@@ -11,6 +11,21 @@ REDIS_QUEUE="${REDIS_QUEUE:-redis://redis-queue:6379}"
 REDIS_SOCKETIO="${REDIS_SOCKETIO:-redis://redis-queue:6379}"
 SOCKETIO_PORT="${SOCKETIO_PORT:-9000}"
 
+sync_public_assets() {
+    mkdir -p sites/assets
+
+    for app in frappe crm; do
+        public_dir="apps/${app}/${app}/public"
+        target_dir="sites/assets/${app}"
+
+        if [ -d "${public_dir}" ]; then
+            rm -rf "${target_dir}"
+            mkdir -p "${target_dir}"
+            cp -a "${public_dir}/." "${target_dir}/"
+        fi
+    done
+}
+
 cd "${BENCH_DIR}"
 
 mkdir -p sites
@@ -36,3 +51,4 @@ fi
 bench use "${SITE_NAME}"
 bench --site "${SITE_NAME}" migrate
 bench --site "${SITE_NAME}" clear-cache
+sync_public_assets
