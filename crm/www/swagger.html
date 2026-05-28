@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Frappe CRM API Docs</title>
+    <style>
+      body {
+        margin: 0;
+        color: #17202a;
+        background: #f7f8fa;
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      main {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
+      }
+
+      header {
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 24px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 28px;
+      }
+
+      .muted {
+        color: #667085;
+      }
+
+      a {
+        color: #2563eb;
+        text-decoration: none;
+      }
+
+      input {
+        width: min(420px, 100%);
+        border: 1px solid #d0d5dd;
+        border-radius: 6px;
+        padding: 10px 12px;
+        font: inherit;
+        background: white;
+      }
+
+      .group {
+        margin-top: 20px;
+      }
+
+      .group h2 {
+        margin: 0 0 10px;
+        font-size: 16px;
+      }
+
+      details {
+        border: 1px solid #e4e7ec;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        background: white;
+        overflow: hidden;
+      }
+
+      summary {
+        display: grid;
+        grid-template-columns: 72px 1fr;
+        gap: 12px;
+        align-items: center;
+        cursor: pointer;
+        padding: 14px 16px;
+      }
+
+      .method {
+        border-radius: 5px;
+        padding: 4px 8px;
+        color: white;
+        background: #16a34a;
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+      }
+
+      .path {
+        overflow-wrap: anywhere;
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 13px;
+      }
+
+      .content {
+        border-top: 1px solid #e4e7ec;
+        padding: 14px 16px 18px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 12px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #eaecf0;
+        padding: 8px 0;
+        text-align: left;
+        font-size: 13px;
+      }
+
+      code,
+      pre {
+        font-family:
+          ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      pre {
+        overflow: auto;
+        border-radius: 6px;
+        background: #101828;
+        color: #f9fafb;
+        padding: 12px;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>Frappe CRM API Docs</h1>
+          <p class="muted">
+            Generated from <code>@frappe.whitelist()</code> methods.
+          </p>
+          <a href="/api/method/crm.api.swagger.get_openapi_spec">
+            OpenAPI JSON
+          </a>
+        </div>
+        <input id="search" placeholder="Search API path or module..." />
+      </header>
+
+      <section id="status" class="muted">Loading APIs...</section>
+      <section id="api-list"></section>
+    </main>
+
+    <script>
+      const statusEl = document.querySelector("#status")
+      const listEl = document.querySelector("#api-list")
+      const searchEl = document.querySelector("#search")
+      let operations = []
+
+      async function loadSpec() {
+        const response = await fetch("/api/method/crm.api.swagger.get_openapi_spec")
+        if (!response.ok) {
+          throw new Error(`Cannot load OpenAPI spec: ${response.status}`)
+        }
+        const data = await response.json()
+        const spec = data.message || data
+        operations = Object.entries(spec.paths || {}).flatMap(([path, methods]) =>
+          Object.entries(methods).map(([method, operation]) => ({
+            path,
+            method,
+            operation,
+            tag: operation.tags?.[0] || "Other",
+          })),
+        )
+        render()
+      }
+
+      function render() {
+        const keyword = searchEl.value.trim().toLowerCase()
+        const filtered = operations.filter((item) =>
+          `${item.path} ${item.tag} ${item.operation.summary || ""}`
+            .toLowerCase()
+            .includes(keyword),
+        )
+
+        statusEl.textContent = `${filtered.length} APIs`
+        const groups = filtered.reduce((map, item) => {
+          if (!map.has(item.tag)) map.set(item.tag, [])
+          map.get(item.tag).push(item)
+          return map
+        }, new Map())
+
+        listEl.innerHTML = [...groups.entries()]
+          .map(
+            ([tag, items]) => `
+              <div class="group">
+                <h2>${escapeHtml(tag)}</h2>
+                ${items.map(renderOperation).join("")}
+              </div>
+            `,
+          )
+          .join("")
+      }
+
+      function renderOperation(item) {
+        const params =
+          item.operation.requestBody?.content?.["application/json"]?.schema
+            ?.properties || {}
+        const required =
+          item.operation.requestBody?.content?.["application/json"]?.schema
+            ?.required || []
+
+        return `
+          <details>
+            <summary>
+              <span class="method">${item.method.toUpperCase()}</span>
+              <span class="path">${escapeHtml(item.path)}</span>
+            </summary>
+            <div class="content">
+              <p>${escapeHtml(item.operation.description || item.operation.summary || "")}</p>
+              <p class="muted">Dotted path: <code>${escapeHtml(item.operation["x-frappe-dotted-path"] || "")}</code></p>
+              ${renderParams(params, required)}
+              <pre>curl -X ${item.method.toUpperCase()} '${location.origin}${item.path}'</pre>
+            </div>
+          </details>
+        `
+      }
+
+      function renderParams(params, required) {
+        const rows = Object.entries(params)
+        if (!rows.length) return '<p class="muted">No parameters detected.</p>'
+
+        return `
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Required</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows
+                .map(
+                  ([name, schema]) => `
+                    <tr>
+                      <td><code>${escapeHtml(name)}</code></td>
+                      <td>${escapeHtml(schema.type || "string")}</td>
+                      <td>${required.includes(name) ? "yes" : "no"}</td>
+                    </tr>
+                  `,
+                )
+                .join("")}
+            </tbody>
+          </table>
+        `
+      }
+
+      function escapeHtml(value) {
+        return String(value)
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;")
+          .replaceAll("'", "&#039;")
+      }
+
+      searchEl.addEventListener("input", render)
+      loadSpec().catch((error) => {
+        statusEl.textContent = error.message
+      })
+    </script>
+  </body>
+</html>
