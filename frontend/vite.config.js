@@ -68,6 +68,8 @@ export default defineConfig(async ({ mode }) => {
       ],
     },
     server: {
+      port: 5000,
+      strictPort: true,
       fs: {
         allow: [path.resolve(__dirname, '..')],
       },
@@ -77,7 +79,9 @@ export default defineConfig(async ({ mode }) => {
   const frappeui = await importFrappeUIPlugin(isDev, config)
   config.plugins.unshift(
     frappeui({
-      frappeProxy: true,
+      frappeProxy: {
+        port: 5000,
+      },
       lucideIcons: true,
       jinjaBootData: true,
       buildConfig: {

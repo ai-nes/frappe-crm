@@ -34,7 +34,7 @@ task fe
 Mở app:
 
 ```text
-http://crm.localhost:8080/crm
+http://crm.localhost:5000/crm
 ```
 
 Tài khoản mặc định:
@@ -74,7 +74,7 @@ task fe
 
 | Mục đích | URL |
 |---|---|
-| Frontend dev | `http://crm.localhost:8080/crm` |
+| Frontend dev | `http://crm.localhost:5000/crm` |
 | Backend Frappe | `http://crm.localhost:8000` |
 | Backend CRM page | `http://crm.localhost:8000/crm` |
 | API Frappe | `http://crm.localhost:8000/api/method/...` |
@@ -91,7 +91,7 @@ http://localhost:8000
 rồi sau đó mở:
 
 ```text
-http://crm.localhost:8080
+http://crm.localhost:5000
 ```
 
 Vì browser cookie phụ thuộc vào host. `localhost` và `crm.localhost` là 2 host khác nhau.
@@ -130,7 +130,7 @@ Ví dụ:
 /api/method/crm.api.contact.get_contacts
 ```
 
-Khi chạy ở port `8080`, Vite sẽ proxy API sang backend Frappe ở port `8000`.
+Khi chạy ở port `5000`, Vite sẽ proxy API sang backend Frappe ở port `8000`.
 
 ## 5. BE code như thế nào?
 
@@ -203,7 +203,54 @@ Nếu sửa DocType, database schema, patch, fixture hoặc hook, chạy:
 task migrate
 ```
 
-## 7. Khi nào dùng từng lệnh?
+## 7. Mỗi lần có code mới thì chạy gì?
+
+Tùy loại code mới.
+
+| Loại thay đổi | Cần chạy gì? |
+|---|---|
+| Sửa Vue/JS/CSS trong `frontend/src/` | Không cần chạy gì thêm. Vite tự reload. |
+| Sửa Python API/service trong `crm/api/` hoặc `crm/` | Refresh browser hoặc gọi lại API. Nếu chưa nhận code mới thì `task restart`. |
+| Sửa DocType/schema/database | `task migrate` |
+| Sửa `crm/hooks.py` | `task migrate`, nếu chưa ăn thì `task restart` |
+| Sửa `docker/docker-compose.dev.yml` | `task recreate` |
+| Sửa `docker/frappe.Dockerfile` | `task build`, rồi `task up` |
+| Muốn xóa sạch database/bench local | `task reset` |
+
+Quy trình dễ nhớ:
+
+```text
+FE đổi  -> Vite tự reload
+BE đổi  -> refresh/gọi lại API, chưa ăn thì task restart
+DB đổi  -> task migrate
+Docker đổi -> task recreate hoặc task build
+```
+
+Ví dụ sửa file backend:
+
+```text
+crm/api/contact.py
+```
+
+Sau đó gọi lại API. Nếu vẫn thấy code cũ:
+
+```bash
+task restart
+```
+
+Ví dụ sửa DocType:
+
+```text
+crm/fcrm/doctype/
+```
+
+Sau đó chạy:
+
+```bash
+task migrate
+```
+
+## 8. Khi nào dùng từng lệnh?
 
 | Lệnh | Dùng khi nào |
 |---|---|
@@ -219,7 +266,7 @@ task migrate
 | `task recreate` | Recreate container khi đổi `docker/docker-compose.dev.yml` |
 | `task reset` | Xóa sạch database/bench local và tạo lại |
 
-## 8. Xem log backend
+## 9. Xem log backend
 
 Chạy:
 
@@ -234,7 +281,7 @@ Dùng lệnh này khi:
 - cần xem traceback Python
 - cần biết migrate có lỗi không
 
-## 9. Vào container backend
+## 10. Vào container backend
 
 Chạy:
 
@@ -251,7 +298,7 @@ cd /home/frappe/frappe-bench
 bench --site crm.localhost console
 ```
 
-## 10. Xem API docs
+## 11. Xem API docs
 
 Mở:
 
@@ -273,9 +320,9 @@ API docs này được sinh từ các function có:
 
 Lưu ý: đây là API docs phục vụ local dev. Nó giúp xem endpoint và params, nhưng response schema có thể chưa đầy đủ như Swagger của FastAPI.
 
-## 11. Lỗi thường gặp
+## 12. Lỗi thường gặp
 
-### CSRFTokenError khi gọi API từ port 8080
+### CSRFTokenError khi gọi API từ port 5000
 
 Dev site cần có config:
 
@@ -303,7 +350,7 @@ http://crm.localhost:8000/login
 Sau đó mở lại:
 
 ```text
-http://crm.localhost:8080/crm
+http://crm.localhost:5000/crm
 ```
 
 Nếu vẫn lỗi, xóa browser site data của `crm.localhost`, rồi login lại.
@@ -323,7 +370,7 @@ cd frontend
 yarn install --check-files
 ```
 
-## 12. Tóm tắt cực ngắn
+## 13. Tóm tắt cực ngắn
 
 Lần đầu:
 

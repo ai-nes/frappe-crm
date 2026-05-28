@@ -23,7 +23,7 @@ tasks:
       - docker compose -f docker/docker-compose.dev.yml down
 
   fe:
-    desc: Start frontend dev server on :8080
+    desc: Start frontend dev server on :5000
     cmds:
       - yarn dev
 
