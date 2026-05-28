@@ -1,16 +1,32 @@
-#!bin/bash
+#!/bin/bash
+set -euo pipefail
 
-if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
-    echo "Bench already exists, skipping init"
-    cd frappe-bench
-    bench start
-else
-    echo "Creating new bench..."
+BENCH_DIR="/home/frappe/frappe-bench"
+
+if [ "$(id -u)" = "0" ]; then
+    mkdir -p "${BENCH_DIR}"
+    chown frappe:frappe /home/frappe
+    chown -R frappe:frappe "${BENCH_DIR}"
+    exec su -s /bin/bash frappe -c "cd /home/frappe && bash /workspace/docker/init.sh"
 fi
 
-bench init --skip-redis-config-generation frappe-bench --version version-15
+if [ -f "${BENCH_DIR}/sites/common_site_config.json" ] \
+    && [ -d "${BENCH_DIR}/apps/frappe" ] \
+    && "${BENCH_DIR}/env/bin/python" -c "import frappe" >/dev/null 2>&1; then
+    echo "Bench already exists, reusing persisted bench data"
+else
+    echo "Bench directory is missing or incomplete. Recreating bench..."
+    mkdir -p "${BENCH_DIR}"
+    rm -rf "${BENCH_DIR:?}/"* "${BENCH_DIR:?}/".[!.]* "${BENCH_DIR:?}/"..?* || true
+    rm -rf /home/frappe/frappe-bench-tmp || true
 
-cd frappe-bench
+    echo "Creating new bench..."
+    cd /home/frappe
+    bench init --ignore-exist --skip-redis-config-generation --no-backups "${BENCH_DIR}" --version version-15
+    test -f "${BENCH_DIR}/sites/common_site_config.json"
+fi
+
+cd "${BENCH_DIR}"
 
 # Use containers instead of localhost
 bench set-mariadb-host mariadb
@@ -18,23 +34,30 @@ bench set-redis-cache-host redis://redis:6379
 bench set-redis-queue-host redis://redis:6379
 bench set-redis-socketio-host redis://redis:6379
 
-# Remove redis, watch from Procfile
-sed -i '/redis/d' ./Procfile
-sed -i '/watch/d' ./Procfile
+# Remove local redis/watch processes from Procfile if present
+sed -i '/redis/d' ./Procfile || true
+sed -i '/watch/d' ./Procfile || true
 
-bench get-app crm --branch main
+# IMPORTANT: Use local app source mounted at /workspace (repo root), not remote get-app
+if [ ! -e "apps/crm" ]; then
+    bench get-app /workspace --soft-link
+fi
 
-bench new-site crm.localhost \
-    --force \
-    --mariadb-root-password 123 \
-    --admin-password admin \
-    --no-mariadb-socket
+if [ ! -d "sites/crm.localhost" ]; then
+    bench new-site crm.localhost \
+        --mariadb-root-password 123 \
+        --admin-password admin \
+        --no-mariadb-socket
 
-bench --site crm.localhost install-app crm
-bench --site crm.localhost set-config developer_mode 1
-bench --site crm.localhost set-config mute_emails 1
-bench --site crm.localhost set-config server_script_enabled 1
+    bench --site crm.localhost install-app crm
+    bench --site crm.localhost set-config developer_mode 1
+    bench --site crm.localhost set-config ignore_csrf 1
+    bench --site crm.localhost set-config mute_emails 1
+    bench --site crm.localhost set-config server_script_enabled 1
+fi
+
 bench --site crm.localhost clear-cache
+bench --site crm.localhost migrate
 bench use crm.localhost
 
 bench start

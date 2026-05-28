@@ -25,12 +25,16 @@ services:
     build:
       context: .
       dockerfile: frappe.Dockerfile
-    command: bash /workspace/init.sh
+    user: root
+    command: bash /workspace/docker/init.sh
     environment:
       SHELL: /bin/bash
     working_dir: /home/frappe
     volumes:
-      - .:/workspace
+      - ..:/workspace
+      - bench-data:/home/frappe/frappe-bench
+      - root-node-modules:/workspace/node_modules
+      - frontend-node-modules:/workspace/frontend/node_modules
     ports:
       - 8000:8000
       - 9000:9000
@@ -40,3 +44,6 @@ services:
 
 volumes:
   mariadb-data:
+  bench-data:
+  root-node-modules:
+  frontend-node-modules:
