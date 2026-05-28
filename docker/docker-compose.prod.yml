@@ -1,5 +1,12 @@
-version: "3.7"
-name: crm
+# Production — pull image from Docker Hub (tag: latest)
+# Requires docker/.env with DOCKER_USERNAME (default: ngothanhdatak)
+#
+#   cd docker
+#   docker compose -f docker-compose.prod.yml pull
+#   docker compose -f docker-compose.prod.yml up -d
+
+name: crm-prod
+
 services:
   mariadb:
     image: mariadb:10.8
@@ -7,7 +14,7 @@ services:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
-      - --skip-innodb-read-only-compressed # Temporary fix for MariaDB 10.6
+      - --skip-innodb-read-only-compressed
     environment:
       MYSQL_ROOT_PASSWORD: 123
     volumes:
@@ -17,16 +24,20 @@ services:
     image: redis:alpine
 
   frappe:
-    image: frappe/bench:latest
+    image: ${DOCKER_USERNAME:-ngothanhdatak}/crm-frappe:latest
+    pull_policy: always
     command: bash /workspace/init.sh
     environment:
-      - SHELL=/bin/bash
+      SHELL: /bin/bash
     working_dir: /home/frappe
     volumes:
       - .:/workspace
     ports:
       - 8000:8000
       - 9000:9000
+    depends_on:
+      - mariadb
+      - redis
 
 volumes:
   mariadb-data:
