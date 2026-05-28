@@ -1,0 +1,13 @@
+.git
+.github
+.devcontainer
+.vscode
+.pi
+node_modules
+frontend/node_modules
+frontend/dist
+frontend/dev-dist
+*.pyc
+__pycache__
+.DS_Store
+docker/.env

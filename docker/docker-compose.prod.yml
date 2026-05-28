@@ -1,43 +1,151 @@
-# Production — pull image from Docker Hub (tag: latest)
-# Requires docker/.env with DOCKER_USERNAME (default: ngothanhdatak)
-#
-#   cd docker
-#   docker compose -f docker-compose.prod.yml pull
-#   docker compose -f docker-compose.prod.yml up -d
-
 name: crm-prod
 
 services:
   mariadb:
     image: mariadb:10.8
+    restart: unless-stopped
     command:
       - --character-set-server=utf8mb4
       - --collation-server=utf8mb4_unicode_ci
       - --skip-character-set-client-handshake
       - --skip-innodb-read-only-compressed
     environment:
-      MYSQL_ROOT_PASSWORD: 123
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in docker/.env}
     volumes:
       - mariadb-data:/var/lib/mysql
 
-  redis:
+  redis-cache:
     image: redis:alpine
+    restart: unless-stopped
 
-  frappe:
-    image: ${DOCKER_USERNAME:-ngothanhdatak}/crm-frappe:latest
-    pull_policy: always
-    command: bash /workspace/init.sh
+  redis-queue:
+    image: redis:alpine
+    restart: unless-stopped
+
+  site:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    command: bash /opt/frappe/scripts/prod-site.sh
     environment:
-      SHELL: /bin/bash
-    working_dir: /home/frappe
+      SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in docker/.env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in docker/.env}
+      DB_HOST: mariadb
+      REDIS_CACHE: redis://redis-cache:6379
+      REDIS_QUEUE: redis://redis-queue:6379
+      REDIS_SOCKETIO: redis://redis-queue:6379
+      SOCKETIO_PORT: 9000
     volumes:
-      - .:/workspace
-    ports:
-      - 8000:8000
-      - 9000:9000
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
     depends_on:
       - mariadb
-      - redis
+      - redis-cache
+      - redis-queue
+    profiles:
+      - setup
+
+  backend:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      gunicorn
+      --chdir=/home/frappe/frappe-bench/sites
+      --bind=0.0.0.0:8000
+      --threads=4
+      --workers=${GUNICORN_WORKERS:-2}
+      --worker-class=gthread
+      --worker-tmp-dir=/dev/shm
+      --timeout=120
+      frappe.app:application'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    ports:
+      - "${HTTP_PORT:-8000}:8000"
+    depends_on:
+      - mariadb
+      - redis-cache
+      - redis-queue
+
+  websocket:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: bash -lc 'cd /home/frappe/frappe-bench && node apps/frappe/socketio.js'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    ports:
+      - "${SOCKETIO_PORT:-9000}:9000"
+    depends_on:
+      - redis-queue
+
+  queue-short:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue short'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - mariadb
+      - redis-queue
+
+  queue-default:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue default'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - mariadb
+      - redis-queue
+
+  queue-long:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue long'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - mariadb
+      - redis-queue
+
+  scheduler:
+    image: ${CRM_IMAGE:-crm-frappe:prod}
+    build:
+      context: ..
+      dockerfile: docker/prod.Dockerfile
+    restart: unless-stopped
+    command: bash -lc 'cd /home/frappe/frappe-bench && bench schedule'
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    depends_on:
+      - mariadb
+      - redis-queue
 
 volumes:
   mariadb-data:
+  sites:
+  logs:

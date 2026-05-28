@@ -7,6 +7,25 @@ Repo này có 2 phần chạy cùng nhau:
 
 Code trong repo được mount vào Docker tại `/workspace`, nên khi sửa code backend trong thư mục `crm/`, container backend có thể thấy code mới.
 
+## 0. Yêu cầu trước khi chạy
+
+Cần có sẵn:
+
+- Docker Desktop (kèm Docker Compose v2)
+- `task` CLI
+- Node.js 20.x
+- Yarn 1.x (classic)
+
+Kiểm tra nhanh:
+
+```bash
+docker --version
+docker compose version
+task --version
+node -v
+yarn -v
+```
+
 ## 1. Chạy lần đầu
 
 Chạy:
@@ -56,6 +75,8 @@ Sau đó chạy frontend:
 ```bash
 task fe
 ```
+
+Nếu backend vừa mới bật, nên chờ backend chạy xong rồi mới login FE (mở `task logs` để theo dõi).
 
 Thông thường bạn sẽ để 2 terminal:
 
@@ -367,8 +388,19 @@ thì chạy:
 
 ```bash
 cd frontend
+rm -rf node_modules
 yarn install --check-files
 ```
+
+Nếu vẫn còn lỗi, chạy thêm:
+
+```bash
+cd frontend
+yarn cache clean
+yarn install --check-files
+```
+
+Lưu ý: trong repo này nên dùng Yarn thống nhất, tránh chạy `npm install` trong `frontend/` để không làm lệch lockfile/dependency tree.
 
 ## 13. Tóm tắt cực ngắn
 

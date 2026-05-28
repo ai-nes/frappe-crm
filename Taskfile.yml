@@ -63,3 +63,35 @@ tasks:
     cmds:
       - docker compose -f docker/docker-compose.dev.yml down -v
       - docker compose -f docker/docker-compose.dev.yml up -d
+
+  prod-build:
+    desc: Build production Docker image from current source
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
+
+  prod-init:
+    desc: Create or migrate the production site
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
+
+  prod-up:
+    desc: Start production services
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d
+
+  prod-update:
+    desc: Build image, migrate site, and restart production services
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans
+
+  prod-logs:
+    desc: Follow production logs
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml logs -f
+
+  prod-down:
+    desc: Stop production services
+    cmds:
+      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml down
