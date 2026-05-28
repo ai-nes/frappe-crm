@@ -8,6 +8,7 @@ on:
 
 env:
   IMAGE_NAME: crm-frappe
+  PLATFORMS: linux/amd64
 
 jobs:
   dockerhub:
@@ -38,7 +39,9 @@ jobs:
           context: .
           file: docker/prod.Dockerfile
           push: true
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ env.PLATFORMS }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}

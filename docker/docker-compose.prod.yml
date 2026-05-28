@@ -3,6 +3,12 @@ name: crm-prod
 x-crm-service: &crm-service
   image: ${CRM_IMAGE:?set CRM_IMAGE in docker/.env}
   pull_policy: always
+  environment:
+    DB_HOST: mariadb
+    REDIS_CACHE: redis://redis-cache:6379
+    REDIS_QUEUE: redis://redis-queue:6379
+    REDIS_SOCKETIO: redis://redis-queue:6379
+    SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
   volumes:
     - sites:/home/frappe/frappe-bench/sites
     - logs:/home/frappe/frappe-bench/logs
@@ -53,7 +59,12 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      gunicorn
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      ./env/bin/gunicorn
       --chdir=/home/frappe/frappe-bench/sites
       --bind=0.0.0.0:8000
       --threads=4
@@ -72,7 +83,14 @@ services:
   websocket:
     <<: *crm-service
     restart: unless-stopped
-    command: bash -lc 'cd /home/frappe/frappe-bench && node apps/frappe/socketio.js'
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      node apps/frappe/socketio.js'
     ports:
       - "${SOCKETIO_PORT:-9000}:9000"
     depends_on:
@@ -81,7 +99,14 @@ services:
   queue-short:
     <<: *crm-service
     restart: unless-stopped
-    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue short'
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench worker --queue short'
     depends_on:
       - mariadb
       - redis-queue
@@ -89,7 +114,14 @@ services:
   queue-default:
     <<: *crm-service
     restart: unless-stopped
-    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue default'
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench worker --queue default'
     depends_on:
       - mariadb
       - redis-queue
@@ -97,7 +129,14 @@ services:
   queue-long:
     <<: *crm-service
     restart: unless-stopped
-    command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue long'
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench worker --queue long'
     depends_on:
       - mariadb
       - redis-queue
@@ -105,7 +144,14 @@ services:
   scheduler:
     <<: *crm-service
     restart: unless-stopped
-    command: bash -lc 'cd /home/frappe/frappe-bench && bench schedule'
+    command: >
+      bash -lc 'cd /home/frappe/frappe-bench &&
+      bench set-mariadb-host "${DB_HOST}" &&
+      bench set-redis-cache-host "${REDIS_CACHE}" &&
+      bench set-redis-queue-host "${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench schedule'
     depends_on:
       - mariadb
       - redis-queue
