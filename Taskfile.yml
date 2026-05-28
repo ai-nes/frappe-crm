@@ -1,0 +1,65 @@
+version: '3'
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  setup:
+    desc: Start backend stack, then install frontend deps
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml up -d
+      - cd frontend && yarn install --check-files
+
+  up:
+    desc: Start backend stack
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml up -d
+
+  down:
+    desc: Stop backend stack
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml down
+
+  fe:
+    desc: Start frontend dev server on :8080
+    cmds:
+      - yarn dev
+
+  logs:
+    desc: Follow backend logs
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml logs -f frappe
+
+  restart:
+    desc: Restart backend service
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml restart frappe
+
+  migrate:
+    desc: Run Frappe migrate for crm.localhost
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml exec frappe bash -lc 'cd /home/frappe/frappe-bench && bench --site crm.localhost migrate'
+
+  shell:
+    desc: Open a shell inside the backend container
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml exec frappe bash
+
+  build:
+    desc: Rebuild backend image after Dockerfile changes
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml build frappe
+
+  recreate:
+    desc: Recreate backend container after compose changes
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml up -d --force-recreate frappe
+
+  reset:
+    desc: Delete local Docker volumes and recreate everything
+    prompt: This deletes the local database and bench volumes. Continue?
+    cmds:
+      - docker compose -f docker/docker-compose.dev.yml down -v
+      - docker compose -f docker/docker-compose.dev.yml up -d
