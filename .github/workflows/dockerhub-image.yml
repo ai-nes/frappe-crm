@@ -1,4 +1,4 @@
-name: Build and Push Docker Hub Image
+name: Build and Push Production Image
 
 on:
   workflow_dispatch:
@@ -36,7 +36,9 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: docker/frappe.Dockerfile
+          file: docker/prod.Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
