@@ -36,4 +36,3 @@ fi
 bench use "${SITE_NAME}"
 bench --site "${SITE_NAME}" migrate
 bench --site "${SITE_NAME}" clear-cache
-bench build --app crm

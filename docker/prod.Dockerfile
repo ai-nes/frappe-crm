@@ -48,7 +48,6 @@ RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && yarn install --frozen-lockfile \
     && yarn build \
     && cd "${BENCH_DIR}" \
-    && bench build --app crm \
     && cp -a sites /opt/frappe/sites-template
 
 COPY --chown=frappe:frappe docker/prod-site.sh /opt/frappe/scripts/prod-site.sh
