@@ -59,11 +59,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       ./env/bin/gunicorn
       --chdir=/home/frappe/frappe-bench/sites
       --bind=0.0.0.0:8000
@@ -85,11 +85,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       node apps/frappe/socketio.js'
     ports:
       - "${SOCKETIO_PORT:-9000}:9000"
@@ -101,11 +101,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       bench worker --queue short'
     depends_on:
       - mariadb
@@ -116,11 +116,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       bench worker --queue default'
     depends_on:
       - mariadb
@@ -131,11 +131,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       bench worker --queue long'
     depends_on:
       - mariadb
@@ -146,11 +146,11 @@ services:
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "${DB_HOST}" &&
-      bench set-redis-cache-host "${REDIS_CACHE}" &&
-      bench set-redis-queue-host "${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "${SOCKETIO_PORT}" &&
+      bench set-mariadb-host "$${DB_HOST}" &&
+      bench set-redis-cache-host "$${REDIS_CACHE}" &&
+      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
+      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
+      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
       bench schedule'
     depends_on:
       - mariadb
