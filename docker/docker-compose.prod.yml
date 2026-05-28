@@ -1,5 +1,12 @@
 name: crm-prod
 
+x-crm-service: &crm-service
+  image: ${CRM_IMAGE:?set CRM_IMAGE in docker/.env}
+  pull_policy: always
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
 services:
   mariadb:
     image: mariadb:10.8
@@ -23,10 +30,7 @@ services:
     restart: unless-stopped
 
   site:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     command: bash /opt/frappe/scripts/prod-site.sh
     environment:
       SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
@@ -36,10 +40,7 @@ services:
       REDIS_CACHE: redis://redis-cache:6379
       REDIS_QUEUE: redis://redis-queue:6379
       REDIS_SOCKETIO: redis://redis-queue:6379
-      SOCKETIO_PORT: 9000
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
+      SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
     depends_on:
       - mariadb
       - redis-cache
@@ -48,10 +49,7 @@ services:
       - setup
 
   backend:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: >
       bash -lc 'cd /home/frappe/frappe-bench &&
@@ -64,9 +62,6 @@ services:
       --worker-tmp-dir=/dev/shm
       --timeout=120
       frappe.app:application'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     ports:
       - "${HTTP_PORT:-8000}:8000"
     depends_on:
@@ -75,72 +70,42 @@ services:
       - redis-queue
 
   websocket:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: bash -lc 'cd /home/frappe/frappe-bench && node apps/frappe/socketio.js'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     ports:
       - "${SOCKETIO_PORT:-9000}:9000"
     depends_on:
       - redis-queue
 
   queue-short:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue short'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     depends_on:
       - mariadb
       - redis-queue
 
   queue-default:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue default'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     depends_on:
       - mariadb
       - redis-queue
 
   queue-long:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: bash -lc 'cd /home/frappe/frappe-bench && bench worker --queue long'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     depends_on:
       - mariadb
       - redis-queue
 
   scheduler:
-    image: ${CRM_IMAGE:-crm-frappe:prod}
-    build:
-      context: ..
-      dockerfile: docker/prod.Dockerfile
+    <<: *crm-service
     restart: unless-stopped
     command: bash -lc 'cd /home/frappe/frappe-bench && bench schedule'
-    volumes:
-      - sites:/home/frappe/frappe-bench/sites
-      - logs:/home/frappe/frappe-bench/logs
     depends_on:
       - mariadb
       - redis-queue
