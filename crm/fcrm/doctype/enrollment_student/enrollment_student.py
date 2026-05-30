@@ -52,5 +52,5 @@ def create_from_contact(contact, branch=None, major=None, enrollment_date=None):
 		"enrollment_status": "Chờ xác nhận",
 		"enrollment_date": enrollment_date,
 	})
-	student.insert(ignore_permissions=True)
+	student.insert()
 	return student.name

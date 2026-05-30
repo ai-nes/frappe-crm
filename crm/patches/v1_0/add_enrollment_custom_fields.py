@@ -210,13 +210,14 @@ def _update_lead_side_panel():
 		"industry", "organization", "territory",
 	}
 
+	# Side panel layout stores fields nested as section.columns[N].fields (not section.fields)
 	for section in sections:
 		if not isinstance(section, dict):
 			continue
-		section["fields"] = [
-			f for f in section.get("fields", [])
-			if f not in fields_to_hide
-		]
+		for column in section.get("columns") or []:
+			if not isinstance(column, dict):
+				continue
+			column["fields"] = [f for f in column.get("fields", []) if f not in fields_to_hide]
 
 	enrollment_fields = ["province", "branch", "major", "high_school",
 		"ad_channel", "conversion_potential", "source", "lead_owner"]
@@ -233,13 +234,14 @@ def _update_lead_side_panel():
 	# Remove any existing enrollment_section first — makes this idempotent on re-run
 	sections = [s for s in sections if s.get("name") != "enrollment_section"]
 
-	enrollment_section = {
-		"label": "Thông tin tuyển sinh",
-		"name": "enrollment_section",
-		"opened": True,
-		"fields": [f for f in enrollment_fields if f in existing_fields],
-	}
-	if enrollment_section["fields"]:
+	valid_fields = [f for f in enrollment_fields if f in existing_fields]
+	if valid_fields:
+		enrollment_section = {
+			"label": "Thông tin tuyển sinh",
+			"name": "enrollment_section",
+			"opened": True,
+			"columns": [{"fields": valid_fields}],
+		}
 		sections.insert(0, enrollment_section)
 
 	layout_doc.layout = json.dumps(sections)
