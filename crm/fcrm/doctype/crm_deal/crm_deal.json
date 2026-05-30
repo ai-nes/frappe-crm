@@ -83,13 +83,13 @@
    "fieldname": "organization",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Organization",
+   "label": "Trường THPT",
    "options": "CRM Organization"
   },
   {
    "fieldname": "probability",
    "fieldtype": "Percent",
-   "label": "Probability"
+   "label": "Xác suất nhập học"
   },
   {
    "fetch_from": ".annual_revenue",
@@ -112,13 +112,13 @@
   {
    "fieldname": "lead",
    "fieldtype": "Link",
-   "label": "Lead",
+   "label": "Khách hàng tiềm năng",
    "options": "CRM Lead"
   },
   {
    "fieldname": "deal_owner",
    "fieldtype": "Link",
-   "label": "Deal Owner",
+   "label": "Người phụ trách",
    "options": "User"
   },
   {
@@ -131,7 +131,7 @@
   {
    "fieldname": "contacts_tab",
    "fieldtype": "Tab Break",
-   "label": "Contacts"
+   "label": "Liên hệ"
   },
   {
    "fieldname": "email",
@@ -151,7 +151,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Status",
+   "label": "Trạng thái hồ sơ",
    "options": "CRM Deal Status",
    "reqd": 1,
    "search_index": 1
@@ -159,13 +159,13 @@
   {
    "fieldname": "contacts",
    "fieldtype": "Table",
-   "label": "Contacts",
+   "label": "Liên hệ",
    "options": "CRM Contacts"
   },
   {
    "fieldname": "organization_tab",
    "fieldtype": "Tab Break",
-   "label": "Organization"
+   "label": "Trường THPT"
   },
   {
    "fieldname": "sla_tab",
@@ -234,13 +234,13 @@
    "fetch_from": ".territory",
    "fieldname": "territory",
    "fieldtype": "Link",
-   "label": "Territory",
+   "label": "Chi nhánh",
    "options": "CRM Territory"
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
-   "label": "Source",
+   "label": "Nguồn",
    "options": "CRM Lead Source"
   },
   {
@@ -275,7 +275,7 @@
   {
    "fieldname": "lead_name",
    "fieldtype": "Data",
-   "label": "Lead Name"
+   "label": "Họ và tên"
   },
   {
    "fieldname": "column_break_ijan",
@@ -284,7 +284,7 @@
   {
    "fieldname": "lead_details_tab",
    "fieldtype": "Tab Break",
-   "label": "Lead Details"
+   "label": "Thông tin KHTN"
   },
   {
    "fieldname": "column_break_wsde",
@@ -293,12 +293,12 @@
   {
    "fieldname": "organization_details_section",
    "fieldtype": "Section Break",
-   "label": "Organization Details"
+   "label": "Chi tiết trường THPT"
   },
   {
    "fieldname": "organization_name",
    "fieldtype": "Data",
-   "label": "Organization Name"
+   "label": "Tên trường THPT"
   },
   {
    "fieldname": "column_break_xbyf",
@@ -307,7 +307,7 @@
   {
    "fieldname": "industry",
    "fieldtype": "Link",
-   "label": "Industry",
+   "label": "Ngành quan tâm",
    "options": "CRM Industry"
   },
   {
@@ -324,12 +324,12 @@
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
-   "label": "First name"
+   "label": "Họ"
   },
   {
    "fieldname": "last_name",
    "fieldtype": "Data",
-   "label": "Last name"
+   "label": "Tên"
   },
   {
    "fieldname": "column_break_xjmy",
@@ -404,13 +404,13 @@
   {
    "fieldname": "lost_reason",
    "fieldtype": "Link",
-   "label": "Lost Reason",
+   "label": "Lý do không theo",
    "options": "CRM Lost Reason"
   },
   {
    "fieldname": "lost_notes",
    "fieldtype": "Text",
-   "label": "Lost Notes",
+   "label": "Ghi chú",
    "mandatory_depends_on": "eval: doc.lost_reason == \"Other\""
   },
   {
@@ -429,12 +429,12 @@
   {
    "fieldname": "expected_closure_date",
    "fieldtype": "Date",
-   "label": "Expected Closure Date"
+   "label": "Ngày dự kiến nhập học"
   },
   {
    "fieldname": "closed_date",
    "fieldtype": "Date",
-   "label": "Closed Date"
+   "label": "Ngày hoàn tất"
   },
   {
    "fieldname": "section_break_mwvg",
@@ -469,7 +469,7 @@
   {
    "fieldname": "lost_details_tab",
    "fieldtype": "Tab Break",
-   "label": "Lost Details"
+   "label": "Chi tiết từ chối"
   }
  ],
  "grid_page_length": 50,
