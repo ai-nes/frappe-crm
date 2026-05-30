@@ -83,7 +83,9 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 import ReferenceDataPage from './ReferenceDataPage.vue'
+import LeadRoutingPage from './LeadRoutingPage.vue'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
+import RouteIcon from '~icons/lucide/route'
 
 const { isManager, getUser } = usersStore()
 
@@ -205,6 +207,12 @@ const tabs = computed(() => {
           label: __('Danh mục'),
           icon: GraduationCapIcon,
           component: markRaw(ReferenceDataPage),
+          condition: () => isManager(),
+        },
+        {
+          label: __('Phân phối lead'),
+          icon: RouteIcon,
+          component: markRaw(LeadRoutingPage),
           condition: () => isManager(),
         },
       ],

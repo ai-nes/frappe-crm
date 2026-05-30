@@ -5,7 +5,7 @@
 #   bench --site crm.localhost execute crm.migration.vtiger_import.run \
 #     --kwargs '{"step": "all", "fixtures_path": "crm/migration/fixtures", "dry_run": false}'
 #
-# Steps: provinces | wards | majors | branches | schools | leads | contacts | all
+# Steps: provinces | wards | majors | branches | schools | leads | contacts | routing_rules | all
 
 import csv
 import json
@@ -24,6 +24,49 @@ from crm.migration.vtiger_transform import (
 
 BATCH_SIZE = 100
 MAPS_DIR = os.path.join(os.path.dirname(__file__), "id_maps")
+
+# Normalize city_type values from vTiger to valid CRM Province options
+_CITY_TYPE_MAP = {
+    "thành phố": "Thành phố trực thuộc TW",
+    "tp": "Thành phố trực thuộc TW",
+    "tỉnh": "Tỉnh",
+}
+
+_VALID_MAJOR_GROUPS = {
+    "Kỹ thuật - Công nghệ",
+    "Kinh tế - Quản trị",
+    "Truyền thông - Thiết kế",
+    "Ngôn ngữ",
+}
+
+
+def _normalize_city_type(raw: str) -> str | None:
+    if not raw:
+        return None
+    normalized = _CITY_TYPE_MAP.get(raw.strip().lower())
+    return normalized  # None if unknown → field left blank
+
+
+def _normalize_major_group(raw: str) -> str | None:
+    if not raw:
+        return None
+    if raw in _VALID_MAJOR_GROUPS:
+        return raw
+    return None  # drop unknown values rather than failing
+
+
+def _ensure_lead_source(source: str) -> str | None:
+    """Return the source name, creating the CRM Lead Source record if missing."""
+    if not source:
+        return None
+    if not frappe.db.exists("CRM Lead Source", source):
+        try:
+            frappe.get_doc({"doctype": "CRM Lead Source", "source_name": source}).insert(
+                ignore_permissions=True
+            )
+        except Exception:
+            return None
+    return source
 
 
 # ---------------------------------------------------------------------------
@@ -102,7 +145,7 @@ def import_provinces(fixtures_path, dry_run=False):
 			doc = frappe.get_doc({
 				"doctype": "CRM Province",
 				"province_name": province_name,
-				"city_type": (row.get("city_type") or "").strip() or None,
+				"city_type": _normalize_city_type((row.get("city_type") or "").strip()),
 				"city_number": city_number or None,
 				"import_source_id": citysid,
 			})
@@ -196,7 +239,7 @@ def import_majors(fixtures_path, dry_run=False):
 				"doctype": "CRM Major",
 				"major_name": major_name,
 				"major_code": (row.get("major_code") or "").strip() or None,
-				"major_group": (row.get("major_group") or "").strip() or None,
+				"major_group": _normalize_major_group((row.get("major_group") or "").strip()),
 				"is_active": int(row.get("is_active") or 1),
 				"import_source_id": majorsid,
 			})
@@ -367,7 +410,7 @@ def import_leads(fixtures_path, dry_run=False):
 				"mobile_no": mobile,
 				"phone": normalize_phone(row.get("phone")),
 				"website": (row.get("website") or "").strip() or None,
-				"source": (row.get("leadsource") or "").strip() or None,
+				"source": _ensure_lead_source((row.get("leadsource") or "").strip()),
 				"status": (row.get("leadstatus") or "New").strip(),
 				"converted": int(row.get("converted") or 0),
 				"conversion_potential": (row.get("rating") or "").strip() or None,
@@ -377,11 +420,13 @@ def import_leads(fixtures_path, dry_run=False):
 				"major": major_map.get(safe_int(row.get("cf_major"))),
 				"branch": branch_name_map.get((row.get("leads_campus") or "").strip()),
 				"ad_channel": (row.get("cf_kenh_quang_cao") or "").strip() or None,
+				"tags": (row.get("cf_tag") or "").strip() or None,
 				"segments": (row.get("cf_segment") or "").strip() or None,
-				"fpt_aspiration": (row.get("cf_nvfpt") or "").strip() or None,
+				"nvfpt": (row.get("cf_nvfpt") or "").strip() or None,
 				"lead_owner": users_map.get(safe_int(row.get("smownerid"))),
 				"import_source_id": leadid,
 			})
+			doc.flags.skip_routing = True
 			doc.insert(ignore_permissions=True)
 			lead_map[leadid] = doc.name
 
@@ -458,6 +503,16 @@ def import_contacts(fixtures_path, dry_run=False):
 			})
 			doc.insert(ignore_permissions=True)
 			contact_map[contactid] = doc.name
+
+			# Backfill linked_contact on the source lead
+			source_lead_vtid = safe_int(row.get("cf_source_lead_id"))
+			if source_lead_vtid and source_lead_vtid in lead_map:
+				frappe.db.set_value(
+					"CRM Lead", lead_map[source_lead_vtid],
+					"linked_contact", doc.name,
+					update_modified=False,
+				)
+
 			ok += 1
 			_append_log(log_lines, "contact", contactid, "ok")
 		except Exception as e:
@@ -476,6 +531,119 @@ def import_contacts(fixtures_path, dry_run=False):
 	return contact_map
 
 
+def _parse_id_list(raw: str) -> list[int]:
+	"""Parse vTiger JSON array or comma-separated string of IDs."""
+	if not raw:
+		return []
+	raw = raw.strip()
+	if raw.startswith("["):
+		try:
+			return [int(x) for x in json.loads(raw) if str(x).strip()]
+		except (json.JSONDecodeError, ValueError):
+			return []
+	try:
+		return [int(x.strip()) for x in raw.split(",") if x.strip()]
+	except ValueError:
+		return []
+
+
+def import_routing_rules(fixtures_path, dry_run=False):
+	"""Import vtiger_lead_sharing_config + vtiger_lead_sharing_school_config into CRM Lead Routing Rule."""
+	province_map = load_map("province_map")
+	school_map = load_map("school_map")
+
+	try:
+		users_map = load_map("users_map")
+	except FileNotFoundError:
+		users_map = {}
+		_log("WARNING: users_map not found — staff assignments will be skipped")
+
+	branch_name_map = {
+		r.branch_name: r.name
+		for r in frappe.get_all("CRM Branch", fields=["name", "branch_name"])
+	}
+
+	ok = skip = fail = 0
+	log_lines = []
+
+	def _create_rule(branch, province, school, staff_ids_raw, is_active):
+		nonlocal ok, skip, fail
+
+		branch_doc = branch_name_map.get(branch)
+		if not branch_doc:
+			_log(f"WARNING: campus '{branch}' not in branch_name_map — skipping rule")
+			return
+
+		existing = frappe.db.get_value(
+			"CRM Lead Routing Rule",
+			{"branch": branch_doc, "province": province, "school": school or ""},
+			"name",
+		)
+		if existing:
+			skip += 1
+			return
+
+		staff_ids = _parse_id_list(staff_ids_raw)
+		staff_rows = [{"user": users_map[sid]} for sid in staff_ids if sid in users_map]
+		if staff_ids and not staff_rows:
+			_log(f"WARNING: no users_map matches for staff_ids={staff_ids} — rule created with empty staff")
+
+		if dry_run:
+			ok += 1
+			return
+
+		try:
+			doc = frappe.get_doc({
+				"doctype": "CRM Lead Routing Rule",
+				"branch": branch_doc,
+				"province": province,
+				"school": school or "",
+				"is_active": int(is_active or 1),
+				"round_robin_index": 0,
+				"staff": staff_rows,
+			})
+			doc.insert(ignore_permissions=True)
+			ok += 1
+			_append_log(log_lines, "routing_rule", f"{branch}/{province}/{school}", "ok")
+		except Exception as e:
+			fail += 1
+			_append_log(log_lines, "routing_rule", f"{branch}/{province}/{school}", "fail", str(e))
+			frappe.log_error(frappe.get_traceback(), "vtiger_import:routing_rule")
+
+	# Province-level rules (no school)
+	for row in _open_csv(fixtures_path, "routing_config.csv"):
+		campus = (row.get("campus") or "").strip()
+		city_ids = _parse_id_list(row.get("city_ids", ""))
+		is_active = (row.get("is_active") or "1").strip()
+		for city_id in city_ids:
+			province = province_map.get(city_id)
+			if not province:
+				_log(f"WARNING: city_id={city_id} not in province_map — skipping")
+				continue
+			_create_rule(campus, province, None, row.get("staff_ids", ""), is_active)
+
+	# School-specific rules
+	for row in _open_csv(fixtures_path, "routing_school_config.csv"):
+		campus = (row.get("campus") or "").strip()
+		city_id = safe_int(row.get("city_id"))
+		province = province_map.get(city_id)
+		if not province:
+			_log(f"WARNING: city_id={city_id} not in province_map — skipping school rule")
+			continue
+		account_ids = _parse_id_list(row.get("account_ids", ""))
+		is_active = (row.get("is_active") or "1").strip()
+		for account_id in account_ids:
+			school = school_map.get(account_id)
+			if not school:
+				_log(f"WARNING: account_id={account_id} not in school_map — skipping")
+				continue
+			_create_rule(campus, province, school, row.get("staff_ids", ""), is_active)
+
+	frappe.db.commit()
+	_flush_log(log_lines)
+	_log(f"Routing rules: ok={ok} skip={skip} fail={fail}")
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -489,6 +657,7 @@ _PIPELINE = [
 	("schools", import_schools),
 	("leads", import_leads),
 	("contacts", import_contacts),
+	("routing_rules", import_routing_rules),
 ]
 
 STEPS = {name: fn for name, fn in _PIPELINE}
