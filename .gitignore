@@ -25,3 +25,5 @@ docker/.env
 docker/.env.*
 docs/*
 plans/*
+crm/migration/id_maps/*.json
+crm/migration/fixtures/*.csv
