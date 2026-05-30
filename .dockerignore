@@ -1,6 +1,5 @@
 .git
 .github
-.devcontainer
 .vscode
 .pi
 node_modules

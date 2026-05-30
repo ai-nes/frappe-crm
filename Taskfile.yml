@@ -1,97 +1,100 @@
 version: '3'
 
+vars:
+  DEV_COMPOSE: docker compose -f docker/docker-compose.dev.yml
+  BENCH_DIR: /home/frappe/frappe-bench
+  SITE: crm.localhost
+
 tasks:
   default:
-    desc: Show available tasks
+    desc: Show available local development tasks
     cmds:
       - task --list
 
   setup:
-    desc: Start backend stack, then install frontend deps
+    desc: First-time setup for backend containers and frontend dependencies
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d
+      - '{{.DEV_COMPOSE}} up -d'
       - cd frontend && yarn install --check-files
 
   up:
-    desc: Start backend stack
+    desc: Start local backend stack
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d
+      - '{{.DEV_COMPOSE}} up -d'
 
   down:
-    desc: Stop backend stack
+    desc: Stop local backend stack
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml down
+      - '{{.DEV_COMPOSE}} down'
+
+  ps:
+    desc: Show local backend containers
+    cmds:
+      - '{{.DEV_COMPOSE}} ps'
 
   fe:
-    desc: Start frontend dev server on :5000
+    desc: Start frontend dev server on port 5000
     cmds:
       - yarn dev
 
-  logs:
-    desc: Follow backend logs
+  install-fe:
+    desc: Install frontend dependencies
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml logs -f frappe
+      - cd frontend && yarn install --check-files
+
+  logs:
+    desc: Follow Frappe backend logs
+    cmds:
+      - '{{.DEV_COMPOSE}} logs -f frappe'
 
   restart:
-    desc: Restart backend service
+    desc: Restart Frappe backend service
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml restart frappe
+      - '{{.DEV_COMPOSE}} restart frappe'
 
   migrate:
-    desc: Run Frappe migrate for crm.localhost
+    desc: Run Frappe migrate for the local CRM site
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml exec frappe bash -lc 'cd /home/frappe/frappe-bench && bench --site crm.localhost migrate'
+      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} migrate'''
+
+  clear-cache:
+    desc: Clear local Frappe cache
+    cmds:
+      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} clear-cache'''
+
+  console:
+    desc: Open Frappe console for the local CRM site
+    cmds:
+      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} console'''
+
+  bench:
+    desc: Run a bench command, for example task bench -- --site crm.localhost list-apps
+    cmds:
+      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench {{.CLI_ARGS}}'''
 
   shell:
-    desc: Open a shell inside the backend container
+    desc: Open a shell inside the Frappe backend container
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml exec frappe bash
+      - '{{.DEV_COMPOSE}} exec frappe bash'
+
+  test-fe:
+    desc: Run frontend unit tests once
+    cmds:
+      - cd frontend && yarn test:run
 
   build:
-    desc: Rebuild backend image after Dockerfile changes
+    desc: Rebuild local Frappe development image after Dockerfile changes
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml build frappe
+      - '{{.DEV_COMPOSE}} build frappe'
 
   recreate:
-    desc: Recreate backend container after compose changes
+    desc: Recreate local Frappe backend container after compose changes
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d --force-recreate frappe
+      - '{{.DEV_COMPOSE}} up -d --force-recreate frappe'
 
   reset:
-    desc: Delete local Docker volumes and recreate everything
+    desc: Delete local Docker volumes and recreate the backend stack
     prompt: This deletes the local database and bench volumes. Continue?
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml down -v
-      - docker compose -f docker/docker-compose.dev.yml up -d
-
-  prod-build:
-    desc: Build production Docker image from current source
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
-
-  prod-init:
-    desc: Create or migrate the production site
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
-
-  prod-up:
-    desc: Start production services
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d
-
-  prod-update:
-    desc: Build image, migrate site, and restart production services
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans
-
-  prod-logs:
-    desc: Follow production logs
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml logs -f
-
-  prod-down:
-    desc: Stop production services
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml down
+      - '{{.DEV_COMPOSE}} down -v'
+      - '{{.DEV_COMPOSE}} up -d'

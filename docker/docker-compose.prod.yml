@@ -13,6 +13,14 @@ x-crm-service: &crm-service
     - sites:/home/frappe/frappe-bench/sites
     - logs:/home/frappe/frappe-bench/logs
 
+x-crm-depends-on: &crm-depends-on
+  mariadb:
+    condition: service_healthy
+  redis-cache:
+    condition: service_healthy
+  redis-queue:
+    condition: service_healthy
+
 services:
   mariadb:
     image: mariadb:10.8
@@ -26,14 +34,30 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in docker/.env}
     volumes:
       - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   redis-cache:
-    image: redis:alpine
+    image: redis:7-alpine
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   redis-queue:
-    image: redis:alpine
+    image: redis:7-alpine
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   site:
     <<: *crm-service
@@ -47,10 +71,7 @@ services:
       REDIS_QUEUE: redis://redis-queue:6379
       REDIS_SOCKETIO: redis://redis-queue:6379
       SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
-    depends_on:
-      - mariadb
-      - redis-cache
-      - redis-queue
+    depends_on: *crm-depends-on
     profiles:
       - setup
 
@@ -103,106 +124,87 @@ services:
     ports:
       - "${HTTP_PORT:-8000}:8080"
     depends_on:
-      - backend
-      - websocket
+      backend:
+        condition: service_started
+      websocket:
+        condition: service_started
 
   backend:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      ./env/bin/gunicorn
-      --chdir=/home/frappe/frappe-bench/sites
-      --bind=0.0.0.0:8000
-      --threads=4
-      --workers=${GUNICORN_WORKERS:-2}
-      --worker-class=gthread
-      --worker-tmp-dir=/dev/shm
-      --timeout=120
-      frappe.app:application'
-    depends_on:
-      - mariadb
-      - redis-cache
-      - redis-queue
+    command:
+      - env
+      - SYNC_PUBLIC_ASSETS=1
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - ./env/bin/gunicorn
+      - --chdir=/home/frappe/frappe-bench/sites
+      - --bind=0.0.0.0:8000
+      - --threads=4
+      - --workers=${GUNICORN_WORKERS:-2}
+      - --worker-class=gthread
+      - --worker-tmp-dir=/dev/shm
+      - --timeout=120
+      - frappe.app:application
+    depends_on: *crm-depends-on
 
   websocket:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      node apps/frappe/socketio.js'
+    command:
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - node
+      - apps/frappe/socketio.js
     depends_on:
-      - redis-queue
+      redis-queue:
+        condition: service_healthy
 
   queue-short:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      bench worker --queue short'
-    depends_on:
-      - mariadb
-      - redis-queue
+    command:
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - bench
+      - worker
+      - --queue
+      - short
+    depends_on: *crm-depends-on
 
   queue-default:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      bench worker --queue default'
-    depends_on:
-      - mariadb
-      - redis-queue
+    command:
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - bench
+      - worker
+      - --queue
+      - default
+    depends_on: *crm-depends-on
 
   queue-long:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      bench worker --queue long'
-    depends_on:
-      - mariadb
-      - redis-queue
+    command:
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - bench
+      - worker
+      - --queue
+      - long
+    depends_on: *crm-depends-on
 
   scheduler:
     <<: *crm-service
     restart: unless-stopped
-    command: >
-      bash -lc 'cd /home/frappe/frappe-bench &&
-      bench set-mariadb-host "$${DB_HOST}" &&
-      bench set-redis-cache-host "$${REDIS_CACHE}" &&
-      bench set-redis-queue-host "$${REDIS_QUEUE}" &&
-      bench set-redis-socketio-host "$${REDIS_SOCKETIO}" &&
-      bench set-config -g socketio_port "$${SOCKETIO_PORT}" &&
-      bench schedule'
-    depends_on:
-      - mariadb
-      - redis-queue
+    command:
+      - bash
+      - /opt/frappe/scripts/prod-runtime.sh
+      - bench
+      - schedule
+    depends_on: *crm-depends-on
 
 volumes:
   mariadb-data:

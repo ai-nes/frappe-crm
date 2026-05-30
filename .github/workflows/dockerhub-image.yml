@@ -5,24 +5,30 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "**.md"
+      - ".pi/**"
+      - ".vscode/**"
 
 env:
   IMAGE_NAME: crm-frappe
   PLATFORMS: linux/amd64
 
+concurrency:
+  group: dockerhub-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   dockerhub:
     name: Docker Hub
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -40,6 +46,7 @@ jobs:
           file: docker/prod.Dockerfile
           push: true
           platforms: ${{ env.PLATFORMS }}
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
           tags: |
