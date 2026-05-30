@@ -699,3 +699,117 @@ sites
 là dữ liệu production quan trọng.
 
 Container có thể recreate. Image có thể pull lại. Nhưng volume là nơi giữ data thật.
+
+## 20. Deploy runbook — quy trình đầy đủ khi có code mới
+
+### Stack production
+
+| Thành phần | Chi tiết |
+|---|---|
+| Deploy tool | Dokploy trên server |
+| Image registry | Docker Hub — `ngothanhdatak/crm-frappe:latest` |
+| Build CI | GitHub Actions — `.github/workflows/dockerhub-image.yml` |
+| Git remote | `https://github.com/darrenak403/frappe-crm.git` |
+| Site name | `crm.beyond8.io.vn` |
+
+### Bước 1 — Merge code vào `main`
+
+Tạo Pull Request từ branch feature/hotfix vào `main` trên GitHub rồi merge.
+
+Sau khi merge, GitHub Actions tự kích hoạt build image mới (~10–15 phút). Image được push lên Docker Hub:
+
+```text
+ngothanhdatak/crm-frappe:latest
+ngothanhdatak/crm-frappe:<github-sha>
+```
+
+### Bước 2 — Backup trước khi deploy (bắt buộc nếu có DB change)
+
+SSH vào server, chạy trong backend container:
+
+```bash
+docker exec -it <tên-backend-container> bash -lc '
+  cd /home/frappe/frappe-bench &&
+  bench --site crm.beyond8.io.vn backup --with-files
+'
+```
+
+Backup nằm trong volume `sites` ở thư mục `private/backups/`. Nên copy ra ngoài server trước khi tiếp tục.
+
+### Bước 3 — Pull image mới và recreate container (Dokploy)
+
+Vào Dokploy dashboard → service CRM → **Redeploy**.
+
+Dokploy pull image mới và recreate toàn bộ service: `backend`, `websocket`, `queue-short`, `queue-default`, `queue-long`, `scheduler`.
+
+Khi `backend` start, `prod-runtime.sh` tự chạy — sync public assets vào volume `sites/assets`. Frontend mới được serve ngay.
+
+### Bước 4 — Chạy `bench migrate` (bắt buộc khi có thay đổi DB)
+
+Cần migrate nếu deploy có: DocType mới, field mới/sửa/xóa, patch mới, fixture thay đổi.
+
+```bash
+# Xem tên container backend đang chạy
+docker ps | grep backend
+
+# Chạy migrate
+docker exec -it <tên-backend-container> bash -lc '
+  cd /home/frappe/frappe-bench &&
+  bench --site crm.beyond8.io.vn migrate &&
+  bench --site crm.beyond8.io.vn clear-cache
+'
+```
+
+Hoặc dùng `site` profile (chạy lại `prod-site.sh` đầy đủ, bao gồm migrate + sync assets):
+
+```bash
+docker compose -f docker/docker-compose.prod.yml --profile setup run --rm site
+```
+
+### Bước 5 — Import dữ liệu từ vTiger
+
+Copy file CSV vào backend container rồi chạy import script:
+
+```bash
+# Copy file CSV vào container
+docker cp /local/path/vtiger-export.csv <tên-backend-container>:/tmp/vtiger-export.csv
+
+# Chạy import
+docker exec -it <tên-backend-container> bash -lc '
+  cd /home/frappe/frappe-bench &&
+  bench --site crm.beyond8.io.vn execute crm.migration.vtiger_import.run \
+    --args "[\"/tmp/vtiger-export.csv\"]"
+'
+```
+
+Lead được import sẽ không tiêu thụ round-robin slot (do `doc.flags.skip_routing = True` trong import script).
+
+### Bước 6 — Kiểm tra sau deploy
+
+```bash
+# Xem log backend
+docker logs -f <tên-backend-container>
+
+# Kiểm tra assets được sync đúng (phải là directory, không phải symlink)
+docker exec -it <tên-nginx-container> sh -lc '
+  ls -ld /home/frappe/frappe-bench/sites/assets/crm
+  ls -ld /home/frappe/frappe-bench/sites/assets/frappe
+'
+
+# Test API cơ bản
+curl -I https://crm.beyond8.io.vn/api/method/frappe.ping
+```
+
+### Thứ tự deploy đầy đủ
+
+| Bước | Hành động | Ai làm |
+|---|---|---|
+| 1 | Merge PR vào `main` | Dev |
+| 2 | GitHub Actions build + push image (~15 phút) | Tự động |
+| 3 | Backup database | Admin server |
+| 4 | Dokploy Redeploy (pull image mới) | Admin server |
+| 5 | `bench migrate` trong backend container | Admin server |
+| 6 | Import CSV vTiger (nếu có) | Admin server |
+| 7 | Smoke test trên trình duyệt | QA |
+
+> **Tên container**: Dokploy đặt tên theo pattern `crm-<service>-<hash>-<role>-1`. Chạy `docker ps` trên server để lấy tên chính xác, ví dụ `crm-crmdev-bgfanm-backend-1`.
