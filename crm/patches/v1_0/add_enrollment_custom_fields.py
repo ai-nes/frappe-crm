@@ -109,6 +109,18 @@ def _add_crm_lead_fields(picklists):
 				"insert_after": "branch",
 			},
 			{
+				"fieldname": "nvfpt",
+				"fieldtype": "Small Text",
+				"label": "Nhân viên FPT",
+				"insert_after": "linked_contact",
+			},
+			{
+				"fieldname": "tags",
+				"fieldtype": "Small Text",
+				"label": "Tags",
+				"insert_after": "nvfpt",
+			},
+			{
 				"fieldname": "import_source_id",
 				"fieldtype": "Int",
 				"label": "Import Source ID",
@@ -219,8 +231,11 @@ def _update_lead_side_panel():
 				continue
 			column["fields"] = [f for f in column.get("fields", []) if f not in fields_to_hide]
 
-	enrollment_fields = ["province", "branch", "major", "high_school",
-		"ad_channel", "conversion_potential", "source", "lead_owner"]
+	enrollment_fields = [
+		"province", "branch", "major", "high_school",
+		"ad_channel", "nvfpt", "segments", "tags",
+		"conversion_potential", "fpt_aspiration", "source", "lead_owner",
+	]
 
 	# Bulk-fetch existing field names to avoid per-field DB queries
 	existing_custom = set(frappe.get_all(
