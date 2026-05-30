@@ -85,6 +85,18 @@ const routes = [
     component: () => import('@/pages/CallLogs.vue'),
   },
   {
+    alias: '/enrollment-students',
+    path: '/enrollment-students/view/:viewType?',
+    name: 'Enrollment Students',
+    component: () => import('@/pages/EnrollmentStudents.vue'),
+  },
+  {
+    path: '/enrollment-students/:enrollmentStudentId',
+    name: 'Enrollment Student',
+    component: () => import('@/pages/EnrollmentStudent.vue'),
+    props: true,
+  },
+  {
     path: '/data-import',
     name: 'DataImportList',
     component: () => import('@/pages/DataImport.vue'),
@@ -169,8 +181,11 @@ router.beforeEach(async (to, from, next) => {
     window.location.href = '/login?redirect-to=/crm'
   } else if (to.matched.length === 0) {
     next({ name: 'Invalid Page' })
-  } else if (['Deal', 'Lead'].includes(to.name) && !to.hash) {
-    let storageKey = to.name === 'Deal' ? 'lastDealTab' : 'lastLeadTab'
+  } else if (['Deal', 'Lead', 'Enrollment Student'].includes(to.name) && !to.hash) {
+    let storageKey =
+      to.name === 'Deal' ? 'lastDealTab'
+      : to.name === 'Enrollment Student' ? 'lastEnrollmentStudentTab'
+      : 'lastLeadTab'
     const activeTab = localStorage.getItem(storageKey) || 'activity'
     const hash = '#' + activeTab
     next({ ...to, hash })
@@ -183,6 +198,7 @@ router.beforeEach(async (to, from, next) => {
       'Notes',
       'Tasks',
       'Call Logs',
+      'Enrollment Students',
     ].includes(to.name) &&
     !to.query?.view
   ) {
@@ -201,6 +217,7 @@ router.beforeEach(async (to, from, next) => {
         Notes: 'FCRM Note',
         Tasks: 'CRM Task',
         'Call Logs': 'CRM Call Log',
+        'Enrollment Students': 'Enrollment Student',
       }
 
       const doctype = doctypeMap[to.name]

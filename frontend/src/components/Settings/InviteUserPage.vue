@@ -151,25 +151,25 @@ const inviteeExistMessage = computed(() => {
 const description = computed(() => {
   return {
     'System Manager':
-      'Can manage all aspects of the CRM, including user management, customizations and settings.',
+      'Quản lý toàn bộ CRM, bao gồm quản lý người dùng, tùy chỉnh và cài đặt.',
     'Sales Manager':
-      'Can manage and invite new users, and create public & private views (reports).',
+      'Quản lý tuyển sinh: mời người dùng mới, tạo báo cáo công khai & riêng tư.',
     'Sales User':
-      'Can work with leads and deals and create private views (reports).',
+      'Nhân viên tuyển sinh: làm việc với khách hàng tiềm năng, hồ sơ và tạo báo cáo riêng tư.',
   }[role.value]
 })
 
 const roleOptions = computed(() => {
   return [
     { value: 'Sales User', label: __('Sales User') },
-    ...(isAdmin() ? [{ value: 'Sales Manager', label: __('Manager') }] : []),
+    ...(isAdmin() ? [{ value: 'Sales Manager', label: __('Sales Manager') }] : []),
     ...(isAdmin() ? [{ value: 'System Manager', label: __('Admin') }] : []),
   ]
 })
 
 const roleMap = {
   'Sales User': __('Sales User'),
-  'Sales Manager': __('Manager'),
+  'Sales Manager': __('Sales Manager'),
   'System Manager': __('Admin'),
 }
 

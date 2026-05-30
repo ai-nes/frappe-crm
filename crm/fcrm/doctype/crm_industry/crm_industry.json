@@ -15,7 +15,7 @@
   {
    "fieldname": "industry",
    "fieldtype": "Data",
-   "label": "Industry",
+   "label": "Ngành quan tâm",
    "unique": 1
   }
  ],

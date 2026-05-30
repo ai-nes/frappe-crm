@@ -90,6 +90,7 @@ class CRMLead(Document):
 			add_status_change_log(self)
 
 	def after_insert(self):
+		_auto_assign_lead(self)
 		if self.lead_owner:
 			if self.lead_owner != frappe.session.user:
 				self.share_with_agent(self.lead_owner)
@@ -490,6 +491,70 @@ class CRMLead(Document):
 			"title_field": "lead_name",
 			"kanban_fields": '["organization", "email", "mobile_no", "_assign", "modified"]',
 		}
+
+
+def _find_routing_rule(branch, province, school):
+	"""Try school-specific first, then province fallback (2-level routing)."""
+	if school:
+		rule = frappe.get_all(
+			"CRM Lead Routing Rule",
+			filters={"branch": branch, "province": province, "school": school, "is_active": 1},
+			fields=["name", "round_robin_index"],
+			limit=1,
+			order_by="creation asc",
+		)
+		if rule:
+			return rule[0]
+
+	rule = frappe.get_all(
+		"CRM Lead Routing Rule",
+		filters={"branch": branch, "province": province, "school": ("in", ["", None]), "is_active": 1},
+		fields=["name", "round_robin_index"],
+		limit=1,
+		order_by="creation asc",
+	)
+	return rule[0] if rule else None
+
+
+def _pick_next_staff(rule_name):
+	"""Atomically increment counter and return the staff user for this slot."""
+	staff_rows = frappe.get_doc("CRM Lead Routing Rule", rule_name).staff
+	if not staff_rows:
+		return None
+
+	count = len(staff_rows)
+	frappe.db.sql(
+		"UPDATE `tabCRM Lead Routing Rule` SET round_robin_index = LAST_INSERT_ID(round_robin_index + 1) WHERE name = %s",
+		rule_name,
+	)
+	new_index = frappe.db.sql("SELECT LAST_INSERT_ID()", as_list=True)[0][0]
+	slot = (new_index - 1) % count
+	# Guard against staff list shrinking between the pre-fetch and index access
+	if slot >= len(staff_rows):
+		return staff_rows[0].user if staff_rows else None
+	return staff_rows[slot].user
+
+
+def _auto_assign_lead(lead):
+	"""Auto-assign lead to staff via routing rules when no owner is set."""
+	if lead.flags.get("skip_routing") or lead.lead_owner or not lead.branch or not lead.province:
+		return
+
+	rule = _find_routing_rule(lead.branch, lead.province, getattr(lead, "high_school", None))
+	if not rule:
+		return
+
+	user = _pick_next_staff(rule["name"])
+	if not user:
+		return
+
+	frappe.db.set_value("CRM Lead", lead.name, "lead_owner", user, update_modified=False)
+	frappe.share.add_docshare(
+		"CRM Lead", lead.name, user,
+		read=1, write=1, share=0, everyone=0, notify=0,
+		flags={"ignore_share_permission": True},
+	)
+	lead.assign_agent(user)
 
 
 @frappe.whitelist()

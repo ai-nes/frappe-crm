@@ -7,6 +7,8 @@ if [ "$(id -u)" = "0" ]; then
     mkdir -p "${BENCH_DIR}"
     chown frappe:frappe /home/frappe
     chown -R frappe:frappe "${BENCH_DIR}"
+    mkdir -p /workspace/node_modules /workspace/frontend/node_modules
+    chown -R frappe:frappe /workspace/node_modules /workspace/frontend/node_modules
     exec su -s /bin/bash frappe -c "cd /home/frappe && bash /workspace/docker/init.sh"
 fi
 

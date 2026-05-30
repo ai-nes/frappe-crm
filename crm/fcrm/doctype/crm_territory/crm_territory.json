@@ -23,7 +23,7 @@
    "fieldname": "territory_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Territory Name",
+   "label": "Tên chi nhánh",
    "reqd": 1,
    "unique": 1
   },

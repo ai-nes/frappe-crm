@@ -12,6 +12,14 @@
         v-if="contact._actions?.length"
         :actions="contact._actions"
       />
+      <Button
+        v-if="canCreateEnrollmentStudent"
+        :label="__('Tạo học sinh')"
+        iconLeft="plus"
+        variant="solid"
+        :loading="creatingStudent"
+        @click="createEnrollmentStudent"
+      />
     </template>
   </LayoutHeader>
   <div v-if="contact.doc" ref="parentRef" class="flex h-full">
@@ -284,6 +292,27 @@ const showDeleteLinkedDocModal = ref(false)
 
 async function deleteContact() {
   showDeleteLinkedDocModal.value = true
+}
+
+const creatingStudent = ref(false)
+const canCreateEnrollmentStudent = ref(true)
+
+async function createEnrollmentStudent() {
+  creatingStudent.value = true
+  try {
+    const name = await call(
+      'crm.fcrm.doctype.enrollment_student.enrollment_student.create_from_contact',
+      { contact: props.contactId },
+    )
+    router.push({ name: 'Enrollment Student', params: { enrollmentStudentId: name } })
+  } catch (err) {
+    toast.error(err.messages?.[0] || __('Failed to create enrollment student'))
+    if (err.exc_type === 'PermissionError') {
+      canCreateEnrollmentStudent.value = false
+    }
+  } finally {
+    creatingStudent.value = false
+  }
 }
 
 function changeContactImage(file) {

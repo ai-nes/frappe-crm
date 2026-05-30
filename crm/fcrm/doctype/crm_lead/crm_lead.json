@@ -89,7 +89,7 @@
   {
    "fieldname": "first_name",
    "fieldtype": "Data",
-   "label": "First Name",
+   "label": "Họ",
    "reqd": 1
   },
   {
@@ -100,7 +100,7 @@
   {
    "fieldname": "last_name",
    "fieldtype": "Data",
-   "label": "Last Name"
+   "label": "Tên"
   },
   {
    "fieldname": "gender",
@@ -113,7 +113,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Status",
+   "label": "Tình trạng",
    "options": "CRM Lead Status",
    "reqd": 1,
    "search_index": 1
@@ -134,7 +134,7 @@
   {
    "fieldname": "mobile_no",
    "fieldtype": "Data",
-   "label": "Mobile No.",
+   "label": "Di động",
    "options": "Phone"
   },
   {
@@ -165,19 +165,19 @@
   {
    "fieldname": "lead_owner",
    "fieldtype": "Link",
-   "label": "Lead Owner",
+   "label": "Giao cho",
    "options": "User"
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
-   "label": "Source",
+   "label": "Nguồn",
    "options": "CRM Lead Source"
   },
   {
    "fieldname": "industry",
    "fieldtype": "Link",
-   "label": "Industry",
+   "label": "Ngành quan tâm",
    "options": "CRM Industry"
   },
   {
@@ -191,7 +191,7 @@
    "fieldname": "lead_name",
    "fieldtype": "Data",
    "in_standard_filter": 1,
-   "label": "Full Name",
+   "label": "Họ và tên",
    "search_index": 1
   },
   {
@@ -202,14 +202,14 @@
   {
    "fieldname": "organization_tab",
    "fieldtype": "Tab Break",
-   "label": "Others",
+   "label": "Khác",
    "read_only": 1
   },
   {
    "fieldname": "organization",
    "fieldtype": "Data",
    "in_standard_filter": 1,
-   "label": "Organization"
+   "label": "Trường THPT"
   },
   {
    "default": "0",
@@ -217,17 +217,17 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Converted"
+   "label": "Đã chuyển hồ sơ"
   },
   {
    "fieldname": "person_tab",
    "fieldtype": "Tab Break",
-   "label": "Person"
+   "label": "Cá nhân"
   },
   {
    "fieldname": "details",
    "fieldtype": "Tab Break",
-   "label": "Details"
+   "label": "Chi tiết"
   },
   {
    "fieldname": "sla_tab",
@@ -295,7 +295,7 @@
   {
    "fieldname": "territory",
    "fieldtype": "Link",
-   "label": "Territory",
+   "label": "Chi nhánh",
    "options": "CRM Territory"
   },
   {
@@ -402,18 +402,18 @@
   {
    "fieldname": "lost_details_tab",
    "fieldtype": "Tab Break",
-   "label": "Lost Details"
+   "label": "Chi tiết từ chối"
   },
   {
    "fieldname": "lost_reason",
    "fieldtype": "Link",
-   "label": "Lost Reason",
+   "label": "Lý do không theo",
    "options": "CRM Lost Reason"
   },
   {
    "fieldname": "lost_notes",
    "fieldtype": "Text",
-   "label": "Lost Notes",
+   "label": "Ghi chú",
    "mandatory_depends_on": "eval: doc.lost_reason == \"Other\""
   },
   {
