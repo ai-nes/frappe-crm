@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Login to CRM</title>
+  <link rel="icon" href="/assets/frappe/images/frappe-favicon.svg" type="image/svg+xml" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -34,14 +35,12 @@
     .logo-box {
       width: 48px;
       height: 48px;
-      background: #111;
-      border-radius: 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #fff;
-      font-size: 22px;
-      font-weight: 700;
+    }
+
+    .logo-box img {
+      width: 48px;
+      height: 48px;
+      object-fit: contain;
     }
 
     h1 {
@@ -179,7 +178,7 @@
 <body>
   <div class="card">
     <div class="logo">
-      <div class="logo-box">F</div>
+      <div class="logo-box"><img src="/assets/frappe/images/frappe-logo.png" alt="Frappe" /></div>
     </div>
     <h1>Login to CRM</h1>
 
