@@ -8409,3 +8409,15 @@ msgstr "Lý do không theo"
 msgid "Lost Notes"
 msgstr "Ghi chú"
 
+msgid "Enrollment Students"
+msgstr "Học sinh nhập học"
+
+msgid "Enrollment Student"
+msgstr "Học sinh nhập học"
+
+msgid "Call Logs"
+msgstr "Lịch sử cuộc gọi"
+
+msgid "Call Log"
+msgstr "Lịch sử cuộc gọi"
+

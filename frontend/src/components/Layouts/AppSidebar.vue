@@ -261,7 +261,7 @@ const links = [
     to: 'Call Logs',
   },
   {
-    label: 'Học sinh nhập học',
+    label: 'Enrollment Students',
     icon: GraduationCapIcon,
     to: 'Enrollment Students',
   },
