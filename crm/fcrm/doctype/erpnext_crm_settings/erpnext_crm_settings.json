@@ -15,9 +15,7 @@
   "column_break_fllx",
   "api_secret",
   "section_break_jnbn",
-  "create_customer_on_status_change",
-  "column_break_kbhw",
-  "deal_status"
+  "create_customer_on_status_change"
  ],
  "fields": [
   {
@@ -89,14 +87,6 @@
   {
    "fieldname": "column_break_kbhw",
    "fieldtype": "Column Break"
-  },
-  {
-   "depends_on": "eval:doc.enabled && doc.create_customer_on_status_change",
-   "fieldname": "deal_status",
-   "fieldtype": "Link",
-   "label": "Deal Status",
-   "mandatory_depends_on": "create_customer_on_status_change",
-   "options": "CRM Deal Status"
   }
  ],
  "index_web_pages_for_search": 1,

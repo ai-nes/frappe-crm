@@ -169,11 +169,6 @@ doc_events = {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
 	},
-	"CRM Deal": {
-		"on_update": [
-			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext"
-		],
-	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
@@ -184,14 +179,15 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	"daily_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_daily"],
-	"hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],
-	"monthly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"],
-	"cron": {
-		"*/5 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes"],
-		"*/10 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes"],
-		"*/15 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes"],
-	},
+	# Disabled: lead_syncing targets CRM Lead — will be rerouted to Student/CRM Contact in a future phase
+	# "daily_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_daily"],
+	# "hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],
+	# "monthly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"],
+	# "cron": {
+	# 	"*/5 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes"],
+	# 	"*/10 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes"],
+	# 	"*/15 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes"],
+	# },
 }
 
 # Testing
