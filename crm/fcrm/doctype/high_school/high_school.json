@@ -2,54 +2,83 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:province_name",
- "creation": "2026-05-30 00:00:00.000000",
+ "autoname": "field:high_school_name",
+ "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "province_name",
-  "region",
-  "city_type",
-  "city_number",
-  "import_source_id"
+  "high_school_name",
+  "school_type",
+  "column_break_1",
+  "province",
+  "ward",
+  "section_break_1",
+  "address",
+  "column_break_2",
+  "phone",
+  "email"
  ],
  "fields": [
   {
-   "fieldname": "province_name",
+   "fieldname": "high_school_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Tên tỉnh/thành phố",
+   "label": "High School Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "region",
+   "fieldname": "school_type",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Region",
-   "options": "Region"
+   "label": "School Type",
+   "options": "School Type"
   },
   {
-   "fieldname": "city_type",
-   "fieldtype": "Select",
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "province",
+   "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Loại",
-   "options": "Thành phố trực thuộc TW\nTỉnh"
+   "in_standard_filter": 1,
+   "label": "Province",
+   "options": "CRM Province"
   },
   {
-   "fieldname": "city_number",
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Ward",
+   "options": "CRM Ward"
+  },
+  {
+   "fieldname": "section_break_1",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "address",
+   "fieldtype": "Small Text",
+   "label": "Address"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "phone",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Mã tỉnh"
+   "label": "Phone"
   },
   {
-   "fieldname": "import_source_id",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Import Source ID"
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -57,7 +86,7 @@
  "modified": "2026-06-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
- "name": "CRM Province",
+ "name": "High School",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
@@ -100,9 +129,9 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "sort_field": "province_name",
+ "search_fields": "province,school_type",
+ "sort_field": "high_school_name",
  "sort_order": "ASC",
  "states": [],
- "title_field": "province_name",
- "translated_doctype": 1
+ "title_field": "high_school_name"
 }
