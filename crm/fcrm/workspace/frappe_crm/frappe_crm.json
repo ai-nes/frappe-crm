@@ -1,0 +1,189 @@
+{
+ "charts": [],
+ "content": "[{\"id\":\"portal-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PORTAL</b></span>\",\"col\":12}},{\"id\":\"portal-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Portal Page\",\"col\":3}},{\"id\":\"shortcut-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shortcut-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>SHORTCUTS</b>\",\"col\":12}},{\"id\":\"students-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Prospective Students\",\"col\":3}},{\"id\":\"contacts-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Contacts\",\"col\":3}},{\"id\":\"schools-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"High Schools\",\"col\":3}},{\"id\":\"persons-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Persons\",\"col\":3}},{\"id\":\"campaigns-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campaigns\",\"col\":3}},{\"id\":\"events-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Events\",\"col\":3}},{\"id\":\"staff-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Staff\",\"col\":3}},{\"id\":\"sla-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SLA\",\"col\":3}},{\"id\":\"assignment-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Rule\",\"col\":3}},{\"id\":\"meta-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"meta-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>META</b>\",\"col\":12}},{\"id\":\"source-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Lead Source\",\"col\":3}},{\"id\":\"major-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Major\",\"col\":3}},{\"id\":\"campus-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campus\",\"col\":3}},{\"id\":\"admission-year-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Admission Year\",\"col\":3}},{\"id\":\"school-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM School Type\",\"col\":3}},{\"id\":\"campaign-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campaign Type\",\"col\":3}},{\"id\":\"major-group-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Major Group\",\"col\":3}},{\"id\":\"geo-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"geo-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>GEOGRAPHY</b>\",\"col\":12}},{\"id\":\"region-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Region\",\"col\":3}},{\"id\":\"province-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Province\",\"col\":3}},{\"id\":\"ward-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Ward\",\"col\":3}}]",
+ "creation": "2023-11-27 13:55:17.090361",
+ "custom_blocks": [],
+ "docstatus": 0,
+ "doctype": "Workspace",
+ "for_user": "",
+ "hide_custom": 0,
+ "icon": "filter",
+ "idx": 0,
+ "indicator_color": "",
+ "is_hidden": 0,
+ "label": "Frappe CRM",
+ "links": [],
+ "modified": "2024-01-04 19:08:27.799960",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "Frappe CRM",
+ "number_cards": [],
+ "owner": "shariq@frappe.io",
+ "parent_page": "",
+ "public": 1,
+ "quick_lists": [],
+ "roles": [],
+ "sequence_id": 1.0,
+ "shortcuts": [
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Prospective Students",
+   "link_to": "Enrollment Student",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Portal Page",
+   "type": "URL",
+   "url": "/crm"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "SLA",
+   "link_to": "CRM Service Level Agreement",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Contacts",
+   "link_to": "CRM Contact",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "High Schools",
+   "link_to": "CRM High School",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Assignment Rule",
+   "link_to": "Assignment Rule",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Persons",
+   "link_to": "Person",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Campaigns",
+   "link_to": "Campaign",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Events",
+   "link_to": "CRM Event",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Staff",
+   "link_to": "Staff",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Lead Source",
+   "link_to": "CRM Lead Source",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Major",
+   "link_to": "CRM Major",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Campus",
+   "link_to": "Campus",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Admission Year",
+   "link_to": "Admission Year",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM School Type",
+   "link_to": "CRM School Type",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Campaign Type",
+   "link_to": "Campaign Type",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "Major Group",
+   "link_to": "Major Group",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Region",
+   "link_to": "CRM Region",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Province",
+   "link_to": "CRM Province",
+   "stats_filter": "[]",
+   "type": "DocType"
+  },
+  {
+   "color": "Grey",
+   "doc_view": "List",
+   "label": "CRM Ward",
+   "link_to": "CRM Ward",
+   "stats_filter": "[]",
+   "type": "DocType"
+  }
+ ],
+ "title": "Frappe CRM"
+}
