@@ -2,48 +2,30 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:province_name",
- "creation": "2026-05-30 00:00:00.000000",
+ "autoname": "field:school_type_name",
+ "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "province_name",
-  "region",
-  "city_type",
-  "city_number",
+  "school_type_name",
+  "description",
   "import_source_id"
  ],
  "fields": [
   {
-   "fieldname": "province_name",
+   "fieldname": "school_type_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Tên tỉnh/thành phố",
+   "label": "School Type Name",
    "reqd": 1,
    "unique": 1
   },
   {
-   "fieldname": "region",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Region",
-   "options": "CRM Region"
-  },
-  {
-   "fieldname": "city_type",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "label": "Loại",
-   "options": "Thành phố trực thuộc TW\nTỉnh"
-  },
-  {
-   "fieldname": "city_number",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Mã tỉnh"
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
   },
   {
    "fieldname": "import_source_id",
@@ -54,10 +36,10 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-03 02:00:00.000000",
+ "modified": "2026-06-03 01:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
- "name": "CRM Province",
+ "name": "CRM School Type",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
@@ -100,9 +82,8 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "sort_field": "province_name",
+ "sort_field": "school_type_name",
  "sort_order": "ASC",
  "states": [],
- "title_field": "province_name",
- "translated_doctype": 1
+ "title_field": "school_type_name"
 }
