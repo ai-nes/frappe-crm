@@ -7,7 +7,6 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from crm.fcrm.doctype.crm_dashboard.crm_dashboard import create_default_manager_dashboard
-from crm.fcrm.doctype.crm_products.crm_products import create_product_details_script
 
 
 def before_install():
@@ -15,19 +14,14 @@ def before_install():
 
 
 def after_install(force=False):
-	add_default_lead_statuses()
-	add_default_deal_statuses()
-	add_default_communication_statuses()
 	add_default_fields_layout(force)
 	add_property_setter()
 	add_email_template_custom_fields()
 	add_email_account_custom_field()
-	add_default_industries()
 	add_default_lead_sources()
 	add_default_lost_reasons()
 	add_default_quick_filters()
 	add_standard_dropdown_items()
-	add_default_scripts()
 	create_default_manager_dashboard(force)
 	create_assignment_rule_custom_fields()
 	add_assignment_rule_property_setters()
@@ -489,8 +483,6 @@ def add_standard_dropdown_items():
 def add_default_scripts():
 	from crm.fcrm.doctype.fcrm_settings.fcrm_settings import create_forecasting_script
 
-	for doctype in ["CRM Lead", "CRM Deal"]:
-		create_product_details_script(doctype)
 	create_forecasting_script()
 
 
