@@ -48,6 +48,12 @@ fi
 
 cd "${BENCH_DIR}"
 
+# /workspace is a host-mounted Git repo. Inside the container it can appear to be
+# owned by a different UID, so bench's Git checks need an explicit trust entry.
+if ! git config --global --get-all safe.directory | grep -Fxq /workspace; then
+    git config --global --add safe.directory /workspace
+fi
+
 # Use containers instead of localhost
 bench set-mariadb-host mariadb
 bench set-redis-cache-host redis://redis:6379
