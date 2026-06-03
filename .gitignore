@@ -23,7 +23,11 @@ AGENTS.md
 
 docker/.env
 docker/.env.*
-# docs/*
-plans/*
+docs/
+plans/
 crm/migration/id_maps/*.json
 crm/migration/fixtures/*.csv
+
+# Cache files
+.ck.json
+.mcp.json
