@@ -22,6 +22,11 @@ tasks:
     cmds:
       - '{{.DEV_COMPOSE}} up -d'
 
+  up-build:
+    desc: Build and recreate local backend stack
+    cmds:
+      - '{{.DEV_COMPOSE}} up -d --build --force-recreate'
+
   down:
     desc: Stop local backend stack
     cmds:
