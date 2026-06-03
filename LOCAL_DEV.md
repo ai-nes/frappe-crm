@@ -26,6 +26,20 @@ node -v
 yarn -v
 ```
 
+### Windows
+
+- Cài [Task](https://taskfile.dev/installation/) (Go) hoặc dùng `yarn dev` từ root thay `task fe`.
+- Thêm vào `C:\Windows\System32\drivers\etc\hosts`:
+
+  ```text
+  127.0.0.1 crm.localhost
+  ```
+
+- Chạy frontend trong **Git Bash** hoặc **PowerShell** (không dùng CMD cũ nếu thiếu `&&`).
+- Lần đầu: `cd frontend && yarn install --check-files` rồi `yarn dev`.
+- Dòng `Local frappe-ui vite plugin not found, using npm package` là **cảnh báo bình thường**, không phải lỗi.
+- Nếu port 5000 bận: `set FRAPPE_WEB_SERVER_PORT=8000` và `set VITE_PORT=5001` (PowerShell: `$env:VITE_PORT=5001`).
+
 ## 1. Chạy lần đầu
 
 Ở thư mục root repo:

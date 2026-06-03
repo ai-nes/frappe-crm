@@ -4,6 +4,25 @@ import vueJsx from '@vitejs/plugin-vue-jsx'
 import path from 'path'
 import { VitePWA } from 'vite-plugin-pwa'
 
+const FRAPPE_WEB_PORT = Number(process.env.FRAPPE_WEB_SERVER_PORT) || 8000
+const VITE_PORT = Number(process.env.VITE_PORT) || 5000
+
+// Proxy API/desk requests to the Frappe backend (same rules as frappe-ui/vite/frappeProxy.js).
+// frappeProxy is disabled below: its getCommonSiteConfig() loops forever on Windows
+// because path traversal checks `currentDir !== '/'` and never reaches a Windows drive root.
+function frappeDevProxy() {
+  return {
+    '^/(desk|app|login|api|assets|files|private)': {
+      target: `http://127.0.0.1:${FRAPPE_WEB_PORT}`,
+      ws: true,
+      router(req) {
+        const siteName = req.headers.host?.split(':')[0] || 'crm.localhost'
+        return `http://${siteName}:${FRAPPE_WEB_PORT}`
+      },
+    },
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig(async ({ mode }) => {
   const isDev = mode === 'development'
@@ -68,20 +87,19 @@ export default defineConfig(async ({ mode }) => {
       ],
     },
     server: {
-      port: 5000,
+      port: VITE_PORT,
       strictPort: true,
       fs: {
         allow: [path.resolve(__dirname, '..')],
       },
+      proxy: isDev ? frappeDevProxy() : undefined,
     },
   }
 
   const frappeui = await importFrappeUIPlugin(isDev, config)
   config.plugins.unshift(
     frappeui({
-      frappeProxy: {
-        port: 5000,
-      },
+      frappeProxy: false,
       lucideIcons: true,
       jinjaBootData: true,
       buildConfig: {
