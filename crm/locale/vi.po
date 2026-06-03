@@ -8594,3 +8594,12 @@ msgstr "CẤU HÌNH"
 msgid "PORTAL"
 msgstr "CỔNG"
 
+msgid "Major Name"
+msgstr "Tên ngành"
+
+msgid "Major Code"
+msgstr "Mã ngành"
+
+msgid "Active for Admission"
+msgstr "Còn tuyển"
+
