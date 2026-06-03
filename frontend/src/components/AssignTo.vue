@@ -39,15 +39,7 @@ const { document } = useDocument(props.doctype, props.docname)
 
 const assignees = defineModel({ type: Array, default: () => [] })
 
-const ownerField = computed(() => {
-  if (props.doctype === 'CRM Lead') {
-    return 'lead_owner'
-  } else if (props.doctype === 'CRM Deal') {
-    return 'deal_owner'
-  } else {
-    return null
-  }
-})
+const ownerField = computed(() => null)
 
 async function saveAssignees(
   addedAssignees,

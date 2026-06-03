@@ -48,15 +48,15 @@
             :label="__('For')"
             :options="[
               {
-                label: __('Deal'),
-                value: 'CRM Deal',
+                label: __('CRM Contact'),
+                value: 'CRM Contact',
               },
               {
-                label: __('Lead'),
-                value: 'CRM Lead',
+                label: __('Enrollment Student'),
+                value: 'Enrollment Student',
               },
             ]"
-            :placeholder="__('Deal')"
+            :placeholder="__('CRM Contact')"
           />
         </div>
       </div>
@@ -93,7 +93,7 @@
           :rows="10"
           :placeholder="
             __(
-              '<p>Dear {{ lead_name }},</p>\n\n<p>This is a reminder for the payment of {{ grand_total }}.</p>\n\n<p>Thanks,</p>\n<p>Frappé</p>',
+                '<p>Dear {{ full_name }},</p>\n\n<p>This is a reminder from the admissions team.</p>\n\n<p>Thanks,</p>\n<p>Frappé</p>',
             )
           "
         />
@@ -109,7 +109,7 @@
             :content="template.response"
             :placeholder="
               __(
-                'Dear {{ lead_name }}, \n\nThis is a reminder for the payment of {{ grand_total }}. \n\nThanks, \nFrappé',
+                'Dear {{ full_name }}, \n\nThis is a reminder from the admissions team. \n\nThanks, \nFrappé',
               )
             "
             @change="(val) => (template.response = val)"

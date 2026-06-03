@@ -88,7 +88,7 @@ def create_call_log(call_details: TwilioCallDetails):
 
 	call_log = frappe.get_doc({**details, "doctype": "CRM Call Log", "telephony_medium": "Twilio"})
 
-	# link call log with lead/deal
+	# link call log with the resolved CRM/contact record
 	contact_number = details.get("from") if details.get("type") == "Incoming" else details.get("to")
 	link(contact_number, call_log)
 
@@ -102,12 +102,9 @@ def link(contact_number, call_log):
 	if contact.get("name"):
 		doctype = "Contact"
 		docname = contact.get("name")
-		if contact.get("lead"):
-			doctype = "CRM Lead"
-			docname = contact.get("lead")
-		elif contact.get("deal"):
-			doctype = "CRM Deal"
-			docname = contact.get("deal")
+		if contact.get("crm_contact"):
+			doctype = "CRM Contact"
+			docname = contact.get("crm_contact")
 		call_log.link_with_reference_doc(doctype, docname)
 
 

@@ -3,17 +3,11 @@ from frappe import _
 
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 
+ASSIGNMENT_DOCTYPES = {"CRM Contact", "Enrollment Student", "CRM Task"}
+
 
 def after_insert(doc, method):
-	if doc.reference_type in ["CRM Lead", "CRM Deal"] and doc.reference_name and doc.allocated_to:
-		fieldname = "lead_owner" if doc.reference_type == "CRM Lead" else "deal_owner"
-		owner = frappe.db.get_value(doc.reference_type, doc.reference_name, fieldname)
-		if not owner:
-			frappe.db.set_value(
-				doc.reference_type, doc.reference_name, fieldname, doc.allocated_to, update_modified=False
-			)
-
-	if doc.reference_type in ["CRM Lead", "CRM Deal", "CRM Task"] and doc.reference_name and doc.allocated_to:
+	if doc.reference_type in ASSIGNMENT_DOCTYPES and doc.reference_name and doc.allocated_to:
 		notify_assigned_user(doc)
 
 
@@ -21,7 +15,7 @@ def on_update(doc, method):
 	if (
 		doc.has_value_changed("status")
 		and doc.status == "Cancelled"
-		and doc.reference_type in ["CRM Lead", "CRM Deal", "CRM Task"]
+		and doc.reference_type in ASSIGNMENT_DOCTYPES
 		and doc.reference_name
 		and doc.allocated_to
 	):
@@ -29,9 +23,9 @@ def on_update(doc, method):
 
 
 def notify_assigned_user(doc, is_cancelled=False):
-	_doc = frappe.get_doc(doc.reference_type, doc.reference_name)
+	reference_doc = frappe.get_doc(doc.reference_type, doc.reference_name)
 	owner = frappe.get_cached_value("User", frappe.session.user, "full_name")
-	notification_text = get_notification_text(owner, doc, _doc, is_cancelled)
+	notification_text = get_notification_text(owner, doc, reference_doc, is_cancelled)
 
 	message = (
 		_("Your assignment on {0} {1} has been removed by {2}").format(
@@ -59,58 +53,45 @@ def notify_assigned_user(doc, is_cancelled=False):
 
 
 def get_notification_text(owner, doc, reference_doc, is_cancelled=False):
-	name = doc.reference_name
-	doctype = doc.reference_type
+	doctype = get_doctype_label(doc.reference_type)
+	name = get_reference_title(reference_doc)
 
-	if doctype.startswith("CRM "):
-		doctype = doctype[4:].lower()
-
-	if doctype in ["lead", "deal"]:
-		name = (
-			reference_doc.lead_name or name
-			if doctype == "lead"
-			else reference_doc.organization or reference_doc.lead_name or name
-		)
-
-		if is_cancelled:
-			return f"""
-                <div class="mb-2 leading-5 text-ink-gray-5">
-                    <span>{ _('Your assignment on {0} {1} has been removed by {2}').format(
-                        doctype,
-                        f'<span class="font-medium text-ink-gray-9">{ name }</span>',
-                        f'<span class="font-medium text-ink-gray-9">{ owner }</span>'
-                    ) }</span>
-                </div>
-            """
-
+	if is_cancelled:
 		return f"""
             <div class="mb-2 leading-5 text-ink-gray-5">
-                <span class="font-medium text-ink-gray-9">{ owner }</span>
-                <span>{ _('assigned a {0} {1} to you').format(
+                <span>{ _('Your assignment on {0} {1} has been removed by {2}').format(
                     doctype,
-                    f'<span class="font-medium text-ink-gray-9">{ name }</span>'
+                    f'<span class="font-medium text-ink-gray-9">{ name }</span>',
+                    f'<span class="font-medium text-ink-gray-9">{ owner }</span>'
                 ) }</span>
             </div>
         """
 
-	if doctype == "task":
-		if is_cancelled:
-			return f"""
-                <div class="mb-2 leading-5 text-ink-gray-5">
-                    <span>{ _('Your assignment on task {0} has been removed by {1}').format(
-                        f'<span class="font-medium text-ink-gray-9">{ reference_doc.title }</span>',
-                        f'<span class="font-medium text-ink-gray-9">{ owner }</span>'
-                    ) }</span>
-                </div>
-            """
-		return f"""
-            <div class="mb-2 leading-5 text-ink-gray-5">
-                <span class="font-medium text-ink-gray-9">{ owner }</span>
-                <span>{ _('assigned a new task {0} to you').format(
-                    f'<span class="font-medium text-ink-gray-9">{ reference_doc.title }</span>'
-                ) }</span>
-            </div>
-        """
+	return f"""
+        <div class="mb-2 leading-5 text-ink-gray-5">
+            <span class="font-medium text-ink-gray-9">{ owner }</span>
+            <span>{ _('assigned a {0} {1} to you').format(
+                doctype,
+                f'<span class="font-medium text-ink-gray-9">{ name }</span>'
+            ) }</span>
+        </div>
+    """
+
+
+def get_reference_title(doc):
+	for fieldname in ("full_name", "student_name", "title", "name"):
+		if doc.get(fieldname):
+			return doc.get(fieldname)
+	return doc.name
+
+
+def get_doctype_label(doctype):
+	labels = {
+		"CRM Contact": _("crm contact"),
+		"Enrollment Student": _("student"),
+		"CRM Task": _("task"),
+	}
+	return labels.get(doctype, _(doctype.lower()))
 
 
 def get_redirect_to_doc(doc):

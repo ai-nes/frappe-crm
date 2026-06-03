@@ -70,8 +70,8 @@
           type="select"
           :options="[
             { label: __('All'), value: 'All' },
-            { label: __('Lead'), value: 'CRM Lead' },
-            { label: __('Deal'), value: 'CRM Deal' },
+            { label: __('CRM Contact'), value: 'CRM Contact' },
+            { label: __('Enrollment Student'), value: 'Enrollment Student' },
           ]"
         />
       </div>

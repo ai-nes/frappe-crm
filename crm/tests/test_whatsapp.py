@@ -16,19 +16,19 @@ class TestWhatsAppHooks(FrappeTestCase):
 	# --- validate() ---
 
 	def test_validate_sets_reference_when_contact_found(self):
-		"""validate() links the doc when a matching Contact/Lead is found"""
+		"""validate() links the doc when a matching Contact/CRM Contact is found"""
 		doc = MagicMock()
 		doc.type = "Incoming"
 		doc.get.return_value = "+15551234567"
 
 		with patch(
-			"crm.api.whatsapp.get_contact_lead_or_deal_from_number",
-			return_value=("LEAD-0001", "CRM Lead"),
+			"crm.api.whatsapp.get_contact_reference_from_number",
+			return_value=("CRM-CONTACT-0001", "CRM Contact"),
 		):
 			validate(doc, None)
 
-		self.assertEqual(doc.reference_doctype, "CRM Lead")
-		self.assertEqual(doc.reference_name, "LEAD-0001")
+		self.assertEqual(doc.reference_doctype, "CRM Contact")
+		self.assertEqual(doc.reference_name, "CRM-CONTACT-0001")
 
 	def test_validate_skips_reference_when_no_contact_found(self):
 		"""validate() leaves reference fields untouched when number is unknown"""
@@ -39,7 +39,7 @@ class TestWhatsAppHooks(FrappeTestCase):
 		doc.reference_name = None
 
 		with patch(
-			"crm.api.whatsapp.get_contact_lead_or_deal_from_number",
+			"crm.api.whatsapp.get_contact_reference_from_number",
 			return_value=(None, None),
 		):
 			validate(doc, None)
@@ -55,7 +55,7 @@ class TestWhatsAppHooks(FrappeTestCase):
 
 		with (
 			patch(
-				"crm.api.whatsapp.get_contact_lead_or_deal_from_number",
+				"crm.api.whatsapp.get_contact_reference_from_number",
 				side_effect=Exception("parse error"),
 			),
 			patch("frappe.log_error") as mock_log,
@@ -83,7 +83,7 @@ class TestWhatsAppHooks(FrappeTestCase):
 		doc = MagicMock()
 		doc.type = "Incoming"
 		doc.reference_doctype = ""
-		doc.reference_name = "LEAD-0001"
+		doc.reference_name = "CRM-CONTACT-0001"
 
 		with patch("crm.api.whatsapp.get_assigned_users") as mock_users:
 			notify_agent(doc)

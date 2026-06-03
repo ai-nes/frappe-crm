@@ -10,197 +10,49 @@ from frappe.translate import get_translated_doctypes
 from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
 
 
+IGNORED_VERSION_FIELDS = {
+	"docstatus",
+	"idx",
+	"modified",
+	"modified_by",
+	"owner",
+	"naming_series",
+	"response_by",
+	"sla_creation",
+	"sla",
+	"first_response_time",
+	"last_response_time",
+	"first_responded_on",
+	"last_responded_on",
+	"rolling_responses",
+}
+
+
 @frappe.whitelist()
-def get_activities(name: str):
-	if frappe.db.exists("CRM Deal", name):
-		return get_deal_activities(name)
-	elif frappe.db.exists("CRM Lead", name):
-		return get_lead_activities(name)
-	else:
+def get_activities(doctype: str, name: str):
+	if not doctype or not name or not frappe.db.exists(doctype, name):
 		frappe.throw(_("Document not found"), frappe.DoesNotExistError)
 
-
-def get_deal_activities(name: str):
-	if not frappe.has_permission("CRM Deal", "read", name):
+	if not frappe.has_permission(doctype, "read", name):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
-	get_docinfo("", "CRM Deal", name)
+	return get_document_activities(doctype, name)
+
+
+def get_document_activities(doctype: str, name: str):
+	get_docinfo("", doctype, name)
 	docinfo = frappe.response["docinfo"]
-	deal_meta = frappe.get_meta("CRM Deal")
-	deal_fields = {
-		field.fieldname: {"label": field.label, "options": field.options} for field in deal_meta.fields
-	}
-	avoid_fields = [
-		"lead",
-		"response_by",
-		"sla_creation",
-		"sla",
-		"first_response_time",
-		"first_responded_on",
-	]
+	meta = frappe.get_meta(doctype)
+	fields = {field.fieldname: {"label": field.label, "options": field.options} for field in meta.fields}
 
-	doc = frappe.db.get_values("CRM Deal", name, ["creation", "owner", "lead"])[0]
-	lead = doc[2]
-
-	activities = []
-	calls = []
-	notes = []
-	tasks = []
-	attachments = []
-	creation_text = _("created this deal")
-
-	if lead:
-		activities, calls, notes, tasks, attachments = get_lead_activities(lead)
-		creation_text = _("converted the lead to this deal")
-
-	activities.append(
-		{
-			"activity_type": "creation",
-			"creation": doc[0],
-			"owner": doc[1],
-			"data": creation_text,
-			"is_lead": False,
-		}
-	)
-
-	docinfo.versions.reverse()
-
-	for version in docinfo.versions:
-		data = json.loads(version.data)
-		if not data.get("changed"):
-			continue
-
-		if change := data.get("changed")[0]:
-			field = deal_fields.get(change[0], None)
-
-			if not field or change[0] in avoid_fields or (not change[1] and not change[2]):
-				continue
-
-			field_label = field.get("label") or change[0]
-			field_option = field.get("options") or None
-
-			activity_type = "changed"
-			data = {
-				"field": change[0],
-				"field_label": field_label,
-				"old_value": change[1],
-				"value": change[2],
-			}
-
-			if not change[1] and change[2]:
-				activity_type = "added"
-				data = {
-					"field": change[0],
-					"field_label": field_label,
-					"value": change[2],
-				}
-			elif change[1] and not change[2]:
-				activity_type = "removed"
-				data = {
-					"field": change[0],
-					"field_label": field_label,
-					"value": change[1],
-				}
-
-			if data.get("value") and field_option and is_translatable(field_option):
-				data["value"] = _(data["value"])
-
-				if data.get("old_value"):
-					data["old_value"] = _(data["old_value"])
-
-		activity = {
-			"activity_type": activity_type,
-			"creation": version.creation,
-			"owner": version.owner,
-			"data": data,
-			"is_lead": False,
-			"options": field_option,
-		}
-		activities.append(activity)
-
-	for comment in docinfo.comments:
-		activity = {
-			"name": comment.name,
-			"activity_type": "comment",
-			"creation": comment.creation,
-			"owner": comment.owner,
-			"content": comment.content,
-			"attachments": get_attachments("Comment", comment.name),
-			"is_lead": False,
-		}
-		activities.append(activity)
-
-	for communication in docinfo.communications + docinfo.automated_messages:
-		activity = {
-			"activity_type": "communication",
-			"communication_type": communication.communication_type,
-			"communication_date": communication.communication_date or communication.creation,
-			"creation": communication.creation,
-			"data": {
-				"subject": communication.subject,
-				"content": communication.content,
-				"sender_full_name": communication.sender_full_name,
-				"sender": communication.sender,
-				"recipients": communication.recipients,
-				"cc": communication.cc,
-				"bcc": communication.bcc,
-				"attachments": get_attachments("Communication", communication.name),
-				"read_by_recipient": communication.read_by_recipient,
-				"delivery_status": communication.delivery_status,
-			},
-			"is_lead": False,
-		}
-		activities.append(activity)
-
-	for attachment_log in docinfo.attachment_logs:
-		activity = {
-			"name": attachment_log.name,
-			"activity_type": "attachment_log",
-			"creation": attachment_log.creation,
-			"owner": attachment_log.owner,
-			"data": parse_attachment_log(attachment_log.content, attachment_log.comment_type),
-			"is_lead": False,
-		}
-		activities.append(activity)
-
-	calls = calls + get_linked_calls(name).get("calls", [])
-	notes = notes + get_linked_notes(name) + get_linked_calls(name).get("notes", [])
-	tasks = tasks + get_linked_tasks(name) + get_linked_calls(name).get("tasks", [])
-	attachments = attachments + get_attachments("CRM Deal", name)
-
-	activities.sort(key=lambda x: x["creation"], reverse=True)
-	activities = handle_multiple_versions(activities)
-
-	return activities, calls, notes, tasks, attachments
-
-
-def get_lead_activities(name: str):
-	if not frappe.has_permission("CRM Lead", "read", name):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
-
-	get_docinfo("", "CRM Lead", name)
-	docinfo = frappe.response["docinfo"]
-	lead_meta = frappe.get_meta("CRM Lead")
-	lead_fields = {
-		field.fieldname: {"label": field.label, "options": field.options} for field in lead_meta.fields
-	}
-	avoid_fields = [
-		"converted",
-		"response_by",
-		"sla_creation",
-		"sla",
-		"first_response_time",
-		"first_responded_on",
-	]
-
-	doc = frappe.db.get_values("CRM Lead", name, ["creation", "owner"])[0]
+	doc = frappe.db.get_values(doctype, name, ["creation", "owner"])[0]
 	activities = [
 		{
 			"activity_type": "creation",
 			"creation": doc[0],
 			"owner": doc[1],
-			"data": _("created this lead"),
-			"is_lead": True,
+			"data": _("created this document"),
+			"is_lead": False,
 		}
 	]
 
@@ -212,9 +64,9 @@ def get_lead_activities(name: str):
 			continue
 
 		if change := data.get("changed")[0]:
-			field = lead_fields.get(change[0], None)
+			field = fields.get(change[0])
 
-			if not field or change[0] in avoid_fields or (not change[1] and not change[2]):
+			if not field or change[0] in IGNORED_VERSION_FIELDS or (not change[1] and not change[2]):
 				continue
 
 			field_label = field.get("label") or change[0]
@@ -249,65 +101,70 @@ def get_lead_activities(name: str):
 				if data.get("old_value"):
 					data["old_value"] = _(data["old_value"])
 
-		activity = {
-			"activity_type": activity_type,
-			"creation": version.creation,
-			"owner": version.owner,
-			"data": data,
-			"is_lead": True,
-			"options": field_option,
-		}
-		activities.append(activity)
+		activities.append(
+			{
+				"activity_type": activity_type,
+				"creation": version.creation,
+				"owner": version.owner,
+				"data": data,
+				"is_lead": False,
+				"options": field_option,
+			}
+		)
 
 	for comment in docinfo.comments:
-		activity = {
-			"name": comment.name,
-			"activity_type": "comment",
-			"creation": comment.creation,
-			"owner": comment.owner,
-			"content": comment.content,
-			"attachments": get_attachments("Comment", comment.name),
-			"is_lead": True,
-		}
-		activities.append(activity)
+		activities.append(
+			{
+				"name": comment.name,
+				"activity_type": "comment",
+				"creation": comment.creation,
+				"owner": comment.owner,
+				"content": comment.content,
+				"attachments": get_attachments("Comment", comment.name),
+				"is_lead": False,
+			}
+		)
 
 	for communication in docinfo.communications + docinfo.automated_messages:
-		activity = {
-			"activity_type": "communication",
-			"communication_type": communication.communication_type,
-			"communication_date": communication.communication_date or communication.creation,
-			"creation": communication.creation,
-			"data": {
-				"subject": communication.subject,
-				"content": communication.content,
-				"sender_full_name": communication.sender_full_name,
-				"sender": communication.sender,
-				"recipients": communication.recipients,
-				"cc": communication.cc,
-				"bcc": communication.bcc,
-				"attachments": get_attachments("Communication", communication.name),
-				"read_by_recipient": communication.read_by_recipient,
-				"delivery_status": communication.delivery_status,
-			},
-			"is_lead": True,
-		}
-		activities.append(activity)
+		activities.append(
+			{
+				"activity_type": "communication",
+				"communication_type": communication.communication_type,
+				"communication_date": communication.communication_date or communication.creation,
+				"creation": communication.creation,
+				"data": {
+					"subject": communication.subject,
+					"content": communication.content,
+					"sender_full_name": communication.sender_full_name,
+					"sender": communication.sender,
+					"recipients": communication.recipients,
+					"cc": communication.cc,
+					"bcc": communication.bcc,
+					"attachments": get_attachments("Communication", communication.name),
+					"read_by_recipient": communication.read_by_recipient,
+					"delivery_status": communication.delivery_status,
+				},
+				"is_lead": False,
+			}
+		)
 
 	for attachment_log in docinfo.attachment_logs:
-		activity = {
-			"name": attachment_log.name,
-			"activity_type": "attachment_log",
-			"creation": attachment_log.creation,
-			"owner": attachment_log.owner,
-			"data": parse_attachment_log(attachment_log.content, attachment_log.comment_type),
-			"is_lead": True,
-		}
-		activities.append(activity)
+		activities.append(
+			{
+				"name": attachment_log.name,
+				"activity_type": "attachment_log",
+				"creation": attachment_log.creation,
+				"owner": attachment_log.owner,
+				"data": parse_attachment_log(attachment_log.content, attachment_log.comment_type),
+				"is_lead": False,
+			}
+		)
 
-	calls = get_linked_calls(name).get("calls", [])
-	notes = get_linked_notes(name) + get_linked_calls(name).get("notes", [])
-	tasks = get_linked_tasks(name) + get_linked_calls(name).get("tasks", [])
-	attachments = get_attachments("CRM Lead", name)
+	linked_calls = get_linked_calls(doctype, name)
+	calls = linked_calls.get("calls", [])
+	notes = get_linked_notes(doctype, name) + linked_calls.get("notes", [])
+	tasks = get_linked_tasks(doctype, name) + linked_calls.get("tasks", [])
+	attachments = get_attachments(doctype, name)
 
 	activities.sort(key=lambda x: x["creation"], reverse=True)
 	activities = handle_multiple_versions(activities)
@@ -373,10 +230,10 @@ def parse_grouped_versions(versions: list):
 	return version
 
 
-def get_linked_calls(name: str):
+def get_linked_calls(doctype: str, name: str):
 	calls = frappe.db.get_all(
 		"CRM Call Log",
-		filters={"reference_docname": name},
+		filters={"reference_doctype": doctype, "reference_docname": name},
 		fields=[
 			"name",
 			"caller",
@@ -395,7 +252,13 @@ def get_linked_calls(name: str):
 	)
 
 	linked_calls = frappe.db.get_all(
-		"Dynamic Link", filters={"link_name": name, "parenttype": "CRM Call Log"}, pluck="parent"
+		"Dynamic Link",
+		filters={
+			"link_doctype": doctype,
+			"link_name": name,
+			"parenttype": "CRM Call Log",
+		},
+		pluck="parent",
 	)
 
 	notes = []
@@ -467,32 +330,36 @@ def get_linked_calls(name: str):
 	return {"calls": calls, "notes": notes, "tasks": tasks}
 
 
-def get_linked_notes(name: str):
-	notes = frappe.db.get_all(
-		"FCRM Note",
-		filters={"reference_docname": name},
-		fields=["name", "title", "content", "owner", "modified", "creation"],
+def get_linked_notes(doctype: str, name: str):
+	return (
+		frappe.db.get_all(
+			"FCRM Note",
+			filters={"reference_doctype": doctype, "reference_docname": name},
+			fields=["name", "title", "content", "owner", "modified", "creation"],
+		)
+		or []
 	)
-	return notes or []
 
 
-def get_linked_tasks(name: str):
-	tasks = frappe.db.get_all(
-		"CRM Task",
-		filters={"reference_docname": name},
-		fields=[
-			"name",
-			"title",
-			"description",
-			"assigned_to",
-			"due_date",
-			"priority",
-			"status",
-			"modified",
-			"creation",
-		],
+def get_linked_tasks(doctype: str, name: str):
+	return (
+		frappe.db.get_all(
+			"CRM Task",
+			filters={"reference_doctype": doctype, "reference_docname": name},
+			fields=[
+				"name",
+				"title",
+				"description",
+				"assigned_to",
+				"due_date",
+				"priority",
+				"status",
+				"modified",
+				"creation",
+			],
+		)
+		or []
 	)
-	return tasks or []
 
 
 def parse_attachment_log(html: str, type: str):

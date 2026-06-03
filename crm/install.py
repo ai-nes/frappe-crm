@@ -28,145 +28,19 @@ def after_install(force=False):
 	frappe.db.commit()
 
 
-def add_default_lead_statuses():
-	statuses = {
-		"New": {
-			"color": "gray",
-			"type": "Open",
-			"position": 1,
-		},
-		"Contacted": {
-			"color": "orange",
-			"type": "Ongoing",
-			"position": 2,
-		},
-		"Nurture": {
-			"color": "blue",
-			"type": "Ongoing",
-			"position": 3,
-		},
-		"Qualified": {
-			"color": "green",
-			"type": "Won",
-			"position": 4,
-		},
-		"Converted": {
-			"color": "teal",
-			"type": "Won",
-			"position": 5,
-		},
-		"Unqualified": {
-			"color": "red",
-			"type": "Lost",
-			"position": 6,
-		},
-		"Junk": {
-			"color": "purple",
-			"type": "Lost",
-			"position": 7,
-		},
-	}
-
-	for status in statuses:
-		if frappe.db.exists("CRM Lead Status", status):
-			continue
-
-		doc = frappe.new_doc("CRM Lead Status")
-		doc.lead_status = status
-		doc.color = statuses[status]["color"]
-		doc.type = statuses[status]["type"]
-		doc.position = statuses[status]["position"]
-		doc.insert()
-
-
-def add_default_deal_statuses():
-	statuses = {
-		"Qualification": {
-			"color": "gray",
-			"type": "Open",
-			"probability": 10,
-			"position": 1,
-		},
-		"Demo/Making": {
-			"color": "orange",
-			"type": "Ongoing",
-			"probability": 25,
-			"position": 2,
-		},
-		"Proposal/Quotation": {
-			"color": "blue",
-			"type": "Ongoing",
-			"probability": 50,
-			"position": 3,
-		},
-		"Negotiation": {
-			"color": "yellow",
-			"type": "Ongoing",
-			"probability": 70,
-			"position": 4,
-		},
-		"Ready to Close": {
-			"color": "purple",
-			"type": "Ongoing",
-			"probability": 90,
-			"position": 5,
-		},
-		"Won": {
-			"color": "green",
-			"type": "Won",
-			"probability": 100,
-			"position": 6,
-		},
-		"Lost": {
-			"color": "red",
-			"type": "Lost",
-			"probability": 0,
-			"position": 7,
-		},
-	}
-
-	for status in statuses:
-		if frappe.db.exists("CRM Deal Status", status):
-			continue
-
-		doc = frappe.new_doc("CRM Deal Status")
-		doc.deal_status = status
-		doc.color = statuses[status]["color"]
-		doc.type = statuses[status]["type"]
-		doc.probability = statuses[status]["probability"]
-		doc.position = statuses[status]["position"]
-		doc.insert()
-
-
-def add_default_communication_statuses():
-	statuses = ["Open", "Replied"]
-
-	for status in statuses:
-		if frappe.db.exists("CRM Communication Status", status):
-			continue
-
-		doc = frappe.new_doc("CRM Communication Status")
-		doc.status = status
-		doc.insert()
-
-
 def add_default_fields_layout(force=False):
 	quick_entry_layouts = {
-		"CRM Lead-Quick Entry": {
-			"doctype": "CRM Lead",
-			"layout": '[{"name": "person_section", "columns": [{"name": "column_5jrk", "fields": ["salutation", "email"]}, {"name": "column_5CPV", "fields": ["first_name", "mobile_no"]}, {"name": "column_gXOy", "fields": ["last_name", "gender"]}]}, {"name": "organization_section", "columns": [{"name": "column_GHfX", "fields": ["organization", "territory"]}, {"name": "column_hXjS", "fields": ["website", "annual_revenue"]}, {"name": "column_RDNA", "fields": ["no_of_employees", "industry"]}]}, {"name": "lead_section", "columns": [{"name": "column_EO1H", "fields": ["status"]}, {"name": "column_RWBe", "fields": ["lead_owner"]}]}]',
+		"CRM Contact-Quick Entry": {
+			"doctype": "CRM Contact",
+			"layout": '[{"name":"details_section","columns":[{"name":"column_name","fields":["full_name","phone","email"]},{"name":"column_stage","fields":["stage","assigned_to"]}]},{"name":"admission_section","columns":[{"name":"column_academic","fields":["student","high_school","major"]},{"name":"column_source","fields":["source","campaign","crm_event"]}]}]',
 		},
-		"CRM Deal-Quick Entry": {
-			"doctype": "CRM Deal",
-			"layout": '[{"name": "organization_section", "hidden": true, "editable": false, "columns": [{"name": "column_GpMP", "fields": ["organization"]}, {"name": "column_FPTn", "fields": []}]}, {"name": "organization_details_section", "editable": false, "columns": [{"name": "column_S3tQ", "fields": ["organization_name", "territory"]}, {"name": "column_KqV1", "fields": ["website", "annual_revenue"]}, {"name": "column_1r67", "fields": ["no_of_employees", "industry"]}]}, {"name": "contact_section", "hidden": true, "editable": false, "columns": [{"name": "column_CeXr", "fields": ["contact"]}, {"name": "column_yHbk", "fields": []}]}, {"name": "contact_details_section", "editable": false, "columns": [{"name": "column_ZTWr", "fields": ["salutation", "email"]}, {"name": "column_tabr", "fields": ["first_name", "mobile_no"]}, {"name": "column_Qjdx", "fields": ["last_name", "gender"]}]}, {"name": "deal_section", "columns": [{"name": "column_mdps", "fields": ["status"]}, {"name": "column_H40H", "fields": ["deal_owner"]}]}]',
+		"Enrollment Student-Quick Entry": {
+			"doctype": "Enrollment Student",
+			"layout": '[{"name":"details_section","columns":[{"name":"column_name","fields":["student_name","mobile_no","email"]},{"name":"column_status","fields":["enrollment_status","source"]}]},{"name":"academic_section","columns":[{"name":"column_school","fields":["high_school","major"]},{"name":"column_location","fields":["branch","province","ward"]}]}]',
 		},
 		"Contact-Quick Entry": {
 			"doctype": "Contact",
-			"layout": '[{"name": "salutation_section", "columns": [{"name": "column_eXks", "fields": ["salutation"]}]}, {"name": "full_name_section", "hideBorder": true, "columns": [{"name": "column_cSxf", "fields": ["first_name"]}, {"name": "column_yBc7", "fields": ["last_name"]}]}, {"name": "email_section", "hideBorder": true, "columns": [{"name": "column_tH3L", "fields": ["email_id"]}]}, {"name": "mobile_gender_section", "hideBorder": true, "columns": [{"name": "column_lrfI", "fields": ["mobile_no"]}, {"name": "column_Tx3n", "fields": ["gender"]}]}, {"name": "organization_section", "hideBorder": true, "columns": [{"name": "column_S0J8", "fields": ["company_name"]}]}, {"name": "designation_section", "hideBorder": true, "columns": [{"name": "column_bsO8", "fields": ["designation"]}]}, {"name": "address_section", "hideBorder": true, "columns": [{"name": "column_W3VY", "fields": ["address"]}]}]',
-		},
-		"CRM Organization-Quick Entry": {
-			"doctype": "CRM Organization",
-			"layout": '[{"name": "organization_section", "columns": [{"name": "column_zOuv", "fields": ["organization_name"]}]}, {"name": "website_revenue_section", "hideBorder": true, "columns": [{"name": "column_I5Dy", "fields": ["website"]}, {"name": "column_Rgss", "fields": ["annual_revenue"]}]}, {"name": "territory_section", "hideBorder": true, "columns": [{"name": "column_w6ap", "fields": ["territory"]}]}, {"name": "employee_industry_section", "hideBorder": true, "columns": [{"name": "column_u5tZ", "fields": ["no_of_employees"]}, {"name": "column_FFrT", "fields": ["industry"]}]}, {"name": "address_section", "hideBorder": true, "columns": [{"name": "column_O2dk", "fields": ["address"]}]}]',
+			"layout": '[{"name": "salutation_section", "columns": [{"name": "column_eXks", "fields": ["salutation"]}]}, {"name": "full_name_section", "hideBorder": true, "columns": [{"name": "column_cSxf", "fields": ["first_name"]}, {"name": "column_yBc7", "fields": ["last_name"]}]}, {"name": "email_section", "hideBorder": true, "columns": [{"name": "column_tH3L", "fields": ["email_id"]}]}, {"name": "mobile_gender_section", "hideBorder": true, "columns": [{"name": "column_lrfI", "fields": ["mobile_no"]}, {"name": "column_Tx3n", "fields": ["gender"]}]}, {"name": "company_section", "hideBorder": true, "columns": [{"name": "column_S0J8", "fields": ["company_name"]}]}, {"name": "designation_section", "hideBorder": true, "columns": [{"name": "column_bsO8", "fields": ["designation"]}]}, {"name": "address_section", "hideBorder": true, "columns": [{"name": "column_W3VY", "fields": ["address"]}]}]',
 		},
 		"Address-Quick Entry": {
 			"doctype": "Address",
@@ -187,32 +61,28 @@ def add_default_fields_layout(force=False):
 	}
 
 	sidebar_fields_layouts = {
-		"CRM Lead-Side Panel": {
-			"doctype": "CRM Lead",
-			"layout": '[{"label": "Details", "name": "details_section", "opened": true, "columns": [{"name": "column_kl92", "fields": ["organization", "website", "territory", "industry", "job_title", "source", "lead_owner"]}]}, {"label": "Person", "name": "person_section", "opened": true, "columns": [{"name": "column_XmW2", "fields": ["salutation", "first_name", "last_name", "email", "mobile_no"]}]}]',
+		"CRM Contact-Side Panel": {
+			"doctype": "CRM Contact",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["full_name","phone","email","stage","assigned_to"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_admission","fields":["student","high_school","major","source","campaign","crm_event"]}]}]',
 		},
-		"CRM Deal-Side Panel": {
-			"doctype": "CRM Deal",
-			"layout": '[{"label": "Contacts", "name": "contacts_section", "opened": true, "editable": false, "contacts": []}, {"label": "Organization Details", "name": "organization_section", "opened": true, "columns": [{"name": "column_na2Q", "fields": ["organization", "website", "territory", "annual_revenue", "closed_date", "probability", "next_step", "deal_owner"]}]}]',
+		"Enrollment Student-Side Panel": {
+			"doctype": "Enrollment Student",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["student_name","mobile_no","email","enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_admission","fields":["high_school","major","source","branch","province","ward","admission_year"]}]}]',
 		},
 		"Contact-Side Panel": {
 			"doctype": "Contact",
 			"layout": '[{"label": "Details", "name": "details_section", "opened": true, "columns": [{"name": "column_eIWl", "fields": ["salutation", "first_name", "last_name", "email_id", "mobile_no", "gender", "company_name", "designation", "address"]}]}]',
 		},
-		"CRM Organization-Side Panel": {
-			"doctype": "CRM Organization",
-			"layout": '[{"label": "Details", "name": "details_section", "opened": true, "columns": [{"name": "column_IJOV", "fields": ["organization_name", "website", "territory", "industry", "no_of_employees", "address"]}]}]',
-		},
 	}
 
 	data_fields_layouts = {
-		"CRM Lead-Data Fields": {
-			"doctype": "CRM Lead",
-			"layout": '[{"label": "Details", "name": "details_section", "opened": true, "columns": [{"name": "column_ZgLG", "fields": ["organization", "industry", "lead_owner"]}, {"name": "column_TbYq", "fields": ["website", "job_title"]}, {"name": "column_OKSX", "fields": ["territory", "source"]}]}, {"label": "Person", "name": "person_section", "opened": true, "columns": [{"name": "column_6c5g", "fields": ["salutation", "email"]}, {"name": "column_1n7Q", "fields": ["first_name", "mobile_no"]}, {"name": "column_cT6C", "fields": ["last_name"]}]}]',
+		"CRM Contact-Data Fields": {
+			"doctype": "CRM Contact",
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["full_name","phone","email"]},{"name":"column_stage","fields":["stage","assigned_to"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_academic","fields":["student","high_school","major"]},{"name":"column_source","fields":["source","campaign","crm_event"]}]}]}]',
 		},
-		"CRM Deal-Data Fields": {
-			"doctype": "CRM Deal",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_z9XL","fields":["organization","annual_revenue","next_step"]},{"name":"column_gM4w","fields":["website","closed_date","deal_owner"]},{"name":"column_gWmE","fields":["territory","probability"]}]},{"label":"Products","name":"section_jHhQ","opened":true,"columns":[{"name":"column_xiNF","fields":["products"]}],"editingLabel":false,"hideLabel":true},{"label":"New Section","name":"section_WNOQ","opened":true,"columns":[{"name":"column_ziBW","fields":["total"]},{"label":"","name":"column_wuwA","fields":["net_total"]}],"hideBorder":true,"hideLabel":true}]}]',
+		"Enrollment Student-Data Fields": {
+			"doctype": "Enrollment Student",
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["student_name","mobile_no","email"]},{"name":"column_status","fields":["enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_academic","fields":["high_school","major","source"]},{"name":"column_location","fields":["branch","province","ward","admission_year"]}]}]}]',
 		},
 	}
 
@@ -296,7 +166,7 @@ def add_email_template_custom_fields():
 
 
 def add_email_account_custom_field():
-	if not frappe.get_meta("Email Account").has_field("create_lead_from_incoming_email"):
+	if not frappe.get_meta("Email Account").has_field("create_crm_contact_from_incoming_email"):
 		click.secho("* Installing Custom Fields in Email Account")
 
 		create_custom_fields(
@@ -304,10 +174,10 @@ def add_email_account_custom_field():
 				"Email Account": [
 					{
 						"default": "0",
-						"fieldname": "create_lead_from_incoming_email",
+						"fieldname": "create_crm_contact_from_incoming_email",
 						"fieldtype": "Check",
-						"label": "Create Lead from Incoming Emails",
-						"description": "Automatically create a lead when an incoming email is received from an unknown contact",
+						"label": "Create CRM Contact from Incoming Emails",
+						"description": "Automatically create a CRM contact when an incoming email is received from an unknown contact",
 						"insert_after": "create_contact",
 					}
 				]
@@ -315,70 +185,6 @@ def add_email_account_custom_field():
 		)
 
 		frappe.clear_cache(doctype="Email Account")
-
-
-def add_default_industries():
-	industries = [
-		"Accounting",
-		"Advertising",
-		"Aerospace",
-		"Agriculture",
-		"Airline",
-		"Apparel & Accessories",
-		"Automotive",
-		"Banking",
-		"Biotechnology",
-		"Broadcasting",
-		"Brokerage",
-		"Chemical",
-		"Computer",
-		"Consulting",
-		"Consumer Products",
-		"Cosmetics",
-		"Defense",
-		"Department Stores",
-		"Education",
-		"Electronics",
-		"Energy",
-		"Entertainment & Leisure, Executive Search",
-		"Financial Services",
-		"Food",
-		"Beverage & Tobacco",
-		"Grocery",
-		"Health Care",
-		"Internet Publishing",
-		"Investment Banking",
-		"Legal",
-		"Manufacturing",
-		"Motion Picture & Video",
-		"Music",
-		"Newspaper Publishers",
-		"Online Auctions",
-		"Pension Funds",
-		"Pharmaceuticals",
-		"Private Equity",
-		"Publishing",
-		"Real Estate",
-		"Retail & Wholesale",
-		"Securities & Commodity Exchanges",
-		"Service",
-		"Soap & Detergent",
-		"Software",
-		"Sports",
-		"Technology",
-		"Telecommunications",
-		"Television",
-		"Transportation",
-		"Venture Capital",
-	]
-
-	for industry in industries:
-		if frappe.db.exists("CRM Industry", industry):
-			continue
-
-		doc = frappe.new_doc("CRM Industry")
-		doc.industry = industry
-		doc.insert()
 
 
 def add_default_lead_sources():
@@ -447,10 +253,9 @@ def add_default_lost_reasons():
 
 def add_default_quick_filters():
 	quick_filters = {
-		"CRM Lead": ["lead_name", "email", "organization", "status", "source"],
-		"CRM Deal": ["organization", "status", "probability", "email"],
+		"Enrollment Student": ["student_name", "mobile_no", "email", "enrollment_status", "source"],
+		"CRM Contact": ["full_name", "phone", "email", "stage", "assigned_to", "source"],
 		"Contact": ["status", "email_id", "phone"],
-		"CRM Organization": ["organization_name", "no_of_employees", "territory", "industry"],
 		"CRM Task": ["title", "priority", "assigned_to", "status", "due_date"],
 		"CRM Call Log": ["telephony_medium", "type", "status", "from", "to"],
 	}
@@ -478,12 +283,6 @@ def add_standard_dropdown_items():
 		crm_settings.append("dropdown_items", item)
 
 	crm_settings.save()
-
-
-def add_default_scripts():
-	from crm.fcrm.doctype.fcrm_settings.fcrm_settings import create_forecasting_script
-
-	create_forecasting_script()
 
 
 def add_assignment_rule_property_setters():

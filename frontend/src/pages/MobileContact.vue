@@ -83,14 +83,12 @@
                   icon-left="trash-2"
                   @click="deleteContact"
                 />
-                <Avatar
+                <span
                   v-if="contact.doc.company_name"
-                  size="md"
-                  :label="contact.doc.company_name"
-                  :image="
-                    getOrganization(contact.doc.company_name)?.organization_logo
-                  "
-                />
+                  class="truncate text-base text-ink-gray-6"
+                >
+                  {{ contact.doc.company_name }}
+                </span>
               </div>
               <ErrorMessage :message="__(error)" />
             </div>
@@ -98,63 +96,17 @@
         </div>
       </template>
     </FileUploader>
-    <Tabs
-      v-model="tabIndex"
-      as="div"
-      :tabs="tabs"
-      class="flex flex-1 overflow-auto flex-col [&_[role='tablist']]:gap-3 [&_[role='tablist']]:px-4 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
+    <div
+      v-if="sections.data"
+      class="flex flex-1 flex-col justify-between overflow-hidden"
     >
-      <template #tab-item="{ tab, selected }">
-        <button
-          v-if="tab.name == 'Deals'"
-          class="group flex items-center gap-2 border-b border-transparent py-2.5 text-base text-ink-gray-5 duration-300 ease-in-out hover:text-ink-gray-9 !px-4"
-          :class="{ 'text-ink-gray-9': selected }"
-        >
-          <component :is="tab.icon" v-if="tab.icon" class="h-5" />
-          {{ __(tab.label) }}
-          <Badge
-            class="group-hover:bg-surface-gray-7"
-            :class="[selected ? 'bg-surface-gray-7' : 'bg-gray-600']"
-            variant="solid"
-            theme="gray"
-            size="sm"
-          >
-            {{ tab.count }}
-          </Badge>
-        </button>
-      </template>
-      <template #tab-panel="{ tab }">
-        <div v-if="tab.name == 'Details'">
-          <div
-            v-if="sections.data"
-            class="flex flex-1 flex-col justify-between overflow-hidden"
-          >
-            <SidePanelLayout
-              :sections="sections.data"
-              doctype="Contact"
-              :docname="contact.doc.name"
-              @reload="sections.reload"
-            />
-          </div>
-        </div>
-        <DealsListView
-          v-else-if="tab.label === 'Deals' && rows.length"
-          class="mt-4"
-          :rows="rows"
-          :columns="columns"
-          :options="{ selectable: false, showTooltip: false }"
-        />
-        <div
-          v-if="tab.label === 'Deals' && !rows.length"
-          class="grid flex-1 place-items-center text-xl font-medium text-ink-gray-4"
-        >
-          <div class="flex flex-col items-center justify-center space-y-3">
-            <component :is="tab.icon" class="!h-10 !w-10" />
-            <div>{{ __('No {0} found', [__(tab.label.toLowerCase())]) }}</div>
-          </div>
-        </div>
-      </template>
-    </Tabs>
+      <SidePanelLayout
+        :sections="sections.data"
+        doctype="Contact"
+        :docname="contact.doc.name"
+        @reload="sections.reload"
+      />
+    </div>
   </div>
 </template>
 
@@ -162,26 +114,19 @@
 import Icon from '@/components/Icon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
-import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import CameraIcon from '@/components/Icons/CameraIcon.vue'
-import DealsIcon from '@/components/Icons/DealsIcon.vue'
-import DealsListView from '@/components/ListViews/DealsListView.vue'
-import { formatDate, timeAgo, validateIsImageFile } from '@/utils'
+import { validateIsImageFile } from '@/utils'
 import { getView } from '@/utils/view'
 import { useDocument } from '@/data/document'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
 import { globalStore } from '@/stores/global.js'
-import { usersStore } from '@/stores/users.js'
-import { organizationsStore } from '@/stores/organizations.js'
-import { statusesStore } from '@/stores/statuses'
 import { callEnabled } from '@/composables/telephony'
 import {
   Breadcrumbs,
   Avatar,
   FileUploader,
-  Tabs,
   call,
   createResource,
   usePageMeta,
@@ -190,15 +135,12 @@ import {
 } from 'frappe-ui'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { useTelemetry } from 'frappe-ui/frappe'
-import { ref, computed, h, onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const { brand } = getSettings()
 const { $dialog, makeCall } = globalStore()
 
-const { getUser } = usersStore()
-const { getOrganization } = organizationsStore()
-const { getDealStatus } = statusesStore()
 const { doctypeMeta } = getMeta('Contact')
 const { capture } = useTelemetry()
 
@@ -288,34 +230,6 @@ async function deleteContact() {
     ],
   })
 }
-
-const tabIndex = ref(0)
-const tabs = [
-  {
-    name: 'Details',
-    label: __('Details'),
-    icon: DetailsIcon,
-  },
-  {
-    name: 'Deals',
-    label: __('Deals'),
-    icon: h(DealsIcon, { class: 'h-4 w-4' }),
-    count: computed(() => deals.data?.length),
-  },
-]
-
-const deals = createResource({
-  url: 'crm.api.contact.get_linked_deals',
-  cache: ['deals', props.contactId],
-  params: { contact: props.contactId },
-  auto: true,
-})
-
-const rows = computed(() => {
-  if (!deals.data || deals.data == []) return []
-
-  return deals.data.map((row) => getDealRowObject(row))
-})
 
 const sections = createResource({
   url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
@@ -480,74 +394,6 @@ async function deleteOption(doctype, name) {
   await contact.reload()
   toast.success(__('Contact Updated'))
 }
-
-const { getFormattedCurrency } = getMeta('CRM Deal')
-
-const columns = computed(() => dealColumns)
-
-function getDealRowObject(deal) {
-  return {
-    name: deal.name,
-    organization: {
-      label: deal.organization,
-      logo: getOrganization(deal.organization)?.organization_logo,
-    },
-    annual_revenue: getFormattedCurrency('annual_revenue', deal),
-    status: {
-      label: deal.status,
-      color: getDealStatus(deal.status)?.color,
-    },
-    email: deal.email,
-    mobile_no: deal.mobile_no,
-    deal_owner: {
-      label: deal.deal_owner && getUser(deal.deal_owner).full_name,
-      ...(deal.deal_owner && getUser(deal.deal_owner)),
-    },
-    modified: {
-      label: formatDate(deal.modified),
-      timeAgo: __(timeAgo(deal.modified)),
-    },
-  }
-}
-
-const dealColumns = [
-  {
-    label: __('Organization'),
-    key: 'organization',
-    width: '11rem',
-  },
-  {
-    label: __('Amount'),
-    key: 'annual_revenue',
-    align: 'right',
-    width: '9rem',
-  },
-  {
-    label: __('Status'),
-    key: 'status',
-    width: '10rem',
-  },
-  {
-    label: __('Email'),
-    key: 'email',
-    width: '12rem',
-  },
-  {
-    label: __('Mobile No.'),
-    key: 'mobile_no',
-    width: '11rem',
-  },
-  {
-    label: __('Deal Owner'),
-    key: 'deal_owner',
-    width: '10rem',
-  },
-  {
-    label: __('Last Modified'),
-    key: 'modified',
-    width: '8rem',
-  },
-]
 
 const { showModal } = useDoctypeModal()
 

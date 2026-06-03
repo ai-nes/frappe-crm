@@ -113,8 +113,8 @@ const state = reactive({
   enable_outgoing: props.accountData.enable_outgoing || false,
   default_outgoing: props.accountData.default_outgoing || false,
   default_incoming: props.accountData.default_incoming || false,
-  create_lead_from_incoming_email:
-    props.accountData.create_lead_from_incoming_email || false,
+  create_crm_contact_from_incoming_email:
+    props.accountData.create_crm_contact_from_incoming_email || false,
 })
 
 const info = {
@@ -184,6 +184,8 @@ const isDirty = computed(() => {
     state.enable_outgoing !== props.accountData.enable_outgoing ||
     state.default_outgoing !== props.accountData.default_outgoing ||
     state.default_incoming !== props.accountData.default_incoming ||
+    state.create_crm_contact_from_incoming_email !==
+      props.accountData.create_crm_contact_from_incoming_email ||
     state.frappe_mail_site !== props.accountData.frappe_mail_site
   )
 })

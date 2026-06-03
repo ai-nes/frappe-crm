@@ -73,38 +73,24 @@ const chartTypes = [
 
 const numberChart = ref('')
 const numberCharts = [
-  { label: __('Total Leads'), value: 'total_leads' },
-  { label: __('Ongoing Deals'), value: 'ongoing_deals' },
-  { label: __('Avg Ongoing Deal Value'), value: 'average_ongoing_deal_value' },
-  { label: __('Won Deals'), value: 'won_deals' },
-  { label: __('Avg Won Deal Value'), value: 'average_won_deal_value' },
-  { label: __('Avg Deal Value'), value: 'average_deal_value' },
-  {
-    label: __('Avg Time to Close a Lead'),
-    value: 'average_time_to_close_a_lead',
-  },
-  {
-    label: __('Avg Time to Close a Deal'),
-    value: 'average_time_to_close_a_deal',
-  },
+  { label: __('Total Students'), value: 'total_students' },
+  { label: __('Total CRM Contacts'), value: 'total_contacts' },
+  { label: __('Qualified Contacts'), value: 'qualified_contacts' },
+  { label: __('Enrolled Contacts'), value: 'enrolled_contacts' },
 ]
 
-const axisChart = ref('sales_trend')
+const axisChart = ref('admission_trend')
 const axisCharts = [
-  { label: __('Sales Trend'), value: 'sales_trend' },
-  { label: __('Forecasted Revenue'), value: 'forecasted_revenue' },
-  { label: __('Funnel Conversion'), value: 'funnel_conversion' },
-  { label: __('Deals by Ongoing & Won Stage'), value: 'deals_by_stage_axis' },
-  { label: __('Lost Deal Reasons'), value: 'lost_deal_reasons' },
-  { label: __('Deals by Territory'), value: 'deals_by_territory' },
-  { label: __('Deals by Salesperson'), value: 'deals_by_salesperson' },
+  { label: __('Admission Trend'), value: 'admission_trend' },
+  { label: __('Contacts by High School'), value: 'contacts_by_high_school' },
+  { label: __('Contacts by Assignee'), value: 'contacts_by_assignee' },
 ]
 
-const donutChart = ref('deals_by_stage_donut')
+const donutChart = ref('contacts_by_stage')
 const donutCharts = [
-  { label: __('Deals by Stage'), value: 'deals_by_stage_donut' },
-  { label: __('Leads by Source'), value: 'leads_by_source' },
-  { label: __('Deals by Source'), value: 'deals_by_source' },
+  { label: __('Contacts by Stage'), value: 'contacts_by_stage' },
+  { label: __('Contacts by Source'), value: 'contacts_by_source' },
+  { label: __('Students by Source'), value: 'students_by_source' },
 ]
 
 async function addChart() {

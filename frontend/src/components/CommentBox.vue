@@ -97,7 +97,7 @@ import { ref, computed } from 'vue'
 defineProps({
   placeholder: { type: String, default: null },
   editable: { type: Boolean, default: true },
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   editorProps: { type: Object, default: () => ({}) },
   submitButtonProps: { type: Object, default: () => ({}) },
   discardButtonProps: { type: Object, default: () => ({}) },

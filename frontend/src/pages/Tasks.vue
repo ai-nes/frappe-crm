@@ -127,11 +127,7 @@
             class="-ml-2"
             variant="ghost"
             size="sm"
-            :label="
-              getRow(itemName, 'reference_doctype').label == 'CRM Deal'
-                ? __('Deal')
-                : __('Lead')
-            "
+            :label="getRow(itemName, 'reference_doctype').label || __('Open')"
             :iconRight="ArrowUpRightIcon"
             @click.stop="
               redirect(
@@ -381,12 +377,12 @@ async function deleteTask(name) {
 
 function redirect(doctype, docname) {
   if (!docname) return
-  let name = doctype == 'CRM Deal' ? 'Deal' : 'Lead'
-  let params = { leadId: docname }
-  if (name == 'Deal') {
-    params = { dealId: docname }
+  const routeMap = {
+    'CRM Contact': { name: 'CRM Contact', params: { crmContactId: docname } },
+    'Enrollment Student': { name: 'Enrollment Student', params: { enrollmentStudentId: docname } },
   }
-  router.push({ name: name, params: params })
+  const route = routeMap[doctype]
+  if (route) router.push(route)
 }
 
 const openTaskFromURL = () => {

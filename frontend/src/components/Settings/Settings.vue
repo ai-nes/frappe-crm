@@ -43,12 +43,10 @@
   </Dialog>
 </template>
 <script setup>
-import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import MonitorCogIcon from '~icons/lucide/monitor-cog'
 import SlidersIcon from '@/components/Icons/SlidersIcon.vue'
 import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
-import ERPNextIcon from '@/components/Icons/ERPNextIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import Email2Icon from '@/components/Icons/Email2Icon.vue'
 import EmailTemplateIcon from '@/components/Icons/EmailTemplateIcon.vue'
@@ -59,13 +57,10 @@ import InviteUserPage from '@/components/Settings/InviteUserPage.vue'
 import ProfilePage from '@/components/Settings/Profile/ProfilePage.vue'
 import PreferencesSettings from '@/components/Settings/PreferencesSettings.vue'
 import WhatsAppSettings from '@/components/Settings/WhatsAppSettings.vue'
-import ERPNextSettings from '@/components/Settings/ERPNextSettings.vue'
-import LeadSyncSourcePage from '@/components/Settings/LeadSyncing/LeadSyncSourcePage.vue'
 import DefaultsSettings from '@/components/Settings/DefaultsSettings.vue'
 import BrandSettings from '@/components/Settings/BrandSettings.vue'
 import HomeActions from '@/components/Settings/HomeActions.vue'
 import GeneralSettings from '@/components/Settings/GeneralSettings.vue'
-import DashboardSettings from '@/components/Settings/DashboardSettings.vue'
 import EmailTemplatePage from '@/components/Settings/EmailTemplate/EmailTemplatePage.vue'
 import TelephonyPage from '@/components/Settings/Telephony/TelephonyPage.vue'
 import EmailConfig from '@/components/Settings/EmailConfig.vue'
@@ -83,9 +78,7 @@ import AssignmentRulePage from './AssignmentRules/AssignmentRulePage.vue'
 import ShieldCheck from '~icons/lucide/shield-check'
 import SlaConfig from './Sla/SlaConfig.vue'
 import ReferenceDataPage from './ReferenceDataPage.vue'
-import LeadRoutingPage from './LeadRoutingPage.vue'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
-import RouteIcon from '~icons/lucide/route'
 
 const { isManager, getUser } = usersStore()
 
@@ -120,11 +113,6 @@ const tabs = computed(() => {
           label: __('General'),
           component: markRaw(GeneralSettings),
           icon: SettingsIcon,
-        },
-        {
-          label: __('Dashboard'),
-          component: markRaw(DashboardSettings),
-          icon: LucideLayoutDashboard,
         },
         {
           label: __('Defaults'),
@@ -209,12 +197,6 @@ const tabs = computed(() => {
           component: markRaw(ReferenceDataPage),
           condition: () => isManager(),
         },
-        {
-          label: __('Phân phối lead'),
-          icon: RouteIcon,
-          component: markRaw(LeadRoutingPage),
-          condition: () => isManager(),
-        },
       ],
       condition: () => isManager(),
     },
@@ -231,18 +213,6 @@ const tabs = computed(() => {
           icon: WhatsAppIcon,
           component: markRaw(WhatsAppSettings),
           condition: () => isWhatsappInstalled.value && isManager(),
-        },
-        {
-          label: __('ERPNext'),
-          icon: ERPNextIcon,
-          component: markRaw(ERPNextSettings),
-          condition: () => isManager(),
-        },
-        {
-          label: __('Lead Syncing'),
-          icon: 'refresh-cw',
-          component: markRaw(LeadSyncSourcePage),
-          condition: () => isManager(),
         },
       ],
     },

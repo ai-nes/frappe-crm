@@ -12,6 +12,14 @@
         v-if="document._actions?.length"
         :actions="document._actions"
       />
+      <Button
+        v-if="doc.name && !doc.converted"
+        variant="solid"
+        :label="__('Convert to Contact')"
+        iconLeft="user-plus"
+        :loading="converting"
+        @click="convertToContact"
+      />
       <Dropdown
         v-if="doc.enrollment_status"
         :options="enrollmentStatuses"
@@ -103,13 +111,14 @@ import {
   toast,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
 const { brand } = getSettings()
 const { doctypeMeta } = getMeta('Enrollment Student')
 
 const route = useRoute()
+const router = useRouter()
 
 const props = defineProps({
   enrollmentStudentId: { type: String, required: true },
@@ -119,6 +128,7 @@ const reload = ref(false)
 const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
+const converting = ref(false)
 
 const { document, error } = useDocument('Enrollment Student', props.enrollmentStudentId)
 
@@ -137,7 +147,21 @@ watch(error, (err) => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: __('Enrollment Students'), route: { name: 'Enrollment Students' } }]
+  let items = [
+    {
+      label:
+        doc.value?.enrollment_status === 'Đã nhập học'
+          ? __('Enrolled Students')
+          : __('Prospective Students'),
+      route: {
+        name: 'Enrollment Students',
+        query: {
+          stage:
+            doc.value?.enrollment_status === 'Đã nhập học' ? 'enrolled' : 'intake',
+        },
+      },
+    },
+  ]
   items.push({
     label: doc.value?.student_name || props.enrollmentStudentId,
     route: { name: 'Enrollment Student', params: { enrollmentStudentId: props.enrollmentStudentId } },
@@ -177,6 +201,24 @@ function updateStatus(status) {
   document.save.submit(null, {
     onError: (err) => toast.error(err.messages?.[0] || __('Error updating status')),
   })
+}
+
+const convertResource = createResource({
+  url: 'crm.fcrm.doctype.enrollment_student.enrollment_student.convert_to_contact',
+  onSuccess(contactName) {
+    converting.value = false
+    toast.success(__('Converted to CRM Contact'))
+    router.push({ name: 'CRM Contact', params: { crmContactId: contactName } })
+  },
+  onError(err) {
+    converting.value = false
+    toast.error(err.messages?.[0] || __('Conversion failed'))
+  },
+})
+
+function convertToContact() {
+  converting.value = true
+  convertResource.submit({ student_name: props.enrollmentStudentId })
 }
 
 const tabs = computed(() => [

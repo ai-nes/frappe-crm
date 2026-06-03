@@ -93,8 +93,12 @@ const viewLinkedDoc = (doc) => {
   let id = ''
   let openDesk = false
   switch (doc.reference_doctype) {
-    case 'CRM Lead':
-      page = 'leads'
+    case 'CRM Contact':
+      page = 'crm-contacts'
+      id = doc.reference_docname
+      break
+    case 'Enrollment Student':
+      page = 'enrollment-students'
       id = doc.reference_docname
       break
     case 'CRM Call Log':
@@ -109,8 +113,8 @@ const viewLinkedDoc = (doc) => {
       page = 'contacts'
       id = doc.reference_docname
       break
-    case 'CRM Organization':
-      page = 'organizations'
+    case 'CRM High School':
+      page = 'high-schools'
       id = doc.reference_docname
       break
     case 'CRM Notification':

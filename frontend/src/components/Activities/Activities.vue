@@ -461,8 +461,6 @@ import WhatsAppArea from '@/components/Activities/WhatsAppArea.vue'
 import WhatsAppBox from '@/components/Activities/WhatsAppBox.vue'
 import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
-import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
-import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import DotIcon from '@/components/Icons/DotIcon.vue'
 import CommentIcon from '@/components/Icons/CommentIcon.vue'
 import SelectIcon from '@/components/Icons/SelectIcon.vue'
@@ -500,7 +498,7 @@ const { getUser } = usersStore()
 const { capture } = useTelemetry()
 
 const props = defineProps({
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   docname: { type: String, default: '' },
   tabs: { type: Array, default: () => [] },
 })
@@ -531,8 +529,8 @@ const changeTabTo = (tabName) => {
 
 const all_activities = createResource({
   url: 'crm.api.activities.get_activities',
-  params: { name: props.docname },
-  cache: ['activity', props.docname],
+  params: { doctype: props.doctype, name: props.docname },
+  cache: ['activity', props.doctype, props.docname],
   auto: true,
   transform: ([versions, calls, notes, tasks, attachments]) => {
     return { versions, calls, notes, tasks, attachments }
@@ -772,10 +770,7 @@ function timelineIcon(activity_type, is_lead) {
   let icon
   switch (activity_type) {
     case 'creation':
-      icon = is_lead ? LeadsIcon : DealsIcon
-      break
-    case 'deal':
-      icon = DealsIcon
+      icon = ActivityIcon
       break
     case 'comment':
       icon = CommentIcon

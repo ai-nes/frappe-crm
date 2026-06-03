@@ -1,7 +1,7 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="Enrollment Students" />
+      <ViewBreadcrumbs v-model="viewControls" :routeName="funnelTitle" />
     </template>
     <template #right-header>
       <CustomActions
@@ -23,6 +23,7 @@
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
     doctype="Enrollment Student"
+    :filters="funnelFilters"
   />
   <EnrollmentStudentsListView
     v-if="students.data && rows.length"
@@ -63,13 +64,38 @@ import EnrollmentIcon from '~icons/lucide/graduation-cap'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
 import { formatDate, timeAgo } from '@/utils'
-import { useRouter } from 'vue-router'
-import { ref, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ref, computed, watch } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('Enrollment Student')
 const { showModal } = useDoctypeModal()
+const route = useRoute()
 const router = useRouter()
+
+const funnelStage = computed(() => route.query.stage || 'intake')
+
+const funnelTitle = computed(() => {
+  if (funnelStage.value === 'enrolled') {
+    return __('Enrolled Students')
+  }
+  return __('Prospective Students')
+})
+
+const funnelFilters = computed(() => {
+  if (funnelStage.value === 'enrolled') {
+    return { enrollment_status: 'Đã nhập học' }
+  }
+  return { converted: 0 }
+})
+
+watch(
+  () => route.query.stage,
+  () => {
+    students.value = {}
+    loadMore.value++
+  },
+)
 
 const listView = ref(null)
 

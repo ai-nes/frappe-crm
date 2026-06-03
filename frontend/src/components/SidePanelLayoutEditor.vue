@@ -149,7 +149,7 @@ import { Input } from 'frappe-ui'
 import { computed } from 'vue'
 
 const props = defineProps({
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
 })
 
 const sections = defineModel({ type: Array, default: () => [] })

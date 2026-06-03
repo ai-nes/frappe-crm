@@ -162,7 +162,7 @@ def _should_update_modified(doc: Communication | Comment) -> bool:
 	if not (doc.reference_doctype and doc.reference_name):
 		return False
 
-	if doc.reference_doctype not in ["CRM Lead", "CRM Deal"]:
+	if doc.reference_doctype != "CRM Contact":
 		return False
 
 	if doc.doctype not in ["Comment", "Communication"]:
@@ -192,7 +192,7 @@ def _get_communication_status(doc: Communication) -> str | None:
 	return None
 
 
-def create_lead_from_incoming_email(doc: Communication, method: str | None = None):
+def create_crm_contact_from_incoming_email(doc: Communication, method: str | None = None):
 	if doc.doctype != "Communication":
 		return
 
@@ -205,33 +205,27 @@ def create_lead_from_incoming_email(doc: Communication, method: str | None = Non
 	if not doc.email_account:
 		return
 
-	create_lead_enabled = frappe.db.get_value(
-		"Email Account", doc.email_account, "create_lead_from_incoming_email"
+	create_contact_enabled = frappe.db.get_value(
+		"Email Account", doc.email_account, "create_crm_contact_from_incoming_email"
 	)
-	if not create_lead_enabled:
+	if not create_contact_enabled:
 		return
 
-	if frappe.db.exists("CRM Lead", {"email": doc.sender}):
+	if frappe.db.exists("CRM Contact", {"email": doc.sender}):
 		return
 
-	lead = frappe.new_doc("CRM Lead")
-	lead.email = doc.sender
-
-	if doc.sender_full_name:
-		lead.first_name = doc.sender_full_name.split(" ")[0]
-		lead.last_name = (
-			doc.sender_full_name.split(" ")[-1] if len(doc.sender_full_name.split(" ")) > 1 else ""
-		)
-	else:
-		lead.first_name = doc.sender.split("@")[0]
+	contact = frappe.new_doc("CRM Contact")
+	contact.email = doc.sender
+	contact.full_name = doc.sender_full_name or doc.sender.split("@")[0]
+	contact.stage = "Interested"
 
 	if frappe.db.exists("CRM Lead Source", "Email"):
-		lead.source = "Email"
+		contact.source = "Email"
 
-	lead.insert(ignore_permissions=True)
+	contact.insert(ignore_permissions=True)
 
-	doc.reference_doctype = "CRM Lead"
-	doc.reference_name = lead.name
+	doc.reference_doctype = "CRM Contact"
+	doc.reference_name = contact.name
 	doc.save(ignore_permissions=True)
 
 
@@ -239,7 +233,7 @@ def on_comment_insert(doc: Comment, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype not in ["CRM Lead", "CRM Deal"] or doc.comment_type != "Comment":
+	if doc.reference_doctype != "CRM Contact" or doc.comment_type != "Comment":
 		return
 
 	if not _should_update_modified(doc):
@@ -254,14 +248,14 @@ def update_modified_background(doctype: str, docname: str):
 
 
 def on_communication_insert(doc: Communication, method: str | None = None):
-	create_lead_from_incoming_email(doc)
+	create_crm_contact_from_incoming_email(doc)
 
 
 def on_communication_update(doc: Communication, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype not in ["CRM Lead", "CRM Deal"]:
+	if doc.reference_doctype != "CRM Contact":
 		return
 
 	should_update_modified = _should_update_modified(doc)

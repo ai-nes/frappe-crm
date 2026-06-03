@@ -118,18 +118,15 @@ def add_task_to_call_log(call_sid: str, task: dict):
 
 
 @frappe.whitelist()
-def get_contact_lead_or_deal_from_number(number: str):
-	"""Get contact, lead or deal from the given number."""
+def get_contact_reference_from_number(number: str):
+	"""Get Contact or CRM Contact from the given number."""
 	contact = get_contact_by_phone_number(number)
 	if contact.get("name"):
 		doctype = "Contact"
 		docname = contact.get("name")
-		if contact.get("lead"):
-			doctype = "CRM Lead"
-			docname = contact.get("lead")
-		elif contact.get("deal"):
-			doctype = "CRM Deal"
-			docname = contact.get("deal")
+		if contact.get("crm_contact"):
+			doctype = "CRM Contact"
+			docname = contact.get("crm_contact")
 		return docname, doctype
 	return None, None
 
@@ -178,7 +175,30 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		.replace("+", "")
 	)
 
-	# Check if the number is associated with a contact
+	CRMContact = frappe.qb.DocType("CRM Contact")
+	normalized_phone = Replace(
+		Replace(Replace(Replace(Replace(CRMContact.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
+	)
+
+	query = (
+		frappe.qb.from_(CRMContact)
+		.select(
+			CRMContact.name,
+			CRMContact.full_name,
+			CRMContact.phone.as_("mobile_no"),
+			CRMContact.email,
+		)
+		.where(normalized_phone.like(f"%{cleaned_number}%"))
+		.orderby("modified", order=Order.desc)
+	)
+	crm_contacts = query.run(as_dict=True)
+
+	for contact in crm_contacts:
+		if are_same_phone_number(contact.mobile_no, phone_number, country, validate=not exact_match):
+			contact["crm_contact"] = contact.name
+			contact["doctype"] = "CRM Contact"
+			return contact
+
 	Contact = frappe.qb.DocType("Contact")
 	normalized_phone = Replace(
 		Replace(Replace(Replace(Replace(Contact.mobile_no, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
@@ -191,39 +211,6 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		.orderby("modified", order=Order.desc)
 	)
 	contacts = query.run(as_dict=True)
-
-	if len(contacts):
-		# Check if the contact is associated with a deal
-		for contact in contacts:
-			if frappe.db.exists("CRM Contacts", {"contact": contact.name, "is_primary": 1}):
-				deal = frappe.db.get_value(
-					"CRM Contacts", {"contact": contact.name, "is_primary": 1}, "parent"
-				)
-				if are_same_phone_number(contact.mobile_no, phone_number, country, validate=not exact_match):
-					contact["deal"] = deal
-					return contact
-
-	# Else, Check if the number is associated with a lead
-	Lead = frappe.qb.DocType("CRM Lead")
-	normalized_phone = Replace(
-		Replace(Replace(Replace(Replace(Lead.mobile_no, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
-	)
-
-	query = (
-		frappe.qb.from_(Lead)
-		.select(Lead.name, Lead.lead_name, Lead.image, Lead.mobile_no)
-		.where(Lead.converted == 0)
-		.where(normalized_phone.like(f"%{cleaned_number}%"))
-		.orderby("modified", order=Order.desc)
-	)
-	leads = query.run(as_dict=True)
-
-	if len(leads):
-		for lead in leads:
-			if are_same_phone_number(lead.mobile_no, phone_number, country, validate=not exact_match):
-				lead["lead"] = lead.name
-				lead["full_name"] = lead.lead_name
-				return lead
 
 	if len(contacts) and are_same_phone_number(
 		contacts[0].mobile_no, phone_number, country, validate=not exact_match

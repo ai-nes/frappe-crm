@@ -156,20 +156,19 @@
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
+import UsersIcon from '~icons/lucide/users'
+import UserIcon from '~icons/lucide/user'
+import SchoolIcon from '~icons/lucide/school'
+import MegaphoneIcon from '~icons/lucide/megaphone'
+import CalendarIcon from '~icons/lucide/calendar'
+import BriefcaseIcon from '~icons/lucide/briefcase'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
-import ConvertIcon from '@/components/Icons/ConvertIcon.vue'
-import CommentIcon from '@/components/Icons/CommentIcon.vue'
-import EmailIcon from '@/components/Icons/EmailIcon.vue'
-import StepsIcon from '@/components/Icons/StepsIcon.vue'
 import Section from '@/components/Section.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
 import SquareAsterisk from '@/components/Icons/SquareAsterisk.vue'
-import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
-import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
-import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
@@ -189,7 +188,6 @@ import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 import { showChangePasswordModal } from '@/composables/modals'
-import { useBroadcast } from '@/composables/useBroadcast.js'
 import { FeatherIcon, call } from 'frappe-ui'
 import {
   SignupBanner,
@@ -211,7 +209,6 @@ const { getPinnedViews, getPublicViews } = viewsStore()
 const { toggle: toggleNotificationPanel } = notificationsStore()
 const { capture } = useTelemetry()
 const { clearDemoData, isDemoDataCreated } = useDemoData()
-const { send } = useBroadcast()
 
 const isSidebarCollapsed = useStorage('isSidebarCollapsed', false)
 
@@ -219,6 +216,7 @@ const isFCSite = ref(window.is_fc_site)
 const isDemoSite = ref(window.is_demo_site)
 const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
+// Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
 const links = [
   {
     label: 'Dashboard',
@@ -226,24 +224,44 @@ const links = [
     to: 'Dashboard',
   },
   {
-    label: 'Leads',
-    icon: LeadsIcon,
-    to: 'Leads',
+    label: 'Prospective Students',
+    icon: SchoolIcon,
+    to: { name: 'Enrollment Students', query: { stage: 'intake' } },
   },
   {
-    label: 'Deals',
-    icon: DealsIcon,
-    to: 'Deals',
+    label: 'CRM Contacts',
+    icon: UsersIcon,
+    to: 'CRM Contacts',
   },
   {
-    label: 'Contacts',
-    icon: ContactsIcon,
-    to: 'Contacts',
+    label: 'Enrolled Students',
+    icon: GraduationCapIcon,
+    to: { name: 'Enrollment Students', query: { stage: 'enrolled' } },
   },
   {
-    label: 'Organizations',
-    icon: OrganizationsIcon,
-    to: 'Organizations',
+    label: 'High Schools',
+    icon: SchoolIcon,
+    to: 'High Schools',
+  },
+  {
+    label: 'Persons',
+    icon: UserIcon,
+    to: 'Persons',
+  },
+  {
+    label: 'Campaigns',
+    icon: MegaphoneIcon,
+    to: 'Campaigns',
+  },
+  {
+    label: 'CRM Events',
+    icon: CalendarIcon,
+    to: 'CRM Events',
+  },
+  {
+    label: 'Staff',
+    icon: BriefcaseIcon,
+    to: 'Staff',
   },
   {
     label: 'Notes',
@@ -259,11 +277,6 @@ const links = [
     label: 'Call Logs',
     icon: PhoneIcon,
     to: 'Call Logs',
-  },
-  {
-    label: 'Enrollment Students',
-    icon: GraduationCapIcon,
-    to: 'Enrollment Students',
   },
 ]
 
@@ -317,18 +330,26 @@ function getIcon(routeName, icon) {
   if (icon) return icon
 
   switch (routeName) {
-    case 'Leads':
-      return LeadsIcon
-    case 'Deals':
-      return DealsIcon
     case 'Contacts':
       return ContactsIcon
-    case 'Organizations':
-      return OrganizationsIcon
     case 'Notes':
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
+    case 'Enrollment Students':
+      return GraduationCapIcon
+    case 'CRM Contacts':
+      return UsersIcon
+    case 'Persons':
+      return UserIcon
+    case 'High Schools':
+      return SchoolIcon
+    case 'Campaigns':
+      return MegaphoneIcon
+    case 'CRM Events':
+      return CalendarIcon
+    case 'Staff':
+      return BriefcaseIcon
     default:
       return PinIcon
   }
@@ -339,16 +360,16 @@ const { user } = sessionStore()
 const { users, isManager } = usersStore()
 const { isOnboardingStepsCompleted, setUp } = useOnboarding('frappecrm')
 
-async function getFirstLead() {
-  let firstLead = localStorage.getItem('firstLead' + user)
-  if (firstLead) return firstLead
-  return await call('crm.api.onboarding.get_first_lead')
+async function getFirstEnrollmentStudent() {
+  let firstStudent = localStorage.getItem('firstEnrollmentStudent' + user)
+  if (firstStudent) return firstStudent
+  return await call('crm.api.onboarding.get_first_enrollment_student')
 }
 
-async function getFirstDeal() {
-  let firstDeal = localStorage.getItem('firstDeal' + user)
-  if (firstDeal) return firstDeal
-  return await call('crm.api.onboarding.get_first_deal')
+async function getFirstCRMContact() {
+  let firstContact = localStorage.getItem('firstCRMContact' + user)
+  if (firstContact) return firstContact
+  return await call('crm.api.onboarding.get_first_crm_contact')
 }
 
 const showIntermediateModal = ref(false)
@@ -367,15 +388,14 @@ const steps = reactive([
     },
   },
   {
-    name: 'create_first_lead',
-    title: __('Create your first lead'),
-    icon: markRaw(LeadsIcon),
+    name: 'create_first_student',
+    title: __('Create your first student'),
+    icon: markRaw(GraduationCapIcon),
     completed: false,
     onClick: () => {
       minimize.value = true
-      router.push({ name: 'Leads' })
-      send('trigger_lead_create', true)
-      capture('onboarding_step_clicked_create_first_lead')
+      router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })
+      capture('onboarding_step_clicked_create_first_student')
     },
   },
   {
@@ -392,31 +412,22 @@ const steps = reactive([
     condition: () => isManager(),
   },
   {
-    name: 'convert_lead_to_deal',
-    title: __('Convert lead to deal'),
-    icon: markRaw(ConvertIcon),
+    name: 'convert_student_to_contact',
+    title: __('Convert student to contact'),
+    icon: markRaw(ContactsIcon),
     completed: false,
-    dependsOn: 'create_first_lead',
     onClick: async () => {
       minimize.value = true
-      capture('onboarding_step_clicked_convert_lead_to_deal')
-      currentStep.value = {
-        title: __('Convert lead to deal'),
-        buttonLabel: __('Convert'),
-        videoURL: '/assets/crm/videos/convertToDeal.mov',
-        onClick: async () => {
-          showIntermediateModal.value = false
-          currentStep.value = {}
-
-          let lead = await getFirstLead()
-          if (lead) {
-            router.push({ name: 'Lead', params: { leadId: lead } })
-          } else {
-            router.push({ name: 'Leads' })
-          }
-        },
+      capture('onboarding_step_clicked_convert_student_to_contact')
+      let student = await getFirstEnrollmentStudent()
+      if (student) {
+        router.push({
+          name: 'Enrollment Student',
+          params: { enrollmentStudentId: student },
+        })
+      } else {
+        router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })
       }
-      showIntermediateModal.value = true
     },
   },
   {
@@ -426,13 +437,13 @@ const steps = reactive([
     completed: false,
     onClick: async () => {
       minimize.value = true
-      let deal = await getFirstDeal()
+      let contact = await getFirstCRMContact()
       capture('onboarding_step_clicked_create_first_task')
 
-      if (deal) {
+      if (contact) {
         router.push({
-          name: 'Deal',
-          params: { dealId: deal },
+          name: 'CRM Contact',
+          params: { crmContactId: contact },
           hash: '#tasks',
         })
       } else {
@@ -447,13 +458,13 @@ const steps = reactive([
     completed: false,
     onClick: async () => {
       minimize.value = true
-      let deal = await getFirstDeal()
+      let contact = await getFirstCRMContact()
       capture('onboarding_step_clicked_create_first_note')
 
-      if (deal) {
+      if (contact) {
         router.push({
-          name: 'Deal',
-          params: { dealId: deal },
+          name: 'CRM Contact',
+          params: { crmContactId: contact },
           hash: '#notes',
         })
       } else {
@@ -464,78 +475,43 @@ const steps = reactive([
   {
     name: 'add_first_comment',
     title: __('Add your first comment'),
-    icon: markRaw(CommentIcon),
+    icon: markRaw(NoteIcon),
     completed: false,
-    dependsOn: 'create_first_lead',
     onClick: async () => {
       minimize.value = true
-      let deal = await getFirstDeal()
+      let contact = await getFirstCRMContact()
       capture('onboarding_step_clicked_add_first_comment')
 
-      if (deal) {
+      if (contact) {
         router.push({
-          name: 'Deal',
-          params: { dealId: deal },
+          name: 'CRM Contact',
+          params: { crmContactId: contact },
           hash: '#comments',
         })
       } else {
-        router.push({ name: 'Leads' })
+        router.push({ name: 'CRM Contacts' })
       }
     },
   },
   {
     name: 'send_first_email',
     title: __('Send email'),
-    icon: markRaw(EmailIcon),
+    icon: markRaw(ContactsIcon),
     completed: false,
-    dependsOn: 'create_first_lead',
     onClick: async () => {
       minimize.value = true
-      let deal = await getFirstDeal()
+      let contact = await getFirstCRMContact()
       capture('onboarding_step_clicked_send_first_email')
 
-      if (deal) {
+      if (contact) {
         router.push({
-          name: 'Deal',
-          params: { dealId: deal },
+          name: 'CRM Contact',
+          params: { crmContactId: contact },
           hash: '#emails',
         })
       } else {
-        router.push({ name: 'Leads' })
+        router.push({ name: 'CRM Contacts' })
       }
-    },
-  },
-  {
-    name: 'change_deal_status',
-    title: __('Change deal status'),
-    icon: markRaw(StepsIcon),
-    completed: false,
-    dependsOn: 'convert_lead_to_deal',
-    onClick: async () => {
-      minimize.value = true
-      capture('onboarding_step_clicked_change_deal_status')
-
-      currentStep.value = {
-        title: __('Change deal status'),
-        buttonLabel: __('Change'),
-        videoURL: '/assets/crm/videos/changeDealStatus.mov',
-        onClick: async () => {
-          showIntermediateModal.value = false
-          currentStep.value = {}
-
-          let deal = await getFirstDeal()
-          if (deal) {
-            router.push({
-              name: 'Deal',
-              params: { dealId: deal },
-              hash: '#activity',
-            })
-          } else {
-            router.push({ name: 'Leads' })
-          }
-        },
-      }
-      showIntermediateModal.value = true
     },
   },
 ])
@@ -577,20 +553,17 @@ const articles = ref([
     title: __('Masters'),
     opened: false,
     subArticles: [
-      { name: 'lead', title: __('Lead') },
-      { name: 'deal', title: __('Deal') },
+      { name: 'student', title: __('Enrollment Student') },
+      { name: 'crm-contact', title: __('CRM Contact') },
       { name: 'contact', title: __('Contact') },
-      { name: 'organization', title: __('Organization') },
+      { name: 'high-school', title: __('High School') },
+      { name: 'campaign', title: __('Campaign') },
+      { name: 'crm-event', title: __('CRM Event') },
       { name: 'note', title: __('Note') },
       { name: 'task', title: __('Task') },
       { name: 'call-log', title: __('Call Log') },
       { name: 'email-template', title: __('Email Template') },
     ],
-  },
-  {
-    title: __('Capturing Leads'),
-    opened: false,
-    subArticles: [{ name: 'web-form', title: __('Web Form') }],
   },
   {
     title: __('Views'),
@@ -631,7 +604,6 @@ const articles = ref([
       { name: 'twilio', title: __('Twilio') },
       { name: 'exotel', title: __('Exotel') },
       { name: 'whatsapp', title: __('WhatsApp') },
-      { name: 'erpnext', title: __('ERPNext') },
     ],
   },
   {

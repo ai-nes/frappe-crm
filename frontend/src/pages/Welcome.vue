@@ -1,7 +1,7 @@
 <template>
   <div class="flex flex-col gap-5 justify-center items-center h-full">
     <div class="font-semibold text-2xl text-ink-gray-8 mb-3">
-      {{ __('Welcome {0}, lets add your first lead', [name]) }}
+      {{ __('Welcome {0}, lets add your first student', [name]) }}
     </div>
     <div class="flex gap-3">
       <div
@@ -18,7 +18,7 @@
             </div>
           </div>
           <div class="text-p-base text-ink-gray-8 text-center">
-            {{ __('Start with sample 10 leads') }}
+            {{ __('Start with sample students') }}
           </div>
         </div>
         <Button variant="outline" :label="__('Add Sample Data')" />
@@ -37,18 +37,17 @@
     </div>
     <Button
       variant="ghost"
-      :label="__('Or create leads manually')"
-      @click="showLeadModal = true"
+      :label="__('Or create students manually')"
+      @click="router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })"
     />
   </div>
-  <LeadModal v-if="showLeadModal" v-model="showLeadModal" />
 </template>
 <script setup>
 import AvatarIcon from '@/components/Icons/AvatarIcon.vue'
 import GoogleIcon from '@/components/Icons/GoogleIcon.vue'
-import LeadModal from '@/components/Modals/LeadModal.vue'
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 
 const name = ref('John Doe')
-const showLeadModal = ref(false)
+const router = useRouter()
 </script>

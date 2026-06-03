@@ -14,6 +14,8 @@
   "email",
   "col_break_1",
   "stage",
+  "communication_status",
+  "sla_status",
   "assigned_to",
   "section_academic",
   "student",
@@ -24,7 +26,16 @@
   "campaign",
   "crm_event",
   "section_notes",
-  "notes"
+  "notes",
+  "sla_section",
+  "sla",
+  "sla_creation",
+  "response_by",
+  "first_responded_on",
+  "first_response_time",
+  "last_responded_on",
+  "last_response_time",
+  "rolling_responses"
  ],
  "fields": [
   {
@@ -60,6 +71,22 @@
    "options": "Interested\nQualified\nEnrolled\nLost",
    "reqd": 1,
    "default": "Interested"
+  },
+  {
+   "default": "Open",
+   "fieldname": "communication_status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Communication Status",
+   "options": "Open\nReplied"
+  },
+  {
+   "fieldname": "sla_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "SLA Status",
+   "options": "\nFirst Response Due\nRolling Response Due\nFulfilled\nFailed",
+   "read_only": 1
   },
   {
    "fieldname": "assigned_to",
@@ -128,6 +155,68 @@
    "fieldname": "notes",
    "fieldtype": "Text Editor",
    "label": "Notes"
+  },
+  {
+   "fieldname": "sla_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "SLA"
+  },
+  {
+   "fieldname": "sla",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "SLA",
+   "options": "CRM Service Level Agreement",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_creation",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "SLA Creation"
+  },
+  {
+   "fieldname": "response_by",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Response By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_responded_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "First Responded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_response_time",
+   "fieldtype": "Duration",
+   "hidden": 1,
+   "label": "First Response Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_responded_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Last Responded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_response_time",
+   "fieldtype": "Duration",
+   "hidden": 1,
+   "label": "Last Response Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rolling_responses",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Rolling Responses",
+   "options": "CRM Rolling Response Time"
   }
  ],
  "index_web_pages_for_search": 1,

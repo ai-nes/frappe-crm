@@ -72,7 +72,7 @@ const subTabs = [
   { idx: 0, label: 'Tỉnh/Thành phố', doctype: 'CRM Province' },
   { idx: 1, label: 'Phường/Xã', doctype: 'CRM Ward' },
   { idx: 2, label: 'Ngành học', doctype: 'CRM Major' },
-  { idx: 3, label: 'Chi nhánh', doctype: 'CRM Branch' },
+  { idx: 3, label: 'Chi nhánh', doctype: 'Campus' },
 ]
 
 const activeIdx = ref(0)
