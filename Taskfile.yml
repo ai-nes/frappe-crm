@@ -1,115 +1,93 @@
 version: '3'
 
+# Local dev only — backend Docker (:8000) + frontend Vite (:5000)
+# App: http://crm.localhost:5000/crm
+
 vars:
-  DEV_COMPOSE: docker compose -f docker/docker-compose.dev.yml
-  BENCH_DIR: /home/frappe/frappe-bench
-  SITE: crm.localhost
+  COMPOSE: docker compose -f docker/docker-compose.dev.yml
+  BENCH: cd /home/frappe/frappe-bench && bench --site crm.localhost
 
 tasks:
   default:
-    desc: Show available local development tasks
+    desc: Danh sách lệnh
     cmds:
       - task --list
 
+  # --- Chạy app ---
+
   setup:
-    desc: First-time setup for backend containers and frontend dependencies
+    desc: Lần đầu — bật backend + cài frontend deps
     cmds:
-      - '{{.DEV_COMPOSE}} up -d'
-      - cd frontend && yarn install --check-files
+      - task: up
+      - task: deps
 
   up:
-    desc: Start local backend stack
+    desc: Bật backend (Docker)
     cmds:
-      - '{{.DEV_COMPOSE}} up -d'
-
-  up-build:
-    desc: Build and recreate local backend stack
-    cmds:
-      - '{{.DEV_COMPOSE}} up -d --build --force-recreate'
-
-  down:
-    desc: Stop local backend stack
-    cmds:
-      - '{{.DEV_COMPOSE}} down'
-
-  ps:
-    desc: Show local backend containers
-    cmds:
-      - '{{.DEV_COMPOSE}} ps'
+      - '{{.COMPOSE}} up -d'
 
   fe:
-    desc: Start frontend dev server on port 5000
+    desc: Frontend dev server (:5000)
     cmds:
       - yarn dev
 
-  install-fe:
-    desc: Install frontend dependencies
+  down:
+    desc: Tắt backend
+    cmds:
+      - '{{.COMPOSE}} down'
+
+  deps:
+    desc: Cài frontend deps (khi yarn.lock đổi)
+    aliases: [install-fe]
     cmds:
       - cd frontend && yarn install --check-files
 
-  logs:
-    desc: Follow Frappe backend logs
-    cmds:
-      - '{{.DEV_COMPOSE}} logs -f frappe'
-
-  restart:
-    desc: Restart Frappe backend service
-    cmds:
-      - '{{.DEV_COMPOSE}} restart frappe'
+  # --- Backend ---
 
   migrate:
-    desc: Run Frappe migrate for the local CRM site
+    desc: Schema, patches, workspace sync
     cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} migrate'''
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} migrate"'
 
-  sync-workspace:
-    desc: Re-import the Frappe CRM Desk workspace from repo JSON
+  restart:
+    desc: Reload Python sau khi sửa BE
     cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} execute crm.install.sync_frappe_crm_workspace && bench --site {{.SITE}} clear-cache'''
+      - '{{.COMPOSE}} restart frappe'
 
-  clear-cache:
-    desc: Clear local Frappe cache
+  pull:
+    desc: Sau git pull — deps + migrate + clear-cache + restart
     cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} clear-cache'''
+      - task: deps
+      - task: migrate
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
+      - task: restart
 
-  compile-locale:
-    desc: Compile vi.po to mo after locale edits
-    cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} migrate && bench --site {{.SITE}} clear-cache'''
+  # --- Docker / debug ---
 
-  console:
-    desc: Open Frappe console for the local CRM site
+  rebuild:
+    desc: Rebuild image sau khi sửa Dockerfile hoặc compose dev
+    aliases: [build]
     cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} console'''
-
-  bench:
-    desc: Run a bench command, for example task bench -- --site crm.localhost list-apps
-    cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench {{.CLI_ARGS}}'''
-
-  shell:
-    desc: Open a shell inside the Frappe backend container
-    cmds:
-      - '{{.DEV_COMPOSE}} exec frappe bash'
-
-  test-fe:
-    desc: Run frontend unit tests once
-    cmds:
-      - cd frontend && yarn test:run
-
-  build:
-    desc: Rebuild local Frappe development image after Dockerfile changes
-    cmds:
-      - '{{.DEV_COMPOSE}} build frappe'
-
-  recreate:
-    desc: Recreate local Frappe backend container after compose changes
-    cmds:
-      - '{{.DEV_COMPOSE}} up -d --force-recreate frappe'
+      - '{{.COMPOSE}} up -d --build --force-recreate frappe'
 
   reset:
-    desc: Delete local Docker volumes and recreate the backend stack
-    prompt: This deletes the local database and bench volumes. Continue?
+    desc: Xóa DB + bench volume, tạo lại stack
+    prompt: Xóa toàn bộ data local. Tiếp tục?
     cmds:
-      - '{{.DEV_COMPOSE}} down -v'
-      - '{{.DEV_COMPOSE}} up -d'
+      - '{{.COMPOSE}} down -v'
+      - '{{.COMPOSE}} up -d'
+
+  logs:
+    desc: Theo dõi backend logs
+    cmds:
+      - '{{.COMPOSE}} logs -f frappe'
+
+  bench:
+    desc: 'Bench tùy ý — vd: task bench -- --site crm.localhost console'
+    cmds:
+      - '{{.COMPOSE}} exec frappe bash -lc "cd /home/frappe/frappe-bench && bench {{.CLI_ARGS}}"'
+
+  shell:
+    desc: Shell trong container Frappe
+    cmds:
+      - '{{.COMPOSE}} exec frappe bash'
