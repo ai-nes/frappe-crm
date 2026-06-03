@@ -78,13 +78,13 @@ Nếu biết chính xác đổi gì, có thể chạy riêng (xem bảng dưới
 
 ## Sửa code thì chạy gì?
 
-| Đổi gì | Lệnh |
-|--------|------|
-| Vue / JS / CSS (`frontend/src/`) | Không cần — Vite tự reload |
-| `yarn.lock` / thêm package FE | `task deps` |
-| Python API, logic BE (`crm/`) | F5 — chưa ăn thì `task restart` |
-| DocType JSON, patch, `hooks.py` | `task migrate` → `task restart` |
-| Dockerfile / compose dev | `task rebuild` |
+| Đổi gì                           | Lệnh                            |
+| -------------------------------- | ------------------------------- |
+| Vue / JS / CSS (`frontend/src/`) | Không cần — Vite tự reload      |
+| `yarn.lock` / thêm package FE    | `task deps`                     |
+| Python API, logic BE (`crm/`)    | F5 — chưa ăn thì `task restart` |
+| DocType JSON, patch, `hooks.py`  | `task migrate` → `task restart` |
+| Dockerfile / compose dev         | `task rebuild`                  |
 
 Quy tắc nhanh:
 
@@ -98,11 +98,11 @@ DB  → migrate
 
 ## URL
 
-| | |
-|---|---|
-| CRM dev | `http://crm.localhost:5000/crm` |
-| Frappe Desk | `http://crm.localhost:8000/app` |
-| API | `http://crm.localhost:8000/api/method/...` |
+|             |                                            |
+| ----------- | ------------------------------------------ |
+| CRM dev     | `http://crm.localhost:5000/crm`            |
+| Frappe Desk | `http://crm.localhost:8000/app`            |
+| API         | `http://crm.localhost:8000/api/method/...` |
 
 Luôn dùng host **`crm.localhost`**. Không mix `localhost:8000` với `crm.localhost:5000` — cookie/session sẽ lệch.
 
@@ -119,21 +119,21 @@ crm/fcrm/doctype/ DocType JSON
 FE gọi BE qua dotted path, không hard-code `localhost:8000`:
 
 ```js
-import { call } from 'frappe-ui'
-await call('crm.api.example.ping', { name: 'Dat' })
+import {call} from 'frappe-ui'
+await call('crm.api.example.ping', {name: 'Dat'})
 ```
 
 ---
 
 ## Khi gặp lỗi
 
-| Vấn đề | Thử |
-|--------|-----|
-| Backend chưa lên | `task logs` — đợi init xong |
-| BE không nhận code mới | `task restart` |
-| Desk thiếu nav / schema lỗi | `task migrate` |
-| Docker đổi mà container cũ | `task rebuild` |
-| Muốn reset sạch DB local | `task reset` ⚠️ mất hết data |
+| Vấn đề                      | Thử                          |
+| --------------------------- | ---------------------------- |
+| Backend chưa lên            | `task logs` — đợi init xong  |
+| BE không nhận code mới      | `task restart`               |
+| Desk thiếu nav / schema lỗi | `task migrate`               |
+| Docker đổi mà container cũ  | `task rebuild`               |
+| Muốn reset sạch DB local    | `task reset` ⚠️ mất hết data |
 
 Lệnh bench khác:
 
