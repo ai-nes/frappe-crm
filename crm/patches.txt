@@ -19,3 +19,4 @@ crm.patches.v1_0.create_email_account_custom_field
 crm.patches.v1_0.create_crm_contact_email_account_custom_field
 crm.patches.v1_0.create_default_quick_filters
 crm.patches.v1_0.sync_frappe_crm_workspace
+crm.patches.v1_0.fix_high_school_view_settings

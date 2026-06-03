@@ -255,6 +255,7 @@ def add_default_quick_filters():
 	quick_filters = {
 		"Enrollment Student": ["student_name", "mobile_no", "email", "enrollment_status", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "stage", "assigned_to", "source"],
+		"CRM High School": ["school_code", "school_type", "ward", "province"],
 		"Contact": ["status", "email_id", "phone"],
 		"CRM Task": ["title", "priority", "assigned_to", "status", "due_date"],
 		"CRM Call Log": ["telephony_medium", "type", "status", "from", "to"],
