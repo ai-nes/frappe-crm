@@ -2,5 +2,5 @@ from crm.install import sync_frappe_crm_workspace
 
 
 def execute():
-	"""Replace stale Frappe CRM workspace shortcuts (e.g. CRM Communication Status)."""
+	"""Re-import Frappe CRM workspace after frappe_crm.json was restored to the repo."""
 	sync_frappe_crm_workspace()

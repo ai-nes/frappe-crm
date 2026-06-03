@@ -62,6 +62,11 @@ tasks:
     cmds:
       - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} migrate'''
 
+  sync-workspace:
+    desc: Re-import the Frappe CRM Desk workspace from repo JSON
+    cmds:
+      - '{{.DEV_COMPOSE}} exec frappe bash -lc ''cd {{.BENCH_DIR}} && bench --site {{.SITE}} execute crm.install.sync_frappe_crm_workspace && bench --site {{.SITE}} clear-cache'''
+
   clear-cache:
     desc: Clear local Frappe cache
     cmds:

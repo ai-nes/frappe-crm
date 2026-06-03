@@ -25,7 +25,13 @@ def after_install(force=False):
 	create_default_manager_dashboard(force)
 	create_assignment_rule_custom_fields()
 	add_assignment_rule_property_setters()
+	sync_frappe_crm_workspace()
 	frappe.db.commit()
+
+
+def sync_frappe_crm_workspace():
+	"""Import the Frappe CRM Desk workspace from crm/fcrm/workspace/frappe_crm/frappe_crm.json."""
+	frappe.reload_doc("fcrm", "Workspace", "Frappe CRM", force=True)
 
 
 def add_default_fields_layout(force=False):
