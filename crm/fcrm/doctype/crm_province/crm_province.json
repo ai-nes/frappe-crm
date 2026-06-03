@@ -20,7 +20,7 @@
    "fieldname": "province_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Tên tỉnh/thành phố",
+   "label": "Province Name",
    "reqd": 1,
    "unique": 1
   },
@@ -36,14 +36,14 @@
    "fieldname": "city_type",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Loại",
+   "label": "Type",
    "options": "Thành phố trực thuộc TW\nTỉnh"
   },
   {
    "fieldname": "city_number",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Mã tỉnh"
+   "label": "Province Code"
   },
   {
    "fieldname": "import_source_id",

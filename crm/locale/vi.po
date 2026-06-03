@@ -1040,7 +1040,7 @@ msgstr "Trạng Thái Giao Tiếp CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 msgid "CRM Contacts"
-msgstr "Danh Bạ CRM"
+msgstr "Hồ sơ CRM"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
@@ -1111,7 +1111,7 @@ msgstr "CRM Lead"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_lead_source/crm_lead_source.json
 msgid "CRM Lead Source"
-msgstr "Nguồn Lead CRM"
+msgstr "Nguồn tuyển sinh"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
@@ -1136,7 +1136,7 @@ msgstr "Tổ Chức CRM"
 #. Label of a shortcut in the Frappe CRM Workspace
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
 msgid "CRM Portal Page"
-msgstr "Trang Cổng Thông Tin CRM"
+msgstr "Trang CRM"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_product/crm_product.json
@@ -4945,7 +4945,7 @@ msgstr "Không tìm thấy kết quả nào"
 #: frontend/src/components/ListViews/EmptyState.vue:37
 #: frontend/src/pages/MobileOrganization.vue:145
 msgid "No {0} Found"
-msgstr ""
+msgstr "Không có {0}"
 
 #: frontend/src/components/PrimaryDropdown.vue:33
 msgid "No {0} available"
@@ -8419,11 +8419,178 @@ msgid "Enrolled Students"
 msgstr "Sinh viên đã nhập học"
 
 msgid "Enrollment Student"
-msgstr "Học sinh nhập học"
+msgstr "Học sinh"
 
 msgid "Call Logs"
 msgstr "Lịch sử cuộc gọi"
 
 msgid "Call Log"
 msgstr "Lịch sử cuộc gọi"
+
+# --- Admission CRM i18n (UI labels; DB values stay as stored) ---
+
+msgid "High Schools"
+msgstr "Trường THPT"
+
+msgid "High School"
+msgstr "Trường THPT"
+
+msgid "New High School"
+msgstr "Thêm trường THPT"
+
+msgid "CRM High School"
+msgstr "Trường THPT"
+
+msgid "CRM Contact"
+msgstr "Hồ sơ CRM"
+
+msgid "CRM Region"
+msgstr "Miền"
+
+msgid "CRM Province"
+msgstr "Tỉnh/Thành phố"
+
+msgid "CRM Ward"
+msgstr "Phường/Xã"
+
+msgid "CRM School Type"
+msgstr "Loại trường"
+
+msgid "CRM Event"
+msgstr "Sự kiện CRM"
+
+msgid "CRM Events"
+msgstr "Sự kiện"
+
+msgid "CRM Major"
+msgstr "Ngành học"
+
+msgid "Persons"
+msgstr "Cá nhân"
+
+msgid "Person"
+msgstr "Cá nhân"
+
+msgid "Staff"
+msgstr "Nhân sự"
+
+msgid "Campaigns"
+msgstr "Chiến dịch"
+
+msgid "Campaign"
+msgstr "Chiến dịch"
+
+msgid "Campaign Type"
+msgstr "Loại chiến dịch"
+
+msgid "Major Group"
+msgstr "Nhóm ngành"
+
+msgid "Admission Year"
+msgstr "Năm tuyển sinh"
+
+msgid "Campus"
+msgstr "Chi nhánh"
+
+msgid "Geography"
+msgstr "Địa lý"
+
+msgid "GEOGRAPHY"
+msgstr "ĐỊA LÝ"
+
+msgid "School Name"
+msgstr "Tên trường"
+
+msgid "School Code"
+msgstr "Mã trường"
+
+msgid "School Type"
+msgstr "Loại trường"
+
+msgid "School Type Name"
+msgstr "Tên loại trường"
+
+msgid "Region Name"
+msgstr "Tên miền"
+
+msgid "Region Code"
+msgstr "Mã miền"
+
+msgid "Province Name"
+msgstr "Tên tỉnh/thành phố"
+
+msgid "Province Code"
+msgstr "Mã tỉnh"
+
+msgid "Ward Name"
+msgstr "Tên phường/xã"
+
+msgid "Region"
+msgstr "Miền"
+
+msgid "Province"
+msgstr "Tỉnh/Thành phố"
+
+msgid "Ward"
+msgstr "Phường/Xã"
+
+msgid "Student Name"
+msgstr "Họ và tên"
+
+msgid "Mobile No"
+msgstr "Di động"
+
+msgid "Enrollment Status"
+msgstr "Trạng thái"
+
+msgid "Enrollment Date"
+msgstr "Ngày nhập học"
+
+msgid "Converted to CRM Contact"
+msgstr "Đã chuyển thành hồ sơ CRM"
+
+msgid "Links"
+msgstr "Liên kết"
+
+msgid "Major"
+msgstr "Ngành"
+
+msgid "Source"
+msgstr "Nguồn"
+
+msgid "Campus Name"
+msgstr "Tên chi nhánh"
+
+msgid "Campus Code"
+msgstr "Mã chi nhánh"
+
+msgid "Assigned To"
+msgstr "Phụ trách"
+
+msgid "Interested"
+msgstr "Quan tâm"
+
+msgid "Enrolled"
+msgstr "Đã nhập học"
+
+msgid "Role"
+msgstr "Vai trò"
+
+msgid "Trace"
+msgstr "Truy vết"
+
+msgid "Admission"
+msgstr "Tuyển sinh"
+
+msgid "Details"
+msgstr "Chi tiết"
+
+msgid "SHORTCUTS"
+msgstr "LỐI TẮT"
+
+msgid "META"
+msgstr "CẤU HÌNH"
+
+msgid "PORTAL"
+msgstr "CỔNG"
 

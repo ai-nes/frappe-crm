@@ -1,6 +1,6 @@
 {
  "charts": [],
- "content": "[{\"id\":\"portal-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PORTAL</b></span>\",\"col\":12}},{\"id\":\"portal-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Portal Page\",\"col\":3}},{\"id\":\"shortcut-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shortcut-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>SHORTCUTS</b>\",\"col\":12}},{\"id\":\"students-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Thí sinh\",\"col\":3}},{\"id\":\"contacts-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Hồ sơ CRM\",\"col\":3}},{\"id\":\"schools-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Trường THPT\",\"col\":3}},{\"id\":\"persons-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Cá nhân\",\"col\":3}},{\"id\":\"campaigns-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Chiến dịch\",\"col\":3}},{\"id\":\"events-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Sự kiện\",\"col\":3}},{\"id\":\"staff-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Nhân sự\",\"col\":3}},{\"id\":\"sla-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SLA\",\"col\":3}},{\"id\":\"assignment-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Rule\",\"col\":3}},{\"id\":\"meta-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"meta-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>META</b>\",\"col\":12}},{\"id\":\"source-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Nguồn tuyển sinh\",\"col\":3}},{\"id\":\"major-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Ngành học\",\"col\":3}},{\"id\":\"campus-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campus\",\"col\":3}},{\"id\":\"admission-year-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Năm tuyển sinh\",\"col\":3}},{\"id\":\"school-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Loại trường\",\"col\":3}},{\"id\":\"campaign-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Loại chiến dịch\",\"col\":3}},{\"id\":\"major-group-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Nhóm ngành\",\"col\":3}},{\"id\":\"geo-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"geo-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>ĐỊA LÝ</b>\",\"col\":12}},{\"id\":\"region-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Miền\",\"col\":3}},{\"id\":\"province-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Tỉnh/TP\",\"col\":3}},{\"id\":\"ward-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Phường/Xã\",\"col\":3}}]",
+ "content": "[{\"id\":\"portal-header\",\"type\":\"header\",\"data\":{\"text\":\"<span class=\\\"h5\\\"><b>PORTAL</b></span>\",\"col\":12}},{\"id\":\"portal-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Portal Page\",\"col\":3}},{\"id\":\"shortcut-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"shortcut-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>SHORTCUTS</b>\",\"col\":12}},{\"id\":\"students-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Prospective Students\",\"col\":3}},{\"id\":\"contacts-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Contacts\",\"col\":3}},{\"id\":\"schools-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"High Schools\",\"col\":3}},{\"id\":\"persons-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Persons\",\"col\":3}},{\"id\":\"campaigns-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campaigns\",\"col\":3}},{\"id\":\"events-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Events\",\"col\":3}},{\"id\":\"staff-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Staff\",\"col\":3}},{\"id\":\"sla-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"SLA\",\"col\":3}},{\"id\":\"assignment-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Assignment Rule\",\"col\":3}},{\"id\":\"meta-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"meta-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>META</b>\",\"col\":12}},{\"id\":\"source-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Lead Source\",\"col\":3}},{\"id\":\"major-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Major\",\"col\":3}},{\"id\":\"campus-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campus\",\"col\":3}},{\"id\":\"admission-year-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Admission Year\",\"col\":3}},{\"id\":\"school-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM School Type\",\"col\":3}},{\"id\":\"campaign-type-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Campaign Type\",\"col\":3}},{\"id\":\"major-group-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"Major Group\",\"col\":3}},{\"id\":\"geo-spacer\",\"type\":\"spacer\",\"data\":{\"col\":12}},{\"id\":\"geo-header\",\"type\":\"paragraph\",\"data\":{\"text\":\"<b>GEOGRAPHY</b>\",\"col\":12}},{\"id\":\"region-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Region\",\"col\":3}},{\"id\":\"province-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Province\",\"col\":3}},{\"id\":\"ward-link\",\"type\":\"shortcut\",\"data\":{\"shortcut_name\":\"CRM Ward\",\"col\":3}}]",
  "creation": "2023-11-27 13:55:17.090361",
  "custom_blocks": [],
  "docstatus": 0,
@@ -28,7 +28,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Thí sinh",
+   "label": "Prospective Students",
    "link_to": "Enrollment Student",
    "stats_filter": "[]",
    "type": "DocType"
@@ -51,7 +51,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Hồ sơ CRM",
+   "label": "CRM Contacts",
    "link_to": "CRM Contact",
    "stats_filter": "[]",
    "type": "DocType"
@@ -59,7 +59,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Trường THPT",
+   "label": "High Schools",
    "link_to": "CRM High School",
    "stats_filter": "[]",
    "type": "DocType"
@@ -75,7 +75,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Cá nhân",
+   "label": "Persons",
    "link_to": "Person",
    "stats_filter": "[]",
    "type": "DocType"
@@ -83,7 +83,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Chiến dịch",
+   "label": "Campaigns",
    "link_to": "Campaign",
    "stats_filter": "[]",
    "type": "DocType"
@@ -91,7 +91,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Sự kiện",
+   "label": "CRM Events",
    "link_to": "CRM Event",
    "stats_filter": "[]",
    "type": "DocType"
@@ -99,7 +99,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Nhân sự",
+   "label": "Staff",
    "link_to": "Staff",
    "stats_filter": "[]",
    "type": "DocType"
@@ -107,7 +107,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Nguồn tuyển sinh",
+   "label": "CRM Lead Source",
    "link_to": "CRM Lead Source",
    "stats_filter": "[]",
    "type": "DocType"
@@ -115,7 +115,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Ngành học",
+   "label": "CRM Major",
    "link_to": "CRM Major",
    "stats_filter": "[]",
    "type": "DocType"
@@ -131,7 +131,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Năm tuyển sinh",
+   "label": "Admission Year",
    "link_to": "Admission Year",
    "stats_filter": "[]",
    "type": "DocType"
@@ -139,7 +139,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Loại trường",
+   "label": "CRM School Type",
    "link_to": "CRM School Type",
    "stats_filter": "[]",
    "type": "DocType"
@@ -147,7 +147,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Loại chiến dịch",
+   "label": "Campaign Type",
    "link_to": "Campaign Type",
    "stats_filter": "[]",
    "type": "DocType"
@@ -155,7 +155,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Nhóm ngành",
+   "label": "Major Group",
    "link_to": "Major Group",
    "stats_filter": "[]",
    "type": "DocType"
@@ -163,7 +163,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Miền",
+   "label": "CRM Region",
    "link_to": "CRM Region",
    "stats_filter": "[]",
    "type": "DocType"
@@ -171,7 +171,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Tỉnh/TP",
+   "label": "CRM Province",
    "link_to": "CRM Province",
    "stats_filter": "[]",
    "type": "DocType"
@@ -179,7 +179,7 @@
   {
    "color": "Grey",
    "doc_view": "List",
-   "label": "Phường/Xã",
+   "label": "CRM Ward",
    "link_to": "CRM Ward",
    "stats_filter": "[]",
    "type": "DocType"

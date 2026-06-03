@@ -19,14 +19,14 @@
    "fieldname": "ward_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Tên phường/xã",
+   "label": "Ward Name",
    "reqd": 1
   },
   {
    "fieldname": "province",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Tỉnh/Thành phố",
+   "label": "Province",
    "options": "CRM Province",
    "reqd": 1
   },
@@ -34,7 +34,7 @@
    "fieldname": "ward_type",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Loại",
+   "label": "Type",
    "options": "Phường\nXã\nThị trấn"
   },
   {

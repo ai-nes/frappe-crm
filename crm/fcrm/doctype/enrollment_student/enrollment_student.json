@@ -33,14 +33,14 @@
    "fieldname": "student_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Họ và tên",
+   "label": "Student Name",
    "reqd": 1
   },
   {
    "fieldname": "mobile_no",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Di động",
+   "label": "Mobile",
    "options": "Phone"
   },
   {
@@ -57,14 +57,14 @@
    "fieldname": "enrollment_status",
    "fieldtype": "Select",
    "in_list_view": 1,
-   "label": "Trạng thái",
+   "label": "Enrollment Status",
    "options": "Chờ xác nhận\nĐã nhập học\nBảo lưu\nThôi học"
   },
   {
    "fieldname": "enrollment_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Ngày nhập học"
+   "label": "Enrollment Date"
   },
   {
    "default": "0",
@@ -75,27 +75,27 @@
   {
    "fieldname": "section_links",
    "fieldtype": "Section Break",
-   "label": "Liên kết"
+   "label": "Links"
   },
   {
    "fieldname": "high_school",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Trường THPT",
+   "label": "High School",
    "options": "CRM High School"
   },
   {
    "fieldname": "province",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Tỉnh/Thành phố",
+   "label": "Province",
    "options": "CRM Province"
   },
   {
    "fieldname": "ward",
    "fieldtype": "Link",
-   "label": "Phường/Xã",
+   "label": "Ward",
    "options": "CRM Ward"
   },
   {
@@ -113,19 +113,19 @@
   {
    "fieldname": "major",
    "fieldtype": "Link",
-   "label": "Ngành",
+   "label": "Major",
    "options": "CRM Major"
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
-   "label": "Nguồn",
+   "label": "Source",
    "options": "CRM Lead Source"
   },
   {
    "fieldname": "admission_year",
    "fieldtype": "Link",
-   "label": "Năm tuyển sinh",
+   "label": "Admission Year",
    "options": "Admission Year"
   },
   {

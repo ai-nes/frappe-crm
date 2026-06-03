@@ -162,5 +162,6 @@
  "sort_field": "school_name",
  "sort_order": "ASC",
  "states": [],
- "title_field": "school_name"
+ "title_field": "school_name",
+ "translated_doctype": 1
 }

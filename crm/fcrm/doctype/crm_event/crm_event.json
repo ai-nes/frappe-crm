@@ -97,5 +97,6 @@
  "sort_field": "event_date",
  "sort_order": "DESC",
  "states": [],
- "title_field": "title"
+ "title_field": "title",
+ "translated_doctype": 1
 }

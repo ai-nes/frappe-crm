@@ -112,5 +112,6 @@
  "sort_field": "full_name",
  "sort_order": "ASC",
  "states": [],
- "title_field": "full_name"
+ "title_field": "full_name",
+ "translated_doctype": 1
 }
