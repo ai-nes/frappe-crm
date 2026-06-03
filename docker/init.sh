@@ -3,6 +3,24 @@ set -euo pipefail
 
 BENCH_DIR="/home/frappe/frappe-bench"
 
+sync_public_assets() {
+    mkdir -p sites/assets
+
+    for app in frappe crm; do
+        public_dir="apps/${app}/${app}/public"
+        target_dir="sites/assets/${app}"
+        tmp_dir="${target_dir}.tmp.$$"
+
+        if [ -d "${public_dir}" ]; then
+            rm -rf "${tmp_dir}"
+            mkdir -p "${tmp_dir}"
+            cp -a "${public_dir}/." "${tmp_dir}/"
+            rm -rf "${target_dir}"
+            mv "${tmp_dir}" "${target_dir}"
+        fi
+    done
+}
+
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "${BENCH_DIR}"
     chown frappe:frappe /home/frappe
@@ -44,6 +62,13 @@ sed -i '/watch/d' ./Procfile || true
 if [ ! -e "apps/crm" ]; then
     bench get-app /workspace --soft-link
 fi
+
+echo "Installing and building CRM frontend assets..."
+cd /workspace
+yarn install --check-files
+yarn build
+cd "${BENCH_DIR}"
+sync_public_assets
 
 if [ ! -d "sites/crm.localhost" ]; then
     bench new-site crm.localhost \

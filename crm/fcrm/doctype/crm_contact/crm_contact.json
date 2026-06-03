@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "full_name",
   "phone",
   "email",
@@ -38,6 +39,14 @@
   "rolling_responses"
  ],
  "fields": [
+  {
+   "default": "CRMC-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CRMC-.YYYY.-"
+  },
   {
    "fieldname": "full_name",
    "fieldtype": "Data",

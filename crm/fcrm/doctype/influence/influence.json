@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "crm_contact",
   "full_name",
   "column_break_1",
@@ -17,6 +18,14 @@
   "notes"
  ],
  "fields": [
+  {
+   "default": "INF-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "INF-.YYYY.-"
+  },
   {
    "fieldname": "crm_contact",
    "fieldtype": "Link",

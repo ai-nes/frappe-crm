@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "full_name",
   "role",
   "column_break_1",
@@ -21,6 +22,14 @@
   "notes"
  ],
  "fields": [
+  {
+   "default": "PER-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "PER-.YYYY.-"
+  },
   {
    "fieldname": "full_name",
    "fieldtype": "Data",

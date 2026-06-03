@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "student_name",
   "mobile_no",
   "email",
@@ -29,6 +30,14 @@
   "import_source_id"
  ],
  "fields": [
+  {
+   "default": "ENR-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "ENR-.YYYY.-"
+  },
   {
    "fieldname": "student_name",
    "fieldtype": "Data",
