@@ -135,6 +135,9 @@ msgstr "51-200"
 msgid "<b>META</b>"
 msgstr "<b>META</b>"
 
+msgid "<b>ACADEMIC</b>"
+msgstr "<b>ACADEMIC</b>"
+
 #. Paragraph text in the Frappe CRM Workspace
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
 msgid "<b>SHORTCUTS</b>"
@@ -8444,6 +8447,9 @@ msgstr "Trường THPT"
 msgid "CRM Contact"
 msgstr "Hồ sơ CRM"
 
+msgid "Portal Page"
+msgstr "Trang cổng"
+
 msgid "CRM Region"
 msgstr "Miền"
 
@@ -8464,6 +8470,27 @@ msgstr "Sự kiện"
 
 msgid "CRM Major"
 msgstr "Ngành học"
+
+msgid "CRM Major Group"
+msgstr "Nhóm ngành"
+
+msgid "CRM Admission Year"
+msgstr "Năm tuyển sinh"
+
+msgid "CRM Academic Year Config"
+msgstr "Cấu hình năm tuyển sinh"
+
+msgid "CRM Campus"
+msgstr "Chi nhánh"
+
+msgid "CRM Tuition Policy Item"
+msgstr "Dòng học phí"
+
+msgid "CRM Scholarship Item"
+msgstr "Dòng học bổng"
+
+msgid "CRM Quota Item"
+msgstr "Dòng chỉ tiêu"
 
 msgid "Persons"
 msgstr "Cá nhân"
@@ -8491,6 +8518,21 @@ msgstr "Năm tuyển sinh"
 
 msgid "Campus"
 msgstr "Chi nhánh"
+
+msgid "Reference Data"
+msgstr "Dữ liệu tham chiếu"
+
+msgid "Categories"
+msgstr "Danh mục"
+
+msgid "Manage provinces, wards, majors, and campuses"
+msgstr "Quản lý danh mục tỉnh/thành phố, phường/xã, ngành học và chi nhánh"
+
+msgid "Province/City"
+msgstr "Tỉnh/Thành phố"
+
+msgid "Ward/Commune"
+msgstr "Phường/Xã"
 
 msgid "Geography"
 msgstr "Địa lý"
@@ -8534,6 +8576,24 @@ msgstr "Tỉnh/Thành phố"
 msgid "Ward"
 msgstr "Phường/Xã"
 
+msgid "Commune"
+msgstr "Xã"
+
+msgid "Township"
+msgstr "Thị trấn"
+
+msgid "Centrally Controlled City"
+msgstr "Thành phố trực thuộc TW"
+
+msgid "Pending Confirmation"
+msgstr "Chờ xác nhận"
+
+msgid "Deferred"
+msgstr "Bảo lưu"
+
+msgid "Withdrawn"
+msgstr "Thôi học"
+
 msgid "Student Name"
 msgstr "Họ và tên"
 
@@ -8564,6 +8624,48 @@ msgstr "Tên chi nhánh"
 msgid "Campus Code"
 msgstr "Mã chi nhánh"
 
+msgid "Year Name"
+msgstr "Tên năm tuyển sinh"
+
+msgid "Start Date"
+msgstr "Ngày bắt đầu"
+
+msgid "End Date"
+msgstr "Ngày kết thúc"
+
+msgid "Is Active"
+msgstr "Đang hoạt động"
+
+msgid "Config Name"
+msgstr "Tên cấu hình"
+
+msgid "Tuition Policy"
+msgstr "Chính sách học phí"
+
+msgid "Scholarship Fund"
+msgstr "Quỹ học bổng"
+
+msgid "Quota"
+msgstr "Chỉ tiêu"
+
+msgid "Scholarship Name"
+msgstr "Tên học bổng"
+
+msgid "Amount"
+msgstr "Số tiền"
+
+msgid "Criteria"
+msgstr "Tiêu chí"
+
+msgid "Note"
+msgstr "Ghi chú"
+
+msgid "Address"
+msgstr "Địa chỉ"
+
+msgid "Phone"
+msgstr "Điện thoại"
+
 msgid "Assigned To"
 msgstr "Phụ trách"
 
@@ -8590,6 +8692,24 @@ msgstr "LỐI TẮT"
 
 msgid "META"
 msgstr "CẤU HÌNH"
+
+msgid "ACADEMIC"
+msgstr "ACADEMIC"
+
+msgid "Lead Source"
+msgstr "Nguồn tuyển sinh"
+
+msgid "Academic Year Config"
+msgstr "Cấu hình năm tuyển sinh"
+
+msgid "Budget"
+msgstr "Ngân sách"
+
+msgid "Campaign Type Name"
+msgstr "Tên loại chiến dịch"
+
+msgid "Event Date"
+msgstr "Ngày sự kiện"
 
 msgid "PORTAL"
 msgstr "CỔNG"

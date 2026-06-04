@@ -3,14 +3,14 @@
     <div class="flex justify-between px-2 pt-2">
       <div class="flex flex-col gap-1">
         <h2 class="flex gap-2 text-xl font-semibold leading-none h-5">
-          {{ __('Dữ liệu tham chiếu') }}
+          {{ __('Reference Data') }}
         </h2>
         <p class="text-p-base text-ink-gray-6">
-          {{ __('Quản lý danh mục tỉnh/thành phố, phường/xã, ngành học và chi nhánh') }}
+          {{ __('Manage provinces, wards, majors, and campuses') }}
         </p>
       </div>
       <div class="flex items-center space-x-2">
-        <Button :label="__('Thêm')" icon-left="plus" variant="solid" @click="addRecord()" />
+        <Button :label="__('Add')" icon-left="plus" variant="solid" @click="addRecord()" />
       </div>
     </div>
 
@@ -69,10 +69,10 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 const { showModal } = useDoctypeModal()
 
 const subTabs = [
-  { idx: 0, label: 'Tỉnh/Thành phố', doctype: 'CRM Province' },
-  { idx: 1, label: 'Phường/Xã', doctype: 'CRM Ward' },
-  { idx: 2, label: 'Ngành học', doctype: 'CRM Major' },
-  { idx: 3, label: 'Chi nhánh', doctype: 'Campus' },
+  { idx: 0, label: 'Province/City', doctype: 'CRM Province' },
+  { idx: 1, label: 'Ward/Commune', doctype: 'CRM Ward' },
+  { idx: 2, label: 'Major', doctype: 'CRM Major' },
+  { idx: 3, label: 'Campus', doctype: 'CRM Campus' },
 ]
 
 const activeIdx = ref(0)

@@ -35,7 +35,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "Phường\nXã\nThị trấn"
+   "options": "Ward\nCommune\nTownship"
   },
   {
    "fieldname": "import_source_id",

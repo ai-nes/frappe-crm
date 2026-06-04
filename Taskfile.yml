@@ -54,12 +54,18 @@ tasks:
     cmds:
       - '{{.COMPOSE}} restart frappe'
 
+  cache:
+    desc: Xóa cache site crm.localhost
+    aliases: [clear-cache]
+    cmds:
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
+
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart
     cmds:
       - task: deps
       - task: migrate
-      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
+      - task: cache
       - task: restart
 
   # --- Docker / debug ---

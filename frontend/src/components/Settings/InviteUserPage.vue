@@ -151,11 +151,11 @@ const inviteeExistMessage = computed(() => {
 const description = computed(() => {
   return {
     'System Manager':
-      'Quản lý toàn bộ CRM, bao gồm quản lý người dùng, tùy chỉnh và cài đặt.',
+      'Manage the entire CRM, including users, customization, and settings.',
     'Sales Manager':
-      'Quản lý tuyển sinh: mời người dùng mới, tạo báo cáo công khai & riêng tư.',
+      'Manage admissions: invite users and create public and private reports.',
     'Sales User':
-      'Nhân viên tuyển sinh: làm việc với khách hàng tiềm năng, hồ sơ và tạo báo cáo riêng tư.',
+      'Admissions user: work with leads, records, and private reports.',
   }[role.value]
 })
 

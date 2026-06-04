@@ -19,7 +19,7 @@ class TestEnrollmentStudent(FrappeTestCase):
 			"student_name": name,
 			"mobile_no": "0901234567",
 			"email": "test.convert@example.com",
-			"enrollment_status": "Chờ xác nhận",
+			"enrollment_status": "Pending Confirmation",
 		})
 		student.insert(ignore_permissions=True)
 		return student
@@ -47,12 +47,11 @@ class TestEnrollmentStudent(FrappeTestCase):
 		student.reload()
 		self.assertEqual(student.converted, 1)
 
-	def test_convert_double_conversion_raises(self):
+	def test_convert_double_conversion_returns_existing_contact(self):
 		student = self._make_student("_Test Double Convert Student")
-		convert_to_contact(student.name)
+		contact_name = convert_to_contact(student.name)
 
-		with self.assertRaises(frappe.ValidationError):
-			convert_to_contact(student.name)
+		self.assertEqual(convert_to_contact(student.name), contact_name)
 
 	def test_create_from_contact_creates_enrollment_student(self):
 		contact = frappe.get_doc({

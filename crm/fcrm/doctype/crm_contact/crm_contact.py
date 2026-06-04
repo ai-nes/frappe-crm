@@ -5,6 +5,65 @@ from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 
 
 class CRMContact(Document):
+	@staticmethod
+	def default_list_data():
+		columns = [
+			{
+				"label": "Full Name",
+				"type": "Data",
+				"key": "full_name",
+				"width": "16rem",
+			},
+			{
+				"label": "Phone",
+				"type": "Data",
+				"key": "phone",
+				"width": "10rem",
+			},
+			{
+				"label": "Email",
+				"type": "Data",
+				"key": "email",
+				"width": "14rem",
+			},
+			{
+				"label": "Stage",
+				"type": "Select",
+				"key": "stage",
+				"width": "10rem",
+			},
+			{
+				"label": "Assigned To",
+				"type": "Link",
+				"key": "assigned_to",
+				"options": "Staff",
+				"width": "12rem",
+			},
+			{
+				"label": "Last Modified",
+				"type": "Datetime",
+				"key": "modified",
+				"width": "8rem",
+			},
+		]
+		rows = [
+			"name",
+			"full_name",
+			"phone",
+			"email",
+			"stage",
+			"assigned_to",
+			"modified",
+		]
+		return {"columns": columns, "rows": rows}
+
+	@staticmethod
+	def default_kanban_settings():
+		return {
+			"title_field": "full_name",
+			"kanban_fields": '["name", "full_name", "phone", "email", "assigned_to"]',
+		}
+
 	def validate(self):
 		self.apply_sla()
 
