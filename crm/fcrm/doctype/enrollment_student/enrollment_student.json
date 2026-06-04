@@ -67,7 +67,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Enrollment Status",
-   "options": "Pending Confirmation\nEnrolled\nDeferred\nWithdrawn"
+   "options": "Pending Confirmation\nEnrolled\nDeferred\nWithdrawn\nConverted"
   },
   {
    "fieldname": "enrollment_date",

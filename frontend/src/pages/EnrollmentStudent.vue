@@ -182,13 +182,20 @@ const STATUS_COLORS = {
   Enrolled: 'text-green-500',
   Deferred: 'text-blue-500',
   Withdrawn: 'text-gray-500',
+  Converted: 'text-purple-500',
 }
 
 function statusColor(status) {
   return STATUS_COLORS[status] || 'text-gray-500'
 }
 
-const STATUS_OPTIONS = ['Pending Confirmation', 'Enrolled', 'Deferred', 'Withdrawn']
+const STATUS_OPTIONS = [
+  'Pending Confirmation',
+  'Enrolled',
+  'Deferred',
+  'Withdrawn',
+  'Converted',
+]
 
 const enrollmentStatuses = computed(() =>
   STATUS_OPTIONS.map((s) => ({

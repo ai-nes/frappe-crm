@@ -25,9 +25,8 @@ class TestEnrollmentStudent(FrappeTestCase):
 		return student
 
 	def tearDown(self):
-		for dt in ("CRM Contact", "Enrollment Student"):
-			for name in frappe.db.get_all(dt, filters={"student_name": ["like", "_Test%"]}, pluck="name"):
-				frappe.delete_doc(dt, name, force=True)
+		for name in frappe.db.get_all("Enrollment Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
+			frappe.delete_doc("Enrollment Student", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("Contact", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
@@ -46,6 +45,7 @@ class TestEnrollmentStudent(FrappeTestCase):
 
 		student.reload()
 		self.assertEqual(student.converted, 1)
+		self.assertEqual(student.enrollment_status, "Converted")
 
 	def test_convert_double_conversion_returns_existing_contact(self):
 		student = self._make_student("_Test Double Convert Student")

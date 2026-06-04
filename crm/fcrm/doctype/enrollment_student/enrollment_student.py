@@ -84,6 +84,7 @@ def convert_to_contact(student_name):
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)
+	student.db_set("enrollment_status", "Converted")
 
 	return contact.name
 
