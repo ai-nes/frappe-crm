@@ -2,27 +2,34 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:province_name",
+ "autoname": "field:province_code",
  "creation": "2026-05-30 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "province_code",
   "province_name",
   "region",
   "city_type",
-  "city_number",
   "import_source_id"
  ],
  "fields": [
+  {
+   "fieldname": "province_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Province Code",
+   "reqd": 1,
+   "unique": 1
+  },
   {
    "fieldname": "province_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Province Name",
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "region",
@@ -38,13 +45,6 @@
    "in_list_view": 1,
    "label": "Type",
    "options": "Centrally Controlled City\nProvince"
-  },
-  {
-   "fieldname": "city_number",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Province Code",
-   "unique": 1
   },
   {
    "fieldname": "import_source_id",

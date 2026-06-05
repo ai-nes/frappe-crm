@@ -8566,7 +8566,10 @@ msgid "Province Name"
 msgstr "Tên tỉnh/thành phố"
 
 msgid "Province Code"
-msgstr "Mã tỉnh"
+msgstr "Mã tỉnh/thành phố"
+
+msgid "Ward Code"
+msgstr "Mã phường/xã"
 
 msgid "Ward Name"
 msgstr "Tên phường/xã"

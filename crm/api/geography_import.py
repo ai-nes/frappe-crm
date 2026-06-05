@@ -175,11 +175,11 @@ def _import_row(data):
 	)
 	province = _upsert_by_field(
 		"CRM Province",
-		"city_number",
+		"province_code",
 		data["province_code"],
 		{
 			"province_name": data["province_name"],
-			"city_number": data["province_code"],
+			"province_code": data["province_code"],
 			"city_type": "Province",
 			"region": region.name,
 		},
