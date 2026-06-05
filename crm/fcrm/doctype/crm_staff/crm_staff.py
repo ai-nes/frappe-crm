@@ -3,6 +3,18 @@ from frappe.model.document import Document
 
 
 class CRMStaff(Document):
+	@staticmethod
+	def default_list_data():
+		columns = [
+			{"label": "Full Name", "type": "Data", "key": "full_name", "width": "16rem"},
+			{"label": "Department", "type": "Link", "key": "department", "options": "CRM Department", "width": "12rem"},
+			{"label": "Campus", "type": "Link", "key": "campus", "options": "CRM Campus", "width": "12rem"},
+			{"label": "User", "type": "Link", "key": "user", "options": "User", "width": "12rem"},
+			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+		]
+		rows = ["name", "full_name", "department", "campus", "user", "modified"]
+		return {"columns": columns, "rows": rows}
+
 	def after_insert(self):
 		if self.user and self.campus:
 			self._sync_campus_user_permission()
