@@ -69,13 +69,11 @@ import ContactsListView from '@/components/ListViews/ContactsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import ViewControls from '@/components/ViewControls.vue'
 import { getMeta } from '@/stores/meta'
-import { organizationsStore } from '@/stores/organizations.js'
 import { formatDate, timeAgo } from '@/utils'
 import { ref, computed } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('Contact')
-const { getOrganization } = organizationsStore()
 
 const showContactModal = ref(false)
 
@@ -132,7 +130,6 @@ const rows = computed(() => {
       } else if (row == 'company_name') {
         _rows[row] = {
           label: contact.company_name,
-          logo: getOrganization(contact.company_name)?.organization_logo,
         }
       } else if (['modified', 'creation'].includes(row)) {
         _rows[row] = {

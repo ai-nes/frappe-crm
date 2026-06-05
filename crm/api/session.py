@@ -77,14 +77,14 @@ def get_users():
 
 
 @frappe.whitelist()
-def get_organizations():
+def get_high_schools():
 	get_session_role_flags()
 
-	organizations = frappe.qb.get_query(
-		"CRM Organization",
+	high_schools = frappe.qb.get_query(
+		"CRM High School",
 		fields=["*"],
 		order_by="name asc",
 		distinct=True,
 	).run(as_dict=1)
 
-	return organizations
+	return high_schools

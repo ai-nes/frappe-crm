@@ -3,10 +3,30 @@ set -euo pipefail
 
 BENCH_DIR="/home/frappe/frappe-bench"
 
+sync_public_assets() {
+    mkdir -p sites/assets
+
+    for app in frappe crm; do
+        public_dir="apps/${app}/${app}/public"
+        target_dir="sites/assets/${app}"
+        tmp_dir="${target_dir}.tmp.$$"
+
+        if [ -d "${public_dir}" ]; then
+            rm -rf "${tmp_dir}"
+            mkdir -p "${tmp_dir}"
+            cp -a "${public_dir}/." "${tmp_dir}/"
+            rm -rf "${target_dir}"
+            mv "${tmp_dir}" "${target_dir}"
+        fi
+    done
+}
+
 if [ "$(id -u)" = "0" ]; then
     mkdir -p "${BENCH_DIR}"
     chown frappe:frappe /home/frappe
     chown -R frappe:frappe "${BENCH_DIR}"
+    mkdir -p /workspace/node_modules /workspace/frontend/node_modules
+    chown -R frappe:frappe /workspace/node_modules /workspace/frontend/node_modules
     exec su -s /bin/bash frappe -c "cd /home/frappe && bash /workspace/docker/init.sh"
 fi
 
@@ -28,6 +48,12 @@ fi
 
 cd "${BENCH_DIR}"
 
+# /workspace is a host-mounted Git repo. Inside the container it can appear to be
+# owned by a different UID, so bench's Git checks need an explicit trust entry.
+if ! git config --global --get-all safe.directory | grep -Fxq /workspace; then
+    git config --global --add safe.directory /workspace
+fi
+
 # Use containers instead of localhost
 bench set-mariadb-host mariadb
 bench set-redis-cache-host redis://redis:6379
@@ -42,6 +68,13 @@ sed -i '/watch/d' ./Procfile || true
 if [ ! -e "apps/crm" ]; then
     bench get-app /workspace --soft-link
 fi
+
+echo "Installing and building CRM frontend assets..."
+cd /workspace
+yarn install --check-files
+yarn build
+cd "${BENCH_DIR}"
+sync_public_assets
 
 if [ ! -d "sites/crm.localhost" ]; then
     bench new-site crm.localhost \

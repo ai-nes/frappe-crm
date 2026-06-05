@@ -10,7 +10,7 @@ def get_sla(doc: Document) -> Document:
 	"""
 	Get Service Level Agreement for `doc`
 
-	:param doc: Lead/Deal to use
+	:param doc: CRM document to use
 	:return: Applicable SLA
 	"""
 	SLA = frappe.qb.DocType("CRM Service Level Agreement")
@@ -19,7 +19,7 @@ def get_sla(doc: Document) -> Document:
 	priority = doc.communication_status
 	q = (
 		frappe.qb.from_(SLA)
-		.select(SLA.name, SLA.condition)
+		.select(SLA.name, SLA.condition, SLA.default)
 		.where(SLA.apply_on == doc.doctype)
 		.where(SLA.enabled)
 		.where(Criterion.any([SLA.start_date.isnull(), SLA.start_date <= now]))

@@ -1,0 +1,263 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-06-03 00:00:00.000000",
+ "default_view": "Kanban",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "full_name",
+  "phone",
+  "email",
+  "col_break_1",
+  "stage",
+  "communication_status",
+  "sla_status",
+  "assigned_to",
+  "section_academic",
+  "student",
+  "high_school",
+  "major",
+  "col_break_2",
+  "source",
+  "campaign",
+  "crm_event",
+  "section_notes",
+  "notes",
+  "sla_section",
+  "sla",
+  "sla_creation",
+  "response_by",
+  "first_responded_on",
+  "first_response_time",
+  "last_responded_on",
+  "last_response_time",
+  "rolling_responses"
+ ],
+ "fields": [
+  {
+   "default": "CRMC-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CRMC-.YYYY.-"
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Full Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage",
+   "options": "Interested\nQualified\nEnrolled\nLost",
+   "reqd": 1,
+   "default": "Interested"
+  },
+  {
+   "default": "Open",
+   "fieldname": "communication_status",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Communication Status",
+   "options": "Open\nReplied"
+  },
+  {
+   "fieldname": "sla_status",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "SLA Status",
+   "options": "\nFirst Response Due\nRolling Response Due\nFulfilled\nFailed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assigned To",
+   "options": "Staff"
+  },
+  {
+   "fieldname": "section_academic",
+   "fieldtype": "Section Break",
+   "label": "Academic Info"
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "label": "Source Student",
+   "options": "Enrollment Student"
+  },
+  {
+   "fieldname": "high_school",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "High School",
+   "options": "CRM High School"
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Major",
+   "options": "CRM Major"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "Campaign"
+  },
+  {
+   "fieldname": "crm_event",
+   "fieldtype": "Link",
+   "label": "CRM Event",
+   "options": "CRM Event"
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "sla_section",
+   "fieldtype": "Section Break",
+   "hidden": 1,
+   "label": "SLA"
+  },
+  {
+   "fieldname": "sla",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "SLA",
+   "options": "CRM Service Level Agreement",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_creation",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "SLA Creation"
+  },
+  {
+   "fieldname": "response_by",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Response By",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_responded_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "First Responded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "first_response_time",
+   "fieldtype": "Duration",
+   "hidden": 1,
+   "label": "First Response Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_responded_on",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Last Responded On",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_response_time",
+   "fieldtype": "Duration",
+   "hidden": 1,
+   "label": "Last Response Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "rolling_responses",
+   "fieldtype": "Table",
+   "hidden": 1,
+   "label": "Rolling Responses",
+   "options": "CRM Rolling Response Time"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "kanban_field": "stage",
+ "links": [],
+ "modified": "2026-06-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Contact",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "CRMC-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
+  },
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "Sales Manager", "share": 1, "write": 1
+  },
+  {
+   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
+   "read": 1, "report": 1, "role": "Sales User", "share": 1, "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "phone,email,high_school",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "full_name",
+ "translated_doctype": 1
+}

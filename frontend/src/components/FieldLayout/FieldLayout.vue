@@ -35,7 +35,7 @@ import { ref, computed, provide } from 'vue'
 const props = defineProps({
   tabs: { type: Array, default: () => [] },
   data: { type: Object, default: () => ({}) },
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   isGridRow: { type: Boolean, default: false },
   preview: { type: Boolean, default: false },
   context: { type: Object, default: null },

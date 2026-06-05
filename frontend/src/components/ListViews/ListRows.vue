@@ -51,7 +51,7 @@ import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue'
 
 const props = defineProps({
   rows: { type: Array, required: true },
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
 })
 
 const reactivieRows = ref(props.rows)

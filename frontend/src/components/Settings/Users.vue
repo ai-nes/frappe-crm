@@ -80,7 +80,7 @@
           :options="[
             { label: __('All'), value: 'All' },
             { label: __('Admin'), value: 'System Manager' },
-            { label: __('Manager'), value: 'Sales Manager' },
+            { label: __('Sales Manager'), value: 'Sales Manager' },
             { label: __('Sales User'), value: 'Sales User' },
           ]"
         />
@@ -188,7 +188,7 @@ const currentRole = ref('All')
 
 const roleMap = {
   'System Manager': __('Admin'),
-  'Sales Manager': __('Manager'),
+  'Sales Manager': __('Sales Manager'),
   'Sales User': __('Sales User'),
 }
 
@@ -234,10 +234,10 @@ function getDropdownOptions(user) {
       condition: () => isAdmin(),
     },
     {
-      label: __('Manager'),
+      label: __('Sales Manager'),
       component: () =>
         DropdownOption({
-          option: __('Manager'),
+          option: __('Sales Manager'),
           icon: 'briefcase',
           selected: user.role === 'Sales Manager',
         }),

@@ -14,15 +14,35 @@ import { useRoute } from 'vue-router'
 const route = useRoute()
 
 const doctypeMap = {
-  'CRM Lead': {
-    title: 'Leads',
-    listRoute: '/crm/leads',
-    pageRoute: `/crm/leads/docname`,
+  'Enrollment Student': {
+    title: 'Enrollment Students',
+    listRoute: '/crm/enrollment-students',
+    pageRoute: `/crm/enrollment-students/docname`,
   },
-  'CRM Deal': {
-    title: 'Deals',
-    listRoute: '/crm/deals',
-    pageRoute: `/crm/deals/docname`,
+  'CRM Contact': {
+    title: 'CRM Contacts',
+    listRoute: '/crm/crm-contacts',
+    pageRoute: `/crm/crm-contacts/docname`,
+  },
+  'CRM High School': {
+    title: 'High Schools',
+    listRoute: '/crm/high-schools',
+    pageRoute: `/crm/high-schools/docname`,
+  },
+  Person: {
+    title: 'Persons',
+    listRoute: '/crm/persons',
+    pageRoute: `/crm/persons/docname`,
+  },
+  Campaign: {
+    title: 'Campaigns',
+    listRoute: '/crm/campaigns',
+    pageRoute: `/crm/campaigns/docname`,
+  },
+  'CRM Event': {
+    title: 'CRM Events',
+    listRoute: '/crm/crm-events',
+    pageRoute: `/crm/crm-events/docname`,
   },
   Contact: {
     title: 'Contacts',
@@ -32,11 +52,6 @@ const doctypeMap = {
   'CRM Task': {
     title: 'Tasks',
     listRoute: '/crm/tasks',
-  },
-  'CRM Organization': {
-    title: 'Organizations',
-    listRoute: '/crm/organizations',
-    pageRoute: `/crm/organizations/docname`,
   },
   'CRM Call Log': {
     title: 'Call Log',

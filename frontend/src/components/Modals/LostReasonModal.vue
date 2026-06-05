@@ -59,7 +59,7 @@ import { Dialog } from 'frappe-ui'
 import { ref } from 'vue'
 
 const props = defineProps({
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   document: { type: Object, required: true },
 })
 

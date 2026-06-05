@@ -2,6 +2,18 @@ import frappe
 from frappe.query_builder import Order
 
 
+ROUTES_BY_DOCTYPE = {
+	"CRM Contact": ("CRM Contact", "crmContactId", "crm contact"),
+	"Enrollment Student": ("Enrollment Student", "enrollmentStudentId", "student"),
+	"Person": ("Person", "personId", "person"),
+	"CRM High School": ("High School", "highSchoolId", "high school"),
+	"Campaign": ("Campaign", "campaignId", "campaign"),
+	"CRM Event": ("CRM Event", "crmEventId", "crm event"),
+	"CRM Task": ("Tasks", None, "task"),
+	"Contact": ("Contact", "contactId", "contact"),
+}
+
+
 @frappe.whitelist()
 def get_notifications():
 	Notification = frappe.qb.DocType("CRM Notification")
@@ -15,6 +27,7 @@ def get_notifications():
 
 	_notifications = []
 	for notification in notifications:
+		route_name, param_name, reference_doctype = get_route(notification.reference_doctype)
 		_notifications.append(
 			{
 				"creation": notification.creation,
@@ -29,9 +42,10 @@ def get_notifications():
 				"notification_text": notification.notification_text,
 				"notification_type_doctype": notification.notification_type_doctype,
 				"notification_type_doc": notification.notification_type_doc,
-				"reference_doctype": ("deal" if notification.reference_doctype == "CRM Deal" else "lead"),
+				"reference_doctype": reference_doctype,
 				"reference_name": notification.reference_name,
-				"route_name": ("Deal" if notification.reference_doctype == "CRM Deal" else "Lead"),
+				"route_name": route_name,
+				"param_name": param_name,
 			}
 		)
 
@@ -67,3 +81,7 @@ def get_hash(notification):
 		if "has been removed by" in notification.message:
 			_hash = ""
 	return _hash
+
+
+def get_route(reference_doctype):
+	return ROUTES_BY_DOCTYPE.get(reference_doctype, ("CRM Contacts", None, reference_doctype))

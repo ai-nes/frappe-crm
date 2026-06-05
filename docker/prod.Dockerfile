@@ -2,6 +2,8 @@ FROM python:3.11-bookworm
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV BENCH_DIR=/home/frappe/frappe-bench
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -13,8 +15,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libffi-dev \
     libpq-dev \
-    cron \
-    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -41,15 +41,21 @@ RUN bench init \
 
 WORKDIR ${BENCH_DIR}
 
+RUN mkdir -p ${BENCH_DIR}/apps/crm/frontend
+
+COPY --chown=frappe:frappe frontend/package.json frontend/yarn.lock ${BENCH_DIR}/apps/crm/frontend/
+
+RUN cd apps/crm/frontend \
+    && yarn install --frozen-lockfile
+
 COPY --chown=frappe:frappe . ${BENCH_DIR}/apps/crm
 
 RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && cd apps/crm/frontend \
-    && yarn install --frozen-lockfile \
     && yarn build \
     && cd "${BENCH_DIR}" \
     && cp -a sites /opt/frappe/sites-template
 
-COPY --chown=frappe:frappe docker/prod-site.sh /opt/frappe/scripts/prod-site.sh
+COPY --chown=frappe:frappe docker/prod-runtime.sh docker/prod-site.sh /opt/frappe/scripts/
 
 EXPOSE 8000 9000

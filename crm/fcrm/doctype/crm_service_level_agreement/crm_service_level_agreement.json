@@ -63,7 +63,7 @@
    "fieldname": "apply_on",
    "fieldtype": "Link",
    "label": "Apply On",
-   "link_filters": "[[{\"fieldname\":\"apply_on\",\"field_option\":\"DocType\"},\"name\",\"in\",[\"CRM Lead\",\"CRM Deal\"]]]",
+   "link_filters": "[[{\"fieldname\":\"apply_on\",\"field_option\":\"DocType\"},\"name\",\"in\",[\"CRM Contact\"]]]",
    "options": "DocType",
    "reqd": 1
   },

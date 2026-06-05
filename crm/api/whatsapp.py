@@ -6,7 +6,7 @@ from frappe.permissions import add_permission, update_permission_property
 
 from crm.api.doc import get_assigned_users
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
-from crm.integrations.api import get_contact_lead_or_deal_from_number
+from crm.integrations.api import get_contact_reference_from_number
 
 ALLOWED_WHATSAPP_ROLES = ["System Manager", "Sales Manager", "Sales User"]
 
@@ -38,7 +38,7 @@ def validate(doc, method):
 	phone_number = doc.get("from") if doc.type == "Incoming" else doc.get("to")
 	if phone_number:
 		try:
-			name, doctype = get_contact_lead_or_deal_from_number(phone_number)
+			name, doctype = get_contact_reference_from_number(phone_number)
 			if doctype and name is not None:
 				doc.reference_doctype = doctype
 				doc.reference_name = name
@@ -120,39 +120,6 @@ def get_whatsapp_messages(reference_doctype: str, reference_name: str):
 	if not frappe.db.exists("DocType", "WhatsApp Message"):
 		return []
 	messages = []
-
-	if reference_doctype == "CRM Deal":
-		lead = reference_doc.get("lead")
-		if lead:
-			validate_access("CRM Lead", lead)
-			messages = frappe.get_all(
-				"WhatsApp Message",
-				filters={
-					"reference_doctype": "CRM Lead",
-					"reference_name": lead,
-				},
-				fields=[
-					"name",
-					"type",
-					"to",
-					"from",
-					"content_type",
-					"message_type",
-					"attach",
-					"template",
-					"use_template",
-					"message_id",
-					"is_reply",
-					"reply_to_message_id",
-					"creation",
-					"message",
-					"status",
-					"reference_doctype",
-					"reference_name",
-					"template_parameters",
-					"template_header_parameters",
-				],
-			)
 
 	messages += frappe.get_all(
 		"WhatsApp Message",
@@ -353,18 +320,12 @@ def parse_template_parameters(string, parameters):
 
 def get_from_name(message):
 	doc = frappe.get_doc(message["reference_doctype"], message["reference_name"])
-	from_name = ""
-	if message["reference_doctype"] == "CRM Deal":
-		if doc.get("contacts"):
-			for c in doc.get("contacts"):
-				if c.is_primary:
-					from_name = c.full_name or c.mobile_no
-					break
-		else:
-			from_name = doc.get("lead_name")
-	else:
-		from_name = " ".join(name for name in [doc.get("first_name"), doc.get("last_name")] if name)
-	return from_name
+	return (
+		doc.get("full_name")
+		or doc.get("student_name")
+		or " ".join(name for name in [doc.get("first_name"), doc.get("last_name")] if name)
+		or doc.name
+	)
 
 
 def add_roles():

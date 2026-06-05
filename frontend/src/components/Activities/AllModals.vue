@@ -118,7 +118,16 @@ const route = useRoute()
 const router = useRouter()
 
 function redirect(tabName) {
-  if (route.name == 'Lead' || route.name == 'Deal') {
+  if (
+    [
+      'CRM Contact',
+      'Enrollment Student',
+      'Person',
+      'High School',
+      'Campaign',
+      'CRM Event',
+    ].includes(route.name)
+  ) {
     let hash = '#' + tabName
     if (route.hash != hash) {
       router.push({ ...route, hash })

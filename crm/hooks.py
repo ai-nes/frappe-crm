@@ -128,10 +128,10 @@ before_uninstall = "crm.uninstall.before_uninstall"
 # -----------
 # Permissions evaluated in scripted ways
 
-# permission_query_conditions = {
-# "Event": "frappe.desk.doctype.event.event.get_permission_query_conditions",
-# }
-#
+permission_query_conditions = {
+	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
+}
+
 # has_permission = {
 # "Event": "frappe.desk.doctype.event.event.has_permission",
 # }
@@ -169,11 +169,6 @@ doc_events = {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
 	},
-	"CRM Deal": {
-		"on_update": [
-			"crm.fcrm.doctype.erpnext_crm_settings.erpnext_crm_settings.create_customer_in_erpnext"
-		],
-	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
@@ -184,14 +179,6 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	"daily_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_daily"],
-	"hourly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_hourly"],
-	"monthly_long": ["crm.lead_syncing.background_sync.sync_leads_from_sources_monthly"],
-	"cron": {
-		"*/5 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_5_minutes"],
-		"*/10 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_10_minutes"],
-		"*/15 * * * *": ["crm.lead_syncing.background_sync.sync_leads_from_sources_15_minutes"],
-	},
 }
 
 # Testing
@@ -220,7 +207,7 @@ before_tests = "crm.tests.before_tests"
 # Ignore links to specified DocTypes when deleting documents
 # -----------------------------------------------------------
 
-ignore_links_on_delete = ["Failed Lead Sync Log"]
+ignore_links_on_delete = []
 
 # Request Events
 # ----------------

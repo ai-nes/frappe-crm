@@ -16,7 +16,16 @@ frontend/coverage
 .github/skills
 .github/copilot-instructions.md
 
-CLAUDE.md
-AGENTS.md
 .claude
 .pi
+
+docker/.env
+docker/.env.*
+docs/*
+plans/*
+crm/migration/id_maps/*.json
+crm/migration/fixtures/*.csv
+
+# Cache files
+.ck.json
+.mcp.json

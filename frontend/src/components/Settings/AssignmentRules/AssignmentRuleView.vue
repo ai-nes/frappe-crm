@@ -127,12 +127,12 @@
             v-model="assignmentRuleData.documentType"
             :options="[
               {
-                label: 'Lead',
-                value: 'CRM Lead',
+                label: 'CRM Contact',
+                value: 'CRM Contact',
               },
               {
-                label: 'Deal',
-                value: 'CRM Deal',
+                label: 'Enrollment Student',
+                value: 'Enrollment Student',
               },
             ]"
           />
@@ -375,9 +375,9 @@ const showConfirmDialog = ref({
 const useNewUI = ref(true)
 const isOldSla = ref(false)
 const documentType = computed(() =>
-  assignmentRuleData.value.documentType == 'CRM Lead'
-    ? __('leads')
-    : __('deals'),
+  assignmentRuleData.value.documentType == 'Enrollment Student'
+    ? __('students')
+    : __('CRM contacts'),
 )
 const deskUrl = `${window.location.origin}/app/assignment-rule/${step.value.data?.name}`
 
@@ -404,7 +404,7 @@ const assignmentRuleData = ref({
   name: '',
   assignmentRuleName: '',
   assignmentDays: defaultAssignmentDays,
-  documentType: 'CRM Lead',
+  documentType: 'CRM Contact',
 })
 
 const validateAssignmentRule = (key, skipConditionCheck = false) => {
@@ -498,7 +498,7 @@ const resetAssignmentRuleData = () => {
     name: '',
     assignmentRuleName: '',
     assignmentDays: defaultAssignmentDays,
-    documentType: 'CRM Lead',
+    documentType: 'CRM Contact',
   }
 }
 

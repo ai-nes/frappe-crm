@@ -146,14 +146,14 @@
         </div>
       </div>
       <div
-        v-if="!callLog?.data?._lead && !callLog?.data?._deal"
+        v-if="!callLog?.data?._crm_contact && !callLog?.data?._contact"
         class="px-4 pb-7 pt-4 sm:px-6"
       >
         <Button
           class="w-full"
           variant="solid"
-          :label="__('Create Lead')"
-          @click="createLead"
+          :label="__('Create CRM Contact')"
+          @click="createCRMContact"
         />
       </div>
     </template>
@@ -165,8 +165,6 @@ import EditIcon from '@/components/Icons/EditIcon.vue'
 import ArrowUpRightIcon from '@/components/Icons/ArrowUpRightIcon.vue'
 import DurationIcon from '@/components/Icons/DurationIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
-import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
-import Dealsicon from '@/components/Icons/DealsIcon.vue'
 import CalendarIcon from '@/components/Icons/CalendarIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
@@ -176,7 +174,6 @@ import { getCallLogDetail } from '@/utils/callLog'
 import { sanitizeHTML } from '@/utils'
 import { isMobileView } from '@/composables/settings'
 import { useDoctypeModal } from '@/composables/doctypeModal'
-import { useDocument } from '@/data/document'
 import { useOnboarding, useTelemetry } from 'frappe-ui/frappe'
 import { FeatherIcon, Dropdown, Avatar, Tooltip, call, toast } from 'frappe-ui'
 import { ref, computed, h, watch } from 'vue'
@@ -274,23 +271,23 @@ const detailFields = computed(() => {
       },
     },
     {
-      icon: data._lead ? LeadsIcon : Dealsicon,
+      icon: ContactsIcon,
       name: 'reference_doc',
-      value: data._lead ? 'Lead' : 'Deal',
+      value: data._crm_contact ? 'CRM Contact' : 'Contact',
       link: () => {
-        if (data._lead) {
+        if (data._crm_contact) {
           router.push({
-            name: 'Lead',
-            params: { leadId: data._lead },
+            name: 'CRM Contact',
+            params: { crmContactId: data._crm_contact },
           })
         } else {
           router.push({
-            name: 'Deal',
-            params: { dealId: data._deal },
+            name: 'Contact',
+            params: { contactId: data._contact },
           })
         }
       },
-      condition: () => data._lead || data._deal,
+      condition: () => data._crm_contact || data._contact,
     },
     {
       icon: CalendarIcon,
@@ -334,28 +331,23 @@ const detailFields = computed(() => {
     .filter((detail) => (detail.condition ? detail.condition() : true))
 })
 
-const d = ref({})
-const leadDetails = ref({})
+const contactDetails = ref({})
 
-async function createLead() {
-  await d.value.triggerOnCreateLead?.(
-    callLog.value?.data,
-    leadDetails.value,
-    () => (show.value = false),
-  )
-
-  call('crm.fcrm.doctype.crm_call_log.crm_call_log.create_lead_from_call_log', {
+async function createCRMContact() {
+  call('crm.fcrm.doctype.crm_call_log.crm_call_log.create_contact_from_call_log', {
     call_log: callLog.value?.data,
-    lead_details: leadDetails.value,
+    contact_details: contactDetails.value,
   })
     .then((d) => {
       if (d) {
-        router.push({ name: 'Lead', params: { leadId: d } })
+        router.push({ name: 'CRM Contact', params: { crmContactId: d } })
       }
     })
     .catch((err) => {
       toast.error(
-        __('Error creating lead: {0}', [err.messages?.[0] || err.message]),
+        __('Error creating CRM contact: {0}', [
+          err.messages?.[0] || err.message,
+        ]),
       )
     })
 }
@@ -385,13 +377,6 @@ watch(
   { immediate: true, deep: true },
 )
 
-watch(
-  () => callLog.value?.data?.name,
-  (value) => {
-    if (!value) return
-    d.value = useDocument('CRM Call Log', value)
-  },
-)
 </script>
 
 <style scoped>

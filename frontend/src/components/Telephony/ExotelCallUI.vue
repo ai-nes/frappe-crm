@@ -193,12 +193,12 @@
             @click="showTaskWindow"
           />
           <Button
-            v-if="contact.deal || contact.lead"
+            v-if="contact.crm_contact"
             class="bg-surface-gray-6 text-ink-white hover:bg-surface-gray-5"
             size="md"
             :iconRight="ArrowUpRightIcon"
-            :label="contact.deal ? __('Deal') : __('Lead')"
-            @click="openDealOrLead"
+            :label="__('CRM Contact')"
+            @click="openCRMContact"
           />
         </div>
 
@@ -431,18 +431,12 @@ onBeforeUnmount(() => {
 
 const router = useRouter()
 
-function openDealOrLead() {
-  if (contact.value.deal) {
-    router.push({
-      name: 'Deal',
-      params: { dealId: contact.value.deal },
-    })
-  } else if (contact.value.lead) {
-    router.push({
-      name: 'Lead',
-      params: { leadId: contact.value.lead },
-    })
-  }
+function openCRMContact() {
+  if (!contact.value.crm_contact) return
+  router.push({
+    name: 'CRM Contact',
+    params: { crmContactId: contact.value.crm_contact },
+  })
 }
 
 function closeCallPopup() {

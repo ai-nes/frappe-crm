@@ -15,9 +15,9 @@
         <div class="text-base font-medium text-ink-gray-8">
           {{
             __('{0} routing', [
-              assignmentRuleData.documentType == 'CRM Lead'
-                ? __('Lead')
-                : __('Deal'),
+              assignmentRuleData.documentType == 'Enrollment Student'
+                ? __('Student')
+                : __('CRM Contact'),
             ])
           }}
         </div>
@@ -126,9 +126,9 @@ const assignmentRuleData = inject('assignmentRuleData')
 const assignmentRuleErrors = inject('assignmentRuleErrors')
 const validateAssignmentRule = inject('validateAssignmentRule')
 const documentType = computed(() =>
-  assignmentRuleData.value.documentType == 'CRM Lead'
-    ? __('leads')
-    : __('deals'),
+  assignmentRuleData.value.documentType == 'Enrollment Student'
+    ? __('students')
+    : __('CRM contacts'),
 )
 
 const documentRoutingOptions = [

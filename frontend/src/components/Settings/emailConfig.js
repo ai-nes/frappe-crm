@@ -55,11 +55,11 @@ export const incomingOutgoingFields = [
     ),
   },
   {
-    label: __('Create Lead from Incoming Emails'),
-    name: 'create_lead_from_incoming_email',
+    label: __('Create CRM Contact from Incoming Emails'),
+    name: 'create_crm_contact_from_incoming_email',
     type: 'checkbox',
     description: __(
-      'If enabled, a lead will be automatically created when an incoming email is received from an unknown contact.',
+      'If enabled, a CRM contact will be automatically created when an incoming email is received from an unknown contact.',
     ),
     condition: (state) => state.enable_incoming,
   },

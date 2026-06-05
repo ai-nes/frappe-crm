@@ -1,438 +1,150 @@
-# Hướng dẫn chạy local dev
+# Local dev
 
-Repo này có 2 phần chạy cùng nhau:
+Backend chạy trong **Docker** (`:8000`). Frontend chạy trên máy bằng **Vite** (`:5000`).
 
-- **Backend**: Frappe + MariaDB + Redis, chạy trong Docker.
-- **Frontend**: Vue/Vite, chạy trực tiếp trên máy của bạn.
-
-Code trong repo được mount vào Docker tại `/workspace`, nên khi sửa code backend trong thư mục `crm/`, container backend có thể thấy code mới.
-
-## 0. Yêu cầu trước khi chạy
-
-Cần có sẵn:
-
-- Docker Desktop (kèm Docker Compose v2)
-- `task` CLI
-- Node.js 20.x
-- Yarn 1.x (classic)
-
-Kiểm tra nhanh:
-
-```bash
-docker --version
-docker compose version
-task --version
-node -v
-yarn -v
+```
+http://crm.localhost:5000/crm     ← dev hàng ngày
+Administrator / admin             ← login mặc định
 ```
 
-## 1. Chạy lần đầu
+---
 
-Chạy:
+## Yêu cầu
+
+- Docker Desktop
+- [Task](https://taskfile.dev/installation/)
+- Node.js 20+
+- Yarn 1.x
+
+Thêm vào **hosts** (`/etc/hosts` hoặc `C:\Windows\System32\drivers\etc\hosts`):
+
+```text
+127.0.0.1 crm.localhost
+```
+
+Xem tất cả lệnh: `task` hoặc `task --list`
+
+---
+
+## Người mới — clone lần đầu
+
+**Terminal 1** — backend (lần đầu ~10–20 phút):
 
 ```bash
+git clone <url-repo>
+cd crm-1.72.0
 task setup
+task logs          # đợi bench start xong
 ```
 
-Lệnh này sẽ:
-
-- bật Docker backend
-- tạo Frappe bench nếu chưa có
-- tạo site `crm.localhost`
-- install app CRM
-- install frontend dependencies
-
-Lần đầu có thể chạy khá lâu vì phải tạo bench, site và migrate database.
-
-Sau khi setup xong, chạy frontend:
+**Terminal 2** — frontend:
 
 ```bash
 task fe
 ```
 
-Mở app:
+Mở `http://crm.localhost:5000/crm`
 
-```text
-http://crm.localhost:5000/crm
-```
+`task setup` = bật Docker + cài frontend deps. Container tự tạo bench, site `crm.localhost`, cài app CRM và migrate.
 
-Tài khoản mặc định:
+---
 
-```text
-Administrator / admin
-```
-
-## 2. Chạy hằng ngày
-
-Mỗi ngày khi bắt đầu code, chạy backend trước:
+## Hàng ngày
 
 ```bash
-task up
+task up      # terminal 1 — backend
+task fe      # terminal 2 — frontend
 ```
 
-Sau đó chạy frontend:
+Backend đã chạy sẵn → chỉ cần `task fe`.
+
+Dừng backend: `task down`  
+Xem log: `task logs`
+
+---
+
+## Sau `git pull`
 
 ```bash
-task fe
+git pull
+task pull
 ```
 
-Nếu backend vừa mới bật, nên chờ backend chạy xong rồi mới login FE (mở `task logs` để theo dõi).
+`task pull` = cài deps + migrate + clear cache + restart backend.
 
-Thông thường bạn sẽ để 2 terminal:
+Nếu biết chính xác đổi gì, có thể chạy riêng (xem bảng dưới).
 
-```text
-Terminal 1: task up
-Terminal 2: task fe
+---
+
+## Sửa code thì chạy gì?
+
+| Đổi gì                           | Lệnh                            |
+| -------------------------------- | ------------------------------- |
+| Vue / JS / CSS (`frontend/src/`) | Không cần — Vite tự reload      |
+| `yarn.lock` / thêm package FE    | `task deps`                     |
+| Python API, logic BE (`crm/`)    | F5 — chưa ăn thì `task restart` |
+| DocType JSON, patch, `hooks.py`  | `task migrate` → `task restart` |
+| Dockerfile / compose dev         | `task rebuild`                  |
+
+Quy tắc nhanh:
+
+```
+FE  → save file
+BE  → restart
+DB  → migrate
 ```
 
-Nếu backend đã chạy sẵn rồi thì chỉ cần:
+---
+
+## URL
+
+|             |                                            |
+| ----------- | ------------------------------------------ |
+| CRM dev     | `http://crm.localhost:5000/crm`            |
+| Frappe Desk | `http://crm.localhost:8000/app`            |
+| API         | `http://crm.localhost:8000/api/method/...` |
+
+Luôn dùng host **`crm.localhost`**. Không mix `localhost:8000` với `crm.localhost:5000` — cookie/session sẽ lệch.
+
+---
+
+## Thư mục code
+
+```
+frontend/src/     Vue UI
+crm/api/          API Python (@frappe.whitelist)
+crm/fcrm/doctype/ DocType JSON
+```
+
+FE gọi BE qua dotted path, không hard-code `localhost:8000`:
+
+```js
+import {call} from 'frappe-ui'
+await call('crm.api.example.ping', {name: 'Dat'})
+```
+
+---
+
+## Khi gặp lỗi
+
+| Vấn đề                      | Thử                          |
+| --------------------------- | ---------------------------- |
+| Backend chưa lên            | `task logs` — đợi init xong  |
+| BE không nhận code mới      | `task restart`               |
+| Desk thiếu nav / schema lỗi | `task migrate`               |
+| Docker đổi mà container cũ  | `task rebuild`               |
+| Muốn reset sạch DB local    | `task reset` ⚠️ mất hết data |
+
+Lệnh bench khác:
 
 ```bash
-task fe
-```
-
-## 3. Các URL cần nhớ
-
-| Mục đích | URL |
-|---|---|
-| Frontend dev | `http://crm.localhost:5000/crm` |
-| Backend Frappe | `http://crm.localhost:8000` |
-| Backend CRM page | `http://crm.localhost:8000/crm` |
-| API Frappe | `http://crm.localhost:8000/api/method/...` |
-| API docs local | `http://crm.localhost:8000/swagger` |
-
-Nên dùng chung host `crm.localhost` cho cả frontend và backend.
-
-Không nên login bằng:
-
-```text
-http://localhost:8000
-```
-
-rồi sau đó mở:
-
-```text
-http://crm.localhost:5000
-```
-
-Vì browser cookie phụ thuộc vào host. `localhost` và `crm.localhost` là 2 host khác nhau.
-
-## 4. FE code như thế nào?
-
-Frontend nằm ở:
-
-```text
-frontend/src/
-```
-
-Chạy frontend bằng:
-
-```bash
-task fe
-```
-
-Lệnh này thực chất chạy Vite.
-
-Khi sửa Vue, JS hoặc CSS:
-
-- Vite tự reload
-- không cần restart Docker
-- không cần rebuild backend
-
-FE gọi API bằng path dạng:
-
-```text
-/api/method/...
-```
-
-Ví dụ:
-
-```text
-/api/method/crm.api.contact.get_contacts
-```
-
-Khi chạy ở port `5000`, Vite sẽ proxy API sang backend Frappe ở port `8000`.
-
-## 5. BE code như thế nào?
-
-Backend nằm ở:
-
-```text
-crm/
-```
-
-Một số file hay sửa:
-
-```text
-crm/api/contact.py
-crm/api/deal.py
-crm/api/lead.py
-crm/fcrm/doctype/
-crm/hooks.py
-```
-
-API trong Frappe thường được tạo bằng `@frappe.whitelist()`.
-
-Ví dụ:
-
-```python
-import frappe
-
-@frappe.whitelist()
-def ping():
-    return "pong"
-```
-
-API sẽ có URL:
-
-```text
-http://crm.localhost:8000/api/method/crm.api.contact.ping
-```
-
-Nếu gọi từ frontend thì dùng:
-
-```text
-/api/method/crm.api.contact.ping
-```
-
-## 6. Có cần restart Docker mỗi lần sửa code không?
-
-Không.
-
-Sửa frontend:
-
-```text
-Không restart Docker.
-Vite tự reload.
-```
-
-Sửa backend Python:
-
-```text
-Thường chỉ cần gọi lại API hoặc refresh browser.
-```
-
-Nếu sửa Python mà backend chưa nhận code mới, chạy:
-
-```bash
-task restart
-```
-
-Nếu sửa DocType, database schema, patch, fixture hoặc hook, chạy:
-
-```bash
-task migrate
-```
-
-## 7. Mỗi lần có code mới thì chạy gì?
-
-Tùy loại code mới.
-
-| Loại thay đổi | Cần chạy gì? |
-|---|---|
-| Sửa Vue/JS/CSS trong `frontend/src/` | Không cần chạy gì thêm. Vite tự reload. |
-| Sửa Python API/service trong `crm/api/` hoặc `crm/` | Refresh browser hoặc gọi lại API. Nếu chưa nhận code mới thì `task restart`. |
-| Sửa DocType/schema/database | `task migrate` |
-| Sửa `crm/hooks.py` | `task migrate`, nếu chưa ăn thì `task restart` |
-| Sửa `docker/docker-compose.dev.yml` | `task recreate` |
-| Sửa `docker/frappe.Dockerfile` | `task build`, rồi `task up` |
-| Muốn xóa sạch database/bench local | `task reset` |
-
-Quy trình dễ nhớ:
-
-```text
-FE đổi  -> Vite tự reload
-BE đổi  -> refresh/gọi lại API, chưa ăn thì task restart
-DB đổi  -> task migrate
-Docker đổi -> task recreate hoặc task build
-```
-
-Ví dụ sửa file backend:
-
-```text
-crm/api/contact.py
-```
-
-Sau đó gọi lại API. Nếu vẫn thấy code cũ:
-
-```bash
-task restart
-```
-
-Ví dụ sửa DocType:
-
-```text
-crm/fcrm/doctype/
-```
-
-Sau đó chạy:
-
-```bash
-task migrate
-```
-
-## 8. Khi nào dùng từng lệnh?
-
-| Lệnh | Dùng khi nào |
-|---|---|
-| `task setup` | Lần đầu setup project |
-| `task up` | Bật backend Docker |
-| `task fe` | Chạy frontend Vite |
-| `task logs` | Xem log backend |
-| `task restart` | Restart backend Frappe |
-| `task migrate` | Chạy migrate sau khi đổi DocType/schema/hook |
-| `task shell` | Vào shell trong container backend |
-| `task down` | Tắt backend Docker |
-| `task build` | Build lại image khi đổi `docker/frappe.Dockerfile` |
-| `task recreate` | Recreate container khi đổi `docker/docker-compose.dev.yml` |
-| `task reset` | Xóa sạch database/bench local và tạo lại |
-
-## 9. Xem log backend
-
-Chạy:
-
-```bash
-task logs
-```
-
-Dùng lệnh này khi:
-
-- API lỗi
-- backend không start được
-- cần xem traceback Python
-- cần biết migrate có lỗi không
-
-## 10. Vào container backend
-
-Chạy:
-
-```bash
+task bench -- --site crm.localhost console
 task shell
 ```
 
-Sau đó bạn có thể chạy lệnh Frappe bên trong container.
+### Windows
 
-Ví dụ:
-
-```bash
-cd /home/frappe/frappe-bench
-bench --site crm.localhost console
-```
-
-## 11. Xem API docs
-
-Mở:
-
-```text
-http://crm.localhost:8000/swagger
-```
-
-Hoặc xem OpenAPI JSON:
-
-```text
-http://crm.localhost:8000/api/method/crm.api.swagger.get_openapi_spec
-```
-
-API docs này được sinh từ các function có:
-
-```python
-@frappe.whitelist()
-```
-
-Lưu ý: đây là API docs phục vụ local dev. Nó giúp xem endpoint và params, nhưng response schema có thể chưa đầy đủ như Swagger của FastAPI.
-
-## 12. Lỗi thường gặp
-
-### CSRFTokenError khi gọi API từ port 5000
-
-Dev site cần có config:
-
-```json
-"ignore_csrf": 1
-```
-
-`docker/init.sh` đã tự set config này khi tạo site mới.
-
-Nếu site cũ bị thiếu config, chạy:
-
-```bash
-docker compose -f docker/docker-compose.dev.yml exec frappe bash -lc 'cd /home/frappe/frappe-bench && bench --site crm.localhost set-config ignore_csrf 1'
-task restart
-```
-
-### Bị chuyển sang trang `not-permitted`
-
-Login tại:
-
-```text
-http://crm.localhost:8000/login
-```
-
-Sau đó mở lại:
-
-```text
-http://crm.localhost:5000/crm
-```
-
-Nếu vẫn lỗi, xóa browser site data của `crm.localhost`, rồi login lại.
-
-### Lỗi thiếu package Rollup trên macOS
-
-Nếu chạy `task fe` hoặc `yarn dev` bị lỗi thiếu:
-
-```text
-@rollup/rollup-darwin-arm64
-```
-
-thì chạy:
-
-```bash
-cd frontend
-rm -rf node_modules
-yarn install --check-files
-```
-
-Nếu vẫn còn lỗi, chạy thêm:
-
-```bash
-cd frontend
-yarn cache clean
-yarn install --check-files
-```
-
-Lưu ý: trong repo này nên dùng Yarn thống nhất, tránh chạy `npm install` trong `frontend/` để không làm lệch lockfile/dependency tree.
-
-## 13. Tóm tắt cực ngắn
-
-Lần đầu:
-
-```bash
-task setup
-task fe
-```
-
-Mỗi ngày:
-
-```bash
-task up
-task fe
-```
-
-Sửa FE:
-
-```text
-Vite tự reload.
-```
-
-Sửa BE:
-
-```text
-Refresh/gọi lại API.
-Nếu chưa ăn code mới thì task restart.
-```
-
-Sửa database schema hoặc DocType:
-
-```bash
-task migrate
-```
+- Chạy terminal bằng Git Bash hoặc PowerShell
+- Có thể dùng `yarn dev` thay `task fe`
+- Cảnh báo `Local frappe-ui vite plugin not found` là bình thường
+- Port 5000 bận: `$env:VITE_PORT=5001` rồi mở `:5001/crm`

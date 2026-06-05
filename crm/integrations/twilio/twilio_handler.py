@@ -196,13 +196,10 @@ def get_the_call_attender(owners, caller=None):
 	current_loggedin_users = get_active_loggedin_users(list(owners.keys()))
 
 	if len(current_loggedin_users) > 1 and caller:
-		deal_owner = frappe.db.get_value("CRM Deal", {"mobile_no": caller}, "deal_owner")
-		if not deal_owner:
-			deal_owner = frappe.db.get_value(
-				"CRM Lead", {"mobile_no": caller, "converted": False}, "lead_owner"
-			)
+		assigned_staff = frappe.db.get_value("CRM Contact", {"phone": caller}, "assigned_to")
+		assigned_user = frappe.db.get_value("Staff", assigned_staff, "user") if assigned_staff else None
 		for user in current_loggedin_users:
-			if user == deal_owner:
+			if user == assigned_user:
 				current_loggedin_users = [user]
 
 	for name, details in owners.items():

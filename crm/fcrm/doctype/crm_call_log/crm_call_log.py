@@ -219,10 +219,10 @@ def get_call_log(name: str):
 		notes.append(note)
 
 	if call.get("reference_doctype") and call.get("reference_docname"):
-		if call.get("reference_doctype") == "CRM Lead":
-			call["_lead"] = call.get("reference_docname")
-		elif call.get("reference_doctype") == "CRM Deal":
-			call["_deal"] = call.get("reference_docname")
+		if call.get("reference_doctype") == "CRM Contact":
+			call["_crm_contact"] = call.get("reference_docname")
+		elif call.get("reference_doctype") == "Contact":
+			call["_contact"] = call.get("reference_docname")
 
 	if call.get("links"):
 		for link in call.get("links"):
@@ -232,10 +232,10 @@ def get_call_log(name: str):
 			elif link.get("link_doctype") == "FCRM Note":
 				note = frappe.get_cached_doc("FCRM Note", link.get("link_name")).as_dict()
 				notes.append(note)
-			elif link.get("link_doctype") == "CRM Lead":
-				call["_lead"] = link.get("link_name")
-			elif link.get("link_doctype") == "CRM Deal":
-				call["_deal"] = link.get("link_name")
+			elif link.get("link_doctype") == "CRM Contact":
+				call["_crm_contact"] = link.get("link_name")
+			elif link.get("link_doctype") == "Contact":
+				call["_contact"] = link.get("link_name")
 
 	call["_tasks"] = tasks
 	call["_notes"] = notes
@@ -243,7 +243,7 @@ def get_call_log(name: str):
 
 
 @frappe.whitelist()
-def create_lead_from_call_log(call_log: str | dict, lead_details: str | dict | None = None):
+def create_contact_from_call_log(call_log: str | dict, contact_details: str | dict | None = None):
 	call_log_data = frappe.parse_json(call_log or {})
 
 	if isinstance(call_log_data, str):
@@ -261,35 +261,38 @@ def create_lead_from_call_log(call_log: str | dict, lead_details: str | dict | N
 	if not call_doc.has_permission("write"):
 		frappe.throw(_("You are not permitted to update this call log."), frappe.PermissionError)
 
-	if not frappe.has_permission("CRM Lead", "create"):
-		frappe.throw(_("You are not permitted to create leads."), frappe.PermissionError)
+	if not frappe.has_permission("CRM Contact", "create"):
+		frappe.throw(_("You are not permitted to create CRM contacts."), frappe.PermissionError)
 
-	lead_details_data = frappe.parse_json(lead_details or {})
-	if lead_details_data and not isinstance(lead_details_data, dict):
-		frappe.throw(_("Invalid lead details supplied."), frappe.ValidationError)
+	contact_details_data = frappe.parse_json(contact_details or {})
+	if contact_details_data and not isinstance(contact_details_data, dict):
+		frappe.throw(_("Invalid contact details supplied."), frappe.ValidationError)
 
-	lead = frappe.new_doc("CRM Lead")
-	meta = frappe.get_meta("CRM Lead")
+	contact = frappe.new_doc("CRM Contact")
+	meta = frappe.get_meta("CRM Contact")
 	valid_fieldnames = [df.fieldname for df in meta.fields]
 
 	sanitized_details = {
-		key: value for key, value in (lead_details_data or {}).items() if key in valid_fieldnames
+		key: value for key, value in (contact_details_data or {}).items() if key in valid_fieldnames
 	}
 
-	if "lead_owner" in valid_fieldnames and not sanitized_details.get("lead_owner"):
-		sanitized_details["lead_owner"] = frappe.session.user
+	if "assigned_to" in valid_fieldnames and not sanitized_details.get("assigned_to"):
+		sanitized_details["assigned_to"] = frappe.db.get_value("Staff", {"user": frappe.session.user}, "name")
 
-	if "mobile_no" in valid_fieldnames and not sanitized_details.get("mobile_no"):
-		sanitized_details["mobile_no"] = call_doc.get("from") or ""
+	if "phone" in valid_fieldnames and not sanitized_details.get("phone"):
+		sanitized_details["phone"] = call_doc.get("from") or ""
 
-	if "first_name" in valid_fieldnames and not sanitized_details.get("first_name"):
-		reference_label = sanitized_details.get("mobile_no") or call_doc.name
-		sanitized_details["first_name"] = _("Lead from call {0}").format(reference_label)
+	if "full_name" in valid_fieldnames and not sanitized_details.get("full_name"):
+		reference_label = sanitized_details.get("phone") or call_doc.name
+		sanitized_details["full_name"] = _("Contact from call {0}").format(reference_label)
 
-	lead.update(sanitized_details)
-	lead.insert()
+	if "stage" in valid_fieldnames and not sanitized_details.get("stage"):
+		sanitized_details["stage"] = "Interested"
 
-	call_doc.link_with_reference_doc("CRM Lead", lead.name)
+	contact.update(sanitized_details)
+	contact.insert()
+
+	call_doc.link_with_reference_doc("CRM Contact", contact.name)
 	call_doc.save()
 
-	return lead.name
+	return contact.name

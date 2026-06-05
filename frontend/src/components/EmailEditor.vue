@@ -217,8 +217,8 @@ import { ref, computed, nextTick, inject, watch } from 'vue'
 const props = defineProps({
   placeholder: { type: String, default: null },
   editable: { type: Boolean, default: true },
-  doctype: { type: String, default: 'CRM Lead' },
-  subject: { type: String, default: __('Email From Lead') },
+  doctype: { type: String, default: 'CRM Contact' },
+  subject: { type: String, default: __('Email') },
   editorProps: { type: Object, default: () => ({}) },
   submitButtonProps: { type: Object, default: () => ({}) },
   discardButtonProps: { type: Object, default: () => ({}) },

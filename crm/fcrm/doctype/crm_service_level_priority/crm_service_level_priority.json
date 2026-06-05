@@ -23,10 +23,10 @@
   },
   {
    "fieldname": "priority",
-   "fieldtype": "Link",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Priority",
-   "options": "CRM Communication Status",
+   "options": "Open\nReplied",
    "reqd": 1
   },
   {

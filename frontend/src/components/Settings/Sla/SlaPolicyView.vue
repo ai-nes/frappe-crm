@@ -73,12 +73,8 @@
               v-model="slaData.apply_on"
               :options="[
                 {
-                  label: 'Lead',
-                  value: 'CRM Lead',
-                },
-                {
-                  label: 'Deal',
-                  value: 'CRM Deal',
+                  label: 'CRM Contact',
+                  value: 'CRM Contact',
                 },
               ]"
             />
@@ -104,7 +100,7 @@
               __('Assignment conditions')
             }}</span>
             <span class="text-p-sm text-ink-gray-6">
-              {{ __('Choose which leads/deals are affected by this policy.') }}
+              {{ __('Choose which CRM contacts are affected by this policy.') }}
             </span>
           </div>
           <div class="mt-3">

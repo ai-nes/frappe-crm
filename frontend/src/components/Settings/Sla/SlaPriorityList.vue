@@ -114,7 +114,6 @@
 import {
   Button,
   Checkbox,
-  createResource,
   Dropdown,
   ErrorMessage,
   toast,
@@ -138,33 +137,18 @@ const priorityData = ref({
 const priorityOptions = reactive([])
 provide('priorityOptions', priorityOptions)
 
-createResource({
-  url: 'frappe.client.get_list',
-  params: {
-    doctype: 'CRM Communication Status',
-    fields: ['name'],
-  },
-  auto: true,
-  onSuccess(data) {
-    priorityOptions.push(
-      ...data.map((p) => {
-        return {
-          label: p.name,
-          value: p.name,
-        }
-      }),
-    )
-    if (!step.value.data) {
-      slaData.value.priorities = priorityOptions.map((p, index) => {
-        return {
-          priority: p.value,
-          first_response_time: 60 * 60,
-          default_priority: index === 0,
-        }
-      })
-    }
-  },
-})
+priorityOptions.push(
+  { label: __('Open'), value: 'Open' },
+  { label: __('Replied'), value: 'Replied' },
+)
+
+if (!step.value.data) {
+  slaData.value.priorities = priorityOptions.map((p, index) => ({
+    priority: p.value,
+    first_response_time: 60 * 60,
+    default_priority: index === 0,
+  }))
+}
 
 const columns = computed(() => [
   {

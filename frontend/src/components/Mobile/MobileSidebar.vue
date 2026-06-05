@@ -93,15 +93,20 @@ import {
 import Section from '@/components/Section.vue'
 import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
-import LeadsIcon from '@/components/Icons/LeadsIcon.vue'
-import DealsIcon from '@/components/Icons/DealsIcon.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
-import OrganizationsIcon from '@/components/Icons/OrganizationsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
+import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import GraduationCapIcon from '~icons/lucide/graduation-cap'
+import UsersIcon from '~icons/lucide/users'
+import UserIcon from '~icons/lucide/user'
+import SchoolIcon from '~icons/lucide/school'
+import MegaphoneIcon from '~icons/lucide/megaphone'
+import CalendarIcon from '~icons/lucide/calendar'
+import BriefcaseIcon from '~icons/lucide/briefcase'
 import { viewsStore } from '@/stores/views'
 import { unreadNotificationsCount } from '@/stores/notifications'
 import { computed, h } from 'vue'
@@ -111,24 +116,49 @@ const { getPinnedViews, getPublicViews } = viewsStore()
 
 const links = [
   {
-    label: 'Leads',
-    icon: LeadsIcon,
-    to: 'Leads',
+    label: 'Dashboard',
+    icon: LucideLayoutDashboard,
+    to: 'Dashboard',
   },
   {
-    label: 'Deals',
-    icon: DealsIcon,
-    to: 'Deals',
+    label: 'Prospective Students',
+    icon: SchoolIcon,
+    to: { name: 'Enrollment Students', query: { stage: 'intake' } },
   },
   {
-    label: 'Contacts',
-    icon: ContactsIcon,
-    to: 'Contacts',
+    label: 'CRM Contacts',
+    icon: UsersIcon,
+    to: 'CRM Contacts',
   },
   {
-    label: 'Organizations',
-    icon: OrganizationsIcon,
-    to: 'Organizations',
+    label: 'Enrolled Students',
+    icon: GraduationCapIcon,
+    to: { name: 'Enrollment Students', query: { stage: 'enrolled' } },
+  },
+  {
+    label: 'High Schools',
+    icon: SchoolIcon,
+    to: 'High Schools',
+  },
+  {
+    label: 'Persons',
+    icon: UserIcon,
+    to: 'Persons',
+  },
+  {
+    label: 'Campaigns',
+    icon: MegaphoneIcon,
+    to: 'Campaigns',
+  },
+  {
+    label: 'CRM Events',
+    icon: CalendarIcon,
+    to: 'CRM Events',
+  },
+  {
+    label: 'Staff',
+    icon: BriefcaseIcon,
+    to: 'Staff',
   },
   {
     label: 'Notes',
@@ -192,18 +222,26 @@ function getIcon(routeName, icon) {
   if (icon) return h('div', { class: 'size-auto' }, icon)
 
   switch (routeName) {
-    case 'Leads':
-      return LeadsIcon
-    case 'Deals':
-      return DealsIcon
     case 'Contacts':
       return ContactsIcon
-    case 'Organizations':
-      return OrganizationsIcon
     case 'Notes':
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
+    case 'Enrollment Students':
+      return GraduationCapIcon
+    case 'CRM Contacts':
+      return UsersIcon
+    case 'Persons':
+      return UserIcon
+    case 'High Schools':
+      return SchoolIcon
+    case 'Campaigns':
+      return MegaphoneIcon
+    case 'CRM Events':
+      return CalendarIcon
+    case 'Staff':
+      return BriefcaseIcon
     default:
       return PinIcon
   }

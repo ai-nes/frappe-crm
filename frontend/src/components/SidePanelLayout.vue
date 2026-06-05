@@ -435,7 +435,7 @@ import { ref, computed, getCurrentInstance } from 'vue'
 
 const props = defineProps({
   sections: { type: Object, default: () => ({}) },
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   docname: { type: String, required: true },
   preview: { type: Boolean, default: false },
   addContact: { type: Function, default: null },

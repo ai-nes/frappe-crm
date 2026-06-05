@@ -94,7 +94,7 @@ import { call, createResource, toast } from 'frappe-ui'
 import { ref, watch, computed } from 'vue'
 
 const props = defineProps({
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
 })
 
 const doc = defineModel({ type: Object, default: () => ({}) })

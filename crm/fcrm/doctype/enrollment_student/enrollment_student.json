@@ -1,0 +1,201 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-30 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "student_name",
+  "mobile_no",
+  "email",
+  "col_break_1",
+  "enrollment_status",
+  "enrollment_date",
+  "converted",
+  "section_links",
+  "high_school",
+  "province",
+  "ward",
+  "col_break_2",
+  "branch",
+  "major",
+  "source",
+  "admission_year",
+  "section_trace",
+  "import_source_id"
+ ],
+ "fields": [
+  {
+   "default": "ENR-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "ENR-.YYYY.-"
+  },
+  {
+   "fieldname": "student_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Student Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Mobile",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "enrollment_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Enrollment Status",
+   "options": "Pending Confirmation\nEnrolled\nDeferred\nWithdrawn\nConverted"
+  },
+  {
+   "fieldname": "enrollment_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Enrollment Date"
+  },
+  {
+   "default": "0",
+   "fieldname": "converted",
+   "fieldtype": "Check",
+   "label": "Converted to CRM Contact"
+  },
+  {
+   "fieldname": "section_links",
+   "fieldtype": "Section Break",
+   "label": "Links"
+  },
+  {
+   "fieldname": "high_school",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "High School",
+   "options": "CRM High School"
+  },
+  {
+   "fieldname": "province",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Province",
+   "options": "CRM Province"
+  },
+  {
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "label": "Ward",
+   "options": "CRM Ward"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "CRM Campus",
+   "options": "CRM Campus"
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "label": "Major",
+   "options": "CRM Major"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "label": "Source",
+   "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
+   "label": "CRM Admission Year",
+   "options": "CRM Admission Year"
+  },
+  {
+   "fieldname": "section_trace",
+   "fieldtype": "Section Break",
+   "label": "Trace"
+  },
+  {
+   "fieldname": "import_source_id",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Import Source ID"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-03 02:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "Enrollment Student",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "ENR-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User",
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "student_name",
+ "translated_doctype": 1
+}

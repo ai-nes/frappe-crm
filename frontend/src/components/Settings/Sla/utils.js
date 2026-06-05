@@ -32,7 +32,7 @@ const working_hours = [
 export const slaData = ref({
   name: '',
   sla_name: '',
-  apply_on: 'CRM Lead',
+  apply_on: 'CRM Contact',
   enabled: true,
   default: false,
   rolling_responses: false,
@@ -49,7 +49,7 @@ export const resetSlaData = () => {
   slaData.value = {
     name: '',
     sla_name: '',
-    apply_on: 'CRM Lead',
+    apply_on: 'CRM Contact',
     enabled: true,
     default: false,
     rolling_responses: false,

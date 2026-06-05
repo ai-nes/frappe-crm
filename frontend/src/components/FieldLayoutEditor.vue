@@ -281,7 +281,7 @@ import { Dropdown } from 'frappe-ui'
 import { ref, computed, watch, nextTick } from 'vue'
 
 const props = defineProps({
-  doctype: { type: String, default: 'CRM Lead' },
+  doctype: { type: String, default: 'CRM Contact' },
   onlyRequired: { type: Boolean, default: false },
 })
 

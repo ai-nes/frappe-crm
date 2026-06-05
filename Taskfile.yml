@@ -1,97 +1,99 @@
 version: '3'
 
+# Local dev only — backend Docker (:8000) + frontend Vite (:5000)
+# App: http://crm.localhost:5000/crm
+
+vars:
+  COMPOSE: docker compose -f docker/docker-compose.dev.yml
+  BENCH: cd /home/frappe/frappe-bench && bench --site crm.localhost
+
 tasks:
   default:
-    desc: Show available tasks
+    desc: Danh sách lệnh
     cmds:
       - task --list
 
+  # --- Chạy app ---
+
   setup:
-    desc: Start backend stack, then install frontend deps
+    desc: Lần đầu — bật backend + cài frontend deps
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d
-      - cd frontend && yarn install --check-files
+      - task: up
+      - task: deps
 
   up:
-    desc: Start backend stack
+    desc: Bật backend (Docker)
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d
-
-  down:
-    desc: Stop backend stack
-    cmds:
-      - docker compose -f docker/docker-compose.dev.yml down
+      - '{{.COMPOSE}} up -d'
 
   fe:
-    desc: Start frontend dev server on :5000
+    desc: Frontend dev server (:5000)
     cmds:
       - yarn dev
 
-  logs:
-    desc: Follow backend logs
+  down:
+    desc: Tắt backend
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml logs -f frappe
+      - '{{.COMPOSE}} down'
 
-  restart:
-    desc: Restart backend service
+  deps:
+    desc: Cài frontend deps (khi yarn.lock đổi)
+    aliases: [install-fe]
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml restart frappe
+      - cd frontend && yarn install --check-files
+
+  # --- Backend ---
 
   migrate:
-    desc: Run Frappe migrate for crm.localhost
+    desc: Schema, patches, workspace sync
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml exec frappe bash -lc 'cd /home/frappe/frappe-bench && bench --site crm.localhost migrate'
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} migrate"'
 
-  shell:
-    desc: Open a shell inside the backend container
+  restart:
+    desc: Reload Python sau khi sửa BE
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml exec frappe bash
+      - '{{.COMPOSE}} restart frappe'
 
-  build:
-    desc: Rebuild backend image after Dockerfile changes
+  cache:
+    desc: Xóa cache site crm.localhost
+    aliases: [clear-cache]
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml build frappe
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
 
-  recreate:
-    desc: Recreate backend container after compose changes
+  pull:
+    desc: Sau git pull — deps + migrate + clear-cache + restart
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml up -d --force-recreate frappe
+      - task: deps
+      - task: migrate
+      - task: cache
+      - task: restart
+
+  # --- Docker / debug ---
+
+  rebuild:
+    desc: Rebuild image sau khi sửa Dockerfile hoặc compose dev
+    aliases: [build]
+    cmds:
+      - '{{.COMPOSE}} up -d --build --force-recreate frappe'
 
   reset:
-    desc: Delete local Docker volumes and recreate everything
-    prompt: This deletes the local database and bench volumes. Continue?
+    desc: Xóa DB + bench volume, tạo lại stack
+    prompt: Xóa toàn bộ data local. Tiếp tục?
     cmds:
-      - docker compose -f docker/docker-compose.dev.yml down -v
-      - docker compose -f docker/docker-compose.dev.yml up -d
+      - '{{.COMPOSE}} down -v'
+      - '{{.COMPOSE}} up -d'
 
-  prod-build:
-    desc: Build production Docker image from current source
+  logs:
+    desc: Theo dõi backend logs
     cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
+      - '{{.COMPOSE}} logs -f frappe'
 
-  prod-init:
-    desc: Create or migrate the production site
+  bench:
+    desc: 'Bench tùy ý — vd: task bench -- --site crm.localhost console'
     cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
+      - '{{.COMPOSE}} exec frappe bash -lc "cd /home/frappe/frappe-bench && bench {{.CLI_ARGS}}"'
 
-  prod-up:
-    desc: Start production services
+  shell:
+    desc: Shell trong container Frappe
     cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d
-
-  prod-update:
-    desc: Build image, migrate site, and restart production services
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml build
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml --profile setup run --rm site
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans
-
-  prod-logs:
-    desc: Follow production logs
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml logs -f
-
-  prod-down:
-    desc: Stop production services
-    cmds:
-      - docker compose --env-file docker/.env -f docker/docker-compose.prod.yml down
+      - '{{.COMPOSE}} exec frappe bash'

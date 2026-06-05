@@ -198,9 +198,6 @@ def get_quick_filters(doctype: str, cached: bool = True):
 			}
 		)
 
-	if doctype == "CRM Lead":
-		quick_filters = [filter for filter in quick_filters if filter.get("fieldname") != "converted"]
-
 	return quick_filters
 
 
@@ -700,9 +697,6 @@ def get_linked_docs_of_document(doctype: str, docname: str):
 		title = data.get("title")
 		if data.doctype == "CRM Call Log":
 			title = f"Call from {data.get('from')} to {data.get('to')}"
-
-		if data.doctype == "CRM Deal":
-			title = data.get("organization")
 
 		if data.doctype == "CRM Notification":
 			title = data.get("message")

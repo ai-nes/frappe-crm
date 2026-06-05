@@ -121,7 +121,7 @@
    "options": "User"
   },
   {
-   "default": "CRM Lead",
+   "default": "CRM Contact",
    "fieldname": "reference_doctype",
    "fieldtype": "Link",
    "label": "Reference Document Type",

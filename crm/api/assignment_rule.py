@@ -5,7 +5,7 @@ import frappe
 def get_assignment_rules_list():
 	assignment_rules = []
 	for docname in frappe.get_all(
-		"Assignment Rule", filters={"document_type": ["in", ["CRM Lead", "CRM Deal"]]}
+		"Assignment Rule", filters={"document_type": ["in", ["CRM Contact", "Enrollment Student"]]}
 	):
 		doc = frappe.get_value(
 			"Assignment Rule",
