@@ -3,6 +3,7 @@
 # Read docs to understand patches: https://frappeframework.com/docs/v14/user/en/database-migrations
 crm.patches.v1_0.move_crm_note_data_to_fcrm_note
 crm.patches.v1_0.rename_twilio_settings_to_crm_twilio_settings
+crm.patches.v1_0.rename_reference_doctypes_to_crm_prefix
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -18,6 +19,9 @@ crm.patches.v1_0.add_email_in_default_lead_sources
 crm.patches.v1_0.create_email_account_custom_field
 crm.patches.v1_0.create_crm_contact_email_account_custom_field
 crm.patches.v1_0.create_default_quick_filters
+crm.patches.v1_0.translate_vi_hardcoded_values_to_en
 crm.patches.v1_0.sync_frappe_crm_workspace
 crm.patches.v1_0.resync_frappe_crm_workspace
 crm.patches.v1_0.fix_high_school_view_settings
+crm.patches.v1_0.reset_student_contact_view_settings
+crm.patches.v1_0.fix_orphan_converted_students

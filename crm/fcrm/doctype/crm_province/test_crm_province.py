@@ -11,7 +11,7 @@ class TestCRMProvince(FrappeTestCase):
 			{
 				"doctype": "CRM Province",
 				"province_name": "_Test Province",
-				"city_type": "Tỉnh",
+				"city_type": "Province",
 				"city_number": "99",
 			}
 		)

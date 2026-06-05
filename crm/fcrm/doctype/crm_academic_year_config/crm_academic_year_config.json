@@ -1,0 +1,106 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:admission_year",
+ "creation": "2026-06-03 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "admission_year",
+  "config_name",
+  "tuition_policy",
+  "scholarship_fund",
+  "quota",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Admission Year",
+   "options": "CRM Admission Year",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "config_name",
+   "fieldtype": "Data",
+   "label": "Config Name"
+  },
+  {
+   "fieldname": "tuition_policy",
+   "fieldtype": "Table",
+   "label": "Tuition Policy",
+   "options": "CRM Tuition Policy Item"
+  },
+  {
+   "fieldname": "scholarship_fund",
+   "fieldtype": "Table",
+   "label": "Scholarship Fund",
+   "options": "CRM Scholarship Item"
+  },
+  {
+   "fieldname": "quota",
+   "fieldtype": "Table",
+   "label": "Quota",
+   "options": "CRM Quota Item"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text Editor",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Academic Year Config",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "admission_year",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "admission_year",
+ "translated_doctype": 1
+}

@@ -145,10 +145,10 @@ const list = defineModel('list', { type: Object })
 const listBulkActionsRef = ref(null)
 
 const STATUS_COLORS = {
-  'Chờ xác nhận': 'orange',
-  'Đã nhập học': 'green',
-  'Bảo lưu': 'blue',
-  'Thôi học': 'gray',
+  'Pending Confirmation': 'orange',
+  Enrolled: 'green',
+  Deferred: 'blue',
+  Withdrawn: 'gray',
 }
 
 function enrollmentStatusColor(status) {

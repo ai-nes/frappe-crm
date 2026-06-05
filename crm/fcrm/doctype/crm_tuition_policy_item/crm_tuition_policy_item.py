@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class AdmissionYear(Document):
+class CRMTuitionPolicyItem(Document):
 	pass

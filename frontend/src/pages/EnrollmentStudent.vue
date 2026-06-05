@@ -72,6 +72,7 @@
           doctype="Enrollment Student"
           :docname="enrollmentStudentId"
           @reload="sections.reload"
+          @beforeFieldChange="handleSidePanelFieldChange"
           @afterFieldChange="() => sections.reload()"
         />
       </div>
@@ -150,14 +151,14 @@ const breadcrumbs = computed(() => {
   let items = [
     {
       label:
-        doc.value?.enrollment_status === 'Đã nhập học'
+        doc.value?.enrollment_status === 'Enrolled'
           ? __('Enrolled Students')
           : __('Prospective Students'),
       route: {
         name: 'Enrollment Students',
         query: {
           stage:
-            doc.value?.enrollment_status === 'Đã nhập học' ? 'enrolled' : 'intake',
+            doc.value?.enrollment_status === 'Enrolled' ? 'enrolled' : 'intake',
         },
       },
     },
@@ -177,17 +178,24 @@ const title = computed(() => {
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
 const STATUS_COLORS = {
-  'Chờ xác nhận': 'text-yellow-500',
-  'Đã nhập học': 'text-green-500',
-  'Bảo lưu': 'text-blue-500',
-  'Thôi học': 'text-gray-500',
+  'Pending Confirmation': 'text-yellow-500',
+  Enrolled: 'text-green-500',
+  Deferred: 'text-blue-500',
+  Withdrawn: 'text-gray-500',
+  Converted: 'text-purple-500',
 }
 
 function statusColor(status) {
   return STATUS_COLORS[status] || 'text-gray-500'
 }
 
-const STATUS_OPTIONS = ['Chờ xác nhận', 'Đã nhập học', 'Bảo lưu', 'Thôi học']
+const STATUS_OPTIONS = [
+  'Pending Confirmation',
+  'Enrolled',
+  'Deferred',
+  'Withdrawn',
+  'Converted',
+]
 
 const enrollmentStatuses = computed(() =>
   STATUS_OPTIONS.map((s) => ({
@@ -219,6 +227,26 @@ const convertResource = createResource({
 function convertToContact() {
   converting.value = true
   convertResource.submit({ student_name: props.enrollmentStudentId })
+}
+
+function handleSidePanelFieldChange(changes) {
+  if (changes.converted) {
+    converting.value = true
+    doc.value.converted = 0
+    document.save.submit(null, {
+      onSuccess: () => convertResource.submit({ student_name: props.enrollmentStudentId }),
+      onError: (err) => {
+        converting.value = false
+        toast.error(err.messages?.[0] || __('Error saving student'))
+      },
+    })
+    return
+  }
+
+  document.save.submit(null, {
+    onSuccess: () => sections.reload(),
+    onError: (err) => toast.error(err.messages?.[0] || __('Error updating field')),
+  })
 }
 
 const tabs = computed(() => [

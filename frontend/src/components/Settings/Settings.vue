@@ -189,10 +189,10 @@ const tabs = computed(() => {
       condition: () => isManager(),
     },
     {
-      label: __('Dữ liệu tham chiếu'),
+      label: __('Reference Data'),
       items: [
         {
-          label: __('Danh mục'),
+          label: __('Categories'),
           icon: GraduationCapIcon,
           component: markRaw(ReferenceDataPage),
           condition: () => isManager(),

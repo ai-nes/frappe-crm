@@ -20,7 +20,7 @@ class Staff(Document):
 	def _sync_campus_user_permission(self):
 		existing = frappe.db.get_value(
 			"User Permission",
-			{"user": self.user, "allow": "Campus"},
+			{"user": self.user, "allow": "CRM Campus"},
 			"name",
 		)
 		if existing:
@@ -29,7 +29,7 @@ class Staff(Document):
 			frappe.get_doc({
 				"doctype": "User Permission",
 				"user": self.user,
-				"allow": "Campus",
+				"allow": "CRM Campus",
 				"for_value": self.campus,
 				"apply_to_all_doctypes": 1,
 			}).insert(ignore_permissions=True)

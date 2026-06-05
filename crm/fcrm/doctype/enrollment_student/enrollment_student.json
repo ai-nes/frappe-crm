@@ -67,7 +67,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Enrollment Status",
-   "options": "Chờ xác nhận\nĐã nhập học\nBảo lưu\nThôi học"
+   "options": "Pending Confirmation\nEnrolled\nDeferred\nWithdrawn\nConverted"
   },
   {
    "fieldname": "enrollment_date",
@@ -116,8 +116,8 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Campus",
-   "options": "Campus"
+   "label": "CRM Campus",
+   "options": "CRM Campus"
   },
   {
    "fieldname": "major",
@@ -134,8 +134,8 @@
   {
    "fieldname": "admission_year",
    "fieldtype": "Link",
-   "label": "Admission Year",
-   "options": "Admission Year"
+   "label": "CRM Admission Year",
+   "options": "CRM Admission Year"
   },
   {
    "fieldname": "section_trace",

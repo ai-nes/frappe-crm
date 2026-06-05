@@ -4,7 +4,58 @@ from frappe.model.document import Document
 
 
 class EnrollmentStudent(Document):
-	pass
+	@staticmethod
+	def default_list_data():
+		columns = [
+			{
+				"label": "Student Name",
+				"type": "Data",
+				"key": "student_name",
+				"width": "16rem",
+			},
+			{
+				"label": "Mobile",
+				"type": "Data",
+				"key": "mobile_no",
+				"width": "10rem",
+			},
+			{
+				"label": "Email",
+				"type": "Data",
+				"key": "email",
+				"width": "14rem",
+			},
+			{
+				"label": "Enrollment Status",
+				"type": "Select",
+				"key": "enrollment_status",
+				"width": "12rem",
+			},
+			{
+				"label": "Source",
+				"type": "Link",
+				"key": "source",
+				"options": "CRM Lead Source",
+				"width": "10rem",
+			},
+			{
+				"label": "Last Modified",
+				"type": "Datetime",
+				"key": "modified",
+				"width": "8rem",
+			},
+		]
+		rows = [
+			"name",
+			"student_name",
+			"mobile_no",
+			"email",
+			"enrollment_status",
+			"source",
+			"converted",
+			"modified",
+		]
+		return {"columns": columns, "rows": rows}
 
 
 @frappe.whitelist()
@@ -12,10 +63,9 @@ def convert_to_contact(student_name):
 	student = frappe.get_doc("Enrollment Student", student_name)
 
 	if student.converted:
-		frappe.throw(
-			frappe._("Student {0} has already been converted to a CRM Contact.").format(student_name),
-			frappe.ValidationError,
-		)
+		existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
+		if existing_contact:
+			return existing_contact
 
 	staff_name = frappe.db.get_value("Staff", {"user": frappe.session.user}, "name")
 
@@ -34,6 +84,7 @@ def convert_to_contact(student_name):
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)
+	student.db_set("enrollment_status", "Converted")
 
 	return contact.name
 
@@ -53,7 +104,7 @@ def create_from_contact(contact):
 		"student_name": contact_doc.full_name or contact_doc.name,
 		"mobile_no": contact_doc.mobile_no,
 		"email": contact_doc.email_id,
-		"enrollment_status": "Chờ xác nhận",
+		"enrollment_status": "Pending Confirmation",
 	})
 	student.insert()
 	return student.name

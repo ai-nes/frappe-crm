@@ -16,7 +16,7 @@ class CRMMajor(Document):
 		import_source_id: DF.Int
 		is_active: DF.Check
 		major_code: DF.Data | None
-		major_group: DF.Literal["Kỹ thuật - Công nghệ", "Kinh tế - Quản trị", "Truyền thông - Thiết kế", "Ngôn ngữ"]
+		major_group: DF.Link | None
 		major_name: DF.Data
 	# end: auto-generated types
 
