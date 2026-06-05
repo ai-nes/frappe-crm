@@ -28,3 +28,4 @@ crm.patches.v1_0.resync_frappe_crm_workspace
 crm.patches.v1_0.fix_high_school_view_settings
 crm.patches.v1_0.reset_student_contact_view_settings
 crm.patches.v1_0.fix_orphan_converted_students
+crm.patches.v1_0.migrate_province_code_from_city_number
