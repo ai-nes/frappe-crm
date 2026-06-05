@@ -131,8 +131,8 @@
                 value: 'CRM Contact',
               },
               {
-                label: 'Enrollment Student',
-                value: 'Enrollment Student',
+                label: 'CRM Student',
+                value: 'CRM Student',
               },
             ]"
           />
@@ -375,7 +375,7 @@ const showConfirmDialog = ref({
 const useNewUI = ref(true)
 const isOldSla = ref(false)
 const documentType = computed(() =>
-  assignmentRuleData.value.documentType == 'Enrollment Student'
+  assignmentRuleData.value.documentType == 'CRM Student'
     ? __('students')
     : __('CRM contacts'),
 )

@@ -13,12 +13,12 @@
         :actions="contact._actions"
       />
       <Button
-        v-if="canCreateEnrollmentStudent"
+        v-if="canCreateCRMStudent"
         :label="__('Create Student')"
         iconLeft="plus"
         variant="solid"
         :loading="creatingStudent"
-        @click="createEnrollmentStudent"
+        @click="createCRMStudent"
       />
     </template>
   </LayoutHeader>
@@ -249,20 +249,20 @@ async function deleteContact() {
 }
 
 const creatingStudent = ref(false)
-const canCreateEnrollmentStudent = ref(true)
+const canCreateCRMStudent = ref(true)
 
-async function createEnrollmentStudent() {
+async function createCRMStudent() {
   creatingStudent.value = true
   try {
     const name = await call(
-      'crm.fcrm.doctype.enrollment_student.enrollment_student.create_from_contact',
+      'crm.fcrm.doctype.crm_student.crm_student.create_from_contact',
       { contact: props.contactId },
     )
-    router.push({ name: 'Enrollment Student', params: { enrollmentStudentId: name } })
+    router.push({ name: 'CRM Student', params: { crmStudentId: name } })
   } catch (err) {
     toast.error(err.messages?.[0] || __('Failed to create enrollment student'))
     if (err.exc_type === 'PermissionError') {
-      canCreateEnrollmentStudent.value = false
+      canCreateCRMStudent.value = false
     }
   } finally {
     creatingStudent.value = false

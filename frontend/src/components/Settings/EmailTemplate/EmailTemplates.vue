@@ -71,7 +71,7 @@
           :options="[
             { label: __('All'), value: 'All' },
             { label: __('CRM Contact'), value: 'CRM Contact' },
-            { label: __('Enrollment Student'), value: 'Enrollment Student' },
+            { label: __('CRM Student'), value: 'CRM Student' },
           ]"
         />
       </div>

@@ -17,6 +17,7 @@ class CRMProvince(Document):
 		city_type: DF.Literal["Centrally Controlled City", "Province"]
 		import_source_id: DF.Int
 		province_name: DF.Data
+		region: DF.Link | None
 	# end: auto-generated types
 
 	pass

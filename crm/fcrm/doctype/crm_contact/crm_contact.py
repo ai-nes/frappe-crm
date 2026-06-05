@@ -36,7 +36,7 @@ class CRMContact(Document):
 				"label": "Assigned To",
 				"type": "Link",
 				"key": "assigned_to",
-				"options": "Staff",
+				"options": "CRM Staff",
 				"width": "12rem",
 			},
 			{
@@ -87,22 +87,22 @@ def get_permission_query_conditions(user=None):
 	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
 		return None
 
-	staff_name = frappe.db.get_value("Staff", {"user": user}, "name")
-	if not staff_name:
+	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
+	if not crm_staff_name:
 		return "1=0"
 
-	campus = frappe.db.get_value("Staff", staff_name, "campus")
+	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
 	if not campus:
 		return "1=0"
 
-	staff_in_campus = frappe.db.get_all(
-		"Staff",
+	crm_staff_in_campus = frappe.db.get_all(
+		"CRM Staff",
 		filters={"campus": campus},
 		pluck="name",
 	)
 
-	if not staff_in_campus:
+	if not crm_staff_in_campus:
 		return "1=0"
 
-	escaped = ", ".join(frappe.db.escape(s) for s in staff_in_campus)
+	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
 	return f"`tabCRM Contact`.assigned_to in ({escaped})"

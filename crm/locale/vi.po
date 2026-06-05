@@ -8726,3 +8726,39 @@ msgstr "Còn tuyển"
 msgid "Convert to Contact"
 msgstr "Chuyển thành hồ sơ CRM"
 
+msgid "CRM Staff"
+msgstr "Nhân viên"
+
+msgid "CRM Persons"
+msgstr "Các bên liên quan"
+
+msgid "CRM Campaigns"
+msgstr "Chiến dịch"
+
+msgid "CRM Contacts"
+msgstr "Hồ sơ sinh viên"
+
+msgid "CRM Events"
+msgstr "Sự kiện"
+
+msgid "High Schools"
+msgstr "Trường THPT"
+
+msgid "Notes"
+msgstr "Ghi chú"
+
+msgid "Tasks"
+msgstr "Nhiệm vụ"
+
+msgid "Call Logs"
+msgstr "Lịch sử cuộc gọi"
+
+msgid "Dashboard"
+msgstr "Trang tổng quan"
+
+msgid "Prospective Students"
+msgstr "Student"
+
+msgid "Enrolled Students"
+msgstr "Học sinh đã nhập học"
+

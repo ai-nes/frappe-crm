@@ -2,6 +2,7 @@ import { getScript } from '@/data/script'
 import { globalStore } from '@/stores/global'
 import { getMeta } from '@/stores/meta'
 import { useAttachments } from '@/composables/useAttachments'
+import { openDeleteDocumentModal } from '@/composables/deleteDocumentModal'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 import { runSequentially, parseAssignees, sanitizeText } from '@/utils'
 import { findMissingMandatory } from '@/utils/fieldTransforms'
@@ -90,6 +91,9 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
       if (!documentsCache[doctype][docname].fieldPropertyOverrides) {
         documentsCache[doctype][docname].fieldPropertyOverrides = {}
       }
+      if (!documentsCache[doctype][docname]._customActions) {
+        documentsCache[doctype][docname]._customActions = []
+      }
 
       // Override the submit function to trigger validation before submitting
       // TODO: fix validate function to return error message instead of throwing error in frappe-ui and remove try-catch block here
@@ -110,6 +114,7 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
       documentsCache[doctype][''] = reactive({
         doc: { __newDocument: true, doctype },
         fieldPropertyOverrides: {},
+        _customActions: [],
       })
       setupFormScript()
     }
@@ -142,6 +147,41 @@ export function useDocument(doctype, docname, resourceOverrides = {}) {
         docname: docname,
       },
       initialData: { permissions: {} },
+    })
+  }
+
+  const currentDocument = documentsCache[doctype][docname || '']
+  if (
+    currentDocument &&
+    !Object.prototype.hasOwnProperty.call(currentDocument, '_actions')
+  ) {
+    Object.defineProperty(currentDocument, '_actions', {
+      configurable: true,
+      enumerable: true,
+      get() {
+        const customActions = Array.isArray(this._customActions)
+          ? [...this._customActions]
+          : []
+        const canDelete = permissionsCache[doctype]?.[docname || '']?.data
+          ?.permissions?.delete
+        const isNewDoc = !this.doc?.name || this.doc?.__newDocument
+        const hasDeleteAction = customActions.some(
+          (action) => action?.label === __('Delete'),
+        )
+
+        if (canDelete && !isNewDoc && !hasDeleteAction) {
+          customActions.push({
+            label: __('Delete'),
+            icon: 'trash-2',
+            onClick: () => openDeleteDocumentModal(doctype, this.doc.name),
+          })
+        }
+
+        return customActions
+      },
+      set(newValue) {
+        this._customActions = Array.isArray(newValue) ? newValue : []
+      },
     })
   }
 

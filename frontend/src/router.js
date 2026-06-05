@@ -49,15 +49,14 @@ const routes = [
     component: () => import('@/pages/CallLogs.vue'),
   },
   {
-    alias: '/enrollment-students',
-    path: '/enrollment-students/view/:viewType?',
-    name: 'Enrollment Students',
-    component: () => import('@/pages/EnrollmentStudents.vue'),
+    path: '/crm-students/view/:viewType?',
+    name: 'CRM Students',
+    component: () => import('@/pages/CRMStudents.vue'),
   },
   {
-    path: '/enrollment-students/:enrollmentStudentId',
-    name: 'Enrollment Student',
-    component: () => import('@/pages/EnrollmentStudent.vue'),
+    path: '/crm-students/:crmStudentId',
+    name: 'CRM Student',
+    component: () => import('@/pages/CRMStudent.vue'),
     props: true,
   },
   {
@@ -73,15 +72,15 @@ const routes = [
     props: true,
   },
   {
-    alias: '/persons',
-    path: '/persons/view/:viewType?',
-    name: 'Persons',
-    component: () => import('@/pages/Persons.vue'),
+    alias: '/crm-persons',
+    path: '/crm-persons/view/:viewType?',
+    name: 'CRM Persons',
+    component: () => import('@/pages/CRMPersons.vue'),
   },
   {
-    path: '/persons/:personId',
-    name: 'Person',
-    component: () => import('@/pages/Person.vue'),
+    path: '/crm-persons/:crmPersonId',
+    name: 'CRM Person',
+    component: () => import('@/pages/CRMPerson.vue'),
     props: true,
   },
   {
@@ -97,15 +96,15 @@ const routes = [
     props: true,
   },
   {
-    alias: '/campaigns',
-    path: '/campaigns/view/:viewType?',
-    name: 'Campaigns',
-    component: () => import('@/pages/Campaigns.vue'),
+    alias: '/crm-campaigns',
+    path: '/crm-campaigns/view/:viewType?',
+    name: 'CRM Campaigns',
+    component: () => import('@/pages/CRMCampaigns.vue'),
   },
   {
-    path: '/campaigns/:campaignId',
-    name: 'Campaign',
-    component: () => import('@/pages/Campaign.vue'),
+    path: '/crm-campaigns/:crmCampaignId',
+    name: 'CRM Campaign',
+    component: () => import('@/pages/CRMCampaign.vue'),
     props: true,
   },
   {
@@ -121,15 +120,20 @@ const routes = [
     props: true,
   },
   {
-    alias: '/staff',
-    path: '/staff/view/:viewType?',
-    name: 'Staff',
-    component: () => import('@/pages/Staff.vue'),
+    alias: '/crm-staff',
+    path: '/crm-staff/view/:viewType?',
+    name: 'CRM Staff',
+    component: () => import('@/pages/CRMStaff.vue'),
   },
   {
     path: '/data-import',
     name: 'DataImportList',
     component: () => import('@/pages/DataImport.vue'),
+  },
+  {
+    path: '/data-import/geography-high-schools',
+    name: 'GeographyImport',
+    component: () => import('@/pages/GeographyImport.vue'),
   },
   {
     path: '/data-import/doctype/:doctype',
@@ -191,12 +195,12 @@ router.beforeEach(async (to, from, next) => {
 
     let defaultView = getDefaultView()
     if (!defaultView) {
-      next({ name: 'Enrollment Students', query: { stage: 'intake' } })
+      next({ name: 'CRM Students', query: { stage: 'intake' } })
       return
     }
 
     let { route_name, type, name, is_standard } = defaultView
-    route_name = route_name || 'Enrollment Students'
+    route_name = route_name || 'CRM Students'
 
     if (name && !is_standard) {
       next({
@@ -212,15 +216,15 @@ router.beforeEach(async (to, from, next) => {
   } else if (to.matched.length === 0) {
     next({ name: 'Invalid Page' })
   } else if (
-    ['Enrollment Student', 'CRM Contact', 'Person', 'High School', 'Campaign', 'CRM Event'].includes(to.name) &&
+    ['CRM Student', 'CRM Contact', 'CRM Person', 'High School', 'CRM Campaign', 'CRM Event'].includes(to.name) &&
     !to.hash
   ) {
     let storageKey =
-      to.name === 'Enrollment Student' ? 'lastEnrollmentStudentTab'
+      to.name === 'CRM Student' ? 'lastCRMStudentTab'
       : to.name === 'CRM Contact' ? 'lastCRMContactTab'
-      : to.name === 'Person' ? 'lastPersonTab'
+      : to.name === 'CRM Person' ? 'lastCRMPersonTab'
       : to.name === 'High School' ? 'lastHighSchoolTab'
-      : to.name === 'Campaign' ? 'lastCampaignTab'
+      : to.name === 'CRM Campaign' ? 'lastCRMCampaignTab'
       : to.name === 'CRM Event' ? 'lastCRMEventTab'
       : 'lastActivityTab'
     const activeTab = localStorage.getItem(storageKey) || 'activity'
@@ -232,13 +236,13 @@ router.beforeEach(async (to, from, next) => {
       'Notes',
       'Tasks',
       'Call Logs',
-      'Enrollment Students',
+      'CRM Students',
       'CRM Contacts',
-      'Persons',
+      'CRM Persons',
       'High Schools',
-      'Campaigns',
+      'CRM Campaigns',
       'CRM Events',
-      'Staff',
+      'CRM Staff',
     ].includes(to.name) &&
     !to.query?.view
   ) {
@@ -254,13 +258,13 @@ router.beforeEach(async (to, from, next) => {
         Notes: 'FCRM Note',
         Tasks: 'CRM Task',
         'Call Logs': 'CRM Call Log',
-        'Enrollment Students': 'Enrollment Student',
+        'CRM Students': 'CRM Student',
         'CRM Contacts': 'CRM Contact',
-        Persons: 'Person',
+        'CRM Persons': 'CRM Person',
         'High Schools': 'CRM High School',
-        Campaigns: 'Campaign',
+        'CRM Campaigns': 'CRM Campaign',
         'CRM Events': 'CRM Event',
-        Staff: 'Staff',
+        'CRM Staff': 'CRM Staff',
       }
 
       const doctype = doctypeMap[to.name]

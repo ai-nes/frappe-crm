@@ -28,7 +28,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Region Code",
-   "description": "e.g. MB / MT / MN"
+   "description": "e.g. MB / MT / MN",
+   "unique": 1
   },
   {
    "fieldname": "description",

@@ -117,12 +117,12 @@
       >
         <div class="flex flex-col">
           <div class="text-p-base font-medium text-ink-gray-7 truncate">
-            {{ __('Personal Mobile No.') }}
+            {{ __('CRM Personal Mobile No.') }}
           </div>
           <div class="text-p-sm text-ink-gray-5">
             {{
               __(
-                'Enter your personal mobile number used by Exotel to make calls',
+                'Enter your crm_personal mobile number used by Exotel to make calls',
               )
             }}
           </div>
@@ -131,7 +131,7 @@
           <FormControl
             v-model="telephonyAgent.doc.mobile_no"
             class="flex-1 truncate w-44 p-1"
-            :placeholder="__('Enter Personal Mobile No.')"
+            :placeholder="__('Enter CRM Personal Mobile No.')"
             placement="bottom-end"
           />
         </div>
