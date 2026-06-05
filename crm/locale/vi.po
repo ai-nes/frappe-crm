@@ -8469,7 +8469,7 @@ msgstr "Sự kiện CRM"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "CRM Events"
+msgid "Events"
 msgstr "Sự kiện"
 
 msgid "CRM Major"
@@ -8732,16 +8732,21 @@ msgstr "Chuyển thành hồ sơ CRM"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "CRM Staff"
+msgid "Staff"
 msgstr "Nhân viên"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "CRM Persons"
+msgid "Persons"
 msgstr "Các bên liên quan"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "CRM Campaigns"
+msgid "Campaigns"
 msgstr "Chiến dịch"
+
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
+msgid "Contacts"
+msgstr "Hồ sơ CRM"
 
