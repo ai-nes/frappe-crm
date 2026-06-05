@@ -1043,7 +1043,7 @@ msgstr "Trạng thái giao tiếp CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 msgid "CRM Contacts"
-msgstr "Liên hệ CRM"
+msgstr "Hồ sơ sinh viên"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
@@ -6944,7 +6944,7 @@ msgstr "Công việc"
 #: frontend/src/pages/Deal.vue:590 frontend/src/pages/Lead.vue:442
 #: frontend/src/pages/MobileDeal.vue:464 frontend/src/pages/MobileLead.vue:309
 msgid "Tasks"
-msgstr "Công việc"
+msgstr "Nhiệm vụ"
 
 #: frontend/src/components/Settings/Settings.vue:210
 msgid "Telephony"
@@ -8425,7 +8425,7 @@ msgid "Enrollment Student"
 msgstr "Học sinh"
 
 msgid "Call Logs"
-msgstr "Nhật ký cuộc gọi"
+msgstr "Lịch sử cuộc gọi"
 
 msgid "Call Log"
 msgstr "Nhật ký cuộc gọi"
@@ -8735,30 +8735,9 @@ msgstr "Các bên liên quan"
 msgid "CRM Campaigns"
 msgstr "Chiến dịch"
 
-msgid "CRM Contacts"
-msgstr "Hồ sơ sinh viên"
-
-msgid "CRM Events"
-msgstr "Sự kiện"
-
-msgid "High Schools"
-msgstr "Trường THPT"
-
-msgid "Notes"
-msgstr "Ghi chú"
-
-msgid "Tasks"
-msgstr "Nhiệm vụ"
-
-msgid "Call Logs"
-msgstr "Lịch sử cuộc gọi"
-
-msgid "Dashboard"
-msgstr "Trang tổng quan"
-
 msgid "Prospective Students"
-msgstr "Student"
+msgstr "Học sinh THPT"
 
 msgid "Enrolled Students"
-msgstr "Học sinh đã nhập học"
+msgstr "Sinh viên đã nhập học"
 
