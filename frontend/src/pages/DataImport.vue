@@ -58,10 +58,10 @@ const isDataImportList = computed(
 )
 
 const doctypeMap = {
-  'Enrollment Student': {
-    title: 'Enrollment Students',
-    listRoute: '/crm/enrollment-students',
-    pageRoute: `/crm/enrollment-students/docname`,
+  'CRM Student': {
+    title: 'CRM Students',
+    listRoute: '/crm/crm-students',
+    pageRoute: `/crm/crm-students/docname`,
   },
   'CRM Contact': {
     title: 'CRM Contacts',
@@ -73,15 +73,15 @@ const doctypeMap = {
     listRoute: '/crm/high-schools',
     pageRoute: `/crm/high-schools/docname`,
   },
-  Person: {
-    title: 'Persons',
-    listRoute: '/crm/persons',
-    pageRoute: `/crm/persons/docname`,
+  'CRM Person': {
+    title: 'CRM Persons',
+    listRoute: '/crm/crm-persons',
+    pageRoute: `/crm/crm-persons/docname`,
   },
-  Campaign: {
-    title: 'Campaigns',
-    listRoute: '/crm/campaigns',
-    pageRoute: `/crm/campaigns/docname`,
+  'CRM Campaign': {
+    title: 'CRM Campaigns',
+    listRoute: '/crm/crm-campaigns',
+    pageRoute: `/crm/crm-campaigns/docname`,
   },
   'CRM Event': {
     title: 'CRM Events',

@@ -11,7 +11,7 @@ export class FCRMNote {
             if (!this.doc.reference_docname) return
             const routeMap = {
               'CRM Contact': { name: 'CRM Contact', params: { crmContactId: this.doc.reference_docname } },
-              'Enrollment Student': { name: 'Enrollment Student', params: { enrollmentStudentId: this.doc.reference_docname } },
+              'CRM Student': { name: 'CRM Student', params: { crmStudentId: this.doc.reference_docname } },
             }
             const route = routeMap[this.doc.reference_doctype]
             if (route) this.router.push(route)

@@ -379,7 +379,7 @@ function redirect(doctype, docname) {
   if (!docname) return
   const routeMap = {
     'CRM Contact': { name: 'CRM Contact', params: { crmContactId: docname } },
-    'Enrollment Student': { name: 'Enrollment Student', params: { enrollmentStudentId: docname } },
+    'CRM Student': { name: 'CRM Student', params: { crmStudentId: docname } },
   }
   const route = routeMap[doctype]
   if (route) router.push(route)

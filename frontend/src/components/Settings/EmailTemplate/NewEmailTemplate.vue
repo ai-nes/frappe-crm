@@ -52,8 +52,8 @@
                 value: 'CRM Contact',
               },
               {
-                label: __('Enrollment Student'),
-                value: 'Enrollment Student',
+                label: __('CRM Student'),
+                value: 'CRM Student',
               },
             ]"
             :placeholder="__('CRM Contact')"

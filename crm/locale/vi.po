@@ -8412,7 +8412,7 @@ msgstr "Lý do không theo"
 msgid "Lost Notes"
 msgstr "Ghi chú"
 
-msgid "Enrollment Students"
+msgid "CRM Students"
 msgstr "Học sinh nhập học"
 
 msgid "Prospective Students"
@@ -8421,7 +8421,7 @@ msgstr "Học sinh THPT"
 msgid "Enrolled Students"
 msgstr "Sinh viên đã nhập học"
 
-msgid "Enrollment Student"
+msgid "CRM Student"
 msgstr "Học sinh"
 
 msgid "Call Logs"

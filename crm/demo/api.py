@@ -75,7 +75,7 @@ def clear_demo_data():
 	_delete_docs("CRM Task", task_names)
 	_delete_docs("FCRM Note", note_names)
 	_delete_docs("CRM Contact", contact_names)
-	_delete_docs("Enrollment Student", student_names)
+	_delete_docs("CRM Student", student_names)
 	delete_demo_users(DEMO_USER_EMAILS)
 
 	for key in (
@@ -99,14 +99,14 @@ def get_demo_state():
 def _create_demo_students():
 	names = []
 	for data in DEMO_STUDENTS:
-		existing = frappe.db.exists("Enrollment Student", {"email": data["email"]})
+		existing = frappe.db.exists("CRM Student", {"email": data["email"]})
 		if existing:
 			names.append(existing)
 			continue
 
 		doc = frappe.get_doc(
 			{
-				"doctype": "Enrollment Student",
+				"doctype": "CRM Student",
 				"student_name": data["student_name"],
 				"mobile_no": data["mobile_no"],
 				"email": data["email"],
@@ -115,7 +115,7 @@ def _create_demo_students():
 				"source": _ensure_source(data["source"]),
 			}
 		).insert(ignore_permissions=True)
-		_backdate("Enrollment Student", doc.name, len(names) + 8)
+		_backdate("CRM Student", doc.name, len(names) + 8)
 		names.append(doc.name)
 
 	return names
@@ -124,7 +124,7 @@ def _create_demo_students():
 def _create_demo_contacts(student_names):
 	names = []
 	for index, student_name in enumerate(student_names):
-		student = frappe.get_doc("Enrollment Student", student_name)
+		student = frappe.get_doc("CRM Student", student_name)
 		existing = frappe.db.exists("CRM Contact", {"student": student.name})
 		if existing:
 			names.append(existing)
@@ -143,7 +143,7 @@ def _create_demo_contacts(student_names):
 				"notes": "Demo admission pipeline contact",
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.set_value("Enrollment Student", student.name, "converted", 1, update_modified=False)
+		frappe.db.set_value("CRM Student", student.name, "converted", 1, update_modified=False)
 		_backdate("CRM Contact", doc.name, len(names) + 5)
 		names.append(doc.name)
 

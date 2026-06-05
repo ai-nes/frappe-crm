@@ -62,10 +62,10 @@ def normalize_dashboard_filters(from_date=None, to_date=None, user=None):
 	return from_date, to_date, user
 
 
-def get_assigned_staff(user):
+def get_assigned_crm_staff(user):
 	if not user:
 		return None
-	return frappe.db.get_value("Staff", {"user": user}, "name") or "__none__"
+	return frappe.db.get_value("CRM Staff", {"user": user}, "name") or "__none__"
 
 
 def get_periods(from_date, to_date):
@@ -81,7 +81,7 @@ def get_count(doctype, from_date, to_date, user=None, extra_filters=None):
 	]
 
 	if doctype == "CRM Contact" and user:
-		filters.append(["assigned_to", "=", get_assigned_staff(user)])
+		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	if extra_filters:
 		filters.extend(extra_filters)
@@ -101,9 +101,9 @@ def get_count_delta(doctype, from_date, to_date, user=None, extra_filters=None):
 	]
 
 	if doctype == "CRM Contact" and user:
-		staff = get_assigned_staff(user)
-		current_filters.append(["assigned_to", "=", staff])
-		previous_filters.append(["assigned_to", "=", staff])
+		crm_staff = get_assigned_crm_staff(user)
+		current_filters.append(["assigned_to", "=", crm_staff])
+		previous_filters.append(["assigned_to", "=", crm_staff])
 
 	if extra_filters:
 		current_filters.extend(extra_filters)
@@ -126,7 +126,7 @@ def number_chart(title, tooltip, value, delta):
 
 
 def get_total_students(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("Enrollment Student", from_date, to_date)
+	value, delta = get_count_delta("CRM Student", from_date, to_date)
 	return number_chart("Total students", "Total number of imported enrollment students", value, delta)
 
 
@@ -150,7 +150,7 @@ def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 
 
 def get_admission_trend(from_date=None, to_date=None, user=None):
-	students = daily_counts("Enrollment Student", from_date, to_date)
+	students = daily_counts("CRM Student", from_date, to_date)
 	contacts = daily_counts("CRM Contact", from_date, to_date, user)
 	dates = sorted(set(students) | set(contacts))
 	data = [
@@ -185,7 +185,7 @@ def daily_counts(doctype, from_date, to_date, user=None):
 		.orderby(Date(table.creation))
 	)
 	if doctype == "CRM Contact" and user:
-		query = query.where(table.assigned_to == get_assigned_staff(user))
+		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
 
 	return {
 		frappe.utils.get_datetime(row.date).strftime("%Y-%m-%d"): row.count or 0
@@ -221,7 +221,7 @@ def get_contacts_by_source(from_date=None, to_date=None, user=None):
 
 def get_students_by_source(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"Enrollment Student",
+		"CRM Student",
 		"source",
 		"source",
 		"Students by source",
@@ -246,23 +246,23 @@ def get_contacts_by_high_school(from_date=None, to_date=None, user=None):
 
 def get_contacts_by_assignee(from_date=None, to_date=None, user=None):
 	Contact = DocType("CRM Contact")
-	Staff = DocType("Staff")
+	CRMStaff = DocType("CRM Staff")
 	query = (
 		frappe.qb.from_(Contact)
-		.left_join(Staff)
-		.on(Contact.assigned_to == Staff.name)
-		.select(IfNull(Staff.full_name, "Unassigned").as_("assignee"), Count(Contact.name).as_("count"))
+		.left_join(CRMStaff)
+		.on(Contact.assigned_to == CRMStaff.name)
+		.select(IfNull(CRMStaff.full_name, "Unassigned").as_("assignee"), Count(Contact.name).as_("count"))
 		.where(Date(Contact.creation).between(from_date, to_date))
 		.groupby(Contact.assigned_to)
 	)
 	if user:
-		query = query.where(Contact.assigned_to == get_assigned_staff(user))
+		query = query.where(Contact.assigned_to == get_assigned_crm_staff(user))
 
 	result = query.run(as_dict=True)
 	return {
 		"data": result or [],
 		"title": _("Contacts by assignee"),
-		"subtitle": _("Admission contacts grouped by assigned staff"),
+		"subtitle": _("Admission contacts grouped by assigned crm_staff"),
 		"xAxis": {"title": _("Assignee"), "key": "assignee", "type": "category"},
 		"yAxis": {"title": _("Count")},
 		"series": [{"name": "count", "type": "bar"}],
@@ -301,6 +301,6 @@ def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=No
 		.groupby(table[fieldname])
 	)
 	if doctype == "CRM Contact" and user:
-		query = query.where(table.assigned_to == get_assigned_staff(user))
+		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
 
 	return query.run(as_dict=True) or []

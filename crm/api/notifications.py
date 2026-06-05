@@ -4,10 +4,10 @@ from frappe.query_builder import Order
 
 ROUTES_BY_DOCTYPE = {
 	"CRM Contact": ("CRM Contact", "crmContactId", "crm contact"),
-	"Enrollment Student": ("Enrollment Student", "enrollmentStudentId", "student"),
-	"Person": ("Person", "personId", "person"),
+	"CRM Student": ("CRM Student", "crmStudentId", "student"),
+	"CRM Person": ("CRM Person", "crm_personId", "crm_person"),
 	"CRM High School": ("High School", "highSchoolId", "high school"),
-	"Campaign": ("Campaign", "campaignId", "campaign"),
+	"CRM Campaign": ("CRM Campaign", "crm_campaignId", "crm_campaign"),
 	"CRM Event": ("CRM Event", "crmEventId", "crm event"),
 	"CRM Task": ("Tasks", None, "task"),
 	"Contact": ("Contact", "contactId", "contact"),

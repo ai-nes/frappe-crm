@@ -123,7 +123,7 @@ const links = [
   {
     label: 'Prospective Students',
     icon: SchoolIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'intake' } },
+    to: { name: 'CRM Students', query: { stage: 'intake' } },
   },
   {
     label: 'CRM Contacts',
@@ -133,7 +133,7 @@ const links = [
   {
     label: 'Enrolled Students',
     icon: GraduationCapIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'enrolled' } },
+    to: { name: 'CRM Students', query: { stage: 'enrolled' } },
   },
   {
     label: 'High Schools',
@@ -141,14 +141,14 @@ const links = [
     to: 'High Schools',
   },
   {
-    label: 'Persons',
+    label: 'CRM Persons',
     icon: UserIcon,
-    to: 'Persons',
+    to: 'CRM Persons',
   },
   {
-    label: 'Campaigns',
+    label: 'CRM Campaigns',
     icon: MegaphoneIcon,
-    to: 'Campaigns',
+    to: 'CRM Campaigns',
   },
   {
     label: 'CRM Events',
@@ -156,9 +156,9 @@ const links = [
     to: 'CRM Events',
   },
   {
-    label: 'Staff',
+    label: 'CRM Staff',
     icon: BriefcaseIcon,
-    to: 'Staff',
+    to: 'CRM Staff',
   },
   {
     label: 'Notes',
@@ -228,19 +228,19 @@ function getIcon(routeName, icon) {
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
-    case 'Enrollment Students':
+    case 'CRM Students':
       return GraduationCapIcon
     case 'CRM Contacts':
       return UsersIcon
-    case 'Persons':
+    case 'CRM Persons':
       return UserIcon
     case 'High Schools':
       return SchoolIcon
-    case 'Campaigns':
+    case 'CRM Campaigns':
       return MegaphoneIcon
     case 'CRM Events':
       return CalendarIcon
-    case 'Staff':
+    case 'CRM Staff':
       return BriefcaseIcon
     default:
       return PinIcon

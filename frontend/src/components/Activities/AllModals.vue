@@ -121,10 +121,10 @@ function redirect(tabName) {
   if (
     [
       'CRM Contact',
-      'Enrollment Student',
-      'Person',
+      'CRM Student',
+      'CRM Person',
       'High School',
-      'Campaign',
+      'CRM Campaign',
       'CRM Event',
     ].includes(route.name)
   ) {

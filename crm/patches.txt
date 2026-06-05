@@ -4,6 +4,9 @@
 crm.patches.v1_0.move_crm_note_data_to_fcrm_note
 crm.patches.v1_0.rename_twilio_settings_to_crm_twilio_settings
 crm.patches.v1_0.rename_reference_doctypes_to_crm_prefix
+crm.patches.v1_0.rename_enrollment_student_to_crm_student
+crm.patches.v1_0.rename_remaining_reference_doctypes_to_crm_prefix
+crm.patches.v1_0.rename_campaign_type_to_crm_campaign_type
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated

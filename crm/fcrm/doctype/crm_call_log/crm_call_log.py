@@ -277,7 +277,7 @@ def create_contact_from_call_log(call_log: str | dict, contact_details: str | di
 	}
 
 	if "assigned_to" in valid_fieldnames and not sanitized_details.get("assigned_to"):
-		sanitized_details["assigned_to"] = frappe.db.get_value("Staff", {"user": frappe.session.user}, "name")
+		sanitized_details["assigned_to"] = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 
 	if "phone" in valid_fieldnames and not sanitized_details.get("phone"):
 		sanitized_details["phone"] = call_doc.get("from") or ""
