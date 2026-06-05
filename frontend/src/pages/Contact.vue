@@ -14,7 +14,7 @@
       />
       <Button
         v-if="canCreateEnrollmentStudent"
-        :label="__('Tạo học sinh')"
+        :label="__('Create Student')"
         iconLeft="plus"
         variant="solid"
         :loading="creatingStudent"

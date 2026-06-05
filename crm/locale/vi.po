@@ -135,6 +135,9 @@ msgstr "51-200"
 msgid "<b>META</b>"
 msgstr "<b>META</b>"
 
+msgid "<b>ACADEMIC</b>"
+msgstr "<b>ACADEMIC</b>"
+
 #. Paragraph text in the Frappe CRM Workspace
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
 msgid "<b>SHORTCUTS</b>"
@@ -204,7 +207,7 @@ msgstr "Yêu cầu API key"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:462
 msgid "API secret is required"
-msgstr ""
+msgstr "Yêu cầu nhập API secret"
 
 #: frontend/src/components/Telephony/TwilioCallUI.vue:88
 msgid "Accept"
@@ -258,7 +261,7 @@ msgstr "Yêu cầu mã thông báo truy cập"
 #. Label of the account_id (Data) field in DocType 'Facebook Page'
 #: crm/lead_syncing/doctype/facebook_page/facebook_page.json
 msgid "Account ID"
-msgstr ""
+msgstr "ID tài khoản"
 
 #: frontend/src/components/Settings/Profile/ProfileSettings.vue:87
 msgid "Account Info & Security"
@@ -307,7 +310,7 @@ msgstr "Thêm Tài Khoản"
 
 #: frontend/src/components/Settings/AssignmentRules/AssigneeSearch.vue:8
 msgid "Add Assignee"
-msgstr ""
+msgstr "Thêm người phụ trách"
 
 #: frontend/src/components/Calendar/Attendee.vue:118
 msgid "Add Attendee"
@@ -400,7 +403,7 @@ msgstr "Thêm Tổ Chức..."
 #: frontend/src/components/Settings/Sla/SlaHolidays.vue:163
 #: frontend/src/components/Settings/Sla/SlaPriorityList.vue:101
 msgid "Add Row"
-msgstr ""
+msgstr "Thêm dòng"
 
 #: frontend/src/pages/Welcome.vue:24
 msgid "Add Sample Data"
@@ -462,7 +465,7 @@ msgstr "Thêm người dùng hệ thống hiện có vào CRM này. Gán cho h�
 #: frontend/src/components/Settings/EmailAccountList.vue:51
 #: frontend/src/components/Settings/Users.vue:53
 msgid "Add one to get started."
-msgstr ""
+msgstr "Thêm một dòng để bắt đầu."
 
 #. Description of the 'Icon' (Code) field in DocType 'CRM Dropdown Item'
 #: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
@@ -504,7 +507,7 @@ msgstr "Địa Chỉ"
 #: frontend/src/components/Settings/Users.vue:226
 #: frontend/src/components/Settings/Users.vue:229
 msgid "Admin"
-msgstr ""
+msgstr "Quản trị viên"
 
 #: crm/integrations/twilio/twilio_handler.py:144
 msgid "Agent is unavailable to take the call, please call after some time."
@@ -669,11 +672,11 @@ msgstr "Bạn chắc chắn muốn quay lại? Các thay đổi chưa lưu sẽ 
 
 #: frontend/src/composables/frappecloud.js:24
 msgid "Are you sure you want to login to your Frappe Cloud dashboard?"
-msgstr ""
+msgstr "Bạn có chắc chắn muốn đăng nhập vào bảng điều khiển Frappe Cloud không?"
 
 #: frontend/src/components/FieldLayoutEditor.vue:428
 msgid "Are you sure you want to remove this tab and all its content?"
-msgstr ""
+msgstr "Bạn có chắc chắn muốn xóa tab này và toàn bộ nội dung của nó không?"
 
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.js:9
 msgid "Are you sure you want to reset 'Create Quotation from CRM Deal' Form Script?"
@@ -717,11 +720,11 @@ msgstr "Được giao Cho"
 
 #: frontend/src/components/Settings/AssignmentRules/AssigneeRules.vue:5
 msgid "Assignee Rules"
-msgstr ""
+msgstr "Quy tắc người phụ trách"
 
 #: frontend/src/components/Settings/AssignmentRules/AssigneeRules.vue:81
 msgid "Assignees"
-msgstr ""
+msgstr "Người phụ trách"
 
 #. Option for the 'Type' (Select) field in DocType 'CRM Notification'
 #: crm/fcrm/doctype/crm_notification/crm_notification.json
@@ -780,7 +783,7 @@ msgstr "Quy tắc phân công"
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:302
 msgid "Assignment Schedule"
-msgstr ""
+msgstr "Lịch phân công"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:104
 msgid "Assignment conditions"
@@ -815,7 +818,7 @@ msgstr "Đính Kèm Một Tệp"
 
 #: frontend/src/components/Controls/AttachControl.vue:10
 msgid "Attach file…"
-msgstr ""
+msgstr "Đính kèm tệp…"
 
 #: frontend/src/pages/Deal.vue:600 frontend/src/pages/Lead.vue:452
 #: frontend/src/pages/MobileDeal.vue:474 frontend/src/pages/MobileLead.vue:319
@@ -838,7 +841,7 @@ msgstr "Mã Xác Thực"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:185
 msgid "Auto Create Customer"
-msgstr ""
+msgstr "Tự động tạo khách hàng"
 
 #: frontend/src/components/Settings/DashboardSettings.vue:49
 msgid "Auto Update Expected Deal Value"
@@ -858,7 +861,7 @@ msgstr "Tự động gán leads/deals cho người dùng bán hàng phù hợp d
 #. Agreement'
 #: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
 msgid "Auto-generated from the portal view — do not edit directly unless you know what you're doing! "
-msgstr ""
+msgstr "Tự động tạo từ cổng xem - không chỉnh sửa trực tiếp trừ khi bạn hiểu rõ mình đang làm gì!"
 
 #. Label of the autocomplete (Autocomplete) field in DocType 'CRM Products'
 #: crm/fcrm/doctype/crm_products/crm_products.json
@@ -870,14 +873,14 @@ msgstr "Tự động hoàn thành"
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
 #: frontend/src/components/Settings/GeneralSettings.vue:64
 msgid "Automatically sets Communication Status to “Open” for the lead or deal when a new communication is created. Applies only when SLA is enabled"
-msgstr ""
+msgstr "Tự động đặt Trạng thái Giao tiếp thành “Mở” cho lead hoặc deal khi có giao tiếp mới. Chỉ áp dụng khi SLA được bật."
 
 #. Description of the 'Mark lead/deal as replied on response' (Check) field in
 #. DocType 'FCRM Settings'
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
 #: frontend/src/components/Settings/GeneralSettings.vue:42
 msgid "Automatically sets Communication Status to “Replied” for the lead or deal when a response is received. Applies only when SLA is enabled"
-msgstr ""
+msgstr "Tự động đặt Trạng thái Giao tiếp thành “Đã phản hồi” cho lead hoặc deal khi nhận được phản hồi. Chỉ áp dụng khi SLA được bật."
 
 #. Description of the 'Auto update Expected Deal Value' (Check) field in
 #. DocType 'FCRM Settings'
@@ -1360,15 +1363,15 @@ msgstr "Thay đổi trạng thái deal"
 
 #: frontend/src/components/Settings/PreferencesSettings.vue:60
 msgid "Change language of the application."
-msgstr ""
+msgstr "Thay đổi ngôn ngữ của ứng dụng."
 
 #: frontend/src/components/Settings/PreferencesSettings.vue:71
 msgid "Change timezone of the application."
-msgstr ""
+msgstr "Thay đổi múi giờ của ứng dụng."
 
 #: frontend/src/components/Settings/Profile/ProfileSettings.vue:113
 msgid "Change your account password for security."
-msgstr ""
+msgstr "Thay đổi mật khẩu tài khoản vì mục đích bảo mật."
 
 #: frontend/src/pages/Dashboard.vue:22
 msgid "Chart"
@@ -1393,7 +1396,7 @@ msgstr "Chọn Tổ Chức Hiện Có"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:171
 msgid "Choose how long this SLA policy will be active."
-msgstr ""
+msgstr "Chọn khoảng thời gian chính sách SLA này sẽ hoạt động."
 
 #: frontend/src/components/Settings/PreferencesSettings.vue:6
 msgid "Choose how you want to use the application by setting your preferences."
@@ -1409,7 +1412,7 @@ msgstr "Chọn Nhà Cung Cấp Dịch Vụ Email bạn muốn định cấu hìn
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:306
 msgid "Choose the days of the week when this rule should be active."
-msgstr ""
+msgstr "Chọn các ngày trong tuần mà quy tắc này sẽ hoạt động."
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:107
 msgid "Choose which leads/deals are affected by this policy."
@@ -1545,7 +1548,7 @@ msgstr "Công ty trong trang ERPNext"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:476
 msgid "Company name is required"
-msgstr ""
+msgstr "Yêu cầu nhập tên công ty"
 
 #: crm/templates/emails/helpdesk_invitation.html:10
 msgid "Complete Registration"
@@ -1592,7 +1595,7 @@ msgstr "Định cấu hình các hành động xuất hiện trên dropdown tran
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:10
 msgid "Configure default settings for your CRM system, including default currency, date formats, and other system-wide preferences to ensure consistency across your system."
-msgstr ""
+msgstr "Cấu hình cài đặt mặc định cho hệ thống CRM của bạn, bao gồm tiền tệ mặc định, định dạng ngày và các tùy chọn hệ thống khác để đảm bảo tính nhất quán trên toàn hệ thống."
 
 #: frontend/src/components/Settings/GeneralSettings.vue:8
 msgid "Configure general settings for your application"
@@ -1600,7 +1603,7 @@ msgstr "Cấu hình cài đặt chung cho ứng dụng của bạn"
 
 #: frontend/src/components/Settings/DashboardSettings.vue:10
 msgid "Configure how your dashboard calculates, formats, and displays key metrics, including forecasting, deal values, and currency settings"
-msgstr ""
+msgstr "Cấu hình cách dashboard tính toán, định dạng và hiển thị các chỉ số chính, bao gồm dự báo, giá trị deal và cài đặt tiền tệ"
 
 #: frontend/src/components/Settings/DashboardSettings.vue:102
 msgid "Configure the Exchange Rate Provider for your CRM"
@@ -1647,7 +1650,7 @@ msgstr "Xác nhận {0}"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:246
 msgid "Connect ERPNext to Frappe CRM"
-msgstr ""
+msgstr "Kết nối ERPNext với Frappe CRM"
 
 #: frontend/src/pages/Welcome.vue:35
 msgid "Connect your Email"
@@ -1740,7 +1743,7 @@ msgstr "Nội dung là bắt buộc"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:75
 msgid "Controls how numbers are displayed (e.g., commas, decimal separators)"
-msgstr ""
+msgstr "Kiểm soát cách hiển thị số (ví dụ: dấu phẩy, dấu phân cách thập phân)"
 
 #: frontend/src/components/Layouts/AppSidebar.vue:399
 #: frontend/src/components/ListBulkActions.vue:86
@@ -1849,7 +1852,7 @@ msgstr "Tạo một Sự kiện"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:189
 msgid "Create customer in ERPNext when the deal status is changed"
-msgstr ""
+msgstr "Tạo khách hàng trong ERPNext khi trạng thái deal thay đổi"
 
 #. Label of the create_customer_on_status_change (Check) field in DocType
 #. 'ERPNext CRM Settings'
@@ -1859,7 +1862,7 @@ msgstr "Tạo khách hàng khi thay đổi trạng thái"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:398
 msgid "Create quotation button on deal page and auto customer creation on deal status change will be disabled. Are you sure?"
-msgstr ""
+msgstr "Nút tạo báo giá trên trang deal và tự động tạo khách hàng khi đổi trạng thái deal sẽ bị tắt. Bạn có chắc chắn không?"
 
 #: frontend/src/components/Layouts/AppSidebar.vue:365
 msgid "Create your first lead"
@@ -1894,7 +1897,7 @@ msgstr "Tiền tệ được đặt là {0} thành công"
 
 #: frontend/src/components/Modals/ChangePasswordModal.vue:8
 msgid "Current Password"
-msgstr ""
+msgstr "Mật khẩu hiện tại"
 
 #: crm/api/dashboard.py:896
 msgid "Current pipeline distribution"
@@ -1962,7 +1965,7 @@ msgstr "Trang tổng quan"
 
 #: frontend/src/components/Settings/DashboardSettings.vue:70
 msgid "Dashboard Currency"
-msgstr ""
+msgstr "Tiền tệ Dashboard"
 
 #: frontend/src/components/Settings/DashboardSettings.vue:74
 msgid "Dashboard number cards & charts will show currency in the selected format. Once set, cannot be edited."
@@ -1970,7 +1973,7 @@ msgstr "Các thẻ số và biểu đồ trên Dashboard sẽ hiển thị tiề
 
 #: frontend/src/components/Settings/DashboardSettings.vue:224
 msgid "Dashboard settings updated successfully"
-msgstr ""
+msgstr "Cập nhật cài đặt dashboard thành công"
 
 #: frontend/src/components/Activities/DataFields.vue:6
 #: frontend/src/components/Layouts/AppSidebar.vue:604
@@ -2188,7 +2191,7 @@ msgstr "Mặc định"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:35
 msgid "Defines the default currency for all records, can be overridden at the field level"
-msgstr ""
+msgstr "Định nghĩa tiền tệ mặc định cho tất cả các bản ghi, có thể ghi đè ở cấp độ trường"
 
 #: frontend/src/components/Activities/AttachmentArea.vue:131
 #: frontend/src/components/Activities/NoteArea.vue:12
@@ -2228,7 +2231,7 @@ msgstr "Xóa & Khôi phục"
 
 #: frontend/src/components/DeleteLinkedDocModal.vue:69
 msgid "Delete All"
-msgstr ""
+msgstr "Xóa tất cả"
 
 #: frontend/src/components/Activities/AttachmentArea.vue:58
 #: frontend/src/components/Activities/AttachmentArea.vue:127
@@ -2310,7 +2313,7 @@ msgstr "Mô tả là bắt buộc"
 
 #: frontend/src/components/Apps.vue:61
 msgid "Desk"
-msgstr ""
+msgstr "Bàn làm việc"
 
 #. Label of the details (Tab Break) field in DocType 'CRM Lead'
 #. Label of the details (Text Editor) field in DocType 'CRM Lead Source'
@@ -2340,7 +2343,7 @@ msgstr "Vô hiệu"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:397
 msgid "Disable ERPNext Integration"
-msgstr ""
+msgstr "Tắt tích hợp ERPNext"
 
 #. Label of the disabled (Check) field in DocType 'CRM Product'
 #: crm/fcrm/doctype/crm_product/crm_product.json
@@ -2374,7 +2377,7 @@ msgstr "Số tiền Giảm giá"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:114
 msgid "Display format for dates across the system"
-msgstr ""
+msgstr "Định dạng hiển thị ngày trên toàn hệ thống"
 
 #. Label of the dt (Link) field in DocType 'CRM Form Script'
 #. Label of the dt (Link) field in DocType 'CRM Global Settings'
@@ -2439,7 +2442,7 @@ msgstr "Kéo & thả tập tin vào đây hoặc tải lên từ"
 
 #: frontend/src/components/FieldLayoutEditor.vue:250
 msgid "Drag a section or a field here to get started"
-msgstr ""
+msgstr "Kéo một phần hoặc một trường vào đây để bắt đầu"
 
 #: frontend/src/components/FilesUploader/FilesUploaderArea.vue:56
 msgid "Drop files here"
@@ -2472,7 +2475,7 @@ msgstr "Trùng lặp"
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleListItem.vue:47
 msgid "Duplicate Assignment Rule"
-msgstr ""
+msgstr "Nhân bản quy tắc phân công"
 
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:34
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:513
@@ -2482,7 +2485,7 @@ msgstr "Sao chép Sự kiện"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyList.vue:112
 msgid "Duplicate SLA Policy"
-msgstr ""
+msgstr "Nhân bản chính sách SLA"
 
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:10
 msgid "Duplicate Template"
@@ -2541,7 +2544,7 @@ msgstr "ERPNext không được cài đặt trong site hiện tại"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:71
 msgid "ERPNext is not installed on this site either install it or enter the URL of your ERPNext site to connect"
-msgstr ""
+msgstr "ERPNext chưa được cài đặt trên trang này, hãy cài đặt hoặc nhập URL của trang ERPNext để kết nối"
 
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.py:27
 msgid "ERPNext is not integrated with the CRM"
@@ -2708,7 +2711,7 @@ msgstr "ID Email là bắt buộc"
 #. Label of the email_sent_at (Datetime) field in DocType 'CRM Invitation'
 #: crm/fcrm/doctype/crm_invitation/crm_invitation.json
 msgid "Email Sent At"
-msgstr ""
+msgstr "Email gửi lúc"
 
 #: frontend/src/components/Settings/Profile/UserEmailSettings.vue:8
 msgid "Email Settings"
@@ -2721,7 +2724,7 @@ msgstr "Mẫu email"
 #: frontend/src/components/Modals/EmailTemplateSelectorModal.vue:4
 #: frontend/src/components/Settings/EmailTemplate/EmailTemplates.vue:7
 msgid "Email Templates"
-msgstr ""
+msgstr "Mẫu email"
 
 #: frontend/src/components/Controls/EmailMultiSelect.vue:254
 msgid "Email already exists"
@@ -2793,7 +2796,7 @@ msgstr "Bật ghi âm cuộc gọi cho các cuộc gọi đến và đi"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:250
 msgid "Enable the integration to create quotations and auto create customers in ERPNext."
-msgstr ""
+msgstr "Bật tích hợp để tạo báo giá và tự động tạo khách hàng trong ERPNext."
 
 #. Label of the enabled (Check) field in DocType 'CRM Exotel Settings'
 #. Label of the enabled (Check) field in DocType 'CRM Form Script'
@@ -3205,7 +3208,7 @@ msgstr "Không thể lấy tỷ giá từ {0} sang {1} vào {2}. Vui lòng kiể
 
 #: frontend/src/components/Modals/FieldLayoutDialog.vue:172
 msgid "Failed to load fields layout"
-msgstr ""
+msgstr "Tải bố cục các trường thất bại"
 
 #: frontend/src/data/script.js:109
 msgid "Failed to load form controller: {0}"
@@ -3218,7 +3221,7 @@ msgstr "Không thể đổi tên mẫu"
 #: frontend/src/components/Settings/DefaultsSettings.vue:169
 #: frontend/src/components/Settings/ERPNextSettings.vue:305
 msgid "Failed to save settings"
-msgstr ""
+msgstr "Lưu cài đặt thất bại"
 
 #: frontend/src/components/Settings/Sla/WorkDayModal.vue:265
 msgid "Failed to save workday: {0}"
@@ -3719,7 +3722,7 @@ msgstr "Cuộc gọi đến..."
 
 #: crm/api/user.py:32
 msgid "Incorrect current password. Please try again."
-msgstr ""
+msgstr "Mật khẩu hiện tại không đúng. Vui lòng thử lại."
 
 #. Label of a shortcut in the Frappe CRM Workspace
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
@@ -3796,11 +3799,11 @@ msgstr "Số Exotel không hợp lệ"
 
 #: frontend/src/components/Controls/GeolocationControl.vue:116
 msgid "Invalid GeoJSON"
-msgstr ""
+msgstr "GeoJSON không hợp lệ"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:454
 msgid "Invalid Site URL"
-msgstr ""
+msgstr "URL trang web không hợp lệ"
 
 #: frontend/src/composables/event.js:253
 msgid "Invalid Start Or End Time"
@@ -4079,7 +4082,7 @@ msgstr "90 ngày qua"
 #: frontend/src/pages/Organization.vue:523
 #: frontend/src/pages/Organization.vue:551
 msgid "Last Modified"
-msgstr ""
+msgstr "Lần cuối chỉnh sửa"
 
 #: frontend/src/components/Filter.vue:653
 msgid "Last Month"
@@ -4136,7 +4139,7 @@ msgstr "Họ"
 
 #: frontend/src/components/Settings/AssignmentRules/AssigneeRules.vue:101
 msgid "Last user assigned by this rule"
-msgstr ""
+msgstr "Người dùng cuối cùng được phân công bởi quy tắc này"
 
 #. Label of the layout (Code) field in DocType 'CRM Dashboard'
 #. Label of the layout (Code) field in DocType 'CRM Fields Layout'
@@ -4245,7 +4248,7 @@ msgstr "Leads theo nguồn"
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:158
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:238
 msgid "Learn about conditions"
-msgstr ""
+msgstr "Tìm hiểu thêm về các điều kiện"
 
 #. Label of the lft (Int) field in DocType 'CRM Territory'
 #: crm/fcrm/doctype/crm_territory/crm_territory.json
@@ -4345,7 +4348,7 @@ msgstr "Ghi nhật ký cuộc gọi"
 
 #: frontend/src/composables/frappecloud.js:23
 msgid "Login to Frappe Cloud?"
-msgstr ""
+msgstr "Đăng nhập vào Frappe Cloud?"
 
 #: frontend/src/pages/NotPermitted.vue:21
 msgid "Login with Different Account"
@@ -4455,7 +4458,7 @@ msgstr "Quản lý người dùng CRM bằng cách thêm hoặc mời họ, và 
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:4
 msgid "Manage ERPNext integration settings"
-msgstr ""
+msgstr "Quản lý cài đặt tích hợp ERPNext"
 
 #: frontend/src/components/Settings/Profile/ProfileSettings.vue:96
 msgid "Manage your account emails and email signature for communication."
@@ -4636,19 +4639,19 @@ msgstr "Thêm tùy chọn"
 
 #: frontend/src/components/FieldLayoutEditor.vue:614
 msgid "Move Last Column to Next Section"
-msgstr ""
+msgstr "Di chuyển cột cuối cùng sang phần tiếp theo"
 
 #: frontend/src/components/FieldLayoutEditor.vue:654
 msgid "Move Last Column to Next Tab"
-msgstr ""
+msgstr "Di chuyển cột cuối cùng sang tab tiếp theo"
 
 #: frontend/src/components/FieldLayoutEditor.vue:624
 msgid "Move Last Column to Previous Section"
-msgstr ""
+msgstr "Di chuyển cột cuối cùng sang phần trước đó"
 
 #: frontend/src/components/FieldLayoutEditor.vue:634
 msgid "Move Last Column to Previous Tab"
-msgstr ""
+msgstr "Di chuyển cột cuối cùng sang tab trước đó"
 
 #: frontend/src/components/FieldLayoutEditor.vue:543
 msgid "Move to Next Tab"
@@ -4732,7 +4735,7 @@ msgstr "Quy tắc phân công mới"
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleListItem.vue:53
 msgid "New Assignment Rule Name"
-msgstr ""
+msgstr "Tên quy tắc phân công mới"
 
 #: frontend/src/components/Activities/ActivityHeader.vue:19
 msgid "New Comment"
@@ -4773,11 +4776,11 @@ msgstr "Mật khẩu mới"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:8
 msgid "New SLA Policy"
-msgstr ""
+msgstr "Chính sách SLA mới"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyList.vue:118
 msgid "New SLA Policy Name"
-msgstr ""
+msgstr "Tên chính sách SLA mới"
 
 #: frontend/src/components/SidePanelLayoutEditor.vue:131
 msgid "New Section"
@@ -4807,11 +4810,11 @@ msgstr "Tổ chức mới sẽ được tạo dựa trên dữ liệu trong ph�
 
 #: frontend/src/components/Modals/ChangePasswordModal.vue:123
 msgid "New password cannot be the same as current password"
-msgstr ""
+msgstr "Mật khẩu mới không được trùng với mật khẩu hiện tại"
 
 #: crm/api/user.py:25
 msgid "New password cannot be the same as current password. Please choose a different password."
-msgstr ""
+msgstr "Mật khẩu mới không được trùng với mật khẩu hiện tại. Vui lòng chọn một mật khẩu khác."
 
 #: frontend/src/components/Modals/CreateDocumentModal.vue:84
 msgid "New {0}"
@@ -4926,7 +4929,7 @@ msgstr "Không có thay đổi nào được thực hiện"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:295
 msgid "No companies found in the given site"
-msgstr ""
+msgstr "Không tìm thấy công ty nào trên trang web đã nhập"
 
 #: frontend/src/components/Activities/EventArea.vue:79
 msgid "No events coming up. Create a new one to keep things on track."
@@ -5059,7 +5062,7 @@ msgstr "Không được phép truy cập tin nhắn WhatsApp được tham chi�
 
 #: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py:197
 msgid "Not permitted to modify fields layout"
-msgstr ""
+msgstr "Không được phép chỉnh sửa bố cục các trường"
 
 #. Label of the note (Link) field in DocType 'CRM Call Log'
 #: crm/fcrm/doctype/crm_call_log/crm_call_log.json
@@ -5141,20 +5144,20 @@ msgstr "Số lượng Deals và tổng giá trị theo nhân viên kinh doanh"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:95
 msgid "Number of decimal places for non-currency numeric fields"
-msgstr ""
+msgstr "Số chữ số thập phân cho các trường số không phải tiền tệ"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:55
 msgid "Number of decimal places used for all currency values"
-msgstr ""
+msgstr "Số chữ số thập phân dùng cho tất cả giá trị tiền tệ"
 
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:167
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:251
 msgid "Old Condition"
-msgstr ""
+msgstr "Điều kiện cũ"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:124
 msgid "Old Conditions"
-msgstr ""
+msgstr "Các điều kiện cũ"
 
 #. Label of the old_parent (Link) field in DocType 'CRM Territory'
 #: crm/fcrm/doctype/crm_territory/crm_territory.json
@@ -5322,7 +5325,7 @@ msgstr "Tính năng Khác"
 #. Label of the organization_tab (Tab Break) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 msgid "Others"
-msgstr ""
+msgstr "Khác"
 
 #: frontend/src/components/Activities/CallArea.vue:35
 msgid "Outbound Call"
@@ -5364,7 +5367,7 @@ msgstr "Mật khẩu"
 
 #: crm/api/user.py:46
 msgid "Password Updated Successfully"
-msgstr ""
+msgstr "Cập nhật mật khẩu thành công"
 
 #: crm/api/live_demo.py:24 crm/api/live_demo.py:32
 msgid "Password cannot be reset by Demo User {}"
@@ -5376,15 +5379,15 @@ msgstr "Yêu cầu mật khẩu"
 
 #: crm/api/user.py:43
 msgid "Password is too weak. {0}"
-msgstr ""
+msgstr "Mật khẩu quá yếu. {0}"
 
 #: frontend/src/components/Modals/ChangePasswordModal.vue:130
 msgid "Password must be at least 8 characters"
-msgstr ""
+msgstr "Mật khẩu phải dài ít nhất 8 ký tự"
 
 #: frontend/src/components/Modals/ChangePasswordModal.vue:133
 msgid "Password must contain lowercase, uppercase, number, and symbol"
-msgstr ""
+msgstr "Mật khẩu phải chứa chữ thường, chữ hoa, số và ký tự đặc biệt"
 
 #: frontend/src/components/Modals/ChangePasswordModal.vue:98
 msgid "Password updated successfully"
@@ -5397,7 +5400,7 @@ msgstr "Mật khẩu không khớp"
 #: frontend/src/components/Modals/ChangePasswordModal.vue:47
 #: frontend/src/components/Modals/ChangePasswordModal.vue:149
 msgid "Passwords match"
-msgstr ""
+msgstr "Mật khẩu trùng khớp"
 
 #: frontend/src/components/Modals/EmailTemplateSelectorModal.vue:13
 #: frontend/src/components/Settings/EmailTemplate/EditEmailTemplate.vue:38
@@ -5560,7 +5563,7 @@ msgstr "Vị trí"
 #: frontend/src/components/Settings/PreferencesSettings.vue:4
 #: frontend/src/components/Settings/Settings.vue:108
 msgid "Preferences"
-msgstr ""
+msgstr "Tùy chọn"
 
 #: frontend/src/components/Settings/PreferencesSettings.vue:115
 msgid "Preferences Updated Successfully"
@@ -5701,7 +5704,7 @@ msgstr "Số lượng"
 #. Label of the questions (Table) field in DocType 'Facebook Lead Form'
 #: crm/lead_syncing/doctype/facebook_lead_form/facebook_lead_form.json
 msgid "Questions"
-msgstr ""
+msgstr "Câu hỏi"
 
 #. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
 #: crm/fcrm/doctype/crm_call_log/crm_call_log.json
@@ -5809,11 +5812,11 @@ msgstr "Làm mới"
 
 #: frontend/src/components/Settings/Telephony/TwilioSettings.vue:78
 msgid "Refresh Apps"
-msgstr ""
+msgstr "Làm mới ứng dụng"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:157
 msgid "Refresh Companies"
-msgstr ""
+msgstr "Làm mới công ty"
 
 #: frontend/src/components/Telephony/TwilioCallUI.vue:97
 msgid "Reject"
@@ -5860,11 +5863,11 @@ msgstr "Xóa Hình ảnh"
 #: frontend/src/components/FieldLayoutEditor.vue:574
 #: frontend/src/components/FieldLayoutEditor.vue:580
 msgid "Remove Last Column"
-msgstr ""
+msgstr "Xóa cột cuối cùng"
 
 #: frontend/src/components/FieldLayoutEditor.vue:604
 msgid "Remove Last Column (move fields to previous)"
-msgstr ""
+msgstr "Xóa cột cuối cùng (di chuyển các trường về cột trước)"
 
 #: frontend/src/components/Settings/Profile/ProfileSettings.vue:157
 msgid "Remove Photo"
@@ -6125,7 +6128,7 @@ msgstr "Trạng thái SLA"
 #: frontend/src/components/Settings/Sla/SlaPolicyList.vue:254
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:373
 msgid "SLA set as default cannot be disabled"
-msgstr ""
+msgstr "Không thể tắt SLA đã được đặt làm mặc định"
 
 #: frontend/src/components/EmailEditor.vue:102
 msgid "SUBJECT"
@@ -6372,7 +6375,7 @@ msgstr "Chọn những người được phân công cho {0}."
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:217
 msgid "Select the deal status to trigger the auto customer creation in ERPNext"
-msgstr ""
+msgstr "Chọn trạng thái deal để kích hoạt tự động tạo khách hàng trong ERPNext"
 
 #: frontend/src/components/Settings/CalendarSettings.vue:38
 msgid "Select the default view for your calendar. This will be the initial view when you open the calendar"
@@ -6380,11 +6383,11 @@ msgstr "Chọn chế độ xem mặc định cho lịch của bạn. Đây sẽ 
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:131
 msgid "Select whether to display time with or without seconds"
-msgstr ""
+msgstr "Chọn hiển thị thời gian có hoặc không có giây"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:133
 msgid "Select your ERPNext company to connect with"
-msgstr ""
+msgstr "Chọn công ty ERPNext của bạn để kết nối"
 
 #: frontend/src/components/FieldLayout/Field.vue:557
 msgid "Select {0}"
@@ -6467,7 +6470,7 @@ msgstr "Đặt Họ Tên"
 
 #: frontend/src/components/Controls/GeolocationControl.vue:43
 msgid "Set Location"
-msgstr ""
+msgstr "Đặt vị trí"
 
 #: frontend/src/components/FilesUploader/FilesUploader.vue:66
 msgid "Set all as private"
@@ -6487,11 +6490,11 @@ msgstr "Đặt làm Liên hệ Chính"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:113
 msgid "Set as default SLA"
-msgstr ""
+msgstr "Đặt làm SLA mặc định"
 
 #: frontend/src/components/Controls/GeolocationControl.vue:10
 msgid "Set location…"
-msgstr ""
+msgstr "Đặt vị trí…"
 
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:102
 msgid "Set the Exotel number to be used for outgoing calls."
@@ -6557,11 +6560,11 @@ msgstr "Thiết lập"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:302
 msgid "Settings saved"
-msgstr ""
+msgstr "Đã lưu cài đặt"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:166
 msgid "Settings updated successfully"
-msgstr ""
+msgstr "Cập nhật cài đặt thành công"
 
 #: frontend/src/components/Settings/EmailAdd.vue:6
 msgid "Setup Email"
@@ -6632,15 +6635,15 @@ msgstr "Vì bạn đã xóa {0} khỏi người được phân công, {0} đã �
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:66
 msgid "Site URL"
-msgstr ""
+msgstr "Đường dẫn trang web"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:449
 msgid "Site URL is required"
-msgstr ""
+msgstr "Yêu cầu nhập đường dẫn trang web"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:432
 msgid "Site connection validated"
-msgstr ""
+msgstr "Kết nối trang web đã được xác thực"
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:439
 msgid "Some error occurred while creating SLA Policy"
@@ -6814,7 +6817,7 @@ msgstr "Chủ đề"
 #: frontend/src/components/Settings/EmailTemplate/EditEmailTemplate.vue:152
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:158
 msgid "Subject is required"
-msgstr ""
+msgstr "Yêu cầu nhập tiêu đề"
 
 #: frontend/src/components/Modals/EmailTemplateSelectorModal.vue:35
 msgid "Subject: {0}"
@@ -6884,7 +6887,7 @@ msgstr "Cấu hình Hệ thống"
 
 #: frontend/src/components/Settings/DefaultsSettings.vue:6
 msgid "System Defaults"
-msgstr ""
+msgstr "Mặc định hệ thống"
 
 #. Name of a role
 #. Option for the 'Role' (Select) field in DocType 'CRM Invitation'
@@ -7066,7 +7069,7 @@ msgstr "Năm nay"
 
 #: frontend/src/components/FieldLayoutEditor.vue:581
 msgid "This column contains fields. Are you sure you want to remove it?"
-msgstr ""
+msgstr "Cột này chứa các trường. Bạn có chắc chắn muốn xóa nó không?"
 
 #: frontend/src/components/Settings/Sla/WorkDayModal.vue:177
 msgid "This field is required"
@@ -7078,7 +7081,7 @@ msgstr "Phương pháp này chỉ dành cho chế độ nhà phát triển"
 
 #: frontend/src/components/FieldLayoutEditor.vue:486
 msgid "This section contains fields. Are you sure you want to remove it?"
-msgstr ""
+msgstr "Phần này chứa các trường. Bạn có chắc chắn muốn xóa nó không?"
 
 #: frontend/src/components/SidePanelLayoutEditor.vue:116
 msgid "This section is not editable"
@@ -7123,7 +7126,7 @@ msgstr "Khoảng thời gian"
 
 #: frontend/src/components/Settings/PreferencesSettings.vue:68
 msgid "Timezone"
-msgstr ""
+msgstr "Múi giờ"
 
 #. Label of the title (Data) field in DocType 'CRM Task'
 #. Label of the title (Data) field in DocType 'FCRM Note'
@@ -7142,7 +7145,7 @@ msgstr "Trường tiêu đề"
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:823
 #: frontend/src/components/Modals/EventModal.vue:376
 msgid "Title is required"
-msgstr ""
+msgstr "Yêu cầu nhập tiêu đề"
 
 #. Label of the to (Data) field in DocType 'CRM Status Change Log'
 #: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
@@ -7174,7 +7177,7 @@ msgstr "Loại Đến"
 #. Label of the to_user (Link) field in DocType 'CRM Notification'
 #: crm/fcrm/doctype/crm_notification/crm_notification.json
 msgid "To User"
-msgstr ""
+msgstr "Gửi đến người dùng"
 
 #: frontend/src/components/Settings/EmailEdit.vue:121
 msgid "To know more about setting up email accounts, click"
@@ -7199,7 +7202,7 @@ msgstr "Ngày mai"
 
 #: crm/api/user.py:21
 msgid "Too many failed attempts. Please try again after some time."
-msgstr ""
+msgstr "Quá nhiều lần thử thất bại. Vui lòng thử lại sau."
 
 #. Label of the total (Currency) field in DocType 'CRM Deal'
 #. Label of the total (Currency) field in DocType 'CRM Lead'
@@ -7445,7 +7448,7 @@ msgstr "Cập nhật Tài khoản"
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:162
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:187
 msgid "Update Configuration"
-msgstr ""
+msgstr "Cập nhật cấu hình"
 
 #. Description of the 'Update timestamp on new communication' (Check) field in
 #. DocType 'FCRM Settings'
@@ -7500,7 +7503,7 @@ msgstr "Tải lên Video"
 
 #: frontend/src/components/Controls/ImageUploader.vue:12
 msgid "Uploading {0}%"
-msgstr ""
+msgstr "Đang tải lên {0}%"
 
 #. Label of the user (Link) field in DocType 'CRM Dashboard'
 #. Label of the user (Link) field in DocType 'CRM Telephony Agent'
@@ -7513,7 +7516,7 @@ msgstr "Người dùng"
 
 #: frontend/src/components/Settings/Settings.vue:95
 msgid "User Configuration"
-msgstr ""
+msgstr "Cấu hình người dùng"
 
 #: frontend/src/components/Settings/Settings.vue:146
 msgid "User Management"
@@ -7571,7 +7574,7 @@ msgstr "Giá trị"
 
 #: frontend/src/components/Settings/ERPNextSettings.vue:110
 msgid "Verify Connection"
-msgstr ""
+msgstr "Xác thực kết nối"
 
 #: frontend/src/pages/Deal.vue:229
 msgid "View Contact"
@@ -7579,7 +7582,7 @@ msgstr "Xem Liên hệ"
 
 #: frontend/src/components/Controls/GeolocationControl.vue:43
 msgid "View Location"
-msgstr ""
+msgstr "Xem vị trí"
 
 #: frontend/src/components/Modals/ViewModal.vue:14
 msgid "View Name"
@@ -7792,11 +7795,11 @@ msgstr "Bạn không có quyền truy cập tài liệu này"
 
 #: crm/api/__init__.py:143
 msgid "You don't have permission to delete this attachment"
-msgstr ""
+msgstr "Bạn không có quyền xóa tệp đính kèm này"
 
 #: crm/api/user.py:17
 msgid "You must be logged in to change your password"
-msgstr ""
+msgstr "Bạn phải đăng nhập để thay đổi mật khẩu"
 
 #: crm/fcrm/doctype/crm_form_script/crm_form_script.py:39
 msgid "You need to be in developer mode to edit a Standard Form Script"
@@ -7828,7 +7831,7 @@ msgstr "Điều kiện cũ của bạn sẽ bị ghi đè. Bạn có chắc ch�
 
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:401
 msgid "Your old conditions will be overwritten. Are you sure you want to save?"
-msgstr ""
+msgstr "Các điều kiện cũ của bạn sẽ bị ghi đè. Bạn có chắc chắn muốn lưu không?"
 
 #: frontend/src/components/Activities/CommentArea.vue:9
 msgid "added a"
@@ -8116,7 +8119,7 @@ msgstr "phút trước"
 #: frontend/src/components/Settings/CalendarSettings.vue:128
 #: frontend/src/components/Settings/CalendarSettings.vue:217
 msgid "minutes"
-msgstr ""
+msgstr "phút"
 
 #: frontend/src/components/Calendar/EventNotifications.vue:186
 msgid "minutes before"
@@ -8220,7 +8223,7 @@ msgstr "tuần trước"
 #: frontend/src/components/Settings/CalendarSettings.vue:124
 #: frontend/src/components/Settings/CalendarSettings.vue:213
 msgid "weeks"
-msgstr ""
+msgstr "tuần"
 
 #: frontend/src/components/Calendar/EventNotifications.vue:179
 #: frontend/src/components/Calendar/EventNotifications.vue:198
@@ -8444,6 +8447,9 @@ msgstr "Trường THPT"
 msgid "CRM Contact"
 msgstr "Hồ sơ CRM"
 
+msgid "Portal Page"
+msgstr "Trang cổng"
+
 msgid "CRM Region"
 msgstr "Miền"
 
@@ -8464,6 +8470,27 @@ msgstr "Sự kiện"
 
 msgid "CRM Major"
 msgstr "Ngành học"
+
+msgid "CRM Major Group"
+msgstr "Nhóm ngành"
+
+msgid "CRM Admission Year"
+msgstr "Năm tuyển sinh"
+
+msgid "CRM Academic Year Config"
+msgstr "Cấu hình năm tuyển sinh"
+
+msgid "CRM Campus"
+msgstr "Chi nhánh"
+
+msgid "CRM Tuition Policy Item"
+msgstr "Dòng học phí"
+
+msgid "CRM Scholarship Item"
+msgstr "Dòng học bổng"
+
+msgid "CRM Quota Item"
+msgstr "Dòng chỉ tiêu"
 
 msgid "Persons"
 msgstr "Cá nhân"
@@ -8491,6 +8518,21 @@ msgstr "Năm tuyển sinh"
 
 msgid "Campus"
 msgstr "Chi nhánh"
+
+msgid "Reference Data"
+msgstr "Dữ liệu tham chiếu"
+
+msgid "Categories"
+msgstr "Danh mục"
+
+msgid "Manage provinces, wards, majors, and campuses"
+msgstr "Quản lý danh mục tỉnh/thành phố, phường/xã, ngành học và chi nhánh"
+
+msgid "Province/City"
+msgstr "Tỉnh/Thành phố"
+
+msgid "Ward/Commune"
+msgstr "Phường/Xã"
 
 msgid "Geography"
 msgstr "Địa lý"
@@ -8534,6 +8576,24 @@ msgstr "Tỉnh/Thành phố"
 msgid "Ward"
 msgstr "Phường/Xã"
 
+msgid "Commune"
+msgstr "Xã"
+
+msgid "Township"
+msgstr "Thị trấn"
+
+msgid "Centrally Controlled City"
+msgstr "Thành phố trực thuộc TW"
+
+msgid "Pending Confirmation"
+msgstr "Chờ xác nhận"
+
+msgid "Deferred"
+msgstr "Bảo lưu"
+
+msgid "Withdrawn"
+msgstr "Thôi học"
+
 msgid "Student Name"
 msgstr "Họ và tên"
 
@@ -8564,6 +8624,48 @@ msgstr "Tên chi nhánh"
 msgid "Campus Code"
 msgstr "Mã chi nhánh"
 
+msgid "Year Name"
+msgstr "Tên năm tuyển sinh"
+
+msgid "Start Date"
+msgstr "Ngày bắt đầu"
+
+msgid "End Date"
+msgstr "Ngày kết thúc"
+
+msgid "Is Active"
+msgstr "Đang hoạt động"
+
+msgid "Config Name"
+msgstr "Tên cấu hình"
+
+msgid "Tuition Policy"
+msgstr "Chính sách học phí"
+
+msgid "Scholarship Fund"
+msgstr "Quỹ học bổng"
+
+msgid "Quota"
+msgstr "Chỉ tiêu"
+
+msgid "Scholarship Name"
+msgstr "Tên học bổng"
+
+msgid "Amount"
+msgstr "Số tiền"
+
+msgid "Criteria"
+msgstr "Tiêu chí"
+
+msgid "Note"
+msgstr "Ghi chú"
+
+msgid "Address"
+msgstr "Địa chỉ"
+
+msgid "Phone"
+msgstr "Điện thoại"
+
 msgid "Assigned To"
 msgstr "Phụ trách"
 
@@ -8591,6 +8693,24 @@ msgstr "LỐI TẮT"
 msgid "META"
 msgstr "CẤU HÌNH"
 
+msgid "ACADEMIC"
+msgstr "ACADEMIC"
+
+msgid "Lead Source"
+msgstr "Nguồn tuyển sinh"
+
+msgid "Academic Year Config"
+msgstr "Cấu hình năm tuyển sinh"
+
+msgid "Budget"
+msgstr "Ngân sách"
+
+msgid "Campaign Type Name"
+msgstr "Tên loại chiến dịch"
+
+msgid "Event Date"
+msgstr "Ngày sự kiện"
+
 msgid "PORTAL"
 msgstr "CỔNG"
 
@@ -8602,4 +8722,7 @@ msgstr "Mã ngành"
 
 msgid "Active for Admission"
 msgstr "Còn tuyển"
+
+msgid "Convert to Contact"
+msgstr "Chuyển thành hồ sơ CRM"
 

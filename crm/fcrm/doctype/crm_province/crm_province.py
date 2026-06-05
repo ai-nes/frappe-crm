@@ -14,7 +14,7 @@ class CRMProvince(Document):
 		from frappe.types import DF
 
 		city_number: DF.Data | None
-		city_type: DF.Literal["Thành phố trực thuộc TW", "Tỉnh"]
+		city_type: DF.Literal["Centrally Controlled City", "Province"]
 		import_source_id: DF.Int
 		province_name: DF.Data
 	# end: auto-generated types

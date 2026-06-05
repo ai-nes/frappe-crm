@@ -1,5 +1,5 @@
 from frappe.model.document import Document
 
 
-class MajorGroup(Document):
+class CRMAcademicYearConfig(Document):
 	pass

@@ -16,7 +16,7 @@ class CRMWard(Document):
 		import_source_id: DF.Int
 		province: DF.Link | None
 		ward_name: DF.Data
-		ward_type: DF.Literal["Phường", "Xã", "Thị trấn"]
+		ward_type: DF.Literal["Ward", "Commune", "Township"]
 	# end: auto-generated types
 
 	pass

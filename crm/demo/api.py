@@ -110,7 +110,7 @@ def _create_demo_students():
 				"student_name": data["student_name"],
 				"mobile_no": data["mobile_no"],
 				"email": data["email"],
-				"enrollment_status": "Chờ xác nhận",
+				"enrollment_status": "Pending Confirmation",
 				"converted": 0,
 				"source": _ensure_source(data["source"]),
 			}

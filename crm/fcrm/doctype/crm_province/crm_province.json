@@ -37,7 +37,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Type",
-   "options": "Thành phố trực thuộc TW\nTỉnh"
+   "options": "Centrally Controlled City\nProvince"
   },
   {
    "fieldname": "city_number",

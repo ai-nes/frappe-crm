@@ -9,7 +9,7 @@ class TestCampus(FrappeTestCase):
 	def test_create_campus(self):
 		campus = frappe.get_doc(
 			{
-				"doctype": "Campus",
+				"doctype": "CRM Campus",
 				"campus_name": "_Test Campus",
 				"campus_code": "test",
 			}

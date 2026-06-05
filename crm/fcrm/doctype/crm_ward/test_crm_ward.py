@@ -11,7 +11,7 @@ class TestCRMWard(FrappeTestCase):
 			{
 				"doctype": "CRM Ward",
 				"ward_name": "_Test Ward",
-				"ward_type": "Phường",
+				"ward_type": "Ward",
 			}
 		)
 		ward.insert(ignore_permissions=True)
