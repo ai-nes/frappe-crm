@@ -218,66 +218,18 @@ const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 // Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
 const links = [
-  {
-    label: 'Dashboard',
-    icon: LucideLayoutDashboard,
-    to: 'Dashboard',
-  },
-  {
-    label: 'Prospective Students',
-    icon: SchoolIcon,
-    to: { name: 'CRM Students', query: { stage: 'intake' } },
-  },
-  {
-    label: 'CRM Contacts',
-    icon: UsersIcon,
-    to: 'CRM Contacts',
-  },
-  {
-    label: 'Enrolled Students',
-    icon: GraduationCapIcon,
-    to: { name: 'CRM Students', query: { stage: 'enrolled' } },
-  },
-  {
-    label: 'High Schools',
-    icon: SchoolIcon,
-    to: 'High Schools',
-  },
-  {
-    label: 'CRM Persons',
-    icon: UserIcon,
-    to: 'CRM Persons',
-  },
-  {
-    label: 'CRM Campaigns',
-    icon: MegaphoneIcon,
-    to: 'CRM Campaigns',
-  },
-  {
-    label: 'CRM Events',
-    icon: CalendarIcon,
-    to: 'CRM Events',
-  },
-  {
-    label: 'CRM Staff',
-    icon: BriefcaseIcon,
-    to: 'CRM Staff',
-  },
-  {
-    label: 'Notes',
-    icon: NoteIcon,
-    to: 'Notes',
-  },
-  {
-    label: 'Tasks',
-    icon: TaskIcon,
-    to: 'Tasks',
-  },
-  {
-    label: 'Call Logs',
-    icon: PhoneIcon,
-    to: 'Call Logs',
-  },
+  { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
+  { label: __('CRM Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
+  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Students', query: { stage: 'enrolled' } } },
+  { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
+  { label: __('CRM Persons'), icon: UserIcon, to: 'CRM Persons' },
+  { label: __('CRM Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
+  { label: __('CRM Events'), icon: CalendarIcon, to: 'CRM Events' },
+  { label: __('CRM Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
+  { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
+  { label: __('Tasks'), icon: TaskIcon, to: 'Tasks' },
+  { label: __('Call Logs'), icon: PhoneIcon, to: 'Call Logs' },
 ]
 
 const allViews = computed(() => {
