@@ -38,7 +38,7 @@
     <Button
       variant="ghost"
       :label="__('Or create students manually')"
-      @click="router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })"
+      @click="router.push({ name: 'CRM Students', query: { stage: 'intake' } })"
     />
   </div>
 </template>

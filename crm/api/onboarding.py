@@ -2,9 +2,9 @@ import frappe
 
 
 @frappe.whitelist()
-def get_first_enrollment_student():
+def get_first_crm_student():
 	student = frappe.get_all(
-		"Enrollment Student",
+		"CRM Student",
 		filters={"converted": 0},
 		fields=["name"],
 		order_by="creation",

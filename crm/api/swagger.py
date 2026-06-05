@@ -8,10 +8,8 @@ from frappe import _
 SKIP_DIRS = {"__pycache__", "node_modules", "public", "templates"}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_openapi_spec():
-    if not frappe.conf.developer_mode:
-        frappe.throw(_("API docs are only available in developer mode"))
 
     paths = {}
     for method in get_whitelisted_methods():

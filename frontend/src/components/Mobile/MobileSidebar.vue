@@ -115,66 +115,18 @@ import { mobileSidebarOpened as sidebarOpened } from '@/composables/settings'
 const { getPinnedViews, getPublicViews } = viewsStore()
 
 const links = [
-  {
-    label: 'Dashboard',
-    icon: LucideLayoutDashboard,
-    to: 'Dashboard',
-  },
-  {
-    label: 'Prospective Students',
-    icon: SchoolIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'intake' } },
-  },
-  {
-    label: 'CRM Contacts',
-    icon: UsersIcon,
-    to: 'CRM Contacts',
-  },
-  {
-    label: 'Enrolled Students',
-    icon: GraduationCapIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'enrolled' } },
-  },
-  {
-    label: 'High Schools',
-    icon: SchoolIcon,
-    to: 'High Schools',
-  },
-  {
-    label: 'Persons',
-    icon: UserIcon,
-    to: 'Persons',
-  },
-  {
-    label: 'Campaigns',
-    icon: MegaphoneIcon,
-    to: 'Campaigns',
-  },
-  {
-    label: 'CRM Events',
-    icon: CalendarIcon,
-    to: 'CRM Events',
-  },
-  {
-    label: 'Staff',
-    icon: BriefcaseIcon,
-    to: 'Staff',
-  },
-  {
-    label: 'Notes',
-    icon: NoteIcon,
-    to: 'Notes',
-  },
-  {
-    label: 'Tasks',
-    icon: TaskIcon,
-    to: 'Tasks',
-  },
-  {
-    label: 'Call Logs',
-    icon: PhoneIcon,
-    to: 'Call Logs',
-  },
+  { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
+  { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
+  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Students', query: { stage: 'enrolled' } } },
+  { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
+  { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
+  { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
+  { label: __('Events'), icon: CalendarIcon, to: 'CRM Events' },
+  { label: __('Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
+  { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
+  { label: __('Tasks'), icon: TaskIcon, to: 'Tasks' },
+  { label: __('Call Logs'), icon: PhoneIcon, to: 'Call Logs' },
 ]
 
 const allViews = computed(() => {
@@ -228,19 +180,19 @@ function getIcon(routeName, icon) {
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
-    case 'Enrollment Students':
+    case 'CRM Students':
       return GraduationCapIcon
     case 'CRM Contacts':
       return UsersIcon
-    case 'Persons':
+    case 'CRM Persons':
       return UserIcon
     case 'High Schools':
       return SchoolIcon
-    case 'Campaigns':
+    case 'CRM Campaigns':
       return MegaphoneIcon
     case 'CRM Events':
       return CalendarIcon
-    case 'Staff':
+    case 'CRM Staff':
       return BriefcaseIcon
     default:
       return PinIcon

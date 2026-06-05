@@ -218,66 +218,18 @@ const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 // Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
 const links = [
-  {
-    label: 'Dashboard',
-    icon: LucideLayoutDashboard,
-    to: 'Dashboard',
-  },
-  {
-    label: 'Prospective Students',
-    icon: SchoolIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'intake' } },
-  },
-  {
-    label: 'CRM Contacts',
-    icon: UsersIcon,
-    to: 'CRM Contacts',
-  },
-  {
-    label: 'Enrolled Students',
-    icon: GraduationCapIcon,
-    to: { name: 'Enrollment Students', query: { stage: 'enrolled' } },
-  },
-  {
-    label: 'High Schools',
-    icon: SchoolIcon,
-    to: 'High Schools',
-  },
-  {
-    label: 'Persons',
-    icon: UserIcon,
-    to: 'Persons',
-  },
-  {
-    label: 'Campaigns',
-    icon: MegaphoneIcon,
-    to: 'Campaigns',
-  },
-  {
-    label: 'CRM Events',
-    icon: CalendarIcon,
-    to: 'CRM Events',
-  },
-  {
-    label: 'Staff',
-    icon: BriefcaseIcon,
-    to: 'Staff',
-  },
-  {
-    label: 'Notes',
-    icon: NoteIcon,
-    to: 'Notes',
-  },
-  {
-    label: 'Tasks',
-    icon: TaskIcon,
-    to: 'Tasks',
-  },
-  {
-    label: 'Call Logs',
-    icon: PhoneIcon,
-    to: 'Call Logs',
-  },
+  { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
+  { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
+  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Students', query: { stage: 'enrolled' } } },
+  { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
+  { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
+  { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
+  { label: __('Events'), icon: CalendarIcon, to: 'CRM Events' },
+  { label: __('Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
+  { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
+  { label: __('Tasks'), icon: TaskIcon, to: 'Tasks' },
+  { label: __('Call Logs'), icon: PhoneIcon, to: 'Call Logs' },
 ]
 
 const allViews = computed(() => {
@@ -336,19 +288,19 @@ function getIcon(routeName, icon) {
       return NoteIcon
     case 'Call Logs':
       return PhoneIcon
-    case 'Enrollment Students':
+    case 'CRM Students':
       return GraduationCapIcon
     case 'CRM Contacts':
       return UsersIcon
-    case 'Persons':
+    case 'CRM Persons':
       return UserIcon
     case 'High Schools':
       return SchoolIcon
-    case 'Campaigns':
+    case 'CRM Campaigns':
       return MegaphoneIcon
     case 'CRM Events':
       return CalendarIcon
-    case 'Staff':
+    case 'CRM Staff':
       return BriefcaseIcon
     default:
       return PinIcon
@@ -360,10 +312,10 @@ const { user } = sessionStore()
 const { users, isManager } = usersStore()
 const { isOnboardingStepsCompleted, setUp } = useOnboarding('frappecrm')
 
-async function getFirstEnrollmentStudent() {
-  let firstStudent = localStorage.getItem('firstEnrollmentStudent' + user)
+async function getFirstCRMStudent() {
+  let firstStudent = localStorage.getItem('firstCRMStudent' + user)
   if (firstStudent) return firstStudent
-  return await call('crm.api.onboarding.get_first_enrollment_student')
+  return await call('crm.api.onboarding.get_first_crm_student')
 }
 
 async function getFirstCRMContact() {
@@ -394,7 +346,7 @@ const steps = reactive([
     completed: false,
     onClick: () => {
       minimize.value = true
-      router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })
+      router.push({ name: 'CRM Students', query: { stage: 'intake' } })
       capture('onboarding_step_clicked_create_first_student')
     },
   },
@@ -419,14 +371,14 @@ const steps = reactive([
     onClick: async () => {
       minimize.value = true
       capture('onboarding_step_clicked_convert_student_to_contact')
-      let student = await getFirstEnrollmentStudent()
+      let student = await getFirstCRMStudent()
       if (student) {
         router.push({
-          name: 'Enrollment Student',
-          params: { enrollmentStudentId: student },
+          name: 'CRM Student',
+          params: { crmStudentId: student },
         })
       } else {
-        router.push({ name: 'Enrollment Students', query: { stage: 'intake' } })
+        router.push({ name: 'CRM Students', query: { stage: 'intake' } })
       }
     },
   },
@@ -553,11 +505,11 @@ const articles = ref([
     title: __('Masters'),
     opened: false,
     subArticles: [
-      { name: 'student', title: __('Enrollment Student') },
+      { name: 'student', title: __('CRM Student') },
       { name: 'crm-contact', title: __('CRM Contact') },
       { name: 'contact', title: __('Contact') },
       { name: 'high-school', title: __('High School') },
-      { name: 'campaign', title: __('Campaign') },
+      { name: 'crm_campaign', title: __('CRM Campaign') },
       { name: 'crm-event', title: __('CRM Event') },
       { name: 'note', title: __('Note') },
       { name: 'task', title: __('Task') },

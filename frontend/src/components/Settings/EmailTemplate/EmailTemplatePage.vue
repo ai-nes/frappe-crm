@@ -44,7 +44,7 @@ const templates = createListResource({
     'owner',
   ],
   auto: true,
-  filters: { reference_doctype: ['in', ['CRM Contact', 'Enrollment Student']] },
+  filters: { reference_doctype: ['in', ['CRM Contact', 'CRM Student']] },
   orderBy: 'modified desc',
   pageLength: 20,
 })

@@ -15,7 +15,7 @@
         <div class="text-base font-medium text-ink-gray-8">
           {{
             __('{0} routing', [
-              assignmentRuleData.documentType == 'Enrollment Student'
+              assignmentRuleData.documentType == 'CRM Student'
                 ? __('Student')
                 : __('CRM Contact'),
             ])
@@ -126,7 +126,7 @@ const assignmentRuleData = inject('assignmentRuleData')
 const assignmentRuleErrors = inject('assignmentRuleErrors')
 const validateAssignmentRule = inject('validateAssignmentRule')
 const documentType = computed(() =>
-  assignmentRuleData.value.documentType == 'Enrollment Student'
+  assignmentRuleData.value.documentType == 'CRM Student'
     ? __('students')
     : __('CRM contacts'),
 )

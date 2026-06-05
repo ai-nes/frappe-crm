@@ -92,7 +92,10 @@ const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
 
-const { document, error } = useDocument('CRM High School', props.highSchoolId)
+const { document, error } = useDocument(
+  'CRM High School',
+  props.highSchoolId,
+)
 const doc = computed(() => document.doc || {})
 
 watch(error, (err) => {

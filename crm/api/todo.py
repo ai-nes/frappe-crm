@@ -3,7 +3,7 @@ from frappe import _
 
 from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
 
-ASSIGNMENT_DOCTYPES = {"CRM Contact", "Enrollment Student", "CRM Task"}
+ASSIGNMENT_DOCTYPES = {"CRM Contact", "CRM Student", "CRM Task"}
 
 
 def after_insert(doc, method):
@@ -88,7 +88,7 @@ def get_reference_title(doc):
 def get_doctype_label(doctype):
 	labels = {
 		"CRM Contact": _("crm contact"),
-		"Enrollment Student": _("student"),
+		"CRM Student": _("student"),
 		"CRM Task": _("task"),
 	}
 	return labels.get(doctype, _(doctype.lower()))

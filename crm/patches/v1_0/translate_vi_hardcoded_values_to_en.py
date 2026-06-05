@@ -2,7 +2,7 @@ import frappe
 
 
 VALUE_MAPS = {
-	"Enrollment Student": {
+	"CRM Student": {
 		"enrollment_status": {
 			"Chờ xác nhận": "Pending Confirmation",
 			"Đã nhập học": "Enrolled",

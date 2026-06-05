@@ -2,19 +2,28 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "format:{ward_name}-{province}",
+ "autoname": "field:ward_code",
  "creation": "2026-05-30 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "ward_code",
   "ward_name",
   "province",
   "ward_type",
   "import_source_id"
  ],
  "fields": [
+  {
+   "fieldname": "ward_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Ward Code",
+   "reqd": 1,
+   "unique": 1
+  },
   {
    "fieldname": "ward_name",
    "fieldtype": "Data",
@@ -50,7 +59,7 @@
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Ward",
- "naming_rule": "Expression",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {

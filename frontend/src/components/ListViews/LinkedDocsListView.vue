@@ -97,7 +97,7 @@ const viewLinkedDoc = (doc) => {
       page = 'crm-contacts'
       id = doc.reference_docname
       break
-    case 'Enrollment Student':
+    case 'CRM Student':
       page = 'enrollment-students'
       id = doc.reference_docname
       break

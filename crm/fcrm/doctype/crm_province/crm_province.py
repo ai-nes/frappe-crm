@@ -13,10 +13,11 @@ class CRMProvince(Document):
 	if TYPE_CHECKING:
 		from frappe.types import DF
 
-		city_number: DF.Data | None
 		city_type: DF.Literal["Centrally Controlled City", "Province"]
 		import_source_id: DF.Int
+		province_code: DF.Data
 		province_name: DF.Data
+		region: DF.Link | None
 	# end: auto-generated types
 
 	pass
