@@ -8432,6 +8432,8 @@ msgstr "Nhật ký cuộc gọi"
 
 # --- Admission CRM i18n (UI labels; DB values stay as stored) ---
 
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "High Schools"
 msgstr "Trường THPT"
 
@@ -8465,6 +8467,8 @@ msgstr "Loại trường"
 msgid "CRM Event"
 msgstr "Sự kiện CRM"
 
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "CRM Events"
 msgstr "Sự kiện"
 
@@ -8726,18 +8730,18 @@ msgstr "Còn tuyển"
 msgid "Convert to Contact"
 msgstr "Chuyển thành hồ sơ CRM"
 
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "CRM Staff"
 msgstr "Nhân viên"
 
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "CRM Persons"
 msgstr "Các bên liên quan"
 
+#: frontend/src/components/Layouts/AppSidebar.vue
+#: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "CRM Campaigns"
 msgstr "Chiến dịch"
-
-msgid "Prospective Students"
-msgstr "Học sinh THPT"
-
-msgid "Enrolled Students"
-msgstr "Sinh viên đã nhập học"
 
