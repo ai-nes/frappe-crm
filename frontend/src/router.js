@@ -132,6 +132,11 @@ const routes = [
     component: () => import('@/pages/DataImport.vue'),
   },
   {
+    path: '/data-import/geography-high-schools',
+    name: 'GeographyImport',
+    component: () => import('@/pages/GeographyImport.vue'),
+  },
+  {
     path: '/data-import/doctype/:doctype',
     name: 'NewDataImport',
     component: () => import('@/pages/DataImport.vue'),

@@ -9,6 +9,32 @@ class CRMHighSchool(Document):
 	def default_list_data():
 		columns = [
 			{
+				"label": "Province Code",
+				"type": "Data",
+				"key": "province_code",
+				"width": "8rem",
+			},
+			{
+				"label": "Province",
+				"type": "Link",
+				"key": "province",
+				"options": "CRM Province",
+				"width": "12rem",
+			},
+			{
+				"label": "Ward Code",
+				"type": "Data",
+				"key": "ward_code",
+				"width": "8rem",
+			},
+			{
+				"label": "Ward",
+				"type": "Link",
+				"key": "ward",
+				"options": "CRM Ward",
+				"width": "12rem",
+			},
+			{
 				"label": "School Name",
 				"type": "Data",
 				"key": "school_name",
@@ -21,25 +47,17 @@ class CRMHighSchool(Document):
 				"width": "10rem",
 			},
 			{
-				"label": "School Type",
-				"type": "Link",
-				"key": "school_type",
-				"options": "CRM School Type",
-				"width": "10rem",
+				"label": "Address",
+				"type": "Small Text",
+				"key": "address",
+				"width": "18rem",
 			},
 			{
-				"label": "Ward",
+				"label": "Region",
 				"type": "Link",
-				"key": "ward",
-				"options": "CRM Ward",
-				"width": "12rem",
-			},
-			{
-				"label": "Province",
-				"type": "Link",
-				"key": "province",
-				"options": "CRM Province",
-				"width": "12rem",
+				"key": "region",
+				"options": "CRM Region",
+				"width": "8rem",
 			},
 			{
 				"label": "Last Modified",
@@ -50,11 +68,13 @@ class CRMHighSchool(Document):
 		]
 		rows = [
 			"name",
-			"school_name",
-			"school_code",
-			"school_type",
-			"ward",
+			"province_code",
 			"province",
+			"ward_code",
+			"ward",
+			"school_code",
+			"school_name",
+			"address",
 			"region",
 			"modified",
 		]

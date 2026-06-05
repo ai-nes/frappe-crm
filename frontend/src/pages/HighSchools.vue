@@ -8,6 +8,7 @@
         v-if="listView?.customListActions"
         :actions="listView.customListActions"
       />
+      <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
       <Button
         variant="solid"
         :label="__('Create')"
@@ -59,6 +60,7 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import HighSchoolsListView from '@/components/ListViews/HighSchoolsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import ViewControls from '@/components/ViewControls.vue'
+import GeographyImportButton from '@/components/GeographyImportButton.vue'
 import SchoolIcon from '~icons/lucide/school'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
@@ -88,6 +90,10 @@ function createHighSchool() {
       },
     },
   })
+}
+
+function reloadHighSchools() {
+  highSchools.value.reload?.()
 }
 
 const rows = computed(() => {

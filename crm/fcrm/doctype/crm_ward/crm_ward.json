@@ -9,12 +9,20 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "ward_code",
   "ward_name",
   "province",
   "ward_type",
   "import_source_id"
  ],
  "fields": [
+  {
+   "fieldname": "ward_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Ward Code",
+   "unique": 1
+  },
   {
    "fieldname": "ward_name",
    "fieldtype": "Data",

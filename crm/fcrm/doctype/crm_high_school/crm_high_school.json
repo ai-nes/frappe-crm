@@ -13,7 +13,9 @@
   "school_code",
   "school_type",
   "column_break_1",
+  "ward_code",
   "ward",
+  "province_code",
   "province",
   "region",
   "section_break_1",
@@ -37,7 +39,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "School Code"
+   "label": "School Code",
+   "unique": 1
   },
   {
    "fieldname": "school_type",
@@ -52,6 +55,14 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "ward_code",
+   "fieldtype": "Data",
+   "fetch_from": "ward.ward_code",
+   "in_list_view": 1,
+   "label": "Ward Code",
+   "read_only": 1
+  },
+  {
    "fieldname": "ward",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -59,6 +70,14 @@
    "label": "Ward",
    "options": "CRM Ward",
    "reqd": 1
+  },
+  {
+   "fieldname": "province_code",
+   "fieldtype": "Data",
+   "fetch_from": "province.city_number",
+   "in_list_view": 1,
+   "label": "Province Code",
+   "read_only": 1
   },
   {
    "fieldname": "province",

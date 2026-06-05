@@ -43,7 +43,8 @@
    "fieldname": "city_number",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Province Code"
+   "label": "Province Code",
+   "unique": 1
   },
   {
    "fieldname": "import_source_id",

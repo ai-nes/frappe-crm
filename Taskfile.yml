@@ -49,6 +49,12 @@ tasks:
     cmds:
       - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} migrate"'
 
+  workspace:
+    desc: Sync Desk workspace Frappe CRM
+    aliases: [sync-workspace]
+    cmds:
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} execute crm.install.sync_frappe_crm_workspace"'
+
   restart:
     desc: Reload Python sau khi sửa BE
     cmds:

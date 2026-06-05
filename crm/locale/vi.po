@@ -8457,7 +8457,7 @@ msgid "CRM Province"
 msgstr "Tỉnh/Thành phố"
 
 msgid "CRM Ward"
-msgstr "Phường/Xã"
+msgstr "Phường"
 
 msgid "CRM School Type"
 msgstr "Loại trường"
@@ -8532,7 +8532,7 @@ msgid "Province/City"
 msgstr "Tỉnh/Thành phố"
 
 msgid "Ward/Commune"
-msgstr "Phường/Xã"
+msgstr "Phường"
 
 msgid "Geography"
 msgstr "Địa lý"
@@ -8574,7 +8574,31 @@ msgid "Province"
 msgstr "Tỉnh/Thành phố"
 
 msgid "Ward"
-msgstr "Phường/Xã"
+msgstr "Phường"
+
+msgid "Ward Code"
+msgstr "Mã phường/xã"
+
+msgid "Province Code"
+msgstr "Mã tỉnh/thành phố"
+
+msgid "Import Geography Excel"
+msgstr "Import Excel địa lý"
+
+msgid "Please upload an Excel file"
+msgstr "Vui lòng tải lên file Excel"
+
+msgid "Imported {0} row(s). Created: {1}. Updated: {2}. Skipped: {3}."
+msgstr "Đã import {0} dòng. Tạo mới: {1}. Cập nhật: {2}. Bỏ qua: {3}."
+
+msgid "Some rows were skipped. Check console for details."
+msgstr "Một số dòng bị bỏ qua. Xem console để biết chi tiết."
+
+msgid "Geography Import"
+msgstr "Import địa lý"
+
+msgid "Upload one .xlsx file with province, ward, high school, address, and region columns. The system will create or update linked geography records automatically."
+msgstr "Tải lên một file .xlsx chứa các cột tỉnh/thành phố, phường/xã, trường, địa chỉ và khu vực. Hệ thống sẽ tự tạo hoặc cập nhật các bản ghi địa lý liên kết."
 
 msgid "Commune"
 msgstr "Xã"

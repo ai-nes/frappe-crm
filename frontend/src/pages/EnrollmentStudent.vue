@@ -131,7 +131,10 @@ const errorTitle = ref('')
 const errorMessage = ref('')
 const converting = ref(false)
 
-const { document, error } = useDocument('Enrollment Student', props.enrollmentStudentId)
+const { document, error } = useDocument(
+  'Enrollment Student',
+  props.enrollmentStudentId,
+)
 
 const doc = computed(() => document.doc || {})
 
