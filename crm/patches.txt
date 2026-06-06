@@ -29,3 +29,4 @@ crm.patches.v1_0.fix_high_school_view_settings
 crm.patches.v1_0.reset_student_contact_view_settings
 crm.patches.v1_0.fix_orphan_converted_students
 crm.patches.v1_0.migrate_province_code_from_city_number
+crm.patches.v1_0.backfill_ward_province_name

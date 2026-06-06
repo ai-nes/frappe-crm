@@ -12,6 +12,7 @@
   "ward_code",
   "ward_name",
   "province",
+  "province_name",
   "ward_type",
   "import_source_id"
  ],
@@ -34,15 +35,25 @@
   {
    "fieldname": "province",
    "fieldtype": "Link",
-   "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province",
    "reqd": 1
   },
   {
+   "fetch_from": "province.province_name",
+   "fetch_if_empty": 0,
+   "fieldname": "province_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Province",
+   "read_only": 1
+  },
+  {
    "fieldname": "ward_type",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Type",
    "options": "Ward\nCommune\nTownship"
   },
@@ -103,6 +114,7 @@
  "sort_field": "ward_name",
  "sort_order": "ASC",
  "states": [],
+ "search_fields": "ward_name,ward_code",
  "title_field": "ward_name",
  "translated_doctype": 1
 }
