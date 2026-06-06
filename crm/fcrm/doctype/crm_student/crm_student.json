@@ -171,7 +171,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-06 01:00:00.000000",
+ "modified": "2026-06-06 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Student",
@@ -217,5 +217,6 @@
  "sort_order": "DESC",
  "states": [],
  "title_field": "student_name",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "search_fields": "student_name,mobile_no"
 }

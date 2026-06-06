@@ -54,7 +54,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-03 02:00:00.000000",
+ "modified": "2026-06-06 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Major",
@@ -103,5 +103,6 @@
  "sort_order": "ASC",
  "states": [],
  "title_field": "major_name",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "search_fields": "major_name,major_code"
 }
