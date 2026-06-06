@@ -8753,3 +8753,69 @@ msgstr "Chiến dịch"
 msgid "Contacts"
 msgstr "Hồ sơ CRM"
 
+
+#. Lead Status options - CRM Contact
+msgid "New"
+msgstr "Mới"
+
+msgid "No Answer 1"
+msgstr "Không nghe máy lần 1"
+
+msgid "No Answer 2"
+msgstr "Không nghe máy lần 2"
+
+msgid "No Answer 3"
+msgstr "Không nghe máy lần 3"
+
+msgid "Unreachable"
+msgstr "Không liên lạc được"
+
+msgid "Callback Scheduled"
+msgstr "Hẹn liên hệ sau"
+
+msgid "Promising"
+msgstr "Có triển vọng"
+
+msgid "Considering"
+msgstr "Đang suy nghĩ"
+
+msgid "Not Interested"
+msgstr "Không quan tâm"
+
+msgid "Not Promising"
+msgstr "Không triển vọng"
+
+msgid "Wrong Number"
+msgstr "Sai số"
+
+msgid "Wrong Target"
+msgstr "Sai đối tượng"
+
+msgid "Financially Unqualified"
+msgstr "Không đủ tài chính"
+
+msgid "Follow-up Lead"
+msgstr "Lead nhắc lại"
+
+msgid "Duplicate Lead"
+msgstr "Lead trùng"
+
+#. Aspiration options - CRM Contact / CRM Student
+msgid "Undecided"
+msgstr "Đang suy nghĩ"
+
+msgid "Not Applying to FPT"
+msgstr "Không đăng ký FPT"
+
+#. Field labels - CRM Contact / CRM Student
+msgid "Lead Status"
+msgstr "Tình trạng Lead"
+
+msgid "Aspiration"
+msgstr "Nguyện vọng"
+
+msgid "Branch"
+msgstr "Chi nhánh"
+
+msgid "Admission Year"
+msgstr "Năm tuyển sinh"

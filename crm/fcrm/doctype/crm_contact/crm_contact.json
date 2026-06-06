@@ -15,17 +15,22 @@
   "email",
   "col_break_1",
   "stage",
+  "lead_status",
   "communication_status",
   "sla_status",
   "assigned_to",
   "section_academic",
   "student",
   "high_school",
+  "province",
   "major",
+  "aspiration",
   "col_break_2",
   "source",
   "crm_campaign",
   "crm_event",
+  "admission_year",
+  "branch",
   "section_notes",
   "notes",
   "sla_section",
@@ -82,6 +87,15 @@
    "default": "Interested"
   },
   {
+   "fieldname": "lead_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead Status",
+   "options": "\nNew\nNo Answer 1\nNo Answer 2\nNo Answer 3\nUnreachable\nCallback Scheduled\nPromising\nConsidering\nNot Interested\nNot Promising\nWrong Number\nWrong Target\nFinancially Unqualified\nFollow-up Lead\nDuplicate Lead\nConverted",
+   "default": "New"
+  },
+  {
    "default": "Open",
    "fieldname": "communication_status",
    "fieldtype": "Select",
@@ -125,11 +139,25 @@
    "options": "CRM High School"
   },
   {
+   "fieldname": "province",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Province",
+   "options": "CRM Province"
+  },
+  {
    "fieldname": "major",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Major",
    "options": "CRM Major"
+  },
+  {
+   "fieldname": "aspiration",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Aspiration",
+   "options": "\nUndecided\nNV1\nNV2\nNV3\nNV4\nNV5\nNV6\nNot Applying to FPT"
   },
   {
    "fieldname": "col_break_2",
@@ -154,6 +182,20 @@
    "fieldtype": "Link",
    "label": "CRM Event",
    "options": "CRM Event"
+  },
+  {
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Admission Year",
+   "options": "CRM Admission Year"
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Branch",
+   "options": "CRM Campus"
   },
   {
    "fieldname": "section_notes",
@@ -231,7 +273,7 @@
  "index_web_pages_for_search": 1,
  "kanban_field": "stage",
  "links": [],
- "modified": "2026-06-03 00:00:00.000000",
+ "modified": "2026-06-06 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Contact",
