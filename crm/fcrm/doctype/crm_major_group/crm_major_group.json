@@ -37,7 +37,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-04 00:00:00.000000",
+ "modified": "2026-06-06 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Major Group",
@@ -87,5 +87,6 @@
  "sort_order": "ASC",
  "states": [],
  "title_field": "group_name",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "search_fields": "group_name,group_code"
 }

@@ -75,11 +75,16 @@ def convert_to_contact(student_name):
 		"phone": student.mobile_no,
 		"email": student.email,
 		"high_school": student.high_school,
+		"province": student.province,
 		"major": student.major,
+		"aspiration": student.aspiration,
 		"source": student.source,
+		"admission_year": student.admission_year,
+		"branch": student.branch,
 		"student": student.name,
 		"assigned_to": crm_staff_name,
 		"stage": "Interested",
+		"lead_status": "New",
 	})
 	contact.insert(ignore_permissions=True)
 

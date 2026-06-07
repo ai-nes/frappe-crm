@@ -51,7 +51,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campus",
+   "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
   },

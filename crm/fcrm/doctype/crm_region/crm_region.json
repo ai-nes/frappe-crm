@@ -27,6 +27,7 @@
    "fieldname": "region_code",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Region Code",
    "description": "e.g. MB / MT / MN",
    "unique": 1
@@ -94,6 +95,7 @@
  "sort_field": "region_name",
  "sort_order": "ASC",
  "states": [],
+ "search_fields": "region_name,region_code",
  "title_field": "region_name",
  "translated_doctype": 1
 }

@@ -19,7 +19,8 @@ services:
     volumes:
       - mariadb-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      test:
+        ['CMD-SHELL', 'mariadb-admin ping -h 127.0.0.1 -uroot -p"$${MYSQL_ROOT_PASSWORD}" --silent']
       interval: 10s
       timeout: 5s
       retries: 12
@@ -29,7 +30,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 10s
       timeout: 5s
       retries: 12
@@ -49,8 +50,8 @@ services:
       - root-node-modules:/workspace/node_modules
       - frontend-node-modules:/workspace/frontend/node_modules
     ports:
-      - "${HTTP_PORT:-8000}:8000"
-      - "${SOCKETIO_PORT:-9000}:9000"
+      - '${HTTP_PORT:-8000}:8000'
+      - '${SOCKETIO_PORT:-9000}:9000'
     depends_on:
       mariadb:
         condition: service_healthy

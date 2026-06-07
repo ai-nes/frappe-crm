@@ -43,6 +43,7 @@
    "fieldname": "city_type",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Type",
    "options": "Centrally Controlled City\nProvince"
   },
@@ -104,6 +105,7 @@
  "sort_field": "province_name",
  "sort_order": "ASC",
  "states": [],
+ "search_fields": "province_name,province_code",
  "title_field": "province_name",
  "translated_doctype": 1
 }

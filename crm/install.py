@@ -38,11 +38,11 @@ def add_default_fields_layout(force=False):
 	quick_entry_layouts = {
 		"CRM Contact-Quick Entry": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"details_section","columns":[{"name":"column_name","fields":["full_name","phone","email"]},{"name":"column_stage","fields":["stage","assigned_to"]}]},{"name":"admission_section","columns":[{"name":"column_academic","fields":["student","high_school","major"]},{"name":"column_source","fields":["source","crm_campaign","crm_event"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_stage","fields":["stage","assigned_to","lead_status"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["student","high_school","major","aspiration"]},{"name":"col_source","fields":["source","branch","province","admission_year"]}]}]',
 		},
 		"CRM Student-Quick Entry": {
 			"doctype": "CRM Student",
-			"layout": '[{"name":"details_section","columns":[{"name":"column_name","fields":["student_name","mobile_no","email"]},{"name":"column_status","fields":["enrollment_status","source"]}]},{"name":"academic_section","columns":[{"name":"column_school","fields":["high_school","major"]},{"name":"column_location","fields":["branch","province","ward"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["student_name","mobile_no","email"]},{"name":"col_status","fields":["enrollment_status","source","branch"]}]},{"name":"academic_section","columns":[{"name":"col_school","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["province","ward","admission_year"]}]}]',
 		},
 		"Contact-Quick Entry": {
 			"doctype": "Contact",
@@ -55,6 +55,10 @@ def add_default_fields_layout(force=False):
 		"CRM Call Log-Quick Entry": {
 			"doctype": "CRM Call Log",
 			"layout": '[{"name":"details_section","columns":[{"name":"column_uMSG","fields":["type","from","duration"]},{"name":"column_wiZT","fields":["to","status","caller","receiver"]}]}]',
+		},
+		"CRM Person-Quick Entry": {
+			"doctype": "CRM Person",
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","role","phone","email"]},{"name":"col_school","fields":["high_school","province"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -69,11 +73,27 @@ def add_default_fields_layout(force=False):
 	sidebar_fields_layouts = {
 		"CRM Contact-Side Panel": {
 			"doctype": "CRM Contact",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["full_name","phone","email","stage","assigned_to"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_admission","fields":["student","high_school","major","source","crm_campaign","crm_event"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","stage","assigned_to","lead_status"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["student","high_school","major","aspiration","source","branch","province","admission_year"]}]}]',
 		},
 		"CRM Student-Side Panel": {
 			"doctype": "CRM Student",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["student_name","mobile_no","email","enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_admission","fields":["high_school","major","source","branch","province","ward","admission_year"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","mobile_no","email","enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["high_school","major","aspiration","source","branch","province","ward","admission_year"]}]}]',
+		},
+		"CRM High School-Side Panel": {
+			"doctype": "CRM High School",
+			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["ward","province_name","region"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+		},
+		"CRM Person-Side Panel": {
+			"doctype": "CRM Person",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","role","phone","email"]}]},{"label":"School","name":"school_section","opened":true,"columns":[{"name":"col_school","fields":["high_school","province","notes"]}]}]',
+		},
+		"CRM Campaign-Side Panel": {
+			"doctype": "CRM Campaign",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["title","campus","campaign_type","start_date","end_date","budget","notes"]}]}]',
+		},
+		"CRM Event-Side Panel": {
+			"doctype": "CRM Event",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["title","crm_campaign","province","event_date","location","notes"]}]}]',
 		},
 		"Contact-Side Panel": {
 			"doctype": "Contact",
@@ -84,11 +104,15 @@ def add_default_fields_layout(force=False):
 	data_fields_layouts = {
 		"CRM Contact-Data Fields": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["full_name","phone","email"]},{"name":"column_stage","fields":["stage","assigned_to"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_academic","fields":["student","high_school","major"]},{"name":"column_source","fields":["source","crm_campaign","crm_event"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_stage","fields":["stage","assigned_to","lead_status"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_academic","fields":["student","high_school","major","aspiration"]},{"name":"col_source","fields":["source","branch","province","admission_year"]}]}]}]',
 		},
 		"CRM Student-Data Fields": {
 			"doctype": "CRM Student",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"column_main","fields":["student_name","mobile_no","email"]},{"name":"column_status","fields":["enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"column_academic","fields":["high_school","major","source"]},{"name":"column_location","fields":["branch","province","ward","admission_year"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","mobile_no","email"]},{"name":"col_status","fields":["enrollment_status","converted","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_academic","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["source","province","ward","admission_year"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
+		},
+		"CRM High School-Data Fields": {
+			"doctype": "CRM High School",
+			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["ward","province_name","region"]}]}]}]',
 		},
 	}
 
