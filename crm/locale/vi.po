@@ -8819,3 +8819,84 @@ msgstr "Chi nhánh"
 
 msgid "Admission Year"
 msgstr "Năm tuyển sinh"
+
+#. Workspace — card group labels
+msgid "Admissions"
+msgstr "Tuyển sinh"
+
+msgid "Geography"
+msgstr "Địa lý"
+
+msgid "Academic"
+msgstr "Học thuật"
+
+msgid "Operations"
+msgstr "Vận hành"
+
+msgid "Configuration"
+msgstr "Cấu hình"
+
+#. Workspace — link labels
+msgid "Students"
+msgstr "Học sinh"
+
+msgid "Contacts"
+msgstr "Liên hệ"
+
+msgid "Regions"
+msgstr "Vùng miền"
+
+msgid "Provinces"
+msgstr "Tỉnh/Thành phố"
+
+msgid "Wards"
+msgstr "Phường/Xã"
+
+msgid "High Schools"
+msgstr "Trường THPT"
+
+msgid "Majors"
+msgstr "Ngành học"
+
+msgid "Major Groups"
+msgstr "Nhóm ngành"
+
+msgid "Campuses"
+msgstr "Cơ sở"
+
+msgid "Admission Years"
+msgstr "Năm tuyển sinh"
+
+msgid "Staff"
+msgstr "Nhân viên"
+
+msgid "Campaigns"
+msgstr "Chiến dịch"
+
+msgid "Events"
+msgstr "Sự kiện"
+
+msgid "Lead Sources"
+msgstr "Nguồn Lead"
+
+msgid "School Types"
+msgstr "Loại trường"
+
+msgid "Campaign Types"
+msgstr "Loại chiến dịch"
+
+msgid "Departments"
+msgstr "Phòng ban"
+
+msgid "Lost Reasons"
+msgstr "Lý do thất bại"
+
+msgid "Holiday Lists"
+msgstr "Lịch nghỉ lễ"
+
+#. Field label changes — CRM Campaign, CRM Staff
+msgid "Campus"
+msgstr "Cơ sở"
+
+msgid "Student"
+msgstr "Học sinh"

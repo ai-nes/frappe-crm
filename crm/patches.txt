@@ -31,3 +31,5 @@ crm.patches.v1_0.fix_orphan_converted_students
 crm.patches.v1_0.migrate_province_code_from_city_number
 crm.patches.v1_0.backfill_ward_province_name
 crm.patches.v1_0.backfill_high_school_province_name
+crm.patches.v1_0.reload_frappe_crm_workspace
+crm.patches.v1_0.reset_fields_layout_v2
