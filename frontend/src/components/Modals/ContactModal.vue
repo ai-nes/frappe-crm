@@ -110,11 +110,14 @@ function validateRequiredFields() {
     return __('Invalid Email Address')
   }
 
-  if (
-    _contact.doc.mobile_no &&
-    isNaN(_contact.doc.mobile_no.replace(/[-+() ]/g, ''))
-  ) {
-    return __('Mobile No. should be a number')
+  if (_contact.doc.mobile_no) {
+    if (isNaN(_contact.doc.mobile_no.replace(/[-+() ]/g, ''))) {
+      return __('Mobile No. should be a number')
+    }
+    const digits = _contact.doc.mobile_no.replace(/\D/g, '')
+    if (digits.length !== 10) {
+      return __('Mobile No. phải có đúng 10 số')
+    }
   }
 
   return null

@@ -15,6 +15,7 @@
   "column_break_1",
   "ward_code",
   "ward",
+  "ward_name",
   "province_code",
   "province",
   "province_name",
@@ -69,6 +70,14 @@
    "label": "Ward",
    "options": "CRM Ward",
    "reqd": 1
+  },
+  {
+   "fieldname": "ward_name",
+   "fieldtype": "Data",
+   "fetch_from": "ward.ward_name",
+   "fetch_if_empty": 0,
+   "label": "Ward Name",
+   "read_only": 1
   },
   {
    "fieldname": "province_code",

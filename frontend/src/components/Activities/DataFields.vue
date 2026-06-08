@@ -20,9 +20,9 @@
       />
       <Button
         label="Save"
-        :disabled="!document.isDirty"
+        :disabled="!document.isDirty || saving"
         variant="solid"
-        :loading="document.save.loading"
+        :loading="saving"
         @click="saveChanges"
       />
     </div>
@@ -59,26 +59,24 @@
 import EditIcon from '@/components/Icons/EditIcon.vue'
 import DataFieldsModal from '@/components/Modals/DataFieldsModal.vue'
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
-import { Badge, createResource } from 'frappe-ui'
+import { Badge, createResource, call, toast } from 'frappe-ui'
 import LoadingIndicator from '@/components/Icons/LoadingIndicator.vue'
 import { usersStore } from '@/stores/users'
 import { useDocument } from '@/data/document'
 import { isMobileView } from '@/composables/settings'
-import { ref, watch, getCurrentInstance } from 'vue'
+import { ref, watch } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
   docname: { type: String, required: true },
 })
 
-const emit = defineEmits(['beforeSave', 'afterSave'])
+const emit = defineEmits(['afterSave'])
 
 const { isManager } = usersStore()
 
-const instance = getCurrentInstance()
-const attrs = instance?.vnode?.props ?? {}
-
 const showDataFieldsModal = ref(false)
+const saving = ref(false)
 
 const { document } = useDocument(props.doctype, props.docname)
 
@@ -87,29 +85,54 @@ const tabs = createResource({
   cache: ['DataFields', props.doctype],
   params: { doctype: props.doctype, type: 'Data Fields' },
   auto: true,
+  transform: (data) => {
+    if (props.doctype !== 'CRM Student') return data
+    return data.map((tab) => ({
+      ...tab,
+      sections: tab.sections?.map((section) => ({
+        ...section,
+        columns: section.columns?.map((col) => ({
+          ...col,
+          fields: col.fields?.filter((f) => f.fieldname !== 'converted') || [],
+        })) || [],
+      })) || [],
+    }))
+  },
 })
 
-function saveChanges() {
-  if (!document.isDirty) return
+async function saveChanges() {
+  if (!document.isDirty || saving.value) return
 
   const updatedDoc = { ...document.doc }
-  const oldDoc = { ...document.originalDoc }
+  const baseDoc = document.originalDoc ? { ...document.originalDoc } : {}
 
   const changes = Object.keys(updatedDoc).reduce((acc, key) => {
-    if (JSON.stringify(updatedDoc[key]) !== JSON.stringify(oldDoc[key])) {
+    if (JSON.stringify(updatedDoc[key]) !== JSON.stringify(baseDoc[key])) {
       acc[key] = updatedDoc[key]
     }
     return acc
   }, {})
 
-  const hasListener = attrs['onBeforeSave'] !== undefined
+  if (!Object.keys(changes).length) return
 
-  if (hasListener) {
-    emit('beforeSave', changes)
-  } else {
-    document.save.submit(null, {
-      onSuccess: () => emit('afterSave', changes),
+  saving.value = true
+  try {
+    await call('frappe.client.set_value', {
+      doctype: props.doctype,
+      name: props.docname,
+      fieldname: changes,
     })
+    document.isDirty = false
+    await document.reload()
+    emit('afterSave', changes)
+  } catch (err) {
+    toast({
+      title: __('Lỗi lưu dữ liệu'),
+      text: err.messages?.[0] || err.message || __('Có lỗi xảy ra'),
+      variant: 'error',
+    })
+  } finally {
+    saving.value = false
   }
 }
 

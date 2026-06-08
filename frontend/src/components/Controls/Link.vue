@@ -6,7 +6,7 @@
     <Autocomplete
       ref="autocomplete"
       v-model="value"
-      :options="options.data"
+      :options="mergedOptions"
       :size="attrs.size || 'sm'"
       :variant="attrs.variant"
       :placeholder="attrs.placeholder"
@@ -71,7 +71,7 @@ import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { isTranslatable } from '@/utils'
 import { watchDebounced } from '@vueuse/core'
 import { createResource } from 'frappe-ui'
-import { useAttrs, computed, ref } from 'vue'
+import { useAttrs, computed, ref, watch } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -86,10 +86,13 @@ const attrs = useAttrs()
 
 const valuePropPassed = computed(() => 'value' in attrs)
 
+const currentValue = computed(() =>
+  valuePropPassed.value ? attrs.value : props.modelValue,
+)
+
 const value = computed({
   get: () => {
-    let v = valuePropPassed.value ? attrs.value : props.modelValue
-
+    let v = currentValue.value
     if (isTranslatable(props.doctype)) return __(v)
     return v
   },
@@ -129,6 +132,23 @@ watchDebounced(
   { debounce: 300, immediate: true },
 )
 
+function transformOptions(data) {
+  return data.map((option) => {
+    // Frappe search_link may not return a `label` field (or label === value/code).
+    // When that happens, extract the human-readable name from the first segment
+    // of `description` (e.g. "Hà Nội, 01" → "Hà Nội").
+    let label = option.label
+    if ((!label || label === option.value) && option.description) {
+      label = option.description.split(',')[0].trim()
+    }
+    return {
+      label: label || option.value,
+      value: option.value,
+      description: option.description,
+    }
+  })
+}
+
 const options = createResource({
   url: 'frappe.desk.search.search_link',
   cache: [props.doctype, text.value, props.hideMe, props.filters],
@@ -139,13 +159,7 @@ const options = createResource({
     filters: props.filters,
   },
   transform: (data) => {
-    let allData = data.map((option) => {
-      return {
-        label: option.label || option.value,
-        value: option.value,
-        description: option.description,
-      }
-    })
+    let allData = transformOptions(data)
     if (!props.hideMe && props.doctype == 'User') {
       allData.unshift({
         label: '@me',
@@ -154,6 +168,39 @@ const options = createResource({
     }
     return allData
   },
+})
+
+// When the field has a pre-selected value that may not appear in the initial
+// lazy-loaded options (e.g. province code "04" not in the first alphabetical
+// page), fetch that specific option so displayValue() can show the proper name.
+const selectedOptionResource = createResource({
+  url: 'frappe.desk.search.search_link',
+  method: 'POST',
+  transform: transformOptions,
+})
+
+watch(
+  currentValue,
+  (val) => {
+    if (!val || !props.doctype) return
+    selectedOptionResource.update({
+      params: { txt: val, doctype: props.doctype, filters: props.filters },
+    })
+    selectedOptionResource.reload()
+  },
+  { immediate: true },
+)
+
+// Merge the pre-fetched selected option into the main options list so that
+// Autocomplete's displayValue() can find it and show the human-readable name.
+const mergedOptions = computed(() => {
+  const main = options.data || []
+  const val = currentValue.value
+  if (!val) return main
+  if (main.find((o) => o.value === val)) return main
+  const preloaded = selectedOptionResource.data?.find((o) => o.value === val)
+  if (preloaded) return [preloaded, ...main]
+  return main
 })
 
 function reload(val, force = false) {

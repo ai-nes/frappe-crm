@@ -125,8 +125,8 @@ const title = computed(() => {
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
 const tabs = computed(() => [
-  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
+  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
