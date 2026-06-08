@@ -128,6 +128,22 @@ const _create = createResource({
 async function create() {
   await triggerOnBeforeCreate?.()
 
+  // Validate phone fields (options: 'Phone') — must be exactly 10 digits
+  const allFields = layout.data?.flatMap((tab) =>
+    tab.sections?.flatMap((section) =>
+      section.columns?.flatMap((col) => col.fields || []) || [],
+    ) || [],
+  ) || []
+  for (const field of allFields) {
+    if (field.options === 'Phone' && document.doc?.[field.fieldname]) {
+      const digits = document.doc[field.fieldname].replace(/\D/g, '')
+      if (digits.length !== 10) {
+        error.value = __('{0} phải có đúng 10 số', [field.label || field.fieldname])
+        return
+      }
+    }
+  }
+
   _create.submit({
     doc: {
       doctype: props.doctype,

@@ -15,7 +15,7 @@
       <Button
         v-if="doc.name && !doc.converted"
         variant="solid"
-        :label="__('Convert to Contact')"
+        :label="__('Chuyển thành hồ sơ liên hệ')"
         iconLeft="user-plus"
         :loading="converting"
         @click="convertToContact"
@@ -253,8 +253,8 @@ function handleSidePanelFieldChange(changes) {
 }
 
 const tabs = computed(() => [
-  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
+  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
@@ -267,5 +267,14 @@ const sections = createResource({
   cache: ['sidePanelSections', 'CRM Student'],
   params: { doctype: 'CRM Student' },
   auto: true,
+  transform: (data) => {
+    return data.map((section) => ({
+      ...section,
+      columns: section.columns?.map((col) => ({
+        ...col,
+        fields: col.fields?.filter((f) => f.fieldname !== 'converted') || [],
+      })) || [],
+    }))
+  },
 })
 </script>

@@ -130,10 +130,10 @@
   },
   {
    "fieldname": "aspiration",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Aspiration",
-   "options": "\nUndecided\nNV1\nNV2\nNV3\nNV4\nNV5\nNV6\nNot Applying to FPT"
+   "options": "CRM Aspiration"
   },
   {
    "fieldname": "source",

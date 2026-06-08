@@ -384,7 +384,6 @@
       <DataFields
         :doctype="doctype"
         :docname="docname"
-        @beforeSave="(data) => emit('beforeSave', data)"
         @afterSave="(data) => emit('afterSave', data)"
       />
     </div>

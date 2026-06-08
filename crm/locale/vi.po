@@ -297,7 +297,7 @@ msgstr "Chức năng"
 #: frontend/src/pages/Deal.vue:560 frontend/src/pages/Lead.vue:412
 #: frontend/src/pages/MobileDeal.vue:438 frontend/src/pages/MobileLead.vue:284
 msgid "Activity"
-msgstr "Hoạt Động"
+msgstr "Nhật ký"
 
 #: frontend/src/components/Dashboard/AddChartModal.vue:41
 #: frontend/src/components/Modals/AddExistingUserModal.vue:55
@@ -823,7 +823,7 @@ msgstr "Đính kèm tệp…"
 #: frontend/src/pages/Deal.vue:600 frontend/src/pages/Lead.vue:452
 #: frontend/src/pages/MobileDeal.vue:474 frontend/src/pages/MobileLead.vue:319
 msgid "Attachments"
-msgstr "Tập tin đính kèm"
+msgstr "Tài liệu"
 
 #: frontend/src/components/Modals/EventModal.vue:120
 msgid "Attendees"
@@ -4794,7 +4794,7 @@ msgstr "Tab mới"
 #: frontend/src/components/Activities/ActivityHeader.vue:48
 #: frontend/src/pages/Deals.vue:527 frontend/src/pages/Leads.vue:561
 msgid "New Task"
-msgstr "Công việc mới"
+msgstr "Thêm nhiệm vụ"
 
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:10
 msgid "New Template"
@@ -6939,7 +6939,7 @@ msgstr "Ghi chú..."
 #: frontend/src/components/Activities/ActivityHeader.vue:151
 #: frontend/src/components/Layouts/AppSidebar.vue:579
 msgid "Task"
-msgstr "Công việc"
+msgstr "Nhiệm vụ"
 
 #: frontend/src/pages/Deal.vue:590 frontend/src/pages/Lead.vue:442
 #: frontend/src/pages/MobileDeal.vue:464 frontend/src/pages/MobileLead.vue:309

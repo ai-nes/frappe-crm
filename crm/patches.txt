@@ -33,3 +33,4 @@ crm.patches.v1_0.backfill_ward_province_name
 crm.patches.v1_0.backfill_high_school_province_name
 crm.patches.v1_0.reload_frappe_crm_workspace
 crm.patches.v1_0.reset_fields_layout_v2
+crm.patches.v1_0.seed_crm_aspiration
