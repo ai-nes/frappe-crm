@@ -2,6 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
+from crm.fcrm.utils.geo_resolver import resolve_province
 
 
 class CRMContact(Document):
@@ -63,6 +64,14 @@ class CRMContact(Document):
 			"title_field": "full_name",
 			"kanban_fields": '["name", "full_name", "phone", "email", "assigned_to"]',
 		}
+
+	def before_insert(self):
+		if self.province:
+			self.province = resolve_province(self.province)
+
+	def before_save(self):
+		if self.province:
+			self.province = resolve_province(self.province)
 
 	def validate(self):
 		self.apply_sla()

@@ -2,9 +2,22 @@
 # For license information, please see license.txt
 
 from frappe.model.document import Document
+from crm.fcrm.utils.geo_resolver import resolve_province, resolve_ward
 
 
 class CRMHighSchool(Document):
+	def before_insert(self):
+		self._resolve_geo()
+
+	def before_save(self):
+		self._resolve_geo()
+
+	def _resolve_geo(self):
+		if self.province:
+			self.province = resolve_province(self.province)
+		if self.ward:
+			self.ward = resolve_ward(self.ward, self.province)
+
 	@staticmethod
 	def default_list_data():
 		columns = [
