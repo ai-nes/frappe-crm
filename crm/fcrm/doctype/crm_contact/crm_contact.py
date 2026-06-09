@@ -66,8 +66,19 @@ class CRMContact(Document):
 		}
 
 	def before_insert(self):
+		self._set_defaults()
 		if self.province:
 			self.province = resolve_province(self.province)
+
+	def _set_defaults(self):
+		if not self.admission_year:
+			current_year = str(frappe.utils.now_datetime().year)
+			if frappe.db.exists("CRM Admission Year", current_year):
+				self.admission_year = current_year
+		if not self.branch:
+			default_branch = frappe.db.get_value("CRM Campus", {"is_default": 1}, "name")
+			if default_branch:
+				self.branch = default_branch
 
 	def before_save(self):
 		if self.province:

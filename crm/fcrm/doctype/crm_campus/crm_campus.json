@@ -11,6 +11,7 @@
  "field_order": [
   "campus_name",
   "campus_code",
+  "is_default",
   "province",
   "address",
   "phone",
@@ -30,6 +31,12 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Campus Code"
+  },
+  {
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default Branch"
   },
   {
    "fieldname": "province",
