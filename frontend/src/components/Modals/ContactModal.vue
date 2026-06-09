@@ -116,7 +116,7 @@ function validateRequiredFields() {
     }
     const digits = _contact.doc.mobile_no.replace(/\D/g, '')
     if (digits.length !== 10) {
-      return __('Mobile No. phải có đúng 10 số')
+      return __('Mobile number must be exactly 10 digits')
     }
   }
 

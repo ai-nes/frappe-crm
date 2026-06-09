@@ -496,7 +496,7 @@ msgstr "Thêm, chỉnh sửa và quản lý nguồn đồng bộ thí sinh tiề
 #. Label of the address (Link) field in DocType 'CRM Organization'
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 msgid "Address"
-msgstr "Địa Chỉ"
+msgstr "Địa chỉ"
 
 #: frontend/src/components/Modals/AddExistingUserModal.vue:94
 #: frontend/src/components/Settings/InviteUserPage.vue:166
@@ -555,7 +555,7 @@ msgstr "Số tiền sau chiết khấu"
 #: frontend/src/components/Modals/FieldLayoutDialog.vue:277
 #: frontend/src/data/script.js:53 frontend/src/data/script.js:54
 msgid "An error occurred"
-msgstr "Đã xảy ra lỗi"
+msgstr "Có lỗi xảy ra"
 
 #: frontend/src/data/document.js:73
 msgid "An error occurred while updating the document"
@@ -1043,7 +1043,7 @@ msgstr "Trạng thái giao tiếp CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 msgid "CRM Contacts"
-msgstr "Hồ sơ sinh viên"
+msgstr "Hồ sơ"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
@@ -1718,7 +1718,7 @@ msgstr "Đã cập nhật hình liên hệ"
 #: frontend/src/pages/Contact.vue:246 frontend/src/pages/MobileContact.vue:223
 #: frontend/src/pages/MobileOrganization.vue:348
 msgid "Contacts"
-msgstr "Liên hệ"
+msgstr "Hồ sơ"
 
 #. Label of the content (Text Editor) field in DocType 'FCRM Note'
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
@@ -5471,7 +5471,7 @@ msgstr "Chế độ xem Đã ghim"
 
 #: frontend/src/components/ViewControls.vue:685
 msgid "Pinned Views"
-msgstr "Các Chế độ xem Đã ghim"
+msgstr "Chế độ xem đã ghim"
 
 #: frontend/src/components/Activities/AudioPlayer.vue:176
 msgid "Playback Speed"
@@ -5694,7 +5694,7 @@ msgstr "Chế độ xem Công khai"
 
 #: frontend/src/components/ViewControls.vue:679
 msgid "Public Views"
-msgstr "Các Chế độ xem Công khai"
+msgstr "Chế độ xem công khai"
 
 #. Label of the qty (Float) field in DocType 'CRM Products'
 #: crm/fcrm/doctype/crm_products/crm_products.json
@@ -8667,9 +8667,6 @@ msgstr "Tiêu chí"
 msgid "Note"
 msgstr "Ghi chú"
 
-msgid "Address"
-msgstr "Địa chỉ"
-
 msgid "Phone"
 msgstr "Điện thoại"
 
@@ -8747,12 +8744,6 @@ msgstr "Các bên liên quan"
 #: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "Campaigns"
 msgstr "Chiến dịch"
-
-#: frontend/src/components/Layouts/AppSidebar.vue
-#: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "Contacts"
-msgstr "Hồ sơ CRM"
-
 
 #. Lead Status options - CRM Contact
 msgid "New"
@@ -8840,9 +8831,6 @@ msgstr "Cấu hình"
 msgid "Students"
 msgstr "Học sinh"
 
-msgid "Contacts"
-msgstr "Liên hệ"
-
 msgid "Regions"
 msgstr "Vùng miền"
 
@@ -8862,7 +8850,7 @@ msgid "Major Groups"
 msgstr "Nhóm ngành"
 
 msgid "Campuses"
-msgstr "Cơ sở"
+msgstr "Chi nhánh"
 
 msgid "Admission Years"
 msgstr "Năm tuyển sinh"
@@ -8877,7 +8865,7 @@ msgid "Events"
 msgstr "Sự kiện"
 
 msgid "Lead Sources"
-msgstr "Nguồn Lead"
+msgstr "Nguồn thí sinh"
 
 msgid "School Types"
 msgstr "Loại trường"
@@ -8889,14 +8877,10 @@ msgid "Departments"
 msgstr "Phòng ban"
 
 msgid "Lost Reasons"
-msgstr "Lý do thất bại"
+msgstr "Lý do không nhập học"
 
 msgid "Holiday Lists"
 msgstr "Lịch nghỉ lễ"
-
-#. Field label changes — CRM Campaign, CRM Staff
-msgid "Campus"
-msgstr "Cơ sở"
 
 msgid "Student"
 msgstr "Học sinh"
@@ -9056,3 +9040,16 @@ msgstr "Nhóm theo: "
 #. SLA priority
 msgid "Replied"
 msgstr "Đã trả lời"
+
+#. Validation messages
+msgid "Mobile number must be exactly 10 digits"
+msgstr "Số điện thoại phải có đúng 10 số"
+
+msgid "Invalid Phone Number"
+msgstr "Số điện thoại không hợp lệ"
+
+msgid "{0} must be exactly 10 digits"
+msgstr "{0} phải có đúng 10 số"
+
+msgid "Error saving data"
+msgstr "Lỗi khi lưu dữ liệu"
