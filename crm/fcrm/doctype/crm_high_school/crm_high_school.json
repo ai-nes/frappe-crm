@@ -59,59 +59,44 @@
   {
    "fieldname": "ward_code",
    "fieldtype": "Data",
-   "fetch_from": "ward.ward_code",
-   "label": "Ward Code",
-   "read_only": 1
+   "label": "Ward Code"
   },
   {
    "fieldname": "ward",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Ward",
-   "options": "CRM Ward",
-   "reqd": 1
+   "options": "CRM Ward"
   },
   {
    "fieldname": "ward_name",
    "fieldtype": "Data",
-   "fetch_from": "ward.ward_name",
-   "fetch_if_empty": 0,
-   "label": "Ward Name",
-   "read_only": 1
+   "label": "Ward Name"
   },
   {
    "fieldname": "province_code",
    "fieldtype": "Data",
-   "fetch_from": "province.province_code",
-   "label": "Province Code",
-   "read_only": 1
+   "label": "Province Code"
   },
   {
    "fieldname": "province",
    "fieldtype": "Link",
-   "fetch_from": "ward.province",
    "in_standard_filter": 1,
    "label": "Province",
-   "options": "CRM Province",
-   "read_only": 1
+   "options": "CRM Province"
   },
   {
    "fieldname": "province_name",
    "fieldtype": "Data",
-   "fetch_from": "province.province_name",
-   "fetch_if_empty": 0,
    "in_list_view": 1,
-   "label": "Province",
-   "read_only": 1
+   "label": "Province"
   },
   {
    "fieldname": "region",
    "fieldtype": "Link",
-   "fetch_from": "province.region",
    "in_standard_filter": 1,
    "label": "Region",
-   "options": "CRM Region",
-   "read_only": 1
+   "options": "CRM Region"
   },
   {
    "fieldname": "section_break_1",
