@@ -2,22 +2,9 @@
 # For license information, please see license.txt
 
 from frappe.model.document import Document
-from crm.fcrm.utils.geo_resolver import resolve_province, resolve_ward
 
 
 class CRMHighSchool(Document):
-	def before_insert(self):
-		self._resolve_geo()
-
-	def before_save(self):
-		self._resolve_geo()
-
-	def _resolve_geo(self):
-		if self.province:
-			self.province = resolve_province(self.province)
-		if self.ward:
-			self.ward = resolve_ward(self.ward, self.province)
-
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -47,13 +34,6 @@ class CRMHighSchool(Document):
 				"width": "14rem",
 			},
 			{
-				"label": "Region",
-				"type": "Link",
-				"key": "region",
-				"options": "CRM Region",
-				"width": "10rem",
-			},
-			{
 				"label": "Address",
 				"type": "Small Text",
 				"key": "address",
@@ -66,7 +46,6 @@ class CRMHighSchool(Document):
 			"school_type",
 			"province_name",
 			"ward_name",
-			"region",
 			"address",
 			"modified",
 		]
