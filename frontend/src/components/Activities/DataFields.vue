@@ -127,8 +127,8 @@ async function saveChanges() {
     emit('afterSave', changes)
   } catch (err) {
     toast({
-      title: __('Lỗi lưu dữ liệu'),
-      text: err.messages?.[0] || err.message || __('Có lỗi xảy ra'),
+      title: __('Error saving data'),
+      text: err.messages?.[0] || err.message || __('An error occurred'),
       variant: 'error',
     })
   } finally {

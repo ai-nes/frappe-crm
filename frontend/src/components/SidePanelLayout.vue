@@ -549,8 +549,8 @@ async function fieldChange(value, df) {
     const digits = value.replace(/\D/g, '')
     if (digits.length !== 10) {
       toast({
-        title: __('Số điện thoại không hợp lệ'),
-        text: __('{0} phải có đúng 10 số', [df.label || df.fieldname]),
+        title: __('Invalid Phone Number'),
+        text: __('{0} must be exactly 10 digits', [df.label || df.fieldname]),
         variant: 'error',
       })
       return

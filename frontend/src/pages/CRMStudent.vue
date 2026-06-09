@@ -15,7 +15,7 @@
       <Button
         v-if="doc.name && !doc.converted"
         variant="solid"
-        :label="__('Chuyển thành hồ sơ liên hệ')"
+        :label="__('Convert to Contact')"
         iconLeft="user-plus"
         :loading="converting"
         @click="convertToContact"
