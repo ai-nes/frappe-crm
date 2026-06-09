@@ -8900,3 +8900,153 @@ msgstr "Cơ sở"
 
 msgid "Student"
 msgstr "Học sinh"
+
+#. Toast and error messages — CRM Student
+msgid "Conversion failed"
+msgstr "Chuyển đổi thất bại"
+
+msgid "Error saving student"
+msgstr "Lỗi khi lưu học sinh"
+
+msgid "Error updating status"
+msgstr "Lỗi khi cập nhật trạng thái"
+
+#. Modal titles and button labels
+msgid "New CRM Event"
+msgstr "Thêm sự kiện"
+
+msgid "New CRM Campaign"
+msgstr "Thêm chiến dịch"
+
+msgid "Create Student"
+msgstr "Tạo học sinh"
+
+msgid "Geography Import"
+msgstr "Nhập dữ liệu địa lý"
+
+msgid "Import Geography Excel"
+msgstr "Nhập Excel địa lý"
+
+msgid "Error updating stage"
+msgstr "Lỗi khi cập nhật giai đoạn"
+
+msgid "Mobile"
+msgstr "Di động"
+
+msgid "Create CRM Contact"
+msgstr "Tạo hồ sơ CRM"
+
+msgid "New CRM Student"
+msgstr "Thêm học sinh"
+
+msgid "New CRM Contact"
+msgstr "Thêm hồ sơ CRM"
+
+#. Dashboard chart labels
+msgid "Admission Trend"
+msgstr "Xu hướng tuyển sinh"
+
+msgid "Contacts by Assignee"
+msgstr "Hồ sơ theo người phụ trách"
+
+msgid "Contacts by High School"
+msgstr "Hồ sơ theo trường THPT"
+
+msgid "Contacts by Source"
+msgstr "Hồ sơ theo nguồn"
+
+msgid "Contacts by Stage"
+msgstr "Hồ sơ theo giai đoạn"
+
+msgid "Enrolled Contacts"
+msgstr "Hồ sơ đã nhập học"
+
+msgid "Qualified Contacts"
+msgstr "Hồ sơ đủ điều kiện"
+
+msgid "Students by Source"
+msgstr "Học sinh theo nguồn"
+
+msgid "Total CRM Contacts"
+msgstr "Tổng hồ sơ CRM"
+
+msgid "Total Students"
+msgstr "Tổng học sinh"
+
+#. Breadcrumb and page title labels
+msgid "CRM Campaigns"
+msgstr "Chiến dịch"
+
+msgid "CRM Events"
+msgstr "Sự kiện"
+
+msgid "CRM Persons"
+msgstr "Cá nhân"
+
+msgid "New CRM Person"
+msgstr "Thêm cá nhân"
+
+#. Welcome page
+msgid "Start with sample students"
+msgstr "Bắt đầu với học sinh mẫu"
+
+msgid "Or create students manually"
+msgstr "Hoặc tạo học sinh thủ công"
+
+#. Contact page
+msgid "Failed to create enrollment student"
+msgstr "Không thể tạo học sinh"
+
+msgid "Add Company..."
+msgstr "Thêm công ty..."
+
+msgid "Company"
+msgstr "Công ty"
+
+#. Common UI feedback
+msgid "No records found"
+msgstr "Không tìm thấy bản ghi"
+
+msgid "Record deleted"
+msgstr "Đã xóa bản ghi"
+
+msgid "Failed to delete"
+msgstr "Xóa thất bại"
+
+msgid "Dismiss"
+msgstr "Bỏ qua"
+
+msgid "students"
+msgstr "học sinh"
+
+msgid "My Open Contacts"
+msgstr "Hồ sơ của tôi đang mở"
+
+#. Geography import
+msgid "Please upload an Excel file"
+msgstr "Vui lòng tải lên tệp Excel"
+
+msgid "Some rows were skipped. Check console for details."
+msgstr "Một số hàng đã bị bỏ qua. Xem console để biết chi tiết."
+
+#. Onboarding steps
+msgid "Create your first student"
+msgstr "Tạo học sinh đầu tiên"
+
+msgid "Convert student to contact"
+msgstr "Chuyển học sinh thành hồ sơ CRM"
+
+#. Help center article names
+msgid "CRM Student"
+msgstr "Học sinh CRM"
+
+msgid "CRM Campaign"
+msgstr "Chiến dịch CRM"
+
+#. List/group UI
+msgid "Group By: "
+msgstr "Nhóm theo: "
+
+#. SLA priority
+msgid "Replied"
+msgstr "Đã trả lời"
