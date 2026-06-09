@@ -73,7 +73,7 @@
               v-model="slaData.apply_on"
               :options="[
                 {
-                  label: 'CRM Contact',
+                  label: __('Contact'),
                   value: 'CRM Contact',
                 },
               ]"

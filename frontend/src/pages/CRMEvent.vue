@@ -108,7 +108,7 @@ watch(error, (err) => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: __('CRM Events'), route: { name: 'CRM Events' } }]
+  let items = [{ label: __('Events'), route: { name: 'CRM Events' } }]
   items.push({
     label: doc.value?.title || props.crmEventId,
     route: { name: 'CRM Event', params: { crmEventId: props.crmEventId } },

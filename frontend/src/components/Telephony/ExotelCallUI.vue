@@ -197,7 +197,7 @@
             class="bg-surface-gray-6 text-ink-white hover:bg-surface-gray-5"
             size="md"
             :iconRight="ArrowUpRightIcon"
-            :label="__('CRM Contact')"
+            :label="__('Contact')"
             @click="openCRMContact"
           />
         </div>

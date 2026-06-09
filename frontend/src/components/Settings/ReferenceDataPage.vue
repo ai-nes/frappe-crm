@@ -69,10 +69,10 @@ import { useDoctypeModal } from '@/composables/doctypeModal'
 const { showModal } = useDoctypeModal()
 
 const subTabs = [
-  { idx: 0, label: 'Province/City', doctype: 'CRM Province' },
-  { idx: 1, label: 'Ward/Commune', doctype: 'CRM Ward' },
-  { idx: 2, label: 'Major', doctype: 'CRM Major' },
-  { idx: 3, label: 'Campus', doctype: 'CRM Campus' },
+  { idx: 0, label: __('Province/City'), doctype: 'CRM Province' },
+  { idx: 1, label: __('Ward/Commune'), doctype: 'CRM Ward' },
+  { idx: 2, label: __('Major'), doctype: 'CRM Major' },
+  { idx: 3, label: __('Campus'), doctype: 'CRM Campus' },
 ]
 
 const activeIdx = ref(0)

@@ -1049,7 +1049,7 @@ msgstr "Hồ sơ sinh viên"
 #: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
 #: frontend/src/pages/Dashboard.vue:307
 msgid "CRM Dashboard"
-msgstr "Bảng Điều Khiển CRM"
+msgstr "Trang tổng quan"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -8447,7 +8447,7 @@ msgid "CRM High School"
 msgstr "Trường THPT"
 
 msgid "CRM Contact"
-msgstr "Hồ sơ CRM"
+msgstr "Hồ sơ"
 
 msgid "Portal Page"
 msgstr "Trang cổng"
@@ -8465,7 +8465,7 @@ msgid "CRM School Type"
 msgstr "Loại trường"
 
 msgid "CRM Event"
-msgstr "Sự kiện CRM"
+msgstr "Sự kiện"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
@@ -8934,13 +8934,13 @@ msgid "Mobile"
 msgstr "Di động"
 
 msgid "Create CRM Contact"
-msgstr "Tạo hồ sơ CRM"
+msgstr "Tạo hồ sơ"
 
 msgid "New CRM Student"
 msgstr "Thêm học sinh"
 
 msgid "New CRM Contact"
-msgstr "Thêm hồ sơ CRM"
+msgstr "Thêm hồ sơ"
 
 #. Dashboard chart labels
 msgid "Admission Trend"
@@ -9038,10 +9038,16 @@ msgstr "Chuyển học sinh thành hồ sơ CRM"
 
 #. Help center article names
 msgid "CRM Student"
-msgstr "Học sinh CRM"
+msgstr "Học sinh"
 
 msgid "CRM Campaign"
-msgstr "Chiến dịch CRM"
+msgstr "Chiến dịch"
+
+msgid "CRM contacts"
+msgstr "hồ sơ"
+
+msgid "CRM Personal Mobile No."
+msgstr "Số di động cá nhân"
 
 #. List/group UI
 msgid "Group By: "
