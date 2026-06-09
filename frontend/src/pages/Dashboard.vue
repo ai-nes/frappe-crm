@@ -304,6 +304,6 @@ function resetToDefault() {
 }
 
 usePageMeta(() => {
-  return { title: __('CRM Dashboard') }
+  return { title: __('Dashboard') }
 })
 </script>

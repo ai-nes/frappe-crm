@@ -2,6 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
+from crm.fcrm.utils.geo_resolver import resolve_province
 
 
 class CRMContact(Document):
@@ -63,6 +64,25 @@ class CRMContact(Document):
 			"title_field": "full_name",
 			"kanban_fields": '["name", "full_name", "phone", "email", "assigned_to"]',
 		}
+
+	def before_insert(self):
+		self._set_defaults()
+		if self.province:
+			self.province = resolve_province(self.province)
+
+	def _set_defaults(self):
+		if not self.admission_year:
+			current_year = str(frappe.utils.now_datetime().year)
+			if frappe.db.exists("CRM Admission Year", current_year):
+				self.admission_year = current_year
+		if not self.branch:
+			default_branch = frappe.db.get_value("CRM Campus", {"is_default": 1}, "name")
+			if default_branch:
+				self.branch = default_branch
+
+	def before_save(self):
+		if self.province:
+			self.province = resolve_province(self.province)
 
 	def validate(self):
 		self.apply_sla()

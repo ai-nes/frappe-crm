@@ -48,15 +48,15 @@
             :label="__('For')"
             :options="[
               {
-                label: __('CRM Contact'),
+                label: __('Contact'),
                 value: 'CRM Contact',
               },
               {
-                label: __('CRM Student'),
+                label: __('Student'),
                 value: 'CRM Student',
               },
             ]"
-            :placeholder="__('CRM Contact')"
+            :placeholder="__('Contact')"
           />
         </div>
       </div>

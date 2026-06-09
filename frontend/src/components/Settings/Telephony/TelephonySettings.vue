@@ -117,7 +117,7 @@
       >
         <div class="flex flex-col">
           <div class="text-p-base font-medium text-ink-gray-7 truncate">
-            {{ __('CRM Personal Mobile No.') }}
+            {{ __('Personal Mobile No.') }}
           </div>
           <div class="text-p-sm text-ink-gray-5">
             {{

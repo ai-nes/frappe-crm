@@ -1,9 +1,33 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from crm.fcrm.utils.geo_resolver import resolve_province, resolve_ward
 
 
 class CRMStudent(Document):
+	def before_insert(self):
+		self._set_defaults()
+		self._resolve_geo()
+
+	def before_save(self):
+		self._resolve_geo()
+
+	def _set_defaults(self):
+		if not self.admission_year:
+			current_year = str(frappe.utils.now_datetime().year)
+			if frappe.db.exists("CRM Admission Year", current_year):
+				self.admission_year = current_year
+		if not self.branch:
+			default_branch = frappe.db.get_value("CRM Campus", {"is_default": 1}, "name")
+			if default_branch:
+				self.branch = default_branch
+
+	def _resolve_geo(self):
+		if self.province:
+			self.province = resolve_province(self.province)
+		if self.ward:
+			self.ward = resolve_ward(self.ward, self.province)
+
 	@staticmethod
 	def default_list_data():
 		columns = [
