@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
+    gettext \
     mariadb-client \
     redis-tools \
     build-essential \
@@ -54,6 +55,9 @@ RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && cd apps/crm/frontend \
     && yarn build \
     && cd "${BENCH_DIR}" \
+    && find apps/crm/crm/locale -name "*.po" -exec sh -c 'msgfmt "$1" -o "${1%.po}.mo"' _ {} \; \
+    && mkdir -p sites/assets/locale/vi/LC_MESSAGES \
+    && cp apps/crm/crm/locale/vi.mo sites/assets/locale/vi/LC_MESSAGES/crm.mo \
     && cp -a sites /opt/frappe/sites-template
 
 COPY --chown=frappe:frappe docker/prod-runtime.sh docker/prod-site.sh /opt/frappe/scripts/
