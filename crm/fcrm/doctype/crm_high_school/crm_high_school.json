@@ -14,12 +14,9 @@
   "school_type",
   "column_break_1",
   "ward_code",
-  "ward",
   "ward_name",
   "province_code",
-  "province",
   "province_name",
-  "region",
   "section_break_1",
   "address",
   "column_break_2",
@@ -62,13 +59,6 @@
    "label": "Ward Code"
   },
   {
-   "fieldname": "ward",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Ward",
-   "options": "CRM Ward"
-  },
-  {
    "fieldname": "ward_name",
    "fieldtype": "Data",
    "label": "Ward Name"
@@ -76,27 +66,15 @@
   {
    "fieldname": "province_code",
    "fieldtype": "Data",
-   "label": "Province Code"
-  },
-  {
-   "fieldname": "province",
-   "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Province",
-   "options": "CRM Province"
+   "label": "Province Code"
   },
   {
    "fieldname": "province_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Province"
-  },
-  {
-   "fieldname": "region",
-   "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Region",
-   "options": "CRM Region"
+   "label": "Province Name"
   },
   {
    "fieldname": "section_break_1",
@@ -131,7 +109,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-06 02:00:00.000000",
+ "modified": "2026-06-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM High School",
