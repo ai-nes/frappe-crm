@@ -8,16 +8,8 @@ def execute():
 		if link.link_to == "CRM Enrollment Status":
 			return
 
-	school_type_idx = None
-	for i, link in enumerate(workspace.links):
-		if link.link_to == "CRM School Type":
-			school_type_idx = i
-			break
-
-	insert_pos = school_type_idx + 1 if school_type_idx is not None else len(workspace.links)
-
-	workspace.links.insert(
-		insert_pos,
+	workspace.append(
+		"links",
 		{
 			"dependencies": "",
 			"hidden": 0,
@@ -30,6 +22,14 @@ def execute():
 			"type": "Link",
 		},
 	)
+
+	# Move to right after CRM School Type if it exists
+	school_type_idx = next(
+		(i for i, l in enumerate(workspace.links) if l.link_to == "CRM School Type"), None
+	)
+	if school_type_idx is not None:
+		new_row = workspace.links.pop()
+		workspace.links.insert(school_type_idx + 1, new_row)
 
 	workspace.save(ignore_permissions=True)
 	frappe.db.commit()
