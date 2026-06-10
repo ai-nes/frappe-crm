@@ -85,14 +85,9 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Sales Manager",
+   "role": "Administrator",
    "share": 1,
    "write": 1
-  },
-  {
-   "read": 1,
-   "report": 1,
-   "role": "Sales User"
   }
  ],
  "quick_entry": 0,

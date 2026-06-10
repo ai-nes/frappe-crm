@@ -125,7 +125,7 @@
   },
   {
    "depends_on": "eval: doc.condition_json",
-   "description": "Auto-generated from the portal view \u2014 do not edit directly unless you know what you're doing! ",
+   "description": "Auto-generated from the portal view — do not edit directly unless you know what you're doing! ",
    "fieldname": "condition_json",
    "fieldtype": "Code",
    "label": "Condition",
@@ -161,7 +161,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Sales Manager",
+   "role": "Administrator",
    "share": 1,
    "write": 1
   }
