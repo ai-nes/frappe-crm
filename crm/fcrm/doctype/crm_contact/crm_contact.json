@@ -282,16 +282,77 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
   },
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "Sales Manager", "share": 1, "write": 1
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
   },
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "Sales User", "share": 1, "write": 1
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sale"
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "if_owner": 1,
+   "print": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "role": "CTV-Sale",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Promoter-PR"
   }
  ],
  "quick_entry": 0,
