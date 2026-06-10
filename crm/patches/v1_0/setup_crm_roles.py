@@ -42,6 +42,14 @@ OLD_ROLES = [
 	"Knowledge Base Editor",
 	"Knowledge Base Contributor",
 	"Website Manager",
+	# Frappe utility roles — not needed for CRM
+	"Translator",
+	"Prepared Report User",
+	"Inbox User",
+	"Script Manager",
+	"Report Manager",
+	"Workspace Manager",
+	"Dashboard Manager",
 ]
 
 
