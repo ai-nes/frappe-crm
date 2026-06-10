@@ -18,8 +18,8 @@ def execute():
 
         if frappe.db.exists("CRM High School", expected):
             frappe.log_error(
-                f"Skipped rename {school.name!r}: target {expected!r} already exists",
-                "rename_high_school_include_province",
+                title="rename_high_school: skip",
+                message=f"Target already exists: {school.name!r} → {expected!r}",
             )
             continue
 
@@ -28,13 +28,12 @@ def execute():
                 "CRM High School",
                 school.name,
                 expected,
-                update_links=True,
                 ignore_permissions=True,
             )
         except Exception as e:
             frappe.log_error(
-                f"Could not rename {school.name!r} → {expected!r}: {e}",
-                "rename_high_school_include_province",
+                title="rename_high_school: failed",
+                message=f"{school.name!r} → {expected!r}\n{e}",
             )
 
     frappe.db.commit()
