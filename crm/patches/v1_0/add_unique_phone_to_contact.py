@@ -36,5 +36,5 @@ def _add_unique_index(table, column, index_name):
 
 
 def execute():
-	_add_unique_index("`tabCRM Contact`", "phone", "unique_contact_phone")
-	_add_unique_index("`tabCRM Contact`", "email", "unique_contact_email")
+	_add_unique_index("tabCRM Contact", "phone", "unique_contact_phone")
+	_add_unique_index("tabCRM Contact", "email", "unique_contact_email")
