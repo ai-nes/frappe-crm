@@ -11,8 +11,8 @@ class TestCRMProvince(FrappeTestCase):
 			{
 				"doctype": "CRM Province",
 				"province_name": "_Test Province",
+				"province_code": "_TP",
 				"city_type": "Province",
-				"city_number": "99",
 			}
 		)
 		province.insert(ignore_permissions=True)

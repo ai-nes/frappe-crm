@@ -50,6 +50,7 @@
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Student Language Certificate",
+ "parenttype": "CRM Contact",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

@@ -53,6 +53,27 @@ class TestCRMStudent(FrappeTestCase):
 
 		self.assertEqual(convert_to_contact(student.name), contact_name)
 
+	def test_student_mobile_no_syncs_to_linked_crm_contact_phone(self):
+		student = self._make_student("_Test Student Phone Sync")
+		contact_name = convert_to_contact(student.name)
+
+		student.mobile_no = "0907654321"
+		student.save(ignore_permissions=True)
+
+		contact = frappe.get_doc("CRM Contact", contact_name)
+		self.assertEqual(contact.phone, "0907654321")
+
+	def test_crm_contact_phone_syncs_to_student_mobile_no(self):
+		student = self._make_student("_Test Contact Phone Sync")
+		contact_name = convert_to_contact(student.name)
+
+		contact = frappe.get_doc("CRM Contact", contact_name)
+		contact.phone = "0902222333"
+		contact.save(ignore_permissions=True)
+
+		student.reload()
+		self.assertEqual(student.mobile_no, "0902222333")
+
 	def test_create_from_contact_creates_crm_student(self):
 		contact = frappe.get_doc({
 			"doctype": "Contact",

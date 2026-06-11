@@ -25,12 +25,26 @@
   "province",
   "major",
   "aspiration",
-  "col_break_2",
+  "section_enrollment",
   "source",
   "crm_campaign",
   "crm_event",
   "admission_year",
   "branch",
+  "section_academic_history",
+  "cohort_start_year",
+  "col_break_academic",
+  "cohort_end_year",
+  "education_program",
+  "graduation_score",
+  "col_break_scores",
+  "english_converted_score",
+  "transcript_score",
+  "col_break_scores2",
+  "total_score",
+  "admission_method",
+  "academic_results",
+  "language_certificates",
   "section_notes",
   "notes",
   "sla_section",
@@ -122,7 +136,7 @@
   {
    "fieldname": "section_academic",
    "fieldtype": "Section Break",
-   "label": "Academic Info"
+   "label": "Hồ sơ học sinh"
   },
   {
    "fieldname": "student",
@@ -160,8 +174,9 @@
    "options": "CRM Aspiration"
   },
   {
-   "fieldname": "col_break_2",
-   "fieldtype": "Column Break"
+   "fieldname": "section_enrollment",
+   "fieldtype": "Section Break",
+   "label": "Thông tin tuyển sinh"
   },
   {
    "fieldname": "source",
@@ -196,6 +211,79 @@
    "in_standard_filter": 1,
    "label": "Branch",
    "options": "CRM Campus"
+  },
+  {
+   "fieldname": "section_academic_history",
+   "fieldtype": "Section Break",
+   "label": "Học vấn & Điểm số"
+  },
+  {
+   "fieldname": "cohort_start_year",
+   "fieldtype": "Int",
+   "label": "Niên khóa từ năm"
+  },
+  {
+   "fieldname": "col_break_academic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cohort_end_year",
+   "fieldtype": "Int",
+   "label": "Đến năm"
+  },
+  {
+   "fieldname": "education_program",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Chương trình đào tạo",
+   "options": "CRM Education Program"
+  },
+  {
+   "fieldname": "graduation_score",
+   "fieldtype": "Float",
+   "label": "Điểm tốt nghiệp THPT"
+  },
+  {
+   "fieldname": "col_break_scores",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "english_converted_score",
+   "fieldtype": "Float",
+   "label": "Điểm tiếng Anh quy đổi"
+  },
+  {
+   "fieldname": "transcript_score",
+   "fieldtype": "Float",
+   "label": "Điểm học bạ"
+  },
+  {
+   "fieldname": "col_break_scores2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Float",
+   "label": "Điểm tổng cộng"
+  },
+  {
+   "fieldname": "admission_method",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Hình thức xét tuyển",
+   "options": "\nXét học bạ\nThi THPT Quốc gia\nXét bằng chứng chỉ ngoại ngữ\nXét tuyển thẳng\nKết hợp"
+  },
+  {
+   "fieldname": "academic_results",
+   "fieldtype": "Table",
+   "label": "Kết quả học tập",
+   "options": "CRM Student Academic Result"
+  },
+  {
+   "fieldname": "language_certificates",
+   "fieldtype": "Table",
+   "label": "Chứng chỉ ngoại ngữ",
+   "options": "CRM Student Language Certificate"
   },
   {
    "fieldname": "section_notes",
@@ -273,7 +361,7 @@
  "index_web_pages_for_search": 1,
  "kanban_field": "stage",
  "links": [],
- "modified": "2026-06-06 00:00:00.000000",
+ "modified": "2026-06-11 12:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Contact",

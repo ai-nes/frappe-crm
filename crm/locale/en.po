@@ -1,0 +1,86 @@
+msgid ""
+msgstr ""
+"Project-Id-Version: frappe\n"
+"Report-Msgid-Bugs-To: shariq@frappe.io\n"
+"POT-Creation-Date: 2026-04-26 09:49+0000\n"
+"PO-Revision-Date: 2026-06-11 00:00\n"
+"Last-Translator: Administrator\n"
+"Language-Team: English\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.16.0\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"Language: en\n"
+
+#. Section label: CRM Contact — student profile section
+msgid "Hồ sơ học sinh"
+msgstr "Student Profile"
+
+#. Section label: CRM Contact — enrollment tracking section
+msgid "Thông tin tuyển sinh"
+msgstr "Enrollment Information"
+
+#. Section label: CRM Contact — academic history and scores section
+msgid "Học vấn & Điểm số"
+msgstr "Academic & Scores"
+
+#. Label of cohort_start_year field in DocType 'CRM Contact'
+msgid "Niên khóa từ năm"
+msgstr "Cohort Start Year"
+
+#. Label of cohort_end_year field in DocType 'CRM Contact'
+msgid "Đến năm"
+msgstr "To Year"
+
+#. Label of education_program field in DocType 'CRM Contact'
+msgid "Chương trình đào tạo"
+msgstr "Education Program"
+
+#. Label of graduation_score field in DocType 'CRM Contact'
+msgid "Điểm tốt nghiệp THPT"
+msgstr "High School Graduation Score"
+
+#. Label of english_converted_score field in DocType 'CRM Contact'
+msgid "Điểm tiếng Anh quy đổi"
+msgstr "Converted English Score"
+
+#. Label of transcript_score field in DocType 'CRM Contact'
+msgid "Điểm học bạ"
+msgstr "Transcript Score"
+
+#. Label of total_score field in DocType 'CRM Contact'
+msgid "Điểm tổng cộng"
+msgstr "Total Score"
+
+#. Label of admission_method field in DocType 'CRM Contact'
+msgid "Hình thức xét tuyển"
+msgstr "Admission Method"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét học bạ"
+msgstr "Transcript Review"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Thi THPT Quốc gia"
+msgstr "National High School Exam"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét bằng chứng chỉ ngoại ngữ"
+msgstr "Language Certificate Review"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét tuyển thẳng"
+msgstr "Direct Admission"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Kết hợp"
+msgstr "Combined"
+
+#. CRM Student Academic Result DocType (child table)
+msgid "CRM Student Academic Result"
+msgstr "Academic Results"
+
+#. CRM Student Language Certificate DocType (child table)
+msgid "CRM Student Language Certificate"
+msgstr "Language Certificates"

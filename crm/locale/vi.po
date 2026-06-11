@@ -9077,3 +9077,67 @@ msgstr "Kết quả học tập"
 #. CRM Student Language Certificate DocType (child table)
 msgid "CRM Student Language Certificate"
 msgstr "Chứng chỉ ngoại ngữ"
+
+#. Section label: CRM Contact — student profile section
+msgid "Hồ sơ học sinh"
+msgstr "Hồ sơ học sinh"
+
+#. Section label: CRM Contact — enrollment tracking section
+msgid "Thông tin tuyển sinh"
+msgstr "Thông tin tuyển sinh"
+
+#. Section label: CRM Contact — academic history and scores section
+msgid "Học vấn & Điểm số"
+msgstr "Học vấn & Điểm số"
+
+#. Label of cohort_start_year field in DocType 'CRM Contact'
+msgid "Niên khóa từ năm"
+msgstr "Niên khóa từ năm"
+
+#. Label of cohort_end_year field in DocType 'CRM Contact'
+msgid "Đến năm"
+msgstr "Đến năm"
+
+#. Label of education_program field in DocType 'CRM Contact'
+msgid "Chương trình đào tạo"
+msgstr "Chương trình đào tạo"
+
+#. Label of graduation_score field in DocType 'CRM Contact'
+msgid "Điểm tốt nghiệp THPT"
+msgstr "Điểm tốt nghiệp THPT"
+
+#. Label of english_converted_score field in DocType 'CRM Contact'
+msgid "Điểm tiếng Anh quy đổi"
+msgstr "Điểm tiếng Anh quy đổi"
+
+#. Label of transcript_score field in DocType 'CRM Contact'
+msgid "Điểm học bạ"
+msgstr "Điểm học bạ"
+
+#. Label of total_score field in DocType 'CRM Contact'
+msgid "Điểm tổng cộng"
+msgstr "Điểm tổng cộng"
+
+#. Label of admission_method field in DocType 'CRM Contact'
+msgid "Hình thức xét tuyển"
+msgstr "Hình thức xét tuyển"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét học bạ"
+msgstr "Xét học bạ"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Thi THPT Quốc gia"
+msgstr "Thi THPT Quốc gia"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét bằng chứng chỉ ngoại ngữ"
+msgstr "Xét bằng chứng chỉ ngoại ngữ"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Xét tuyển thẳng"
+msgstr "Xét tuyển thẳng"
+
+#. Option for admission_method Select field in DocType 'CRM Contact'
+msgid "Kết hợp"
+msgstr "Kết hợp"
