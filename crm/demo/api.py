@@ -129,9 +129,10 @@ def _create_demo_students():
 			{
 				"doctype": "CRM Student",
 				"student_name": data["student_name"],
+				"phone": data["mobile_no"],
 				"mobile_no": data["mobile_no"],
 				"email": data["email"],
-				"enrollment_status": "Pending Confirmation",
+				"enrollment_status": "Mới",
 				"converted": 0,
 				"source": _ensure_source(data["source"]),
 			}
@@ -151,14 +152,14 @@ def _create_demo_contacts(student_names):
 			names.append(existing)
 			continue
 
-		stage = ("Interested", "Qualified", "Enrolled")[index % 3]
+		enrollment_status = ("Mới", "Có triển vọng", "Đã xác nhận")[index % 3]
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Contact",
 				"full_name": student.student_name,
-				"phone": student.mobile_no,
+				"phone": student.phone,
 				"email": student.email,
-				"stage": stage,
+				"enrollment_status": enrollment_status,
 				"student": student.name,
 				"source": student.source,
 				"notes": "Demo admission pipeline contact",
