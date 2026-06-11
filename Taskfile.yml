@@ -5,7 +5,9 @@ version: '3'
 
 vars:
   COMPOSE: docker compose -f docker/docker-compose.dev.yml
-  BENCH: cd /home/frappe/frappe-bench && bench --site crm.localhost
+  # Chạy bench đúng user + workdir (root sẽ bị warn và exit)
+  EXEC: docker exec -u frappe -w /home/frappe/frappe-bench crm-dev-frappe-1
+  BENCH: bench --site crm.localhost
 
 tasks:
   default:
@@ -47,13 +49,13 @@ tasks:
   migrate:
     desc: Schema, patches, workspace sync
     cmds:
-      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} migrate"'
+      - '{{.EXEC}} {{.BENCH}} migrate'
 
   workspace:
     desc: Sync Desk workspace Frappe CRM
     aliases: [sync-workspace]
     cmds:
-      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} execute crm.install.sync_frappe_crm_workspace"'
+      - '{{.EXEC}} {{.BENCH}} execute crm.install.sync_frappe_crm_workspace'
 
   restart:
     desc: Reload Python sau khi sửa BE
@@ -64,13 +66,26 @@ tasks:
     desc: Xóa cache site crm.localhost
     aliases: [clear-cache]
     cmds:
-      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
+      - '{{.EXEC}} {{.BENCH}} clear-cache'
+
+  build:
+    desc: Compile translations (vi.po/en.po) → .mo, cần sau khi sửa locale
+    aliases: [compile-translations]
+    cmds:
+      - '{{.EXEC}} bench build --apps crm'
+
+  i18n:
+    desc: Migrate + compile translations (dùng sau khi sửa DocType + locale)
+    cmds:
+      - task: migrate
+      - task: build
+      - task: cache
 
   seed-student:
     desc: Seed 1 hồ sơ student mẫu FPTU kèm contact, admission context, interactions, intents
     aliases: [seed-sample-student]
     cmds:
-      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} execute crm.demo.create_student_full_sample.execute"'
+      - '{{.EXEC}} {{.BENCH}} execute crm.demo.create_student_full_sample.execute'
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart
@@ -82,9 +97,9 @@ tasks:
 
   # --- Docker / debug ---
 
-  rebuild:
+  docker-build:
     desc: Rebuild image sau khi sửa Dockerfile hoặc compose dev
-    aliases: [build]
+    aliases: [rebuild]
     cmds:
       - '{{.COMPOSE}} up -d --build --force-recreate frappe'
 
@@ -101,11 +116,11 @@ tasks:
       - '{{.COMPOSE}} logs -f frappe'
 
   bench:
-    desc: 'Bench tùy ý — vd: task bench -- --site crm.localhost console'
+    desc: 'Bench tùy ý — vd: task bench -- console'
     cmds:
-      - '{{.COMPOSE}} exec frappe bash -lc "cd /home/frappe/frappe-bench && bench {{.CLI_ARGS}}"'
+      - '{{.EXEC}} {{.BENCH}} {{.CLI_ARGS}}'
 
   shell:
-    desc: Shell trong container Frappe
+    desc: Shell trong container Frappe (user frappe)
     cmds:
-      - '{{.COMPOSE}} exec frappe bash'
+      - docker exec -it -u frappe -w /home/frappe/frappe-bench crm-dev-frappe-1 bash

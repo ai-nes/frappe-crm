@@ -8608,7 +8608,7 @@ msgid "Mobile No"
 msgstr "Di động"
 
 msgid "Enrollment Status"
-msgstr "Trạng thái"
+msgstr "Trạng thái tuyển sinh"
 
 msgid "Enrollment Date"
 msgstr "Ngày nhập học"
@@ -8800,7 +8800,7 @@ msgstr "Không đăng ký FPT"
 
 #. Field labels - CRM Contact / CRM Student
 msgid "Lead Status"
-msgstr "Tình trạng Lead"
+msgstr "Tình trạng thí sinh"
 
 msgid "Aspiration"
 msgstr "Nguyện vọng"
@@ -9092,7 +9092,7 @@ msgstr "SĐT phụ huynh"
 msgid "Student Profile"
 msgstr "Hồ sơ học sinh"
 
-msgid "Program"
+msgid "Applied Major"
 msgstr "Ngành đăng ký"
 
 msgid "Enrollment Information"
@@ -9148,3 +9148,33 @@ msgstr "Xét tuyển thẳng"
 
 msgid "Combined"
 msgstr "Kết hợp"
+
+#. CRM Enrollment Status options
+
+msgid "Prospect"
+msgstr "Có triển vọng"
+
+msgid "Refused"
+msgstr "Từ chối"
+
+#. CRM Lead Status / Enrollment Status — DocType labels
+
+msgid "CRM Enrollment Status"
+msgstr "Trạng thái tuyển sinh"
+
+#. Workspace labels — missing translations
+
+msgid "Enrollment Statuses"
+msgstr "Trạng thái tuyển sinh"
+
+msgid "Interactions"
+msgstr "Tương tác"
+
+msgid "Intents"
+msgstr "Ý định"
+
+msgid "Interaction Types"
+msgstr "Loại tương tác"
+
+msgid "Intent Types"
+msgstr "Loại ý định"

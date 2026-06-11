@@ -20,6 +20,8 @@ def after_install(force=False):
 	add_email_account_custom_field()
 	add_default_lead_sources()
 	add_default_lost_reasons()
+	add_default_lead_statuses()
+	add_default_enrollment_statuses()
 	add_default_quick_filters()
 	add_standard_dropdown_items()
 	create_default_manager_dashboard(force)
@@ -38,7 +40,7 @@ def add_default_fields_layout(force=False):
 	quick_entry_layouts = {
 		"CRM Contact-Quick Entry": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_stage","fields":["stage","assigned_to","lead_status"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["student","high_school","major","aspiration"]},{"name":"col_source","fields":["source","branch","province","admission_year"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","lead_status","assigned_to","admission_year"]}]},{"name":"section_parents","columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["high_school","province"]},{"name":"col_major","fields":["major","aspiration"]}]},{"name":"section_enrollment","columns":[{"name":"col_enroll1","fields":["source","crm_campaign"]},{"name":"col_enroll2","fields":["branch","crm_event"]}]}]',
 		},
 		"CRM Student-Quick Entry": {
 			"doctype": "CRM Student",
@@ -73,7 +75,7 @@ def add_default_fields_layout(force=False):
 	sidebar_fields_layouts = {
 		"CRM Contact-Side Panel": {
 			"doctype": "CRM Contact",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","stage","assigned_to","lead_status"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["student","high_school","major","aspiration","source","branch","province","admission_year"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","enrollment_status","lead_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent","fields":["parent_name","parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_admission","fields":["high_school","province","major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll","fields":["source","branch","crm_campaign","crm_event"]}]}]',
 		},
 		"CRM Student-Side Panel": {
 			"doctype": "CRM Student",
@@ -104,7 +106,7 @@ def add_default_fields_layout(force=False):
 	data_fields_layouts = {
 		"CRM Contact-Data Fields": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_stage","fields":["stage","assigned_to","lead_status"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_academic","fields":["student","high_school","major","aspiration"]},{"name":"col_source","fields":["source","branch","province","admission_year"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","lead_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_school","fields":["high_school","province"]},{"name":"col_major","fields":["major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll1","fields":["source","crm_campaign"]},{"name":"col_enroll2","fields":["branch","crm_event"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":false,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":false,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
 		},
 		"CRM Student-Data Fields": {
 			"doctype": "CRM Student",
@@ -281,10 +283,58 @@ def add_default_lost_reasons():
 		doc.insert()
 
 
+def add_default_lead_statuses():
+	lead_statuses = [
+		"Mới",
+		"Không nghe máy lần 1",
+		"Không nghe máy lần 2",
+		"Không nghe máy lần 3",
+		"Không liên lạc được",
+		"Hẹn liên hệ sau",
+		"Có triển vọng",
+		"Đang suy nghĩ",
+		"Không quan tâm",
+		"Không triển vọng",
+		"Sai số",
+		"Sai đối tượng",
+		"Không đủ tài chính",
+		"Lead nhắc lại",
+		"Lead trùng",
+		"Đã chuyển đổi",
+	]
+
+	for status in lead_statuses:
+		if frappe.db.exists("CRM Lead Status", status):
+			continue
+
+		doc = frappe.new_doc("CRM Lead Status")
+		doc.status_name = status
+		doc.insert()
+
+
+def add_default_enrollment_statuses():
+	enrollment_statuses = [
+		"Mới",
+		"Có triển vọng",
+		"Đã xác nhận",
+		"Đã nhập học",
+		"Đã chuyển đổi",
+		"Từ chối",
+	]
+
+	for status in enrollment_statuses:
+		if frappe.db.exists("CRM Enrollment Status", status):
+			continue
+
+		doc = frappe.new_doc("CRM Enrollment Status")
+		doc.status_name = status
+		doc.insert()
+
+
 def add_default_quick_filters():
 	quick_filters = {
 		"CRM Student": ["student_name", "mobile_no", "email", "enrollment_status", "source"],
-		"CRM Contact": ["full_name", "phone", "email", "stage", "assigned_to", "source"],
+		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM High School": ["school_code", "school_type", "ward_name", "province_name"],
 		"Contact": ["status", "email_id", "phone"],
 		"Task": ["title", "priority", "assigned_to", "status", "due_date"],

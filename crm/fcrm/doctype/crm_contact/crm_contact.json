@@ -14,7 +14,7 @@
   "phone",
   "email",
   "col_break_1",
-  "stage",
+  "enrollment_status",
   "lead_status",
   "communication_status",
   "sla_status",
@@ -95,23 +95,22 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "stage",
-   "fieldtype": "Select",
+   "fieldname": "enrollment_status",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Stage",
-   "options": "Interested\nQualified\nEnrolled\nLost",
-   "reqd": 1,
-   "default": "Interested"
+   "label": "Enrollment Status",
+   "options": "CRM Enrollment Status",
+   "default": "Mới"
   },
   {
    "fieldname": "lead_status",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Lead Status",
-   "options": "\nNew\nNo Answer 1\nNo Answer 2\nNo Answer 3\nUnreachable\nCallback Scheduled\nPromising\nConsidering\nNot Interested\nNot Promising\nWrong Number\nWrong Target\nFinancially Unqualified\nFollow-up Lead\nDuplicate Lead\nConverted",
-   "default": "New"
+   "options": "CRM Lead Status",
+   "default": "Mới"
   },
   {
    "default": "Open",
@@ -189,7 +188,7 @@
    "fieldname": "major",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Program",
+   "label": "Applied Major",
    "options": "CRM Major"
   },
   {
@@ -387,7 +386,7 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "kanban_field": "stage",
+ "kanban_field": "enrollment_status",
  "links": [],
  "modified": "2026-06-11 14:00:00.000000",
  "modified_by": "Administrator",

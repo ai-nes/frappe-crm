@@ -50,3 +50,5 @@ crm.patches.v1_0.rename_high_school_by_code_and_province
 crm.patches.v1_0.drop_student_mobile_email_unique_indexes
 crm.patches.v1_0.backfill_student_contact_phone_sync
 crm.patches.v1_0.add_student_config_to_workspace
+crm.patches.v1_0.fix_contact_fields_layout
+crm.patches.v1_0.unify_contact_status_fields
