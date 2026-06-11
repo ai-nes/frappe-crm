@@ -60,13 +60,15 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Mobile",
-   "options": "Phone"
+   "options": "Phone",
+   "unique": 1
   },
   {
    "fieldname": "email",
    "fieldtype": "Data",
    "label": "Email",
-   "options": "Email"
+   "options": "Email",
+   "unique": 1
   },
   {
    "fieldname": "col_break_1",
