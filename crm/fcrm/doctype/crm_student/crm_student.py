@@ -1,16 +1,22 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from crm.fcrm.utils.geo_resolver import resolve_province, resolve_ward
+
+from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province, resolve_ward
 
 
 class CRMStudent(Document):
 	def before_insert(self):
 		self._set_defaults()
+		self._normalize_mobile_no()
 		self._resolve_geo()
 
 	def before_save(self):
+		self._normalize_mobile_no()
 		self._resolve_geo()
+
+	def on_update(self):
+		self._sync_linked_contact_phone()
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -25,8 +31,30 @@ class CRMStudent(Document):
 	def _resolve_geo(self):
 		if self.province:
 			self.province = resolve_province(self.province)
+		if self.high_school:
+			self.high_school = resolve_high_school(self.high_school, self.province)
 		if self.ward:
 			self.ward = resolve_ward(self.ward, self.province)
+
+	def _normalize_mobile_no(self):
+		if isinstance(self.mobile_no, str):
+			self.mobile_no = self.mobile_no.strip()
+
+	def _sync_linked_contact_phone(self):
+		contact_name = frappe.db.get_value("CRM Contact", {"student": self.name}, "name")
+		if not contact_name:
+			return
+
+		phone = self.mobile_no or ""
+		current_phone = frappe.db.get_value("CRM Contact", contact_name, "phone") or ""
+		if current_phone != phone:
+			frappe.db.set_value(
+				"CRM Contact",
+				contact_name,
+				"phone",
+				phone,
+				update_modified=False,
+			)
 
 	@staticmethod
 	def default_list_data():

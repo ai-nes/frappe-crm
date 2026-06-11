@@ -44,3 +44,5 @@ crm.patches.v1_0.seed_crm_education_program
 crm.patches.v1_0.setup_crm_student_extended_permissions
 crm.patches.v1_0.rename_ward_include_province
 crm.patches.v1_0.rename_high_school_by_code_and_province
+crm.patches.v1_0.drop_student_mobile_email_unique_indexes
+crm.patches.v1_0.backfill_student_contact_phone_sync
