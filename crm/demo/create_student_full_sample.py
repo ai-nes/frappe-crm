@@ -26,6 +26,8 @@ def execute():
 	contact = _ensure_contact(student)
 	interactions = _ensure_interactions(student, contact)
 	intents = _ensure_intents(interactions)
+	score_template = _ensure_score_template()
+	score_histories = _ensure_score_histories(student, score_template)
 
 	frappe.db.commit()
 
@@ -35,6 +37,8 @@ def execute():
 		"contact": contact.name,
 		"interactions": interactions,
 		"intents": intents,
+		"score_template": score_template,
+		"score_histories": score_histories,
 	}
 
 
@@ -43,7 +47,6 @@ def _ensure_student():
 	if existing:
 		student = frappe.get_doc("CRM Student", existing)
 		_apply_student_fields(student)
-		_update_student_child_tables(student)
 		student.save(ignore_permissions=True)
 		return student
 
@@ -51,7 +54,6 @@ def _ensure_student():
 		"doctype": "CRM Student",
 	})
 	_apply_student_fields(student)
-	_update_student_child_tables(student)
 	student.insert(ignore_permissions=True)
 	return student
 
@@ -72,9 +74,6 @@ def _apply_student_fields(student):
 		"aspiration": _ensure_aspiration("NV1", "First choice admission aspiration."),
 		"source": _ensure_lead_source("FPTU Open Day"),
 		"admission_year": _ensure_admission_year(),
-		"education_program": _ensure_education_program(),
-		"cohort_start_year": datetime.now().year,
-		"cohort_end_year": datetime.now().year + 4,
 		"notes": (
 			"Realistic FPTU sample: admitted Software Engineering student preparing "
 			"for enrollment, with school records, language certificate, campaign, "
@@ -83,8 +82,8 @@ def _apply_student_fields(student):
 	})
 
 
-def _update_student_child_tables(student):
-	student.set(
+def _update_contact_child_tables(contact):
+	contact.set(
 		"academic_results",
 		[
 			{
@@ -101,7 +100,7 @@ def _update_student_child_tables(student):
 			},
 		],
 	)
-	student.set(
+	contact.set(
 		"language_certificates",
 		[
 			{
@@ -120,6 +119,7 @@ def _ensure_contact(student):
 	if existing:
 		contact = frappe.get_doc("CRM Contact", existing)
 		_apply_contact_fields(contact, student)
+		_update_contact_child_tables(contact)
 		contact.save(ignore_permissions=True)
 		return contact
 
@@ -127,6 +127,7 @@ def _ensure_contact(student):
 		"doctype": "CRM Contact",
 	})
 	_apply_contact_fields(contact, student)
+	_update_contact_child_tables(contact)
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)
@@ -139,7 +140,7 @@ def _apply_contact_fields(contact, student):
 		"phone": student.mobile_no,
 		"email": student.email,
 		"stage": "Qualified",
-		"lead_status": "Promising",
+		"lead_status": _ensure_lead_status("Promising"),
 		"student": student.name,
 		"high_school": student.high_school,
 		"province": student.province,
@@ -150,6 +151,14 @@ def _apply_contact_fields(contact, student):
 		"crm_event": _ensure_event(),
 		"admission_year": student.admission_year,
 		"branch": student.branch,
+		"education_program": _ensure_education_program(),
+		"cohort_start_year": datetime.now().year,
+		"cohort_end_year": datetime.now().year + 4,
+		"graduation_score": 8.6,
+		"transcript_score": 8.8,
+		"english_converted_score": 8.5,
+		"total_score": 25.9,
+		"admission_method": "Combined",
 		"notes": (
 			"FPTU HCMC prospective student has submitted application documents "
 			"and is preparing for enrollment confirmation."
@@ -310,6 +319,111 @@ def _ensure_intents(interactions):
 	return intent_names
 
 
+def _ensure_score_template():
+	template_name = "FPTU Admission Scoring 2026"
+	existing = frappe.db.get_value("CRM Score Template", {"template_name": template_name}, "name")
+	if existing:
+		return existing
+
+	return frappe.get_doc({
+		"doctype": "CRM Score Template",
+		"template_name": template_name,
+		"status": "Active",
+		"start_time": datetime.now() - timedelta(days=30),
+		"end_time": datetime.now() + timedelta(days=365),
+		"fit_scoring": '{"academic_fit": 30, "major_fit": 20}',
+		"engagement_scoring": '{"form_submission": 10, "campus_visit": 15, "application_submission": 20}',
+		"intent_scoring": '{"tuition": 10, "scholarship": 10, "enrollment": 20}',
+		"time_decay_scoring": '{"recent_activity_days": 14}',
+		"negative_scoring": '{"no_response": -10, "wrong_target": -30}',
+	}).insert(ignore_permissions=True).name
+
+
+def _ensure_score_histories(student, score_template):
+	score_specs = [
+		{
+			"days_ago": 12,
+			"fit_score": 24,
+			"engagement_score": 12,
+			"intent_score": 16,
+			"time_decay_score": 4,
+			"negative_score": 0,
+			"final_score": 56,
+			"details": [
+				("Fit", "fit.major", "Software Engineering fit", 14, "Student selected Software Engineering as first choice."),
+				("Engagement", "engagement.form", "Admission form submitted", 12, "Student submitted the inquiry form."),
+			],
+		},
+		{
+			"days_ago": 7,
+			"fit_score": 29,
+			"engagement_score": 22,
+			"intent_score": 21,
+			"time_decay_score": 5,
+			"negative_score": 0,
+			"final_score": 77,
+			"details": [
+				("Engagement", "engagement.visit", "Campus visit attended", 15, "Student attended campus visit."),
+				("Intent", "intent.scholarship", "Scholarship inquiry", 10, "Student asked about scholarship criteria."),
+			],
+		},
+		{
+			"days_ago": 2,
+			"fit_score": 32,
+			"engagement_score": 27,
+			"intent_score": 28,
+			"time_decay_score": 6,
+			"negative_score": -2,
+			"final_score": 91,
+			"details": [
+				("Intent", "intent.enrollment", "Enrollment next steps", 18, "Student asked about final enrollment confirmation."),
+				("Negative", "negative.delay", "Pending payment confirmation", -2, "Tuition payment confirmation is pending."),
+			],
+		},
+	]
+	names = []
+	for spec in score_specs:
+		scoring_time = datetime.now() - timedelta(days=spec["days_ago"])
+		existing = frappe.db.exists(
+			"CRM Score History",
+			{
+				"student": student.name,
+				"score_template": score_template,
+				"final_score": spec["final_score"],
+			},
+		)
+		if existing:
+			names.append(existing)
+			continue
+
+		doc = frappe.get_doc({
+			"doctype": "CRM Score History",
+			"student": student.name,
+			"score_template": score_template,
+			"scoring_time": scoring_time,
+			"fit_score": spec["fit_score"],
+			"engagement_score": spec["engagement_score"],
+			"intent_score": spec["intent_score"],
+			"time_decay_score": spec["time_decay_score"],
+			"negative_score": spec["negative_score"],
+			"final_score": spec["final_score"],
+			"details": [
+				{
+					"category": category,
+					"rule_id": rule_id,
+					"signal": signal,
+					"score": score,
+					"reason": reason,
+				}
+				for category, rule_id, signal, score, reason in spec["details"]
+			],
+		})
+		doc.insert(ignore_permissions=True)
+		names.append(doc.name)
+
+	return names
+
+
 def _ensure_admission_context():
 	return {
 		"province": _ensure_province(),
@@ -333,6 +447,17 @@ def _ensure_enrollment_status(status_name):
 	return frappe.get_doc({
 		"doctype": "CRM Enrollment Status",
 		"status_name": status_name,
+	}).insert(ignore_permissions=True).name
+
+
+def _ensure_lead_status(status_name):
+	if frappe.db.exists("CRM Lead Status", status_name):
+		return status_name
+
+	return frappe.get_doc({
+		"doctype": "CRM Lead Status",
+		"status_name": status_name,
+		"description": "Demo admission lead status.",
 	}).insert(ignore_permissions=True).name
 
 

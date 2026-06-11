@@ -105,6 +105,8 @@ SYS_PERMS = [
 DOCTYPE_PERMS = {
 	"CRM Student":  STUDENT_PERMS,
 	"CRM Contact":  CONTACT_PERMS,
+	"CRM Score Template": REF_PERMS,
+	"CRM Score History":  OPS_PERMS,
 	# Reference data
 	"CRM Campus":            REF_PERMS,
 	"CRM Major":             REF_PERMS,

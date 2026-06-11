@@ -9178,3 +9178,194 @@ msgstr "Loại tương tác"
 
 msgid "Intent Types"
 msgstr "Loại ý định"
+
+# Interaction / Intent / Scoring DocTypes
+
+msgid "CRM Interaction"
+msgstr "Tương tác"
+
+msgid "CRM Interaction Type"
+msgstr "Loại tương tác"
+
+msgid "CRM Intent"
+msgstr "Ý định"
+
+msgid "CRM Intent Type"
+msgstr "Loại ý định"
+
+msgid "CRM Score Template"
+msgstr "Mẫu chấm điểm"
+
+msgid "CRM Score History"
+msgstr "Lịch sử chấm điểm"
+
+msgid "CRM Score History Detail"
+msgstr "Chi tiết lịch sử chấm điểm"
+
+msgid "Score Templates"
+msgstr "Mẫu chấm điểm"
+
+msgid "Score Histories"
+msgstr "Lịch sử chấm điểm"
+
+msgid "Scores"
+msgstr "Điểm số"
+
+msgid "No Interactions Found"
+msgstr "Không tìm thấy tương tác"
+
+msgid "Interactions linked to this contact will appear here."
+msgstr "Các tương tác liên kết với hồ sơ này sẽ hiển thị tại đây."
+
+msgid "No Score History Found"
+msgstr "Không tìm thấy lịch sử chấm điểm"
+
+msgid "Score snapshots for the linked student will appear here."
+msgstr "Các lần chấm điểm của học sinh liên kết sẽ hiển thị tại đây."
+
+msgid "Interaction"
+msgstr "Tương tác"
+
+msgid "Interaction Type"
+msgstr "Loại tương tác"
+
+msgid "Interaction Type Name"
+msgstr "Tên loại tương tác"
+
+msgid "Interaction Time"
+msgstr "Thời gian tương tác"
+
+msgid "Intent"
+msgstr "Ý định"
+
+msgid "Intent Type"
+msgstr "Loại ý định"
+
+msgid "Intent Type Name"
+msgstr "Tên loại ý định"
+
+msgid "Importance"
+msgstr "Mức độ quan trọng"
+
+msgid "Confidence"
+msgstr "Độ tin cậy"
+
+msgid "Outcome"
+msgstr "Kết quả"
+
+msgid "Summary"
+msgstr "Tóm tắt"
+
+msgid "Captured"
+msgstr "Đã ghi nhận"
+
+msgid "Follow Up Needed"
+msgstr "Cần theo dõi"
+
+msgid "Resolved"
+msgstr "Đã xử lý"
+
+msgid "No Response"
+msgstr "Không phản hồi"
+
+msgid "Medium"
+msgstr "Trung bình"
+
+msgid "High"
+msgstr "Cao"
+
+msgid "Very High"
+msgstr "Rất cao"
+
+msgid "Vietnamese Description"
+msgstr "Mô tả tiếng Việt"
+
+msgid "Latest Score"
+msgstr "Điểm mới nhất"
+
+msgid "Score Template"
+msgstr "Mẫu chấm điểm"
+
+msgid "Scoring Time"
+msgstr "Thời điểm chấm điểm"
+
+msgid "Scoring Formula"
+msgstr "Công thức chấm điểm"
+
+msgid "Fit"
+msgstr "Độ phù hợp"
+
+msgid "Engagement"
+msgstr "Mức độ tương tác"
+
+msgid "Time Decay"
+msgstr "Suy giảm theo thời gian"
+
+msgid "Negative"
+msgstr "Điểm trừ"
+
+msgid "Fit Scoring"
+msgstr "Chấm điểm độ phù hợp"
+
+msgid "Engagement Scoring"
+msgstr "Chấm điểm mức độ tương tác"
+
+msgid "Intent Scoring"
+msgstr "Chấm điểm ý định"
+
+msgid "Time Decay Scoring"
+msgstr "Chấm điểm suy giảm theo thời gian"
+
+msgid "Negative Scoring"
+msgstr "Chấm điểm trừ"
+
+msgid "Fit Score"
+msgstr "Điểm độ phù hợp"
+
+msgid "Engagement Score"
+msgstr "Điểm tương tác"
+
+msgid "Intent Score"
+msgstr "Điểm ý định"
+
+msgid "Time Decay Score"
+msgstr "Điểm suy giảm theo thời gian"
+
+msgid "Negative Score"
+msgstr "Điểm trừ"
+
+msgid "Final Score"
+msgstr "Điểm cuối cùng"
+
+msgid "Score Change"
+msgstr "Mức thay đổi điểm"
+
+msgid "Score Details"
+msgstr "Chi tiết điểm"
+
+msgid "Category"
+msgstr "Nhóm"
+
+msgid "Rule ID"
+msgstr "Mã quy tắc"
+
+msgid "Signal"
+msgstr "Tín hiệu"
+
+msgid "Score"
+msgstr "Điểm"
+
+msgid "Reason"
+msgstr "Lý do"
+
+msgid "Draft"
+msgstr "Nháp"
+
+msgid "Active"
+msgstr "Đang hoạt động"
+
+msgid "Inactive"
+msgstr "Không hoạt động"
+
+msgid "Expired"
+msgstr "Hết hiệu lực"
