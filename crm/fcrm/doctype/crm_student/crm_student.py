@@ -8,15 +8,15 @@ from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province, r
 class CRMStudent(Document):
 	def before_insert(self):
 		self._set_defaults()
-		self._normalize_mobile_no()
+		self._normalize_phone_fields()
 		self._resolve_geo()
 
 	def before_save(self):
-		self._normalize_mobile_no()
+		self._normalize_phone_fields()
 		self._resolve_geo()
 
 	def on_update(self):
-		self._sync_linked_contact_phone()
+		self._sync_linked_contact_fields()
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -36,25 +36,56 @@ class CRMStudent(Document):
 		if self.ward:
 			self.ward = resolve_ward(self.ward, self.province)
 
-	def _normalize_mobile_no(self):
-		if isinstance(self.mobile_no, str):
-			self.mobile_no = self.mobile_no.strip()
+	def _normalize_phone_fields(self):
+		phone = self.phone if isinstance(getattr(self, "phone", None), str) else (self.phone or "")
+		mobile_no = self.mobile_no if isinstance(self.mobile_no, str) else (self.mobile_no or "")
+		phone = phone.strip() if isinstance(phone, str) else phone
+		mobile_no = mobile_no.strip() if isinstance(mobile_no, str) else mobile_no
+		canonical_phone = phone or mobile_no
+		self.phone = canonical_phone
+		self.mobile_no = canonical_phone
+		if isinstance(self.email, str):
+			self.email = self.email.strip().lower()
 
-	def _sync_linked_contact_phone(self):
+	def _sync_linked_contact_fields(self):
 		contact_name = frappe.db.get_value("CRM Contact", {"student": self.name}, "name")
 		if not contact_name:
 			return
 
-		phone = self.mobile_no or ""
-		current_phone = frappe.db.get_value("CRM Contact", contact_name, "phone") or ""
-		if current_phone != phone:
-			frappe.db.set_value(
-				"CRM Contact",
-				contact_name,
+		contact_values = frappe.db.get_value(
+			"CRM Contact",
+			contact_name,
+			[
+				"full_name",
 				"phone",
-				phone,
-				update_modified=False,
-			)
+				"email",
+				"high_school",
+				"province",
+				"major",
+				"aspiration",
+				"source",
+				"admission_year",
+				"branch",
+				"enrollment_status",
+			],
+			as_dict=True,
+		) or {}
+		target_values = {
+			"full_name": self.student_name or "",
+			"phone": self.phone or "",
+			"email": self.email or "",
+			"high_school": self.high_school,
+			"province": self.province,
+			"major": self.major,
+			"aspiration": self.aspiration,
+			"source": self.source,
+			"admission_year": self.admission_year,
+			"branch": self.branch,
+			"enrollment_status": self.enrollment_status,
+		}
+		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
+		if updates:
+			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
 
 	@staticmethod
 	def default_list_data():
@@ -66,9 +97,9 @@ class CRMStudent(Document):
 				"width": "16rem",
 			},
 			{
-				"label": "Mobile",
+				"label": "Phone",
 				"type": "Data",
-				"key": "mobile_no",
+				"key": "phone",
 				"width": "10rem",
 			},
 			{
@@ -79,8 +110,9 @@ class CRMStudent(Document):
 			},
 			{
 				"label": "Enrollment Status",
-				"type": "Select",
+				"type": "Link",
 				"key": "enrollment_status",
+				"options": "CRM Enrollment Status",
 				"width": "12rem",
 			},
 			{
@@ -106,7 +138,7 @@ class CRMStudent(Document):
 		rows = [
 			"name",
 			"student_name",
-			"mobile_no",
+			"phone",
 			"email",
 			"enrollment_status",
 			"latest_score",
@@ -131,7 +163,7 @@ def convert_to_contact(student_name):
 	contact = frappe.get_doc({
 		"doctype": "CRM Contact",
 		"full_name": student.student_name,
-		"phone": student.mobile_no,
+		"phone": student.phone,
 		"email": student.email,
 		"high_school": student.high_school,
 		"province": student.province,
@@ -142,13 +174,13 @@ def convert_to_contact(student_name):
 		"branch": student.branch,
 		"student": student.name,
 		"assigned_to": crm_staff_name,
-		"stage": "Interested",
-		"lead_status": "New",
+		"enrollment_status": student.enrollment_status or "Mới",
+		"lead_status": "Mới",
 	})
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)
-	student.db_set("enrollment_status", "Converted")
+	student.db_set("enrollment_status", "Đã chuyển đổi")
 
 	return contact.name
 
@@ -166,9 +198,10 @@ def create_from_contact(contact):
 	student = frappe.get_doc({
 		"doctype": "CRM Student",
 		"student_name": contact_doc.full_name or contact_doc.name,
+		"phone": contact_doc.mobile_no,
 		"mobile_no": contact_doc.mobile_no,
 		"email": contact_doc.email_id,
-		"enrollment_status": "Pending Confirmation",
+		"enrollment_status": "Mới",
 	})
 	student.insert()
 	return student.name

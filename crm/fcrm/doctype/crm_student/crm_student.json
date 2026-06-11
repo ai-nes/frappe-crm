@@ -11,6 +11,7 @@
  "field_order": [
   "naming_series",
   "student_name",
+  "phone",
   "mobile_no",
   "email",
   "col_break_1",
@@ -50,10 +51,17 @@
    "reqd": 1
   },
   {
-   "fieldname": "mobile_no",
+   "fieldname": "phone",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Mobile",
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "mobile_no",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Legacy Mobile No",
    "options": "Phone"
   },
   {
@@ -259,5 +267,5 @@
  "states": [],
  "title_field": "student_name",
  "translated_doctype": 1,
- "search_fields": "student_name,mobile_no"
+ "search_fields": "student_name,phone,email,mobile_no"
 }

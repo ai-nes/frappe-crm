@@ -19,6 +19,7 @@
   "communication_status",
   "sla_status",
   "assigned_to",
+  "student",
   "admission_year",
   "section_parents",
   "parent_name",
@@ -135,6 +136,13 @@
    "in_standard_filter": 1,
    "label": "Assigned To",
    "options": "CRM Staff"
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student"
   },
   {
    "fieldname": "admission_year",

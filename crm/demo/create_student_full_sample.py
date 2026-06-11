@@ -61,9 +61,10 @@ def _ensure_student():
 def _apply_student_fields(student):
 	student.update({
 		"student_name": SAMPLE_STUDENT_NAME,
+		"phone": SAMPLE_PHONE,
 		"mobile_no": SAMPLE_PHONE,
 		"email": SAMPLE_EMAIL,
-		"enrollment_status": _ensure_enrollment_status("Confirmed"),
+		"enrollment_status": _ensure_enrollment_status("Đã xác nhận"),
 		"enrollment_date": frappe.utils.add_days(frappe.utils.today(), 14),
 		"converted": 1,
 		"high_school": _ensure_high_school(),
@@ -137,10 +138,10 @@ def _ensure_contact(student):
 def _apply_contact_fields(contact, student):
 	contact.update({
 		"full_name": student.student_name,
-		"phone": student.mobile_no,
+		"phone": student.phone,
 		"email": student.email,
-		"stage": "Qualified",
-		"lead_status": _ensure_lead_status("Promising"),
+		"enrollment_status": student.enrollment_status or "Đã xác nhận",
+		"lead_status": _ensure_lead_status("Có triển vọng"),
 		"student": student.name,
 		"high_school": student.high_school,
 		"province": student.province,
