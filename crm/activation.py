@@ -16,6 +16,8 @@ def get_sales_data(site_info):
 		"CRM Person",
 		"CRM Campaign",
 		"CRM Event",
+		"CRM Interaction",
+		"CRM Intent",
 		"CRM Staff",
 		"Contact",
 		"CRM Task",
