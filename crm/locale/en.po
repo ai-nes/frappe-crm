@@ -27,8 +27,8 @@ msgstr "Parent Phone"
 msgid "Student Profile"
 msgstr "Student Profile"
 
-msgid "Program"
-msgstr "Program"
+msgid "Applied Major"
+msgstr "Applied Major"
 
 msgid "Enrollment Information"
 msgstr "Enrollment Information"
@@ -91,3 +91,204 @@ msgstr "Academic Results"
 
 msgid "CRM Student Language Certificate"
 msgstr "Language Certificates"
+
+#. CRM Contact — field labels and options (standard strings)
+
+msgid "Admission Year"
+msgstr "Admission Year"
+
+msgid "Aspiration"
+msgstr "Aspiration"
+
+msgid "Assigned To"
+msgstr "Assigned To"
+
+msgid "Branch"
+msgstr "Branch"
+
+msgid "CRM Campaign"
+msgstr "CRM Campaign"
+
+msgid "CRM Event"
+msgstr "CRM Event"
+
+msgid "Communication Status"
+msgstr "Communication Status"
+
+msgid "Details"
+msgstr "Details"
+
+msgid "Email"
+msgstr "Email"
+
+msgid "Full Name"
+msgstr "Full Name"
+
+msgid "High School"
+msgstr "High School"
+
+msgid "Lead Status"
+msgstr "Lead Status"
+
+msgid "Notes"
+msgstr "Notes"
+
+msgid "Phone"
+msgstr "Phone"
+
+msgid "Province"
+msgstr "Province"
+
+msgid "SLA"
+msgstr "SLA"
+
+msgid "SLA Creation"
+msgstr "SLA Creation"
+
+msgid "SLA Status"
+msgstr "SLA Status"
+
+msgid "Series"
+msgstr "Series"
+
+msgid "Source"
+msgstr "Source"
+
+msgid "Stage"
+msgstr "Stage"
+
+msgid "Response By"
+msgstr "Response By"
+
+msgid "First Responded On"
+msgstr "First Responded On"
+
+msgid "First Response Time"
+msgstr "First Response Time"
+
+msgid "Last Responded On"
+msgstr "Last Responded On"
+
+msgid "Last Response Time"
+msgstr "Last Response Time"
+
+msgid "Rolling Responses"
+msgstr "Rolling Responses"
+
+#. Stage options
+
+msgid "Interested"
+msgstr "Interested"
+
+msgid "Qualified"
+msgstr "Qualified"
+
+msgid "Enrolled"
+msgstr "Enrolled"
+
+msgid "Lost"
+msgstr "Lost"
+
+#. Lead Status options
+
+msgid "New"
+msgstr "New"
+
+msgid "No Answer 1"
+msgstr "No Answer 1"
+
+msgid "No Answer 2"
+msgstr "No Answer 2"
+
+msgid "No Answer 3"
+msgstr "No Answer 3"
+
+msgid "Unreachable"
+msgstr "Unreachable"
+
+msgid "Callback Scheduled"
+msgstr "Callback Scheduled"
+
+msgid "Promising"
+msgstr "Promising"
+
+msgid "Considering"
+msgstr "Considering"
+
+msgid "Not Interested"
+msgstr "Not Interested"
+
+msgid "Not Promising"
+msgstr "Not Promising"
+
+msgid "Wrong Number"
+msgstr "Wrong Number"
+
+msgid "Wrong Target"
+msgstr "Wrong Target"
+
+msgid "Financially Unqualified"
+msgstr "Financially Unqualified"
+
+msgid "Follow-up Lead"
+msgstr "Follow-up Lead"
+
+msgid "Duplicate Lead"
+msgstr "Duplicate Lead"
+
+msgid "Converted"
+msgstr "Converted"
+
+#. Communication Status options
+
+msgid "Open"
+msgstr "Open"
+
+msgid "Replied"
+msgstr "Replied"
+
+#. SLA Status options
+
+msgid "First Response Due"
+msgstr "First Response Due"
+
+msgid "Rolling Response Due"
+msgstr "Rolling Response Due"
+
+msgid "Fulfilled"
+msgstr "Fulfilled"
+
+msgid "Failed"
+msgstr "Failed"
+
+#. CRM Enrollment Status options
+
+msgid "Prospect"
+msgstr "Prospect"
+
+msgid "Refused"
+msgstr "Refused"
+
+msgid "Enrollment Status"
+msgstr "Enrollment Status"
+
+msgid "CRM Enrollment Status"
+msgstr "CRM Enrollment Status"
+
+msgid "CRM Lead Status"
+msgstr "CRM Lead Status"
+
+msgid "Enrollment Statuses"
+msgstr "Enrollment Statuses"
+
+msgid "Interactions"
+msgstr "Interactions"
+
+msgid "Intents"
+msgstr "Intents"
+
+msgid "Interaction Types"
+msgstr "Interaction Types"
+
+msgid "Intent Types"
+msgstr "Intent Types"
