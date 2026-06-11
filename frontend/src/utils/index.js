@@ -230,7 +230,7 @@ export function prettyDate(date, mini = false) {
 
 export function taskStatusOptions(action, data) {
   let options = ['Backlog', 'Todo', 'In Progress', 'Done', 'Canceled']
-  let statusMeta = getMeta('CRM Task')
+  let statusMeta = getMeta('Task')
     .getFields()
     ?.find((field) => field.fieldname == 'status')
   if (statusMeta) {
@@ -249,7 +249,7 @@ export function taskStatusOptions(action, data) {
 
 export function taskPriorityOptions(action, data) {
   let options = ['Low', 'Medium', 'High']
-  let priorityMeta = getMeta('CRM Task')
+  let priorityMeta = getMeta('Task')
     .getFields()
     ?.find((field) => field.fieldname == 'priority')
   if (priorityMeta) {

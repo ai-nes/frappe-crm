@@ -11,10 +11,11 @@
  "field_order": [
   "naming_series",
   "student_name",
-  "mobile_no",
+  "phone",
   "email",
   "col_break_1",
   "enrollment_status",
+  "latest_score",
   "enrollment_date",
   "converted",
   "section_links",
@@ -49,10 +50,10 @@
    "reqd": 1
   },
   {
-   "fieldname": "mobile_no",
+   "fieldname": "phone",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Mobile",
+   "label": "Phone",
    "options": "Phone"
   },
   {
@@ -72,6 +73,13 @@
    "in_standard_filter": 1,
    "label": "Enrollment Status",
    "options": "CRM Enrollment Status"
+  },
+  {
+   "fieldname": "latest_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Latest Score",
+   "read_only": 1
   },
   {
    "fieldname": "enrollment_date",
@@ -251,5 +259,5 @@
  "states": [],
  "title_field": "student_name",
  "translated_doctype": 1,
- "search_fields": "student_name,mobile_no"
+ "search_fields": "student_name,phone,email"
 }

@@ -7,6 +7,7 @@ crm.patches.v1_0.rename_reference_doctypes_to_crm_prefix
 crm.patches.v1_0.rename_enrollment_student_to_crm_student
 crm.patches.v1_0.rename_remaining_reference_doctypes_to_crm_prefix
 crm.patches.v1_0.rename_campaign_type_to_crm_campaign_type
+crm.patches.v1_0.rename_non_admission_doctypes_without_crm_prefix
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -38,6 +39,7 @@ crm.patches.v1_0.rename_province_name_as_key
 crm.patches.v1_0.rename_high_school_include_province
 crm.patches.v1_0.add_enrollment_status_to_workspace
 crm.patches.v1_0.seed_crm_enrollment_status
+crm.patches.v1_0.ensure_pending_confirmation_enrollment_status
 crm.patches.v1_0.setup_crm_roles
 crm.patches.v1_0.setup_crm_permissions
 crm.patches.v1_0.seed_crm_education_program
@@ -50,3 +52,6 @@ crm.patches.v1_0.backfill_student_contact_phone_sync
 crm.patches.v1_0.add_student_config_to_workspace
 crm.patches.v1_0.fix_contact_fields_layout
 crm.patches.v1_0.unify_contact_status_fields
+crm.patches.v1_0.drop_sla_fields_from_contact
+crm.patches.v1_0.add_unique_phone_to_contact
+crm.patches.v1_0.consolidate_student_phone_field

@@ -220,7 +220,7 @@ const { getUser, isManager } = usersStore()
 const isNewDoc = ref(false)
 
 const { document: telephonyAgent } = useDocument(
-  'CRM Telephony Agent',
+  'Telephony Agent',
   getUser().name,
   {
     onError: (err) => {
@@ -252,7 +252,7 @@ function update() {
   if (isNewDoc.value) {
     insertResource.submit({
       doc: {
-        doctype: 'CRM Telephony Agent',
+        doctype: 'Telephony Agent',
         user: getUser().name,
         ...telephonyAgent.doc,
       },

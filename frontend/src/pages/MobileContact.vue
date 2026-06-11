@@ -232,7 +232,7 @@ async function deleteContact() {
 }
 
 const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_sidepanel_sections',
   cache: ['sidePanelSections', 'Contact'],
   params: { doctype: 'Contact' },
   auto: true,

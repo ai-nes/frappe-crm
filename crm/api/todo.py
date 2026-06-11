@@ -1,9 +1,9 @@
 import frappe
 from frappe import _
 
-from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.fcrm.doctype.notification.notification import notify_user
 
-ASSIGNMENT_DOCTYPES = {"CRM Contact", "CRM Student", "CRM Task"}
+ASSIGNMENT_DOCTYPES = {"CRM Contact", "CRM Student", "Task"}
 
 
 def after_insert(doc, method):
@@ -89,13 +89,13 @@ def get_doctype_label(doctype):
 	labels = {
 		"CRM Contact": _("crm contact"),
 		"CRM Student": _("student"),
-		"CRM Task": _("task"),
+		"Task": _("task"),
 	}
 	return labels.get(doctype, _(doctype.lower()))
 
 
 def get_redirect_to_doc(doc):
-	if doc.reference_type == "CRM Task":
+	if doc.reference_type == "Task":
 		reference_doc = frappe.get_doc(doc.reference_type, doc.reference_name)
 		return reference_doc.reference_doctype, reference_doc.reference_docname
 

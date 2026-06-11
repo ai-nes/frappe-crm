@@ -199,7 +199,7 @@ const duplicate = (sla) => {
   createResource({
     url: 'frappe.client.get',
     params: {
-      doctype: 'CRM Service Level Agreement',
+      doctype: 'Service Level Agreement',
       name: sla.name,
     },
     onSuccess: (data) => {

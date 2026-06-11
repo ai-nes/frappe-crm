@@ -1,7 +1,6 @@
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
 from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province
 
 
@@ -28,9 +27,10 @@ class CRMContact(Document):
 				"width": "14rem",
 			},
 			{
-				"label": "Stage",
-				"type": "Select",
-				"key": "stage",
+				"label": "Enrollment Status",
+				"type": "Link",
+				"key": "enrollment_status",
+				"options": "CRM Enrollment Status",
 				"width": "10rem",
 			},
 			{
@@ -52,7 +52,7 @@ class CRMContact(Document):
 			"full_name",
 			"phone",
 			"email",
-			"stage",
+			"enrollment_status",
 			"assigned_to",
 			"modified",
 		]
@@ -62,13 +62,13 @@ class CRMContact(Document):
 	def default_kanban_settings():
 		return {
 			"title_field": "full_name",
-			"kanban_fields": '["name", "full_name", "phone", "email", "assigned_to"]',
+			"kanban_fields": '["name", "full_name", "phone", "email", "enrollment_status", "assigned_to"]',
 		}
 
 	def before_insert(self):
 		self._set_defaults()
-		self._normalize_phone()
-		self._sync_phone_from_student_if_blank()
+		self._normalize_shared_fields()
+		self._sync_fields_from_student_if_blank()
 		if self.province:
 			self.province = resolve_province(self.province)
 		if self.high_school:
@@ -85,55 +85,136 @@ class CRMContact(Document):
 				self.branch = default_branch
 
 	def before_save(self):
-		self._normalize_phone()
+		self._normalize_shared_fields()
+		self._sync_fields_from_student_if_blank()
 		if self.province:
 			self.province = resolve_province(self.province)
 		if self.high_school:
 			self.high_school = resolve_high_school(self.high_school, self.province)
 
 	def on_update(self):
-		self._sync_student_mobile_no()
+		self._sync_student_fields()
 
 	def validate(self):
-		self.apply_sla()
+		self._normalize_shared_fields()
+		self._validate_unique_phone()
+		self._validate_unique_email()
 
-	def _normalize_phone(self):
+	def _validate_unique_phone(self):
+		if not self.phone:
+			return
+		existing = frappe.db.get_value(
+			"CRM Contact",
+			{"phone": self.phone, "name": ("!=", self.name or "")},
+			["name", "full_name"],
+			as_dict=True,
+		)
+		if existing:
+			frappe.throw(
+				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
+				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Số điện thoại trùng",
+			)
+
+	def _validate_unique_email(self):
+		if not self.email:
+			return
+		existing = frappe.db.get_value(
+			"CRM Contact",
+			{"email": self.email, "name": ("!=", self.name or "")},
+			["name", "full_name"],
+			as_dict=True,
+		)
+		if existing:
+			frappe.throw(
+				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
+				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Email trùng",
+			)
+
+	def _normalize_shared_fields(self):
 		if isinstance(self.phone, str):
 			self.phone = self.phone.strip()
+		if isinstance(self.email, str):
+			self.email = self.email.strip().lower()
 
-	def _sync_phone_from_student_if_blank(self):
-		if not self.student or self.phone:
-			return
-
-		self.phone = frappe.db.get_value("CRM Student", self.student, "mobile_no")
-
-	def _sync_student_mobile_no(self):
+	def _sync_fields_from_student_if_blank(self):
 		if not self.student:
 			return
 
-		mobile_no = self.phone or ""
-		current_mobile_no = frappe.db.get_value("CRM Student", self.student, "mobile_no") or ""
-		if current_mobile_no != mobile_no:
-			frappe.db.set_value(
-				"CRM Student",
-				self.student,
-				"mobile_no",
-				mobile_no,
-				update_modified=False,
-			)
+		student_values = frappe.db.get_value(
+			"CRM Student",
+			self.student,
+			[
+				"student_name",
+				"phone",
+				"email",
+				"high_school",
+				"province",
+				"major",
+				"aspiration",
+				"source",
+				"admission_year",
+				"branch",
+				"enrollment_status",
+			],
+			as_dict=True,
+		) or {}
+		field_map = {
+			"full_name": student_values.get("student_name"),
+			"phone": student_values.get("phone"),
+			"email": student_values.get("email"),
+			"high_school": student_values.get("high_school"),
+			"province": student_values.get("province"),
+			"major": student_values.get("major"),
+			"aspiration": student_values.get("aspiration"),
+			"source": student_values.get("source"),
+			"admission_year": student_values.get("admission_year"),
+			"branch": student_values.get("branch"),
+			"enrollment_status": student_values.get("enrollment_status"),
+		}
+		for fieldname, value in field_map.items():
+			if not self.get(fieldname) and value:
+				self.set(fieldname, value)
 
-	def apply_sla(self):
-		if not self.communication_status:
-			self.communication_status = "Open"
-
-		sla = get_sla(self)
-		if not sla:
-			self.sla = None
+	def _sync_student_fields(self):
+		if not self.student:
 			return
 
-		self.sla = sla.name
-		frappe.get_doc("CRM Service Level Agreement", sla.name).apply(self)
-
+		student_values = frappe.db.get_value(
+			"CRM Student",
+			self.student,
+			[
+				"student_name",
+				"phone",
+				"email",
+				"high_school",
+				"province",
+				"major",
+				"aspiration",
+				"source",
+				"admission_year",
+				"branch",
+				"enrollment_status",
+			],
+			as_dict=True,
+		) or {}
+		target_values = {
+			"student_name": self.full_name or "",
+			"phone": self.phone or "",
+			"email": self.email or "",
+			"high_school": self.high_school,
+			"province": self.province,
+			"major": self.major,
+			"aspiration": self.aspiration,
+			"source": self.source,
+			"admission_year": self.admission_year,
+			"branch": self.branch,
+			"enrollment_status": self.enrollment_status,
+		}
+		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
+		if updates:
+			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
 
 def get_permission_query_conditions(user=None):
 	if not user:

@@ -1,0 +1,179 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-06-11 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "student",
+  "score_template",
+  "scoring_time",
+  "column_break_1",
+  "fit_score",
+  "engagement_score",
+  "intent_score",
+  "time_decay_score",
+  "negative_score",
+  "final_score",
+  "score_change",
+  "section_details",
+  "details"
+ ],
+ "fields": [
+  {
+   "default": "SCH-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "SCH-.YYYY.-"
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "reqd": 1
+  },
+  {
+   "fieldname": "score_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Score Template",
+   "options": "CRM Score Template",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scoring_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Scoring Time"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fit_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Fit Score"
+  },
+  {
+   "fieldname": "engagement_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Engagement Score"
+  },
+  {
+   "fieldname": "intent_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Intent Score"
+  },
+  {
+   "fieldname": "time_decay_score",
+   "fieldtype": "Float",
+   "label": "Time Decay Score"
+  },
+  {
+   "fieldname": "negative_score",
+   "fieldtype": "Float",
+   "label": "Negative Score"
+  },
+  {
+   "fieldname": "final_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Final Score",
+   "reqd": 1
+  },
+  {
+   "fieldname": "score_change",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Score Change"
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "label": "Score Details",
+   "options": "CRM Score History Detail"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score History",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "SCH-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "student,score_template",
+ "sort_field": "scoring_time",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "student",
+ "translated_doctype": 1
+}

@@ -290,7 +290,7 @@ const deskUrl = `${window.location.origin}/app/crm-service-level-agreement/${ste
 const getSlaResource = createResource({
   url: 'frappe.client.get',
   params: {
-    doctype: 'CRM Service Level Agreement',
+    doctype: 'Service Level Agreement',
     name: step.value.data?.name,
   },
   onSuccess(data) {
@@ -425,7 +425,7 @@ const createSla = () => {
         toast.success(__('SLA Policy Created'))
         updateStep('view', data, true)
         getSlaResource.submit({
-          doctype: 'CRM Service Level Agreement',
+          doctype: 'Service Level Agreement',
           name: data.name,
         })
       },
@@ -443,7 +443,7 @@ const renameSlaResource = createResource({
   url: 'frappe.client.rename_doc',
   makeParams() {
     return {
-      doctype: 'CRM Service Level Agreement',
+      doctype: 'Service Level Agreement',
       old_name: step.value.data.name,
       new_name: slaData.value.sla_name,
     }
@@ -485,7 +485,7 @@ const updateSla = async () => {
     })
 
     getSlaResource.submit({
-      doctype: 'CRM Service Level Agreement',
+      doctype: 'Service Level Agreement',
       name: slaData.value.sla_name,
     })
   } else {

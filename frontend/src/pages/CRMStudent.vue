@@ -46,6 +46,7 @@
     >
       <template #tab-panel>
         <Activities
+          v-if="!['Interactions', 'Scores'].includes(tabs[tabIndex]?.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -53,6 +54,11 @@
           :docname="crmStudentId"
           :tabs="tabs"
           @afterSave="() => sections.reload()"
+        />
+        <InteractionScoreArea
+          v-else
+          :student="doc"
+          :type="tabs[tabIndex]?.name === 'Scores' ? 'scores' : 'interactions'"
         />
       </template>
     </Tabs>
@@ -99,6 +105,7 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
+import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
 import { copyToClipboard } from '@/utils'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
@@ -255,6 +262,8 @@ function handleSidePanelFieldChange(changes) {
 const tabs = computed(() => [
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
+  { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
+  { name: 'Scores', label: __('Scores'), icon: DetailsIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
@@ -263,7 +272,7 @@ const tabs = computed(() => [
 const { tabIndex } = useActiveTabManager(tabs, 'lastCRMStudentTab')
 
 const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_sidepanel_sections',
   cache: ['sidePanelSections', 'CRM Student'],
   params: { doctype: 'CRM Student' },
   auto: true,
