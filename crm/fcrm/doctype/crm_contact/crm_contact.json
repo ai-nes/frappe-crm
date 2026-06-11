@@ -65,14 +65,16 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Full Name",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "fieldname": "phone",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Phone",
-   "options": "Phone"
+   "options": "Phone",
+   "unique": 1,
+   "reqd": 1
   },
   {
    "fieldname": "email",
