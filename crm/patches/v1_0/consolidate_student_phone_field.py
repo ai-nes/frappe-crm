@@ -19,6 +19,7 @@ def execute():
 	# Drop mobile_no column if it exists
 	existing = {row[0] for row in frappe.db.sql("SHOW COLUMNS FROM `tabCRM Student`")}
 	if "mobile_no" in existing:
+		frappe.db.commit()
 		frappe.db.sql("ALTER TABLE `tabCRM Student` DROP COLUMN `mobile_no`")
 
 	frappe.clear_cache(doctype="CRM Student")
