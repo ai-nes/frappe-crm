@@ -181,7 +181,7 @@ function handleContactUpdate(doc) {
 }
 
 const tabs = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'Contact'],
   params: { doctype: 'Contact', type: 'Quick Entry' },
   auto: true,

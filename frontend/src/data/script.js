@@ -35,7 +35,7 @@ async function loadFileScript(doctype, view) {
 
 export function getScript(doctype, view = 'Form') {
   const scripts = createListResource({
-    doctype: 'CRM Form Script',
+    doctype: 'Form Script',
     cache: ['Form Scripts', doctype, view],
     fields: ['name', 'dt', 'view', 'script'],
     filters: { view, dt: doctype, enabled: 1 },
@@ -49,7 +49,7 @@ export function getScript(doctype, view = 'Form') {
     },
     onError: (err) => {
       console.error(
-        `Error loading CRM Form Scripts for ${doctype} (view: ${view}):`,
+        `Error loading Form Scripts for ${doctype} (view: ${view}):`,
         err,
       )
     },

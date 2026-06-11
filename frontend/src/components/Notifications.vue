@@ -125,11 +125,11 @@ function markAllAsRead() {
 }
 
 onBeforeUnmount(() => {
-  $socket.off('crm_notification')
+  $socket.off('notification')
 })
 
 onMounted(() => {
-  $socket.on('crm_notification', () => {
+  $socket.on('notification', () => {
     notifications.reload()
   })
 })

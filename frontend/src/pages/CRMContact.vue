@@ -187,7 +187,7 @@ const tabs = computed(() => [
 const { tabIndex } = useActiveTabManager(tabs, 'lastCRMContactTab')
 
 const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_sidepanel_sections',
   cache: ['sidePanelSections', 'CRM Contact'],
   params: { doctype: 'CRM Contact' },
   auto: true,

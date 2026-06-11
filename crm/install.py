@@ -6,7 +6,7 @@ import click
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
-from crm.fcrm.doctype.crm_dashboard.crm_dashboard import create_default_manager_dashboard
+from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
 
 
 def before_install():
@@ -52,8 +52,8 @@ def add_default_fields_layout(force=False):
 			"doctype": "Address",
 			"layout": '[{"name": "details_section", "columns": [{"name": "column_uSSG", "fields": ["address_title", "address_type", "address_line1", "address_line2", "city", "state", "country", "pincode"]}]}]',
 		},
-		"CRM Call Log-Quick Entry": {
-			"doctype": "CRM Call Log",
+		"Call Log-Quick Entry": {
+			"doctype": "Call Log",
 			"layout": '[{"name":"details_section","columns":[{"name":"column_uMSG","fields":["type","from","duration"]},{"name":"column_wiZT","fields":["to","status","caller","receiver"]}]}]',
 		},
 		"CRM Person-Quick Entry": {
@@ -64,8 +64,8 @@ def add_default_fields_layout(force=False):
 			"doctype": "FCRM Note",
 			"layout": '[{"name":"details_section","columns":[{"name":"column_o2s9","fields":["title", "content"]}]}]',
 		},
-		"CRM Task-Quick Entry": {
-			"doctype": "CRM Task",
+		"Task-Quick Entry": {
+			"doctype": "Task",
 			"layout": '[{"name":"first_tab","sections":[{"name":"details_section","columns":[{"name":"column_X9sG","fields":["title","description"]}]},{"name":"assignment_section","columns":[{"name":"column_9XjK","fields":["priority","due_date"]},{"name":"column_7s8n","fields":["assigned_to","status"]}],"hideBorder":true}]}]',
 		},
 	}
@@ -117,39 +117,39 @@ def add_default_fields_layout(force=False):
 	}
 
 	for layout in quick_entry_layouts:
-		if frappe.db.exists("CRM Fields Layout", layout):
+		if frappe.db.exists("Fields Layout", layout):
 			if force:
-				frappe.delete_doc("CRM Fields Layout", layout)
+				frappe.delete_doc("Fields Layout", layout)
 			else:
 				continue
 
-		doc = frappe.new_doc("CRM Fields Layout")
+		doc = frappe.new_doc("Fields Layout")
 		doc.type = "Quick Entry"
 		doc.dt = quick_entry_layouts[layout]["doctype"]
 		doc.layout = quick_entry_layouts[layout]["layout"]
 		doc.insert()
 
 	for layout in sidebar_fields_layouts:
-		if frappe.db.exists("CRM Fields Layout", layout):
+		if frappe.db.exists("Fields Layout", layout):
 			if force:
-				frappe.delete_doc("CRM Fields Layout", layout)
+				frappe.delete_doc("Fields Layout", layout)
 			else:
 				continue
 
-		doc = frappe.new_doc("CRM Fields Layout")
+		doc = frappe.new_doc("Fields Layout")
 		doc.type = "Side Panel"
 		doc.dt = sidebar_fields_layouts[layout]["doctype"]
 		doc.layout = sidebar_fields_layouts[layout]["layout"]
 		doc.insert()
 
 	for layout in data_fields_layouts:
-		if frappe.db.exists("CRM Fields Layout", layout):
+		if frappe.db.exists("Fields Layout", layout):
 			if force:
-				frappe.delete_doc("CRM Fields Layout", layout)
+				frappe.delete_doc("Fields Layout", layout)
 			else:
 				continue
 
-		doc = frappe.new_doc("CRM Fields Layout")
+		doc = frappe.new_doc("Fields Layout")
 		doc.type = "Data Fields"
 		doc.dt = data_fields_layouts[layout]["doctype"]
 		doc.layout = data_fields_layouts[layout]["layout"]
@@ -287,15 +287,15 @@ def add_default_quick_filters():
 		"CRM Contact": ["full_name", "phone", "email", "stage", "assigned_to", "source"],
 		"CRM High School": ["school_code", "school_type", "ward", "province"],
 		"Contact": ["status", "email_id", "phone"],
-		"CRM Task": ["title", "priority", "assigned_to", "status", "due_date"],
-		"CRM Call Log": ["telephony_medium", "type", "status", "from", "to"],
+		"Task": ["title", "priority", "assigned_to", "status", "due_date"],
+		"Call Log": ["telephony_medium", "type", "status", "from", "to"],
 	}
 
 	for quick_filter in quick_filters:
-		if frappe.db.exists("CRM Global Settings", {"dt": quick_filter}):
+		if frappe.db.exists("Global Settings", {"dt": quick_filter}):
 			continue
 
-		doc = frappe.new_doc("CRM Global Settings")
+		doc = frappe.new_doc("Global Settings")
 		doc.dt = quick_filter
 		doc.json = json.dumps(quick_filters[quick_filter])
 		doc.insert()

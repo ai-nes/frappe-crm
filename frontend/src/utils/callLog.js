@@ -2,7 +2,7 @@ import { formatDate, timeAgo } from '@/utils'
 import { getMeta } from '@/stores/meta'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
-  getMeta('CRM Call Log')
+  getMeta('Call Log')
 
 export function getCallLogDetail(row, log, columns = []) {
   let incoming = log.type === 'Incoming'

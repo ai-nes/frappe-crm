@@ -1,7 +1,7 @@
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.doctype.crm_service_level_agreement.utils import get_sla
+from crm.fcrm.doctype.service_level_agreement.utils import get_sla
 from crm.fcrm.utils.geo_resolver import resolve_province
 
 
@@ -97,7 +97,7 @@ class CRMContact(Document):
 			return
 
 		self.sla = sla.name
-		frappe.get_doc("CRM Service Level Agreement", sla.name).apply(self)
+		frappe.get_doc("Service Level Agreement", sla.name).apply(self)
 
 
 def get_permission_query_conditions(user=None):

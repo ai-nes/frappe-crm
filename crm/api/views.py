@@ -4,7 +4,7 @@ from pypika import Criterion
 
 @frappe.whitelist()
 def get_views(doctype: str):
-	View = frappe.qb.DocType("CRM View Settings")
+	View = frappe.qb.DocType("View Settings")
 	query = (
 		frappe.qb.from_(View)
 		.select("*")

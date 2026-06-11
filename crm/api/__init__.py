@@ -80,10 +80,10 @@ def accept_invitation(key: str | None = None):
 	if not key:
 		frappe.throw(_("Invalid or expired key"))
 
-	result = frappe.db.get_all("CRM Invitation", filters={"key": key}, pluck="name")
+	result = frappe.db.get_all("Invitation", filters={"key": key}, pluck="name")
 	if not result:
 		frappe.throw(_("Invalid or expired key"))
-	invitation = frappe.get_doc("CRM Invitation", result[0])
+	invitation = frappe.get_doc("Invitation", result[0])
 	invitation.accept()
 	invitation.reload()
 
@@ -116,7 +116,7 @@ def invite_by_email(emails: str, role: str):
 		return
 	existing_members = frappe.db.get_all("User", filters={"email": ["in", email_list]}, pluck="email")
 	existing_invites = frappe.db.get_all(
-		"CRM Invitation",
+		"Invitation",
 		filters={
 			"email": ["in", email_list],
 			"role": ["in", ["System Manager", "Sales Manager", "Sales User"]],
@@ -127,7 +127,7 @@ def invite_by_email(emails: str, role: str):
 	to_invite = list(set(email_list) - set(existing_members) - set(existing_invites))
 
 	for email in to_invite:
-		frappe.get_doc(doctype="CRM Invitation", email=email, role=role).insert(ignore_permissions=True)
+		frappe.get_doc(doctype="Invitation", email=email, role=role).insert(ignore_permissions=True)
 
 	return {
 		"existing_members": existing_members,

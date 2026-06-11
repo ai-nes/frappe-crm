@@ -69,7 +69,7 @@ def create_demo_users():
 
 def delete_demo_users(demo_user_emails):
 	# delete notifications first — they link to users and block deletion
-	Notification = DocType("CRM Notification")
+	Notification = DocType("Notification")
 	frappe.qb.from_(Notification).delete().where(
 		(Notification.from_user.isin(demo_user_emails)) | (Notification.to_user.isin(demo_user_emails))
 	).run()

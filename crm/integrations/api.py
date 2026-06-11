@@ -11,10 +11,10 @@ from crm.utils import are_same_phone_number, parse_phone_number
 def _get_recording_credentials(telephony_medium: str) -> tuple:
 	"""Return (api_key, secret) for the given telephony medium."""
 	if telephony_medium == "Twilio":
-		s = frappe.get_single("CRM Twilio Settings")
+		s = frappe.get_single("Twilio Settings")
 		return s.api_key, s.get_password("api_secret")
 	elif telephony_medium == "Exotel":
-		s = frappe.get_single("CRM Exotel Settings")
+		s = frappe.get_single("Exotel Settings")
 		return s.api_key, s.get_password("api_token")
 	frappe.throw(_("Unknown telephony medium: {0}").format(telephony_medium))
 
@@ -23,18 +23,18 @@ def _get_recording_credentials(telephony_medium: str) -> tuple:
 def is_call_integration_enabled():
 	return {
 		"integrations": {
-			"twilio": bool(frappe.db.get_single_value("CRM Twilio Settings", "enabled")),
-			"exotel": bool(frappe.db.get_single_value("CRM Exotel Settings", "enabled")),
+			"twilio": bool(frappe.db.get_single_value("Twilio Settings", "enabled")),
+			"exotel": bool(frappe.db.get_single_value("Exotel Settings", "enabled")),
 		},
 		"default_calling_medium": get_user_default_calling_medium(),
 	}
 
 
 def get_user_default_calling_medium():
-	if not frappe.db.exists("CRM Telephony Agent", frappe.session.user):
+	if not frappe.db.exists("Telephony Agent", frappe.session.user):
 		return None
 
-	default_medium = frappe.db.get_value("CRM Telephony Agent", frappe.session.user, "default_medium")
+	default_medium = frappe.db.get_value("Telephony Agent", frappe.session.user, "default_medium")
 
 	if not default_medium:
 		return None
@@ -44,16 +44,16 @@ def get_user_default_calling_medium():
 
 @frappe.whitelist()
 def set_default_calling_medium(medium: str):
-	if not frappe.db.exists("CRM Telephony Agent", frappe.session.user):
+	if not frappe.db.exists("Telephony Agent", frappe.session.user):
 		frappe.get_doc(
 			{
-				"doctype": "CRM Telephony Agent",
+				"doctype": "Telephony Agent",
 				"user": frappe.session.user,
 				"default_medium": medium,
 			}
 		).insert(ignore_permissions=True)
 	else:
-		frappe.db.set_value("CRM Telephony Agent", frappe.session.user, "default_medium", medium)
+		frappe.db.set_value("Telephony Agent", frappe.session.user, "default_medium", medium)
 
 	return get_user_default_calling_medium()
 
@@ -73,7 +73,7 @@ def add_note_to_call_log(call_sid: str, note: dict):
 	else:
 		_note = frappe.set_value("FCRM Note", note.get("name"), "content", note.get("content"))
 
-	call_log = frappe.get_cached_doc("CRM Call Log", call_sid)
+	call_log = frappe.get_cached_doc("Call Log", call_sid)
 	call_log.link_with_reference_doc("FCRM Note", _note.name)
 	call_log.save(ignore_permissions=True)
 
@@ -87,7 +87,7 @@ def add_task_to_call_log(call_sid: str, task: dict):
 	if not task.get("name"):
 		_task = frappe.get_doc(
 			{
-				"doctype": "CRM Task",
+				"doctype": "Task",
 				"title": task.get("title"),
 				"description": task.get("description"),
 				"assigned_to": task.get("assigned_to"),
@@ -97,7 +97,7 @@ def add_task_to_call_log(call_sid: str, task: dict):
 			}
 		).insert(ignore_permissions=True)
 	else:
-		_task = frappe.get_doc("CRM Task", task.get("name"))
+		_task = frappe.get_doc("Task", task.get("name"))
 		_task.update(
 			{
 				"title": task.get("title"),
@@ -110,8 +110,8 @@ def add_task_to_call_log(call_sid: str, task: dict):
 		)
 		_task.save(ignore_permissions=True)
 
-	call_log = frappe.get_doc("CRM Call Log", call_sid)
-	call_log.link_with_reference_doc("CRM Task", _task.name)
+	call_log = frappe.get_doc("Call Log", call_sid)
+	call_log.link_with_reference_doc("Task", _task.name)
 	call_log.save(ignore_permissions=True)
 
 	return _task
@@ -145,10 +145,10 @@ def get_contact_by_phone_number(phone_number: str):
 @frappe.whitelist()
 def get_recording_url(call_log_name: str):
 	"""Fetch and stream a call recording, authenticating with the provider's credentials."""
-	if not call_log_name or not frappe.db.exists("CRM Call Log", call_log_name):
+	if not call_log_name or not frappe.db.exists("Call Log", call_log_name):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 
-	log = frappe.get_doc("CRM Call Log", call_log_name)
+	log = frappe.get_doc("Call Log", call_log_name)
 
 	if not log.recording_url:
 		frappe.throw(_("Recording URL not found"), frappe.DoesNotExistError)

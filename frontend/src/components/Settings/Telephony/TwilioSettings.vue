@@ -144,8 +144,8 @@ import { computed } from 'vue'
 const emit = defineEmits(['updateStep'])
 
 const { document: twilio } = useDocument(
-  'CRM Twilio Settings',
-  'CRM Twilio Settings',
+  'Twilio Settings',
+  'Twilio Settings',
   {
     whitelistedMethods: {
       fetchTwilioApps: {

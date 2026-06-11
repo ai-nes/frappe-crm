@@ -117,7 +117,7 @@ const props = defineProps({
 const call = reactive(props.activity)
 
 const callLog = createResource({
-  url: 'crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log',
+  url: 'crm.fcrm.doctype.call_log.call_log.get_call_log',
   params: { name: call.name },
   cache: ['call_log', call.name],
   auto: true,

@@ -71,8 +71,8 @@ def clear_demo_data():
 	task_names = json.loads(frappe.db.get_default(DEMO_TASKS_KEY) or "[]")
 	call_log_names = json.loads(frappe.db.get_default(DEMO_CALL_LOGS_KEY) or "[]")
 
-	_delete_docs("CRM Call Log", call_log_names)
-	_delete_docs("CRM Task", task_names)
+	_delete_docs("Call Log", call_log_names)
+	_delete_docs("Task", task_names)
 	_delete_docs("FCRM Note", note_names)
 	_delete_docs("CRM Contact", contact_names)
 	_delete_docs("CRM Student", student_names)
@@ -174,7 +174,7 @@ def _create_demo_tasks(contact_names, demo_users):
 	for contact_name in contact_names:
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Task",
+				"doctype": "Task",
 				"title": "Follow up application documents",
 				"priority": "Medium",
 				"status": "Todo",
@@ -183,7 +183,7 @@ def _create_demo_tasks(contact_names, demo_users):
 				"reference_docname": contact_name,
 			}
 		).insert(ignore_permissions=True)
-		_backdate("CRM Task", doc.name, len(names) + 2)
+		_backdate("Task", doc.name, len(names) + 2)
 		names.append(doc.name)
 
 	return names
@@ -195,7 +195,7 @@ def _create_demo_call_logs(contact_names):
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Call Log",
+				"doctype": "Call Log",
 				"from": contact.phone,
 				"to": "+84 280 100 0000",
 				"type": "Incoming",
@@ -206,7 +206,7 @@ def _create_demo_call_logs(contact_names):
 				"reference_docname": contact.name,
 			}
 		).insert(ignore_permissions=True)
-		_backdate("CRM Call Log", doc.name, len(names) + 1)
+		_backdate("Call Log", doc.name, len(names) + 1)
 		names.append(doc.name)
 
 	return names

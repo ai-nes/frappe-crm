@@ -218,7 +218,7 @@
    "fieldtype": "Link",
    "hidden": 1,
    "label": "SLA",
-   "options": "CRM Service Level Agreement",
+   "options": "Service Level Agreement",
    "read_only": 1
   },
   {
@@ -267,7 +267,7 @@
    "fieldtype": "Table",
    "hidden": 1,
    "label": "Rolling Responses",
-   "options": "CRM Rolling Response Time"
+   "options": "Rolling Response Time"
   }
  ],
  "index_web_pages_for_search": 1,

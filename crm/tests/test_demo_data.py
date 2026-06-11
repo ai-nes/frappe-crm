@@ -89,8 +89,8 @@ class TestDemoData(FrappeTestCase):
 		for user in DEMO_USERS:
 			self.assertFalse(frappe.db.exists("User", user["email"]))
 
-		self.assertFalse(self._check_demo_records_exist("CRM Call Log", call_log_names))
-		self.assertFalse(self._check_demo_records_exist("CRM Task", task_names))
+		self.assertFalse(self._check_demo_records_exist("Call Log", call_log_names))
+		self.assertFalse(self._check_demo_records_exist("Task", task_names))
 		self.assertFalse(self._check_demo_records_exist("FCRM Note", note_names))
 		self.assertFalse(self._check_demo_records_exist("CRM Contact", contact_names))
 		self.assertFalse(self._check_demo_records_exist("CRM Student", student_names))

@@ -64,7 +64,7 @@ def get_users():
 		if frappe.session.user == user.name:
 			user.session_user = True
 
-		user.is_telephony_agent = frappe.db.exists("CRM Telephony Agent", {"user": user.name})
+		user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
 		user.language = user.language or system_language
 
 		if user.role in ("System Manager", "Sales Manager", "Sales User"):

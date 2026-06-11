@@ -13,7 +13,7 @@ const slaSearchQuery = ref('')
 const step = ref({ screen: 'list', data: null, fetchData: false })
 
 const slaPolicyListData = createListResource({
-  doctype: 'CRM Service Level Agreement',
+  doctype: 'Service Level Agreement',
   fields: ['name', 'default', 'enabled', 'apply_on'],
   cache: ['SLAPolicyList'],
   orderBy: 'modified desc',

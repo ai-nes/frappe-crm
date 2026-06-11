@@ -198,7 +198,7 @@ const inviteByEmail = createResource({
 
 const pendingInvitations = createListResource({
   type: 'list',
-  doctype: 'CRM Invitation',
+  doctype: 'Invitation',
   filters: { status: 'Pending' },
   fields: ['name', 'email', 'role'],
   pageLength: 999,

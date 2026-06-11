@@ -5,7 +5,7 @@ from frappe import _
 from frappe.permissions import add_permission, update_permission_property
 
 from crm.api.doc import get_assigned_users
-from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.fcrm.doctype.notification.notification import notify_user
 from crm.integrations.api import get_contact_reference_from_number
 
 ALLOWED_WHATSAPP_ROLES = ["System Manager", "Sales Manager", "Sales User"]
