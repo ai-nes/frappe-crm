@@ -9053,3 +9053,27 @@ msgstr "{0} phải có đúng 10 số"
 
 msgid "Error saving data"
 msgstr "Lỗi khi lưu dữ liệu"
+
+#. CRM Education Program DocType
+msgid "CRM Education Program"
+msgstr "Chương trình đào tạo"
+
+msgid "Education Programs"
+msgstr "Chương trình đào tạo"
+
+msgid "New CRM Education Program"
+msgstr "Thêm chương trình đào tạo"
+
+msgid "Program Name"
+msgstr "Tên chương trình"
+
+msgid "Program Type"
+msgstr "Loại chương trình"
+
+#. CRM Student Academic Result DocType (child table)
+msgid "CRM Student Academic Result"
+msgstr "Kết quả học tập"
+
+#. CRM Student Language Certificate DocType (child table)
+msgid "CRM Student Language Certificate"
+msgstr "Chứng chỉ ngoại ngữ"
