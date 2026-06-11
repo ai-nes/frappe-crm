@@ -74,6 +74,17 @@ REF_PERMS = [
 	_p("Promoter-PR", read=1),
 ]
 
+EDUCATION_PROGRAM_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",               read=1),
+	_p("CTV-Sale",           read=1),
+	_p("Promoter-PR",        read=1),
+	_p("Enrollment Manager", read=1, write=1, create=1, prt=1, export=1),
+]
+
 OPS_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
@@ -107,6 +118,7 @@ DOCTYPE_PERMS = {
 	"CRM Enrollment Status": REF_PERMS,
 	"CRM Lead Source":       REF_PERMS,
 	"CRM Admission Year":    REF_PERMS,
+	"CRM Education Program": EDUCATION_PROGRAM_PERMS,
 	"CRM Campaign Type":     REF_PERMS,
 	"CRM Department":        REF_PERMS,
 	"CRM Lost Reason":       REF_PERMS,
