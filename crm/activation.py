@@ -20,14 +20,14 @@ def get_sales_data(site_info):
 		"CRM Intent",
 		"CRM Staff",
 		"Contact",
-		"CRM Task",
+		"Task",
 		"FCRM Note",
-		"CRM Call Log",
+		"Call Log",
 		"CRM Lead Source",
 		"CRM Lost Reason",
-		"CRM Form Script",
-		"CRM Fields Layout",
-		"CRM View Settings",
+		"Form Script",
+		"Fields Layout",
+		"View Settings",
 	]
 
 	for doctype in doctypes:

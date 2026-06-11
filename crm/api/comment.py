@@ -6,7 +6,7 @@ from frappe import _
 from frappe.desk.form.utils import add_comment as frappe_add_comment
 from frappe.utils import get_fullname
 
-from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.fcrm.doctype.notification.notification import notify_user
 
 
 def on_update(self, method):

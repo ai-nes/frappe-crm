@@ -15,6 +15,7 @@
   "email",
   "col_break_1",
   "enrollment_status",
+  "latest_score",
   "enrollment_date",
   "converted",
   "section_links",
@@ -72,6 +73,13 @@
    "in_standard_filter": 1,
    "label": "Enrollment Status",
    "options": "CRM Enrollment Status"
+  },
+  {
+   "fieldname": "latest_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Latest Score",
+   "read_only": 1
   },
   {
    "fieldname": "enrollment_date",

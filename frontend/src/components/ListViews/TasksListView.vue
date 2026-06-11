@@ -37,7 +37,7 @@
       v-slot="{ idx, column, item }"
       class="mx-3 sm:mx-5"
       :rows="rows"
-      doctype="CRM Task"
+      doctype="Task"
     >
       <div v-if="column.key === 'due_date' && item">
         <Tooltip :text="item && formatDate(item, 'ddd, MMM D, YYYY | hh:mm a')">
@@ -174,7 +174,7 @@
   <ListBulkActions
     ref="listBulkActionsRef"
     v-model="list"
-    doctype="CRM Task"
+    doctype="Task"
     :options="{
       hideAssign: true,
     }"

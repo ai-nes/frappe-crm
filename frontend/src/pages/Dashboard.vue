@@ -285,7 +285,7 @@ function save() {
   })
 
   saveDashboard.submit({
-    doctype: 'CRM Dashboard',
+    doctype: 'Dashboard',
     name: 'Manager Dashboard',
     fieldname: 'layout',
     value: JSON.stringify(dashboardItemsCopy),

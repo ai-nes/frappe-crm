@@ -6,13 +6,13 @@ from frappe.utils import random_string
 
 
 def execute():
-	layouts = frappe.get_all("CRM Fields Layout", fields=["name", "layout", "type"])
+	layouts = frappe.get_all("Fields Layout", fields=["name", "layout", "type"])
 
 	for layout in layouts:
 		old_layout = layout.layout
 		new_layout = get_new_layout(old_layout, layout.type)
 
-		frappe.db.set_value("CRM Fields Layout", layout.name, "layout", new_layout)
+		frappe.db.set_value("Fields Layout", layout.name, "layout", new_layout)
 
 
 def get_new_layout(old_layout, type):

@@ -1,6 +1,6 @@
 import frappe
 
-NEW_STATUSES = ["New", "Confirmed", "Prospect", "Enrolled", "Refused", "Converted"]
+NEW_STATUSES = ["New", "Pending Confirmation", "Confirmed", "Prospect", "Enrolled", "Refused", "Converted"]
 
 
 def execute():

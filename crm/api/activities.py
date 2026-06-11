@@ -7,7 +7,7 @@ from frappe.desk.form.load import get_docinfo
 from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
-from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
+from crm.fcrm.doctype.call_log.call_log import parse_call_log
 
 
 IGNORED_VERSION_FIELDS = {
@@ -232,7 +232,7 @@ def parse_grouped_versions(versions: list):
 
 def get_linked_calls(doctype: str, name: str):
 	calls = frappe.db.get_all(
-		"CRM Call Log",
+		"Call Log",
 		filters={"reference_doctype": doctype, "reference_docname": name},
 		fields=[
 			"name",
@@ -256,7 +256,7 @@ def get_linked_calls(doctype: str, name: str):
 		filters={
 			"link_doctype": doctype,
 			"link_name": name,
-			"parenttype": "CRM Call Log",
+			"parenttype": "Call Log",
 		},
 		pluck="parent",
 	)
@@ -265,7 +265,7 @@ def get_linked_calls(doctype: str, name: str):
 	tasks = []
 
 	if linked_calls:
-		CallLog = frappe.qb.DocType("CRM Call Log")
+		CallLog = frappe.qb.DocType("Call Log")
 		Link = frappe.qb.DocType("Dynamic Link")
 		query = (
 			frappe.qb.from_(CallLog)
@@ -295,10 +295,10 @@ def get_linked_calls(doctype: str, name: str):
 		for call in _calls:
 			if call.get("link_doctype") == "FCRM Note":
 				notes.append(call.link_name)
-			elif call.get("link_doctype") == "CRM Task":
+			elif call.get("link_doctype") == "Task":
 				tasks.append(call.link_name)
 
-		_calls = [call for call in _calls if call.get("link_doctype") not in ["FCRM Note", "CRM Task"]]
+		_calls = [call for call in _calls if call.get("link_doctype") not in ["FCRM Note", "Task"]]
 		if _calls:
 			calls = calls + _calls
 
@@ -311,7 +311,7 @@ def get_linked_calls(doctype: str, name: str):
 
 	if tasks:
 		tasks = frappe.db.get_all(
-			"CRM Task",
+			"Task",
 			filters={"name": ("in", tasks)},
 			fields=[
 				"name",
@@ -344,7 +344,7 @@ def get_linked_notes(doctype: str, name: str):
 def get_linked_tasks(doctype: str, name: str):
 	return (
 		frappe.db.get_all(
-			"CRM Task",
+			"Task",
 			filters={"reference_doctype": doctype, "reference_docname": name},
 			fields=[
 				"name",

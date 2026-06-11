@@ -46,7 +46,7 @@
  "index_web_pages_for_search": 1,
  "links": [
   {
-   "link_doctype": "CRM Call Log",
+   "link_doctype": "Call Log",
    "link_fieldname": "note"
   }
  ],

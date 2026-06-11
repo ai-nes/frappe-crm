@@ -22,7 +22,7 @@ const { capture } = useTelemetry()
 function showTask(task) {
   showModal({
     name: task?.name,
-    doctype: 'CRM Task',
+    doctype: 'Task',
     title: 'Task',
     defaults: {
       reference_doctype: props.doctype,
@@ -37,7 +37,7 @@ function showTask(task) {
 
 async function deleteTask(name) {
   await call('frappe.client.delete', {
-    doctype: 'CRM Task',
+    doctype: 'Task',
     name,
   })
   activities.value.reload()
@@ -45,7 +45,7 @@ async function deleteTask(name) {
 
 function updateTaskStatus(status, task) {
   call('frappe.client.set_value', {
-    doctype: 'CRM Task',
+    doctype: 'Task',
     name: task.name,
     fieldname: 'status',
     value: status,
@@ -77,12 +77,12 @@ function afterDoctype(d, isInsert = false) {
   let name =
     d.doctype == 'FCRM Note'
       ? 'note'
-      : d.doctype == 'CRM Task'
+      : d.doctype == 'Task'
         ? 'task'
         : 'call_log'
 
   let redirectHash = name + 's'
-  if (d.doctype == 'CRM Call Log') {
+  if (d.doctype == 'Call Log') {
     redirectHash = 'calls'
   }
 
@@ -99,7 +99,7 @@ function afterDoctype(d, isInsert = false) {
 // Call Logs
 function createCallLog() {
   showModal({
-    doctype: 'CRM Call Log',
+    doctype: 'Call Log',
     title: 'Call Log',
     defaults: {
       reference_doctype: props.doctype,

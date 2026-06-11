@@ -84,6 +84,12 @@ class CRMStudent(Document):
 				"width": "12rem",
 			},
 			{
+				"label": "Latest Score",
+				"type": "Float",
+				"key": "latest_score",
+				"width": "8rem",
+			},
+			{
 				"label": "Source",
 				"type": "Link",
 				"key": "source",
@@ -103,6 +109,7 @@ class CRMStudent(Document):
 			"mobile_no",
 			"email",
 			"enrollment_status",
+			"latest_score",
 			"source",
 			"converted",
 			"modified",

@@ -232,7 +232,7 @@ const note = ref({
 function openNoteModal() {
   showModal({
     name: note.value.name || null,
-    doctype: 'CRM Call Log',
+    doctype: 'Call Log',
     title: 'Call Log',
     callbacks: {
       afterInsert: (n) => updateNote(n, true),

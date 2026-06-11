@@ -192,7 +192,7 @@ const dialog = ref({
 const isConfirmingDelete = ref(false)
 
 const holidayListData = createListResource({
-  doctype: 'CRM Holiday List',
+  doctype: 'Holiday List',
   fields: ['name'],
   auto: true,
 })

@@ -33,7 +33,7 @@
   {
    "fieldname": "dropdown_items",
    "fieldtype": "Table",
-   "options": "CRM Dropdown Item"
+   "options": "Dropdown Item"
   },
   {
    "fieldname": "defaults_tab",

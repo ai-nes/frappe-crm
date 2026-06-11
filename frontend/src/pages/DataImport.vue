@@ -93,11 +93,11 @@ const doctypeMap = {
     listRoute: '/crm/contacts',
     pageRoute: `/crm/contacts/docname`,
   },
-  'CRM Task': {
+  'Task': {
     title: 'Tasks',
     listRoute: '/crm/tasks',
   },
-  'CRM Call Log': {
+  'Call Log': {
     title: 'Call Log',
     listRoute: '/crm/call-logs',
   },

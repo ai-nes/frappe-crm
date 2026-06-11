@@ -22,7 +22,7 @@
     v-model:loadMore="loadMore"
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM Call Log"
+    doctype="Call Log"
   />
   <CallLogsListView
     v-if="callLogs.data && rows.length"
@@ -120,7 +120,7 @@ const callLog = ref({})
 function showCallLog(name) {
   showCallLogDetailModal.value = true
   callLog.value = createResource({
-    url: 'crm.fcrm.doctype.crm_call_log.crm_call_log.get_call_log',
+    url: 'crm.fcrm.doctype.call_log.call_log.get_call_log',
     params: { name },
     cache: ['call_log', name],
     auto: true,
@@ -132,7 +132,7 @@ const { capture } = useTelemetry()
 
 function createCallLog() {
   showModal({
-    doctype: 'CRM Call Log',
+    doctype: 'Call Log',
     title: 'Call Log',
     callbacks: {
       afterInsert: () => {

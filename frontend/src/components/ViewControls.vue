@@ -998,7 +998,7 @@ function createOrUpdateStandardView() {
   if (route.query.view) return
   view.value.doctype = props.doctype
   call(
-    'crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_standard_view',
+    'crm.fcrm.doctype.view_settings.view_settings.create_or_update_standard_view',
     {
       view: view.value,
     },
@@ -1161,7 +1161,7 @@ function createView() {
 }
 
 function setAsDefault(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default', {
+  call('crm.fcrm.doctype.view_settings.view_settings.set_as_default', {
     name: v.name,
     type: v.type,
     doctype: v.dt,
@@ -1187,7 +1187,7 @@ function editView(v, close) {
 }
 
 function publicView(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.public', {
+  call('crm.fcrm.doctype.view_settings.view_settings.public', {
     name: v.name,
     value: !v.public,
   }).then(() => {
@@ -1198,7 +1198,7 @@ function publicView(v) {
 }
 
 function pinView(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', {
+  call('crm.fcrm.doctype.view_settings.view_settings.pin', {
     name: v.name,
     value: !v.pinned,
   }).then(() => {
@@ -1209,7 +1209,7 @@ function pinView(v) {
 }
 
 function deleteView(v, close) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete', {
+  call('crm.fcrm.doctype.view_settings.view_settings.delete', {
     name: v.name,
   }).then(() => {
     router.push({ name: route.name, params: { viewType: 'list' } })
@@ -1221,7 +1221,7 @@ function deleteView(v, close) {
 
 function fetchAndUpdateKanbanColumns(v) {
   call(
-    'crm.fcrm.doctype.crm_view_settings.crm_view_settings.fetch_and_update_kanban_columns',
+    'crm.fcrm.doctype.view_settings.view_settings.fetch_and_update_kanban_columns',
     {
       name: v.name,
     },

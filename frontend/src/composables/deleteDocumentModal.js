@@ -14,10 +14,10 @@ const LIST_ROUTE_BY_DOCTYPE = {
   'CRM Campaign': 'CRM Campaigns',
   'CRM Person': 'CRM Persons',
   'CRM Staff': 'CRM Staff',
-  'CRM Task': 'Tasks',
+  'Task': 'Tasks',
   'CRM Student': 'CRM Students',
   'CRM High School': 'High Schools',
-  'CRM Call Log': 'Call Logs',
+  'Call Log': 'Call Logs',
 }
 
 export function openDeleteDocumentModal(doctype, docname, routeName = null) {

@@ -1,5 +1,5 @@
 /**
- * Extract class names from a CRM Form Script string.
+ * Extract class names from a Form Script string.
  * Ignores class names inside comments.
  *
  * @param {string} script - raw script source

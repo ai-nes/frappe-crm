@@ -9,14 +9,14 @@ ROUTES_BY_DOCTYPE = {
 	"CRM High School": ("High School", "highSchoolId", "high school"),
 	"CRM Campaign": ("CRM Campaign", "crm_campaignId", "crm_campaign"),
 	"CRM Event": ("CRM Event", "crmEventId", "crm event"),
-	"CRM Task": ("Tasks", None, "task"),
+	"Task": ("Tasks", None, "task"),
 	"Contact": ("Contact", "contactId", "contact"),
 }
 
 
 @frappe.whitelist()
 def get_notifications():
-	Notification = frappe.qb.DocType("CRM Notification")
+	Notification = frappe.qb.DocType("Notification")
 	query = (
 		frappe.qb.from_(Notification)
 		.select("*")
@@ -62,8 +62,8 @@ def mark_as_read(user: str | None = None, doc: str | None = None):
 			{"comment": doc},
 			{"notification_type_doc": doc},
 		]
-	for n in frappe.get_all("CRM Notification", filters=filters, or_filters=or_filters):
-		d = frappe.get_doc("CRM Notification", n.name)
+	for n in frappe.get_all("Notification", filters=filters, or_filters=or_filters):
+		d = frappe.get_doc("Notification", n.name)
 		d.read = True
 		d.save()
 
@@ -76,7 +76,7 @@ def get_hash(notification):
 	if notification.type == "WhatsApp":
 		_hash = "#whatsapp"
 
-	if notification.type == "Assignment" and notification.notification_type_doctype == "CRM Task":
+	if notification.type == "Assignment" and notification.notification_type_doctype == "Task":
 		_hash = "#tasks"
 		if "has been removed by" in notification.message:
 			_hash = ""

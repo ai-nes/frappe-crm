@@ -74,10 +74,10 @@ def make_a_call(to_number: str, from_number: str | None = None, caller_id: str |
 	endpoint = get_exotel_endpoint("Calls/connect.json?details=true")
 
 	if not from_number:
-		from_number = frappe.get_value("CRM Telephony Agent", {"user": frappe.session.user}, "mobile_no")
+		from_number = frappe.get_value("Telephony Agent", {"user": frappe.session.user}, "mobile_no")
 
 	if not caller_id:
-		caller_id = frappe.get_value("CRM Telephony Agent", {"user": frappe.session.user}, "exotel_number")
+		caller_id = frappe.get_value("Telephony Agent", {"user": frappe.session.user}, "exotel_number")
 
 	if not caller_id:
 		frappe.throw(
@@ -92,7 +92,7 @@ def make_a_call(to_number: str, from_number: str | None = None, caller_id: str |
 			_("You do not have mobile number set in your Telephony Agent"), title=_("Mobile Number Missing")
 		)
 
-	record_call = frappe.db.get_single_value("CRM Exotel Settings", "record_call")
+	record_call = frappe.db.get_single_value("Exotel Settings", "record_call")
 
 	try:
 		response = requests.post(
@@ -150,18 +150,18 @@ def get_all_exophones():
 def get_status_updater_url():
 	from frappe.utils.data import get_url
 
-	webhook_verify_token = frappe.db.get_single_value("CRM Exotel Settings", "webhook_verify_token")
+	webhook_verify_token = frappe.db.get_single_value("Exotel Settings", "webhook_verify_token")
 	return get_url(f"api/method/crm.integrations.exotel.handler.handle_request?key={webhook_verify_token}")
 
 
 def get_exotel_settings():
-	return frappe.get_single("CRM Exotel Settings")
+	return frappe.get_single("Exotel Settings")
 
 
 def validate_request():
 	# workaround security since exotel does not support request signature
 	# /api/method/<exotel-integration-method>?key=<exotel-webhook=verify-token>
-	webhook_verify_token = frappe.db.get_single_value("CRM Exotel Settings", "webhook_verify_token")
+	webhook_verify_token = frappe.db.get_single_value("Exotel Settings", "webhook_verify_token")
 	key = frappe.request.args.get("key")
 	is_valid = key and key == webhook_verify_token
 
@@ -171,7 +171,7 @@ def validate_request():
 
 @frappe.whitelist()
 def is_integration_enabled():
-	return frappe.db.get_single_value("CRM Exotel Settings", "enabled", True)
+	return frappe.db.get_single_value("Exotel Settings", "enabled", True)
 
 
 # Call Log Functions
@@ -184,7 +184,7 @@ def create_call_log(
 	status="Ringing",
 	call_type="Incoming",
 ):
-	call_log = frappe.new_doc("CRM Call Log")
+	call_log = frappe.new_doc("Call Log")
 	call_log.id = call_id
 	call_log.to = to_number
 	call_log.medium = medium
@@ -220,8 +220,8 @@ def link(contact_number, call_log):
 
 def get_call_log(call_payload):
 	call_log_id = call_payload.get("CallSid")
-	if frappe.db.exists("CRM Call Log", call_log_id):
-		return frappe.get_doc("CRM Call Log", call_log_id)
+	if frappe.db.exists("Call Log", call_log_id):
+		return frappe.get_doc("Call Log", call_log_id)
 
 
 def get_call_log_status(call_payload, direction="inbound"):

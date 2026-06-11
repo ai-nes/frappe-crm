@@ -22,8 +22,8 @@ class TestIntegrations(FrappeTestCase):
 		frappe.db.rollback()
 
 	def test_is_call_integration_enabled_both_disabled(self):
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 0)
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 0)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 0)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
@@ -31,8 +31,8 @@ class TestIntegrations(FrappeTestCase):
 		self.assertFalse(result["integrations"]["exotel"])
 
 	def test_is_call_integration_enabled_twilio_only(self):
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 1)
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 0)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 1)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
@@ -40,8 +40,8 @@ class TestIntegrations(FrappeTestCase):
 		self.assertFalse(result["integrations"]["exotel"])
 
 	def test_is_call_integration_enabled_exotel_only(self):
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 1)
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 0)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 1)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
@@ -49,8 +49,8 @@ class TestIntegrations(FrappeTestCase):
 		self.assertTrue(result["integrations"]["exotel"])
 
 	def test_get_user_default_calling_medium_no_agent(self):
-		if frappe.db.exists("CRM Telephony Agent", frappe.session.user):
-			frappe.delete_doc("CRM Telephony Agent", frappe.session.user)
+		if frappe.db.exists("Telephony Agent", frappe.session.user):
+			frappe.delete_doc("Telephony Agent", frappe.session.user)
 
 		self.assertIsNone(get_user_default_calling_medium())
 
@@ -58,7 +58,7 @@ class TestIntegrations(FrappeTestCase):
 		_delete_current_agent()
 		frappe.get_doc(
 			{
-				"doctype": "CRM Telephony Agent",
+				"doctype": "Telephony Agent",
 				"user": frappe.session.user,
 				"default_medium": "Twilio",
 			}
@@ -72,15 +72,15 @@ class TestIntegrations(FrappeTestCase):
 		result = set_default_calling_medium("Exotel")
 
 		self.assertEqual(result, "Exotel")
-		self.assertTrue(frappe.db.exists("CRM Telephony Agent", frappe.session.user))
-		agent = frappe.get_doc("CRM Telephony Agent", frappe.session.user)
+		self.assertTrue(frappe.db.exists("Telephony Agent", frappe.session.user))
+		agent = frappe.get_doc("Telephony Agent", frappe.session.user)
 		self.assertEqual(agent.default_medium, "Exotel")
 
 	def test_set_default_calling_medium_updates_existing_record(self):
 		_delete_current_agent()
 		frappe.get_doc(
 			{
-				"doctype": "CRM Telephony Agent",
+				"doctype": "Telephony Agent",
 				"user": frappe.session.user,
 				"default_medium": "Twilio",
 			}
@@ -89,7 +89,7 @@ class TestIntegrations(FrappeTestCase):
 		result = set_default_calling_medium("Exotel")
 
 		self.assertEqual(result, "Exotel")
-		agent = frappe.get_doc("CRM Telephony Agent", frappe.session.user)
+		agent = frappe.get_doc("Telephony Agent", frappe.session.user)
 		self.assertEqual(agent.default_medium, "Exotel")
 
 	def test_add_note_to_call_log_creates_new_note(self):
@@ -141,20 +141,20 @@ class TestIntegrations(FrappeTestCase):
 			},
 		)
 
-		self.assertTrue(frappe.db.exists("CRM Task", result.name))
+		self.assertTrue(frappe.db.exists("Task", result.name))
 		self.assertEqual(result.title, "Follow up call")
 		self.assertEqual(result.assigned_to, "Administrator")
 		self.assertEqual(result.status, "Todo")
 
 		call_log.reload()
-		linked_tasks = [link.link_name for link in call_log.links if link.link_doctype == "CRM Task"]
+		linked_tasks = [link.link_name for link in call_log.links if link.link_doctype == "Task"]
 		self.assertIn(str(result.name), linked_tasks)
 
 	def test_add_task_to_call_log_updates_existing_task(self):
 		call_log = create_test_call_log()
 		task = frappe.get_doc(
 			{
-				"doctype": "CRM Task",
+				"doctype": "Task",
 				"title": "Initial Task",
 				"status": "Todo",
 				"priority": "Medium",
@@ -260,10 +260,10 @@ class TestIntegrations(FrappeTestCase):
 		call_log.reload()
 		link_types = {link.link_doctype for link in call_log.links}
 		self.assertIn("FCRM Note", link_types)
-		self.assertIn("CRM Task", link_types)
+		self.assertIn("Task", link_types)
 
 		note_links = [link for link in call_log.links if link.link_doctype == "FCRM Note"]
-		task_links = [link for link in call_log.links if link.link_doctype == "CRM Task"]
+		task_links = [link for link in call_log.links if link.link_doctype == "Task"]
 		self.assertEqual(note_links[0].link_name, note.name)
 		self.assertEqual(task_links[0].link_name, str(task.name))
 
@@ -271,7 +271,7 @@ class TestIntegrations(FrappeTestCase):
 def create_test_call_log(**kwargs):
 	unique_id = kwargs.pop("id", str(uuid.uuid4())[:10])
 	data = {
-		"doctype": "CRM Call Log",
+		"doctype": "Call Log",
 		"id": unique_id,
 		"type": "Incoming",
 		"status": "Completed",
@@ -296,5 +296,5 @@ def create_test_crm_contact(**kwargs):
 
 
 def _delete_current_agent():
-	if frappe.db.exists("CRM Telephony Agent", frappe.session.user):
-		frappe.delete_doc("CRM Telephony Agent", frappe.session.user)
+	if frappe.db.exists("Telephony Agent", frappe.session.user):
+		frappe.delete_doc("Telephony Agent", frappe.session.user)

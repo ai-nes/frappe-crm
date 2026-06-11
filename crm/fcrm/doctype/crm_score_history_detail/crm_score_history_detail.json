@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-06-11 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "category",
+  "rule_id",
+  "signal",
+  "column_break_1",
+  "score",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Category",
+   "options": "Fit\nEngagement\nIntent\nTime Decay\nNegative"
+  },
+  {
+   "fieldname": "rule_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Rule ID"
+  },
+  {
+   "fieldname": "signal",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Signal"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Score"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score History Detail",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
