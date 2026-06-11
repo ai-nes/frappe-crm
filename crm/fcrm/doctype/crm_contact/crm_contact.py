@@ -2,7 +2,7 @@ import frappe
 from frappe.model.document import Document
 
 from crm.fcrm.doctype.service_level_agreement.utils import get_sla
-from crm.fcrm.utils.geo_resolver import resolve_province
+from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province
 
 
 class CRMContact(Document):
@@ -67,8 +67,12 @@ class CRMContact(Document):
 
 	def before_insert(self):
 		self._set_defaults()
+		self._normalize_phone()
+		self._sync_phone_from_student_if_blank()
 		if self.province:
 			self.province = resolve_province(self.province)
+		if self.high_school:
+			self.high_school = resolve_high_school(self.high_school, self.province)
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -81,11 +85,42 @@ class CRMContact(Document):
 				self.branch = default_branch
 
 	def before_save(self):
+		self._normalize_phone()
 		if self.province:
 			self.province = resolve_province(self.province)
+		if self.high_school:
+			self.high_school = resolve_high_school(self.high_school, self.province)
+
+	def on_update(self):
+		self._sync_student_mobile_no()
 
 	def validate(self):
 		self.apply_sla()
+
+	def _normalize_phone(self):
+		if isinstance(self.phone, str):
+			self.phone = self.phone.strip()
+
+	def _sync_phone_from_student_if_blank(self):
+		if not self.student or self.phone:
+			return
+
+		self.phone = frappe.db.get_value("CRM Student", self.student, "mobile_no")
+
+	def _sync_student_mobile_no(self):
+		if not self.student:
+			return
+
+		mobile_no = self.phone or ""
+		current_mobile_no = frappe.db.get_value("CRM Student", self.student, "mobile_no") or ""
+		if current_mobile_no != mobile_no:
+			frappe.db.set_value(
+				"CRM Student",
+				self.student,
+				"mobile_no",
+				mobile_no,
+				update_modified=False,
+			)
 
 	def apply_sla(self):
 		if not self.communication_status:

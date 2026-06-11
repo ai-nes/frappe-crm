@@ -148,6 +148,17 @@
    "type": "Link"
   },
   {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Education Programs",
+   "link_count": 0,
+   "link_to": "CRM Education Program",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
    "hidden": 0,
    "is_query_report": 0,
    "label": "Operations",
@@ -240,6 +251,17 @@
    "label": "School Types",
    "link_count": 0,
    "link_to": "CRM School Type",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
+   "label": "Enrollment Statuses",
+   "link_count": 0,
+   "link_to": "CRM Enrollment Status",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"

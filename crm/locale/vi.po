@@ -9077,3 +9077,74 @@ msgstr "Kết quả học tập"
 #. CRM Student Language Certificate DocType (child table)
 msgid "CRM Student Language Certificate"
 msgstr "Chứng chỉ ngoại ngữ"
+
+#. CRM Contact — custom fields (English msgid → Vietnamese msgstr)
+
+msgid "Parent Information"
+msgstr "Thông tin phụ huynh"
+
+msgid "Parent Name"
+msgstr "Tên phụ huynh"
+
+msgid "Parent Phone"
+msgstr "SĐT phụ huynh"
+
+msgid "Student Profile"
+msgstr "Hồ sơ học sinh"
+
+msgid "Program"
+msgstr "Ngành đăng ký"
+
+msgid "Enrollment Information"
+msgstr "Thông tin tuyển sinh"
+
+msgid "Academic & Scores"
+msgstr "Học vấn & Điểm số"
+
+msgid "Results"
+msgstr "Bảng kết quả"
+
+msgid "Cohort Start Year"
+msgstr "Niên khóa từ năm"
+
+msgid "Cohort End Year"
+msgstr "Đến năm"
+
+msgid "Education Program"
+msgstr "Chương trình đào tạo"
+
+msgid "Graduation Score"
+msgstr "Điểm tốt nghiệp THPT"
+
+msgid "English Score"
+msgstr "Điểm tiếng Anh quy đổi"
+
+msgid "Transcript Score"
+msgstr "Điểm học bạ"
+
+msgid "Total Score"
+msgstr "Điểm tổng cộng"
+
+msgid "Admission Method"
+msgstr "Hình thức xét tuyển"
+
+msgid "Academic Results"
+msgstr "Kết quả học tập"
+
+msgid "Language Certificates"
+msgstr "Chứng chỉ ngoại ngữ"
+
+msgid "Transcript Review"
+msgstr "Xét học bạ"
+
+msgid "National High School Exam"
+msgstr "Thi THPT Quốc gia"
+
+msgid "Language Certificate Review"
+msgstr "Xét bằng chứng chỉ ngoại ngữ"
+
+msgid "Direct Admission"
+msgstr "Xét tuyển thẳng"
+
+msgid "Combined"
+msgstr "Kết hợp"
