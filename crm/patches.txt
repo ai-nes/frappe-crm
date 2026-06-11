@@ -40,3 +40,7 @@ crm.patches.v1_0.add_enrollment_status_to_workspace
 crm.patches.v1_0.seed_crm_enrollment_status
 crm.patches.v1_0.setup_crm_roles
 crm.patches.v1_0.setup_crm_permissions
+crm.patches.v1_0.seed_crm_education_program
+crm.patches.v1_0.setup_crm_student_extended_permissions
+crm.patches.v1_0.rename_ward_include_province
+crm.patches.v1_0.rename_high_school_by_code_and_province

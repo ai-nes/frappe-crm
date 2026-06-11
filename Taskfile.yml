@@ -66,6 +66,12 @@ tasks:
     cmds:
       - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} clear-cache"'
 
+  seed-student:
+    desc: Seed 1 hồ sơ student mẫu FPTU kèm contact, admission context, interactions, intents
+    aliases: [seed-sample-student]
+    cmds:
+      - '{{.COMPOSE}} exec frappe bash -lc "{{.BENCH}} execute crm.demo.create_student_full_sample.execute"'
+
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart
     cmds:

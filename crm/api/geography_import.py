@@ -163,20 +163,18 @@ def _import_row(data):
 	_required(data, "school_name", "Tên Trường")
 	_required(data, "region_code", "Khu Vực")
 
-	region = _upsert_by_field(
+	region = _upsert_doc(
 		"CRM Region",
-		"region_code",
-		data["region_code"],
+		{"region_code": data["region_code"]},
 		{
 			"region_name": data["region_code"],
 			"region_code": data["region_code"],
 		},
 		fallback_filters={"region_name": data["region_code"]},
 	)
-	province = _upsert_by_field(
+	province = _upsert_doc(
 		"CRM Province",
-		"province_code",
-		data["province_code"],
+		{"province_code": data["province_code"]},
 		{
 			"province_name": data["province_name"],
 			"province_code": data["province_code"],
@@ -185,29 +183,35 @@ def _import_row(data):
 		},
 		fallback_filters={"province_name": data["province_name"]},
 	)
-	ward = _upsert_by_field(
+	ward = _upsert_doc(
 		"CRM Ward",
-		"ward_code",
-		data["ward_code"],
+		{"ward_code": data["ward_code"], "province": province.name},
 		{
 			"ward_name": data["ward_name"],
 			"ward_code": data["ward_code"],
 			"province": province.name,
+			"province_name": data["province_name"],
 			"ward_type": "Ward",
 		},
 		fallback_filters={"ward_name": data["ward_name"], "province": province.name},
 	)
-	_upsert_by_field(
+	_upsert_doc(
 		"CRM High School",
-		"school_code",
-		data["school_code"],
+		{"school_code": data["school_code"], "province_code": data["province_code"]},
 		{
 			"school_name": data["school_name"],
 			"school_code": data["school_code"],
-			"ward": ward.name,
+			"province_code": data["province_code"],
+			"province_name": data["province_name"],
+			"ward_code": data["ward_code"],
+			"ward_name": data["ward_name"],
 			"address": data.get("address"),
 		},
-		fallback_filters={"school_name": data["school_name"]},
+		fallback_filters={
+			"school_name": data["school_name"],
+			"ward_code": data["ward_code"],
+			"province_code": data["province_code"],
+		},
 	)
 
 
@@ -216,8 +220,8 @@ def _required(data, fieldname, label):
 		frappe.throw(_("{0} is required").format(label))
 
 
-def _upsert_by_field(doctype, fieldname, value, values, fallback_filters=None):
-	name = frappe.db.get_value(doctype, {fieldname: value}, "name")
+def _upsert_doc(doctype, filters, values, fallback_filters=None):
+	name = frappe.db.get_value(doctype, filters, "name")
 	if not name and fallback_filters:
 		name = frappe.db.get_value(doctype, fallback_filters, "name")
 
