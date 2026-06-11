@@ -98,6 +98,7 @@ class CRMContact(Document):
 	def validate(self):
 		self._normalize_shared_fields()
 		self._validate_unique_phone()
+		self._validate_unique_email()
 
 	def _validate_unique_phone(self):
 		if not self.phone:
@@ -113,6 +114,22 @@ class CRMContact(Document):
 				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
 				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
 				title="Số điện thoại trùng",
+			)
+
+	def _validate_unique_email(self):
+		if not self.email:
+			return
+		existing = frappe.db.get_value(
+			"CRM Contact",
+			{"email": self.email, "name": ("!=", self.name or "")},
+			["name", "full_name"],
+			as_dict=True,
+		)
+		if existing:
+			frappe.throw(
+				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
+				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Email trùng",
 			)
 
 	def _normalize_shared_fields(self):
