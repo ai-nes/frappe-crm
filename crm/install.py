@@ -44,7 +44,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Student-Quick Entry": {
 			"doctype": "CRM Student",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["student_name","mobile_no","email"]},{"name":"col_status","fields":["enrollment_status","source","branch"]}]},{"name":"academic_section","columns":[{"name":"col_school","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["province","ward","admission_year"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["student_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","source","branch"]}]},{"name":"academic_section","columns":[{"name":"col_school","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["province","ward","admission_year"]}]}]',
 		},
 		"Contact-Quick Entry": {
 			"doctype": "Contact",
@@ -79,7 +79,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Student-Side Panel": {
 			"doctype": "CRM Student",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","mobile_no","email","enrollment_status","converted"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["high_school","major","aspiration","source","branch","province","ward","admission_year"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","phone","email","enrollment_status","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["high_school","major","aspiration","source","province","ward","admission_year"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":true,"columns":[{"name":"col_scores","fields":["cohort_start_year","cohort_end_year","education_program","admission_method","graduation_score","transcript_score","english_converted_score","total_score"]}]}]',
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
@@ -110,7 +110,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Student-Data Fields": {
 			"doctype": "CRM Student",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","mobile_no","email"]},{"name":"col_status","fields":["enrollment_status","converted","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_academic","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["source","province","ward","admission_year"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_academic","fields":["high_school","major","aspiration"]},{"name":"col_location","fields":["source","province","ward","admission_year"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":true,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":true,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
@@ -333,7 +333,7 @@ def add_default_enrollment_statuses():
 
 def add_default_quick_filters():
 	quick_filters = {
-		"CRM Student": ["student_name", "mobile_no", "email", "enrollment_status", "source"],
+		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM High School": ["school_code", "school_type", "ward_name", "province_name"],
 		"Contact": ["status", "email_id", "phone"],

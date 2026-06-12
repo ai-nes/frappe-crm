@@ -74,16 +74,25 @@ def _apply_student_fields(student):
 		"aspiration": _ensure_aspiration("NV1", "First choice admission aspiration."),
 		"source": _ensure_lead_source("FPTU Open Day"),
 		"admission_year": _ensure_admission_year(),
+		"education_program": _ensure_education_program(),
+		"cohort_start_year": datetime.now().year,
+		"cohort_end_year": datetime.now().year + 4,
+		"graduation_score": 8.6,
+		"transcript_score": 8.8,
+		"english_converted_score": 8.5,
+		"total_score": 25.9,
+		"admission_method": "Combined",
 		"notes": (
 			"Realistic FPTU sample: admitted Software Engineering student preparing "
 			"for enrollment, with school records, language certificate, campaign, "
 			"event, interactions, and intents."
 		),
 	})
+	_update_academic_child_tables(student)
 
 
-def _update_contact_child_tables(contact):
-	contact.set(
+def _update_academic_child_tables(doc):
+	doc.set(
 		"academic_results",
 		[
 			{
@@ -100,7 +109,7 @@ def _update_contact_child_tables(contact):
 			},
 		],
 	)
-	contact.set(
+	doc.set(
 		"language_certificates",
 		[
 			{
@@ -119,7 +128,7 @@ def _ensure_contact(student):
 	if existing:
 		contact = frappe.get_doc("CRM Contact", existing)
 		_apply_contact_fields(contact, student)
-		_update_contact_child_tables(contact)
+		_update_academic_child_tables(contact)
 		contact.save(ignore_permissions=True)
 		return contact
 
@@ -127,7 +136,7 @@ def _ensure_contact(student):
 		"doctype": "CRM Contact",
 	})
 	_apply_contact_fields(contact, student)
-	_update_contact_child_tables(contact)
+	_update_academic_child_tables(contact)
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)

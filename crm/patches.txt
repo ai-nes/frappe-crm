@@ -55,3 +55,5 @@ crm.patches.v1_0.unify_contact_status_fields
 crm.patches.v1_0.drop_sla_fields_from_contact
 crm.patches.v1_0.add_unique_phone_to_contact
 crm.patches.v1_0.consolidate_student_phone_field
+crm.patches.v1_0.add_academic_fields_to_student
+crm.patches.v1_0.update_student_academic_fields_layout

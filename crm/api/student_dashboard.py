@@ -332,9 +332,10 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	phone_val = student_doc.phone if student_doc else (contact_doc.phone if contact_doc else "")
 	
 	cohort = ""
-	if contact_doc and contact_doc.cohort_start_year:
-		start = contact_doc.cohort_start_year
-		end = contact_doc.cohort_end_year or (start + 4)
+	cohort_source = contact_doc if contact_doc and contact_doc.cohort_start_year else student_doc
+	if cohort_source and getattr(cohort_source, "cohort_start_year", None):
+		start = cohort_source.cohort_start_year
+		end = cohort_source.cohort_end_year or (start + 4)
 		cohort = f"{start}-{end}"
 	elif student_doc and student_doc.admission_year:
 		cohort = student_doc.admission_year
@@ -368,8 +369,9 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		}
 
 	academic_records = []
-	if contact_doc and hasattr(contact_doc, "academic_results"):
-		for result in contact_doc.academic_results:
+	academic_source = contact_doc if contact_doc and contact_doc.get("academic_results") else student_doc
+	if academic_source and hasattr(academic_source, "academic_results"):
+		for result in academic_source.academic_results:
 			rank_map = {
 				"Giỏi": "Gioi",
 				"Khá": "Kha",
@@ -383,8 +385,9 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			})
 
 	languages = []
-	if contact_doc and hasattr(contact_doc, "language_certificates"):
-		for cert in contact_doc.language_certificates:
+	language_source = contact_doc if contact_doc and contact_doc.get("language_certificates") else student_doc
+	if language_source and hasattr(language_source, "language_certificates"):
+		for cert in language_source.language_certificates:
 			languages.append({
 				"language": cert.language or "Tiếng Anh",
 				"certificate": cert.certificate_name or "IELTS",
@@ -393,7 +396,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			})
 
 	interested_programs = []
-	prog = contact_doc.education_program if contact_doc else (student_doc.education_program if student_doc and hasattr(student_doc, "education_program") else None)
+	prog = (
+		contact_doc.education_program
+		if contact_doc and contact_doc.education_program
+		else (student_doc.education_program if student_doc and hasattr(student_doc, "education_program") else None)
+	)
 	if prog:
 		prog_map = {
 			"THPT thường": "thpt_thuong",

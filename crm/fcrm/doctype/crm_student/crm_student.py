@@ -62,6 +62,14 @@ class CRMStudent(Document):
 				"admission_year",
 				"branch",
 				"enrollment_status",
+				"cohort_start_year",
+				"education_program",
+				"graduation_score",
+				"transcript_score",
+				"cohort_end_year",
+				"admission_method",
+				"english_converted_score",
+				"total_score",
 			],
 			as_dict=True,
 		) or {}
@@ -77,6 +85,14 @@ class CRMStudent(Document):
 			"admission_year": self.admission_year,
 			"branch": self.branch,
 			"enrollment_status": self.enrollment_status,
+			"cohort_start_year": self.cohort_start_year,
+			"education_program": self.education_program,
+			"graduation_score": self.graduation_score,
+			"transcript_score": self.transcript_score,
+			"cohort_end_year": self.cohort_end_year,
+			"admission_method": self.admission_method,
+			"english_converted_score": self.english_converted_score,
+			"total_score": self.total_score,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
 		if updates:
@@ -171,7 +187,30 @@ def convert_to_contact(student_name):
 		"assigned_to": crm_staff_name,
 		"enrollment_status": student.enrollment_status or "Mới",
 		"lead_status": "Mới",
+		"cohort_start_year": student.cohort_start_year,
+		"education_program": student.education_program,
+		"graduation_score": student.graduation_score,
+		"transcript_score": student.transcript_score,
+		"cohort_end_year": student.cohort_end_year,
+		"admission_method": student.admission_method,
+		"english_converted_score": student.english_converted_score,
+		"total_score": student.total_score,
 	})
+	for result in student.academic_results:
+		contact.append("academic_results", {
+			"school_year": result.school_year,
+			"grade": result.grade,
+			"academic_rank": result.academic_rank,
+			"gpa": result.gpa,
+		})
+	for certificate in student.language_certificates:
+		contact.append("language_certificates", {
+			"language": certificate.language,
+			"certificate_name": certificate.certificate_name,
+			"score_level": certificate.score_level,
+			"issue_date": certificate.issue_date,
+			"expiry_date": certificate.expiry_date,
+		})
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("converted", 1)
@@ -193,7 +232,7 @@ def create_from_contact(contact):
 	student = frappe.get_doc({
 		"doctype": "CRM Student",
 		"student_name": contact_doc.full_name or contact_doc.name,
-		"phone": contact_doc.mobile_no or contact_doc.phone,
+		"phone": contact_doc.get("phone"),
 		"email": contact_doc.email_id,
 		"enrollment_status": "Mới",
 	})

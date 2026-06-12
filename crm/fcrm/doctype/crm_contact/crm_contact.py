@@ -157,6 +157,14 @@ class CRMContact(Document):
 				"admission_year",
 				"branch",
 				"enrollment_status",
+				"cohort_start_year",
+				"education_program",
+				"graduation_score",
+				"transcript_score",
+				"cohort_end_year",
+				"admission_method",
+				"english_converted_score",
+				"total_score",
 			],
 			as_dict=True,
 		) or {}
@@ -172,6 +180,14 @@ class CRMContact(Document):
 			"admission_year": student_values.get("admission_year"),
 			"branch": student_values.get("branch"),
 			"enrollment_status": student_values.get("enrollment_status"),
+			"cohort_start_year": student_values.get("cohort_start_year"),
+			"education_program": student_values.get("education_program"),
+			"graduation_score": student_values.get("graduation_score"),
+			"transcript_score": student_values.get("transcript_score"),
+			"cohort_end_year": student_values.get("cohort_end_year"),
+			"admission_method": student_values.get("admission_method"),
+			"english_converted_score": student_values.get("english_converted_score"),
+			"total_score": student_values.get("total_score"),
 		}
 		for fieldname, value in field_map.items():
 			if not self.get(fieldname) and value:
@@ -196,6 +212,14 @@ class CRMContact(Document):
 				"admission_year",
 				"branch",
 				"enrollment_status",
+				"cohort_start_year",
+				"education_program",
+				"graduation_score",
+				"transcript_score",
+				"cohort_end_year",
+				"admission_method",
+				"english_converted_score",
+				"total_score",
 			],
 			as_dict=True,
 		) or {}
@@ -211,6 +235,14 @@ class CRMContact(Document):
 			"admission_year": self.admission_year,
 			"branch": self.branch,
 			"enrollment_status": self.enrollment_status,
+			"cohort_start_year": self.cohort_start_year,
+			"education_program": self.education_program,
+			"graduation_score": self.graduation_score,
+			"transcript_score": self.transcript_score,
+			"cohort_end_year": self.cohort_end_year,
+			"admission_method": self.admission_method,
+			"english_converted_score": self.english_converted_score,
+			"total_score": self.total_score,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
 		if updates:
