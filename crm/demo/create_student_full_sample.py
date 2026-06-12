@@ -62,7 +62,6 @@ def _apply_student_fields(student):
 	student.update({
 		"student_name": SAMPLE_STUDENT_NAME,
 		"phone": SAMPLE_PHONE,
-		"mobile_no": SAMPLE_PHONE,
 		"email": SAMPLE_EMAIL,
 		"enrollment_status": _ensure_enrollment_status("Đã xác nhận"),
 		"enrollment_date": frappe.utils.add_days(frappe.utils.today(), 14),

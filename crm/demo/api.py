@@ -17,21 +17,21 @@ DEMO_SCORE_HISTORIES_KEY = "crm_demo_score_histories"
 DEMO_STUDENTS = [
 	{
 		"student_name": "Minh Anh Nguyen",
-		"mobile_no": "+84 901 100 001",
+		"phone": "+84 901 100 001",
 		"email": "minhanh.demo@example.com",
 		"source": "Website",
 		"scores": [54, 63, 72],
 	},
 	{
 		"student_name": "Gia Bao Tran",
-		"mobile_no": "+84 901 100 002",
+		"phone": "+84 901 100 002",
 		"email": "giabao.demo@example.com",
 		"source": "Open Day",
 		"scores": [48, 56, 61],
 	},
 	{
 		"student_name": "Linh Chi Pham",
-		"mobile_no": "+84 901 100 003",
+		"phone": "+84 901 100 003",
 		"email": "linhchi.demo@example.com",
 		"source": "Facebook",
 		"scores": [60, 68, 77],
@@ -129,8 +129,7 @@ def _create_demo_students():
 			{
 				"doctype": "CRM Student",
 				"student_name": data["student_name"],
-				"phone": data["mobile_no"],
-				"mobile_no": data["mobile_no"],
+				"phone": data["phone"],
 				"email": data["email"],
 				"enrollment_status": "Mới",
 				"converted": 0,

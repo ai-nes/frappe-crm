@@ -5,6 +5,13 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
+from crm.api.student_dashboard import (
+	get_intent_definitions,
+	get_student_dashboard,
+	get_student_records_by_phone,
+	get_study_majors,
+	get_training_programs,
+)
 from crm.utils import is_frappe_version
 
 
