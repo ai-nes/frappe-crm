@@ -19,6 +19,8 @@ class CRMStudent(Document):
 		self._sync_linked_contact_fields()
 
 	def _set_defaults(self):
+		if not self.enrollment_status:
+			self.enrollment_status = "Mới"
 		if not self.admission_year:
 			current_year = str(frappe.utils.now_datetime().year)
 			if frappe.db.exists("CRM Admission Year", current_year):
@@ -154,7 +156,6 @@ class CRMStudent(Document):
 			"enrollment_status",
 			"latest_score",
 			"source",
-			"converted",
 			"modified",
 		]
 		return {"columns": columns, "rows": rows}
@@ -164,10 +165,12 @@ class CRMStudent(Document):
 def convert_to_contact(student_name):
 	student = frappe.get_doc("CRM Student", student_name)
 
-	if student.converted:
-		existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
-		if existing_contact:
-			return existing_contact
+	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
+	if existing_contact:
+		return existing_contact
+
+	if not student.phone:
+		frappe.throw(_("Student must have a phone number before converting to a contact."))
 
 	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 
@@ -213,7 +216,6 @@ def convert_to_contact(student_name):
 		})
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("converted", 1)
 	student.db_set("enrollment_status", "Đã chuyển đổi")
 
 	return contact.name

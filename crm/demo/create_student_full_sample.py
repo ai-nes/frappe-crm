@@ -65,7 +65,6 @@ def _apply_student_fields(student):
 		"email": SAMPLE_EMAIL,
 		"enrollment_status": _ensure_enrollment_status("Đã xác nhận"),
 		"enrollment_date": frappe.utils.add_days(frappe.utils.today(), 14),
-		"converted": 1,
 		"high_school": _ensure_high_school(),
 		"province": _ensure_province(),
 		"ward": _ensure_ward(),
@@ -139,7 +138,7 @@ def _ensure_contact(student):
 	_update_academic_child_tables(contact)
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("converted", 1)
+	student.db_set("enrollment_status", "Đã chuyển đổi")
 	return contact
 
 

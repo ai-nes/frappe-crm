@@ -17,7 +17,6 @@
     "enrollment_status",
     "latest_score",
     "enrollment_date",
-    "converted",
     "section_links",
     "high_school",
     "province",
@@ -80,6 +79,7 @@
       "fieldtype": "Column Break"
     },
     {
+      "default": "Mới",
       "fieldname": "enrollment_status",
       "fieldtype": "Link",
       "in_list_view": 1,
@@ -99,12 +99,6 @@
       "fieldtype": "Date",
       "in_list_view": 1,
       "label": "Enrollment Date"
-    },
-    {
-      "default": "0",
-      "fieldname": "converted",
-      "fieldtype": "Check",
-      "label": "Converted to CRM Contact"
     },
     {
       "fieldname": "section_links",
