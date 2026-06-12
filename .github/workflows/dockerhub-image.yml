@@ -45,6 +45,7 @@ jobs:
           context: .
           file: docker/prod.Dockerfile
           push: true
+          pull: true
           platforms: ${{ env.PLATFORMS }}
           provenance: false
           cache-from: type=gha
