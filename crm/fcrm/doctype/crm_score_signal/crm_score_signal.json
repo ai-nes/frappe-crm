@@ -1,0 +1,217 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:signal_key",
+ "creation": "2026-06-12 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "signal_key",
+  "label",
+  "category",
+  "signal_type",
+  "column_break_1",
+  "is_active",
+  "description",
+  "section_property",
+  "condition_field",
+  "condition_operator",
+  "condition_value",
+  "section_interaction",
+  "interaction_type",
+  "section_intent",
+  "intent_type",
+  "section_inactivity",
+  "inactivity_days"
+ ],
+ "fields": [
+  {
+   "fieldname": "signal_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Signal Key",
+   "reqd": 1,
+   "unique": 1,
+   "description": "Unique key, no spaces, use underscores — e.g. gpa_high"
+  },
+  {
+   "fieldname": "label",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Display Name",
+   "reqd": 1,
+   "description": "Human-readable name shown in scoring rules — e.g. High GPA (>=  8.0)"
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Category",
+   "options": "Fit\nIntent\nEngagement\nTime Decay\nNegative",
+   "reqd": 1
+  },
+  {
+   "default": "property",
+   "fieldname": "signal_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Signal Type",
+   "options": "property\ninteraction\nintent\ninactivity",
+   "reqd": 1,
+   "description": "property = student profile field; interaction = activity type; intent = what student asked; inactivity = no activity for N days"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description",
+   "description": "Brief explanation of what this signal measures"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.signal_type == 'property'",
+   "fieldname": "section_property",
+   "fieldtype": "Section Break",
+   "label": "Property Condition (admin)"
+  },
+  {
+   "fieldname": "condition_field",
+   "fieldtype": "Data",
+   "label": "Student Field",
+   "depends_on": "eval:doc.signal_type == 'property'",
+   "description": "Field name on CRM Student to evaluate — e.g. gpa_thpt"
+  },
+  {
+   "fieldname": "condition_operator",
+   "fieldtype": "Select",
+   "label": "Operator",
+   "options": "\n=\n>=\n<=\ncontains\nin",
+   "depends_on": "eval:doc.signal_type == 'property'"
+  },
+  {
+   "fieldname": "condition_value",
+   "fieldtype": "Data",
+   "label": "Threshold Value",
+   "depends_on": "eval:doc.signal_type == 'property'",
+   "description": "e.g. 8.0 or HCM,HN,DN"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.signal_type == 'interaction'",
+   "fieldname": "section_interaction",
+   "fieldtype": "Section Break",
+   "label": "Interaction Configuration (admin)"
+  },
+  {
+   "fieldname": "interaction_type",
+   "fieldtype": "Select",
+   "label": "Interaction Type",
+   "options": "\nWebsite Visit\nMajor View\nZalo Chat\nConsultation Register\nWebinar\nOpen Day\nApplication Submit\nRefuse Consultation\nCancel Event\nTransfer School",
+   "depends_on": "eval:doc.signal_type == 'interaction'"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.signal_type == 'intent'",
+   "fieldname": "section_intent",
+   "fieldtype": "Section Break",
+   "label": "Intent Configuration (admin)"
+  },
+  {
+   "fieldname": "intent_type",
+   "fieldtype": "Link",
+   "label": "Intent Type",
+   "options": "CRM Intent Type",
+   "depends_on": "eval:doc.signal_type == 'intent'"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.signal_type == 'inactivity'",
+   "fieldname": "section_inactivity",
+   "fieldtype": "Section Break",
+   "label": "Inactivity Configuration (admin)"
+  },
+  {
+   "default": "30",
+   "fieldname": "inactivity_days",
+   "fieldtype": "Int",
+   "label": "Inactivity Days",
+   "depends_on": "eval:doc.signal_type == 'inactivity'",
+   "description": "Score penalty applies after N days of no interaction — e.g. 30, 60, 90"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-12 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score Signal",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Counseller"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sale"
+  }
+ ],
+ "quick_entry": 1,
+ "row_format": "Dynamic",
+ "search_fields": "label,category,signal_type",
+ "sort_field": "category",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "label",
+ "translated_doctype": 1
+}

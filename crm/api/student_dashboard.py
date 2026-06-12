@@ -472,19 +472,24 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		}
 		ix_type = type_map.get(ix.get("interaction_type"), "conversation")
 		
+		ix_intent_key_map = {
+			"Major Inquiry": "major_inquiry",
+			"Tuition Inquiry": "tuition_inquiry",
+			"Scholarship Inquiry": "scholarship_inquiry",
+			"Campus Visit Inquiry": "campus_visit_inquiry",
+			"Student Life Inquiry": "student_life_inquiry",
+			"Application Submission": "application_submission",
+			"Enrollment Inquiry": "enrollment_inquiry"
+		}
 		ix_intents = []
+		ix_dominant_intent = None
 		for intent in intents:
 			if intent.get("interaction") == ix.get("name"):
-				intent_key_map = {
-					"Major Inquiry": "major_inquiry",
-					"Tuition Inquiry": "tuition_inquiry",
-					"Scholarship Inquiry": "scholarship_inquiry",
-					"Campus Visit Inquiry": "campus_visit_inquiry",
-					"Student Life Inquiry": "student_life_inquiry",
-					"Application Submission": "application_submission",
-					"Enrollment Inquiry": "enrollment_inquiry"
-				}
-				ix_intents.append(intent_key_map.get(intent.get("intent_type"), "admission_inquiry"))
+				key = ix_intent_key_map.get(intent.get("intent_type"), "admission_inquiry")
+				role = intent.get("intent_role") or "Support"
+				ix_intents.append({"key": key, "role": role})
+				if role == "Dominant":
+					ix_dominant_intent = key
 
 		interaction_items.append({
 			"id": ix.get("name"),
@@ -494,6 +499,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"occurredAt": to_unix(ix.get("interaction_datetime")),
 			"channel": ix.get("interaction_type") or "",
 			"intents": ix_intents,
+			"dominantIntent": ix_dominant_intent,
+			"supportIntents": [i["key"] for i in ix_intents if i["role"] == "Support"],
 			"metadata": { "conversationId": ix.get("name") }
 		})
 
@@ -535,11 +542,14 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 		confidence = (intent.get("confidence") / 100.0) if intent.get("confidence") else None
 
+		role = intent.get("intent_role") or "Support"
 		intent_items.append({
 			"key": key,
 			"label": intent.get("intent_type") or "Ý định",
 			"intentType": intent_type,
 			"importance": importance,
+			"role": role,
+			"isDominant": role == "Dominant",
 			"detectedAt": to_unix(intent.get("modified")),
 			"sourceInteractionId": intent.get("interaction") or "",
 			"sourceType": "conversation",
@@ -654,7 +664,9 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			},
 			"intents": {
 				"items": intent_items,
-				"total": len(intent_items)
+				"total": len(intent_items),
+				"dominant": [i for i in intent_items if i.get("isDominant")],
+				"support": [i for i in intent_items if not i.get("isDominant")]
 			},
 			"events": {
 				"items": event_items

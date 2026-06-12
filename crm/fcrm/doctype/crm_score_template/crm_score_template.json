@@ -15,7 +15,17 @@
   "column_break_1",
   "start_time",
   "end_time",
-  "section_scoring",
+  "section_weights",
+  "fit_weight",
+  "intent_weight",
+  "engagement_weight",
+  "section_rules",
+  "rules",
+  "section_time_decay",
+  "time_decay_config",
+  "section_negative",
+  "negative_rules",
+  "section_legacy",
   "fit_scoring",
   "engagement_scoring",
   "intent_scoring",
@@ -66,37 +76,102 @@
    "label": "End Time"
   },
   {
-   "fieldname": "section_scoring",
+   "fieldname": "section_weights",
    "fieldtype": "Section Break",
-   "label": "Scoring Formula"
+   "label": "Dimension Weights"
+  },
+  {
+   "default": "0.34",
+   "fieldname": "fit_weight",
+   "fieldtype": "Float",
+   "label": "Fit Weight",
+   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
+  },
+  {
+   "default": "0.33",
+   "fieldname": "intent_weight",
+   "fieldtype": "Float",
+   "label": "Intent Weight",
+   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
+  },
+  {
+   "default": "0.33",
+   "fieldname": "engagement_weight",
+   "fieldtype": "Float",
+   "label": "Engagement Weight",
+   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
+  },
+  {
+   "fieldname": "section_rules",
+   "fieldtype": "Section Break",
+   "label": "Scoring Rules (Fit / Intent / Engagement)"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules",
+   "options": "CRM Score Rule"
+  },
+  {
+   "fieldname": "section_time_decay",
+   "fieldtype": "Section Break",
+   "label": "Time Decay Configuration"
+  },
+  {
+   "fieldname": "time_decay_config",
+   "fieldtype": "Table",
+   "label": "Time Decay Config",
+   "options": "CRM Time Decay Config"
+  },
+  {
+   "fieldname": "section_negative",
+   "fieldtype": "Section Break",
+   "label": "Negative Scoring Rules"
+  },
+  {
+   "fieldname": "negative_rules",
+   "fieldtype": "Table",
+   "label": "Negative Rules",
+   "options": "CRM Negative Score Rule"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_legacy",
+   "fieldtype": "Section Break",
+   "label": "Legacy JSON Config (deprecated — do not edit)"
   },
   {
    "fieldname": "fit_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Fit Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "engagement_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Engagement Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "intent_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Intent Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "time_decay_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Time Decay Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "negative_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Negative Scoring",
    "options": "JSON"
   }
