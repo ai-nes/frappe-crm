@@ -37,13 +37,8 @@ class CRMStudent(Document):
 			self.ward = resolve_ward(self.ward, self.province)
 
 	def _normalize_phone_fields(self):
-		phone = self.phone if isinstance(getattr(self, "phone", None), str) else (self.phone or "")
-		mobile_no = self.mobile_no if isinstance(self.mobile_no, str) else (self.mobile_no or "")
-		phone = phone.strip() if isinstance(phone, str) else phone
-		mobile_no = mobile_no.strip() if isinstance(mobile_no, str) else mobile_no
-		canonical_phone = phone or mobile_no
-		self.phone = canonical_phone
-		self.mobile_no = canonical_phone
+		if isinstance(self.phone, str):
+			self.phone = self.phone.strip()
 		if isinstance(self.email, str):
 			self.email = self.email.strip().lower()
 
@@ -198,8 +193,7 @@ def create_from_contact(contact):
 	student = frappe.get_doc({
 		"doctype": "CRM Student",
 		"student_name": contact_doc.full_name or contact_doc.name,
-		"phone": contact_doc.mobile_no,
-		"mobile_no": contact_doc.mobile_no,
+		"phone": contact_doc.mobile_no or contact_doc.phone,
 		"email": contact_doc.email_id,
 		"enrollment_status": "Mới",
 	})

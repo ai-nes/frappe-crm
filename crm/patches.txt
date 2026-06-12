@@ -52,3 +52,6 @@ crm.patches.v1_0.backfill_student_contact_phone_sync
 crm.patches.v1_0.add_student_config_to_workspace
 crm.patches.v1_0.fix_contact_fields_layout
 crm.patches.v1_0.unify_contact_status_fields
+crm.patches.v1_0.drop_sla_fields_from_contact
+crm.patches.v1_0.add_unique_phone_to_contact
+crm.patches.v1_0.consolidate_student_phone_field

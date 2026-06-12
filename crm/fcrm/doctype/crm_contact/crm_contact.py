@@ -1,7 +1,6 @@
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.doctype.service_level_agreement.utils import get_sla
 from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province
 
 
@@ -97,7 +96,41 @@ class CRMContact(Document):
 		self._sync_student_fields()
 
 	def validate(self):
-		self.apply_sla()
+		self._normalize_shared_fields()
+		self._validate_unique_phone()
+		self._validate_unique_email()
+
+	def _validate_unique_phone(self):
+		if not self.phone:
+			return
+		existing = frappe.db.get_value(
+			"CRM Contact",
+			{"phone": self.phone, "name": ("!=", self.name or "")},
+			["name", "full_name"],
+			as_dict=True,
+		)
+		if existing:
+			frappe.throw(
+				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
+				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Số điện thoại trùng",
+			)
+
+	def _validate_unique_email(self):
+		if not self.email:
+			return
+		existing = frappe.db.get_value(
+			"CRM Contact",
+			{"email": self.email, "name": ("!=", self.name or "")},
+			["name", "full_name"],
+			as_dict=True,
+		)
+		if existing:
+			frappe.throw(
+				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
+				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Email trùng",
+			)
 
 	def _normalize_shared_fields(self):
 		if isinstance(self.phone, str):
@@ -115,7 +148,6 @@ class CRMContact(Document):
 			[
 				"student_name",
 				"phone",
-				"mobile_no",
 				"email",
 				"high_school",
 				"province",
@@ -130,7 +162,7 @@ class CRMContact(Document):
 		) or {}
 		field_map = {
 			"full_name": student_values.get("student_name"),
-			"phone": student_values.get("phone") or student_values.get("mobile_no"),
+			"phone": student_values.get("phone"),
 			"email": student_values.get("email"),
 			"high_school": student_values.get("high_school"),
 			"province": student_values.get("province"),
@@ -155,7 +187,6 @@ class CRMContact(Document):
 			[
 				"student_name",
 				"phone",
-				"mobile_no",
 				"email",
 				"high_school",
 				"province",
@@ -171,7 +202,6 @@ class CRMContact(Document):
 		target_values = {
 			"student_name": self.full_name or "",
 			"phone": self.phone or "",
-			"mobile_no": self.phone or "",
 			"email": self.email or "",
 			"high_school": self.high_school,
 			"province": self.province,
@@ -185,19 +215,6 @@ class CRMContact(Document):
 		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
 		if updates:
 			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
-
-	def apply_sla(self):
-		if not self.communication_status:
-			self.communication_status = "Open"
-
-		sla = get_sla(self)
-		if not sla:
-			self.sla = None
-			return
-
-		self.sla = sla.name
-		frappe.get_doc("Service Level Agreement", sla.name).apply(self)
-
 
 def get_permission_query_conditions(user=None):
 	if not user:

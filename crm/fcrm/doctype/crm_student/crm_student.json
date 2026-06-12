@@ -12,7 +12,6 @@
   "naming_series",
   "student_name",
   "phone",
-  "mobile_no",
   "email",
   "col_break_1",
   "enrollment_status",
@@ -55,13 +54,6 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Phone",
-   "options": "Phone"
-  },
-  {
-   "fieldname": "mobile_no",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Legacy Mobile No",
    "options": "Phone"
   },
   {
@@ -267,5 +259,5 @@
  "states": [],
  "title_field": "student_name",
  "translated_doctype": 1,
- "search_fields": "student_name,phone,email,mobile_no"
+ "search_fields": "student_name,phone,email"
 }
