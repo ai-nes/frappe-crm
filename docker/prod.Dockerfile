@@ -55,6 +55,7 @@ RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && cd apps/crm/frontend \
     && yarn build \
     && cd "${BENCH_DIR}" \
+    && bench build --app frappe --production \
     && mkdir -p sites/assets/locale/vi/LC_MESSAGES \
     && msguniq --use-first apps/crm/crm/locale/vi.po | msgfmt - -o sites/assets/locale/vi/LC_MESSAGES/crm.mo \
     && cp -a sites /opt/frappe/sites-template
