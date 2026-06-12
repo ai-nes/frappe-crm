@@ -84,9 +84,9 @@ const funnelTitle = computed(() => {
 
 const funnelFilters = computed(() => {
   if (funnelStage.value === 'enrolled') {
-    return { enrollment_status: 'Enrolled' }
+    return { enrollment_status: 'Đã chuyển đổi' }
   }
-  return { enrollment_status: ['!=', 'Enrolled'] }
+  return { enrollment_status: 'Mới' }
 })
 
 watch(

@@ -19,8 +19,6 @@ class CRMStudent(Document):
 		self._sync_linked_contact_fields()
 
 	def _set_defaults(self):
-		if not self.enrollment_status:
-			self.enrollment_status = "Mới"
 		if not self.admission_year:
 			current_year = str(frappe.utils.now_datetime().year)
 			if frappe.db.exists("CRM Admission Year", current_year):
@@ -63,7 +61,6 @@ class CRMStudent(Document):
 				"source",
 				"admission_year",
 				"branch",
-				"enrollment_status",
 				"cohort_start_year",
 				"education_program",
 				"graduation_score",
@@ -86,7 +83,6 @@ class CRMStudent(Document):
 			"source": self.source,
 			"admission_year": self.admission_year,
 			"branch": self.branch,
-			"enrollment_status": self.enrollment_status,
 			"cohort_start_year": self.cohort_start_year,
 			"education_program": self.education_program,
 			"graduation_score": self.graduation_score,
@@ -188,7 +184,7 @@ def convert_to_contact(student_name):
 		"branch": student.branch,
 		"student": student.name,
 		"assigned_to": crm_staff_name,
-		"enrollment_status": student.enrollment_status or "Mới",
+		"enrollment_status": "Có triển vọng",
 		"lead_status": "Mới",
 		"cohort_start_year": student.cohort_start_year,
 		"education_program": student.education_program,
