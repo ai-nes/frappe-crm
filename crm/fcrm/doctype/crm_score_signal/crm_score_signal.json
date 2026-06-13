@@ -35,16 +35,14 @@
    "in_standard_filter": 1,
    "label": "Signal Key",
    "reqd": 1,
-   "unique": 1,
-   "description": "Unique key, no spaces, use underscores — e.g. gpa_high"
+   "unique": 1
   },
   {
    "fieldname": "label",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Display Name",
-   "reqd": 1,
-   "description": "Human-readable name shown in scoring rules — e.g. High GPA (>=  8.0)"
+   "reqd": 1
   },
   {
    "fieldname": "category",
@@ -63,8 +61,7 @@
    "in_standard_filter": 1,
    "label": "Signal Type",
    "options": "property\ninteraction\nintent\ninactivity",
-   "reqd": 1,
-   "description": "property = student profile field; interaction = activity type; intent = what student asked; inactivity = no activity for N days"
+   "reqd": 1
   },
   {
    "fieldname": "column_break_1",
@@ -80,22 +77,20 @@
   {
    "fieldname": "description",
    "fieldtype": "Small Text",
-   "label": "Description",
-   "description": "Brief explanation of what this signal measures"
+   "label": "Description"
   },
   {
    "collapsible": 1,
    "depends_on": "eval:doc.signal_type == 'property'",
    "fieldname": "section_property",
    "fieldtype": "Section Break",
-   "label": "Property Condition (admin)"
+   "label": "Property Condition"
   },
   {
    "fieldname": "condition_field",
    "fieldtype": "Data",
    "label": "Student Field",
-   "depends_on": "eval:doc.signal_type == 'property'",
-   "description": "Field name on CRM Student to evaluate — e.g. gpa_thpt"
+   "depends_on": "eval:doc.signal_type == 'property'"
   },
   {
    "fieldname": "condition_operator",
@@ -108,15 +103,14 @@
    "fieldname": "condition_value",
    "fieldtype": "Data",
    "label": "Threshold Value",
-   "depends_on": "eval:doc.signal_type == 'property'",
-   "description": "e.g. 8.0 or HCM,HN,DN"
+   "depends_on": "eval:doc.signal_type == 'property'"
   },
   {
    "collapsible": 1,
    "depends_on": "eval:doc.signal_type == 'interaction'",
    "fieldname": "section_interaction",
    "fieldtype": "Section Break",
-   "label": "Interaction Configuration (admin)"
+   "label": "Interaction Configuration"
   },
   {
    "fieldname": "interaction_type",
@@ -130,7 +124,7 @@
    "depends_on": "eval:doc.signal_type == 'intent'",
    "fieldname": "section_intent",
    "fieldtype": "Section Break",
-   "label": "Intent Configuration (admin)"
+   "label": "Intent Configuration"
   },
   {
    "fieldname": "intent_type",
@@ -144,20 +138,19 @@
    "depends_on": "eval:doc.signal_type == 'inactivity'",
    "fieldname": "section_inactivity",
    "fieldtype": "Section Break",
-   "label": "Inactivity Configuration (admin)"
+   "label": "Inactivity Configuration"
   },
   {
    "default": "30",
    "fieldname": "inactivity_days",
    "fieldtype": "Int",
    "label": "Inactivity Days",
-   "depends_on": "eval:doc.signal_type == 'inactivity'",
-   "description": "Score penalty applies after N days of no interaction — e.g. 30, 60, 90"
+   "depends_on": "eval:doc.signal_type == 'inactivity'"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-12 00:00:00.000000",
+ "modified": "2026-06-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Score Signal",

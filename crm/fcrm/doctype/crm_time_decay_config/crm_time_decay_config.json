@@ -7,81 +7,38 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "tier_1_days",
-  "tier_1_multiplier",
-  "tier_2_days",
-  "tier_2_multiplier",
-  "column_break_1",
-  "tier_3_days",
-  "tier_3_multiplier",
-  "tier_4_multiplier"
+  "max_days",
+  "multiplier",
+  "tier_label"
  ],
  "fields": [
   {
-   "default": "30",
-   "fieldname": "tier_1_days",
+   "default": "0",
+   "fieldname": "max_days",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Tier 1 Max Days",
-   "description": "Activity within this many days gets full multiplier — e.g. 30"
+   "label": "Max Days",
+   "reqd": 1
   },
   {
    "default": "1.0",
-   "fieldname": "tier_1_multiplier",
+   "fieldname": "multiplier",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Tier 1 Multiplier",
-   "description": "e.g. 1.0 = 100%"
+   "label": "Multiplier",
+   "reqd": 1
   },
   {
-   "default": "60",
-   "fieldname": "tier_2_days",
-   "fieldtype": "Int",
+   "fieldname": "tier_label",
+   "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Tier 2 Max Days",
-   "description": "Activity within this many days (but beyond tier 1) — e.g. 60"
-  },
-  {
-   "default": "0.7",
-   "fieldname": "tier_2_multiplier",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Tier 2 Multiplier",
-   "description": "e.g. 0.7 = 70%"
-  },
-  {
-   "fieldname": "column_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "90",
-   "fieldname": "tier_3_days",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Tier 3 Max Days",
-   "description": "Activity within this many days (but beyond tier 2) — e.g. 90"
-  },
-  {
-   "default": "0.4",
-   "fieldname": "tier_3_multiplier",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Tier 3 Multiplier",
-   "description": "e.g. 0.4 = 40%"
-  },
-  {
-   "default": "0.1",
-   "fieldname": "tier_4_multiplier",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Tier 4 Multiplier (> Tier 3)",
-   "description": "Applies to all activity older than tier 3 max days — e.g. 0.1 = 10%"
+   "label": "Label"
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-06-12 00:00:00.000000",
+ "modified": "2026-06-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Time Decay Config",

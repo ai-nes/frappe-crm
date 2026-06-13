@@ -11,17 +11,19 @@ What this creates (all idempotent):
     CRM Score Template      — "Default Scoring 2026" (active)
 
   Test students
-    Student A  Nguyen Thu Ha   — high-potential lead          expected final ≈  70
-    Student B  Tran Quoc Bao   — cold / disengaged lead       expected final ≈  -1
-    Student C  Le Phuong Linh  — intent-driven, low fit       expected final ≈  54
+    Student A  Nguyen Thu Ha   — high-potential lead          expected final ≈  75
+    Student B  Tran Quoc Bao   — cold / disengaged lead       expected final ≈   2
+    Student C  Le Phuong Linh  — intent-driven, low fit       expected final ≈  48
 
   Shared context
     Province, Ward, Campus, High School, Major, Aspiration,
     Lead Source, Campaign, Event, Education Program, Admission Year
 
 Expected score derivation (formula):
-  raw = (fit_total * 0.34) + (intent_total * 0.33) + (engagement_total * 0.33)
-  final = raw * decay_multiplier + sum(negative_penalties)
+  non_decay = 0.4 * Fit_score
+  decayable = 0.3 * Engagement_score + 0.3 * Intent_score
+  final     = non_decay + decayable * time_decay_factor + min(0, Negative_score)
+  LeadHealthScore = max(0, min(100, final))
 """
 
 from __future__ import annotations
@@ -222,12 +224,12 @@ NEGATIVE_RULES = [
     {"signal": "transfer_school",     "penalty_amount": 50, "cooldown_days": 0,  "max_penalties": 1},
 ]
 
-TIME_DECAY_CONFIG = {
-    "tier_1_days": 30, "tier_1_multiplier": 1.0,
-    "tier_2_days": 60, "tier_2_multiplier": 0.7,
-    "tier_3_days": 90, "tier_3_multiplier": 0.4,
-    "tier_4_multiplier": 0.1,
-}
+TIME_DECAY_TIERS = [
+    {"max_days": 30,  "multiplier": 1.0, "tier_label": "Hot"},
+    {"max_days": 60,  "multiplier": 0.7, "tier_label": "Warm"},
+    {"max_days": 90,  "multiplier": 0.4, "tier_label": "Cool"},
+    {"max_days": 0,   "multiplier": 0.1, "tier_label": "Cold"},  # 0 = catch-all (> 90d)
+]
 
 
 # ---------------------------------------------------------------------------
@@ -246,13 +248,14 @@ STUDENTS = [
     # Activity: zalo_chat + consultation + open_day, 5 days ago → tier 1 (1.0)
     # Intents:  Tuition (Dominant) + Enrollment (Dominant in later interaction)
     #
-    # Fit         = grade_12(20) + gpa_high(20) + ielts_6(15) + top_school(15) = 70
-    # Engagement  = zalo_chat(10) + consultation_register(20) + open_day(30)   = 60
-    # Intent      = intent_tuition(25) + intent_enroll(70)                     = 95
-    # raw         = (70*0.34) + (95*0.33) + (60*0.33) = 23.8 + 31.35 + 19.8  = 74.95
-    # decayed     = 74.95 * 1.0 = 74.95
-    # negative    = 0
-    # EXPECTED FINAL ≈ 75
+    # Fit         = 20 + 20 + 15 + 15 = 70
+    # Engagement  = 10 + 20 + 30      = 60
+    # Intent      = 25 + 70           = 95
+    # Negative    = 0
+    # TimeDecay   = 1.0  (last activity 5d ago → tier Hot ≤ 30d)
+    # non_decay   = 0.4 × 70                   = 28.0
+    # decayable   = (0.3×60 + 0.3×95) × 1.0   = (18 + 28.5) × 1.0 = 46.5
+    # EXPECTED    = max(0, min(100, 28.0 + 46.5 + 0)) = 74.5 ≈ 75
     # -----------------------------------------------------------------------
     {
         "email": "nguyen.thu.ha.fptu2026@example.com",
@@ -344,14 +347,15 @@ STUDENTS = [
     # Intents:  Major Inquiry only (low signal)
     # Negative: no_contact_30 fires → −10
     #
-    # Fit         = grade_12(20) + gpa_high(0) + ielts_6(0)   = 20
-    # Engagement  = website_visit(2) + major_view(5)           =  7
-    # Intent      = intent_major(10)                           = 10
-    # raw         = (20*0.34) + (10*0.33) + (7*0.33)
-    #             = 6.8 + 3.3 + 2.31                           = 12.41
-    # decayed     = 12.41 * 0.7                                =  8.69
-    # negative    = −10
-    # EXPECTED FINAL ≈ −1  (cold lead, negative final is valid)
+    # Fit         = 20
+    # Engagement  = 2 + 5      =  7
+    # Intent      = 10         = 10
+    # Negative    = −10  (no_contact_30)
+    # TimeDecay   = 0.7  (last activity 50d ago → tier Warm 31–60d)
+    # non_decay   = 0.4 × 20                   =  8.0
+    # decayable   = (0.3×7 + 0.3×10) × 0.7    = (2.1 + 3.0) × 0.7 = 3.57
+    # EXPECTED    = max(0, min(100, 8.0 + 3.57 − 10)) = max(0, 1.57) ≈ 2
+    # (cold lead — low fit, almost no engagement, decayed)
     # -----------------------------------------------------------------------
     {
         "email": "tran.quoc.bao.fptu2026@example.com",
@@ -413,14 +417,15 @@ STUDENTS = [
     # Intents:  Admission Process (Dominant) + Deposit Intent (Dominant later)
     # Negative: cancel_event fires → −20
     #
-    # Fit         = 0  (none of the 4 fit conditions met)
-    # Engagement  = zalo_chat(10) + webinar(25) + application_submit(50) = 85
-    # Intent      = intent_admission(50) + intent_deposit(90)            = 140
-    # raw         = (0*0.34) + (140*0.33) + (85*0.33)
-    #             = 0 + 46.2 + 28.05                                     = 74.25
-    # decayed     = 74.25 * 1.0                                          = 74.25
-    # negative    = −20
-    # EXPECTED FINAL ≈ 54
+    # Fit         = 0
+    # Engagement  = 10 + 25 + 50 =  85
+    # Intent      = 50 + 90      = 140
+    # Negative    = −20  (cancel_event fires once)
+    # TimeDecay   = 1.0  (last activity 3d ago → tier Hot ≤ 30d)
+    # non_decay   = 0.4 × 0                    =  0.0
+    # decayable   = (0.3×85 + 0.3×140) × 1.0  = (25.5 + 42) × 1.0 = 67.5
+    # EXPECTED    = max(0, min(100, 0 + 67.5 − 20)) = 47.5 ≈ 48
+    # (high intent/engagement, but fit is 0 — counselor must verify eligibility)
     # Edge case: strong intent/engagement but counselor must verify eligibility
     # -----------------------------------------------------------------------
     {
@@ -590,7 +595,7 @@ def _seed_score_template():
             {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
             for r in SCORE_RULES
         ],
-        "time_decay_config": [TIME_DECAY_CONFIG],
+        "time_decay_config": TIME_DECAY_TIERS,
         "negative_rules": [
             {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
              "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}

@@ -17,8 +17,8 @@
   "end_time",
   "section_weights",
   "fit_weight",
-  "intent_weight",
   "engagement_weight",
+  "intent_weight",
   "section_rules",
   "rules",
   "section_time_decay",
@@ -81,30 +81,27 @@
    "label": "Dimension Weights"
   },
   {
-   "default": "0.34",
+   "default": "0.4",
    "fieldname": "fit_weight",
    "fieldtype": "Float",
-   "label": "Fit Weight",
-   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
+   "label": "Fit Weight"
   },
   {
-   "default": "0.33",
-   "fieldname": "intent_weight",
-   "fieldtype": "Float",
-   "label": "Intent Weight",
-   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
-  },
-  {
-   "default": "0.33",
+   "default": "0.3",
    "fieldname": "engagement_weight",
    "fieldtype": "Float",
-   "label": "Engagement Weight",
-   "description": "Weights must sum to 1.0 (fit + intent + engagement)"
+   "label": "Engagement Weight"
+  },
+  {
+   "default": "0.3",
+   "fieldname": "intent_weight",
+   "fieldtype": "Float",
+   "label": "Intent Weight"
   },
   {
    "fieldname": "section_rules",
    "fieldtype": "Section Break",
-   "label": "Scoring Rules (Fit / Intent / Engagement)"
+   "label": "Scoring Rules"
   },
   {
    "fieldname": "rules",
@@ -115,7 +112,7 @@
   {
    "fieldname": "section_time_decay",
    "fieldtype": "Section Break",
-   "label": "Time Decay Configuration"
+   "label": "Time Decay"
   },
   {
    "fieldname": "time_decay_config",
@@ -126,7 +123,7 @@
   {
    "fieldname": "section_negative",
    "fieldtype": "Section Break",
-   "label": "Negative Scoring Rules"
+   "label": "Negative Rules"
   },
   {
    "fieldname": "negative_rules",
@@ -138,7 +135,7 @@
    "collapsible": 1,
    "fieldname": "section_legacy",
    "fieldtype": "Section Break",
-   "label": "Legacy JSON Config (deprecated — do not edit)"
+   "label": "Legacy JSON Config"
   },
   {
    "fieldname": "fit_scoring",
@@ -178,7 +175,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-11 00:00:00.000000",
+ "modified": "2026-06-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Score Template",

@@ -21,8 +21,7 @@
    "in_list_view": 1,
    "label": "Signal",
    "options": "CRM Score Signal",
-   "reqd": 1,
-   "description": "Pick from the signal catalog — choose signals with category = Negative"
+   "reqd": 1
   },
   {
    "default": "1",
@@ -40,30 +39,27 @@
    "fieldname": "penalty_amount",
    "fieldtype": "Float",
    "in_list_view": 1,
-   "label": "Penalty Points",
-   "description": "Enter a positive number — scoring engine applies it as negative"
+   "label": "Penalty Points"
   },
   {
    "default": "0",
    "fieldname": "cooldown_days",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Cooldown Days",
-   "description": "Minimum days before this rule can penalize again — 0 = no limit"
+   "label": "Cooldown Days"
   },
   {
    "default": "0",
    "fieldname": "max_penalties",
    "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Max Penalties",
-   "description": "Maximum times this rule can fire per student — 0 = no limit"
+   "label": "Max Penalties"
   }
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,
  "links": [],
- "modified": "2026-06-12 00:00:00.000000",
+ "modified": "2026-06-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Negative Score Rule",
