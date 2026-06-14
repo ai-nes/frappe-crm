@@ -12,9 +12,16 @@ if id frappe >/dev/null 2>&1; then
     chown -R frappe:frappe sites
 fi
 
-if [ -d /opt/frappe/sites-template/assets ]; then
-    echo "Seeding assets from /opt/frappe/sites-template/assets"
-    cp -r /opt/frappe/sites-template/assets/. sites/assets/
+if [ -f /opt/frappe/sites-template/assets/assets.json ]; then
+    echo "Seeding assets.json from /opt/frappe/sites-template/assets"
+    cp /opt/frappe/sites-template/assets/assets.json sites/assets/assets.json
+fi
+
+if [ -d /opt/frappe/sites-template/assets/locale ]; then
+    echo "Seeding locale assets from /opt/frappe/sites-template/assets"
+    rm -rf sites/assets/locale
+    mkdir -p sites/assets/locale
+    cp -r /opt/frappe/sites-template/assets/locale/. sites/assets/locale/
 fi
 
 for app in frappe crm; do
