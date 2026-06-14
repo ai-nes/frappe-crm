@@ -360,7 +360,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		}
 
 	home_address = None
-	ward_link = student_doc.ward if student_doc else (contact_doc.ward if contact_doc else None)
+	ward_link = (student_doc.ward if student_doc else None) or (contact_doc.get("ward") if contact_doc else None)
 	if prov_link or ward_link:
 		home_address = {
 			"province": prov_link or "",
