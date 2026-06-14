@@ -221,7 +221,7 @@ const links = [
   { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
   { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
   { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
-  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Students', query: { stage: 'enrolled' } } },
+  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Contacts', query: { stage: 'enrolled' } } },
   { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
   { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
   { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },

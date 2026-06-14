@@ -55,10 +55,11 @@ RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && cd apps/crm/frontend \
     && yarn build \
     && cd "${BENCH_DIR}" \
+    && bench build --app frappe --production \
     && mkdir -p sites/assets/locale/vi/LC_MESSAGES \
     && msguniq --use-first apps/crm/crm/locale/vi.po | msgfmt - -o sites/assets/locale/vi/LC_MESSAGES/crm.mo \
     && cp -a sites /opt/frappe/sites-template
 
-COPY --chown=frappe:frappe docker/prod-runtime.sh docker/prod-site.sh /opt/frappe/scripts/
+COPY --chown=frappe:frappe docker/prod-runtime.sh docker/prod-site.sh docker/prod-assets.sh /opt/frappe/scripts/
 
 EXPOSE 8000 9000

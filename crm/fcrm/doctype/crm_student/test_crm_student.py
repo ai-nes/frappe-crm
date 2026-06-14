@@ -17,7 +17,7 @@ class TestCRMStudent(FrappeTestCase):
 		student = frappe.get_doc({
 			"doctype": "CRM Student",
 			"student_name": name,
-			"mobile_no": "0901234567",
+			"phone": "0901234567",
 			"email": "test.convert@example.com",
 			"enrollment_status": "Pending Confirmation",
 		})
@@ -38,7 +38,7 @@ class TestCRMStudent(FrappeTestCase):
 
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		self.assertEqual(contact.full_name, student.student_name)
-		self.assertEqual(contact.phone, student.mobile_no)
+		self.assertEqual(contact.phone, student.phone)
 		self.assertEqual(contact.email, student.email)
 		self.assertEqual(contact.student, student.name)
 		self.assertEqual(contact.stage, "Interested")
@@ -53,17 +53,17 @@ class TestCRMStudent(FrappeTestCase):
 
 		self.assertEqual(convert_to_contact(student.name), contact_name)
 
-	def test_student_mobile_no_syncs_to_linked_crm_contact_phone(self):
+	def test_student_phone_syncs_to_linked_crm_contact_phone(self):
 		student = self._make_student("_Test Student Phone Sync")
 		contact_name = convert_to_contact(student.name)
 
-		student.mobile_no = "0907654321"
+		student.phone = "0907654321"
 		student.save(ignore_permissions=True)
 
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		self.assertEqual(contact.phone, "0907654321")
 
-	def test_crm_contact_phone_syncs_to_student_mobile_no(self):
+	def test_crm_contact_phone_syncs_to_student_phone(self):
 		student = self._make_student("_Test Contact Phone Sync")
 		contact_name = convert_to_contact(student.name)
 
@@ -72,7 +72,7 @@ class TestCRMStudent(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 
 		student.reload()
-		self.assertEqual(student.mobile_no, "0902222333")
+		self.assertEqual(student.phone, "0902222333")
 
 	def test_create_from_contact_creates_crm_student(self):
 		contact = frappe.get_doc({
@@ -80,7 +80,7 @@ class TestCRMStudent(FrappeTestCase):
 			"first_name": "_Test",
 			"last_name": "Source Contact",
 			"email_id": "test.source@example.com",
-			"mobile_no": "0912345678",
+			"phone": "0912345678",
 		})
 		contact.insert(ignore_permissions=True)
 
@@ -88,5 +88,5 @@ class TestCRMStudent(FrappeTestCase):
 		student = frappe.get_doc("CRM Student", student_name)
 
 		self.assertEqual(student.student_name, contact.full_name)
-		self.assertEqual(student.mobile_no, contact.mobile_no)
+		self.assertEqual(student.phone, contact.phone)
 		self.assertEqual(student.email, contact.email_id)

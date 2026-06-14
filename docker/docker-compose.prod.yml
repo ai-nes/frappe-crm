@@ -89,6 +89,13 @@ services:
 
           client_max_body_size 50m;
 
+          location = /assets/assets.json {
+            alias /home/frappe/frappe-bench/sites/assets/assets.json;
+            access_log off;
+            expires -1;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+          }
+
           location /assets/ {
             alias /home/frappe/frappe-bench/sites/assets/;
             access_log off;
@@ -124,17 +131,23 @@ services:
     ports:
       - "${HTTP_PORT:-8000}:8080"
     depends_on:
+      assets:
+        condition: service_completed_successfully
       backend:
         condition: service_started
       websocket:
         condition: service_started
 
+  assets:
+    <<: *crm-service
+    pull_policy: always
+    restart: "no"
+    command: bash /opt/frappe/scripts/prod-assets.sh
+
   backend:
     <<: *crm-service
     restart: unless-stopped
     command:
-      - env
-      - SYNC_PUBLIC_ASSETS=1
       - bash
       - /opt/frappe/scripts/prod-runtime.sh
       - ./env/bin/gunicorn

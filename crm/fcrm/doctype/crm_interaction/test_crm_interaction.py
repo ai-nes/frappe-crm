@@ -33,7 +33,7 @@ class TestCRMInteraction(FrappeTestCase):
 		student = frappe.get_doc({
 			"doctype": "CRM Student",
 			"student_name": "_Test Interaction Student",
-			"mobile_no": "0901234567",
+			"phone": "0901234567",
 		})
 		student.insert(ignore_permissions=True)
 		return student

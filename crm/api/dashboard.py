@@ -137,14 +137,14 @@ def get_total_contacts(from_date=None, to_date=None, user=None):
 
 def get_qualified_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["stage", "=", "Qualified"]]
+		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "Có triển vọng"]]
 	)
 	return number_chart("Qualified contacts", "Contacts currently in the qualified stage", value, delta)
 
 
 def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["stage", "=", "Enrolled"]]
+		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "Đã nhập học"]]
 	)
 	return number_chart("Enrolled contacts", "Contacts currently in the enrolled stage", value, delta)
 
@@ -196,8 +196,8 @@ def daily_counts(doctype, from_date, to_date, user=None):
 def get_contacts_by_stage(from_date=None, to_date=None, user=None):
 	return donut_chart(
 		"CRM Contact",
-		"stage",
-		"stage",
+		"enrollment_status",
+		"enrollment_status",
 		"Contacts by stage",
 		"Current admission pipeline distribution",
 		from_date,
