@@ -7,6 +7,10 @@ cd "${BENCH_DIR}"
 
 mkdir -p sites/assets
 
+if id frappe >/dev/null 2>&1; then
+    chown -R frappe:frappe sites
+fi
+
 if [ -d /opt/frappe/sites-template/assets ]; then
     cp -r /opt/frappe/sites-template/assets/. sites/assets/
 fi
@@ -26,3 +30,7 @@ for app in frappe crm; do
 done
 
 chmod -R a+rX sites/assets
+
+if id frappe >/dev/null 2>&1; then
+    chown -R frappe:frappe sites
+fi
