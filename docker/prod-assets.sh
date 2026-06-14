@@ -8,7 +8,7 @@ cd "${BENCH_DIR}"
 mkdir -p sites/assets
 
 if [ -d /opt/frappe/sites-template/assets ]; then
-    cp -a /opt/frappe/sites-template/assets/. sites/assets/
+    cp -r /opt/frappe/sites-template/assets/. sites/assets/
 fi
 
 for app in frappe crm; do
