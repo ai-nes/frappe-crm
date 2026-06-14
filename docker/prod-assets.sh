@@ -27,15 +27,11 @@ fi
 for app in frappe crm; do
     public_dir="apps/${app}/${app}/public"
     target_dir="sites/assets/${app}"
-    tmp_dir="${target_dir}.tmp.$$"
 
     if [ -d "${public_dir}" ]; then
         echo "Copying ${public_dir} -> ${target_dir}"
-        rm -rf "${tmp_dir}"
-        mkdir -p "${tmp_dir}"
-        cp -r "${public_dir}/." "${tmp_dir}/"
-        rm -rf "${target_dir}"
-        mv "${tmp_dir}" "${target_dir}"
+        mkdir -p "${target_dir}"
+        cp -r "${public_dir}/." "${target_dir}/"
     else
         echo "Missing public directory: ${public_dir}" >&2
         exit 1
