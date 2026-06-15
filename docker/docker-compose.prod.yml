@@ -141,6 +141,7 @@ services:
   assets:
     <<: *crm-service
     pull_policy: always
+    user: root
     restart: "no"
     command: bash /opt/frappe/scripts/prod-assets.sh
 
@@ -159,7 +160,15 @@ services:
       - --worker-tmp-dir=/dev/shm
       - --timeout=120
       - frappe.app:application
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   websocket:
     <<: *crm-service
@@ -170,6 +179,8 @@ services:
       - node
       - apps/frappe/socketio.js
     depends_on:
+      assets:
+        condition: service_completed_successfully
       redis-queue:
         condition: service_healthy
 
@@ -183,7 +194,15 @@ services:
       - worker
       - --queue
       - short
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   queue-default:
     <<: *crm-service
@@ -195,7 +214,15 @@ services:
       - worker
       - --queue
       - default
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   queue-long:
     <<: *crm-service
@@ -207,7 +234,15 @@ services:
       - worker
       - --queue
       - long
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   scheduler:
     <<: *crm-service
@@ -217,7 +252,15 @@ services:
       - /opt/frappe/scripts/prod-runtime.sh
       - bench
       - schedule
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
 volumes:
   mariadb-data:

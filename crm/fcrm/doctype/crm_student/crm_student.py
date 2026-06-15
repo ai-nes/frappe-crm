@@ -61,7 +61,6 @@ class CRMStudent(Document):
 				"source",
 				"admission_year",
 				"branch",
-				"enrollment_status",
 				"cohort_start_year",
 				"education_program",
 				"graduation_score",
@@ -84,7 +83,6 @@ class CRMStudent(Document):
 			"source": self.source,
 			"admission_year": self.admission_year,
 			"branch": self.branch,
-			"enrollment_status": self.enrollment_status,
 			"cohort_start_year": self.cohort_start_year,
 			"education_program": self.education_program,
 			"graduation_score": self.graduation_score,
@@ -147,7 +145,6 @@ class CRMStudent(Document):
 			"email",
 			"enrollment_status",
 			"source",
-			"converted",
 			"modified",
 		]
 		return {"columns": columns, "rows": rows}
@@ -157,10 +154,12 @@ class CRMStudent(Document):
 def convert_to_contact(student_name):
 	student = frappe.get_doc("CRM Student", student_name)
 
-	if student.converted:
-		existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
-		if existing_contact:
-			return existing_contact
+	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
+	if existing_contact:
+		return existing_contact
+
+	if not student.phone:
+		frappe.throw(_("Student must have a phone number before converting to a contact."))
 
 	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 
@@ -178,7 +177,7 @@ def convert_to_contact(student_name):
 		"branch": student.branch,
 		"student": student.name,
 		"assigned_to": crm_staff_name,
-		"enrollment_status": student.enrollment_status or "Mới",
+		"enrollment_status": "Có triển vọng",
 		"lead_status": "Mới",
 		"cohort_start_year": student.cohort_start_year,
 		"education_program": student.education_program,
@@ -206,7 +205,6 @@ def convert_to_contact(student_name):
 		})
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("converted", 1)
 	student.db_set("enrollment_status", "Đã chuyển đổi")
 
 	return contact.name

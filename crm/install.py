@@ -9,11 +9,15 @@ from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
 
 
+CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
+
+
 def before_install():
 	pass
 
 
 def after_install(force=False):
+	add_chatwoot_cors_origin()
 	add_default_fields_layout(force)
 	add_property_setter()
 	add_email_template_custom_fields()
@@ -29,6 +33,42 @@ def after_install(force=False):
 	add_assignment_rule_property_setters()
 	sync_frappe_crm_workspace()
 	frappe.db.commit()
+
+
+def add_chatwoot_cors_origin():
+	"""Allow Chatwoot dashboard requests to reach this site."""
+
+	current_allow_cors = frappe.conf.get("allow_cors")
+
+	if current_allow_cors == "*":
+		return
+
+	if not current_allow_cors:
+		allow_cors = CHATWOOT_CORS_ORIGIN
+	elif isinstance(current_allow_cors, list):
+		if CHATWOOT_CORS_ORIGIN in current_allow_cors:
+			return
+		allow_cors = [*current_allow_cors, CHATWOOT_CORS_ORIGIN]
+	elif isinstance(current_allow_cors, str):
+		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
+		if CHATWOOT_CORS_ORIGIN in origins:
+			return
+		allow_cors = ",".join([*origins, CHATWOOT_CORS_ORIGIN])
+	else:
+		allow_cors = CHATWOOT_CORS_ORIGIN
+
+	site_config_path = frappe.get_site_path("site_config.json")
+	with open(site_config_path) as site_config_file:
+		site_config = json.load(site_config_file)
+
+	site_config["allow_cors"] = allow_cors
+
+	with open(site_config_path, "w") as site_config_file:
+		json.dump(site_config, site_config_file, indent=1)
+		site_config_file.write("\n")
+
+	frappe.conf.allow_cors = allow_cors
+	click.secho(f"* Allowing CORS for {CHATWOOT_CORS_ORIGIN}")
 
 
 def sync_frappe_crm_workspace():

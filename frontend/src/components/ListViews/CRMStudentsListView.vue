@@ -144,15 +144,8 @@ const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
 const listBulkActionsRef = ref(null)
 
-const STATUS_COLORS = {
-  'Pending Confirmation': 'orange',
-  Enrolled: 'green',
-  Deferred: 'blue',
-  Withdrawn: 'gray',
-}
-
-function enrollmentStatusColor(status) {
-  return STATUS_COLORS[status] || 'gray'
+function enrollmentStatusColor() {
+  return 'gray'
 }
 
 watch(pageLengthCount, (val, old_value) => {

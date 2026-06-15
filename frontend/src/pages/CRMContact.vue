@@ -13,17 +13,17 @@
         :actions="document._actions"
       />
       <Dropdown
-        v-if="doc.stage"
-        :options="stageOptions"
+        v-if="doc.enrollment_status"
+        :options="enrollmentStatuses"
         placement="right"
       >
         <template #default="{ open }">
           <Button
-            :label="doc.stage"
+            :label="doc.enrollment_status"
             :iconRight="open ? 'chevron-up' : 'chevron-down'"
           >
             <template #prefix>
-              <IndicatorIcon :class="stageColor(doc.stage)" />
+              <IndicatorIcon :class="enrollmentStatusColor(doc.enrollment_status)" />
             </template>
           </Button>
         </template>
@@ -158,28 +158,27 @@ const title = computed(() => {
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
-const STAGE_COLORS = {
-  Interested: 'text-blue-500',
-  Qualified: 'text-orange-500',
-  Enrolled: 'text-green-500',
-  Lost: 'text-gray-500',
+const enrollmentStatusList = createResource({
+  url: 'frappe.client.get_list',
+  params: { doctype: 'CRM Enrollment Status', fields: ['name'], limit: 50, order_by: 'idx asc' },
+  auto: true,
+})
+
+function enrollmentStatusColor() {
+  return 'text-gray-500'
 }
 
-function stageColor(stage) {
-  return STAGE_COLORS[stage] || 'text-gray-500'
-}
-
-const stageOptions = computed(() =>
-  ['Interested', 'Qualified', 'Enrolled', 'Lost'].map((s) => ({
-    label: s,
-    onClick: () => updateStage(s),
+const enrollmentStatuses = computed(() =>
+  (enrollmentStatusList.data || []).map((s) => ({
+    label: s.name,
+    onClick: () => updateEnrollmentStatus(s.name),
   })),
 )
 
-function updateStage(stage) {
-  doc.value.stage = stage
+function updateEnrollmentStatus(status) {
+  doc.value.enrollment_status = status
   document.save.submit(null, {
-    onError: (err) => toast.error(err.messages?.[0] || __('Error updating stage')),
+    onError: (err) => toast.error(err.messages?.[0] || __('Error updating status')),
   })
 }
 

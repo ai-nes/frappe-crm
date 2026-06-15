@@ -132,7 +132,6 @@ def _create_demo_students():
 				"phone": data["phone"],
 				"email": data["email"],
 				"enrollment_status": "Mới",
-				"converted": 0,
 				"source": _ensure_source(data["source"]),
 			}
 		).insert(ignore_permissions=True)
@@ -178,7 +177,7 @@ def _create_demo_contacts(student_names):
 				"notes": "Demo admission pipeline contact",
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.set_value("CRM Student", student.name, "converted", 1, update_modified=False)
+		frappe.db.set_value("CRM Student", student.name, "enrollment_status", "Đã chuyển đổi", update_modified=False)
 		_backdate("CRM Contact", doc.name, len(names) + 5)
 		names.append(doc.name)
 

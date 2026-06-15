@@ -93,7 +93,7 @@
    "in_standard_filter": 1,
    "label": "Enrollment Status",
    "options": "CRM Enrollment Status",
-   "default": "Mới"
+   "default": "Có triển vọng"
   },
   {
    "fieldname": "lead_status",

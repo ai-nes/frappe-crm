@@ -13,7 +13,7 @@
         :actions="document._actions"
       />
       <Button
-        v-if="doc.name && !doc.converted"
+        v-if="doc.name && doc.enrollment_status !== 'Đã chuyển đổi'"
         variant="solid"
         :label="__('Convert to Contact')"
         iconLeft="user-plus"
@@ -161,14 +161,14 @@ const breadcrumbs = computed(() => {
   let items = [
     {
       label:
-        doc.value?.enrollment_status === 'Enrolled'
+        doc.value?.enrollment_status === 'Đã chuyển đổi'
           ? __('Enrolled Students')
           : __('Prospective Students'),
       route: {
         name: 'CRM Students',
         query: {
           stage:
-            doc.value?.enrollment_status === 'Enrolled' ? 'enrolled' : 'intake',
+            doc.value?.enrollment_status === 'Đã chuyển đổi' ? 'enrolled' : 'intake',
         },
       },
     },
@@ -187,30 +187,20 @@ const title = computed(() => {
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
-const STATUS_COLORS = {
-  'Pending Confirmation': 'text-yellow-500',
-  Enrolled: 'text-green-500',
-  Deferred: 'text-blue-500',
-  Withdrawn: 'text-gray-500',
-  Converted: 'text-purple-500',
-}
+const enrollmentStatusList = createResource({
+  url: 'frappe.client.get_list',
+  params: { doctype: 'CRM Enrollment Status', fields: ['name'], limit: 50, order_by: 'idx asc' },
+  auto: true,
+})
 
-function statusColor(status) {
-  return STATUS_COLORS[status] || 'text-gray-500'
+function statusColor() {
+  return 'text-gray-500'
 }
-
-const STATUS_OPTIONS = [
-  'Pending Confirmation',
-  'Enrolled',
-  'Deferred',
-  'Withdrawn',
-  'Converted',
-]
 
 const enrollmentStatuses = computed(() =>
-  STATUS_OPTIONS.map((s) => ({
-    label: s,
-    onClick: () => updateStatus(s),
+  (enrollmentStatusList.data || []).map((s) => ({
+    label: s.name,
+    onClick: () => updateStatus(s.name),
   })),
 )
 
@@ -239,20 +229,7 @@ function convertToContact() {
   convertResource.submit({ student_name: props.crmStudentId })
 }
 
-function handleSidePanelFieldChange(changes) {
-  if (changes.converted) {
-    converting.value = true
-    doc.value.converted = 0
-    document.save.submit(null, {
-      onSuccess: () => convertResource.submit({ student_name: props.crmStudentId }),
-      onError: (err) => {
-        converting.value = false
-        toast.error(err.messages?.[0] || __('Error saving student'))
-      },
-    })
-    return
-  }
-
+function handleSidePanelFieldChange() {
   document.save.submit(null, {
     onSuccess: () => sections.reload(),
     onError: (err) => toast.error(err.messages?.[0] || __('Error updating field')),
