@@ -237,9 +237,9 @@ TIME_DECAY_TIERS = [
 # ---------------------------------------------------------------------------
 #
 # Score formula:
-#   raw = (fit_total * 0.34) + (intent_total * 0.33) + (engagement_total * 0.33)
-#   decayed = raw * decay_multiplier
-#   final = decayed + sum(penalties)
+#   non_decay = 0.4 * Fit_score
+#   decayable = 0.3 * Engagement_score + 0.3 * Intent_score
+#   final = max(0, min(100, non_decay + decayable * decay_multiplier + min(0, Negative_score)))
 
 STUDENTS = [
     # -----------------------------------------------------------------------
@@ -314,9 +314,9 @@ STUDENTS = [
             "fit_score": 70.0,
             "engagement_score": 60.0,
             "intent_score": 95.0,
-            "time_decay_score": 74.95,   # raw before negative
+            "time_decay_score": 74.5,
             "negative_score": 0.0,
-            "final_score": 74.95,
+            "final_score": 74.5,
             "score_change": 0.0,
             "days_ago": 5,
             "details": [
@@ -335,7 +335,7 @@ STUDENTS = [
         "expected": {
             "fit": 70, "engagement": 60, "intent": 95,
             "decay_multiplier": 1.0, "decay_tier": "Tier 1 (≤30 days)",
-            "negative": 0, "final": 74.95,
+            "negative": 0, "final": 74.5,
             "note": "Hot lead — strong across all 3 dimensions, recent activity.",
         },
     },
@@ -388,9 +388,9 @@ STUDENTS = [
             "fit_score": 20.0,
             "engagement_score": 7.0,
             "intent_score": 10.0,
-            "time_decay_score": 8.69,
+            "time_decay_score": 11.57,
             "negative_score": -10.0,
-            "final_score": -1.31,
+            "final_score": 1.57,
             "score_change": 0.0,
             "days_ago": 50,
             "details": [
@@ -398,15 +398,15 @@ STUDENTS = [
                 ("Engagement", "website_visit","Website Visit",            2.0,  "One tracked website visit."),
                 ("Engagement", "major_view",  "Major Page View",           5.0,  "Viewed SE major detail page."),
                 ("Intent",     "intent_major","Intent: Major Inquiry",    10.0,  "Passive browse — no direct question asked."),
-                ("Time Decay", "tier_2",      "Tier 2 decay applied",     -3.72, "50 days since last activity → 0.7x multiplier."),
+                ("Time Decay", "tier_2",      "Tier 2 decay applied",     -1.53, "50 days since last activity → 0.7x multiplier."),
                 ("Negative",   "no_contact_30","No Contact 30 Days",     -10.0,  "No interaction in over 30 days."),
             ],
         },
         "expected": {
             "fit": 20, "engagement": 7, "intent": 10,
             "decay_multiplier": 0.7, "decay_tier": "Tier 2 (31–60 days)",
-            "negative": -10, "final": -1.31,
-            "note": "Cold lead — minimal engagement, no certificates, inactive 50 days. Negative final score signals deprioritisation.",
+            "negative": -10, "final": 1.57,
+            "note": "Cold lead — minimal engagement, no certificates, inactive 50 days, but fit is not time-decayed.",
         },
     },
 
@@ -488,9 +488,9 @@ STUDENTS = [
             "fit_score": 0.0,
             "engagement_score": 85.0,
             "intent_score": 140.0,
-            "time_decay_score": 74.25,
+            "time_decay_score": 67.5,
             "negative_score": -20.0,
-            "final_score": 54.25,
+            "final_score": 47.5,
             "score_change": 0.0,
             "days_ago": 3,
             "details": [
@@ -505,7 +505,7 @@ STUDENTS = [
         "expected": {
             "fit": 0, "engagement": 85, "intent": 140,
             "decay_multiplier": 1.0, "decay_tier": "Tier 1 (≤30 days)",
-            "negative": -20, "final": 54.25,
+            "negative": -20, "final": 47.5,
             "note": "Edge case — zero fit (grade 11, no certs) but strong intent/engagement. "
                     "AI flags high intent; counselor must verify eligibility before converting.",
         },
@@ -581,16 +581,34 @@ def _seed_signals():
 def _seed_score_template():
     if frappe.db.exists("CRM Score Template", {"template_name": TEMPLATE_NAME}):
         name = frappe.db.get_value("CRM Score Template", {"template_name": TEMPLATE_NAME}, "name")
-        print(f"  Score Template: '{TEMPLATE_NAME}' already exists — skipped")
+        doc = frappe.get_doc("CRM Score Template", name)
+        doc.update({
+            "status": "Active",
+            "fit_weight": 0.4,
+            "intent_weight": 0.3,
+            "engagement_weight": 0.3,
+        })
+        doc.set("rules", [
+            {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
+            for r in SCORE_RULES
+        ])
+        doc.set("time_decay_config", TIME_DECAY_TIERS)
+        doc.set("negative_rules", [
+            {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
+             "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
+            for r in NEGATIVE_RULES
+        ])
+        doc.save(ignore_permissions=True)
+        print(f"  Score Template: '{TEMPLATE_NAME}' updated")
         return name
 
     doc = frappe.get_doc({
         "doctype": "CRM Score Template",
         "template_name": TEMPLATE_NAME,
         "status": "Active",
-        "fit_weight": 0.34,
-        "intent_weight": 0.33,
-        "engagement_weight": 0.33,
+        "fit_weight": 0.4,
+        "intent_weight": 0.3,
+        "engagement_weight": 0.3,
         "rules": [
             {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
             for r in SCORE_RULES
@@ -748,27 +766,37 @@ def _seed_score_history(student, template_name, spec):
         "student": student.name,
         "score_template": template_name,
     })
-    if existing:
-        return existing
 
     scoring_time = datetime.now() - timedelta(days=spec["days_ago"])
-    doc = frappe.get_doc({
-        "doctype": "CRM Score History",
+    values = {
         "student": student.name,
         "score_template": template_name,
         "scoring_time": scoring_time,
         "scoring_date": scoring_time.date(),
-        "fit_score":        spec["fit_score"],
+        "fit_score": spec["fit_score"],
         "engagement_score": spec["engagement_score"],
-        "intent_score":     spec["intent_score"],
+        "intent_score": spec["intent_score"],
         "time_decay_score": spec["time_decay_score"],
-        "negative_score":   spec["negative_score"],
-        "final_score":      spec["final_score"],
-        "score_change":     spec["score_change"],
-        "details": [
-            {"category": cat, "rule_id": rid, "signal": sig, "score": score, "reason": reason}
-            for cat, rid, sig, score, reason in spec["details"]
-        ],
+        "negative_score": spec["negative_score"],
+        "final_score": spec["final_score"],
+        "score_change": spec["score_change"],
+    }
+    details = [
+        {"category": cat, "rule_id": rid, "signal": sig, "score": score, "reason": reason}
+        for cat, rid, sig, score, reason in spec["details"]
+    ]
+
+    if existing:
+        doc = frappe.get_doc("CRM Score History", existing)
+        doc.update(values)
+        doc.set("details", details)
+        doc.save(ignore_permissions=True)
+        return doc.name
+
+    doc = frappe.get_doc({
+        "doctype": "CRM Score History",
+        **values,
+        "details": details,
     })
     doc.insert(ignore_permissions=True)
     return doc.name

@@ -83,7 +83,7 @@ tasks:
 
   seed:
     desc: Seed data mẫu (student + scoring master data)
-    aliases: [seed-sample-student]
+    aliases: [seed-student, seed-sample-student]
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_demo.execute"
 
