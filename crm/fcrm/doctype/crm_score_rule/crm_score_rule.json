@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "signal",
+  "column_break_1",
+  "base_points",
+  "max_points",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "signal",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Signal",
+   "options": "CRM Score Signal",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "base_points",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Points"
+  },
+  {
+   "default": "0",
+   "fieldname": "max_points",
+   "fieldtype": "Float",
+   "label": "Max Points"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score Rule",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "Administrator"},
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Team Leader"},
+  {"read": 1, "role": "Counseller"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "translated_doctype": 1
+}

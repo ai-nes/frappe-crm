@@ -15,7 +15,17 @@
   "column_break_1",
   "start_time",
   "end_time",
-  "section_scoring",
+  "section_weights",
+  "fit_weight",
+  "engagement_weight",
+  "intent_weight",
+  "section_rules",
+  "rules",
+  "section_time_decay",
+  "time_decay_config",
+  "section_negative",
+  "negative_rules",
+  "section_legacy",
   "fit_scoring",
   "engagement_scoring",
   "intent_scoring",
@@ -66,44 +76,106 @@
    "label": "End Time"
   },
   {
-   "fieldname": "section_scoring",
+   "fieldname": "section_weights",
    "fieldtype": "Section Break",
-   "label": "Scoring Formula"
+   "label": "Dimension Weights"
+  },
+  {
+   "default": "0.4",
+   "fieldname": "fit_weight",
+   "fieldtype": "Float",
+   "label": "Fit Weight"
+  },
+  {
+   "default": "0.3",
+   "fieldname": "engagement_weight",
+   "fieldtype": "Float",
+   "label": "Engagement Weight"
+  },
+  {
+   "default": "0.3",
+   "fieldname": "intent_weight",
+   "fieldtype": "Float",
+   "label": "Intent Weight"
+  },
+  {
+   "fieldname": "section_rules",
+   "fieldtype": "Section Break",
+   "label": "Scoring Rules"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules",
+   "options": "CRM Score Rule"
+  },
+  {
+   "fieldname": "section_time_decay",
+   "fieldtype": "Section Break",
+   "label": "Time Decay"
+  },
+  {
+   "fieldname": "time_decay_config",
+   "fieldtype": "Table",
+   "label": "Time Decay Config",
+   "options": "CRM Time Decay Config"
+  },
+  {
+   "fieldname": "section_negative",
+   "fieldtype": "Section Break",
+   "label": "Negative Rules"
+  },
+  {
+   "fieldname": "negative_rules",
+   "fieldtype": "Table",
+   "label": "Negative Rules",
+   "options": "CRM Negative Score Rule"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_legacy",
+   "fieldtype": "Section Break",
+   "label": "Legacy JSON Config"
   },
   {
    "fieldname": "fit_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Fit Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "engagement_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Engagement Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "intent_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Intent Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "time_decay_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Time Decay Scoring",
    "options": "JSON"
   },
   {
    "fieldname": "negative_scoring",
    "fieldtype": "Code",
+   "hidden": 1,
    "label": "Negative Scoring",
    "options": "JSON"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-11 00:00:00.000000",
+ "modified": "2026-06-13 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Score Template",

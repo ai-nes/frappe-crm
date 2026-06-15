@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 # Local dev only — backend Docker (:8000) + frontend Vite (:5000)
 # App: http://crm.localhost:5000/crm
@@ -26,7 +26,7 @@ tasks:
   up:
     desc: Bật backend (Docker)
     cmds:
-      - '{{.COMPOSE}} up -d'
+      - "{{.COMPOSE}} up -d"
 
   fe:
     desc: Frontend dev server (:5000)
@@ -36,7 +36,7 @@ tasks:
   down:
     desc: Tắt backend
     cmds:
-      - '{{.COMPOSE}} down'
+      - "{{.COMPOSE}} down"
 
   deps:
     desc: Cài frontend deps (khi yarn.lock đổi)
@@ -49,30 +49,30 @@ tasks:
   migrate:
     desc: Schema, patches, workspace sync
     cmds:
-      - '{{.EXEC}} {{.BENCH}} migrate'
+      - "{{.EXEC}} {{.BENCH}} migrate"
 
   workspace:
     desc: Sync Desk workspace Frappe CRM
     aliases: [sync-workspace]
     cmds:
-      - '{{.EXEC}} {{.BENCH}} execute crm.install.sync_frappe_crm_workspace'
+      - "{{.EXEC}} {{.BENCH}} execute crm.install.sync_frappe_crm_workspace"
 
   restart:
     desc: Reload Python sau khi sửa BE
     cmds:
-      - '{{.COMPOSE}} restart frappe'
+      - "{{.COMPOSE}} restart frappe"
 
   cache:
     desc: Xóa cache site crm.localhost
     aliases: [clear-cache]
     cmds:
-      - '{{.EXEC}} {{.BENCH}} clear-cache'
+      - "{{.EXEC}} {{.BENCH}} clear-cache"
 
   build:
     desc: Compile translations (vi.po/en.po) → .mo, cần sau khi sửa locale
     aliases: [compile-translations]
     cmds:
-      - '{{.EXEC}} bench build --apps crm'
+      - "{{.EXEC}} bench build --apps crm"
 
   i18n:
     desc: Migrate + compile translations (dùng sau khi sửa DocType + locale)
@@ -81,11 +81,11 @@ tasks:
       - task: build
       - task: cache
 
-  seed-student:
-    desc: Seed 1 hồ sơ student mẫu FPTU kèm contact, admission context, interactions, intents
-    aliases: [seed-sample-student]
+  seed:
+    desc: Seed data mẫu (student + scoring master data)
+    aliases: [seed-student, seed-sample-student]
     cmds:
-      - '{{.EXEC}} {{.BENCH}} execute crm.demo.create_student_full_sample.execute'
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_demo.execute"
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart
@@ -101,24 +101,24 @@ tasks:
     desc: Rebuild image sau khi sửa Dockerfile hoặc compose dev
     aliases: [rebuild]
     cmds:
-      - '{{.COMPOSE}} up -d --build --force-recreate frappe'
+      - "{{.COMPOSE}} up -d --build --force-recreate frappe"
 
   reset:
     desc: Xóa DB + bench volume, tạo lại stack
     prompt: Xóa toàn bộ data local. Tiếp tục?
     cmds:
-      - '{{.COMPOSE}} down -v'
-      - '{{.COMPOSE}} up -d'
+      - "{{.COMPOSE}} down -v"
+      - "{{.COMPOSE}} up -d"
 
   logs:
     desc: Theo dõi backend logs
     cmds:
-      - '{{.COMPOSE}} logs -f frappe'
+      - "{{.COMPOSE}} logs -f frappe"
 
   bench:
-    desc: 'Bench tùy ý — vd: task bench -- console'
+    desc: "Bench tùy ý — vd: task bench -- console"
     cmds:
-      - '{{.EXEC}} {{.BENCH}} {{.CLI_ARGS}}'
+      - "{{.EXEC}} {{.BENCH}} {{.CLI_ARGS}}"
 
   shell:
     desc: Shell trong container Frappe (user frappe)

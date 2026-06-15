@@ -14,6 +14,7 @@
   "student",
   "column_break_1",
   "intent_type",
+  "intent_role",
   "importance",
   "confidence",
   "notes"
@@ -56,6 +57,16 @@
    "in_standard_filter": 1,
    "label": "Intent Type",
    "options": "CRM Intent Type",
+   "reqd": 1
+  },
+  {
+   "default": "Support",
+   "fieldname": "intent_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intent Role",
+   "options": "Dominant\nSupport",
    "reqd": 1
   },
   {
