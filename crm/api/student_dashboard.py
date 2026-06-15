@@ -458,6 +458,32 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		"notes": notes
 	}
 
+	intent_key_map = {
+		"Major Inquiry": "major_inquiry",
+		"Tuition": "tuition_inquiry",
+		"Tuition Inquiry": "tuition_inquiry",
+		"Scholarship": "scholarship_inquiry",
+		"Scholarship Inquiry": "scholarship_inquiry",
+		"Admission Process": "admission_process",
+		"Campus Visit Inquiry": "campus_visit_inquiry",
+		"Student Life Inquiry": "student_life_inquiry",
+		"Application Submission": "application_submission",
+		"Enrollment Intent": "enrollment_intent",
+		"Enrollment Inquiry": "enrollment_intent",
+		"Deposit Intent": "deposit_intent",
+	}
+	intent_type_map = {
+		"major_inquiry": "academic",
+		"tuition_inquiry": "financial",
+		"scholarship_inquiry": "financial",
+		"admission_process": "admission",
+		"campus_visit_inquiry": "campus_life",
+		"student_life_inquiry": "campus_life",
+		"application_submission": "admission",
+		"enrollment_intent": "admission",
+		"deposit_intent": "admission",
+	}
+
 	# --- Interactions Mapping ---
 	interaction_items = []
 	for ix in interactions:
@@ -472,20 +498,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		}
 		ix_type = type_map.get(ix.get("interaction_type"), "conversation")
 		
-		ix_intent_key_map = {
-			"Major Inquiry": "major_inquiry",
-			"Tuition Inquiry": "tuition_inquiry",
-			"Scholarship Inquiry": "scholarship_inquiry",
-			"Campus Visit Inquiry": "campus_visit_inquiry",
-			"Student Life Inquiry": "student_life_inquiry",
-			"Application Submission": "application_submission",
-			"Enrollment Inquiry": "enrollment_inquiry"
-		}
 		ix_intents = []
 		ix_dominant_intent = None
 		for intent in intents:
 			if intent.get("interaction") == ix.get("name"):
-				key = ix_intent_key_map.get(intent.get("intent_type"), "admission_inquiry")
+				key = intent_key_map.get(intent.get("intent_type"), "admission_inquiry")
 				role = intent.get("intent_role") or "Support"
 				ix_intents.append({"key": key, "role": role})
 				if role == "Dominant":
@@ -510,26 +527,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	# --- Intents Mapping ---
 	intent_items = []
 	for intent in intents:
-		intent_key_map = {
-			"Major Inquiry": "major_inquiry",
-			"Tuition Inquiry": "tuition_inquiry",
-			"Scholarship Inquiry": "scholarship_inquiry",
-			"Campus Visit Inquiry": "campus_visit_inquiry",
-			"Student Life Inquiry": "student_life_inquiry",
-			"Application Submission": "application_submission",
-			"Enrollment Inquiry": "enrollment_inquiry"
-		}
 		key = intent_key_map.get(intent.get("intent_type"), "admission_inquiry")
 		
-		intent_type_map = {
-			"major_inquiry": "academic",
-			"tuition_inquiry": "financial",
-			"scholarship_inquiry": "financial",
-			"campus_visit_inquiry": "campus_life",
-			"student_life_inquiry": "campus_life",
-			"application_submission": "admission",
-			"enrollment_inquiry": "admission"
-		}
 		intent_type = intent_type_map.get(key, "admission")
 
 		importance_map = {
@@ -632,8 +631,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		lead_score = {
 			"fitScore": latest_score_history.get("fit_score") or 0,
 			"engagementScore": latest_score_history.get("engagement_score") or 0,
+			"intentScore": latest_score_history.get("intent_score") or 0,
+			"timeDecayScore": latest_score_history.get("time_decay_score") or 0,
+			"negativeScore": latest_score_history.get("negative_score") or 0,
 			"totalScore": total_score,
-			"maxScore": 200,
+			"maxScore": 100,
 			"tier": tier,
 			"isPotentialCustomer": total_score >= 70,
 			"breakdown": breakdown,
@@ -644,8 +646,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		lead_score = {
 			"fitScore": 0,
 			"engagementScore": 0,
+			"intentScore": 0,
+			"timeDecayScore": 0,
+			"negativeScore": 0,
 			"totalScore": 0,
-			"maxScore": 200,
+			"maxScore": 100,
 			"tier": "cold",
 			"isPotentialCustomer": False,
 			"breakdown": [],
@@ -761,8 +766,20 @@ def get_intent_definitions():
 					"importance": "very_high"
 				},
 				{
-					"key": "enrollment_inquiry",
-					"label": "Hỏi ghi danh",
+					"key": "admission_process",
+					"label": "Hỏi quy trình xét tuyển",
+					"intentType": "admission",
+					"importance": "very_high"
+				},
+				{
+					"key": "enrollment_intent",
+					"label": "Ý định nhập học",
+					"intentType": "admission",
+					"importance": "very_high"
+				},
+				{
+					"key": "deposit_intent",
+					"label": "Ý định đặt cọc",
 					"intentType": "admission",
 					"importance": "very_high"
 				},
