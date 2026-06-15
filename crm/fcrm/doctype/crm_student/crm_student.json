@@ -13,6 +13,8 @@
     "student_name",
     "phone",
     "email",
+    "gender",
+    "date_of_birth",
     "col_break_1",
     "enrollment_status",
     "latest_score",
@@ -25,6 +27,7 @@
     "branch",
     "major",
     "aspiration",
+    "step",
     "source",
     "admission_year",
     "section_academic_history",
@@ -40,9 +43,17 @@
     "section_academic_tables",
     "academic_results",
     "language_certificates",
+    "section_parent",
+    "alt_name",
+    "col_break_parent",
+    "alt_phone",
+    "alt_address",
     "section_notes",
     "notes",
-    "section_trace",
+    "section_identity",
+    "id_number",
+    "id_issued_date",
+    "id_issued_place",
     "import_source_id"
   ],
   "fields": [
@@ -73,6 +84,17 @@
       "fieldtype": "Data",
       "label": "Email",
       "options": "Email"
+    },
+    {
+      "fieldname": "gender",
+      "fieldtype": "Select",
+      "label": "Gender",
+      "options": "\nNam\nNữ"
+    },
+    {
+      "fieldname": "date_of_birth",
+      "fieldtype": "Date",
+      "label": "Date of Birth"
     },
     {
       "fieldname": "col_break_1",
@@ -152,6 +174,12 @@
       "options": "CRM Aspiration"
     },
     {
+      "default": "1",
+      "fieldname": "step",
+      "fieldtype": "Int",
+      "label": "Registration Step"
+    },
+    {
       "fieldname": "source",
       "fieldtype": "Link",
       "label": "Source",
@@ -162,27 +190,6 @@
       "fieldtype": "Link",
       "label": "CRM Admission Year",
       "options": "CRM Admission Year"
-    },
-    {
-      "fieldname": "section_notes",
-      "fieldtype": "Section Break",
-      "label": "Notes"
-    },
-    {
-      "fieldname": "notes",
-      "fieldtype": "Text",
-      "label": "Notes"
-    },
-    {
-      "fieldname": "section_trace",
-      "fieldtype": "Section Break",
-      "label": "Trace"
-    },
-    {
-      "fieldname": "import_source_id",
-      "fieldtype": "Int",
-      "hidden": 1,
-      "label": "Import Source ID"
     },
     {
       "collapsed": 1,
@@ -257,11 +264,73 @@
       "fieldtype": "Table",
       "label": "Language Certificates",
       "options": "CRM Student Language Certificate"
+    },
+    {
+      "fieldname": "section_parent",
+      "fieldtype": "Section Break",
+      "label": "Parent Info"
+    },
+    {
+      "fieldname": "alt_name",
+      "fieldtype": "Data",
+      "label": "Parent/Contact Name"
+    },
+    {
+      "fieldname": "col_break_parent",
+      "fieldtype": "Column Break"
+    },
+    {
+      "fieldname": "alt_phone",
+      "fieldtype": "Data",
+      "label": "Parent Phone",
+      "options": "Phone"
+    },
+    {
+      "fieldname": "alt_address",
+      "fieldtype": "Text",
+      "label": "Parent Address"
+    },
+    {
+      "fieldname": "section_notes",
+      "fieldtype": "Section Break",
+      "label": "Notes"
+    },
+    {
+      "fieldname": "notes",
+      "fieldtype": "Text",
+      "label": "Notes"
+    },
+    {
+      "collapsed": 1,
+      "collapsible": 1,
+      "fieldname": "section_identity",
+      "fieldtype": "Section Break",
+      "label": "Identity"
+    },
+    {
+      "fieldname": "id_number",
+      "fieldtype": "Data",
+      "label": "ID Number"
+    },
+    {
+      "fieldname": "id_issued_date",
+      "fieldtype": "Date",
+      "label": "ID Issued Date"
+    },
+    {
+      "fieldname": "id_issued_place",
+      "fieldtype": "Data",
+      "label": "ID Issued Place"
+    },
+    {
+      "fieldname": "import_source_id",
+      "fieldtype": "Data",
+      "label": "Source ID"
     }
   ],
   "index_web_pages_for_search": 1,
   "links": [],
-  "modified": "2026-06-12 00:00:00.000000",
+  "modified": "2026-06-15 00:00:00.000000",
   "modified_by": "Administrator",
   "module": "FCRM",
   "name": "CRM Student",

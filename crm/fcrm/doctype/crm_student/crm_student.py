@@ -14,6 +14,11 @@ class CRMStudent(Document):
 	def before_save(self):
 		self._normalize_phone_fields()
 		self._resolve_geo()
+		if self.cohort_end_year:
+			self.cohort_start_year = int(self.cohort_end_year) - 3
+
+	def after_insert(self):
+		self._auto_create_contact()
 
 	def on_update(self):
 		self._sync_linked_contact_fields()
@@ -61,14 +66,8 @@ class CRMStudent(Document):
 				"source",
 				"admission_year",
 				"branch",
-				"cohort_start_year",
-				"education_program",
-				"graduation_score",
-				"transcript_score",
-				"cohort_end_year",
-				"admission_method",
-				"english_converted_score",
-				"total_score",
+				"parent_name",
+				"parent_phone",
 			],
 			as_dict=True,
 		) or {}
@@ -83,18 +82,34 @@ class CRMStudent(Document):
 			"source": self.source,
 			"admission_year": self.admission_year,
 			"branch": self.branch,
-			"cohort_start_year": self.cohort_start_year,
-			"education_program": self.education_program,
-			"graduation_score": self.graduation_score,
-			"transcript_score": self.transcript_score,
-			"cohort_end_year": self.cohort_end_year,
-			"admission_method": self.admission_method,
-			"english_converted_score": self.english_converted_score,
-			"total_score": self.total_score,
+			"parent_name": self.alt_name,
+			"parent_phone": self.alt_phone,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
 		if updates:
 			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
+
+	def _auto_create_contact(self):
+		if not self.phone:
+			return
+		if frappe.db.exists("CRM Contact", {"student": self.name}):
+			return
+		contact = frappe.new_doc("CRM Contact")
+		contact.full_name = self.student_name
+		contact.phone = self.phone
+		contact.email = self.email
+		contact.student = self.name
+		contact.enrollment_status = self.enrollment_status
+		contact.high_school = self.high_school
+		contact.province = self.province
+		contact.major = self.major
+		contact.aspiration = self.aspiration
+		contact.branch = self.branch
+		contact.admission_year = self.admission_year
+		contact.source = self.source
+		contact.parent_name = self.alt_name
+		contact.parent_phone = self.alt_phone
+		contact.insert(ignore_permissions=True)
 
 	@staticmethod
 	def default_list_data():
@@ -179,30 +194,9 @@ def convert_to_contact(student_name):
 		"assigned_to": crm_staff_name,
 		"enrollment_status": "Có triển vọng",
 		"lead_status": "Mới",
-		"cohort_start_year": student.cohort_start_year,
-		"education_program": student.education_program,
-		"graduation_score": student.graduation_score,
-		"transcript_score": student.transcript_score,
-		"cohort_end_year": student.cohort_end_year,
-		"admission_method": student.admission_method,
-		"english_converted_score": student.english_converted_score,
-		"total_score": student.total_score,
+		"parent_name": student.alt_name,
+		"parent_phone": student.alt_phone,
 	})
-	for result in student.academic_results:
-		contact.append("academic_results", {
-			"school_year": result.school_year,
-			"grade": result.grade,
-			"academic_rank": result.academic_rank,
-			"gpa": result.gpa,
-		})
-	for certificate in student.language_certificates:
-		contact.append("language_certificates", {
-			"language": certificate.language,
-			"certificate_name": certificate.certificate_name,
-			"score_level": certificate.score_level,
-			"issue_date": certificate.issue_date,
-			"expiry_date": certificate.expiry_date,
-		})
 	contact.insert(ignore_permissions=True)
 
 	student.db_set("enrollment_status", "Đã chuyển đổi")
