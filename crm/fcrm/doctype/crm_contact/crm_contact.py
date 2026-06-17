@@ -115,6 +115,18 @@ class CRMContact(Document):
 				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
 				title="Số điện thoại trùng",
 			)
+		existing_student = frappe.db.get_value(
+			"CRM Student",
+			{"phone": self.phone, "name": ("!=", self.student or "")},
+			["name", "student_name"],
+			as_dict=True,
+		)
+		if existing_student:
+			frappe.throw(
+				f"Số điện thoại <b>{self.phone}</b> đã tồn tại ở học sinh "
+				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
+				title="Số điện thoại trùng",
+			)
 
 	def _validate_unique_email(self):
 		if not self.email:
@@ -129,6 +141,18 @@ class CRMContact(Document):
 			frappe.throw(
 				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
 				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
+				title="Email trùng",
+			)
+		existing_student = frappe.db.get_value(
+			"CRM Student",
+			{"email": self.email, "name": ("!=", self.student or "")},
+			["name", "student_name"],
+			as_dict=True,
+		)
+		if existing_student:
+			frappe.throw(
+				f"Email <b>{self.email}</b> đã tồn tại ở học sinh "
+				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
 				title="Email trùng",
 			)
 
