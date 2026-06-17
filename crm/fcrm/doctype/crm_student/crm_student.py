@@ -1,3 +1,5 @@
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
@@ -18,9 +20,23 @@ class CRMStudent(Document):
 			self.cohort_start_year = int(self.cohort_end_year) - 3
 
 	def validate(self):
+		self._validate_phone_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._validate_unique_id_number()
+
+	def _validate_phone_format(self):
+		if not self.phone:
+			return
+		phone = self.phone.strip()
+		if phone.startswith("+84"):
+			phone = "0" + phone[3:]
+		self.phone = phone
+		if not re.fullmatch(r"0\d{9}", phone):
+			frappe.throw(
+				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
+				title="Số điện thoại không hợp lệ",
+			)
 
 	def on_update(self):
 		self._sync_linked_contact_fields()

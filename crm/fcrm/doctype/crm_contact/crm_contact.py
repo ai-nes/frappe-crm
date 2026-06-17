@@ -1,3 +1,5 @@
+import re
+
 import frappe
 from frappe.model.document import Document
 
@@ -100,8 +102,22 @@ class CRMContact(Document):
 
 	def validate(self):
 		self._normalize_shared_fields()
+		self._validate_phone_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
+
+	def _validate_phone_format(self):
+		if not self.phone:
+			return
+		phone = self.phone.strip()
+		if phone.startswith("+84"):
+			phone = "0" + phone[3:]
+		self.phone = phone
+		if not re.fullmatch(r"0\d{9}", phone):
+			frappe.throw(
+				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
+				title="Số điện thoại không hợp lệ",
+			)
 
 	def _validate_unique_phone(self):
 		if not self.phone:
