@@ -2,14 +2,6 @@ import frappe
 
 
 VALUE_MAPS = {
-	"CRM Student": {
-		"enrollment_status": {
-			"Chờ xác nhận": "Pending Confirmation",
-			"Đã nhập học": "Enrolled",
-			"Bảo lưu": "Deferred",
-			"Thôi học": "Withdrawn",
-		}
-	},
 	"CRM Province": {
 		"city_type": {
 			"Thành phố trực thuộc TW": "Centrally Controlled City",
