@@ -1059,7 +1059,7 @@ msgstr "Hồ sơ CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
 msgid "CRM Deal Status"
-msgstr "Trạng thái hồ sơ CRM"
+msgstr "Trạng thái giao dịch"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/dropdown_item/dropdown_item.json
@@ -8614,7 +8614,7 @@ msgid "Enrollment Date"
 msgstr "Ngày nhập học"
 
 msgid "Converted to CRM Contact"
-msgstr "Đã chuyển thành hồ sơ CRM"
+msgstr "Đã chuyển thành Liên hệ"
 
 msgid "Links"
 msgstr "Liên kết"
@@ -8728,7 +8728,7 @@ msgid "Active for Admission"
 msgstr "Còn tuyển"
 
 msgid "Convert to Contact"
-msgstr "Chuyển thành hồ sơ CRM"
+msgstr "Chuyển thành Liên hệ"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
@@ -8952,7 +8952,7 @@ msgid "Students by Source"
 msgstr "Học sinh theo nguồn"
 
 msgid "Total CRM Contacts"
-msgstr "Tổng hồ sơ CRM"
+msgstr "Tổng Liên hệ"
 
 msgid "Total Students"
 msgstr "Tổng học sinh"
@@ -9018,7 +9018,7 @@ msgid "Create your first student"
 msgstr "Tạo học sinh đầu tiên"
 
 msgid "Convert student to contact"
-msgstr "Chuyển học sinh thành hồ sơ CRM"
+msgstr "Chuyển học sinh thành Liên hệ"
 
 #. Help center article names
 msgid "CRM Student"
