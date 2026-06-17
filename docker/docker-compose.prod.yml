@@ -134,7 +134,7 @@ services:
       assets:
         condition: service_completed_successfully
       backend:
-        condition: service_started
+        condition: service_healthy
       websocket:
         condition: service_started
 
@@ -160,6 +160,12 @@ services:
       - --worker-tmp-dir=/dev/shm
       - --timeout=120
       - frappe.app:application
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/method/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
     depends_on:
       assets:
         condition: service_completed_successfully
