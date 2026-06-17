@@ -13,7 +13,7 @@
         :actions="document._actions"
       />
       <Button
-        v-if="doc.name && doc.enrollment_status !== 'Đã chuyển đổi'"
+        v-if="doc.name && doc.enrollment_status === 'Mới'"
         variant="solid"
         :label="__('Convert to Contact')"
         iconLeft="user-plus"

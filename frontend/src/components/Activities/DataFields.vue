@@ -126,11 +126,7 @@ async function saveChanges() {
     await document.reload()
     emit('afterSave', changes)
   } catch (err) {
-    toast({
-      title: __('Error saving data'),
-      text: err.messages?.[0] || err.message || __('An error occurred'),
-      variant: 'error',
-    })
+    toast.error(err.messages?.[0] || err.message || __('An error occurred'))
   } finally {
     saving.value = false
   }

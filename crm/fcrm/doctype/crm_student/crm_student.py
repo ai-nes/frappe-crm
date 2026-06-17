@@ -250,6 +250,11 @@ def convert_to_contact(student_name):
 
 	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
 	if existing_contact:
+		if student.enrollment_status != "Có triển vọng":
+			student.db_set("enrollment_status", "Có triển vọng")
+		frappe.db.set_value(
+			"CRM Contact", existing_contact, "enrollment_status", "Có triển vọng", update_modified=False
+		)
 		return existing_contact
 
 	if not student.phone:
@@ -278,7 +283,7 @@ def convert_to_contact(student_name):
 	})
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("enrollment_status", "Đã chuyển đổi")
+	student.db_set("enrollment_status", "Có triển vọng")
 
 	return contact.name
 
