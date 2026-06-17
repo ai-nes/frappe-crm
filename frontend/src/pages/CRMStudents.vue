@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" :routeName="funnelTitle" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Students"
+        :label="funnelTitle"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -77,9 +81,9 @@ const funnelStage = computed(() => route.query.stage || 'intake')
 
 const funnelTitle = computed(() => {
   if (funnelStage.value === 'enrolled') {
-    return __('Enrolled Students')
+    return 'Enrolled Students'
   }
-  return __('Prospective Students')
+  return 'Prospective Students'
 })
 
 const funnelFilters = computed(() => {
