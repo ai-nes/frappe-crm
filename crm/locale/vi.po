@@ -8475,6 +8475,9 @@ msgstr "Loại trường"
 msgid "CRM Event"
 msgstr "Sự kiện"
 
+msgid "Event"
+msgstr "Sự kiện"
+
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "Events"
@@ -8928,7 +8931,7 @@ msgstr "Lỗi khi cập nhật giai đoạn"
 msgid "Mobile"
 msgstr "Di động"
 
-msgid "Create CRM Contact"
+msgid "Create Contact"
 msgstr "Tạo hồ sơ"
 
 msgid "New CRM Student"
@@ -8962,7 +8965,7 @@ msgstr "Hồ sơ đủ điều kiện"
 msgid "Students by Source"
 msgstr "Học sinh theo nguồn"
 
-msgid "Total CRM Contacts"
+msgid "Total Contacts"
 msgstr "Tổng Liên hệ"
 
 msgid "Total Students"

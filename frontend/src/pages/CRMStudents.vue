@@ -48,7 +48,7 @@
   />
   <EmptyState
     v-else-if="students.data && !rows.length"
-    name="CRM Students"
+    name="Students"
     :icon="EnrollmentIcon"
   />
 </template>
@@ -108,7 +108,7 @@ const viewControls = ref(null)
 function createStudent() {
   showModal({
     doctype: 'CRM Student',
-    title: __('CRM Student'),
+    title: __('Student'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Student', params: { crmStudentId: doc.name } })

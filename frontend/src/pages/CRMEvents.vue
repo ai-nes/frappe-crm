@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="CRM Events" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Events"
+        :label="__('Events')"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -47,7 +51,7 @@
   />
   <EmptyState
     v-else-if="events.data && !rows.length"
-    name="CRM Events"
+    name="Events"
     :icon="EventIcon"
   />
 </template>
@@ -81,7 +85,7 @@ const viewControls = ref(null)
 function createEvent() {
   showModal({
     doctype: 'CRM Event',
-    title: __('CRM Event'),
+    title: __('Event'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Event', params: { crmEventId: doc.name } })

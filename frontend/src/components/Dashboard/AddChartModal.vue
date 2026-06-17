@@ -74,7 +74,7 @@ const chartTypes = [
 const numberChart = ref('')
 const numberCharts = [
   { label: __('Total Students'), value: 'total_students' },
-  { label: __('Total CRM Contacts'), value: 'total_contacts' },
+  { label: __('Total Contacts'), value: 'total_contacts' },
   { label: __('Qualified Contacts'), value: 'qualified_contacts' },
   { label: __('Enrolled Contacts'), value: 'enrolled_contacts' },
 ]
