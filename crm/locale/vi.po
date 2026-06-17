@@ -1804,6 +1804,10 @@ msgstr "Đếm"
 msgid "Create"
 msgstr "Tạo"
 
+#: frontend/src/components/Modals/DoctypeModal.vue:11
+msgid "Create {0}"
+msgstr "Tạo {0}"
+
 #: frontend/src/components/Modals/DealModal.vue:8
 msgid "Create Deal"
 msgstr "Tạo hồ sơ"
@@ -2561,6 +2565,10 @@ msgstr "ERPNext không được tích hợp với CRM"
 #: frontend/src/pages/Dashboard.vue:16
 msgid "Edit"
 msgstr "Chỉnh sửa"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:10
+msgid "Edit {0}"
+msgstr "Chỉnh sửa {0}"
 
 #: frontend/src/components/Modals/CallLogDetailModal.vue:40
 #: frontend/src/components/Modals/CallLogModal.vue:87
