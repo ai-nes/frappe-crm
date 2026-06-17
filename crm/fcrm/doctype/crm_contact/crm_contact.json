@@ -35,19 +35,6 @@
   "crm_event",
   "col_break_enrollment",
   "branch",
-  "section_academic_history",
-  "cohort_start_year",
-  "education_program",
-  "graduation_score",
-  "transcript_score",
-  "col_break_academic",
-  "cohort_end_year",
-  "admission_method",
-  "english_converted_score",
-  "total_score",
-  "section_academic_tables",
-  "academic_results",
-  "language_certificates",
   "section_notes",
   "notes"
  ],
@@ -222,80 +209,6 @@
    "options": "CRM Campus"
   },
   {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_academic_history",
-   "fieldtype": "Section Break",
-   "label": "Academic & Scores"
-  },
-  {
-   "fieldname": "cohort_start_year",
-   "fieldtype": "Int",
-   "label": "Cohort Start Year"
-  },
-  {
-   "fieldname": "education_program",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "Education Program",
-   "options": "CRM Education Program"
-  },
-  {
-   "fieldname": "graduation_score",
-   "fieldtype": "Float",
-   "label": "Graduation Score"
-  },
-  {
-   "fieldname": "transcript_score",
-   "fieldtype": "Float",
-   "label": "Transcript Score"
-  },
-  {
-   "fieldname": "col_break_academic",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "cohort_end_year",
-   "fieldtype": "Int",
-   "label": "Cohort End Year"
-  },
-  {
-   "fieldname": "admission_method",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Admission Method",
-   "options": "\nTranscript Review\nNational High School Exam\nLanguage Certificate Review\nDirect Admission\nCombined"
-  },
-  {
-   "fieldname": "english_converted_score",
-   "fieldtype": "Float",
-   "label": "English Score"
-  },
-  {
-   "fieldname": "total_score",
-   "fieldtype": "Float",
-   "label": "Total Score"
-  },
-  {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_academic_tables",
-   "fieldtype": "Section Break",
-   "label": "Results"
-  },
-  {
-   "fieldname": "academic_results",
-   "fieldtype": "Table",
-   "label": "Academic Results",
-   "options": "CRM Student Academic Result"
-  },
-  {
-   "fieldname": "language_certificates",
-   "fieldtype": "Table",
-   "label": "Language Certificates",
-   "options": "CRM Student Language Certificate"
-  },
-  {
    "fieldname": "section_notes",
    "fieldtype": "Section Break",
    "label": "Notes"
@@ -309,7 +222,7 @@
  "index_web_pages_for_search": 1,
  "kanban_field": "enrollment_status",
  "links": [],
- "modified": "2026-06-11 14:00:00.000000",
+ "modified": "2026-06-15 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Contact",

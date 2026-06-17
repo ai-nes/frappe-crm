@@ -13,6 +13,7 @@
   "student",
   "score_template",
   "scoring_time",
+  "scoring_date",
   "column_break_1",
   "fit_score",
   "engagement_score",
@@ -21,6 +22,8 @@
   "negative_score",
   "final_score",
   "score_change",
+  "triggered_by_doctype",
+  "triggered_by",
   "section_details",
   "details"
  ],
@@ -55,7 +58,17 @@
    "fieldname": "scoring_time",
    "fieldtype": "Datetime",
    "in_list_view": 1,
-   "label": "Scoring Time"
+   "label": "Scoring Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scoring_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Scoring Date",
+   "read_only": 1,
+   "description": "Derived from scoring_time at save — used for chart grouping by day"
   },
   {
    "fieldname": "column_break_1",
@@ -101,6 +114,20 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Score Change"
+  },
+  {
+   "fieldname": "triggered_by_doctype",
+   "fieldtype": "Select",
+   "label": "Triggered By (Doctype)",
+   "options": "\nCRM Interaction\nCRM Lead",
+   "description": "Source doctype that triggered this score calculation"
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Dynamic Link",
+   "label": "Triggered By",
+   "options": "triggered_by_doctype",
+   "description": "Source record that triggered this score calculation"
   },
   {
    "fieldname": "section_details",

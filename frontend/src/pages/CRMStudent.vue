@@ -13,7 +13,7 @@
         :actions="document._actions"
       />
       <Button
-        v-if="doc.name && doc.enrollment_status !== 'Đã chuyển đổi'"
+        v-if="doc.name && doc.enrollment_status === 'Mới'"
         variant="solid"
         :label="__('Convert to Contact')"
         iconLeft="user-plus"
@@ -46,7 +46,7 @@
     >
       <template #tab-panel>
         <Activities
-          v-if="!['Interactions', 'Scores'].includes(tabs[tabIndex]?.name)"
+          v-if="tabs[tabIndex]?.name !== 'Interactions'"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -58,7 +58,7 @@
         <InteractionScoreArea
           v-else
           :student="doc"
-          :type="tabs[tabIndex]?.name === 'Scores' ? 'scores' : 'interactions'"
+          type="interactions"
         />
       </template>
     </Tabs>
@@ -240,7 +240,6 @@ const tabs = computed(() => [
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
-  { name: 'Scores', label: __('Scores'), icon: DetailsIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
@@ -254,11 +253,12 @@ const sections = createResource({
   params: { doctype: 'CRM Student' },
   auto: true,
   transform: (data) => {
+    const hiddenFields = new Set(['converted', 'latest_score'])
     return data.map((section) => ({
       ...section,
       columns: section.columns?.map((col) => ({
         ...col,
-        fields: col.fields?.filter((f) => f.fieldname !== 'converted') || [],
+        fields: col.fields?.filter((f) => !hiddenFields.has(f.fieldname)) || [],
       })) || [],
     }))
   },

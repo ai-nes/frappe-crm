@@ -179,7 +179,7 @@ watch(
       interactions.data = []
     }
 
-    if (studentName) {
+    if (props.type === 'scores' && studentName) {
       scores.submit({
         doctype: 'CRM Score History',
         fields: [

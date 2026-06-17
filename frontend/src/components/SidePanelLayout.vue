@@ -548,11 +548,7 @@ async function fieldChange(value, df) {
   if (df.options === 'Phone' && value) {
     const digits = value.replace(/\D/g, '')
     if (digits.length !== 10) {
-      toast({
-        title: __('Invalid Phone Number'),
-        text: __('{0} must be exactly 10 digits', [df.label || df.fieldname]),
-        variant: 'error',
-      })
+      toast.error(__('{0} must be exactly 10 digits', [df.label || df.fieldname]))
       return
     }
   }

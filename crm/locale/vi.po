@@ -9105,10 +9105,10 @@ msgid "Results"
 msgstr "Bảng kết quả"
 
 msgid "Cohort Start Year"
-msgstr "Niên khóa từ năm"
+msgstr "Năm vào lớp 10"
 
 msgid "Cohort End Year"
-msgstr "Đến năm"
+msgstr "Năm tốt nghiệp THPT"
 
 msgid "Education Program"
 msgstr "Chương trình đào tạo"
@@ -9369,3 +9369,35 @@ msgstr "Không hoạt động"
 
 msgid "Expired"
 msgstr "Hết hiệu lực"
+
+#. CRM Student — new fields (v2 field redesign)
+
+msgid "Date of Birth"
+msgstr "Ngày sinh"
+
+msgid "ID Number"
+msgstr "Số CCCD/CMND"
+
+msgid "ID Issued Date"
+msgstr "Ngày cấp CCCD"
+
+msgid "ID Issued Place"
+msgstr "Nơi cấp CCCD"
+
+msgid "Registration Step"
+msgstr "Bước đăng ký"
+
+msgid "Parent/Contact Name"
+msgstr "Họ tên phụ huynh/liên hệ"
+
+msgid "Parent Address"
+msgstr "Địa chỉ phụ huynh"
+
+msgid "Source ID"
+msgstr "Mã nguồn ngoài"
+
+msgid "Parent Info"
+msgstr "Thông tin phụ huynh"
+
+msgid "Identity"
+msgstr "Giấy tờ tùy thân"

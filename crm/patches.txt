@@ -57,6 +57,7 @@ crm.patches.v1_0.add_unique_phone_to_contact
 crm.patches.v1_0.consolidate_student_phone_field
 crm.patches.v1_0.add_academic_fields_to_student
 crm.patches.v1_0.update_student_academic_fields_layout
+crm.patches.v1_0.update_student_new_fields_layout
 crm.patches.v1_0.remove_converted_field_from_student
 crm.patches.v1_0.fix_student_quick_entry_phone_field
 crm.patches.v1_0.fix_enrollment_status_cleanup
