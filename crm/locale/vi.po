@@ -9025,7 +9025,7 @@ msgid "CRM Student"
 msgstr "Học sinh"
 
 msgid "CRM Campaign"
-msgstr ""
+msgstr "Chiến dịch"
 
 msgid "CRM contacts"
 msgstr "hồ sơ"
