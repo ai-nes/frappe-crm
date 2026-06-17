@@ -22,9 +22,6 @@ class CRMStudent(Document):
 		self._validate_unique_email()
 		self._validate_unique_id_number()
 
-	def after_insert(self):
-		self._auto_create_contact()
-
 	def on_update(self):
 		self._sync_linked_contact_fields()
 
@@ -167,28 +164,6 @@ class CRMStudent(Document):
 		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
 		if updates:
 			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
-
-	def _auto_create_contact(self):
-		if not self.phone:
-			return
-		if frappe.db.exists("CRM Contact", {"student": self.name}):
-			return
-		contact = frappe.new_doc("CRM Contact")
-		contact.full_name = self.student_name
-		contact.phone = self.phone
-		contact.email = self.email
-		contact.student = self.name
-		contact.enrollment_status = self.enrollment_status
-		contact.high_school = self.high_school
-		contact.province = self.province
-		contact.major = self.major
-		contact.aspiration = self.aspiration
-		contact.branch = self.branch
-		contact.admission_year = self.admission_year
-		contact.source = self.source
-		contact.parent_name = self.alt_name
-		contact.parent_phone = self.alt_phone
-		contact.insert(ignore_permissions=True)
 
 	@staticmethod
 	def default_list_data():

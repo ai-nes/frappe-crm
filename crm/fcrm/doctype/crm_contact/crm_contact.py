@@ -92,6 +92,9 @@ class CRMContact(Document):
 		if self.high_school:
 			self.high_school = resolve_high_school(self.high_school, self.province)
 
+	def after_insert(self):
+		self._auto_create_student()
+
 	def on_update(self):
 		self._sync_student_fields()
 
@@ -200,6 +203,30 @@ class CRMContact(Document):
 		for fieldname, value in field_map.items():
 			if not self.get(fieldname) and value:
 				self.set(fieldname, value)
+
+	def _auto_create_student(self):
+		if self.student:
+			return
+		if not self.phone:
+			return
+		if frappe.db.exists("CRM Student", {"phone": self.phone}):
+			return
+		student = frappe.new_doc("CRM Student")
+		student.student_name = self.full_name
+		student.phone = self.phone
+		student.email = self.email
+		student.enrollment_status = self.enrollment_status
+		student.high_school = self.high_school
+		student.province = self.province
+		student.major = self.major
+		student.aspiration = self.aspiration
+		student.branch = self.branch
+		student.admission_year = self.admission_year
+		student.source = self.source
+		student.alt_name = self.parent_name
+		student.alt_phone = self.parent_phone
+		student.insert(ignore_permissions=True)
+		frappe.db.set_value("CRM Contact", self.name, "student", student.name, update_modified=False)
 
 	def _sync_student_fields(self):
 		if not self.student:
