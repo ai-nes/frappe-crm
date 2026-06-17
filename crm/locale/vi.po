@@ -8728,7 +8728,7 @@ msgid "Active for Admission"
 msgstr "Còn tuyển"
 
 msgid "Convert to Contact"
-msgstr "Chuyển thành Liên hệ"
+msgstr "Chuyển sang hổ sơ tiềm năng"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
