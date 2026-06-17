@@ -4,10 +4,23 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province, resolve_ward
+from crm.fcrm.utils.geo_resolver import (
+	resolve_high_school_strict,
+	resolve_province,
+	resolve_ward,
+)
 
 
 class CRMStudent(Document):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Frappe's _validate_links() runs before before_insert/before_save/validate
+		# and throws its own generic error for any Link field holding free-text
+		# input (e.g. high_school/province/ward from a Data Import row), before our
+		# resolvers ever get a chance to run. We disable it here and re-run it
+		# ourselves at the end of validate(), once geo fields are resolved.
+		self.flags.ignore_links = True
+
 	def before_insert(self):
 		self._set_defaults()
 		self._normalize_phone_fields()
@@ -21,9 +34,18 @@ class CRMStudent(Document):
 
 	def validate(self):
 		self._validate_phone_format()
+		self._resolve_geo()
+		self._validate_high_school_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._validate_unique_id_number()
+		self.flags.ignore_links = False
+		self._validate_links()
+
+	def _validate_high_school_format(self):
+		if not self.high_school:
+			return
+		self.high_school = resolve_high_school_strict(self.high_school, self.province)
 
 	def _validate_phone_format(self):
 		if not self.phone:
@@ -52,10 +74,12 @@ class CRMStudent(Document):
 				self.branch = default_branch
 
 	def _resolve_geo(self):
+		# high_school is intentionally NOT resolved here — _validate_high_school_format()
+		# is the single source of truth for it (resolve_high_school_strict), called right
+		# after this in validate(). Resolving it twice would be wasted work whose result
+		# gets discarded.
 		if self.province:
 			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
 		if self.ward:
 			self.ward = resolve_ward(self.ward, self.province)
 

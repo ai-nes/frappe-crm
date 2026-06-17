@@ -1,4 +1,21 @@
+import re
+import unicodedata
+
 import frappe
+
+
+def normalize_text(value):
+	"""Lowercase, strip Vietnamese diacritics, collapse whitespace to underscores."""
+	if not value:
+		return value
+	text = str(value).strip()
+	text = text.replace("Đ", "D").replace("đ", "d")
+	text = unicodedata.normalize("NFKD", text)
+	text = "".join(ch for ch in text if not unicodedata.combining(ch))
+	text = text.lower()
+	text = re.sub(r"\s+", " ", text).strip()
+	text = text.replace(" ", "_")
+	return text
 
 
 def resolve_province(value):
@@ -65,6 +82,54 @@ def resolve_high_school(school_value, province_value=None):
 		],
 	)
 	return name or school_value
+
+
+def resolve_high_school_strict(school_value, province_value=None):
+	"""Return CRM High School docname, raising a clear error instead of falling back
+	to the raw input when no confident match exists (used for import-time validation)."""
+	if not school_value:
+		return school_value
+	if frappe.db.exists("CRM High School", school_value):
+		return school_value
+
+	target = normalize_text(school_value)
+	province = _get_province_context(province_value)
+
+	candidates = frappe.get_all(
+		"CRM High School",
+		fields=["name", "school_name", "province_code", "province_name"],
+		order_by="name",
+	)
+	matches = [c for c in candidates if normalize_text(c.school_name) == target]
+
+	if not matches:
+		frappe.throw(
+			f"Không tìm thấy trường <b>{school_value}</b> trong hệ thống. Vui lòng kiểm tra lại tên trường.",
+			title="Trường học không hợp lệ",
+		)
+
+	distinct_provinces = {(m.province_code, m.province_name) for m in matches}
+	if len(distinct_provinces) <= 1:
+		# Duplicate rows within the same province are a data-quality issue, not
+		# the multi-province ambiguity FR-04 cares about — pick the first match.
+		return matches[0].name
+
+	if province.get("province_code") or province.get("province_name"):
+		scoped = [
+			m
+			for m in matches
+			if (province.get("province_code") and m.province_code == province.province_code)
+			or (province.get("province_name") and m.province_name == province.province_name)
+		]
+		if len(scoped) == 1:
+			return scoped[0].name
+
+	province_names = sorted({m.province_name or m.province_code or "?" for m in matches})
+	frappe.throw(
+		f"Trường <b>{school_value}</b> tồn tại ở nhiều tỉnh ({', '.join(province_names)}). "
+		"Vui lòng bổ sung đúng tỉnh/thành để xác định trường chính xác.",
+		title="Cần bổ sung tỉnh/thành",
+	)
 
 
 def _get_province_context(value):

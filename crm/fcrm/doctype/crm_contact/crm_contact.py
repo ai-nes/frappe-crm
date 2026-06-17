@@ -3,10 +3,18 @@ import re
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province
+from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 
 class CRMContact(Document):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# See CRMStudent.__init__ — Frappe's _validate_links() runs before
+		# before_insert/before_save/validate and breaks free-text Link field
+		# resolution (high_school/province). Disabled here, re-run at the end
+		# of validate() once those fields are resolved.
+		self.flags.ignore_links = True
+
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -71,10 +79,7 @@ class CRMContact(Document):
 		self._set_defaults()
 		self._normalize_shared_fields()
 		self._sync_fields_from_student_if_blank()
-		if self.province:
-			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
+		self._resolve_geo()
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -89,10 +94,7 @@ class CRMContact(Document):
 	def before_save(self):
 		self._normalize_shared_fields()
 		self._sync_fields_from_student_if_blank()
-		if self.province:
-			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
+		self._resolve_geo()
 
 	def after_insert(self):
 		self._auto_create_student()
@@ -103,8 +105,25 @@ class CRMContact(Document):
 	def validate(self):
 		self._normalize_shared_fields()
 		self._validate_phone_format()
+		self._resolve_geo()
+		self._validate_high_school_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
+		self.flags.ignore_links = False
+		self._validate_links()
+
+	def _resolve_geo(self):
+		# high_school is intentionally NOT resolved here — _validate_high_school_format()
+		# is the single source of truth for it (resolve_high_school_strict), called right
+		# after this in validate(). Resolving it twice would be wasted work whose result
+		# gets discarded.
+		if self.province:
+			self.province = resolve_province(self.province)
+
+	def _validate_high_school_format(self):
+		if not self.high_school:
+			return
+		self.high_school = resolve_high_school_strict(self.high_school, self.province)
 
 	def _validate_phone_format(self):
 		if not self.phone:
