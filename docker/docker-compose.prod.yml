@@ -161,7 +161,7 @@ services:
       - --timeout=120
       - frappe.app:application
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/method/ping"]
+      test: ["CMD-SHELL", "curl -fsS -H \"Host: ${SITE_NAME:?set SITE_NAME in docker/.env}\" http://localhost:8000/api/method/ping"]
       interval: 10s
       timeout: 5s
       retries: 12
