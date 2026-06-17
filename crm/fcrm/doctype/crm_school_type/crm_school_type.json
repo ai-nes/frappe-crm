@@ -18,6 +18,7 @@
    "fieldname": "school_type_name",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "School Type Name",
    "reqd": 1,
    "unique": 1
