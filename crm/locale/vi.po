@@ -8510,6 +8510,9 @@ msgstr "Cá nhân"
 msgid "Person"
 msgstr "Cá nhân"
 
+msgid "CRM Person"
+msgstr "Cá nhân"
+
 msgid "Staff"
 msgstr "Nhân sự"
 

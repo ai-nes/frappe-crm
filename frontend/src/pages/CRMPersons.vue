@@ -81,7 +81,7 @@ const viewControls = ref(null)
 function createCRMPerson() {
   showModal({
     doctype: 'CRM Person',
-    title: __('New CRM Person'),
+    title: __('CRM Person'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Person', params: { crmPersonId: doc.name } })

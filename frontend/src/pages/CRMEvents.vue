@@ -81,7 +81,7 @@ const viewControls = ref(null)
 function createEvent() {
   showModal({
     doctype: 'CRM Event',
-    title: __('New CRM Event'),
+    title: __('CRM Event'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Event', params: { crmEventId: doc.name } })

@@ -83,7 +83,7 @@ const viewControls = ref(null)
 function createHighSchool() {
   showModal({
     doctype: 'CRM High School',
-    title: __('New High School'),
+    title: __('High School'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'High School', params: { highSchoolId: doc.name } })

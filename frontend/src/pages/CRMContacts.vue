@@ -140,7 +140,7 @@ function createContact(column) {
   const defaults = column?.column_value ? { stage: column.column_value } : {}
   showModal({
     doctype: 'CRM Contact',
-    title: __('New CRM Contact'),
+    title: __('CRM Contact'),
     defaults,
   })
 }
