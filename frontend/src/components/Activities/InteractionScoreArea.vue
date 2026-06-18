@@ -677,9 +677,9 @@ function displayScoreReason(value) {
 
 function scoreTier(value) {
   let score = Number(value || 0)
-  if (score >= 80) return __('Tiềm năng cao')
-  if (score >= 50) return __('Tiềm năng vừa')
-  return __('Tiềm năng thấp')
+  if (score >= 80) return __('High Potential')
+  if (score >= 50) return __('Medium Potential')
+  return __('Low Potential')
 }
 
 function scoreTierTheme(value) {

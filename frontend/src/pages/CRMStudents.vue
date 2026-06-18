@@ -28,6 +28,7 @@
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Student"
     :filters="funnelFilters"
+    :quickFilterPresets="potentialScoreFilters"
   />
   <CRMStudentsListView
     v-if="students.data && rows.length"
@@ -92,6 +93,26 @@ const funnelFilters = computed(() => {
   }
   return { enrollment_status: ['not in', ['Từ chối']] }
 })
+
+const potentialScoreFilters = computed(() => [
+  {
+    key: 'potential-score',
+    label: __('Potential Score'),
+    fieldname: '_potential_score_tier',
+    fieldtype: 'Select',
+    options: [
+      { label: __('High Potential'), value: 'high' },
+      { label: __('Medium Potential'), value: 'medium' },
+      { label: __('Low Potential'), value: 'low' },
+    ],
+    presetValues: {
+      high: 'high',
+      medium: 'medium',
+      low: 'low',
+    },
+    after: 'enrollment_status',
+  },
+])
 
 watch(
   () => route.query.stage,

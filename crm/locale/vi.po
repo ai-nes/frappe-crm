@@ -116,15 +116,21 @@ msgid "Lead Score"
 msgstr "Điểm tiềm năng"
 
 #: frontend/src/components/Activities/InteractionScoreArea.vue
-msgid "Tiềm năng cao"
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "High Potential"
 msgstr "Tiềm năng cao"
 
 #: frontend/src/components/Activities/InteractionScoreArea.vue
-msgid "Tiềm năng thấp"
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Low Potential"
 msgstr "Tiềm năng thấp"
 
 #: frontend/src/components/Activities/InteractionScoreArea.vue
-msgid "Tiềm năng vừa"
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Medium Potential"
 msgstr "Tiềm năng vừa"
 
 #: frontend/src/components/Activities/InteractionScoreArea.vue
