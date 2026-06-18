@@ -321,7 +321,11 @@ import {
 } from '@/utils'
 import { flt, formatNumber, formatCurrency } from '@/utils/numberFormat.js'
 import { getMeta } from '@/stores/meta'
-import { parseLinkFilters } from '@/utils/fieldTransforms'
+import {
+  getContextualLinkFilters,
+  getDependentFieldsToClear,
+  parseLinkFilters,
+} from '@/utils/fieldTransforms'
 import { usersStore } from '@/stores/users'
 import { useDocument } from '@/data/document'
 import {
@@ -372,6 +376,14 @@ if (standaloneContext) {
       row[fieldname] = value
     } else {
       data.value[fieldname] = value
+      for (const dependentField of getDependentFieldsToClear(
+        fieldname,
+        data.value,
+      )) {
+        if (data.value[dependentField]) {
+          data.value[dependentField] = ''
+        }
+      }
     }
   }
   triggerButton = async () => {}
@@ -503,9 +515,15 @@ const field = computed(() => {
     data.value,
   )
 
+  const filters = getContextualLinkFilters(
+    field,
+    data.value,
+    parseLinkFilters(field.link_filters),
+  )
+
   let _field = {
     ...field,
-    filters: parseLinkFilters(field.link_filters),
+    filters,
     placeholder: field.placeholder || field.label,
     display_via_depends_on: displayViaDependsOn,
     mandatory_via_depends_on: evaluateDependsOnValue(
