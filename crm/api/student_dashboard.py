@@ -170,6 +170,123 @@ def to_display_date(dt):
 	return str(dt)
 
 
+def _can_read_doc(doctype: str, name: str | None) -> bool:
+	if not name:
+		return False
+	try:
+		doc = frappe.get_doc(doctype, name)
+	except frappe.DoesNotExistError:
+		return False
+	return doc.has_permission("read")
+
+
+def _score_history_payload(history):
+	details = []
+	for detail in history.get("details") or []:
+		details.append({
+			"category": detail.get("category"),
+			"rule_id": detail.get("rule_id"),
+			"signal": detail.get("signal"),
+			"score": detail.get("score") or 0,
+			"reason": detail.get("reason"),
+		})
+
+	return {
+		"name": history.name,
+		"student": history.student,
+		"score_template": history.score_template,
+		"scoring_time": history.scoring_time,
+		"scoring_date": history.scoring_date,
+		"fit_score": history.fit_score or 0,
+		"engagement_score": history.engagement_score or 0,
+		"intent_score": history.intent_score or 0,
+		"time_decay_score": history.time_decay_score or 0,
+		"negative_score": history.negative_score or 0,
+		"final_score": history.final_score or 0,
+		"score_change": history.score_change or 0,
+		"triggered_by_doctype": history.triggered_by_doctype,
+		"triggered_by": history.triggered_by,
+		"details": details,
+	}
+
+
+@frappe.whitelist()
+def get_student_score_context(student: str | None = None, contact: str | None = None, limit: int = 20):
+	"""Return full score context for the student/contact detail scoring tab."""
+	if not student and contact:
+		if not _can_read_doc("CRM Contact", contact):
+			frappe.throw("Not permitted", frappe.PermissionError)
+		student = frappe.db.get_value("CRM Contact", contact, "student")
+
+	if not student:
+		return {
+			"student": None,
+			"histories": [],
+			"latest": None,
+			"intents": [],
+			"template": None,
+		}
+
+	if not _can_read_doc("CRM Student", student):
+		frappe.throw("Not permitted", frappe.PermissionError)
+
+	score_names = frappe.get_all(
+		"CRM Score History",
+		filters={"student": student},
+		fields=["name"],
+		order_by="scoring_time desc, creation desc",
+		limit_page_length=int(limit or 20),
+		ignore_permissions=True,
+	)
+	histories = []
+	for row in score_names:
+		try:
+			histories.append(_score_history_payload(frappe.get_doc("CRM Score History", row.name)))
+		except frappe.DoesNotExistError:
+			continue
+
+	intents = frappe.get_all(
+		"CRM Intent",
+		filters={"student": student},
+		fields=[
+			"name",
+			"interaction",
+			"intent_type",
+			"intent_role",
+			"importance",
+			"confidence",
+			"notes",
+			"modified",
+		],
+		order_by="modified desc",
+		limit_page_length=100,
+		ignore_permissions=True,
+	)
+
+	template = None
+	latest = histories[0] if histories else None
+	if latest and latest.get("score_template"):
+		template_doc = frappe.get_doc("CRM Score Template", latest["score_template"])
+		template = {
+			"name": template_doc.name,
+			"template_name": template_doc.template_name,
+			"status": template_doc.status,
+			"fit_weight": template_doc.fit_weight or 0,
+			"engagement_weight": template_doc.engagement_weight or 0,
+			"intent_weight": template_doc.intent_weight or 0,
+			"start_time": template_doc.start_time,
+			"end_time": template_doc.end_time,
+		}
+
+	return {
+		"student": student,
+		"histories": histories,
+		"latest": latest,
+		"intents": intents,
+		"template": template,
+	}
+
+
 @frappe.whitelist(allow_guest=True)
 def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, suggestedEventLimit: int = 10, eventStatus: str | None = None):
 	if not phone:
