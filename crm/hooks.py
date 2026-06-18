@@ -211,7 +211,7 @@ ignore_links_on_delete = []
 
 # Request Events
 # ----------------
-# before_request = ["crm.utils.before_request"]
+before_request = ["crm.api.resource.normalize_resource_phone_filters"]
 # after_request = ["crm.utils.after_request"]
 
 # Job Events

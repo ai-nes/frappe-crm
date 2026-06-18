@@ -1,6 +1,7 @@
 import frappe
 from datetime import date, datetime, timedelta
 from frappe.utils import get_datetime
+from crm.utils import get_docs_by_phone, get_phone_lookup_terms
 
 
 @frappe.whitelist(allow_guest=True)
@@ -15,22 +16,13 @@ def get_student_records_by_phone(phone: str | None = None):
 			"influences": []
 		}
 
-	# 1. Normalize input phone: extract only digits
-	digits = "".join(c for c in phone if c.isdigit())
-	if len(digits) >= 9:
-		search_term = digits[-9:]
-	else:
-		search_term = digits
+	lookup_terms = get_phone_lookup_terms(phone)
 
 	# 2. Query CRM Student by phone
 	students = []
-	if search_term:
-		students_list = frappe.db.sql("""
-			SELECT name 
-			FROM `tabCRM Student` 
-			WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') LIKE %s
-		""", (f"%{search_term}%",), as_dict=True)
-		
+	if lookup_terms:
+		students_list = get_docs_by_phone("CRM Student", phone)
+
 		for s in students_list:
 			try:
 				doc = frappe.get_doc("CRM Student", s.name)
@@ -43,13 +35,9 @@ def get_student_records_by_phone(phone: str | None = None):
 	# 3. Query CRM Contact by phone
 	contacts = []
 	contact_names = []
-	if search_term:
-		contacts_list = frappe.db.sql("""
-			SELECT name 
-			FROM `tabCRM Contact` 
-			WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') LIKE %s
-		""", (f"%{search_term}%",), as_dict=True)
-		
+	if lookup_terms:
+		contacts_list = get_docs_by_phone("CRM Contact", phone)
+
 		for c in contacts_list:
 			try:
 				doc = frappe.get_doc("CRM Contact", c.name)
@@ -191,14 +179,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"data": None
 		}
 
-	# Normalize phone number
-	digits = "".join(c for c in phone if c.isdigit())
-	if len(digits) >= 9:
-		search_term = digits[-9:]
-	else:
-		search_term = digits
-
-	if not search_term:
+	lookup_terms = get_phone_lookup_terms(phone)
+	if not lookup_terms:
 		return {
 			"isSuccess": False,
 			"message": "Số điện thoại không hợp lệ",
@@ -206,10 +188,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		}
 
 	# 1. Fetch CRM Student
-	students_list = frappe.db.sql("""
-		SELECT name FROM `tabCRM Student`
-		WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') LIKE %s
-	""", (f"%{search_term}%",), as_dict=True)
+	students_list = get_docs_by_phone("CRM Student", phone)
 
 	student_doc = None
 	for s in students_list:
@@ -221,10 +200,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	# 2. Fetch CRM Contact
 	contact_doc = None
-	contacts_list = frappe.db.sql("""
-		SELECT name FROM `tabCRM Contact`
-		WHERE REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', '') LIKE %s
-	""", (f"%{search_term}%",), as_dict=True)
+	contacts_list = get_docs_by_phone("CRM Contact", phone)
 
 	for c in contacts_list:
 		try:

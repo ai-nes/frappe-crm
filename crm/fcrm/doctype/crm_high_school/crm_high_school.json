@@ -56,11 +56,13 @@
   {
    "fieldname": "ward_code",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Ward Code"
   },
   {
    "fieldname": "ward_name",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Ward Name"
   },
   {

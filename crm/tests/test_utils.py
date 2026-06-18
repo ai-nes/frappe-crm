@@ -4,11 +4,14 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api.resource import normalize_phone_filters
 from crm.utils import (
 	_get_communication_status,
 	_should_update_modified,
 	are_same_phone_number,
 	create_crm_contact_from_incoming_email,
+	get_phone_lookup_terms,
+	normalize_phone_for_lookup,
 	on_communication_update,
 	parse_phone_number,
 	seconds_to_duration,
@@ -50,6 +53,48 @@ class TestUtils(FrappeTestCase):
 		result = parse_phone_number("not-a-number")
 		self.assertFalse(result["success"])
 		self.assertIn("error", result)
+
+	def test_normalize_vietnam_phone_for_lookup(self):
+		self.assertEqual(normalize_phone_for_lookup("+84 901 100 001"), "0901100001")
+		self.assertEqual(normalize_phone_for_lookup("84-901-100-001"), "0901100001")
+		self.assertEqual(normalize_phone_for_lookup("0901100001"), "0901100001")
+		self.assertEqual(normalize_phone_for_lookup("901100001"), "0901100001")
+
+	def test_vietnam_phone_lookup_terms_include_zero_and_country_code_forms(self):
+		self.assertEqual(
+			get_phone_lookup_terms("+84 901 100 001"),
+			["0901100001", "84901100001", "901100001"],
+		)
+
+	def test_normalize_resource_phone_filter_list(self):
+		self.assertEqual(
+			normalize_phone_filters('[["phone", "=", "+84 901 100 001"]]'),
+			[["phone", "in", ["0901100001", "84901100001", "901100001"]]],
+		)
+
+	def test_normalize_resource_phone_filter_list_with_doctype(self):
+		self.assertEqual(
+			normalize_phone_filters(
+				'[["CRM Student", "phone", "=", "+84 901 100 001"]]'
+			),
+			[
+				[
+					"CRM Student",
+					"phone",
+					"in",
+					["0901100001", "84901100001", "901100001"],
+				]
+			],
+		)
+
+	def test_normalize_resource_phone_filter_dict(self):
+		self.assertEqual(
+			normalize_phone_filters({"phone": "+84 901 100 001", "email": "a@example.com"}),
+			{
+				"phone": ["in", ["0901100001", "84901100001", "901100001"]],
+				"email": "a@example.com",
+			},
+		)
 
 
 class TestUpdateModifiedTimestamp(FrappeTestCase):
