@@ -1,5 +1,5 @@
 """
-Full demo seed — master data + 3 test students with scored histories.
+Demo seed — master data + 3 test students (interactions + intents, no scoring).
 
 Run with:
   bench --site <site> execute crm.demo.seed_demo.execute
@@ -11,19 +11,13 @@ What this creates (all idempotent):
     CRM Score Template      — "Default Scoring 2026" (active)
 
   Test students
-    Student A  Nguyen Thu Ha   — high-potential lead          expected final ≈  75
-    Student B  Tran Quoc Bao   — cold / disengaged lead       expected final ≈   2
-    Student C  Le Phuong Linh  — intent-driven, low fit       expected final ≈  48
+    Student A  Nguyen Thu Ha   — high-potential lead (strong fit, recent activity)
+    Student B  Tran Quoc Bao   — cold / disengaged lead (low fit, inactive 50d)
+    Student C  Le Phuong Linh  — intent-driven, zero fit (grade 11, no certs)
 
   Shared context
     Province, Ward, Campus, High School, Major, Aspiration,
     Lead Source, Campaign, Event, Education Program, Admission Year
-
-Expected score derivation (formula):
-  non_decay = 0.4 * Fit_score
-  decayable = 0.3 * Engagement_score + 0.3 * Intent_score
-  final     = non_decay + decayable * time_decay_factor + min(0, Negative_score)
-  LeadHealthScore = max(0, min(100, final))
 """
 
 from __future__ import annotations
@@ -234,35 +228,21 @@ TIME_DECAY_TIERS = [
 
 # ---------------------------------------------------------------------------
 # Student profiles
+# Intent spec dict keys: type, importance, desc_vi, confidence, role, polarity, notes
 # ---------------------------------------------------------------------------
-#
-# Score formula:
-#   non_decay = 0.4 * Fit_score
-#   decayable = 0.3 * Engagement_score + 0.3 * Intent_score
-#   final = max(0, min(100, non_decay + decayable * decay_multiplier + min(0, Negative_score)))
 
 STUDENTS = [
     # -----------------------------------------------------------------------
     # Student A — Nguyen Thu Ha
-    # Profile:  Grade 12, GPA 8.5, IELTS 6.5, top high school → strong fit
-    # Activity: zalo_chat + consultation + open_day, 5 days ago → tier 1 (1.0)
-    # Intents:  Tuition (Dominant) + Enrollment (Dominant in later interaction)
-    #
-    # Fit         = 20 + 20 + 15 + 15 = 70
-    # Engagement  = 10 + 20 + 30      = 60
-    # Intent      = 25 + 70           = 95
-    # Negative    = 0
-    # TimeDecay   = 1.0  (last activity 5d ago → tier Hot ≤ 30d)
-    # non_decay   = 0.4 × 70                   = 28.0
-    # decayable   = (0.3×60 + 0.3×95) × 1.0   = (18 + 28.5) × 1.0 = 46.5
-    # EXPECTED    = max(0, min(100, 28.0 + 46.5 + 0)) = 74.5 ≈ 75
+    # Grade 12, GPA 8.5, IELTS 6.5, top high school — strong fit
+    # Activity: Zalo → Consultation → Open Day (5 days ago)
     # -----------------------------------------------------------------------
     {
         "email": "nguyen.thu.ha.fptu2026@example.com",
         "phone": "+84 909 111 001",
         "student_name": "Nguyen Thu Ha",
         "transcript_score": 8.5,
-        "english_converted_score": 7.0,   # IELTS 6.5 → converted 7.0
+        "english_converted_score": 7.0,
         "graduation_score": 8.3,
         "total_score": 26.3,
         "admission_method": "Combined",
@@ -272,9 +252,11 @@ STUDENTS = [
             {"school_year": "2024-2025", "grade": "12", "academic_rank": "Giỏi", "gpa": 8.5},
         ],
         "language_certificates": [
-            {"language": "Tiếng Anh", "certificate_name": "IELTS", "score_level": "6.5",
-             "issue_date": frappe.utils.add_months(frappe.utils.today(), -3),
-             "expiry_date": frappe.utils.add_months(frappe.utils.today(), 21)},
+            {
+                "language": "Tiếng Anh", "certificate_name": "IELTS", "score_level": "6.5",
+                "issue_date": frappe.utils.add_months(frappe.utils.today(), -3),
+                "expiry_date": frappe.utils.add_months(frappe.utils.today(), 21),
+            },
         ],
         "interactions": [
             {
@@ -284,8 +266,8 @@ STUDENTS = [
                 "outcome": "Captured",
                 "notes": "Student asked about tuition installment options and whether IELTS 6.5 qualifies for scholarship.",
                 "intents": [
-                    ("Tuition",    "High",      "Hỏi về học phí", 88, "Dominant", "Asked about tuition payment schedule."),
-                    ("Scholarship","High",      "Hỏi về học bổng", 82, "Support",  "Asked if IELTS qualifies for scholarship."),
+                    {"type": "Tuition",    "importance": "High",   "desc_vi": "Hỏi về học phí",  "confidence": 88, "role": "Dominant", "polarity": "Positive", "notes": "Asked about tuition payment schedule."},
+                    {"type": "Scholarship","importance": "High",   "desc_vi": "Hỏi về học bổng", "confidence": 82, "role": "Support",  "polarity": "Positive", "notes": "Asked if IELTS qualifies for scholarship."},
                 ],
             },
             {
@@ -295,7 +277,7 @@ STUDENTS = [
                 "outcome": "Captured",
                 "notes": "Booked a consultation slot to discuss Software Engineering curriculum.",
                 "intents": [
-                    ("Major Inquiry", "Medium", "Hỏi về ngành học", 80, "Dominant", "Wanted details on SE curriculum and career paths."),
+                    {"type": "Major Inquiry", "importance": "Medium", "desc_vi": "Hỏi về ngành học", "confidence": 80, "role": "Dominant", "polarity": "Positive", "notes": "Wanted details on SE curriculum and career paths."},
                 ],
             },
             {
@@ -305,57 +287,15 @@ STUDENTS = [
                 "outcome": "Follow Up Needed",
                 "notes": "Attended campus visit, confirmed SE as first choice, expressed enrollment intent.",
                 "intents": [
-                    ("Enrollment Intent", "Very High", "Ý định nhập học", 94, "Dominant", "Confirmed intent to enroll after Open Day."),
+                    {"type": "Enrollment Intent", "importance": "Very High", "desc_vi": "Ý định nhập học", "confidence": 94, "role": "Dominant", "polarity": "Positive", "notes": "Confirmed intent to enroll after Open Day."},
                 ],
             },
         ],
-        # Score snapshot — single history row representing current state
-        "score_history": {
-            "fit_score": 70.0,
-            "engagement_score": 60.0,
-            "intent_score": 95.0,
-            "time_decay_score": 74.5,
-            "negative_score": 0.0,
-            "final_score": 74.5,
-            "score_change": 0.0,
-            "days_ago": 5,
-            "details": [
-                ("Fit",        "grade_12",             "Grade 12 Student",         20.0, "Verified grade 12 from academic results."),
-                ("Fit",        "gpa_high",             "High GPA (>= 8.0)",        20.0, "Transcript score 8.5 >= 8.0."),
-                ("Fit",        "ielts_6",              "IELTS >= 6.0",             15.0, "IELTS 6.5 on record."),
-                ("Fit",        "top_school",           "Top High School",          15.0, "Tran Dai Nghia is a gifted school."),
-                ("Engagement", "zalo_chat",            "Zalo Chat",                10.0, "Initiated Zalo inquiry."),
-                ("Engagement", "consultation_register","Consultation Register",    20.0, "Booked consultation slot."),
-                ("Engagement", "open_day",             "Open Day Visit",           30.0, "Attended campus open day."),
-                ("Intent",     "intent_tuition",       "Intent: Tuition Question", 25.0, "Dominant intent: tuition inquiry."),
-                ("Intent",     "intent_enroll",        "Intent: Enrollment",       70.0, "Dominant intent: enrollment confirmed."),
-            ],
-        },
-        # Expected output annotation (printed at end of seed)
-        "expected": {
-            "fit": 70, "engagement": 60, "intent": 95,
-            "decay_multiplier": 1.0, "decay_tier": "Tier 1 (≤30 days)",
-            "negative": 0, "final": 74.5,
-            "note": "Hot lead — strong across all 3 dimensions, recent activity.",
-        },
     },
 
     # -----------------------------------------------------------------------
     # Student B — Tran Quoc Bao
-    # Profile:  Grade 12, GPA 7.2, no certificates → weak fit
-    # Activity: website_visit + major_view only, last activity 50 days ago → tier 2 (0.7)
-    # Intents:  Major Inquiry only (low signal)
-    # Negative: no_contact_30 fires → −10
-    #
-    # Fit         = 20
-    # Engagement  = 2 + 5      =  7
-    # Intent      = 10         = 10
-    # Negative    = −10  (no_contact_30)
-    # TimeDecay   = 0.7  (last activity 50d ago → tier Warm 31–60d)
-    # non_decay   = 0.4 × 20                   =  8.0
-    # decayable   = (0.3×7 + 0.3×10) × 0.7    = (2.1 + 3.0) × 0.7 = 3.57
-    # EXPECTED    = max(0, min(100, 8.0 + 3.57 − 10)) = max(0, 1.57) ≈ 2
-    # (cold lead — low fit, almost no engagement, decayed)
+    # Grade 12, GPA 7.2, no certificates — weak fit, inactive 50 days
     # -----------------------------------------------------------------------
     {
         "email": "tran.quoc.bao.fptu2026@example.com",
@@ -380,53 +320,16 @@ STUDENTS = [
                 "outcome": "Captured",
                 "notes": "Student browsed the Software Engineering major page. No follow-up action taken.",
                 "intents": [
-                    ("Major Inquiry", "Medium", "Hỏi về ngành học", 65, "Dominant", "Browsed SE major page — passive interest."),
+                    {"type": "Major Inquiry", "importance": "Medium", "desc_vi": "Hỏi về ngành học", "confidence": 65, "role": "Dominant", "polarity": "Positive", "notes": "Browsed SE major page — passive interest."},
                 ],
             },
         ],
-        "score_history": {
-            "fit_score": 20.0,
-            "engagement_score": 7.0,
-            "intent_score": 10.0,
-            "time_decay_score": 11.57,
-            "negative_score": -10.0,
-            "final_score": 1.57,
-            "score_change": 0.0,
-            "days_ago": 50,
-            "details": [
-                ("Fit",        "grade_12",    "Grade 12 Student",         20.0,  "Verified grade 12."),
-                ("Engagement", "website_visit","Website Visit",            2.0,  "One tracked website visit."),
-                ("Engagement", "major_view",  "Major Page View",           5.0,  "Viewed SE major detail page."),
-                ("Intent",     "intent_major","Intent: Major Inquiry",    10.0,  "Passive browse — no direct question asked."),
-                ("Time Decay", "tier_2",      "Tier 2 decay applied",     -1.53, "50 days since last activity → 0.7x multiplier."),
-                ("Negative",   "no_contact_30","No Contact 30 Days",     -10.0,  "No interaction in over 30 days."),
-            ],
-        },
-        "expected": {
-            "fit": 20, "engagement": 7, "intent": 10,
-            "decay_multiplier": 0.7, "decay_tier": "Tier 2 (31–60 days)",
-            "negative": -10, "final": 1.57,
-            "note": "Cold lead — minimal engagement, no certificates, inactive 50 days, but fit is not time-decayed.",
-        },
     },
 
     # -----------------------------------------------------------------------
     # Student C — Le Phuong Linh
-    # Profile:  Grade 11 (not 12), GPA 7.8, no IELTS → zero fit score
-    # Activity: zalo_chat + webinar + application_submit, 3 days ago → tier 1 (1.0)
-    # Intents:  Admission Process (Dominant) + Deposit Intent (Dominant later)
-    # Negative: cancel_event fires → −20
-    #
-    # Fit         = 0
-    # Engagement  = 10 + 25 + 50 =  85
-    # Intent      = 50 + 90      = 140
-    # Negative    = −20  (cancel_event fires once)
-    # TimeDecay   = 1.0  (last activity 3d ago → tier Hot ≤ 30d)
-    # non_decay   = 0.4 × 0                    =  0.0
-    # decayable   = (0.3×85 + 0.3×140) × 1.0  = (25.5 + 42) × 1.0 = 67.5
-    # EXPECTED    = max(0, min(100, 0 + 67.5 − 20)) = 47.5 ≈ 48
-    # (high intent/engagement, but fit is 0 — counselor must verify eligibility)
-    # Edge case: strong intent/engagement but counselor must verify eligibility
+    # Grade 11, GPA 7.8, no certificates — zero fit score
+    # Activity: Zalo → Webinar → Cancel Event → Application Submit (3 days ago)
     # -----------------------------------------------------------------------
     {
         "email": "le.phuong.linh.fptu2026@example.com",
@@ -451,8 +354,8 @@ STUDENTS = [
                 "outcome": "Captured",
                 "notes": "Student asked about admission requirements and whether grade 11 students can apply early.",
                 "intents": [
-                    ("Admission Process", "High", "Hỏi quy trình xét tuyển", 85, "Dominant", "Asked if grade 11 students can register for early admission."),
-                    ("Major Inquiry",     "Medium","Hỏi về ngành học",       70, "Support",  "Also asked about SE vs IT differences."),
+                    {"type": "Admission Process", "importance": "High",   "desc_vi": "Hỏi quy trình xét tuyển", "confidence": 85, "role": "Dominant", "polarity": "Positive", "notes": "Asked if grade 11 students can register for early admission."},
+                    {"type": "Major Inquiry",     "importance": "Medium", "desc_vi": "Hỏi về ngành học",        "confidence": 70, "role": "Support",  "polarity": "Positive", "notes": "Also asked about SE vs IT differences."},
                 ],
             },
             {
@@ -462,7 +365,7 @@ STUDENTS = [
                 "outcome": "Captured",
                 "notes": "Attended webinar, asked about deposit timeline and reservation policy.",
                 "intents": [
-                    ("Deposit Intent", "Very High", "Ý định đặt cọc", 91, "Dominant", "Asked about deposit amount and deadline — strong purchase signal."),
+                    {"type": "Deposit Intent", "importance": "Very High", "desc_vi": "Ý định đặt cọc", "confidence": 91, "role": "Dominant", "polarity": "Positive", "notes": "Asked about deposit amount and deadline — strong purchase signal."},
                 ],
             },
             {
@@ -480,35 +383,10 @@ STUDENTS = [
                 "outcome": "Follow Up Needed",
                 "notes": "Submitted application despite being grade 11 — counselor must verify eligibility.",
                 "intents": [
-                    ("Enrollment Intent", "Very High", "Ý định nhập học", 88, "Dominant", "Submitted formal application — highest conversion signal."),
+                    {"type": "Enrollment Intent", "importance": "Very High", "desc_vi": "Ý định nhập học", "confidence": 88, "role": "Dominant", "polarity": "Positive", "notes": "Submitted formal application — highest conversion signal."},
                 ],
             },
         ],
-        "score_history": {
-            "fit_score": 0.0,
-            "engagement_score": 85.0,
-            "intent_score": 140.0,
-            "time_decay_score": 67.5,
-            "negative_score": -20.0,
-            "final_score": 47.5,
-            "score_change": 0.0,
-            "days_ago": 3,
-            "details": [
-                ("Engagement", "zalo_chat",         "Zalo Chat",                10.0,  "Initiated Zalo inquiry."),
-                ("Engagement", "webinar",           "Webinar Attendance",       25.0,  "Attended online info session."),
-                ("Engagement", "application_submit","Application Submitted",    50.0,  "Submitted formal application."),
-                ("Intent",     "intent_admission",  "Intent: Admission Process",50.0,  "Dominant: asked about admission steps."),
-                ("Intent",     "intent_deposit",    "Intent: Deposit",          90.0,  "Dominant: asked about deposit — strong signal."),
-                ("Negative",   "cancel_event",      "Cancelled Event",         -20.0,  "Cancelled Open Day registration."),
-            ],
-        },
-        "expected": {
-            "fit": 0, "engagement": 85, "intent": 140,
-            "decay_multiplier": 1.0, "decay_tier": "Tier 1 (≤30 days)",
-            "negative": -20, "final": 47.5,
-            "note": "Edge case — zero fit (grade 11, no certs) but strong intent/engagement. "
-                    "AI flags high intent; counselor must verify eligibility before converting.",
-        },
     },
 ]
 
@@ -523,32 +401,17 @@ def execute():
     print("\n=== Seeding master data ===")
     _seed_intent_types()
     _seed_signals()
-    template_name = _seed_score_template()
+    _seed_score_template()
 
     print("\n=== Seeding shared context ===")
     ctx = _ensure_shared_context()
 
     print("\n=== Seeding test students ===")
-    results = []
     for profile in STUDENTS:
-        r = _seed_student(profile, ctx, template_name)
-        results.append(r)
+        _seed_student(profile, ctx)
 
     frappe.db.commit()
-
-    print("\n=== Expected Score Summary ===")
-    print(f"{'Student':<25} {'Fit':>6} {'Eng':>6} {'Int':>6} {'Decay':>7} {'Neg':>6} {'Final':>7}  Note")
-    print("-" * 100)
-    for r in results:
-        e = r["expected"]
-        print(
-            f"{r['student_name']:<25} "
-            f"{e['fit']:>6} {e['engagement']:>6} {e['intent']:>6} "
-            f"{e['decay_multiplier']:>7.1f} {e['negative']:>6} {e['final']:>7.2f}  "
-            f"{e['note']}"
-        )
-
-    return {"students": [r["student"] for r in results], "template": template_name}
+    print("\n=== Done ===")
 
 
 # ---------------------------------------------------------------------------
@@ -579,50 +442,39 @@ def _seed_signals():
 
 
 def _seed_score_template():
-    if frappe.db.exists("CRM Score Template", {"template_name": TEMPLATE_NAME}):
-        name = frappe.db.get_value("CRM Score Template", {"template_name": TEMPLATE_NAME}, "name")
+    rules = [
+        {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
+        for r in SCORE_RULES
+    ]
+    neg_rules = [
+        {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
+         "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
+        for r in NEGATIVE_RULES
+    ]
+
+    name = frappe.db.get_value("CRM Score Template", {"template_name": TEMPLATE_NAME}, "name")
+    if name:
         doc = frappe.get_doc("CRM Score Template", name)
-        doc.update({
-            "status": "Active",
-            "fit_weight": 0.4,
-            "intent_weight": 0.3,
-            "engagement_weight": 0.3,
-        })
-        doc.set("rules", [
-            {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
-            for r in SCORE_RULES
-        ])
+        doc.update({"status": "Active", "fit_weight": 0.4, "intent_weight": 0.3, "engagement_weight": 0.3})
+        doc.set("rules", rules)
         doc.set("time_decay_config", TIME_DECAY_TIERS)
-        doc.set("negative_rules", [
-            {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
-             "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
-            for r in NEGATIVE_RULES
-        ])
+        doc.set("negative_rules", neg_rules)
         doc.save(ignore_permissions=True)
         print(f"  Score Template: '{TEMPLATE_NAME}' updated")
-        return name
+        return
 
-    doc = frappe.get_doc({
+    frappe.get_doc({
         "doctype": "CRM Score Template",
         "template_name": TEMPLATE_NAME,
         "status": "Active",
         "fit_weight": 0.4,
         "intent_weight": 0.3,
         "engagement_weight": 0.3,
-        "rules": [
-            {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
-            for r in SCORE_RULES
-        ],
+        "rules": rules,
         "time_decay_config": TIME_DECAY_TIERS,
-        "negative_rules": [
-            {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
-             "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
-            for r in NEGATIVE_RULES
-        ],
-    })
-    doc.insert(ignore_permissions=True)
+        "negative_rules": neg_rules,
+    }).insert(ignore_permissions=True)
     print(f"  Score Template: '{TEMPLATE_NAME}' created")
-    return doc.name
 
 
 # ---------------------------------------------------------------------------
@@ -652,10 +504,9 @@ def _ensure_shared_context():
 # Student seeder
 # ---------------------------------------------------------------------------
 
-def _seed_student(profile, ctx, template_name):
+def _seed_student(profile, ctx):
     email = profile["email"]
 
-    # Student
     existing = frappe.db.exists("CRM Student", {"email": email})
     if existing:
         student = frappe.get_doc("CRM Student", existing)
@@ -663,28 +514,28 @@ def _seed_student(profile, ctx, template_name):
         student = frappe.get_doc({"doctype": "CRM Student"})
 
     student.update({
-        "student_name":          profile["student_name"],
-        "phone":                 profile["phone"],
-        "email":                 email,
-        "enrollment_status":     ctx["enrollment_status"],
-        "high_school":           ctx["high_school"],
-        "province":              ctx["province"],
-        "ward":                  ctx["ward"],
-        "branch":                ctx["campus"],
-        "major":                 ctx["major"],
-        "aspiration":            ctx["aspiration"],
-        "source":                ctx["source"],
-        "admission_year":        ctx["admission_year"],
-        "education_program":     ctx["education_program"],
-        "cohort_start_year":     profile["cohort_start_year"],
-        "cohort_end_year":       profile["cohort_end_year"],
-        "transcript_score":      profile["transcript_score"],
-        "graduation_score":      profile["graduation_score"],
+        "student_name":            profile["student_name"],
+        "phone":                   profile["phone"],
+        "email":                   email,
+        "enrollment_status":       ctx["enrollment_status"],
+        "high_school":             ctx["high_school"],
+        "province":                ctx["province"],
+        "ward":                    ctx["ward"],
+        "branch":                  ctx["campus"],
+        "major":                   ctx["major"],
+        "aspiration":              ctx["aspiration"],
+        "source":                  ctx["source"],
+        "admission_year":          ctx["admission_year"],
+        "education_program":       ctx["education_program"],
+        "cohort_start_year":       profile["cohort_start_year"],
+        "cohort_end_year":         profile["cohort_end_year"],
+        "transcript_score":        profile["transcript_score"],
+        "graduation_score":        profile["graduation_score"],
         "english_converted_score": profile["english_converted_score"],
-        "total_score":           profile["total_score"],
-        "admission_method":      profile["admission_method"],
+        "total_score":             profile["total_score"],
+        "admission_method":        profile["admission_method"],
     })
-    student.set("academic_results",    profile["academic_results"])
+    student.set("academic_results",      profile["academic_results"])
     student.set("language_certificates", profile["language_certificates"])
 
     if existing:
@@ -693,23 +544,10 @@ def _seed_student(profile, ctx, template_name):
         student.insert(ignore_permissions=True)
 
     print(f"  Student '{profile['student_name']}': {student.name}")
-
-    # Interactions + Intents
-    interaction_names = _seed_interactions(student, profile["interactions"])
-
-    # Score History
-    _seed_score_history(student, template_name, profile["score_history"])
-
-    return {
-        "student": student.name,
-        "student_name": profile["student_name"],
-        "interactions": interaction_names,
-        "expected": profile["expected"],
-    }
+    _seed_interactions(student, profile["interactions"])
 
 
 def _seed_interactions(student, interaction_specs):
-    names = []
     for spec in interaction_specs:
         itype = _ensure_interaction_type(spec["type"])
         existing = frappe.db.exists("CRM Interaction", {
@@ -731,75 +569,23 @@ def _seed_interactions(student, interaction_specs):
             interaction.insert(ignore_permissions=True)
             interaction_name = interaction.name
 
-        names.append(interaction_name)
         _seed_intents(interaction_name, spec.get("intents", []))
-
-    return names
 
 
 def _seed_intents(interaction_name, intent_specs):
-    # Validate: at most one Dominant per interaction
-    has_dominant = False
-    for intent_type, importance, desc_vi, confidence, role, notes in intent_specs:
-        if role == "Dominant":
-            if has_dominant:
-                role = "Support"   # downgrade extras to Support to avoid validation error
-            else:
-                has_dominant = True
-
-        itype_name = _ensure_intent_type(intent_type, importance, desc_vi)
+    for s in intent_specs:
+        itype_name = _ensure_intent_type(s["type"], s["importance"], s["desc_vi"])
         if frappe.db.exists("CRM Intent", {"interaction": interaction_name, "intent_type": itype_name}):
             continue
-
         frappe.get_doc({
             "doctype": "CRM Intent",
             "interaction": interaction_name,
             "intent_type": itype_name,
-            "confidence": confidence,
-            "intent_role": role,
-            "notes": notes,
+            "confidence": s["confidence"],
+            "intent_role": s["role"],
+            "polarity": s["polarity"],
+            "notes": s["notes"],
         }).insert(ignore_permissions=True)
-
-
-def _seed_score_history(student, template_name, spec):
-    existing = frappe.db.exists("CRM Score History", {
-        "student": student.name,
-        "score_template": template_name,
-    })
-
-    scoring_time = datetime.now() - timedelta(days=spec["days_ago"])
-    values = {
-        "student": student.name,
-        "score_template": template_name,
-        "scoring_time": scoring_time,
-        "scoring_date": scoring_time.date(),
-        "fit_score": spec["fit_score"],
-        "engagement_score": spec["engagement_score"],
-        "intent_score": spec["intent_score"],
-        "time_decay_score": spec["time_decay_score"],
-        "negative_score": spec["negative_score"],
-        "final_score": spec["final_score"],
-        "score_change": spec["score_change"],
-    }
-    details = [
-        {"category": cat, "rule_id": rid, "signal": sig, "score": score, "reason": reason}
-        for cat, rid, sig, score, reason in spec["details"]
-    ]
-
-    if existing:
-        doc = frappe.get_doc("CRM Score History", existing)
-        doc.update(values)
-        doc.set("details", details)
-        doc.save(ignore_permissions=True)
-        return doc.name
-
-    doc = frappe.get_doc({
-        "doctype": "CRM Score History",
-        **values,
-        "details": details,
-    })
-    doc.insert(ignore_permissions=True)
-    return doc.name
 
 
 # ---------------------------------------------------------------------------

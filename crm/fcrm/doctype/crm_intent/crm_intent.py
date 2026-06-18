@@ -49,9 +49,10 @@ class CRMIntent(Document):
 				"width": "14rem",
 			},
 			{"label": "Role", "type": "Select", "key": "intent_role", "width": "8rem"},
+			{"label": "Polarity", "type": "Select", "key": "polarity", "width": "8rem"},
 			{"label": "Importance", "type": "Select", "key": "importance", "width": "10rem"},
 			{"label": "Confidence", "type": "Percent", "key": "confidence", "width": "8rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "interaction", "student", "intent_type", "intent_role", "importance", "confidence", "modified"]
+		rows = ["name", "interaction", "student", "intent_type", "intent_role", "polarity", "importance", "confidence", "modified"]
 		return {"columns": columns, "rows": rows}

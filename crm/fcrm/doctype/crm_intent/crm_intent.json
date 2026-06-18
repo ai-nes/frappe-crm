@@ -15,6 +15,7 @@
   "column_break_1",
   "intent_type",
   "intent_role",
+  "polarity",
   "importance",
   "confidence",
   "notes"
@@ -70,6 +71,16 @@
    "reqd": 1
   },
   {
+   "default": "Positive",
+   "fieldname": "polarity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Polarity",
+   "options": "Positive\nNegative",
+   "reqd": 1
+  },
+  {
    "fieldname": "importance",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -92,7 +103,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-11 00:00:00.000000",
+ "modified": "2026-06-18 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Intent",
