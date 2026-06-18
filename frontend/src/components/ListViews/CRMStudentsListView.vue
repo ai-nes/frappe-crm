@@ -95,6 +95,7 @@
     ref="listBulkActionsRef"
     v-model="list"
     doctype="CRM Student"
+    :options="{ hideAssign: true }"
   />
 </template>
 

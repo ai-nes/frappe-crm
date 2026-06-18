@@ -70,6 +70,23 @@ msgstr "1 tuần trước"
 msgid "1 year ago"
 msgstr "1 năm trước"
 
+#: frontend/src/components/Modals/AssignStaffModal.vue
+#: frontend/src/components/ListBulkActions.vue
+msgid "Assign Staff"
+msgstr "Gán nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Assigned staff for {0} record(s)"
+msgstr "Đã gán nhân sự cho {0} bản ghi"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Select staff"
+msgstr "Chọn nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Staff"
+msgstr "Nhân sự"
+
 #: frontend/src/components/Activities/InteractionScoreArea.vue
 msgid "Cold"
 msgstr "Tiềm năng thấp"

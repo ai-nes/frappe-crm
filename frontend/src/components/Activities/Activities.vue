@@ -7,8 +7,10 @@
     :tabs="tabs"
     :title="title"
     :doc="doc"
+    :doctype="doctype"
     :whatsappBox="whatsappBox"
     :modalRef="modalRef"
+    @assignStaff="showAssignStaffModal = true"
   />
   <FadedScrollableDiv class="flex flex-col h-full overflow-y-auto">
     <div
@@ -437,6 +439,13 @@
       }
     "
   />
+  <AssignStaffModal
+    v-if="showAssignStaffModal"
+    v-model="showAssignStaffModal"
+    :doctype="doctype"
+    :selectedValues="selectedDocValues"
+    @reload="reloadAfterStaffAssignment"
+  />
 </template>
 <script setup>
 import ActivityHeader from '@/components/Activities/ActivityHeader.vue'
@@ -471,6 +480,7 @@ import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import CommunicationArea from '@/components/CommunicationArea.vue'
 import WhatsappTemplateSelectorModal from '@/components/Modals/WhatsappTemplateSelectorModal.vue'
 import AllModals from '@/components/Activities/AllModals.vue'
+import AssignStaffModal from '@/components/Modals/AssignStaffModal.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import { timeAgo, formatDate, startCase } from '@/utils'
 import { globalStore } from '@/stores/global'
@@ -516,6 +526,10 @@ const doc = computed(() => _document.doc || {})
 const reload_email = ref(false)
 const modalRef = ref(null)
 const showFilesUploader = ref(false)
+const showAssignStaffModal = ref(false)
+const selectedDocValues = computed(
+  () => new Set(props.docname ? [props.docname] : []),
+)
 
 const title = computed(() => props.tabs?.[tabIndex.value]?.name || 'Activity')
 
@@ -599,6 +613,12 @@ function sendTemplate(template) {
     },
     onSuccess: () => whatsappMessages.reload(),
   })
+}
+
+function reloadAfterStaffAssignment() {
+  all_activities.reload()
+  _document.reload()
+  emit('afterSave')
 }
 
 const replyMessage = ref({})

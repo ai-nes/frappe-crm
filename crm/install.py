@@ -373,7 +373,7 @@ def add_default_enrollment_statuses():
 
 def add_default_quick_filters():
 	quick_filters = {
-		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "source"],
+		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM High School": ["school_name", "school_code", "school_type", "ward_name", "province_name"],
 		"Contact": ["status", "email_id", "phone"],
