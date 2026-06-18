@@ -259,7 +259,7 @@ STUDENTS = [
     # -----------------------------------------------------------------------
     {
         "email": "nguyen.thu.ha.fptu2026@example.com",
-        "phone": "+84 909 111 001",
+        "phone": "0909111001",
         "student_name": "Nguyen Thu Ha",
         "transcript_score": 8.5,
         "english_converted_score": 7.0,   # IELTS 6.5 → converted 7.0
@@ -359,7 +359,7 @@ STUDENTS = [
     # -----------------------------------------------------------------------
     {
         "email": "tran.quoc.bao.fptu2026@example.com",
-        "phone": "+84 909 222 002",
+        "phone": "0909222002",
         "student_name": "Tran Quoc Bao",
         "transcript_score": 7.2,
         "english_converted_score": 0.0,
@@ -430,7 +430,7 @@ STUDENTS = [
     # -----------------------------------------------------------------------
     {
         "email": "le.phuong.linh.fptu2026@example.com",
-        "phone": "+84 909 333 003",
+        "phone": "0909333003",
         "student_name": "Le Phuong Linh",
         "transcript_score": 7.8,
         "english_converted_score": 0.0,

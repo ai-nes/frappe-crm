@@ -14,6 +14,62 @@ export function parseLinkFilters(linkFilters) {
   }
 }
 
+function getCampusContext(doc) {
+  return doc?.campus || doc?.branch
+}
+
+export function getContextualLinkFilters(field, doc, baseFilters = null) {
+  if (!field || field.fieldtype !== 'Link' || !doc) {
+    return baseFilters
+  }
+
+  const campus = getCampusContext(doc)
+  const filtersByDoctype = {
+    'CRM Ward': doc.province ? { province: doc.province } : null,
+    'CRM High School': doc.province
+      ? { province_name: doc.province }
+      : null,
+    'CRM Campus': doc.province ? { province: doc.province } : null,
+    'CRM Department': campus ? { campus } : null,
+    'CRM Campaign': campus ? { campus } : null,
+    'CRM Staff': {
+      ...(campus ? { campus } : {}),
+      ...(doc.department ? { department: doc.department } : {}),
+    },
+    'CRM Event': {
+      ...(doc.crm_campaign ? { crm_campaign: doc.crm_campaign } : {}),
+      ...(doc.province ? { province: doc.province } : {}),
+    },
+  }
+  const contextFilters = filtersByDoctype[field.options]
+  if (!contextFilters || Object.keys(contextFilters).length === 0) {
+    return baseFilters
+  }
+
+  return {
+    ...(baseFilters || {}),
+    ...contextFilters,
+  }
+}
+
+export function getProvinceScopedLinkFilters(field, doc, baseFilters = null) {
+  return getContextualLinkFilters(field, doc, baseFilters)
+}
+
+export function getDependentFieldsToClear(fieldname, doc = {}) {
+  const dependencies = {
+    province: ['ward', 'high_school', 'branch', 'campus', 'crm_event'],
+    branch: ['crm_campaign'],
+    campus: ['department', 'crm_campaign'],
+    department: ['assigned_to'],
+    crm_campaign: ['crm_event'],
+  }
+
+  return (dependencies[fieldname] || []).filter((dependentField) =>
+    Object.hasOwn(doc, dependentField),
+  )
+}
+
 /**
  * Process a raw field meta object into a UI-ready field object.
  * Returns a NEW object — never mutates the input.
