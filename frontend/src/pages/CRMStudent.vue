@@ -46,7 +46,7 @@
     >
       <template #tab-panel>
         <Activities
-          v-if="tabs[tabIndex]?.name !== 'Interactions'"
+          v-if="!['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -56,9 +56,14 @@
           @afterSave="() => sections.reload()"
         />
         <InteractionScoreArea
-          v-else
+          v-else-if="tabs[tabIndex]?.name === 'Interactions'"
           :student="doc"
           type="interactions"
+        />
+        <InteractionScoreArea
+          v-else
+          :student="doc"
+          type="scores"
         />
       </template>
     </Tabs>
@@ -240,6 +245,7 @@ const tabs = computed(() => [
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
+  { name: 'Scoring', label: __('Potential Score'), icon: ActivityIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },

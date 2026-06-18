@@ -152,7 +152,7 @@
         <Button
           class="w-full"
           variant="solid"
-          :label="__('Create CRM Contact')"
+          :label="__('Create Contact')"
           @click="createCRMContact"
         />
       </div>

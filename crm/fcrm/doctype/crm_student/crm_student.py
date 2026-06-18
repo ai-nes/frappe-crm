@@ -1,11 +1,26 @@
+import re
+
 import frappe
 from frappe import _
 from frappe.model.document import Document
 
-from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province, resolve_ward
+from crm.fcrm.utils.geo_resolver import (
+	resolve_high_school_strict,
+	resolve_province,
+	resolve_ward,
+)
 
 
 class CRMStudent(Document):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# Frappe's _validate_links() runs before before_insert/before_save/validate
+		# and throws its own generic error for any Link field holding free-text
+		# input (e.g. high_school/province/ward from a Data Import row), before our
+		# resolvers ever get a chance to run. We disable it here and re-run it
+		# ourselves at the end of validate(), once geo fields are resolved.
+		self.flags.ignore_links = True
+
 	def before_insert(self):
 		self._set_defaults()
 		self._normalize_phone_fields()
@@ -18,12 +33,32 @@ class CRMStudent(Document):
 			self.cohort_start_year = int(self.cohort_end_year) - 3
 
 	def validate(self):
+		self._validate_phone_format()
+		self._resolve_geo()
+		self._validate_high_school_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._validate_unique_id_number()
+		self.flags.ignore_links = False
+		self._validate_links()
 
-	def after_insert(self):
-		self._auto_create_contact()
+	def _validate_high_school_format(self):
+		if not self.high_school:
+			return
+		self.high_school = resolve_high_school_strict(self.high_school, self.province)
+
+	def _validate_phone_format(self):
+		if not self.phone:
+			return
+		phone = self.phone.strip()
+		if phone.startswith("+84"):
+			phone = "0" + phone[3:]
+		self.phone = phone
+		if not re.fullmatch(r"0\d{9}", phone):
+			frappe.throw(
+				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
+				title="Số điện thoại không hợp lệ",
+			)
 
 	def on_update(self):
 		self._sync_linked_contact_fields()
@@ -39,10 +74,12 @@ class CRMStudent(Document):
 				self.branch = default_branch
 
 	def _resolve_geo(self):
+		# high_school is intentionally NOT resolved here — _validate_high_school_format()
+		# is the single source of truth for it (resolve_high_school_strict), called right
+		# after this in validate(). Resolving it twice would be wasted work whose result
+		# gets discarded.
 		if self.province:
 			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
 		if self.ward:
 			self.ward = resolve_ward(self.ward, self.province)
 
@@ -147,6 +184,7 @@ class CRMStudent(Document):
 				"branch",
 				"parent_name",
 				"parent_phone",
+				"assigned_to",
 			],
 			as_dict=True,
 		) or {}
@@ -163,32 +201,11 @@ class CRMStudent(Document):
 			"branch": self.branch,
 			"parent_name": self.alt_name,
 			"parent_phone": self.alt_phone,
+			"assigned_to": self.assigned_to,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
 		if updates:
 			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
-
-	def _auto_create_contact(self):
-		if not self.phone:
-			return
-		if frappe.db.exists("CRM Contact", {"student": self.name}):
-			return
-		contact = frappe.new_doc("CRM Contact")
-		contact.full_name = self.student_name
-		contact.phone = self.phone
-		contact.email = self.email
-		contact.student = self.name
-		contact.enrollment_status = self.enrollment_status
-		contact.high_school = self.high_school
-		contact.province = self.province
-		contact.major = self.major
-		contact.aspiration = self.aspiration
-		contact.branch = self.branch
-		contact.admission_year = self.admission_year
-		contact.source = self.source
-		contact.parent_name = self.alt_name
-		contact.parent_phone = self.alt_phone
-		contact.insert(ignore_permissions=True)
 
 	@staticmethod
 	def default_list_data():
@@ -219,6 +236,13 @@ class CRMStudent(Document):
 				"width": "12rem",
 			},
 			{
+				"label": "Assigned To",
+				"type": "Link",
+				"key": "assigned_to",
+				"options": "CRM Staff",
+				"width": "12rem",
+			},
+			{
 				"label": "Source",
 				"type": "Link",
 				"key": "source",
@@ -238,6 +262,7 @@ class CRMStudent(Document):
 			"phone",
 			"email",
 			"enrollment_status",
+			"assigned_to",
 			"source",
 			"modified",
 		]
@@ -275,7 +300,7 @@ def convert_to_contact(student_name):
 		"admission_year": student.admission_year,
 		"branch": student.branch,
 		"student": student.name,
-		"assigned_to": crm_staff_name,
+		"assigned_to": student.assigned_to or crm_staff_name,
 		"enrollment_status": "Có triển vọng",
 		"lead_status": "Mới",
 		"parent_name": student.alt_name,

@@ -14,6 +14,13 @@
     :doctype="doctype"
     @reload="reload"
   />
+  <AssignStaffModal
+    v-if="showAssignStaffModal"
+    v-model="showAssignStaffModal"
+    :doctype="doctype"
+    :selectedValues="selectedValues"
+    @reload="reload"
+  />
   <DeleteLinkedDocModal
     v-if="showDeleteDocModal.showLinkedDocsModal"
     v-model="showDeleteDocModal.showLinkedDocsModal"
@@ -33,6 +40,7 @@
 <script setup>
 import EditValueModal from '@/components/Modals/EditValueModal.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
+import AssignStaffModal from '@/components/Modals/AssignStaffModal.vue'
 import { setupListCustomizations } from '@/utils'
 import { globalStore } from '@/stores/global'
 import { useTelemetry } from 'frappe-ui/frappe'
@@ -93,9 +101,19 @@ function deleteValues(selections, unselectAll) {
 
 const showAssignmentModal = ref(false)
 const bulkAssignees = ref([])
+const showAssignStaffModal = ref(false)
+const canAssignStaff = ref(false)
+
+const staffAssignableDoctypes = ['CRM Student', 'CRM Contact']
 
 function assignValues(selections, unselectAll) {
   showAssignmentModal.value = true
+  selectedValues.value = selections
+  unselectAllAction.value = unselectAll
+}
+
+function assignStaffValues(selections, unselectAll) {
+  showAssignStaffModal.value = true
   selectedValues.value = selections
   unselectAllAction.value = unselectAll
 }
@@ -161,6 +179,16 @@ function bulkActions(selections, unselectAll) {
     })
   }
 
+  if (
+    staffAssignableDoctypes.includes(props.doctype) &&
+    canAssignStaff.value
+  ) {
+    actions.push({
+      label: __('Assign Staff'),
+      onClick: () => assignStaffValues(selections, unselectAll),
+    })
+  }
+
 
 
   customBulkActions.value.forEach((action) => {
@@ -195,6 +223,9 @@ function reload(unselectAll) {
 }
 
 onMounted(async () => {
+  if (staffAssignableDoctypes.includes(props.doctype)) {
+    canAssignStaff.value = await call('crm.api.staff_assignment.can_assign_staff')
+  }
   if (!list.value?.data) return
   let customization = await setupListCustomizations(list.value.data, {
     list: list.value,

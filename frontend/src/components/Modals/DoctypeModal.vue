@@ -7,8 +7,8 @@
             <h3 class="text-2xl font-semibold leading-6 text-ink-gray-9">
               {{
                 editMode
-                  ? __('Edit ' + (doctypeTitle || doctype))
-                  : __('Create ' + (doctypeTitle || doctype))
+                  ? __('Edit {0}', [doctypeTitle || doctype])
+                  : __('Create {0}', [doctypeTitle || doctype])
               }}
             </h3>
           </div>

@@ -87,6 +87,7 @@
     ref="listBulkActionsRef"
     v-model="list"
     doctype="CRM Contact"
+    :options="{ hideAssign: true }"
   />
 </template>
 

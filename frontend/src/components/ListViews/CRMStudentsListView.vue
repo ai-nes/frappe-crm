@@ -53,6 +53,18 @@
               size="md"
             />
           </div>
+          <div
+            v-else-if="column.key === 'latest_score'"
+            class="truncate"
+            @click="(event) => emit('applyFilter', { event, idx, column, item, firstColumn: columns[0] })"
+          >
+            <Badge
+              :label="potentialScoreLabel(item)"
+              :theme="potentialScoreTheme(item)"
+              variant="subtle"
+              size="md"
+            />
+          </div>
           <div v-else-if="column.type === 'Check'">
             <FormControl
               type="checkbox"
@@ -95,6 +107,7 @@
     ref="listBulkActionsRef"
     v-model="list"
     doctype="CRM Student"
+    :options="{ hideAssign: true }"
   />
 </template>
 
@@ -146,6 +159,24 @@ const listBulkActionsRef = ref(null)
 
 function enrollmentStatusColor() {
   return 'gray'
+}
+
+function potentialScoreLabel(value) {
+  let score = Number(value || 0)
+  if (score >= 80) return __('High Potential') + ` (${formatScore(score)})`
+  if (score >= 50) return __('Medium Potential') + ` (${formatScore(score)})`
+  return __('Low Potential') + ` (${formatScore(score)})`
+}
+
+function potentialScoreTheme(value) {
+  let score = Number(value || 0)
+  if (score >= 80) return 'red'
+  if (score >= 50) return 'orange'
+  return 'gray'
+}
+
+function formatScore(value) {
+  return Number.isInteger(value) ? value : value.toFixed(2)
 }
 
 watch(pageLengthCount, (val, old_value) => {

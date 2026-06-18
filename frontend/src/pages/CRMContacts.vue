@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="CRM Contacts" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Contacts"
+        :label="__('Contacts')"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -87,7 +91,7 @@
   />
   <EmptyState
     v-else-if="contacts.data && !rows.length"
-    name="CRM Contacts"
+    name="Contacts"
     :icon="ContactIcon"
   />
 </template>
@@ -140,7 +144,7 @@ function createContact(column) {
   const defaults = column?.column_value ? { stage: column.column_value } : {}
   showModal({
     doctype: 'CRM Contact',
-    title: __('New CRM Contact'),
+    title: __('Contact'),
     defaults,
   })
 }

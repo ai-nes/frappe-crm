@@ -135,8 +135,8 @@
       orientation="horizontal"
     >
       <div
-        v-for="filter in quickFilterList"
-        :key="filter.fieldname"
+        v-for="filter in quickFilterListWithPresets"
+        :key="filter.key || filter.fieldname"
         class="m-1 min-w-36"
       >
         <QuickFilterField
@@ -353,6 +353,7 @@ const props = defineProps({
       allowedViews: ['list'],
     }),
   },
+  quickFilterPresets: { type: Array, default: () => [] },
 })
 
 const { brand } = getSettings()
@@ -810,6 +811,29 @@ const quickFilterList = computed(() => {
   return filters
 })
 
+const quickFilterPresets = computed(() => props.quickFilterPresets || [])
+
+const quickFilterListWithPresets = computed(() => {
+  let filters = [...quickFilterList.value]
+  quickFilterPresets.value.forEach((preset) => {
+    let value = list.value.params?.filters?.[preset.fieldname]
+    let activeOption = Object.entries(preset.presetValues || {}).find(
+      ([, presetValue]) => JSON.stringify(presetValue) === JSON.stringify(value),
+    )
+    preset.value = activeOption?.[0] || ''
+
+    let index = preset.after
+      ? filters.findIndex((filter) => filter.fieldname === preset.after)
+      : -1
+    if (index === -1) {
+      filters.push(preset)
+    } else {
+      filters.splice(index + 1, 0, preset)
+    }
+  })
+  return filters
+})
+
 const quickFilters = createResource({
   url: 'crm.api.doc.get_quick_filters',
   params: { doctype: props.doctype },
@@ -833,7 +857,9 @@ function applyQuickFilter(filter, value) {
   let filters = { ...list.value.params.filters }
   let field = filter.fieldname
   if (value) {
-    if (
+    if (filter.presetValues) {
+      filters[field] = filter.presetValues[value]
+    } else if (
       ['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.fieldtype)
     ) {
       filters[field] = value

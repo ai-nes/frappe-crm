@@ -70,6 +70,127 @@ msgstr "1 tuần trước"
 msgid "1 year ago"
 msgstr "1 năm trước"
 
+#: frontend/src/components/Modals/AssignStaffModal.vue
+#: frontend/src/components/ListBulkActions.vue
+msgid "Assign Staff"
+msgstr "Gán nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Assigned staff for {0} record(s)"
+msgstr "Đã gán nhân sự cho {0} bản ghi"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Select staff"
+msgstr "Chọn nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Staff"
+msgstr "Nhân sự"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Cold"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Engage W."
+msgstr "TL tương tác"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Fit W."
+msgstr "TL phù hợp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Hot"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent Summary"
+msgstr "Tổng quan ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent W."
+msgstr "TL ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Lead Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "High Potential"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Low Potential"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Medium Potential"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Linked interactions will appear here."
+msgstr "Các tương tác liên kết sẽ hiển thị ở đây."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "No score detail rows were recorded for this snapshot."
+msgstr "Ảnh chụp điểm này chưa có dòng chi tiết."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Nổi bật"
+msgstr "Nổi bật"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Potential Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Breakdown"
+msgstr "Phân tích điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score History"
+msgstr "Lịch sử điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Overview"
+msgstr "Tổng quan điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score rule"
+msgstr "Quy tắc điểm"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Scoring"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Top Signals"
+msgstr "Tín hiệu chính"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Triggered by"
+msgstr "Kích hoạt bởi"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Warm"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "intents"
+msgstr "ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "snapshots"
+msgstr "lần ghi nhận"
+
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Deal'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Lead'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM
@@ -1059,7 +1180,7 @@ msgstr "Hồ sơ CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
 msgid "CRM Deal Status"
-msgstr "Trạng thái hồ sơ CRM"
+msgstr "Trạng thái giao dịch"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/dropdown_item/dropdown_item.json
@@ -1803,6 +1924,10 @@ msgstr "Đếm"
 #: frontend/src/pages/Organizations.vue:13 frontend/src/pages/Tasks.vue:13
 msgid "Create"
 msgstr "Tạo"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:11
+msgid "Create {0}"
+msgstr "Tạo {0}"
 
 #: frontend/src/components/Modals/DealModal.vue:8
 msgid "Create Deal"
@@ -2561,6 +2686,10 @@ msgstr "ERPNext không được tích hợp với CRM"
 #: frontend/src/pages/Dashboard.vue:16
 msgid "Edit"
 msgstr "Chỉnh sửa"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:10
+msgid "Edit {0}"
+msgstr "Chỉnh sửa {0}"
 
 #: frontend/src/components/Modals/CallLogDetailModal.vue:40
 #: frontend/src/components/Modals/CallLogModal.vue:87
@@ -8467,6 +8596,9 @@ msgstr "Loại trường"
 msgid "CRM Event"
 msgstr "Sự kiện"
 
+msgid "Event"
+msgstr "Sự kiện"
+
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
 msgid "Events"
@@ -8500,6 +8632,9 @@ msgid "Persons"
 msgstr "Cá nhân"
 
 msgid "Person"
+msgstr "Cá nhân"
+
+msgid "CRM Person"
 msgstr "Cá nhân"
 
 msgid "Staff"
@@ -8614,7 +8749,7 @@ msgid "Enrollment Date"
 msgstr "Ngày nhập học"
 
 msgid "Converted to CRM Contact"
-msgstr "Đã chuyển thành hồ sơ CRM"
+msgstr "Đã chuyển thành Liên hệ"
 
 msgid "Links"
 msgstr "Liên kết"
@@ -8728,7 +8863,7 @@ msgid "Active for Admission"
 msgstr "Còn tuyển"
 
 msgid "Convert to Contact"
-msgstr "Chuyển thành hồ sơ CRM"
+msgstr "Chuyển sang hổ sơ tiềm năng"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
@@ -8917,7 +9052,7 @@ msgstr "Lỗi khi cập nhật giai đoạn"
 msgid "Mobile"
 msgstr "Di động"
 
-msgid "Create CRM Contact"
+msgid "Create Contact"
 msgstr "Tạo hồ sơ"
 
 msgid "New CRM Student"
@@ -8951,8 +9086,8 @@ msgstr "Hồ sơ đủ điều kiện"
 msgid "Students by Source"
 msgstr "Học sinh theo nguồn"
 
-msgid "Total CRM Contacts"
-msgstr "Tổng hồ sơ CRM"
+msgid "Total Contacts"
+msgstr "Tổng Liên hệ"
 
 msgid "Total Students"
 msgstr "Tổng học sinh"
@@ -9018,7 +9153,7 @@ msgid "Create your first student"
 msgstr "Tạo học sinh đầu tiên"
 
 msgid "Convert student to contact"
-msgstr "Chuyển học sinh thành hồ sơ CRM"
+msgstr "Chuyển học sinh thành Liên hệ"
 
 #. Help center article names
 msgid "CRM Student"

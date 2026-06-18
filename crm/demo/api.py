@@ -17,21 +17,21 @@ DEMO_SCORE_HISTORIES_KEY = "crm_demo_score_histories"
 DEMO_STUDENTS = [
 	{
 		"student_name": "Minh Anh Nguyen",
-		"phone": "+84 901 100 001",
+		"phone": "0901100001",
 		"email": "minhanh.demo@example.com",
 		"source": "Website",
 		"scores": [54, 63, 72],
 	},
 	{
 		"student_name": "Gia Bao Tran",
-		"phone": "+84 901 100 002",
+		"phone": "0901100002",
 		"email": "giabao.demo@example.com",
 		"source": "Open Day",
 		"scores": [48, 56, 61],
 	},
 	{
 		"student_name": "Linh Chi Pham",
-		"phone": "+84 901 100 003",
+		"phone": "0901100003",
 		"email": "linhchi.demo@example.com",
 		"source": "Facebook",
 		"scores": [60, 68, 77],

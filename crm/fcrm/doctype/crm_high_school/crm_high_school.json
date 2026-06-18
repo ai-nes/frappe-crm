@@ -29,6 +29,7 @@
    "fieldname": "school_name",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "School Name",
    "reqd": 1
   },
@@ -55,11 +56,13 @@
   {
    "fieldname": "ward_code",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Ward Code"
   },
   {
    "fieldname": "ward_name",
    "fieldtype": "Data",
+   "in_standard_filter": 1,
    "label": "Ward Name"
   },
   {

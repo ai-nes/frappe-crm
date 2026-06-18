@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" :routeName="funnelTitle" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Students"
+        :label="funnelTitle"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -24,6 +28,7 @@
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Student"
     :filters="funnelFilters"
+    :quickFilterPresets="potentialScoreFilters"
   />
   <CRMStudentsListView
     v-if="students.data && rows.length"
@@ -48,7 +53,7 @@
   />
   <EmptyState
     v-else-if="students.data && !rows.length"
-    name="CRM Students"
+    name="Students"
     :icon="EnrollmentIcon"
   />
 </template>
@@ -77,9 +82,9 @@ const funnelStage = computed(() => route.query.stage || 'intake')
 
 const funnelTitle = computed(() => {
   if (funnelStage.value === 'enrolled') {
-    return __('Enrolled Students')
+    return 'Enrolled Students'
   }
-  return __('Prospective Students')
+  return 'Prospective Students'
 })
 
 const funnelFilters = computed(() => {
@@ -88,6 +93,26 @@ const funnelFilters = computed(() => {
   }
   return { enrollment_status: ['not in', ['Từ chối']] }
 })
+
+const potentialScoreFilters = computed(() => [
+  {
+    key: 'potential-score',
+    label: __('Potential Score'),
+    fieldname: '_potential_score_tier',
+    fieldtype: 'Select',
+    options: [
+      { label: __('High Potential'), value: 'high' },
+      { label: __('Medium Potential'), value: 'medium' },
+      { label: __('Low Potential'), value: 'low' },
+    ],
+    presetValues: {
+      high: 'high',
+      medium: 'medium',
+      low: 'low',
+    },
+    after: 'enrollment_status',
+  },
+])
 
 watch(
   () => route.query.stage,
@@ -108,7 +133,7 @@ const viewControls = ref(null)
 function createStudent() {
   showModal({
     doctype: 'CRM Student',
-    title: __('New CRM Student'),
+    title: __('Student'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Student', params: { crmStudentId: doc.name } })

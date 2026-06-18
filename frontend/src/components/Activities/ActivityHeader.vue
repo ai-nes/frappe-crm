@@ -83,16 +83,19 @@ import WhatsAppIcon from '@/components/Icons/WhatsAppIcon.vue'
 import { globalStore } from '@/stores/global'
 import { whatsappEnabled } from '@/composables/whatsapp'
 import { callEnabled } from '@/composables/telephony'
-import { Dropdown } from 'frappe-ui'
-import { computed, h } from 'vue'
+import { call, Dropdown } from 'frappe-ui'
+import { computed, h, onMounted, ref } from 'vue'
 
 const props = defineProps({
   tabs: { type: Array, default: () => [] },
   title: { type: String, default: '' },
   doc: { type: Object, default: () => ({}) },
+  doctype: { type: String, default: '' },
   modalRef: { type: Object, default: () => ({}) },
   whatsappBox: { type: Object, default: () => ({}) },
 })
+
+const emit = defineEmits(['assignStaff'])
 
 const { makeCall } = globalStore()
 
@@ -102,6 +105,8 @@ const showWhatsappTemplates = defineModel('showWhatsappTemplates', {
 })
 const showFilesUploader = defineModel('showFilesUploader', { type: Boolean })
 const emailBox = defineModel('emailBox', { type: Object, default: () => ({}) })
+const canAssignStaff = ref(false)
+const staffAssignableDoctypes = ['CRM Student', 'CRM Contact']
 
 const defaultActions = computed(() => {
   let actions = [
@@ -142,6 +147,14 @@ const defaultActions = computed(() => {
       onClick: () => (showFilesUploader.value = true),
     },
     {
+      icon: 'user-check',
+      label: __('Assign Staff'),
+      onClick: () => emit('assignStaff'),
+      condition: () =>
+        staffAssignableDoctypes.includes(props.doctype) &&
+        canAssignStaff.value,
+    },
+    {
       icon: h(WhatsAppIcon, { class: 'h-4 w-4' }),
       label: __('WhatsApp Message'),
       onClick: () => (tabIndex.value = getTabIndex('WhatsApp')),
@@ -156,6 +169,14 @@ const defaultActions = computed(() => {
 function getTabIndex(name) {
   return props.tabs.findIndex((tab) => tab.name === name)
 }
+
+onMounted(async () => {
+  if (staffAssignableDoctypes.includes(props.doctype)) {
+    canAssignStaff.value = await call(
+      'crm.api.staff_assignment.can_assign_staff',
+    )
+  }
+})
 
 const callActions = computed(() => {
   let actions = [

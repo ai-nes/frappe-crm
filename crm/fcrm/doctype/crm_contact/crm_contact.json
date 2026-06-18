@@ -311,5 +311,6 @@
  "sort_order": "DESC",
  "states": [],
  "title_field": "full_name",
+ "track_changes": 1,
  "translated_doctype": 1
 }

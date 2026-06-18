@@ -1,10 +1,20 @@
+import re
+
 import frappe
 from frappe.model.document import Document
 
-from crm.fcrm.utils.geo_resolver import resolve_high_school, resolve_province
+from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 
 class CRMContact(Document):
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		# See CRMStudent.__init__ — Frappe's _validate_links() runs before
+		# before_insert/before_save/validate and breaks free-text Link field
+		# resolution (high_school/province). Disabled here, re-run at the end
+		# of validate() once those fields are resolved.
+		self.flags.ignore_links = True
+
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -69,10 +79,7 @@ class CRMContact(Document):
 		self._set_defaults()
 		self._normalize_shared_fields()
 		self._sync_fields_from_student_if_blank()
-		if self.province:
-			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
+		self._resolve_geo()
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -87,18 +94,49 @@ class CRMContact(Document):
 	def before_save(self):
 		self._normalize_shared_fields()
 		self._sync_fields_from_student_if_blank()
-		if self.province:
-			self.province = resolve_province(self.province)
-		if self.high_school:
-			self.high_school = resolve_high_school(self.high_school, self.province)
+		self._resolve_geo()
+
+	def after_insert(self):
+		self._auto_create_student()
 
 	def on_update(self):
 		self._sync_student_fields()
 
 	def validate(self):
 		self._normalize_shared_fields()
+		self._validate_phone_format()
+		self._resolve_geo()
+		self._validate_high_school_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
+		self.flags.ignore_links = False
+		self._validate_links()
+
+	def _resolve_geo(self):
+		# high_school is intentionally NOT resolved here — _validate_high_school_format()
+		# is the single source of truth for it (resolve_high_school_strict), called right
+		# after this in validate(). Resolving it twice would be wasted work whose result
+		# gets discarded.
+		if self.province:
+			self.province = resolve_province(self.province)
+
+	def _validate_high_school_format(self):
+		if not self.high_school:
+			return
+		self.high_school = resolve_high_school_strict(self.high_school, self.province)
+
+	def _validate_phone_format(self):
+		if not self.phone:
+			return
+		phone = self.phone.strip()
+		if phone.startswith("+84"):
+			phone = "0" + phone[3:]
+		self.phone = phone
+		if not re.fullmatch(r"0\d{9}", phone):
+			frappe.throw(
+				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
+				title="Số điện thoại không hợp lệ",
+			)
 
 	def _validate_unique_phone(self):
 		if not self.phone:
@@ -201,6 +239,31 @@ class CRMContact(Document):
 			if not self.get(fieldname) and value:
 				self.set(fieldname, value)
 
+	def _auto_create_student(self):
+		if self.student:
+			return
+		if not self.phone:
+			return
+		if frappe.db.exists("CRM Student", {"phone": self.phone}):
+			return
+		student = frappe.new_doc("CRM Student")
+		student.student_name = self.full_name
+		student.phone = self.phone
+		student.email = self.email
+		student.enrollment_status = self.enrollment_status
+		student.high_school = self.high_school
+		student.province = self.province
+		student.major = self.major
+		student.aspiration = self.aspiration
+		student.branch = self.branch
+		student.admission_year = self.admission_year
+		student.source = self.source
+		student.assigned_to = self.assigned_to
+		student.alt_name = self.parent_name
+		student.alt_phone = self.parent_phone
+		student.insert(ignore_permissions=True)
+		frappe.db.set_value("CRM Contact", self.name, "student", student.name, update_modified=False)
+
 	def _sync_student_fields(self):
 		if not self.student:
 			return
@@ -220,6 +283,7 @@ class CRMContact(Document):
 				"admission_year",
 				"branch",
 				"enrollment_status",
+				"assigned_to",
 			],
 			as_dict=True,
 		) or {}
@@ -235,6 +299,7 @@ class CRMContact(Document):
 			"admission_year": self.admission_year,
 			"branch": self.branch,
 			"enrollment_status": self.enrollment_status,
+			"assigned_to": self.assigned_to,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
 		if updates:

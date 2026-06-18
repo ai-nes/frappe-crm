@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="CRM Campaigns" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Campaigns"
+        :label="__('Campaigns')"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -47,7 +51,7 @@
   />
   <EmptyState
     v-else-if="crmCampaigns.data && !rows.length"
-    name="CRM Campaigns"
+    name="Campaigns"
     :icon="CRMCampaignIcon"
   />
 </template>
@@ -81,7 +85,7 @@ const viewControls = ref(null)
 function createCRMCampaign() {
   showModal({
     doctype: 'CRM Campaign',
-    title: __('New CRM Campaign'),
+    title: __('Campaign'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Campaign', params: { crmCampaignId: doc.name } })
