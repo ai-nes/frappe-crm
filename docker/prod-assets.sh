@@ -69,17 +69,30 @@ echo "Production assets synced successfully"
 # once `docker/prod-site.sh` (the `setup` profile) has actually created
 # sites/${SITE_NAME}, and there's nothing cached yet to clear anyway.
 if [ -n "${SITE_NAME:-}" ] && [ -d "sites/${SITE_NAME}" ]; then
-    echo "Clearing cached pages for site ${SITE_NAME}"
     # This script runs as root when invoked directly as the `assets`
     # service, but also runs as frappe when prod-site.sh calls it at the
     # end of its own (already-frappe) setup - `su` to the user you already
     # are isn't guaranteed to be password-less, so only su when actually
     # root.
-    if [ "$(id -u)" = "0" ]; then
-        su -s /bin/bash frappe -c "bench --site '${SITE_NAME}' clear-website-cache"
-        su -s /bin/bash frappe -c "bench --site '${SITE_NAME}' clear-cache"
-    else
-        bench --site "${SITE_NAME}" clear-website-cache
-        bench --site "${SITE_NAME}" clear-cache
-    fi
+    run_as_frappe() {
+        if [ "$(id -u)" = "0" ]; then
+            su -s /bin/bash frappe -c "$1"
+        else
+            bash -c "$1"
+        fi
+    }
+
+    # host_name is normally set by prod-site.sh, but that only runs behind
+    # the `setup` profile (deliberately manual, since it also runs
+    # migrate/install-app). Repeating the safe, idempotent part - forcing
+    # https:// so Frappe never builds an absolute URL (OAuth redirect_uri,
+    # emails, webhooks) with the wrong scheme - here means every ordinary
+    # deploy self-heals this without anyone having to remember to run the
+    # setup profile or exec into a container by hand.
+    echo "Ensuring host_name is set for site ${SITE_NAME}"
+    run_as_frappe "bench --site '${SITE_NAME}' set-config host_name 'https://${SITE_NAME}'"
+
+    echo "Clearing cached pages for site ${SITE_NAME}"
+    run_as_frappe "bench --site '${SITE_NAME}' clear-website-cache"
+    run_as_frappe "bench --site '${SITE_NAME}' clear-cache"
 fi
