@@ -83,6 +83,17 @@ services:
       - -lc
       - |
         cat > /etc/nginx/conf.d/default.conf <<'EOF'
+        # Preserve the scheme an upstream TLS-terminating proxy (Traefik,
+        # Dokploy, Cloudflare Tunnel, etc) already set. Without this,
+        # $$scheme below always resolves to "http" - this container only
+        # listens on plain HTTP - which breaks any absolute URL Frappe
+        # builds (OAuth redirect_uri, emails, webhooks) by giving them the
+        # wrong protocol.
+        map $$http_x_forwarded_proto $$proxy_x_forwarded_proto {
+          default $$http_x_forwarded_proto;
+          ''      $$scheme;
+        }
+
         server {
           listen 8080;
           server_name _;
@@ -110,14 +121,14 @@ services:
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $$host;
             proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header X-Forwarded-Proto $$proxy_x_forwarded_proto;
             proxy_pass http://websocket:9000;
           }
 
           location / {
             proxy_set_header Host $$host;
             proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header X-Forwarded-Proto $$proxy_x_forwarded_proto;
             proxy_read_timeout 120s;
             proxy_pass http://backend:8000;
           }
@@ -143,6 +154,18 @@ services:
     pull_policy: always
     user: root
     restart: "no"
+    # SITE_NAME is only needed here (on top of the crm-service anchor's
+    # vars) so prod-assets.sh can clear this site's cached pages - explicit
+    # environment: replaces the anchor's block wholesale in YAML, so every
+    # var the anchor set has to be repeated (same pattern as the `site`
+    # service above).
+    environment:
+      SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
+      DB_HOST: mariadb
+      REDIS_CACHE: redis://redis-cache:6379
+      REDIS_QUEUE: redis://redis-queue:6379
+      REDIS_SOCKETIO: redis://redis-queue:6379
+      SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
     command: bash /opt/frappe/scripts/prod-assets.sh
 
   backend:
