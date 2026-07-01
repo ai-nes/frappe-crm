@@ -24,7 +24,7 @@ def execute():
     }
 
     for name, layout in updates.items():
-        if frappe.db.exists("CRM Fields Layout", name):
-            frappe.db.set_value("CRM Fields Layout", name, "layout", layout)
+        if frappe.db.exists("Fields Layout", name):
+            frappe.db.set_value("Fields Layout", name, "layout", layout)
 
     frappe.clear_cache(doctype="CRM Contact")

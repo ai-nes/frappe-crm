@@ -59,9 +59,16 @@ services:
       timeout: 5s
       retries: 12
 
+  # Runs on every `docker compose up`, not just first-time setup - creates
+  # the site if missing, then always runs `bench migrate` so the DB schema
+  # never drifts behind the deployed app code (this used to be gated behind
+  # the `setup` profile, which meant ordinary deploys silently skipped
+  # migrate and left new DocType columns like User.form_navigation_buttons
+  # missing until someone remembered to run this by hand).
   site:
     <<: *crm-service
     command: bash /opt/frappe/scripts/prod-site.sh
+    restart: "no"
     environment:
       SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in docker/.env}
@@ -72,8 +79,6 @@ services:
       REDIS_SOCKETIO: redis://redis-queue:6379
       SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
     depends_on: *crm-depends-on
-    profiles:
-      - setup
 
   nginx:
     image: nginx:1.27-alpine
@@ -167,6 +172,12 @@ services:
       REDIS_SOCKETIO: redis://redis-queue:6379
       SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
     command: bash /opt/frappe/scripts/prod-assets.sh
+    # Must run after `site` so the schema (and thus the cache it clears) is
+    # already migrated - everything else waits on `assets` completing, so
+    # this one edge is enough to put `site` ahead of the whole stack.
+    depends_on:
+      site:
+        condition: service_completed_successfully
 
   backend:
     <<: *crm-service
