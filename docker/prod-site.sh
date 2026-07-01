@@ -35,5 +35,12 @@ fi
 
 bench use "${SITE_NAME}"
 bench --site "${SITE_NAME}" migrate
+# Force https:// regardless of what X-Forwarded-Proto the reverse proxy in
+# front of nginx sends - nginx itself only listens on plain HTTP, so
+# without this any absolute URL Frappe builds (OAuth redirect_uri, emails,
+# webhooks) can end up http:// even when the site is only ever reachable
+# over https.
+bench --site "${SITE_NAME}" set-config host_name "https://${SITE_NAME}"
+bench --site "${SITE_NAME}" clear-website-cache
 bench --site "${SITE_NAME}" clear-cache
 bash /opt/frappe/scripts/prod-assets.sh

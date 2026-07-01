@@ -56,3 +56,30 @@ ls -lh sites/assets/crm/frontend/assets/index-*.css
 ls -lh sites/assets/crm/frontend/assets/index-*.js
 
 echo "Production assets synced successfully"
+
+# Every regular deploy re-syncs content-hashed asset filenames above, but
+# Frappe also caches rendered guest pages (like /login) in Redis, which is
+# a long-lived service that outlives this one-shot container. Without
+# clearing that cache here too, a stale cached page keeps pointing at the
+# previous deploy's asset hashes until something else happens to clear it -
+# confirmed in practice on a sibling project (frappe/lms) as 404s on
+# *.bundle.*.css/js that an asset resync alone did not fix.
+#
+# Skipped on the very first deploy: SITE_NAME is only set on this service
+# once `docker/prod-site.sh` (the `setup` profile) has actually created
+# sites/${SITE_NAME}, and there's nothing cached yet to clear anyway.
+if [ -n "${SITE_NAME:-}" ] && [ -d "sites/${SITE_NAME}" ]; then
+    echo "Clearing cached pages for site ${SITE_NAME}"
+    # This script runs as root when invoked directly as the `assets`
+    # service, but also runs as frappe when prod-site.sh calls it at the
+    # end of its own (already-frappe) setup - `su` to the user you already
+    # are isn't guaranteed to be password-less, so only su when actually
+    # root.
+    if [ "$(id -u)" = "0" ]; then
+        su -s /bin/bash frappe -c "bench --site '${SITE_NAME}' clear-website-cache"
+        su -s /bin/bash frappe -c "bench --site '${SITE_NAME}' clear-cache"
+    else
+        bench --site "${SITE_NAME}" clear-website-cache
+        bench --site "${SITE_NAME}" clear-cache
+    fi
+fi
