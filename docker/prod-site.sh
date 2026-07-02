@@ -23,6 +23,13 @@ bench set-redis-socketio-host "${REDIS_SOCKETIO}"
 bench set-config -g socketio_port "${SOCKETIO_PORT}"
 bench set-config -g developer_mode 0
 bench set-config -g maintenance_mode 0
+# Without restart_supervisor_on_update/restart_systemd_on_update, Frappe's
+# get_url() (frappe/utils/data.py) treats this as a bare bench-dev setup and
+# appends ":${webserver_port}" to every absolute URL it builds - including
+# the OAuth redirect_uri - even when host_name is explicitly set. This
+# container is never managed by supervisor/systemd, but setting this flag is
+# the documented way to tell Frappe "production mode, don't touch host_name".
+bench set-config -g restart_systemd_on_update 1
 
 if [ ! -d "sites/${SITE_NAME}" ]; then
     bench new-site "${SITE_NAME}" \
