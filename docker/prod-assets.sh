@@ -92,6 +92,14 @@ if [ -n "${SITE_NAME:-}" ] && [ -d "sites/${SITE_NAME}" ]; then
     echo "Ensuring host_name is set for site ${SITE_NAME}"
     run_as_frappe "bench --site '${SITE_NAME}' set-config host_name 'https://${SITE_NAME}'"
 
+    # Without this global flag, Frappe's get_url() (frappe/utils/data.py)
+    # assumes an unmanaged bench-dev setup and appends ":${webserver_port}"
+    # to every absolute URL it builds - including the OAuth redirect_uri -
+    # even when host_name above is correctly set. Repeating it here (on top
+    # of prod-site.sh) makes it self-heal the same way host_name does.
+    echo "Ensuring restart_systemd_on_update is set (prevents Frappe appending webserver_port to absolute URLs)"
+    run_as_frappe "bench set-config -g restart_systemd_on_update 1"
+
     echo "Clearing cached pages for site ${SITE_NAME}"
     run_as_frappe "bench --site '${SITE_NAME}' clear-website-cache"
     run_as_frappe "bench --site '${SITE_NAME}' clear-cache"
