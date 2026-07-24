@@ -15,6 +15,12 @@ cd "${BENCH_DIR}"
 
 mkdir -p sites
 cp -an /opt/frappe/sites-template/. sites/
+# apps.txt lists which apps this bench image has built in - not site data -
+# so unlike the rest of sites-template it must always be re-synced from the
+# image, otherwise a stale copy on the persistent `sites` volume shadows any
+# app added in a newer image and `bench install-app` fails with
+# "App <name> not in apps.txt".
+cp -f /opt/frappe/sites-template/apps.txt sites/apps.txt
 
 bench set-mariadb-host "${DB_HOST}"
 bench set-redis-cache-host "${REDIS_CACHE}"
