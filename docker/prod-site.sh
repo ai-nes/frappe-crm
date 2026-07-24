@@ -41,6 +41,9 @@ if [ ! -d "sites/${SITE_NAME}" ]; then
 fi
 
 bench use "${SITE_NAME}"
+# install-app is idempotent (no-op if already installed), so this stays safe
+# to run on every deploy rather than only when the site is first created.
+bench --site "${SITE_NAME}" install-app dfp_external_storage
 bench --site "${SITE_NAME}" migrate
 # Force https:// regardless of what X-Forwarded-Proto the reverse proxy in
 # front of nginx sends - nginx itself only listens on plain HTTP, so
