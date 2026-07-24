@@ -51,7 +51,7 @@ RUN cd apps/crm/frontend \
 
 COPY --chown=frappe:frappe . ${BENCH_DIR}/apps/crm
 
-RUN bench get-app --branch version-15 https://github.com/developmentforpeople/dfp_external_storage.git
+RUN bench get-app --branch version-15 --skip-assets https://github.com/developmentforpeople/dfp_external_storage.git
 
 RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
     && cd apps/crm/frontend \
