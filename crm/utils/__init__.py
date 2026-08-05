@@ -1,4 +1,5 @@
 import functools
+import re
 
 import frappe
 import phonenumbers
@@ -9,6 +10,65 @@ from frappe.core.doctype.communication.communication import Communication
 from frappe.utils import floor, now
 from phonenumbers import NumberParseException
 from phonenumbers import PhoneNumberFormat as PNF
+
+
+def normalize_phone_for_lookup(phone_number: str | None) -> str:
+	if not phone_number:
+		return ""
+
+	digits = re.sub(r"\D", "", str(phone_number))
+	if digits.startswith("84") and len(digits) == 11:
+		return "0" + digits[2:]
+	if digits.startswith("0") and len(digits) == 10:
+		return digits
+	if len(digits) == 9:
+		return "0" + digits
+	return digits
+
+
+def get_phone_lookup_terms(phone_number: str | None) -> list[str]:
+	normalized = normalize_phone_for_lookup(phone_number)
+	if not normalized:
+		return []
+
+	terms = {normalized}
+	if normalized.startswith("0") and len(normalized) == 10:
+		national = normalized[1:]
+		terms.update({national, f"84{national}"})
+	elif normalized.startswith("84") and len(normalized) == 11:
+		national = normalized[2:]
+		terms.update({national, f"0{national}"})
+
+	return sorted(terms)
+
+
+def _validate_sql_identifier(value: str) -> str:
+	if not re.fullmatch(r"[A-Za-z0-9_ ]+", value or ""):
+		frappe.throw(_("Invalid SQL identifier: {0}").format(value))
+	return value
+
+
+def get_docs_by_phone(doctype: str, phone_number: str | None, phone_field: str = "phone") -> list[frappe._dict]:
+	terms = get_phone_lookup_terms(phone_number)
+	if not terms:
+		return []
+
+	doctype = _validate_sql_identifier(doctype)
+	phone_field = _validate_sql_identifier(phone_field)
+	normalized_phone = (
+		f"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(`{phone_field}`, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')"
+	)
+	placeholders = ", ".join(["%s"] * len(terms))
+	return frappe.db.sql(
+		f"""
+		SELECT name
+		FROM `tab{doctype}`
+		WHERE {normalized_phone} IN ({placeholders})
+		ORDER BY modified DESC
+		""",
+		tuple(terms),
+		as_dict=True,
+	)
 
 
 def parse_phone_number(phone_number: str, default_country: str = "IN"):

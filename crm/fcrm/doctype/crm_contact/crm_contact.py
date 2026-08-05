@@ -258,6 +258,7 @@ class CRMContact(Document):
 		student.branch = self.branch
 		student.admission_year = self.admission_year
 		student.source = self.source
+		student.assigned_to = self.assigned_to
 		student.alt_name = self.parent_name
 		student.alt_phone = self.parent_phone
 		student.insert(ignore_permissions=True)
@@ -282,6 +283,7 @@ class CRMContact(Document):
 				"admission_year",
 				"branch",
 				"enrollment_status",
+				"assigned_to",
 			],
 			as_dict=True,
 		) or {}
@@ -297,6 +299,7 @@ class CRMContact(Document):
 			"admission_year": self.admission_year,
 			"branch": self.branch,
 			"enrollment_status": self.enrollment_status,
+			"assigned_to": self.assigned_to,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
 		if updates:

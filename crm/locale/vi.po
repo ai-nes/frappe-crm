@@ -70,6 +70,127 @@ msgstr "1 tuần trước"
 msgid "1 year ago"
 msgstr "1 năm trước"
 
+#: frontend/src/components/Modals/AssignStaffModal.vue
+#: frontend/src/components/ListBulkActions.vue
+msgid "Assign Staff"
+msgstr "Gán nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Assigned staff for {0} record(s)"
+msgstr "Đã gán nhân sự cho {0} bản ghi"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Select staff"
+msgstr "Chọn nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Staff"
+msgstr "Nhân sự"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Cold"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Engage W."
+msgstr "TL tương tác"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Fit W."
+msgstr "TL phù hợp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Hot"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent Summary"
+msgstr "Tổng quan ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent W."
+msgstr "TL ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Lead Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "High Potential"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Low Potential"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Medium Potential"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Linked interactions will appear here."
+msgstr "Các tương tác liên kết sẽ hiển thị ở đây."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "No score detail rows were recorded for this snapshot."
+msgstr "Ảnh chụp điểm này chưa có dòng chi tiết."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Nổi bật"
+msgstr "Nổi bật"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Potential Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Breakdown"
+msgstr "Phân tích điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score History"
+msgstr "Lịch sử điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Overview"
+msgstr "Tổng quan điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score rule"
+msgstr "Quy tắc điểm"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Scoring"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Top Signals"
+msgstr "Tín hiệu chính"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Triggered by"
+msgstr "Kích hoạt bởi"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Warm"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "intents"
+msgstr "ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "snapshots"
+msgstr "lần ghi nhận"
+
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Deal'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Lead'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM

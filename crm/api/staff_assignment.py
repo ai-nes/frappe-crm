@@ -1,0 +1,61 @@
+import json
+
+import frappe
+from frappe import _
+
+
+ASSIGNABLE_DOCTYPES = {"CRM Student", "CRM Contact"}
+STAFF_ASSIGN_DENIED_ROLES = {"Sale", "CTV-Sale", "Promoter-PR"}
+STAFF_ASSIGN_ALLOWED_ROLES = {"System Manager", "Administrator", "Team Leader", "Counseller"}
+
+
+def _has_staff_assign_permission(user: str | None = None) -> bool:
+	user = user or frappe.session.user
+	if user == "Administrator":
+		return True
+	roles = set(frappe.get_roles(user))
+	if roles.intersection(STAFF_ASSIGN_ALLOWED_ROLES):
+		return True
+	if roles.intersection(STAFF_ASSIGN_DENIED_ROLES):
+		return False
+	return False
+
+
+@frappe.whitelist()
+def can_assign_staff() -> bool:
+	return _has_staff_assign_permission()
+
+
+@frappe.whitelist()
+def assign_staff(doctype: str, names: str | list, staff: str):
+	if doctype not in ASSIGNABLE_DOCTYPES:
+		frappe.throw(_("Staff assignment is only supported for CRM Student and CRM Contact."), frappe.PermissionError)
+
+	if not _has_staff_assign_permission():
+		frappe.throw(_("You are not permitted to assign staff."), frappe.PermissionError)
+
+	if isinstance(names, str):
+		names = json.loads(names)
+	if not isinstance(names, list) or not names:
+		frappe.throw(_("Please select at least one record."))
+
+	if not staff or not frappe.db.exists("CRM Staff", staff):
+		frappe.throw(_("Please select a valid CRM Staff."))
+
+	updated = 0
+	for name in names:
+		doc = frappe.get_doc(doctype, name)
+		if not doc.has_permission("write"):
+			frappe.throw(_("Not permitted to update {0}").format(name), frappe.PermissionError)
+		doc.assigned_to = staff
+		doc.save()
+		if doctype == "CRM Student":
+			contact = frappe.db.get_value("CRM Contact", {"student": name}, "name")
+			if contact:
+				frappe.db.set_value("CRM Contact", contact, "assigned_to", staff, update_modified=False)
+		elif doctype == "CRM Contact" and doc.get("student"):
+			frappe.db.set_value("CRM Student", doc.student, "assigned_to", staff, update_modified=False)
+		updated += 1
+
+	frappe.db.commit()
+	return {"updated": updated}

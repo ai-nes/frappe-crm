@@ -117,6 +117,24 @@ describe('getContextualLinkFilters', () => {
       ),
     ).toEqual({ crm_campaign: 'Open Day', province: 'Ha Noi' })
   })
+
+  it('filters CRM High School by selected province and ward code', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM High School' },
+        { province: 'Ha Noi', ward: '001 - Ha Noi' },
+      ),
+    ).toEqual({ province_name: 'Ha Noi', ward_code: '001' })
+  })
+
+  it('filters CRM High School by selected province and ward name', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM High School' },
+        { province: 'Lam Dong', ward: 'Phuong Phu Thuy' },
+      ),
+    ).toEqual({ province_name: 'Lam Dong', ward_name: 'Phuong Phu Thuy' })
+  })
 })
 
 describe('getDependentFieldsToClear', () => {
@@ -138,5 +156,14 @@ describe('getDependentFieldsToClear', () => {
         crm_campaign: 'Old Campaign',
       }),
     ).toEqual(['crm_campaign'])
+  })
+
+  it('clears high school when ward changes', () => {
+    expect(
+      getDependentFieldsToClear('ward', {
+        ward: '001 - Ha Noi',
+        high_school: 'Old School',
+      }),
+    ).toEqual(['high_school'])
   })
 })

@@ -18,17 +18,34 @@ function getCampusContext(doc) {
   return doc?.campus || doc?.branch
 }
 
+function getLinkedDocCode(value) {
+  if (typeof value !== 'string') return null
+  const code = value.includes(' - ') ? value.split(' - ')[0]?.trim() : value
+  if (!/^\d+$/.test(code)) return null
+  return code || null
+}
+
+function getWardNameContext(value) {
+  if (typeof value !== 'string' || !value) return null
+  if (value.includes(' - ')) return null
+  return value
+}
+
 export function getContextualLinkFilters(field, doc, baseFilters = null) {
   if (!field || field.fieldtype !== 'Link' || !doc) {
     return baseFilters
   }
 
   const campus = getCampusContext(doc)
+  const wardCode = getLinkedDocCode(doc.ward)
+  const wardName = getWardNameContext(doc.ward)
   const filtersByDoctype = {
     'CRM Ward': doc.province ? { province: doc.province } : null,
-    'CRM High School': doc.province
-      ? { province_name: doc.province }
-      : null,
+    'CRM High School': {
+      ...(doc.province ? { province_name: doc.province } : {}),
+      ...(wardCode ? { ward_code: wardCode } : {}),
+      ...(wardName ? { ward_name: wardName } : {}),
+    },
     'CRM Campus': doc.province ? { province: doc.province } : null,
     'CRM Department': campus ? { campus } : null,
     'CRM Campaign': campus ? { campus } : null,
@@ -59,6 +76,7 @@ export function getProvinceScopedLinkFilters(field, doc, baseFilters = null) {
 export function getDependentFieldsToClear(fieldname, doc = {}) {
   const dependencies = {
     province: ['ward', 'high_school', 'branch', 'campus', 'crm_event'],
+    ward: ['high_school'],
     branch: ['crm_campaign'],
     campus: ['department', 'crm_campaign'],
     department: ['assigned_to'],

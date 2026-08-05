@@ -293,6 +293,8 @@ def get_data(
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
 
+	query_filters = get_query_filters(doctype, filters)
+
 	is_default = True
 	data = []
 	_list = get_controller(doctype)
@@ -356,7 +358,7 @@ def get_data(
 			frappe.get_list(
 				doctype,
 				fields=rows,
-				filters=filters,
+				filters=query_filters,
 				order_by=order_by,
 				page_length=page_length,
 			)
@@ -530,12 +532,38 @@ def get_data(
 		"page_length_count": page_length_count,
 		"is_default": is_default,
 		"views": get_views(doctype),
-		"total_count": frappe.get_list(doctype, filters=filters, fields=[COUNT_NAME])[0].total_count,
+		"total_count": frappe.get_list(doctype, filters=query_filters, fields=[COUNT_NAME])[
+			0
+		].total_count,
 		"row_count": len(data),
 		"form_script": get_form_script(doctype),
 		"list_script": get_form_script(doctype, "List"),
 		"view_type": view_type,
 	}
+
+
+def get_query_filters(doctype, filters):
+	if doctype != "CRM Student":
+		return filters
+
+	potential_score_tier = filters.get("_potential_score_tier")
+	if not potential_score_tier:
+		return filters
+
+	query_filters = convert_filter_to_tuple(
+		doctype,
+		{key: value for key, value in filters.items() if key != "_potential_score_tier"},
+	)
+
+	if potential_score_tier == "high":
+		query_filters.append([doctype, "latest_score", ">=", 80])
+	elif potential_score_tier == "medium":
+		query_filters.append([doctype, "latest_score", ">=", 50])
+		query_filters.append([doctype, "latest_score", "<", 80])
+	elif potential_score_tier == "low":
+		query_filters.append([doctype, "latest_score", "<", 50])
+
+	return query_filters
 
 
 def parse_list_data(data, doctype):

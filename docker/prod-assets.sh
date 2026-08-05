@@ -56,3 +56,51 @@ ls -lh sites/assets/crm/frontend/assets/index-*.css
 ls -lh sites/assets/crm/frontend/assets/index-*.js
 
 echo "Production assets synced successfully"
+
+# Every regular deploy re-syncs content-hashed asset filenames above, but
+# Frappe also caches rendered guest pages (like /login) in Redis, which is
+# a long-lived service that outlives this one-shot container. Without
+# clearing that cache here too, a stale cached page keeps pointing at the
+# previous deploy's asset hashes until something else happens to clear it -
+# confirmed in practice on a sibling project (frappe/lms) as 404s on
+# *.bundle.*.css/js that an asset resync alone did not fix.
+#
+# Skipped on the very first deploy: SITE_NAME is only set on this service
+# once `docker/prod-site.sh` (the `setup` profile) has actually created
+# sites/${SITE_NAME}, and there's nothing cached yet to clear anyway.
+if [ -n "${SITE_NAME:-}" ] && [ -d "sites/${SITE_NAME}" ]; then
+    # This script runs as root when invoked directly as the `assets`
+    # service, but also runs as frappe when prod-site.sh calls it at the
+    # end of its own (already-frappe) setup - `su` to the user you already
+    # are isn't guaranteed to be password-less, so only su when actually
+    # root.
+    run_as_frappe() {
+        if [ "$(id -u)" = "0" ]; then
+            su -s /bin/bash frappe -c "$1"
+        else
+            bash -c "$1"
+        fi
+    }
+
+    # host_name is normally set by prod-site.sh, but that only runs behind
+    # the `setup` profile (deliberately manual, since it also runs
+    # migrate/install-app). Repeating the safe, idempotent part - forcing
+    # https:// so Frappe never builds an absolute URL (OAuth redirect_uri,
+    # emails, webhooks) with the wrong scheme - here means every ordinary
+    # deploy self-heals this without anyone having to remember to run the
+    # setup profile or exec into a container by hand.
+    echo "Ensuring host_name is set for site ${SITE_NAME}"
+    run_as_frappe "bench --site '${SITE_NAME}' set-config host_name 'https://${SITE_NAME}'"
+
+    # Without this global flag, Frappe's get_url() (frappe/utils/data.py)
+    # assumes an unmanaged bench-dev setup and appends ":${webserver_port}"
+    # to every absolute URL it builds - including the OAuth redirect_uri -
+    # even when host_name above is correctly set. Repeating it here (on top
+    # of prod-site.sh) makes it self-heal the same way host_name does.
+    echo "Ensuring restart_systemd_on_update is set (prevents Frappe appending webserver_port to absolute URLs)"
+    run_as_frappe "bench set-config -g restart_systemd_on_update 1"
+
+    echo "Clearing cached pages for site ${SITE_NAME}"
+    run_as_frappe "bench --site '${SITE_NAME}' clear-website-cache"
+    run_as_frappe "bench --site '${SITE_NAME}' clear-cache"
+fi

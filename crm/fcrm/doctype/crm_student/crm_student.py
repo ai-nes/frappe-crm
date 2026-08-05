@@ -184,6 +184,7 @@ class CRMStudent(Document):
 				"branch",
 				"parent_name",
 				"parent_phone",
+				"assigned_to",
 			],
 			as_dict=True,
 		) or {}
@@ -200,6 +201,7 @@ class CRMStudent(Document):
 			"branch": self.branch,
 			"parent_name": self.alt_name,
 			"parent_phone": self.alt_phone,
+			"assigned_to": self.assigned_to,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
 		if updates:
@@ -234,6 +236,13 @@ class CRMStudent(Document):
 				"width": "12rem",
 			},
 			{
+				"label": "Assigned To",
+				"type": "Link",
+				"key": "assigned_to",
+				"options": "CRM Staff",
+				"width": "12rem",
+			},
+			{
 				"label": "Source",
 				"type": "Link",
 				"key": "source",
@@ -253,6 +262,7 @@ class CRMStudent(Document):
 			"phone",
 			"email",
 			"enrollment_status",
+			"assigned_to",
 			"source",
 			"modified",
 		]
@@ -290,7 +300,7 @@ def convert_to_contact(student_name):
 		"admission_year": student.admission_year,
 		"branch": student.branch,
 		"student": student.name,
-		"assigned_to": crm_staff_name,
+		"assigned_to": student.assigned_to or crm_staff_name,
 		"enrollment_status": "Có triển vọng",
 		"lead_status": "Mới",
 		"parent_name": student.alt_name,
