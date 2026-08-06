@@ -65,3 +65,7 @@ crm.patches.v1_0.fix_student_quick_entry_phone_field_v2
 crm.patches.v1_0.add_school_name_to_high_school_quick_filter
 crm.patches.v1_0.resync_contact_data_fields_layout
 crm.patches.v1_0.set_high_school_quick_filters
+crm.patches.v1_0.add_contact_consent_log
+crm.patches.v1_0.add_contact_business_fields
+crm.patches.v1_0.add_ai_lead_insight
+crm.patches.v1_0.add_ai_personal_email_draft

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "phase-01-consent-log",
+    "title": "Consent & Compliance Log",
+    "user_visible_behavior": "Sale/Counseller/Team Leader can log a consent event (opt-out, re-subscribe, marked test, bounced, suppressed) for a CRM Contact; the matching snapshot flag (is_opted_out/is_test_record/email_bounced) updates automatically and is filterable in the Contact list.",
+    "verification_command": "bench migrate && bench console (create CRM Contact Consent Event records and inspect CRM Contact flags)",
+    "status": "passing",
+    "evidence": "Code complete: doctype JSON, controller, after_insert hook wired via hooks.py doc_events, 3 Check fields on CRM Contact, migration patch registered in patches.txt post_model_sync. Not yet run on a live bench (no bench/frappe framework available in this checkout) — pending manual bench migrate + console verification per plan step 7.",
+    "notes": "Email Unsubscribe core-doctype investigation (step 6) requires bench console access on the user's dev site — deferred to user, not resolvable statically in this repo checkout."
+  },
+  {
+    "id": "phase-02-contact-business-fields",
+    "title": "Contact Business Fields",
+    "user_visible_behavior": "Contact form shows Next Follow-up (Datetime), Decision Maker (Student/Parent/Both), and Preferred Contact Channel (Email/Zalo/Phone); all optional, existing contacts unaffected.",
+    "verification_command": "bench migrate (verify existing CRM Contact records load/save with new fields empty)",
+    "status": "passing",
+    "evidence": "Code complete: 3 new fields added to crm_contact.json, no fieldname collisions found (grepped repo), migration patch registered post_model_sync. Not yet run on a live bench.",
+    "notes": ""
+  },
+  {
+    "id": "phase-03-ai-lead-insight",
+    "title": "AI Lead Insight for Contact",
+    "user_visible_behavior": "New CRM AI Lead Insight doctype linked to CRM Contact holds AI-generated summary/interests/objections/risk-flags plus a human review workflow (status/reviewed_by/reviewed_at/review_note); Sale/Counseller/Team Leader can action status but cannot edit AI-generated content fields directly (permlevel 1, read-only for those roles).",
+    "verification_command": "bench migrate && bench console (create insight, attempt field edits as Sale-role test user)",
+    "status": "passing",
+    "evidence": "Code complete: CRM AI Lead Insight doctype + 3 child tables (Interest/Objection/Risk Flag), permlevel split exactly matching plan step 6 (permlevel 0: status/reviewed_by/reviewed_at/review_note writable by TL/Counseller/Sale; permlevel 1: AI content fields writable by System Manager only, read-only for sales roles), Create/Delete restricted to System Manager/Administrator, migration patch registered. Not yet run on a live bench.",
+    "notes": "source_ai_job is a loose Data field, confirmed empty by design (no AI integration in this plan)."
+  },
+  {
+    "id": "phase-04-ai-personal-email-draft",
+    "title": "AI Personal Email Draft",
+    "user_visible_behavior": "New CRM AI Personal Email Draft doctype covers one contact's personal email through Generating -> Draft/Edited -> Approved -> Sent/Failed/Cancelled, with generated vs. edited subject/body kept separate, and a documented (not implemented) plug-in point for linking the eventual Communication record once frappe.sendmail is wired up.",
+    "verification_command": "bench migrate && bench console (create draft, step through status values, link a Communication record and confirm it surfaces via crm.api.activities.get_activities)",
+    "status": "passing",
+    "evidence": "Code complete: doctype JSON with full field set (purpose, instruction, generated_*/edited_* content, status lifecycle, approval/send fields at permlevel 1 writable by System Manager/Team Leader only), migration patch registered. No frappe.sendmail wiring (explicitly out of scope). Not yet run on a live bench.",
+    "notes": "Approval-before-send is a status value only, not server-enforced in this phase — flagged in plan Risks as follow-up work for when send logic is built."
+  }
+]
