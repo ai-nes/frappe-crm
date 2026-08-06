@@ -3,6 +3,7 @@
   <ChatboxPanel
     v-if="isOpen"
     :messages="messages"
+    :suggestions="suggestions"
     @close="isOpen = false"
     @send="handleSend"
   />
@@ -23,6 +24,12 @@ const messages = ref([
     text: __('Sure, pulling up your open deals now...'),
   },
 ])
+
+const suggestions = [
+  __('Show my open deals'),
+  __('List today’s tasks'),
+  __('Any leads assigned to me?'),
+]
 
 const cannedReplies = [
   __("Got it, I'm looking into that now."),

@@ -32,6 +32,19 @@
         </div>
       </div>
     </div>
+    <div
+      v-if="props.suggestions.length"
+      class="flex flex-wrap gap-1.5 border-t px-3 py-2"
+    >
+      <button
+        v-for="suggestion in suggestions"
+        :key="suggestion"
+        class="rounded-full border px-2.5 py-1 text-xs text-ink-gray-7 hover:bg-surface-gray-2"
+        @click="sendText(suggestion)"
+      >
+        {{ suggestion }}
+      </button>
+    </div>
     <div class="flex items-center gap-2 border-t px-3 py-3">
       <FormControl
         v-model="draft"
@@ -53,16 +66,24 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  suggestions: {
+    type: Array,
+    default: () => [],
+  },
 })
 const emit = defineEmits(['close', 'send'])
 
 const draft = ref('')
 const messageList = ref(null)
 
+function sendText(text) {
+  emit('send', text)
+}
+
 function send() {
   const text = draft.value.trim()
   if (!text) return
-  emit('send', text)
+  sendText(text)
   draft.value = ''
 }
 
