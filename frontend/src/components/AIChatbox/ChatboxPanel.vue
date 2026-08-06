@@ -1,17 +1,31 @@
 <template>
   <div
-    class="fixed bottom-20 right-5 z-20 flex h-[480px] w-[360px] flex-col overflow-hidden rounded-lg border bg-surface-modal shadow-2xl"
+    class="fixed z-20 flex flex-col overflow-hidden rounded-lg border bg-surface-modal shadow-2xl transition-all"
+    :class="
+      expanded
+        ? 'inset-8 h-auto w-auto'
+        : 'bottom-20 right-5 h-[480px] w-[360px]'
+    "
   >
     <div class="flex items-center justify-between border-b px-4 py-3">
       <div class="text-base font-semibold text-ink-gray-9">
         {{ __('AI Assistant') }}
       </div>
-      <button
-        class="flex h-6 w-6 items-center justify-center rounded text-ink-gray-6 hover:bg-surface-gray-2"
-        @click="$emit('close')"
-      >
-        <FeatherIcon name="x" class="h-4 w-4" />
-      </button>
+      <div class="flex items-center gap-1">
+        <button
+          class="flex h-6 w-6 items-center justify-center rounded text-ink-gray-6 hover:bg-surface-gray-2"
+          @click="expanded = !expanded"
+        >
+          <MinimizeIcon v-if="expanded" class="h-4 w-4" />
+          <MaximizeIcon v-else class="h-4 w-4" />
+        </button>
+        <button
+          class="flex h-6 w-6 items-center justify-center rounded text-ink-gray-6 hover:bg-surface-gray-2"
+          @click="$emit('close')"
+        >
+          <FeatherIcon name="x" class="h-4 w-4" />
+        </button>
+      </div>
     </div>
     <div ref="messageList" class="flex-1 space-y-3 overflow-y-auto px-4 py-3">
       <div
@@ -60,6 +74,8 @@
 <script setup>
 import { nextTick, ref, watch } from 'vue'
 import { Button, FeatherIcon, FormControl } from 'frappe-ui'
+import MaximizeIcon from '@/components/Icons/MaximizeIcon.vue'
+import MinimizeIcon from '@/components/Icons/MinimizeIcon.vue'
 
 const props = defineProps({
   messages: {
@@ -75,6 +91,7 @@ const emit = defineEmits(['close', 'send'])
 
 const draft = ref('')
 const messageList = ref(null)
+const expanded = ref(false)
 
 function sendText(text) {
   emit('send', text)
