@@ -1,5 +1,15 @@
 <template>
-  <Dialog v-model="show" :options="{ title: __('AI Draft'), size: '2xl' }">
+  <Dialog v-model="show" :options="{ size: '2xl' }">
+    <template #body-title>
+      <div class="flex items-center gap-2">
+        <span
+          class="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-violet-500 to-blue-500"
+        >
+          <SparkleIcon class="h-3.5 w-3.5 text-white" />
+        </span>
+        <h3 class="text-2xl font-semibold text-ink-gray-9">{{ __('AI Draft') }}</h3>
+      </div>
+    </template>
     <template #body-content>
       <div v-if="state === 'request'" class="flex flex-col gap-4">
         <FormControl
@@ -16,36 +26,50 @@
         />
         <div v-if="error" class="text-sm text-ink-red-3">{{ error }}</div>
         <div class="flex justify-end">
-          <Button
-            variant="solid"
-            :label="__('Generate')"
-            :disabled="!purpose"
-            @click="generate()"
-          />
+          <Button variant="solid" :disabled="!purpose" @click="generate()">
+            <template #prefix><SparkleIcon class="h-4 w-4" /></template>
+            {{ __('Generate') }}
+          </Button>
         </div>
       </div>
 
       <div v-else class="flex flex-col gap-4">
-        <div v-if="loading" class="flex h-40 items-center justify-center">
-          <LoadingIndicator class="h-6 w-6 text-ink-gray-4" />
+        <div
+          v-if="loading"
+          class="flex h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-outline-gray-3"
+        >
+          <SparkleIcon class="h-5 w-5 animate-pulse text-violet-500" />
+          <div class="text-sm text-ink-gray-5">{{ __('Generating draft…') }}</div>
         </div>
         <template v-else>
           <div v-if="error" class="text-sm text-ink-red-3">{{ error }}</div>
-          <template v-else>
-            <div>
-              <div class="mb-1 text-xs text-ink-gray-4">{{ __('SUBJECT') }}</div>
-              <div class="text-base text-ink-gray-9">{{ subject }}</div>
+          <div
+            v-else
+            class="rounded-lg bg-gradient-to-br from-violet-50 to-blue-50 p-[1px]"
+          >
+            <div class="flex flex-col gap-3 rounded-[7px] bg-surface-modal p-4">
+              <div class="flex items-center gap-1.5 text-xs font-medium text-violet-500">
+                <SparkleIcon class="h-3.5 w-3.5" />
+                {{ __('AI generated') }}
+              </div>
+              <div>
+                <div class="mb-1 text-xs text-ink-gray-4">{{ __('SUBJECT') }}</div>
+                <div class="text-base text-ink-gray-9">{{ subject }}</div>
+              </div>
+              <div>
+                <div class="mb-1 text-xs text-ink-gray-4">{{ __('BODY') }}</div>
+                <div class="whitespace-pre-wrap text-sm text-ink-gray-8">{{ body }}</div>
+              </div>
             </div>
-            <div>
-              <div class="mb-1 text-xs text-ink-gray-4">{{ __('BODY') }}</div>
-              <div class="whitespace-pre-wrap text-sm text-ink-gray-8">{{ body }}</div>
-            </div>
-          </template>
+          </div>
         </template>
         <div class="flex justify-between">
           <Button :label="__('Discard')" @click="discard()" />
           <div class="flex gap-2">
-            <Button :label="__('Regenerate')" :disabled="loading" @click="regenerate()" />
+            <Button :label="__('Regenerate')" :disabled="loading" @click="regenerate()">
+              <template #prefix><SparkleIcon class="h-4 w-4" /></template>
+              {{ __('Regenerate') }}
+            </Button>
             <Button
               variant="solid"
               :label="__('Accept')"
@@ -60,7 +84,8 @@
 </template>
 
 <script setup>
-import { Button, FormControl, LoadingIndicator, call } from 'frappe-ui'
+import { Button, FormControl, call } from 'frappe-ui'
+import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import { ref, watch } from 'vue'
 
 const props = defineProps({
