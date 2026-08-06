@@ -26,8 +26,8 @@ const suggestions = [
 ]
 
 const cannedReplies = [
-  __("Got it, I'm looking into that now."),
-  __('Thanks for the details, one moment please.'),
+  __("Got it, I'm looking into that now.\n\nHere is a quick summary:\n- Checked your **open deals**\n- Cross-referenced today's tasks\n\nLet me know if you'd like more detail."),
+  __('Thanks for the details, one moment please.\n\n```\nchecking CRM records...\n```'),
   __('Noted. I will follow up on this shortly.'),
 ]
 
@@ -39,8 +39,28 @@ function handleSend(text) {
   const reply =
     cannedReplies[Math.floor(Math.random() * cannedReplies.length)]
 
-  setTimeout(() => {
-    messages.value.push({ id: nextId++, role: 'assistant', text: reply })
-  }, 600)
+  const assistantMessage = {
+    id: nextId++,
+    role: 'assistant',
+    text: '',
+    streaming: true,
+  }
+  messages.value.push(assistantMessage)
+
+  setTimeout(() => streamReply(assistantMessage, reply), 400)
+}
+
+function streamReply(message, fullText) {
+  const tokens = fullText.split(/(\s+)/)
+  let i = 0
+
+  const interval = setInterval(() => {
+    message.text += tokens[i]
+    i++
+    if (i >= tokens.length) {
+      clearInterval(interval)
+      message.streaming = false
+    }
+  }, 40)
 }
 </script>

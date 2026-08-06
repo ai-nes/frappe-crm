@@ -32,15 +32,17 @@
         :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
       >
         <div
-          class="max-w-[80%] rounded-lg px-3 py-2 text-sm"
-          :class="
-            message.role === 'user'
-              ? 'bg-surface-gray-7 text-ink-white'
-              : 'bg-surface-gray-2 text-ink-gray-9'
-          "
+          v-if="message.role === 'user'"
+          class="max-w-[80%] rounded-lg bg-surface-gray-7 px-3 py-2 text-sm text-ink-white"
         >
           {{ message.text }}
         </div>
+        <!-- eslint-disable-next-line vue/no-v-html -->
+        <div
+          v-else
+          class="prose-sm max-w-[85%] rounded-lg bg-surface-gray-2 px-3 py-2 text-ink-gray-9"
+          v-html="renderMarkdown(message.text) + (message.streaming ? streamingCursor : '')"
+        />
       </div>
     </div>
     <div
@@ -71,9 +73,17 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { useStorage } from '@vueuse/core'
+import { marked } from 'marked'
 import { Button, FeatherIcon, FormControl } from 'frappe-ui'
 import MaximizeIcon from '@/components/Icons/MaximizeIcon.vue'
 import MinimizeIcon from '@/components/Icons/MinimizeIcon.vue'
+import { sanitizeHTML } from '@/utils'
+
+const streamingCursor = '<span class="animate-pulse">▍</span>'
+
+function renderMarkdown(text) {
+  return sanitizeHTML(marked.parse(text || ''))
+}
 
 const props = defineProps({
   messages: {
@@ -106,7 +116,7 @@ function send() {
 }
 
 watch(
-  () => props.messages.length,
+  () => [props.messages.length, props.messages.at(-1)?.text],
   () => {
     nextTick(() => {
       if (messageList.value) {
