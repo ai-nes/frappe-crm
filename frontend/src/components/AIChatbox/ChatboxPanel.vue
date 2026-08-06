@@ -1,11 +1,8 @@
 <template>
   <div
-    class="fixed z-20 flex flex-col overflow-hidden rounded-lg border bg-surface-modal shadow-2xl transition-all"
-    :class="
-      expanded
-        ? 'inset-8 h-auto w-auto'
-        : 'bottom-20 right-5 h-[480px] w-[360px]'
-    "
+    class="fixed inset-y-0 right-0 z-20 flex flex-col overflow-hidden border-l bg-surface-modal shadow-2xl transition-all"
+    :class="expanded ? '' : 'w-[380px]'"
+    :style="expanded ? { left: sidebarWidth } : {}"
   >
     <div class="flex items-center justify-between border-b px-4 py-3">
       <div class="text-base font-semibold text-ink-gray-9">
@@ -72,7 +69,8 @@
   </div>
 </template>
 <script setup>
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import { useStorage } from '@vueuse/core'
 import { Button, FeatherIcon, FormControl } from 'frappe-ui'
 import MaximizeIcon from '@/components/Icons/MaximizeIcon.vue'
 import MinimizeIcon from '@/components/Icons/MinimizeIcon.vue'
@@ -92,6 +90,9 @@ const emit = defineEmits(['close', 'send'])
 const draft = ref('')
 const messageList = ref(null)
 const expanded = ref(false)
+
+const isSidebarCollapsed = useStorage('isSidebarCollapsed', false)
+const sidebarWidth = computed(() => (isSidebarCollapsed.value ? '3rem' : '220px'))
 
 function sendText(text) {
   emit('send', text)

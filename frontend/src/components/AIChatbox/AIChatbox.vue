@@ -1,5 +1,5 @@
 <template>
-  <ChatboxButton :is-open="isOpen" @toggle="isOpen = !isOpen" />
+  <ChatboxButton v-if="!isOpen" @toggle="isOpen = true" />
   <ChatboxPanel
     v-if="isOpen"
     :messages="messages"
