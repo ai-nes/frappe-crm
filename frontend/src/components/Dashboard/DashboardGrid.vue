@@ -30,6 +30,7 @@
               :index="index"
               :item="items[index]"
               :editing="editing"
+              @refresh="$emit('refresh')"
             />
           </div>
           <div
@@ -50,6 +51,8 @@
 </template>
 <script setup>
 import { GridLayout } from 'frappe-ui'
+
+defineEmits(['refresh'])
 
 defineProps({
   editing: { type: Boolean, default: false },
