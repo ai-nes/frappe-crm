@@ -24,7 +24,7 @@
           class="max-w-[80%] rounded-lg px-3 py-2 text-sm"
           :class="
             message.role === 'user'
-              ? 'bg-ink-gray-9 text-ink-white'
+              ? 'bg-surface-gray-7 text-ink-white'
               : 'bg-surface-gray-2 text-ink-gray-9'
           "
         >
