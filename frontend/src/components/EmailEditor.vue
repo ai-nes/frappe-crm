@@ -172,6 +172,13 @@
               :icon="EmailTemplateIcon"
               @click="showEmailTemplateSelectorModal = true"
             />
+            <Button
+              v-if="doctype === 'CRM Contact'"
+              :tooltip="__('AI Draft')"
+              variant="ghost"
+              :icon="SparkleIcon"
+              @click="showAIDraftModal = true"
+            />
           </div>
           <div class="mt-2 flex items-center justify-end space-x-2 sm:mt-0">
             <Button v-bind="discardButtonProps || {}" :label="__('Discard')" />
@@ -190,16 +197,24 @@
     :doctype="doctype"
     @apply="applyEmailTemplate"
   />
+  <AIDraftModal
+    v-if="doctype === 'CRM Contact'"
+    v-model="showAIDraftModal"
+    :contact="modelValue.name"
+    @apply="applyAIDraft"
+  />
 </template>
 
 <script setup>
 import IconPicker from '@/components/IconPicker.vue'
 import SmileIcon from '@/components/Icons/SmileIcon.vue'
 import EmailTemplateIcon from '@/components/Icons/EmailTemplateIcon.vue'
+import SparkleIcon from '@/components/Icons/SparkleIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import AttachmentItem from '@/components/AttachmentItem.vue'
 import MultiSelectEmailInput from '@/components/Controls/MultiSelectEmailInput.vue'
 import EmailTemplateSelectorModal from '@/components/Modals/EmailTemplateSelectorModal.vue'
+import AIDraftModal from '@/components/Modals/AIDraftModal.vue'
 import {
   TextEditorBubbleMenu,
   TextEditor,
@@ -299,6 +314,18 @@ function removeAttachment(attachment) {
 }
 
 const showEmailTemplateSelectorModal = ref(false)
+const showAIDraftModal = ref(false)
+
+function applyAIDraft({ subject: draftSubject, body: draftBody }) {
+  let html = draftBody
+    .split('\n\n')
+    .map((paragraph) => `<p>${paragraph.replace(/\n/g, '<br>')}</p>`)
+    .join('')
+  subject.value = draftSubject
+  content.value = html
+  editor.value.commands.setContent(html)
+  capture('ai_email_draft_applied', { doctype: props.doctype })
+}
 
 async function applyEmailTemplate(template) {
   let data = await call(
