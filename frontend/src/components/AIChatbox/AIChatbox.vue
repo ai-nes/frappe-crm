@@ -17,12 +17,6 @@ const isOpen = ref(false)
 
 const messages = ref([
   { id: 1, role: 'assistant', text: __('Hi! How can I help you today?') },
-  { id: 2, role: 'user', text: __('Can you show me my open deals?') },
-  {
-    id: 3,
-    role: 'assistant',
-    text: __('Sure, pulling up your open deals now...'),
-  },
 ])
 
 const suggestions = [
@@ -37,7 +31,7 @@ const cannedReplies = [
   __('Noted. I will follow up on this shortly.'),
 ]
 
-let nextId = 4
+let nextId = 2
 
 function handleSend(text) {
   messages.value.push({ id: nextId++, role: 'user', text })
