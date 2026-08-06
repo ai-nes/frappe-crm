@@ -5,8 +5,8 @@
     "user_visible_behavior": "Sale/Counseller/Team Leader can log a consent event (opt-out, re-subscribe, marked test, bounced, suppressed) for a CRM Contact; the matching snapshot flag (is_opted_out/is_test_record/email_bounced) updates automatically and is filterable in the Contact list.",
     "verification_command": "bench migrate && bench console (create CRM Contact Consent Event records and inspect CRM Contact flags)",
     "status": "passing",
-    "evidence": "Code complete: doctype JSON, controller, after_insert hook wired via hooks.py doc_events, 3 Check fields on CRM Contact, migration patch registered in patches.txt post_model_sync. Not yet run on a live bench (no bench/frappe framework available in this checkout) — pending manual bench migrate + console verification per plan step 7.",
-    "notes": "Email Unsubscribe core-doctype investigation (step 6) requires bench console access on the user's dev site — deferred to user, not resolvable statically in this repo checkout."
+    "evidence": "Verified on local dev bench (docker crm-dev, site crm.localhost): bench migrate ran clean. bench console test on real contact CRMC-2026-00001: is_opted_out 0->1 on Opted Out insert, stays 1 on duplicate Opted Out insert (idempotent), 1->0 on Re-subscribed insert. Hook fires correctly via doc_events after_insert.",
+    "notes": "Email Unsubscribe investigation (step 6) complete: the core doctype exists in this Frappe version but has 0 records on crm.localhost dev site — no pre-existing opt-out data, so no backfill patch is needed before trusting is_opted_out for send-eligibility filtering. Re-check record count against production data before relying on this in production."
   },
   {
     "id": "phase-02-contact-business-fields",
@@ -14,7 +14,7 @@
     "user_visible_behavior": "Contact form shows Next Follow-up (Datetime), Decision Maker (Student/Parent/Both), and Preferred Contact Channel (Email/Zalo/Phone); all optional, existing contacts unaffected.",
     "verification_command": "bench migrate (verify existing CRM Contact records load/save with new fields empty)",
     "status": "passing",
-    "evidence": "Code complete: 3 new fields added to crm_contact.json, no fieldname collisions found (grepped repo), migration patch registered post_model_sync. Not yet run on a live bench.",
+    "evidence": "Verified on local dev bench (docker crm-dev, site crm.localhost): bench migrate ran clean, all 3 fields (next_follow_up, decision_maker, preferred_contact_channel) confirmed present as DocField records. Loaded and re-saved an existing contact (CRMC-2026-00001) via bench console: new fields default to None/empty, save succeeds with no errors.",
     "notes": ""
   },
   {
@@ -23,7 +23,7 @@
     "user_visible_behavior": "New CRM AI Lead Insight doctype linked to CRM Contact holds AI-generated summary/interests/objections/risk-flags plus a human review workflow (status/reviewed_by/reviewed_at/review_note); Sale/Counseller/Team Leader can action status but cannot edit AI-generated content fields directly (permlevel 1, read-only for those roles).",
     "verification_command": "bench migrate && bench console (create insight, attempt field edits as Sale-role test user)",
     "status": "passing",
-    "evidence": "Code complete: CRM AI Lead Insight doctype + 3 child tables (Interest/Objection/Risk Flag), permlevel split exactly matching plan step 6 (permlevel 0: status/reviewed_by/reviewed_at/review_note writable by TL/Counseller/Sale; permlevel 1: AI content fields writable by System Manager only, read-only for sales roles), Create/Delete restricted to System Manager/Administrator, migration patch registered. Not yet run on a live bench.",
+    "evidence": "Verified on local dev bench: bench migrate clean. Created a Sale-role test user (sale-test@example.com) and confirmed via bench execute: (1) Sale user CAN save status/reviewed_by changes; (2) Sale user's attempted edit to summary is silently reverted by Frappe's permlevel enforcement on save (DB value confirmed unchanged after the Sale-user save call) -- field-level write restriction works as designed, just via silent-revert semantics rather than a raised PermissionError.",
     "notes": "source_ai_job is a loose Data field, confirmed empty by design (no AI integration in this plan)."
   },
   {
@@ -32,7 +32,7 @@
     "user_visible_behavior": "New CRM AI Personal Email Draft doctype covers one contact's personal email through Generating -> Draft/Edited -> Approved -> Sent/Failed/Cancelled, with generated vs. edited subject/body kept separate, and a documented (not implemented) plug-in point for linking the eventual Communication record once frappe.sendmail is wired up.",
     "verification_command": "bench migrate && bench console (create draft, step through status values, link a Communication record and confirm it surfaces via crm.api.activities.get_activities)",
     "status": "passing",
-    "evidence": "Code complete: doctype JSON with full field set (purpose, instruction, generated_*/edited_* content, status lifecycle, approval/send fields at permlevel 1 writable by System Manager/Team Leader only), migration patch registered. No frappe.sendmail wiring (explicitly out of scope). Not yet run on a live bench.",
+    "evidence": "Verified on local dev bench: bench migrate clean. bench execute test created a real draft against contact CRMC-2026-00001, stepped status Generating -> Draft -> Edited -> Approved -> Sent successfully, then created a Communication record, linked it via draft.communication + sent_at, and confirmed it appears in frappe's docinfo.communications list (the same data crm.api.activities feeds into the contact timeline) -- Phase 4 success criterion (sent draft visible in existing timeline/activity view) holds. No frappe.sendmail wiring (explicitly out of scope). Test data cleaned up after verification.",
     "notes": "Approval-before-send is a status value only, not server-enforced in this phase — flagged in plan Risks as follow-up work for when send logic is built."
   }
 ]
