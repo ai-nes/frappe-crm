@@ -155,6 +155,7 @@
 <script setup>
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import LucideBarChart3 from '~icons/lucide/bar-chart-3'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
@@ -218,7 +219,8 @@ const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 // Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
 const links = [
-  { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Sales Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Marketing Dashboard'), icon: LucideBarChart3, to: 'Marketing Dashboard' },
   { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
   { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
   { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Contacts', query: { stage: 'enrolled' } } },

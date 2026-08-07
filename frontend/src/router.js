@@ -14,9 +14,23 @@ const routes = [
     component: () => import('@/pages/MobileNotification.vue'),
   },
   {
-    path: '/dashboard',
+    path: '/dashboard/sales/:section?',
+    alias: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/pages/Dashboard.vue'),
+    props: (route) => ({
+      dashboardType: 'sales',
+      dashboardSection: route.params.section || 'overview',
+    }),
+  },
+  {
+    path: '/dashboard/marketing/:section?',
+    name: 'Marketing Dashboard',
+    component: () => import('@/pages/Dashboard.vue'),
+    props: (route) => ({
+      dashboardType: 'marketing',
+      dashboardSection: route.params.section || 'overview',
+    }),
   },
   {
     alias: '/notes',
