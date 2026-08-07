@@ -10,6 +10,8 @@
  "engine": "InnoDB",
  "field_order": [
   "status_name",
+  "stage_order",
+  "stage_category",
   "description"
  ],
  "fields": [
@@ -23,6 +25,23 @@
    "unique": 1
   },
   {
+   "fieldname": "stage_order",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Stage Order",
+   "reqd": 1
+  },
+  {
+   "default": "open",
+   "fieldname": "stage_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stage Category",
+   "options": "open\nenrolled\nlost",
+   "reqd": 1
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
@@ -30,7 +49,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-10 00:00:00.000000",
+ "modified": "2026-08-06 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Enrollment Status",

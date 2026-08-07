@@ -4,6 +4,10 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.doctype.crm_student.enrollment_transition import (
+	record_transition,
+	set_enrollment_status,
+)
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
 	resolve_province,
@@ -62,6 +66,27 @@ class CRMStudent(Document):
 
 	def on_update(self):
 		self._sync_linked_contact_fields()
+		self._log_enrollment_transition()
+
+	def _log_enrollment_transition(self):
+		# Fires on both insert and update (Frappe calls on_update after
+		# db_insert too) — the single hook-side entry point into
+		# record_transition(). Does NOT catch the db_set/db.set_value
+		# bypass paths (convert-to-contact, Contact-side edit) — those
+		# call set_enrollment_status() directly instead, since db_set
+		# skips this hook entirely.
+		before = self.get_doc_before_save()
+		if before is None:
+			# New student — get_doc_before_save() is only populated on the
+			# update path (load_doc_before_save runs before db_update, not
+			# before db_insert). Record the initial status so it isn't
+			# invisible in the log.
+			record_transition(self.name, None, self.enrollment_status, source="student_insert")
+			return
+
+		old_status = before.get("enrollment_status")
+		if old_status != self.enrollment_status:
+			record_transition(self.name, old_status, self.enrollment_status, source="student_save")
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -276,7 +301,7 @@ def convert_to_contact(student_name):
 	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
 	if existing_contact:
 		if student.enrollment_status != "Có triển vọng":
-			student.db_set("enrollment_status", "Có triển vọng")
+			set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
 		frappe.db.set_value(
 			"CRM Contact", existing_contact, "enrollment_status", "Có triển vọng", update_modified=False
 		)
@@ -308,7 +333,7 @@ def convert_to_contact(student_name):
 	})
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("enrollment_status", "Có triển vọng")
+	set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
 
 	return contact.name
 

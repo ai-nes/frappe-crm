@@ -19,7 +19,7 @@ class TestCRMStudent(FrappeTestCase):
 			"student_name": name,
 			"phone": "0901234567",
 			"email": "test.convert@example.com",
-			"enrollment_status": "Pending Confirmation",
+			"enrollment_status": "Đã xác nhận",
 		})
 		student.insert(ignore_permissions=True)
 		return student
@@ -45,7 +45,7 @@ class TestCRMStudent(FrappeTestCase):
 
 		student.reload()
 		self.assertEqual(student.converted, 1)
-		self.assertEqual(student.enrollment_status, "Converted")
+		self.assertEqual(student.enrollment_status, "Có triển vọng")
 
 	def test_convert_double_conversion_returns_existing_contact(self):
 		student = self._make_student("_Test Double Convert Student")

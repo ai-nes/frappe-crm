@@ -8,7 +8,10 @@ class CRMIntent(Document):
 		if self.interaction and not self.student:
 			self.student = frappe.db.get_value("CRM Interaction", self.interaction, "student")
 
-		if self.intent_type and not self.importance:
+		# importance is read-only and always derived from intent_type; Frappe initializes an
+		# undefaulted Select field to its first option, so a "not self.importance" guard would
+		# always be false here and must not gate the derivation.
+		if self.intent_type:
 			self.importance = frappe.db.get_value("CRM Intent Type", self.intent_type, "importance")
 
 	def validate(self):

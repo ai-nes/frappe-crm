@@ -20,6 +20,21 @@ def get_session_role_flags():
 
 
 @frappe.whitelist()
+def get_my_roles():
+	"""Return the roles of the CURRENT session user (bound by the auth token
+	on this request), never a caller-supplied username. Frappe's token/bearer
+	auth already resolves `frappe.session.user` from the credential presented
+	on this request before this function runs, so there is no lookup-on-behalf-of
+	step here — a caller can only ever learn their own roles.
+
+	Consumed by crm-agents (the internal chat copilot) to gate access to the
+	sales/marketing ReAct surface without a service account inferring identity
+	from client-supplied input.
+	"""
+	return {"user": frappe.session.user, "roles": frappe.get_roles()}
+
+
+@frappe.whitelist()
 def get_users():
 	session_roles = get_session_role_flags()
 

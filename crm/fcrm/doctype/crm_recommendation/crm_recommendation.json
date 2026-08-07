@@ -1,0 +1,197 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "creation": "2026-08-06 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "student",
+  "rule_key",
+  "source_intent_id",
+  "condition_version",
+  "column_break_1",
+  "priority",
+  "status",
+  "expires_at",
+  "created_at",
+  "section_reason",
+  "reason",
+  "evidence"
+ ],
+ "fields": [
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "rule_key",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Rule Key",
+   "read_only": 1,
+   "reqd": 1,
+   "description": "Registry key of the rule that generated this recommendation, e.g. unaddressed_intent"
+  },
+  {
+   "fieldname": "source_intent_id",
+   "fieldtype": "Data",
+   "in_standard_filter": 1,
+   "label": "Source Intent",
+   "read_only": 1,
+   "reqd": 1,
+   "description": "name of the CRM Intent record that triggered this recommendation — part of the dedup fingerprint"
+  },
+  {
+   "default": "1",
+   "fieldname": "condition_version",
+   "fieldtype": "Int",
+   "label": "Condition Version",
+   "read_only": 1,
+   "reqd": 1,
+   "description": "Bumped when a rule's evaluation logic changes, to allow a controlled re-arm without touching old dedup fingerprints"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "medium",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "high\nmedium\nlow",
+   "reqd": 1
+  },
+  {
+   "default": "new",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "new\nacknowledged\ndismissed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Expires At"
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Created At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_reason",
+   "fieldtype": "Section Break",
+   "label": "Detail"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Text",
+   "label": "Reason",
+   "read_only": 1,
+   "reqd": 1,
+   "description": "Human-readable explanation shown to staff, distinct from the raw evidence JSON"
+  },
+  {
+   "fieldname": "evidence",
+   "fieldtype": "JSON",
+   "label": "Evidence",
+   "read_only": 1,
+   "description": "Machine-readable evidence backing this recommendation, shape depends on rule_key"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Recommendation",
+ "naming_rule": "By script",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "role": "CTV-Sale",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "student,rule_key,status",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "rule_key",
+ "translated_doctype": 1
+}

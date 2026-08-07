@@ -130,11 +130,12 @@ before_uninstall = "crm.uninstall.before_uninstall"
 
 permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
+	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 }
 
-# has_permission = {
-# "Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+has_permission = {
+	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
+}
 
 # DocType Class
 # ---------------
@@ -179,6 +180,9 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
+	"daily": [
+		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+	],
 }
 
 # Testing
