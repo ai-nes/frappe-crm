@@ -20,18 +20,6 @@
     </LayoutHeader>
 
     <div class="flex flex-wrap items-center gap-3 px-5 pb-2 pt-5">
-      <div class="flex items-center rounded-md border border-outline-gray-2 p-0.5">
-        <Button
-          :variant="isSalesDashboard ? 'solid' : 'ghost'"
-          :label="__('Sales Dashboard')"
-          @click="openDashboard('Dashboard')"
-        />
-        <Button
-          :variant="isSalesDashboard ? 'ghost' : 'solid'"
-          :label="__('Marketing Dashboard')"
-          @click="openDashboard('Marketing Dashboard')"
-        />
-      </div>
       <div
         v-if="isSalesDashboard"
         class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
@@ -316,10 +304,6 @@ function refreshDashboard() {
     renderKey.value += 1
     refreshing.value = false
   }, 350)
-}
-
-function openDashboard(name: 'Dashboard' | 'Marketing Dashboard') {
-  if (router.currentRoute.value.name !== name) router.push({ name })
 }
 
 function openSalesSection(section: SalesSection) {
