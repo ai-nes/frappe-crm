@@ -292,22 +292,22 @@ function funnelRow(
     enrolled,
     ariaLabel: `${label}: ${contacted} Contacted, ${qualified} Qualified, ${counseling} Counseling, ${application} Application, ${enrolled} Enrolled`,
     segments: [
-      segment('Enrolled', enrolled, 'bg-surface-gray-7'),
-      segment('Dừng ở Application', application - enrolled, 'bg-surface-gray-6'),
-      segment('Dừng ở Counseling', counseling - application, 'bg-surface-gray-5'),
-      segment('Dừng ở Qualified', qualified - counseling, 'bg-surface-gray-4'),
-      segment('Dừng sau Contacted', contacted - qualified, 'bg-surface-gray-3'),
+      segment('Enrolled', enrolled, 'bg-green-500'),
+      segment('Dừng ở Application', application - enrolled, 'bg-blue-700'),
+      segment('Dừng ở Counseling', counseling - application, 'bg-blue-500'),
+      segment('Dừng ở Qualified', qualified - counseling, 'bg-blue-300'),
+      segment('Dừng sau Contacted', contacted - qualified, 'bg-blue-200'),
     ],
   }
 }
 
 const interestCards = [
-  { code: 'COST', title: 'Chi phí', value: 1024, ratio: '8,2% active', progress: 74, sparkline: [61, 64, 63, 69, 71, 73, 78], metrics: [{ label: '15 phút', value: '+63' }, { label: 'So với hôm qua', value: '+4,1%' }, { label: 'Đang tăng', value: 298 }, { label: 'Confidence thấp', value: 72 }], conversion: '11,8%', trend: 'Tăng', theme: 'orange' },
-  { code: 'PROGRAM_COMPETITOR', title: 'Ngành & trường khác', value: 864, ratio: '6,9% active', progress: 62, sparkline: [44, 47, 51, 54, 61, 66, 72], metrics: [{ label: '15 phút', value: '+91' }, { label: 'So với hôm qua', value: '+8,4%' }, { label: 'Đang tăng', value: 312 }, { label: 'Confidence thấp', value: 88 }], conversion: '9,6%', trend: 'Tăng', theme: 'red' },
-  { code: 'CAREER', title: 'Việc làm', value: 1386, ratio: '11,1% active', progress: 100, sparkline: [76, 78, 79, 80, 83, 84, 86], metrics: [{ label: '15 phút', value: '+28' }, { label: 'So với hôm qua', value: '+2,7%' }, { label: 'Đang tăng', value: 246 }, { label: 'Confidence thấp', value: 54 }], conversion: '18,9%', trend: 'Ổn định', theme: 'green' },
-  { code: 'STUDENT_LIFE', title: 'Hoạt động sinh viên', value: 742, ratio: '6,0% active', progress: 54, sparkline: [52, 51, 54, 57, 59, 61, 64], metrics: [{ label: '15 phút', value: '+17' }, { label: 'So với hôm qua', value: '+1,9%' }, { label: 'Đang tăng', value: 138 }, { label: 'Confidence thấp', value: 61 }], conversion: '13,4%', trend: 'Mới', theme: 'blue' },
-  { code: 'ACCOMMODATION', title: 'Chỗ ở', value: 618, ratio: '5,0% active', progress: 45, sparkline: [71, 70, 68, 66, 63, 61, 59], metrics: [{ label: '15 phút', value: '-9' }, { label: 'So với hôm qua', value: '-1,2%' }, { label: 'Đang tăng', value: 96 }, { label: 'Confidence thấp', value: 47 }], conversion: '12,1%', trend: 'Giảm', theme: 'gray' },
-  { code: 'ENROLLMENT_READINESS', title: 'Sẵn sàng nhập học', value: 1580, ratio: 'Level 3–4', readinessTotal: 12450, readinessLevels: [{ level: 0, count: 5200, share: 41.8 }, { level: 1, count: 3000, share: 24.1 }, { level: 2, count: 2670, share: 21.4 }, { level: 3, count: 960, share: 7.7 }, { level: 4, count: 620, share: 5 }], operationalMetrics: [{ label: 'Đã có hồ sơ', value: 488 }, { label: 'Chưa follow-up', value: 410 }, { label: 'Quá SLA', value: 125 }], conversion: '31,7%', trend: 'Ưu tiên', theme: 'green' },
+  { code: 'COST', title: 'Chi phí', value: 1024, ratio: '8,2% active', progress: 74, sparkline: [61, 64, 63, 69, 71, 73, 78], metrics: [{ label: '15 phút', value: '+63' }, { label: 'So với hôm qua', value: '+4,1%' }, { label: 'Đang tăng', value: 298 }, { label: 'Confidence thấp', value: 72 }], conversion: '11,8%', trend: 'Tăng', theme: 'orange', color: 'amber' },
+  { code: 'PROGRAM_COMPETITOR', title: 'Ngành & trường khác', value: 864, ratio: '6,9% active', progress: 62, sparkline: [44, 47, 51, 54, 61, 66, 72], metrics: [{ label: '15 phút', value: '+91' }, { label: 'So với hôm qua', value: '+8,4%' }, { label: 'Đang tăng', value: 312 }, { label: 'Confidence thấp', value: 88 }], conversion: '9,6%', trend: 'Tăng', theme: 'red', color: 'violet' },
+  { code: 'CAREER', title: 'Việc làm', value: 1386, ratio: '11,1% active', progress: 100, sparkline: [76, 78, 79, 80, 83, 84, 86], metrics: [{ label: '15 phút', value: '+28' }, { label: 'So với hôm qua', value: '+2,7%' }, { label: 'Đang tăng', value: 246 }, { label: 'Confidence thấp', value: 54 }], conversion: '18,9%', trend: 'Ổn định', theme: 'green', color: 'teal' },
+  { code: 'STUDENT_LIFE', title: 'Hoạt động sinh viên', value: 742, ratio: '6,0% active', progress: 54, sparkline: [52, 51, 54, 57, 59, 61, 64], metrics: [{ label: '15 phút', value: '+17' }, { label: 'So với hôm qua', value: '+1,9%' }, { label: 'Đang tăng', value: 138 }, { label: 'Confidence thấp', value: 61 }], conversion: '13,4%', trend: 'Mới', theme: 'blue', color: 'pink' },
+  { code: 'ACCOMMODATION', title: 'Chỗ ở', value: 618, ratio: '5,0% active', progress: 45, sparkline: [71, 70, 68, 66, 63, 61, 59], metrics: [{ label: '15 phút', value: '-9' }, { label: 'So với hôm qua', value: '-1,2%' }, { label: 'Đang tăng', value: 96 }, { label: 'Confidence thấp', value: 47 }], conversion: '12,1%', trend: 'Giảm', theme: 'gray', color: 'cyan' },
+  { code: 'ENROLLMENT_READINESS', title: 'Sẵn sàng nhập học', value: 1580, ratio: 'Level 3–4', readinessTotal: 12450, readinessLevels: [{ level: 0, count: 5200, share: 41.8 }, { level: 1, count: 3000, share: 24.1 }, { level: 2, count: 2670, share: 21.4 }, { level: 3, count: 960, share: 7.7 }, { level: 4, count: 620, share: 5 }], operationalMetrics: [{ label: 'Đã có hồ sơ', value: 488 }, { label: 'Chưa follow-up', value: 410 }, { label: 'Quá SLA', value: 125 }], conversion: '31,7%', trend: 'Ưu tiên', theme: 'green', color: 'blue' },
 ]
 
 const interestCardWidths = [3, 3, 3, 3, 4, 4]
@@ -376,11 +376,11 @@ export const aiInterestDashboardItems = [
     title: 'Interest × Funnel',
     subtitle: 'Tỷ trọng chuyển đổi và điểm rơi theo từng mối quan tâm',
     legend: [
-      { label: 'Enrolled', class: 'bg-surface-gray-7' },
-      { label: 'Dừng ở Application', class: 'bg-surface-gray-6' },
-      { label: 'Dừng ở Counseling', class: 'bg-surface-gray-5' },
-      { label: 'Dừng ở Qualified', class: 'bg-surface-gray-4' },
-      { label: 'Dừng sau Contacted', class: 'bg-surface-gray-3' },
+      { label: 'Enrolled', class: 'bg-green-500' },
+      { label: 'Dừng ở Application', class: 'bg-blue-700' },
+      { label: 'Dừng ở Counseling', class: 'bg-blue-500' },
+      { label: 'Dừng ở Qualified', class: 'bg-blue-300' },
+      { label: 'Dừng sau Contacted', class: 'bg-blue-200' },
     ],
     rows: [
       funnelRow('Chi phí', 918, 612, 448, 201, 121),

@@ -101,7 +101,7 @@
       />
     </div>
 
-    <div class="min-h-0 flex-1 overflow-hidden border-t">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
       <DashboardGrid
         :key="`${props.dashboardType}-${activeSalesSection}-${renderKey}`"
         :model-value="dashboardItems"

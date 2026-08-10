@@ -86,6 +86,7 @@
             :key="metric.label"
             :label="metric.label"
             :value="formatNumber(metric.value)"
+            :tone="metricTone(metric.label, metric.value)"
           />
         </div>
       </template>
@@ -98,7 +99,8 @@
           <span
             v-for="(point, pointIndex) in item.data.sparkline"
             :key="pointIndex"
-            class="flex-1 rounded-sm bg-surface-gray-4"
+            class="flex-1 rounded-sm"
+            :class="interestAccent(item.data.color).bar"
             :style="{ height: `${sparkHeight(point, item.data.sparkline)}%` }"
           ></span>
         </div>
@@ -111,7 +113,8 @@
           :aria-label="`${item.data.title}: ${item.data.progress}% so với nhóm cao nhất`"
         >
           <div
-            class="h-full rounded-full bg-surface-gray-7"
+            class="h-full rounded-full"
+            :class="interestAccent(item.data.color).fill"
             :style="{ width: `${item.data.progress}%` }"
           ></div>
         </div>
@@ -122,6 +125,7 @@
           :key="metric.label"
           :label="metric.label"
           :value="formatNumber(metric.value)"
+          :tone="metricTone(metric.label, metric.value)"
         />
       </div>
       <div class="mt-auto flex items-center justify-between gap-2 pt-3 text-xs">
@@ -331,13 +335,40 @@ defineEmits(['refresh'])
 const router = useRouter()
 
 const Metric = defineComponent({
-  props: { label: String, value: [String, Number] },
+  props: { label: String, value: [String, Number], tone: String },
   setup: (props) => () =>
     h('div', [
       h('div', { class: 'text-ink-gray-5' }, props.label),
-      h('div', { class: 'mt-0.5 font-medium text-ink-gray-8' }, props.value),
+      h(
+        'div',
+        { class: `mt-0.5 font-medium ${props.tone || 'text-ink-gray-8'}` },
+        props.value,
+      ),
     ]),
 })
+
+const interestAccentMap = {
+  amber: { bar: 'bg-amber-200', fill: 'bg-amber-500' },
+  violet: { bar: 'bg-violet-200', fill: 'bg-violet-500' },
+  teal: { bar: 'bg-teal-200', fill: 'bg-teal-500' },
+  pink: { bar: 'bg-pink-200', fill: 'bg-pink-500' },
+  cyan: { bar: 'bg-cyan-200', fill: 'bg-cyan-500' },
+  blue: { bar: 'bg-blue-200', fill: 'bg-blue-500' },
+}
+
+function interestAccent(color) {
+  return interestAccentMap[color] || interestAccentMap.blue
+}
+
+function metricTone(label, value) {
+  const text = String(value)
+  if (text.startsWith('+')) return 'text-ink-green-2'
+  if (text.startsWith('-')) return 'text-ink-red-3'
+  if (label === 'Confidence thấp' || label === 'Quá SLA') return 'text-ink-amber-2'
+  if (label === 'Đang tăng' || label === 'Chưa follow-up') return 'text-ink-blue-2'
+  if (label === 'Đã có hồ sơ') return 'text-ink-green-2'
+  return 'text-ink-gray-8'
+}
 
 function formatNumber(value) {
   return typeof value === 'number' ? value.toLocaleString('vi-VN') : value
@@ -355,22 +386,22 @@ function sparkHeight(value, points) {
 
 function readinessLevelClass(level) {
   return [
-    'bg-surface-gray-2',
-    'bg-surface-gray-3',
-    'bg-surface-gray-4',
-    'bg-surface-gray-5',
-    'bg-surface-gray-7',
+    'bg-blue-100',
+    'bg-blue-200',
+    'bg-blue-400',
+    'bg-blue-500',
+    'bg-blue-600',
   ][level]
 }
 
 function heatmapClass(value, max) {
   if (value == null) return 'bg-surface-gray-1 text-ink-gray-4'
   const ratio = value / max
-  if (ratio >= 0.8) return 'bg-surface-gray-7 text-ink-white'
-  if (ratio >= 0.6) return 'bg-surface-gray-5 text-ink-white'
-  if (ratio >= 0.4) return 'bg-surface-gray-4 text-ink-gray-9'
-  if (ratio >= 0.2) return 'bg-surface-gray-3 text-ink-gray-8'
-  return 'bg-surface-gray-2 text-ink-gray-7'
+  if (ratio >= 0.8) return 'bg-blue-500 text-ink-white'
+  if (ratio >= 0.6) return 'bg-blue-400 text-ink-white'
+  if (ratio >= 0.4) return 'bg-blue-300 text-ink-gray-9'
+  if (ratio >= 0.2) return 'bg-blue-200 text-ink-gray-8'
+  return 'bg-blue-100 text-ink-gray-7'
 }
 
 function openInterestLeads() {
