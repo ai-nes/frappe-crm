@@ -12,6 +12,7 @@
   "title",
   "campus",
   "campaign_type",
+  "event_type",
   "column_break_1",
   "start_date",
   "end_date",
@@ -45,6 +46,14 @@
    "in_standard_filter": 1,
    "label": "CRM Campaign Type",
    "options": "CRM Campaign Type"
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "options": "\nOn-Campus\nOff-Campus"
   },
   {
    "fieldname": "column_break_1",

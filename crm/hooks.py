@@ -145,6 +145,16 @@ override_doctype_class = {
 	"Email Template": "crm.overrides.email_template.CustomEmailTemplate",
 }
 
+# Status Change Log
+# ------------------
+# Doctypes whose status field is neither "stage" nor "status" register
+# their field name here instead of the generic status_change_log helper
+# growing a hardcoded chain of field names per adopter.
+
+status_change_log_field = {
+	"CRM Contact": "enrollment_status",
+}
+
 # Document Events
 # ---------------
 # Hook on document methods and events
@@ -152,6 +162,9 @@ override_doctype_class = {
 doc_events = {
 	"Contact": {
 		"validate": ["crm.api.contact.validate"],
+	},
+	"CRM Contact": {
+		"validate": ["crm.fcrm.doctype.crm_contact.crm_contact.log_status_change"],
 	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
@@ -168,6 +181,11 @@ doc_events = {
 	"WhatsApp Message": {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
+	},
+	"CRM Contact Consent Event": {
+		"after_insert": [
+			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag"
+		],
 	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],

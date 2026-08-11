@@ -28,4 +28,5 @@ crm/migration/fixtures/*.csv
 
 # Cache files
 .ck.json
-.mcp.json
+.mcp.json.claude/
+.codex/
