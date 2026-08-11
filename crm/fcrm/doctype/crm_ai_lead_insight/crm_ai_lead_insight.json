@@ -1,0 +1,301 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-06 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "contact",
+  "insight_type",
+  "generated_at",
+  "col_break_1",
+  "confidence_score",
+  "model_version",
+  "prompt_version",
+  "source_ai_job",
+  "section_content",
+  "summary",
+  "readiness_suggestion",
+  "next_action_summary",
+  "section_interests",
+  "detected_interests",
+  "section_objections",
+  "detected_objections",
+  "section_risks",
+  "risk_flags",
+  "section_review",
+  "status",
+  "col_break_review",
+  "reviewed_by",
+  "reviewed_at",
+  "review_note"
+ ],
+ "fields": [
+  {
+   "default": "CRMAI-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CRMAI-.YYYY.-"
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Contact",
+   "options": "CRM Contact",
+   "reqd": 1
+  },
+  {
+   "fieldname": "insight_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Insight Type",
+   "options": "Profile Summary\nConversation Summary\nInterest Detection\nObjection Detection\nLead Score Explanation\nNext Best Action\nRisk Assessment",
+   "reqd": 1
+  },
+  {
+   "fieldname": "generated_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Generated At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "confidence_score",
+   "fieldtype": "Percent",
+   "label": "Confidence Score",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "model_version",
+   "fieldtype": "Data",
+   "label": "Model Version",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "prompt_version",
+   "fieldtype": "Data",
+   "label": "Prompt Version",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "source_ai_job",
+   "fieldtype": "Data",
+   "label": "Source AI Job",
+   "permlevel": 1,
+   "description": "Loose reference until the platform-wide AI Job doctype ships (AI-0 phase); expected to stay empty until then"
+  },
+  {
+   "fieldname": "section_content",
+   "fieldtype": "Section Break",
+   "label": "AI-Generated Content"
+  },
+  {
+   "fieldname": "summary",
+   "fieldtype": "Long Text",
+   "label": "Summary",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "readiness_suggestion",
+   "fieldtype": "Int",
+   "label": "Readiness Suggestion",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "next_action_summary",
+   "fieldtype": "Small Text",
+   "label": "Next Action Summary",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_interests",
+   "fieldtype": "Section Break",
+   "label": "Detected Interests"
+  },
+  {
+   "fieldname": "detected_interests",
+   "fieldtype": "Table",
+   "label": "Detected Interests",
+   "options": "CRM AI Lead Insight Interest",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_objections",
+   "fieldtype": "Section Break",
+   "label": "Detected Objections"
+  },
+  {
+   "fieldname": "detected_objections",
+   "fieldtype": "Table",
+   "label": "Detected Objections",
+   "options": "CRM AI Lead Insight Objection",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_risks",
+   "fieldtype": "Section Break",
+   "label": "Risk Flags"
+  },
+  {
+   "fieldname": "risk_flags",
+   "fieldtype": "Table",
+   "label": "Risk Flags",
+   "options": "CRM AI Lead Insight Risk Flag",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_review",
+   "fieldtype": "Section Break",
+   "label": "Human Review"
+  },
+  {
+   "default": "Generated",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Generated\nNeeds Review\nAccepted\nEdited\nRejected\nSuperseded"
+  },
+  {
+   "fieldname": "col_break_review",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "reviewed_by",
+   "fieldtype": "Link",
+   "label": "Reviewed By",
+   "options": "User"
+  },
+  {
+   "fieldname": "reviewed_at",
+   "fieldtype": "Datetime",
+   "label": "Reviewed At"
+  },
+  {
+   "fieldname": "review_note",
+   "fieldtype": "Small Text",
+   "label": "Review Note"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-06 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM AI Lead Insight",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "CRMAI-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Administrator",
+   "write": 1
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Team Leader"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Counseller"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "CTV-Sale"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "CTV-Sale"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "contact,insight_type,status",
+ "sort_field": "generated_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "contact",
+ "track_changes": 1,
+ "translated_doctype": 1
+}

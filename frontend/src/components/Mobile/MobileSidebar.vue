@@ -100,11 +100,13 @@ import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
+import LucideBarChart3 from '~icons/lucide/bar-chart-3'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
 import SchoolIcon from '~icons/lucide/school'
 import MegaphoneIcon from '~icons/lucide/megaphone'
+import LucideMapPin from '~icons/lucide/map-pin'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
 import { viewsStore } from '@/stores/views'
@@ -115,7 +117,9 @@ import { mobileSidebarOpened as sidebarOpened } from '@/composables/settings'
 const { getPinnedViews, getPublicViews } = viewsStore()
 
 const links = [
-  { label: __('Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Sales Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
+  { label: __('Digital Marketing Dashboard'), icon: LucideBarChart3, to: 'Digital Marketing Dashboard' },
+  { label: __('Offline Marketing Dashboard'), icon: LucideMapPin, to: 'Offline Marketing Dashboard' },
   { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
   { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
   { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Contacts', query: { stage: 'enrolled' } } },

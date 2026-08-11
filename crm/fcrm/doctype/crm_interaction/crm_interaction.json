@@ -72,7 +72,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Outcome",
-   "options": "\nCaptured\nFollow Up Needed\nResolved\nConverted\nNo Response"
+   "options": "\nCaptured\nFollow Up Needed\nResolved\nConverted\nNo Response\nData Error\nUncontactable"
   },
   {
    "fieldname": "section_summary",
