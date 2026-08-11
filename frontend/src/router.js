@@ -24,11 +24,21 @@ const routes = [
     }),
   },
   {
-    path: '/dashboard/marketing/:section?',
-    name: 'Marketing Dashboard',
+    path: '/dashboard/digital-marketing/:section?',
+    alias: '/dashboard/marketing/:section?',
+    name: 'Digital Marketing Dashboard',
     component: () => import('@/pages/Dashboard.vue'),
     props: (route) => ({
-      dashboardType: 'marketing',
+      dashboardType: 'digital_marketing',
+      dashboardSection: route.params.section || 'overview',
+    }),
+  },
+  {
+    path: '/dashboard/offline-marketing/:section?',
+    name: 'Offline Marketing Dashboard',
+    component: () => import('@/pages/Dashboard.vue'),
+    props: (route) => ({
+      dashboardType: 'offline_marketing',
       dashboardSection: route.params.section || 'overview',
     }),
   },

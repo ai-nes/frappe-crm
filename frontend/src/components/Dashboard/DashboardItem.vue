@@ -164,13 +164,13 @@
               :title="`${segment.label}: ${formatNumber(segment.value)}`"
               role="progressbar"
               aria-valuemin="0"
-              :aria-valuemax="row.contacted"
+              :aria-valuemax="row.total"
               :aria-valuenow="segment.value"
               :aria-label="`${segment.label}: ${formatNumber(segment.value)} Lead`"
             ></span>
           </div>
           <div class="text-right text-[10px] text-ink-gray-5">
-            <b class="text-ink-gray-8">{{ formatNumber(row.enrolled) }}</b> / {{ formatNumber(row.contacted) }}
+            <b class="text-ink-gray-8">{{ formatNumber(row.enrolled) }}</b> / {{ formatNumber(row.total) }}
           </div>
         </div>
       </div>
@@ -182,6 +182,21 @@
       <div class="border-b px-4 py-3">
         <div class="text-base font-medium text-ink-gray-9">{{ item.data.title }}</div>
         <div class="mt-0.5 text-xs text-ink-gray-5">{{ item.data.subtitle }}</div>
+        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-gray-5">
+          <span class="flex items-center gap-1">
+            Ít
+            <i class="size-2 rounded-sm bg-blue-100"></i>
+            <i class="size-2 rounded-sm bg-blue-200"></i>
+            <i class="size-2 rounded-sm bg-blue-300"></i>
+            <i class="size-2 rounded-sm bg-blue-400"></i>
+            <i class="size-2 rounded-sm bg-blue-500"></i>
+            {{ item.data.symmetric ? 'Nhiều Lead trùng' : 'Nhiều Lead' }}
+          </span>
+          <span v-if="item.data.symmetric" class="flex items-center gap-1">
+            <i class="size-2 rounded-sm bg-surface-gray-3"></i>
+            Tổng Lead của nhóm (đường chéo)
+          </span>
+        </div>
       </div>
       <div class="min-h-0 flex-1 overflow-auto p-3">
         <table class="h-full w-full border-separate border-spacing-1 text-center text-[10px]">
@@ -192,16 +207,16 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in item.data.rows" :key="row.label">
+            <tr v-for="(row, rowIndex) in item.data.rows" :key="row.label">
               <th scope="row" class="whitespace-nowrap pr-2 text-left font-medium text-ink-gray-7">{{ row.label }}</th>
               <td
                 v-for="(value, valueIndex) in row.values"
                 :key="valueIndex"
                 class="rounded px-2 py-2 font-medium"
-                :class="heatmapClass(value, item.data.max)"
-                :aria-label="`${row.label} và ${item.data.labels[valueIndex]}: ${value ?? 'không áp dụng'} Lead`"
+                :class="item.data.symmetric && valueIndex === rowIndex ? 'bg-surface-gray-3 text-ink-gray-8' : item.data.symmetric && valueIndex < rowIndex ? 'bg-transparent' : heatmapClass(value, item.data.max)"
+                :aria-label="item.data.symmetric && valueIndex === rowIndex ? `Tổng Lead quan tâm ${row.label}: ${value}` : item.data.symmetric && valueIndex < rowIndex ? undefined : `${row.label} và ${item.data.labels[valueIndex]}: ${value ?? 'không áp dụng'} Lead`"
               >
-                {{ value ?? '—' }}
+                {{ item.data.symmetric && valueIndex < rowIndex ? '' : (value ?? '—') }}
               </td>
             </tr>
           </tbody>
@@ -354,6 +369,8 @@ const interestAccentMap = {
   pink: { bar: 'bg-pink-200', fill: 'bg-pink-500' },
   cyan: { bar: 'bg-cyan-200', fill: 'bg-cyan-500' },
   blue: { bar: 'bg-blue-200', fill: 'bg-blue-500' },
+  yellow: { bar: 'bg-yellow-200', fill: 'bg-yellow-500' },
+  gray: { bar: 'bg-gray-200', fill: 'bg-gray-400' },
 }
 
 function interestAccent(color) {

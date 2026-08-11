@@ -3,9 +3,7 @@
     <LayoutHeader>
       <template #left-header>
         <div class="flex items-center gap-2">
-          <ViewBreadcrumbs
-            :routeName="isSalesDashboard ? 'Dashboard' : 'Marketing Dashboard'"
-          />
+          <ViewBreadcrumbs :routeName="breadcrumbRouteName" />
           <Badge variant="subtle" theme="orange" :label="__('Mock data')" />
         </div>
       </template>
@@ -30,6 +28,18 @@
           :variant="activeSalesSection === section.value ? 'solid' : 'ghost'"
           :label="__(section.label)"
           @click="openSalesSection(section.value)"
+        />
+      </div>
+      <div
+        v-if="isOfflineMarketingDashboard"
+        class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
+      >
+        <Button
+          v-for="team in offlineTeams"
+          :key="team.value"
+          :variant="offlineTeamFilter === team.value ? 'solid' : 'ghost'"
+          :label="__(team.label)"
+          @click="offlineTeamFilter = team.value"
         />
       </div>
       <Dropdown
@@ -103,7 +113,7 @@
 
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
       <DashboardGrid
-        :key="`${props.dashboardType}-${activeSalesSection}-${renderKey}`"
+        :key="`${props.dashboardType}-${activeSalesSection}-${offlineTeamFilter}-${renderKey}`"
         :model-value="dashboardItems"
         @refresh="refreshDashboard"
       />
@@ -145,8 +155,10 @@ import Link from '@/components/Controls/Link.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import {
-  marketingDashboardItems,
+  digitalMarketingDashboardItems,
+  offlineMarketingDashboardItems,
   salesDashboardSections,
+  type OfflineTeam,
 } from '@/data/admissionsDashboardMock'
 import { usersStore } from '@/stores/users'
 import { formatRange, formatter, getLastXDays } from '@/utils/dashboard'
@@ -192,11 +204,11 @@ const advancedFilterFields = [
   { key: 'district', label: 'District', options: ['Nội thành', 'Ngoại thành', 'Ngoài tỉnh'] },
   { key: 'highSchool', label: 'High School', options: ['Tất cả trường THPT', 'THPT chuyên', 'THPT công lập', 'THPT tư thục'] },
   { key: 'salesTeam', label: 'Sales Team', options: ['Team North', 'Team Central', 'Team South'] },
-  { key: 'leadChannel', label: 'Lead Channel', options: ['Digital', 'Event', 'Organic', 'Partner'] },
-  { key: 'leadSource', label: 'Lead Source', options: ['Facebook', 'Google', 'Zalo', 'Website', 'Sự kiện THPT'] },
+  { key: 'leadChannel', label: 'Lead Channel', options: ['Digital', 'Event', 'Organic', 'Referral'] },
+  { key: 'leadSource', label: 'Lead Source', options: ['Facebook', 'Google', 'Zalo', 'TikTok', 'Referral', 'Website'] },
   { key: 'campaign', label: 'Campaign', options: ['Open Day 2026', 'GenZ chọn ngành đúng', 'FPTU Scholarship', 'Campus Tour'] },
   { key: 'stage', label: 'Admission Stage', options: ['New Lead', 'Contacted', 'Qualified', 'Counseling', 'Application', 'Enrolled'] },
-  { key: 'dimension', label: 'Interest Dimension', options: ['Chi phí', 'Ngành & trường khác', 'Việc làm', 'Hoạt động sinh viên', 'Chỗ ở'] },
+  { key: 'dimension', label: 'Interest Dimension', options: ['Chi phí', 'Ngành & trường khác', 'Việc làm', 'Hoạt động sinh viên', 'Chỗ ở', 'Quan tâm', 'Khác'] },
   { key: 'interestLevel', label: 'Interest Level', options: ['Level ≥1', 'Level ≥2', 'Level 3'] },
   { key: 'stance', label: 'Stance', options: ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'UNRESOLVED'] },
   { key: 'readiness', label: 'Readiness', options: ['Level 0', 'Level 1', 'Level 2', 'Level 3', 'Level 4'] },
@@ -222,6 +234,7 @@ const marketingFilterKeys = new Set([
 ])
 
 const isSalesDashboard = computed(() => props.dashboardType === 'sales')
+const isOfflineMarketingDashboard = computed(() => props.dashboardType === 'offline_marketing')
 const salesSections = [
   { value: 'overview', label: 'Overview' },
   { value: 'interests', label: 'AI Interests' },
@@ -233,11 +246,23 @@ const activeSalesSection = computed<SalesSection>(() =>
     ? (props.dashboardSection as SalesSection)
     : 'overview',
 )
-const dashboardItems = computed(() =>
-  isSalesDashboard.value
-    ? salesDashboardSections[activeSalesSection.value]
-    : marketingDashboardItems,
-)
+const offlineTeams = [
+  { value: 'all', label: 'Tổng quan tất cả' },
+  { value: 'Team North', label: 'Team North' },
+  { value: 'Team Central', label: 'Team Central' },
+  { value: 'Team South', label: 'Team South' },
+] as const satisfies { value: OfflineTeam; label: string }[]
+const offlineTeamFilter = ref<OfflineTeam>('all')
+const dashboardItems = computed(() => {
+  if (isSalesDashboard.value) return salesDashboardSections[activeSalesSection.value]
+  if (isOfflineMarketingDashboard.value) return offlineMarketingDashboardItems(offlineTeamFilter.value)
+  return digitalMarketingDashboardItems
+})
+const breadcrumbRouteName = computed(() => {
+  if (isSalesDashboard.value) return 'Dashboard'
+  if (isOfflineMarketingDashboard.value) return 'Offline Marketing Dashboard'
+  return 'Digital Marketing Dashboard'
+})
 const dashboardFilterFields = computed(() =>
   isSalesDashboard.value
     ? advancedFilterFields
@@ -325,6 +350,8 @@ function applyAdvancedFilters() {
 usePageMeta(() => ({
   title: isSalesDashboard.value
     ? __('Sales Dashboard')
-    : __('Marketing Dashboard'),
+    : isOfflineMarketingDashboard.value
+      ? __('Offline Marketing Dashboard')
+      : __('Digital Marketing Dashboard'),
 }))
 </script>
