@@ -305,6 +305,18 @@ class CRMContact(Document):
 		if updates:
 			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
 
+def log_status_change(doc, method=None):
+	# CRM Contact.validate runs on every save across the whole app (phone/email
+	# uniqueness, geo resolution, student auto-create) — a failure here must never
+	# block an unrelated contact save, so this is a hard no-op-on-error boundary.
+	try:
+		from crm.fcrm.doctype.status_change_log.status_change_log import add_status_change_log
+
+		add_status_change_log(doc)
+	except Exception:
+		frappe.log_error(title="CRM Contact status_change_log failed")
+
+
 def get_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user

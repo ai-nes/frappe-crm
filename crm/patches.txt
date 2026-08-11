@@ -69,3 +69,6 @@ crm.patches.v1_0.add_contact_consent_log
 crm.patches.v1_0.add_contact_business_fields
 crm.patches.v1_0.add_ai_lead_insight
 crm.patches.v1_0.add_ai_personal_email_draft
+crm.patches.v1_0.expand_lead_source_platform_taxonomy
+crm.patches.v1_0.seed_crm_intent_type_dashboard_expansion
+crm.patches.v1_0.add_stage_category_to_enrollment_status

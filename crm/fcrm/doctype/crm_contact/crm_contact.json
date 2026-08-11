@@ -31,6 +31,7 @@
   "aspiration",
   "section_enrollment",
   "source",
+  "platform",
   "crm_campaign",
   "crm_event",
   "col_break_enrollment",
@@ -43,6 +44,8 @@
   "is_opted_out",
   "is_test_record",
   "email_bounced",
+  "section_status_history",
+  "status_change_log",
   "section_notes",
   "notes"
  ],
@@ -193,6 +196,13 @@
    "options": "CRM Lead Source"
   },
   {
+   "fieldname": "platform",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Platform",
+   "options": "CRM Platform"
+  },
+  {
    "fieldname": "crm_campaign",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -273,6 +283,18 @@
    "label": "Email Bounced",
    "read_only": 1,
    "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "fieldname": "section_status_history",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_change_log",
+   "fieldtype": "Table",
+   "label": "Status Change Log",
+   "options": "Status Change Log",
+   "read_only": 1
   },
   {
    "fieldname": "section_notes",

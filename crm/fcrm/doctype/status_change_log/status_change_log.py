@@ -42,9 +42,19 @@ def get_duration(from_date, to_date):
 	return duration.total_seconds()
 
 
+def get_status_field(doc):
+	overrides = frappe.get_hooks("status_change_log_field") or {}
+	override_field = overrides.get(doc.doctype)
+	if isinstance(override_field, list):
+		override_field = override_field[0] if override_field else None
+	if override_field and doc.meta.has_field(override_field):
+		return override_field
+	return next((f for f in ("stage", "status") if doc.meta.has_field(f)), None)
+
+
 def add_status_change_log(doc):
-	status_field = "stage" if doc.meta.has_field("stage") else "status"
-	if not doc.meta.has_field(status_field) or not doc.meta.has_field("status_change_log"):
+	status_field = get_status_field(doc)
+	if not status_field or not doc.meta.has_field("status_change_log"):
 		return
 
 	current_status = doc.get(status_field)
@@ -52,7 +62,9 @@ def add_status_change_log(doc):
 	if not doc.is_new():
 		previous_doc = doc.get_doc_before_save()
 		previous_status = previous_doc.get(status_field) if previous_doc else None
-		if not doc.status_change_log and previous_status:
+		if previous_status == current_status:
+			return
+		if not doc.status_change_log:
 			now_minus_one_minute = add_to_date(datetime.now(), minutes=-1)
 			doc.append(
 				"status_change_log",
