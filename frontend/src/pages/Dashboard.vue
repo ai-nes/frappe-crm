@@ -4,16 +4,29 @@
       <template #left-header>
         <div class="flex items-center gap-2">
           <ViewBreadcrumbs :routeName="breadcrumbRouteName" />
-          <Badge variant="subtle" theme="orange" :label="__('Mock data')" />
+          <Badge
+            variant="subtle"
+            :theme="useMockData ? 'orange' : 'green'"
+            :label="useMockData ? __('Mock data') : __('Live data')"
+          />
         </div>
       </template>
       <template #right-header>
-        <Button
-          :label="__('Refresh')"
-          :iconLeft="LucideRefreshCcw"
-          :loading="refreshing"
-          @click="refreshDashboard"
-        />
+        <div class="flex items-center gap-2">
+          <Button
+            :variant="useMockData ? 'subtle' : 'outline'"
+            :theme="useMockData ? 'orange' : 'green'"
+            :iconLeft="useMockData ? LucideDatabase : LucideActivity"
+            :label="useMockData ? __('Mock Data') : __('Live Data')"
+            @click="toggleMockMode"
+          />
+          <Button
+            :label="__('Refresh')"
+            :iconLeft="LucideRefreshCcw"
+            :loading="refreshing"
+            @click="refreshDashboard"
+          />
+        </div>
       </template>
     </LayoutHeader>
 
@@ -162,8 +175,10 @@ import {
 } from '@/data/admissionsDashboardMock'
 import { usersStore } from '@/stores/users'
 import { formatRange, formatter, getLastXDays } from '@/utils/dashboard'
+import { useStorage } from '@vueuse/core'
 import {
   Badge,
+  createResource,
   DateRangePicker,
   Dialog,
   Dropdown,
@@ -171,9 +186,11 @@ import {
   Tooltip,
   usePageMeta,
 } from 'frappe-ui'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import LucideActivity from '~icons/lucide/activity'
 import LucideCalendar from '~icons/lucide/calendar'
+import LucideDatabase from '~icons/lucide/database'
 import LucideListFilter from '~icons/lucide/list-filter'
 import LucideRefreshCcw from '~icons/lucide/refresh-ccw'
 
@@ -184,6 +201,7 @@ const props = defineProps({
 })
 const router = useRouter()
 
+const useMockData = useStorage('crm_dashboard_use_mock_data', false)
 const refreshing = ref(false)
 const renderKey = ref(0)
 const showDatePicker = ref(false)
@@ -253,11 +271,102 @@ const offlineTeams = [
   { value: 'Team South', label: 'Team South' },
 ] as const satisfies { value: OfflineTeam; label: string }[]
 const offlineTeamFilter = ref<OfflineTeam>('all')
-const dashboardItems = computed(() => {
-  if (isSalesDashboard.value) return salesDashboardSections[activeSalesSection.value]
-  if (isOfflineMarketingDashboard.value) return offlineMarketingDashboardItems(offlineTeamFilter.value)
-  return digitalMarketingDashboardItems
+
+function parsePeriod(period: string | null) {
+  if (!period) return { from_date: undefined, to_date: undefined }
+  if (period.includes(',')) {
+    const [f, t] = period.split(',')
+    return { from_date: f.trim(), to_date: t.trim() }
+  }
+  if (period.includes(' to ')) {
+    const [f, t] = period.split(' to ')
+    return { from_date: f.trim(), to_date: t.trim() }
+  }
+  return { from_date: period.trim(), to_date: undefined }
+}
+
+const liveSalesData = createResource({
+  url: 'crm.api.admissions_dashboard.get_sales_dashboard',
 })
+
+const liveDigitalData = createResource({
+  url: 'crm.api.admissions_dashboard.get_digital_marketing_dashboard',
+})
+
+const liveOfflineData = createResource({
+  url: 'crm.api.admissions_dashboard.get_offline_marketing_dashboard',
+})
+
+function fetchLiveData() {
+  if (useMockData.value) return
+  const { from_date, to_date } = parsePeriod(filters.period)
+  if (isSalesDashboard.value) {
+    liveSalesData.fetch({
+      from_date,
+      to_date,
+      user: filters.user || undefined,
+      sales_team: advancedFilters.salesTeam || undefined,
+      campus: advancedFilters.campus || undefined,
+      admission_term: advancedFilters.admissionTerm || undefined,
+      section: activeSalesSection.value,
+    })
+  } else if (isOfflineMarketingDashboard.value) {
+    liveOfflineData.fetch({
+      team: offlineTeamFilter.value,
+      from_date,
+      to_date,
+      campus: advancedFilters.campus || undefined,
+    })
+  } else {
+    liveDigitalData.fetch({
+      from_date,
+      to_date,
+      source: advancedFilters.leadSource || undefined,
+      platform: advancedFilters.leadChannel || undefined,
+      campaign: advancedFilters.campaign || undefined,
+      campus: advancedFilters.campus || undefined,
+    })
+  }
+}
+
+watch(
+  [
+    useMockData,
+    () => filters.period,
+    () => filters.user,
+    () => activeSalesSection.value,
+    () => offlineTeamFilter.value,
+    () => props.dashboardType,
+    () => props.dashboardSection,
+  ],
+  () => {
+    fetchLiveData()
+  },
+  { immediate: true },
+)
+
+const dashboardItems = computed(() => {
+  if (useMockData.value) {
+    if (isSalesDashboard.value) return salesDashboardSections[activeSalesSection.value]
+    if (isOfflineMarketingDashboard.value) return offlineMarketingDashboardItems(offlineTeamFilter.value)
+    return digitalMarketingDashboardItems
+  }
+
+  if (isSalesDashboard.value) {
+    return liveSalesData.data && Array.isArray(liveSalesData.data)
+      ? liveSalesData.data
+      : []
+  }
+  if (isOfflineMarketingDashboard.value) {
+    return liveOfflineData.data && Array.isArray(liveOfflineData.data)
+      ? liveOfflineData.data
+      : []
+  }
+  return liveDigitalData.data && Array.isArray(liveDigitalData.data)
+    ? liveDigitalData.data
+    : []
+})
+
 const breadcrumbRouteName = computed(() => {
   if (isSalesDashboard.value) return 'Dashboard'
   if (isOfflineMarketingDashboard.value) return 'Offline Marketing Dashboard'
@@ -325,10 +434,20 @@ function setCustomRange(value: string | null) {
 
 function refreshDashboard() {
   refreshing.value = true
+  if (!useMockData.value) {
+    if (isSalesDashboard.value) liveSalesData.fetch()
+    else if (isOfflineMarketingDashboard.value) liveOfflineData.fetch()
+    else liveDigitalData.fetch()
+  }
   window.setTimeout(() => {
     renderKey.value += 1
     refreshing.value = false
   }, 350)
+}
+
+function toggleMockMode() {
+  useMockData.value = !useMockData.value
+  refreshDashboard()
 }
 
 function openSalesSection(section: SalesSection) {

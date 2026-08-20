@@ -36,6 +36,7 @@ function axisItem(
   value: string,
   layout: Layout,
   type: 'bar' | 'line' = 'bar',
+  options: { wrapLabels?: boolean } = {},
 ) {
   return {
     name,
@@ -45,7 +46,7 @@ function axisItem(
       data,
       title,
       subtitle,
-      xAxis: { title: '', key: category, type: 'category' },
+      xAxis: { title: '', key: category, type: 'category', wrapLabels: options.wrapLabels },
       yAxis: { title: 'Số lượng' },
       series: [{ name: value, type, showDataPoints: type === 'line' }],
     },
@@ -350,33 +351,44 @@ export function offlineMarketingDashboardItems(team: OfflineTeam) {
     { x: 10, y: 0, w: 10, h: 8, i: 'mock_offline_interest' },
   )
 
-  const leadQualityChart = axisItem(
-    'mock_offline_lead_quality',
-    'Lead thu được theo phân loại',
-    'Toàn bộ Lead thu được từ sự kiện On-campus & Off-campus',
-    [
-      { category: 'Hot', count: 96 },
-      { category: 'Warm', count: 184 },
-      { category: 'Cool', count: 142 },
-      { category: 'Sai số', count: 58 },
-      { category: 'Không liên lạc được', count: 74 },
-      { category: 'Không quan tâm', count: 91 },
-    ],
-    'category',
-    'count',
-    { x: 0, y: 8, w: 10, h: 8, i: 'mock_offline_lead_quality' },
-  )
+  const leadQualityChart = {
+    name: 'mock_offline_lead_quality',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 0, y: 8, w: 10, h: 8, i: 'mock_offline_lead_quality' },
+    data: {
+      data: [
+        { category: 'Hot', count: 96 },
+        { category: 'Warm', count: 184 },
+        { category: 'Cool', count: 142 },
+        { category: 'Sai số', count: 58 },
+        { category: 'KLLĐ', count: 74 },
+        { category: 'Không quan tâm', count: 91 },
+      ],
+      title: 'Lead thu được theo phân loại',
+      subtitle: 'Toàn bộ Lead thu được từ sự kiện On-campus & Off-campus',
+      xAxis: { title: '', key: 'category', type: 'category' },
+      yAxis: { title: 'Số lượng' },
+      series: [{ name: 'count', type: 'bar' }],
+      echartOptions: {
+        xAxis: {
+          axisLabel: {
+            interval: 0,
+            fontSize: 11,
+          },
+        },
+      },
+    },
+  }
 
   const provinceRows = isFiltered
     ? offlineProvinceGroups[team].flatMap((group) =>
         group.oldProvinces.map((province) => ({ province: province.name, verified: province.count })),
       )
-    : offlineProvinceGroups.all.flatMap((group) =>
-        group.oldProvinces.map((province) => ({
-          province: `${group.newProvince} · ${province.name}`,
-          verified: province.count,
-        })),
-      )
+    : offlineProvinceGroups.all.map((group) => ({
+        province: group.newProvince,
+        province_detail: group.oldProvinces.map((p) => p.name).join(', '),
+        verified: group.oldProvinces.reduce((acc, p) => acc + p.count, 0),
+      }))
 
   const provinceChart = {
     name: 'mock_offline_province',
@@ -386,11 +398,20 @@ export function offlineMarketingDashboardItems(team: OfflineTeam) {
       data: provinceRows,
       title: 'Verified Lead theo địa bàn',
       subtitle: isFiltered
-        ? `Team đang chọn: ${team} · chỉ hiện tỉnh cũ`
-        : 'Tỉnh mới · gộp từ nhiều tỉnh cũ (dữ liệu mẫu, chờ mapping chính thức)',
-      xAxis: { title: '', key: 'province', type: 'category' },
+        ? `Team đang chọn: ${team} · chi tiết từng tỉnh`
+        : 'Tỉnh mới · gộp từ nhiều tỉnh cũ',
+      xAxis: { title: '', key: 'province', type: 'category', wrapLabels: true },
       yAxis: { title: 'Verified Lead' },
       series: [{ name: 'verified', type: 'bar' }],
+      echartOptions: {
+        xAxis: {
+          axisLabel: {
+            interval: 0,
+            rotate: 0,
+            fontSize: 11,
+          },
+        },
+      },
     },
   }
 
@@ -544,6 +565,8 @@ export const aiInterestDashboardItems = [
     'dimension',
     'leads',
     { x: 0, y: 9, w: 10, h: 8, i: 'mock_interest_distribution' },
+    'bar',
+    { wrapLabels: true },
   ),
   {
     name: 'mock_interest_trend',

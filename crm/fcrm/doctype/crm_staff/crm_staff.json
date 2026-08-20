@@ -11,6 +11,7 @@
  "field_order": [
   "full_name",
   "user",
+  "sales_team",
   "column_break_1",
   "department",
   "campus",
@@ -33,6 +34,14 @@
    "options": "User",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "sales_team",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Team",
+   "options": "\nTeam North\nTeam Central\nTeam South"
   },
   {
    "fieldname": "column_break_1",
