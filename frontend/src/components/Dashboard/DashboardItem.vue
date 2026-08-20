@@ -24,7 +24,7 @@
       v-else-if="item.type == 'axis_chart'"
       class="h-full w-full rounded-md bg-surface-white shadow"
     >
-      <AxisChart v-if="item.data" :config="item.data" />
+      <AxisChart v-if="axisChartConfig" :config="axisChartConfig" />
     </div>
     <div
       v-else-if="item.type == 'donut_chart'"
@@ -335,7 +335,7 @@
   </div>
 </template>
 <script setup>
-import { defineComponent, h } from 'vue'
+import { computed, defineComponent, h } from 'vue'
 import { AxisChart, Badge, Button, DonutChart, NumberChart, Tooltip } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 
@@ -348,6 +348,108 @@ const props = defineProps({
 defineEmits(['refresh'])
 
 const router = useRouter()
+
+const axisChartConfig = computed(() => {
+  if (!props.item?.data) return null
+  const config = props.item.data
+  const axisLabelDefaults = getAxisLabelDefaults(config)
+  const tooltipFormatter = getDetailTooltipFormatter(config)
+  return {
+    ...config,
+    xAxis: {
+      ...config.xAxis,
+      echartOptions: {
+        ...config.xAxis?.echartOptions,
+        axisLabel: {
+          ...axisLabelDefaults,
+          ...config.xAxis?.echartOptions?.axisLabel,
+        },
+      },
+    },
+    echartOptions: {
+      ...config.echartOptions,
+      xAxis: {
+        ...config.echartOptions?.xAxis,
+        axisLabel: {
+          ...axisLabelDefaults,
+          ...config.echartOptions?.xAxis?.axisLabel,
+        },
+      },
+      ...(tooltipFormatter
+        ? {
+            tooltip: {
+              ...config.echartOptions?.tooltip,
+              formatter: tooltipFormatter,
+            },
+          }
+        : {}),
+    },
+  }
+})
+
+function getAxisLabelDefaults(config) {
+  if (config.xAxis?.type !== 'category' || !config.xAxis?.wrapLabels) {
+    return { hideOverlap: true }
+  }
+
+  const labels = (config.data || []).map((row) => String(row?.[config.xAxis.key] || ''))
+  const isDense = labels.length >= 6 || labels.some((label) => label.length > 12)
+
+  if (!isDense) return { hideOverlap: true }
+
+  return {
+    hideOverlap: false,
+    interval: 0,
+    lineHeight: 14,
+    margin: 10,
+    formatter: formatCategoryAxisLabel,
+  }
+}
+
+function formatCategoryAxisLabel(value) {
+  const words = String(value).trim().split(/\s+/)
+  const lines = []
+  let line = ''
+
+  for (const word of words) {
+    const nextLine = line ? `${line} ${word}` : word
+    if (nextLine.length > 12 && line) {
+      lines.push(line)
+      line = word
+    } else {
+      line = nextLine
+    }
+  }
+  if (line) lines.push(line)
+
+  return lines.length > 2 ? `${lines.slice(0, 2).join('\n')}…` : lines.join('\n')
+}
+
+function getDetailTooltipFormatter(config) {
+  if (!config.data?.some((row) => row.province_detail)) return null
+
+  return (params) => {
+    const point = Array.isArray(params) ? params[0] : params
+    const row = config.data[point?.dataIndex]
+    if (!row) return ''
+
+    const label = escapeHtml(row[config.xAxis.key])
+    const detail = escapeHtml(row.province_detail)
+    const value = escapeHtml(point?.value?.[1])
+
+    return `<div class="flex flex-col gap-1"><b>${label}</b><span>${detail}</span><span>${point.marker} Verified Lead: <b>${value}</b></span></div>`
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character])
+}
 
 const Metric = defineComponent({
   props: { label: String, value: [String, Number], tone: String },

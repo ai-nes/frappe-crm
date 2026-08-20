@@ -10,6 +10,8 @@
  "engine": "InnoDB",
  "field_order": [
   "source_name",
+  "is_digital",
+  "channel_family",
   "details"
  ],
  "fields": [
@@ -20,6 +22,22 @@
    "label": "Source Name",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_digital",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Digital"
+  },
+  {
+   "fieldname": "channel_family",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Channel Family",
+   "options": "\nSocial\nSearch\nDirect/Website\nReferral\nEvent/Offline"
   },
   {
    "fieldname": "details",
