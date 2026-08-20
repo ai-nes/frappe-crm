@@ -16,6 +16,9 @@
   "col_break_1",
   "enrollment_status",
   "lead_status",
+  "readiness_level",
+  "quality_bucket",
+  "is_verified_lead",
   "assigned_to",
   "student",
   "admission_year",
@@ -36,6 +39,8 @@
   "crm_event",
   "col_break_enrollment",
   "branch",
+  "first_contact_time",
+  "sla_status",
   "next_follow_up",
   "col_break_follow_up",
   "decision_maker",
@@ -101,6 +106,31 @@
    "label": "Lead Status",
    "options": "CRM Lead Status",
    "default": "Mới"
+  },
+  {
+   "fieldname": "readiness_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Readiness Level",
+   "options": "\nLevel 0 - Chưa xác định\nLevel 1 - Đang tìm hiểu\nLevel 2 - Đang so sánh\nLevel 3 - Có ý định nộp hồ sơ\nLevel 4 - Sẵn sàng nhập học",
+   "default": ""
+  },
+  {
+   "fieldname": "quality_bucket",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead Quality Bucket",
+   "options": "\nHot\nWarm\nCool\nSai số\nKhông liên lạc được\nKhông quan tâm"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_verified_lead",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verified Lead"
   },
   {
    "fieldname": "assigned_to",
@@ -225,6 +255,21 @@
    "in_standard_filter": 1,
    "label": "Branch",
    "options": "CRM Campus"
+  },
+  {
+   "fieldname": "first_contact_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "First Contact Time"
+  },
+  {
+   "fieldname": "sla_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "SLA Status",
+   "options": "\nĐúng SLA\nSắp quá hạn\nQuá SLA"
   },
   {
    "fieldname": "next_follow_up",

@@ -6,11 +6,24 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "dimension_code",
   "label",
+  "interest_level",
+  "score",
+  "trend",
+  "stance",
   "confidence",
+  "is_current",
   "evidence"
  ],
  "fields": [
+  {
+   "fieldname": "dimension_code",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Dimension Code",
+   "options": "\nCOST\nPROGRAM_COMPETITOR\nCAREER\nSTUDENT_LIFE\nACCOMMODATION\nENROLLMENT_READINESS\nINTERESTED\nOTHER"
+  },
   {
    "fieldname": "label",
    "fieldtype": "Data",
@@ -18,10 +31,43 @@
    "label": "Interest"
   },
   {
+   "default": "2",
+   "fieldname": "interest_level",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Level (0-3)"
+  },
+  {
+   "fieldname": "score",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Score"
+  },
+  {
+   "fieldname": "trend",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trend",
+   "options": "\nNEW\nSTABLE\nINCREASING\nDECREASING\nRESOLVED\nUNKNOWN"
+  },
+  {
+   "fieldname": "stance",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Stance",
+   "options": "\nPOSITIVE\nNEUTRAL\nNEGATIVE\nUNRESOLVED"
+  },
+  {
    "fieldname": "confidence",
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Confidence"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_current",
+   "fieldtype": "Check",
+   "label": "Is Current"
   },
   {
    "fieldname": "evidence",
