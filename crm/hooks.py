@@ -151,6 +151,9 @@ override_doctype_class = {
 # Hook on document methods and events
 
 doc_events = {
+	"DocType": {
+		"validate": ["crm.api.capability.validate_ai_exposed_change"],
+	},
 	"Contact": {
 		"validate": ["crm.api.contact.validate"],
 	},
