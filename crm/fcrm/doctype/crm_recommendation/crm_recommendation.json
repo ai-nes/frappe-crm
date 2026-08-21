@@ -12,6 +12,10 @@
   "rule_key",
   "source_intent_id",
   "condition_version",
+  "context_hash",
+  "policy_version",
+  "worklist_priority_rank",
+  "worklist_timing_sort",
   "column_break_1",
   "priority",
   "status",
@@ -65,6 +69,35 @@
    "read_only": 1,
    "reqd": 1,
    "description": "Bumped when a rule's evaluation logic changes, to allow a controlled re-arm without touching old dedup fingerprints"
+  },
+  {
+   "fieldname": "context_hash",
+   "fieldtype": "Data",
+   "label": "Decision Context Hash",
+   "read_only": 1,
+   "description": "Canonical bounded decision-context version; blank for legacy recommendations."
+  },
+  {
+   "fieldname": "policy_version",
+   "fieldtype": "Data",
+   "label": "Policy Version",
+   "read_only": 1,
+   "description": "Deterministic policy version that created this recommendation."
+  },
+  {
+   "default": "99",
+   "fieldname": "worklist_priority_rank",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Worklist Priority Rank",
+   "read_only": 1
+  },
+  {
+   "fieldname": "worklist_timing_sort",
+   "fieldtype": "Datetime",
+   "hidden": 1,
+   "label": "Worklist Timing Sort",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_1",

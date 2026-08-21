@@ -191,6 +191,7 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
+	"hourly": ["crm.api.agent_events.retry_pending_agent_events"],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
 	],
@@ -268,6 +269,7 @@ before_request = ["crm.api.resource.normalize_resource_phone_filters"]
 after_migrate = [
 	"crm.fcrm.doctype.fcrm_settings.fcrm_settings.after_migrate",
 	"crm.api.whatsapp.add_roles",
+	"crm.api.agent_migrations.after_migrate",
 ]
 
 standard_dropdown_items = [

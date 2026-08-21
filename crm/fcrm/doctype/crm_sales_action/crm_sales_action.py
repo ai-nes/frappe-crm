@@ -40,67 +40,9 @@ def on_execution_or_outcome_change(doc, method=None):
 	previous_outcome = before.business_outcome if before else None
 	if not doc.business_outcome or doc.business_outcome == previous_outcome:
 		return
-	frappe.enqueue(
-		"crm.fcrm.doctype.crm_sales_action.crm_sales_action.notify_crm_agents_of_outcome",
-		queue="short",
-		enqueue_after_commit=True,
-		sales_action=doc.name,
-		student=doc.student,
-		business_outcome=doc.business_outcome,
-		outcome_notes=doc.outcome_notes,
-		linked_interaction=doc.linked_interaction,
-	)
+	from crm.api.agent_events import record_agent_event
 
-
-def notify_crm_agents_of_outcome(sales_action, student, business_outcome, outcome_notes=None, linked_interaction=None):
-	"""Background job body for on_execution_or_outcome_change — same HMAC
-	scheme as crm_recommendation.notify_crm_agents_of_decision. Never raises:
-	a failed delivery is logged and left for crm-agents' reconciliation
-	sweep, not retried here.
-	"""
-	import hashlib
-	import hmac
-	import json
-	import time
-
-	import requests
-
-	base_url = frappe.conf.get("crm_agents_url")
-	secret = frappe.conf.get("crm_agents_webhook_secret")
-	if not base_url or not secret:
-		frappe.log_error(
-			title="crm-agents webhook not configured",
-			message="site_config.json is missing crm_agents_url / crm_agents_webhook_secret",
-		)
-		return
-
-	body = json.dumps({
-		"sales_action": sales_action,
-		"student": student,
-		"business_outcome": business_outcome,
-		"outcome_notes": outcome_notes,
-		"linked_interaction": linked_interaction,
-	}).encode("utf-8")
-	timestamp = str(int(time.time()))
-	signature = hmac.new(secret.encode("utf-8"), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
-
-	try:
-		response = requests.post(
-			f"{base_url.rstrip('/')}/api/v1/insight/sales-action-outcome",
-			data=body,
-			headers={
-				"Content-Type": "application/json",
-				"X-CRM-Signature": f"sha256={signature}",
-				"X-CRM-Timestamp": timestamp,
-			},
-			timeout=10,
-		)
-		response.raise_for_status()
-	except Exception as exc:
-		frappe.log_error(
-			title="crm-agents sales-action-outcome notify failed",
-			message=f"sales_action={sales_action}: {exc}",
-		)
+	record_agent_event("sales_action.outcome_recorded.v1", doc)
 
 
 def get_permission_query_conditions(user=None):

@@ -3,13 +3,36 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
 
 class CRMRecommendation(Document):
-	def autoname(self):
-		"""Deterministic name = hash(student, rule_key, source_intent_id, condition_version).
+	_ALLOWED_TRANSITIONS = {
+		"new": {"acknowledged", "dismissed", "accepted", "rejected", "deferred", "modified", "expired", "superseded"},
+		"acknowledged": {"dismissed", "accepted", "rejected", "deferred", "modified", "expired", "superseded"},
+		"deferred": {"accepted", "rejected", "modified", "expired", "superseded"},
+		"accepted": {"modified", "expired", "superseded"},
+		"modified": {"expired", "superseded"},
+	}
 
-		Naming the record by a hash of these four fields, rather than a random/
+	def validate(self):
+		"""Keep legacy rows readable while rejecting illegal lifecycle rewrites."""
+		self.worklist_priority_rank = {"high": 0, "medium": 1, "low": 2}.get(self.priority, 99)
+		# A null recommendation time means no fabricated urgency. Its sortable
+		# projection deliberately lands after scheduled work of the same rank.
+		self.worklist_timing_sort = self.recommended_timing or "9999-12-31 23:59:59.999999"
+		before = self.get_doc_before_save()
+		if not before or before.status == self.status:
+			return
+		allowed = self._ALLOWED_TRANSITIONS.get(before.status, set())
+		if self.status not in allowed:
+			frappe.throw(_("Illegal CRM Recommendation transition: {0} -> {1}").format(before.status, self.status))
+		if self.status in {"rejected", "deferred"} and not self.decision_reason:
+			frappe.throw(_("A decision reason is required when rejecting or deferring a recommendation."))
+	def autoname(self):
+		"""Deterministic name = hash(student, rule_key, source_intent_id, condition_version, context revision).
+
+		Naming the record by a hash of these immutable fields, rather than a random/
 		series name, means a concurrent double-run of the nightly batch racing to
 		insert the same fingerprint fails on the SECOND insert with a duplicate
 		primary-key error instead of silently creating two rows. Query-then-insert
@@ -26,12 +49,17 @@ class CRMRecommendation(Document):
 			frappe.throw(
 				_("CRM Recommendation requires student, rule_key, source_intent_id and condition_version before it can be named"),
 			)
-		fingerprint = "|".join([
+		fingerprint_parts = [
 			self.student,
 			self.rule_key,
 			self.source_intent_id,
 			str(self.condition_version),
-		])
+		]
+		# Legacy rows keep their original four-part identity. A versioned context
+		# adds one immutable revision component.
+		if self.context_hash:
+			fingerprint_parts.append(self.context_hash)
+		fingerprint = "|".join(fingerprint_parts)
 		digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
 		self.name = f"REC-{digest}"
 
@@ -89,78 +117,38 @@ def on_status_decided(doc, method=None):
 	crm-agents in the background so it can create the CRM Sales Action row
 	that will track execution/outcome for it.
 
-	Fires on every save, not just this one, so it must detect the actual
-	transition itself via `get_doc_before_save()` rather than assume it only
-	runs once. Bypassable like any Frappe hook (a direct `db_set` skips it
-	entirely) — crm-agents' own reconciliation sweep is the correctness
-	backstop for whatever this hook misses, not this call alone.
+	Fires on every save, not just this one, so it detects the actual transition.
+	The Sales Action and outbox row are written in this same Frappe transaction;
+	the asynchronous delivery only signals crm-agents to re-read authoritative
+	CRM data.
 	"""
 	before = doc.get_doc_before_save()
 	previous_status = before.status if before else None
 	if doc.status == previous_status or doc.status not in ("accepted", "modified"):
 		return
-	frappe.enqueue(
-		"crm.fcrm.doctype.crm_recommendation.crm_recommendation.notify_crm_agents_of_decision",
-		queue="short",
-		enqueue_after_commit=True,
-		recommendation=doc.name,
-		student=doc.student,
-		action_type=doc.recommended_action,
-		status=doc.status,
-		decision_reason=doc.decision_reason,
+	_create_sales_action(doc)
+	from crm.api.agent_events import record_agent_event
+
+	record_agent_event("recommendation.decided.v1", doc)
+
+
+def _create_sales_action(recommendation) -> str:
+	"""Create the one linked Sales Action before committing the decision."""
+	existing = frappe.db.get_value("CRM Sales Action", {"recommendation": recommendation.name}, "name")
+	if existing:
+		return existing
+	action = frappe.get_doc(
+		{
+			"doctype": "CRM Sales Action",
+			"recommendation": recommendation.name,
+			"student": recommendation.student,
+			"action_type": recommendation.recommended_action,
+			"execution_status": "planned",
+			"created_at": now_datetime(),
+		}
 	)
-
-
-def notify_crm_agents_of_decision(recommendation, student, action_type, status, decision_reason=None):
-	"""Background job body for on_status_decided — HMAC-signs and POSTs the
-	decision to crm-agents' recommendation-decision endpoint, the same
-	{timestamp}.{body} HMAC-SHA256 scheme crm-agents itself uses to verify
-	the Chatwoot webhook. Never raises: a failed delivery is logged and left
-	for crm-agents' reconciliation sweep, not retried here.
-	"""
-	import hashlib
-	import hmac
-	import json
-	import time
-
-	import requests
-
-	base_url = frappe.conf.get("crm_agents_url")
-	secret = frappe.conf.get("crm_agents_webhook_secret")
-	if not base_url or not secret:
-		frappe.log_error(
-			title="crm-agents webhook not configured",
-			message="site_config.json is missing crm_agents_url / crm_agents_webhook_secret",
-		)
-		return
-
-	body = json.dumps({
-		"recommendation": recommendation,
-		"student": student,
-		"action_type": action_type,
-		"status": status,
-		"decision_reason": decision_reason,
-	}).encode("utf-8")
-	timestamp = str(int(time.time()))
-	signature = hmac.new(secret.encode("utf-8"), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
-
-	try:
-		response = requests.post(
-			f"{base_url.rstrip('/')}/api/v1/insight/recommendation-decision",
-			data=body,
-			headers={
-				"Content-Type": "application/json",
-				"X-CRM-Signature": f"sha256={signature}",
-				"X-CRM-Timestamp": timestamp,
-			},
-			timeout=10,
-		)
-		response.raise_for_status()
-	except Exception as exc:
-		frappe.log_error(
-			title="crm-agents recommendation-decision notify failed",
-			message=f"recommendation={recommendation}: {exc}",
-		)
+	action.insert(ignore_permissions=True)
+	return action.name
 
 
 def has_permission(doc, user=None, permission_type=None):
