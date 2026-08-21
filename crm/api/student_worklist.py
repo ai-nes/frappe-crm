@@ -28,6 +28,8 @@ def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) 
 	"""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if frappe.conf.get("crm_student_worklist_enabled", 1) in (0, "0", False):
+		frappe.throw(_("Student worklist is disabled by rollout policy."), frappe.PermissionError)
 
 	page_size = _parse_page_size(page_size)
 	principal = frappe.session.user

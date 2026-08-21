@@ -25,6 +25,8 @@ _MAX_DELIVERY_ATTEMPTS = 10
 
 def record_agent_event(event_type: str, doc) -> str:
 	"""Persist an event in the caller's current transaction and schedule delivery."""
+	if frappe.conf.get("crm_agents_outbox_enabled", 1) in (0, "0", False):
+		return ""
 	if event_type not in _EVENT_PATHS:
 		frappe.throw(f"Unsupported crm-agents event type: {event_type}")
 	event = frappe.get_doc(

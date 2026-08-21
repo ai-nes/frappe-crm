@@ -22,3 +22,24 @@ def after_migrate() -> None:
 	frappe.db.add_index(
 		"CRM Agent Event", ["status", "next_attempt_at", "creation"], "crm_agent_event_retry_idx"
 	)
+	_grant_sales_worklist_capability()
+
+
+def _grant_sales_worklist_capability() -> None:
+	"""Seed the least-privilege read capability for verified Sales roles."""
+	if not frappe.db.has_column("Role", "custom_ai_capability_grants"):
+		return
+	for role_name in ("Sale", "CTV-Sale", "Counseller", "Team Leader"):
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == "sales_intelligence.worklist.read"
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": "sales_intelligence.worklist.read"},
+		)
+		role.save(ignore_permissions=True)
