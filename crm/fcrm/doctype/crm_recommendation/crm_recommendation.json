@@ -17,9 +17,15 @@
   "status",
   "expires_at",
   "created_at",
+  "section_action",
+  "recommended_action",
+  "recommended_timing",
+  "cta",
+  "talking_points",
   "section_reason",
   "reason",
-  "evidence"
+  "evidence",
+  "decision_reason"
  ],
  "fields": [
   {
@@ -81,8 +87,9 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "new\nacknowledged\ndismissed",
-   "reqd": 1
+   "options": "new\nacknowledged\ndismissed\naccepted\nrejected\ndeferred\nmodified\nexpired\nsuperseded",
+   "reqd": 1,
+   "description": "new/acknowledged/dismissed are the original ack/dismiss lifecycle, kept valid for existing rows; accepted/rejected/deferred/modified/expired/superseded is the widened Sales feedback lifecycle."
   },
   {
    "fieldname": "expires_at",
@@ -96,6 +103,39 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Created At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_action",
+   "fieldtype": "Section Break",
+   "label": "Recommended Action"
+  },
+  {
+   "fieldname": "recommended_action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Recommended Action",
+   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
+   "read_only": 1,
+   "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary; blank on rows written before this field existed."
+  },
+  {
+   "fieldname": "recommended_timing",
+   "fieldtype": "Datetime",
+   "label": "Recommended Timing",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cta",
+   "fieldtype": "Data",
+   "label": "Call To Action",
+   "read_only": 1
+  },
+  {
+   "fieldname": "talking_points",
+   "fieldtype": "Text",
+   "label": "Talking Points",
    "read_only": 1
   },
   {
@@ -117,6 +157,12 @@
    "label": "Evidence",
    "read_only": 1,
    "description": "Machine-readable evidence backing this recommendation, shape depends on rule_key"
+  },
+  {
+   "fieldname": "decision_reason",
+   "fieldtype": "Text",
+   "label": "Decision Reason",
+   "description": "Optional — why Sales rejected/deferred this recommendation."
   }
  ],
  "index_web_pages_for_search": 1,

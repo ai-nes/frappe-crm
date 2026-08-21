@@ -131,10 +131,12 @@ before_uninstall = "crm.uninstall.before_uninstall"
 permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
+	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
 }
 
 has_permission = {
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
+	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
 }
 
 # DocType Class
@@ -172,6 +174,12 @@ doc_events = {
 	"WhatsApp Message": {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
+	},
+	"CRM Recommendation": {
+		"on_update": ["crm.fcrm.doctype.crm_recommendation.crm_recommendation.on_status_decided"],
+	},
+	"CRM Sales Action": {
+		"on_update": ["crm.fcrm.doctype.crm_sales_action.crm_sales_action.on_execution_or_outcome_change"],
 	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],

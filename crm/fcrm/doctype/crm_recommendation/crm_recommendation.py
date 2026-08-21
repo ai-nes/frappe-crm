@@ -83,6 +83,86 @@ def get_permission_query_conditions(user=None):
 	)
 
 
+def on_status_decided(doc, method=None):
+	"""Sales just decided Accept/Reject/Defer/Modify in the Frappe UI (a plain
+	write to `status`) — when the decision is accepted/modified, tell
+	crm-agents in the background so it can create the CRM Sales Action row
+	that will track execution/outcome for it.
+
+	Fires on every save, not just this one, so it must detect the actual
+	transition itself via `get_doc_before_save()` rather than assume it only
+	runs once. Bypassable like any Frappe hook (a direct `db_set` skips it
+	entirely) — crm-agents' own reconciliation sweep is the correctness
+	backstop for whatever this hook misses, not this call alone.
+	"""
+	before = doc.get_doc_before_save()
+	previous_status = before.status if before else None
+	if doc.status == previous_status or doc.status not in ("accepted", "modified"):
+		return
+	frappe.enqueue(
+		"crm.fcrm.doctype.crm_recommendation.crm_recommendation.notify_crm_agents_of_decision",
+		queue="short",
+		enqueue_after_commit=True,
+		recommendation=doc.name,
+		student=doc.student,
+		action_type=doc.recommended_action,
+		status=doc.status,
+		decision_reason=doc.decision_reason,
+	)
+
+
+def notify_crm_agents_of_decision(recommendation, student, action_type, status, decision_reason=None):
+	"""Background job body for on_status_decided — HMAC-signs and POSTs the
+	decision to crm-agents' recommendation-decision endpoint, the same
+	{timestamp}.{body} HMAC-SHA256 scheme crm-agents itself uses to verify
+	the Chatwoot webhook. Never raises: a failed delivery is logged and left
+	for crm-agents' reconciliation sweep, not retried here.
+	"""
+	import hashlib
+	import hmac
+	import json
+	import time
+
+	import requests
+
+	base_url = frappe.conf.get("crm_agents_url")
+	secret = frappe.conf.get("crm_agents_webhook_secret")
+	if not base_url or not secret:
+		frappe.log_error(
+			title="crm-agents webhook not configured",
+			message="site_config.json is missing crm_agents_url / crm_agents_webhook_secret",
+		)
+		return
+
+	body = json.dumps({
+		"recommendation": recommendation,
+		"student": student,
+		"action_type": action_type,
+		"status": status,
+		"decision_reason": decision_reason,
+	}).encode("utf-8")
+	timestamp = str(int(time.time()))
+	signature = hmac.new(secret.encode("utf-8"), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
+
+	try:
+		response = requests.post(
+			f"{base_url.rstrip('/')}/api/v1/insight/recommendation-decision",
+			data=body,
+			headers={
+				"Content-Type": "application/json",
+				"X-CRM-Signature": f"sha256={signature}",
+				"X-CRM-Timestamp": timestamp,
+			},
+			timeout=10,
+		)
+		response.raise_for_status()
+	except Exception as exc:
+		frappe.log_error(
+			title="crm-agents recommendation-decision notify failed",
+			message=f"recommendation={recommendation}: {exc}",
+		)
+
+
 def has_permission(doc, user=None, permission_type=None):
 	"""Direct-GET-by-name guard (also covers report/export and link-lookup reads
 	that resolve a specific document rather than running the list query).
