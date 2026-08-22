@@ -9,10 +9,7 @@ NEW_ROLES = [
 	"Administrator",
 ]
 
-OLD_ROLES = [
-	# Old CRM roles
-	"Sales Manager",
-	"Sales User",
+REMOVABLE_ROLES = [
 	# ERPNext business roles — irrelevant on a CRM-only deployment
 	"Accounts Manager",
 	"Accounts User",
@@ -36,6 +33,7 @@ OLD_ROLES = [
 	"Quality Manager",
 	"Item Manager",
 	"Auditor",
+	"Enrollment Manager",
 	# Frappe content roles — not needed for CRM
 	"Blogger",
 	"Newsletter Manager",
@@ -46,19 +44,26 @@ OLD_ROLES = [
 	"Translator",
 	"Prepared Report User",
 	"Inbox User",
-	"Script Manager",
 	"Report Manager",
 	"Workspace Manager",
 	"Dashboard Manager",
 ]
 
 
-def execute():
-	# Remove old roles and all their assignments
-	for role_name in OLD_ROLES:
+def remove_unused_roles():
+	"""Remove default roles that are outside the CRM's supported role model.
+
+	Sales Manager and Sales User remain supported for legacy CRM user-management
+	flows. Script Manager is a Frappe standard role and must not be removed.
+	"""
+	for role_name in REMOVABLE_ROLES:
 		if frappe.db.exists("Role", role_name):
 			frappe.db.delete("Has Role", {"role": role_name})
 			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
+
+
+def execute():
+	remove_unused_roles()
 
 	# Create new roles
 	for role_name in NEW_ROLES:

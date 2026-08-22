@@ -73,3 +73,4 @@ crm.patches.v1_0.expand_lead_source_platform_taxonomy
 crm.patches.v1_0.seed_crm_intent_type_dashboard_expansion
 crm.patches.v1_0.add_stage_category_to_enrollment_status
 crm.patches.v1_0.seed_phase1_dashboard_data_foundation
+crm.patches.v1_0.remove_unused_default_roles
