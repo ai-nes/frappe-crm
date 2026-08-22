@@ -168,6 +168,7 @@ doc_events = {
 	},
 	"CRM Contact": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
 	},
 	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
@@ -177,8 +178,15 @@ doc_events = {
 		"on_update": ["crm.api.todo.on_update"],
 	},
 	"Communication": {
-		"after_insert": ["crm.utils.on_communication_insert"],
-		"on_update": ["crm.utils.on_communication_update"],
+		"after_insert": [
+			"crm.utils.on_communication_insert",
+			"crm.fcrm.interaction_log.create_interaction_from_communication_insert",
+		],
+		"on_update": [
+			"crm.utils.on_communication_update",
+			"crm.fcrm.interaction_log.create_interaction_from_communication_update",
+		],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"Comment": {
 		"after_insert": ["crm.utils.on_comment_insert"],
@@ -190,8 +198,18 @@ doc_events = {
 	},
 	"CRM Contact Consent Event": {
 		"after_insert": [
-			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag"
+			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag",
+			"crm.fcrm.interaction_log.create_interaction_from_consent_event",
 		],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"Task": {
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_task_update"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"Call Log": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],

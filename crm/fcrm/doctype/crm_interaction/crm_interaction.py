@@ -6,6 +6,12 @@ class CRMInteraction(Document):
 	def before_validate(self):
 		if not self.interaction_datetime:
 			self.interaction_datetime = frappe.utils.now_datetime()
+		if not self.actor:
+			self.actor = frappe.session.user
+
+	def validate(self):
+		if not self.student and not self.crm_contact:
+			frappe.throw(frappe._("An interaction must be linked to a Student or a CRM Contact."))
 
 	@staticmethod
 	def default_list_data():

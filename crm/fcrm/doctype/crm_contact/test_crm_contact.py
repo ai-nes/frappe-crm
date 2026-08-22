@@ -7,7 +7,15 @@ class TestCRMContact(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
+		test_contact_names = frappe.db.get_all(
+			"CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"
+		)
+		if test_contact_names:
+			for name in frappe.db.get_all(
+				"CRM Interaction", filters={"crm_contact": ["in", test_contact_names]}, pluck="name"
+			):
+				frappe.delete_doc("CRM Interaction", name, force=True)
+		for name in test_contact_names:
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
@@ -193,7 +201,77 @@ class TestCRMContact(FrappeTestCase):
 		contact.reload()
 		self.assertEqual(len(contact.assignment_log), 0)
 
+	# ------------------------------------------------------- CRM Interaction dispatch
+	# (Phase 4: crm.fcrm.interaction_log.create_interaction_from_contact_update)
+
+	def test_lifecycle_stage_change_creates_single_stage_changed_interaction(self):
+		self._ensure_interaction_type("Stage Changed")
+
+		contact = self._make_contact("_Test Stage Interaction", "0933100001", enrollment_status="Mới")
+		self.assertEqual(contact.lifecycle_stage, "Lead")
+
+		contact.enrollment_status = "Có triển vọng"
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(contact.lifecycle_stage, "MQL")
+
+		interactions = self._stage_changed_interactions(contact.name)
+		self.assertEqual(len(interactions), 1)
+
+		# Duplicate guard: saving again with no further lifecycle_stage change
+		# must not create a second Stage Changed interaction.
+		contact.full_name = "_Test Stage Interaction Renamed"
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 1)
+
+	def test_assignment_change_creates_lead_assigned_then_lead_reassigned_interactions(self):
+		self._ensure_interaction_type("Lead Assigned")
+		self._ensure_interaction_type("Lead Reassigned")
+
+		campus = self._make_campus("_Test Interaction Assign Campus")
+		department = self._make_department("_Test Interaction Assign Dept", campus)
+		team = self._make_team("_Test Interaction Assign Team", campus)
+		staff_a = self._make_staff("_Test Interaction Assign Staff A", campus, department, team)
+		staff_b = self._make_staff("_Test Interaction Assign Staff B", campus, department, team)
+
+		contact = self._make_contact("_Test Assignment Interaction", "0933100002")
+
+		contact.assigned_to = staff_a
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 0)
+
+		contact.assigned_to = staff_b
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 1)
+
 	# ---------------------------------------------------------------------- helpers
+
+	def _ensure_interaction_type(self, name):
+		# Same production CRM Interaction Type names the seed_crm_interaction_types
+		# patch installs; not _Test-prefixed and intentionally left in place
+		# across tests (create_interaction() no-ops if the type is missing).
+		if not frappe.db.exists("CRM Interaction Type", name):
+			frappe.get_doc({
+				"doctype": "CRM Interaction Type",
+				"interaction_type_name": name,
+			}).insert(ignore_permissions=True)
+
+	def _stage_changed_interactions(self, contact_name):
+		return frappe.db.get_all(
+			"CRM Interaction",
+			filters={"crm_contact": contact_name, "interaction_type": "Stage Changed"},
+			pluck="name",
+		)
+
+	def _interaction_count(self, contact_name, interaction_type):
+		return frappe.db.count(
+			"CRM Interaction", {"crm_contact": contact_name, "interaction_type": interaction_type}
+		)
 
 	def _make_user_and_staff(self, prefix, roles=None):
 		campus = self._make_campus(f"{prefix} Campus")
