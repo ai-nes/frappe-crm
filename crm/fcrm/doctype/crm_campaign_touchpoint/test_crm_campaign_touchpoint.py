@@ -14,6 +14,10 @@ class TestCRMCampaignTouchpoint(FrappeTestCase):
 
 	def tearDown(self):
 		for name in frappe.db.get_all(
+			"CRM Interaction", filters={"reference_doctype": "CRM Campaign Touchpoint"}, pluck="name"
+		):
+			frappe.delete_doc("CRM Interaction", name, force=True)
+		for name in frappe.db.get_all(
 			"CRM Campaign Touchpoint", filters={"crm_campaign": self.campaign}, pluck="name"
 		):
 			frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
@@ -99,3 +103,45 @@ class TestCRMCampaignTouchpoint(FrappeTestCase):
 		second = self._make_touchpoint(crm_campaign=other_campaign)
 		second.insert(ignore_permissions=True)  # must not raise
 		self.assertTrue(second.name)
+
+	# ---------------------------------------------- Phase 6: interaction dispatch
+
+	def _ensure_interaction_type(self, name):
+		if not frappe.db.exists("CRM Interaction Type", name):
+			frappe.get_doc(
+				{"doctype": "CRM Interaction Type", "interaction_type_name": name}
+			).insert(ignore_permissions=True)
+
+	def test_insert_creates_campaign_touched_interaction(self):
+		self._ensure_interaction_type("Campaign Touched")
+		touchpoint = self._make_touchpoint()
+		touchpoint.insert(ignore_permissions=True)
+
+		interaction_name = frappe.db.get_value(
+			"CRM Interaction",
+			{"reference_doctype": "CRM Campaign Touchpoint", "reference_docname": touchpoint.name},
+			"name",
+		)
+		self.assertTrue(interaction_name)
+
+		interaction = frappe.get_doc("CRM Interaction", interaction_name)
+		self.assertEqual(interaction.interaction_type, "Campaign Touched")
+		self.assertEqual(interaction.crm_contact, self.contact)
+
+		frappe.delete_doc("CRM Interaction", interaction_name, force=True)
+
+	def test_in_patch_flag_suppresses_campaign_touchpoint_interaction(self):
+		self._ensure_interaction_type("Campaign Touched")
+		touchpoint = self._make_touchpoint()
+
+		frappe.flags.in_patch = True
+		try:
+			touchpoint.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.in_patch = False
+
+		exists = frappe.db.exists(
+			"CRM Interaction",
+			{"reference_doctype": "CRM Campaign Touchpoint", "reference_docname": touchpoint.name},
+		)
+		self.assertFalse(exists)

@@ -2,12 +2,15 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.admissions_dashboard import (
+	_campaign_cost_data,
 	_contact_names_touched_by_campaign,
 	_contact_names_with_event_participation,
+	get_admissions_director_dashboard,
 	get_digital_marketing_dashboard,
 	get_offline_marketing_dashboard,
 	get_sales_dashboard,
 )
+from crm.api.admissions_dashboard_auth import DashboardAccessDenied
 
 
 class TestAdmissionsDashboard(FrappeTestCase):
@@ -124,6 +127,144 @@ class TestAdmissionsDashboard(FrappeTestCase):
 
 		self.assertIn(legacy_contact, names)
 		self.assertIn(migrated_contact, names)
+
+	# ------------------------------------------------------------------------
+	# Phase 6: campaign-scoped total_spend and per-campaign cost data
+
+	def test_digital_dashboard_total_spend_scoped_to_selected_campaign(self):
+		campus = self._make_campus_for_dash("_Test Dash Spend Campus")
+		campaign_a = self._make_campaign_for_dash("_Test Dash Spend Campaign A", campus)
+		campaign_b = self._make_campaign_for_dash("_Test Dash Spend Campaign B", campus)
+
+		self._make_campaign_spend(campaign_a, "2020-06-01", 100000)
+		self._make_campaign_spend(campaign_b, "2020-06-01", 500000)
+
+		# Smoke-check the dashboard still returns a well-formed response with
+		# the `campaign` filter set (the mock_campaign_cost chart's row list
+		# is bounded/unordered by CRM Campaign query -- see
+		# test_campaign_cost_data_scopes_spend_per_campaign below for a
+		# direct assertion against the real per-campaign spend values, via
+		# the same _campaign_cost_data helper get_digital_marketing_dashboard
+		# calls internally).
+		items = get_digital_marketing_dashboard(
+			from_date="2020-01-01", to_date="2030-12-31", campaign=campaign_a
+		)
+		item_names = [it["name"] for it in items]
+		self.assertIn("mock_cpl", item_names)
+		self.assertIn("mock_campaign_cost", item_names)
+
+	def test_campaign_cost_data_scopes_spend_per_campaign(self):
+		# Directly exercises _campaign_cost_data, the exact helper both
+		# get_digital_marketing_dashboard and get_admissions_director_dashboard
+		# call -- if the campaign-scoping filter inside it ever regresses back
+		# to an unscoped/flat spend total, this test fails against the real
+		# production code path (not a reimplementation of the query).
+		campus = self._make_campus_for_dash("_Test Dash Spend Only Campus")
+		campaign_a = self._make_campaign_for_dash("_Test Dash Spend Only Campaign A", campus)
+		campaign_b = self._make_campaign_for_dash("_Test Dash Spend Only Campaign B", campus)
+
+		self._make_campaign_spend(campaign_a, "2020-06-01", 100000)
+		self._make_campaign_spend(campaign_b, "2020-06-01", 500000)
+
+		campaign_list = [
+			frappe._dict({"name": campaign_a, "title": None}),
+			frappe._dict({"name": campaign_b, "title": None}),
+		]
+		cost_data = _campaign_cost_data(campaign_list, "2020-01-01", "2030-12-31", base_filters=[])
+		spend_by_campaign = {row["campaign"]: row["spend"] for row in cost_data}
+		self.assertEqual(spend_by_campaign[campaign_a], 100000)
+		self.assertEqual(spend_by_campaign[campaign_b], 500000)
+
+	# ------------------------------------------------------------------------
+	# Phase 6: admissions director dashboard role gate + shape
+
+	def test_get_admissions_director_dashboard_denied_for_unauthorized_role(self):
+		user, staff = self._make_user_and_staff_for_dash("_test_director_denied", roles=["Sale"])
+		try:
+			with self.assertRaises(DashboardAccessDenied):
+				self._call_as_user(
+					user, get_admissions_director_dashboard, from_date="2020-01-01", to_date="2030-12-31"
+				)
+		finally:
+			self._cleanup_user_and_staff_for_dash(user, staff)
+
+	def test_get_admissions_director_dashboard_returns_chart_list_for_authorized_role(self):
+		frappe.set_user("Administrator")
+		items = get_admissions_director_dashboard(from_date="2020-01-01", to_date="2030-12-31")
+		self.assertIsInstance(items, list)
+		self.assertGreater(len(items), 0)
+		item_names = [it["name"] for it in items]
+		self.assertIn("director_total_leads", item_names)
+		self.assertIn("director_campaign_cost", item_names)
+		self.assertIn("director_multi_touch_credit", item_names)
+
+	def test_get_admissions_director_dashboard_allows_admissions_director_role(self):
+		# Unlike the Administrator smoke-check above, this exercises the new,
+		# narrower "admissions_director" gate itself: a user holding ONLY the
+		# Admissions Director role (no Administrator/System Manager) must be
+		# let through. Admissions Director is also in ADMIN_ROLES (Phase 6),
+		# so it bypasses get_campus_scope's CRM Staff lookup -- no CRM Staff
+		# fixture is needed for this role specifically.
+		user, staff = self._make_user_and_staff_for_dash(
+			"_test_director_allowed", roles=["Admissions Director"]
+		)
+		try:
+			items = self._call_as_user(
+				user, get_admissions_director_dashboard, from_date="2020-01-01", to_date="2030-12-31"
+			)
+			self.assertIsInstance(items, list)
+			item_names = [it["name"] for it in items]
+			self.assertIn("director_total_leads", item_names)
+		finally:
+			self._cleanup_user_and_staff_for_dash(user, staff)
+
+	# ------------------------------------------------------------------- helpers (Phase 6)
+
+	def _make_campaign_spend(self, campaign, spend_date, amount):
+		if not frappe.db.exists("CRM Lead Source", "_Test Dash Spend Source"):
+			frappe.get_doc(
+				{"doctype": "CRM Lead Source", "source_name": "_Test Dash Spend Source"}
+			).insert(ignore_permissions=True)
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Campaign Spend",
+				"crm_campaign": campaign,
+				"lead_source": "_Test Dash Spend Source",
+				"spend_date": spend_date,
+				"amount": amount,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("CRM Campaign Spend", doc.name, force=True))
+		return doc.name
+
+	def _make_user_and_staff_for_dash(self, prefix, roles=None):
+		email = f"{prefix}@example.com"
+		if frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, force=True)
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": prefix,
+				"send_welcome_email": 0,
+				"roles": [{"role": role} for role in (roles or ["Sale"])],
+			}
+		)
+		user.insert(ignore_permissions=True)
+		return email, None
+
+	def _cleanup_user_and_staff_for_dash(self, user, staff):
+		if user and frappe.db.exists("User", user):
+			frappe.delete_doc("User", user, force=True)
+		frappe.set_user("Administrator")
+
+	def _call_as_user(self, user, fn, **kwargs):
+		frappe.set_user(user)
+		try:
+			return fn(**kwargs)
+		finally:
+			frappe.set_user("Administrator")
 
 	# ------------------------------------------------------------- helpers
 

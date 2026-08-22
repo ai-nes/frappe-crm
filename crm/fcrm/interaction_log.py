@@ -1,10 +1,12 @@
-"""Phase 4/5: creates CRM Interaction records from the source events the
+"""Phase 4/5/6: creates CRM Interaction records from the source events the
 admissions operating model considers meaningful lead touchpoints -- outgoing/
 incoming Communication, a completed Task, a Call Log entry, a CRM Contact
-lifecycle/assignment change, a Consent Event, and (Phase 5) a CRM Event
-Participation status change. Each dispatcher below is wired via hooks.py
-doc_events and fires only on the specific has_value_changed transition listed
-in the guard tables in
+lifecycle/assignment change, a Consent Event, a CRM Event Participation
+status change (Phase 5), and a CRM Campaign Touchpoint insert (Phase 6, added
+to satisfy the operating model's "no customer activity outside Interaction"
+condition, which a bare Touchpoint insert previously violated). Each
+dispatcher below is wired via hooks.py doc_events and fires only on the
+specific has_value_changed transition listed in the guard tables in
 plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md and
 phase-05-campaign-event-overhaul.md -- do not loosen these into a generic
 "on every save" check.
@@ -257,6 +259,23 @@ def create_interaction_from_event_participation_update(doc, method=None):
 		)
 	except Exception:
 		frappe.log_error(title="CRM Interaction creation failed (Event Participation update)")
+
+
+def create_interaction_from_campaign_touchpoint_insert(doc, method=None):
+	if frappe.flags.in_patch:
+		return
+
+	try:
+		create_interaction(
+			interaction_type="Campaign Touched",
+			crm_contact=doc.crm_contact,
+			student=doc.student,
+			reference_doctype=doc.doctype,
+			reference_docname=doc.name,
+			summary=f"Touched by {doc.crm_campaign}",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (Campaign Touchpoint insert)")
 
 
 def clear_interaction_reference(doc, method=None):

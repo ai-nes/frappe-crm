@@ -82,3 +82,4 @@ crm.patches.v1_0.seed_lifecycle_stage_on_enrollment_status
 crm.patches.v1_0.backfill_lifecycle_stage
 crm.patches.v1_0.seed_crm_interaction_types
 crm.patches.v1_0.migrate_campaign_event_to_many_to_many
+crm.patches.v1_0.add_campaign_touched_interaction_type
