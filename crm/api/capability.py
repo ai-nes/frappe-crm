@@ -10,6 +10,7 @@ from crm.api.session import CRM_ALLOWED_ROLES
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
 
 OPERATIONS = ("read", "write", "create", "delete")
+CAPABILITY_CONTRACT_VERSION = "v1"
 
 # This whitelisted method serves the crm-agents AI copilot, whose real staff
 # roles (Sale, CTV-Sale, Counseller, Team Leader, Promoter-PR — see
@@ -21,6 +22,7 @@ CRM_AI_ALLOWED_ROLES = frozenset(CRM_ALLOWED_ROLES) | {
 	"Sale",
 	"CTV-Sale",
 	"Counseller",
+	"Admissions Director",
 	"Team Leader",
 	"Promoter-PR",
 }
@@ -150,6 +152,20 @@ def validate_ai_exposed_change(doc, method=None):
 
 @frappe.whitelist()
 @rate_limit(limit=30, seconds=60, ip_based=True)
+def get_current_roles():
+	"""Return role names for the authenticated caller only.
+
+	Frappe's REST ``User`` document hides the ``roles`` child table from normal
+	system users. The AI gateway therefore obtains this server-derived identity
+	value through a narrow endpoint instead of reading arbitrary User records.
+	"""
+	if frappe.session.user in ("", "Guest"):
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	return {"roles": sorted(frappe.get_roles(frappe.session.user))}
+
+
+@frappe.whitelist()
+@rate_limit(limit=30, seconds=60, ip_based=True)
 def get_capability_manifest():
 	"""Return the current session user's Frappe-granted capability manifest:
 	roles, per-DocType resource grants (all doctypes with
@@ -243,6 +259,7 @@ def get_capability_manifest():
 	)
 
 	return {
+		"contract_version": CAPABILITY_CONTRACT_VERSION,
 		"roles": roles,
 		"resources": resources,
 		"semantic_capabilities": semantic_capabilities,

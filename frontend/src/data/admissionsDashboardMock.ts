@@ -36,6 +36,7 @@ function axisItem(
   value: string,
   layout: Layout,
   type: 'bar' | 'line' = 'bar',
+  options: { wrapLabels?: boolean } = {},
 ) {
   return {
     name,
@@ -45,7 +46,7 @@ function axisItem(
       data,
       title,
       subtitle,
-      xAxis: { title: '', key: category, type: 'category' },
+      xAxis: { title: '', key: category, type: 'category', wrapLabels: options.wrapLabels },
       yAxis: { title: 'Số lượng' },
       series: [{ name: value, type, showDataPoints: type === 'line' }],
     },
@@ -136,55 +137,100 @@ const salesItems = [
   ),
 ]
 
-const marketingItems = [
-  numberItem('mock_marketing_leads', 'Marketing Lead', 'Lead đến từ các kênh Marketing', 1086, 15.2, { x: 0, y: 0, w: 4, h: 3, i: 'mock_marketing_leads' }),
+const digitalMarketingItems = [
+  numberItem('mock_marketing_leads', 'Digital Marketing Lead', 'Lead đến từ các nguồn Digital', 1086, 15.2, { x: 0, y: 0, w: 4, h: 3, i: 'mock_marketing_leads' }),
   numberItem('mock_valid_rate', 'Valid Lead Rate (%)', 'Tỷ lệ Lead hợp lệ', 94.8, 2.1, { x: 4, y: 0, w: 4, h: 3, i: 'mock_valid_rate' }),
   numberItem('mock_qualified_rate', 'Qualified Rate (%)', 'Tỷ lệ Lead đủ điều kiện', 48.9, 5.4, { x: 8, y: 0, w: 4, h: 3, i: 'mock_qualified_rate' }),
   numberItem('mock_cpl', 'CPL (nghìn đồng)', 'Chi phí trung bình trên mỗi Lead', 394, -9.7, { x: 12, y: 0, w: 4, h: 3, i: 'mock_cpl' }),
   numberItem('mock_cost_enrollment', 'Chi phí / Enrollment (triệu)', 'Chi phí trung bình trên mỗi enrollment', 3.7, -11.2, { x: 16, y: 0, w: 4, h: 3, i: 'mock_cost_enrollment' }),
   donutItem(
-    'mock_leads_by_channel',
-    'Lead theo kênh',
-    'Phân bổ 1.086 Marketing Lead',
+    'mock_leads_by_platform',
+    'Lead theo Platform',
+    'Phân bổ 1.086 Lead theo nhóm nguồn (Lead Source)',
     [
-      { channel: 'Meta Ads', count: 386 },
-      { channel: 'Google Ads', count: 294 },
-      { channel: 'Sự kiện THPT', count: 196 },
-      { channel: 'Organic', count: 132 },
-      { channel: 'Đối tác', count: 78 },
+      { platform: 'Facebook', count: 328 },
+      { platform: 'Google', count: 219 },
+      { platform: 'Zalo', count: 168 },
+      { platform: 'Website', count: 159 },
+      { platform: 'TikTok', count: 134 },
+      { platform: 'Referral', count: 78 },
     ],
-    'channel',
-    { x: 0, y: 3, w: 10, h: 8, i: 'mock_leads_by_channel' },
+    'platform',
+    { x: 0, y: 3, w: 10, h: 8, i: 'mock_leads_by_platform' },
   ),
-  axisItem(
-    'mock_campaign_conversion',
-    'Enrollment theo chiến dịch',
-    'So sánh hiệu quả chuyển đổi campaign',
-    [
-      { campaign: 'Open Day 2026', enrolled: 28 },
-      { campaign: 'GenZ chọn ngành đúng', enrolled: 31 },
-      { campaign: 'FPTU Scholarship', enrolled: 27 },
-      { campaign: 'Campus Tour', enrolled: 12 },
+  {
+    name: 'mock_form_landing_split',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 10, y: 3, w: 10, h: 8, i: 'mock_form_landing_split' },
+    data: {
+      data: [
+        { platform: 'Facebook', Form: 186, 'Landing Page': 142 },
+        { platform: 'Google', Form: 121, 'Landing Page': 98 },
+      ],
+      title: 'Chi tiết Form vs Landing Page',
+      subtitle: 'Facebook & Google là 2 nguồn có tách sub-channel',
+      xAxis: { title: '', key: 'platform', type: 'category' },
+      yAxis: { title: 'Số lượng' },
+      series: [
+        { name: 'Form', type: 'bar' },
+        { name: 'Landing Page', type: 'bar' },
+      ],
+    },
+  },
+  customItem('mock_source_platform_matrix', 'overlap_heatmap', {
+    title: 'Ma trận Nguồn × Platform',
+    subtitle: 'Số Lead theo từng Lead Source và sub-channel (Platform) tương ứng',
+    max: 186,
+    labels: ['Form', 'Landing Page', 'Trực tiếp'],
+    rows: [
+      { label: 'Facebook', values: [186, 142, null] },
+      { label: 'Google', values: [121, 98, null] },
+      { label: 'Zalo', values: [null, null, 168] },
+      { label: 'TikTok', values: [null, null, 134] },
+      { label: 'Referral', values: [null, null, 78] },
+      { label: 'Website', values: [null, null, 159] },
     ],
-    'campaign',
-    'enrolled',
-    { x: 10, y: 3, w: 10, h: 8, i: 'mock_campaign_conversion' },
-  ),
+  }, { x: 0, y: 11, w: 10, h: 9, i: 'mock_source_platform_matrix' }),
   axisItem(
     'mock_source_quality',
     'Qualified Lead theo nguồn',
-    'Chất lượng Lead theo nguồn chính',
+    'Chất lượng Lead theo Lead Source',
     [
-      { source: 'Facebook', qualified: 184 },
-      { source: 'Google', qualified: 157 },
-      { source: 'Sự kiện', qualified: 104 },
-      { source: 'Website', qualified: 58 },
-      { source: 'Đối tác', qualified: 28 },
+      { source: 'Facebook', qualified: 152 },
+      { source: 'Google', qualified: 98 },
+      { source: 'Zalo', qualified: 74 },
+      { source: 'TikTok', qualified: 61 },
+      { source: 'Website', qualified: 71 },
+      { source: 'Referral', qualified: 34 },
     ],
     'source',
     'qualified',
-    { x: 0, y: 11, w: 10, h: 8, i: 'mock_source_quality' },
+    { x: 10, y: 11, w: 10, h: 9, i: 'mock_source_quality' },
   ),
+  {
+    name: 'mock_campaign_contact',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 0, y: 20, w: 12, h: 8, i: 'mock_campaign_contact' },
+    data: {
+      data: [
+        { campaign: 'Open Day 2026', 'Đã chuyển đổi': 28, 'Có triển vọng': 64, 'Sai số': 12, 'Sai đối tượng': 9, 'Không liên lạc được': 18 },
+        { campaign: 'GenZ chọn ngành đúng', 'Đã chuyển đổi': 31, 'Có triển vọng': 58, 'Sai số': 15, 'Sai đối tượng': 21, 'Không liên lạc được': 14 },
+        { campaign: 'FPTU Scholarship', 'Đã chuyển đổi': 27, 'Có triển vọng': 49, 'Sai số': 8, 'Sai đối tượng': 6, 'Không liên lạc được': 11 },
+        { campaign: 'Campus Tour', 'Đã chuyển đổi': 12, 'Có triển vọng': 33, 'Sai số': 19, 'Sai đối tượng': 24, 'Không liên lạc được': 22 },
+      ],
+      title: 'Contact theo chiến dịch',
+      subtitle: 'Phân bổ Contact theo trạng thái Lead (Sai đối tượng ~ quan tâm ngành khác) cho từng chiến dịch',
+      xAxis: { title: '', key: 'campaign', type: 'category' },
+      yAxis: { title: 'Số lượng' },
+      series: [
+        { name: 'Đã chuyển đổi', type: 'bar' },
+        { name: 'Có triển vọng', type: 'bar' },
+        { name: 'Sai số', type: 'bar' },
+        { name: 'Sai đối tượng', type: 'bar' },
+        { name: 'Không liên lạc được', type: 'bar' },
+      ],
+    },
+  },
   donutItem(
     'mock_primary_interest',
     'Mối quan tâm nổi bật',
@@ -196,9 +242,181 @@ const marketingItems = [
       { interest: 'Môi trường quốc tế', count: 258 },
     ],
     'interest',
-    { x: 10, y: 11, w: 10, h: 8, i: 'mock_primary_interest' },
+    { x: 12, y: 20, w: 8, h: 8, i: 'mock_primary_interest' },
   ),
 ]
+
+export type OfflineTeam = 'all' | 'Team North' | 'Team Central' | 'Team South'
+
+const offlineRegionData: Record<OfflineTeam, { region: string; onCampus: number; offCampus: number }[]> = {
+  all: [
+    { region: 'Miền Bắc', onCampus: 86, offCampus: 142 },
+    { region: 'Miền Trung', onCampus: 54, offCampus: 98 },
+    { region: 'Miền Nam', onCampus: 71, offCampus: 168 },
+  ],
+  'Team North': [{ region: 'Miền Bắc', onCampus: 86, offCampus: 142 }],
+  'Team Central': [{ region: 'Miền Trung', onCampus: 54, offCampus: 98 }],
+  'Team South': [{ region: 'Miền Nam', onCampus: 71, offCampus: 168 }],
+}
+
+const offlineInterestData: Record<OfflineTeam, { interest: string; count: number }[]> = {
+  all: [
+    { interest: 'Học phí & học bổng', count: 218 },
+    { interest: 'Ngành đào tạo', count: 186 },
+    { interest: 'Cơ hội việc làm', count: 164 },
+    { interest: 'Môi trường sinh viên', count: 122 },
+    { interest: 'Khác', count: 58 },
+  ],
+  'Team North': [
+    { interest: 'Học phí & học bổng', count: 92 },
+    { interest: 'Ngành đào tạo', count: 74 },
+    { interest: 'Cơ hội việc làm', count: 61 },
+    { interest: 'Môi trường sinh viên', count: 48 },
+    { interest: 'Khác', count: 21 },
+  ],
+  'Team Central': [
+    { interest: 'Học phí & học bổng', count: 58 },
+    { interest: 'Ngành đào tạo', count: 52 },
+    { interest: 'Cơ hội việc làm', count: 45 },
+    { interest: 'Môi trường sinh viên', count: 31 },
+    { interest: 'Khác', count: 16 },
+  ],
+  'Team South': [
+    { interest: 'Học phí & học bổng', count: 68 },
+    { interest: 'Ngành đào tạo', count: 60 },
+    { interest: 'Cơ hội việc làm', count: 58 },
+    { interest: 'Môi trường sinh viên', count: 43 },
+    { interest: 'Khác', count: 21 },
+  ],
+}
+
+// Placeholder old→new province merger grouping — replace with the authoritative
+// CRM Province Mapping list once supplied.
+const offlineProvinceGroups: Record<
+  OfflineTeam,
+  { newProvince: string; oldProvinces: { name: string; count: number }[] }[]
+> = {
+  all: [
+    { newProvince: 'Bắc Ninh', oldProvinces: [{ name: 'Bắc Ninh', count: 64 }, { name: 'Bắc Giang', count: 58 }] },
+    { newProvince: 'Ninh Bình', oldProvinces: [{ name: 'Ninh Bình', count: 42 }, { name: 'Hà Nam', count: 38 }] },
+    { newProvince: 'Quảng Ngãi', oldProvinces: [{ name: 'Quảng Ngãi', count: 39 }, { name: 'Kon Tum', count: 27 }] },
+    { newProvince: 'Gia Lai', oldProvinces: [{ name: 'Bình Định', count: 46 }, { name: 'Gia Lai', count: 33 }] },
+    { newProvince: 'TP. Hồ Chí Minh', oldProvinces: [{ name: 'TP. Hồ Chí Minh', count: 88 }, { name: 'Bà Rịa - Vũng Tàu', count: 41 }] },
+    { newProvince: 'An Giang', oldProvinces: [{ name: 'An Giang', count: 52 }, { name: 'Kiên Giang', count: 47 }] },
+  ],
+  'Team North': [
+    { newProvince: 'Bắc Ninh', oldProvinces: [{ name: 'Bắc Ninh', count: 64 }, { name: 'Bắc Giang', count: 58 }] },
+    { newProvince: 'Ninh Bình', oldProvinces: [{ name: 'Ninh Bình', count: 42 }, { name: 'Hà Nam', count: 38 }] },
+  ],
+  'Team Central': [
+    { newProvince: 'Quảng Ngãi', oldProvinces: [{ name: 'Quảng Ngãi', count: 39 }, { name: 'Kon Tum', count: 27 }] },
+    { newProvince: 'Gia Lai', oldProvinces: [{ name: 'Bình Định', count: 46 }, { name: 'Gia Lai', count: 33 }] },
+  ],
+  'Team South': [
+    { newProvince: 'TP. Hồ Chí Minh', oldProvinces: [{ name: 'TP. Hồ Chí Minh', count: 88 }, { name: 'Bà Rịa - Vũng Tàu', count: 41 }] },
+    { newProvince: 'An Giang', oldProvinces: [{ name: 'An Giang', count: 52 }, { name: 'Kiên Giang', count: 47 }] },
+  ],
+}
+
+export function offlineMarketingDashboardItems(team: OfflineTeam) {
+  const isFiltered = team !== 'all'
+
+  const eventChart = {
+    name: 'mock_offline_region',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 0, y: 0, w: 10, h: 8, i: 'mock_offline_region' },
+    data: {
+      data: offlineRegionData[team].map((row) => ({
+        region: row.region,
+        'On-campus': row.onCampus,
+        'Off-campus': row.offCampus,
+      })),
+      title: 'Lead theo Khu vực & Hình thức sự kiện',
+      subtitle: isFiltered ? `Team đang chọn: ${team}` : 'Tổng quan tất cả team · On-campus vs Off-campus',
+      xAxis: { title: '', key: 'region', type: 'category' },
+      yAxis: { title: 'Số lượng' },
+      series: [
+        { name: 'On-campus', type: 'bar' },
+        { name: 'Off-campus', type: 'bar' },
+      ],
+    },
+  }
+
+  const interestChart = donutItem(
+    'mock_offline_interest',
+    'Mối quan tâm từ sự kiện',
+    isFiltered ? `Team đang chọn: ${team}` : 'Tổng quan tất cả team',
+    offlineInterestData[team],
+    'interest',
+    { x: 10, y: 0, w: 10, h: 8, i: 'mock_offline_interest' },
+  )
+
+  const leadQualityChart = {
+    name: 'mock_offline_lead_quality',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 0, y: 8, w: 10, h: 8, i: 'mock_offline_lead_quality' },
+    data: {
+      data: [
+        { category: 'Hot', count: 96 },
+        { category: 'Warm', count: 184 },
+        { category: 'Cool', count: 142 },
+        { category: 'Sai số', count: 58 },
+        { category: 'KLLĐ', count: 74 },
+        { category: 'Không quan tâm', count: 91 },
+      ],
+      title: 'Lead thu được theo phân loại',
+      subtitle: 'Toàn bộ Lead thu được từ sự kiện On-campus & Off-campus',
+      xAxis: { title: '', key: 'category', type: 'category' },
+      yAxis: { title: 'Số lượng' },
+      series: [{ name: 'count', type: 'bar' }],
+      echartOptions: {
+        xAxis: {
+          axisLabel: {
+            interval: 0,
+            fontSize: 11,
+          },
+        },
+      },
+    },
+  }
+
+  const provinceRows = isFiltered
+    ? offlineProvinceGroups[team].flatMap((group) =>
+        group.oldProvinces.map((province) => ({ province: province.name, verified: province.count })),
+      )
+    : offlineProvinceGroups.all.map((group) => ({
+        province: group.newProvince,
+        province_detail: group.oldProvinces.map((p) => p.name).join(', '),
+        verified: group.oldProvinces.reduce((acc, p) => acc + p.count, 0),
+      }))
+
+  const provinceChart = {
+    name: 'mock_offline_province',
+    type: 'axis_chart' as DashboardItemType,
+    layout: { x: 10, y: 8, w: 10, h: 8, i: 'mock_offline_province' },
+    data: {
+      data: provinceRows,
+      title: 'Verified Lead theo địa bàn',
+      subtitle: isFiltered
+        ? `Team đang chọn: ${team} · chi tiết từng tỉnh`
+        : 'Tỉnh mới · gộp từ nhiều tỉnh cũ',
+      xAxis: { title: '', key: 'province', type: 'category', wrapLabels: true },
+      yAxis: { title: 'Verified Lead' },
+      series: [{ name: 'verified', type: 'bar' }],
+      echartOptions: {
+        xAxis: {
+          axisLabel: {
+            interval: 0,
+            rotate: 0,
+            fontSize: 11,
+          },
+        },
+      },
+    },
+  }
+
+  return [eventChart, interestChart, leadQualityChart, provinceChart]
+}
 
 const qualityItems = [
   numberItem('mock_completeness', 'Data Completeness (%)', 'Mức độ đầy đủ của các field bắt buộc', 96.2, 1.5, { x: 0, y: 0, w: 4, h: 3, i: 'mock_completeness' }),
@@ -273,44 +491,46 @@ function customItem(
 
 function funnelRow(
   label: string,
-  contacted: number,
-  qualified: number,
-  counseling: number,
-  application: number,
-  enrolled: number,
+  total: number,
+  moi: number,
+  trienVong: number,
+  xacNhan: number,
+  nhapHoc: number,
 ) {
   const segment = (name: string, value: number, className: string) => ({
     label: name,
     value,
-    share: Number(((value / contacted) * 100).toFixed(1)),
+    share: Number(((value / total) * 100).toFixed(1)),
     class: className,
   })
 
   return {
     label,
-    contacted,
-    enrolled,
-    ariaLabel: `${label}: ${contacted} Contacted, ${qualified} Qualified, ${counseling} Counseling, ${application} Application, ${enrolled} Enrolled`,
+    total,
+    enrolled: nhapHoc,
+    ariaLabel: `${label}: ${total} Lead, ${moi} Mới, ${trienVong} Có triển vọng, ${xacNhan} Đã xác nhận, ${nhapHoc} Đã nhập học`,
     segments: [
-      segment('Enrolled', enrolled, 'bg-surface-gray-7'),
-      segment('Dừng ở Application', application - enrolled, 'bg-surface-gray-6'),
-      segment('Dừng ở Counseling', counseling - application, 'bg-surface-gray-5'),
-      segment('Dừng ở Qualified', qualified - counseling, 'bg-surface-gray-4'),
-      segment('Dừng sau Contacted', contacted - qualified, 'bg-surface-gray-3'),
+      segment('Không chuyển đổi', total - moi, 'bg-gray-300'),
+      segment('Mới', moi - trienVong, 'bg-red-600'),
+      segment('Có triển vọng', trienVong - xacNhan, 'bg-red-400'),
+      segment('Đã xác nhận', xacNhan - nhapHoc, 'bg-orange-500'),
+      segment('Đã nhập học', nhapHoc, 'bg-green-600'),
     ],
   }
 }
 
 const interestCards = [
-  { code: 'COST', title: 'Chi phí', value: 1024, ratio: '8,2% active', progress: 74, sparkline: [61, 64, 63, 69, 71, 73, 78], metrics: [{ label: '15 phút', value: '+63' }, { label: 'So với hôm qua', value: '+4,1%' }, { label: 'Đang tăng', value: 298 }, { label: 'Confidence thấp', value: 72 }], conversion: '11,8%', trend: 'Tăng', theme: 'orange' },
-  { code: 'PROGRAM_COMPETITOR', title: 'Ngành & trường khác', value: 864, ratio: '6,9% active', progress: 62, sparkline: [44, 47, 51, 54, 61, 66, 72], metrics: [{ label: '15 phút', value: '+91' }, { label: 'So với hôm qua', value: '+8,4%' }, { label: 'Đang tăng', value: 312 }, { label: 'Confidence thấp', value: 88 }], conversion: '9,6%', trend: 'Tăng', theme: 'red' },
-  { code: 'CAREER', title: 'Việc làm', value: 1386, ratio: '11,1% active', progress: 100, sparkline: [76, 78, 79, 80, 83, 84, 86], metrics: [{ label: '15 phút', value: '+28' }, { label: 'So với hôm qua', value: '+2,7%' }, { label: 'Đang tăng', value: 246 }, { label: 'Confidence thấp', value: 54 }], conversion: '18,9%', trend: 'Ổn định', theme: 'green' },
-  { code: 'STUDENT_LIFE', title: 'Hoạt động sinh viên', value: 742, ratio: '6,0% active', progress: 54, sparkline: [52, 51, 54, 57, 59, 61, 64], metrics: [{ label: '15 phút', value: '+17' }, { label: 'So với hôm qua', value: '+1,9%' }, { label: 'Đang tăng', value: 138 }, { label: 'Confidence thấp', value: 61 }], conversion: '13,4%', trend: 'Mới', theme: 'blue' },
-  { code: 'ACCOMMODATION', title: 'Chỗ ở', value: 618, ratio: '5,0% active', progress: 45, sparkline: [71, 70, 68, 66, 63, 61, 59], metrics: [{ label: '15 phút', value: '-9' }, { label: 'So với hôm qua', value: '-1,2%' }, { label: 'Đang tăng', value: 96 }, { label: 'Confidence thấp', value: 47 }], conversion: '12,1%', trend: 'Giảm', theme: 'gray' },
-  { code: 'ENROLLMENT_READINESS', title: 'Sẵn sàng nhập học', value: 1580, ratio: 'Level 3–4', readinessTotal: 12450, readinessLevels: [{ level: 0, count: 5200, share: 41.8 }, { level: 1, count: 3000, share: 24.1 }, { level: 2, count: 2670, share: 21.4 }, { level: 3, count: 960, share: 7.7 }, { level: 4, count: 620, share: 5 }], operationalMetrics: [{ label: 'Đã có hồ sơ', value: 488 }, { label: 'Chưa follow-up', value: 410 }, { label: 'Quá SLA', value: 125 }], conversion: '31,7%', trend: 'Ưu tiên', theme: 'green' },
+  { code: 'COST', title: 'Chi phí', value: 1024, ratio: '8,2% active', progress: 74, sparkline: [61, 64, 63, 69, 71, 73, 78], metrics: [{ label: '15 phút', value: '+63' }, { label: 'So với hôm qua', value: '+4,1%' }, { label: 'Đang tăng', value: 298 }, { label: 'Confidence thấp', value: 72 }], conversion: '11,8%', trend: 'Tăng', theme: 'orange', color: 'amber' },
+  { code: 'PROGRAM_COMPETITOR', title: 'Ngành & trường khác', value: 864, ratio: '6,9% active', progress: 62, sparkline: [44, 47, 51, 54, 61, 66, 72], metrics: [{ label: '15 phút', value: '+91' }, { label: 'So với hôm qua', value: '+8,4%' }, { label: 'Đang tăng', value: 312 }, { label: 'Confidence thấp', value: 88 }], conversion: '9,6%', trend: 'Tăng', theme: 'red', color: 'violet' },
+  { code: 'CAREER', title: 'Việc làm', value: 1386, ratio: '11,1% active', progress: 100, sparkline: [76, 78, 79, 80, 83, 84, 86], metrics: [{ label: '15 phút', value: '+28' }, { label: 'So với hôm qua', value: '+2,7%' }, { label: 'Đang tăng', value: 246 }, { label: 'Confidence thấp', value: 54 }], conversion: '18,9%', trend: 'Ổn định', theme: 'green', color: 'teal' },
+  { code: 'STUDENT_LIFE', title: 'Hoạt động sinh viên', value: 742, ratio: '6,0% active', progress: 54, sparkline: [52, 51, 54, 57, 59, 61, 64], metrics: [{ label: '15 phút', value: '+17' }, { label: 'So với hôm qua', value: '+1,9%' }, { label: 'Đang tăng', value: 138 }, { label: 'Confidence thấp', value: 61 }], conversion: '13,4%', trend: 'Mới', theme: 'blue', color: 'pink' },
+  { code: 'ACCOMMODATION', title: 'Chỗ ở', value: 618, ratio: '5,0% active', progress: 45, sparkline: [71, 70, 68, 66, 63, 61, 59], metrics: [{ label: '15 phút', value: '-9' }, { label: 'So với hôm qua', value: '-1,2%' }, { label: 'Đang tăng', value: 96 }, { label: 'Confidence thấp', value: 47 }], conversion: '12,1%', trend: 'Giảm', theme: 'gray', color: 'cyan' },
+  { code: 'ENROLLMENT_READINESS', title: 'Sẵn sàng nhập học', value: 1580, ratio: 'Level 3–4', readinessTotal: 12450, readinessLevels: [{ level: 0, count: 5200, share: 41.8 }, { level: 1, count: 3000, share: 24.1 }, { level: 2, count: 2670, share: 21.4 }, { level: 3, count: 960, share: 7.7 }, { level: 4, count: 620, share: 5 }], operationalMetrics: [{ label: 'Đã có hồ sơ', value: 488 }, { label: 'Chưa follow-up', value: 410 }, { label: 'Quá SLA', value: 125 }], conversion: '31,7%', trend: 'Ưu tiên', theme: 'green', color: 'blue' },
+  { code: 'INTERESTED', title: 'Quan tâm', value: 980, ratio: '7,9% active', progress: 68, sparkline: [50, 54, 58, 60, 63, 65, 68], metrics: [{ label: '15 phút', value: '+41' }, { label: 'So với hôm qua', value: '+3,6%' }, { label: 'Đang tăng', value: 210 }, { label: 'Confidence thấp', value: 66 }], conversion: '14,2%', trend: 'Tăng', theme: 'yellow', color: 'yellow' },
+  { code: 'OTHER', title: 'Khác', value: 226, ratio: '1,8% active', progress: 18, sparkline: [22, 20, 19, 21, 20, 19, 18], metrics: [{ label: '15 phút', value: '+3' }, { label: 'So với hôm qua', value: '+0,4%' }, { label: 'Đang tăng', value: 34 }, { label: 'Confidence thấp', value: 29 }], conversion: '5,1%', trend: 'Ổn định', theme: 'gray', color: 'gray' },
 ]
 
-const interestCardWidths = [3, 3, 3, 3, 4, 4]
+const interestCardWidths = [3, 3, 3, 3, 4, 4, 3, 3]
 let interestCardX = 0
 const interestCardItems = interestCards.map((data, index) => {
   const item = customItem(
@@ -345,6 +565,8 @@ export const aiInterestDashboardItems = [
     'dimension',
     'leads',
     { x: 0, y: 9, w: 10, h: 8, i: 'mock_interest_distribution' },
+    'bar',
+    { wrapLabels: true },
   ),
   {
     name: 'mock_interest_trend',
@@ -376,31 +598,32 @@ export const aiInterestDashboardItems = [
     title: 'Interest × Funnel',
     subtitle: 'Tỷ trọng chuyển đổi và điểm rơi theo từng mối quan tâm',
     legend: [
-      { label: 'Enrolled', class: 'bg-surface-gray-7' },
-      { label: 'Dừng ở Application', class: 'bg-surface-gray-6' },
-      { label: 'Dừng ở Counseling', class: 'bg-surface-gray-5' },
-      { label: 'Dừng ở Qualified', class: 'bg-surface-gray-4' },
-      { label: 'Dừng sau Contacted', class: 'bg-surface-gray-3' },
+      { label: 'Không chuyển đổi', class: 'bg-gray-300' },
+      { label: 'Mới', class: 'bg-red-600' },
+      { label: 'Có triển vọng', class: 'bg-red-400' },
+      { label: 'Đã xác nhận', class: 'bg-orange-500' },
+      { label: 'Đã nhập học', class: 'bg-green-600' },
     ],
     rows: [
-      funnelRow('Chi phí', 918, 612, 448, 201, 121),
-      funnelRow('Ngành & trường khác', 772, 498, 361, 164, 83),
-      funnelRow('Việc làm', 1264, 954, 722, 398, 262),
-      funnelRow('Hoạt động sinh viên', 653, 442, 318, 164, 99),
-      funnelRow('Chỗ ở', 552, 376, 271, 126, 75),
+      funnelRow('Chi phí', 1024, 918, 612, 448, 121),
+      funnelRow('Ngành & trường khác', 864, 772, 498, 361, 83),
+      funnelRow('Việc làm', 1386, 1264, 954, 722, 262),
+      funnelRow('Hoạt động sinh viên', 742, 653, 442, 318, 99),
+      funnelRow('Chỗ ở', 618, 552, 376, 271, 75),
     ],
   }, { x: 0, y: 17, w: 10, h: 9, i: 'mock_interest_funnel' }),
   customItem('mock_interest_overlap', 'overlap_heatmap', {
     title: 'Interest Overlap Matrix',
-    subtitle: 'Màu đậm hơn = nhiều Lead đồng thời thuộc hai nhóm',
+    subtitle: 'Số Lead đồng thời thuộc cả hai mối quan tâm · đường chéo là tổng Lead của từng nhóm',
+    symmetric: true,
     max: 610,
     labels: ['Chi phí', 'Ngành/trường', 'Việc làm', 'Hoạt động', 'Chỗ ở'],
     rows: [
-      { label: 'Chi phí', values: [null, 420, 610, 180, 260] },
-      { label: 'Ngành/trường', values: [420, null, 550, 240, 190] },
-      { label: 'Việc làm', values: [610, 550, null, 360, 220] },
-      { label: 'Hoạt động', values: [180, 240, 360, null, 150] },
-      { label: 'Chỗ ở', values: [260, 190, 220, 150, null] },
+      { label: 'Chi phí', values: [1024, 420, 610, 180, 260] },
+      { label: 'Ngành/trường', values: [420, 864, 550, 240, 190] },
+      { label: 'Việc làm', values: [610, 550, 1386, 360, 220] },
+      { label: 'Hoạt động', values: [180, 240, 360, 742, 150] },
+      { label: 'Chỗ ở', values: [260, 190, 220, 150, 618] },
     ],
   }, { x: 10, y: 17, w: 10, h: 9, i: 'mock_interest_overlap' }),
   customItem('mock_interest_owner', 'data_table', {
@@ -490,9 +713,9 @@ const salesInterestLayout: Record<string, Partial<Layout>> = Object.fromEntries(
   ...interestCardItems.map((item, index) => [
     item.name,
     {
-      x: index % 3 === 0 ? 0 : index % 3 === 1 ? 7 : 14,
-      y: index < 3 ? 0 : 7,
-      w: index % 3 === 2 ? 6 : 7,
+      x: (index % 4) * 5,
+      y: index < 4 ? 0 : 7,
+      w: 5,
       h: 7,
     },
   ]),
@@ -535,4 +758,4 @@ export const salesDashboardSections = {
   ),
 }
 
-export const marketingDashboardItems = marketingItems
+export const digitalMarketingDashboardItems = digitalMarketingItems

@@ -24,7 +24,7 @@
       v-else-if="item.type == 'axis_chart'"
       class="h-full w-full rounded-md bg-surface-white shadow"
     >
-      <AxisChart v-if="item.data" :config="item.data" />
+      <AxisChart v-if="axisChartConfig" :config="axisChartConfig" />
     </div>
     <div
       v-else-if="item.type == 'donut_chart'"
@@ -86,6 +86,7 @@
             :key="metric.label"
             :label="metric.label"
             :value="formatNumber(metric.value)"
+            :tone="metricTone(metric.label, metric.value)"
           />
         </div>
       </template>
@@ -98,7 +99,8 @@
           <span
             v-for="(point, pointIndex) in item.data.sparkline"
             :key="pointIndex"
-            class="flex-1 rounded-sm bg-surface-gray-4"
+            class="flex-1 rounded-sm"
+            :class="interestAccent(item.data.color).bar"
             :style="{ height: `${sparkHeight(point, item.data.sparkline)}%` }"
           ></span>
         </div>
@@ -111,7 +113,8 @@
           :aria-label="`${item.data.title}: ${item.data.progress}% so với nhóm cao nhất`"
         >
           <div
-            class="h-full rounded-full bg-surface-gray-7"
+            class="h-full rounded-full"
+            :class="interestAccent(item.data.color).fill"
             :style="{ width: `${item.data.progress}%` }"
           ></div>
         </div>
@@ -122,6 +125,7 @@
           :key="metric.label"
           :label="metric.label"
           :value="formatNumber(metric.value)"
+          :tone="metricTone(metric.label, metric.value)"
         />
       </div>
       <div class="mt-auto flex items-center justify-between gap-2 pt-3 text-xs">
@@ -160,13 +164,13 @@
               :title="`${segment.label}: ${formatNumber(segment.value)}`"
               role="progressbar"
               aria-valuemin="0"
-              :aria-valuemax="row.contacted"
+              :aria-valuemax="row.total"
               :aria-valuenow="segment.value"
               :aria-label="`${segment.label}: ${formatNumber(segment.value)} Lead`"
             ></span>
           </div>
           <div class="text-right text-[10px] text-ink-gray-5">
-            <b class="text-ink-gray-8">{{ formatNumber(row.enrolled) }}</b> / {{ formatNumber(row.contacted) }}
+            <b class="text-ink-gray-8">{{ formatNumber(row.enrolled) }}</b> / {{ formatNumber(row.total) }}
           </div>
         </div>
       </div>
@@ -178,6 +182,21 @@
       <div class="border-b px-4 py-3">
         <div class="text-base font-medium text-ink-gray-9">{{ item.data.title }}</div>
         <div class="mt-0.5 text-xs text-ink-gray-5">{{ item.data.subtitle }}</div>
+        <div class="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-ink-gray-5">
+          <span class="flex items-center gap-1">
+            Ít
+            <i class="size-2 rounded-sm bg-blue-100"></i>
+            <i class="size-2 rounded-sm bg-blue-200"></i>
+            <i class="size-2 rounded-sm bg-blue-300"></i>
+            <i class="size-2 rounded-sm bg-blue-400"></i>
+            <i class="size-2 rounded-sm bg-blue-500"></i>
+            {{ item.data.symmetric ? 'Nhiều Lead trùng' : 'Nhiều Lead' }}
+          </span>
+          <span v-if="item.data.symmetric" class="flex items-center gap-1">
+            <i class="size-2 rounded-sm bg-surface-gray-3"></i>
+            Tổng Lead của nhóm (đường chéo)
+          </span>
+        </div>
       </div>
       <div class="min-h-0 flex-1 overflow-auto p-3">
         <table class="h-full w-full border-separate border-spacing-1 text-center text-[10px]">
@@ -188,16 +207,16 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="row in item.data.rows" :key="row.label">
+            <tr v-for="(row, rowIndex) in item.data.rows" :key="row.label">
               <th scope="row" class="whitespace-nowrap pr-2 text-left font-medium text-ink-gray-7">{{ row.label }}</th>
               <td
                 v-for="(value, valueIndex) in row.values"
                 :key="valueIndex"
                 class="rounded px-2 py-2 font-medium"
-                :class="heatmapClass(value, item.data.max)"
-                :aria-label="`${row.label} và ${item.data.labels[valueIndex]}: ${value ?? 'không áp dụng'} Lead`"
+                :class="item.data.symmetric && valueIndex === rowIndex ? 'bg-surface-gray-3 text-ink-gray-8' : item.data.symmetric && valueIndex < rowIndex ? 'bg-transparent' : heatmapClass(value, item.data.max)"
+                :aria-label="item.data.symmetric && valueIndex === rowIndex ? `Tổng Lead quan tâm ${row.label}: ${value}` : item.data.symmetric && valueIndex < rowIndex ? undefined : `${row.label} và ${item.data.labels[valueIndex]}: ${value ?? 'không áp dụng'} Lead`"
               >
-                {{ value ?? '—' }}
+                {{ item.data.symmetric && valueIndex < rowIndex ? '' : (value ?? '—') }}
               </td>
             </tr>
           </tbody>
@@ -316,7 +335,7 @@
   </div>
 </template>
 <script setup>
-import { defineComponent, h } from 'vue'
+import { computed, defineComponent, h } from 'vue'
 import { AxisChart, Badge, Button, DonutChart, NumberChart, Tooltip } from 'frappe-ui'
 import { useRouter } from 'vue-router'
 
@@ -330,14 +349,145 @@ defineEmits(['refresh'])
 
 const router = useRouter()
 
+const axisChartConfig = computed(() => {
+  if (!props.item?.data) return null
+  const config = props.item.data
+  const axisLabelDefaults = getAxisLabelDefaults(config)
+  const tooltipFormatter = getDetailTooltipFormatter(config)
+  return {
+    ...config,
+    xAxis: {
+      ...config.xAxis,
+      echartOptions: {
+        ...config.xAxis?.echartOptions,
+        axisLabel: {
+          ...axisLabelDefaults,
+          ...config.xAxis?.echartOptions?.axisLabel,
+        },
+      },
+    },
+    echartOptions: {
+      ...config.echartOptions,
+      xAxis: {
+        ...config.echartOptions?.xAxis,
+        axisLabel: {
+          ...axisLabelDefaults,
+          ...config.echartOptions?.xAxis?.axisLabel,
+        },
+      },
+      ...(tooltipFormatter
+        ? {
+            tooltip: {
+              ...config.echartOptions?.tooltip,
+              formatter: tooltipFormatter,
+            },
+          }
+        : {}),
+    },
+  }
+})
+
+function getAxisLabelDefaults(config) {
+  if (config.xAxis?.type !== 'category' || !config.xAxis?.wrapLabels) {
+    return { hideOverlap: true }
+  }
+
+  const labels = (config.data || []).map((row) => String(row?.[config.xAxis.key] || ''))
+  const isDense = labels.length >= 6 || labels.some((label) => label.length > 12)
+
+  if (!isDense) return { hideOverlap: true }
+
+  return {
+    hideOverlap: false,
+    interval: 0,
+    lineHeight: 14,
+    margin: 10,
+    formatter: formatCategoryAxisLabel,
+  }
+}
+
+function formatCategoryAxisLabel(value) {
+  const words = String(value).trim().split(/\s+/)
+  const lines = []
+  let line = ''
+
+  for (const word of words) {
+    const nextLine = line ? `${line} ${word}` : word
+    if (nextLine.length > 12 && line) {
+      lines.push(line)
+      line = word
+    } else {
+      line = nextLine
+    }
+  }
+  if (line) lines.push(line)
+
+  return lines.length > 2 ? `${lines.slice(0, 2).join('\n')}…` : lines.join('\n')
+}
+
+function getDetailTooltipFormatter(config) {
+  if (!config.data?.some((row) => row.province_detail)) return null
+
+  return (params) => {
+    const point = Array.isArray(params) ? params[0] : params
+    const row = config.data[point?.dataIndex]
+    if (!row) return ''
+
+    const label = escapeHtml(row[config.xAxis.key])
+    const detail = escapeHtml(row.province_detail)
+    const value = escapeHtml(point?.value?.[1])
+
+    return `<div class="flex flex-col gap-1"><b>${label}</b><span>${detail}</span><span>${point.marker} Verified Lead: <b>${value}</b></span></div>`
+  }
+}
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[character])
+}
+
 const Metric = defineComponent({
-  props: { label: String, value: [String, Number] },
+  props: { label: String, value: [String, Number], tone: String },
   setup: (props) => () =>
     h('div', [
       h('div', { class: 'text-ink-gray-5' }, props.label),
-      h('div', { class: 'mt-0.5 font-medium text-ink-gray-8' }, props.value),
+      h(
+        'div',
+        { class: `mt-0.5 font-medium ${props.tone || 'text-ink-gray-8'}` },
+        props.value,
+      ),
     ]),
 })
+
+const interestAccentMap = {
+  amber: { bar: 'bg-amber-200', fill: 'bg-amber-500' },
+  violet: { bar: 'bg-violet-200', fill: 'bg-violet-500' },
+  teal: { bar: 'bg-teal-200', fill: 'bg-teal-500' },
+  pink: { bar: 'bg-pink-200', fill: 'bg-pink-500' },
+  cyan: { bar: 'bg-cyan-200', fill: 'bg-cyan-500' },
+  blue: { bar: 'bg-blue-200', fill: 'bg-blue-500' },
+  yellow: { bar: 'bg-yellow-200', fill: 'bg-yellow-500' },
+  gray: { bar: 'bg-gray-200', fill: 'bg-gray-400' },
+}
+
+function interestAccent(color) {
+  return interestAccentMap[color] || interestAccentMap.blue
+}
+
+function metricTone(label, value) {
+  const text = String(value)
+  if (text.startsWith('+')) return 'text-ink-green-2'
+  if (text.startsWith('-')) return 'text-ink-red-3'
+  if (label === 'Confidence thấp' || label === 'Quá SLA') return 'text-ink-amber-2'
+  if (label === 'Đang tăng' || label === 'Chưa follow-up') return 'text-ink-blue-2'
+  if (label === 'Đã có hồ sơ') return 'text-ink-green-2'
+  return 'text-ink-gray-8'
+}
 
 function formatNumber(value) {
   return typeof value === 'number' ? value.toLocaleString('vi-VN') : value
@@ -355,22 +505,22 @@ function sparkHeight(value, points) {
 
 function readinessLevelClass(level) {
   return [
-    'bg-surface-gray-2',
-    'bg-surface-gray-3',
-    'bg-surface-gray-4',
-    'bg-surface-gray-5',
-    'bg-surface-gray-7',
+    'bg-blue-100',
+    'bg-blue-200',
+    'bg-blue-400',
+    'bg-blue-500',
+    'bg-blue-600',
   ][level]
 }
 
 function heatmapClass(value, max) {
   if (value == null) return 'bg-surface-gray-1 text-ink-gray-4'
   const ratio = value / max
-  if (ratio >= 0.8) return 'bg-surface-gray-7 text-ink-white'
-  if (ratio >= 0.6) return 'bg-surface-gray-5 text-ink-white'
-  if (ratio >= 0.4) return 'bg-surface-gray-4 text-ink-gray-9'
-  if (ratio >= 0.2) return 'bg-surface-gray-3 text-ink-gray-8'
-  return 'bg-surface-gray-2 text-ink-gray-7'
+  if (ratio >= 0.8) return 'bg-blue-500 text-ink-white'
+  if (ratio >= 0.6) return 'bg-blue-400 text-ink-white'
+  if (ratio >= 0.4) return 'bg-blue-300 text-ink-gray-9'
+  if (ratio >= 0.2) return 'bg-blue-200 text-ink-gray-8'
+  return 'bg-blue-100 text-ink-gray-7'
 }
 
 function openInterestLeads() {

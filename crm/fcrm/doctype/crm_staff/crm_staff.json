@@ -11,10 +11,15 @@
  "field_order": [
   "full_name",
   "user",
+  "sales_team",
+  "is_active",
   "column_break_1",
   "department",
   "campus",
-  "target"
+  "target",
+  "last_routed_at",
+  "section_team_memberships",
+  "team_memberships"
  ],
  "fields": [
   {
@@ -35,24 +40,43 @@
    "unique": 1
   },
   {
+   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "fieldname": "sales_team",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Sales Team (Deprecated)",
+   "options": "\nTeam North\nTeam Central\nTeam South"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Active",
+   "description": "Only active staff are eligible for automatic lead routing (see crm.api.routing)."
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
+   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
    "fieldname": "department",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Department",
+   "label": "CRM Department (Deprecated)",
    "options": "CRM Department",
    "reqd": 1
   },
   {
+   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
    "fieldname": "campus",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Campus",
+   "label": "Campus (Deprecated)",
    "options": "CRM Campus",
    "reqd": 1
   },
@@ -60,6 +84,24 @@
    "fieldname": "target",
    "fieldtype": "Int",
    "label": "Monthly Target"
+  },
+  {
+   "fieldname": "last_routed_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Last Routed At",
+   "description": "Set by the automatic lead-routing round robin (see crm.api.routing) each time a new lead is routed to this staff member. Do not edit directly."
+  },
+  {
+   "fieldname": "section_team_memberships",
+   "fieldtype": "Section Break",
+   "label": "Team Memberships"
+  },
+  {
+   "fieldname": "team_memberships",
+   "fieldtype": "Table",
+   "label": "Team Memberships",
+   "options": "CRM Team Membership"
   }
  ],
  "index_web_pages_for_search": 1,

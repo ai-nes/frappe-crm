@@ -68,7 +68,7 @@ def _sort_key(row) -> tuple[int, str, str, str]:
 def _minimal_dto(row) -> dict:
 	return {
 		"recommendation": row.name,
-		"student": row.student,
+		"student_name": row.student_name,
 		"priority": row.priority,
 		"action": row.recommended_action,
 		"timing": str(row.recommended_timing) if row.recommended_timing else None,
@@ -103,8 +103,12 @@ def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
 		)
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key)))
 	return frappe.db.sql(
-		"""SELECT name, student, priority, recommended_action, recommended_timing, reason, modified, creation
+		"""SELECT `tabCRM Recommendation`.name, `tabCRM Student`.student_name,
+		`tabCRM Recommendation`.priority, `tabCRM Recommendation`.recommended_action,
+		`tabCRM Recommendation`.recommended_timing, `tabCRM Recommendation`.reason,
+		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
 		FROM `tabCRM Recommendation`
+		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Recommendation`.student
 		WHERE {conditions}
 		ORDER BY worklist_priority_rank ASC, worklist_timing_sort ASC, creation ASC, name ASC
 		LIMIT %(limit)s""".format(conditions=" AND ".join(conditions)),

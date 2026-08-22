@@ -11,7 +11,13 @@
  "field_order": [
   "intent_type_name",
   "importance",
-  "description_vi"
+  "description_vi",
+  "section_governance",
+  "owner_role",
+  "approval_state",
+  "column_break_governance",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
@@ -35,6 +41,43 @@
    "fieldname": "description_vi",
    "fieldtype": "Small Text",
    "label": "Vietnamese Description"
+  },
+  {
+   "fieldname": "section_governance",
+   "fieldtype": "Section Break",
+   "label": "Governance"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Link",
+   "label": "Owner Role",
+   "options": "Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Approval State",
+   "options": "Proposed\nApproved\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_governance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

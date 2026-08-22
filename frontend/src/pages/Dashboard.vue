@@ -3,35 +3,34 @@
     <LayoutHeader>
       <template #left-header>
         <div class="flex items-center gap-2">
-          <ViewBreadcrumbs
-            :routeName="isSalesDashboard ? 'Dashboard' : 'Marketing Dashboard'"
+          <ViewBreadcrumbs :routeName="breadcrumbRouteName" />
+          <Badge
+            variant="subtle"
+            :theme="useMockData ? 'orange' : 'green'"
+            :label="useMockData ? __('Mock data') : __('Live data')"
           />
-          <Badge variant="subtle" theme="orange" :label="__('Mock data')" />
         </div>
       </template>
       <template #right-header>
-        <Button
-          :label="__('Refresh')"
-          :iconLeft="LucideRefreshCcw"
-          :loading="refreshing"
-          @click="refreshDashboard"
-        />
+        <div class="flex items-center gap-2">
+          <Button
+            :variant="useMockData ? 'subtle' : 'outline'"
+            :theme="useMockData ? 'orange' : 'green'"
+            :iconLeft="useMockData ? LucideDatabase : LucideActivity"
+            :label="useMockData ? __('Mock Data') : __('Live Data')"
+            @click="toggleMockMode"
+          />
+          <Button
+            :label="__('Refresh')"
+            :iconLeft="LucideRefreshCcw"
+            :loading="refreshing"
+            @click="refreshDashboard"
+          />
+        </div>
       </template>
     </LayoutHeader>
 
     <div class="flex flex-wrap items-center gap-3 px-5 pb-2 pt-5">
-      <div class="flex items-center rounded-md border border-outline-gray-2 p-0.5">
-        <Button
-          :variant="isSalesDashboard ? 'solid' : 'ghost'"
-          :label="__('Sales Dashboard')"
-          @click="openDashboard('Dashboard')"
-        />
-        <Button
-          :variant="isSalesDashboard ? 'ghost' : 'solid'"
-          :label="__('Marketing Dashboard')"
-          @click="openDashboard('Marketing Dashboard')"
-        />
-      </div>
       <div
         v-if="isSalesDashboard"
         class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
@@ -42,6 +41,18 @@
           :variant="activeSalesSection === section.value ? 'solid' : 'ghost'"
           :label="__(section.label)"
           @click="openSalesSection(section.value)"
+        />
+      </div>
+      <div
+        v-if="isOfflineMarketingDashboard"
+        class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
+      >
+        <Button
+          v-for="team in offlineTeams"
+          :key="team.value"
+          :variant="offlineTeamFilter === team.value ? 'solid' : 'ghost'"
+          :label="__(team.label)"
+          @click="offlineTeamFilter = team.value"
         />
       </div>
       <Dropdown
@@ -113,9 +124,9 @@
       />
     </div>
 
-    <div class="min-h-0 flex-1 overflow-hidden border-t">
+    <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
       <DashboardGrid
-        :key="`${props.dashboardType}-${activeSalesSection}-${renderKey}`"
+        :key="`${props.dashboardType}-${activeSalesSection}-${offlineTeamFilter}-${renderKey}`"
         :model-value="dashboardItems"
         @refresh="refreshDashboard"
       />
@@ -157,13 +168,17 @@ import Link from '@/components/Controls/Link.vue'
 import UserAvatar from '@/components/UserAvatar.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import {
-  marketingDashboardItems,
+  digitalMarketingDashboardItems,
+  offlineMarketingDashboardItems,
   salesDashboardSections,
+  type OfflineTeam,
 } from '@/data/admissionsDashboardMock'
 import { usersStore } from '@/stores/users'
 import { formatRange, formatter, getLastXDays } from '@/utils/dashboard'
+import { useStorage } from '@vueuse/core'
 import {
   Badge,
+  createResource,
   DateRangePicker,
   Dialog,
   Dropdown,
@@ -171,9 +186,11 @@ import {
   Tooltip,
   usePageMeta,
 } from 'frappe-ui'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import LucideActivity from '~icons/lucide/activity'
 import LucideCalendar from '~icons/lucide/calendar'
+import LucideDatabase from '~icons/lucide/database'
 import LucideListFilter from '~icons/lucide/list-filter'
 import LucideRefreshCcw from '~icons/lucide/refresh-ccw'
 
@@ -184,6 +201,7 @@ const props = defineProps({
 })
 const router = useRouter()
 
+const useMockData = useStorage('crm_dashboard_use_mock_data', false)
 const refreshing = ref(false)
 const renderKey = ref(0)
 const showDatePicker = ref(false)
@@ -204,11 +222,11 @@ const advancedFilterFields = [
   { key: 'district', label: 'District', options: ['Nội thành', 'Ngoại thành', 'Ngoài tỉnh'] },
   { key: 'highSchool', label: 'High School', options: ['Tất cả trường THPT', 'THPT chuyên', 'THPT công lập', 'THPT tư thục'] },
   { key: 'salesTeam', label: 'Sales Team', options: ['Team North', 'Team Central', 'Team South'] },
-  { key: 'leadChannel', label: 'Lead Channel', options: ['Digital', 'Event', 'Organic', 'Partner'] },
-  { key: 'leadSource', label: 'Lead Source', options: ['Facebook', 'Google', 'Zalo', 'Website', 'Sự kiện THPT'] },
+  { key: 'leadChannel', label: 'Lead Channel', options: ['Digital', 'Event', 'Organic', 'Referral'] },
+  { key: 'leadSource', label: 'Lead Source', options: ['Facebook', 'Google', 'Zalo', 'TikTok', 'Referral', 'Website'] },
   { key: 'campaign', label: 'Campaign', options: ['Open Day 2026', 'GenZ chọn ngành đúng', 'FPTU Scholarship', 'Campus Tour'] },
   { key: 'stage', label: 'Admission Stage', options: ['New Lead', 'Contacted', 'Qualified', 'Counseling', 'Application', 'Enrolled'] },
-  { key: 'dimension', label: 'Interest Dimension', options: ['Chi phí', 'Ngành & trường khác', 'Việc làm', 'Hoạt động sinh viên', 'Chỗ ở'] },
+  { key: 'dimension', label: 'Interest Dimension', options: ['Chi phí', 'Ngành & trường khác', 'Việc làm', 'Hoạt động sinh viên', 'Chỗ ở', 'Quan tâm', 'Khác'] },
   { key: 'interestLevel', label: 'Interest Level', options: ['Level ≥1', 'Level ≥2', 'Level 3'] },
   { key: 'stance', label: 'Stance', options: ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'UNRESOLVED'] },
   { key: 'readiness', label: 'Readiness', options: ['Level 0', 'Level 1', 'Level 2', 'Level 3', 'Level 4'] },
@@ -234,6 +252,7 @@ const marketingFilterKeys = new Set([
 ])
 
 const isSalesDashboard = computed(() => props.dashboardType === 'sales')
+const isOfflineMarketingDashboard = computed(() => props.dashboardType === 'offline_marketing')
 const salesSections = [
   { value: 'overview', label: 'Overview' },
   { value: 'interests', label: 'AI Interests' },
@@ -245,11 +264,114 @@ const activeSalesSection = computed<SalesSection>(() =>
     ? (props.dashboardSection as SalesSection)
     : 'overview',
 )
-const dashboardItems = computed(() =>
-  isSalesDashboard.value
-    ? salesDashboardSections[activeSalesSection.value]
-    : marketingDashboardItems,
+const offlineTeams = [
+  { value: 'all', label: 'Tổng quan tất cả' },
+  { value: 'Team North', label: 'Team North' },
+  { value: 'Team Central', label: 'Team Central' },
+  { value: 'Team South', label: 'Team South' },
+] as const satisfies { value: OfflineTeam; label: string }[]
+const offlineTeamFilter = ref<OfflineTeam>('all')
+
+function parsePeriod(period: string | null) {
+  if (!period) return { from_date: undefined, to_date: undefined }
+  if (period.includes(',')) {
+    const [f, t] = period.split(',')
+    return { from_date: f.trim(), to_date: t.trim() }
+  }
+  if (period.includes(' to ')) {
+    const [f, t] = period.split(' to ')
+    return { from_date: f.trim(), to_date: t.trim() }
+  }
+  return { from_date: period.trim(), to_date: undefined }
+}
+
+const liveSalesData = createResource({
+  url: 'crm.api.admissions_dashboard.get_sales_dashboard',
+})
+
+const liveDigitalData = createResource({
+  url: 'crm.api.admissions_dashboard.get_digital_marketing_dashboard',
+})
+
+const liveOfflineData = createResource({
+  url: 'crm.api.admissions_dashboard.get_offline_marketing_dashboard',
+})
+
+function fetchLiveData() {
+  if (useMockData.value) return
+  const { from_date, to_date } = parsePeriod(filters.period)
+  if (isSalesDashboard.value) {
+    liveSalesData.fetch({
+      from_date,
+      to_date,
+      user: filters.user || undefined,
+      sales_team: advancedFilters.salesTeam || undefined,
+      campus: advancedFilters.campus || undefined,
+      admission_term: advancedFilters.admissionTerm || undefined,
+      section: activeSalesSection.value,
+    })
+  } else if (isOfflineMarketingDashboard.value) {
+    liveOfflineData.fetch({
+      team: offlineTeamFilter.value,
+      from_date,
+      to_date,
+      campus: advancedFilters.campus || undefined,
+    })
+  } else {
+    liveDigitalData.fetch({
+      from_date,
+      to_date,
+      source: advancedFilters.leadSource || undefined,
+      platform: advancedFilters.leadChannel || undefined,
+      campaign: advancedFilters.campaign || undefined,
+      campus: advancedFilters.campus || undefined,
+    })
+  }
+}
+
+watch(
+  [
+    useMockData,
+    () => filters.period,
+    () => filters.user,
+    () => activeSalesSection.value,
+    () => offlineTeamFilter.value,
+    () => props.dashboardType,
+    () => props.dashboardSection,
+  ],
+  () => {
+    fetchLiveData()
+  },
+  { immediate: true },
 )
+
+const dashboardItems = computed(() => {
+  if (useMockData.value) {
+    if (isSalesDashboard.value) return salesDashboardSections[activeSalesSection.value]
+    if (isOfflineMarketingDashboard.value) return offlineMarketingDashboardItems(offlineTeamFilter.value)
+    return digitalMarketingDashboardItems
+  }
+
+  if (isSalesDashboard.value) {
+    return liveSalesData.data && Array.isArray(liveSalesData.data)
+      ? liveSalesData.data
+      : []
+  }
+  if (isOfflineMarketingDashboard.value) {
+    return liveOfflineData.data && Array.isArray(liveOfflineData.data)
+      ? liveOfflineData.data
+      : []
+  }
+  return liveDigitalData.data && Array.isArray(liveDigitalData.data)
+    ? liveDigitalData.data
+    : []
+})
+
+const breadcrumbRouteName = computed(() => {
+  if (isSalesDashboard.value) return 'Dashboard'
+  if (isOfflineMarketingDashboard.value) return 'Offline Marketing Dashboard'
+  return 'Digital Marketing Dashboard'
+})
 const dashboardFilterFields = computed(() =>
   isSalesDashboard.value
     ? advancedFilterFields
@@ -312,14 +434,20 @@ function setCustomRange(value: string | null) {
 
 function refreshDashboard() {
   refreshing.value = true
+  if (!useMockData.value) {
+    if (isSalesDashboard.value) liveSalesData.fetch()
+    else if (isOfflineMarketingDashboard.value) liveOfflineData.fetch()
+    else liveDigitalData.fetch()
+  }
   window.setTimeout(() => {
     renderKey.value += 1
     refreshing.value = false
   }, 350)
 }
 
-function openDashboard(name: 'Dashboard' | 'Marketing Dashboard') {
-  if (router.currentRoute.value.name !== name) router.push({ name })
+function toggleMockMode() {
+  useMockData.value = !useMockData.value
+  refreshDashboard()
 }
 
 function openSalesSection(section: SalesSection) {
@@ -341,6 +469,8 @@ function applyAdvancedFilters() {
 usePageMeta(() => ({
   title: isSalesDashboard.value
     ? __('Sales Dashboard')
-    : __('Marketing Dashboard'),
+    : isOfflineMarketingDashboard.value
+      ? __('Offline Marketing Dashboard')
+      : __('Digital Marketing Dashboard'),
 }))
 </script>

@@ -18,7 +18,14 @@
   "outcome",
   "section_summary",
   "summary",
-  "notes"
+  "notes",
+  "section_reference",
+  "reference_doctype",
+  "reference_docname",
+  "actor",
+  "column_break_2",
+  "next_follow_up_date",
+  "next_follow_up_action"
  ],
  "fields": [
   {
@@ -30,13 +37,13 @@
    "options": "INTX-.YYYY.-"
   },
   {
+   "description": "Either Student or CRM Contact must be set (enforced in validate) -- not required alone, since most interactions happen before a lead is promoted to Student.",
    "fieldname": "student",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Student",
-   "options": "CRM Student",
-   "reqd": 1
+   "options": "CRM Student"
   },
   {
    "fieldname": "crm_contact",
@@ -72,7 +79,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Outcome",
-   "options": "\nCaptured\nFollow Up Needed\nResolved\nConverted\nNo Response"
+   "options": "\nCaptured\nFollow Up Needed\nResolved\nConverted\nNo Response\nData Error\nUncontactable"
   },
   {
    "fieldname": "section_summary",
@@ -90,6 +97,44 @@
    "fieldname": "notes",
    "fieldtype": "Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "section_reference",
+   "fieldtype": "Section Break",
+   "label": "Reference & Follow-up"
+  },
+  {
+   "description": "Source record that triggered this interaction (Communication, Task, Call Log, CRM Contact Consent Event, ...), if auto-created.",
+   "fieldname": "reference_doctype",
+   "fieldtype": "Link",
+   "label": "Reference Document Type",
+   "options": "DocType"
+  },
+  {
+   "fieldname": "reference_docname",
+   "fieldtype": "Dynamic Link",
+   "label": "Reference Document",
+   "options": "reference_doctype"
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Link",
+   "label": "Actor",
+   "options": "User"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "next_follow_up_date",
+   "fieldtype": "Datetime",
+   "label": "Next Follow-up Date"
+  },
+  {
+   "fieldname": "next_follow_up_action",
+   "fieldtype": "Data",
+   "label": "Next Follow-up Action"
   }
  ],
  "index_web_pages_for_search": 1,

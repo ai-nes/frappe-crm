@@ -15,7 +15,13 @@
   "province",
   "address",
   "phone",
-  "import_source_id"
+  "import_source_id",
+  "section_governance",
+  "owner_role",
+  "approval_state",
+  "column_break_governance",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
@@ -62,6 +68,43 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Import Source ID"
+  },
+  {
+   "fieldname": "section_governance",
+   "fieldtype": "Section Break",
+   "label": "Governance"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Link",
+   "label": "Owner Role",
+   "options": "Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Approval State",
+   "options": "Proposed\nApproved\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_governance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

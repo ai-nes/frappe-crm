@@ -15,8 +15,14 @@
   "email",
   "col_break_1",
   "enrollment_status",
+  "lifecycle_stage",
   "lead_status",
+  "readiness_level",
+  "quality_bucket",
+  "is_verified_lead",
   "assigned_to",
+  "owner_staff",
+  "owning_team",
   "student",
   "admission_year",
   "section_parents",
@@ -31,10 +37,27 @@
   "aspiration",
   "section_enrollment",
   "source",
+  "platform",
   "crm_campaign",
   "crm_event",
   "col_break_enrollment",
   "branch",
+  "first_contact_time",
+  "sla_status",
+  "sla_started_at",
+  "next_follow_up",
+  "col_break_follow_up",
+  "decision_maker",
+  "preferred_contact_channel",
+  "section_consent",
+  "is_opted_out",
+  "is_test_record",
+  "email_bounced",
+  "section_status_history",
+  "status_change_reason",
+  "status_change_log",
+  "section_assignment_history",
+  "assignment_log",
   "section_notes",
   "notes"
  ],
@@ -83,6 +106,16 @@
    "default": "Có triển vọng"
   },
   {
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lifecycle Stage",
+   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "read_only": 1,
+   "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
+  },
+  {
    "fieldname": "lead_status",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -92,12 +125,55 @@
    "default": "Mới"
   },
   {
+   "fieldname": "readiness_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Readiness Level",
+   "options": "\nLevel 0 - Chưa xác định\nLevel 1 - Đang tìm hiểu\nLevel 2 - Đang so sánh\nLevel 3 - Có ý định nộp hồ sơ\nLevel 4 - Sẵn sàng nhập học",
+   "default": ""
+  },
+  {
+   "fieldname": "quality_bucket",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead Quality Bucket",
+   "options": "\nHot\nWarm\nCool\nSai số\nKhông liên lạc được\nKhông quan tâm"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_verified_lead",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verified Lead"
+  },
+  {
    "fieldname": "assigned_to",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Assigned To",
    "options": "CRM Staff"
+  },
+  {
+   "fieldname": "owner_staff",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner Staff",
+   "options": "CRM Staff",
+   "read_only": 1,
+   "description": "Derived from Assigned To — used for row-level data scoping. Do not edit directly."
+  },
+  {
+   "fieldname": "owning_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Team",
+   "options": "CRM Team",
+   "read_only": 1,
+   "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
   },
   {
    "fieldname": "student",
@@ -185,16 +261,25 @@
    "options": "CRM Lead Source"
   },
   {
+   "fieldname": "platform",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Platform",
+   "options": "CRM Platform"
+  },
+  {
+   "description": "Deprecated (Phase 5) -- a lead can now touch multiple campaigns via CRM Campaign Touchpoint. This field is kept populated as the first/legacy touchpoint for backward-compatible readers and historical fallback.",
    "fieldname": "crm_campaign",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "CRM Campaign",
+   "label": "CRM Campaign (Deprecated)",
    "options": "CRM Campaign"
   },
   {
+   "description": "Deprecated (Phase 5) -- a lead can now attend multiple events via CRM Event Participation. This field is kept populated as the first/legacy touchpoint for backward-compatible readers and historical fallback.",
    "fieldname": "crm_event",
    "fieldtype": "Link",
-   "label": "CRM Event",
+   "label": "CRM Event (Deprecated)",
    "options": "CRM Event"
   },
   {
@@ -207,6 +292,118 @@
    "in_standard_filter": 1,
    "label": "Branch",
    "options": "CRM Campus"
+  },
+  {
+   "fieldname": "first_contact_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "First Contact Time"
+  },
+  {
+   "fieldname": "sla_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "SLA Status",
+   "options": "\nĐúng SLA\nSắp quá hạn\nQuá SLA",
+   "read_only": 1,
+   "description": "Computed on a schedule from sla_started_at/first_contact_time — see crm.api.sla. Do not edit directly."
+  },
+  {
+   "fieldname": "sla_started_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "SLA Started At",
+   "description": "Set once when this lead is first assigned to a staff member — the response-window countdown start (see crm.api.sla). Do not edit directly."
+  },
+  {
+   "fieldname": "next_follow_up",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Next Follow-up"
+  },
+  {
+   "fieldname": "col_break_follow_up",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decision_maker",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Decision Maker",
+   "options": "\nStudent\nParent\nBoth"
+  },
+  {
+   "fieldname": "preferred_contact_channel",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Preferred Contact Channel",
+   "options": "\nEmail\nZalo\nPhone"
+  },
+  {
+   "fieldname": "section_consent",
+   "fieldtype": "Section Break",
+   "label": "Consent & Compliance"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_opted_out",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Opted Out",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_test_record",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Test Record",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_bounced",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Email Bounced",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "fieldname": "section_status_history",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Status Change Reason",
+   "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Team Leader/Admissions Director only)."
+  },
+  {
+   "fieldname": "status_change_log",
+   "fieldtype": "Table",
+   "label": "Status Change Log",
+   "options": "Status Change Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_assignment_history",
+   "fieldtype": "Section Break",
+   "label": "Assignment History"
+  },
+  {
+   "fieldname": "assignment_log",
+   "fieldtype": "Table",
+   "label": "Assignment Log",
+   "options": "CRM Assignment Log",
+   "read_only": 1
   },
   {
    "fieldname": "section_notes",

@@ -15,6 +15,12 @@
   "province",
   "event_date",
   "location",
+  "section_schedule",
+  "start_datetime",
+  "end_datetime",
+  "column_break_2",
+  "owner_staff",
+  "owning_team",
   "section_notes",
   "notes"
  ],
@@ -50,15 +56,51 @@
    "options": "CRM Province"
   },
   {
+   "description": "Deprecated -- use Start/End Time instead. Kept for backward compatibility; kept in sync with Start Time by validate().",
    "fieldname": "event_date",
    "fieldtype": "Date",
    "in_list_view": 1,
-   "label": "Event Date"
+   "label": "Event Date (Deprecated)"
   },
   {
    "fieldname": "location",
    "fieldtype": "Data",
    "label": "Location"
+  },
+  {
+   "fieldname": "section_schedule",
+   "fieldtype": "Section Break",
+   "label": "Schedule & Ownership"
+  },
+  {
+   "fieldname": "start_datetime",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Start Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "end_datetime",
+   "fieldtype": "Datetime",
+   "label": "End Time"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "owner_staff",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "owning_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Team",
+   "options": "CRM Team"
   },
   {
    "fieldname": "section_notes",

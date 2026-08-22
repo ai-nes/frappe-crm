@@ -53,15 +53,8 @@ OLD_ROLES = [
 ]
 
 
-def execute():
-	# Remove old roles and all their assignments
-	for role_name in OLD_ROLES:
-		if frappe.db.exists("Role", role_name):
-			frappe.db.delete("Has Role", {"role": role_name})
-			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
-
-	# Create new roles
-	for role_name in NEW_ROLES:
+def create_roles(role_names):
+	for role_name in role_names:
 		if not frappe.db.exists("Role", role_name):
 			frappe.get_doc({
 				"doctype": "Role",
@@ -69,4 +62,13 @@ def execute():
 				"desk_access": 1,
 			}).insert(ignore_permissions=True)
 
+
+def execute():
+	# Remove old roles and all their assignments
+	for role_name in OLD_ROLES:
+		if frappe.db.exists("Role", role_name):
+			frappe.db.delete("Has Role", {"role": role_name})
+			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
+
+	create_roles(NEW_ROLES)
 	frappe.db.commit()
