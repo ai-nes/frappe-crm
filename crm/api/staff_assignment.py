@@ -3,6 +3,8 @@ import json
 import frappe
 from frappe import _
 
+from crm.fcrm.permissions import derive_owner_fields
+
 
 ASSIGNABLE_DOCTYPES = {"CRM Student", "CRM Contact"}
 STAFF_ASSIGN_DENIED_ROLES = {"Sale", "CTV-Sale", "Promoter-PR"}
@@ -49,12 +51,18 @@ def assign_staff(doctype: str, names: str | list, staff: str):
 			frappe.throw(_("Not permitted to update {0}").format(name), frappe.PermissionError)
 		doc.assigned_to = staff
 		doc.save()
+		# doc.save() re-derives owner_staff/owning_team via validate(), but the
+		# reciprocal linked record below is updated with a raw db.set_value that
+		# bypasses hooks entirely — it must set those two fields explicitly too, or
+		# they go stale on the linked record after this reassignment.
+		owner_staff, owning_team = derive_owner_fields(staff)
+		linked_updates = {"assigned_to": staff, "owner_staff": owner_staff, "owning_team": owning_team}
 		if doctype == "CRM Student":
 			contact = frappe.db.get_value("CRM Contact", {"student": name}, "name")
 			if contact:
-				frappe.db.set_value("CRM Contact", contact, "assigned_to", staff, update_modified=False)
+				frappe.db.set_value("CRM Contact", contact, linked_updates, update_modified=False)
 		elif doctype == "CRM Contact" and doc.get("student"):
-			frappe.db.set_value("CRM Student", doc.student, "assigned_to", staff, update_modified=False)
+			frappe.db.set_value("CRM Student", doc.student, linked_updates, update_modified=False)
 		updated += 1
 
 	frappe.db.commit()

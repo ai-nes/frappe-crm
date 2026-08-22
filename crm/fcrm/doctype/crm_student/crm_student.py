@@ -4,6 +4,7 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
 	resolve_province,
@@ -39,8 +40,17 @@ class CRMStudent(Document):
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._validate_unique_id_number()
+		self._derive_owner_fields()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _derive_owner_fields(self):
+		if self.assigned_to:
+			self.owner_staff, self.owning_team = derive_owner_fields(self.assigned_to)
+			return
+		self.owner_staff = None
+		if not self.owning_team:
+			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
 	def _validate_high_school_format(self):
 		if not self.high_school:
@@ -59,9 +69,6 @@ class CRMStudent(Document):
 				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
 				title="Số điện thoại không hợp lệ",
 			)
-
-	def on_update(self):
-		self._sync_linked_contact_fields()
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -162,50 +169,6 @@ class CRMStudent(Document):
 				f'<a href="/crm/crm-students/{existing.name}">{existing.student_name}</a>',
 				title="Số CCCD trùng",
 			)
-
-	def _sync_linked_contact_fields(self):
-		contact_name = frappe.db.get_value("CRM Contact", {"student": self.name}, "name")
-		if not contact_name:
-			return
-
-		contact_values = frappe.db.get_value(
-			"CRM Contact",
-			contact_name,
-			[
-				"full_name",
-				"phone",
-				"email",
-				"high_school",
-				"province",
-				"major",
-				"aspiration",
-				"source",
-				"admission_year",
-				"branch",
-				"parent_name",
-				"parent_phone",
-				"assigned_to",
-			],
-			as_dict=True,
-		) or {}
-		target_values = {
-			"full_name": self.student_name or "",
-			"phone": self.phone or "",
-			"email": self.email or "",
-			"high_school": self.high_school,
-			"province": self.province,
-			"major": self.major,
-			"aspiration": self.aspiration,
-			"source": self.source,
-			"admission_year": self.admission_year,
-			"branch": self.branch,
-			"parent_name": self.alt_name,
-			"parent_phone": self.alt_phone,
-			"assigned_to": self.assigned_to,
-		}
-		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
-		if updates:
-			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
 
 	@staticmethod
 	def default_list_data():

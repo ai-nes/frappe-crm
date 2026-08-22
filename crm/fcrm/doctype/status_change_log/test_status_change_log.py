@@ -86,11 +86,9 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 			}
 		)
 		doc.insert(ignore_permissions=True)
-		# CRM Contact.after_insert() auto-creates a linked CRM Student and writes the
-		# `student` link via a raw db.set_value (not onto this in-memory doc) — without
-		# reloading, a later .save() on this stale instance sees student="" and its own
-		# auto-created student now looks like a *different* record with the same phone,
-		# tripping _validate_unique_phone() with a false-positive duplicate error.
+		# validate() derives owner_staff/owning_team via db_set-free assignment on the
+		# in-memory doc, but reload to pick up server-side defaults (status_change_log)
+		# consistently with the rest of this test module's pattern.
 		doc.reload()
 		return doc
 

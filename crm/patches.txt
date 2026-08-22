@@ -76,3 +76,5 @@ crm.patches.v1_0.seed_phase1_dashboard_data_foundation
 crm.patches.v1_0.add_marketing_admissions_roles
 crm.patches.v1_0.backfill_team_membership_from_staff
 crm.patches.v1_0.reapply_crm_permissions_phase1
+crm.patches.v1_0.backfill_owner_fields_from_assigned_to
+crm.patches.v1_0.report_auto_created_student_anomalies

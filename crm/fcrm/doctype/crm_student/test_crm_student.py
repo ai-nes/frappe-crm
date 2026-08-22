@@ -53,26 +53,33 @@ class TestCRMStudent(FrappeTestCase):
 
 		self.assertEqual(convert_to_contact(student.name), contact_name)
 
-	def test_student_phone_syncs_to_linked_crm_contact_phone(self):
+	def test_student_phone_change_no_longer_syncs_to_linked_crm_contact(self):
+		# Regression guard for Phase 2 (removal of the continuous two-way sync bug):
+		# a Student field change must never silently overwrite its linked Contact.
 		student = self._make_student("_Test Student Phone Sync")
 		contact_name = convert_to_contact(student.name)
+		original_contact_phone = frappe.db.get_value("CRM Contact", contact_name, "phone")
 
 		student.phone = "0907654321"
 		student.save(ignore_permissions=True)
 
 		contact = frappe.get_doc("CRM Contact", contact_name)
-		self.assertEqual(contact.phone, "0907654321")
+		self.assertEqual(contact.phone, original_contact_phone)
+		self.assertNotEqual(contact.phone, "0907654321")
 
-	def test_crm_contact_phone_syncs_to_student_phone(self):
+	def test_crm_contact_phone_change_no_longer_syncs_to_student(self):
+		# Regression guard, mirror of the above for the Contact -> Student direction.
 		student = self._make_student("_Test Contact Phone Sync")
 		contact_name = convert_to_contact(student.name)
+		original_student_phone = student.phone
 
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		contact.phone = "0902222333"
 		contact.save(ignore_permissions=True)
 
 		student.reload()
-		self.assertEqual(student.phone, "0902222333")
+		self.assertEqual(student.phone, original_student_phone)
+		self.assertNotEqual(student.phone, "0902222333")
 
 	def test_create_from_contact_creates_crm_student(self):
 		contact = frappe.get_doc({

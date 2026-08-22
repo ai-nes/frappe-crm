@@ -3,7 +3,13 @@ import re
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
+
+# CRM Enrollment Status values that constitute the "application/enrollment" milestone
+# at which a CRM Student record should be created for a Contact — locked business
+# rule, see plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md.
+MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
 
 
 class CRMContact(Document):
@@ -96,11 +102,8 @@ class CRMContact(Document):
 		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
 
-	def after_insert(self):
-		self._auto_create_student()
-
 	def on_update(self):
-		self._sync_student_fields()
+		self._create_student_at_milestone()
 
 	def validate(self):
 		self._normalize_shared_fields()
@@ -109,8 +112,17 @@ class CRMContact(Document):
 		self._validate_high_school_format()
 		self._validate_unique_phone()
 		self._validate_unique_email()
+		self._derive_owner_fields()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _derive_owner_fields(self):
+		if self.assigned_to:
+			self.owner_staff, self.owning_team = derive_owner_fields(self.assigned_to)
+			return
+		self.owner_staff = None
+		if not self.owning_team:
+			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
 	def _resolve_geo(self):
 		# high_school is intentionally NOT resolved here — _validate_high_school_format()
@@ -239,13 +251,25 @@ class CRMContact(Document):
 			if not self.get(fieldname) and value:
 				self.set(fieldname, value)
 
-	def _auto_create_student(self):
+	def _create_student_at_milestone(self):
+		"""Creates a linked CRM Student exactly once, when enrollment_status first
+		transitions into MILESTONE_ENROLLMENT_STATUSES — not on every save (that was
+		the old continuous two-way sync, which this replaces; see phase-02 plan)."""
 		if self.student:
 			return
+		if self.enrollment_status not in MILESTONE_ENROLLMENT_STATUSES:
+			return
+
+		before = self.get_doc_before_save()
+		before_status = before.enrollment_status if before else None
+		if before_status in MILESTONE_ENROLLMENT_STATUSES:
+			return
+
 		if not self.phone:
 			return
 		if frappe.db.exists("CRM Student", {"phone": self.phone}):
 			return
+
 		student = frappe.new_doc("CRM Student")
 		student.student_name = self.full_name
 		student.phone = self.phone
@@ -262,48 +286,7 @@ class CRMContact(Document):
 		student.alt_name = self.parent_name
 		student.alt_phone = self.parent_phone
 		student.insert(ignore_permissions=True)
-		frappe.db.set_value("CRM Contact", self.name, "student", student.name, update_modified=False)
-
-	def _sync_student_fields(self):
-		if not self.student:
-			return
-
-		student_values = frappe.db.get_value(
-			"CRM Student",
-			self.student,
-			[
-				"student_name",
-				"phone",
-				"email",
-				"high_school",
-				"province",
-				"major",
-				"aspiration",
-				"source",
-				"admission_year",
-				"branch",
-				"enrollment_status",
-				"assigned_to",
-			],
-			as_dict=True,
-		) or {}
-		target_values = {
-			"student_name": self.full_name or "",
-			"phone": self.phone or "",
-			"email": self.email or "",
-			"high_school": self.high_school,
-			"province": self.province,
-			"major": self.major,
-			"aspiration": self.aspiration,
-			"source": self.source,
-			"admission_year": self.admission_year,
-			"branch": self.branch,
-			"enrollment_status": self.enrollment_status,
-			"assigned_to": self.assigned_to,
-		}
-		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
-		if updates:
-			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
+		self.db_set("student", student.name, update_modified=False)
 
 def log_status_change(doc, method=None):
 	# CRM Contact.validate runs on every save across the whole app (phone/email

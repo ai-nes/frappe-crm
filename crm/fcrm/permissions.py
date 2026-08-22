@@ -59,7 +59,7 @@ def get_permission_query_conditions(doctype, user=None):
 		return _campus_condition(table, crm_staff_name)
 
 	if "Sale" in roles or "CTV-Sale" in roles:
-		return f"{table}.assigned_to = {frappe.db.escape(crm_staff_name)}"
+		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
 
@@ -125,6 +125,45 @@ def _get_teams(crm_staff_name):
 	)
 
 
+def _primary_team(staff_name):
+	if not staff_name:
+		return None
+	memberships = frappe.get_all(
+		"CRM Team Membership",
+		filters={"parent": staff_name, "parenttype": "CRM Staff"},
+		fields=["team", "is_primary"],
+		order_by="is_primary desc, creation asc",
+	)
+	return memberships[0].team if memberships else None
+
+
+def derive_owner_fields(assigned_to):
+	"""Compute (owner_staff, owning_team) for an *assigned* CRM Contact/Student.
+	owner_staff simply echoes assigned_to; owning_team is the staff's primary team
+	membership (falling back to their first team if none is marked primary).
+	Called from CRMContact/CRMStudent.validate() so these two fields — not
+	assigned_to/branch — are what row-level scoping keys off of.
+	"""
+	if not assigned_to:
+		return None, None
+	return assigned_to, _primary_team(assigned_to)
+
+
+def derive_unassigned_owning_team(creator_user):
+	"""owning_team for a record that has NO assigned_to yet. Without this, an
+	unassigned record could never carry a team attribution at all (owner_staff and
+	owning_team would both stay null forever), making the Team Leader "own team's
+	unassigned pool" rule in the locked BR matrix (constraint 3) permanently
+	unreachable. Attributes the record to the *creating* staff member's own primary
+	team instead — the natural team-of-record for a freshly-created, not-yet-assigned
+	lead. Callers must only apply this when owning_team is not already set, so a
+	record that later gets unassigned again keeps falling back into its last-known
+	team's pool rather than being re-attributed to whoever happened to touch it.
+	"""
+	creator_staff = _get_crm_staff_name(creator_user)
+	return _primary_team(creator_staff)
+
+
 def _in_clause(field, values):
 	values = [v for v in set(values) if v]
 	if not values:
@@ -143,35 +182,19 @@ def _team_leader_condition(table, crm_staff_name):
 		filters={"team": ["in", teams], "parenttype": "CRM Staff"},
 		pluck="parent",
 	)
-	team_campuses = frappe.get_all(
-		"CRM Team", filters={"name": ["in", teams]}, fields=["name", "campus"]
-	)
 
 	parts = []
-	staff_clause = _in_clause(f"{table}.assigned_to", staff_in_teams)
+	staff_clause = _in_clause(f"{table}.owner_staff", staff_in_teams)
 	if staff_clause:
 		parts.append(staff_clause)
 
-	# Unassigned-pool: Contact/Student have no owning_team field yet (that lands in
-	# Phase 2), so an unassigned record can only be attributed to a team via campus
-	# match. Only include a campus here if none of the leader's OTHER teams share it
-	# with a team outside their own set — otherwise a shared campus could leak a
-	# sibling team's unassigned records, which the locked BR matrix forbids
-	# (constraint 3: unassigned-pool visibility must be scoped to own team only, not
-	# campus-wide). A campus shared with another team is simply omitted from the pool
-	# rather than approximated, so this can under-deliver visibility for multi-team
-	# campuses but never over-expose.
-	own_campuses = {row.campus for row in team_campuses if row.campus}
-	exclusive_campuses = [
-		campus
-		for campus in own_campuses
-		if not frappe.get_all(
-			"CRM Team", filters={"campus": campus, "name": ["not in", teams]}, limit=1
-		)
-	]
-	pool_clause = _in_clause(f"{table}.branch", exclusive_campuses)
-	if pool_clause:
-		parts.append(f"({table}.assigned_to is null and {pool_clause})")
+	# Unassigned-pool: Contact/Student now carry owning_team directly (Phase 2), so
+	# this is an exact match against the leader's own team(s) — no more approximating
+	# team ownership via a shared campus, which used to risk leaking a sibling team's
+	# unassigned records (constraint 3).
+	team_clause = _in_clause(f"{table}.owning_team", teams)
+	if team_clause:
+		parts.append(f"({table}.owner_staff is null and {team_clause})")
 
 	if not parts:
 		return "1=0"
@@ -184,5 +207,5 @@ def _campus_condition(table, crm_staff_name):
 		return "1=0"
 
 	staff_in_campus = frappe.get_all("CRM Staff", filters={"campus": campus}, pluck="name")
-	clause = _in_clause(f"{table}.assigned_to", staff_in_campus)
+	clause = _in_clause(f"{table}.owner_staff", staff_in_campus)
 	return clause or "1=0"

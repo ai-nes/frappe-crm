@@ -18,6 +18,8 @@
     "col_break_1",
     "enrollment_status",
     "assigned_to",
+    "owner_staff",
+    "owning_team",
     "latest_score",
     "enrollment_date",
     "section_links",
@@ -117,6 +119,24 @@
       "in_standard_filter": 1,
       "label": "Assigned To",
       "options": "CRM Staff"
+    },
+    {
+      "fieldname": "owner_staff",
+      "fieldtype": "Link",
+      "in_standard_filter": 1,
+      "label": "Owner Staff",
+      "options": "CRM Staff",
+      "read_only": 1,
+      "description": "Derived from Assigned To — used for row-level data scoping. Do not edit directly."
+    },
+    {
+      "fieldname": "owning_team",
+      "fieldtype": "Link",
+      "in_standard_filter": 1,
+      "label": "Owning Team",
+      "options": "CRM Team",
+      "read_only": 1,
+      "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
     },
     {
       "fieldname": "latest_score",
