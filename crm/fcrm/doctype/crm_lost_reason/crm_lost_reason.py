@@ -1,21 +1,11 @@
 # Copyright (c) 2025, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-# import frappe
 from frappe.model.document import Document
 
 
 class CRMLostReason(Document):
-	# begin: auto-generated types
-	# This code is auto-generated. Do not modify anything in this block.
+	def before_insert(self):
+		from crm.fcrm.master_data_governance import set_governance_defaults
 
-	from typing import TYPE_CHECKING
-
-	if TYPE_CHECKING:
-		from frappe.types import DF
-
-		description: DF.TextEditor | None
-		lost_reason: DF.Data
-	# end: auto-generated types
-
-	pass
+		set_governance_defaults(self)

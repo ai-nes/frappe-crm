@@ -83,6 +83,51 @@ REF_PERMS = [
 	_p("Admissions Director",   read=1),
 ]
 
+# Master-data-governance-owned lookup types (Phase 7): the owning role gets
+# create+write so plain additive inserts (via before_insert/set_governance_defaults)
+# work through the normal doctype permission table; the approver role gets
+# read-only, since approve_change/reject_change apply the actual mutation via
+# ignore_permissions=True and don't need doctype-level write access.
+MARKETING_LOOKUP_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("Marketing Operator", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing Lead",     read=1, report=1, prt=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
+]
+
+LOST_REASON_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, report=1, prt=1),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("CRM Data Steward", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing Lead",   read=1, report=1, prt=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
+]
+
+CAMPUS_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("Admissions Operations", read=1, write=1, create=1, prt=1, report=1),
+	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
+]
+
 EDUCATION_PROGRAM_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
@@ -151,7 +196,7 @@ DOCTYPE_PERMS = {
 	"CRM Score Template": REF_PERMS,
 	"CRM Score History":  OPS_PERMS,
 	# Reference data
-	"CRM Campus":            REF_PERMS,
+	"CRM Campus":            CAMPUS_PERMS,
 	"CRM Major":             REF_PERMS,
 	"CRM Major Group":       REF_PERMS,
 	"CRM High School":       REF_PERMS,
@@ -161,12 +206,14 @@ DOCTYPE_PERMS = {
 	"CRM School Type":       REF_PERMS,
 	"CRM Aspiration":        REF_PERMS,
 	"CRM Enrollment Status": REF_PERMS,
-	"CRM Lead Source":       REF_PERMS,
+	"CRM Lead Source":       MARKETING_LOOKUP_PERMS,
+	"CRM Platform":          MARKETING_LOOKUP_PERMS,
+	"CRM Intent Type":       MARKETING_LOOKUP_PERMS,
 	"CRM Admission Year":    REF_PERMS,
 	"CRM Education Program": EDUCATION_PROGRAM_PERMS,
 	"CRM Campaign Type":     REF_PERMS,
 	"CRM Department":        REF_PERMS,
-	"CRM Lost Reason":       REF_PERMS,
+	"CRM Lost Reason":       LOST_REASON_PERMS,
 	"Holiday List":      REF_PERMS,
 	"CRM Team":          TEAM_PERMS,
 	# Operations

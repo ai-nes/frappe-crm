@@ -1,21 +1,11 @@
 # Copyright (c) 2023, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
-# import frappe
 from frappe.model.document import Document
 
 
 class CRMLeadSource(Document):
-	# begin: auto-generated types
-	# This code is auto-generated. Do not modify anything in this block.
+	def before_insert(self):
+		from crm.fcrm.master_data_governance import set_governance_defaults
 
-	from typing import TYPE_CHECKING
-
-	if TYPE_CHECKING:
-		from frappe.types import DF
-
-		details: DF.TextEditor | None
-		source_name: DF.Data
-	# end: auto-generated types
-
-	pass
+		set_governance_defaults(self)
