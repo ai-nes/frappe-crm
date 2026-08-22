@@ -473,6 +473,24 @@ def get_sales_dashboard(
 	return []
 
 
+def _contact_names_touched_by_campaign(campaign):
+	"""Union of the deprecated singular crm_campaign field and the Phase 5
+	CRM Campaign Touchpoint many-to-many table, so dashboards read correctly
+	whether a contact's campaign attribution came from before or after the
+	Phase 5 migration."""
+	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
+	names.update(frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"))
+	return names
+
+
+def _contact_names_with_event_participation():
+	"""Union of the deprecated singular crm_event field and the Phase 5
+	CRM Event Participation many-to-many table."""
+	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
+	names.update(frappe.db.get_all("CRM Event Participation", pluck="crm_contact"))
+	return names
+
+
 @frappe.whitelist()
 def get_digital_marketing_dashboard(
 	from_date=None,
@@ -501,7 +519,7 @@ def get_digital_marketing_dashboard(
 	if platform:
 		base_filters.append(["platform", "=", platform])
 	if campaign:
-		base_filters.append(["crm_campaign", "=", campaign])
+		base_filters.append(["name", "in", list(_contact_names_touched_by_campaign(campaign))])
 	if campus:
 		base_filters.append(["branch", "=", campus])
 
@@ -561,7 +579,7 @@ def get_digital_marketing_dashboard(
 	campaign_data = []
 	for camp in campaign_list:
 		c_name = camp.title or camp.name
-		c_filters = base_filters + [["crm_campaign", "=", camp.name]]
+		c_filters = base_filters + [["name", "in", list(_contact_names_touched_by_campaign(camp.name))]]
 		campaign_data.append({
 			"campaign": c_name,
 			"Đã chuyển đổi": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "Đã nhập học"]]),
@@ -687,12 +705,18 @@ def get_offline_marketing_dashboard(team="all", from_date=None, to_date=None, ca
 			base_filters.append(["assigned_to", "=", "__none__"])
 
 	# Region counts (Bắc, Trung, Nam)
+	event_participant_names = list(_contact_names_with_event_participation())
 	regions = ["Miền Bắc", "Miền Trung", "Miền Nam"]
 	region_data = []
 	for r in (regions if not is_filtered else [("Miền Bắc" if team == "Team North" else "Miền Trung" if team == "Team Central" else "Miền Nam")]):
 		provinces_in_reg = frappe.db.get_all("CRM Province", filters={"region": r}, pluck="name")
-		on_c = frappe.db.count("CRM Contact", filters=base_filters + [["province", "in", provinces_in_reg], ["crm_event", "is", "set"]])
-		off_c = frappe.db.count("CRM Contact", filters=base_filters + [["province", "in", provinces_in_reg], ["crm_event", "is", "not set"]])
+		region_filters = base_filters + [["province", "in", provinces_in_reg]]
+		if event_participant_names:
+			on_c = frappe.db.count("CRM Contact", filters=region_filters + [["name", "in", event_participant_names]])
+			off_c = frappe.db.count("CRM Contact", filters=region_filters + [["name", "not in", event_participant_names]])
+		else:
+			on_c = 0
+			off_c = frappe.db.count("CRM Contact", filters=region_filters)
 		region_data.append({"region": r, "On-campus": on_c, "Off-campus": off_c})
 
 	# Interest data

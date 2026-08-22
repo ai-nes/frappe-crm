@@ -81,3 +81,4 @@ crm.patches.v1_0.report_auto_created_student_anomalies
 crm.patches.v1_0.seed_lifecycle_stage_on_enrollment_status
 crm.patches.v1_0.backfill_lifecycle_stage
 crm.patches.v1_0.seed_crm_interaction_types
+crm.patches.v1_0.migrate_campaign_event_to_many_to_many

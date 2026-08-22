@@ -651,36 +651,69 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	# --- Events Mapping ---
 	event_items = []
 	attended_event_names = []
-	
-	if contact_doc and contact_doc.crm_event:
-		try:
-			evt_doc = frappe.get_doc("CRM Event", contact_doc.crm_event)
+
+	participation_status_map = {
+		"Registered": "registered",
+		"Checked-in": "attended",
+		"No-show": "no_show",
+		"Feedback Given": "feedback_given",
+	}
+
+	if contact_doc:
+		participations = frappe.get_all(
+			"CRM Event Participation",
+			filters={"crm_contact": contact_doc.name},
+			fields=["crm_event", "status", "registered_at", "checked_in_at"],
+			order_by="registered_at desc",
+			ignore_permissions=True,
+		)
+		for participation in participations:
+			try:
+				evt_doc = frappe.get_doc("CRM Event", participation.crm_event)
+			except frappe.DoesNotExistError:
+				continue
 			event_items.append({
 				"id": evt_doc.name,
 				"name": evt_doc.title or evt_doc.name,
 				"type": "open_day",
-				"attendedAt": to_unix(evt_doc.event_date) or to_unix(evt_doc.creation),
-				"status": "attended"
+				"attendedAt": to_unix(participation.checked_in_at)
+					or to_unix(participation.registered_at)
+					or to_unix(evt_doc.start_datetime or evt_doc.event_date)
+					or to_unix(evt_doc.creation),
+				"status": participation_status_map.get(participation.status, "registered"),
 			})
 			attended_event_names.append(evt_doc.name)
-		except frappe.DoesNotExistError:
-			pass
+
+		# Fallback for contacts predating the Phase 5 many-to-many migration
+		if not participations and contact_doc.crm_event:
+			try:
+				evt_doc = frappe.get_doc("CRM Event", contact_doc.crm_event)
+				event_items.append({
+					"id": evt_doc.name,
+					"name": evt_doc.title or evt_doc.name,
+					"type": "open_day",
+					"attendedAt": to_unix(evt_doc.start_datetime or evt_doc.event_date) or to_unix(evt_doc.creation),
+					"status": "attended"
+				})
+				attended_event_names.append(evt_doc.name)
+			except frappe.DoesNotExistError:
+				pass
 
 	# --- Suggested Events Mapping ---
 	suggested_event_items = []
 	upcoming_evts = frappe.get_all(
 		"CRM Event",
-		fields=["name", "title", "event_date", "notes"],
+		fields=["name", "title", "event_date", "start_datetime", "notes"],
 		ignore_permissions=True
 	)
-	
+
 	for ue in upcoming_evts:
 		if ue.name not in attended_event_names:
 			suggested_event_items.append({
 				"id": ue.name,
 				"name": ue.title or ue.name,
 				"type": "open_day",
-				"startsAt": to_unix(ue.event_date) or to_unix(datetime.now() + timedelta(days=5)),
+				"startsAt": to_unix(ue.start_datetime or ue.event_date) or to_unix(datetime.now() + timedelta(days=5)),
 				"matchScore": 90,
 				"matchReason": "Phù hợp ngành học CNTT"
 			})

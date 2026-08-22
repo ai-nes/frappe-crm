@@ -268,16 +268,18 @@
    "options": "CRM Platform"
   },
   {
+   "description": "Deprecated (Phase 5) -- a lead can now touch multiple campaigns via CRM Campaign Touchpoint. This field is kept populated as the first/legacy touchpoint for backward-compatible readers and historical fallback.",
    "fieldname": "crm_campaign",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "CRM Campaign",
+   "label": "CRM Campaign (Deprecated)",
    "options": "CRM Campaign"
   },
   {
+   "description": "Deprecated (Phase 5) -- a lead can now attend multiple events via CRM Event Participation. This field is kept populated as the first/legacy touchpoint for backward-compatible readers and historical fallback.",
    "fieldname": "crm_event",
    "fieldtype": "Link",
-   "label": "CRM Event",
+   "label": "CRM Event (Deprecated)",
    "options": "CRM Event"
   },
   {

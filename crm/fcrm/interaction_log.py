@@ -1,14 +1,19 @@
-"""Phase 4: creates CRM Interaction records from the source events the
+"""Phase 4/5: creates CRM Interaction records from the source events the
 admissions operating model considers meaningful lead touchpoints -- outgoing/
 incoming Communication, a completed Task, a Call Log entry, a CRM Contact
-lifecycle/assignment change, and a Consent Event. Each dispatcher below is
-wired via hooks.py doc_events and fires only on the specific has_value_changed
-transition listed in the guard table in
-plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md -- do
-not loosen these into a generic "on every save" check.
+lifecycle/assignment change, a Consent Event, and (Phase 5) a CRM Event
+Participation status change. Each dispatcher below is wired via hooks.py
+doc_events and fires only on the specific has_value_changed transition listed
+in the guard tables in
+plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md and
+phase-05-campaign-event-overhaul.md -- do not loosen these into a generic
+"on every save" check.
 
-Event Participation (Phase 5, not yet implemented) is intentionally not wired
-here -- add its dispatcher once that doctype exists.
+Dispatchers are skipped while `frappe.flags.in_patch` is set, so migration
+patches that backfill historical records (e.g. converting existing singular
+CRM Contact campaign/event fields into CRM Campaign Touchpoint / CRM Event
+Participation rows) don't flood the interaction timeline with
+present-dated interactions for years-old activity.
 """
 
 import frappe
@@ -20,6 +25,14 @@ CONSENT_EVENT_TO_INTERACTION_TYPE = {
 	"Suppressed": "Data Error",
 	# "Marked Test" is intentionally excluded -- test records shouldn't pollute
 	# lead history with interactions.
+}
+
+EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
+	"Checked-in": "Checked-in",
+	"No-show": "No-show",
+	"Feedback Given": "Feedback",
+	# "Registered" is handled separately in create_interaction_from_event_participation_insert,
+	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
 
@@ -200,6 +213,50 @@ def create_interaction_from_consent_event(doc, method=None):
 		)
 	except Exception:
 		frappe.log_error(title="CRM Interaction creation failed (Consent event)")
+
+
+def create_interaction_from_event_participation_insert(doc, method=None):
+	if frappe.flags.in_patch:
+		return
+
+	try:
+		create_interaction(
+			interaction_type="Registered",
+			crm_contact=doc.crm_contact,
+			student=doc.student,
+			reference_doctype=doc.doctype,
+			reference_docname=doc.name,
+			actor=doc.actor,
+			summary=f"Registered for {doc.crm_event}",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (Event Participation insert)")
+
+
+def create_interaction_from_event_participation_update(doc, method=None):
+	if frappe.flags.in_patch:
+		return
+	if doc.is_new():
+		return
+	if not doc.has_value_changed("status"):
+		return
+
+	interaction_type = EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE.get(doc.status)
+	if not interaction_type:
+		return
+
+	try:
+		create_interaction(
+			interaction_type=interaction_type,
+			crm_contact=doc.crm_contact,
+			student=doc.student,
+			reference_doctype=doc.doctype,
+			reference_docname=doc.name,
+			actor=doc.actor,
+			summary=f"{interaction_type} at {doc.crm_event}",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (Event Participation update)")
 
 
 def clear_interaction_reference(doc, method=None):
