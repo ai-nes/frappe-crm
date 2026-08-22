@@ -155,6 +155,7 @@ override_doctype_class = {
 
 status_change_log_field = {
 	"CRM Contact": "enrollment_status",
+	"CRM Student": "enrollment_status",
 }
 
 # Document Events
@@ -166,7 +167,10 @@ doc_events = {
 		"validate": ["crm.api.contact.validate"],
 	},
 	"CRM Contact": {
-		"validate": ["crm.fcrm.doctype.crm_contact.crm_contact.log_status_change"],
+		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
+	},
+	"CRM Student": {
+		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
@@ -199,6 +203,9 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
+	"cron": {
+		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+	},
 }
 
 # Testing

@@ -3,7 +3,9 @@ import re
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
+from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
@@ -41,6 +43,8 @@ class CRMStudent(Document):
 		self._validate_unique_email()
 		self._validate_unique_id_number()
 		self._derive_owner_fields()
+		self._derive_lifecycle_stage()
+		self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
 
@@ -51,6 +55,29 @@ class CRMStudent(Document):
 		self.owner_staff = None
 		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
+
+	def _derive_lifecycle_stage(self):
+		before = self.get_doc_before_save()
+		before_enrollment_status = before.enrollment_status if before else None
+		self.lifecycle_stage = get_lifecycle_stage(self.enrollment_status)
+		enforce_lifecycle_change_policy(self, before_enrollment_status)
+
+	def _log_assignment_change(self):
+		before = self.get_doc_before_save()
+		before_assigned_to = before.assigned_to if before else None
+		if before_assigned_to == self.assigned_to:
+			return
+		self.append(
+			"assignment_log",
+			{
+				"from_staff": before_assigned_to,
+				"to_staff": self.assigned_to,
+				"changed_by": frappe.session.user,
+				"changed_at": now_datetime(),
+				"auto_routed": 0,
+				"reason": self.status_change_reason,
+			},
+		)
 
 	def _validate_high_school_format(self):
 		if not self.high_school:
@@ -238,10 +265,20 @@ def convert_to_contact(student_name):
 
 	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
 	if existing_contact:
+		# Raw field writes (db_set / db.set_value) bypass validate(), so
+		# lifecycle_stage — normally derived automatically — must be set
+		# explicitly here too, or it drifts out of sync with enrollment_status
+		# (see crm.fcrm.lifecycle.get_lifecycle_stage).
+		reconverted_stage = get_lifecycle_stage("Có triển vọng")
 		if student.enrollment_status != "Có triển vọng":
-			student.db_set("enrollment_status", "Có triển vọng")
+			student.db_set(
+				{"enrollment_status": "Có triển vọng", "lifecycle_stage": reconverted_stage}
+			)
 		frappe.db.set_value(
-			"CRM Contact", existing_contact, "enrollment_status", "Có triển vọng", update_modified=False
+			"CRM Contact",
+			existing_contact,
+			{"enrollment_status": "Có triển vọng", "lifecycle_stage": reconverted_stage},
+			update_modified=False,
 		)
 		return existing_contact
 
@@ -271,7 +308,9 @@ def convert_to_contact(student_name):
 	})
 	contact.insert(ignore_permissions=True)
 
-	student.db_set("enrollment_status", "Có triển vọng")
+	student.db_set(
+		{"enrollment_status": "Có triển vọng", "lifecycle_stage": get_lifecycle_stage("Có triển vọng")}
+	)
 
 	return contact.name
 

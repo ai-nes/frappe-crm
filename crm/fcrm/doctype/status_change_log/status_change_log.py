@@ -97,3 +97,13 @@ def add_status_change_log(doc):
 			"log_owner": frappe.session.user,
 		},
 	)
+
+
+def on_change_log_hook(doc, method=None):
+	# A doctype's validate() runs on every save for many unrelated reasons
+	# (field normalization, uniqueness checks, ...) -- a failure logging
+	# status history must never block an otherwise-valid save.
+	try:
+		add_status_change_log(doc)
+	except Exception:
+		frappe.log_error(title=f"{doc.doctype} status_change_log failed")

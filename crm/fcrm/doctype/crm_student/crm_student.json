@@ -17,6 +17,7 @@
     "date_of_birth",
     "col_break_1",
     "enrollment_status",
+    "lifecycle_stage",
     "assigned_to",
     "owner_staff",
     "owning_team",
@@ -51,6 +52,11 @@
     "col_break_parent",
     "alt_phone",
     "alt_address",
+    "section_status_history",
+    "status_change_reason",
+    "status_change_log",
+    "section_assignment_history",
+    "assignment_log",
     "section_notes",
     "notes",
     "section_identity",
@@ -111,6 +117,16 @@
       "in_standard_filter": 1,
       "label": "Enrollment Status",
       "options": "CRM Enrollment Status"
+    },
+    {
+      "fieldname": "lifecycle_stage",
+      "fieldtype": "Select",
+      "in_list_view": 1,
+      "in_standard_filter": 1,
+      "label": "Lifecycle Stage",
+      "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+      "read_only": 1,
+      "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
     },
     {
       "fieldname": "assigned_to",
@@ -318,6 +334,36 @@
       "fieldname": "alt_address",
       "fieldtype": "Text",
       "label": "Parent Address"
+    },
+    {
+      "fieldname": "section_status_history",
+      "fieldtype": "Section Break",
+      "label": "Status History"
+    },
+    {
+      "fieldname": "status_change_reason",
+      "fieldtype": "Small Text",
+      "label": "Status Change Reason",
+      "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Team Leader/Admissions Director only)."
+    },
+    {
+      "fieldname": "status_change_log",
+      "fieldtype": "Table",
+      "label": "Status Change Log",
+      "options": "Status Change Log",
+      "read_only": 1
+    },
+    {
+      "fieldname": "section_assignment_history",
+      "fieldtype": "Section Break",
+      "label": "Assignment History"
+    },
+    {
+      "fieldname": "assignment_log",
+      "fieldtype": "Table",
+      "label": "Assignment Log",
+      "options": "CRM Assignment Log",
+      "read_only": 1
     },
     {
       "fieldname": "section_notes",

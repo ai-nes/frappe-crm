@@ -89,6 +89,140 @@ class TestCRMContact(FrappeTestCase):
 		self.assertEqual(contact.owner_staff, staff)
 		self.assertEqual(contact.owning_team, team)
 
+	# ---------------------------------------------------------------- lifecycle stage
+
+	def test_forward_progression_does_not_require_reason_or_role(self):
+		# Lead(Mới) -> MQL(Có triển vọng) is forward-only; no override role or
+		# status_change_reason should be required.
+		contact = self._make_contact("_Test Forward Progress", "0933000001", enrollment_status="Mới")
+		self.assertEqual(contact.lifecycle_stage, "Lead")
+
+		contact.enrollment_status = "Có triển vọng"
+		contact.save(ignore_permissions=True)  # must not raise
+		contact.reload()
+		self.assertEqual(contact.lifecycle_stage, "MQL")
+
+	def test_reopen_from_lost_without_role_or_reason_is_blocked(self):
+		contact = self._make_contact("_Test Reopen No Role", "0933000002", enrollment_status="Từ chối")
+		self.assertEqual(contact.lifecycle_stage, "Lost")
+
+		user, _staff = self._make_user_and_staff("_Test Reopen No Role User", roles=["Sale"])
+		frappe.set_user(user)
+		try:
+			contact.enrollment_status = "Có triển vọng"
+			with self.assertRaises(frappe.PermissionError):
+				contact.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
+		contact = self._make_contact("_Test Reopen No Reason", "0933000003", enrollment_status="Từ chối")
+
+		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Team Leader"])
+		frappe.set_user(user)
+		try:
+			contact.enrollment_status = "Có triển vọng"
+			contact.status_change_reason = ""
+			with self.assertRaises(frappe.ValidationError):
+				contact.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
+		contact = self._make_contact("_Test Reopen Success", "0933000004", enrollment_status="Từ chối")
+
+		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Team Leader"])
+		frappe.set_user(user)
+		try:
+			contact.enrollment_status = "Có triển vọng"
+			contact.status_change_reason = "Khách hàng liên hệ lại, xác nhận vẫn quan tâm."
+			contact.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+		contact.reload()
+		self.assertEqual(contact.enrollment_status, "Có triển vọng")
+		self.assertEqual(contact.lifecycle_stage, "MQL")
+
+	def test_backward_move_within_main_track_is_gated_same_as_reopen(self):
+		# Applicant(Đã xác nhận) -> MQL(Có triển vọng) is a backward move on
+		# the main track (not a Lost reopen) and must be gated the same way.
+		contact = self._make_contact("_Test Backward Move", "0933000005", enrollment_status="Đã xác nhận")
+		self.assertEqual(contact.lifecycle_stage, "Applicant")
+
+		contact.enrollment_status = "Có triển vọng"
+		user, _staff = self._make_user_and_staff("_Test Backward Move User", roles=["Sale"])
+		frappe.set_user(user)
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				contact.save(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+
+	# --------------------------------------------------------------- assignment log
+
+	def test_reassignment_appends_assignment_log_row(self):
+		campus = self._make_campus("_Test Assign Log Campus")
+		department = self._make_department("_Test Assign Log Dept", campus)
+		team = self._make_team("_Test Assign Log Team", campus)
+		staff_a = self._make_staff("_Test Assign Log Staff A", campus, department, team)
+		staff_b = self._make_staff("_Test Assign Log Staff B", campus, department, team)
+
+		contact = self._make_contact("_Test Reassignment", "0933000006")
+		contact.assigned_to = staff_a
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(len(contact.assignment_log), 1)
+		self.assertFalse(contact.assignment_log[0].from_staff)
+		self.assertEqual(contact.assignment_log[0].to_staff, staff_a)
+
+		contact.assigned_to = staff_b
+		contact.save(ignore_permissions=True)
+		contact.reload()
+
+		self.assertEqual(len(contact.assignment_log), 2)
+		row = contact.assignment_log[1]
+		self.assertEqual(row.from_staff, staff_a)
+		self.assertEqual(row.to_staff, staff_b)
+		self.assertEqual(row.changed_by, "Administrator")
+
+	def test_no_assignment_change_does_not_append_log_row(self):
+		contact = self._make_contact("_Test No Reassignment", "0933000007")
+		contact.full_name = "_Test No Reassignment Renamed"
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(len(contact.assignment_log), 0)
+
+	# ---------------------------------------------------------------------- helpers
+
+	def _make_user_and_staff(self, prefix, roles=None):
+		campus = self._make_campus(f"{prefix} Campus")
+		department = self._make_department(f"{prefix} Dept", campus)
+		email = f"{frappe.scrub(prefix)}@example.com"
+		if frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, force=True)
+		user = frappe.get_doc({
+			"doctype": "User",
+			"email": email,
+			"first_name": prefix,
+			"send_welcome_email": 0,
+			"roles": [{"role": role} for role in (roles or ["Sale"])],
+		})
+		user.insert(ignore_permissions=True)
+
+		staff_name = f"_Test Staff {prefix}"
+		if frappe.db.exists("CRM Staff", staff_name):
+			frappe.delete_doc("CRM Staff", staff_name, force=True)
+		staff = frappe.get_doc({
+			"doctype": "CRM Staff",
+			"full_name": staff_name,
+			"user": email,
+			"department": department,
+			"campus": campus,
+		})
+		staff.insert(ignore_permissions=True)
+		return email, staff.name
+
 	# ---------------------------------------------------------------------- helpers
 
 	def _make_campus(self, name):

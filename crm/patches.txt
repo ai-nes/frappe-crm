@@ -78,3 +78,5 @@ crm.patches.v1_0.backfill_team_membership_from_staff
 crm.patches.v1_0.reapply_crm_permissions_phase1
 crm.patches.v1_0.backfill_owner_fields_from_assigned_to
 crm.patches.v1_0.report_auto_created_student_anomalies
+crm.patches.v1_0.seed_lifecycle_stage_on_enrollment_status
+crm.patches.v1_0.backfill_lifecycle_stage

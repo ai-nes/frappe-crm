@@ -2,6 +2,7 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
 from crm.fcrm.permissions import derive_owner_fields
 
@@ -60,7 +61,14 @@ def assign_staff(doctype: str, names: str | list, staff: str):
 		if doctype == "CRM Student":
 			contact = frappe.db.get_value("CRM Contact", {"student": name}, "name")
 			if contact:
-				frappe.db.set_value("CRM Contact", contact, linked_updates, update_modified=False)
+				contact_updates = dict(linked_updates)
+				# sla_started_at only lives on CRM Contact and is set-once (see
+				# CRMContact._track_sla_start); this raw write bypasses validate(),
+				# so it must be applied here too or the SLA clock never starts for
+				# a Contact whose assignment only ever changes via its linked Student.
+				if not frappe.db.get_value("CRM Contact", contact, "sla_started_at"):
+					contact_updates["sla_started_at"] = now_datetime()
+				frappe.db.set_value("CRM Contact", contact, contact_updates, update_modified=False)
 		elif doctype == "CRM Contact" and doc.get("student"):
 			frappe.db.set_value("CRM Student", doc.student, linked_updates, update_modified=False)
 		updated += 1

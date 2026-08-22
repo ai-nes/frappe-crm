@@ -15,6 +15,7 @@
   "email",
   "col_break_1",
   "enrollment_status",
+  "lifecycle_stage",
   "lead_status",
   "readiness_level",
   "quality_bucket",
@@ -43,6 +44,7 @@
   "branch",
   "first_contact_time",
   "sla_status",
+  "sla_started_at",
   "next_follow_up",
   "col_break_follow_up",
   "decision_maker",
@@ -52,7 +54,10 @@
   "is_test_record",
   "email_bounced",
   "section_status_history",
+  "status_change_reason",
   "status_change_log",
+  "section_assignment_history",
+  "assignment_log",
   "section_notes",
   "notes"
  ],
@@ -99,6 +104,16 @@
    "label": "Enrollment Status",
    "options": "CRM Enrollment Status",
    "default": "Có triển vọng"
+  },
+  {
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lifecycle Stage",
+   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "read_only": 1,
+   "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
   },
   {
    "fieldname": "lead_status",
@@ -289,7 +304,16 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "SLA Status",
-   "options": "\nĐúng SLA\nSắp quá hạn\nQuá SLA"
+   "options": "\nĐúng SLA\nSắp quá hạn\nQuá SLA",
+   "read_only": 1,
+   "description": "Computed on a schedule from sla_started_at/first_contact_time — see crm.api.sla. Do not edit directly."
+  },
+  {
+   "fieldname": "sla_started_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "SLA Started At",
+   "description": "Set once when this lead is first assigned to a staff member — the response-window countdown start (see crm.api.sla). Do not edit directly."
   },
   {
    "fieldname": "next_follow_up",
@@ -355,10 +379,28 @@
    "label": "Status History"
   },
   {
+   "fieldname": "status_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Status Change Reason",
+   "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Team Leader/Admissions Director only)."
+  },
+  {
    "fieldname": "status_change_log",
    "fieldtype": "Table",
    "label": "Status Change Log",
    "options": "Status Change Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_assignment_history",
+   "fieldtype": "Section Break",
+   "label": "Assignment History"
+  },
+  {
+   "fieldname": "assignment_log",
+   "fieldtype": "Table",
+   "label": "Assignment Log",
+   "options": "CRM Assignment Log",
    "read_only": 1
   },
   {

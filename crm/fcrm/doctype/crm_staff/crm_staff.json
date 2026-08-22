@@ -12,10 +12,12 @@
   "full_name",
   "user",
   "sales_team",
+  "is_active",
   "column_break_1",
   "department",
   "campus",
   "target",
+  "last_routed_at",
   "section_team_memberships",
   "team_memberships"
  ],
@@ -47,6 +49,14 @@
    "options": "\nTeam North\nTeam Central\nTeam South"
   },
   {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Active",
+   "description": "Only active staff are eligible for automatic lead routing (see crm.api.routing)."
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -74,6 +84,13 @@
    "fieldname": "target",
    "fieldtype": "Int",
    "label": "Monthly Target"
+  },
+  {
+   "fieldname": "last_routed_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Last Routed At",
+   "description": "Set by the automatic lead-routing round robin (see crm.api.routing) each time a new lead is routed to this staff member. Do not edit directly."
   },
   {
    "fieldname": "section_team_memberships",

@@ -2,7 +2,10 @@ import re
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
+from crm.api.routing import route_new_lead
+from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
@@ -86,6 +89,7 @@ class CRMContact(Document):
 		self._normalize_shared_fields()
 		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
+		route_new_lead(self)
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -113,6 +117,9 @@ class CRMContact(Document):
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._derive_owner_fields()
+		self._derive_lifecycle_stage()
+		self._log_assignment_change()
+		self._track_sla_start()
 		self.flags.ignore_links = False
 		self._validate_links()
 
@@ -123,6 +130,33 @@ class CRMContact(Document):
 		self.owner_staff = None
 		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
+
+	def _derive_lifecycle_stage(self):
+		before = self.get_doc_before_save()
+		before_enrollment_status = before.enrollment_status if before else None
+		self.lifecycle_stage = get_lifecycle_stage(self.enrollment_status)
+		enforce_lifecycle_change_policy(self, before_enrollment_status)
+
+	def _log_assignment_change(self):
+		before = self.get_doc_before_save()
+		before_assigned_to = before.assigned_to if before else None
+		if before_assigned_to == self.assigned_to:
+			return
+		self.append(
+			"assignment_log",
+			{
+				"from_staff": before_assigned_to,
+				"to_staff": self.assigned_to,
+				"changed_by": frappe.session.user,
+				"changed_at": now_datetime(),
+				"auto_routed": 1 if self.flags.auto_routed else 0,
+				"reason": self.status_change_reason,
+			},
+		)
+
+	def _track_sla_start(self):
+		if self.assigned_to and not self.sla_started_at:
+			self.sla_started_at = now_datetime()
 
 	def _resolve_geo(self):
 		# high_school is intentionally NOT resolved here — _validate_high_school_format()
@@ -287,17 +321,6 @@ class CRMContact(Document):
 		student.alt_phone = self.parent_phone
 		student.insert(ignore_permissions=True)
 		self.db_set("student", student.name, update_modified=False)
-
-def log_status_change(doc, method=None):
-	# CRM Contact.validate runs on every save across the whole app (phone/email
-	# uniqueness, geo resolution, student auto-create) — a failure here must never
-	# block an unrelated contact save, so this is a hard no-op-on-error boundary.
-	try:
-		from crm.fcrm.doctype.status_change_log.status_change_log import add_status_change_log
-
-		add_status_change_log(doc)
-	except Exception:
-		frappe.log_error(title="CRM Contact status_change_log failed")
 
 
 def get_permission_query_conditions(user=None):
