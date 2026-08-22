@@ -50,23 +50,8 @@ REMOVABLE_ROLES = [
 ]
 
 
-def remove_unused_roles():
-	"""Remove default roles that are outside the CRM's supported role model.
-
-	Sales Manager and Sales User remain supported for legacy CRM user-management
-	flows. Script Manager is a Frappe standard role and must not be removed.
-	"""
-	for role_name in REMOVABLE_ROLES:
-		if frappe.db.exists("Role", role_name):
-			frappe.db.delete("Has Role", {"role": role_name})
-			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
-
-
-def execute():
-	remove_unused_roles()
-
-	# Create new roles
-	for role_name in NEW_ROLES:
+def create_roles(role_names):
+	for role_name in role_names:
 		if not frappe.db.exists("Role", role_name):
 			frappe.get_doc({
 				"doctype": "Role",
@@ -74,4 +59,13 @@ def execute():
 				"desk_access": 1,
 			}).insert(ignore_permissions=True)
 
+
+def execute():
+	# Remove old roles and all their assignments
+	for role_name in OLD_ROLES:
+		if frappe.db.exists("Role", role_name):
+			frappe.db.delete("Has Role", {"role": role_name})
+			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
+
+	create_roles(NEW_ROLES)
 	frappe.db.commit()

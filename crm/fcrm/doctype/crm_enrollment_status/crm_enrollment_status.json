@@ -11,6 +11,7 @@
  "field_order": [
   "status_name",
   "stage_category",
+  "lifecycle_stage",
   "description"
  ],
  "fields": [
@@ -31,6 +32,16 @@
    "label": "Stage Category",
    "options": "open\nenrolled\nlost",
    "reqd": 1
+  },
+  {
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lifecycle Stage",
+   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "reqd": 1,
+   "description": "Long-term funnel position (Phase 3 two-track model) this working status maps to. CRM Contact/CRM Student derive their read-only lifecycle_stage from this."
   },
   {
    "fieldname": "description",

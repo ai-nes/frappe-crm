@@ -34,5 +34,68 @@
     "status": "passing",
     "evidence": "Verified on local dev bench: bench migrate clean. bench execute test created a real draft against contact CRMC-2026-00001, stepped status Generating -> Draft -> Edited -> Approved -> Sent successfully, then created a Communication record, linked it via draft.communication + sent_at, and confirmed it appears in frappe's docinfo.communications list (the same data crm.api.activities feeds into the contact timeline) -- Phase 4 success criterion (sent draft visible in existing timeline/activity view) holds. No frappe.sendmail wiring (explicitly out of scope). Test data cleaned up after verification.",
     "notes": "Approval-before-send is a status value only, not server-enforced in this phase — flagged in plan Risks as follow-up work for when send logic is built."
+  },
+  {
+    "id": "phase-01-team-membership-foundation",
+    "title": "Team & Membership Foundation",
+    "user_visible_behavior": "Staff can belong to multiple CRM Teams (via CRM Team Membership on CRM Staff); 4 new roles (Marketing Operator, Marketing Lead, Admissions Operations, Admissions Director) exist; CRM Contact and CRM Student list views are now both scoped by one shared function per the locked BR matrix (own-assigned for Sale/CTV-Sale, own-team+unassigned-pool for Team Leader, team/campus for Counseller/Promoter-PR) — closing Counseller's prior system-wide Student exposure.",
+    "verification_command": "bench migrate && bench execute crm.patches.v1_0.backfill_team_membership_from_staff.execute (idempotency check: rerun, assert no duplicate membership rows) && per-role before/after visible-record-count comparison for every active CRM Staff account",
+    "status": "not_started",
+    "evidence": "",
+    "notes": "Implemented in this environment (no bench/site present here — cannot run bench migrate or tests). Code written: crm/fcrm/doctype/crm_team/, crm/fcrm/doctype/crm_team_membership/, crm/fcrm/permissions.py (shared scoping, gated by site_config crm_legacy_campus_scoping fallback), crm/patches/v1_0/{add_marketing_admissions_roles,backfill_team_membership_from_staff}.py, setup_crm_permissions.py updated (if_owner removed from Student Sale/CTV-Sale, new role perms added). Needs bench migrate + manual verification against a real site before status can move to passing. See plan.md Session Notes for design decisions made without a stop-and-ask (team-scoped-by-campus unassigned-pool approximation, Admissions Director/Operations bypass roles)."
+  },
+  {
+    "id": "phase-02-fix-contact-student-lifecycle-bug",
+    "title": "Fix Contact↔Student Lifecycle Bug",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
+  },
+  {
+    "id": "phase-03-lead-status-routing-sla",
+    "title": "Lead Status Model + Routing/SLA",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
+  },
+  {
+    "id": "phase-04-interaction-standard",
+    "title": "Interaction Standard",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
+  },
+  {
+    "id": "phase-05-campaign-event-overhaul",
+    "title": "Campaign/Event Overhaul + Event Participation",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
+  },
+  {
+    "id": "phase-06-attribution-dashboard-reconciliation",
+    "title": "Multi-Touch Attribution + Dashboard Reconciliation",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
+  },
+  {
+    "id": "phase-07-master-data-governance",
+    "title": "Master Data Governance",
+    "user_visible_behavior": "",
+    "verification_command": "",
+    "status": "not_started",
+    "evidence": "",
+    "notes": ""
   }
 ]

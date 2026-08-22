@@ -130,11 +130,13 @@ before_uninstall = "crm.uninstall.before_uninstall"
 
 permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
+	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
 }
 
-# has_permission = {
-# "Event": "frappe.desk.doctype.event.event.has_permission",
-# }
+has_permission = {
+	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
+	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
+}
 
 # DocType Class
 # ---------------
@@ -153,6 +155,7 @@ override_doctype_class = {
 
 status_change_log_field = {
 	"CRM Contact": "enrollment_status",
+	"CRM Student": "enrollment_status",
 }
 
 # Document Events
@@ -164,15 +167,26 @@ doc_events = {
 		"validate": ["crm.api.contact.validate"],
 	},
 	"CRM Contact": {
-		"validate": ["crm.fcrm.doctype.crm_contact.crm_contact.log_status_change"],
+		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
+	},
+	"CRM Student": {
+		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
 		"on_update": ["crm.api.todo.on_update"],
 	},
 	"Communication": {
-		"after_insert": ["crm.utils.on_communication_insert"],
-		"on_update": ["crm.utils.on_communication_update"],
+		"after_insert": [
+			"crm.utils.on_communication_insert",
+			"crm.fcrm.interaction_log.create_interaction_from_communication_insert",
+		],
+		"on_update": [
+			"crm.utils.on_communication_update",
+			"crm.fcrm.interaction_log.create_interaction_from_communication_update",
+		],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"Comment": {
 		"after_insert": ["crm.utils.on_comment_insert"],
@@ -184,8 +198,27 @@ doc_events = {
 	},
 	"CRM Contact Consent Event": {
 		"after_insert": [
-			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag"
+			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag",
+			"crm.fcrm.interaction_log.create_interaction_from_consent_event",
 		],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"Task": {
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_task_update"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"Call Log": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"CRM Event Participation": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_insert"],
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_update"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"CRM Campaign Touchpoint": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_campaign_touchpoint_insert"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
@@ -197,6 +230,9 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
+	"cron": {
+		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+	},
 }
 
 # Testing

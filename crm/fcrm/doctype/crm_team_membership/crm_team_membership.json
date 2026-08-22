@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "creation": "2026-08-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "team",
+  "function",
+  "term",
+  "column_break_1",
+  "is_primary",
+  "is_team_lead"
+ ],
+ "fields": [
+  {
+   "description": "Campus is derived from Team, not stored on the membership row.",
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Team",
+   "options": "CRM Team",
+   "reqd": 1
+  },
+  {
+   "fieldname": "function",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Function",
+   "options": "Team Leader\nCounseller\nSale\nCTV-Sale\nPromoter-PR\nMarketing Operator\nMarketing Lead\nAdmissions Operations\nAdmissions Director",
+   "reqd": 1
+  },
+  {
+   "fieldname": "term",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Term"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_primary",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Primary"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_team_lead",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Is Team Lead"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Team Membership",
+ "owner": "Administrator",
+ "parenttype": "CRM Staff",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

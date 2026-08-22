@@ -3,6 +3,7 @@ from frappe import _
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
 from crm.api.admissions_dashboard_auth import check_dashboard_access
+from crm.fcrm.attribution import get_last_touch_campaign_by_contact, get_multi_touch_attribution
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -16,6 +17,15 @@ def _get_delta(current, previous):
 	if not previous:
 		return 0.0
 	return round(((current - previous) / previous) * 100.0, 1)
+
+
+def _staff_names_in_sales_team(sales_team):
+	"""CRM Staff names belonging to a sales_team, or the sentinel "__none__"
+	(never a real doc name) when the team has no staff -- shared by every
+	dashboard that scopes CRM Contact.assigned_to by team, so the scoping
+	logic can't silently diverge between them."""
+	staff_names = frappe.db.get_all("CRM Staff", filters={"sales_team": sales_team}, pluck="name")
+	return staff_names or ["__none__"]
 
 
 @frappe.whitelist()
@@ -56,13 +66,9 @@ def get_sales_dashboard(
 			prev_filters.append(["assigned_to", "=", staff_name])
 
 	if sales_team:
-		staff_in_team = frappe.db.get_all("CRM Staff", filters={"sales_team": sales_team}, pluck="name")
-		if staff_in_team:
-			base_filters.append(["assigned_to", "in", staff_in_team])
-			prev_filters.append(["assigned_to", "in", staff_in_team])
-		else:
-			base_filters.append(["assigned_to", "=", "__none__"])
-			prev_filters.append(["assigned_to", "=", "__none__"])
+		staff_in_team = _staff_names_in_sales_team(sales_team)
+		base_filters.append(["assigned_to", "in", staff_in_team])
+		prev_filters.append(["assigned_to", "in", staff_in_team])
 
 	if campus:
 		base_filters.append(["branch", "=", campus])
@@ -473,6 +479,59 @@ def get_sales_dashboard(
 	return []
 
 
+def _contact_names_touched_by_campaign(campaign):
+	"""Union of the deprecated singular crm_campaign field and the Phase 5
+	CRM Campaign Touchpoint many-to-many table, so dashboards read correctly
+	whether a contact's campaign attribution came from before or after the
+	Phase 5 migration."""
+	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
+	names.update(frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"))
+	return names
+
+
+def _contact_names_with_event_participation():
+	"""Union of the deprecated singular crm_event field and the Phase 5
+	CRM Event Participation many-to-many table."""
+	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
+	names.update(frappe.db.get_all("CRM Event Participation", pluck="crm_contact"))
+	return names
+
+
+def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
+	"""Per-campaign spend / last-touch-attributed conversions / cost-per-
+	conversion, shared by get_digital_marketing_dashboard and
+	get_admissions_director_dashboard so the two views can't silently diverge
+	(condition #6). Computes the site-wide last-touch-by-contact map ONCE
+	(not once per campaign -- get_campaign_names_by_last_touch would re-scan
+	both junction tables on every loop iteration) and buckets it in memory."""
+	last_touch_by_contact = get_last_touch_campaign_by_contact()
+	contacts_by_campaign = {}
+	for contact, campaign in last_touch_by_contact.items():
+		contacts_by_campaign.setdefault(campaign, set()).add(contact)
+
+	cost_data = []
+	for camp in campaign_list:
+		c_name = camp.title or camp.name
+		camp_spend_rows = frappe.db.get_all(
+			"CRM Campaign Spend",
+			filters=[["spend_date", "between", [from_date, to_date]], ["crm_campaign", "=", camp.name]],
+			fields=["amount"],
+		)
+		camp_spend = sum(row.amount or 0.0 for row in camp_spend_rows)
+		attributed_contacts = contacts_by_campaign.get(camp.name) or set()
+		attributed_conversions = frappe.db.count(
+			"CRM Contact",
+			filters=base_filters + [["name", "in", list(attributed_contacts) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
+		)
+		cost_data.append({
+			"campaign": c_name,
+			"spend": camp_spend,
+			"attributedConversions": attributed_conversions,
+			"costPerConversion": round(camp_spend / attributed_conversions, 0) if attributed_conversions and camp_spend else 0.0,
+		})
+	return cost_data
+
+
 @frappe.whitelist()
 def get_digital_marketing_dashboard(
 	from_date=None,
@@ -501,7 +560,7 @@ def get_digital_marketing_dashboard(
 	if platform:
 		base_filters.append(["platform", "=", platform])
 	if campaign:
-		base_filters.append(["crm_campaign", "=", campaign])
+		base_filters.append(["name", "in", list(_contact_names_touched_by_campaign(campaign))])
 	if campus:
 		base_filters.append(["branch", "=", campus])
 
@@ -512,11 +571,15 @@ def get_digital_marketing_dashboard(
 	qualified_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "in", ["Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]]])
 	qualified_rate = round((qualified_leads / total_digital_leads * 100.0), 1) if total_digital_leads else 0.0
 
-	# Total spend from CRM Campaign Spend
-	total_spend = frappe.db.sql(
-		"""SELECT COALESCE(SUM(amount), 0) FROM `tabCRM Campaign Spend` WHERE spend_date BETWEEN %s AND %s""",
-		(from_date, to_date),
-	)[0][0] or 0.0
+	# Spend from CRM Campaign Spend -- scoped to the selected campaign when one
+	# is filtered, so CPL/cost-per-enrollment reflect that campaign's own spend
+	# instead of the site-wide total (previously a flat total regardless of
+	# the `campaign` filter, which misrepresented per-campaign cost).
+	spend_filters = [["spend_date", "between", [from_date, to_date]]]
+	if campaign:
+		spend_filters.append(["crm_campaign", "=", campaign])
+	spend_rows = frappe.db.get_all("CRM Campaign Spend", filters=spend_filters, fields=["amount"])
+	total_spend = sum(row.amount or 0.0 for row in spend_rows)
 
 	cpl = round(total_spend / total_digital_leads / 1000, 1) if total_digital_leads and total_spend else 0.0
 	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]])
@@ -561,7 +624,7 @@ def get_digital_marketing_dashboard(
 	campaign_data = []
 	for camp in campaign_list:
 		c_name = camp.title or camp.name
-		c_filters = base_filters + [["crm_campaign", "=", camp.name]]
+		c_filters = base_filters + [["name", "in", list(_contact_names_touched_by_campaign(camp.name))]]
 		campaign_data.append({
 			"campaign": c_name,
 			"Đã chuyển đổi": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "Đã nhập học"]]),
@@ -570,6 +633,12 @@ def get_digital_marketing_dashboard(
 			"Sai đối tượng": frappe.db.count("CRM Contact", filters=c_filters + [["quality_bucket", "=", "Không quan tâm"]]),
 			"Không liên lạc được": frappe.db.count("CRM Contact", filters=c_filters + [["quality_bucket", "=", "Không liên lạc được"]]),
 		})
+
+	# Cost-per-outcome: spend per campaign vs. its LAST-TOUCH-attributed
+	# conversions (Phase 6), not just "ever touched" conversions -- a lead
+	# touched early by this campaign but converted via a later campaign's
+	# touch shouldn't count as this campaign's conversion.
+	campaign_cost_data = _campaign_cost_data(campaign_list, from_date, to_date, base_filters)
 
 	if not campaign_data:
 		campaign_data = [{"campaign": "Chưa có chiến dịch", "Đã chuyển đổi": 0, "Có triển vọng": 0, "Sai số": 0, "Sai đối tượng": 0, "Không liên lạc được": 0}]
@@ -658,6 +727,23 @@ def get_digital_marketing_dashboard(
 				"valueColumn": "count",
 			},
 		},
+		{
+			"name": "mock_campaign_cost",
+			"type": "axis_chart",
+			"layout": {"x": 0, "y": 28, "w": 12, "h": 8, "i": "mock_campaign_cost"},
+			"data": {
+				"data": campaign_cost_data,
+				"title": "Chi phí / Chuyển đổi theo chiến dịch",
+				"subtitle": "Chi phí thực tế so với số chuyển đổi được attribute (last-touch) cho từng chiến dịch",
+				"xAxis": {"title": "", "key": "campaign", "type": "category"},
+				"yAxis": {"title": "Giá trị"},
+				"series": [
+					{"name": "spend", "type": "bar"},
+					{"name": "attributedConversions", "type": "bar"},
+					{"name": "costPerConversion", "type": "bar"},
+				],
+			},
+		},
 	]
 
 	return items
@@ -680,19 +766,22 @@ def get_offline_marketing_dashboard(team="all", from_date=None, to_date=None, ca
 
 	# Filter by staff sales_team if team is selected
 	if is_filtered:
-		staff_in_team = frappe.db.get_all("CRM Staff", filters={"sales_team": team}, pluck="name")
-		if staff_in_team:
-			base_filters.append(["assigned_to", "in", staff_in_team])
-		else:
-			base_filters.append(["assigned_to", "=", "__none__"])
+		staff_in_team = _staff_names_in_sales_team(team)
+		base_filters.append(["assigned_to", "in", staff_in_team])
 
 	# Region counts (Bắc, Trung, Nam)
+	event_participant_names = list(_contact_names_with_event_participation())
 	regions = ["Miền Bắc", "Miền Trung", "Miền Nam"]
 	region_data = []
 	for r in (regions if not is_filtered else [("Miền Bắc" if team == "Team North" else "Miền Trung" if team == "Team Central" else "Miền Nam")]):
 		provinces_in_reg = frappe.db.get_all("CRM Province", filters={"region": r}, pluck="name")
-		on_c = frappe.db.count("CRM Contact", filters=base_filters + [["province", "in", provinces_in_reg], ["crm_event", "is", "set"]])
-		off_c = frappe.db.count("CRM Contact", filters=base_filters + [["province", "in", provinces_in_reg], ["crm_event", "is", "not set"]])
+		region_filters = base_filters + [["province", "in", provinces_in_reg]]
+		if event_participant_names:
+			on_c = frappe.db.count("CRM Contact", filters=region_filters + [["name", "in", event_participant_names]])
+			off_c = frappe.db.count("CRM Contact", filters=region_filters + [["name", "not in", event_participant_names]])
+		else:
+			on_c = 0
+			off_c = frappe.db.count("CRM Contact", filters=region_filters)
 		region_data.append({"region": r, "On-campus": on_c, "Off-campus": off_c})
 
 	# Interest data
@@ -823,3 +912,106 @@ def get_offline_marketing_dashboard(team="all", from_date=None, to_date=None, ca
 	}
 
 	return [event_chart, interest_chart, lead_quality_chart, province_chart]
+
+
+@frappe.whitelist()
+def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None):
+	"""Cross-functional summary for Admissions Director/Operations: the same
+	underlying funnel, spend, and attribution data as the Sales/Digital/Offline
+	dashboards, reconciled into one view instead of three separately-scoped
+	ones (Phase 6 reconciliation requirement)."""
+	check_dashboard_access("admissions_director")
+	from_date, to_date = _normalize_date_range(from_date, to_date)
+	to_date_plus_1 = str(add_days(to_date, 1))
+
+	base_filters = [
+		["creation", ">=", from_date],
+		["creation", "<", to_date_plus_1],
+		["is_test_record", "=", 0],
+	]
+	if campus:
+		base_filters.append(["branch", "=", campus])
+
+	total_leads = frappe.db.count("CRM Contact", filters=base_filters)
+	qualified_leads = frappe.db.count(
+		"CRM Contact",
+		filters=base_filters + [["enrollment_status", "in", ["Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]]],
+	)
+	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]])
+	qualified_rate = round((qualified_leads / total_leads * 100.0), 1) if total_leads else 0.0
+	conversion_rate = round((enrolled_leads / total_leads * 100.0), 1) if total_leads else 0.0
+
+	spend_rows = frappe.db.get_all(
+		"CRM Campaign Spend",
+		filters=[["spend_date", "between", [from_date, to_date]]],
+		fields=["amount"],
+	)
+	total_spend = sum(row.amount or 0.0 for row in spend_rows)
+	cost_per_enrollment = round(total_spend / enrolled_leads / 1000000, 1) if enrolled_leads and total_spend else 0.0
+
+	# Per-campaign last-touch spend/conversion reconciliation -- same shared
+	# helper as get_digital_marketing_dashboard's campaign_cost_data (so the
+	# two views can't diverge), but unscoped by digital-source-only leads,
+	# since a Director needs the whole funnel, not just the digital slice.
+	campaign_list = frappe.db.get_all("CRM Campaign", fields=["name", "title"], limit=10)
+	campaign_cost_data = _campaign_cost_data(campaign_list, from_date, to_date, base_filters)
+
+	# Multi-touch credit reconciliation for this period's enrolled contacts --
+	# shows how conversion credit splits across every campaign that touched a
+	# converted lead, not just its last touch, so a Director can see whether
+	# last-touch cost-per-conversion over/under-credits any one campaign.
+	# Bounded to 200 contacts, same accepted-N+1-scale precedent as Phase 5.
+	enrolled_contacts = frappe.db.get_all(
+		"CRM Contact",
+		filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]],
+		pluck="name",
+		limit=200,
+	)
+	multi_touch_credit_by_campaign = {}
+	for contact in enrolled_contacts:
+		for campaign_name, credit in get_multi_touch_attribution(contact).items():
+			multi_touch_credit_by_campaign[campaign_name] = multi_touch_credit_by_campaign.get(campaign_name, 0.0) + credit
+	multi_touch_data = [
+		{"campaign": frappe.db.get_value("CRM Campaign", name, "title") or name, "credit": round(credit, 2)}
+		for name, credit in sorted(multi_touch_credit_by_campaign.items(), key=lambda kv: kv[1], reverse=True)[:10]
+	]
+
+	items = [
+		{"name": "director_total_leads", "type": "number_chart", "layout": {"x": 0, "y": 0, "w": 4, "h": 3, "i": "director_total_leads"}, "data": {"title": "Tổng Lead", "tooltip": "Tổng số Lead trong kỳ, mọi kênh", "value": total_leads, "delta": 0.0, "deltaSuffix": "%"}},
+		{"name": "director_qualified_rate", "type": "number_chart", "layout": {"x": 4, "y": 0, "w": 4, "h": 3, "i": "director_qualified_rate"}, "data": {"title": "Qualified Rate (%)", "tooltip": "Tỷ lệ Lead đủ điều kiện", "value": qualified_rate, "delta": 0.0, "deltaSuffix": "%"}},
+		{"name": "director_conversion_rate", "type": "number_chart", "layout": {"x": 8, "y": 0, "w": 4, "h": 3, "i": "director_conversion_rate"}, "data": {"title": "Conversion Rate (%)", "tooltip": "Tỷ lệ Lead nhập học", "value": conversion_rate, "delta": 0.0, "deltaSuffix": "%"}},
+		{"name": "director_total_spend", "type": "number_chart", "layout": {"x": 12, "y": 0, "w": 4, "h": 3, "i": "director_total_spend"}, "data": {"title": "Tổng chi phí (triệu)", "tooltip": "Tổng chi phí marketing trong kỳ, mọi chiến dịch", "value": round(total_spend / 1000000, 1), "delta": 0.0, "deltaSuffix": "%"}},
+		{"name": "director_cost_enrollment", "type": "number_chart", "layout": {"x": 16, "y": 0, "w": 4, "h": 3, "i": "director_cost_enrollment"}, "data": {"title": "Chi phí / Enrollment (triệu)", "tooltip": "Chi phí trung bình trên mỗi enrollment, mọi chiến dịch", "value": cost_per_enrollment, "delta": 0.0, "deltaSuffix": "%"}},
+		{
+			"name": "director_campaign_cost",
+			"type": "axis_chart",
+			"layout": {"x": 0, "y": 3, "w": 12, "h": 8, "i": "director_campaign_cost"},
+			"data": {
+				"data": campaign_cost_data,
+				"title": "Chi phí / Chuyển đổi theo chiến dịch (Last-touch)",
+				"subtitle": "Toàn bộ chiến dịch, không giới hạn nguồn Digital",
+				"xAxis": {"title": "", "key": "campaign", "type": "category"},
+				"yAxis": {"title": "Giá trị"},
+				"series": [
+					{"name": "spend", "type": "bar"},
+					{"name": "attributedConversions", "type": "bar"},
+					{"name": "costPerConversion", "type": "bar"},
+				],
+			},
+		},
+		{
+			"name": "director_multi_touch_credit",
+			"type": "axis_chart",
+			"layout": {"x": 12, "y": 3, "w": 8, "h": 8, "i": "director_multi_touch_credit"},
+			"data": {
+				"data": multi_touch_data,
+				"title": "Multi-touch Credit theo chiến dịch",
+				"subtitle": "Đối chiếu Last-touch: credit chia đều cho mọi touchpoint của Lead đã nhập học",
+				"xAxis": {"title": "", "key": "campaign", "type": "category"},
+				"yAxis": {"title": "Credit"},
+				"series": [{"name": "credit", "type": "bar"}],
+			},
+		},
+	]
+
+	return items
