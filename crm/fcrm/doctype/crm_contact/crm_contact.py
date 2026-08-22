@@ -318,28 +318,12 @@ def log_status_change(doc, method=None):
 
 
 def get_permission_query_conditions(user=None):
-	if not user:
-		user = frappe.session.user
+	from crm.fcrm.permissions import get_permission_query_conditions as _scoped
 
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
-		return None
+	return _scoped("CRM Contact", user=user)
 
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-	if not crm_staff_name:
-		return "1=0"
 
-	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
-	if not campus:
-		return "1=0"
+def has_permission(doc, user=None, permission_type=None):
+	from crm.fcrm.permissions import has_permission as _scoped
 
-	crm_staff_in_campus = frappe.db.get_all(
-		"CRM Staff",
-		filters={"campus": campus},
-		pluck="name",
-	)
-
-	if not crm_staff_in_campus:
-		return "1=0"
-
-	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
-	return f"`tabCRM Contact`.assigned_to in ({escaped})"
+	return _scoped(doc, user=user, permission_type=permission_type)

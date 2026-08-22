@@ -332,3 +332,15 @@ def create_from_contact(contact):
 	})
 	student.insert()
 	return student.name
+
+
+def get_permission_query_conditions(user=None):
+	from crm.fcrm.permissions import get_permission_query_conditions as _scoped
+
+	return _scoped("CRM Student", user=user)
+
+
+def has_permission(doc, user=None, permission_type=None):
+	from crm.fcrm.permissions import has_permission as _scoped
+
+	return _scoped(doc, user=user, permission_type=permission_type)
