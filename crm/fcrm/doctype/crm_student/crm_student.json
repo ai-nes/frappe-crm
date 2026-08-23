@@ -33,6 +33,7 @@
   "aspiration",
   "step",
   "source",
+  "advertising_channel",
   "admission_year",
   "section_academic_history",
   "cohort_start_year",
@@ -227,8 +228,13 @@
   {
    "fieldname": "source",
    "fieldtype": "Link",
-   "label": "Source",
+   "label": "Nguồn quảng cáo",
    "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "advertising_channel",
+   "fieldtype": "Data",
+   "label": "Kênh quảng cáo"
   },
   {
    "fieldname": "admission_year",
