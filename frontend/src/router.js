@@ -132,6 +132,18 @@ const routes = [
     props: true,
   },
   {
+    alias: '/crm-segments',
+    path: '/crm-segments/view/:viewType?',
+    name: 'CRM Segments',
+    component: () => import('@/pages/CRMSegments.vue'),
+  },
+  {
+    path: '/crm-segments/:crmSegmentId',
+    name: 'CRM Segment',
+    component: () => import('@/pages/CRMSegment.vue'),
+    props: true,
+  },
+  {
     alias: '/crm-events',
     path: '/crm-events/view/:viewType?',
     name: 'CRM Events',

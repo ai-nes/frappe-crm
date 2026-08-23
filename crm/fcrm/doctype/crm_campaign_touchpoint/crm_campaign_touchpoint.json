@@ -16,6 +16,7 @@
   "column_break_1",
   "touched_at",
   "source",
+  "crm_segment",
   "section_notes",
   "notes"
  ],
@@ -71,8 +72,16 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Source",
-   "options": "Manual\nMigrated",
+   "options": "Manual\nMigrated\nSegment",
    "reqd": 1
+  },
+  {
+   "description": "Segment that produced this touchpoint on attach, for audit traceability. Set only when source is 'Segment'; never retroactively updated by later edits to that Segment.",
+   "fieldname": "crm_segment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Segment",
+   "options": "CRM Segment"
   },
   {
    "fieldname": "section_notes",

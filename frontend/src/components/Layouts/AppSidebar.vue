@@ -161,6 +161,7 @@ import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
 import SchoolIcon from '~icons/lucide/school'
 import MegaphoneIcon from '~icons/lucide/megaphone'
+import FilterIcon from '~icons/lucide/filter'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
 import LucideMapPin from '~icons/lucide/map-pin'
@@ -229,6 +230,7 @@ const links = [
   { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
   { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
   { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
+  { label: __('Segments'), icon: FilterIcon, to: 'CRM Segments' },
   { label: __('Events'), icon: CalendarIcon, to: 'CRM Events' },
   { label: __('Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
   { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
@@ -302,6 +304,8 @@ function getIcon(routeName, icon) {
       return SchoolIcon
     case 'CRM Campaigns':
       return MegaphoneIcon
+    case 'CRM Segments':
+      return FilterIcon
     case 'CRM Events':
       return CalendarIcon
     case 'CRM Staff':
