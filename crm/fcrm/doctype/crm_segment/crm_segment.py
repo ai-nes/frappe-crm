@@ -6,7 +6,7 @@ from crm.api.segment import validate_segment_filters
 
 class CRMSegment(Document):
 	def validate(self):
-		validate_segment_filters(self.filters)
+		self.filters = validate_segment_filters(self.filters)
 
 	def on_trash(self):
 		if frappe.db.exists("CRM Campaign Touchpoint", {"crm_segment": self.name}):

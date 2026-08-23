@@ -16,13 +16,31 @@ from crm.api.segment import (
 
 
 class TestCRMSegment(FrappeTestCase):
+	# CRMContact._derive_lifecycle_stage() always recomputes lifecycle_stage from
+	# enrollment_status on save, discarding a directly-assigned value — so
+	# _make_contact's convenience "lifecycle_stage" kwarg maps through this table
+	# to the enrollment status this site's seed data maps to that stage.
+	LIFECYCLE_STAGE_ENROLLMENT_STATUS = {
+		"Lead": "Mới",
+		"MQL": "Có triển vọng",
+		"Applicant": "Đã xác nhận",
+		"Enrolled": "Đã nhập học",
+		"Lost": "Từ chối",
+	}
+
 	def setUp(self):
 		frappe.set_user("Administrator")
+		# Real imported CRM Contacts overwhelmingly sit at lifecycle_stage="Lead"
+		# (see docs/CRM Contact.csv import), so any test matching on "Lead" must
+		# scope to this dedicated campus to avoid matching thousands of them.
+		self.test_branch = self._make_campus("_Test Segment Setup Campus")
 		self.contacts = []
-		self.contacts.append(self._make_contact("A", lifecycle_stage="Lead", is_opted_out=0))
-		self.contacts.append(self._make_contact("B", lifecycle_stage="MQL", is_opted_out=0))
-		self.contacts.append(self._make_contact("C", lifecycle_stage="Applicant", is_opted_out=1))
-		self.contacts.append(self._make_contact("D", lifecycle_stage="Lost", is_opted_out=1))
+		self.contacts.append(self._make_contact("A", lifecycle_stage="Lead", is_opted_out=0, branch=self.test_branch))
+		self.contacts.append(self._make_contact("B", lifecycle_stage="MQL", is_opted_out=0, branch=self.test_branch))
+		self.contacts.append(
+			self._make_contact("C", lifecycle_stage="Applicant", is_opted_out=1, branch=self.test_branch)
+		)
+		self.contacts.append(self._make_contact("D", lifecycle_stage="Lost", is_opted_out=1, branch=self.test_branch))
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -38,7 +56,9 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.delete_doc("CRM Campaign", name, force=True)
 		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		for name in frappe.db.get_all("CRM Contact", filters={"last_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all("CRM Student", filters={"phone": ["like", "00%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
+		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
@@ -71,13 +91,22 @@ class TestCRMSegment(FrappeTestCase):
 		user.insert(ignore_permissions=True)
 		return email
 
+	_next_test_phone = 1
+
 	def _make_contact(self, suffix, **kwargs):
+		# phone must satisfy CRMContact._validate_phone_format() (0 + 9 digits, unique).
+		# Real Vietnamese mobile numbers never start with two zeros, so a "00"-prefixed
+		# counter can't collide with imported production-like data.
+		TestCRMSegment._next_test_phone += 1
+		phone = "00" + str(TestCRMSegment._next_test_phone).zfill(8)
+		lifecycle_stage = kwargs.pop("lifecycle_stage", None)
+		if lifecycle_stage:
+			kwargs["enrollment_status"] = self.LIFECYCLE_STAGE_ENROLLMENT_STATUS[lifecycle_stage]
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Contact",
-				"first_name": "_Test",
-				"last_name": f"_Test Segment {suffix}",
-				"phone": f"_Test-Segment-{suffix}",
+				"full_name": f"_Test Segment {suffix}",
+				"phone": phone,
 				**kwargs,
 			}
 		)
@@ -208,19 +237,28 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_preview_pagination(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "in", "value": [0, 1]}]}]
+			"groups": [
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 0}]},
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 1}]},
+			]
 		}
 		result = preview_segment(filters=filters, start=0, page_length=2)
 		self.assertGreaterEqual(result["total"], 4)
 		self.assertEqual(len(result["contacts"]), 2)
 
 	def test_preview_private_segment_visible_to_owner(self):
-		owner_email = self._make_user("_Test Segment Owner")
+		owner_email = self._make_user("_Test Segment Owner", roles=("Counseller", "System Manager"))
 		frappe.set_user(owner_email)
 		try:
 			filters = {
 				"groups": [
-					{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}
+					{
+						"logic": "AND",
+						"conditions": [
+							{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+							{"field": "branch", "operator": "=", "value": self.test_branch},
+						],
+					}
 				]
 			}
 			segment = frappe.get_doc({"doctype": "CRM Segment", "title": "_Test Segment Private", "filters": filters})
@@ -250,12 +288,20 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_preview_public_segment_visible_to_other_users(self):
-		owner_email = self._make_user("_Test Segment PubOwner")
-		other_email = self._make_user("_Test Segment PubOther")
+		owner_email = self._make_user("_Test Segment PubOwner", roles=("Counseller", "System Manager"))
+		other_email = self._make_user("_Test Segment PubOther", roles=("Counseller", "System Manager"))
 
 		frappe.set_user(owner_email)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": self.test_branch},
+					],
+				}
+			]
 		}
 		segment = frappe.get_doc(
 			{"doctype": "CRM Segment", "title": "_Test Segment Public", "is_public": 1, "filters": filters}
@@ -276,7 +322,15 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Attach Campus")
 		campaign = self._make_campaign("_Test Segment Attach Campaign", campus)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": self.test_branch},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Attach", filters)
 
@@ -312,7 +366,15 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Retro Campus")
 		campaign = self._make_campaign("_Test Segment Retro Campaign", campus)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": self.test_branch},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Retro", filters)
 
@@ -349,7 +411,15 @@ class TestCRMSegment(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": self.test_branch},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment SkipOther", filters)
 
@@ -360,8 +430,17 @@ class TestCRMSegment(FrappeTestCase):
 	def test_delete_segment_with_touchpoints_is_blocked(self):
 		campus = self._make_campus("_Test Segment DeleteBlock Campus")
 		campaign = self._make_campaign("_Test Segment DeleteBlock Campaign", campus)
+		self._make_contact("DeleteBlock", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": campus},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment DeleteBlock", filters)
 		attach_segment_to_campaign(segment.name, campaign)
@@ -378,14 +457,25 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Batch Campus")
 		campaign = self._make_campaign("_Test Segment Batch Campaign", campus)
 		extra_contacts = [
-			self._make_contact(f"Batch{i}", lifecycle_stage="Lead", is_opted_out=0) for i in range(6)
+			self._make_contact(f"Batch{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
+			for i in range(6)
 		]
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": campus},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Batch", filters)
 		expected_matches = get_matching_contact_names(segment.filters)
-		self.assertEqual(len(expected_matches), len(extra_contacts) + 1)  # + seeded contact A
+		# Scoped to this test's own campus so real/other contacts sharing
+		# lifecycle_stage="Lead" can't inflate the match count.
+		self.assertEqual(expected_matches, set(extra_contacts))
 
 		with patch.object(segment_api, "ATTACH_BATCH_SIZE", 2):
 			result = segment_api.attach_segment_to_campaign(segment.name, campaign)
@@ -406,14 +496,25 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Fail Campus")
 		campaign = self._make_campaign("_Test Segment Fail Campaign", campus)
 		extra_contacts = [
-			self._make_contact(f"Fail{i}", lifecycle_stage="Lead", is_opted_out=0) for i in range(3)
+			self._make_contact(f"Fail{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
+			for i in range(4)
 		]
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
+						{"field": "branch", "operator": "=", "value": campus},
+					],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Fail", filters)
 		expected_matches = sorted(get_matching_contact_names(segment.filters))
-		self.assertEqual(len(expected_matches), len(extra_contacts) + 1)  # + seeded contact A
+		# Scoped to this test's own campus so real/other contacts sharing
+		# lifecycle_stage="Lead" can't inflate the match count.
+		self.assertEqual(set(expected_matches), set(extra_contacts))
 		failing_contact = expected_matches[-1]
 
 		original_get_doc = frappe.get_doc
@@ -504,7 +605,10 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_preview_page_length_clamped_to_max(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "in", "value": [0, 1]}]}]
+			"groups": [
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 0}]},
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 1}]},
+			]
 		}
 		result = preview_segment(filters=filters, page_length=segment_api.MAX_PREVIEW_PAGE_LENGTH + 50)
 		self.assertEqual(result["page_length"], segment_api.MAX_PREVIEW_PAGE_LENGTH)

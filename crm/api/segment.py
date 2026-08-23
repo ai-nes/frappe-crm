@@ -62,7 +62,17 @@ def get_segment_condition_fields():
 
 def validate_segment_filters(filters):
 	"""Raises frappe.throw on anything invalid. This is the single gate every
-	consumer of Segment rules must call before touching CRM Contact data."""
+	consumer of Segment rules must call before touching CRM Contact data.
+
+	Returns the normalized dict — callers must use the return value, since the
+	"filters" JSON field round-trips as a string (not a dict) once a Segment
+	doc is loaded from the database rather than freshly constructed."""
+	if isinstance(filters, str):
+		try:
+			filters = frappe.parse_json(filters)
+		except Exception:
+			frappe.throw(_("Segment filters must be valid JSON."))
+
 	if not isinstance(filters, dict):
 		frappe.throw(_("Segment filters must be a JSON object with a 'groups' list."))
 
@@ -88,6 +98,8 @@ def validate_segment_filters(filters):
 
 		for condition in conditions:
 			_validate_condition(condition)
+
+	return filters
 
 
 def _validate_condition(condition):
@@ -124,7 +136,7 @@ def get_matching_contact_names(filters):
 	at least one group. Validates first, so zero groups / a zero-condition
 	group / a non-allow-listed field can never reach frappe.get_list — they
 	are rejected outright rather than silently matching everyone."""
-	validate_segment_filters(filters)
+	filters = validate_segment_filters(filters)
 
 	names = set()
 	for group in filters["groups"]:

@@ -221,6 +221,26 @@
    "read": 1,
    "report": 1,
    "role": "Counseller"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "CTV-Sale"
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Operations"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 0,

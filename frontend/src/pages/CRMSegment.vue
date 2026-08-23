@@ -70,10 +70,10 @@
   </div>
 </template>
 <script setup>
-import Breadcrumbs from '@/components/Breadcrumbs.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import SegmentConditionBuilder from '@/components/SegmentConditionBuilder.vue'
 import {
+  Breadcrumbs,
   Button,
   ErrorMessage,
   FormControl,

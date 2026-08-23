@@ -142,6 +142,28 @@
   {
    "read": 1,
    "role": "Promoter-PR"
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Operator",
+   "write": 1
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Marketing Lead"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Operations"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 1,

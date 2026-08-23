@@ -1,9 +1,13 @@
 {
- "content": "[{\"type\":\"card\",\"data\":{\"card_name\":\"Admissions\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Geography\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Academic\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Operations\",\"col\":4}},{\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
- "creation": "2026-06-07 00:00:00.000000",
+ "charts": [],
+ "content": "[{\"id\":\"zfQ5P6XSw_\",\"type\":\"card\",\"data\":{\"card_name\":\"Admissions\",\"col\":4}},{\"id\":\"fZGIiYTL1Z\",\"type\":\"card\",\"data\":{\"card_name\":\"Geography\",\"col\":4}},{\"id\":\"AiDb-QVADk\",\"type\":\"card\",\"data\":{\"card_name\":\"Academic\",\"col\":4}},{\"id\":\"Dabn7KA9rO\",\"type\":\"card\",\"data\":{\"card_name\":\"Operations\",\"col\":4}},{\"id\":\"dwyAjFgHI8\",\"type\":\"card\",\"data\":{\"card_name\":\"Configuration\",\"col\":4}}]",
+ "creation": "2026-06-07 00:00:00",
+ "custom_blocks": [],
+ "docstatus": 0,
  "doctype": "Workspace",
  "for_user": "",
  "hide_custom": 0,
+ "idx": 0,
  "is_hidden": 0,
  "label": "Frappe CRM",
  "links": [
@@ -205,6 +209,17 @@
    "dependencies": "",
    "hidden": 0,
    "is_query_report": 0,
+   "label": "Segments",
+   "link_count": 0,
+   "link_to": "CRM Segment",
+   "link_type": "DocType",
+   "onboard": 0,
+   "type": "Link"
+  },
+  {
+   "dependencies": "",
+   "hidden": 0,
+   "is_query_report": 0,
    "label": "Interactions",
    "link_count": 0,
    "link_to": "CRM Interaction",
@@ -366,40 +381,17 @@
    "type": "Link"
   }
  ],
- "modified": "2026-06-07 00:00:00.000000",
+ "modified": "2026-08-23 18:27:21.454759",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "Frappe CRM",
+ "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
  "public": 1,
+ "quick_lists": [],
  "roles": [],
  "sequence_id": 1.0,
- "shortcuts": [
-  {
-   "color": "Blue",
-   "label": "Students",
-   "link_to": "CRM Student",
-   "type": "DocType"
-  },
-  {
-   "color": "Green",
-   "label": "Contacts",
-   "link_to": "CRM Contact",
-   "type": "DocType"
-  },
-  {
-   "color": "Orange",
-   "label": "High Schools",
-   "link_to": "CRM High School",
-   "type": "DocType"
-  },
-  {
-   "color": "Purple",
-   "label": "Staff",
-   "link_to": "CRM Staff",
-   "type": "DocType"
-  }
- ],
+ "shortcuts": [],
  "title": "Frappe CRM"
 }
