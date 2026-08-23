@@ -40,15 +40,17 @@ def resolve_ward(ward_value, province_value=None):
 	province = resolve_province(province_value) if province_value else None
 	scoped_filters = []
 	if province:
-		scoped_filters.extend([
-			{"ward_code": ward_value, "province": province},
-			{"ward_name": ward_value, "province": province},
-		])
+		scoped_filters.extend(
+			[
+				{"ward_code": ward_value, "province": province},
+				{"ward_name": ward_value, "province": province},
+			]
+		)
 
 	name = _first_matching_docname(
 		"CRM Ward",
-		scoped_filters
-		+ [
+		[
+			*scoped_filters,
 			{"ward_code": ward_value},
 			{"ward_name": ward_value},
 		],
@@ -66,17 +68,19 @@ def resolve_high_school(school_value, province_value=None):
 	province = _get_province_context(province_value)
 	scoped_filters = []
 	if province.get("province_code"):
-		scoped_filters.extend([
-			{"school_code": school_value, "province_code": province.province_code},
-			{"school_name": school_value, "province_code": province.province_code},
-		])
+		scoped_filters.extend(
+			[
+				{"school_code": school_value, "province_code": province.province_code},
+				{"school_name": school_value, "province_code": province.province_code},
+			]
+		)
 	if province.get("province_name"):
 		scoped_filters.append({"school_name": school_value, "province_name": province.province_name})
 
 	name = _first_matching_docname(
 		"CRM High School",
-		scoped_filters
-		+ [
+		[
+			*scoped_filters,
 			{"school_code": school_value},
 			{"school_name": school_value},
 		],
@@ -92,8 +96,30 @@ def resolve_high_school_strict(school_value, province_value=None):
 	if frappe.db.exists("CRM High School", school_value):
 		return school_value
 
-	target = normalize_text(school_value)
 	province = _get_province_context(province_value)
+	code_matches = frappe.get_all(
+		"CRM High School",
+		filters={"school_code": school_value},
+		fields=["name", "province_code", "province_name"],
+	)
+	if len(code_matches) == 1:
+		return code_matches[0].name
+	if len(code_matches) > 1:
+		scoped_matches = [
+			match
+			for match in code_matches
+			if (province.get("province_code") and match.province_code == province.province_code)
+			or (province.get("province_name") and match.province_name == province.province_name)
+		]
+		if len(scoped_matches) == 1:
+			return scoped_matches[0].name
+		frappe.throw(
+			f"Mã trường <b>{school_value}</b> khớp với nhiều trường học. "
+			"Vui lòng bổ sung tỉnh/thành để xác định trường chính xác.",
+			title="Trường học không rõ ràng",
+		)
+
+	target = normalize_text(school_value)
 
 	candidates = frappe.get_all(
 		"CRM High School",

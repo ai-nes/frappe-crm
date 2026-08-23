@@ -96,6 +96,14 @@
    "read": 1,
    "role": "Enrollment Manager",
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Admissions Operations"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 1,

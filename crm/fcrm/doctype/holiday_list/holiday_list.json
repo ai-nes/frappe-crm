@@ -143,6 +143,14 @@
   {
    "read": 1,
    "role": "Promoter-PR"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Operations"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
   }
  ],
  "row_format": "Dynamic",
