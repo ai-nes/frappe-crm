@@ -19,10 +19,10 @@ class TestCRMContact(FrappeTestCase):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
-		for name in frappe.db.get_all("CRM Team", filters={"team_name": ["like", "_Test%"]}, pluck="name"):
-			frappe.delete_doc("CRM Team", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
+		for name in frappe.db.get_all("CRM Team", filters={"team_name": ["like", "_Test%"]}, pluck="name"):
+			frappe.delete_doc("CRM Team", name, force=True)
 		for name in frappe.db.get_all(
 			"CRM Department", filters={"department_name": ["like", "_Test%"]}, pluck="name"
 		):

@@ -125,7 +125,11 @@ def create_interaction_from_communication_update(doc, method=None):
 
 
 def create_interaction_from_task_update(doc, method=None):
-	if doc.is_new():
+	# on_update fires during insert too, at a point where is_new() has already
+	# flipped to False but flags.in_insert is still True -- check both, or a
+	# freshly-inserted doc's baseline-less has_value_changed() (always True)
+	# fires spuriously.
+	if doc.is_new() or doc.flags.in_insert:
 		return
 	if not (doc.has_value_changed("status") and doc.status == "Done"):
 		return
@@ -166,7 +170,10 @@ def create_interaction_from_call_log_insert(doc, method=None):
 
 
 def create_interaction_from_contact_update(doc, method=None):
-	if doc.is_new():
+	# See create_interaction_from_task_update -- on_update fires during insert
+	# too, after is_new() has already flipped to False; flags.in_insert is the
+	# reliable signal there.
+	if doc.is_new() or doc.flags.in_insert:
 		return
 
 	if doc.has_value_changed("lifecycle_stage"):
@@ -238,7 +245,10 @@ def create_interaction_from_event_participation_insert(doc, method=None):
 def create_interaction_from_event_participation_update(doc, method=None):
 	if frappe.flags.in_patch:
 		return
-	if doc.is_new():
+	# See create_interaction_from_task_update -- on_update fires during insert
+	# too, after is_new() has already flipped to False; flags.in_insert is the
+	# reliable signal there.
+	if doc.is_new() or doc.flags.in_insert:
 		return
 	if not doc.has_value_changed("status"):
 		return
