@@ -53,8 +53,8 @@ def normalize_dashboard_filters(from_date=None, to_date=None, user=None):
 		to_date = frappe.utils.get_last_day(to_date or frappe.utils.nowdate())
 
 	roles = frappe.get_roles(frappe.session.user)
-	is_manager = "Sales Manager" in roles or "System Manager" in roles
-	is_user = "Sales User" in roles and not is_manager
+	is_manager = bool({"Lead Sales", "Sales Manager", "System Manager"}.intersection(roles))
+	is_user = bool({"Sale", "Sales User"}.intersection(roles)) and not is_manager
 
 	if is_user:
 		user = frappe.session.user

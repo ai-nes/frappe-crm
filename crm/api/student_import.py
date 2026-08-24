@@ -1,9 +1,19 @@
+"""Compatibility adapter for the retired legacy Student import route.
+
+The old endpoint performed a global phone/email upsert and was guest writable.
+It now delegates to the canonical intake command. It remains available only to
+authenticated callers during provider reconciliation; external providers must
+use :mod:`crm.api.student_intake_webhook`.
+"""
+
+from __future__ import annotations
+
 import json
+from typing import Any
 
 import frappe
 
-from crm.fcrm.utils.geo_resolver import resolve_high_school_strict
-from crm.fcrm.utils.link_resolver import resolve_link_strict
+from crm.fcrm.student_intake import normalize_email, normalize_phone, submit_intake
 
 LEGACY_LEAD_STATUS_MAP = {
 	"New": "Mới",
@@ -19,179 +29,79 @@ LEGACY_LEAD_STATUS_MAP = {
 	"Promising": "Có triển vọng",
 }
 
-MAPPED_PAYLOAD_KEYS = {
-	"firstname",
-	"lastname",
-	"mobile",
-	"email",
-	"leadsource",
-	"leads_campus",
-	"cf_city",
-	"cf_school",
-	"cf_school_code",
-	"cf_major",
-	"cf_nvfpt",
-	"cf_registered_year",
-	"leadstatus",
-	"cf_kenh_quang_cao",
-}
 
-NOTE_FIELD_LABELS = {
-	"annualrevenue": "Doanh thu hàng năm",
-	"assigned_user_id": "ID người phụ trách",
-	"city": "Quận/huyện",
-	"code": "Mã bưu chính",
-	"company": "Công ty",
-	"country": "Quốc gia",
-	"designation": "Chức danh",
-	"emailoptout": "Từ chối nhận email",
-	"fax": "Fax",
-	"industry": "Ngành nghề",
-	"lane": "Địa chỉ đường/phố",
-	"noofemployees": "Số nhân viên",
-	"phone": "Điện thoại bàn",
-	"pobox": "Hộp thư bưu điện",
-	"rating": "Đánh giá lead",
-	"salutationtype": "Danh xưng",
-	"secondaryemail": "Email phụ",
-	"state": "Tỉnh/thành gốc",
-	"website": "Website",
-	"cf_kha_nang_cd": "Khả năng chuyển đổi",
-	"cf_noi_hoc_lead": "Nơi học lead",
-	"cf_segment": "Phân khúc",
-	"cf_su_kien_tham_gia": "Sự kiện tham gia",
-	"cf_tag": "Tags",
-	"cf_tinh_trang_cs_nhap_hoc": "Tình trạng chăm sóc/nhập học",
-}
-
-
-@frappe.whitelist(allow_guest=True, methods=["POST"])
-def upsert_student(payload: dict | str | None = None) -> dict:
-	"""Create or update one CRM Student from an external lead payload.
-
-	This webhook is intentionally public for the current third-party integration.
-	It bypasses document permissions, so access control must be added before using
-	it with any untrusted sender.
-	"""
+def _parse_payload(payload: dict[str, Any] | str | None):
 	if payload is None:
-		payload = frappe.request.get_json(silent=True)
-	payload = _parse_payload(payload)
-	phone = _normalize_phone(payload.get("mobile"))
-	email = _normalize_email(payload.get("email"))
-	if not phone and not email:
-		frappe.throw("Payload phải có mobile hoặc email.", title="Thiếu định danh học sinh")
-
-	student = _find_existing_student(phone, email)
-	values = _map_payload(payload, phone, email)
-	if student:
-		for fieldname, value in values.items():
-			student.set(fieldname, value)
-		student.save(ignore_permissions=True)
-		action = "updated"
-	else:
-		student = frappe.get_doc({"doctype": "CRM Student", **values})
-		student.insert(ignore_permissions=True)
-		action = "created"
-
-	return {"name": student.name, "action": action}
-
-
-def _parse_payload(payload):
+		try:
+			payload = frappe.request.get_json(silent=True)
+		except Exception:
+			payload = None
 	if isinstance(payload, str):
 		try:
 			payload = json.loads(payload)
-		except json.JSONDecodeError:
+		except ValueError:
 			frappe.throw("payload phải là JSON object hợp lệ.", title="Payload không hợp lệ")
 	if not isinstance(payload, dict):
 		frappe.throw("payload phải là JSON object.", title="Payload không hợp lệ")
 	return payload
 
 
-def _normalize_phone(value):
-	if not isinstance(value, str):
-		return None
-	phone = value.strip()
-	if phone.startswith("+84"):
-		phone = "0" + phone[3:]
-	return phone or None
+def _compatibility_payload(payload: dict[str, Any]) -> dict[str, Any]:
+	first = str(payload.get("firstname") or "").strip()
+	last = str(payload.get("lastname") or "").strip()
+	values = {
+		"student_name": " ".join(value for value in (first, last) if value),
+		"phone": payload.get("mobile") or payload.get("phone"),
+		"email": payload.get("email"),
+		"id_number": payload.get("id_number") or payload.get("national_id") or payload.get("cccd"),
+		"campus": payload.get("leads_campus") or payload.get("campus") or payload.get("branch"),
+		"admission_year": payload.get("cf_registered_year") or payload.get("admission_year"),
+		"source": payload.get("leadsource") or payload.get("source"),
+		"advertising_channel": payload.get("cf_kenh_quang_cao") or payload.get("advertising_channel"),
+		"enrollment_status": LEGACY_LEAD_STATUS_MAP.get(payload.get("leadstatus"), payload.get("leadstatus")),
+	}
+	for source, target in (
+		("cf_city", "province"),
+		("cf_school", "high_school"),
+		("cf_major", "major"),
+		("cf_nvfpt", "aspiration"),
+		("alt_name", "alt_name"),
+		("alt_phone", "alt_phone"),
+	):
+		if payload.get(source):
+			values[target] = payload[source]
+	return {key: value for key, value in values.items() if value not in (None, "")}
 
 
-def _normalize_email(value):
-	if not isinstance(value, str):
-		return None
-	return value.strip().lower() or None
-
-
-def _find_existing_student(phone, email):
-	by_phone = frappe.db.get_value("CRM Student", {"phone": phone}, "name") if phone else None
-	by_email = frappe.db.get_value("CRM Student", {"email": email}, "name") if email else None
-	if by_phone and by_email and by_phone != by_email:
-		frappe.throw(
-			"mobile và email đang thuộc về hai học sinh khác nhau.",
-			title="Định danh học sinh mâu thuẫn",
-		)
-	return frappe.get_doc("CRM Student", by_phone or by_email) if by_phone or by_email else None
-
-
-def _map_payload(payload, phone, email):
-	student_name = " ".join(
-		str(value).strip()
-		for value in (payload.get("firstname"), payload.get("lastname"))
-		if value and str(value).strip()
+@frappe.whitelist(methods=["POST"])
+def upsert_student(
+	payload: dict[str, Any] | str | None = None,
+	source_namespace: str | None = None,
+	source_record_id: str | None = None,
+	idempotency_key: str | None = None,
+	correlation_id: str | None = None,
+) -> dict[str, Any]:
+	"""Compatibility name; behavior is now deterministic intake only."""
+	if getattr(frappe, "session", None) and frappe.session.user in ("Guest", ""):
+		frappe.throw("Authentication is required for the retired import adapter.", frappe.PermissionError)
+	payload = _parse_payload(payload)
+	if not source_namespace:
+		source_namespace = payload.get("source_namespace") or "legacy-student-import"
+	if not source_record_id:
+		source_record_id = payload.get("source_record_id") or payload.get("id") or payload.get("external_id")
+	if not idempotency_key:
+		idempotency_key = payload.get("idempotency_key")
+	if not source_record_id or not idempotency_key:
+		frappe.throw("source_record_id và idempotency_key là bắt buộc.", title="Legacy import đã bị khóa")
+	result = submit_intake(
+		_compatibility_payload(payload),
+		source_namespace=source_namespace,
+		source_record_id=str(source_record_id),
+		idempotency_key=str(idempotency_key),
+		correlation_id=correlation_id or payload.get("correlation_id"),
 	)
-	values = {"notes": _serialize_unmapped_payload(payload)}
-	if student_name:
-		values["student_name"] = student_name
-	if phone:
-		values["phone"] = phone
-	if email:
-		values["email"] = email
-	if value := payload.get("leadsource"):
-		values["source"] = resolve_link_strict("CRM Lead Source", value, ["source_name"])
-	if value := payload.get("leads_campus"):
-		values["branch"] = resolve_link_strict("CRM Campus", value, ["campus_code", "campus_name"])
-
-	province_value = payload.get("cf_city") or payload.get("city") or payload.get("state")
-	if province_value:
-		values["province"] = resolve_link_strict(
-			"CRM Province", province_value, ["province_code", "province_name"]
-		)
-	if value := payload.get("cf_school_code") or payload.get("cf_school"):
-		values["high_school"] = resolve_high_school_strict(value, values.get("province"))
-	if value := payload.get("cf_major"):
-		values["major"] = resolve_link_strict("CRM Major", value, ["major_code", "major_name"])
-	if value := payload.get("cf_nvfpt"):
-		values["aspiration"] = resolve_link_strict("CRM Aspiration", value, ["aspiration_name"])
-	if value := payload.get("cf_registered_year"):
-		values["admission_year"] = resolve_link_strict("CRM Admission Year", value, ["year_name"])
-	if value := payload.get("leadstatus"):
-		status = LEGACY_LEAD_STATUS_MAP.get(value, value)
-		values["enrollment_status"] = resolve_link_strict("CRM Enrollment Status", status, ["status_name"])
-	if value := payload.get("cf_kenh_quang_cao"):
-		values["advertising_channel"] = str(value).strip()
-	return values
+	return {"name": result.get("student"), "action": result.get("outcome"), **result}
 
 
-def _serialize_unmapped_payload(payload):
-	unmapped = {key: value for key, value in payload.items() if key not in MAPPED_PAYLOAD_KEYS}
-	if not unmapped:
-		return ""
-
-	lines = ["Thông tin bổ sung từ nguồn tích hợp:"]
-	for key in sorted(unmapped):
-		lines.append(
-			f"- {NOTE_FIELD_LABELS.get(key, _format_field_label(key))}: {_format_note_value(unmapped[key])}"
-		)
-	return "\n".join(lines)
-
-
-def _format_field_label(key):
-	return key.replace("_", " ").strip().capitalize()
-
-
-def _format_note_value(value):
-	if isinstance(value, (dict, list)):
-		return json.dumps(value, ensure_ascii=False, separators=(",", ", "))
-	if value is None:
-		return "Không có"
-	return str(value).strip()
+_normalize_phone = normalize_phone
+_normalize_email = normalize_email

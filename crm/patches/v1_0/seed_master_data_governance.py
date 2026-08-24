@@ -5,17 +5,15 @@ from crm.patches.v1_0 import setup_crm_permissions
 from crm.patches.v1_0.setup_crm_roles import create_roles
 
 GOVERNED_DOCTYPES = {
-	"CRM Lead Source": "Marketing Operator",
-	"CRM Platform": "Marketing Operator",
-	"CRM Intent Type": "Marketing Operator",
-	"CRM Lost Reason": "CRM Data Steward",
-	"CRM Campus": "Admissions Operations",
+	"CRM Lead Source": "Marketing",
+	"CRM Platform": "Marketing",
+	"CRM Intent Type": "Marketing",
+	"CRM Lost Reason": "Lead Sales",
+	"CRM Campus": "Admissions Director",
 }
 
 
 def execute():
-	create_roles(["CRM Data Steward"])
-
 	for doctype in list(GOVERNED_DOCTYPES) + ["CRM Master Data Change Log"]:
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 

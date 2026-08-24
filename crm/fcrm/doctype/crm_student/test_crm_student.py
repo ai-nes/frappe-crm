@@ -17,11 +17,15 @@ class TestCRMStudent(FrappeTestCase):
 		student = frappe.get_doc({
 			"doctype": "CRM Student",
 			"student_name": name,
-			"phone": "0901234567",
+			"phone": "0981000001",
 			"email": "test.convert@example.com",
 			"enrollment_status": "Đã xác nhận",
 		})
-		student.insert(ignore_permissions=True)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def tearDown(self):
@@ -97,7 +101,7 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(student.phone, original_student_phone)
 		self.assertNotEqual(student.phone, "0902222333")
 
-	def test_create_from_contact_creates_crm_student(self):
+	def test_create_from_contact_is_retired(self):
 		contact = frappe.get_doc({
 			"doctype": "Contact",
 			"first_name": "_Test",
@@ -107,12 +111,8 @@ class TestCRMStudent(FrappeTestCase):
 		})
 		contact.insert(ignore_permissions=True)
 
-		student_name = create_from_contact(contact.name)
-		student = frappe.get_doc("CRM Student", student_name)
-
-		self.assertEqual(student.student_name, contact.full_name)
-		self.assertEqual(student.phone, contact.phone)
-		self.assertEqual(student.email, contact.email_id)
+		with self.assertRaises(frappe.PermissionError):
+			create_from_contact(contact.name)
 
 	# ---------------------------------------------------------------- lifecycle stage
 
@@ -178,14 +178,22 @@ class TestCRMStudent(FrappeTestCase):
 
 		student = self._make_student("_Test Student Reassignment")
 		student.assigned_to = staff_a
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 		self.assertEqual(len(student.assignment_log), 1)
 		self.assertFalse(student.assignment_log[0].from_staff)
 		self.assertEqual(student.assignment_log[0].to_staff, staff_a)
 
 		student.assigned_to = staff_b
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 
 		self.assertEqual(len(student.assignment_log), 2)
@@ -212,7 +220,11 @@ class TestCRMStudent(FrappeTestCase):
 			"phone": phone,
 			"enrollment_status": enrollment_status,
 		})
-		student.insert(ignore_permissions=True)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def _make_user_and_staff(self, prefix, roles=None):

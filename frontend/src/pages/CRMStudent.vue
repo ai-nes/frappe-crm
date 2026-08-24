@@ -13,6 +13,12 @@
         :actions="document._actions"
       />
       <Button
+        v-if="canChangeOwnership"
+        :label="__('Change ownership')"
+        iconLeft="users"
+        @click="showOwnershipModal = true"
+      />
+      <Button
         v-if="doc.name && doc.enrollment_status === 'Mới'"
         variant="solid"
         :label="__('Convert to Contact')"
@@ -78,6 +84,22 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
+        <section class="border-b px-5 py-4" aria-labelledby="ownership-heading">
+          <div class="flex items-center justify-between gap-2">
+            <h2 id="ownership-heading" class="text-sm font-medium text-ink-gray-8">{{ __('Ownership') }}</h2>
+            <span v-if="ownership.loading" class="text-xs text-ink-gray-5" role="status">{{ __('Loading…') }}</span>
+          </div>
+          <p v-if="ownership.data" class="mt-1 text-sm text-ink-gray-6">
+            {{ ownershipSummary }}
+          </p>
+          <p v-else class="mt-1 text-sm text-ink-gray-5">{{ __('Ownership details are unavailable.') }}</p>
+          <ol v-if="ownershipEvents.length" class="mt-3 space-y-2 border-l pl-3 text-xs text-ink-gray-6" aria-label="Ownership history">
+            <li v-for="event in ownershipEvents" :key="event.name || event.event_id || event.creation">
+              <span class="font-medium text-ink-gray-7">{{ event.summary || event.reason || __('Ownership changed') }}</span>
+              <span v-if="event.creation || event.timestamp"> · {{ event.creation || event.timestamp }}</span>
+            </li>
+          </ol>
+        </section>
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Student"
@@ -93,6 +115,14 @@
     v-else-if="errorTitle"
     :errorTitle="errorTitle"
     :errorMessage="errorMessage"
+  />
+  <ChangeStudentOwnershipModal
+    v-if="showOwnershipModal"
+    v-model="showOwnershipModal"
+    :student="crmStudentId"
+    :ownership="ownership.data || {}"
+    @changed="handleOwnershipChanged"
+    @refresh-required="ownership.reload()"
   />
 </template>
 
@@ -111,7 +141,10 @@ import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
+import ChangeStudentOwnershipModal from '@/components/Modals/ChangeStudentOwnershipModal.vue'
 import { copyToClipboard } from '@/utils'
+import { usersStore } from '@/stores/users'
+import { hasAnyCapability } from '@/utils/rolePolicy'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
@@ -129,6 +162,7 @@ import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
 const { brand } = getSettings()
 const { doctypeMeta } = getMeta('CRM Student')
+const { getCurrentUser } = usersStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -142,6 +176,15 @@ const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
 const converting = ref(false)
+const showOwnershipModal = ref(false)
+const canChangeOwnership = computed(() =>
+  hasAnyCapability(getCurrentUser(), [
+    'student.execute',
+    'team.oversee',
+    'admissions.oversee',
+    'system.configure',
+  ]),
+)
 
 const { document, error } = useDocument(
   'CRM Student',
@@ -149,6 +192,30 @@ const { document, error } = useDocument(
 )
 
 const doc = computed(() => document.doc || {})
+
+const ownership = createResource({
+  url: 'crm.api.student_ownership.get_student_ownership',
+  makeParams: () => ({ student: props.crmStudentId }),
+  auto: true,
+  initialData: null,
+})
+const ownershipSummary = computed(() => {
+  const state = ownership.data || {}
+  const owner = state.owner_staff_label || state.owner_staff
+  const pool = state.owning_team_label || state.owning_team
+  const target = owner || pool
+  if (!target) return __('No active owner or pool.')
+  return owner
+    ? __('Owner: {0} · Revision {1}', [owner, state.revision ?? 0])
+    : __('Pool: {0} · Revision {1}', [pool, state.revision ?? 0])
+})
+const ownershipEvents = computed(() => ownership.data?.events || ownership.data?.history || [])
+
+function handleOwnershipChanged(response) {
+  ownership.reload()
+  sections.reload()
+  if (response?.revision !== undefined) ownership.data = { ...ownership.data, ...response }
+}
 
 watch(error, (err) => {
   if (err) {
@@ -259,7 +326,15 @@ const sections = createResource({
   params: { doctype: 'CRM Student' },
   auto: true,
   transform: (data) => {
-    const hiddenFields = new Set(['converted', 'latest_score'])
+    const hiddenFields = new Set([
+      'converted',
+      'latest_score',
+      'assigned_to',
+      'owner_staff',
+      'owning_team',
+      'section_assignment_history',
+      'assignment_log',
+    ])
     return data.map((section) => ({
       ...section,
       columns: section.columns?.map((col) => ({

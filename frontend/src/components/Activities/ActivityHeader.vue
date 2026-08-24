@@ -106,7 +106,7 @@ const showWhatsappTemplates = defineModel('showWhatsappTemplates', {
 const showFilesUploader = defineModel('showFilesUploader', { type: Boolean })
 const emailBox = defineModel('emailBox', { type: Object, default: () => ({}) })
 const canAssignStaff = ref(false)
-const staffAssignableDoctypes = ['CRM Student', 'CRM Contact']
+const staffAssignableDoctypes = ['CRM Contact']
 
 const defaultActions = computed(() => {
   let actions = [

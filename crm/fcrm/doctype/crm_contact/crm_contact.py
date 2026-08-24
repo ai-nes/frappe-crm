@@ -286,41 +286,15 @@ class CRMContact(Document):
 				self.set(fieldname, value)
 
 	def _create_student_at_milestone(self):
-		"""Creates a linked CRM Student exactly once, when enrollment_status first
-		transitions into MILESTONE_ENROLLMENT_STATUSES — not on every save (that was
-		the old continuous two-way sync, which this replaces; see phase-02 plan)."""
-		if self.student:
-			return
-		if self.enrollment_status not in MILESTONE_ENROLLMENT_STATUSES:
-			return
+		"""Contain the retired Contact milestone writer.
 
-		before = self.get_doc_before_save()
-		before_status = before.enrollment_status if before else None
-		if before_status in MILESTONE_ENROLLMENT_STATUSES:
-			return
-
-		if not self.phone:
-			return
-		if frappe.db.exists("CRM Student", {"phone": self.phone}):
-			return
-
-		student = frappe.new_doc("CRM Student")
-		student.student_name = self.full_name
-		student.phone = self.phone
-		student.email = self.email
-		student.enrollment_status = self.enrollment_status
-		student.high_school = self.high_school
-		student.province = self.province
-		student.major = self.major
-		student.aspiration = self.aspiration
-		student.branch = self.branch
-		student.admission_year = self.admission_year
-		student.source = self.source
-		student.assigned_to = self.assigned_to
-		student.alt_name = self.parent_name
-		student.alt_phone = self.parent_phone
-		student.insert(ignore_permissions=True)
-		self.db_set("student", student.name, update_modified=False)
+		CRM Contact is a post-conversion relationship and is no longer an intake
+		target. A Contact milestone must be handled by an explicit, authorized
+		Student command after the conversion contract is available; silently
+		creating a Student here would bypass identity, cycle, receipt and scope
+		checks.
+		"""
+		return
 
 
 def get_permission_query_conditions(user=None):

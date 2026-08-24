@@ -29,11 +29,24 @@ class CRMStudent(Document):
 		self.flags.ignore_links = True
 
 	def before_insert(self):
+		if not getattr(frappe.flags, "student_intake_service", False):
+			frappe.throw(
+				_("New CRM Students must be created through the Student intake command."),
+				title=_("Student intake required"),
+			)
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
 
 	def before_save(self):
+		before = self.get_doc_before_save()
+		if before and not getattr(frappe.flags, "student_ownership_service", False):
+			ownership_fields = ("assigned_to", "owner_staff", "owning_team")
+			if any(before.get(field) != self.get(field) for field in ownership_fields):
+				frappe.throw(
+					_("Student ownership changes must use the ownership command."),
+					title=_("Ownership command required"),
+				)
 		self._normalize_phone_fields()
 		self._resolve_geo()
 		if self.cohort_end_year:
@@ -46,9 +59,11 @@ class CRMStudent(Document):
 		self._validate_unique_phone()
 		self._validate_unique_email()
 		self._validate_unique_id_number()
-		self._derive_owner_fields()
+		if getattr(frappe.flags, "student_intake_service", False) or getattr(frappe.flags, "student_ownership_service", False) or not self.get_doc_before_save():
+			self._derive_owner_fields()
 		self._derive_lifecycle_stage()
-		self._log_assignment_change()
+		if getattr(frappe.flags, "student_ownership_service", False):
+			self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
 
@@ -342,23 +357,10 @@ def convert_to_contact(student_name):
 
 @frappe.whitelist()
 def create_from_contact(contact):
-	contact_doc = frappe.get_doc("Contact", contact)
-
-	if not contact_doc.has_permission("read"):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
-
-	if not frappe.has_permission("CRM Student", "create"):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
-
-	student = frappe.get_doc({
-		"doctype": "CRM Student",
-		"student_name": contact_doc.full_name or contact_doc.name,
-		"phone": contact_doc.get("phone"),
-		"email": contact_doc.email_id,
-		"enrollment_status": "Mới",
-	})
-	student.insert()
-	return student.name
+	# Contact is post-conversion identity data. Creating an admissions Student
+	# from it bypasses identity/cycle resolution, review, pool selection, and
+	# command receipts; the canonical intake service is the only allowed writer.
+	frappe.throw(_("Creating a Student from Contact is retired; use the Student intake command."), frappe.PermissionError)
 
 
 def get_permission_query_conditions(user=None):

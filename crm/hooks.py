@@ -182,6 +182,26 @@ doc_events = {
 	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 	},
+	"CRM Lead Source": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+	},
+	"CRM Platform": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+	},
+	"CRM Intent Type": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+	},
+	"CRM Lost Reason": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+	},
+	"CRM Campus": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
 		"on_update": ["crm.api.todo.on_update"],

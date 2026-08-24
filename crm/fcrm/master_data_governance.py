@@ -17,6 +17,12 @@ import json
 import frappe
 from frappe.utils import now_datetime, nowdate
 
+from crm.fcrm.role_policy import (
+	PROFILE_LABELS,
+	classify_role_set,
+	resolve_crm_profile,
+)
+
 # Ownership per docs/admissions-crm-operating-model.md section 8. CRM Intent
 # Type isn't named explicitly in that table -- it's treated as part of the
 # "Source, platform, UTM, campaign/event type" marketing-owned group, same as
@@ -27,26 +33,26 @@ from frappe.utils import now_datetime, nowdate
 GOVERNED_DOCTYPES = {
 	"CRM Lead Source": {
 		"name_field": "source_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Contact", "source"), ("CRM Platform", "lead_source")],
 	},
 	"CRM Platform": {
 		"name_field": "platform_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Contact", "platform")],
 	},
 	"CRM Intent Type": {
 		"name_field": "intent_type_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Intent", "intent_type")],
 	},
 	"CRM Lost Reason": {
 		"name_field": "lost_reason",
-		"owner_role": "CRM Data Steward",
-		"approver_roles": {"Team Leader", "Marketing Lead"},
+		"owner_role": "Lead Sales",
+		"approver_roles": {"Lead Sales", "Marketing"},
 		# No doctype in this fork currently links to CRM Lost Reason (verified
 		# by grep across crm/fcrm/doctype/*/*.json) -- the impact check below
 		# will always report 0 usage for this type until something wires it
@@ -56,7 +62,7 @@ GOVERNED_DOCTYPES = {
 	},
 	"CRM Campus": {
 		"name_field": "campus_name",
-		"owner_role": "Admissions Operations",
+		"owner_role": "Admissions Director",
 		"approver_roles": {"Admissions Director"},
 		"usage_checks": [
 			("CRM Contact", "branch"),
@@ -70,6 +76,33 @@ GOVERNED_DOCTYPES = {
 }
 
 
+def validate_governed_mutation(doc, method=None):
+	"""Reject direct updates; approved changes flow only through this module."""
+	if (
+		doc.doctype not in GOVERNED_DOCTYPES
+		or frappe.flags.get("crm_governance_change")
+		or frappe.session.user == "Administrator"
+	):
+		return
+	if doc.get_doc_before_save():
+		frappe.throw(
+			"Governed master data must be changed through the proposal and approval workflow.",
+			frappe.PermissionError,
+		)
+
+
+def prevent_governed_delete(doc, method=None):
+	if (
+		doc.doctype in GOVERNED_DOCTYPES
+		and not frappe.flags.get("crm_governance_change")
+		and frappe.session.user != "Administrator"
+	):
+		frappe.throw(
+			"Governed master data must be retired through the proposal and approval workflow.",
+			frappe.PermissionError,
+		)
+
+
 def _governed_config(doctype):
 	config = GOVERNED_DOCTYPES.get(doctype)
 	if not config:
@@ -79,18 +112,30 @@ def _governed_config(doctype):
 
 def _require_role(role, user=None):
 	user = user or frappe.session.user
-	if role not in frappe.get_roles(user):
+	if role not in _governance_roles_for_user(user):
 		frappe.throw(f"Only {role} can do this for this lookup type", frappe.PermissionError)
 
 
 def _require_owner_or_approver(config, user=None):
 	user = user or frappe.session.user
-	user_roles = set(frappe.get_roles(user))
+	user_roles = _governance_roles_for_user(user)
 	allowed_roles = {config["owner_role"]} | config["approver_roles"]
 	if not (user_roles & allowed_roles):
-		frappe.throw(
-			"You do not have access to this lookup type's governance data", frappe.PermissionError
-		)
+		frappe.throw("You do not have access to this lookup type's governance data", frappe.PermissionError)
+
+
+def _governance_roles_for_user(user):
+	"""Return canonical governance identities, never raw Frappe role aliases."""
+	if user == "Administrator":
+		return frozenset({role for config in GOVERNED_DOCTYPES.values() for role in config["approver_roles"]})
+	roles = frozenset(frappe.get_roles(user))
+	if classify_role_set(roles) == "system_manager":
+		# System Manager is a control-plane/recovery role, not a substitute for
+		# the named admissions approvers. In particular it must not collapse the
+		# Lead Sales + Marketing separation of duties for Lost Reason changes.
+		return frozenset()
+	profile = resolve_crm_profile(roles)
+	return frozenset({PROFILE_LABELS[profile]}) if profile else frozenset()
 
 
 def set_governance_defaults(doc):
@@ -103,7 +148,7 @@ def set_governance_defaults(doc):
 		return
 	if not doc.get("owner_role"):
 		doc.owner_role = config["owner_role"]
-	if not doc.get("approval_state"):
+	if doc.get("approval_state") in (None, "", "Proposed"):
 		doc.approval_state = "Approved"
 	if not doc.get("version"):
 		doc.version = 1
@@ -164,8 +209,28 @@ def propose_change(doctype, docname, action, new_value=None, reason=None):
 
 
 def _apply_change(change):
+	previous_flag = frappe.flags.get("crm_governance_change")
+	frappe.flags.crm_governance_change = True
+	try:
+		_apply_approved_change(change)
+	finally:
+		frappe.flags.crm_governance_change = previous_flag
+
+
+def _apply_approved_change(change):
 	if change.action == "Rename":
-		frappe.rename_doc(change.reference_doctype, change.reference_docname, change.new_value)
+		# The public frappe.rename_doc wrapper does not expose
+		# ignore_permissions in this Frappe version. This controlled path already
+		# authenticated the required governance approvers above, so call the
+		# underlying command narrowly rather than broadening DocPerm just to rename.
+		from frappe.model.rename_doc import rename_doc
+
+		rename_doc(
+			change.reference_doctype,
+			change.reference_docname,
+			change.new_value,
+			ignore_permissions=True,
+		)
 		doc = frappe.get_doc(change.reference_doctype, change.new_value)
 	else:
 		doc = frappe.get_doc(change.reference_doctype, change.reference_docname)
@@ -194,7 +259,7 @@ def approve_change(change_log_name):
 			frappe.throw(f"Change {change_log_name} is not pending approval")
 
 		config = _governed_config(change.reference_doctype)
-		user_roles = set(frappe.get_roles(frappe.session.user))
+		user_roles = _governance_roles_for_user(frappe.session.user)
 		matching_roles = user_roles & config["approver_roles"]
 		if not matching_roles:
 			frappe.throw("You are not an approver for this lookup type", frappe.PermissionError)
@@ -226,7 +291,7 @@ def reject_change(change_log_name, reason=None):
 		frappe.throw(f"Change {change_log_name} is not pending approval")
 
 	config = _governed_config(change.reference_doctype)
-	user_roles = set(frappe.get_roles(frappe.session.user))
+	user_roles = _governance_roles_for_user(frappe.session.user)
 	if not (user_roles & config["approver_roles"]):
 		frappe.throw("You are not an approver for this lookup type", frappe.PermissionError)
 

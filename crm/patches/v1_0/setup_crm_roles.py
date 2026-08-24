@@ -1,21 +1,14 @@
 import frappe
 
-NEW_ROLES = [
-	"Team Leader",
-	"Counseller",
-	"Sale",
-	"CTV-Sale",
-	"Promoter-PR",
-	"Marketing",
-	"Lead Sales",
-	"Admissions Director",
-	"Administrator",
-]
+from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES
+
+NEW_ROLES = list(CRM_POLICY_ROLE_NAMES)
 
 OLD_ROLES = [
 	# Old CRM roles
-	# Kept during the role-contract migration.  They are explicit aliases for
-	# the Sales profile in crm.api.session, not a permission elevation path.
+	# Kept during the role-contract migration. They are explicit aliases for
+	# canonical CRM profiles, not a permission elevation path. The retired
+	# duplicate ``Sales`` role is intentionally excluded from this catalog.
 	# A later, approved migration may remove them after account adoption has
 	# been audited.
 	# ERPNext business roles — irrelevant on a CRM-only deployment
@@ -61,19 +54,16 @@ OLD_ROLES = [
 def create_roles(role_names):
 	for role_name in role_names:
 		if not frappe.db.exists("Role", role_name):
-			frappe.get_doc({
-				"doctype": "Role",
-				"role_name": role_name,
-				"desk_access": 1,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "Role",
+					"role_name": role_name,
+					"desk_access": 1,
+				}
+			).insert(ignore_permissions=True)
 
 
 def execute():
-	# Remove old roles and all their assignments
-	for role_name in OLD_ROLES:
-		if frappe.db.exists("Role", role_name):
-			frappe.db.delete("Has Role", {"role": role_name})
-			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
-
+	# Alias retirement is a future, audit-gated migration. This setup patch must
+	# only ensure policy roles exist; it never deletes a role or assignment.
 	create_roles(NEW_ROLES)
-	frappe.db.commit()

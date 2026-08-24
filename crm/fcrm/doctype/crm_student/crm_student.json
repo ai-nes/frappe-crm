@@ -61,6 +61,11 @@
   "section_notes",
   "notes",
   "section_identity",
+  "identity",
+  "case_key",
+  "ownership_revision",
+  "intake_integrity_state",
+  "intake_quarantine_reason",
   "id_number",
   "id_issued_date",
   "id_issued_place",
@@ -130,12 +135,14 @@
    "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
   },
   {
-   "fieldname": "assigned_to",
+    "fieldname": "assigned_to",
+    "read_only": 1,
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assigned To",
-   "options": "CRM Staff"
+   "label": "Assigned To (Legacy Projection)",
+   "options": "CRM Staff",
+   "description": "Compatibility projection of owner_staff. Ownership commands are the authority."
   },
   {
    "fieldname": "owner_staff",
@@ -153,7 +160,7 @@
    "label": "Owning Team",
    "options": "CRM Team",
    "read_only": 1,
-   "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
+   "description": "Compatibility projection of a named Student Pool's Team. Ownership commands are the authority."
   },
   {
    "fieldname": "latest_score",
@@ -389,6 +396,48 @@
    "label": "Identity"
   },
   {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Student Identity",
+   "options": "CRM Student Identity",
+   "read_only": 1,
+   "description": "Canonical identity resolved by Student Intake; never inferred from a weak phone/email match."
+  },
+  {
+   "fieldname": "case_key",
+   "fieldtype": "Link",
+   "label": "Admission Case Key",
+   "options": "CRM Student Case Key",
+   "read_only": 1,
+   "description": "Physical identity + admission cycle enforcement record."
+  },
+  {
+   "default": "0",
+   "fieldname": "ownership_revision",
+   "fieldtype": "Int",
+   "label": "Ownership Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by ownership commands."
+  },
+  {
+   "default": "review_required",
+   "fieldname": "intake_integrity_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intake Integrity State",
+   "options": "resolved\nreview_required\nquarantined\nlegacy",
+   "read_only": 1,
+   "description": "Set by the signed intake/migration workflow; not a generic edit field."
+  },
+  {
+   "fieldname": "intake_quarantine_reason",
+   "fieldtype": "Small Text",
+   "label": "Intake Quarantine Reason",
+   "read_only": 1,
+   "description": "Redacted reason/category for remediation; raw PII never belongs here."
+  },
+  {
    "fieldname": "id_number",
    "fieldtype": "Data",
    "label": "ID Number"
@@ -420,108 +469,73 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Admissions Operations",
    "write": 1
   },
   {
    "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Team Leader",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "print": 1,
    "read": 1,
    "role": "CTV-Sale",
    "write": 1
   },
   {
    "create": 1,
-   "email": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Admissions Operations",
+   "role": "Counseller",
    "write": 1
   },
   {
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Admissions Director"
+   "role": "Giám đốc Tuyển sinh"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Lead Sales",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
   },
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
    "read": 1,
    "role": "Sales Manager",
    "write": 1
   },
   {
    "create": 1,
-   "email": 1,
-   "print": 1,
    "read": 1,
    "role": "Sales User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "Team Leader",
    "write": 1
   }
  ],

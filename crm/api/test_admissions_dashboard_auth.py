@@ -25,15 +25,23 @@ class TestAdmissionsDashboardAuth(FrappeTestCase):
 			require_dashboard_access(dashboard, user_roles={"Administrator"})
 
 	def test_require_dashboard_access_sale_role_allowed_for_sale(self):
-		for role in ("Sale", "CTV-Sale", "Counseller", "Team Leader"):
+		for role in ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader"):
 			require_dashboard_access("sale", user_roles={role})
 
 	def test_require_dashboard_access_sale_role_denied_for_offline_marketing(self):
 		with self.assertRaises(DashboardAccessDenied):
 			require_dashboard_access("offline_marketing", user_roles={"Sale"})
 
+	def test_require_dashboard_access_retired_sales_role_denied(self):
+		with self.assertRaises(DashboardAccessDenied):
+			require_dashboard_access("sale", user_roles={"Sales"})
+
 	def test_require_dashboard_access_promoter_allowed_for_offline_marketing(self):
 		require_dashboard_access("offline_marketing", user_roles={"Promoter-PR"})
+
+	def test_require_dashboard_access_marketing_allowed_for_marketing_dashboards(self):
+		for dashboard in ("digital_marketing", "offline_marketing"):
+			require_dashboard_access(dashboard, user_roles={"Marketing"})
 
 	def test_require_dashboard_access_promoter_denied_for_sale(self):
 		with self.assertRaises(DashboardAccessDenied):

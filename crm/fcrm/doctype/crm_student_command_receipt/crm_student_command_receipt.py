@@ -1,0 +1,27 @@
+import frappe
+from frappe.model.document import Document
+
+
+class CRMStudentCommandReceipt(Document):
+	"""Durable command receipt; request identity cannot be rewritten."""
+
+	_IMMUTABLE_FIELDS = (
+		"command_kind",
+		"command_key",
+		"request_fingerprint",
+		"actor",
+		"request_received_at",
+	)
+
+	def validate(self):
+		if self.is_new():
+			return
+		previous = self.get_doc_before_save()
+		if not previous:
+			return
+		for fieldname in self._IMMUTABLE_FIELDS:
+			if self.get(fieldname) != previous.get(fieldname):
+				frappe.throw(f"{fieldname} is immutable on a Student Command Receipt")
+
+	def on_trash(self):
+		frappe.throw("Student Command Receipts are append-only")

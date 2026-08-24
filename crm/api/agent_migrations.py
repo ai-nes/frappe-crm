@@ -2,6 +2,9 @@
 import frappe
 
 
+SALES_WORKLIST_ROLE_NAMES = ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Team Leader")
+
+
 def after_migrate() -> None:
 	"""Backfill sortable projections and add the hot-path composite indexes."""
 	frappe.db.sql(
@@ -32,7 +35,7 @@ def _grant_sales_worklist_capability() -> None:
 	if not frappe.get_meta("Role").has_field("custom_ai_capability_grants"):
 		return
 	changed = False
-	for role_name in ("Sale", "CTV-Sale", "Counseller", "Team Leader"):
+	for role_name in SALES_WORKLIST_ROLE_NAMES:
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)

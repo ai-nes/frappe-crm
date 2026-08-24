@@ -49,7 +49,7 @@ class TestCRMContact(FrappeTestCase):
 		self.assertFalse(contact.student)
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111111"}))
 
-	def test_transition_into_milestone_status_creates_linked_student(self):
+	def test_transition_into_milestone_status_does_not_create_student(self):
 		contact = self._make_contact("_Test Milestone Transition", "0911111112")
 		self.assertFalse(contact.student)
 
@@ -57,29 +57,28 @@ class TestCRMContact(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
-		self.assertTrue(contact.student)
-		student = frappe.get_doc("CRM Student", contact.student)
-		self.assertEqual(student.phone, "0911111112")
+		self.assertFalse(contact.student)
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111112"}))
 
-	def test_insert_directly_at_milestone_status_creates_linked_student(self):
+	def test_insert_directly_at_milestone_status_does_not_create_student(self):
 		contact = self._make_contact("_Test Milestone Insert", "0911111113", enrollment_status="Đã nhập học")
 		contact.reload()
 
-		self.assertTrue(contact.student)
-		self.assertTrue(frappe.db.exists("CRM Student", {"phone": "0911111113"}))
+		self.assertFalse(contact.student)
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111113"}))
 
-	def test_milestone_creation_does_not_refire_on_subsequent_saves(self):
+	def test_retired_milestone_writer_does_not_refire_on_subsequent_saves(self):
 		contact = self._make_contact("_Test Milestone Once", "0911111114", enrollment_status="Đã xác nhận")
 		contact.reload()
 		student_name = contact.student
-		self.assertTrue(student_name)
+		self.assertFalse(student_name)
 
 		contact.full_name = "_Test Milestone Once Renamed"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
 		self.assertEqual(contact.student, student_name)
-		self.assertEqual(frappe.db.count("CRM Student", {"phone": "0911111114"}), 1)
+		self.assertEqual(frappe.db.count("CRM Student", {"phone": "0911111114"}), 0)
 
 	# --------------------------------------------------------------- owner derivation
 

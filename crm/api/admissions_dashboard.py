@@ -38,7 +38,9 @@ def get_sales_dashboard(
 	admission_term=None,
 	section="overview",
 ):
-	scoped_staff = check_dashboard_access("sale", user=user)
+	# The public API is always authorized and scoped as the authenticated session
+	# user. A caller-supplied ``user`` must never select a different role/campus.
+	scoped_staff = check_dashboard_access("sale")
 	from_date, to_date = _normalize_date_range(from_date, to_date)
 	diff = frappe.utils.date_diff(to_date, from_date) or 1
 	prev_from_date = str(add_days(from_date, -diff))
@@ -59,12 +61,6 @@ def get_sales_dashboard(
 	if scoped_staff:
 		base_filters.append(["assigned_to", "in", scoped_staff])
 		prev_filters.append(["assigned_to", "in", scoped_staff])
-	elif user:
-		staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-		if staff_name:
-			base_filters.append(["assigned_to", "=", staff_name])
-			prev_filters.append(["assigned_to", "=", staff_name])
-
 	if sales_team:
 		staff_in_team = _staff_names_in_sales_team(sales_team)
 		base_filters.append(["assigned_to", "in", staff_in_team])

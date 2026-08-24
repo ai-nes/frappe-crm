@@ -8,18 +8,24 @@ from collections import Counter
 import frappe
 from frappe import _
 
+from crm.api.capability import _is_capability_gateway_user
+from crm.api.session import get_session_role_flags
+
 _ALLOWED_ROLES = frozenset({
-	"System Manager", "CRM Manager", "Sale", "CTV-Sale", "Team Leader",
-	"Promoter-PR", "Admissions Director",
+	"Sale", "Lead Sales", "Marketing", "Admissions Director",
+	"CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader",
+	"Promoter-PR", "Marketing Operator", "Marketing Lead", "Admissions Operations", "Giám đốc Tuyển sinh",
 })
 _E2E_EMAIL_PREFIX = "e2e-fpt-2026-"
 
 
 def _require_role() -> None:
+	if not _is_capability_gateway_user(get_session_role_flags()):
+		frappe.throw(_("You are not permitted to access aggregate admissions analytics."), frappe.PermissionError)
 	roles = set(frappe.get_roles())
 	if not _ALLOWED_ROLES.intersection(roles):
 		frappe.throw(_("You are not permitted to access aggregate admissions analytics."), frappe.PermissionError)
-	if not roles.intersection({"System Manager", "CRM Manager"}) and not frappe.db.exists(
+	if not frappe.db.exists(
 		"CRM Staff", {"user": frappe.session.user}
 	):
 		frappe.throw(_("A CRM Staff campus mapping is required for aggregate analytics."), frappe.PermissionError)

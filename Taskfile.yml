@@ -82,10 +82,12 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed data mẫu (student + scoring master data)
+    desc: Seed data mẫu và tài khoản Phase 2 (chỉ local demo)
     aliases: [seed-student, seed-sample-student]
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_demo.execute"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_phase2_staff.execute"
 
   e2e-seed:
     desc: Seed the isolated crm-agents E2E cohort and identities

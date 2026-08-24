@@ -6,17 +6,11 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
-from crm.api.session import CRM_ALLOWED_ROLES, get_session_role_flags
+from crm.api.session import get_session_role_flags
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
 
 OPERATIONS = ("read", "write", "create", "delete")
 CAPABILITY_CONTRACT_VERSION = "v1"
-
-# This whitelisted method serves the crm-agents AI copilot, whose real staff
-# The session contract is the sole authority for Copilot eligibility.  Do not
-# add a broader local allowlist here: that would let an unsupported role obtain
-# a capability manifest even though it has no canonical agent profile.
-CRM_AI_ALLOWED_ROLES = frozenset(CRM_ALLOWED_ROLES)
 
 # Timeout budget for the whole call, not per doctype — a stalled meta lookup on
 # one exposed doctype must not block the rest from being reported.
@@ -40,6 +34,11 @@ def _row_scoped(doctype: str) -> bool:
 
 _NO_GRANT = object()  # caller has zero operations on this doctype — omit, not an error
 _COMPUTE_ERROR = object()  # computing the grant raised — report "unknown", don't abort
+
+
+def _is_capability_gateway_user(session_flags: dict) -> bool:
+	"""Copilot serves operating roles; System Manager remains control-plane only."""
+	return bool(session_flags.get("is_crm_user")) and not session_flags.get("is_system_manager", False)
 
 
 def _doctype_columns(meta) -> list[str]:
@@ -155,7 +154,9 @@ def get_current_roles():
 	# Keep this trust boundary aligned with the Desk session and crm-agents
 	# resolver: mixed canonical profiles must never receive an authoritative
 	# role list that could be unioned into a broader capability manifest.
-	get_session_role_flags()
+	session_flags = get_session_role_flags()
+	if not _is_capability_gateway_user(session_flags):
+		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 	return {"roles": sorted(frappe.get_roles(frappe.session.user))}
 
 
@@ -173,10 +174,10 @@ def get_capability_manifest():
 	backend IP, so an IP-keyed limit would throttle all users together
 	instead of each caller individually.
 	"""
-	get_session_role_flags()
-	roles = sorted(frappe.get_roles())
-	if not set(roles) & CRM_AI_ALLOWED_ROLES:
+	session_flags = get_session_role_flags()
+	if not _is_capability_gateway_user(session_flags):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	roles = sorted(frappe.get_roles())
 
 	start = time.monotonic()
 	# The exposure roster is Frappe-admin-published metadata, not any single

@@ -11,6 +11,7 @@ import requests
 from contextlib import contextmanager
 from frappe.utils import now_datetime
 
+from crm.api.user import set_canonical_crm_profile
 from crm.demo import seed_demo
 from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
 
@@ -21,8 +22,8 @@ FIXTURE_CREATED_AT = datetime(2026, 8, 23, 9, 0, 0)
 LIVE_TEST_CLIENT = f"{PREFIX} Agent Client"
 LIVE_TEST_USERS = {
     "sales": ("e2e.sales@example.test", "Sale"),
-    "marketing": ("e2e.marketing@example.test", "Promoter-PR"),
-    "lead_sales": ("e2e.lead-sales@example.test", "Team Leader"),
+    "marketing": ("e2e.marketing@example.test", "Marketing"),
+    "lead_sales": ("e2e.lead-sales@example.test", "Lead Sales"),
     "admissions_director": ("e2e.admissions-director@example.test", "Admissions Director"),
     # Deliberately unresolved by crm-agents; never make this test identity a
     # privileged System Manager account merely to prove fail-closed behavior.
@@ -30,8 +31,8 @@ LIVE_TEST_USERS = {
 }
 _E2E_TOKEN_TTL_SECONDS = 60 * 60
 _MANAGED_ROLE_ALIASES = {
-    "System Manager", "CRM Manager", "Sales Manager", "Sales User",
-    "Sale", "CTV-Sale", "Marketing", "Promoter-PR", "Team Leader",
+	"System Manager", "CRM Manager", "Sales Manager", "Sales User", "Sales", "Sale",
+	"CTV-Sale", "Marketing", "Promoter-PR", "Team Leader",
     "Lead Sales", "Admissions Director", "Giám đốc Tuyển sinh",
 }
 
@@ -68,9 +69,8 @@ def _fixture_lock():
 def _ensure_staff(ctx):
     user = "crm.rep1@example.com"
     doc = frappe.get_doc("User", user)
-    if not any(row.role == "Sale" for row in doc.roles):
-        doc.append("roles", {"role": "Sale"})
-        doc.save(ignore_permissions=True)
+    set_canonical_crm_profile(doc, "Sale")
+    doc.save(ignore_permissions=True)
     department = frappe.db.get_value("CRM Department", {}, "name")
     if not department:
         department = frappe.get_doc({

@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model="show" :options="{ title: __('Assign Staff') }">
+  <Dialog v-if="isContact" v-model="show" :options="{ title: __('Assign Staff') }">
     <template #body-content>
       <div class="space-y-1.5">
         <div class="text-sm text-ink-gray-5">{{ __('Staff') }}</div>
@@ -34,7 +34,7 @@
 <script setup>
 import Link from '@/components/Controls/Link.vue'
 import { call, toast } from 'frappe-ui'
-import { ref } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 
 const props = defineProps({
   doctype: { type: String, required: true },
@@ -44,11 +44,13 @@ const props = defineProps({
 const emit = defineEmits(['reload'])
 
 const show = defineModel({ type: Boolean })
+const isContact = computed(() => props.doctype === 'CRM Contact')
 
 const staff = ref('')
 const loading = ref(false)
 
 async function assignStaff() {
+  if (!isContact.value) return
   loading.value = true
   try {
     const result = await call('crm.api.staff_assignment.assign_staff', {
@@ -64,4 +66,8 @@ async function assignStaff() {
     loading.value = false
   }
 }
+
+watchEffect(() => {
+  if (show.value && !isContact.value) show.value = false
+})
 </script>

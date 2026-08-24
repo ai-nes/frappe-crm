@@ -15,13 +15,15 @@ campus-wide-for-everyone condition (pre-Phase-1 behavior) without a code deploy.
 
 import frappe
 
-FULL_VISIBILITY_ROLES = {
-	"System Manager",
-	"CRM Manager",
-	"Administrator",
-	"Admissions Director",
-	"Admissions Operations",
-}
+from crm.fcrm.role_policy import (
+	case_scope_for_roles,
+)
+
+# Compatibility export for lifecycle.py only. Row-level Student/Contact access
+# no longer reads this set; it resolves the canonical policy below.
+FULL_VISIBILITY_ROLES = frozenset(
+	{"System Manager", "CRM Manager", "Administrator", "Admissions Director", "Admissions Operations"}
+)
 
 CACHE_TTL_SEC = 300
 
@@ -31,8 +33,11 @@ def get_permission_query_conditions(doctype, user=None):
 		user = frappe.session.user
 
 	roles = set(frappe.get_roles(user))
-	if FULL_VISIBILITY_ROLES & roles:
+	scope = _effective_case_scope(roles, doctype, user=user)
+	if scope == "all":
 		return None
+	if scope == "deny":
+		return "1=0"
 
 	crm_staff_name = _get_crm_staff_name(user)
 	if not crm_staff_name:
@@ -40,25 +45,23 @@ def get_permission_query_conditions(doctype, user=None):
 
 	table = f"`tab{doctype}`"
 
-	# Deliberately closed to the 5 lead-ownership roles the locked BR matrix defines.
-	# Marketing/Admissions roles are handled above via FULL_VISIBILITY_ROLES (bypass)
-	# or intentionally excluded (Marketing Operator/Lead have no Contact/Student
-	# access in this phase — see business-rules-data-scope.md) — not an omission.
 	if frappe.conf.get("crm_legacy_campus_scoping"):
 		# Legacy fallback only ever applied to Counseller/Promoter-PR's campus-wide
 		# scope; Sale/CTV-Sale keep their own-assigned-only rule even when this flag
 		# is set, so flipping it can't silently widen their visibility.
-		if "Sale" in roles or "CTV-Sale" in roles:
+		if scope in {"assigned", "own_assigned"}:
 			return f"{table}.assigned_to = {frappe.db.escape(crm_staff_name)}"
-		return _campus_condition(table, crm_staff_name)
-
-	if "Team Leader" in roles:
+		if scope in {"campus_assigned", "campus_assigned_contact"}:
+			return _campus_condition(table, crm_staff_name)
 		return _team_leader_condition(table, crm_staff_name)
 
-	if "Counseller" in roles or "Promoter-PR" in roles:
+	if scope in {"team_and_team_pool", "team_members_and_own_team_pool"}:
+		return _team_leader_condition(table, crm_staff_name)
+
+	if scope in {"campus_assigned", "campus_assigned_contact"}:
 		return _campus_condition(table, crm_staff_name)
 
-	if "Sale" in roles or "CTV-Sale" in roles:
+	if scope in {"assigned", "own_assigned"}:
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
@@ -75,14 +78,6 @@ def has_permission(doc, user=None, permission_type=None):
 	if not user:
 		user = frappe.session.user
 
-	roles = set(frappe.get_roles(user))
-	if FULL_VISIBILITY_ROLES & roles:
-		return True
-
-	crm_staff_name = _get_crm_staff_name(user)
-	if not crm_staff_name:
-		return False
-
 	condition = get_permission_query_conditions(doc.doctype, user=user)
 	if condition is None:
 		return True
@@ -98,6 +93,11 @@ def has_permission(doc, user=None, permission_type=None):
 	)
 
 
+def _effective_case_scope(roles, doctype, *, user):
+	"""Delegate policy selection; this module only turns a scope into SQL."""
+	return case_scope_for_roles(roles, doctype, administrator=user == "Administrator")
+
+
 def _cached(cache_key, loader):
 	cached = frappe.cache().get_value(cache_key)
 	if cached is not None:
@@ -108,10 +108,13 @@ def _cached(cache_key, loader):
 
 
 def _get_crm_staff_name(user):
-	return _cached(
-		f"crm_staff_name::{user}",
-		lambda: frappe.db.get_value("CRM Staff", {"user": user}, "name") or "",
-	) or None
+	return (
+		_cached(
+			f"crm_staff_name::{user}",
+			lambda: frappe.db.get_value("CRM Staff", {"user": user}, "name") or "",
+		)
+		or None
+	)
 
 
 def _get_teams(crm_staff_name):
@@ -123,6 +126,22 @@ def _get_teams(crm_staff_name):
 			pluck="team",
 		),
 	)
+
+
+def _get_teams_in_staff_campus(crm_staff_name):
+	"""Restrict membership-derived Team scope to the Staff record's Campus."""
+	return _cached(
+		f"crm_staff_campus_teams::{crm_staff_name}",
+		lambda: _load_teams_in_staff_campus(crm_staff_name),
+	)
+
+
+def _load_teams_in_staff_campus(crm_staff_name):
+	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
+	teams = _get_teams(crm_staff_name)
+	if not campus or not teams:
+		return []
+	return frappe.get_all("CRM Team", filters={"name": ["in", teams], "campus": campus}, pluck="name")
 
 
 def _primary_team(staff_name):
@@ -173,7 +192,7 @@ def _in_clause(field, values):
 
 
 def _team_leader_condition(table, crm_staff_name):
-	teams = _get_teams(crm_staff_name)
+	teams = _get_teams_in_staff_campus(crm_staff_name)
 	if not teams:
 		return "1=0"
 

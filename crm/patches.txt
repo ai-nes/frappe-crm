@@ -69,3 +69,8 @@ crm.patches.v1_0.backfill_enrollment_status_stage_category
 crm.patches.v1_0.seed_crm_interaction_type
 crm.patches.v1_0.add_ai_capability_gateway_fields
 crm.patches.v1_0.apply_canonical_crm_role_contract
+crm.patches.v1_0.apply_phase2_role_policy
+crm.patches.v1_0.backfill_canonical_role_targets
+crm.patches.v1_0.retire_duplicate_sales_role
+crm.patches.v1_0.phase3_prepare_student_intake_data
+crm.patches.v1_0.seed_student_pools
