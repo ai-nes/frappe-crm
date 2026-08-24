@@ -165,6 +165,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertIn(frappe.db.escape(self._team), condition)
 		self.assertIn(frappe.db.escape(second_team), condition)
 
+		staff_doc.reload()
+		staff_doc.team_memberships = [row for row in staff_doc.team_memberships if row.team != second_team]
+		staff_doc.save(ignore_permissions=True)
 		frappe.delete_doc("CRM Team", second_team, force=True)
 		self._cleanup_campus(second_campus)
 

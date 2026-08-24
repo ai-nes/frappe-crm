@@ -136,7 +136,13 @@ def get_users():
 
 		user.roles = frappe.get_roles(user.name)
 
-		user.role, user.crm_profile = get_crm_user_role(user.roles)
+		if user.name == "Administrator":
+			# Same blanket-role-grant issue as get_session_role_flags(): Administrator
+			# holds every role, which trips get_crm_user_role()'s ambiguous-profile
+			# fail-closed check and would otherwise drop it from crm_users below.
+			user.role, user.crm_profile = "System Manager", None
+		else:
+			user.role, user.crm_profile = get_crm_user_role(user.roles)
 		if not user.role and "Guest" in user.roles:
 			user.role = "Guest"
 
