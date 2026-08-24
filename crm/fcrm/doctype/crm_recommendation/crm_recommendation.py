@@ -49,19 +49,30 @@ class CRMRecommendation(Document):
 			frappe.throw(
 				_("CRM Recommendation requires student, rule_key, source_intent_id and condition_version before it can be named"),
 			)
-		fingerprint_parts = [
-			self.student,
-			self.rule_key,
-			self.source_intent_id,
-			str(self.condition_version),
-		]
+		# The E2E fixture is reset/reseeded on a shared development site where
+		# Student and Intent use monotonic naming series.  Its context hash is a
+		# fixed fixture key, so preserve a stable Recommendation/Action identity
+		# across resets without changing production recommendation fingerprints.
+		if self.rule_key == "e2e_capture_readiness" and self.context_hash:
+			fingerprint_parts = ["e2e_capture", self.context_hash]
+		else:
+			fingerprint_parts = [
+				self.student,
+				self.rule_key,
+				self.source_intent_id,
+				str(self.condition_version),
+			]
 		# Legacy rows keep their original four-part identity. A versioned context
 		# adds one immutable revision component.
-		if self.context_hash:
+		if self.context_hash and self.rule_key != "e2e_capture_readiness":
 			fingerprint_parts.append(self.context_hash)
 		fingerprint = "|".join(fingerprint_parts)
 		digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:24]
-		self.name = f"REC-{digest}"
+		# The reset API accepts only this fixture namespace, never production
+		# REC-* IDs. Keep its marker in the durable aggregate identity so an
+		# agent-side cleanup can prove that an inbox event belongs to the fixture.
+		prefix = "REC-E2E-FPT-2026-" if self.rule_key == "e2e_capture_readiness" else "REC-"
+		self.name = f"{prefix}{digest}"
 
 
 def _crm_staff_campus(user: str) -> tuple[str | None, str | None]:

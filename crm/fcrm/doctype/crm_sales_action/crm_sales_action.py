@@ -16,7 +16,8 @@ class CRMSalesAction(Document):
 		if not self.recommendation:
 			frappe.throw(_("CRM Sales Action requires a recommendation before it can be named"))
 		digest = hashlib.sha256(self.recommendation.encode("utf-8")).hexdigest()[:24]
-		self.name = f"SA-{digest}"
+		prefix = "SA-E2E-FPT-2026-" if self.recommendation.startswith("REC-E2E-FPT-2026-") else "SA-"
+		self.name = f"{prefix}{digest}"
 
 
 def _crm_staff_campus(user: str) -> tuple[str | None, str | None]:

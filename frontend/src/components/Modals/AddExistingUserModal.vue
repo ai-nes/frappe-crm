@@ -72,23 +72,25 @@ const { users, isAdmin } = usersStore()
 const show = defineModel({ type: Boolean })
 
 const newUsers = ref([])
-const role = ref('Sales User')
+const role = ref('Sale')
 
 const description = computed(() => {
   return {
     'System Manager':
       'Can manage all aspects of the CRM, including user management, customizations and settings.',
-    'Sales Manager':
-      'Can manage and invite new users, and create public & private views (reports).',
-    'Sales User':
-      'Can work with leads and deals and create private views (reports).',
+    Sale: 'Can work with permitted admissions records and private reports.',
+    Marketing: 'Can access permitted campaign and aggregate CRM information.',
+    'Lead Sales': 'Can access Frappe-granted admissions operations for sales leads.',
+    'Admissions Director': 'Can access Frappe-granted admissions aggregate information.',
   }[role.value]
 })
 
 const roleOptions = computed(() => {
   return [
-    { value: 'Sales User', label: __('Sales User') },
-    ...(isAdmin() ? [{ value: 'Sales Manager', label: __('Manager') }] : []),
+    { value: 'Sale', label: __('Sales') },
+    ...(isAdmin() ? [{ value: 'Marketing', label: __('Marketing') }] : []),
+    ...(isAdmin() ? [{ value: 'Lead Sales', label: __('Lead Sales') }] : []),
+    ...(isAdmin() ? [{ value: 'Admissions Director', label: __('Admissions Director') }] : []),
     ...(isAdmin() ? [{ value: 'System Manager', label: __('Admin') }] : []),
   ]
 })

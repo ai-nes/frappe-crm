@@ -153,6 +153,26 @@ OPS_PERMS = [
 	_p("Admissions Director",   read=1, report=1),
 ]
 
+RECOMMENDATION_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, write=1, email=1, prt=1, report=1),
+	_p("Counseller", read=1, write=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, prt=1),
+	_p("CTV-Sale", read=1, write=1, prt=1),
+	_p("Promoter-PR", read=1),
+]
+
+SALES_ACTION_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Counseller", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, create=1, prt=1, report=1),
+	_p("CTV-Sale", read=1, write=1, create=1, prt=1),
+	_p("Promoter-PR", read=1),
+]
+
 # Marketing roles are scoped to Campaign/Event ownership, not lead ownership — see
 # business-rules-data-scope.md. Not granted access to CRM Contact/CRM Student here.
 CAMPAIGN_EVENT_PERMS = [
@@ -195,6 +215,8 @@ DOCTYPE_PERMS = {
 	"CRM Contact":  CONTACT_PERMS,
 	"CRM Score Template": REF_PERMS,
 	"CRM Score History":  OPS_PERMS,
+	"CRM Recommendation": RECOMMENDATION_PERMS,
+	"CRM Sales Action": SALES_ACTION_PERMS,
 	# Reference data
 	"CRM Campus":            CAMPUS_PERMS,
 	"CRM Major":             REF_PERMS,
@@ -237,6 +259,34 @@ DOCTYPE_PERMS = {
 	"Service Level Agreement": SYS_PERMS,
 	"CRM Influence":               SYS_PERMS,
 	"CRM Academic Year Config":    SYS_PERMS,
+}
+
+# Canonical UI/persona role names are migration aliases for the existing
+# Frappe permission authorities.  Keep the mapping here, beside the sole
+# DocPerm source, so the new role names never grant more access than their
+# established counterpart.  Row scope remains governed by the existing
+# permission hooks; this only makes equivalent DocType grants explicit.
+PROFILE_PERMISSION_ALIASES = {
+	"Sale": ("Sales Manager", "Sales User"),
+	"Promoter-PR": ("Marketing",),
+	"Team Leader": ("Lead Sales",),
+}
+
+
+def _expand_profile_permission_aliases(perms):
+	expanded = list(perms)
+	roles = {permission["role"] for permission in expanded}
+	for permission in perms:
+		for alias in PROFILE_PERMISSION_ALIASES.get(permission["role"], ()):
+			if alias not in roles:
+				expanded.append({**permission, "role": alias})
+				roles.add(alias)
+	return expanded
+
+
+DOCTYPE_PERMS = {
+	doctype: _expand_profile_permission_aliases(perms)
+	for doctype, perms in DOCTYPE_PERMS.items()
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

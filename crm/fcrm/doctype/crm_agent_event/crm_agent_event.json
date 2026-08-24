@@ -12,7 +12,7 @@
   {"fieldname": "source_revision", "fieldtype": "Data", "label": "Source Revision", "read_only": 1, "reqd": 1},
   {"default": "1", "fieldname": "contract_version", "fieldtype": "Int", "label": "Contract Version", "read_only": 1, "reqd": 1},
   {"fieldname": "occurred_at", "fieldtype": "Datetime", "label": "Occurred At", "read_only": 1, "reqd": 1},
-  {"default": "pending", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "pending\ndelivered\ndead_letter", "read_only": 1, "reqd": 1},
+  {"default": "pending", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "pending\nprocessing\nquiesced\ndelivered\ndead_letter", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "attempts", "fieldtype": "Int", "label": "Attempts", "read_only": 1},
   {"fieldname": "next_attempt_at", "fieldtype": "Datetime", "label": "Next Attempt At", "read_only": 1},
   {"fieldname": "delivered_at", "fieldtype": "Datetime", "label": "Delivered At", "read_only": 1},

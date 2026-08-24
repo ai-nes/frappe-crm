@@ -4,15 +4,20 @@ Run: bench --site crm.localhost execute crm.demo.seed_e2e.execute
 """
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import frappe
+import requests
+from contextlib import contextmanager
 from frappe.utils import now_datetime
 
 from crm.demo import seed_demo
 from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
 
 PREFIX = "E2E-FPT-2026"
+FIXTURE_VERSION = "capture-v1"
+FIXTURE_RUN_ID = f"{PREFIX}-{FIXTURE_VERSION}"
+FIXTURE_CREATED_AT = datetime(2026, 8, 23, 9, 0, 0)
 LIVE_TEST_CLIENT = f"{PREFIX} Agent Client"
 LIVE_TEST_USERS = {
     "sales": ("e2e.sales@example.test", "Sale"),
@@ -24,6 +29,11 @@ LIVE_TEST_USERS = {
     "admin": ("e2e.admin@example.test", "E2E Test Admin"),
 }
 _E2E_TOKEN_TTL_SECONDS = 60 * 60
+_MANAGED_ROLE_ALIASES = {
+    "System Manager", "CRM Manager", "Sales Manager", "Sales User",
+    "Sale", "CTV-Sale", "Marketing", "Promoter-PR", "Team Leader",
+    "Lead Sales", "Admissions Director", "Giám đốc Tuyển sinh",
+}
 
 CASES = [
     ("01", "Nguyen Minh An", "Có triển vọng", 18, "Deposit Intent", "Very High", "Zalo Chat", 3, "Captured", "Hỏi học phí, học bổng và xác nhận muốn gọi lại hôm nay."),
@@ -37,6 +47,22 @@ CASES = [
     ("09", "Ngo Bao Chau", "Có triển vọng", 1, "Admission Process", "Very High", "Consultation Register", 16, "Captured", "Hồ sơ cần bổ sung, vừa được chuyển sang giai đoạn mới."),
     ("10", "Huynh Gia Bao", "Từ chối", 6, "Tuition", "High", "Phone Call", 10, "No Response", "Đã chọn trường khác."),
 ]
+
+# Capture starts with two deterministic, active recommendations.  Their input
+# intent IDs are Frappe-owned fixture data, so the normal Recommendation
+# controller still supplies its deterministic fingerprint/name.  The later
+# accept transition exercises the real action/outbox lifecycle.
+CAPTURE_CASES = (
+	("01", "CALL", "high"),
+	("02", "FOLLOW_UP", "medium"),
+)
+
+
+@contextmanager
+def _fixture_lock():
+    lock = frappe.cache().lock(f"{PREFIX}:fixture-lock", timeout=120)
+    with lock:
+        yield
 
 
 def _ensure_staff(ctx):
@@ -71,8 +97,7 @@ def _ensure_live_test_user(email, role):
             "roles": [{"role": role}],
         }).insert(ignore_permissions=True)
     user = frappe.get_doc("User", email)
-    e2e_roles = {configured_role for _, configured_role in LIVE_TEST_USERS.values()}
-    managed_roles = e2e_roles | ({"System Manager"} if email == LIVE_TEST_USERS["admin"][0] else set())
+    managed_roles = _MANAGED_ROLE_ALIASES
     user.roles = [row for row in user.roles if row.role not in managed_roles or row.role == role]
     if not any(row.role == role for row in user.roles):
         user.append("roles", {"role": role})
@@ -122,6 +147,39 @@ def _ensure_live_test_aggregate_staff(ctx):
 			"doctype": "CRM Staff", "full_name": f"{PREFIX} Live Test {label}", "user": email,
 			"department": department, "campus": ctx["campus"], "target": 10,
 		}).insert(ignore_permissions=True)
+
+
+def _ensure_cross_campus_staff(ctx):
+	"""Create a real CRM Staff row in the negative case's campus."""
+	email = "e2e.other-campus@example.test"
+	role = "Sale"
+	_ensure_live_test_user(email, role)
+	department = frappe.db.get_value(
+		"CRM Department", {"campus": ctx["campus"]}, "name"
+	)
+	if not department:
+		department = frappe.get_doc({
+			"doctype": "CRM Department",
+			"department_name": f"{PREFIX} Other Campus Sales",
+			"campus": ctx["campus"],
+		}).insert(ignore_permissions=True).name
+	staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
+	if staff:
+		frappe.db.set_value(
+			"CRM Staff", staff,
+			{"department": department, "campus": ctx["campus"]},
+			update_modified=False,
+		)
+		return staff, email
+	staff = frappe.get_doc({
+		"doctype": "CRM Staff",
+		"full_name": f"{PREFIX} Other Campus Sales",
+		"user": email,
+		"department": department,
+		"campus": ctx["campus"],
+		"target": 10,
+	}).insert(ignore_permissions=True).name
+	return staff, email
 
 
 def _ensure_live_test_client():
@@ -182,7 +240,7 @@ def _normalize_e2e_intent_timestamps(student, days_ago):
 def _put_student(ctx, assigned_to, item):
     code, name, status, stage_days, intent, importance, channel, interaction_days, outcome, notes = item
     email = f"e2e-fpt-2026-{code}@example.test"
-    phone = f"09862026{code}"
+    phone = f"09862026{code}" if str(code).isdigit() else "0986202699"
     existing = frappe.db.exists("CRM Student", {"email": email})
     if existing:
         frappe.db.set_value(
@@ -223,19 +281,339 @@ def _reset_e2e_recommendation_lifecycle(students):
         "CRM Recommendation", filters={"student": ["in", students]}, pluck="name"
     )
     if not recommendations:
-        return
+        return {"deleted": 0, "agent_state": _clear_agent_fixture_state([])}
     actions = frappe.get_all(
         "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
     )
+    aggregate_names = [*recommendations, *actions]
+    event_names = frappe.get_all(
+        "CRM Agent Event", filters={"aggregate_name": ["in", aggregate_names]}, pluck="name"
+    )
+    agent_state = _clear_agent_fixture_state(aggregate_names)
+    if event_names:
+        frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
     for action in actions:
         frappe.delete_doc("CRM Sales Action", action, ignore_permissions=True, force=True)
     for recommendation in recommendations:
         frappe.delete_doc("CRM Recommendation", recommendation, ignore_permissions=True, force=True)
+    return {"deleted": len(recommendations), "agent_state": agent_state}
 
 
-@frappe.whitelist()
-def execute():
-    """Seed master score data and exactly ten isolated student records."""
+def _ensure_cross_campus_negative_case(ctx):
+    """Create one non-worklist recommendation in a second campus.
+
+    It is included in the synthetic reset namespace but deliberately uses a
+    different rule key, so readiness still expects exactly the two positive
+    capture rows. The role rehearsal proves Frappe filters this row out.
+    """
+    other_campus = frappe.db.exists("CRM Campus", {"campus_name": f"{PREFIX} Other Campus"})
+    if not other_campus:
+        other_campus = frappe.get_doc({
+            "doctype": "CRM Campus", "campus_name": f"{PREFIX} Other Campus",
+            "campus_code": "E2E26-OTHER", "province": ctx["province"],
+        }).insert(ignore_permissions=True).name
+    other_ctx = {**ctx, "campus": other_campus}
+    other_staff, other_user = _ensure_cross_campus_staff(other_ctx)
+    student = _put_student(
+        other_ctx,
+        other_staff,
+        ("X", "Cross Campus", "Mới", 0, "Major Inquiry", "Medium", "Zalo Chat", 0, "Captured", f"{FIXTURE_RUN_ID}: cross-campus negative"),
+    )
+    # Keep the negative row assigned to a valid staff record in the other
+    # campus. This makes the denial prove campus isolation rather than an
+    # unmapped-owner fallback.
+    frappe.db.set_value(
+        "CRM Student", student, {"owner": other_user, "assigned_to": other_staff}, update_modified=False
+    )
+    intent = frappe.db.get_value("CRM Intent", {"student": student}, "name", order_by="creation asc")
+    recommendation = frappe.db.exists(
+        "CRM Recommendation", {"student": student, "rule_key": "e2e_capture_cross_campus"}
+    )
+    if recommendation:
+        return student, recommendation
+    candidate = frappe.get_doc({
+        "doctype": "CRM Recommendation",
+        "student": student,
+        "rule_key": "e2e_capture_cross_campus",
+        "source_intent_id": intent,
+        "condition_version": 1,
+        "priority": "low",
+        "status": "new",
+        "context_hash": f"{FIXTURE_RUN_ID}:cross-campus",
+        "created_at": FIXTURE_CREATED_AT,
+        "recommended_action": "FOLLOW_UP",
+        "reason": f"{FIXTURE_RUN_ID}: cross-campus negative",
+        "evidence": {"fixture_run_id": FIXTURE_RUN_ID, "negative_case": True},
+    })
+    candidate.run_method("autoname")
+    candidate.insert(ignore_permissions=True)
+    return student, candidate.name
+
+
+def generate_capture_lifecycle() -> dict:
+    """Create the fixed, idempotent recommendation set used by UTA rehearsal."""
+    created: list[str] = []
+    existing: list[str] = []
+    for code, action, priority in CAPTURE_CASES:
+        student = frappe.db.get_value("CRM Student", {"email": f"e2e-fpt-2026-{code}@example.test"}, "name")
+        if not student:
+            raise RuntimeError(f"{FIXTURE_RUN_ID}: missing fixture student {code}")
+        intent = frappe.db.get_value("CRM Intent", {"student": student, "importance": "Very High"}, "name", order_by="creation asc")
+        if not intent:
+            raise RuntimeError(f"{FIXTURE_RUN_ID}: missing high-priority intent for {student}")
+        candidate = frappe.get_doc({
+            "doctype": "CRM Recommendation", "student": student,
+            "rule_key": "e2e_capture_readiness", "source_intent_id": intent,
+            "condition_version": 1, "priority": priority, "status": "new",
+            "context_hash": f"{FIXTURE_RUN_ID}:{code}",
+            "created_at": FIXTURE_CREATED_AT, "recommended_action": action,
+            "reason": f"{FIXTURE_RUN_ID}: deterministic capture recommendation",
+            "evidence": {"fixture_run_id": FIXTURE_RUN_ID, "student_code": code},
+        })
+        candidate.run_method("autoname")
+        if frappe.db.exists("CRM Recommendation", candidate.name):
+            existing.append(candidate.name)
+            continue
+        candidate.insert(ignore_permissions=True)
+        created.append(candidate.name)
+    return {"fixture_run_id": FIXTURE_RUN_ID, "created": created, "existing": existing}
+
+
+def wait_for_capture_readiness(max_attempts: int = 10) -> dict:
+    """Bounded readiness assertion with stable IDs; never capture an empty list."""
+    if not isinstance(max_attempts, int) or max_attempts < 1 or max_attempts > 30:
+        raise ValueError("max_attempts must be between 1 and 30")
+    for _ in range(max_attempts):
+        rows = frappe.get_all(
+            "CRM Recommendation",
+            filters={
+                "rule_key": "e2e_capture_readiness",
+                "context_hash": ["like", f"{FIXTURE_RUN_ID}:%"],
+                "status": "new",
+            },
+            fields=["name", "student", "recommended_action"],
+            order_by="name asc",
+        )
+        if len(rows) != len(CAPTURE_CASES):
+            continue
+        expected = {
+            f"{FIXTURE_RUN_ID}:{code}": (action, priority)
+            for code, action, priority in CAPTURE_CASES
+        }
+        actual = {
+            frappe.db.get_value("CRM Recommendation", row["name"], "context_hash"): (
+                row["recommended_action"],
+                frappe.db.get_value("CRM Recommendation", row["name"], "priority"),
+            )
+            for row in rows
+        }
+        if actual != expected:
+            continue
+
+        original_user = frappe.session.user
+        try:
+            frappe.set_user(LIVE_TEST_USERS["sales"][0])
+            from crm.api.student_worklist import list_student_worklist
+
+            worklist = list_student_worklist(page_size=50)
+            worklist_ids = {item["recommendation"] for item in worklist["items"]}
+            if worklist_ids != {row["name"] for row in rows}:
+                continue
+
+            cross_campus = frappe.get_all(
+                "CRM Recommendation",
+                filters={
+                    "rule_key": "e2e_capture_cross_campus",
+                    "context_hash": f"{FIXTURE_RUN_ID}:cross-campus",
+                    "status": "new",
+                },
+                pluck="name",
+            )
+            if len(cross_campus) != 1:
+                continue
+            cross_campus_id = cross_campus[0]
+            cross_campus_is_hidden = True
+            for role_user in (
+                LIVE_TEST_USERS["marketing"][0],
+                LIVE_TEST_USERS["lead_sales"][0],
+            ):
+                frappe.set_user(role_user)
+                role_worklist = list_student_worklist(page_size=50)
+                if cross_campus_id in {
+                    item["recommendation"] for item in role_worklist["items"]
+                }:
+                    cross_campus_is_hidden = False
+                    break
+                cross_doc = frappe.get_doc("CRM Recommendation", cross_campus_id)
+                if cross_doc.has_permission("read"):
+                    cross_campus_is_hidden = False
+                    break
+            if not cross_campus_is_hidden:
+                continue
+        finally:
+            frappe.set_user(original_user)
+        return {
+            "fixture_run_id": FIXTURE_RUN_ID,
+            "ready": True,
+            "recommendations": rows,
+            "worklist": worklist,
+        }
+    raise RuntimeError(f"{FIXTURE_RUN_ID}: capture recommendations did not become ready")
+
+
+def _clear_agent_fixture_state(aggregate_names: list[str]) -> dict:
+    """Clear only run-correlated agent state before deleting Frappe rows.
+
+    A configured agent endpoint is mandatory when the fixture produced outbox
+    events: deleting CRM rows first would leave a retry able to re-contaminate
+    the next run. A fresh namespace can proceed without agent configuration.
+    """
+    base_url = frappe.conf.get("crm_agents_url")
+    api_key = frappe.conf.get("crm_agents_e2e_reset_api_key")
+    if not base_url or not api_key:
+        if not aggregate_names:
+            return {"deleted_inbox": 0, "deleted_sessions": 0, "skipped": "empty_namespace"}
+        raise RuntimeError("E2E reset requires crm_agents_url and crm_agents_e2e_reset_api_key")
+    from crm.api.agent_events import quiesce_agent_events
+
+    quiesce_agent_events(aggregate_names)
+    # Make the producer-side quiesce visible before the agent-side reset; a
+    # scheduler worker must not observe the old pending state and re-enqueue
+    # an event after the distributed cleanup starts.
+    frappe.db.commit()
+    response = requests.post(
+        f"{base_url.rstrip('/')}/api/v1/maintenance/e2e-reset",
+        json={
+            "aggregate_names": aggregate_names,
+            "fixture_run_id": FIXTURE_RUN_ID,
+            # The capture runner may add exact session/thread IDs here. Do
+            # not broaden reset to every conversation owned by a fixture user.
+            "session_ids": [],
+            "thread_ids": [],
+        },
+        headers={"X-API-Key": api_key},
+        timeout=10,
+    )
+    response.raise_for_status()
+    result = response.json()
+    residual = {
+        key: result.get(key, 0)
+        for key in (
+            "inbox_remaining",
+            "sessions_remaining",
+            "checkpoint_remaining",
+            "checkpoint_writes_remaining",
+        )
+        if result.get(key, 0)
+    }
+    if residual:
+        raise RuntimeError(f"{FIXTURE_RUN_ID}: agent reset left residual state: {residual}")
+    return result
+
+
+def rehearse_permissioned_lifecycle() -> dict:
+    """Exercise the real CAS APIs as fixture roles, never direct DB writes."""
+    frappe.only_for("System Manager")
+    readiness = wait_for_capture_readiness()
+    rows = readiness["recommendations"]
+    sales_email = LIVE_TEST_USERS["sales"][0]
+    marketing_email = LIVE_TEST_USERS["marketing"][0]
+    lead_sales_email = LIVE_TEST_USERS["lead_sales"][0]
+    original_user = frappe.session.user
+    positive_ids = {row["name"] for row in rows}
+    cross_campus = frappe.get_all(
+        "CRM Recommendation",
+        filters={"rule_key": "e2e_capture_cross_campus", "context_hash": f"{FIXTURE_RUN_ID}:cross-campus", "status": "new"},
+        pluck="name",
+    )
+    if len(cross_campus) != 1:
+        raise RuntimeError("cross-campus negative recommendation is missing")
+    cross_campus_id = cross_campus[0]
+
+    def visible_worklist(user: str) -> dict:
+        frappe.set_user(user)
+        from crm.api.student_worklist import list_student_worklist
+
+        return list_student_worklist(page_size=50)
+
+    try:
+        marketing_worklist = visible_worklist(marketing_email)
+        lead_sales_worklist = visible_worklist(lead_sales_email)
+        expected_ids = positive_ids
+        if {item["recommendation"] for item in marketing_worklist["items"]} != expected_ids:
+            raise RuntimeError("Marketing could not read the campus-scoped recommendation worklist")
+        if {item["recommendation"] for item in lead_sales_worklist["items"]} != expected_ids:
+            raise RuntimeError("Lead Sales could not read the campus-scoped recommendation worklist")
+        if cross_campus_id in {
+            item["recommendation"]
+            for item in (*marketing_worklist["items"], *lead_sales_worklist["items"])
+        }:
+            raise RuntimeError("a cross-campus recommendation leaked into an aggregate worklist")
+
+        for user in (sales_email, marketing_email, lead_sales_email):
+            frappe.set_user(user)
+            cross_doc = frappe.get_doc("CRM Recommendation", cross_campus_id)
+            if cross_doc.has_permission("read"):
+                raise RuntimeError(
+                    f"cross-campus recommendation direct-read leaked to {user}"
+                )
+
+        campus = frappe.db.get_value("CRM Staff", {"user": marketing_email}, "campus")
+        for item in marketing_worklist["items"]:
+            student_campus = frappe.db.get_value("CRM Student", {"name": frappe.db.get_value("CRM Recommendation", item["recommendation"], "student")}, "branch")
+            if student_campus != campus:
+                raise RuntimeError("Worklist returned a cross-campus recommendation")
+
+        sales_recommendation = frappe.get_doc("CRM Recommendation", rows[0]["name"])
+        frappe.set_user(sales_email)
+        from crm.api.student_decision import transition_recommendation
+        accepted = transition_recommendation(
+            sales_recommendation.name,
+            str(sales_recommendation.modified),
+            "accepted",
+        )
+        if not accepted.get("sales_action"):
+            raise RuntimeError("Sales acceptance did not create CRM Sales Action")
+        action = frappe.get_doc("CRM Sales Action", accepted["sales_action"])
+        from crm.api.student_decision import record_sales_action_outcome
+        outcome = record_sales_action_outcome(
+            action.name,
+            str(action.modified),
+            "INTEREST_INCREASED",
+            "fixture permissioned outcome",
+        )
+
+        denied_recommendation = frappe.get_doc("CRM Recommendation", rows[1]["name"])
+        before_status = denied_recommendation.status
+        frappe.set_user(marketing_email)
+        try:
+            transition_recommendation(
+                denied_recommendation.name,
+                str(denied_recommendation.modified),
+                "rejected",
+                decision_reason="fixture observer denial",
+            )
+        except frappe.PermissionError:
+            pass
+        else:
+            raise RuntimeError("Marketing observer unexpectedly changed a recommendation")
+        denied_recommendation.reload()
+        if denied_recommendation.status != before_status:
+            raise RuntimeError("Denied Marketing write changed the recommendation")
+        return {
+            "fixture_run_id": FIXTURE_RUN_ID,
+            "sales_accepted": accepted["name"],
+            "sales_action": accepted["sales_action"],
+            "sales_outcome": outcome["name"],
+            "marketing_denied": denied_recommendation.name,
+            "cross_campus_denied": cross_campus_id,
+        }
+    finally:
+        frappe.set_user(original_user)
+
+
+def _execute(*, rehearse: bool = True):
+    """Seed the cohort and, by default, run the complete permissioned rehearsal."""
     if not {"System Manager", "CRM Manager"}.intersection(frappe.get_roles()):
         frappe.throw("Only CRM managers may seed the isolated E2E cohort.", frappe.PermissionError)
     seed_demo._seed_intent_types()
@@ -267,67 +645,101 @@ def execute():
     staff = _ensure_live_test_sales_staff(ctx)
     _ensure_live_test_aggregate_staff(ctx)
     names = [_put_student(ctx, staff, item) for item in CASES]
+    cross_campus_student, _ = _ensure_cross_campus_negative_case(ctx)
+    names.append(cross_campus_student)
     _reset_e2e_recommendation_lifecycle(names)
+    generator = generate_capture_lifecycle()
+    _, cross_campus_recommendation = _ensure_cross_campus_negative_case(ctx)
     frappe.db.commit()
-    print({"prefix": PREFIX, "student_count": len(names), "students": names})
+    readiness = wait_for_capture_readiness()
+    rehearsal = rehearse_permissioned_lifecycle() if rehearse else None
+    result = {
+        "prefix": PREFIX,
+        "student_count": len(names),
+        "students": names,
+        "cross_campus_recommendation": cross_campus_recommendation,
+        **generator,
+        "readiness": readiness,
+        "rehearsal": rehearsal,
+    }
+    print(result)
+    return result
+
+
+@frappe.whitelist()
+def execute(rehearse: bool = True):
+    with _fixture_lock():
+        return _execute(rehearse=rehearse)
+
+
+def _reset():
+    """Delete only the isolated E2E cohort and its dedicated identities.
+
+    Run: bench --site crm.localhost execute crm.demo.seed_e2e.reset
+    Shared master data and non-E2E CRM records are never removed.
+    """
+    student_names = frappe.get_all(
+        "CRM Student",
+        filters={"email": ["like", "e2e-fpt-2026-%@example.test"]},
+        pluck="name",
+    )
+    recommendations = frappe.get_all(
+        "CRM Recommendation", filters={"student": ["in", student_names]}, pluck="name"
+    ) if student_names else []
+    actions = frappe.get_all(
+        "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
+    ) if recommendations else []
+    aggregate_names = [*recommendations, *actions]
+    event_names = frappe.get_all(
+        "CRM Agent Event", filters={"aggregate_name": ["in", aggregate_names]}, pluck="name"
+    ) if aggregate_names else []
+    agent_state = _clear_agent_fixture_state(aggregate_names)
+
+    if event_names:
+        frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
+    for name in actions:
+        frappe.delete_doc("CRM Sales Action", name, ignore_permissions=True, force=True)
+    for name in recommendations:
+        frappe.delete_doc("CRM Recommendation", name, ignore_permissions=True, force=True)
+
+    if student_names:
+        interaction_names = frappe.get_all(
+            "CRM Interaction", filters={"student": ["in", student_names]}, pluck="name"
+        )
+        if interaction_names:
+            for name in frappe.get_all(
+                "CRM Intent", filters={"interaction": ["in", interaction_names]}, pluck="name"
+            ):
+                frappe.delete_doc("CRM Intent", name, ignore_permissions=True, force=True)
+            for name in interaction_names:
+                frappe.delete_doc("CRM Interaction", name, ignore_permissions=True, force=True)
+        for name in student_names:
+            frappe.delete_doc("CRM Student", name, ignore_permissions=True, force=True)
+
+    fixture_users = [email for email, _ in LIVE_TEST_USERS.values()]
+    for name in frappe.get_all(
+        "OAuth Bearer Token", filters={"user": ["in", fixture_users]}, pluck="name"
+    ):
+        frappe.delete_doc("OAuth Bearer Token", name, ignore_permissions=True, force=True)
+    for name in frappe.get_all("CRM Staff", filters={"user": ["in", fixture_users]}, pluck="name"):
+        frappe.delete_doc("CRM Staff", name, ignore_permissions=True, force=True)
+    for email in fixture_users:
+        if frappe.db.exists("User", email):
+            frappe.delete_doc("User", email, ignore_permissions=True, force=True)
+    if frappe.db.exists("OAuth Client", {"app_name": LIVE_TEST_CLIENT}):
+        frappe.delete_doc(
+            "OAuth Client",
+            frappe.db.get_value("OAuth Client", {"app_name": LIVE_TEST_CLIENT}, "name"),
+            ignore_permissions=True,
+            force=True,
+        )
+    frappe.db.commit()
+    print({"prefix": PREFIX, "deleted_students": len(student_names), "reset": True, "agent_state": agent_state})
 
 
 def reset():
-	"""Delete only the isolated E2E cohort and its dedicated identities.
-
-	Run: bench --site crm.localhost execute crm.demo.seed_e2e.reset
-	Shared master data and non-E2E CRM records are never removed.
-	"""
-	student_names = frappe.get_all(
-		"CRM Student",
-		filters={"email": ["like", "e2e-fpt-2026-%@example.test"]},
-		pluck="name",
-	)
-	if student_names:
-		recommendations = frappe.get_all(
-			"CRM Recommendation", filters={"student": ["in", student_names]}, pluck="name"
-		)
-		if recommendations:
-			actions = frappe.get_all(
-				"CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
-			)
-			for name in actions:
-				frappe.delete_doc("CRM Sales Action", name, ignore_permissions=True, force=True)
-			for name in recommendations:
-				frappe.delete_doc("CRM Recommendation", name, ignore_permissions=True, force=True)
-
-		interaction_names = frappe.get_all(
-			"CRM Interaction", filters={"student": ["in", student_names]}, pluck="name"
-		)
-		if interaction_names:
-			for name in frappe.get_all(
-				"CRM Intent", filters={"interaction": ["in", interaction_names]}, pluck="name"
-			):
-				frappe.delete_doc("CRM Intent", name, ignore_permissions=True, force=True)
-			for name in interaction_names:
-				frappe.delete_doc("CRM Interaction", name, ignore_permissions=True, force=True)
-		for name in student_names:
-			frappe.delete_doc("CRM Student", name, ignore_permissions=True, force=True)
-
-	fixture_users = [email for email, _ in LIVE_TEST_USERS.values()]
-	for name in frappe.get_all(
-		"OAuth Bearer Token", filters={"user": ["in", fixture_users]}, pluck="name"
-	):
-		frappe.delete_doc("OAuth Bearer Token", name, ignore_permissions=True, force=True)
-	for name in frappe.get_all("CRM Staff", filters={"user": ["in", fixture_users]}, pluck="name"):
-		frappe.delete_doc("CRM Staff", name, ignore_permissions=True, force=True)
-	for email in fixture_users:
-		if frappe.db.exists("User", email):
-			frappe.delete_doc("User", email, ignore_permissions=True, force=True)
-	if frappe.db.exists("OAuth Client", {"app_name": LIVE_TEST_CLIENT}):
-		frappe.delete_doc(
-			"OAuth Client",
-			frappe.db.get_value("OAuth Client", {"app_name": LIVE_TEST_CLIENT}, "name"),
-			ignore_permissions=True,
-			force=True,
-		)
-	frappe.db.commit()
-	print({"prefix": PREFIX, "deleted_students": len(student_names), "reset": True})
+    with _fixture_lock():
+        return _reset()
 
 
 @frappe.whitelist()

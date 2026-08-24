@@ -89,6 +89,26 @@ if [ ! -d "sites/crm.localhost" ]; then
     bench --site crm.localhost set-config server_script_enabled 1
 fi
 
+# Keep the BFF and fixture reset contract in the server-side site config. The
+# browser only sees same-origin CRM methods; these values never enter Vite.
+if [ -n "${CRM_AGENTS_URL:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_url "${CRM_AGENTS_URL}"
+fi
+if [ -n "${CRM_AGENTS_API_KEY:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_api_key "${CRM_AGENTS_API_KEY}"
+fi
+if [ -n "${CRM_AGENTS_RESET_API_KEY:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_e2e_reset_api_key "${CRM_AGENTS_RESET_API_KEY}"
+fi
+if [ -n "${CRM_AGENTS_DELEGATION_KEYS_JSON:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_delegation_keys "${CRM_AGENTS_DELEGATION_KEYS_JSON}" --parse
+    bench --site crm.localhost set-config crm_agents_delegation_active_kid "${CRM_AGENTS_DELEGATION_ACTIVE_KID:-v1}"
+    bench --site crm.localhost set-config crm_agents_delegation_issuer "${CRM_AGENTS_DELEGATION_ISSUER:-http://crm.localhost:8001}"
+fi
+if [ -n "${CRM_E2E_FIXTURE_RUN_ID:-}" ]; then
+    bench --site crm.localhost set-config crm_e2e_fixture_run_id "${CRM_E2E_FIXTURE_RUN_ID}"
+fi
+
 bench --site crm.localhost clear-cache
 bench --site crm.localhost migrate
 bench use crm.localhost

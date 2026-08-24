@@ -6,26 +6,17 @@ import frappe
 from frappe import _
 from frappe.rate_limiter import rate_limit
 
-from crm.api.session import CRM_ALLOWED_ROLES
+from crm.api.session import CRM_ALLOWED_ROLES, get_session_role_flags
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
 
 OPERATIONS = ("read", "write", "create", "delete")
 CAPABILITY_CONTRACT_VERSION = "v1"
 
 # This whitelisted method serves the crm-agents AI copilot, whose real staff
-# roles (Sale, CTV-Sale, Counseller, Team Leader, Promoter-PR — see
-# app/config.json / app/prompts/domain/sales.md in crm-agents) are broader
-# than crm.api.session's desk-CRM-only CRM_ALLOWED_ROLES. Union both rather
-# than reusing CRM_ALLOWED_ROLES verbatim, or every AI-copilot staff member
-# would be rejected by this gate.
-CRM_AI_ALLOWED_ROLES = frozenset(CRM_ALLOWED_ROLES) | {
-	"Sale",
-	"CTV-Sale",
-	"Counseller",
-	"Admissions Director",
-	"Team Leader",
-	"Promoter-PR",
-}
+# The session contract is the sole authority for Copilot eligibility.  Do not
+# add a broader local allowlist here: that would let an unsupported role obtain
+# a capability manifest even though it has no canonical agent profile.
+CRM_AI_ALLOWED_ROLES = frozenset(CRM_ALLOWED_ROLES)
 
 # Timeout budget for the whole call, not per doctype — a stalled meta lookup on
 # one exposed doctype must not block the rest from being reported.
@@ -161,6 +152,10 @@ def get_current_roles():
 	"""
 	if frappe.session.user in ("", "Guest"):
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	# Keep this trust boundary aligned with the Desk session and crm-agents
+	# resolver: mixed canonical profiles must never receive an authoritative
+	# role list that could be unioned into a broader capability manifest.
+	get_session_role_flags()
 	return {"roles": sorted(frappe.get_roles(frappe.session.user))}
 
 
@@ -178,6 +173,7 @@ def get_capability_manifest():
 	backend IP, so an IP-keyed limit would throttle all users together
 	instead of each caller individually.
 	"""
+	get_session_role_flags()
 	roles = sorted(frappe.get_roles())
 	if not set(roles) & CRM_AI_ALLOWED_ROLES:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
@@ -266,4 +262,24 @@ def get_capability_manifest():
 		"data_scopes": data_scopes,
 		"schema_version": schema_version,
 		"capability_version": capability_version,
+	}
+
+
+@frappe.whitelist()
+def get_exposed_doctypes():
+	"""Return the server-published AI schema roster for the crm-agents service.
+
+	DocType custom fields are intentionally not usable as REST resource filters,
+	so schema bootstrap must use this narrow server-side read instead.
+	"""
+	frappe.only_for(("System Manager", "AI Capability Admin"))
+	return {
+		"doctypes": sorted(
+			frappe.get_all(
+				"DocType",
+				filters={"custom_ai_exposed": 1},
+				pluck="name",
+				ignore_permissions=True,
+			)
+		)
 	}

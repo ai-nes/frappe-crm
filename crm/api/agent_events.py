@@ -23,6 +23,32 @@ _EVENT_PATHS = {
 _MAX_DELIVERY_ATTEMPTS = 10
 
 
+def quiesce_agent_events(aggregate_names: list[str]) -> dict:
+	"""Stop retryable fixture deliveries before distributed state is removed."""
+	if not aggregate_names:
+		return {"quiesced": 0, "processing": 0}
+	frappe.db.sql(
+		"""UPDATE `tabCRM Agent Event`
+		SET status = 'quiesced'
+		WHERE aggregate_name IN %(aggregate_names)s AND status = 'pending'""",
+		{"aggregate_names": aggregate_names},
+	)
+	processing = frappe.db.count(
+		"CRM Agent Event", {"aggregate_name": ["in", aggregate_names], "status": "processing"}
+	)
+	if processing:
+		frappe.throw(
+			f"Cannot reset fixture while {processing} crm-agents event(s) are processing.",
+			frappe.ValidationError,
+		)
+	return {
+		"quiesced": frappe.db.count(
+			"CRM Agent Event", {"aggregate_name": ["in", aggregate_names], "status": "quiesced"}
+		),
+		"processing": 0,
+	}
+
+
 def record_agent_event(event_type: str, doc) -> str:
 	"""Persist an event in the caller's current transaction and schedule delivery."""
 	if frappe.conf.get("crm_agents_outbox_enabled", 1) in (0, "0", False):
@@ -72,8 +98,15 @@ def _event_body(event) -> bytes:
 def deliver_agent_event(event_name: str) -> None:
 	"""Deliver one pending event. Failures stay pending for scheduled replay."""
 	event = frappe.get_doc("CRM Agent Event", event_name)
-	if event.status == "delivered":
+	if event.status != "pending":
 		return
+	frappe.db.sql(
+		"UPDATE `tabCRM Agent Event` SET status = 'processing' WHERE name = %s AND status = 'pending'",
+		(event.name,),
+	)
+	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
+		return
+	event.reload()
 	base_url = frappe.conf.get("crm_agents_url")
 	secret = frappe.conf.get("crm_agents_webhook_secret")
 	kid = frappe.conf.get("crm_agents_webhook_kid", "v1")
@@ -113,6 +146,7 @@ def _record_delivery_failure(event, error: str) -> None:
 	if attempts >= _MAX_DELIVERY_ATTEMPTS:
 		event.db_set("status", "dead_letter")
 		return
+	event.db_set("status", "pending")
 	# Bound retries so one unavailable consumer cannot make the oldest events
 	# monopolise every scheduled replay pass.
 	delay_minutes = min(60 * (2 ** min(attempts - 1, 5)), 24 * 60)
