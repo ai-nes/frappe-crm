@@ -78,6 +78,11 @@ const routes = [
     component: () => import('@/pages/CRMStudents.vue'),
   },
   {
+    path: '/my-recommendations',
+    name: 'My Recommendations',
+    component: () => import('@/pages/StudentWorklist.vue'),
+  },
+  {
     path: '/crm-students/:crmStudentId',
     name: 'CRM Student',
     component: () => import('@/pages/CRMStudent.vue'),
@@ -129,6 +134,18 @@ const routes = [
     path: '/crm-campaigns/:crmCampaignId',
     name: 'CRM Campaign',
     component: () => import('@/pages/CRMCampaign.vue'),
+    props: true,
+  },
+  {
+    alias: '/crm-segments',
+    path: '/crm-segments/view/:viewType?',
+    name: 'CRM Segments',
+    component: () => import('@/pages/CRMSegments.vue'),
+  },
+  {
+    path: '/crm-segments/:crmSegmentId',
+    name: 'CRM Segment',
+    component: () => import('@/pages/CRMSegment.vue'),
     props: true,
   },
   {
@@ -240,17 +257,30 @@ router.beforeEach(async (to, from, next) => {
   } else if (to.matched.length === 0) {
     next({ name: 'Invalid Page' })
   } else if (
-    ['CRM Student', 'CRM Contact', 'CRM Person', 'High School', 'CRM Campaign', 'CRM Event'].includes(to.name) &&
+    [
+      'CRM Student',
+      'CRM Contact',
+      'CRM Person',
+      'High School',
+      'CRM Campaign',
+      'CRM Event',
+    ].includes(to.name) &&
     !to.hash
   ) {
     let storageKey =
-      to.name === 'CRM Student' ? 'lastCRMStudentTab'
-      : to.name === 'CRM Contact' ? 'lastCRMContactTab'
-      : to.name === 'CRM Person' ? 'lastCRMPersonTab'
-      : to.name === 'High School' ? 'lastHighSchoolTab'
-      : to.name === 'CRM Campaign' ? 'lastCRMCampaignTab'
-      : to.name === 'CRM Event' ? 'lastCRMEventTab'
-      : 'lastActivityTab'
+      to.name === 'CRM Student'
+        ? 'lastCRMStudentTab'
+        : to.name === 'CRM Contact'
+          ? 'lastCRMContactTab'
+          : to.name === 'CRM Person'
+            ? 'lastCRMPersonTab'
+            : to.name === 'High School'
+              ? 'lastHighSchoolTab'
+              : to.name === 'CRM Campaign'
+                ? 'lastCRMCampaignTab'
+                : to.name === 'CRM Event'
+                  ? 'lastCRMEventTab'
+                  : 'lastActivityTab'
     const activeTab = localStorage.getItem(storageKey) || 'activity'
     const hash = '#' + activeTab
     next({ ...to, hash })

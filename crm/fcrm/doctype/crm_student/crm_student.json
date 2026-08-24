@@ -1,423 +1,537 @@
 {
-  "actions": [],
-  "allow_import": 1,
-  "allow_rename": 0,
-  "autoname": "naming_series:",
-  "creation": "2026-05-30 00:00:00.000000",
-  "default_view": "List",
-  "doctype": "DocType",
-  "editable_grid": 1,
-  "engine": "InnoDB",
-  "field_order": [
-    "naming_series",
-    "student_name",
-    "phone",
-    "email",
-    "gender",
-    "date_of_birth",
-    "col_break_1",
-    "enrollment_status",
-    "assigned_to",
-    "latest_score",
-    "enrollment_date",
-    "section_links",
-    "high_school",
-    "province",
-    "ward",
-    "col_break_2",
-    "branch",
-    "major",
-    "aspiration",
-    "step",
-    "source",
-    "admission_year",
-    "section_academic_history",
-    "cohort_start_year",
-    "education_program",
-    "graduation_score",
-    "transcript_score",
-    "col_break_academic",
-    "cohort_end_year",
-    "admission_method",
-    "english_converted_score",
-    "total_score",
-    "section_academic_tables",
-    "academic_results",
-    "language_certificates",
-    "section_parent",
-    "alt_name",
-    "col_break_parent",
-    "alt_phone",
-    "alt_address",
-    "section_notes",
-    "notes",
-    "section_identity",
-    "id_number",
-    "id_issued_date",
-    "id_issued_place",
-    "import_source_id"
-  ],
-  "fields": [
-    {
-      "default": "ENR-.YYYY.-",
-      "fieldname": "naming_series",
-      "fieldtype": "Select",
-      "hidden": 1,
-      "label": "Series",
-      "options": "ENR-.YYYY.-"
-    },
-    {
-      "fieldname": "student_name",
-      "fieldtype": "Data",
-      "in_list_view": 1,
-      "label": "Student Name",
-      "reqd": 1
-    },
-    {
-      "fieldname": "phone",
-      "fieldtype": "Data",
-      "in_list_view": 1,
-      "label": "Phone",
-      "options": "Phone"
-    },
-    {
-      "fieldname": "email",
-      "fieldtype": "Data",
-      "label": "Email",
-      "options": "Email"
-    },
-    {
-      "fieldname": "gender",
-      "fieldtype": "Select",
-      "label": "Gender",
-      "options": "\nNam\nNữ"
-    },
-    {
-      "fieldname": "date_of_birth",
-      "fieldtype": "Date",
-      "label": "Date of Birth"
-    },
-    {
-      "fieldname": "col_break_1",
-      "fieldtype": "Column Break"
-    },
-    {
-      "default": "Mới",
-      "fieldname": "enrollment_status",
-      "fieldtype": "Link",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "Enrollment Status",
-      "options": "CRM Enrollment Status"
-    },
-    {
-      "fieldname": "assigned_to",
-      "fieldtype": "Link",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "Assigned To",
-      "options": "CRM Staff"
-    },
-    {
-      "fieldname": "latest_score",
-      "fieldtype": "Float",
-      "in_list_view": 1,
-      "label": "Latest Score",
-      "read_only": 1
-    },
-    {
-      "fieldname": "enrollment_date",
-      "fieldtype": "Date",
-      "in_list_view": 1,
-      "label": "Enrollment Date"
-    },
-    {
-      "fieldname": "section_links",
-      "fieldtype": "Section Break",
-      "label": "Links"
-    },
-    {
-      "fieldname": "high_school",
-      "fieldtype": "Link",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "High School",
-      "options": "CRM High School"
-    },
-    {
-      "fieldname": "province",
-      "fieldtype": "Link",
-      "in_standard_filter": 1,
-      "label": "Province",
-      "options": "CRM Province"
-    },
-    {
-      "fieldname": "ward",
-      "fieldtype": "Link",
-      "label": "Ward",
-      "options": "CRM Ward"
-    },
-    {
-      "fieldname": "col_break_2",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "branch",
-      "fieldtype": "Link",
-      "in_list_view": 1,
-      "in_standard_filter": 1,
-      "label": "Branch",
-      "options": "CRM Campus"
-    },
-    {
-      "fieldname": "major",
-      "fieldtype": "Link",
-      "label": "Major",
-      "options": "CRM Major"
-    },
-    {
-      "fieldname": "aspiration",
-      "fieldtype": "Link",
-      "in_standard_filter": 1,
-      "label": "Aspiration",
-      "options": "CRM Aspiration"
-    },
-    {
-      "default": "1",
-      "fieldname": "step",
-      "fieldtype": "Int",
-      "label": "Registration Step"
-    },
-    {
-      "fieldname": "source",
-      "fieldtype": "Link",
-      "label": "Source",
-      "options": "CRM Lead Source"
-    },
-    {
-      "fieldname": "admission_year",
-      "fieldtype": "Link",
-      "label": "CRM Admission Year",
-      "options": "CRM Admission Year"
-    },
-    {
-      "collapsed": 1,
-      "collapsible": 1,
-      "fieldname": "section_academic_history",
-      "fieldtype": "Section Break",
-      "label": "Academic & Scores"
-    },
-    {
-      "fieldname": "cohort_start_year",
-      "fieldtype": "Int",
-      "label": "Cohort Start Year"
-    },
-    {
-      "fieldname": "education_program",
-      "fieldtype": "Link",
-      "in_standard_filter": 1,
-      "label": "Education Program",
-      "options": "CRM Education Program"
-    },
-    {
-      "fieldname": "graduation_score",
-      "fieldtype": "Float",
-      "label": "Graduation Score"
-    },
-    {
-      "fieldname": "transcript_score",
-      "fieldtype": "Float",
-      "label": "Transcript Score"
-    },
-    {
-      "fieldname": "col_break_academic",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "cohort_end_year",
-      "fieldtype": "Int",
-      "label": "Cohort End Year"
-    },
-    {
-      "fieldname": "admission_method",
-      "fieldtype": "Select",
-      "in_standard_filter": 1,
-      "label": "Admission Method",
-      "options": "\nTranscript Review\nNational High School Exam\nLanguage Certificate Review\nDirect Admission\nCombined"
-    },
-    {
-      "fieldname": "english_converted_score",
-      "fieldtype": "Float",
-      "label": "English Score"
-    },
-    {
-      "fieldname": "total_score",
-      "fieldtype": "Float",
-      "label": "Total Score"
-    },
-    {
-      "collapsed": 1,
-      "collapsible": 1,
-      "fieldname": "section_academic_tables",
-      "fieldtype": "Section Break",
-      "label": "Results"
-    },
-    {
-      "fieldname": "academic_results",
-      "fieldtype": "Table",
-      "label": "Academic Results",
-      "options": "CRM Student Academic Result"
-    },
-    {
-      "fieldname": "language_certificates",
-      "fieldtype": "Table",
-      "label": "Language Certificates",
-      "options": "CRM Student Language Certificate"
-    },
-    {
-      "fieldname": "section_parent",
-      "fieldtype": "Section Break",
-      "label": "Parent Info"
-    },
-    {
-      "fieldname": "alt_name",
-      "fieldtype": "Data",
-      "label": "Parent/Contact Name"
-    },
-    {
-      "fieldname": "col_break_parent",
-      "fieldtype": "Column Break"
-    },
-    {
-      "fieldname": "alt_phone",
-      "fieldtype": "Data",
-      "label": "Parent Phone",
-      "options": "Phone"
-    },
-    {
-      "fieldname": "alt_address",
-      "fieldtype": "Text",
-      "label": "Parent Address"
-    },
-    {
-      "fieldname": "section_notes",
-      "fieldtype": "Section Break",
-      "label": "Notes"
-    },
-    {
-      "fieldname": "notes",
-      "fieldtype": "Text",
-      "label": "Notes"
-    },
-    {
-      "collapsed": 1,
-      "collapsible": 1,
-      "fieldname": "section_identity",
-      "fieldtype": "Section Break",
-      "label": "Identity"
-    },
-    {
-      "fieldname": "id_number",
-      "fieldtype": "Data",
-      "label": "ID Number"
-    },
-    {
-      "fieldname": "id_issued_date",
-      "fieldtype": "Date",
-      "label": "ID Issued Date"
-    },
-    {
-      "fieldname": "id_issued_place",
-      "fieldtype": "Data",
-      "label": "ID Issued Place"
-    },
-    {
-      "fieldname": "import_source_id",
-      "fieldtype": "Data",
-      "label": "Source ID"
-    }
-  ],
-  "index_web_pages_for_search": 1,
-  "links": [],
-  "modified": "2026-06-15 00:00:00.000000",
-  "modified_by": "Administrator",
-  "module": "FCRM",
-  "name": "CRM Student",
-  "naming_rule": "Naming Series",
-  "naming_series_options": "ENR-.YYYY.-",
-  "owner": "Administrator",
-  "permissions": [
-    {
-      "create": 1,
-      "delete": 1,
-      "email": 1,
-      "export": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "System Manager",
-      "share": 1,
-      "write": 1
-    },
-    {
-      "create": 1,
-      "delete": 1,
-      "email": 1,
-      "export": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "Administrator",
-      "share": 1,
-      "write": 1
-    },
-    {
-      "create": 1,
-      "delete": 1,
-      "email": 1,
-      "export": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "Team Leader",
-      "share": 1,
-      "write": 1
-    },
-    {
-      "create": 1,
-      "email": 1,
-      "print": 1,
-      "read": 1,
-      "report": 1,
-      "role": "Counseller",
-      "share": 1,
-      "write": 1
-    },
-    {
-      "create": 1,
-      "email": 1,
-      "if_owner": 1,
-      "print": 1,
-      "read": 1,
-      "role": "Sale",
-      "write": 1
-    },
-    {
-      "create": 1,
-      "if_owner": 1,
-      "print": 1,
-      "read": 1,
-      "role": "CTV-Sale",
-      "write": 1
-    }
-  ],
-  "quick_entry": 0,
-  "row_format": "Dynamic",
-  "sort_field": "modified",
-  "sort_order": "DESC",
-  "states": [],
-  "title_field": "student_name",
-  "track_changes": 1,
-  "translated_doctype": 1,
-  "search_fields": "student_name,phone,email"
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-05-30 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "student_name",
+  "phone",
+  "email",
+  "gender",
+  "date_of_birth",
+  "col_break_1",
+  "enrollment_status",
+  "lifecycle_stage",
+  "assigned_to",
+  "owner_staff",
+  "owning_team",
+  "latest_score",
+  "enrollment_date",
+  "section_links",
+  "high_school",
+  "province",
+  "ward",
+  "col_break_2",
+  "branch",
+  "major",
+  "aspiration",
+  "step",
+  "source",
+  "advertising_channel",
+  "admission_year",
+  "section_academic_history",
+  "cohort_start_year",
+  "education_program",
+  "graduation_score",
+  "transcript_score",
+  "col_break_academic",
+  "cohort_end_year",
+  "admission_method",
+  "english_converted_score",
+  "total_score",
+  "section_academic_tables",
+  "academic_results",
+  "language_certificates",
+  "section_parent",
+  "alt_name",
+  "col_break_parent",
+  "alt_phone",
+  "alt_address",
+  "section_status_history",
+  "status_change_reason",
+  "status_change_log",
+  "section_assignment_history",
+  "assignment_log",
+  "section_notes",
+  "notes",
+  "section_identity",
+  "id_number",
+  "id_issued_date",
+  "id_issued_place",
+  "import_source_id"
+ ],
+ "fields": [
+  {
+   "default": "ENR-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "ENR-.YYYY.-"
+  },
+  {
+   "fieldname": "student_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Student Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "phone",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "email",
+   "fieldtype": "Data",
+   "label": "Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "gender",
+   "fieldtype": "Select",
+   "label": "Gender",
+   "options": "\nNam\nNữ"
+  },
+  {
+   "fieldname": "date_of_birth",
+   "fieldtype": "Date",
+   "label": "Date of Birth"
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "Mới",
+   "fieldname": "enrollment_status",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Enrollment Status",
+   "options": "CRM Enrollment Status"
+  },
+  {
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lifecycle Stage",
+   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "read_only": 1,
+   "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
+  },
+  {
+   "fieldname": "assigned_to",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assigned To",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "owner_staff",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner Staff",
+   "options": "CRM Staff",
+   "read_only": 1,
+   "description": "Derived from Assigned To — used for row-level data scoping. Do not edit directly."
+  },
+  {
+   "fieldname": "owning_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Team",
+   "options": "CRM Team",
+   "read_only": 1,
+   "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
+  },
+  {
+   "fieldname": "latest_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Latest Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "enrollment_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Enrollment Date"
+  },
+  {
+   "fieldname": "section_links",
+   "fieldtype": "Section Break",
+   "label": "Links"
+  },
+  {
+   "fieldname": "high_school",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "High School",
+   "options": "CRM High School"
+  },
+  {
+   "fieldname": "province",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Province",
+   "options": "CRM Province"
+  },
+  {
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "label": "Ward",
+   "options": "CRM Ward"
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "branch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Branch",
+   "options": "CRM Campus"
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "label": "Major",
+   "options": "CRM Major"
+  },
+  {
+   "fieldname": "aspiration",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Aspiration",
+   "options": "CRM Aspiration"
+  },
+  {
+   "default": "1",
+   "fieldname": "step",
+   "fieldtype": "Int",
+   "label": "Registration Step"
+  },
+  {
+   "fieldname": "source",
+   "fieldtype": "Link",
+   "label": "Source",
+   "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "advertising_channel",
+   "fieldtype": "Data",
+   "label": "Advertising Channel"
+  },
+  {
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
+   "label": "CRM Admission Year",
+   "options": "CRM Admission Year"
+  },
+  {
+   "collapsed": 1,
+   "collapsible": 1,
+   "fieldname": "section_academic_history",
+   "fieldtype": "Section Break",
+   "label": "Academic & Scores"
+  },
+  {
+   "fieldname": "cohort_start_year",
+   "fieldtype": "Int",
+   "label": "Cohort Start Year"
+  },
+  {
+   "fieldname": "education_program",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Education Program",
+   "options": "CRM Education Program"
+  },
+  {
+   "fieldname": "graduation_score",
+   "fieldtype": "Float",
+   "label": "Graduation Score"
+  },
+  {
+   "fieldname": "transcript_score",
+   "fieldtype": "Float",
+   "label": "Transcript Score"
+  },
+  {
+   "fieldname": "col_break_academic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "cohort_end_year",
+   "fieldtype": "Int",
+   "label": "Cohort End Year"
+  },
+  {
+   "fieldname": "admission_method",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Admission Method",
+   "options": "\nTranscript Review\nNational High School Exam\nLanguage Certificate Review\nDirect Admission\nCombined"
+  },
+  {
+   "fieldname": "english_converted_score",
+   "fieldtype": "Float",
+   "label": "English Score"
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Float",
+   "label": "Total Score"
+  },
+  {
+   "collapsed": 1,
+   "collapsible": 1,
+   "fieldname": "section_academic_tables",
+   "fieldtype": "Section Break",
+   "label": "Results"
+  },
+  {
+   "fieldname": "academic_results",
+   "fieldtype": "Table",
+   "label": "Academic Results",
+   "options": "CRM Student Academic Result"
+  },
+  {
+   "fieldname": "language_certificates",
+   "fieldtype": "Table",
+   "label": "Language Certificates",
+   "options": "CRM Student Language Certificate"
+  },
+  {
+   "fieldname": "section_parent",
+   "fieldtype": "Section Break",
+   "label": "Parent Info"
+  },
+  {
+   "fieldname": "alt_name",
+   "fieldtype": "Data",
+   "label": "Parent/Contact Name"
+  },
+  {
+   "fieldname": "col_break_parent",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "alt_phone",
+   "fieldtype": "Data",
+   "label": "Parent Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "alt_address",
+   "fieldtype": "Text",
+   "label": "Parent Address"
+  },
+  {
+   "fieldname": "section_status_history",
+   "fieldtype": "Section Break",
+   "label": "Status History"
+  },
+  {
+   "fieldname": "status_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Status Change Reason",
+   "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Team Leader/Admissions Director only)."
+  },
+  {
+   "fieldname": "status_change_log",
+   "fieldtype": "Table",
+   "label": "Status Change Log",
+   "options": "Status Change Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_assignment_history",
+   "fieldtype": "Section Break",
+   "label": "Assignment History"
+  },
+  {
+   "fieldname": "assignment_log",
+   "fieldtype": "Table",
+   "label": "Assignment Log",
+   "options": "CRM Assignment Log",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  },
+  {
+   "collapsed": 1,
+   "collapsible": 1,
+   "fieldname": "section_identity",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "fieldname": "id_number",
+   "fieldtype": "Data",
+   "label": "ID Number"
+  },
+  {
+   "fieldname": "id_issued_date",
+   "fieldtype": "Date",
+   "label": "ID Issued Date"
+  },
+  {
+   "fieldname": "id_issued_place",
+   "fieldtype": "Data",
+   "label": "ID Issued Place"
+  },
+  {
+   "fieldname": "import_source_id",
+   "fieldtype": "Data",
+   "label": "Source ID"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-15 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "ENR-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "role": "CTV-Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Operations",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sales",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sales User",
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "student_name",
+ "track_changes": 1,
+ "translated_doctype": 1,
+ "search_fields": "student_name,phone,email"
 }

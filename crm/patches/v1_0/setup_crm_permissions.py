@@ -1,15 +1,16 @@
 """
-Replace Sales Manager / Sales User with 6 custom CRM roles across all DocTypes.
-Writes updated permissions to the JSON files on disk, then calls reload_doc to
-sync each DocType into the DB — the canonical Frappe approach.
+DocType-level permissions (DocPerm) for all CRM roles. Writes updated permissions to
+the JSON files on disk, then calls reload_doc to sync each DocType into the DB — the
+canonical Frappe approach. Idempotent — safe to rerun on every patch that changes a
+permission set.
 
-Role matrix:
-- Team Leader  : CRUD all records of campus
-- Counseller   : CRU all records of campus (no delete)
-- Sale         : Read all leads/contacts; write/create own students
-- CTV-Sale     : Write/create own records only
-- Promoter-PR  : Read-only on leads/contacts
-- Administrator: Full access everywhere
+Row-level visibility for CRM Contact/CRM Student is NOT decided here — see
+crm/fcrm/permissions.py and plans/260822-admissions-crm-alignment/business-rules-data-scope.md
+for the locked scope matrix (Sale/CTV-Sale/Team Leader/Counseller/Promoter-PR).
+
+Marketing Operator/Marketing Lead scope to CRM Campaign/CRM Event only (not lead
+ownership). Admissions Operations/Admissions Director get system-wide Contact/Student
+visibility via crm.fcrm.permissions.FULL_VISIBILITY_ROLES.
 """
 
 import json
@@ -43,25 +44,31 @@ def _read(role):
 
 # ── Permission sets per DocType category ────────────────────────────────────
 
+# if_owner intentionally NOT used below — row visibility is enforced by the shared
+# get_permission_query_conditions in crm/fcrm/permissions.py (keyed off Team Membership /
+# assigned_to), not Frappe's native owner/creator field. See
+# plans/260822-admissions-crm-alignment/business-rules-data-scope.md constraint 1.
 STUDENT_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
 	_full("Team Leader"),
 	_p("Counseller", read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
-	_p("Sale",       read=1, write=1, create=1, email=1, prt=1, if_owner=1),
-	_p("CTV-Sale",   read=1, write=1, create=1, prt=1, if_owner=1),
+	_p("Sale",       read=1, write=1, create=1, email=1, prt=1),
+	_p("CTV-Sale",   read=1, write=1, create=1, prt=1),
+	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
-# Sale gets two rows: read all leads + write own
 CONTACT_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
 	_full("Team Leader"),
 	_p("Counseller",  read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
-	_p("Sale",        read=1, report=1),
-	_p("Sale",        write=1, create=1, email=1, prt=1, if_owner=1),
-	_p("CTV-Sale",    read=1, write=1, create=1, prt=1, if_owner=1),
+	_p("Sale",        read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("CTV-Sale",    read=1, write=1, create=1, prt=1),
 	_p("Promoter-PR", read=1, report=1, prt=1),
+	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
 REF_PERMS = [
@@ -72,6 +79,53 @@ REF_PERMS = [
 	_p("Sale",        read=1),
 	_p("CTV-Sale",    read=1),
 	_p("Promoter-PR", read=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
+]
+
+# Master-data-governance-owned lookup types (Phase 7): the owning role gets
+# create+write so plain additive inserts (via before_insert/set_governance_defaults)
+# work through the normal doctype permission table; the approver role gets
+# read-only, since approve_change/reject_change apply the actual mutation via
+# ignore_permissions=True and don't need doctype-level write access.
+MARKETING_LOOKUP_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("Marketing Operator", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing Lead",     read=1, report=1, prt=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
+]
+
+LOST_REASON_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, report=1, prt=1),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("CRM Data Steward", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing Lead",   read=1, report=1, prt=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
+]
+
+CAMPUS_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("Admissions Operations", read=1, write=1, create=1, prt=1, report=1),
+	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
 EDUCATION_PROGRAM_PERMS = [
@@ -83,6 +137,8 @@ EDUCATION_PROGRAM_PERMS = [
 	_p("CTV-Sale",           read=1),
 	_p("Promoter-PR",        read=1),
 	_p("Enrollment Manager", read=1, write=1, create=1, prt=1, export=1),
+	_p("Admissions Operations", read=1),
+	_p("Admissions Director",   read=1),
 ]
 
 OPS_PERMS = [
@@ -93,6 +149,58 @@ OPS_PERMS = [
 	_p("Sale",        read=1, write=1, create=1, prt=1, if_owner=1),
 	_p("CTV-Sale",    read=1),
 	_p("Promoter-PR", read=1),
+	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Admissions Director",   read=1, report=1),
+]
+
+RECOMMENDATION_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, write=1, email=1, prt=1, report=1),
+	_p("Counseller", read=1, write=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, prt=1),
+	_p("CTV-Sale", read=1, write=1, prt=1),
+	_p("Promoter-PR", read=1),
+]
+
+SALES_ACTION_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_p("Team Leader", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Counseller", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, create=1, prt=1, report=1),
+	_p("CTV-Sale", read=1, write=1, create=1, prt=1),
+	_p("Promoter-PR", read=1),
+]
+
+# Marketing roles are scoped to Campaign/Event ownership, not lead ownership — see
+# business-rules-data-scope.md. Not granted access to CRM Contact/CRM Student here.
+CAMPAIGN_EVENT_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_full("Team Leader"),
+	_p("Counseller",  read=1, report=1, prt=1),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_full("Marketing Lead"),
+	_p("Marketing Operator", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Admissions Operations", read=1, report=1),
+	_p("Admissions Director",   read=1, report=1, export=1),
+]
+
+TEAM_PERMS = [
+	_full("System Manager"),
+	_full("Administrator"),
+	_read("Team Leader"),
+	_read("Counseller"),
+	_p("Sale",        read=1),
+	_p("CTV-Sale",    read=1),
+	_p("Promoter-PR", read=1),
+	_p("Marketing Operator",     read=1),
+	_p("Marketing Lead",         read=1),
+	_p("Admissions Operations",  read=1),
+	_p("Admissions Director",    read=1),
 ]
 
 SYS_PERMS = [
@@ -107,8 +215,10 @@ DOCTYPE_PERMS = {
 	"CRM Contact":  CONTACT_PERMS,
 	"CRM Score Template": REF_PERMS,
 	"CRM Score History":  OPS_PERMS,
+	"CRM Recommendation": RECOMMENDATION_PERMS,
+	"CRM Sales Action": SALES_ACTION_PERMS,
 	# Reference data
-	"CRM Campus":            REF_PERMS,
+	"CRM Campus":            CAMPUS_PERMS,
 	"CRM Major":             REF_PERMS,
 	"CRM Major Group":       REF_PERMS,
 	"CRM High School":       REF_PERMS,
@@ -118,16 +228,19 @@ DOCTYPE_PERMS = {
 	"CRM School Type":       REF_PERMS,
 	"CRM Aspiration":        REF_PERMS,
 	"CRM Enrollment Status": REF_PERMS,
-	"CRM Lead Source":       REF_PERMS,
+	"CRM Lead Source":       MARKETING_LOOKUP_PERMS,
+	"CRM Platform":          MARKETING_LOOKUP_PERMS,
+	"CRM Intent Type":       MARKETING_LOOKUP_PERMS,
 	"CRM Admission Year":    REF_PERMS,
 	"CRM Education Program": EDUCATION_PROGRAM_PERMS,
 	"CRM Campaign Type":     REF_PERMS,
 	"CRM Department":        REF_PERMS,
-	"CRM Lost Reason":       REF_PERMS,
+	"CRM Lost Reason":       LOST_REASON_PERMS,
 	"Holiday List":      REF_PERMS,
+	"CRM Team":          TEAM_PERMS,
 	# Operations
-	"CRM Campaign": OPS_PERMS,
-	"CRM Event":    OPS_PERMS,
+	"CRM Campaign": CAMPAIGN_EVENT_PERMS,
+	"CRM Event":    CAMPAIGN_EVENT_PERMS,
 	"CRM Staff":    OPS_PERMS,
 	"CRM Person":   OPS_PERMS,
 	"Task":     OPS_PERMS,
@@ -146,6 +259,34 @@ DOCTYPE_PERMS = {
 	"Service Level Agreement": SYS_PERMS,
 	"CRM Influence":               SYS_PERMS,
 	"CRM Academic Year Config":    SYS_PERMS,
+}
+
+# Canonical UI/persona role names are migration aliases for the existing
+# Frappe permission authorities.  Keep the mapping here, beside the sole
+# DocPerm source, so the new role names never grant more access than their
+# established counterpart.  Row scope remains governed by the existing
+# permission hooks; this only makes equivalent DocType grants explicit.
+PROFILE_PERMISSION_ALIASES = {
+	"Sale": ("Sales Manager", "Sales User"),
+	"Promoter-PR": ("Marketing",),
+	"Team Leader": ("Lead Sales",),
+}
+
+
+def _expand_profile_permission_aliases(perms):
+	expanded = list(perms)
+	roles = {permission["role"] for permission in expanded}
+	for permission in perms:
+		for alias in PROFILE_PERMISSION_ALIASES.get(permission["role"], ()):
+			if alias not in roles:
+				expanded.append({**permission, "role": alias})
+				roles.add(alias)
+	return expanded
+
+
+DOCTYPE_PERMS = {
+	doctype: _expand_profile_permission_aliases(perms)
+	for doctype, perms in DOCTYPE_PERMS.items()
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

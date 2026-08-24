@@ -1,0 +1,182 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-22 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "crm_campaign",
+  "crm_contact",
+  "student",
+  "column_break_1",
+  "touched_at",
+  "source",
+  "crm_segment",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "CTP-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CTP-.YYYY.-"
+  },
+  {
+   "fieldname": "crm_campaign",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "CRM Campaign",
+   "reqd": 1
+  },
+  {
+   "fieldname": "crm_contact",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "CRM Contact",
+   "options": "CRM Contact",
+   "reqd": 1
+  },
+  {
+   "description": "Auto-resolved from CRM Contact when left blank.",
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "touched_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Touched At",
+   "reqd": 1
+  },
+  {
+   "default": "Manual",
+   "fieldname": "source",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Source",
+   "options": "Manual\nMigrated\nSegment",
+   "reqd": 1
+  },
+  {
+   "description": "Segment that produced this touchpoint on attach, for audit traceability. Set only when source is 'Segment'; never retroactively updated by later edits to that Segment.",
+   "fieldname": "crm_segment",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Segment",
+   "options": "CRM Segment"
+  },
+  {
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Campaign Touchpoint",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "CTP-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Team Leader",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Counseller",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "role": "CTV-Sale",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "crm_campaign,crm_contact",
+ "sort_field": "touched_at",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "crm_campaign",
+ "translated_doctype": 1
+}

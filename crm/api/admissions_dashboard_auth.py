@@ -1,20 +1,21 @@
 import frappe
 
 # Shared role-gate + campus-tenancy helper for the Sale / Digital Marketing / Offline
-# Marketing dashboard aggregation APIs (crm/api/sale_dashboard.py,
-# digital_marketing_dashboard.py, offline_marketing_dashboard.py).
+# Marketing / Admissions Director dashboard aggregation APIs, all in
+# crm/api/admissions_dashboard.py.
 #
 # Deliberately NOT a copy of crm/api/dashboard.py's @sales_user_only: that gate checks
 # for "Sales Manager"/"Sales User", roles this fork's setup_crm_roles.py patch deletes —
 # copying it verbatim would lock out every real non-admin user. This fork's real roles
 # are Team Leader / Counseller / Sale / CTV-Sale / Promoter-PR / Administrator.
 
-ADMIN_ROLES = {"Administrator", "System Manager"}
+ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director", "Admissions Operations"}
 
 DASHBOARD_ROLE_GATES = {
 	"sale": {"Sale", "CTV-Sale", "Counseller", "Team Leader", *ADMIN_ROLES},
 	"digital_marketing": {"Team Leader", *ADMIN_ROLES},
 	"offline_marketing": {"Promoter-PR", "Team Leader", *ADMIN_ROLES},
+	"admissions_director": {"Admissions Director", "Admissions Operations", *ADMIN_ROLES},
 }
 
 

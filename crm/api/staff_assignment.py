@@ -2,6 +2,9 @@ import json
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
+
+from crm.fcrm.permissions import derive_owner_fields
 
 
 ASSIGNABLE_DOCTYPES = {"CRM Student", "CRM Contact"}
@@ -49,12 +52,25 @@ def assign_staff(doctype: str, names: str | list, staff: str):
 			frappe.throw(_("Not permitted to update {0}").format(name), frappe.PermissionError)
 		doc.assigned_to = staff
 		doc.save()
+		# doc.save() re-derives owner_staff/owning_team via validate(), but the
+		# reciprocal linked record below is updated with a raw db.set_value that
+		# bypasses hooks entirely — it must set those two fields explicitly too, or
+		# they go stale on the linked record after this reassignment.
+		owner_staff, owning_team = derive_owner_fields(staff)
+		linked_updates = {"assigned_to": staff, "owner_staff": owner_staff, "owning_team": owning_team}
 		if doctype == "CRM Student":
 			contact = frappe.db.get_value("CRM Contact", {"student": name}, "name")
 			if contact:
-				frappe.db.set_value("CRM Contact", contact, "assigned_to", staff, update_modified=False)
+				contact_updates = dict(linked_updates)
+				# sla_started_at only lives on CRM Contact and is set-once (see
+				# CRMContact._track_sla_start); this raw write bypasses validate(),
+				# so it must be applied here too or the SLA clock never starts for
+				# a Contact whose assignment only ever changes via its linked Student.
+				if not frappe.db.get_value("CRM Contact", contact, "sla_started_at"):
+					contact_updates["sla_started_at"] = now_datetime()
+				frappe.db.set_value("CRM Contact", contact, contact_updates, update_modified=False)
 		elif doctype == "CRM Contact" and doc.get("student"):
-			frappe.db.set_value("CRM Student", doc.student, "assigned_to", staff, update_modified=False)
+			frappe.db.set_value("CRM Student", doc.student, linked_updates, update_modified=False)
 		updated += 1
 
 	frappe.db.commit()

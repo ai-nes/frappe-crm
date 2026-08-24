@@ -15,7 +15,13 @@
   "province",
   "address",
   "phone",
-  "import_source_id"
+  "import_source_id",
+  "section_governance",
+  "owner_role",
+  "approval_state",
+  "column_break_governance",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
@@ -62,6 +68,43 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Import Source ID"
+  },
+  {
+   "fieldname": "section_governance",
+   "fieldtype": "Section Break",
+   "label": "Governance"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Link",
+   "label": "Owner Role",
+   "options": "Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Approval State",
+   "options": "Proposed\nApproved\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_governance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -122,6 +165,40 @@
   {
    "read": 1,
    "role": "Promoter-PR"
+  },
+  {
+   "create": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Operations",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sales"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
   }
  ],
  "quick_entry": 1,

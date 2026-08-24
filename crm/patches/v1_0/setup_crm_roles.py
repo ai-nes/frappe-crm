@@ -6,13 +6,18 @@ NEW_ROLES = [
 	"Sale",
 	"CTV-Sale",
 	"Promoter-PR",
+	"Marketing",
+	"Lead Sales",
+	"Admissions Director",
 	"Administrator",
 ]
 
 OLD_ROLES = [
 	# Old CRM roles
-	"Sales Manager",
-	"Sales User",
+	# Kept during the role-contract migration.  They are explicit aliases for
+	# the Sales profile in crm.api.session, not a permission elevation path.
+	# A later, approved migration may remove them after account adoption has
+	# been audited.
 	# ERPNext business roles — irrelevant on a CRM-only deployment
 	"Accounts Manager",
 	"Accounts User",
@@ -36,6 +41,7 @@ OLD_ROLES = [
 	"Quality Manager",
 	"Item Manager",
 	"Auditor",
+	"Enrollment Manager",
 	# Frappe content roles — not needed for CRM
 	"Blogger",
 	"Newsletter Manager",
@@ -46,11 +52,20 @@ OLD_ROLES = [
 	"Translator",
 	"Prepared Report User",
 	"Inbox User",
-	"Script Manager",
 	"Report Manager",
 	"Workspace Manager",
 	"Dashboard Manager",
 ]
+
+
+def create_roles(role_names):
+	for role_name in role_names:
+		if not frappe.db.exists("Role", role_name):
+			frappe.get_doc({
+				"doctype": "Role",
+				"role_name": role_name,
+				"desk_access": 1,
+			}).insert(ignore_permissions=True)
 
 
 def execute():
@@ -60,13 +75,5 @@ def execute():
 			frappe.db.delete("Has Role", {"role": role_name})
 			frappe.delete_doc("Role", role_name, ignore_permissions=True, force=True)
 
-	# Create new roles
-	for role_name in NEW_ROLES:
-		if not frappe.db.exists("Role", role_name):
-			frappe.get_doc({
-				"doctype": "Role",
-				"role_name": role_name,
-				"desk_access": 1,
-			}).insert(ignore_permissions=True)
-
+	create_roles(NEW_ROLES)
 	frappe.db.commit()

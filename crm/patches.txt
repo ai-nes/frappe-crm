@@ -65,11 +65,7 @@ crm.patches.v1_0.fix_student_quick_entry_phone_field_v2
 crm.patches.v1_0.add_school_name_to_high_school_quick_filter
 crm.patches.v1_0.resync_contact_data_fields_layout
 crm.patches.v1_0.set_high_school_quick_filters
-crm.patches.v1_0.add_contact_consent_log
-crm.patches.v1_0.add_contact_business_fields
-crm.patches.v1_0.add_ai_lead_insight
-crm.patches.v1_0.add_ai_personal_email_draft
-crm.patches.v1_0.expand_lead_source_platform_taxonomy
-crm.patches.v1_0.seed_crm_intent_type_dashboard_expansion
-crm.patches.v1_0.add_stage_category_to_enrollment_status
-crm.patches.v1_0.seed_phase1_dashboard_data_foundation
+crm.patches.v1_0.backfill_enrollment_status_stage_category
+crm.patches.v1_0.seed_crm_interaction_type
+crm.patches.v1_0.add_ai_capability_gateway_fields
+crm.patches.v1_0.apply_canonical_crm_role_contract

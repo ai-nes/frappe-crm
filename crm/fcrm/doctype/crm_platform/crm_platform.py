@@ -5,17 +5,7 @@ from frappe.model.document import Document
 
 
 class CRMPlatform(Document):
-	# begin: auto-generated types
-	# This code is auto-generated. Do not modify anything in this block.
+	def before_insert(self):
+		from crm.fcrm.master_data_governance import set_governance_defaults
 
-	from typing import TYPE_CHECKING
-
-	if TYPE_CHECKING:
-		from frappe.types import DF
-
-		lead_source: DF.Link
-		platform_name: DF.Data
-		sub_channel: DF.Literal["", "Form", "Landing Page"]
-	# end: auto-generated types
-
-	pass
+		set_governance_defaults(self)

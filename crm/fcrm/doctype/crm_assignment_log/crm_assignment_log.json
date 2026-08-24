@@ -1,0 +1,74 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-08-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "from_staff",
+  "to_staff",
+  "column_break_1",
+  "changed_by",
+  "changed_at",
+  "auto_routed",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "from_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "From Staff",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "to_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "To Staff",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "changed_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Changed By",
+   "options": "User"
+  },
+  {
+   "fieldname": "changed_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Changed At"
+  },
+  {
+   "fieldname": "auto_routed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Auto Routed"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-08-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Assignment Log",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

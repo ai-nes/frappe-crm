@@ -4,6 +4,8 @@ from datetime import datetime, timedelta
 import frappe
 from frappe.utils.telemetry import capture
 
+from crm.fcrm.doctype.crm_student.enrollment_transition import set_enrollment_status
+
 DEMO_STATE_KEY = "crm_demo_data_created"
 DEMO_STUDENTS_KEY = "crm_demo_students"
 DEMO_CONTACTS_KEY = "crm_demo_crm_contacts"
@@ -177,7 +179,7 @@ def _create_demo_contacts(student_names):
 				"notes": "Demo admission pipeline contact",
 			}
 		).insert(ignore_permissions=True)
-		frappe.db.set_value("CRM Student", student.name, "enrollment_status", "Đã chuyển đổi", update_modified=False)
+		set_enrollment_status(student.name, "Đã chuyển đổi", source="demo_seed")
 		_backdate("CRM Contact", doc.name, len(names) + 5)
 		names.append(doc.name)
 

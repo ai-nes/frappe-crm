@@ -3,6 +3,7 @@ import re
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.doctype.crm_student.enrollment_transition import set_enrollment_status
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 
@@ -302,20 +303,18 @@ class CRMContact(Document):
 			"assigned_to": self.assigned_to,
 		}
 		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
+		if not updates:
+			return
+
+		# enrollment_status must go through set_enrollment_status() (which
+		# calls record_transition()), not the plain db.set_value batch
+		# below — that batch skips Document hooks, so it would silently
+		# bypass CRM Student's enrollment transition log.
+		new_enrollment_status = updates.pop("enrollment_status", None)
 		if updates:
 			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
-
-def log_status_change(doc, method=None):
-	# CRM Contact.validate runs on every save across the whole app (phone/email
-	# uniqueness, geo resolution, student auto-create) — a failure here must never
-	# block an unrelated contact save, so this is a hard no-op-on-error boundary.
-	try:
-		from crm.fcrm.doctype.status_change_log.status_change_log import add_status_change_log
-
-		add_status_change_log(doc)
-	except Exception:
-		frappe.log_error(title="CRM Contact status_change_log failed")
-
+		if new_enrollment_status is not None:
+			set_enrollment_status(self.student, new_enrollment_status, source="contact_sync")
 
 def get_permission_query_conditions(user=None):
 	if not user:

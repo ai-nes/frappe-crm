@@ -20,7 +20,7 @@ class Invitation(Document):
 		email_sent_at: DF.Datetime | None
 		invited_by: DF.Link | None
 		key: DF.Data | None
-		role: DF.Literal["", "Sales User", "Sales Manager", "System Manager"]
+		role: DF.Literal["", "Sale", "Marketing", "Lead Sales", "Admissions Director", "Sales User", "Sales Manager", "System Manager"]
 		status: DF.Literal["", "Pending", "Accepted", "Expired"]
 	# end: auto-generated types
 
@@ -66,7 +66,7 @@ class Invitation(Document):
 			user.append_roles("Sales Manager", "Sales User")
 		elif self.role == "Sales Manager":
 			user.append_roles("Sales User")
-		if self.role == "Sales User":
+		if self.role != "System Manager":
 			self.update_module_in_user(user, "FCRM")
 		user.save(ignore_permissions=True)
 
