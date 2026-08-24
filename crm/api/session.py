@@ -73,6 +73,19 @@ def _session_role_flags(roles):
 
 
 def get_session_role_flags():
+	# Frappe auto-grants every Role in the system to the "Administrator" account,
+	# so it always trips the mixed-business-profile fail-closed check below. That
+	# check exists to catch real users with conflicting role assignments, not the
+	# framework superuser — mirrors the Administrator bypass in
+	# crm.api.check_app_permission.
+	if frappe.session.user == "Administrator":
+		return {
+			"is_system_manager": True,
+			"is_sales_manager": False,
+			"is_sales_user": False,
+			"is_crm_user": True,
+			"crm_profile": None,
+		}
 	return _session_role_flags(frappe.get_roles())
 
 
