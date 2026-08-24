@@ -80,8 +80,10 @@
           :options="[
             { label: __('All'), value: 'All' },
             { label: __('Admin'), value: 'System Manager' },
-            { label: __('Sales Manager'), value: 'Sales Manager' },
-            { label: __('Sales User'), value: 'Sales User' },
+            { label: __('Sales'), value: 'Sales' },
+            { label: __('Marketing'), value: 'Marketing' },
+            { label: __('Lead Sales'), value: 'Lead Sales' },
+            { label: __('Admissions Director'), value: 'Admissions Director' },
           ]"
         />
       </div>
@@ -122,7 +124,7 @@
                 <Button :label="__('Admin')" icon-left="shield" />
               </Tooltip>
               <Dropdown
-                v-else
+                v-else-if="isManager()"
                 :options="getDropdownOptions(user)"
                 :button="{
                   label: roleMap[user.role],
@@ -130,7 +132,7 @@
                   iconLeft:
                     user.role === 'System Manager'
                       ? 'shield'
-                      : user.role === 'Sales Manager'
+                      : user.role === 'Lead Sales'
                         ? 'briefcase'
                         : 'user-check',
                 }"
@@ -188,8 +190,12 @@ const currentRole = ref('All')
 
 const roleMap = {
   'System Manager': __('Admin'),
-  'Sales Manager': __('Sales Manager'),
-  'Sales User': __('Sales User'),
+  Sales: __('Sales'),
+  Sale: __('Sales'),
+  'CTV-Sale': __('Sales'),
+  Marketing: __('Marketing'),
+  'Lead Sales': __('Lead Sales'),
+  'Admissions Director': __('Admissions Director'),
 }
 
 const usersList = computed(() => {
@@ -234,29 +240,52 @@ function getDropdownOptions(user) {
       condition: () => isAdmin(),
     },
     {
-      label: __('Sales Manager'),
+      label: __('Sales'),
       component: () =>
         DropdownOption({
-          option: __('Sales Manager'),
+          option: __('Sales'),
           icon: 'briefcase',
-          selected: user.role === 'Sales Manager',
+          selected: user.role === 'Sales',
         }),
-      onClick: () => updateRole(user, 'Sales Manager'),
+      onClick: () => updateRole(user, 'Sale'),
+      condition: () => isManager(),
+    },
+    {
+      label: __('Marketing'),
+      component: () =>
+        DropdownOption({
+          option: __('Marketing'),
+          icon: 'user-check',
+          selected: user.role === 'Marketing',
+        }),
+      onClick: () => updateRole(user, 'Marketing'),
       condition: () => isAdmin(),
     },
     {
-      label: __('Sales User'),
+      label: __('Lead Sales'),
       component: () =>
         DropdownOption({
-          option: __('Sales User'),
-          icon: 'user-check',
-          selected: user.role === 'Sales User',
+          option: __('Lead Sales'),
+          icon: 'briefcase',
+          selected: user.role === 'Lead Sales',
         }),
-      onClick: () => updateRole(user, 'Sales User'),
+      onClick: () => updateRole(user, 'Lead Sales'),
+      condition: () => isAdmin(),
+    },
+    {
+      label: __('Admissions Director'),
+      component: () =>
+        DropdownOption({
+          option: __('Admissions Director'),
+          icon: 'shield',
+          selected: user.role === 'Admissions Director',
+        }),
+      onClick: () => updateRole(user, 'Admissions Director'),
+      condition: () => isAdmin(),
     },
   ]
 
-  return options.filter((option) => option.condition?.() || true)
+  return options.filter((option) => !option.condition || option.condition())
 }
 
 function updateRole(user, newRole) {
@@ -270,7 +299,7 @@ function updateRole(user, newRole) {
       toast.success(
         __('{0} has been granted {1} access', [
           user.full_name,
-          roleMap[newRole],
+          roleMap[newRole] || newRole,
         ]),
       )
       users.reload()

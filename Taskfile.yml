@@ -87,6 +87,16 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_demo.execute"
 
+  e2e-seed:
+    desc: Seed the isolated crm-agents E2E cohort and identities
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_e2e.execute"
+
+  e2e-reset:
+    desc: Remove only the isolated crm-agents E2E cohort and identities
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_e2e.reset"
+
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart
     cmds:

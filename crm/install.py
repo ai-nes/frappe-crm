@@ -26,6 +26,7 @@ def after_install(force=False):
 	add_default_lost_reasons()
 	add_default_lead_statuses()
 	add_default_enrollment_statuses()
+	add_default_interaction_types()
 	add_default_quick_filters()
 	add_standard_dropdown_items()
 	create_default_manager_dashboard(force)
@@ -353,21 +354,45 @@ def add_default_lead_statuses():
 
 
 def add_default_enrollment_statuses():
-	enrollment_statuses = [
-		"Mới",
-		"Có triển vọng",
-		"Đã xác nhận",
-		"Đã nhập học",
-		"Đã chuyển đổi",
-		"Từ chối",
-	]
+	# stage_order/stage_category are mandatory on the doctype; values mirror the
+	# business-confirmed mapping in patches/v1_0/backfill_enrollment_status_stage_category.py
+	# — keep both in sync if the classification changes.
+	enrollment_statuses = {
+		"Mới": (1, "open"),
+		"Có triển vọng": (2, "open"),
+		"Đã xác nhận": (3, "open"),
+		"Đã nhập học": (4, "enrolled"),
+		"Đã chuyển đổi": (5, "enrolled"),
+		"Từ chối": (6, "lost"),
+	}
 
-	for status in enrollment_statuses:
+	for status, (order, category) in enrollment_statuses.items():
 		if frappe.db.exists("CRM Enrollment Status", status):
 			continue
 
 		doc = frappe.new_doc("CRM Enrollment Status")
 		doc.status_name = status
+		doc.stage_order = order
+		doc.stage_category = category
+		doc.insert()
+
+
+def add_default_interaction_types():
+	# CRM Interaction.interaction_type is mandatory (reqd: 1); every fresh install
+	# must have at least one record or interaction creation fails outright.
+	interaction_types = [
+		"Tin nhắn Chatwoot",
+		"Cuộc gọi",
+		"Email",
+		"Gặp trực tiếp",
+	]
+
+	for interaction_type in interaction_types:
+		if frappe.db.exists("CRM Interaction Type", interaction_type):
+			continue
+
+		doc = frappe.new_doc("CRM Interaction Type")
+		doc.interaction_type_name = interaction_type
 		doc.insert()
 
 

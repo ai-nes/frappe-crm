@@ -5,6 +5,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
+from crm.api.session import CRM_ALLOWED_ROLES, get_session_role_flags
 from crm.api.student_dashboard import (
 	get_intent_definitions,
 	get_student_dashboard,
@@ -75,11 +76,10 @@ def check_app_permission():
 	if "FCRM" not in allowed_modules:
 		return False
 
-	roles = frappe.get_roles()
-	if any(role in ["System Manager", "Sales User", "Sales Manager"] for role in roles):
-		return True
-
-	return False
+	try:
+		return bool(get_session_role_flags()["is_crm_user"])
+	except frappe.PermissionError:
+		return False
 
 
 @frappe.whitelist(allow_guest=True)
@@ -109,11 +109,10 @@ def invite_by_email(emails: str, role: str):
 	if role == "System Manager" and "System Manager" not in user_roles:
 		frappe.throw(_("You are not allowed to invite System Managers"), frappe.PermissionError)
 
-	if role == "Sales Manager" and "System Manager" not in user_roles:
-		frappe.throw(_("You are not allowed to invite Sales Managers"), frappe.PermissionError)
-
-	if role not in ["System Manager", "Sales Manager", "Sales User"]:
+	if role not in CRM_ALLOWED_ROLES:
 		frappe.throw(_("Cannot invite for this role"), frappe.PermissionError)
+	if "System Manager" not in user_roles and role not in {"Sale", "CTV-Sale", "Sales User"}:
+		frappe.throw(_("You are not allowed to invite this CRM profile"), frappe.PermissionError)
 
 	if not emails:
 		return
@@ -126,7 +125,7 @@ def invite_by_email(emails: str, role: str):
 		"Invitation",
 		filters={
 			"email": ["in", email_list],
-			"role": ["in", ["System Manager", "Sales Manager", "Sales User"]],
+			"role": ["in", list(CRM_ALLOWED_ROLES)],
 		},
 		pluck="email",
 	)

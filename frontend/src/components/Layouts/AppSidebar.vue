@@ -156,6 +156,7 @@
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
 import LucideBarChart3 from '~icons/lucide/bar-chart-3'
+import ListChecksIcon from '~icons/lucide/list-checks'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
@@ -164,7 +165,6 @@ import MegaphoneIcon from '~icons/lucide/megaphone'
 import FilterIcon from '~icons/lucide/filter'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
-import LucideMapPin from '~icons/lucide/map-pin'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
 import InviteIcon from '@/components/Icons/InviteIcon.vue'
 import Section from '@/components/Section.vue'
@@ -221,12 +221,32 @@ const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 // Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
 const links = [
-  { label: __('Sales Dashboard'), icon: LucideLayoutDashboard, to: 'Dashboard' },
-  { label: __('Digital Marketing Dashboard'), icon: LucideBarChart3, to: 'Digital Marketing Dashboard' },
-  { label: __('Offline Marketing Dashboard'), icon: LucideMapPin, to: 'Offline Marketing Dashboard' },
-  { label: __('Prospective Students'), icon: SchoolIcon, to: { name: 'CRM Students', query: { stage: 'intake' } } },
+  {
+    label: __('Sales Dashboard'),
+    icon: LucideLayoutDashboard,
+    to: 'Dashboard',
+  },
+  {
+    label: __('Marketing Dashboard'),
+    icon: LucideBarChart3,
+    to: 'Marketing Dashboard',
+  },
+  {
+    label: __('My Recommendations'),
+    icon: ListChecksIcon,
+    to: 'My Recommendations',
+  },
+  {
+    label: __('Prospective Students'),
+    icon: SchoolIcon,
+    to: { name: 'CRM Students', query: { stage: 'intake' } },
+  },
   { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
-  { label: __('Enrolled Students'), icon: GraduationCapIcon, to: { name: 'CRM Contacts', query: { stage: 'enrolled' } } },
+  {
+    label: __('Enrolled Students'),
+    icon: GraduationCapIcon,
+    to: { name: 'CRM Contacts', query: { stage: 'enrolled' } },
+  },
   { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
   { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
   { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },

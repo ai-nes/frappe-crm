@@ -43,6 +43,15 @@ services:
     command: bash /workspace/docker/init.sh
     environment:
       SHELL: /bin/bash
+      # Server-only crm-agents BFF/outbox settings. Never expose these through
+      # the Vite bundle or return them from a whitelisted method.
+      CRM_AGENTS_URL: ${CRM_AGENTS_URL:-http://host.docker.internal:7999}
+      CRM_AGENTS_API_KEY: ${CRM_AGENTS_API_KEY:-}
+      CRM_AGENTS_RESET_API_KEY: ${CRM_AGENTS_RESET_API_KEY:-}
+      CRM_AGENTS_DELEGATION_KEYS_JSON: ${CRM_AGENTS_DELEGATION_KEYS_JSON:-}
+      CRM_AGENTS_DELEGATION_ACTIVE_KID: ${CRM_AGENTS_DELEGATION_ACTIVE_KID:-v1}
+      CRM_AGENTS_DELEGATION_ISSUER: ${CRM_AGENTS_DELEGATION_ISSUER:-http://crm.localhost:8001}
+      CRM_E2E_FIXTURE_RUN_ID: ${CRM_E2E_FIXTURE_RUN_ID:-}
     working_dir: /home/frappe
     volumes:
       - ..:/workspace

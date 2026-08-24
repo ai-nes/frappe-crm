@@ -147,6 +147,24 @@
   {
    "read": 1,
    "role": "Admissions Director"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sales"
+  },
+  {
+   "read": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
   }
  ],
  "quick_entry": 1,

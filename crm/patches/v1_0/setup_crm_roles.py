@@ -6,10 +6,18 @@ NEW_ROLES = [
 	"Sale",
 	"CTV-Sale",
 	"Promoter-PR",
+	"Marketing",
+	"Lead Sales",
+	"Admissions Director",
 	"Administrator",
 ]
 
-REMOVABLE_ROLES = [
+OLD_ROLES = [
+	# Old CRM roles
+	# Kept during the role-contract migration.  They are explicit aliases for
+	# the Sales profile in crm.api.session, not a permission elevation path.
+	# A later, approved migration may remove them after account adoption has
+	# been audited.
 	# ERPNext business roles — irrelevant on a CRM-only deployment
 	"Accounts Manager",
 	"Accounts User",

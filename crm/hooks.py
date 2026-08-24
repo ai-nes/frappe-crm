@@ -132,12 +132,16 @@ permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
+	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
+	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
 }
 
 has_permission = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
+	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
+	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
 }
 
 # DocType Class
@@ -149,46 +153,24 @@ override_doctype_class = {
 	"Email Template": "crm.overrides.email_template.CustomEmailTemplate",
 }
 
-# Status Change Log
-# ------------------
-# Doctypes whose status field is neither "stage" nor "status" register
-# their field name here instead of the generic status_change_log helper
-# growing a hardcoded chain of field names per adopter.
-
-status_change_log_field = {
-	"CRM Contact": "enrollment_status",
-	"CRM Student": "enrollment_status",
-}
-
 # Document Events
 # ---------------
 # Hook on document methods and events
 
 doc_events = {
+	"DocType": {
+		"validate": ["crm.api.capability.validate_ai_exposed_change"],
+	},
 	"Contact": {
 		"validate": ["crm.api.contact.validate"],
-	},
-	"CRM Contact": {
-		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
-		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
-	},
-	"CRM Student": {
-		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
 		"on_update": ["crm.api.todo.on_update"],
 	},
 	"Communication": {
-		"after_insert": [
-			"crm.utils.on_communication_insert",
-			"crm.fcrm.interaction_log.create_interaction_from_communication_insert",
-		],
-		"on_update": [
-			"crm.utils.on_communication_update",
-			"crm.fcrm.interaction_log.create_interaction_from_communication_update",
-		],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+		"after_insert": ["crm.utils.on_communication_insert"],
+		"on_update": ["crm.utils.on_communication_update"],
 	},
 	"Comment": {
 		"after_insert": ["crm.utils.on_comment_insert"],
@@ -198,29 +180,11 @@ doc_events = {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],
 	},
-	"CRM Contact Consent Event": {
-		"after_insert": [
-			"crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event.sync_contact_consent_flag",
-			"crm.fcrm.interaction_log.create_interaction_from_consent_event",
-		],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	"CRM Recommendation": {
+		"on_update": ["crm.fcrm.doctype.crm_recommendation.crm_recommendation.on_status_decided"],
 	},
-	"Task": {
-		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_task_update"],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
-	},
-	"Call Log": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
-	},
-	"CRM Event Participation": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_insert"],
-		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_update"],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
-	},
-	"CRM Campaign Touchpoint": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_campaign_touchpoint_insert"],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	"CRM Sales Action": {
+		"on_update": ["crm.fcrm.doctype.crm_sales_action.crm_sales_action.on_execution_or_outcome_change"],
 	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
@@ -232,9 +196,10 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	"cron": {
-		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
-	},
+	"hourly": ["crm.api.agent_events.retry_pending_agent_events"],
+	"daily": [
+		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+	],
 }
 
 # Testing
@@ -309,6 +274,7 @@ before_request = ["crm.api.resource.normalize_resource_phone_filters"]
 after_migrate = [
 	"crm.fcrm.doctype.fcrm_settings.fcrm_settings.after_migrate",
 	"crm.api.whatsapp.add_roles",
+	"crm.api.agent_migrations.after_migrate",
 ]
 
 standard_dropdown_items = [

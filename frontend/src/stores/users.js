@@ -54,7 +54,9 @@ export const usersStore = defineStore('crm-users', () => {
   }
 
   function isManager(email) {
-    return getUser(email).role === 'Sales Manager' || isAdmin(email)
+    // Retain legacy manager behaviour during the progressive role migration.
+    // The session API deliberately presents it as the canonical Sales profile.
+    return getUser(email).roles?.includes('Sales Manager') || isAdmin(email)
   }
 
   function isWebsiteUser(email) {

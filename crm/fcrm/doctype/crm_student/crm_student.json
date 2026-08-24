@@ -228,13 +228,13 @@
   {
    "fieldname": "source",
    "fieldtype": "Link",
-   "label": "Nguồn quảng cáo",
+   "label": "Source",
    "options": "CRM Lead Source"
   },
   {
    "fieldname": "advertising_channel",
    "fieldtype": "Data",
-   "label": "Kênh quảng cáo"
+   "label": "Advertising Channel"
   },
   {
    "fieldname": "admission_year",
@@ -495,6 +495,34 @@
    "read": 1,
    "report": 1,
    "role": "Admissions Director"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sales",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sales User",
+   "write": 1
   }
  ],
  "quick_entry": 0,
