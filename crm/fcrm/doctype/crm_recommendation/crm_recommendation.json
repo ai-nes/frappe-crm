@@ -236,51 +236,13 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
-   "write": 1
-  },
-  {
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "CTV-Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Lead Sales",
    "write": 1
   },
   {
    "print": 1,
    "read": 1,
-   "role": "Sales Manager",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "Sales User",
+   "role": "Sale",
    "write": 1
   },
   {

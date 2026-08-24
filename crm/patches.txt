@@ -69,3 +69,9 @@ crm.patches.v1_0.backfill_enrollment_status_stage_category
 crm.patches.v1_0.seed_crm_interaction_type
 crm.patches.v1_0.add_ai_capability_gateway_fields
 crm.patches.v1_0.apply_canonical_crm_role_contract
+crm.patches.v1_0.backfill_owner_fields_from_assigned_to
+crm.patches.v1_0.disable_unscoped_ai_resources
+crm.patches.v1_0.restore_ai_exposed_resource_roster
+crm.patches.v1_0.migrate_to_canonical_crm_roles
+crm.patches.v1_0.repair_canonical_role_references
+crm.patches.v1_0.upgrade_canonical_role_snapshot_v4

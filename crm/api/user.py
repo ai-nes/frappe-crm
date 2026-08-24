@@ -8,31 +8,23 @@ from frappe.utils.password import check_password, update_password
 CRM_MANAGED_ROLES = (
 	"System Manager",
 	"Sale",
-	"CTV-Sale",
 	"Marketing",
-	"Promoter-PR",
-	"Team Leader",
 	"Lead Sales",
 	"Admissions Director",
-	# Reversible migration aliases; see crm.api.session.CRM_ROLE_PROFILES.
-	"Sales Manager",
-	"Sales User",
 )
 CRM_BUSINESS_ROLES = frozenset(CRM_MANAGED_ROLES) - {"System Manager"}
 
 
 def _require_crm_role_manager():
-	"""Return whether the caller is admin; retain narrow legacy manager access."""
+	"""Only the Frappe control-plane role may manage CRM role assignments."""
 	roles = set(frappe.get_roles())
 	if "System Manager" in roles:
 		return True
-	if "Sales Manager" in roles:
-		return False
 	frappe.throw(_("Only CRM role managers may change CRM users."), frappe.PermissionError)
 
 
-def _set_single_crm_profile(user_doc, new_role: str):
-	"""Replace CRM business aliases atomically while preserving unrelated roles."""
+def _set_single_crm_role(user_doc, new_role: str):
+	"""Replace the one canonical CRM business role while preserving unrelated roles."""
 	if new_role not in CRM_MANAGED_ROLES:
 		frappe.throw(_("Cannot assign this role"), frappe.ValidationError)
 	if new_role == "System Manager":
@@ -46,24 +38,15 @@ def _set_single_crm_profile(user_doc, new_role: str):
 
 
 def _can_assign_role(is_system_manager: bool, new_role: str) -> bool:
-	"""Legacy Sales Managers keep their prior, Sales-only migration authority."""
-	return is_system_manager or new_role in {"Sale", "CTV-Sale", "Sales User"}
+	return is_system_manager and new_role in CRM_MANAGED_ROLES
 
 
 def _can_manage_target(is_system_manager: bool, target_roles) -> bool:
-	"""Prevent a legacy Sales Manager from demoting another business profile."""
-	if is_system_manager:
-		return True
-	business_roles = set(target_roles) & CRM_BUSINESS_ROLES
-	return not business_roles or business_roles <= {"Sale", "CTV-Sale", "Sales User", "Sales Manager"}
+	return is_system_manager
 
 
 def _can_remove_target(is_system_manager: bool, target_roles) -> bool:
-	"""A legacy Sales Manager may never remove an administrator's CRM access."""
-	roles = set(target_roles)
-	return _can_manage_target(is_system_manager, roles) and (
-		is_system_manager or "System Manager" not in roles
-	)
+	return is_system_manager
 
 
 @frappe.whitelist()
@@ -110,7 +93,7 @@ def change_password(old_password: str, new_password: str):
 @frappe.whitelist()
 def add_existing_users(users: str | list, role: str = "Sale"):
 	"""
-	Add existing users to the CRM by assigning them a role (Sales User or Sales Manager).
+	Add existing users to the CRM by assigning one canonical role.
 	:param users: List of user names to be added
 	"""
 	is_system_manager = _require_crm_role_manager()
@@ -142,7 +125,7 @@ def update_user_role(user: str, new_role: str):
 	if target_is_system_manager and new_role != "System Manager":
 		frappe.throw(_("Remove System Manager access separately before changing this user"), frappe.PermissionError)
 
-	_set_single_crm_profile(user_doc, new_role)
+	_set_single_crm_role(user_doc, new_role)
 
 	user_doc.save(ignore_permissions=True)
 
@@ -150,7 +133,7 @@ def update_user_role(user: str, new_role: str):
 @frappe.whitelist()
 def remove_crm_roles_from_user(user: str):
 	"""
-	Remove a user means removing Sales User & Sales Manager roles from the user.
+	Remove a user means removing their canonical CRM role.
 	:param user: The name of the user to be removed
 	"""
 	is_system_manager = _require_crm_role_manager()

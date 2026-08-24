@@ -8,8 +8,8 @@ from crm.fcrm.permissions import derive_owner_fields
 
 
 ASSIGNABLE_DOCTYPES = {"CRM Student", "CRM Contact"}
-STAFF_ASSIGN_DENIED_ROLES = {"Sale", "CTV-Sale", "Promoter-PR"}
-STAFF_ASSIGN_ALLOWED_ROLES = {"System Manager", "Administrator", "Team Leader", "Counseller"}
+STAFF_ASSIGN_DENIED_ROLES = {"Sale", "Marketing"}
+STAFF_ASSIGN_ALLOWED_ROLES = {"System Manager", "Administrator", "Lead Sales", "Admissions Director"}
 
 
 def _has_staff_assign_permission(user: str | None = None) -> bool:

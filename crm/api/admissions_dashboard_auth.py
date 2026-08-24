@@ -5,17 +5,17 @@ import frappe
 # crm/api/admissions_dashboard.py.
 #
 # Deliberately NOT a copy of crm/api/dashboard.py's @sales_user_only: that gate checks
-# for "Sales Manager"/"Sales User", roles this fork's setup_crm_roles.py patch deletes —
+# for "Lead Sales"/"Sale", roles this fork's setup_crm_roles.py patch deletes —
 # copying it verbatim would lock out every real non-admin user. This fork's real roles
-# are Team Leader / Counseller / Sale / CTV-Sale / Promoter-PR / Administrator.
+# are Lead Sales / Sale / Sale / Sale / Marketing / Administrator.
 
-ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director", "Admissions Operations"}
+ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director", "Admissions Director"}
 
 DASHBOARD_ROLE_GATES = {
-	"sale": {"Sale", "CTV-Sale", "Counseller", "Team Leader", *ADMIN_ROLES},
-	"digital_marketing": {"Team Leader", *ADMIN_ROLES},
-	"offline_marketing": {"Promoter-PR", "Team Leader", *ADMIN_ROLES},
-	"admissions_director": {"Admissions Director", "Admissions Operations", *ADMIN_ROLES},
+	"sale": {"Sale", "Sale", "Sale", "Lead Sales", *ADMIN_ROLES},
+	"digital_marketing": {"Lead Sales", *ADMIN_ROLES},
+	"offline_marketing": {"Marketing", "Lead Sales", *ADMIN_ROLES},
+	"admissions_director": {"Admissions Director", "Admissions Director", *ADMIN_ROLES},
 }
 
 

@@ -3,20 +3,15 @@
 		"doctype": "User",
 		"email": "crm.manager@example.com",
 		"enabled": 1,
-		"first_name": "Sales",
-		"last_name": "Manager",
-		"full_name": "Sales Manager",
+		"first_name": "Lead",
+		"last_name": "Sales",
+		"full_name": "Lead Sales",
 		"new_password": "CRM_Manager_2026",
 		"roles": [
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Lead Sales"
 			}
 		],
 		"user_type": "System User"
@@ -33,7 +28,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -50,7 +45,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -67,7 +62,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -84,7 +79,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -101,7 +96,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -118,12 +113,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Lead Sales"
 			}
 		],
 		"user_type": "System User"
@@ -140,7 +130,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -157,7 +147,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -179,12 +169,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Lead Sales"
 			}
 		],
 		"user_type": "System User"

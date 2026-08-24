@@ -8,6 +8,16 @@ from crm.fcrm.doctype.crm_student.enrollment_transition import (
 	record_transition,
 	set_enrollment_status,
 )
+from crm.fcrm.permissions import (
+	derive_owner_fields,
+	derive_unassigned_owning_team,
+)
+from crm.fcrm.permissions import (
+	get_permission_query_conditions as shared_permission_query_conditions,
+)
+from crm.fcrm.permissions import (
+	has_permission as shared_has_permission,
+)
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
 	resolve_province,
@@ -37,6 +47,7 @@ class CRMStudent(Document):
 			self.cohort_start_year = int(self.cohort_end_year) - 3
 
 	def validate(self):
+		self._derive_scope_fields()
 		self._validate_phone_format()
 		self._resolve_geo()
 		self._validate_high_school_format()
@@ -45,6 +56,12 @@ class CRMStudent(Document):
 		self._validate_unique_id_number()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _derive_scope_fields(self):
+		if self.assigned_to:
+			self.owner_staff, self.owning_team = derive_owner_fields(self.assigned_to)
+		elif not self.owning_team:
+			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
 	def _validate_high_school_format(self):
 		if not self.high_school:
@@ -357,3 +374,11 @@ def create_from_contact(contact):
 	})
 	student.insert()
 	return student.name
+
+
+def get_permission_query_conditions(user=None):
+	return shared_permission_query_conditions("CRM Student", user=user)
+
+
+def has_permission(doc, user=None, permission_type=None):
+	return shared_has_permission(doc, user=user, permission_type=permission_type)

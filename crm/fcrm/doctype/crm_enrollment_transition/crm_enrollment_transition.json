@@ -135,14 +135,14 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader"
+   "role": "Lead Sales"
   },
   {
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Counseller"
+   "role": "Sale"
   }
  ],
  "quick_entry": 0,

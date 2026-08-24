@@ -31,7 +31,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Team Type",
-   "options": "Sales\nMarketing\nAdmissions Operations",
+   "options": "Sales\nMarketing\nAdmissions Director",
    "reqd": 1
   },
   {
@@ -94,14 +94,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller"
+   "role": "Lead Sales"
   },
   {
    "read": 1,
@@ -109,46 +102,11 @@
   },
   {
    "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "read": 1,
-   "role": "Marketing Operator"
-  },
-  {
-   "read": 1,
-   "role": "Marketing Lead"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Operations"
+   "role": "Marketing"
   },
   {
    "read": 1,
    "role": "Admissions Director"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
   }
  ],
  "quick_entry": 0,

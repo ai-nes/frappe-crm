@@ -25,7 +25,7 @@ class TestAdmissionsDashboardAuth(FrappeTestCase):
 			require_dashboard_access(dashboard, user_roles={"Administrator"})
 
 	def test_require_dashboard_access_sale_role_allowed_for_sale(self):
-		for role in ("Sale", "CTV-Sale", "Counseller", "Team Leader"):
+		for role in ("Sale", "Lead Sales"):
 			require_dashboard_access("sale", user_roles={role})
 
 	def test_require_dashboard_access_sale_role_denied_for_offline_marketing(self):
@@ -33,14 +33,14 @@ class TestAdmissionsDashboardAuth(FrappeTestCase):
 			require_dashboard_access("offline_marketing", user_roles={"Sale"})
 
 	def test_require_dashboard_access_promoter_allowed_for_offline_marketing(self):
-		require_dashboard_access("offline_marketing", user_roles={"Promoter-PR"})
+		require_dashboard_access("offline_marketing", user_roles={"Marketing"})
 
 	def test_require_dashboard_access_promoter_denied_for_sale(self):
 		with self.assertRaises(DashboardAccessDenied):
-			require_dashboard_access("sale", user_roles={"Promoter-PR"})
+			require_dashboard_access("sale", user_roles={"Marketing"})
 
 	def test_require_dashboard_access_team_leader_allowed_for_digital_marketing(self):
-		require_dashboard_access("digital_marketing", user_roles={"Team Leader"})
+		require_dashboard_access("digital_marketing", user_roles={"Lead Sales"})
 
 	def test_require_dashboard_access_non_team_leader_denied_for_digital_marketing(self):
 		with self.assertRaises(DashboardAccessDenied):
@@ -113,7 +113,7 @@ class TestAdmissionsDashboardAuth(FrappeTestCase):
 
 	def test_check_dashboard_access_denies_wrong_role(self):
 		campus = self._make_campus("_Test Dashboard Campus 3")
-		user, staff = self._make_user_and_staff("_test_check_wrong_role", campus=campus, roles=["Promoter-PR"])
+		user, staff = self._make_user_and_staff("_test_check_wrong_role", campus=campus, roles=["Marketing"])
 		try:
 			with self.assertRaises(DashboardAccessDenied):
 				check_dashboard_access("sale", user=user)

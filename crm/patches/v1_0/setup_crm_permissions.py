@@ -6,15 +6,17 @@ permission set.
 
 Row-level visibility for CRM Contact/CRM Student is NOT decided here — see
 crm/fcrm/permissions.py and plans/260822-admissions-crm-alignment/business-rules-data-scope.md
-for the locked scope matrix (Sale/CTV-Sale/Team Leader/Counseller/Promoter-PR).
+for the locked scope matrix (Sale/Sale/Lead Sales/Sale/Marketing).
 
-Marketing Operator/Marketing Lead scope to CRM Campaign/CRM Event only (not lead
-ownership). Admissions Operations/Admissions Director get system-wide Contact/Student
+Marketing/Marketing scope to CRM Campaign/CRM Event only (not lead
+ownership). Admissions Director/Admissions Director get system-wide Contact/Student
 visibility via crm.fcrm.permissions.FULL_VISIBILITY_ROLES.
 """
 
 import json
 import os
+import stat
+import tempfile
 
 import frappe
 
@@ -51,35 +53,34 @@ def _read(role):
 STUDENT_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_full("Team Leader"),
-	_p("Counseller", read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
+	_full("Lead Sales"),
+	_p("Sale", read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
 	_p("Sale",       read=1, write=1, create=1, email=1, prt=1),
-	_p("CTV-Sale",   read=1, write=1, create=1, prt=1),
-	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale",   read=1, write=1, create=1, prt=1),
+	_p("Admissions Director", read=1, write=1, create=1, email=1, prt=1, report=1),
 	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
 CONTACT_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_full("Team Leader"),
-	_p("Counseller",  read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
+	_full("Lead Sales"),
+	_p("Sale",  read=1, write=1, create=1, email=1, prt=1, report=1, share=1),
 	_p("Sale",        read=1, write=1, create=1, email=1, prt=1, report=1),
-	_p("CTV-Sale",    read=1, write=1, create=1, prt=1),
-	_p("Promoter-PR", read=1, report=1, prt=1),
-	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale",    read=1, write=1, create=1, prt=1),
+	_p("Admissions Director", read=1, write=1, create=1, email=1, prt=1, report=1),
 	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
 REF_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_read("Team Leader"),
-	_read("Counseller"),
+	_read("Lead Sales"),
+	_read("Sale"),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("Admissions Operations", read=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Admissions Director", read=1),
 	_p("Admissions Director",   read=1),
 ]
 
@@ -91,86 +92,86 @@ REF_PERMS = [
 MARKETING_LOOKUP_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_read("Team Leader"),
-	_read("Counseller"),
+	_read("Lead Sales"),
+	_read("Sale"),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("Marketing Operator", read=1, write=1, create=1, prt=1, report=1),
-	_p("Marketing Lead",     read=1, report=1, prt=1),
-	_p("Admissions Operations", read=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Marketing", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing",     read=1, report=1, prt=1),
+	_p("Admissions Director", read=1),
 	_p("Admissions Director",   read=1),
 ]
 
 LOST_REASON_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_p("Team Leader", read=1, report=1, prt=1),
-	_read("Counseller"),
+	_p("Lead Sales", read=1, report=1, prt=1),
+	_read("Sale"),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("CRM Data Steward", read=1, write=1, create=1, prt=1, report=1),
-	_p("Marketing Lead",   read=1, report=1, prt=1),
-	_p("Admissions Operations", read=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Marketing", read=1, write=1, create=1, prt=1, report=1),
+	_p("Marketing",   read=1, report=1, prt=1),
+	_p("Admissions Director", read=1),
 	_p("Admissions Director",   read=1),
 ]
 
 CAMPUS_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_read("Team Leader"),
-	_read("Counseller"),
+	_read("Lead Sales"),
+	_read("Sale"),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("Admissions Operations", read=1, write=1, create=1, prt=1, report=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Admissions Director", read=1, write=1, create=1, prt=1, report=1),
 	_p("Admissions Director",   read=1, report=1, prt=1, export=1),
 ]
 
 EDUCATION_PROGRAM_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_read("Team Leader"),
-	_read("Counseller"),
+	_read("Lead Sales"),
+	_read("Sale"),
 	_p("Sale",               read=1),
-	_p("CTV-Sale",           read=1),
-	_p("Promoter-PR",        read=1),
-	_p("Enrollment Manager", read=1, write=1, create=1, prt=1, export=1),
-	_p("Admissions Operations", read=1),
+	_p("Sale",           read=1),
+	_p("Marketing",        read=1),
+	_p("Admissions Director", read=1, write=1, create=1, prt=1, export=1),
+	_p("Admissions Director", read=1),
 	_p("Admissions Director",   read=1),
 ]
 
 OPS_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_full("Team Leader"),
-	_p("Counseller",  read=1, write=1, create=1, email=1, prt=1, report=1),
+	_full("Lead Sales"),
+	_p("Sale",  read=1, write=1, create=1, email=1, prt=1, report=1),
 	_p("Sale",        read=1, write=1, create=1, prt=1, if_owner=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("Admissions Operations", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Admissions Director", read=1, write=1, create=1, email=1, prt=1, report=1),
 	_p("Admissions Director",   read=1, report=1),
 ]
 
 RECOMMENDATION_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_p("Team Leader", read=1, write=1, email=1, prt=1, report=1),
-	_p("Counseller", read=1, write=1, email=1, prt=1, report=1),
+	_p("Lead Sales", read=1, write=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, email=1, prt=1, report=1),
 	_p("Sale", read=1, write=1, prt=1),
-	_p("CTV-Sale", read=1, write=1, prt=1),
-	_p("Promoter-PR", read=1),
+	_p("Sale", read=1, write=1, prt=1),
+	_p("Marketing", read=1),
 ]
 
 SALES_ACTION_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_p("Team Leader", read=1, write=1, create=1, email=1, prt=1, report=1),
-	_p("Counseller", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Lead Sales", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Sale", read=1, write=1, create=1, email=1, prt=1, report=1),
 	_p("Sale", read=1, write=1, create=1, prt=1, report=1),
-	_p("CTV-Sale", read=1, write=1, create=1, prt=1),
-	_p("Promoter-PR", read=1),
+	_p("Sale", read=1, write=1, create=1, prt=1),
+	_p("Marketing", read=1),
 ]
 
 # Marketing roles are scoped to Campaign/Event ownership, not lead ownership — see
@@ -178,28 +179,28 @@ SALES_ACTION_PERMS = [
 CAMPAIGN_EVENT_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_full("Team Leader"),
-	_p("Counseller",  read=1, report=1, prt=1),
+	_full("Lead Sales"),
+	_p("Sale",  read=1, report=1, prt=1),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_full("Marketing Lead"),
-	_p("Marketing Operator", read=1, write=1, create=1, email=1, prt=1, report=1),
-	_p("Admissions Operations", read=1, report=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_full("Marketing"),
+	_p("Marketing", read=1, write=1, create=1, email=1, prt=1, report=1),
+	_p("Admissions Director", read=1, report=1),
 	_p("Admissions Director",   read=1, report=1, export=1),
 ]
 
 TEAM_PERMS = [
 	_full("System Manager"),
 	_full("Administrator"),
-	_read("Team Leader"),
-	_read("Counseller"),
+	_read("Lead Sales"),
+	_read("Sale"),
 	_p("Sale",        read=1),
-	_p("CTV-Sale",    read=1),
-	_p("Promoter-PR", read=1),
-	_p("Marketing Operator",     read=1),
-	_p("Marketing Lead",         read=1),
-	_p("Admissions Operations",  read=1),
+	_p("Sale",    read=1),
+	_p("Marketing", read=1),
+	_p("Marketing",     read=1),
+	_p("Marketing",         read=1),
+	_p("Admissions Director",  read=1),
 	_p("Admissions Director",    read=1),
 ]
 
@@ -261,61 +262,109 @@ DOCTYPE_PERMS = {
 	"CRM Academic Year Config":    SYS_PERMS,
 }
 
-# Canonical UI/persona role names are migration aliases for the existing
-# Frappe permission authorities.  Keep the mapping here, beside the sole
-# DocPerm source, so the new role names never grant more access than their
-# established counterpart.  Row scope remains governed by the existing
-# permission hooks; this only makes equivalent DocType grants explicit.
-PROFILE_PERMISSION_ALIASES = {
-	"Sale": ("Sales Manager", "Sales User"),
-	"Promoter-PR": ("Marketing",),
-	"Team Leader": ("Lead Sales",),
-}
-
-
-def _expand_profile_permission_aliases(perms):
-	expanded = list(perms)
-	roles = {permission["role"] for permission in expanded}
+def _merge_duplicate_permissions(perms):
+	"""Keep the least-privilege common grant for each canonical role."""
+	grouped = {}
 	for permission in perms:
-		for alias in PROFILE_PERMISSION_ALIASES.get(permission["role"], ()):
-			if alias not in roles:
-				expanded.append({**permission, "role": alias})
-				roles.add(alias)
-	return expanded
+		grouped.setdefault(permission["role"], []).append(permission)
+	merged = []
+	for role, rows in grouped.items():
+		common = {"role": role}
+		for key in set().union(*(row.keys() for row in rows)) - {"role"}:
+			if all(row.get(key) for row in rows):
+				common[key] = 1
+		merged.append(common)
+	return merged
 
 
-DOCTYPE_PERMS = {
-	doctype: _expand_profile_permission_aliases(perms)
-	for doctype, perms in DOCTYPE_PERMS.items()
-}
+DOCTYPE_PERMS = {doctype: _merge_duplicate_permissions(perms) for doctype, perms in DOCTYPE_PERMS.items()}
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _update_json(doctype, perms, module):
+def _stage_json(doctype, perms, module):
+	"""Render one permission JSON file into a same-directory staging file.
+
+		All files are staged before any is published.  The original bytes and mode
+		are retained so a later publish/reload failure can restore the whole batch.
+	"""
 	doctype_dir = frappe.scrub(doctype)
 	json_path = os.path.join(
 		frappe.get_module_path(module, "doctype", doctype_dir),
 		f"{doctype_dir}.json",
 	)
 	if not os.path.exists(json_path):
-		return
+		return None
 
+	with open(json_path, "rb") as original_file:
+		original = original_file.read()
+	staged = False
 	try:
-		with open(json_path, encoding="utf-8") as f:
-			doc_json = json.load(f)
+		doc_json = json.loads(original.decode("utf-8"))
 
 		doc_json["permissions"] = [dict(sorted(p.items())) for p in perms]
 
-		with open(json_path, "w", encoding="utf-8") as f:
-			json.dump(doc_json, f, indent=1, ensure_ascii=False)
-			f.write("\n")
+		fd, temp_path = tempfile.mkstemp(
+			prefix=f".{doctype_dir}.", suffix=".json.tmp", dir=os.path.dirname(json_path)
+		)
+		try:
+			with os.fdopen(fd, "w", encoding="utf-8") as f:
+				json.dump(doc_json, f, indent=1, ensure_ascii=False)
+				f.write("\n")
+				f.flush()
+				os.fsync(f.fileno())
+			staged = True
+			return {
+				"doctype": doctype,
+				"module": module,
+				"json_path": json_path,
+				"temp_path": temp_path,
+				"original": original,
+				"mode": stat.S_IMODE(os.stat(json_path).st_mode),
+			}
+		finally:
+			if os.path.exists(temp_path) and not staged:
+				os.unlink(temp_path)
 	except Exception as e:
-		frappe.log_error(f"setup_crm_permissions: failed to update {doctype} JSON — {e}")
+		# Permission JSON is part of the cutover transaction.  Continuing after a
+		# failed write would reload stale permissions and commit a partial policy.
+		raise RuntimeError(f"setup_crm_permissions: failed to update {doctype} JSON") from e
+
+
+def _update_json(doctype, perms, module):
+	"""Backward-compatible single-file helper used by older patches/tests."""
+	staged = _stage_json(doctype, perms, module)
+	if staged is None:
+		return
+	try:
+		os.replace(staged["temp_path"], staged["json_path"])
+		os.chmod(staged["json_path"], staged["mode"])
+	finally:
+		if os.path.exists(staged["temp_path"]):
+			os.unlink(staged["temp_path"])
+
+
+def _restore_staged_json(staged):
+	for item in reversed(staged):
+		fd, temp_path = tempfile.mkstemp(
+			prefix=f".{frappe.scrub(item['doctype'])}.restore.",
+			suffix=".json.tmp",
+			dir=os.path.dirname(item["json_path"]),
+		)
+		try:
+			with os.fdopen(fd, "wb") as f:
+				f.write(item["original"])
+				f.flush()
+				os.fsync(f.fileno())
+			os.replace(temp_path, item["json_path"])
+			os.chmod(item["json_path"], item["mode"])
+		finally:
+			if os.path.exists(temp_path):
+				os.unlink(temp_path)
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
-def execute():
+def execute(*, commit=True):
 	# Batch-fetch existing doctypes and their modules in one query
 	rows = frappe.get_all(
 		"DocType",
@@ -324,12 +373,32 @@ def execute():
 	)
 	modules = {r.name: r.module for r in rows}
 
-	for doctype, perms in DOCTYPE_PERMS.items():
-		module = modules.get(doctype)
-		if not module:
-			continue
-		_update_json(doctype, perms, module)
-		frappe.reload_doc(module, "doctype", frappe.scrub(doctype), force=True)
-
-	frappe.db.commit()
-	frappe.clear_cache()
+	staged = []
+	try:
+		# Stage every candidate before publishing any file.  This catches malformed
+		# JSON, missing directories, and disk errors before the first mutation.
+		for doctype, perms in DOCTYPE_PERMS.items():
+			module = modules.get(doctype)
+			if module:
+				item = _stage_json(doctype, perms, module)
+				if item:
+					staged.append(item)
+		for item in staged:
+			os.replace(item["temp_path"], item["json_path"])
+			os.chmod(item["json_path"], item["mode"])
+		for item in staged:
+			frappe.reload_doc(item["module"], "doctype", frappe.scrub(item["doctype"]), force=True)
+		if commit:
+			frappe.db.commit()
+		frappe.clear_cache()
+	except Exception:
+		try:
+			_restore_staged_json(staged)
+			frappe.db.rollback()
+		except Exception:
+			frappe.log_error(frappe.get_traceback(), "setup_crm_permissions rollback failed")
+		raise
+	finally:
+		for item in staged:
+			if os.path.exists(item["temp_path"]):
+				os.unlink(item["temp_path"])

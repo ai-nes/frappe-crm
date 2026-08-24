@@ -105,14 +105,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller"
+   "role": "Lead Sales"
   },
   {
    "read": 1,
@@ -120,51 +113,11 @@
   },
   {
    "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "create": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "CRM Data Steward",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Marketing Lead"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Operations"
+   "role": "Marketing"
   },
   {
    "read": 1,
    "role": "Admissions Director"
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
   }
  ],
  "quick_entry": 1,

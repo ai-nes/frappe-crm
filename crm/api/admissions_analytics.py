@@ -9,8 +9,8 @@ import frappe
 from frappe import _
 
 _ALLOWED_ROLES = frozenset({
-	"System Manager", "CRM Manager", "Sale", "CTV-Sale", "Team Leader",
-	"Promoter-PR", "Admissions Director",
+	"System Manager", "Lead Sales", "Sale", "Sale", "Lead Sales",
+	"Marketing", "Admissions Director",
 })
 _E2E_EMAIL_PREFIX = "e2e-fpt-2026-"
 
@@ -19,7 +19,7 @@ def _require_role() -> None:
 	roles = set(frappe.get_roles())
 	if not _ALLOWED_ROLES.intersection(roles):
 		frappe.throw(_("You are not permitted to access aggregate admissions analytics."), frappe.PermissionError)
-	if not roles.intersection({"System Manager", "CRM Manager"}) and not frappe.db.exists(
+	if not roles.intersection({"System Manager", "Lead Sales"}) and not frappe.db.exists(
 		"CRM Staff", {"user": frappe.session.user}
 	):
 		frappe.throw(_("A CRM Staff campus mapping is required for aggregate analytics."), frappe.PermissionError)

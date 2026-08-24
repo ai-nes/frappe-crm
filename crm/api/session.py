@@ -1,74 +1,64 @@
 import frappe
 from frappe import _
 
-CRM_ROLE_PROFILES = {
-	# Sales Manager/User are retained as migration aliases. They deliberately
-	# select the Sales persona only; they do not grant manager permissions.
-	"sales": frozenset({"Sale", "CTV-Sale", "Counseller", "Sales Manager", "Sales User"}),
-	"marketing": frozenset({"Marketing", "Promoter-PR"}),
-	"lead_sales": frozenset({"Team Leader", "Lead Sales"}),
-	"admissions_director": frozenset({"Admissions Director", "Giám đốc Tuyển sinh"}),
-}
-CRM_PROFILE_LABELS = {
-	"sales": "Sales",
-	"marketing": "Marketing",
-	"lead_sales": "Lead Sales",
-	"admissions_director": "Admissions Director",
-}
-CRM_BUSINESS_ROLES = frozenset().union(*CRM_ROLE_PROFILES.values())
+CRM_BUSINESS_ROLES = frozenset({"Sale", "Lead Sales", "Marketing", "Admissions Director"})
 CRM_ALLOWED_ROLES = frozenset({"System Manager"}) | CRM_BUSINESS_ROLES
 
 
 def resolve_crm_profile(roles):
-	"""Return the sole canonical business profile, otherwise ``None``.
+	"""Return the one assigned canonical business role, otherwise ``None``.
 
-	A person can keep several migration aliases for the same profile.  Roles
-	from two profiles are intentionally indistinguishable from an unmapped
-	caller: both fail closed rather than making declaration order a persona
-	selection policy.
+	There are no compatibility aliases: a role assignment is authoritative only
+	when it contains exactly one of the four CRM business roles.
+	"""
+	matches = frozenset(roles) & CRM_BUSINESS_ROLES
+	return next(iter(matches)) if len(matches) == 1 else None
+
+
+def resolve_copilot_profile(roles):
+	"""Return a business Copilot profile, denying System Manager absolutely.
+
+	System Manager is an AI-exposure control-plane role. It must never acquire
+	a Copilot persona through a coexisting legacy business alias during the
+	canonical-role migration.
 	"""
 	role_names = frozenset(roles)
-	matches = [profile for profile, aliases in CRM_ROLE_PROFILES.items() if role_names & aliases]
-	return matches[0] if len(matches) == 1 else None
+	if "System Manager" in role_names:
+		return None
+	return resolve_crm_profile(role_names)
 
 
 def get_crm_user_role(roles):
 	"""Return the UI role label and profile for a User's actual Frappe roles."""
 	role_names = frozenset(roles)
+	if "System Manager" in role_names:
+		# Keep the control-plane identity visible in the UI and prevent a
+		# coexisting legacy business alias from selecting a Copilot persona.
+		return "System Manager", None
 	profile = resolve_crm_profile(role_names)
 	if profile:
-		return CRM_PROFILE_LABELS[profile], profile
+		return profile, profile
 	if role_names & CRM_BUSINESS_ROLES:
-		# A System Manager must not mask a conflicting business-role set.  The
-		# caller must first remove/migrate the extra profile aliases.
+		# Non-System users with business roles from multiple canonical profiles
+		# are ambiguous and must remove/migrate the extra aliases first.
 		return "", None
-	if "System Manager" in role_names:
-		return "System Manager", None
 	return "", None
 
 
 def _session_role_flags(roles):
 	"""Build flags from server-derived roles; shared with focused contract tests."""
 	role_names = frozenset(roles)
-	profile = resolve_crm_profile(role_names)
-	if role_names & CRM_BUSINESS_ROLES and profile is None:
+	is_system_manager = "System Manager" in role_names
+	profile = resolve_copilot_profile(role_names)
+	if not is_system_manager and role_names & CRM_BUSINESS_ROLES and profile is None:
 		frappe.throw(_("Your CRM business roles are ambiguous or unsupported."), frappe.PermissionError)
-	if not profile and "System Manager" not in role_names:
+	if not profile and not is_system_manager:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 
-	# Keep the legacy booleans stable for older SPA callers. New consumers must
-	# use crm_profile/is_crm_user so a Marketing or Lead Sales account never
-	# masquerades as a Sales Manager/User.
 	return {
-		"is_system_manager": "System Manager" in role_names,
-		"is_sales_manager": "Sales Manager" in role_names and "System Manager" not in role_names,
-		"is_sales_user": (
-			"Sales User" in role_names
-			and "Sales Manager" not in role_names
-			and "System Manager" not in role_names
-		),
-		"is_crm_user": bool(profile) or "System Manager" in role_names,
-		"crm_profile": profile,
+		"is_system_manager": is_system_manager,
+		"is_crm_user": bool(profile) or is_system_manager,
+		"crm_role": profile,
 	}
 
 
@@ -89,7 +79,7 @@ def get_my_roles():
 	from client-supplied input.
 	"""
 	flags = get_session_role_flags()
-	return {"user": frappe.session.user, "roles": frappe.get_roles(), "crm_profile": flags["crm_profile"]}
+	return {"user": frappe.session.user, "roles": frappe.get_roles(), "crm_role": flags["crm_role"]}
 
 
 @frappe.whitelist()
@@ -123,7 +113,7 @@ def get_users():
 
 		user.roles = frappe.get_roles(user.name)
 
-		user.role, user.crm_profile = get_crm_user_role(user.roles)
+		user.role, user.crm_role = get_crm_user_role(user.roles)
 		if not user.role and "Guest" in user.roles:
 			user.role = "Guest"
 
@@ -133,7 +123,7 @@ def get_users():
 		user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
 		user.language = user.language or system_language
 
-		if user.crm_profile or user.role == "System Manager":
+		if user.crm_role or user.role == "System Manager":
 			crm_users.append(user)
 
 	if not session_roles["is_system_manager"]:

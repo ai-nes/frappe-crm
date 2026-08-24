@@ -27,7 +27,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Function",
-   "options": "Team Leader\nCounseller\nSale\nCTV-Sale\nPromoter-PR\nMarketing Operator\nMarketing Lead\nAdmissions Operations\nAdmissions Director",
+   "options": "Lead Sales\nSale\nMarketing\nAdmissions Director",
    "reqd": 1
   },
   {

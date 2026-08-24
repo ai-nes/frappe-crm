@@ -4,6 +4,12 @@ import frappe
 from frappe.model.document import Document
 
 from crm.fcrm.doctype.crm_student.enrollment_transition import set_enrollment_status
+from crm.fcrm.permissions import (
+	derive_owner_fields,
+	derive_unassigned_owning_team,
+	get_permission_query_conditions as shared_permission_query_conditions,
+	has_permission as shared_has_permission,
+)
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 
@@ -105,6 +111,7 @@ class CRMContact(Document):
 
 	def validate(self):
 		self._normalize_shared_fields()
+		self._derive_scope_fields()
 		self._validate_phone_format()
 		self._resolve_geo()
 		self._validate_high_school_format()
@@ -112,6 +119,12 @@ class CRMContact(Document):
 		self._validate_unique_email()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _derive_scope_fields(self):
+		if self.assigned_to:
+			self.owner_staff, self.owning_team = derive_owner_fields(self.assigned_to)
+		elif not self.owning_team:
+			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
 
 	def _resolve_geo(self):
 		# high_school is intentionally NOT resolved here — _validate_high_school_format()
@@ -317,28 +330,8 @@ class CRMContact(Document):
 			set_enrollment_status(self.student, new_enrollment_status, source="contact_sync")
 
 def get_permission_query_conditions(user=None):
-	if not user:
-		user = frappe.session.user
+	return shared_permission_query_conditions("CRM Contact", user=user)
 
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
-		return None
 
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-	if not crm_staff_name:
-		return "1=0"
-
-	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
-	if not campus:
-		return "1=0"
-
-	crm_staff_in_campus = frappe.db.get_all(
-		"CRM Staff",
-		filters={"campus": campus},
-		pluck="name",
-	)
-
-	if not crm_staff_in_campus:
-		return "1=0"
-
-	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
-	return f"`tabCRM Contact`.assigned_to in ({escaped})"
+def has_permission(doc, user=None, permission_type=None):
+	return shared_has_permission(doc, user=user, permission_type=permission_type)

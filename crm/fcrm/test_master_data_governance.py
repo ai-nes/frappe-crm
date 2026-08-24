@@ -45,7 +45,8 @@ class TestMasterDataGovernance(FrappeTestCase):
 	# ------------------------------------------------------------- check_impact
 
 	def test_check_impact_counts_real_usage(self):
-		platform_name = self._make_platform("_Test Gov Platform Impact")
+		lead_source = self._make_lead_source("_Test Gov Platform Impact Source")
+		platform_name = self._make_platform("_Test Gov Platform Impact", lead_source=lead_source)
 		contact = self._make_contact("_Test Gov Impact Contact", "0981113301", platform=platform_name)
 
 		usage = check_impact("CRM Platform", platform_name)
@@ -112,12 +113,20 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_approve_change_rejects_non_proposed_status(self):
 		source = self._make_lead_source("_Test Gov Source Approve Bad Status")
-		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
-		approve_change(change_name)  # single-approver type -> immediately applied
-
-		with self.assertRaises(frappe.ValidationError):
+		proposer, _ = self._make_user_with_roles("_test_gov_bad_status_proposer", roles=["Marketing"])
+		approver, _ = self._make_user_with_roles("_test_gov_bad_status_approver", roles=["Marketing"])
+		try:
+			frappe.set_user(proposer)
+			change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
+			self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+			frappe.set_user(approver)
 			approve_change(change_name)
+			with self.assertRaises(frappe.ValidationError):
+				approve_change(change_name)
+		finally:
+			frappe.set_user("Administrator")
+			self._cleanup_user(proposer)
+			self._cleanup_user(approver)
 
 	def test_approve_change_denied_without_approver_role(self):
 		source = self._make_lead_source("_Test Gov Source Approve Denied")
@@ -127,6 +136,21 @@ class TestMasterDataGovernance(FrappeTestCase):
 		user, _ = self._make_user_with_roles("_test_gov_approve_denied", roles=["Sale"])
 		try:
 			frappe.set_user(user)
+			with self.assertRaises(frappe.PermissionError):
+				approve_change(change_name)
+		finally:
+			frappe.set_user("Administrator")
+			self._cleanup_user(user)
+
+	def test_proposer_cannot_approve_even_with_approver_role(self):
+		source = self._make_lead_source("_Test Gov Source Self Approval")
+		user, _ = self._make_user_with_roles(
+			"_test_gov_self_approval", roles=["Marketing"]
+		)
+		try:
+			frappe.set_user(user)
+			change_name = propose_change("CRM Lead Source", source, "Retire", reason="separation test")
+			self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
 			with self.assertRaises(frappe.PermissionError):
 				approve_change(change_name)
 		finally:
@@ -147,7 +171,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			lambda: frappe.delete_doc("CRM Lead Source", "_Test Gov Source Rename Dst", force=True)
 		)
 
-		user, _ = self._make_user_with_roles("_test_gov_marketing_lead", roles=["Marketing Lead"])
+		user, _ = self._make_user_with_roles("_test_gov_marketing_lead", roles=["Marketing"])
 		try:
 			frappe.set_user(user)
 			status = approve_change(change_name)
@@ -168,15 +192,15 @@ class TestMasterDataGovernance(FrappeTestCase):
 		)
 		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
 
-		team_leader, _ = self._make_user_with_roles("_test_gov_team_leader", roles=["Team Leader"])
-		marketing_lead, _ = self._make_user_with_roles("_test_gov_dual_marketing_lead", roles=["Marketing Lead"])
+		team_leader, _ = self._make_user_with_roles("_test_gov_team_leader", roles=["Lead Sales"])
+		marketing_lead, _ = self._make_user_with_roles("_test_gov_dual_marketing_lead", roles=["Marketing"])
 		try:
 			frappe.set_user(team_leader)
 			status_after_first = approve_change(change_name)
 			self.assertEqual(status_after_first, "Proposed")
 
 			change = frappe.get_doc("CRM Master Data Change Log", change_name)
-			self.assertEqual(change.approved_by_roles, "Team Leader")
+			self.assertEqual(change.approved_by_roles, "Lead Sales")
 			self.assertEqual(
 				frappe.db.get_value("CRM Lost Reason", lost_reason, "approval_state"), "Approved"
 			)
@@ -186,7 +210,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			self.assertEqual(status_after_second, "Approved")
 
 			change.reload()
-			self.assertEqual(set(change.approved_by_roles.split(",")), {"Team Leader", "Marketing Lead"})
+			self.assertEqual(set(change.approved_by_roles.split(",")), {"Lead Sales", "Marketing"})
 			self.assertEqual(
 				frappe.db.get_value("CRM Lost Reason", lost_reason, "approval_state"), "Retired"
 			)
@@ -195,6 +219,23 @@ class TestMasterDataGovernance(FrappeTestCase):
 			self._cleanup_user(team_leader)
 			self._cleanup_user(marketing_lead)
 
+	def test_dual_role_user_cannot_self_satisfy_both_signoffs(self):
+		lost_reason = self._make_lost_reason("_Test Gov Lost Reason Dual Role")
+		change_name = propose_change(
+			"CRM Lost Reason", lost_reason, "Retire", reason="no longer used"
+		)
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		dual_role_user, _ = self._make_user_with_roles(
+			"_test_gov_dual_role_user", roles=["Lead Sales", "Marketing"]
+		)
+		try:
+			frappe.set_user(dual_role_user)
+			with self.assertRaises(frappe.PermissionError):
+				approve_change(change_name)
+		finally:
+			frappe.set_user("Administrator")
+			self._cleanup_user(dual_role_user)
+
 	# ------------------------------------------------------------- reject_change
 
 	def test_reject_change_sets_status_and_appends_reason(self):
@@ -202,7 +243,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated channel")
 		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
 
-		user, _ = self._make_user_with_roles("_test_gov_rejector", roles=["Marketing Lead"])
+		user, _ = self._make_user_with_roles("_test_gov_rejector", roles=["Marketing"])
 		try:
 			frappe.set_user(user)
 			status = reject_change(change_name, reason="not a real duplicate")
@@ -255,10 +296,16 @@ class TestMasterDataGovernance(FrappeTestCase):
 			if frappe.db.exists("CRM Lead Source", doc.name) else None)
 		return doc.name
 
-	def _make_platform(self, name):
+	def _make_platform(self, name, lead_source=None):
 		if frappe.db.exists("CRM Platform", name):
 			frappe.delete_doc("CRM Platform", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Platform", "platform_name": name})
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Platform",
+				"platform_name": name,
+				"lead_source": lead_source or self._make_lead_source(f"{name} Source"),
+			}
+		)
 		doc.insert(ignore_permissions=True)
 		self.addCleanup(lambda: frappe.delete_doc("CRM Platform", doc.name, force=True)
 			if frappe.db.exists("CRM Platform", doc.name) else None)

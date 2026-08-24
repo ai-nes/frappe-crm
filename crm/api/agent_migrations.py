@@ -26,13 +26,18 @@ def after_migrate() -> None:
 
 
 def _grant_sales_worklist_capability() -> None:
-	"""Seed least-privilege read capabilities for verified CRM copilot roles."""
+	"""Seed read capabilities for verified CRM Copilot roles.
+
+	Knowledge-graph retrieval is a shared advisory source for every supported
+	Copilot persona. The grant remains Role-owned in Frappe: the AI service
+	never supplies a fallback capability when a Role is revoked here.
+	"""
 	# This is a Table field, stored in its child DocType rather than as a
 	# column on tabRole.  `db.has_column` would therefore always return False.
 	if not frappe.get_meta("Role").has_field("custom_ai_capability_grants"):
 		return
 	changed = False
-	for role_name in ("Sale", "CTV-Sale", "Counseller", "Team Leader"):
+	for role_name in ("Sale", "Lead Sales"):
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -47,7 +52,7 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
-	for role_name in ("Promoter-PR", "Team Leader", "Admissions Director"):
+	for role_name in ("Marketing", "Lead Sales", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -59,6 +64,24 @@ def _grant_sales_worklist_capability() -> None:
 		role.append(
 			"custom_ai_capability_grants",
 			{"grant_type": "semantic_capability", "value": "admissions_analytics.pipeline_summary.read"},
+		)
+		role.save(ignore_permissions=True)
+		changed = True
+	# All canonical Copilot profiles may consult the shared, advisory knowledge
+	# graph.  System Manager and Administrator are intentionally excluded: they
+	# are control-plane identities, not Copilot personas (see crm.api.session).
+	for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == "knowledge_graph.query"
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": "knowledge_graph.query"},
 		)
 		role.save(ignore_permissions=True)
 		changed = True

@@ -3,6 +3,9 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from crm.fcrm.permissions import (
+	get_permission_query_conditions as get_student_permission_query_conditions,
+)
 
 
 class CRMSalesAction(Document):
@@ -18,15 +21,6 @@ class CRMSalesAction(Document):
 		digest = hashlib.sha256(self.recommendation.encode("utf-8")).hexdigest()[:24]
 		prefix = "SA-E2E-FPT-2026-" if self.recommendation.startswith("REC-E2E-FPT-2026-") else "SA-"
 		self.name = f"{prefix}{digest}"
-
-
-def _crm_staff_campus(user: str) -> tuple[str | None, str | None]:
-	"""Return (crm_staff_name, campus) for `user`, or (None, None) if unmapped."""
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-	if not crm_staff_name:
-		return None, None
-	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
-	return crm_staff_name, campus
 
 
 def on_execution_or_outcome_change(doc, method=None):
@@ -47,56 +41,36 @@ def on_execution_or_outcome_change(doc, method=None):
 
 
 def get_permission_query_conditions(user=None):
-	"""LIST-view guard: only rows for students whose assigned_to falls in the
-	requesting user's own campus are visible — mirrors
-	crm_recommendation.get_permission_query_conditions's campus-based
-	filtering."""
+	"""LIST-view guard derived from the canonical CRM Student scope."""
 	if not user:
 		user = frappe.session.user
 
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
 		return None
-
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
-		return "1=0"
-
-	crm_staff_in_campus = frappe.db.get_all(
-		"CRM Staff",
-		filters={"campus": campus},
-		pluck="name",
-	)
-	if not crm_staff_in_campus:
-		return "1=0"
-
-	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
 	return (
 		"`tabCRM Sales Action`.student in ("
 		"select `tabCRM Student`.name from `tabCRM Student` "
-		f"where `tabCRM Student`.assigned_to in ({escaped})"
+		f"where {student_condition}"
 		")"
 	)
 
 
 def has_permission(doc, user=None, permission_type=None):
-	"""Direct-GET-by-name guard — mirrors crm_recommendation.has_permission."""
+	"""Direct-GET-by-name guard using the same Student scope as list views."""
 	if not user:
 		user = frappe.session.user
-
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
-		return True
 
 	student = doc.get("student") if isinstance(doc, dict) else getattr(doc, "student", None)
 	if not student:
 		return False
 
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
-		return False
-
-	assigned_to = frappe.db.get_value("CRM Student", student, "assigned_to")
-	if not assigned_to:
-		return False
-
-	assigned_campus = frappe.db.get_value("CRM Staff", assigned_to, "campus")
-	return assigned_campus == campus
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return True
+	return bool(
+		frappe.db.sql(
+			"select name from `tabCRM Student` where name = %s and (" + student_condition + ") limit 1",
+			(student,),
+		)
+	)

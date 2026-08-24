@@ -129,7 +129,7 @@ def delete(name: str | int):
 
 @frappe.whitelist()
 def public(name: str | int, value: bool | int):
-	if frappe.session.user != "Administrator" and "Sales Manager" not in frappe.get_roles():
+	if frappe.session.user != "Administrator" and "Lead Sales" not in frappe.get_roles():
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 	doc = frappe.get_doc("View Settings", name)
@@ -150,11 +150,11 @@ def pin(name: str | int, value: bool | int):
 
 def check_permission(doc):
 	"""Administrator and System Manager can edit any view.
-	If view is public, Sales Manager can edit.
+	If view is public, Lead Sales can edit.
 	If view is private, only the view owner can edit."""
 	if frappe.session.user == "Administrator" or "System Manager" in frappe.get_roles():
 		pass
-	elif doc.public and "Sales Manager" in frappe.get_roles():
+	elif doc.public and "Lead Sales" in frappe.get_roles():
 		pass
 	elif doc.user and doc.user == frappe.session.user:
 		pass

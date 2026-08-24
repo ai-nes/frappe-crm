@@ -91,7 +91,7 @@ def accept_invitation(key: str | None = None):
 	if not result:
 		frappe.throw(_("Invalid or expired key"))
 	invitation = frappe.get_doc("Invitation", result[0])
-	invitation.accept()
+	invitation.accept(key=key)
 	invitation.reload()
 
 	if invitation.status == "Accepted":
@@ -102,7 +102,9 @@ def accept_invitation(key: str | None = None):
 
 @frappe.whitelist()
 def invite_by_email(emails: str, role: str):
-	frappe.only_for(["Sales Manager", "System Manager"], True)
+	# Role assignment is a control-plane operation.  Lead Sales can work CRM
+	# records but must not mint accounts or choose a different business role.
+	frappe.only_for(["System Manager"], True)
 
 	user_roles = frappe.get_roles(frappe.session.user)
 
@@ -111,7 +113,7 @@ def invite_by_email(emails: str, role: str):
 
 	if role not in CRM_ALLOWED_ROLES:
 		frappe.throw(_("Cannot invite for this role"), frappe.PermissionError)
-	if "System Manager" not in user_roles and role not in {"Sale", "CTV-Sale", "Sales User"}:
+	if "System Manager" not in user_roles:
 		frappe.throw(_("You are not allowed to invite this CRM profile"), frappe.PermissionError)
 
 	if not emails:

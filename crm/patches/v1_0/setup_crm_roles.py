@@ -1,23 +1,18 @@
 import frappe
 
 NEW_ROLES = [
-	"Team Leader",
-	"Counseller",
 	"Sale",
-	"CTV-Sale",
-	"Promoter-PR",
 	"Marketing",
 	"Lead Sales",
 	"Admissions Director",
+	"System Manager",
 	"Administrator",
 ]
 
 OLD_ROLES = [
 	# Old CRM roles
-	# Kept during the role-contract migration.  They are explicit aliases for
-	# the Sales profile in crm.api.session, not a permission elevation path.
-	# A later, approved migration may remove them after account adoption has
-	# been audited.
+	# Historical ERPNext roles retained only for the one-time migration patch
+	# below. Runtime authorization never treats these as CRM roles.
 	# ERPNext business roles — irrelevant on a CRM-only deployment
 	"Accounts Manager",
 	"Accounts User",

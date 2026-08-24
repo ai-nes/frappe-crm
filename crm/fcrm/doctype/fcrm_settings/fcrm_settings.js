@@ -4,7 +4,7 @@
 frappe.ui.form.on("FCRM Settings", {
 	refresh(frm) {
 		if (
-			(frappe.user.has_role("Sales Manager") ||
+			(frappe.user.has_role("Lead Sales") ||
 				frappe.user.has_role("System Manager")) &&
 			frappe.boot.user.defaults.crm_demo_data_created !== "1"
 		) {

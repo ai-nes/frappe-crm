@@ -652,7 +652,7 @@ def get_digital_marketing_dashboard(
 	]
 
 	items = [
-		{"name": "mock_marketing_leads", "type": "number_chart", "layout": {"x": 0, "y": 0, "w": 4, "h": 3, "i": "mock_marketing_leads"}, "data": {"title": "Digital Marketing Lead", "tooltip": "Lead đến từ các nguồn Digital", "value": total_digital_leads, "delta": 0.0, "deltaSuffix": "%"}},
+		{"name": "mock_marketing_leads", "type": "number_chart", "layout": {"x": 0, "y": 0, "w": 4, "h": 3, "i": "mock_marketing_leads"}, "data": {"title": "Digital Marketing", "tooltip": "Lead đến từ các nguồn Digital", "value": total_digital_leads, "delta": 0.0, "deltaSuffix": "%"}},
 		{"name": "mock_valid_rate", "type": "number_chart", "layout": {"x": 4, "y": 0, "w": 4, "h": 3, "i": "mock_valid_rate"}, "data": {"title": "Valid Lead Rate (%)", "tooltip": "Tỷ lệ Lead hợp lệ", "value": valid_rate, "delta": 0.0, "deltaSuffix": "%"}},
 		{"name": "mock_qualified_rate", "type": "number_chart", "layout": {"x": 8, "y": 0, "w": 4, "h": 3, "i": "mock_qualified_rate"}, "data": {"title": "Qualified Rate (%)", "tooltip": "Tỷ lệ Lead đủ điều kiện", "value": qualified_rate, "delta": 0.0, "deltaSuffix": "%"}},
 		{"name": "mock_cpl", "type": "number_chart", "layout": {"x": 12, "y": 0, "w": 4, "h": 3, "i": "mock_cpl"}, "data": {"title": "CPL (nghìn đồng)", "tooltip": "Chi phí trung bình trên mỗi Lead", "value": cpl, "delta": 0.0, "deltaSuffix": "%"}},

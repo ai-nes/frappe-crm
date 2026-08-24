@@ -52,10 +52,12 @@ class TestCopilotDelegationRelay(FrappeTestCase):
 			self.assertEqual(_utc_epoch_seconds(), 1787504130)
 			mocked_datetime.now.assert_called_once_with(timezone.utc)
 
-	def test_system_manager_is_authorized_without_a_business_profile(self):
-		self.assertTrue(_is_copilot_authorized({"is_system_manager": True, "crm_profile": None}))
-		self.assertTrue(_is_copilot_authorized({"is_system_manager": False, "crm_profile": "sales"}))
-		self.assertFalse(_is_copilot_authorized({"is_system_manager": False, "crm_profile": None}))
+	def test_system_manager_is_denied_even_with_a_business_profile(self):
+		self.assertFalse(_is_copilot_authorized({"System Manager"}))
+		self.assertFalse(_is_copilot_authorized({"System Manager", "Sale"}))
+		self.assertTrue(_is_copilot_authorized({"Sale"}))
+		self.assertFalse(_is_copilot_authorized({"Counseller"}))
+		self.assertFalse(_is_copilot_authorized({"Unrelated Role"}))
 
 	def test_relay_flushes_small_chunks_and_preserves_finish(self):
 		upstream = _FakeUpstream([

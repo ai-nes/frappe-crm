@@ -1,49 +1,89 @@
 {
+  "$schema": "./.codex/schemas/hs-config.schema.json",
+  "codingLevel": -1,
+  "docs": {
+    "maxLoc": 800
+  },
+  "plan": {
+    "namingFormat": "{date}-{issue}-{slug}",
+    "dateFormat": "YYMMDD-HHmm",
+    "issuePrefix": "GH-",
+    "reportsDir": "reports",
+    "resolution": {
+      "order": [
+        "session",
+        "branch"
+      ],
+      "branchPattern": "(?:feat|fix|chore|refactor|docs)/(?:[^/]+/)?(.+)"
+    },
+    "validation": {
+      "mode": "prompt",
+      "minQuestions": 3,
+      "maxQuestions": 8,
+      "focusAreas": [
+        "assumptions",
+        "risks",
+        "tradeoffs",
+        "architecture"
+      ]
+    }
+  },
+  "paths": {
+    "docs": "docs",
+    "plans": "plans"
+  },
+  "locale": {
+    "thinkingLanguage": null,
+    "responseLanguage": null
+  },
+  "trust": {
+    "enabled": false,
+    "passphrase": null
+  },
+  "project": {
+    "type": "auto",
+    "packageManager": "auto",
+    "framework": "auto"
+  },
   "gemini": {
     "model": "gemini-3-flash-preview"
   },
   "skills": {
     "research": {
       "useGemini": false
-    },
-    "scout": {
-      "external": {
-        "enabled": false,
-        "approvedProviders": []
-      }
     }
   },
-  "guardrails": {
-    "hooks": {
-      "privacy": {
-        "enabled": true
-      },
-      "scout": {
-        "enabled": true,
-        "allowlist": []
-      },
-      "devRulesReminder": {
-        "enabled": true
-      }
+  "assertions": [],
+  "simplify": {
+    "threshold": {
+      "locDelta": 400,
+      "fileCount": 8,
+      "singleFileLoc": 200
+    },
+    "gate": {
+      "enabled": true,
+      "hardVerbs": [
+        "ship",
+        "merge",
+        "pr",
+        "deploy",
+        "publish"
+      ],
+      "softVerbs": [
+        "commit",
+        "finalize",
+        "release"
+      ]
     }
   },
-  "artifacts": {
-    "plans": {
-      "directory": "plans",
-      "reportsDirectory": "plans/reports",
-      "archiveDirectory": "plans/archive"
-    },
-    "journals": {
-      "directory": "docs/journals"
-    },
-    "images": {
-      "directory": "assets"
-    },
-    "repomix": {
-      "directory": "artifacts/repomix"
-    },
-    "skillEvals": {
-      "directory": "skills-workspace"
-    }
+  "hooks": {
+    "session-init": true,
+    "subagent-init": true,
+    "secret-output-guardrail": true,
+    "session-state": true,
+    "privacy-block": true,
+    "scout-block": true,
+    "dev-rules-reminder": true,
+    "simplify-gate": true
   }
 }

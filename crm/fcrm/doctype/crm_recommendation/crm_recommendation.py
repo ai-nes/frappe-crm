@@ -4,6 +4,9 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
+from crm.fcrm.permissions import (
+	get_permission_query_conditions as get_student_permission_query_conditions,
+)
 
 
 class CRMRecommendation(Document):
@@ -71,53 +74,32 @@ class CRMRecommendation(Document):
 		# The reset API accepts only this fixture namespace, never production
 		# REC-* IDs. Keep its marker in the durable aggregate identity so an
 		# agent-side cleanup can prove that an inbox event belongs to the fixture.
-		prefix = "REC-E2E-FPT-2026-" if self.rule_key == "e2e_capture_readiness" else "REC-"
+		prefix = "REC-E2E-FPT-2026-" if self.rule_key in {
+			"e2e_capture_readiness",
+			"e2e_capture_cross_campus",
+		} else "REC-"
 		self.name = f"{prefix}{digest}"
 
 
-def _crm_staff_campus(user: str) -> tuple[str | None, str | None]:
-	"""Return (crm_staff_name, campus) for `user`, or (None, None) if unmapped."""
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-	if not crm_staff_name:
-		return None, None
-	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
-	return crm_staff_name, campus
-
-
 def get_permission_query_conditions(user=None):
-	"""LIST-view guard: only rows for students whose assigned_to falls in the
-	requesting user's own campus are visible.
+	"""LIST-view guard derived from the canonical CRM Student scope.
 
-	Mirrors crm_contact.get_permission_query_conditions's campus-based
-	filtering — CRM Recommendation is batch-written by a service account
-	(the record `owner` is never the assigned Sale/CTV-Sale), so `if_owner`
-	cannot be used here: it would filter on `owner == current_user` and hide
-	every recommendation from every sales/marketing role, regardless of
-	whether the underlying student is assigned to them.
+	Recommendations are batch-written by a service account, so ownership on
+	the recommendation itself is not an authorization signal.  The underlying
+	Student permission condition is the single row-scope source for Sale,
+	Lead Sales, Marketing, and oversight roles; this prevents the recommendation
+	worklist from widening Lead Sales beyond its own teams.
 	"""
 	if not user:
 		user = frappe.session.user
 
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
 		return None
-
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
-		return "1=0"
-
-	crm_staff_in_campus = frappe.db.get_all(
-		"CRM Staff",
-		filters={"campus": campus},
-		pluck="name",
-	)
-	if not crm_staff_in_campus:
-		return "1=0"
-
-	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
 	return (
 		"`tabCRM Recommendation`.student in ("
 		"select `tabCRM Student`.name from `tabCRM Student` "
-		f"where `tabCRM Student`.assigned_to in ({escaped})"
+		f"where {student_condition}"
 		")"
 	)
 
@@ -163,31 +145,20 @@ def _create_sales_action(recommendation) -> str:
 
 
 def has_permission(doc, user=None, permission_type=None):
-	"""Direct-GET-by-name guard (also covers report/export and link-lookup reads
-	that resolve a specific document rather than running the list query).
-
-	`get_permission_query_conditions` only protects the LIST path — Frappe calls
-	this function separately for `frappe.get_doc("CRM Recommendation", name)`,
-	so both must independently enforce the same campus scope or a direct GET by
-	name bypasses the list filter entirely.
-	"""
+	"""Direct-GET-by-name guard using the same Student scope as list views."""
 	if not user:
 		user = frappe.session.user
-
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
-		return True
 
 	student = doc.get("student") if isinstance(doc, dict) else getattr(doc, "student", None)
 	if not student:
 		return False
 
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
-		return False
-
-	assigned_to = frappe.db.get_value("CRM Student", student, "assigned_to")
-	if not assigned_to:
-		return False
-
-	assigned_campus = frappe.db.get_value("CRM Staff", assigned_to, "campus")
-	return assigned_campus == campus
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return True
+	return bool(
+		frappe.db.sql(
+			"select name from `tabCRM Student` where name = %s and (" + student_condition + ") limit 1",
+			(student,),
+		)
+	)

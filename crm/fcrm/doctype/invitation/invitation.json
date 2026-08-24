@@ -27,7 +27,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Role",
-   "options": "\nSale\nMarketing\nLead Sales\nAdmissions Director\nSales User\nSales Manager\nSystem Manager",
+   "options": "\nSale\nMarketing\nLead Sales\nAdmissions Director\nSystem Manager",
    "reqd": 1
   },
   {

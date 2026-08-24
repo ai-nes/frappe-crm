@@ -15,6 +15,7 @@ that lookup type.
 import json
 
 import frappe
+from frappe.model.rename_doc import rename_doc
 from frappe.utils import now_datetime, nowdate
 
 # Ownership per docs/admissions-crm-operating-model.md section 8. CRM Intent
@@ -27,26 +28,26 @@ from frappe.utils import now_datetime, nowdate
 GOVERNED_DOCTYPES = {
 	"CRM Lead Source": {
 		"name_field": "source_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Contact", "source"), ("CRM Platform", "lead_source")],
 	},
 	"CRM Platform": {
 		"name_field": "platform_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Contact", "platform")],
 	},
 	"CRM Intent Type": {
 		"name_field": "intent_type_name",
-		"owner_role": "Marketing Operator",
-		"approver_roles": {"Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Marketing"},
 		"usage_checks": [("CRM Intent", "intent_type")],
 	},
 	"CRM Lost Reason": {
 		"name_field": "lost_reason",
-		"owner_role": "CRM Data Steward",
-		"approver_roles": {"Team Leader", "Marketing Lead"},
+		"owner_role": "Marketing",
+		"approver_roles": {"Lead Sales", "Marketing"},
 		# No doctype in this fork currently links to CRM Lost Reason (verified
 		# by grep across crm/fcrm/doctype/*/*.json) -- the impact check below
 		# will always report 0 usage for this type until something wires it
@@ -56,7 +57,7 @@ GOVERNED_DOCTYPES = {
 	},
 	"CRM Campus": {
 		"name_field": "campus_name",
-		"owner_role": "Admissions Operations",
+		"owner_role": "Admissions Director",
 		"approver_roles": {"Admissions Director"},
 		"usage_checks": [
 			("CRM Contact", "branch"),
@@ -103,7 +104,9 @@ def set_governance_defaults(doc):
 		return
 	if not doc.get("owner_role"):
 		doc.owner_role = config["owner_role"]
-	if not doc.get("approval_state"):
+	# The DocType field's default is "Proposed", but additive rows bypass the
+	# governed structural-change flow and are intentionally approved on insert.
+	if not doc.get("approval_state") or doc.approval_state == "Proposed":
 		doc.approval_state = "Approved"
 	if not doc.get("version"):
 		doc.version = 1
@@ -165,7 +168,15 @@ def propose_change(doctype, docname, action, new_value=None, reason=None):
 
 def _apply_change(change):
 	if change.action == "Rename":
-		frappe.rename_doc(change.reference_doctype, change.reference_docname, change.new_value)
+		# Approval has already been authorized above.  The approver may not hold
+		# ordinary write permission on the lookup DocType, so do not make that
+		# unrelated permission a second, inconsistent approval gate.
+		rename_doc(
+			change.reference_doctype,
+			change.reference_docname,
+			change.new_value,
+			ignore_permissions=True,
+		)
 		doc = frappe.get_doc(change.reference_doctype, change.new_value)
 	else:
 		doc = frappe.get_doc(change.reference_doctype, change.reference_docname)
@@ -179,7 +190,7 @@ def _apply_change(change):
 def approve_change(change_log_name):
 	"""Records this user's approval. The change is only actually applied once
 	every role in required_approver_roles has signed off (CRM Lost Reason
-	requires both Team Leader and Marketing Lead; every other governed type
+	requires both Lead Sales and Marketing; every other governed type
 	has a single required approver).
 
 	Retries once on a concurrent-write conflict: two approvers signing off on
@@ -194,10 +205,20 @@ def approve_change(change_log_name):
 			frappe.throw(f"Change {change_log_name} is not pending approval")
 
 		config = _governed_config(change.reference_doctype)
+		if change.proposed_by == frappe.session.user:
+			frappe.throw("A proposer cannot approve their own governed change", frappe.PermissionError)
 		user_roles = set(frappe.get_roles(frappe.session.user))
 		matching_roles = user_roles & config["approver_roles"]
 		if not matching_roles:
 			frappe.throw("You are not an approver for this lookup type", frappe.PermissionError)
+		if len(matching_roles) > 1:
+			# One account must never self-satisfy both sides of a dual approval.
+			# Canonical role assignment normally prevents this; keep the gate here
+			# as a defense for pre-cutover or manually edited users.
+			frappe.throw(
+				"Dual approval requires a single-role approver account",
+				frappe.PermissionError,
+			)
 
 		already_approved = set(filter(None, (change.approved_by_roles or "").split(",")))
 		already_approved |= matching_roles

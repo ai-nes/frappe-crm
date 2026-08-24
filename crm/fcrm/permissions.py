@@ -1,10 +1,11 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
-Implements the locked matrix in plans/260822-admissions-crm-alignment/business-rules-data-scope.md:
-- Sale / CTV-Sale        -> own-assigned records only
-- Team Leader            -> own team(s) + own team's unassigned pool
-- Counseller / Promoter-PR -> team/campus scope (not system-wide)
-- System Manager / CRM Manager / Administrator / Admissions Director / Admissions Operations -> full
+Implements the canonical CRM matrix:
+- Sale                  -> own-assigned records only
+- Lead Sales            -> own team(s) + own team's unassigned pool
+- Admissions Director   -> full oversight scope
+- Marketing             -> no Contact/Student scope
+- System Manager / Administrator -> control-plane full scope
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -17,14 +18,9 @@ import frappe
 
 FULL_VISIBILITY_ROLES = {
 	"System Manager",
-	"CRM Manager",
 	"Administrator",
 	"Admissions Director",
-	"Admissions Operations",
 }
-
-CACHE_TTL_SEC = 300
-
 
 def get_permission_query_conditions(doctype, user=None):
 	if not user:
@@ -40,25 +36,22 @@ def get_permission_query_conditions(doctype, user=None):
 
 	table = f"`tab{doctype}`"
 
-	# Deliberately closed to the 5 lead-ownership roles the locked BR matrix defines.
-	# Marketing/Admissions roles are handled above via FULL_VISIBILITY_ROLES (bypass)
-	# or intentionally excluded (Marketing Operator/Lead have no Contact/Student
-	# access in this phase — see business-rules-data-scope.md) — not an omission.
+	# Marketing deliberately has no Contact/Student scope; Admissions Director
+	# is handled above as an oversight role.
+	# This deny must precede the legacy compatibility branch.  The flag is a
+	# temporary data migration escape hatch, never an authorization grant for a
+	# role that is explicitly excluded by the canonical matrix.
+	if "Marketing" in roles:
+		return "1=0"
 	if frappe.conf.get("crm_legacy_campus_scoping"):
-		# Legacy fallback only ever applied to Counseller/Promoter-PR's campus-wide
-		# scope; Sale/CTV-Sale keep their own-assigned-only rule even when this flag
-		# is set, so flipping it can't silently widen their visibility.
-		if "Sale" in roles or "CTV-Sale" in roles:
+		if "Sale" in roles:
 			return f"{table}.assigned_to = {frappe.db.escape(crm_staff_name)}"
 		return _campus_condition(table, crm_staff_name)
 
-	if "Team Leader" in roles:
+	if "Lead Sales" in roles:
 		return _team_leader_condition(table, crm_staff_name)
 
-	if "Counseller" in roles or "Promoter-PR" in roles:
-		return _campus_condition(table, crm_staff_name)
-
-	if "Sale" in roles or "CTV-Sale" in roles:
+	if "Sale" in roles:
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
@@ -99,12 +92,9 @@ def has_permission(doc, user=None, permission_type=None):
 
 
 def _cached(cache_key, loader):
-	cached = frappe.cache().get_value(cache_key)
-	if cached is not None:
-		return cached
-	value = loader()
-	frappe.cache().set_value(cache_key, value, expires_in_sec=CACHE_TTL_SEC)
-	return value
+	# Membership is authorization data. Do not retain a removed team member's
+	# Student scope in a shared cache after reassignment.
+	return loader()
 
 
 def _get_crm_staff_name(user):
@@ -152,7 +142,7 @@ def derive_owner_fields(assigned_to):
 def derive_unassigned_owning_team(creator_user):
 	"""owning_team for a record that has NO assigned_to yet. Without this, an
 	unassigned record could never carry a team attribution at all (owner_staff and
-	owning_team would both stay null forever), making the Team Leader "own team's
+	owning_team would both stay null forever), making the Lead Sales "own team's
 	unassigned pool" rule in the locked BR matrix (constraint 3) permanently
 	unreachable. Attributes the record to the *creating* staff member's own primary
 	team instead — the natural team-of-record for a freshly-created, not-yet-assigned

@@ -41,7 +41,7 @@ REQUIRED_COLUMNS = {
 
 @frappe.whitelist()
 def import_geography_high_schools(file_url: str):
-	frappe.only_for(["System Manager", "Sales Manager"], True)
+	frappe.only_for(["System Manager", "Lead Sales"], True)
 
 	if not file_url:
 		frappe.throw(_("File URL is required"))

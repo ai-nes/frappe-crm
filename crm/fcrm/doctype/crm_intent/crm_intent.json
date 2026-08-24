@@ -143,7 +143,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
+   "role": "Lead Sales",
    "share": 1,
    "write": 1
   },
@@ -153,7 +153,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Counseller",
+   "role": "Sale",
    "share": 1,
    "write": 1
   },
@@ -170,12 +170,12 @@
    "if_owner": 1,
    "print": 1,
    "read": 1,
-   "role": "CTV-Sale",
+   "role": "Sale",
    "write": 1
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+   "role": "Marketing"
   }
  ],
  "quick_entry": 0,
