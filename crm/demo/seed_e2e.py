@@ -108,6 +108,20 @@ def _ensure_live_test_user(email, role):
     return email
 
 
+def _refresh_live_test_staff_scope(staff_name, campus):
+    """Refresh the CRM Campus permission after an idempotent raw update.
+
+    `frappe.db.set_value` intentionally bypasses controller hooks. The E2E
+    seed uses it for idempotent fixture updates, so explicitly mirror the
+    CRM Staff hook that keeps the user's User Permission aligned with campus.
+    """
+    frappe.db.set_value("CRM Staff", staff_name, "campus", campus, update_modified=False)
+    staff_doc = frappe.get_doc("CRM Staff", staff_name)
+    staff_doc.campus = campus
+    staff_doc._sync_campus_user_permission()
+    return staff_doc
+
+
 def _ensure_live_test_sales_staff(ctx):
     """Give the fictional Sales identity ownership of the fictional cohort only.
 
@@ -119,7 +133,7 @@ def _ensure_live_test_sales_staff(ctx):
     _ensure_live_test_user(email, role)
     staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
     if staff:
-        frappe.db.set_value("CRM Staff", staff, "campus", ctx["campus"], update_modified=False)
+        _refresh_live_test_staff_scope(staff, ctx["campus"])
         return staff
     department = frappe.db.get_value("CRM Department", {}, "name")
     if not department:
@@ -151,7 +165,7 @@ def _ensure_live_test_aggregate_staff(ctx):
 		_ensure_live_test_user(email, role)
 		staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 		if staff:
-			frappe.db.set_value("CRM Staff", staff, "campus", ctx["campus"], update_modified=False)
+			_refresh_live_test_staff_scope(staff, ctx["campus"])
 			continue
 		frappe.get_doc({
 			"doctype": "CRM Staff", "full_name": f"{PREFIX} Live Test {label}", "user": email,
@@ -189,11 +203,8 @@ def _ensure_cross_campus_staff(ctx):
 		}).insert(ignore_permissions=True).name
 	staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 	if staff:
-		frappe.db.set_value(
-			"CRM Staff", staff,
-			{"department": department, "campus": ctx["campus"]},
-			update_modified=False,
-		)
+		frappe.db.set_value("CRM Staff", staff, "department", department, update_modified=False)
+		_refresh_live_test_staff_scope(staff, ctx["campus"])
 		return staff, email
 	staff = frappe.get_doc({
 		"doctype": "CRM Staff",
