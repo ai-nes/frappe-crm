@@ -4,15 +4,46 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
-from crm.api.routing import route_new_lead
-from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
-from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 # CRM Enrollment Status values that constitute the "application/enrollment" milestone
 # at which a CRM Student record should be created for a Contact — locked business
 # rule, see plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md.
 MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
+
+CONVERSION_SERVICE_FLAG = "student_conversion_service"
+MIGRATION_SERVICE_FLAG = "contact_migration_service"
+IDENTITY_MAINTENANCE_FIELDS = frozenset({"full_name", "phone", "email", "notes"})
+PROTECTED_CASE_FIELDS = frozenset(
+	{
+		"student",
+		"enrollment_status",
+		"lifecycle_stage",
+		"lead_status",
+		"assigned_to",
+		"owner_staff",
+		"owning_team",
+		"admission_year",
+		"branch",
+		"first_contact_time",
+		"sla_status",
+		"sla_started_at",
+		"next_follow_up",
+		"source",
+		"platform",
+		"crm_campaign",
+		"crm_event",
+		"status_change_reason",
+		"status_change_log",
+		"assignment_log",
+		"parent_name",
+		"parent_phone",
+		"high_school",
+		"province",
+		"major",
+		"aspiration",
+	}
+)
 
 
 class CRMContact(Document):
@@ -85,11 +116,13 @@ class CRMContact(Document):
 		}
 
 	def before_insert(self):
-		self._set_defaults()
+		if not self._is_service_write():
+			frappe.throw(
+				"Direct CRM Contact creation is retired; use an authorized Student conversion command.",
+				frappe.PermissionError,
+			)
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
-		route_new_lead(self)
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -102,26 +135,58 @@ class CRMContact(Document):
 				self.branch = default_branch
 
 	def before_save(self):
+		self._validate_guarded_update()
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
 
 	def on_update(self):
-		self._create_student_at_milestone()
+		# Contact is a post-conversion identity record.  No lifecycle, routing,
+		# SLA or Student writer is allowed to run from a Contact hook.
+		return
 
 	def validate(self):
 		self._normalize_shared_fields()
 		self._validate_phone_format()
 		self._resolve_geo()
 		self._validate_high_school_format()
-		self._validate_unique_phone()
-		self._validate_unique_email()
-		self._derive_owner_fields()
-		self._derive_lifecycle_stage()
-		self._log_assignment_change()
-		self._track_sla_start()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _is_service_write(self):
+		return bool(
+			getattr(frappe.flags, CONVERSION_SERVICE_FLAG, False)
+			or getattr(frappe.flags, MIGRATION_SERVICE_FLAG, False)
+		)
+
+	def _validate_guarded_update(self):
+		before = self.get_doc_before_save()
+		if not before:
+			return
+		changed = {
+			fieldname
+			for fieldname in self.meta.get_valid_columns()
+			if before.get(fieldname) != self.get(fieldname)
+		}
+		if "student" in changed:
+			frappe.throw("CRM Contact.student is a read-only legacy compatibility link.", frappe.PermissionError)
+		if "student_identity" in changed:
+			# A conversion may stamp a blank legacy Contact once, but identity
+			# ownership can never be reassigned after it is set.
+			if before.get("student_identity") or not self._is_service_write():
+				frappe.throw("CRM Contact.student_identity is immutable.", frappe.PermissionError)
+		protected = changed & PROTECTED_CASE_FIELDS
+		if protected:
+			frappe.throw(
+				"Contact case, lifecycle, ownership, routing and SLA fields are read-only after conversion.",
+				frappe.PermissionError,
+			)
+		if not self._is_service_write():
+			non_identity = changed - IDENTITY_MAINTENANCE_FIELDS - {"student_identity"}
+			if non_identity:
+				frappe.throw(
+					"CRM Contact changes must use the identity-maintenance command.",
+					frappe.PermissionError,
+				)
 
 	def _derive_owner_fields(self):
 		if self.assigned_to:

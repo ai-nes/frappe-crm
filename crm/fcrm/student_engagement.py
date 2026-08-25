@@ -13,6 +13,8 @@ import json
 from typing import Any
 
 import frappe
+
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
 from frappe import _
 
 from crm.fcrm.qualification import (
@@ -150,7 +152,8 @@ def _verify_linked_records(student: str, interaction: str | None, source_doctype
 		if not linked_student and source_doc.get("reference_doctype") == "CRM Student":
 			linked_student = source_doc.get("reference_docname")
 		if not linked_student and source_doc.get("crm_contact"):
-			linked_student = frappe.db.get_value("CRM Contact", source_doc.get("crm_contact"), "student")
+			students = students_for_contact(source_doc.get("crm_contact"))
+			linked_student = students[0] if len(students) == 1 else None
 		if linked_student and linked_student != student:
 			_fail("OUT_OF_SCOPE", "The source evidence belongs to another Student.")
 

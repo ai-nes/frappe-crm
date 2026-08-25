@@ -15,6 +15,8 @@ DEFAULTS = {
 	"lifecycle_write": False,
 	"legacy_read": True,
 	"migration": False,
+	"conversion_read": False,
+	"conversion_write": False,
 }
 ALIASES = {
 	"context_read": "context",

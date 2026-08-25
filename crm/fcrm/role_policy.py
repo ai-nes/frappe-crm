@@ -18,6 +18,12 @@ PROFILE_LABELS = {
 	"admissions_director": "Admissions Director",
 }
 
+# Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
+# retirement and supersession are exposed only through master_data_governance.
+PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({
+	"CRM Lead Source", "CRM Platform", "CRM Intent Type", "CRM Lost Reason", "CRM Campus", "CRM Campaign Type",
+})
+
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
 	"marketing": frozenset({"Marketing"}),
@@ -29,6 +35,7 @@ PROFILE_CAPABILITIES = {
 	"sales": frozenset(
 		{
 			"student.execute",
+			"conversion.execute",
 			"recommendation.decide",
 			"sales_action.execute",
 			"interaction.record",
@@ -44,6 +51,7 @@ PROFILE_CAPABILITIES = {
 	"lead_sales": frozenset(
 		{
 			"student.execute",
+			"conversion.execute",
 			"recommendation.decide",
 			"sales_action.execute",
 			"sales_action.reassign",
@@ -68,6 +76,7 @@ PROFILE_CAPABILITIES = {
 	"admissions_director": frozenset(
 		{
 			"admissions.oversee",
+			"conversion.execute",
 			"recommendation.decide",
 			"sales_action.execute",
 			"sales_action.reassign",
@@ -105,6 +114,17 @@ _PERMISSION_FLAGS = {
 # into database records. The values below mirror the reviewed Phase 2 matrix:
 # r=read, w=write, c=create, d=delete, x=export; "-" means no grant.
 CANONICAL_PERMISSION_MATRIX = {
+	"attribution_evidence": {
+		"doctypes": ("CRM Campaign Touchpoint", "CRM Event Participation"),
+		"permissions": {
+			"system_manager": "r",
+			"sales": "-",
+			"lead_sales": "-",
+			"marketing": "-",
+			"admissions_director": "-",
+		},
+		"row_scope": "student_context_or_redacted_endpoint",
+	},
 	"admissions_case": {
 		"doctypes": ("CRM Student", "CRM Contact"),
 		"permissions": {
@@ -134,7 +154,6 @@ CANONICAL_PERMISSION_MATRIX = {
 			"CRM Enrollment Status",
 			"CRM Admission Year",
 			"CRM Education Program",
-			"CRM Campaign Type",
 			"CRM Department",
 			"Holiday List",
 			"CRM Team",
@@ -160,7 +179,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_owned_record",
 	},
 	"governed_acquisition": {
-		"doctypes": ("CRM Lead Source", "CRM Platform", "CRM Intent Type"),
+		"doctypes": ("CRM Lead Source", "CRM Platform", "CRM Intent Type", "CRM Campaign Type"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -257,6 +276,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "r",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "own_assigned",
 	},
@@ -267,6 +287,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "r",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "campus_assigned",
 	},
@@ -277,6 +298,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "rwcdx",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "team_members_and_own_team_pool",
 	},
@@ -287,6 +309,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "r",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "campus_assigned_contact",
 	},
@@ -297,6 +320,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "rwcdx",
 		"governed_acquisition_permissions": "rwc",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "no_case_scope",
 	},
@@ -307,6 +331,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "rwc",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "no_case_scope",
 	},
@@ -317,6 +342,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "r",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "rwc",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "all_cases",
 	},
@@ -327,6 +353,7 @@ LEGACY_COMPATIBILITY_OVERLAYS = {
 		"acquisition_permissions": "rx",
 		"governed_acquisition_permissions": "r",
 		"governed_admissions_permissions": "r",
+		"attribution_evidence_permissions": "-",
 		"control_permissions": "-",
 		"row_scope": "all_cases",
 	},
@@ -361,6 +388,7 @@ SYSTEM_MANAGER_CAPABILITIES = frozenset(
 		"roles.manage",
 		"system.recover",
 		"student.policy.manage",
+		"conversion.execute",
 		"student.routing.read",
 		"student.sla.read",
 	}
@@ -559,6 +587,8 @@ def managed_docperm_rows():
 					profile, permission_set
 				)
 				role = SYSTEM_MANAGER_ROLE if profile == "system_manager" else PROFILE_LABELS[profile]
+				if doctype in PHASE9_COMMAND_ONLY_DOCTYPES:
+					permission_set = "r"
 				row = _docperm_row(role, permission_set)
 				if row:
 					rows.append(row)
@@ -566,6 +596,8 @@ def managed_docperm_rows():
 				template = LEGACY_COMPATIBILITY_OVERLAYS[overlay]
 				permission_set = _overlay_permission_set(surface, template, doctype)
 				for role in template["roles"]:
+					if doctype in PHASE9_COMMAND_ONLY_DOCTYPES:
+						permission_set = "r"
 					row = _docperm_row(role, permission_set)
 					if row:
 						rows.append(row)
@@ -586,6 +618,7 @@ def _overlay_permission_set(surface, template, doctype):
 		"acquisition": "acquisition_permissions",
 		"governed_acquisition": "governed_acquisition_permissions",
 		"governed_admissions": "governed_admissions_permissions",
+		"attribution_evidence": "attribution_evidence_permissions",
 		"control_plane": "control_permissions",
 	}[surface]
 	return template[key]

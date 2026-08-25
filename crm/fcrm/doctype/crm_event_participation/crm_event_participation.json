@@ -13,6 +13,10 @@
   "crm_event",
   "crm_contact",
   "student",
+  "command_receipt",
+  "idempotency_key",
+  "correlation_id",
+  "supersedes",
   "column_break_1",
   "status",
   "actor",
@@ -48,16 +52,22 @@
    "in_standard_filter": 1,
    "label": "CRM Contact",
    "options": "CRM Contact",
-   "reqd": 1
+   "read_only": 1
   },
   {
-   "description": "Auto-resolved from CRM Contact when left blank -- not every participant has been promoted to Student yet.",
+   "description": "Required Student anchor for new attribution evidence.",
    "fieldname": "student",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Student",
-   "options": "CRM Student"
+   "options": "CRM Student",
+   "read_only": 1,
+   "reqd": 1
   },
+  {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "hidden": 1, "read_only": 1},
+  {"fieldname": "correlation_id", "fieldtype": "Data", "label": "Correlation ID", "hidden": 1, "read_only": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Event Participation", "read_only": 1},
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
@@ -117,77 +127,10 @@
  "naming_rule": "Naming Series",
  "naming_series_options": "EVTP-.YYYY.-",
  "owner": "Administrator",
- "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Team Leader",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "if_owner": 1,
-   "print": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "if_owner": 1,
-   "print": 1,
-   "read": 1,
-   "role": "CTV-Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  }
- ],
+ "permissions": [{"read": 1, "role": "System Manager"}],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "crm_event,crm_contact,status",
+ "search_fields": "crm_event,student,status",
  "sort_field": "registered_at",
  "sort_order": "DESC",
  "states": [],

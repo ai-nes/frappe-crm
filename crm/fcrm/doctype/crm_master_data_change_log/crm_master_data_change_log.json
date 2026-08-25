@@ -27,7 +27,16 @@
   "required_approver_roles",
   "approved_by_roles",
   "approved_by",
-  "approved_at"
+  "approved_at",
+  "section_evidence",
+  "registry_revision",
+  "idempotency_key",
+  "correlation_id",
+  "target_version",
+  "effective_at",
+  "before_snapshot",
+  "reference_migration_summary",
+  "reference_migration_completed_at"
  ],
  "fields": [
   {
@@ -61,7 +70,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Action",
-   "options": "Rename\nRetire\nReactivate",
+   "options": "Create\nRetire\nReactivate\nSupersede\nRename",
    "reqd": 1
   },
   {
@@ -71,7 +80,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Proposed\nApproved\nRejected",
+   "options": "Proposed\nPending Effective\nApplied\nRejected\nCancelled\nExpired\nFailed",
    "read_only": 1
   },
   {
@@ -155,6 +164,60 @@
    "fieldtype": "Datetime",
    "label": "Approved At",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_evidence",
+   "fieldtype": "Section Break",
+   "label": "Immutable Evidence"
+  },
+  {
+   "fieldname": "registry_revision",
+   "fieldtype": "Data",
+   "label": "Registry Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "unique": 1,
+   "read_only": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "label": "Correlation ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_version",
+   "fieldtype": "Int",
+   "label": "Target Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_at",
+   "fieldtype": "Datetime",
+   "label": "Effective At (UTC)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "before_snapshot",
+   "fieldtype": "Long Text",
+   "label": "Before Snapshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_migration_summary",
+   "fieldtype": "Long Text",
+   "label": "Reference Migration Summary",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reference_migration_completed_at",
+   "fieldtype": "Datetime",
+   "label": "Reference Migration Completed At",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -168,31 +231,24 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "share": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
    "role": "Administrator",
-   "share": 1,
-   "write": 1
+   "share": 1
   },
   {
-   "create": 1,
    "export": 1,
    "print": 1,
    "read": 1,
@@ -200,7 +256,6 @@
    "role": "Marketing Operator"
   },
   {
-   "create": 1,
    "export": 1,
    "print": 1,
    "read": 1,
@@ -208,7 +263,6 @@
    "role": "Marketing Lead"
   },
   {
-   "create": 1,
    "export": 1,
    "print": 1,
    "read": 1,
@@ -216,7 +270,6 @@
    "role": "Admissions Operations"
   },
   {
-   "create": 1,
    "export": 1,
    "print": 1,
    "read": 1,
@@ -224,15 +277,6 @@
    "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "CRM Data Steward"
-  },
-  {
-   "create": 1,
    "export": 1,
    "print": 1,
    "read": 1,

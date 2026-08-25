@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "field:source_name",
  "creation": "2023-07-24 19:47:01.063203",
  "default_view": "List",
@@ -123,20 +123,16 @@
    "role": "Lead Sales"
   },
   {
-   "create": 1,
    "read": 1,
-   "role": "Marketing",
-   "write": 1
+   "role": "Marketing"
   },
   {
    "read": 1,
    "role": "Marketing Lead"
   },
   {
-   "create": 1,
    "read": 1,
-   "role": "Marketing Operator",
-   "write": 1
+   "role": "Marketing Operator"
   },
   {
    "read": 1,
@@ -155,12 +151,8 @@
    "role": "Sales User"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "export": 1,
    "read": 1,
-   "role": "System Manager",
-   "write": 1
+   "role": "System Manager"
   },
   {
    "read": 1,

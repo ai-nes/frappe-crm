@@ -21,6 +21,8 @@ from crm.fcrm.qualification import redact_evidence
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled, legacy_read_enabled
 from crm.fcrm.student_lifecycle import get_lifecycle_context
+from crm.fcrm.attribution import get_student_attribution
+from crm.fcrm.student_contact_conversion import conversion_rows_for_student
 
 CONTEXT_POLICY_VERSION = "phase5-context-v1"
 MAX_HISTORY_LIMIT = 50
@@ -407,6 +409,50 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 	if cursor_key:
 		history = [item for item in history if (str(item.get("occurred_at") or ""), str(item.get("name") or "")) < cursor_key]
 	page = history[:limit]
+	conversion_read_enabled = enabled("conversion_read")
+	conversion_write_enabled = enabled("conversion_write")
+	conversion_rows = conversion_rows_for_student(student, limit=1) if conversion_read_enabled else []
+	conversion = None
+	if conversion_read_enabled and conversion_rows:
+		row = conversion_rows[0]
+		conversion = {
+			"status": "converted",
+			"contact": _get(row, "contact"),
+			"converted_at": _iso(_get(row, "converted_at")),
+			"actor": _get(row, "actor"),
+			"conversion": _get(row, "name"),
+		}
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	try:
+		conversion_capabilities = capabilities_for_roles(frappe.get_roles(actor), administrator=actor == "Administrator")
+	except Exception:
+		conversion_capabilities = set()
+	conversion_can_convert = bool(
+		conversion_read_enabled
+		and conversion_write_enabled
+		and lifecycle_context.get("current_stage") == "Enrolled"
+		and (actor in {"Administrator"} or "conversion.execute" in conversion_capabilities)
+	)
+	if not conversion_read_enabled:
+		conversion = {
+			"status": "unavailable",
+			"can_convert": False,
+			"read_enabled": False,
+			"write_enabled": conversion_write_enabled,
+			"lifecycle_revision": int(doc.get("lifecycle_revision") or 0),
+		}
+	elif conversion is None:
+		conversion = {
+			"status": "eligible" if conversion_can_convert else "not_eligible",
+			"can_convert": conversion_can_convert,
+			"read_enabled": True,
+			"write_enabled": conversion_write_enabled,
+			"lifecycle_revision": int(doc.get("lifecycle_revision") or 0),
+		}
+	else:
+		conversion["can_convert"] = False
+		conversion["read_enabled"] = True
+		conversion["write_enabled"] = conversion_write_enabled
 	return {
 		"student": {"name": doc.name, "student_name": doc.get("student_name"), "owner_staff": doc.get("owner_staff") or doc.get("assigned_to"), "assigned_to": doc.get("assigned_to"), "owning_team": doc.get("owning_team"), "owning_pool": doc.get("owning_pool")},
 		"engagement_revision": int(doc.get("engagement_revision") or 0),
@@ -415,9 +461,28 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		"latest_outcome": _outcome(outcome_rows[0], student) if outcome_rows else None,
 		"next_action": _next_action(student, latest_interaction_name),
 		"decision": _decision_context(student),
+		"conversion": conversion,
+		# Attribution is evidence-only and scoped by the Student permission
+		# check above.  A malformed/legacy row must never make the core context
+		# unavailable, so an empty bounded projection is safer than surfacing a
+		# partial Contact fallback.
+		"attribution": _attribution_context(student),
 		"qualification_evidence": _evidence(outcome_rows[0], "qualification_evidence", student=student) if outcome_rows else [],
 		"history": page,
 		"next_cursor": _cursor(student, page[-1]) if len(history) > limit and page else None,
 		"policy_version": CONTEXT_POLICY_VERSION,
 		"legacy_read": bool(legacy and (not outcome_rows or not canonical_lifecycle_present)),
 	}
+
+
+def _attribution_context(student: str) -> dict[str, Any]:
+	try:
+		projection = get_student_attribution(student)
+		return {
+			"first_touch": projection["firstTouch"],
+			"last_touch": projection["lastTouch"],
+			"equal_credit": projection["multiTouch"],
+			"timeline": projection["touchpoints"][:MAX_HISTORY_LIMIT],
+		}
+	except Exception:
+		return {"first_touch": None, "last_touch": None, "equal_credit": {}, "timeline": []}

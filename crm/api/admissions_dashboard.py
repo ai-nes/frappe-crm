@@ -3,7 +3,11 @@ from frappe import _
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
 from crm.api.admissions_dashboard_auth import check_dashboard_access
-from crm.fcrm.attribution import get_last_touch_campaign_by_contact, get_multi_touch_attribution
+from crm.fcrm.attribution import (
+	get_equal_credit_by_campaign_for_students,
+	get_last_touch_campaign_by_student,
+)
+from crm.fcrm.student_contact_conversion import students_for_contact
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -493,6 +497,43 @@ def _contact_names_with_event_participation():
 	return names
 
 
+def _legacy_last_touch_campaign_by_contact():
+	"""Temporary internal dual-read fallback; never a Contact public API."""
+	touches = [
+		{"contact": row.crm_contact, "campaign": row.crm_campaign, "at": row.touched_at, "name": row.name}
+		for row in frappe.db.get_all("CRM Campaign Touchpoint", fields=["name", "crm_contact", "crm_campaign", "touched_at"])
+		if row.crm_contact and row.touched_at
+	]
+	superseded_touchpoints = set(
+		frappe.db.get_all(
+			"CRM Campaign Touchpoint",
+			filters={"supersedes": ["in", [row["name"] for row in touches] or ["__none__"]]},
+			pluck="supersedes",
+		)
+	)
+	touches = [row for row in touches if row["name"] not in superseded_touchpoints]
+	events = frappe.db.get_all("CRM Event Participation", fields=["name", "crm_contact", "crm_event", "registered_at"])
+	superseded_events = set(
+		frappe.db.get_all(
+			"CRM Event Participation",
+			filters={"supersedes": ["in", [row.name for row in events] or ["__none__"]]},
+			pluck="supersedes",
+		)
+	)
+	event_campaigns = {
+		row.name: row.crm_campaign
+		for row in frappe.db.get_all("CRM Event", filters={"name": ["in", list({row.crm_event for row in events if row.crm_event}) or ["__none__"]]}, fields=["name", "crm_campaign"])
+	}
+	for row in events:
+		if row.crm_contact and row.registered_at and row.name not in superseded_events:
+			touches.append({"contact": row.crm_contact, "campaign": event_campaigns.get(row.crm_event), "at": row.registered_at, "name": row.name})
+	last = {}
+	for row in touches:
+		if row["campaign"] and (row["contact"] not in last or (str(row["at"]), row["name"]) > (str(last[row["contact"]]["at"]), last[row["contact"]]["name"])):
+			last[row["contact"]] = row
+	return {contact: row["campaign"] for contact, row in last.items()}
+
+
 def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	"""Per-campaign spend / last-touch-attributed conversions / cost-per-
 	conversion, shared by get_digital_marketing_dashboard and
@@ -500,10 +541,29 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	(condition #6). Computes the site-wide last-touch-by-contact map ONCE
 	(not once per campaign -- get_campaign_names_by_last_touch would re-scan
 	both junction tables on every loop iteration) and buckets it in memory."""
-	last_touch_by_contact = get_last_touch_campaign_by_contact()
-	contacts_by_campaign = {}
-	for contact, campaign in last_touch_by_contact.items():
-		contacts_by_campaign.setdefault(campaign, set()).add(contact)
+	# Existing dashboard filters are Contact-scoped. Resolve the bounded Student
+	# cohort once, then run the canonical Student-first attribution projection
+	# against that cohort so campus/date/source filters are not dropped.
+	scoped_contacts = set(frappe.db.get_all("CRM Contact", filters=base_filters, pluck="name"))
+	scoped_students = {
+		student
+		for contact in scoped_contacts
+		for student in students_for_contact(contact)
+	}
+	last_touch_by_student = get_last_touch_campaign_by_student(scoped_students)
+	students_by_campaign = {}
+	for student, campaign in last_touch_by_student.items():
+		students_by_campaign.setdefault(campaign, set()).add(student)
+	# Retain historical Contact evidence only while Student reconciliation is
+	# incomplete. This is an internal read bridge, not an authorization path.
+	legacy_contacts_by_campaign = {}
+	contact_students = {
+		contact: next(iter(students_for_contact(contact)), None)
+		for contact in scoped_contacts
+	}
+	for contact, campaign in _legacy_last_touch_campaign_by_contact().items():
+		if contact in scoped_contacts and last_touch_by_student.get(contact_students.get(contact)) != campaign:
+			legacy_contacts_by_campaign.setdefault(campaign, set()).add(contact)
 
 	cost_data = []
 	for camp in campaign_list:
@@ -514,11 +574,17 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 			fields=["amount"],
 		)
 		camp_spend = sum(row.amount or 0.0 for row in camp_spend_rows)
-		attributed_contacts = contacts_by_campaign.get(camp.name) or set()
+		attributed_students = students_by_campaign.get(camp.name) or set()
+		# Attribution is Student-first. Contact-only filters are intentionally
+		# not applied to this canonical projection; they are legacy dashboard
+		# filters and must not authorize or silently reinterpret Student data.
 		attributed_conversions = frappe.db.count(
-			"CRM Contact",
-			filters=base_filters + [["name", "in", list(attributed_contacts) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
+			"CRM Student",
+			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
 		)
+		legacy_contacts = legacy_contacts_by_campaign.get(camp.name) or set()
+		if legacy_contacts:
+			attributed_conversions += frappe.db.count("CRM Contact", filters=base_filters + [["name", "in", list(legacy_contacts)], ["enrollment_status", "=", "Đã nhập học"]])
 		cost_data.append({
 			"campaign": c_name,
 			"spend": camp_spend,
@@ -952,21 +1018,24 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 	campaign_list = frappe.db.get_all("CRM Campaign", fields=["name", "title"], limit=10)
 	campaign_cost_data = _campaign_cost_data(campaign_list, from_date, to_date, base_filters)
 
-	# Multi-touch credit reconciliation for this period's enrolled contacts --
-	# shows how conversion credit splits across every campaign that touched a
-	# converted lead, not just its last touch, so a Director can see whether
-	# last-touch cost-per-conversion over/under-credits any one campaign.
-	# Bounded to 200 contacts, same accepted-N+1-scale precedent as Phase 5.
-	enrolled_contacts = frappe.db.get_all(
-		"CRM Contact",
-		filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]],
+	# One bounded Student query + batched evidence reads; this avoids the former
+	# per-Contact attribution call (and does not depend on Contact permission).
+	scoped_contacts = set(frappe.db.get_all("CRM Contact", filters=base_filters, pluck="name"))
+	scoped_student_names = {
+		student
+		for contact in scoped_contacts
+		for student in students_for_contact(contact)
+	}
+	enrolled_students = frappe.db.get_all(
+		"CRM Student",
+		filters={
+			"name": ["in", list(scoped_student_names) or ["__none__"]],
+			"enrollment_status": "Đã nhập học",
+		},
 		pluck="name",
 		limit=200,
 	)
-	multi_touch_credit_by_campaign = {}
-	for contact in enrolled_contacts:
-		for campaign_name, credit in get_multi_touch_attribution(contact).items():
-			multi_touch_credit_by_campaign[campaign_name] = multi_touch_credit_by_campaign.get(campaign_name, 0.0) + credit
+	multi_touch_credit_by_campaign = get_equal_credit_by_campaign_for_students(enrolled_students)
 	multi_touch_data = [
 		{"campaign": frappe.db.get_value("CRM Campaign", name, "title") or name, "credit": round(credit, 2)}
 		for name, credit in sorted(multi_touch_credit_by_campaign.items(), key=lambda kv: kv[1], reverse=True)[:10]

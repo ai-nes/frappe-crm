@@ -139,6 +139,9 @@ permission_query_conditions = {
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
+	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.get_permission_query_conditions",
+	"CRM Event Participation": "crm.fcrm.student_attribution.get_permission_query_conditions",
+	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -152,6 +155,9 @@ has_permission = {
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
+	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.has_permission",
+	"CRM Event Participation": "crm.fcrm.student_attribution.has_permission",
+	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.has_permission",
 }
 
 # DocType Class
@@ -199,22 +205,32 @@ doc_events = {
 	"CRM Lead Source": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"CRM Platform": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"CRM Intent Type": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"CRM Lost Reason": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"CRM Campus": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Campaign Type": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
@@ -254,6 +270,8 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
+	# Keep legacy Contact-based attribution activity wired. Student-first
+	# attribution commands suppress these dispatchers via their service flag.
 	"CRM Event Participation": {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_insert"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_update"],
@@ -269,6 +287,19 @@ doc_events = {
 	},
 }
 
+# Consumer-side enforcement is required because retiring a Link target does
+# not cause Frappe to revalidate existing consumer writes automatically.
+for _governed_consumer_doctype in (
+	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
+	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
+	"CRM Staff", "CRM Quota Item", "CRM Student Pool", "CRM Student Routing Request",
+	"CRM Student SLA Attempt", "CRM Team", "CRM Tuition Policy Item",
+):
+	_governed_events = doc_events.setdefault(_governed_consumer_doctype, {})
+	_governed_events.setdefault("validate", []).append(
+		"crm.fcrm.master_data_governance.validate_governed_references"
+	)
+
 # Scheduled Tasks
 # ---------------
 
@@ -276,10 +307,12 @@ scheduler_events = {
 	"hourly": ["crm.api.agent_events.retry_pending_agent_events"],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+		"crm.fcrm.master_data_governance.expire_break_glass_requests",
 	],
 	"cron": {
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
 		"* * * * *": [
+			"crm.fcrm.master_data_governance.apply_effective_changes",
 			"crm.fcrm.student_routing.process_pending_routing_requests",
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",

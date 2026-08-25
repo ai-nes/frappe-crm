@@ -310,55 +310,26 @@ class CRMStudent(Document):
 
 
 @frappe.whitelist()
-def convert_to_contact(student_name):
-	student = frappe.get_doc("CRM Student", student_name)
-	if not student.has_permission("read"):
-		frappe.throw(_("You are not permitted to access this Student."), frappe.PermissionError)
-	if frappe.session.user not in {"Administrator", "Guest"}:
-		from crm.fcrm.role_policy import capabilities_for_roles
-
-		capabilities = capabilities_for_roles(frappe.get_roles(frappe.session.user))
-		if "student.execute" not in capabilities:
-			frappe.throw(_("You are not permitted to convert this Student."), frappe.PermissionError)
-	# Conversion is not a lifecycle command.  Do not allow this legacy endpoint
-	# to smuggle a status/stage mutation around the authoritative transition API.
-	if student.enrollment_status != "Có triển vọng":
+def convert_to_contact(
+	student_name,
+	expected_lifecycle_revision=None,
+	idempotency_key=None,
+	correlation_id=None,
+):
+	"""Retained route for old clients; it cannot bypass the conversion command."""
+	if expected_lifecycle_revision in (None, "") or not str(idempotency_key or "").strip():
 		frappe.throw(
-			_("Record the lifecycle transition to MQL before converting this Student to a Contact."),
+			_("CONVERSION_ENDPOINT_RETIRED: use crm.api.student_conversion.convert_student."),
 			frappe.ValidationError,
 		)
+	from crm.fcrm.student_conversion import convert_student
 
-	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
-	if existing_contact:
-		return existing_contact
-
-	if not student.phone:
-		frappe.throw(_("Student must have a phone number before converting to a contact."))
-
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
-
-	contact = frappe.get_doc({
-		"doctype": "CRM Contact",
-		"full_name": student.student_name,
-		"phone": student.phone,
-		"email": student.email,
-		"high_school": student.high_school,
-		"province": student.province,
-		"major": student.major,
-		"aspiration": student.aspiration,
-		"source": student.source,
-		"admission_year": student.admission_year,
-		"branch": student.branch,
-		"student": student.name,
-		"assigned_to": student.assigned_to or crm_staff_name,
-		"enrollment_status": "Có triển vọng",
-		"lead_status": "Mới",
-		"parent_name": student.alt_name,
-		"parent_phone": student.alt_phone,
-	})
-	contact.insert(ignore_permissions=True)
-
-	return contact.name
+	return convert_student(
+		student=student_name,
+		expected_lifecycle_revision=expected_lifecycle_revision,
+		idempotency_key=idempotency_key,
+		correlation_id=correlation_id,
+	)
 
 
 @frappe.whitelist()

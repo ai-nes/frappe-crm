@@ -79,3 +79,6 @@ crm.patches.v1_0.phase4_backfill_and_reconcile_routing_sla
 crm.patches.v1_0.phase5_prepare_student_engagement
 crm.patches.v1_0.phase5_backfill_student_engagement
 crm.patches.v1_0.phase6_prepare_student_decisions
+crm.patches.v1_0.phase7_prepare_student_attribution
+crm.patches.v1_0.phase8_prepare_student_contact_conversion
+crm.patches.v1_0.phase9_prepare_governance_audit

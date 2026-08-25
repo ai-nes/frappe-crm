@@ -1,6 +1,9 @@
 import frappe
 from frappe import _
 
+from crm.fcrm.student_attribution import record_campaign_touchpoint
+from crm.fcrm.student_contact_conversion import students_for_contact
+
 # Single source of truth for which CRM Contact fields a Segment condition may
 # target. Every consumer (doctype validate, draft preview, saved preview,
 # attach) must route through validate_segment_filters()/get_matching_contact_names()
@@ -213,16 +216,21 @@ def attach_segment_to_campaign(segment, campaign):
 
 	existing_by_contact = {}
 	if matches:
-		for row in frappe.get_all(
+		for row in frappe.db.get_all(
 			"CRM Campaign Touchpoint",
 			filters={"crm_campaign": campaign, "crm_contact": ["in", matches]},
 			fields=["crm_contact", "source", "crm_segment"],
 		):
 			existing_by_contact[row.crm_contact] = row
+	contact_students = {
+		contact: next(iter(students_for_contact(contact)), None)
+		for contact in matches
+	}
 
 	to_insert = []
 	skipped_same_segment = 0
 	skipped_other_source = 0
+	skipped_unresolved_student = 0
 	for contact in matches:
 		existing_row = existing_by_contact.get(contact)
 		if existing_row is None:
@@ -239,18 +247,24 @@ def attach_segment_to_campaign(segment, campaign):
 		batch = to_insert[i : i + ATTACH_BATCH_SIZE]
 		try:
 			for contact in batch:
-				frappe.get_doc(
-					{
-						"doctype": "CRM Campaign Touchpoint",
-						"crm_campaign": campaign,
-						"crm_contact": contact,
-						"touched_at": now,
-						"source": "Segment",
-						"crm_segment": segment_doc.name,
-					}
-				).insert()
+				student = contact_students.get(contact)
+				if not student:
+					skipped_unresolved_student += 1
+					continue
+				# Runtime attribution writes must use the audited Student command,
+				# with a stable key so retries cannot duplicate segment exposure.
+				record_campaign_touchpoint(
+					student=student,
+					crm_campaign=campaign,
+					crm_contact=contact,
+					touched_at=now,
+					source="Segment",
+					crm_segment=segment_doc.name,
+					idempotency_key=f"segment:{segment_doc.name}:{campaign}:{contact}",
+					correlation_id=f"segment:{segment_doc.name}:{campaign}",
+				)
 			frappe.db.commit()
-			created += len(batch)
+			created += len(batch) - sum(1 for contact in batch if not contact_students.get(contact))
 		except Exception:
 			frappe.db.rollback()
 			frappe.log_error(
@@ -265,6 +279,7 @@ def attach_segment_to_campaign(segment, campaign):
 		"created": created,
 		"skipped_same_segment": skipped_same_segment,
 		"skipped_other_source": skipped_other_source,
+		"skipped_unresolved_student": skipped_unresolved_student,
 		"remaining": len(to_insert) - created,
 		"failed": failed,
 	}

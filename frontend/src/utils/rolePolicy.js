@@ -161,6 +161,11 @@ export function canManageRoles(user) {
   return hasCapability(user, 'roles.manage')
 }
 
+// UI affordance only. The attribution command endpoint remains authoritative.
+export function canManageAttribution(user) {
+  return hasCapability(user, 'attribution.manage')
+}
+
 export function roleOptionFor(role) {
   return canonicalRoleOptions.find((option) => option.value === role)
 }

@@ -8,26 +8,6 @@
       </Breadcrumbs>
     </template>
     <template v-if="!errorTitle" #right-header>
-      <CustomActions
-        v-if="document._actions?.length"
-        :actions="document._actions"
-      />
-      <Dropdown
-        v-if="doc.enrollment_status"
-        :options="enrollmentStatuses"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            :label="doc.enrollment_status"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="enrollmentStatusColor(doc.enrollment_status)" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -70,6 +50,7 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
+        <ContactConversionHistory :contact="crmContactId" />
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Contact"
@@ -91,7 +72,6 @@
 import ErrorPage from '@/components/ErrorPage.vue'
 import Icon from '@/components/Icon.vue'
 import Resizer from '@/components/Resizer.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
@@ -100,19 +80,17 @@ import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
-import CustomActions from '@/components/CustomActions.vue'
 import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
+import ContactConversionHistory from '@/components/StudentConversion/ContactConversionHistory.vue'
 import { copyToClipboard } from '@/utils'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import {
   createResource,
-  Dropdown,
   Tabs,
   Breadcrumbs,
   usePageMeta,
-  toast,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
@@ -163,30 +141,6 @@ const title = computed(() => {
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
-const enrollmentStatusList = createResource({
-  url: 'frappe.client.get_list',
-  params: { doctype: 'CRM Enrollment Status', fields: ['name'], limit: 50, order_by: 'idx asc' },
-  auto: true,
-})
-
-function enrollmentStatusColor() {
-  return 'text-gray-500'
-}
-
-const enrollmentStatuses = computed(() =>
-  (enrollmentStatusList.data || []).map((s) => ({
-    label: s.name,
-    onClick: () => updateEnrollmentStatus(s.name),
-  })),
-)
-
-function updateEnrollmentStatus(status) {
-  doc.value.enrollment_status = status
-  document.save.submit(null, {
-    onError: (err) => toast.error(err.messages?.[0] || __('Error updating status')),
-  })
-}
-
 const tabs = computed(() => [
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
@@ -204,5 +158,34 @@ const sections = createResource({
   cache: ['sidePanelSections', 'CRM Contact'],
   params: { doctype: 'CRM Contact' },
   auto: true,
+  transform: (data) => {
+    const protectedFields = new Set([
+      'student',
+      'student_identity',
+      'enrollment_status',
+      'lifecycle_stage',
+      'lead_status',
+      'assigned_to',
+      'owner_staff',
+      'owning_team',
+      'admission_year',
+      'branch',
+      'first_contact_time',
+      'sla_status',
+      'sla_started_at',
+      'next_follow_up',
+      'source',
+      'platform',
+      'crm_campaign',
+      'crm_event',
+    ])
+    return data.map((section) => ({
+      ...section,
+      columns: section.columns?.map((column) => ({
+        ...column,
+        fields: column.fields?.filter((field) => !protectedFields.has(field.fieldname)) || [],
+      })) || [],
+    }))
+  },
 })
 </script>

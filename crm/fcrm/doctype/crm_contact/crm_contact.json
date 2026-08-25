@@ -24,6 +24,7 @@
   "owner_staff",
   "owning_team",
   "student",
+  "student_identity",
   "admission_year",
   "section_parents",
   "parent_name",
@@ -83,14 +84,14 @@
    "in_list_view": 1,
    "label": "Phone",
    "options": "Phone",
-   "unique": 1,
-   "reqd": 1
+   "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
   },
   {
    "fieldname": "email",
    "fieldtype": "Data",
    "label": "Email",
-   "options": "Email"
+   "options": "Email",
+   "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
   },
   {
    "fieldname": "col_break_1",
@@ -180,7 +181,18 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Student",
-   "options": "CRM Student"
+   "options": "CRM Student",
+   "read_only": 1,
+   "description": "Legacy compatibility link only. Phase 8 conversion never writes this field; use CRM Student Contact Conversion for relationship history."
+  },
+  {
+   "fieldname": "student_identity",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student Identity",
+   "options": "CRM Student Identity",
+   "description": "Nullable during legacy migration; new conversion Contacts must resolve to this identity."
   },
   {
    "fieldname": "admission_year",
@@ -433,19 +445,16 @@
    "role": "Admissions Director"
   },
   {
-   "create": 1,
    "read": 1,
    "role": "Admissions Operations",
    "write": 1
   },
   {
-   "create": 1,
    "read": 1,
    "role": "CTV-Sale",
    "write": 1
   },
   {
-   "create": 1,
    "read": 1,
    "role": "Counseller",
    "write": 1
@@ -456,7 +465,6 @@
    "role": "Giám đốc Tuyển sinh"
   },
   {
-   "create": 1,
    "read": 1,
    "role": "Lead Sales",
    "write": 1
@@ -466,36 +474,28 @@
    "role": "Promoter-PR"
   },
   {
-   "create": 1,
    "read": 1,
    "role": "Sale",
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "export": 1,
    "read": 1,
    "role": "Sales Manager",
    "write": 1
   },
   {
-   "create": 1,
    "read": 1,
    "role": "Sales User",
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "export": 1,
    "read": 1,
    "role": "System Manager",
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
    "export": 1,
    "read": 1,
    "role": "Team Leader",

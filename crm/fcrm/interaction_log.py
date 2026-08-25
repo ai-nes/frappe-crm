@@ -20,6 +20,8 @@ present-dated interactions for years-old activity.
 
 import frappe
 
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
+
 CONSENT_EVENT_TO_INTERACTION_TYPE = {
 	"Opted Out": "Opt-out",
 	"Re-subscribed": "Opt-in",
@@ -37,7 +39,9 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
-SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "CRM Event Participation", "WhatsApp Message"}
+# Attribution is evidence, not an admissions engagement.  In particular, an
+# event registration/check-in must not close Student SLA or create outcomes.
+SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 
 
 def _source_matches_student(doctype, name, student, seen=None):
@@ -58,7 +62,7 @@ def _source_matches_student(doctype, name, student, seen=None):
 	for fieldname in ("crm_contact", "contact", "customer", "party"):
 		contact = getattr(doc, fieldname, None)
 		if contact and frappe.db.exists("CRM Contact", contact):
-			return frappe.db.get_value("CRM Contact", contact, "student") == student
+			return contact_is_linked_to_student(contact, student)
 	ref_doctype = getattr(doc, "reference_doctype", None)
 	ref_name = getattr(doc, "reference_docname", None) or getattr(doc, "reference_name", None)
 	if ref_doctype and ref_name:
@@ -77,8 +81,6 @@ def _source_is_actionable(doctype, doc):
 		return doc.status == "Completed" and bool(doc.duration or doc.end_time)
 	if doctype == "Task":
 		return doc.status == "Done"
-	if doctype == "CRM Event Participation":
-		return doc.status in {"Checked-in", "Feedback Given"}
 	if doctype == "Communication":
 		return doc.sent_or_received in {"Sent", "Received"}
 	if doctype == "WhatsApp Message":
@@ -108,7 +110,11 @@ def create_interaction(
 	outcome=None,
 ):
 	if not student and crm_contact:
-		student = frappe.db.get_value("CRM Contact", crm_contact, "student")
+		students = students_for_contact(crm_contact)
+		# A Contact can belong to multiple historical cases.  Source events that
+		# need one Student must provide the Student explicitly; do not silently
+		# choose a latest/first case.
+		student = students[0] if len(students) == 1 else None
 
 	if not student and not crm_contact:
 		return None
@@ -143,7 +149,7 @@ def satisfy_student_sla_from_interaction(doc, method=None):
 		return None
 	if doc.get("outcome") not in {"Captured", "Follow Up Needed", "Resolved", "Converted"}:
 		return None
-	if doc.get("reference_doctype") not in {"Call Log", "Communication", "Task", "CRM Event Participation", "WhatsApp Message"}:
+	if doc.get("reference_doctype") not in {"Call Log", "Communication", "Task", "WhatsApp Message"}:
 		return None
 	if not doc.get("source_verified") or not verify_sla_source(doc.reference_doctype, doc.reference_docname, doc.student):
 		return None
@@ -170,7 +176,8 @@ def _create_interaction_for_reference(
 		student, crm_contact = reference_name, None
 	elif reference_doctype == "CRM Contact":
 		crm_contact = reference_name
-		student = frappe.db.get_value("CRM Contact", reference_name, "student")
+		students = students_for_contact(reference_name)
+		student = students[0] if len(students) == 1 else None
 	else:
 		return None
 
@@ -321,7 +328,7 @@ def create_interaction_from_consent_event(doc, method=None):
 
 
 def create_interaction_from_event_participation_insert(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 
 	try:
@@ -339,7 +346,7 @@ def create_interaction_from_event_participation_insert(doc, method=None):
 
 
 def create_interaction_from_event_participation_update(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 	# See create_interaction_from_task_update -- on_update fires during insert
 	# too, after is_new() has already flipped to False; flags.in_insert is the
@@ -368,7 +375,7 @@ def create_interaction_from_event_participation_update(doc, method=None):
 
 
 def create_interaction_from_campaign_touchpoint_insert(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 
 	try:

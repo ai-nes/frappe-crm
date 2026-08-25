@@ -1,0 +1,31 @@
+"""Regression checks that production readers use the conversion resolver."""
+
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+READER_FILES = (
+	"fcrm/student_attribution.py",
+	"fcrm/interaction_log.py",
+	"fcrm/student_engagement.py",
+	"fcrm/attribution.py",
+	"fcrm/student_context.py",
+	"api/student_dashboard.py",
+	"api/admissions_dashboard.py",
+	"api/segment.py",
+	"fcrm/doctype/crm_campaign_touchpoint/crm_campaign_touchpoint.py",
+	"fcrm/doctype/crm_event_participation/crm_event_participation.py",
+)
+
+
+class TestStudentContactConversionReaderInventory(unittest.TestCase):
+	def test_readers_do_not_query_legacy_contact_student_directly(self):
+		for relative in READER_FILES:
+			text = (ROOT / relative).read_text(encoding="utf-8")
+			self.assertNotIn('get_value("CRM Contact", {"student":', text, relative)
+			self.assertNotIn('get_all("CRM Contact", filters={"student":', text, relative)
+
+	def test_resolver_is_the_only_legacy_fallback_boundary(self):
+		resolver = (ROOT / "fcrm/student_contact_conversion.py").read_text(encoding="utf-8")
+		self.assertIn('get_value("CRM Contact", {"student": student}', resolver)
+		self.assertIn('get_value("CRM Contact", contact, "student")', resolver)

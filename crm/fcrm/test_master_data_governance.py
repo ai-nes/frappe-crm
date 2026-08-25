@@ -11,12 +11,14 @@ from frappe.tests.utils import FrappeTestCase
 from crm.fcrm.master_data_governance import (
 	GOVERNED_DOCTYPES,
 	_governance_roles_for_user,
+	assert_reference_effective,
 	approve_change,
 	check_impact,
 	propose_change,
 	reject_change,
 	set_governance_defaults,
 )
+from crm.fcrm.governed_reference_registry import GOVERNED_REFERENCE_REGISTRY, REGISTRY_REVISION
 
 
 class TestMasterDataGovernance(FrappeTestCase):
@@ -49,6 +51,20 @@ class TestMasterDataGovernance(FrappeTestCase):
 				for role in {config["owner_role"]} | config["approver_roles"]
 			},
 		)
+
+	def test_phase_9_registry_is_versioned_and_has_concrete_consumers(self):
+		self.assertEqual(REGISTRY_REVISION, "P9-DEC-001")
+		self.assertIn("CRM Campaign Type", GOVERNED_REFERENCE_REGISTRY)
+		self.assertEqual(
+			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Campaign Type"]["consumers"]},
+			{("CRM Campaign", "campaign_type")},
+		)
+
+	def test_retired_value_cannot_receive_new_reference(self):
+		source = self._make_lead_source("_Test Gov Retired Effective")
+		frappe.db.set_value("CRM Lead Source", source, "approval_state", "Retired")
+		with self.assertRaises(frappe.ValidationError):
+			assert_reference_effective("CRM Lead Source", source)
 
 	def test_system_manager_cannot_satisfy_business_role_signoffs(self):
 		with patch("crm.fcrm.master_data_governance.frappe.get_roles", return_value=["System Manager"]):
@@ -147,7 +163,11 @@ class TestMasterDataGovernance(FrappeTestCase):
 		source = self._make_lead_source("_Test Gov Source Approve Bad Status")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
 		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		approver, _ = self._make_user_with_roles("_test_gov_bad_status_approver", roles=["Marketing"])
+		frappe.set_user(approver)
 		approve_change(change_name)  # single-approver type -> immediately applied
+		frappe.set_user("Administrator")
+		self._cleanup_user(approver)
 
 		with self.assertRaises(frappe.ValidationError):
 			approve_change(change_name)
@@ -188,7 +208,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			frappe.set_user("Administrator")
 			self._cleanup_user(user)
 
-		self.assertEqual(status, "Approved")
+		self.assertEqual(status, "Applied")
 		self.assertFalse(frappe.db.exists("CRM Lead Source", "_Test Gov Source Rename Src"))
 		self.assertTrue(frappe.db.exists("CRM Lead Source", "_Test Gov Source Rename Dst"))
 		renamed = frappe.get_doc("CRM Lead Source", "_Test Gov Source Rename Dst")
@@ -214,7 +234,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 			frappe.set_user(marketing_lead)
 			status_after_second = approve_change(change_name)
-			self.assertEqual(status_after_second, "Approved")
+			self.assertEqual(status_after_second, "Applied")
 
 			change.reload()
 			self.assertEqual(set(change.approved_by_roles.split(",")), {"Lead Sales", "Marketing"})

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "field:campus_name",
  "creation": "2026-05-30 00:00:00.000000",
  "default_view": "List",
@@ -117,16 +117,12 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
    "read": 1,
-   "role": "Admissions Director",
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
    "read": 1,
-   "role": "Admissions Operations",
-   "write": 1
+   "role": "Admissions Operations"
   },
   {
    "read": 1,
@@ -173,12 +169,8 @@
    "role": "Sales User"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "export": 1,
    "read": 1,
-   "role": "System Manager",
-   "write": 1
+   "role": "System Manager"
   },
   {
    "read": 1,

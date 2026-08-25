@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canConfigureSystem,
+  canManageAttribution,
   canAccessNavigationRoute,
   canManageRoles,
   hasAnyCapability,
@@ -75,6 +76,8 @@ describe('rolePolicy', () => {
     expect(canConfigureSystem(systemManager)).toBe(true)
     expect(canManageRoles(systemManager)).toBe(true)
     expect(canManageRoles({ crm_capabilities: ['team.oversee'] })).toBe(false)
+    expect(canManageAttribution({ crm_capabilities: ['attribution.manage'] })).toBe(true)
+    expect(canManageAttribution({ crm_capabilities: ['acquisition.manage'] })).toBe(false)
   })
 
   it('keeps a shared navigation declaration and canonical selectable roles', () => {

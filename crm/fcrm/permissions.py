@@ -18,6 +18,7 @@ import frappe
 from crm.fcrm.role_policy import (
 	case_scope_for_roles,
 )
+from crm.fcrm.student_feature_flags import enabled
 
 # Compatibility export for lifecycle.py only. Row-level Student/Contact access
 # no longer reads this set; it resolves the canonical policy below.
@@ -79,6 +80,8 @@ def get_permission_query_conditions(doctype, user=None):
 
 	roles = set(frappe.get_roles(user))
 	scope = _effective_case_scope(roles, doctype, user=user)
+	if doctype == "CRM Contact" and enabled("conversion_read"):
+		return _contact_conversion_condition(user, roles, scope)
 	if scope == "all":
 		return None
 	if scope == "deny":
@@ -141,6 +144,36 @@ def has_permission(doc, user=None, permission_type=None):
 def _effective_case_scope(roles, doctype, *, user):
 	"""Delegate policy selection; this module only turns a scope into SQL."""
 	return case_scope_for_roles(roles, doctype, administrator=user == "Administrator")
+
+
+def _contact_conversion_condition(user, roles, scope):
+	"""Expose Contacts only through currently visible converted Student cases.
+
+	Contact owner/team fields are mutable compatibility projections and therefore
+	never form a permission boundary.  System Manager/Administrator retain the
+	explicit platform exception; every other profile must have a visible Student
+	case in the immutable conversion junction.
+	"""
+	if user == "Administrator" or "System Manager" in roles:
+		return None
+	if scope == "deny":
+		return "1=0"
+	if not frappe.db.exists("DocType", "CRM Student Contact Conversion"):
+		return "1=0"
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	contact_table = "`tabCRM Contact`"
+	conversion_table = "`tabCRM Student Contact Conversion`"
+	if student_condition is None:
+		return (
+			f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion)"
+		)
+	if student_condition == "1=0":
+		return "1=0"
+	return (
+		f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion "
+		"inner join `tabCRM Student` student on student.name = conversion.student "
+		f"where ({student_condition}))"
+	)
 
 
 def _cached(cache_key, loader):

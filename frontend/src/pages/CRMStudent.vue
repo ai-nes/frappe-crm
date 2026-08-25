@@ -19,14 +19,6 @@
         @click="showOwnershipModal = true"
       />
       <Button
-        v-if="doc.name && doc.enrollment_status === 'Có triển vọng'"
-        variant="solid"
-        :label="__('Convert to Contact')"
-        iconLeft="user-plus"
-        :loading="converting"
-        @click="convertToContact"
-      />
-      <Button
         v-if="doc.enrollment_status"
         :label="lifecycleStage"
         iconLeft="shuffle"
@@ -109,6 +101,13 @@
           :loading="engagementContext.loading"
           :error="engagementContextError"
         />
+        <StudentConversionPanel
+          :student="crmStudentId"
+          :context="engagementContext.data"
+          :loading="engagementContext.loading"
+          @refresh-required="refreshConversionContext"
+          @converted="handleConverted"
+        />
         <section class="border-b p-1 sm:p-3" aria-label="Sales decisions and actions">
           <Section
             :label="__('Sales decisions and actions')"
@@ -184,8 +183,9 @@
     :student="crmStudentId"
     :lifecycle="engagementContext.data.lifecycle || {}"
     @changed="handleLifecycleChanged"
-    @refresh-required="engagementContext.reload()"
-  />
+          @refresh-required="engagementContext.reload()"
+        />
+        <AuditTimeline :student="crmStudentId" />
   <RecordStudentOutcomeModal
     v-if="showOutcomeModal && engagementContext.data"
     v-model="showOutcomeModal"
@@ -221,6 +221,8 @@ import ChangeStudentOwnershipModal from '@/components/Modals/ChangeStudentOwners
 import RouteStudentModal from '@/components/Modals/RouteStudentModal.vue'
 import StudentSLASection from '@/components/StudentSLASection.vue'
 import StudentEngagementSection from '@/components/StudentEngagementSection.vue'
+import AuditTimeline from '@/components/Governance/AuditTimeline.vue'
+import StudentConversionPanel from '@/components/StudentConversion/StudentConversionPanel.vue'
 import Section from '@/components/Section.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
@@ -242,14 +244,11 @@ import {
   call,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
 const { brand } = getSettings()
 const { doctypeMeta } = getMeta('CRM Student')
 const { getCurrentUser } = usersStore()
-
-const router = useRouter()
 
 const props = defineProps({
   crmStudentId: { type: String, required: true },
@@ -259,7 +258,6 @@ const reload = ref(false)
 const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
-const converting = ref(false)
 const showOwnershipModal = ref(false)
 const showRouteModal = ref(false)
 const showLifecycleModal = ref(false)
@@ -420,6 +418,16 @@ function handleSalesActionChanged() {
   sections.reload()
 }
 
+function refreshConversionContext() {
+  engagementContext.reload()
+  document.reload?.()
+}
+
+function handleConverted() {
+  refreshConversionContext()
+  sections.reload()
+}
+
 async function loadMoreEngagementHistory() {
   if (!engagementHistoryCursor.value) return
   try {
@@ -484,24 +492,6 @@ const title = computed(() => {
 })
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
-
-const convertResource = createResource({
-  url: 'crm.fcrm.doctype.crm_student.crm_student.convert_to_contact',
-  onSuccess(contactName) {
-    converting.value = false
-    toast.success(__('Converted to CRM Contact'))
-    router.push({ name: 'CRM Contact', params: { crmContactId: contactName } })
-  },
-  onError(err) {
-    converting.value = false
-    toast.error(err.messages?.[0] || __('Conversion failed'))
-  },
-})
-
-function convertToContact() {
-  converting.value = true
-  convertResource.submit({ student_name: props.crmStudentId })
-}
 
 function handleSidePanelFieldChange() {
   document.save.submit(null, {

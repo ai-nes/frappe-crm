@@ -41,7 +41,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Command Kind",
-   "options": "intake\nownership\nreview_decision\nrouting\nsla\ninteraction_outcome\nlifecycle_transition\nrecommendation_decision\nsales_action\nsales_action_reassign",
+   "options": "intake\nownership\nreview_decision\nrouting\nsla\ninteraction_outcome\nlifecycle_transition\nrecommendation_decision\nsales_action\nsales_action_reassign\ncampaign_touchpoint\nevent_participation\nconversion",
    "read_only": 1,
    "reqd": 1
   },
@@ -64,6 +64,7 @@
   },
   {"fieldname": "error_code", "fieldtype": "Data", "label": "Error Code", "read_only": 1},
   {"fieldname": "target_student", "fieldtype": "Link", "in_list_view": 1, "label": "Target Student", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "target_contact", "fieldtype": "Link", "in_list_view": 1, "label": "Target Contact", "options": "CRM Contact", "read_only": 1},
   {"fieldname": "target_case_key", "fieldtype": "Link", "label": "Target Case Key", "options": "CRM Student Case Key", "read_only": 1},
   {"fieldname": "review", "fieldtype": "Link", "label": "Intake Review", "options": "CRM Student Intake Review", "read_only": 1},
   {"fieldname": "result_revision", "fieldtype": "Int", "label": "Result Revision", "read_only": 1},

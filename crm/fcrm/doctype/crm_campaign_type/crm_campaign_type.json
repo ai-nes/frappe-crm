@@ -1,7 +1,7 @@
 {
  "actions": [],
- "allow_import": 1,
- "allow_rename": 1,
+ "allow_import": 0,
+ "allow_rename": 0,
  "autoname": "field:campaign_type_name",
  "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
@@ -10,7 +10,11 @@
  "engine": "InnoDB",
  "field_order": [
   "campaign_type_name",
-  "description"
+  "description",
+  "owner_role",
+  "approval_state",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
@@ -26,6 +30,31 @@
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Data",
+   "label": "Owner Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "label": "Approval State",
+   "options": "Approved\nRetired\nProposed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -38,7 +67,6 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "export": 1,
    "read": 1,
    "role": "Admissions Director"
   },
@@ -55,7 +83,6 @@
    "role": "Counseller"
   },
   {
-   "export": 1,
    "read": 1,
    "role": "Giám đốc Tuyển sinh"
   },
@@ -84,7 +111,6 @@
    "role": "Sale"
   },
   {
-   "export": 1,
    "read": 1,
    "role": "Sales Manager"
   },
@@ -93,15 +119,10 @@
    "role": "Sales User"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "export": 1,
    "read": 1,
-   "role": "System Manager",
-   "write": 1
+   "role": "System Manager"
   },
   {
-   "export": 1,
    "read": 1,
    "role": "Team Leader"
   }
