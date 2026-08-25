@@ -11,6 +11,7 @@ class TestCRMEventParticipation(FrappeTestCase):
 		self.campus = self._make_campus("_Test EvtP Campus")
 		self.campaign = self._make_campaign("_Test EvtP Campaign", self.campus)
 		self.event = self._make_event("_Test EvtP Event", self.campaign)
+		self.student = self._make_student("_Test EvtP Student", "0977000001")
 		self.contact = self._make_contact("_Test EvtP Contact", "0977000001")
 
 	def tearDown(self):
@@ -24,6 +25,8 @@ class TestCRMEventParticipation(FrappeTestCase):
 			frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test EvtP%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name"):
@@ -43,6 +46,23 @@ class TestCRMEventParticipation(FrappeTestCase):
 			frappe.delete_doc("CRM Campaign", title, force=True)
 		doc = frappe.get_doc({"doctype": "CRM Campaign", "title": title, "campus": campus})
 		doc.insert(ignore_permissions=True)
+		return doc.name
+
+	def _make_student(self, name, phone):
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": name,
+				"phone": phone,
+				"enrollment_status": "Có triển vọng",
+			}
+		)
+		previous_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			doc.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_flag
 		return doc.name
 
 	def _make_event(self, title, campaign):
@@ -66,6 +86,7 @@ class TestCRMEventParticipation(FrappeTestCase):
 				"full_name": name,
 				"phone": phone,
 				"enrollment_status": "Có triển vọng",
+				"student": self.student,
 			}
 		)
 		contact.insert(ignore_permissions=True)
@@ -82,6 +103,7 @@ class TestCRMEventParticipation(FrappeTestCase):
 			"doctype": "CRM Event Participation",
 			"crm_event": self.event,
 			"crm_contact": self.contact,
+			"student": self.student,
 		}
 		payload.update(kwargs)
 		return frappe.get_doc(payload)
@@ -94,8 +116,7 @@ class TestCRMEventParticipation(FrappeTestCase):
 		participation.insert(ignore_permissions=True)
 		participation.reload()
 
-		expected_student = frappe.db.get_value("CRM Contact", self.contact, "student")
-		self.assertEqual(participation.student, expected_student)
+		self.assertEqual(participation.student, self.student)
 		self.assertEqual(participation.actor, "Administrator")
 		self.assertTrue(participation.registered_at)
 

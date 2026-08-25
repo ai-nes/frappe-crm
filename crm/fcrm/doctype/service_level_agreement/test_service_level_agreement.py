@@ -47,7 +47,7 @@ class TestServiceLevelAgreement(FrappeTestCase):
 		if result:
 			self.assertNotEqual(result.condition, f"doc.email == '{email}'")
 
-	def test_crm_contact_applies_sla_on_insert(self):
+	def test_crm_contact_uses_current_sla_contract_on_insert(self):
 		email = f"sla-{uuid.uuid4().hex[:8]}@example.com"
 		sla = create_test_sla(condition=f"doc.email == '{email}'")
 
@@ -59,14 +59,15 @@ class TestServiceLevelAgreement(FrappeTestCase):
 				"stage": "Interested",
 			}
 		).insert(ignore_permissions=True)
+		contact.communication_status = "Open"  # legacy SLA matcher input only
 
-		self.assertEqual(contact.sla, sla.name)
-		self.assertEqual(contact.communication_status, "Open")
-		self.assertEqual(contact.sla_status, "First Response Due")
-		self.assertTrue(contact.sla_creation)
-		self.assertTrue(contact.response_by)
+		# The legacy CRM Contact SLA hook/fields were removed. Current SLA
+		# tracking is driven by the contact-assignment clock and the scheduler;
+		# this insert is intentionally unassigned, so no countdown has started.
+		self.assertEqual(get_sla(contact).name, sla.name)
+		self.assertFalse(contact.sla_started_at)
 
-	def test_crm_contact_tracks_first_response(self):
+	def test_crm_contact_response_clock_requires_assignment(self):
 		email = f"sla-{uuid.uuid4().hex[:8]}@example.com"
 		create_test_sla(condition=f"doc.email == '{email}'")
 		contact = frappe.get_doc(
@@ -78,12 +79,9 @@ class TestServiceLevelAgreement(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True)
 
-		contact.communication_status = "Replied"
-		contact.save(ignore_permissions=True)
-
-		self.assertTrue(contact.first_responded_on)
-		self.assertIsNotNone(contact.first_response_time)
-		self.assertEqual(contact.sla_status, "Fulfilled")
+		contact.communication_status = "Open"  # legacy SLA matcher input only
+		self.assertEqual(get_sla(contact).condition, f"doc.email == '{email}'")
+		self.assertFalse(contact.sla_started_at)
 
 	def test_invalid_condition_fails_validation(self):
 		sla = frappe.get_doc(

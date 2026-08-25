@@ -56,12 +56,21 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(student.enrollment_status, "Đã xác nhận")
 
 	def test_direct_contact_creation_is_retired(self):
-		with self.assertRaises(frappe.PermissionError):
-			frappe.get_doc({
-				"doctype": "CRM Contact",
-				"full_name": "_Test Direct Contact",
-				"phone": "0902222333",
-			}).insert(ignore_permissions=True)
+		# Test the production boundary rather than the test-fixture bypass used
+		# by the surrounding CRM Contact fixtures.
+		previous_in_test = getattr(frappe.flags, "in_test", False)
+		frappe.flags.in_test = False
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				frappe.get_doc(
+					{
+						"doctype": "CRM Contact",
+						"full_name": "_Test Direct Contact",
+						"phone": "0902222333",
+					}
+				).insert(ignore_permissions=True)
+		finally:
+			frappe.flags.in_test = previous_in_test
 
 	def test_create_from_contact_is_retired(self):
 		contact = frappe.get_doc({
@@ -83,7 +92,12 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "Lead")
 
 		student.enrollment_status = "Có triển vọng"
-		student.save(ignore_permissions=True)  # must not raise
+		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
+		frappe.flags.student_lifecycle_service = True
+		try:
+			student.save(ignore_permissions=True)  # must not raise
+		finally:
+			frappe.flags.student_lifecycle_service = previous_flag
 		student.reload()
 		self.assertEqual(student.lifecycle_stage, "MQL")
 
@@ -103,7 +117,7 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
 		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
@@ -116,12 +130,17 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
 		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
 			student.status_change_reason = "Phụ huynh xác nhận vẫn quan tâm."
-			student.save(ignore_permissions=True)
+			previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
+			frappe.flags.student_lifecycle_service = True
+			try:
+				student.save(ignore_permissions=True)
+			finally:
+				frappe.flags.student_lifecycle_service = previous_flag
 		finally:
 			frappe.set_user("Administrator")
 

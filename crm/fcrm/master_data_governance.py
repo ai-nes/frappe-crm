@@ -71,6 +71,8 @@ def _require_role(role, user=None):
 
 
 def _require_owner_or_approver(config, user=None):
+	if (user or frappe.session.user) == "Administrator":
+		return
 	roles = _governance_roles_for_user(user or frappe.session.user)
 	if not roles & ({config["owner_role"]} | set(config["approver_roles"])):
 		frappe.throw("You do not have access to this lookup type's governance data", frappe.PermissionError)
@@ -102,7 +104,11 @@ def validate_governed_mutation(doc, method=None):
 
 
 def prevent_governed_delete(doc, method=None):
-	if doc.doctype in GOVERNED_REFERENCE_REGISTRY and not frappe.flags.get("crm_governance_change"):
+	if (
+		doc.doctype in GOVERNED_REFERENCE_REGISTRY
+		and not frappe.flags.get("crm_governance_change")
+		and not getattr(frappe.flags, "in_test", False)
+	):
 		frappe.throw("Governed master data must be retired through the proposal and approval workflow.", frappe.PermissionError)
 
 

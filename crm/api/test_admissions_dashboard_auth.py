@@ -121,7 +121,7 @@ class TestAdmissionsDashboardAuth(FrappeTestCase):
 
 	def test_check_dashboard_access_denies_wrong_role(self):
 		campus = self._make_campus("_Test Dashboard Campus 3")
-		user, staff = self._make_user_and_staff("_test_check_wrong_role", campus=campus, roles=["Promoter-PR"])
+		user, staff = self._make_user_and_staff("_test_check_wrong_role", campus=campus, roles=["Marketing"])
 		try:
 			with self.assertRaises(DashboardAccessDenied):
 				check_dashboard_access("sale", user=user)

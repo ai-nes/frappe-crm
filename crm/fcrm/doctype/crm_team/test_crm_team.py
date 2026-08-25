@@ -125,6 +125,7 @@ class TestCRMTeam(FrappeTestCase):
 				{
 					"doctype": "CRM Department",
 					"department_name": name,
+					"campus": self._campus,
 				}
 			).insert(ignore_permissions=True)
 		return name

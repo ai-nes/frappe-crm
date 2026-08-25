@@ -124,7 +124,9 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertEqual(
 			set(CANONICAL_PERMISSION_MATRIX),
 			{
+				"attribution_evidence",
 				"admissions_case",
+				"decision_action",
 				"reference",
 				"acquisition",
 				"governed_acquisition",
@@ -183,10 +185,7 @@ class TestSessionRoleContract(FrappeTestCase):
 			{key for key, value in student_roles["Sale"].items() if value == 1},
 			{"read", "write", "create"},
 		)
-		self.assertEqual(
-			{key for key, value in student_roles["Team Leader"].items() if value == 1},
-			{"read", "write", "create", "delete", "export"},
-		)
+		self.assertNotIn("Team Leader", student_roles)
 		self.assertNotIn("Sales", student_roles)
 		self.assertNotIn("CRM Staff", managed_docperm_rows())
 		self.assertNotIn("CRM Data Steward", student_roles)

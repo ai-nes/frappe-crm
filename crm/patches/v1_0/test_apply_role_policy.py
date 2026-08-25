@@ -3,8 +3,9 @@ from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES, LEGACY_UNMAPPED_ROLES
+from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES
 from crm.patches.v1_0 import apply_role_policy, setup_crm_permissions
+from crm.patches.v1_0.setup_crm_permissions import MANAGED_DOCPERM_ROLE_NAMES
 
 
 class TestApplyPhase2RolePolicy(FrappeTestCase):
@@ -51,8 +52,6 @@ class TestApplyPhase2RolePolicy(FrappeTestCase):
 		managed_doctypes = {call.args[1]["parent"] for call in delete.call_args_list}
 		self.assertIn("CRM Student", managed_doctypes)
 		self.assertNotIn("CRM Staff", managed_doctypes)
-		self.assertNotIn("CRM Recommendation", managed_doctypes)
+		self.assertIn("CRM Recommendation", managed_doctypes)
 		for call in delete.call_args_list:
-			self.assertEqual(
-				set(call.args[1]["role"][1]), set(CRM_POLICY_ROLE_NAMES) | LEGACY_UNMAPPED_ROLES | {"Administrator"}
-			)
+			self.assertEqual(set(call.args[1]["role"][1]), set(MANAGED_DOCPERM_ROLE_NAMES))

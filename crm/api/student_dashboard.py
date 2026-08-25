@@ -439,7 +439,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	phone_val = student_doc.phone if student_doc else (contact_doc.phone if contact_doc else "")
 	
 	cohort = ""
-	cohort_source = contact_doc if contact_doc and contact_doc.cohort_start_year else student_doc
+	contact_cohort_start = getattr(contact_doc, "cohort_start_year", None) if contact_doc else None
+	cohort_source = contact_doc if contact_cohort_start else student_doc
 	if cohort_source and getattr(cohort_source, "cohort_start_year", None):
 		start = cohort_source.cohort_start_year
 		end = cohort_source.cohort_end_year or (start + 4)
@@ -503,9 +504,10 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			})
 
 	interested_programs = []
+	contact_program = getattr(contact_doc, "education_program", None) if contact_doc else None
 	prog = (
-		contact_doc.education_program
-		if contact_doc and contact_doc.education_program
+		contact_program
+		if contact_program
 		else (student_doc.education_program if student_doc and hasattr(student_doc, "education_program") else None)
 	)
 	if prog:

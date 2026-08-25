@@ -37,7 +37,12 @@ class TestCRMInteraction(FrappeTestCase):
 			"student_name": "_Test Interaction Student",
 			"phone": "0901234567",
 		})
-		student.insert(ignore_permissions=True)
+		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_intake_flag
 		return student
 
 	def _make_interaction(self, student):

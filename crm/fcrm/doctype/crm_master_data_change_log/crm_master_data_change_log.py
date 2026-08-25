@@ -16,7 +16,10 @@ class CRMMasterDataChangeLog(Document):
 			frappe.throw("Unknown governance registry revision")
 
 	def on_update(self):
-		if not frappe.flags.get("crm_governance_log_update"):
+		if not (
+			frappe.flags.get("crm_governance_log_update")
+			or frappe.flags.get("crm_governance_log_insert")
+		):
 			frappe.throw("Change logs are append-only evidence.", frappe.PermissionError)
 
 	def on_trash(self):

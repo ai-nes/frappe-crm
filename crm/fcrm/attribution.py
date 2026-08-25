@@ -66,7 +66,7 @@ def _touchpoints_for_student(student):
 	touchpoints.extend(
 		{
 			"touched_at": row.registered_at,
-			"campaign": event_campaigns.get(row.crm_event),
+			"campaign": event_campaigns.get(row.crm_event) or None,
 			"event": row.crm_event,
 			"status": row.status,
 			"source": "Event Participation",
@@ -176,7 +176,7 @@ def get_equal_credit_by_campaign_for_students(students):
 		if row.name not in campaign_superseded and row.crm_campaign and row.touched_at:
 			by_student[row.student].append(row.crm_campaign)
 	for row in event_rows:
-		campaign = event_campaigns.get(row.crm_event)
+		campaign = event_campaigns.get(row.crm_event) or None
 		if row.name not in event_superseded and campaign and row.registered_at:
 			by_student[row.student].append(campaign)
 	rollup = defaultdict(float)
@@ -260,7 +260,7 @@ def _legacy_touchpoints_for_contact(contact):
 	touchpoints.extend(
 		{
 			"touched_at": row.registered_at,
-			"campaign": event_campaigns.get(row.crm_event),
+			"campaign": event_campaigns.get(row.crm_event) or None,
 			"event": row.crm_event,
 			"status": row.status,
 			"source": "Event Participation",
@@ -345,6 +345,8 @@ def get_campaign_names_by_last_touch(campaign):
 
 @frappe.whitelist()
 def get_contact_attribution(contact):
+	if not frappe.db.exists("CRM Contact", contact):
+		frappe.throw(f"CRM Contact {contact} does not exist")
 	students = students_for_contact(contact)
 	if len(students) == 1:
 		projection = get_student_attribution(students[0])

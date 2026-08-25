@@ -62,10 +62,14 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._statuses = {}
-		for status_name in ("_Test Status A", "_Test Status B", "_Test Status C"):
+		for stage_order, status_name in enumerate(("_Test Status A", "_Test Status B", "_Test Status C"), 1):
 			if not frappe.db.exists("CRM Enrollment Status", status_name):
 				frappe.get_doc(
-					{"doctype": "CRM Enrollment Status", "status_name": status_name}
+					{
+						"doctype": "CRM Enrollment Status",
+						"status_name": status_name,
+						"stage_order": stage_order,
+					}
 				).insert(ignore_permissions=True)
 			self._statuses[status_name] = status_name
 

@@ -445,60 +445,23 @@
    "role": "Admissions Director"
   },
   {
-   "read": 1,
-   "role": "Admissions Operations",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "CTV-Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Counseller",
-   "write": 1
-  },
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Giám đốc Tuyển sinh"
-  },
-  {
+   "create": 1,
    "read": 1,
    "role": "Lead Sales",
    "write": 1
   },
   {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
+   "create": 1,
    "read": 1,
    "role": "Sale",
    "write": 1
   },
   {
-   "export": 1,
-   "read": 1,
-   "role": "Sales Manager",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Sales User",
-   "write": 1
-  },
-  {
+   "create": 1,
+   "delete": 1,
    "export": 1,
    "read": 1,
    "role": "System Manager",
-   "write": 1
-  },
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Team Leader",
    "write": 1
   }
  ],

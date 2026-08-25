@@ -181,9 +181,9 @@ class TestIntegrations(FrappeTestCase):
 		self.assertEqual(task.priority, "High")
 
 	def test_get_contact_by_phone_number_finds_crm_contact(self):
-		contact = create_test_crm_contact(phone="+1 415 555 0600")
+		contact = create_test_crm_contact(phone="0912345600")
 
-		result = get_contact_by_phone_number("+1 415 555 0600")
+		result = get_contact_by_phone_number("0912345600")
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["crm_contact"], contact.name)
@@ -195,11 +195,11 @@ class TestIntegrations(FrappeTestCase):
 				"doctype": "Contact",
 				"first_name": "John",
 				"last_name": "Doe",
-				"mobile_no": "4155550100",
+				"phone_nos": [{"phone": "+91 9845552671", "is_primary_mobile_no": 1}],
 			}
 		).insert()
 
-		result = get_contact_by_phone_number("4155550100")
+		result = get_contact_by_phone_number("+91 9845552671")
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["full_name"], "John Doe")
@@ -212,9 +212,9 @@ class TestIntegrations(FrappeTestCase):
 		self.assertNotIn("full_name", result)
 
 	def test_get_contact_reference_from_number_returns_crm_contact(self):
-		contact = create_test_crm_contact(phone="+1 415 555 0700")
+		contact = create_test_crm_contact(phone="0912345700")
 
-		docname, doctype = get_contact_reference_from_number("+1 415 555 0700")
+		docname, doctype = get_contact_reference_from_number("0912345700")
 
 		self.assertEqual(docname, contact.name)
 		self.assertEqual(doctype, "CRM Contact")
@@ -225,11 +225,11 @@ class TestIntegrations(FrappeTestCase):
 				"doctype": "Contact",
 				"first_name": "Standalone",
 				"last_name": "Contact",
-				"mobile_no": "4155550400",
+				"phone_nos": [{"phone": "+91 9845552672", "is_primary_mobile_no": 1}],
 			}
 		).insert()
 
-		docname, doctype = get_contact_reference_from_number("4155550400")
+		docname, doctype = get_contact_reference_from_number("+91 9845552672")
 
 		self.assertEqual(docname, contact.name)
 		self.assertEqual(doctype, "Contact")
@@ -287,7 +287,7 @@ def create_test_crm_contact(**kwargs):
 	data = {
 		"doctype": "CRM Contact",
 		"full_name": "Phone Lookup Contact",
-		"phone": "+1 415 555 0000",
+		"phone": "0912345000",
 		"email": f"lookup-{uuid.uuid4().hex[:8]}@example.com",
 		"stage": "Interested",
 	}
