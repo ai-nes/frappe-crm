@@ -2,7 +2,7 @@
   <section v-if="resource.data?.read_enabled !== false" class="border-b p-1 sm:p-3" aria-label="Critical admission history">
     <Section :label="__('Critical admission history')" label-class="px-2 font-semibold" header-class="h-8">
       <div class="space-y-3 px-3 pb-3 text-sm">
-        <p v-if="resource.loading && !timeline.items.length" class="text-ink-gray-5" role="status">{{ __('Loading admission history…') }}</p>
+        <p v-if="resource.loading && !resource.data" class="text-ink-gray-5" role="status">{{ __('Loading admission history…') }}</p>
         <div v-else-if="resource.error" role="alert" class="space-y-2 text-ink-red-3">
           <p>{{ errorState.message }}</p>
           <Button v-if="errorState.retryable" size="sm" :label="__('Retry')" @click="resource.reload()" />
@@ -39,6 +39,7 @@ const appended = ref([])
 const resource = createResource({
   url: governanceAuditApi.getTimeline,
   makeParams: () => ({ student: props.student, limit: 20 }),
+  cache: ['governanceAuditTimeline', props.student],
   auto: true,
   initialData: null,
 })

@@ -15,7 +15,7 @@
       <Button
         v-if="canSubmitIntake"
         variant="solid"
-        :label="__('New intake')"
+        :label="__('New student')"
         iconLeft="plus"
         @click="showIntakeModal = true"
       />

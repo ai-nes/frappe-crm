@@ -148,7 +148,7 @@ const tabs = [
               {
                 fieldname: 'branch',
                 fieldtype: 'Link',
-                label: 'Branch',
+                label: 'Campus',
                 options: 'CRM Campus',
                 reqd: 1,
               },
@@ -167,7 +167,7 @@ const tabs = [
               {
                 fieldname: 'admission_year',
                 fieldtype: 'Link',
-                label: 'CRM Admission Year',
+                label: 'Admission Year',
                 options: 'CRM Admission Year',
                 reqd: 1,
               },
@@ -177,7 +177,7 @@ const tabs = [
       },
       {
         name: 'phase3-intake-controls',
-        label: 'Phase 3 intake controls',
+        label: 'Identity and assignment',
         collapsible: true,
         opened: false,
         columns: [
