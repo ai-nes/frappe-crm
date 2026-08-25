@@ -23,6 +23,7 @@
   "owning_team",
   "owning_pool",
   "latest_score",
+  "student_context_revision",
   "enrollment_date",
   "section_links",
   "high_school",
@@ -180,6 +181,15 @@
    "in_list_view": 1,
    "label": "Latest Score",
    "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "student_context_revision",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Student Context Revision",
+   "read_only": 1,
+   "description": "Frappe-owned monotonic revision for material Student context changes. Never edit directly."
   },
   {
    "fieldname": "enrollment_date",

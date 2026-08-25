@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import re
 import struct
 import unicodedata
@@ -263,6 +264,16 @@ def _append_weak_observations(student: dict, identity: str) -> None:
 		doc.save(ignore_permissions=True)
 
 
+def _source_reference_history(student_name: str) -> str:
+	return json.dumps(
+		[
+			{"student": student_name, "kind": "legacy_source", "schema_version": SCHEMA_VERSION}
+		],
+		ensure_ascii=False,
+		separators=(",", ":"),
+	)
+
+
 def _ensure_case_key(student: dict, identity: str, cycle: str) -> str:
 	case_key = f"CK-{identity}-{cycle}"[:140]
 	existing = frappe.db.get_value("CRM Student Case Key", {"case_key": case_key}, "name")
@@ -276,9 +287,7 @@ def _ensure_case_key(student: dict, identity: str, cycle: str) -> str:
 			"admission_year": cycle,
 			"canonical_student": student["name"],
 			"source_student": student["name"],
-			"source_reference_history": [
-				{"student": student["name"], "kind": "legacy_source", "schema_version": SCHEMA_VERSION}
-			],
+			"source_reference_history": _source_reference_history(student["name"]),
 			"integrity_state": "resolved",
 			"schema_version": SCHEMA_VERSION,
 		}
