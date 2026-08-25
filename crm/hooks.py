@@ -133,6 +133,7 @@ permission_query_conditions = {
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
+	"CRM Student Task": "crm.fcrm.doctype.crm_student_task.crm_student_task.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -140,6 +141,7 @@ has_permission = {
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
+	"CRM Student Task": "crm.fcrm.doctype.crm_student_task.crm_student_task.has_permission",
 }
 
 # DocType Class
@@ -194,7 +196,11 @@ doc_events = {
 # ---------------
 
 scheduler_events = {
-	"hourly": ["crm.api.agent_events.retry_pending_agent_events"],
+	"hourly": [
+		"crm.api.agent_events.retry_pending_agent_events",
+		"crm.api.agent_events.reconcile_student_context_v2",
+	],
+	"cron": {"*/5 * * * *": ["crm.api.sla.materialize_sla_evidence"]},
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
 	],

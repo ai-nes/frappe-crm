@@ -14,18 +14,22 @@ class TestCRMStudent(FrappeTestCase):
 	def _make_student(self, name="_Test Convert Student"):
 		if frappe.db.exists("CRM Student", name):
 			frappe.delete_doc("CRM Student", name, force=True)
-		student = frappe.get_doc({
-			"doctype": "CRM Student",
-			"student_name": name,
-			"phone": "0901234567",
-			"email": "test.convert@example.com",
-			"enrollment_status": "Đã xác nhận",
-		})
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": name,
+				"phone": "0901234567",
+				"email": "test.convert@example.com",
+				"enrollment_status": "Đã xác nhận",
+			}
+		)
 		student.insert(ignore_permissions=True)
 		return student
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
@@ -41,7 +45,9 @@ class TestCRMStudent(FrappeTestCase):
 			frappe.delete_doc("CRM Department", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
-		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
 	def test_convert_creates_crm_contact(self):
@@ -94,13 +100,15 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertNotEqual(student.phone, "0902222333")
 
 	def test_create_from_contact_creates_crm_student(self):
-		contact = frappe.get_doc({
-			"doctype": "Contact",
-			"first_name": "_Test",
-			"last_name": "Source Contact",
-			"email_id": "test.source@example.com",
-			"phone": "0912345678",
-		})
+		contact = frappe.get_doc(
+			{
+				"doctype": "Contact",
+				"first_name": "_Test",
+				"last_name": "Source Contact",
+				"email_id": "test.source@example.com",
+				"phone": "0912345678",
+			}
+		)
 		contact.insert(ignore_permissions=True)
 
 		student_name = create_from_contact(contact.name)
@@ -202,12 +210,14 @@ class TestCRMStudent(FrappeTestCase):
 	def _make_student_with_status(self, name, phone, enrollment_status):
 		if frappe.db.exists("CRM Student", name):
 			frappe.delete_doc("CRM Student", name, force=True)
-		student = frappe.get_doc({
-			"doctype": "CRM Student",
-			"student_name": name,
-			"phone": phone,
-			"enrollment_status": enrollment_status,
-		})
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": name,
+				"phone": phone,
+				"enrollment_status": enrollment_status,
+			}
+		)
 		student.insert(ignore_permissions=True)
 		return student
 
@@ -215,23 +225,27 @@ class TestCRMStudent(FrappeTestCase):
 		email = f"{frappe.scrub(prefix)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc({
-			"doctype": "User",
-			"email": email,
-			"first_name": prefix,
-			"send_welcome_email": 0,
-			"roles": [{"role": role} for role in (roles or ["Sale"])],
-		})
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": prefix,
+				"send_welcome_email": 0,
+				"roles": [{"role": role} for role in (roles or ["Sale"])],
+			}
+		)
 		user.insert(ignore_permissions=True)
 
 		staff_name = f"_Test Staff {prefix}"
 		if frappe.db.exists("CRM Staff", staff_name):
 			frappe.delete_doc("CRM Staff", staff_name, force=True)
-		staff = frappe.get_doc({
-			"doctype": "CRM Staff",
-			"full_name": staff_name,
-			"user": email,
-		})
+		staff = frappe.get_doc(
+			{
+				"doctype": "CRM Staff",
+				"full_name": staff_name,
+				"user": email,
+			}
+		)
 		staff.insert(ignore_permissions=True)
 		return email, staff.name
 
@@ -244,23 +258,27 @@ class TestCRMStudent(FrappeTestCase):
 
 	def _make_department(self, name, campus):
 		if not frappe.db.exists("CRM Department", name):
-			frappe.get_doc({
-				"doctype": "CRM Department",
-				"department_name": name,
-				"campus": campus,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "CRM Department",
+					"department_name": name,
+					"campus": campus,
+				}
+			).insert(ignore_permissions=True)
 		return name
 
 	def _make_team(self, name, campus):
 		if frappe.db.exists("CRM Team", name):
 			frappe.delete_doc("CRM Team", name, force=True)
-		team = frappe.get_doc({
-			"doctype": "CRM Team",
-			"team_name": name,
-			"team_type": "Sales",
-			"campus": campus,
-			"is_active": 1,
-		})
+		team = frappe.get_doc(
+			{
+				"doctype": "CRM Team",
+				"team_name": name,
+				"team_type": "Sales",
+				"campus": campus,
+				"is_active": 1,
+			}
+		)
 		team.insert(ignore_permissions=True)
 		return team.name
 
@@ -268,23 +286,27 @@ class TestCRMStudent(FrappeTestCase):
 		email = f"{frappe.scrub(name)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc({
-			"doctype": "User",
-			"email": email,
-			"first_name": name,
-			"send_welcome_email": 0,
-		})
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": name,
+				"send_welcome_email": 0,
+			}
+		)
 		user.insert(ignore_permissions=True)
 
 		if frappe.db.exists("CRM Staff", name):
 			frappe.delete_doc("CRM Staff", name, force=True)
-		staff = frappe.get_doc({
-			"doctype": "CRM Staff",
-			"full_name": name,
-			"user": email,
-			"department": department,
-			"campus": campus,
-		})
+		staff = frappe.get_doc(
+			{
+				"doctype": "CRM Staff",
+				"full_name": name,
+				"user": email,
+				"department": department,
+				"campus": campus,
+			}
+		)
 		staff.append("team_memberships", {"team": team, "function": "Sale", "term": "", "is_primary": 1})
 		staff.insert(ignore_permissions=True)
 		return staff.name

@@ -7,7 +7,11 @@ from crm.fcrm.doctype.crm_student.enrollment_transition import set_enrollment_st
 from crm.fcrm.permissions import (
 	derive_owner_fields,
 	derive_unassigned_owning_team,
+)
+from crm.fcrm.permissions import (
 	get_permission_query_conditions as shared_permission_query_conditions,
+)
+from crm.fcrm.permissions import (
 	has_permission as shared_has_permission,
 )
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
@@ -108,6 +112,10 @@ class CRMContact(Document):
 
 	def on_update(self):
 		self._sync_student_fields()
+		if self.student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(self.student, "contact_material_change")
 
 	def validate(self):
 		self._normalize_shared_fields()
@@ -218,24 +226,27 @@ class CRMContact(Document):
 		if not self.student:
 			return
 
-		student_values = frappe.db.get_value(
-			"CRM Student",
-			self.student,
-			[
-				"student_name",
-				"phone",
-				"email",
-				"high_school",
-				"province",
-				"major",
-				"aspiration",
-				"source",
-				"admission_year",
-				"branch",
-				"enrollment_status",
-			],
-			as_dict=True,
-		) or {}
+		student_values = (
+			frappe.db.get_value(
+				"CRM Student",
+				self.student,
+				[
+					"student_name",
+					"phone",
+					"email",
+					"high_school",
+					"province",
+					"major",
+					"aspiration",
+					"source",
+					"admission_year",
+					"branch",
+					"enrollment_status",
+				],
+				as_dict=True,
+			)
+			or {}
+		)
 		field_map = {
 			"full_name": student_values.get("student_name"),
 			"phone": student_values.get("phone"),
@@ -282,25 +293,28 @@ class CRMContact(Document):
 		if not self.student:
 			return
 
-		student_values = frappe.db.get_value(
-			"CRM Student",
-			self.student,
-			[
-				"student_name",
-				"phone",
-				"email",
-				"high_school",
-				"province",
-				"major",
-				"aspiration",
-				"source",
-				"admission_year",
-				"branch",
-				"enrollment_status",
-				"assigned_to",
-			],
-			as_dict=True,
-		) or {}
+		student_values = (
+			frappe.db.get_value(
+				"CRM Student",
+				self.student,
+				[
+					"student_name",
+					"phone",
+					"email",
+					"high_school",
+					"province",
+					"major",
+					"aspiration",
+					"source",
+					"admission_year",
+					"branch",
+					"enrollment_status",
+					"assigned_to",
+				],
+				as_dict=True,
+			)
+			or {}
+		)
 		target_values = {
 			"student_name": self.full_name or "",
 			"phone": self.phone or "",
@@ -315,7 +329,11 @@ class CRMContact(Document):
 			"enrollment_status": self.enrollment_status,
 			"assigned_to": self.assigned_to,
 		}
-		updates = {fieldname: value for fieldname, value in target_values.items() if student_values.get(fieldname) != value}
+		updates = {
+			fieldname: value
+			for fieldname, value in target_values.items()
+			if student_values.get(fieldname) != value
+		}
 		if not updates:
 			return
 
@@ -328,6 +346,7 @@ class CRMContact(Document):
 			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
 		if new_enrollment_status is not None:
 			set_enrollment_status(self.student, new_enrollment_status, source="contact_sync")
+
 
 def get_permission_query_conditions(user=None):
 	return shared_permission_query_conditions("CRM Contact", user=user)

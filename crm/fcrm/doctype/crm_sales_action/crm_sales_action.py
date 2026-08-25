@@ -1,14 +1,37 @@
 import hashlib
+from typing import ClassVar
 
 import frappe
 from frappe import _
 from frappe.model.document import Document
+
 from crm.fcrm.permissions import (
 	get_permission_query_conditions as get_student_permission_query_conditions,
 )
 
 
 class CRMSalesAction(Document):
+	_V2_PROTECTED_FIELDS: ClassVar[frozenset[str]] = frozenset({
+		"student_task",
+		"action_type",
+		"action_revision",
+		"package_revision",
+		"requires_review",
+		"execution_package",
+		"execution_status",
+		"business_outcome",
+	})
+
+	def validate(self):
+		before = self.get_doc_before_save()
+		if before and self.student_task and not getattr(frappe.flags, "student_task_command", False):
+			for field in self._V2_PROTECTED_FIELDS:
+				if before.get(field) != self.get(field):
+					frappe.throw(
+						frappe._("v2 Sales Action fields can only be changed through controlled commands."),
+						frappe.PermissionError,
+					)
+
 	def autoname(self):
 		"""Deterministic name = hash(recommendation) — one CRM Sales Action per
 		CRM Recommendation (Requirement: one row per accepted/modified
@@ -38,6 +61,10 @@ def on_execution_or_outcome_change(doc, method=None):
 	from crm.api.agent_events import record_agent_event
 
 	record_agent_event("sales_action.outcome_recorded.v1", doc)
+	if doc.student_task:
+		from crm.services.student_context import mark_student_context_changed
+
+		mark_student_context_changed(doc.student, "sales_action_outcome")
 
 
 def get_permission_query_conditions(user=None):

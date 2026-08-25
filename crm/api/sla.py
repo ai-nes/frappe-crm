@@ -62,3 +62,35 @@ def recompute_sla_statuses():
 		{"on_time": ON_TIME, "warning_min": SLA_WARNING_MINUTES},
 	)
 	frappe.db.commit()
+
+
+def materialize_sla_evidence():
+	"""Publish optional SLA state/evidence to Student at most every five minutes.
+
+	The thresholds remain in this Frappe-owned SLA module. crm-agents receives
+	only state/freshness metadata and never derives an SLA clock.
+	"""
+	rows = frappe.db.sql(
+		"""SELECT student, sla_status, modified FROM `tabCRM Contact`
+			WHERE student IS NOT NULL ORDER BY modified DESC""",
+		as_dict=True,
+	)
+	seen = set()
+	observed_at = frappe.utils.now_datetime()
+	for row in rows:
+		if row.student in seen:
+			continue
+		seen.add(row.student)
+		state = "known" if row.sla_status else "unknown"
+		previous = frappe.db.get_value("CRM Student", row.student, "sla_evidence_state")
+		frappe.db.set_value(
+			"CRM Student",
+			row.student,
+			{"sla_evidence_state": state, "sla_evidence_observed_at": observed_at},
+			update_modified=False,
+		)
+		if previous != state:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(row.student, "sla_evidence_state_change")
+	frappe.db.commit()

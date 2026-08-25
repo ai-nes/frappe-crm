@@ -13,6 +13,13 @@ class CRMInteraction(Document):
 		if not self.student and not self.crm_contact:
 			frappe.throw(frappe._("An interaction must be linked to a Student or a CRM Contact."))
 
+	def on_update(self):
+		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
+		if student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(student, "interaction_material_change")
+
 	@staticmethod
 	def default_list_data():
 		columns = [

@@ -9,8 +9,13 @@
  "engine": "InnoDB",
  "field_order": [
   "recommendation",
+  "student_task",
   "student",
   "action_type",
+  "action_revision",
+  "package_revision",
+  "requires_review",
+  "execution_package",
   "created_at",
   "column_break_1",
   "execution_status",
@@ -44,15 +49,27 @@
    "description": "Denormalized from the recommendation for query convenience only — not a substitute join key for recommendation-correlation."
   },
   {
+   "fieldname": "student_task",
+   "fieldtype": "Link",
+   "label": "Student Task",
+   "options": "CRM Student Task",
+   "read_only": 1,
+   "description": "The single v2 task anchor; legacy actions may leave this blank."
+  },
+  {
    "fieldname": "action_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Action Type",
-   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
+   "options": "WAIT\nCALL\nEMAIL\nMESSAGE\nCOUNSELING\nMEETING\nEVENT_INVITE\nCAMPUS_VISIT\nDOCUMENT_REQUEST\nAPPLICATION_SUPPORT\nPARENT_CONTACT\nHANDOFF\nFOLLOW_UP",
    "reqd": 1,
    "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary."
   },
+  {"fieldname": "action_revision", "fieldtype": "Int", "default": "0", "read_only": 1, "label": "Action Revision"},
+  {"fieldname": "package_revision", "fieldtype": "Int", "default": "0", "read_only": 1, "label": "Package Revision"},
+  {"fieldname": "requires_review", "fieldtype": "Check", "read_only": 1, "label": "Requires Review"},
+  {"fieldname": "execution_package", "fieldtype": "JSON", "read_only": 1, "label": "Execution Package"},
   {
    "fieldname": "created_at",
    "fieldtype": "Datetime",

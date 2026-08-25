@@ -75,3 +75,4 @@ crm.patches.v1_0.restore_ai_exposed_resource_roster
 crm.patches.v1_0.migrate_to_canonical_crm_roles
 crm.patches.v1_0.repair_canonical_role_references
 crm.patches.v1_0.upgrade_canonical_role_snapshot_v4
+crm.patches.v1_0.add_student_next_task_v2

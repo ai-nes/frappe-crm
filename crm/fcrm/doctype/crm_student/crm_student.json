@@ -22,6 +22,9 @@
   "owner_staff",
   "owning_team",
   "latest_score",
+  "student_context_revision",
+  "sla_evidence_state",
+  "sla_evidence_observed_at",
   "enrollment_date",
   "section_links",
   "high_school",
@@ -159,6 +162,29 @@
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Latest Score",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "student_context_revision",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Student Context Revision",
+   "read_only": 1,
+   "description": "Frappe-owned monotonic revision for material Student context changes. Never edit directly."
+  },
+  {
+   "default": "unknown",
+   "fieldname": "sla_evidence_state",
+   "fieldtype": "Select",
+   "label": "SLA Evidence State",
+   "options": "known\nstale\nunknown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_evidence_observed_at",
+   "fieldtype": "Datetime",
+   "label": "SLA Evidence Observed At",
    "read_only": 1
   },
   {

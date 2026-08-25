@@ -149,7 +149,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Recommended Action",
-   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
+   "options": "WAIT\nCALL\nEMAIL\nMESSAGE\nCOUNSELING\nMEETING\nEVENT_INVITE\nCAMPUS_VISIT\nDOCUMENT_REQUEST\nAPPLICATION_SUPPORT\nPARENT_CONTACT\nHANDOFF\nFOLLOW_UP",
    "read_only": 1,
    "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary; blank on rows written before this field existed."
   },

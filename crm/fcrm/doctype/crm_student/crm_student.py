@@ -84,6 +84,11 @@ class CRMStudent(Document):
 	def on_update(self):
 		self._sync_linked_contact_fields()
 		self._log_enrollment_transition()
+		before = self.get_doc_before_save()
+		from crm.services.student_context import bump_student_context_revision, material_student_changed
+
+		if material_student_changed(self, before):
+			bump_student_context_revision(self.name, "student_material_change")
 
 	def _log_enrollment_transition(self):
 		# Fires on both insert and update (Frappe calls on_update after
@@ -210,26 +215,29 @@ class CRMStudent(Document):
 		if not contact_name:
 			return
 
-		contact_values = frappe.db.get_value(
-			"CRM Contact",
-			contact_name,
-			[
-				"full_name",
-				"phone",
-				"email",
-				"high_school",
-				"province",
-				"major",
-				"aspiration",
-				"source",
-				"admission_year",
-				"branch",
-				"parent_name",
-				"parent_phone",
-				"assigned_to",
-			],
-			as_dict=True,
-		) or {}
+		contact_values = (
+			frappe.db.get_value(
+				"CRM Contact",
+				contact_name,
+				[
+					"full_name",
+					"phone",
+					"email",
+					"high_school",
+					"province",
+					"major",
+					"aspiration",
+					"source",
+					"admission_year",
+					"branch",
+					"parent_name",
+					"parent_phone",
+					"assigned_to",
+				],
+				as_dict=True,
+			)
+			or {}
+		)
 		target_values = {
 			"full_name": self.student_name or "",
 			"phone": self.phone or "",
@@ -245,7 +253,11 @@ class CRMStudent(Document):
 			"parent_phone": self.alt_phone,
 			"assigned_to": self.assigned_to,
 		}
-		updates = {fieldname: value for fieldname, value in target_values.items() if contact_values.get(fieldname) != value}
+		updates = {
+			fieldname: value
+			for fieldname, value in target_values.items()
+			if contact_values.get(fieldname) != value
+		}
 		if updates:
 			frappe.db.set_value("CRM Contact", contact_name, updates, update_modified=False)
 
@@ -329,25 +341,27 @@ def convert_to_contact(student_name):
 
 	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 
-	contact = frappe.get_doc({
-		"doctype": "CRM Contact",
-		"full_name": student.student_name,
-		"phone": student.phone,
-		"email": student.email,
-		"high_school": student.high_school,
-		"province": student.province,
-		"major": student.major,
-		"aspiration": student.aspiration,
-		"source": student.source,
-		"admission_year": student.admission_year,
-		"branch": student.branch,
-		"student": student.name,
-		"assigned_to": student.assigned_to or crm_staff_name,
-		"enrollment_status": "Có triển vọng",
-		"lead_status": "Mới",
-		"parent_name": student.alt_name,
-		"parent_phone": student.alt_phone,
-	})
+	contact = frappe.get_doc(
+		{
+			"doctype": "CRM Contact",
+			"full_name": student.student_name,
+			"phone": student.phone,
+			"email": student.email,
+			"high_school": student.high_school,
+			"province": student.province,
+			"major": student.major,
+			"aspiration": student.aspiration,
+			"source": student.source,
+			"admission_year": student.admission_year,
+			"branch": student.branch,
+			"student": student.name,
+			"assigned_to": student.assigned_to or crm_staff_name,
+			"enrollment_status": "Có triển vọng",
+			"lead_status": "Mới",
+			"parent_name": student.alt_name,
+			"parent_phone": student.alt_phone,
+		}
+	)
 	contact.insert(ignore_permissions=True)
 
 	set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
@@ -365,13 +379,15 @@ def create_from_contact(contact):
 	if not frappe.has_permission("CRM Student", "create"):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
-	student = frappe.get_doc({
-		"doctype": "CRM Student",
-		"student_name": contact_doc.full_name or contact_doc.name,
-		"phone": contact_doc.get("phone"),
-		"email": contact_doc.email_id,
-		"enrollment_status": "Mới",
-	})
+	student = frappe.get_doc(
+		{
+			"doctype": "CRM Student",
+			"student_name": contact_doc.full_name or contact_doc.name,
+			"phone": contact_doc.get("phone"),
+			"email": contact_doc.email_id,
+			"enrollment_status": "Mới",
+		}
+	)
 	student.insert()
 	return student.name
 
