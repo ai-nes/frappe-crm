@@ -235,6 +235,19 @@
           >
             <CallArea :activity="activity" />
           </div>
+          <div
+            v-else-if="activity.activity_type == 'student_engagement'"
+            class="mb-4 flex items-center justify-stretch gap-2 py-1.5 text-base"
+          >
+            <span class="font-medium text-ink-gray-8">{{ activity.type }}</span>
+            <div class="ml-auto whitespace-nowrap">
+              <Tooltip :text="formatDate(activity.creation)">
+                <div class="text-sm text-ink-gray-5">
+                  {{ __(timeAgo(activity.creation)) }}
+                </div>
+              </Tooltip>
+            </div>
+          </div>
           <div v-else class="mb-4 flex flex-col gap-2 py-1.5">
             <div class="flex items-center justify-stretch gap-2 text-base">
               <div
@@ -380,6 +393,12 @@
             </div>
           </div>
         </div>
+        <div
+          v-if="title == 'Activity' && additionalActivitiesHasMore"
+          class="px-3 pb-5 sm:px-10"
+        >
+          <Button :label="__('View more history')" @click="emit('load-more-additional-activities')" />
+        </div>
       </template>
     </div>
     <div v-else-if="title == 'Data'" class="h-full flex flex-col px-3 sm:px-10">
@@ -510,9 +529,11 @@ const props = defineProps({
   doctype: { type: String, default: 'CRM Contact' },
   docname: { type: String, default: '' },
   tabs: { type: Array, default: () => [] },
+  additionalActivities: { type: Array, default: () => [] },
+  additionalActivitiesHasMore: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['beforeSave', 'afterSave'])
+const emit = defineEmits(['beforeSave', 'afterSave', 'load-more-additional-activities'])
 
 const route = useRoute()
 
@@ -624,10 +645,17 @@ function reloadAfterStaffAssignment() {
 const replyMessage = ref({})
 
 function get_activities() {
-  if (!all_activities.data?.versions) return []
-  if (!all_activities.data?.calls.length)
-    return all_activities.data.versions || []
-  return [...all_activities.data.versions, ...all_activities.data.calls]
+  if (!all_activities.data?.versions) return [...props.additionalActivities]
+  let documentActivities = !all_activities.data?.calls.length
+    ? all_activities.data.versions || []
+    : [...all_activities.data.versions, ...all_activities.data.calls]
+  return [
+    ...documentActivities,
+    ...props.additionalActivities.map((activity) => ({
+      ...activity,
+      data: { ...activity.data },
+    })),
+  ]
 }
 
 const activities = computed(() => {
@@ -688,7 +716,9 @@ function sortByModified(list) {
 }
 
 function update_activities_details(activity) {
-  activity.owner_name = getUser(activity.owner).full_name
+  activity.owner_name = activity.owner
+    ? getUser(activity.owner)?.full_name || activity.owner
+    : ''
   activity.type = ''
   activity.value = ''
   activity.to = ''
@@ -705,6 +735,8 @@ function update_activities_details(activity) {
     activity.type = 'changed'
     activity.value = 'from'
     activity.to = 'to'
+  } else if (activity.activity_type == 'student_engagement') {
+    activity.type = activity.data?.summary || __('Student lifecycle updated')
   }
 }
 
@@ -802,6 +834,9 @@ function timelineIcon(activity_type, is_lead) {
       break
     case 'attachment_log':
       icon = AttachmentIcon
+      break
+    case 'student_engagement':
+      icon = ActivityIcon
       break
     default:
       icon = DotIcon

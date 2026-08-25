@@ -3,13 +3,15 @@ from datetime import datetime, timedelta
 import frappe
 from frappe.query_builder import DocType
 
+from crm.api.user import set_canonical_crm_profile
+
 DEMO_USERS = [
 	{
 		"email": "sarah.demo@example.com",
 		"first_name": "Sarah",
 		"last_name": "Connor",
 		"mobile_no": "+1 555 100 0002",
-		"roles": ["Lead Sales", "Sale"],
+		"roles": ["Lead Sales"],
 		"avatar": "/assets/crm/images/demo/sarah-connor.png",
 	},
 	{
@@ -49,6 +51,9 @@ def create_demo_users():
 					"roles": [{"role": r} for r in user_data["roles"]],
 				}
 			).insert(ignore_permissions=True)
+		user = frappe.get_doc("User", user_data["email"])
+		set_canonical_crm_profile(user, user_data["roles"][0])
+		user.save(ignore_permissions=True)
 
 	# Backdate auto-created contacts and set their image
 	_ts = datetime.now() - timedelta(days=70)

@@ -14,109 +14,67 @@ class TestCRMStudent(FrappeTestCase):
 	def _make_student(self, name="_Test Convert Student"):
 		if frappe.db.exists("CRM Student", name):
 			frappe.delete_doc("CRM Student", name, force=True)
-		student = frappe.get_doc(
-			{
-				"doctype": "CRM Student",
-				"student_name": name,
-				"phone": "0901234567",
-				"email": "test.convert@example.com",
-				"enrollment_status": "Đã xác nhận",
-			}
-		)
-		student.insert(ignore_permissions=True)
+		student = frappe.get_doc({
+			"doctype": "CRM Student",
+			"student_name": name,
+			"phone": "0981000001",
+			"email": "test.convert@example.com",
+			"enrollment_status": "Đã xác nhận",
+		})
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def tearDown(self):
-		for name in frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"
-		):
+		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("Contact", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("Contact", name, force=True)
-		for name in frappe.db.get_all("CRM Team", filters={"team_name": ["like", "_Test%"]}, pluck="name"):
-			frappe.delete_doc("CRM Team", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
+		for name in frappe.db.get_all("CRM Team", filters={"team_name": ["like", "_Test%"]}, pluck="name"):
+			frappe.delete_doc("CRM Team", name, force=True)
 		for name in frappe.db.get_all(
 			"CRM Department", filters={"department_name": ["like", "_Test%"]}, pluck="name"
 		):
 			frappe.delete_doc("CRM Department", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
-		for name in frappe.db.get_all(
-			"CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"
-		):
+		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
-	def test_convert_creates_crm_contact(self):
+	def test_legacy_convert_endpoint_requires_phase8_command_contract(self):
 		student = self._make_student()
-		contact_name = convert_to_contact(student.name)
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		self.assertEqual(contact.full_name, student.student_name)
-		self.assertEqual(contact.phone, student.phone)
-		self.assertEqual(contact.email, student.email)
-		self.assertEqual(contact.student, student.name)
-		self.assertEqual(contact.stage, "Interested")
-
+		with self.assertRaises(frappe.ValidationError):
+			convert_to_contact(student.name)
 		student.reload()
-		self.assertEqual(student.converted, 1)
-		self.assertEqual(student.enrollment_status, "Có triển vọng")
+		self.assertEqual(student.enrollment_status, "Đã xác nhận")
 
-	def test_convert_double_conversion_returns_existing_contact(self):
-		student = self._make_student("_Test Double Convert Student")
-		contact_name = convert_to_contact(student.name)
+	def test_direct_contact_creation_is_retired(self):
+		with self.assertRaises(frappe.PermissionError):
+			frappe.get_doc({
+				"doctype": "CRM Contact",
+				"full_name": "_Test Direct Contact",
+				"phone": "0902222333",
+			}).insert(ignore_permissions=True)
 
-		self.assertEqual(convert_to_contact(student.name), contact_name)
-
-	def test_student_phone_change_no_longer_syncs_to_linked_crm_contact(self):
-		# Regression guard for Phase 2 (removal of the continuous two-way sync bug):
-		# a Student field change must never silently overwrite its linked Contact.
-		student = self._make_student("_Test Student Phone Sync")
-		contact_name = convert_to_contact(student.name)
-		original_contact_phone = frappe.db.get_value("CRM Contact", contact_name, "phone")
-
-		student.phone = "0907654321"
-		student.save(ignore_permissions=True)
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		self.assertEqual(contact.phone, original_contact_phone)
-		self.assertNotEqual(contact.phone, "0907654321")
-
-	def test_crm_contact_phone_change_no_longer_syncs_to_student(self):
-		# Regression guard, mirror of the above for the Contact -> Student direction.
-		student = self._make_student("_Test Contact Phone Sync")
-		contact_name = convert_to_contact(student.name)
-		original_student_phone = student.phone
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		contact.phone = "0902222333"
-		contact.save(ignore_permissions=True)
-
-		student.reload()
-		self.assertEqual(student.phone, original_student_phone)
-		self.assertNotEqual(student.phone, "0902222333")
-
-	def test_create_from_contact_creates_crm_student(self):
-		contact = frappe.get_doc(
-			{
-				"doctype": "Contact",
-				"first_name": "_Test",
-				"last_name": "Source Contact",
-				"email_id": "test.source@example.com",
-				"phone": "0912345678",
-			}
-		)
+	def test_create_from_contact_is_retired(self):
+		contact = frappe.get_doc({
+			"doctype": "Contact",
+			"first_name": "_Test",
+			"last_name": "Source Contact",
+			"email_id": "test.source@example.com",
+			"phone": "0912345678",
+		})
 		contact.insert(ignore_permissions=True)
 
-		student_name = create_from_contact(contact.name)
-		student = frappe.get_doc("CRM Student", student_name)
-
-		self.assertEqual(student.student_name, contact.full_name)
-		self.assertEqual(student.phone, contact.phone)
-		self.assertEqual(student.email, contact.email_id)
+		with self.assertRaises(frappe.PermissionError):
+			create_from_contact(contact.name)
 
 	# ---------------------------------------------------------------- lifecycle stage
 
@@ -145,7 +103,7 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
 		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sales"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Team Leader"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
@@ -158,7 +116,7 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
 		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sales"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Team Leader"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
@@ -182,14 +140,22 @@ class TestCRMStudent(FrappeTestCase):
 
 		student = self._make_student("_Test Student Reassignment")
 		student.assigned_to = staff_a
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 		self.assertEqual(len(student.assignment_log), 1)
 		self.assertFalse(student.assignment_log[0].from_staff)
 		self.assertEqual(student.assignment_log[0].to_staff, staff_a)
 
 		student.assigned_to = staff_b
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 
 		self.assertEqual(len(student.assignment_log), 2)
@@ -210,42 +176,45 @@ class TestCRMStudent(FrappeTestCase):
 	def _make_student_with_status(self, name, phone, enrollment_status):
 		if frappe.db.exists("CRM Student", name):
 			frappe.delete_doc("CRM Student", name, force=True)
-		student = frappe.get_doc(
-			{
-				"doctype": "CRM Student",
-				"student_name": name,
-				"phone": phone,
-				"enrollment_status": enrollment_status,
-			}
-		)
-		student.insert(ignore_permissions=True)
+		student = frappe.get_doc({
+			"doctype": "CRM Student",
+			"student_name": name,
+			"phone": phone,
+			"enrollment_status": enrollment_status,
+		})
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def _make_user_and_staff(self, prefix, roles=None):
 		email = f"{frappe.scrub(prefix)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc(
-			{
-				"doctype": "User",
-				"email": email,
-				"first_name": prefix,
-				"send_welcome_email": 0,
-				"roles": [{"role": role} for role in (roles or ["Sale"])],
-			}
-		)
+		user = frappe.get_doc({
+			"doctype": "User",
+			"email": email,
+			"first_name": prefix,
+			"send_welcome_email": 0,
+			"roles": [{"role": role} for role in (roles or ["Sale"])],
+		})
 		user.insert(ignore_permissions=True)
+
+		campus = self._make_campus(f"_Test Campus {prefix}")
+		department = self._make_department(f"_Test Dept {prefix}", campus)
 
 		staff_name = f"_Test Staff {prefix}"
 		if frappe.db.exists("CRM Staff", staff_name):
 			frappe.delete_doc("CRM Staff", staff_name, force=True)
-		staff = frappe.get_doc(
-			{
-				"doctype": "CRM Staff",
-				"full_name": staff_name,
-				"user": email,
-			}
-		)
+		staff = frappe.get_doc({
+			"doctype": "CRM Staff",
+			"full_name": staff_name,
+			"user": email,
+			"department": department,
+			"campus": campus,
+		})
 		staff.insert(ignore_permissions=True)
 		return email, staff.name
 
@@ -258,27 +227,23 @@ class TestCRMStudent(FrappeTestCase):
 
 	def _make_department(self, name, campus):
 		if not frappe.db.exists("CRM Department", name):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Department",
-					"department_name": name,
-					"campus": campus,
-				}
-			).insert(ignore_permissions=True)
+			frappe.get_doc({
+				"doctype": "CRM Department",
+				"department_name": name,
+				"campus": campus,
+			}).insert(ignore_permissions=True)
 		return name
 
 	def _make_team(self, name, campus):
 		if frappe.db.exists("CRM Team", name):
 			frappe.delete_doc("CRM Team", name, force=True)
-		team = frappe.get_doc(
-			{
-				"doctype": "CRM Team",
-				"team_name": name,
-				"team_type": "Sales",
-				"campus": campus,
-				"is_active": 1,
-			}
-		)
+		team = frappe.get_doc({
+			"doctype": "CRM Team",
+			"team_name": name,
+			"team_type": "Sales",
+			"campus": campus,
+			"is_active": 1,
+		})
 		team.insert(ignore_permissions=True)
 		return team.name
 
@@ -286,27 +251,23 @@ class TestCRMStudent(FrappeTestCase):
 		email = f"{frappe.scrub(name)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc(
-			{
-				"doctype": "User",
-				"email": email,
-				"first_name": name,
-				"send_welcome_email": 0,
-			}
-		)
+		user = frappe.get_doc({
+			"doctype": "User",
+			"email": email,
+			"first_name": name,
+			"send_welcome_email": 0,
+		})
 		user.insert(ignore_permissions=True)
 
 		if frappe.db.exists("CRM Staff", name):
 			frappe.delete_doc("CRM Staff", name, force=True)
-		staff = frappe.get_doc(
-			{
-				"doctype": "CRM Staff",
-				"full_name": name,
-				"user": email,
-				"department": department,
-				"campus": campus,
-			}
-		)
+		staff = frappe.get_doc({
+			"doctype": "CRM Staff",
+			"full_name": name,
+			"user": email,
+			"department": department,
+			"campus": campus,
+		})
 		staff.append("team_memberships", {"team": team, "function": "Sale", "term": "", "is_primary": 1})
 		staff.insert(ignore_permissions=True)
 		return staff.name

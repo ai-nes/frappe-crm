@@ -2,6 +2,11 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
 import { viewsStore } from '@/stores/views'
+import {
+  acquisitionWorkspaceCapabilities,
+  admissionsWorkspaceCapabilities,
+  hasAnyCapability,
+} from '@/utils/rolePolicy'
 
 const routes = [
   {
@@ -18,6 +23,7 @@ const routes = [
     alias: '/dashboard',
     name: 'Dashboard',
     component: () => import('@/pages/Dashboard.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: (route) => ({
       dashboardType: 'sales',
       dashboardSection: route.params.section || 'overview',
@@ -28,6 +34,7 @@ const routes = [
     alias: '/dashboard/marketing/:section?',
     name: 'Digital Marketing Dashboard',
     component: () => import('@/pages/Dashboard.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: (route) => ({
       dashboardType: 'digital_marketing',
       dashboardSection: route.params.section || 'overview',
@@ -37,6 +44,7 @@ const routes = [
     path: '/dashboard/offline-marketing/:section?',
     name: 'Offline Marketing Dashboard',
     component: () => import('@/pages/Dashboard.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: (route) => ({
       dashboardType: 'offline_marketing',
       dashboardSection: route.params.section || 'overview',
@@ -47,23 +55,27 @@ const routes = [
     path: '/notes/view/:viewType?',
     name: 'Notes',
     component: () => import('@/pages/Notes.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     alias: '/tasks',
     path: '/tasks/view/:viewType?',
     name: 'Tasks',
     component: () => import('@/pages/Tasks.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     alias: '/contacts',
     path: '/contacts/view/:viewType?',
     name: 'Contacts',
     component: () => import('@/pages/Contacts.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/contacts/:contactId',
     name: 'Contact',
     component: () => import(`@/pages/${handleMobileView('Contact')}.vue`),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -71,21 +83,25 @@ const routes = [
     path: '/call-logs/view/:viewType?',
     name: 'Call Logs',
     component: () => import('@/pages/CallLogs.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/crm-students/view/:viewType?',
     name: 'CRM Students',
     component: () => import('@/pages/CRMStudents.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/my-recommendations',
     name: 'My Recommendations',
     component: () => import('@/pages/StudentWorklist.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/crm-students/:crmStudentId',
     name: 'CRM Student',
     component: () => import('@/pages/CRMStudent.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -93,11 +109,13 @@ const routes = [
     path: '/crm-contacts/view/:viewType?',
     name: 'CRM Contacts',
     component: () => import('@/pages/CRMContacts.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/crm-contacts/:crmContactId',
     name: 'CRM Contact',
     component: () => import('@/pages/CRMContact.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -105,11 +123,13 @@ const routes = [
     path: '/crm-persons/view/:viewType?',
     name: 'CRM Persons',
     component: () => import('@/pages/CRMPersons.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/crm-persons/:crmPersonId',
     name: 'CRM Person',
     component: () => import('@/pages/CRMPerson.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -117,11 +137,13 @@ const routes = [
     path: '/high-schools/view/:viewType?',
     name: 'High Schools',
     component: () => import('@/pages/HighSchools.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
     path: '/high-schools/:highSchoolId',
     name: 'High School',
     component: () => import('@/pages/HighSchool.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -129,11 +151,27 @@ const routes = [
     path: '/crm-campaigns/view/:viewType?',
     name: 'CRM Campaigns',
     component: () => import('@/pages/CRMCampaigns.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
   },
   {
     path: '/crm-campaigns/:crmCampaignId',
     name: 'CRM Campaign',
     component: () => import('@/pages/CRMCampaign.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    props: true,
+  },
+  {
+    alias: '/crm-segments',
+    path: '/crm-segments/view/:viewType?',
+    name: 'CRM Segments',
+    component: () => import('@/pages/CRMSegments.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
+  },
+  {
+    path: '/crm-segments/:crmSegmentId',
+    name: 'CRM Segment',
+    component: () => import('@/pages/CRMSegment.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
     props: true,
   },
   {
@@ -141,11 +179,13 @@ const routes = [
     path: '/crm-events/view/:viewType?',
     name: 'CRM Events',
     component: () => import('@/pages/CRMEvents.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
   },
   {
     path: '/crm-events/:crmEventId',
     name: 'CRM Event',
     component: () => import('@/pages/CRMEvent.vue'),
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: true,
   },
   {
@@ -153,27 +193,32 @@ const routes = [
     path: '/crm-staff/view/:viewType?',
     name: 'CRM Staff',
     component: () => import('@/pages/CRMStaff.vue'),
+    meta: { anyOf: ['system.configure'] },
   },
   {
     path: '/data-import',
     name: 'DataImportList',
     component: () => import('@/pages/DataImport.vue'),
+    meta: { anyOf: ['system.configure'] },
   },
   {
     path: '/data-import/geography-high-schools',
     name: 'GeographyImport',
     component: () => import('@/pages/GeographyImport.vue'),
+    meta: { anyOf: ['system.configure'] },
   },
   {
     path: '/data-import/doctype/:doctype',
     name: 'NewDataImport',
     component: () => import('@/pages/DataImport.vue'),
+    meta: { anyOf: ['system.configure'] },
     props: true,
   },
   {
     path: '/data-import/:importName',
     name: 'DataImport',
     component: () => import('@/pages/DataImport.vue'),
+    meta: { anyOf: ['system.configure'] },
     props: true,
   },
   {
@@ -206,7 +251,7 @@ router.beforeEach(async (to, from, next) => {
   router.previousRoute = from
 
   const { isLoggedIn } = sessionStore()
-  const { users, isCrmUser } = usersStore()
+  const { users, isCrmUser, getCurrentUser } = usersStore()
 
   if (isLoggedIn && !users.fetched) {
     try {
@@ -214,6 +259,16 @@ router.beforeEach(async (to, from, next) => {
     } catch (error) {
       console.error('Error loading users', error)
     }
+  }
+
+  const requiredCapabilities = to.meta?.anyOf
+  if (
+    isLoggedIn &&
+    requiredCapabilities &&
+    !hasAnyCapability(getCurrentUser(), requiredCapabilities)
+  ) {
+    next({ name: 'Not Permitted' })
+    return
   }
 
   if (isLoggedIn && to.name !== 'Not Permitted' && !isCrmUser()) {
@@ -224,7 +279,13 @@ router.beforeEach(async (to, from, next) => {
 
     let defaultView = getDefaultView()
     if (!defaultView) {
-      next({ name: 'CRM Students', query: { stage: 'intake' } })
+      const defaultRoute = hasAnyCapability(
+        getCurrentUser(),
+        admissionsWorkspaceCapabilities,
+      )
+        ? { name: 'CRM Students', query: { stage: 'intake' } }
+        : { name: 'Digital Marketing Dashboard' }
+      next(defaultRoute)
       return
     }
 

@@ -11,6 +11,7 @@ import requests
 from contextlib import contextmanager
 from frappe.utils import now_datetime
 
+from crm.api.user import set_canonical_crm_profile
 from crm.demo import seed_demo
 from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
 
@@ -29,8 +30,10 @@ LIVE_TEST_USERS = {
     "admin": ("e2e.admin@example.test", "E2E Test Admin"),
 }
 _E2E_TOKEN_TTL_SECONDS = 60 * 60
-_MANAGED_CANONICAL_ROLES = {
-	"System Manager", "Sale", "Marketing", "Lead Sales", "Admissions Director",
+_MANAGED_ROLE_ALIASES = {
+	"System Manager", "CRM Manager", "Sales Manager", "Sales User", "Sales", "Sale",
+	"CTV-Sale", "Marketing", "Promoter-PR", "Team Leader",
+    "Lead Sales", "Admissions Director", "Giám đốc Tuyển sinh",
 }
 
 CASES = [
@@ -55,11 +58,6 @@ CAPTURE_CASES = (
 	("02", "FOLLOW_UP", "medium"),
 )
 
-_E2E_RECOMMENDATION_RULE_KEYS = (
-	"e2e_capture_readiness",
-	"e2e_capture_cross_campus",
-)
-
 
 @contextmanager
 def _fixture_lock():
@@ -71,9 +69,8 @@ def _fixture_lock():
 def _ensure_staff(ctx):
     user = "crm.rep1@example.com"
     doc = frappe.get_doc("User", user)
-    if not any(row.role == "Sale" for row in doc.roles):
-        doc.append("roles", {"role": "Sale"})
-        doc.save(ignore_permissions=True)
+    set_canonical_crm_profile(doc, "Sale")
+    doc.save(ignore_permissions=True)
     department = frappe.db.get_value("CRM Department", {}, "name")
     if not department:
         department = frappe.get_doc({
@@ -100,26 +97,12 @@ def _ensure_live_test_user(email, role):
             "roles": [{"role": role}],
         }).insert(ignore_permissions=True)
     user = frappe.get_doc("User", email)
-    managed_roles = _MANAGED_CANONICAL_ROLES
+    managed_roles = _MANAGED_ROLE_ALIASES
     user.roles = [row for row in user.roles if row.role not in managed_roles or row.role == role]
     if not any(row.role == role for row in user.roles):
         user.append("roles", {"role": role})
     user.save(ignore_permissions=True)
     return email
-
-
-def _refresh_live_test_staff_scope(staff_name, campus):
-    """Refresh the CRM Campus permission after an idempotent raw update.
-
-    `frappe.db.set_value` intentionally bypasses controller hooks. The E2E
-    seed uses it for idempotent fixture updates, so explicitly mirror the
-    CRM Staff hook that keeps the user's User Permission aligned with campus.
-    """
-    frappe.db.set_value("CRM Staff", staff_name, "campus", campus, update_modified=False)
-    staff_doc = frappe.get_doc("CRM Staff", staff_name)
-    staff_doc.campus = campus
-    staff_doc._sync_campus_user_permission()
-    return staff_doc
 
 
 def _ensure_live_test_sales_staff(ctx):
@@ -133,7 +116,7 @@ def _ensure_live_test_sales_staff(ctx):
     _ensure_live_test_user(email, role)
     staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
     if staff:
-        _refresh_live_test_staff_scope(staff, ctx["campus"])
+        frappe.db.set_value("CRM Staff", staff, "campus", ctx["campus"], update_modified=False)
         return staff
     department = frappe.db.get_value("CRM Department", {}, "name")
     if not department:
@@ -153,38 +136,17 @@ def _ensure_live_test_aggregate_staff(ctx):
 		department = frappe.get_doc({
 			"doctype": "CRM Department", "department_name": f"{PREFIX} Live Test Aggregate", "campus": ctx["campus"],
 		}).insert(ignore_permissions=True).name
-	team = frappe.db.exists("CRM Team", {"team_name": f"{PREFIX} Sales Team"})
-	if not team:
-		team = frappe.get_doc({
-			"doctype": "CRM Team", "team_name": f"{PREFIX} Sales Team",
-			"team_type": "Sales", "campus": ctx["campus"], "is_active": 1,
-		}).insert(ignore_permissions=True).name
-
 	for role_key, label in (("marketing", "Marketing"), ("lead_sales", "Lead Sales"), ("admissions_director", "Admissions Director")):
 		email, role = LIVE_TEST_USERS[role_key]
 		_ensure_live_test_user(email, role)
 		staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 		if staff:
-			_refresh_live_test_staff_scope(staff, ctx["campus"])
+			frappe.db.set_value("CRM Staff", staff, "campus", ctx["campus"], update_modified=False)
 			continue
 		frappe.get_doc({
 			"doctype": "CRM Staff", "full_name": f"{PREFIX} Live Test {label}", "user": email,
 			"department": department, "campus": ctx["campus"], "target": 10,
 		}).insert(ignore_permissions=True)
-
-	# Lead Sales scope is team-based.  Keep the fixture aligned with the
-	# canonical Student permission condition instead of relying on the old
-	# campus-wide recommendation hook.  The Sale staff and all fixture students
-	# share this one team; the negative-campus staff does not.
-	lead_staff = frappe.db.get_value("CRM Staff", {"user": LIVE_TEST_USERS["lead_sales"][0]}, "name")
-	sales_staff = frappe.db.get_value("CRM Staff", {"user": LIVE_TEST_USERS["sales"][0]}, "name")
-	for staff_name, function, is_lead in ((sales_staff, "Sale", 0), (lead_staff, "Lead Sales", 1)):
-		staff_doc = frappe.get_doc("CRM Staff", staff_name)
-		if not any(row.team == team for row in staff_doc.get("team_memberships") or []):
-			staff_doc.append("team_memberships", {
-				"team": team, "function": function, "is_primary": 1, "is_team_lead": is_lead,
-			})
-			staff_doc.save(ignore_permissions=True)
 
 
 def _ensure_cross_campus_staff(ctx):
@@ -203,8 +165,11 @@ def _ensure_cross_campus_staff(ctx):
 		}).insert(ignore_permissions=True).name
 	staff = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 	if staff:
-		frappe.db.set_value("CRM Staff", staff, "department", department, update_modified=False)
-		_refresh_live_test_staff_scope(staff, ctx["campus"])
+		frappe.db.set_value(
+			"CRM Staff", staff,
+			{"department": department, "campus": ctx["campus"]},
+			update_modified=False,
+		)
 		return staff, email
 	staff = frappe.get_doc({
 		"doctype": "CRM Staff",
@@ -283,15 +248,6 @@ def _put_student(ctx, assigned_to, item):
             {"assigned_to": assigned_to, "owner": LIVE_TEST_USERS["sales"][0], "branch": ctx["campus"], "phone": phone},
             update_modified=False,
         )
-        # Existing fixture rows may have been created before the team membership
-        # was provisioned. Refresh the derived scope keys idempotently.
-        from crm.fcrm.permissions import derive_owner_fields
-        owner_staff, owning_team = derive_owner_fields(assigned_to)
-        frappe.db.set_value(
-            "CRM Student", existing,
-            {"owner_staff": owner_staff, "owning_team": owning_team},
-            update_modified=False,
-        )
         _normalize_e2e_intent_timestamps(existing, interaction_days)
         return existing
     student = frappe.get_doc({
@@ -322,12 +278,7 @@ def _reset_e2e_recommendation_lifecycle(students):
     sales actions are deleted before their recommendation parent.
     """
     recommendations = frappe.get_all(
-        "CRM Recommendation",
-        filters={
-            "student": ["in", students],
-            "rule_key": ["in", _E2E_RECOMMENDATION_RULE_KEYS],
-        },
-        pluck="name",
+        "CRM Recommendation", filters={"student": ["in", students]}, pluck="name"
     )
     if not recommendations:
         return {"deleted": 0, "agent_state": _clear_agent_fixture_state([])}
@@ -395,6 +346,7 @@ def _ensure_cross_campus_negative_case(ctx):
         "evidence": {"fixture_run_id": FIXTURE_RUN_ID, "negative_case": True},
     })
     candidate.run_method("autoname")
+    candidate.flags.from_phase6_command = True
     candidate.insert(ignore_permissions=True)
     return student, candidate.name
 
@@ -423,6 +375,7 @@ def generate_capture_lifecycle() -> dict:
         if frappe.db.exists("CRM Recommendation", candidate.name):
             existing.append(candidate.name)
             continue
+        candidate.flags.from_phase6_command = True
         candidate.insert(ignore_permissions=True)
         created.append(candidate.name)
     return {"fixture_run_id": FIXTURE_RUN_ID, "created": created, "existing": existing}
@@ -487,12 +440,7 @@ def wait_for_capture_readiness(max_attempts: int = 10) -> dict:
                 LIVE_TEST_USERS["lead_sales"][0],
             ):
                 frappe.set_user(role_user)
-                try:
-                    role_worklist = list_student_worklist(page_size=50)
-                except frappe.PermissionError:
-                    # Marketing has no Student/recommendation row scope by design;
-                    # a denied worklist is the expected fail-closed result.
-                    continue
+                role_worklist = list_student_worklist(page_size=50)
                 if cross_campus_id in {
                     item["recommendation"] for item in role_worklist["items"]
                 }:
@@ -591,12 +539,16 @@ def rehearse_permissioned_lifecycle() -> dict:
         return list_student_worklist(page_size=50)
 
     try:
+        marketing_worklist = visible_worklist(marketing_email)
         lead_sales_worklist = visible_worklist(lead_sales_email)
         expected_ids = positive_ids
+        if {item["recommendation"] for item in marketing_worklist["items"]} != expected_ids:
+            raise RuntimeError("Marketing could not read the campus-scoped recommendation worklist")
         if {item["recommendation"] for item in lead_sales_worklist["items"]} != expected_ids:
-            raise RuntimeError("Lead Sales could not read the team-scoped recommendation worklist")
+            raise RuntimeError("Lead Sales could not read the campus-scoped recommendation worklist")
         if cross_campus_id in {
-            item["recommendation"] for item in lead_sales_worklist["items"]
+            item["recommendation"]
+            for item in (*marketing_worklist["items"], *lead_sales_worklist["items"])
         }:
             raise RuntimeError("a cross-campus recommendation leaked into an aggregate worklist")
 
@@ -607,6 +559,12 @@ def rehearse_permissioned_lifecycle() -> dict:
                 raise RuntimeError(
                     f"cross-campus recommendation direct-read leaked to {user}"
                 )
+
+        campus = frappe.db.get_value("CRM Staff", {"user": marketing_email}, "campus")
+        for item in marketing_worklist["items"]:
+            student_campus = frappe.db.get_value("CRM Student", {"name": frappe.db.get_value("CRM Recommendation", item["recommendation"], "student")}, "branch")
+            if student_campus != campus:
+                raise RuntimeError("Worklist returned a cross-campus recommendation")
 
         sales_recommendation = frappe.get_doc("CRM Recommendation", rows[0]["name"])
         frappe.set_user(sales_email)
@@ -658,7 +616,7 @@ def rehearse_permissioned_lifecycle() -> dict:
 
 def _execute(*, rehearse: bool = True):
     """Seed the cohort and, by default, run the complete permissioned rehearsal."""
-    if not {"System Manager", "Lead Sales"}.intersection(frappe.get_roles()):
+    if not {"System Manager", "CRM Manager"}.intersection(frappe.get_roles()):
         frappe.throw("Only CRM managers may seed the isolated E2E cohort.", frappe.PermissionError)
     seed_demo._seed_intent_types()
     seed_demo._seed_signals()
@@ -728,12 +686,7 @@ def _reset():
         pluck="name",
     )
     recommendations = frappe.get_all(
-        "CRM Recommendation",
-        filters={
-            "student": ["in", student_names],
-            "rule_key": ["in", _E2E_RECOMMENDATION_RULE_KEYS],
-        },
-        pluck="name",
+        "CRM Recommendation", filters={"student": ["in", student_names]}, pluck="name"
     ) if student_names else []
     actions = frappe.get_all(
         "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"

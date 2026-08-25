@@ -1,11 +1,23 @@
-"""Permissioned, compare-and-set transitions for CRM Recommendations."""
+"""Thin HTTP adapters for Phase 6 decision commands."""
+from __future__ import annotations
 
 import hashlib
 import json
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
+from crm.fcrm.student_decision import (
+	StudentDecisionError,
+	decide_recommendation as _decide_recommendation,
+	reassign_sales_action as _reassign_sales_action,
+	transition_sales_action as _transition_sales_action,
+)
+
+
+# Local crm-agents Student Task v2 command contract. Remote Phase 6 decision
+# adapters remain authoritative for Recommendation/Sales Action commands.
 _TASK_TRANSITIONS = {
 	"PENDING": {"ACCEPTED", "CANCELLED", "SUPERSEDED"},
 	"ACCEPTED": {"IN_PROGRESS", "COMPLETED", "CANCELLED", "REQUIRES_REVIEW"},
@@ -69,9 +81,7 @@ def upsert_student_next_task(
 	action_type = candidate.get("action_type")
 	disposition = candidate.get("disposition")
 	if int(candidate.get("context_revision", -1)) != int(expected_context_revision):
-		frappe.throw(
-			_("Candidate revision does not match expected context revision."), frappe.ValidationError
-		)
+		frappe.throw(_("Candidate revision does not match expected context revision."), frappe.ValidationError)
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
 		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
 	row = frappe.db.sql(
@@ -93,9 +103,7 @@ def upsert_student_next_task(
 	)
 	if existing:
 		if existing.payload_digest != payload_digest:
-			frappe.throw(
-				_("Generation idempotency key was reused with a different payload."), frappe.ValidationError
-			)
+			frappe.throw(_("Generation idempotency key was reused with a different payload."), frappe.ValidationError)
 		return _task_result(frappe.get_doc("CRM Student Task", existing.name), idempotent=True)
 	current_revision = int(row[0].student_context_revision or 0)
 	if current_revision != int(expected_context_revision):
@@ -125,7 +133,6 @@ def upsert_student_next_task(
 			{"current_slot": None, "state": "SUPERSEDED"},
 			update_modified=False,
 		)
-
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
 
 	if action_type and action_type not in V2_ACTION_TYPES:
@@ -149,9 +156,6 @@ def upsert_student_next_task(
 			"generation_idempotency_key": generation_idempotency_key,
 			"producer_identity": producer_identity,
 			"payload_digest": payload_digest,
-			# Frappe JSON fields are persisted as serialized JSON at this API
-			# boundary; keeping the wire contract as arrays/objects avoids
-			# leaking storage-specific encoding to crm-agents.
 			"evidence_references": json.dumps(candidate.get("evidence_refs", []), separators=(",", ":")),
 			"package_seed": json.dumps(candidate.get("package_seed") or {}, separators=(",", ":")),
 			"created_at": frappe.utils.now_datetime(),
@@ -183,7 +187,7 @@ def upsert_student_next_task(
 def record_student_task_generation_failure(
 	student: str, source_revision: int, reason: str, rollout_epoch: int = 0
 ) -> dict:
-	"""Persist an explicit bounded failure for the five-minute convergence SLO."""
+	"""Persist an explicit bounded failure for the convergence SLO."""
 	_require_v2_service()
 	row = frappe.db.sql(
 		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
@@ -194,7 +198,6 @@ def record_student_task_generation_failure(
 		return {"status": "deferred", "reason": "revision_moved"}
 	current = frappe.db.get_value("CRM Student Task", {"student": student, "current_slot": "CURRENT"}, "name")
 	if current:
-		task = frappe.get_doc("CRM Student Task", current)
 		frappe.db.set_value(
 			"CRM Student Task",
 			current,
@@ -205,7 +208,7 @@ def record_student_task_generation_failure(
 			},
 			update_modified=False,
 		)
-		return {"status": "failed", "task": task.name}
+		return {"status": "failed", "task": current}
 	task = frappe.get_doc(
 		{
 			"doctype": "CRM Student Task",
@@ -213,7 +216,6 @@ def record_student_task_generation_failure(
 			"current_slot": "CURRENT",
 			"source_context_revision": source_revision,
 			"disposition": "MONITOR",
-			"action_type": None,
 			"objective": "Generation failed; reconcile this Student context.",
 			"policy_version": "student-next-task-v2",
 			"context_version": "generation-failure",
@@ -230,194 +232,96 @@ def record_student_task_generation_failure(
 	return {"status": "failed", "task": task.name}
 
 
-def _transition_student_task(name, expected_task_revision, target_state, *, outcome=None):
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	task = frappe.get_doc("CRM Student Task", name)
-	if not task.has_permission("write"):
-		frappe.throw(_("You do not have permission to change this task."), frappe.PermissionError)
-	if str(task.modified) != str(expected_task_revision):
-		frappe.throw(_("Task changed; refresh before issuing a command."), frappe.ValidationError)
-	if target_state not in _TASK_TRANSITIONS.get(task.state, set()):
-		frappe.throw(_("Illegal Student Task transition."), frappe.ValidationError)
-	if task.disposition != "ACT":
-		frappe.throw(
-			_("MONITOR and NURTURE decisions are immutable and not executable."), frappe.ValidationError
-		)
-	if task.action_type:
-		if target_state == "ACCEPTED":
-			from crm.services.sales_action_dispatch import persist_initial_package
-
-			frappe.flags.student_task_command = True
-			try:
-				task.package_seed = persist_initial_package(task)
-				task.execution_package_version = max(int(task.execution_package_version or 0), 1)
-			finally:
-				frappe.flags.student_task_command = False
-		from crm.services.sales_action_policy import validate_action_command
-
-		roles = set(frappe.get_roles(frappe.session.user))
-		validate_action_command(
-			task.action_type,
-			student=task.student,
-			inputs={
-				"objective": task.objective,
-				"package": task.package_seed or {},
-				"authority": True,
-				"channel": "email",
-				"timing": True,
-			},
-			actor_roles=roles,
-		)
-	task.state = target_state
-	if target_state == "REQUIRES_REVIEW":
-		task.requires_review = 1
-		task.review_revision = task.source_context_revision
-	if outcome:
-		task.outcome = outcome
-	frappe.flags.student_task_command = True
+def _call(fn, **kwargs):
 	try:
-		task.save()
-	finally:
-		frappe.flags.student_task_command = False
-	if target_state in {"COMPLETED", "CANCELLED"}:
-		frappe.db.set_value("CRM Student Task", task.name, "current_slot", None, update_modified=False)
-	if target_state == "COMPLETED" and outcome:
-		from crm.services.student_context import mark_student_context_changed
-
-		mark_student_context_changed(task.student, "student_task_outcome")
-	if (
-		target_state == "ACCEPTED"
-		and task.disposition == "ACT"
-		and task.recommendation
-		and not task.sales_action
-	):
-		from frappe.utils import now_datetime
-
-		from crm.fcrm.doctype.crm_recommendation.crm_recommendation import _create_sales_action
-
-		recommendation = frappe.get_doc("CRM Recommendation", task.recommendation)
-		frappe.flags.student_task_command = True
-		try:
-			action_name = _create_sales_action(recommendation)
-		finally:
-			frappe.flags.student_task_command = False
-		frappe.db.set_value(
-			"CRM Sales Action",
-			action_name,
-			{
-				"student_task": task.name,
-				"action_revision": task.action_revision or 1,
-				"package_revision": task.execution_package_version or 1,
-			},
-			update_modified=False,
-		)
-		frappe.db.set_value("CRM Student Task", task.name, "sales_action", action_name, update_modified=False)
-		task.reload()
-	return _task_result(task)
+		return fn(**kwargs)
+	except StudentDecisionError as exc:
+		exc_type = frappe.PermissionError if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE", "CONTRACT_UNAVAILABLE", "OUTBOX_DISABLED"} else frappe.ValidationError
+		frappe.throw(str(exc), exc_type)
 
 
-@frappe.whitelist()
-def edit_email_package(name: str, expected_package_revision: int, package: dict | str, reason: str) -> dict:
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	if isinstance(package, str):
-		package = frappe.parse_json(package)
-	roles = set(frappe.get_roles(frappe.session.user))
-	if not roles.intersection({"Sale", "Lead Sales", "System Manager"}):
-		frappe.throw(_("Only Sales may edit an Email Package."), frappe.PermissionError)
-	from crm.services.sales_action_dispatch import edit_email_package as _edit
+@frappe.whitelist(methods=["POST"])
+def transition_recommendation(name: str, expected_revision: str, status: str, decision_reason: str | None = None, **kwargs):
+	"""Compatibility adapter for the pre-Phase-6 Desk/demo call shape.
 
-	return _edit(name, int(expected_package_revision), package, reason)
-
-
-@frappe.whitelist()
-def accept_student_task(name: str, expected_task_revision: str) -> dict:
-	return _transition_student_task(name, expected_task_revision, "ACCEPTED")
-
-
-@frappe.whitelist()
-def start_student_task(name: str, expected_task_revision: str) -> dict:
-	return _transition_student_task(name, expected_task_revision, "IN_PROGRESS")
-
-
-@frappe.whitelist()
-def complete_student_task(name: str, expected_task_revision: str, outcome: str | None = None) -> dict:
-	return _transition_student_task(name, expected_task_revision, "COMPLETED", outcome=outcome)
-
-
-@frappe.whitelist()
-def cancel_student_task(name: str, expected_task_revision: str, outcome: str | None = None) -> dict:
-	return _transition_student_task(name, expected_task_revision, "CANCELLED", outcome=outcome)
-
-
-@frappe.whitelist()
-def transition_recommendation(
-	name: str, expected_revision: str, status: str, decision_reason: str | None = None
-) -> dict:
-	"""Apply a legal decision only if the client still holds the CRM revision.
-
-	No caller-selected user, campus, or role scope is accepted. Frappe's own
-	session plus document permission hooks determine visibility and authority.
+	New clients must send an idempotency key and the decision revision. This
+	adapter only translates legacy callers; it does not restore direct document
+	writes or bypass the Phase 6 command service.
 	"""
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if kwargs.get("idempotency_key"):
+		return _call(
+			_decide_recommendation,
+			name=name,
+			expected_revision=expected_revision,
+			status=status,
+			decision_reason=decision_reason,
+			due_at=kwargs.get("due_at"),
+			assignee_staff=kwargs.get("assignee_staff"),
+			revisit_at=kwargs.get("revisit_at"),
+			defer_kind=kwargs.get("defer_kind"),
+			idempotency_key=kwargs["idempotency_key"],
+			correlation_id=kwargs.get("correlation_id"),
+		)
 	doc = frappe.get_doc("CRM Recommendation", name)
-	if not doc.has_permission("write"):
-		frappe.throw(_("You do not have permission to decide this recommendation."), frappe.PermissionError)
-	if str(doc.modified) != expected_revision:
-		frappe.throw(_("Recommendation changed; refresh before deciding."), frappe.ValidationError)
-	doc.status = status
-	doc.decision_reason = decision_reason
-	doc.save()
-	action = frappe.db.get_value("CRM Sales Action", {"recommendation": doc.name}, "name")
-	return {
-		"name": doc.name,
-		"status": doc.status,
-		"source_revision": str(doc.modified),
-		"sales_action": action,
-	}
+	legacy_modified = str(doc.modified) == str(expected_revision)
+	result = _call(
+		_decide_recommendation,
+		name=name,
+		expected_revision=(doc.get("decision_revision") or 0) if legacy_modified else expected_revision,
+		status=status,
+		decision_reason=decision_reason,
+		due_at=kwargs.get("due_at") or doc.get("recommended_timing") or now_datetime(),
+		revisit_at=kwargs.get("revisit_at"),
+		defer_kind=kwargs.get("defer_kind"),
+		idempotency_key=kwargs.get("idempotency_key") or f"legacy-decision-{name}-{expected_revision}-{status}",
+		correlation_id=kwargs.get("correlation_id") or f"legacy-decision-{name}",
+		expected_modified=str(expected_revision) if legacy_modified else None,
+	)
+	result.setdefault("name", result.get("recommendation"))
+	return result
 
 
-@frappe.whitelist()
-def record_sales_action_outcome(
-	name: str, expected_revision: str, business_outcome: str, outcome_notes: str | None = None
-) -> dict:
-	"""CAS-protected outcome entry for a Sales Action the caller may write."""
-	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Sales Action", name)
-	if not doc.has_permission("write"):
-		frappe.throw(_("You do not have permission to record this outcome."), frappe.PermissionError)
-	if str(doc.modified) != expected_revision:
-		frappe.throw(_("Sales Action changed; refresh before recording an outcome."), frappe.ValidationError)
-	if business_outcome not in {
-		"NO_RESPONSE",
-		"INTEREST_INCREASED",
-		"NEEDS_MORE_INFORMATION",
-		"CALL_BACK_LATER",
-		"APPLICATION_STARTED",
-		"APPLICATION_COMPLETED",
-		"NOT_INTERESTED",
-	}:
-		frappe.throw(_("Invalid business outcome."), frappe.ValidationError)
-	doc.business_outcome = business_outcome
-	doc.outcome_notes = outcome_notes
-	doc.execution_status = "completed"
-	frappe.flags.student_task_command = True
-	try:
-		doc.save()
-	finally:
-		frappe.flags.student_task_command = False
-	return {"name": doc.name, "source_revision": str(doc.modified)}
+@frappe.whitelist(methods=["POST"])
+def decide_recommendation(**kwargs):
+	return _call(_decide_recommendation, **kwargs)
+
+
+@frappe.whitelist(methods=["POST"])
+def record_sales_action_outcome(name: str, expected_revision: str, business_outcome: str, outcome_notes: str | None = None):
+	"""Compatibility adapter for the retired one-call completion endpoint."""
+	action = frappe.get_doc("CRM Sales Action", name)
+	result = _call(
+		_transition_sales_action,
+		name=name,
+		expected_revision=action.get("action_revision") or 1,
+		status="completed",
+		outcome_code=business_outcome,
+		evidence=outcome_notes,
+		idempotency_key=f"legacy-outcome-{name}-{expected_revision}",
+		correlation_id=f"legacy-outcome-{name}",
+		expected_modified=str(expected_revision) if str(action.modified) == str(expected_revision) else None,
+	)
+	result.setdefault("name", result.get("sales_action"))
+	return result
+
+
+@frappe.whitelist(methods=["POST"])
+def transition_sales_action(**kwargs):
+	kwargs.pop("_internal_service", None)
+	return _call(_transition_sales_action, **kwargs)
+
+
+@frappe.whitelist(methods=["POST"])
+def reassign_sales_action(**kwargs):
+	kwargs.pop("_internal_service", None)
+	return _call(_reassign_sales_action, **kwargs)
 
 
 @frappe.whitelist()
 def get_sales_action(name: str) -> dict:
-	"""Return the small, permission-checked projection needed by the Desk outcome control."""
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+		frappe.throw("Authentication is required.", frappe.PermissionError)
 	doc = frappe.get_doc("CRM Sales Action", name)
 	if not doc.has_permission("read"):
-		frappe.throw(_("You do not have permission to view this Sales Action."), frappe.PermissionError)
-	return {"name": doc.name, "action_type": doc.action_type, "source_revision": str(doc.modified)}
+		frappe.throw("You do not have permission to view this Sales Action.", frappe.PermissionError)
+	return {"name": doc.name, "student": doc.student, "action_type": doc.action_type, "status": doc.execution_status, "revision": doc.get("action_revision") or 1}

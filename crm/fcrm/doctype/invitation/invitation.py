@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
+
 
 class Invitation(Document):
 	# begin: auto-generated types
@@ -26,6 +28,7 @@ class Invitation(Document):
 
 	def before_insert(self):
 		frappe.utils.validate_email_address(self.email, True)
+		self._validate_canonical_role()
 
 		self.key = frappe.generate_hash(length=12)
 		self.invited_by = frappe.session.user
@@ -53,50 +56,30 @@ class Invitation(Document):
 
 	@frappe.whitelist()
 	def accept_invitation(self):
-		frappe.only_for("System Manager", True)
+		from crm.api.session import get_session_role_flags
+
+		if not get_session_role_flags()["is_system_manager"]:
+			frappe.throw(_("You are not allowed to accept invitations"), frappe.PermissionError)
 		self.accept()
 
-	def _lock_pending_row(self, key=None):
-		"""Lock and validate this invitation before any account mutation.
-
-		The guest endpoint and a concurrent replay can otherwise both load a
-		Pending document and login as the invited user.  A row lock plus a
-		Pending/key check makes acceptance a one-shot state transition.
-		"""
-		rows = frappe.db.sql(
-			"""
-			SELECT status, `key`
-			FROM `tabInvitation`
-			WHERE name = %s
-			FOR UPDATE
-			""",
-			(self.name,),
-			as_dict=True,
-		)
-		row = rows[0] if rows else None
-		if not row or row.status != "Pending" or (key is not None and row.key != key):
+	def accept(self):
+		if self.status != "Pending":
 			frappe.throw(_("Invalid or expired key"))
-
-	def accept(self, key=None):
-		self._lock_pending_row(key)
-		from crm.api.user import _set_single_crm_role
+		self._validate_canonical_role()
 
 		user = self.create_user_if_not_exists()
-		if self.role != "System Manager" and "System Manager" in frappe.get_roles(user.name):
-			frappe.throw(_("A System Manager account cannot be downgraded by an invitation."), frappe.PermissionError)
-		# Replace the canonical CRM role instead of appending it.  This keeps one
-		# business role per account and prevents permission union/escalation when
-		# an existing user accepts a new invitation.
-		_set_single_crm_role(user, self.role)
-		if self.role != "System Manager":
-			self.update_module_in_user(user, "FCRM")
+		from crm.api.user import set_canonical_crm_profile
+
+		set_canonical_crm_profile(user, self.role)
 		user.save(ignore_permissions=True)
 
 		self.status = "Accepted"
 		self.accepted_at = frappe.utils.now()
-		# The bearer link is a one-time secret; never retain it after acceptance.
-		self.key = None
 		self.save(ignore_permissions=True)
+
+	def _validate_canonical_role(self):
+		if self.role not in CANONICAL_SELECTABLE_ROLES:
+			frappe.throw(_("Invitation role must be a canonical CRM role"), frappe.ValidationError)
 
 	def update_module_in_user(self, user, module):
 		block_modules = frappe.get_all(

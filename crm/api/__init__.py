@@ -5,7 +5,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
-from crm.api.session import CRM_ALLOWED_ROLES, get_session_role_flags
+from crm.api.session import get_session_role_flags
 from crm.api.student_dashboard import (
 	get_intent_definitions,
 	get_student_dashboard,
@@ -13,6 +13,7 @@ from crm.api.student_dashboard import (
 	get_study_majors,
 	get_training_programs,
 )
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
 from crm.utils import is_frappe_version
 
 
@@ -91,7 +92,7 @@ def accept_invitation(key: str | None = None):
 	if not result:
 		frappe.throw(_("Invalid or expired key"))
 	invitation = frappe.get_doc("Invitation", result[0])
-	invitation.accept(key=key)
+	invitation.accept()
 	invitation.reload()
 
 	if invitation.status == "Accepted":
@@ -102,18 +103,11 @@ def accept_invitation(key: str | None = None):
 
 @frappe.whitelist()
 def invite_by_email(emails: str, role: str):
-	# Role assignment is a control-plane operation.  Lead Sales can work CRM
-	# records but must not mint accounts or choose a different business role.
-	frappe.only_for(["System Manager"], True)
+	session_roles = get_session_role_flags()
 
-	user_roles = frappe.get_roles(frappe.session.user)
-
-	if role == "System Manager" and "System Manager" not in user_roles:
-		frappe.throw(_("You are not allowed to invite System Managers"), frappe.PermissionError)
-
-	if role not in CRM_ALLOWED_ROLES:
+	if role not in CANONICAL_SELECTABLE_ROLES:
 		frappe.throw(_("Cannot invite for this role"), frappe.PermissionError)
-	if "System Manager" not in user_roles:
+	if not session_roles["is_system_manager"]:
 		frappe.throw(_("You are not allowed to invite this CRM profile"), frappe.PermissionError)
 
 	if not emails:
@@ -127,7 +121,7 @@ def invite_by_email(emails: str, role: str):
 		"Invitation",
 		filters={
 			"email": ["in", email_list],
-			"role": ["in", list(CRM_ALLOWED_ROLES)],
+			"status": "Pending",
 		},
 		pluck="email",
 	)

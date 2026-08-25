@@ -9,20 +9,31 @@
  "engine": "InnoDB",
  "field_order": [
   "recommendation",
-  "student_task",
   "student",
   "action_type",
-  "action_revision",
-  "package_revision",
-  "requires_review",
-  "execution_package",
   "created_at",
+  "due_at",
+  "assignee_staff",
+  "assignee_snapshot",
+  "assignment_history",
+  "assignment_revision",
+  "action_revision",
+  "correlation_id",
+  "idempotency_key",
+  "supersedes_decision_event",
   "column_break_1",
   "execution_status",
   "executed_at",
+  "started_at",
+  "completed_at",
+  "terminal_reason",
   "section_outcome",
+  "outcome_code",
   "business_outcome",
   "outcome_notes",
+  "outcome_evidence",
+  "outcome_at",
+  "outcome_actor",
   "linked_interaction"
  ],
  "fields": [
@@ -49,32 +60,86 @@
    "description": "Denormalized from the recommendation for query convenience only — not a substitute join key for recommendation-correlation."
   },
   {
-   "fieldname": "student_task",
-   "fieldtype": "Link",
-   "label": "Student Task",
-   "options": "CRM Student Task",
-   "read_only": 1,
-   "description": "The single v2 task anchor; legacy actions may leave this blank."
-  },
-  {
    "fieldname": "action_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Action Type",
-   "options": "WAIT\nCALL\nEMAIL\nMESSAGE\nCOUNSELING\nMEETING\nEVENT_INVITE\nCAMPUS_VISIT\nDOCUMENT_REQUEST\nAPPLICATION_SUPPORT\nPARENT_CONTACT\nHANDOFF\nFOLLOW_UP",
+   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
    "reqd": 1,
    "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary."
   },
-  {"fieldname": "action_revision", "fieldtype": "Int", "default": "0", "read_only": 1, "label": "Action Revision"},
-  {"fieldname": "package_revision", "fieldtype": "Int", "default": "0", "read_only": 1, "label": "Package Revision"},
-  {"fieldname": "requires_review", "fieldtype": "Check", "read_only": 1, "label": "Requires Review"},
-  {"fieldname": "execution_package", "fieldtype": "JSON", "read_only": 1, "label": "Execution Package"},
   {
    "fieldname": "created_at",
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Created At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "due_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Due At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "assignee_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assignee Staff",
+   "options": "CRM Staff",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "assignee_snapshot",
+   "fieldtype": "JSON",
+   "label": "Assignment Scope Snapshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assignment_history",
+   "fieldtype": "JSON",
+   "label": "Assignment History",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "assignment_revision",
+   "fieldtype": "Int",
+   "label": "Assignment Revision",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "action_revision",
+   "fieldtype": "Int",
+   "label": "Action Revision",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "label": "Correlation ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "supersedes_decision_event",
+   "fieldtype": "Link",
+   "label": "Supersedes Decision Event",
+   "options": "CRM Student Decision Event",
    "read_only": 1
   },
   {
@@ -95,12 +160,41 @@
   {
    "fieldname": "executed_at",
    "fieldtype": "Datetime",
-   "label": "Executed At"
+   "label": "Executed At (Legacy)",
+   "read_only": 1,
+   "description": "Legacy execution timestamp retained for migration compatibility."
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "terminal_reason",
+   "fieldtype": "Small Text",
+   "label": "Failure or Cancellation Reason",
+   "read_only": 1
   },
   {
    "fieldname": "section_outcome",
    "fieldtype": "Section Break",
    "label": "Business Outcome"
+  },
+  {
+   "fieldname": "outcome_code",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Outcome Code",
+   "options": "\nNO_RESPONSE\nINTEREST_INCREASED\nNEEDS_MORE_INFORMATION\nCALL_BACK_LATER\nAPPLICATION_STARTED\nAPPLICATION_COMPLETED\nNOT_INTERESTED",
+   "read_only": 1,
+   "description": "Versioned allowlisted code required when an action is completed."
   },
   {
    "fieldname": "business_outcome",
@@ -114,13 +208,34 @@
   {
    "fieldname": "outcome_notes",
    "fieldtype": "Text",
-   "label": "Outcome Notes"
+   "label": "Outcome Notes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_evidence",
+   "fieldtype": "JSON",
+   "label": "Outcome Evidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_at",
+   "fieldtype": "Datetime",
+   "label": "Outcome At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "outcome_actor",
+   "fieldtype": "Link",
+   "label": "Outcome Actor",
+   "options": "User",
+   "read_only": 1
   },
   {
    "fieldname": "linked_interaction",
    "fieldtype": "Link",
    "label": "Linked Interaction",
    "options": "CRM Interaction",
+   "read_only": 1,
    "description": "Set only when this action's execution produced a CRM Interaction record. When set, the sole explicit correlation to CRM Interaction — never inferred by student+timestamp proximity."
   }
  ],
@@ -158,20 +273,52 @@
    "write": 1
   },
   {
-   "create": 1,
    "email": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
-   "write": 1
+   "role": "Team Leader"
   },
   {
-   "create": 1,
+   "email": 1,
    "print": 1,
    "read": 1,
-   "role": "Sale",
-   "write": 1
+   "report": 1,
+   "role": "Counseller"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sale"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "role": "CTV-Sale"
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  },
+  {
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sales"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sales User"
   },
   {
    "read": 1,

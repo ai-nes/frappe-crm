@@ -42,6 +42,11 @@ _STUDENT_STAGING_ENVIRONMENTS = frozenset({"isolated", "staging"})
 _TIME_BUDGET_S = 8.0
 
 
+def _is_capability_gateway_user(session_flags: dict) -> bool:
+	"""Copilot serves canonical operating roles, never System Manager."""
+	return bool(session_flags.get("is_crm_user")) and not session_flags.get("is_system_manager", False)
+
+
 def _session_rate_limit(*, limit: int, seconds: int):
 	"""Rate-limit capability endpoints by the authenticated Frappe session.
 
@@ -384,6 +389,17 @@ def validate_ai_exposed_change(doc, method=None):
 
 @frappe.whitelist()
 @_session_rate_limit(limit=30, seconds=60)
+def get_current_roles():
+	"""Return only the authenticated user's server-derived roles to crm-agents."""
+	if frappe.session.user in ("", "Guest"):
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if not _is_capability_gateway_user(get_session_role_flags()):
+		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	return {"roles": sorted(frappe.get_roles(frappe.session.user))}
+
+
+@frappe.whitelist()
+@_session_rate_limit(limit=30, seconds=60)
 def get_capability_manifest():
 	"""Return the current session user's Frappe-granted capability manifest:
 	roles, per-DocType resource grants (all doctypes with
@@ -487,6 +503,7 @@ def get_capability_manifest():
 		"contract_version": CAPABILITY_CONTRACT_VERSION,
 		"roles": roles,
 		"crm_role": resolve_copilot_profile(roles),
+		"role_profile": resolve_copilot_profile(roles),
 		"role_matrix_epoch": ROLE_MATRIX_EPOCH,
 		"resources": resources,
 		"semantic_capabilities": semantic_capabilities,

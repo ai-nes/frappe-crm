@@ -1,25 +1,28 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
+
 
 class CRMEventParticipation(Document):
 	def before_validate(self):
-		if not self.student and self.crm_contact:
-			self.student = frappe.db.get_value("CRM Contact", self.crm_contact, "student")
-		if not self.actor:
-			self.actor = frappe.session.user
+		if self.is_new() and not getattr(frappe.flags, "student_attribution_service", False):
+			frappe.throw("Event attribution must be recorded through the Student attribution command.", frappe.PermissionError)
 		if self.is_new() and not self.registered_at:
 			self.registered_at = frappe.utils.now_datetime()
 		if self.status == "Checked-in" and not self.checked_in_at:
 			self.checked_in_at = frappe.utils.now_datetime()
 
 	def validate(self):
-		if self.is_new() and frappe.db.exists(
-			"CRM Event Participation", {"crm_event": self.crm_event, "crm_contact": self.crm_contact}
-		):
-			frappe.throw(
-				frappe._("This contact already has a participation record for this event -- update it instead of creating a duplicate.")
-			)
+		if not self.is_new():
+			frappe.throw("Event attribution evidence is append-only; create a superseding correction instead.", frappe.PermissionError)
+		if not self.student:
+			frappe.throw("Student is required for new attribution evidence.")
+		if self.crm_contact and not contact_is_linked_to_student(self.crm_contact, self.student):
+			frappe.throw("CRM Contact must belong to the evidence Student.")
+
+	def on_trash(self):
+		frappe.throw("Event attribution evidence is append-only and cannot be deleted.", frappe.PermissionError)
 
 	@staticmethod
 	def default_list_data():

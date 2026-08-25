@@ -1,247 +1,348 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <div class="flex min-w-0 flex-col">
-        <h1 class="text-lg font-semibold text-ink-gray-9">
-          {{ __('My recommendations') }}
-        </h1>
-        <p class="text-sm text-ink-gray-5">
-          {{ __('Ordered by the current recommendation policy.') }}
-        </p>
-      </div>
+      <ViewBreadcrumbs routeName="My Recommendations" />
     </template>
     <template #right-header>
       <Button
         :label="__('Refresh')"
         iconLeft="refresh-cw"
-        :loading="loading"
+        :loading="active.loading"
         @click="refresh"
       />
     </template>
   </LayoutHeader>
 
-  <main
-    class="h-full overflow-y-auto bg-surface-gray-1 px-3 py-4 sm:px-10 sm:py-6"
-  >
-    <div class="mx-auto max-w-5xl">
-      <div v-if="pendingAction" class="mb-4 rounded border border-outline-gray-modals bg-surface-white p-4">
-        <p class="font-medium text-ink-gray-9">{{ __('Record outcome for') }} {{ pendingAction.action_type }}</p>
-        <div class="mt-3 flex flex-wrap gap-2">
-          <select v-model="selectedOutcome" class="rounded border border-outline-gray-modals px-2 py-1 text-sm">
-            <option value="">{{ __('Select outcome') }}</option>
-            <option v-for="outcome in outcomes" :key="outcome" :value="outcome">{{ outcome }}</option>
-          </select>
-          <Button size="sm" :label="__('Save outcome')" :loading="savingOutcome" :disabled="!selectedOutcome" @click="recordOutcome" />
-          <Button size="sm" :label="__('Later')" theme="gray" @click="pendingAction = null" />
-        </div>
-      </div>
-      <div
-        v-if="loading && !items.length"
-        class="flex min-h-48 items-center justify-center text-ink-gray-5"
-      >
-        <LoadingIndicator class="size-5" />
-      </div>
-      <div
-        v-else-if="errorMessage"
-        class="rounded border border-outline-gray-modals bg-surface-white p-5"
-        role="alert"
-      >
-        <p class="font-medium text-ink-gray-9">
-          {{ __('Recommendations could not be loaded') }}
-        </p>
-        <p class="mt-1 text-sm text-ink-gray-5">{{ errorMessage }}</p>
-        <Button class="mt-4" :label="__('Try again')" @click="refresh" />
-      </div>
-      <div
-        v-else-if="!items.length"
-        class="rounded border border-dashed border-outline-gray-modals bg-surface-white px-5 py-12 text-center"
-      >
-        <h2 class="text-base font-semibold text-ink-gray-9">
-          {{ __('No active recommendations') }}
-        </h2>
-        <p class="mt-1 text-sm text-ink-gray-5">
-          {{ __('New recommendations will appear here when available.') }}
-        </p>
-      </div>
-      <div v-else class="flex flex-col gap-3">
-        <article
-          v-for="(item, index) in items"
-          :key="item.recommendation"
-          class="rounded border border-outline-gray-modals bg-surface-white p-4 sm:p-5"
-        >
+  <div class="flex h-full min-h-0 flex-col overflow-hidden">
+    <Tabs
+      v-model="tabIndex"
+      :tabs="workTabs"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:min-h-0 [&_[role='tabpanel']:not([hidden])]:flex-1 [&_[role='tabpanel']:not([hidden])]:overflow-y-auto"
+    >
+      <template #tab-panel>
+        <section class="flex min-h-0 flex-1 flex-col px-3 pb-5 pt-3 sm:px-5">
           <div
-            class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"
+            v-if="active.loading && !active.items.length"
+            class="flex min-h-40 flex-1 items-center justify-center text-ink-gray-5"
+            role="status"
           >
-            <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-medium tabular-nums text-ink-gray-5"
-                  >#{{ index + 1 }}</span
-                >
-                <Badge
-                  :label="priorityLabel(item.priority)"
-                  :theme="priorityTheme(item.priority)"
-                  variant="subtle"
-                />
-                <Badge
-                  v-if="item.timing"
-                  :label="item.timing"
-                  theme="gray"
-                  variant="subtle"
-                />
-              </div>
-              <h2 class="mt-3 text-base font-semibold text-ink-gray-9">
-                {{ item.action }}
-              </h2>
-              <p
-                v-if="item.reason"
-                class="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink-gray-6"
-              >
-                {{ item.reason }}
+            <LoadingIndicator class="size-5" />
+            <span class="sr-only">{{ __('Loading work') }}</span>
+          </div>
+
+          <div
+            v-else-if="active.error"
+            class="flex flex-1 items-center justify-center py-8"
+            role="alert"
+          >
+            <div class="w-full max-w-md rounded border border-outline-gray-modals bg-surface-white p-5">
+              <p class="font-medium text-ink-gray-9">
+                {{ __('Work could not be loaded') }}
               </p>
-              <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                <div>
-                  <dt class="text-ink-gray-5">{{ __('Student') }}</dt>
-                  <dd class="mt-0.5 font-medium text-ink-gray-8">
-                    {{ item.student }}
-                  </dd>
-                </div>
-                <div>
-                  <dt class="text-ink-gray-5">{{ __('Revision') }}</dt>
-                  <dd class="mt-0.5 font-medium tabular-nums text-ink-gray-8">
-                    {{ item.revision }}
-                  </dd>
-                </div>
-              </dl>
+              <p class="mt-1 text-sm text-ink-gray-5">{{ active.error }}</p>
+              <Button class="mt-4" :label="__('Try again')" @click="refresh" />
             </div>
-            <Button
-              class="shrink-0"
-              :label="__('Open student')"
-              iconRight="arrow-up-right"
-              @click="openStudent(item.student)"
-            />
           </div>
-          <div class="mt-4 flex flex-wrap gap-2 border-t border-outline-gray-1 pt-3">
-            <Button size="sm" :label="__('Accept')" theme="green" :loading="deciding === item.recommendation" @click="decide(item, 'accepted')" />
-            <Button size="sm" :label="__('Defer')" theme="gray" :loading="deciding === item.recommendation" @click="decide(item, 'deferred')" />
-            <Button size="sm" :label="__('Reject')" theme="red" :loading="deciding === item.recommendation" @click="decide(item, 'rejected')" />
-          </div>
-        </article>
-        <div v-if="nextCursor" class="flex justify-center pt-2">
-          <Button
-            :label="__('Load more')"
-            :loading="loading"
-            @click="loadMore"
+
+          <EmptyState
+            v-else-if="!active.items.length"
+            class="min-h-64 flex-1"
+            name="Work"
+            icon="inbox"
+            :title="emptyTitle"
+            :description="emptyDescription"
           />
-        </div>
-      </div>
-    </div>
-  </main>
+
+          <template v-else>
+            <div class="flex flex-col divide-y rounded border border-outline-gray-2 bg-surface-white">
+              <article
+                v-for="(item, index) in active.items"
+                :key="item.recommendation || item.name"
+                class="p-4 transition-colors hover:bg-surface-gray-1 sm:p-5"
+              >
+                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <span class="text-xs font-medium text-ink-gray-5">
+                        #{{ index + 1 }}
+                      </span>
+                      <Badge
+                        v-if="queue === 'recommendations'"
+                        :label="priorityLabel(item.priority)"
+                        :theme="priorityTheme(item.priority)"
+                        variant="subtle"
+                        size="sm"
+                      />
+                      <Badge
+                        v-else
+                        :label="item.overdue ? __('Overdue') : item.status"
+                        :theme="item.overdue ? 'red' : 'gray'"
+                        variant="subtle"
+                        size="sm"
+                      />
+                    </div>
+
+                    <template v-if="queue === 'recommendations'">
+                      <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <h2 class="text-base font-semibold text-ink-gray-9">
+                          {{ item.action }}
+                        </h2>
+                        <span class="text-sm text-ink-gray-6">· {{ item.studentName }}</span>
+                      </div>
+                      <p
+                        v-if="item.reason"
+                        class="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink-gray-6"
+                      >
+                        {{ item.reason }}
+                      </p>
+                      <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+                        <div>
+                          <dt class="text-ink-gray-5">{{ __('Student') }}</dt>
+                          <dd class="mt-0.5 font-medium text-ink-gray-8">
+                            {{ item.studentName }}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt class="text-ink-gray-5">{{ __('Scheduled') }}</dt>
+                          <dd class="mt-0.5 text-ink-gray-8">
+                            {{ item.timing || __('Not scheduled') }}
+                          </dd>
+                        </div>
+                      </dl>
+                    </template>
+
+                    <template v-else>
+                      <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <h2 class="text-base font-semibold text-ink-gray-9">
+                          {{ item.actionType }}
+                        </h2>
+                        <span class="text-sm text-ink-gray-6">· {{ item.studentName }}</span>
+                      </div>
+                      <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
+                        <div>
+                          <dt class="text-ink-gray-5">{{ __('Due') }}</dt>
+                          <dd
+                            class="mt-0.5"
+                            :class="item.overdue ? 'font-medium text-red-600' : 'text-ink-gray-8'"
+                          >
+                            {{ item.dueAt || __('Not scheduled') }}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt class="text-ink-gray-5">{{ __('Assignee') }}</dt>
+                          <dd class="mt-0.5 text-ink-gray-8">{{ item.assignee }}</dd>
+                        </div>
+                        <div v-if="item.outcome">
+                          <dt class="text-ink-gray-5">{{ __('Outcome') }}</dt>
+                          <dd class="mt-0.5 text-ink-gray-8">{{ item.outcome }}</dd>
+                        </div>
+                      </dl>
+                      <p
+                        v-if="item.linkedInteraction"
+                        class="mt-3 text-sm text-ink-gray-6"
+                      >
+                        {{ __('Linked interaction') }}: {{ item.linkedInteraction }}
+                      </p>
+                    </template>
+                  </div>
+
+                  <div class="flex shrink-0 flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      :label="__('Open student')"
+                      :disabled="!item.student"
+                      @click="openStudent(item.student)"
+                    />
+                    <Button
+                      v-if="queue === 'actions' && item.permittedTransitions.length"
+                      size="sm"
+                      variant="solid"
+                      :label="__('Update action')"
+                      @click="selectedAction = item"
+                    />
+                  </div>
+                </div>
+
+                <div
+                  v-if="queue === 'recommendations'"
+                  class="mt-4 flex flex-wrap gap-2 border-t border-outline-gray-1 pt-3"
+                >
+                  <Button
+                    v-if="item.permittedDecisions.includes('accepted')"
+                    size="sm"
+                    variant="solid"
+                    theme="green"
+                    :label="__('Accept')"
+                    @click="openDecision(item, 'accepted')"
+                  />
+                  <Button
+                    v-if="item.permittedDecisions.includes('deferred')"
+                    size="sm"
+                    variant="outline"
+                    theme="gray"
+                    :label="__('Defer')"
+                    @click="openDecision(item, 'deferred')"
+                  />
+                  <Button
+                    v-if="item.permittedDecisions.includes('rejected')"
+                    size="sm"
+                    variant="outline"
+                    theme="red"
+                    :label="__('Reject')"
+                    @click="openDecision(item, 'rejected')"
+                  />
+                </div>
+              </article>
+            </div>
+
+            <div v-if="active.nextCursor" class="flex justify-center pt-4">
+              <Button
+                :label="__('Load more')"
+                :loading="active.loading"
+                @click="loadMore"
+              />
+            </div>
+          </template>
+        </section>
+      </template>
+    </Tabs>
+  </div>
+
+  <RecommendationDecisionDialog
+    v-if="selectedRecommendation"
+    v-model="showDecision"
+    :item="selectedRecommendation"
+    :status="decisionStatus"
+    @changed="handleChanged"
+    @refresh-required="refresh"
+  />
+  <SalesActionOutcomeDialog
+    v-if="selectedAction"
+    v-model="showAction"
+    :action="selectedAction"
+    @changed="handleChanged"
+    @refresh-required="refresh"
+  />
 </template>
 
 <script setup>
+import EmptyState from '@/components/ListViews/EmptyState.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
-import { Badge, Button, call, LoadingIndicator, usePageMeta } from 'frappe-ui'
-import { ref } from 'vue'
+import RecommendationDecisionDialog from '@/components/StudentDecision/RecommendationDecisionDialog.vue'
+import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
+import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
+import {
+  recommendationItem,
+  safeStudentDecisionError,
+  salesActionItem,
+  studentDecisionApi,
+} from '@/utils/studentDecision'
+import { Badge, Button, LoadingIndicator, Tabs, call, usePageMeta } from 'frappe-ui'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
-const items = ref([])
-const nextCursor = ref(null)
-const loading = ref(false)
-const errorMessage = ref('')
-const deciding = ref('')
-const pendingAction = ref(null)
-const selectedOutcome = ref('')
-const savingOutcome = ref(false)
-const outcomes = ['NO_RESPONSE', 'INTEREST_INCREASED', 'NEEDS_MORE_INFORMATION', 'CALL_BACK_LATER', 'APPLICATION_STARTED', 'APPLICATION_COMPLETED', 'NOT_INTERESTED']
+const queue = ref('recommendations')
+const workTabs = [
+  { name: 'recommendations', label: __('Recommendation inbox') },
+  { name: 'actions', label: __('My actions') },
+]
+const tabIndex = computed({
+  get: () => (queue.value === 'actions' ? 1 : 0),
+  set: (value) => {
+    queue.value = workTabs[Number(value)]?.name || 'recommendations'
+  },
+})
+const recommendations = ref({ items: [], nextCursor: null, loading: false, error: '' })
+const actions = ref({ items: [], nextCursor: null, loading: false, error: '' })
+const selectedRecommendation = ref(null)
+const decisionStatus = ref('')
+const selectedAction = ref(null)
+const showDecision = computed({
+  get: () => Boolean(selectedRecommendation.value),
+  set: (value) => {
+    if (!value) selectedRecommendation.value = null
+  },
+})
+const showAction = computed({
+  get: () => Boolean(selectedAction.value),
+  set: (value) => {
+    if (!value) selectedAction.value = null
+  },
+})
+const active = computed(() =>
+  queue.value === 'recommendations' ? recommendations.value : actions.value,
+)
+const emptyTitle = computed(() =>
+  queue.value === 'recommendations'
+    ? __('No recommendations to decide')
+    : __('No actions assigned to you'),
+)
+const emptyDescription = computed(() =>
+  queue.value === 'recommendations'
+    ? __('New or returning recommendations will appear here.')
+    : __('Your active Sales Actions will appear here.'),
+)
 
-usePageMeta(() => ({ title: __('My recommendations') }))
+usePageMeta(() => ({ title: __('My Recommendations') }))
 
-async function fetchPage(cursor = null) {
-  loading.value = true
-  errorMessage.value = ''
+watch(
+  queue,
+  () => {
+    if (!active.value.items.length && !active.value.loading) refresh()
+  },
+  { immediate: true },
+)
+
+function priorityLabel(priority) {
+  return priority ? __('{0} priority', [priority]) : __('Priority unavailable')
+}
+
+function priorityTheme(priority) {
+  return { high: 'orange', medium: 'blue', low: 'gray' }[priority] || 'gray'
+}
+
+async function fetchPage(kind, cursor = null) {
+  const state = kind === 'recommendations' ? recommendations.value : actions.value
+  state.loading = true
+  state.error = ''
   try {
     const response = await call(
-      'crm.api.student_worklist.list_student_worklist',
-      {
-        ...(cursor ? { cursor } : {}),
-        page_size: 20,
-      },
+      kind === 'recommendations'
+        ? studentDecisionApi.listRecommendations
+        : studentDecisionApi.listActions,
+      { ...(cursor ? { cursor } : {}), page_size: 20 },
     )
-    items.value = cursor
-      ? [...items.value, ...(response.items || [])]
-      : response.items || []
-    nextCursor.value = response.next_cursor || null
-  } catch (error) {
-    errorMessage.value = error.messages?.[0] || __('Please try again.')
+    const mapper = kind === 'recommendations' ? recommendationItem : salesActionItem
+    const nextItems = (response.items || []).map(mapper)
+    state.items = cursor ? [...state.items, ...nextItems] : nextItems
+    state.nextCursor = response.next_cursor || null
+  } catch (err) {
+    state.error = safeStudentDecisionError(err, __('Please try again.'))
   } finally {
-    loading.value = false
+    state.loading = false
   }
 }
 
 function refresh() {
-  fetchPage()
+  fetchPage(queue.value)
 }
+
 function loadMore() {
-  if (nextCursor.value) fetchPage(nextCursor.value)
+  if (active.value.nextCursor) fetchPage(queue.value, active.value.nextCursor)
 }
+
 function openStudent(student) {
   router.push({ name: 'CRM Student', params: { crmStudentId: student } })
 }
-async function decide(item, status) {
-  let decisionReason = null
-  if (status === 'rejected' || status === 'deferred') {
-    decisionReason = window.prompt(__('Please provide a reason for this decision.'))
-    if (!decisionReason?.trim()) return
-  }
-  deciding.value = item.recommendation
-  errorMessage.value = ''
-  try {
-    const result = await call('crm.api.student_decision.transition_recommendation', {
-      name: item.recommendation,
-      expected_revision: item.revision,
-      status,
-      decision_reason: decisionReason,
-    })
-    if (result.sales_action) {
-      pendingAction.value = await call('crm.api.student_decision.get_sales_action', { name: result.sales_action })
-    }
-    // The record no longer belongs to this active worklist. Reload rather
-    // than mutating local state so a concurrent server-side change is shown.
-    await fetchPage()
-  } catch (error) {
-    errorMessage.value = error.messages?.[0] || __('This recommendation changed. Refresh and try again.')
-  } finally {
-    deciding.value = ''
-  }
-}
-async function recordOutcome() {
-  if (!pendingAction.value || !selectedOutcome.value) return
-  savingOutcome.value = true
-  try {
-    await call('crm.api.student_decision.record_sales_action_outcome', {
-      name: pendingAction.value.name,
-      expected_revision: pendingAction.value.source_revision,
-      business_outcome: selectedOutcome.value,
-    })
-    pendingAction.value = null
-    selectedOutcome.value = ''
-  } catch (error) {
-    errorMessage.value = error.messages?.[0] || __('This Sales Action changed. Refresh and try again.')
-  } finally {
-    savingOutcome.value = false
-  }
-}
-function priorityLabel(priority) {
-  return __(
-    priority
-      ? `${priority.charAt(0).toUpperCase()}${priority.slice(1)} priority`
-      : 'Priority unavailable',
-  )
-}
-function priorityTheme(priority) {
-  return priority === 'high' ? 'red' : priority === 'medium' ? 'orange' : 'gray'
+
+function openDecision(item, status) {
+  selectedRecommendation.value = item
+  decisionStatus.value = status
 }
 
-refresh()
+function handleChanged() {
+  refresh()
+}
 </script>

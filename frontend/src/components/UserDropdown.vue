@@ -58,6 +58,7 @@ import { getSettings } from '@/stores/settings'
 import { showSettings, isMobileView } from '@/composables/settings'
 import { showAboutModal } from '@/composables/modals'
 import { confirmLoginToFrappeCloud } from '@/composables/frappecloud'
+import { buildUserDropdownItems } from '@/utils/userDropdown'
 import { Dropdown } from 'frappe-ui'
 import { computed, h, markRaw } from 'vue'
 
@@ -72,34 +73,10 @@ const { getUser } = usersStore()
 const user = computed(() => getUser() || {})
 
 const dropdownItems = computed(() => {
-  if (!settings.value?.dropdown_items) return []
-
-  let items = settings.value.dropdown_items
-
-  let _dropdownItems = [
-    {
-      group: 'Dropdown Items',
-      hideLabel: true,
-      items: [],
-    },
-  ]
-
-  items.forEach((item) => {
-    if (item.hidden) return
-    if (item.type !== 'Separator') {
-      _dropdownItems[_dropdownItems.length - 1].items.push(
-        dropdownItemObj(item),
-      )
-    } else {
-      _dropdownItems.push({
-        group: '',
-        hideLabel: true,
-        items: [],
-      })
-    }
-  })
-
-  return _dropdownItems
+  // FCRM Settings is a control-plane document, so most CRM roles cannot read
+  // it. Signing out must remain available even when that optional menu config
+  // is unavailable.
+  return buildUserDropdownItems(settings.value?.dropdown_items, dropdownItemObj)
 })
 
 function dropdownItemObj(item) {

@@ -8,7 +8,7 @@ from crm.api.doc import get_assigned_users
 from crm.fcrm.doctype.notification.notification import notify_user
 from crm.integrations.api import get_contact_reference_from_number
 
-ALLOWED_WHATSAPP_ROLES = ["System Manager", "Lead Sales", "Sale"]
+ALLOWED_WHATSAPP_ROLES = ["System Manager", "Lead Sales", "Sale", "Sales Manager", "Sales User"]
 
 
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):

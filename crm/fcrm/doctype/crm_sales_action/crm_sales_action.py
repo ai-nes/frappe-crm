@@ -1,5 +1,4 @@
 import hashlib
-from typing import ClassVar
 
 import frappe
 from frappe import _
@@ -7,30 +6,28 @@ from frappe.model.document import Document
 
 from crm.fcrm.permissions import (
 	get_permission_query_conditions as get_student_permission_query_conditions,
+	has_permission as has_student_permission,
 )
 
 
 class CRMSalesAction(Document):
-	_V2_PROTECTED_FIELDS: ClassVar[frozenset[str]] = frozenset({
-		"student_task",
-		"action_type",
-		"action_revision",
-		"package_revision",
-		"requires_review",
-		"execution_package",
-		"execution_status",
-		"business_outcome",
-	})
+	"""Durable execution aggregate; lifecycle writes belong to Phase 6 commands."""
 
-	def validate(self):
-		before = self.get_doc_before_save()
-		if before and self.student_task and not getattr(frappe.flags, "student_task_command", False):
-			for field in self._V2_PROTECTED_FIELDS:
-				if before.get(field) != self.get(field):
-					frappe.throw(
-						frappe._("v2 Sales Action fields can only be changed through controlled commands."),
-						frappe.PermissionError,
-					)
+	_IMMUTABLE_FIELDS = (
+		"recommendation", "student", "action_type", "created_at", "due_at",
+		"assignee_snapshot", "correlation_id", "idempotency_key",
+	)
+	_ALLOWED_TRANSITIONS = {
+		"planned": {"in_progress", "cancelled"},
+		"in_progress": {"completed", "failed", "cancelled"},
+	}
+	_OUTCOME_CODES = {
+		"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER",
+		"APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED",
+	}
+
+	def _from_command(self):
+		return bool(getattr(self.flags, "from_phase6_command", False) or getattr(self.flags, "phase6_break_glass", False))
 
 	def autoname(self):
 		"""Deterministic name = hash(recommendation) — one CRM Sales Action per
@@ -45,46 +42,82 @@ class CRMSalesAction(Document):
 		prefix = "SA-E2E-FPT-2026-" if self.recommendation.startswith("REC-E2E-FPT-2026-") else "SA-"
 		self.name = f"{prefix}{digest}"
 
+	def validate(self):
+		before = self.get_doc_before_save()
+		if self.is_new():
+			if not self._from_command():
+				frappe.throw(_("CRM Sales Actions may only be created by a Phase 6 server command."))
+			if not self.due_at or not self.assignee_staff:
+				frappe.throw(_("CRM Sales Action requires due_at and assignee_staff."))
+			recommendation_student = frappe.db.get_value("CRM Recommendation", self.recommendation, "student")
+			if recommendation_student != self.student:
+				frappe.throw(_("CRM Sales Action must use the Recommendation's Student."))
+			return
+		if not before:
+			return
 
-def on_execution_or_outcome_change(doc, method=None):
-	"""Sales just recorded `business_outcome` in the Frappe UI (a plain write
-	on this row) — tell crm-agents in the background so it can fire the
-	closed-loop re-evaluation for this student. Detects the actual
-	transition via `get_doc_before_save()`, same convention as
-	crm_recommendation.on_status_decided; bypassable like any Frappe hook,
-	crm-agents' reconciliation sweep is the backstop, not this call alone.
-	"""
-	before = doc.get_doc_before_save()
-	previous_outcome = before.business_outcome if before else None
-	if not doc.business_outcome or doc.business_outcome == previous_outcome:
-		return
-	from crm.api.agent_events import record_agent_event
+		changed = {field for field in self._IMMUTABLE_FIELDS if self.get(field) != before.get(field)}
+		if changed:
+			frappe.throw(_("CRM Sales Action fields are immutable: {0}").format(", ".join(changed)))
+		lifecycle_fields = (
+			"assignee_staff", "assignment_revision",
+			"assignment_history",
+			"execution_status", "started_at", "completed_at", "outcome_code", "business_outcome",
+			"outcome_notes", "outcome_evidence", "outcome_at", "outcome_actor", "linked_interaction",
+			"terminal_reason", "action_revision", "supersedes_decision_event",
+		)
+		if any(self.get(field) != before.get(field) for field in lifecycle_fields) and not self._from_command():
+			frappe.throw(_("CRM Sales Action lifecycle changes must use a Phase 6 server command."))
+		if before.execution_status != self.execution_status:
+			allowed = self._ALLOWED_TRANSITIONS.get(before.execution_status, set())
+			if self.execution_status not in allowed:
+				frappe.throw(_("Illegal CRM Sales Action transition: {0} -> {1}").format(
+					before.execution_status, self.execution_status
+				))
+		if self.assignee_staff != before.assignee_staff and self.execution_status in {"completed", "failed", "cancelled"}:
+			frappe.throw(_("Terminal CRM Sales Actions cannot be reassigned."))
+		if self.execution_status == "completed":
+			self._validate_completed()
+		elif self.execution_status in {"failed", "cancelled"} and not self.terminal_reason:
+			frappe.throw(_("A terminal reason is required when failing or cancelling a CRM Sales Action."))
 
-	record_agent_event("sales_action.outcome_recorded.v1", doc)
-	if doc.student_task:
-		from crm.services.student_context import mark_student_context_changed
-
-		mark_student_context_changed(doc.student, "sales_action_outcome")
+	def _validate_completed(self):
+		outcome_code = self.outcome_code or self.business_outcome
+		if outcome_code not in self._OUTCOME_CODES:
+			frappe.throw(_("Completed CRM Sales Actions require an allowlisted outcome code."))
+		if not self.completed_at or not self.outcome_at or not self.outcome_actor:
+			frappe.throw(_("Completed CRM Sales Actions require completed_at, outcome_at and outcome_actor."))
+		if not self.linked_interaction:
+			return
+		interaction_student = frappe.db.get_value("CRM Interaction", self.linked_interaction, "student")
+		if interaction_student != self.student:
+			frappe.throw(_("Linked CRM Interaction must belong to the same Student as the CRM Sales Action."))
+		if not frappe.db.exists(
+			"CRM Student Outcome",
+			{"student": self.student, "interaction": self.linked_interaction},
+		):
+			frappe.throw(_("Linked CRM Interaction requires a Phase 5 Student Outcome."))
 
 
 def get_permission_query_conditions(user=None):
-	"""LIST-view guard derived from the canonical CRM Student scope."""
+	"""Project the canonical CRM Student own/team/director scope onto actions."""
 	if not user:
 		user = frappe.session.user
-
 	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
 	if student_condition is None:
 		return None
+	if student_condition == "1=0":
+		return "1=0"
 	return (
 		"`tabCRM Sales Action`.student in ("
 		"select `tabCRM Student`.name from `tabCRM Student` "
-		f"where {student_condition}"
+		f"where ({student_condition})"
 		")"
 	)
 
 
 def has_permission(doc, user=None, permission_type=None):
-	"""Direct-GET-by-name guard using the same Student scope as list views."""
+	"""Direct-GET-by-name guard using the same current Student scope."""
 	if not user:
 		user = frappe.session.user
 
@@ -92,12 +125,8 @@ def has_permission(doc, user=None, permission_type=None):
 	if not student:
 		return False
 
-	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
-	if student_condition is None:
-		return True
-	return bool(
-		frappe.db.sql(
-			"select name from `tabCRM Student` where name = %s and (" + student_condition + ") limit 1",
-			(student,),
-		)
-	)
+	try:
+		student_doc = frappe.get_doc("CRM Student", student)
+		return has_student_permission(student_doc, user=user, permission_type=permission_type)
+	except Exception:
+		return False

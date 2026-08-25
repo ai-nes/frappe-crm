@@ -107,9 +107,14 @@ import {
   FormControl,
 } from 'frappe-ui'
 import { ref, computed } from 'vue'
+import {
+  canonicalRoleOptions,
+  canManageRoles,
+  roleOptionFor,
+} from '@/utils/rolePolicy'
 
 const { updateOnboardingStep } = useOnboarding('frappecrm')
-const { users, isAdmin } = usersStore()
+const { users, getCurrentUser } = usersStore()
 const { capture } = useTelemetry()
 
 const invitees = ref([])
@@ -148,29 +153,17 @@ const inviteeExistMessage = computed(() => {
   ])
 })
 
-const description = computed(() => {
-  return {
-    'System Manager':
-      'Manage the entire CRM, including users, customization, and settings.',
-    Sale: 'Admissions user: works with permitted leads, records, and private reports.',
-    Marketing: 'Marketing user: accesses permitted campaign and aggregate CRM information.',
-    'Lead Sales': 'Sales lead: accesses Frappe-granted admissions operations.',
-    'Admissions Director': 'Admissions director: accesses Frappe-granted aggregate information.',
-  }[role.value]
-})
+const description = computed(() => roleOptionFor(role.value)?.description)
 
 const roleOptions = computed(() => {
-  return [
-    { value: 'Sale', label: __('Sales') },
-    ...(isAdmin() ? [{ value: 'Marketing', label: __('Marketing') }] : []),
-    ...(isAdmin() ? [{ value: 'Lead Sales', label: __('Lead Sales') }] : []),
-    ...(isAdmin() ? [{ value: 'Admissions Director', label: __('Admissions Director') }] : []),
-    ...(isAdmin() ? [{ value: 'System Manager', label: __('Admin') }] : []),
-  ]
+  return canonicalRoleOptions.filter(
+    (option) =>
+      option.value !== 'System Manager' || canManageRoles(getCurrentUser()),
+  )
 })
 
 const roleMap = {
-  Sale: __('Sales'),
+  Sale: __('Sale'),
   Marketing: __('Marketing'),
   'Lead Sales': __('Lead Sales'),
   'Admissions Director': __('Admissions Director'),

@@ -2,19 +2,48 @@ import re
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import now_datetime
 
-from crm.fcrm.doctype.crm_student.enrollment_transition import set_enrollment_status
-from crm.fcrm.permissions import (
-	derive_owner_fields,
-	derive_unassigned_owning_team,
-)
-from crm.fcrm.permissions import (
-	get_permission_query_conditions as shared_permission_query_conditions,
-)
-from crm.fcrm.permissions import (
-	has_permission as shared_has_permission,
-)
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
+
+# CRM Enrollment Status values that constitute the "application/enrollment" milestone
+# at which a CRM Student record should be created for a Contact — locked business
+# rule, see plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md.
+MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
+
+CONVERSION_SERVICE_FLAG = "student_conversion_service"
+MIGRATION_SERVICE_FLAG = "contact_migration_service"
+IDENTITY_MAINTENANCE_FIELDS = frozenset({"full_name", "phone", "email", "notes"})
+PROTECTED_CASE_FIELDS = frozenset(
+	{
+		"student",
+		"enrollment_status",
+		"lifecycle_stage",
+		"lead_status",
+		"assigned_to",
+		"owner_staff",
+		"owning_team",
+		"admission_year",
+		"branch",
+		"first_contact_time",
+		"sla_status",
+		"sla_started_at",
+		"next_follow_up",
+		"source",
+		"platform",
+		"crm_campaign",
+		"crm_event",
+		"status_change_reason",
+		"status_change_log",
+		"assignment_log",
+		"parent_name",
+		"parent_phone",
+		"high_school",
+		"province",
+		"major",
+		"aspiration",
+	}
+)
 
 
 class CRMContact(Document):
@@ -87,9 +116,12 @@ class CRMContact(Document):
 		}
 
 	def before_insert(self):
-		self._set_defaults()
+		if not self._is_service_write():
+			frappe.throw(
+				"Direct CRM Contact creation is retired; use an authorized Student conversion command.",
+				frappe.PermissionError,
+			)
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
 
 	def _set_defaults(self):
@@ -103,36 +135,93 @@ class CRMContact(Document):
 				self.branch = default_branch
 
 	def before_save(self):
+		self._validate_guarded_update()
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
 
-	def after_insert(self):
-		self._auto_create_student()
-
 	def on_update(self):
-		self._sync_student_fields()
-		if self.student:
-			from crm.services.student_context import mark_student_context_changed
-
-			mark_student_context_changed(self.student, "contact_material_change")
+		# Contact is a post-conversion identity record.  No lifecycle, routing,
+		# SLA or Student writer is allowed to run from a Contact hook.
+		return
 
 	def validate(self):
 		self._normalize_shared_fields()
-		self._derive_scope_fields()
 		self._validate_phone_format()
 		self._resolve_geo()
 		self._validate_high_school_format()
-		self._validate_unique_phone()
-		self._validate_unique_email()
 		self.flags.ignore_links = False
 		self._validate_links()
 
-	def _derive_scope_fields(self):
+	def _is_service_write(self):
+		return bool(
+			getattr(frappe.flags, CONVERSION_SERVICE_FLAG, False)
+			or getattr(frappe.flags, MIGRATION_SERVICE_FLAG, False)
+		)
+
+	def _validate_guarded_update(self):
+		before = self.get_doc_before_save()
+		if not before:
+			return
+		changed = {
+			fieldname
+			for fieldname in self.meta.get_valid_columns()
+			if before.get(fieldname) != self.get(fieldname)
+		}
+		if "student" in changed:
+			frappe.throw("CRM Contact.student is a read-only legacy compatibility link.", frappe.PermissionError)
+		if "student_identity" in changed:
+			# A conversion may stamp a blank legacy Contact once, but identity
+			# ownership can never be reassigned after it is set.
+			if before.get("student_identity") or not self._is_service_write():
+				frappe.throw("CRM Contact.student_identity is immutable.", frappe.PermissionError)
+		protected = changed & PROTECTED_CASE_FIELDS
+		if protected:
+			frappe.throw(
+				"Contact case, lifecycle, ownership, routing and SLA fields are read-only after conversion.",
+				frappe.PermissionError,
+			)
+		if not self._is_service_write():
+			non_identity = changed - IDENTITY_MAINTENANCE_FIELDS - {"student_identity"}
+			if non_identity:
+				frappe.throw(
+					"CRM Contact changes must use the identity-maintenance command.",
+					frappe.PermissionError,
+				)
+
+	def _derive_owner_fields(self):
 		if self.assigned_to:
 			self.owner_staff, self.owning_team = derive_owner_fields(self.assigned_to)
-		elif not self.owning_team:
+			return
+		self.owner_staff = None
+		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
+
+	def _derive_lifecycle_stage(self):
+		before = self.get_doc_before_save()
+		before_enrollment_status = before.enrollment_status if before else None
+		self.lifecycle_stage = get_lifecycle_stage(self.enrollment_status)
+		enforce_lifecycle_change_policy(self, before_enrollment_status)
+
+	def _log_assignment_change(self):
+		before = self.get_doc_before_save()
+		before_assigned_to = before.assigned_to if before else None
+		if before_assigned_to == self.assigned_to:
+			return
+		self.append(
+			"assignment_log",
+			{
+				"from_staff": before_assigned_to,
+				"to_staff": self.assigned_to,
+				"changed_by": frappe.session.user,
+				"changed_at": now_datetime(),
+				"auto_routed": 1 if self.flags.auto_routed else 0,
+				"reason": self.status_change_reason,
+			},
+		)
+
+	def _track_sla_start(self):
+		if self.assigned_to and not self.sla_started_at:
+			self.sla_started_at = now_datetime()
 
 	def _resolve_geo(self):
 		# high_school is intentionally NOT resolved here — _validate_high_school_format()
@@ -226,27 +315,24 @@ class CRMContact(Document):
 		if not self.student:
 			return
 
-		student_values = (
-			frappe.db.get_value(
-				"CRM Student",
-				self.student,
-				[
-					"student_name",
-					"phone",
-					"email",
-					"high_school",
-					"province",
-					"major",
-					"aspiration",
-					"source",
-					"admission_year",
-					"branch",
-					"enrollment_status",
-				],
-				as_dict=True,
-			)
-			or {}
-		)
+		student_values = frappe.db.get_value(
+			"CRM Student",
+			self.student,
+			[
+				"student_name",
+				"phone",
+				"email",
+				"high_school",
+				"province",
+				"major",
+				"aspiration",
+				"source",
+				"admission_year",
+				"branch",
+				"enrollment_status",
+			],
+			as_dict=True,
+		) or {}
 		field_map = {
 			"full_name": student_values.get("student_name"),
 			"phone": student_values.get("phone"),
@@ -264,93 +350,25 @@ class CRMContact(Document):
 			if not self.get(fieldname) and value:
 				self.set(fieldname, value)
 
-	def _auto_create_student(self):
-		if self.student:
-			return
-		if not self.phone:
-			return
-		if frappe.db.exists("CRM Student", {"phone": self.phone}):
-			return
-		student = frappe.new_doc("CRM Student")
-		student.student_name = self.full_name
-		student.phone = self.phone
-		student.email = self.email
-		student.enrollment_status = self.enrollment_status
-		student.high_school = self.high_school
-		student.province = self.province
-		student.major = self.major
-		student.aspiration = self.aspiration
-		student.branch = self.branch
-		student.admission_year = self.admission_year
-		student.source = self.source
-		student.assigned_to = self.assigned_to
-		student.alt_name = self.parent_name
-		student.alt_phone = self.parent_phone
-		student.insert(ignore_permissions=True)
-		frappe.db.set_value("CRM Contact", self.name, "student", student.name, update_modified=False)
+	def _create_student_at_milestone(self):
+		"""Contain the retired Contact milestone writer.
 
-	def _sync_student_fields(self):
-		if not self.student:
-			return
-
-		student_values = (
-			frappe.db.get_value(
-				"CRM Student",
-				self.student,
-				[
-					"student_name",
-					"phone",
-					"email",
-					"high_school",
-					"province",
-					"major",
-					"aspiration",
-					"source",
-					"admission_year",
-					"branch",
-					"enrollment_status",
-					"assigned_to",
-				],
-				as_dict=True,
-			)
-			or {}
-		)
-		target_values = {
-			"student_name": self.full_name or "",
-			"phone": self.phone or "",
-			"email": self.email or "",
-			"high_school": self.high_school,
-			"province": self.province,
-			"major": self.major,
-			"aspiration": self.aspiration,
-			"source": self.source,
-			"admission_year": self.admission_year,
-			"branch": self.branch,
-			"enrollment_status": self.enrollment_status,
-			"assigned_to": self.assigned_to,
-		}
-		updates = {
-			fieldname: value
-			for fieldname, value in target_values.items()
-			if student_values.get(fieldname) != value
-		}
-		if not updates:
-			return
-
-		# enrollment_status must go through set_enrollment_status() (which
-		# calls record_transition()), not the plain db.set_value batch
-		# below — that batch skips Document hooks, so it would silently
-		# bypass CRM Student's enrollment transition log.
-		new_enrollment_status = updates.pop("enrollment_status", None)
-		if updates:
-			frappe.db.set_value("CRM Student", self.student, updates, update_modified=False)
-		if new_enrollment_status is not None:
-			set_enrollment_status(self.student, new_enrollment_status, source="contact_sync")
+		CRM Contact is a post-conversion relationship and is no longer an intake
+		target. A Contact milestone must be handled by an explicit, authorized
+		Student command after the conversion contract is available; silently
+		creating a Student here would bypass identity, cycle, receipt and scope
+		checks.
+		"""
+		return
 
 
 def get_permission_query_conditions(user=None):
-	return shared_permission_query_conditions("CRM Contact", user=user)
+	from crm.fcrm.permissions import get_permission_query_conditions as _scoped
+
+	return _scoped("CRM Contact", user=user)
 
 
 def has_permission(doc, user=None, permission_type=None):
-	return shared_has_permission(doc, user=user, permission_type=permission_type)
+	from crm.fcrm.permissions import has_permission as _scoped
+
+	return _scoped(doc, user=user, permission_type=permission_type)

@@ -26,11 +26,10 @@ class TestAdmissionsDashboard(FrappeTestCase):
 				}
 			).insert(ignore_permissions=True)
 
-		if not frappe.db.exists("CRM Contact", "CRMC-TEST-DASH-01"):
+		if not frappe.db.exists("CRM Contact", {"phone": "0981112223"}):
 			frappe.get_doc(
 				{
 					"doctype": "CRM Contact",
-					"name": "CRMC-TEST-DASH-01",
 					"full_name": "_Test Dash Student",
 					"phone": "0981112223",
 					"source": "_Test Dash Source",
@@ -45,8 +44,9 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			).insert(ignore_permissions=True)
 
 	def tearDown(self):
-		if frappe.db.exists("CRM Contact", "CRMC-TEST-DASH-01"):
-			frappe.delete_doc("CRM Contact", "CRMC-TEST-DASH-01", force=True)
+		contact_name = frappe.db.get_value("CRM Contact", {"phone": "0981112223"}, "name")
+		if contact_name:
+			frappe.delete_doc("CRM Contact", contact_name, force=True)
 		if frappe.db.exists("CRM Lead Source", "_Test Dash Source"):
 			frappe.delete_doc("CRM Lead Source", "_Test Dash Source", force=True)
 

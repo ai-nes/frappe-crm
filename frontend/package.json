@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build --base=/assets/crm/frontend/ && yarn copy-html-entry",
+    "build": "vite build --base=/assets/crm/frontend/ && npm run copy-html-entry",
     "copy-html-entry": "node ./scripts/copy-html-entry.js",
     "serve": "vite preview",
     "test": "vitest",

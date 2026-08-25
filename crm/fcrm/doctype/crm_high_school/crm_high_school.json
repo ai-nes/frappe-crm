@@ -120,39 +120,30 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Operations"
+  },
+  {
+   "read": 1,
+   "role": "CTV-Sale"
+  },
+  {
+   "read": 1,
+   "role": "Counseller"
   },
   {
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
+   "role": "Giám đốc Tuyển sinh"
+  },
+  {
+   "read": 1,
    "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sale"
   },
   {
    "read": 1,
@@ -160,7 +151,41 @@
   },
   {
    "read": 1,
-   "role": "Admissions Director"
+   "role": "Marketing Lead"
+  },
+  {
+   "read": 1,
+   "role": "Marketing Operator"
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Sales Manager"
+  },
+  {
+   "read": 1,
+   "role": "Sales User"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Team Leader"
   }
  ],
  "quick_entry": 1,

@@ -91,7 +91,7 @@
         />
       </div>
       <SidebarLink
-        v-if="isManager() && isDemoDataCreated"
+        v-if="canConfigureSystem(getUser(user)) && isDemoDataCreated"
         class="text-ink-red-3 hover:bg-surface-red-2 focus:bg-surface-red-2"
         :label="__('Clear Demo Data')"
         :isCollapsed="isSidebarCollapsed"
@@ -162,6 +162,7 @@ import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
 import SchoolIcon from '~icons/lucide/school'
 import MegaphoneIcon from '~icons/lucide/megaphone'
+import FilterIcon from '~icons/lucide/filter'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
 import CRMLogo from '@/components/Icons/CRMLogo.vue'
@@ -205,6 +206,13 @@ import {
 import router from '@/router'
 import { useStorage } from '@vueuse/core'
 import { useDemoData } from '@/composables/demoData'
+import {
+  canConfigureSystem,
+  canAccessNavigationRoute,
+  canManageRoles,
+  navigationEntries,
+  visibleNavigation,
+} from '@/utils/rolePolicy'
 import { ref, reactive, computed, markRaw, onMounted } from 'vue'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
@@ -219,42 +227,28 @@ const isDemoSite = ref(window.is_demo_site)
 const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
 // Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
-const links = [
-  {
-    label: __('Sales Dashboard'),
-    icon: LucideLayoutDashboard,
-    to: 'Dashboard',
-  },
-  {
-    label: __('Marketing Dashboard'),
-    icon: LucideBarChart3,
-    to: 'Marketing Dashboard',
-  },
-  {
-    label: __('My Recommendations'),
-    icon: ListChecksIcon,
-    to: 'My Recommendations',
-  },
-  {
-    label: __('Prospective Students'),
-    icon: SchoolIcon,
-    to: { name: 'CRM Students', query: { stage: 'intake' } },
-  },
-  { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
-  {
-    label: __('Enrolled Students'),
-    icon: GraduationCapIcon,
-    to: { name: 'CRM Contacts', query: { stage: 'enrolled' } },
-  },
-  { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
-  { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
-  { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
-  { label: __('Events'), icon: CalendarIcon, to: 'CRM Events' },
-  { label: __('Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
-  { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
-  { label: __('Tasks'), icon: TaskIcon, to: 'Tasks' },
-  { label: __('Call Logs'), icon: PhoneIcon, to: 'Call Logs' },
-]
+const navigationIcons = {
+  salesDashboard: LucideLayoutDashboard,
+  marketingDashboard: LucideBarChart3,
+  recommendations: ListChecksIcon,
+  students: SchoolIcon,
+  contacts: UsersIcon,
+  enrolledStudents: GraduationCapIcon,
+  schools: SchoolIcon,
+  persons: UserIcon,
+  campaigns: MegaphoneIcon,
+  segments: FilterIcon,
+  events: CalendarIcon,
+  staff: BriefcaseIcon,
+  notes: NoteIcon,
+  tasks: TaskIcon,
+  callLogs: PhoneIcon,
+}
+
+const links = navigationEntries.map((link) => ({
+  ...link,
+  icon: navigationIcons[link.icon],
+}))
 
 const allViews = computed(() => {
   let _views = [
@@ -262,7 +256,7 @@ const allViews = computed(() => {
       name: 'All Views',
       hideLabel: true,
       opened: true,
-      views: links.filter((link) => {
+      views: visibleNavigation(links, getUser(user.value)).filter((link) => {
         if (link.condition) {
           return link.condition()
         }
@@ -289,17 +283,21 @@ const allViews = computed(() => {
 })
 
 function parseView(views) {
-  return views.map((view) => {
-    return {
-      label: view.label,
-      icon: getIcon(view.route_name, view.icon),
-      to: {
-        name: view.route_name,
-        params: { viewType: view.type || 'list' },
-        query: { view: view.name },
-      },
-    }
-  })
+  return views
+    .filter((view) =>
+      canAccessNavigationRoute(getUser(user.value), view.route_name),
+    )
+    .map((view) => {
+      return {
+        label: view.label,
+        icon: getIcon(view.route_name, view.icon),
+        to: {
+          name: view.route_name,
+          params: { viewType: view.type || 'list' },
+          query: { view: view.name },
+        },
+      }
+    })
 }
 
 function getIcon(routeName, icon) {
@@ -322,6 +320,8 @@ function getIcon(routeName, icon) {
       return SchoolIcon
     case 'CRM Campaigns':
       return MegaphoneIcon
+    case 'CRM Segments':
+      return FilterIcon
     case 'CRM Events':
       return CalendarIcon
     case 'CRM Staff':
@@ -333,7 +333,7 @@ function getIcon(routeName, icon) {
 
 // onboarding
 const { user } = sessionStore()
-const { users, isManager } = usersStore()
+const { users, getUser } = usersStore()
 const { isOnboardingStepsCompleted, setUp } = useOnboarding('frappecrm')
 
 async function getFirstCRMStudent() {
@@ -385,7 +385,7 @@ const steps = reactive([
       activeSettingsPage.value = 'Invite User'
       capture('onboarding_step_clicked_invite_your_team')
     },
-    condition: () => isManager(),
+    condition: () => canManageRoles(getUser(user.value)),
   },
   {
     name: 'convert_student_to_contact',

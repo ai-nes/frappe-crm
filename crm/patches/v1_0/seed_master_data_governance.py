@@ -8,14 +8,12 @@ GOVERNED_DOCTYPES = {
 	"CRM Lead Source": "Marketing",
 	"CRM Platform": "Marketing",
 	"CRM Intent Type": "Marketing",
-	"CRM Lost Reason": "Marketing",
+	"CRM Lost Reason": "Lead Sales",
 	"CRM Campus": "Admissions Director",
 }
 
 
 def execute():
-	create_roles(["Marketing"])
-
 	for doctype in list(GOVERNED_DOCTYPES) + ["CRM Master Data Change Log"]:
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 

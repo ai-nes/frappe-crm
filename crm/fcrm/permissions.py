@@ -1,11 +1,10 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
-Implements the canonical CRM matrix:
-- Sale                  -> own-assigned records only
-- Lead Sales            -> own team(s) + own team's unassigned pool
-- Admissions Director   -> full oversight scope
-- Marketing             -> no Contact/Student scope
-- System Manager / Administrator -> control-plane full scope
+Implements the locked matrix in plans/260822-admissions-crm-alignment/business-rules-data-scope.md:
+- Sale / CTV-Sale        -> own-assigned records only
+- Team Leader            -> own team(s) + own team's unassigned pool
+- Counseller / Promoter-PR -> team/campus scope (not system-wide)
+- System Manager / CRM Manager / Administrator / Admissions Director / Admissions Operations -> full
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -16,19 +15,77 @@ campus-wide-for-everyone condition (pre-Phase-1 behavior) without a code deploy.
 
 import frappe
 
-FULL_VISIBILITY_ROLES = {
-	"System Manager",
-	"Administrator",
-	"Admissions Director",
+from crm.fcrm.role_policy import (
+	case_scope_for_roles,
+)
+from crm.fcrm.student_feature_flags import enabled
+
+# Compatibility export for lifecycle.py only. Row-level Student/Contact access
+# no longer reads this set; it resolves the canonical policy below.
+FULL_VISIBILITY_ROLES = frozenset(
+	{"System Manager", "CRM Manager", "Administrator", "Admissions Director", "Admissions Operations"}
+)
+
+CACHE_TTL_SEC = 300
+
+# Operational records are never independently scoped.  They inherit the
+# current Student scope and are exposed only through masked service projections.
+OPERATIONAL_RECORD_STUDENT_FIELDS = {
+	"CRM Student Routing Request": "student",
+	"CRM Student SLA Attempt": "student",
+	"CRM Student SLA Event": "student",
+	"CRM Student SLA Delivery": "student",
+	"CRM Student SLA Delivery Attempt": "delivery",
 }
+
+
+def get_operational_record_permission_query_conditions(doctype, user=None):
+	"""Scope operational records through their linked Student aggregate."""
+	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doctype)
+	if not student_field:
+		return "1=0"
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	if student_condition == "1=0":
+		return "1=0"
+	if doctype == "CRM Student SLA Delivery Attempt":
+		return (
+			f"`tab{doctype}`.`delivery` in (select `tabCRM Student SLA Delivery`.`name` "
+			"from `tabCRM Student SLA Delivery` where `tabCRM Student SLA Delivery`.`student` in "
+			f"(select `tabCRM Student`.`name` from `tabCRM Student` where ({student_condition})))"
+		)
+	return (
+		f"`tab{doctype}`.`{student_field}` in "
+		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
+		f"where ({student_condition}))"
+	)
+
+
+def has_operational_record_permission(doc, user=None, permission_type=None):
+	"""Apply Student current-scope checks to direct operational-record reads."""
+	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
+	student_name = doc.get(student_field) if student_field else None
+	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
+		student_name = frappe.db.get_value("CRM Student SLA Delivery", student_name, "student")
+	if not student_name:
+		return False
+	student = frappe.get_doc("CRM Student", student_name)
+	return has_permission(student, user=user, permission_type=permission_type)
+
 
 def get_permission_query_conditions(doctype, user=None):
 	if not user:
 		user = frappe.session.user
 
 	roles = set(frappe.get_roles(user))
-	if FULL_VISIBILITY_ROLES & roles:
+	scope = _effective_case_scope(roles, doctype, user=user)
+	if doctype == "CRM Contact" and enabled("conversion_read"):
+		return _contact_conversion_condition(user, roles, scope)
+	if scope == "all":
 		return None
+	if scope == "deny":
+		return "1=0"
 
 	crm_staff_name = _get_crm_staff_name(user)
 	if not crm_staff_name:
@@ -36,22 +93,23 @@ def get_permission_query_conditions(doctype, user=None):
 
 	table = f"`tab{doctype}`"
 
-	# Marketing deliberately has no Contact/Student scope; Admissions Director
-	# is handled above as an oversight role.
-	# This deny must precede the legacy compatibility branch.  The flag is a
-	# temporary data migration escape hatch, never an authorization grant for a
-	# role that is explicitly excluded by the canonical matrix.
-	if "Marketing" in roles:
-		return "1=0"
 	if frappe.conf.get("crm_legacy_campus_scoping"):
-		if "Sale" in roles:
+		# Legacy fallback only ever applied to Counseller/Promoter-PR's campus-wide
+		# scope; Sale/CTV-Sale keep their own-assigned-only rule even when this flag
+		# is set, so flipping it can't silently widen their visibility.
+		if scope in {"assigned", "own_assigned"}:
 			return f"{table}.assigned_to = {frappe.db.escape(crm_staff_name)}"
-		return _campus_condition(table, crm_staff_name)
-
-	if "Lead Sales" in roles:
+		if scope in {"campus_assigned", "campus_assigned_contact"}:
+			return _campus_condition(table, crm_staff_name)
 		return _team_leader_condition(table, crm_staff_name)
 
-	if "Sale" in roles:
+	if scope in {"team_and_team_pool", "team_members_and_own_team_pool"}:
+		return _team_leader_condition(table, crm_staff_name)
+
+	if scope in {"campus_assigned", "campus_assigned_contact"}:
+		return _campus_condition(table, crm_staff_name)
+
+	if scope in {"assigned", "own_assigned"}:
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
@@ -68,14 +126,6 @@ def has_permission(doc, user=None, permission_type=None):
 	if not user:
 		user = frappe.session.user
 
-	roles = set(frappe.get_roles(user))
-	if FULL_VISIBILITY_ROLES & roles:
-		return True
-
-	crm_staff_name = _get_crm_staff_name(user)
-	if not crm_staff_name:
-		return False
-
 	condition = get_permission_query_conditions(doc.doctype, user=user)
 	if condition is None:
 		return True
@@ -91,17 +141,58 @@ def has_permission(doc, user=None, permission_type=None):
 	)
 
 
+def _effective_case_scope(roles, doctype, *, user):
+	"""Delegate policy selection; this module only turns a scope into SQL."""
+	return case_scope_for_roles(roles, doctype, administrator=user == "Administrator")
+
+
+def _contact_conversion_condition(user, roles, scope):
+	"""Expose Contacts only through currently visible converted Student cases.
+
+	Contact owner/team fields are mutable compatibility projections and therefore
+	never form a permission boundary.  System Manager/Administrator retain the
+	explicit platform exception; every other profile must have a visible Student
+	case in the immutable conversion junction.
+	"""
+	if user == "Administrator" or "System Manager" in roles:
+		return None
+	if scope == "deny":
+		return "1=0"
+	if not frappe.db.exists("DocType", "CRM Student Contact Conversion"):
+		return "1=0"
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	contact_table = "`tabCRM Contact`"
+	conversion_table = "`tabCRM Student Contact Conversion`"
+	if student_condition is None:
+		return (
+			f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion)"
+		)
+	if student_condition == "1=0":
+		return "1=0"
+	return (
+		f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion "
+		"inner join `tabCRM Student` student on student.name = conversion.student "
+		f"where ({student_condition}))"
+	)
+
+
 def _cached(cache_key, loader):
-	# Membership is authorization data. Do not retain a removed team member's
-	# Student scope in a shared cache after reassignment.
-	return loader()
+	cached = frappe.cache().get_value(cache_key)
+	if cached is not None:
+		return cached
+	value = loader()
+	frappe.cache().set_value(cache_key, value, expires_in_sec=CACHE_TTL_SEC)
+	return value
 
 
 def _get_crm_staff_name(user):
-	return _cached(
-		f"crm_staff_name::{user}",
-		lambda: frappe.db.get_value("CRM Staff", {"user": user}, "name") or "",
-	) or None
+	return (
+		_cached(
+			f"crm_staff_name::{user}",
+			lambda: frappe.db.get_value("CRM Staff", {"user": user}, "name") or "",
+		)
+		or None
+	)
 
 
 def _get_teams(crm_staff_name):
@@ -113,6 +204,22 @@ def _get_teams(crm_staff_name):
 			pluck="team",
 		),
 	)
+
+
+def _get_teams_in_staff_campus(crm_staff_name):
+	"""Restrict membership-derived Team scope to the Staff record's Campus."""
+	return _cached(
+		f"crm_staff_campus_teams::{crm_staff_name}",
+		lambda: _load_teams_in_staff_campus(crm_staff_name),
+	)
+
+
+def _load_teams_in_staff_campus(crm_staff_name):
+	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
+	teams = _get_teams(crm_staff_name)
+	if not campus or not teams:
+		return []
+	return frappe.get_all("CRM Team", filters={"name": ["in", teams], "campus": campus}, pluck="name")
 
 
 def _primary_team(staff_name):
@@ -142,7 +249,7 @@ def derive_owner_fields(assigned_to):
 def derive_unassigned_owning_team(creator_user):
 	"""owning_team for a record that has NO assigned_to yet. Without this, an
 	unassigned record could never carry a team attribution at all (owner_staff and
-	owning_team would both stay null forever), making the Lead Sales "own team's
+	owning_team would both stay null forever), making the Team Leader "own team's
 	unassigned pool" rule in the locked BR matrix (constraint 3) permanently
 	unreachable. Attributes the record to the *creating* staff member's own primary
 	team instead — the natural team-of-record for a freshly-created, not-yet-assigned
@@ -163,7 +270,7 @@ def _in_clause(field, values):
 
 
 def _team_leader_condition(table, crm_staff_name):
-	teams = _get_teams(crm_staff_name)
+	teams = _get_teams_in_staff_campus(crm_staff_name)
 	if not teams:
 		return "1=0"
 

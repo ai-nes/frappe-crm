@@ -8,12 +8,22 @@
       </Breadcrumbs>
     </template>
     <template v-if="!errorTitle" #right-header>
+      <Button
+        :label="__('Attach Segment')"
+        iconLeft="filter"
+        @click="showAttachSegmentModal = true"
+      />
       <CustomActions
         v-if="document._actions?.length"
         :actions="document._actions"
       />
     </template>
   </LayoutHeader>
+  <AttachSegmentModal
+    v-if="showAttachSegmentModal"
+    v-model="showAttachSegmentModal"
+    :campaign="crmCampaignId"
+  />
   <div v-if="doc.name" class="flex h-full overflow-hidden">
     <Tabs
       v-model="tabIndex"
@@ -43,6 +53,7 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
+        <AttributionPanel kind="campaign" :record="crmCampaignId" />
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Campaign"
@@ -72,11 +83,13 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
+import AttachSegmentModal from '@/components/Modals/AttachSegmentModal.vue'
+import AttributionPanel from '@/components/Attribution/AttributionPanel.vue'
 import { copyToClipboard } from '@/utils'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
-import { createResource, Tabs, Breadcrumbs, usePageMeta } from 'frappe-ui'
+import { Button, createResource, Tabs, Breadcrumbs, usePageMeta } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
@@ -91,6 +104,7 @@ const reload = ref(false)
 const activities = ref(null)
 const errorTitle = ref('')
 const errorMessage = ref('')
+const showAttachSegmentModal = ref(false)
 
 const { document, error } = useDocument('CRM Campaign', props.crmCampaignId)
 const doc = computed(() => document.doc || {})

@@ -21,10 +21,8 @@
   "assigned_to",
   "owner_staff",
   "owning_team",
+  "owning_pool",
   "latest_score",
-  "student_context_revision",
-  "sla_evidence_state",
-  "sla_evidence_observed_at",
   "enrollment_date",
   "section_links",
   "high_school",
@@ -36,6 +34,7 @@
   "aspiration",
   "step",
   "source",
+  "advertising_channel",
   "admission_year",
   "section_academic_history",
   "cohort_start_year",
@@ -63,6 +62,13 @@
   "section_notes",
   "notes",
   "section_identity",
+  "identity",
+  "case_key",
+  "ownership_revision",
+  "engagement_revision",
+  "lifecycle_revision",
+  "intake_integrity_state",
+  "intake_quarantine_reason",
   "id_number",
   "id_issued_date",
   "id_issued_place",
@@ -132,12 +138,14 @@
    "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
   },
   {
-   "fieldname": "assigned_to",
+    "fieldname": "assigned_to",
+    "read_only": 1,
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assigned To",
-   "options": "CRM Staff"
+   "label": "Assigned To (Legacy Projection)",
+   "options": "CRM Staff",
+   "description": "Compatibility projection of owner_staff. Ownership commands are the authority."
   },
   {
    "fieldname": "owner_staff",
@@ -155,36 +163,22 @@
    "label": "Owning Team",
    "options": "CRM Team",
    "read_only": 1,
-   "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
+   "description": "Compatibility projection of a named Student Pool's Team. Ownership commands are the authority."
+  },
+  {
+   "fieldname": "owning_pool",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Student Pool",
+   "options": "CRM Student Pool",
+   "read_only": 1,
+   "description": "Canonical pool identity for routing and SLA scope. Ownership commands are the authority."
   },
   {
    "fieldname": "latest_score",
    "fieldtype": "Float",
    "in_list_view": 1,
    "label": "Latest Score",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "student_context_revision",
-   "fieldtype": "Int",
-   "in_list_view": 1,
-   "label": "Student Context Revision",
-   "read_only": 1,
-   "description": "Frappe-owned monotonic revision for material Student context changes. Never edit directly."
-  },
-  {
-   "default": "unknown",
-   "fieldname": "sla_evidence_state",
-   "fieldtype": "Select",
-   "label": "SLA Evidence State",
-   "options": "known\nstale\nunknown",
-   "read_only": 1
-  },
-  {
-   "fieldname": "sla_evidence_observed_at",
-   "fieldtype": "Datetime",
-   "label": "SLA Evidence Observed At",
    "read_only": 1
   },
   {
@@ -255,6 +249,11 @@
    "fieldtype": "Link",
    "label": "Source",
    "options": "CRM Lead Source"
+  },
+  {
+   "fieldname": "advertising_channel",
+   "fieldtype": "Data",
+   "label": "Advertising Channel"
   },
   {
    "fieldname": "admission_year",
@@ -370,7 +369,7 @@
    "fieldname": "status_change_reason",
    "fieldtype": "Small Text",
    "label": "Status Change Reason",
-   "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Lead Sales/Admissions Director only)."
+   "description": "Required when moving this lead backward in its lifecycle or reopening it from Lost (Team Leader/Admissions Director only)."
   },
   {
    "fieldname": "status_change_log",
@@ -409,6 +408,64 @@
    "label": "Identity"
   },
   {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "label": "Student Identity",
+   "options": "CRM Student Identity",
+   "read_only": 1,
+   "description": "Canonical identity resolved by Student Intake; never inferred from a weak phone/email match."
+  },
+  {
+   "fieldname": "case_key",
+   "fieldtype": "Link",
+   "label": "Admission Case Key",
+   "options": "CRM Student Case Key",
+   "read_only": 1,
+   "description": "Physical identity + admission cycle enforcement record."
+  },
+  {
+   "default": "0",
+   "fieldname": "ownership_revision",
+   "fieldtype": "Int",
+   "label": "Ownership Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by ownership commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "engagement_revision",
+   "fieldtype": "Int",
+   "label": "Engagement Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by Student outcome commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "lifecycle_revision",
+   "fieldtype": "Int",
+   "label": "Lifecycle Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by lifecycle commands."
+  },
+  {
+   "default": "review_required",
+   "fieldname": "intake_integrity_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intake Integrity State",
+   "options": "resolved\nreview_required\nquarantined\nlegacy",
+   "read_only": 1,
+   "description": "Set by the signed intake/migration workflow; not a generic edit field."
+  },
+  {
+   "fieldname": "intake_quarantine_reason",
+   "fieldtype": "Small Text",
+   "label": "Intake Quarantine Reason",
+   "read_only": 1,
+   "description": "Redacted reason/category for remediation; raw PII never belongs here."
+  },
+  {
    "fieldname": "id_number",
    "fieldtype": "Data",
    "label": "ID Number"
@@ -440,53 +497,74 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Admissions Operations",
    "write": 1
   },
   {
    "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
+   "role": "CTV-Sale",
    "write": 1
   },
   {
    "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
+   "role": "Counseller",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Giám đốc Tuyển sinh"
+  },
+  {
+   "create": 1,
+   "read": 1,
    "role": "Lead Sales",
-   "share": 1,
    "write": 1
   },
   {
    "create": 1,
-   "print": 1,
    "read": 1,
    "role": "Sale",
    "write": 1
   },
   {
-   "print": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1,
    "read": 1,
-   "report": 1,
-   "role": "Admissions Director"
+   "role": "Sales Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Sales User",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "Team Leader",
+   "write": 1
   }
  ],
  "quick_entry": 0,

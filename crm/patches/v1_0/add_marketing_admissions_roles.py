@@ -1,13 +1,8 @@
 import frappe
 
+from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES
 from crm.patches.v1_0.setup_crm_roles import create_roles
-
-NEW_ROLES = [
-	"Marketing",
-	"Admissions Director",
-]
 
 
 def execute():
-	create_roles(NEW_ROLES)
-	frappe.db.commit()
+	create_roles(CRM_POLICY_ROLE_NAMES)

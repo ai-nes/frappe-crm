@@ -2,6 +2,9 @@
 import frappe
 
 
+SALES_WORKLIST_ROLE_NAMES = ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Team Leader")
+
+
 def after_migrate() -> None:
 	"""Backfill sortable projections and add the hot-path composite indexes."""
 	frappe.db.sql(
@@ -26,18 +29,13 @@ def after_migrate() -> None:
 
 
 def _grant_sales_worklist_capability() -> None:
-	"""Seed read capabilities for verified CRM Copilot roles.
-
-	Knowledge-graph retrieval is a shared advisory source for every supported
-	Copilot persona. The grant remains Role-owned in Frappe: the AI service
-	never supplies a fallback capability when a Role is revoked here.
-	"""
+	"""Seed least-privilege read capabilities for verified CRM copilot roles."""
 	# This is a Table field, stored in its child DocType rather than as a
 	# column on tabRole.  `db.has_column` would therefore always return False.
 	if not frappe.get_meta("Role").has_field("custom_ai_capability_grants"):
 		return
 	changed = False
-	for role_name in ("Sale", "Lead Sales"):
+	for role_name in SALES_WORKLIST_ROLE_NAMES:
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -52,7 +50,7 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
-	for role_name in ("Marketing", "Lead Sales", "Admissions Director"):
+	for role_name in ("Promoter-PR", "Team Leader", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -67,9 +65,8 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
-	# All canonical Copilot profiles may consult the shared, advisory knowledge
-	# graph.  System Manager and Administrator are intentionally excluded: they
-	# are control-plane identities, not Copilot personas (see crm.api.session).
+	# crm-agents uses the shared advisory graph for every business Copilot
+	# persona. Keep this grant additive to the remote phase capabilities.
 	for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue
