@@ -21,14 +21,18 @@
         <template v-if="decision === 'approve_new_identity'">
           <FormControl v-model="newIdentity.student_name" :label="__('Verified student name')" required />
           <FormControl
-            v-model="newIdentity.national_id"
-            :label="__('Verified national ID')"
-            :description="__('Use a verified 9- or 12-digit identifier. This creates a new identity.')"
-            inputmode="numeric"
-            required
+            v-model="newIdentity.phone"
+            :label="__('Phone')"
+            :description="__('Provide at least one valid phone number or email address.')"
+            type="tel"
           />
-          <FormControl v-model="newIdentity.phone" :label="__('Phone (optional)')" type="tel" />
-          <FormControl v-model="newIdentity.email" :label="__('Email (optional)')" type="email" />
+          <FormControl v-model="newIdentity.email" :label="__('Email')" type="email" />
+          <FormControl
+            v-model="newIdentity.national_id"
+            :label="__('National ID (optional)')"
+            :description="__('Optional strong identifier for the identity record.')"
+            inputmode="numeric"
+          />
         </template>
         <FormControl
           v-model="evidence"
@@ -38,7 +42,7 @@
           required
         />
       </div>
-      <ErrorMessage v-if="error" class="mt-4" :message="error" />
+      <ErrorMessage v-if="error" class="mt-4" :message="error" role="alert" />
     </template>
     <template #actions>
       <div class="flex justify-end gap-2">
@@ -65,7 +69,7 @@ const show = defineModel({ type: Boolean })
 const decision = ref('attach_identity')
 const selectedIdentity = ref('')
 const evidence = ref('')
-const newIdentity = reactive({ student_name: '', national_id: '', phone: '', email: '' })
+const newIdentity = reactive({ student_name: '', phone: '', email: '', national_id: '' })
 const loading = ref(false)
 const error = ref('')
 const idempotencyKey = ref(createCommandId())

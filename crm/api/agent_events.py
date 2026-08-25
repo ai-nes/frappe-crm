@@ -27,6 +27,7 @@ _EVENT_PATHS = {
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120
 SLA_NOTIFICATION_EVENT = "student.sla.notification.v1"
+SLA_DIGEST_EVENT = "student.sla.digest.v1"
 _SLA_OUTBOX_FIELDS = {"source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "retention_until", "legal_hold"}
 
 
@@ -184,6 +185,85 @@ def record_sla_notification(*, sla_event, student, recipient_user: str, recipien
 	return event.name
 
 
+def record_sla_digest(*, recipient_user: str, digest_date: str, unresolved_count: int) -> str:
+	"""Write one PII-free daily Student SLA digest per Director."""
+	fields = _event_fields()
+	if not _SLA_OUTBOX_FIELDS.issubset(fields):
+		frappe.throw("CRM Agent Event shared-outbox fields are not migrated.")
+	key = f"sla-digest:{recipient_user}:{digest_date}"
+	existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
+	if existing:
+		return existing
+	payload = {"digest_date": digest_date, "unresolved_count": int(unresolved_count), "worklist_url": "/app/student-worklist"}
+	event = frappe.get_doc(
+		{
+			"doctype": "CRM Agent Event",
+			"event_id": str(uuid.uuid4()),
+			"event_type": SLA_DIGEST_EVENT,
+			"aggregate_doctype": "CRM Student SLA Digest",
+			"aggregate_name": key,
+			"source_revision": digest_date,
+			"contract_version": 1,
+			"delivery_key": key,
+			"channel": "realtime",
+			"recipient_user": recipient_user,
+			"recipient_role": "Admissions Director",
+			"payload": json.dumps(payload, sort_keys=True, separators=(",", ":")),
+			"occurred_at": now_datetime(),
+			"status": "pending",
+			"next_attempt_at": now_datetime(),
+			"retention_until": _retention_until(),
+		}
+	)
+	try:
+		event.insert(ignore_permissions=True)
+	except Exception as exc:
+		# The delivery key is unique; a concurrent scheduler run may win the
+		# insert between our read and write. Reuse its event instead of failing
+		# the remaining Directors.
+		if "duplicate" not in str(exc).casefold() and "unique" not in str(exc).casefold():
+			raise
+		existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
+		if not existing:
+			raise
+		return existing
+	_enqueue_delivery(event)
+	return event.name
+
+
+def send_daily_sla_director_digests() -> dict[str, int]:
+	"""Create one aggregate notification for each Director with unresolved escalations."""
+	from frappe.utils import add_days, getdate
+
+	digest_date = str(add_days(getdate(now_datetime()), -1))
+	window_start = f"{digest_date} 00:00:00"
+	window_end = f"{digest_date} 23:59:59"
+	count = frappe.db.count(
+		"CRM Student SLA Attempt",
+		{
+			"status": "escalated",
+			"recipient_strategy": "owner_warning_lead_breach_director_daily_digest",
+			"escalation_at": ["between", [window_start, window_end]],
+		},
+	)
+	if not count:
+		return {"created": 0, "skipped": 0}
+	directors = frappe.get_all("Has Role", filters={"role": "Admissions Director", "parenttype": "User"}, pluck="parent")
+	directors = [
+		user
+		for user in sorted(set(directors))
+		if frappe.db.get_value("User", user, "enabled")
+	]
+	created = 0
+	for director in sorted(set(directors)):
+		key = f"sla-digest:{director}:{digest_date}"
+		existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
+		record_sla_digest(recipient_user=director, digest_date=digest_date, unresolved_count=count)
+		if not existing:
+			created += 1
+	return {"created": created, "skipped": 0}
+
+
 def _event_body(event) -> bytes:
 	payload = {
 			"event_id": event.event_id,
@@ -222,16 +302,30 @@ def _complete_delivery(event, lease_id: str, *, status: str = "delivered", error
 def _deliver_realtime_notification(event, lease_id: str) -> bool:
 	"""Publish an SLA alert only if the recipient remains in Student scope."""
 	try:
-		if not event.recipient_user or event.aggregate_doctype != "CRM Student" or not event.aggregate_name:
+		if not event.recipient_user or not event.aggregate_name:
 			raise ValueError("Invalid shared SLA outbox contract")
-		student = frappe.get_doc("CRM Student", event.aggregate_name)
-		if not has_student_permission(student, user=event.recipient_user, permission_type="read"):
-			_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_OUT_OF_SCOPE")
-			return True
 		payload = json.loads(event.payload or "{}")
-		if not isinstance(payload, dict) or set(payload) - {"student", "sla_event", "event_type", "correlation_token"}:
-			raise ValueError("Shared SLA payload contains unsupported fields")
-		frappe.publish_realtime("student_sla_alert", payload, user=event.recipient_user)
+		if event.event_type == SLA_DIGEST_EVENT:
+			if (
+				event.recipient_role != "Admissions Director"
+				or not frappe.db.get_value("User", event.recipient_user, "enabled")
+				or not frappe.db.exists("Has Role", {"parent": event.recipient_user, "role": "Admissions Director"})
+			):
+				_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_ROLE_REVOKED")
+				return True
+			if not isinstance(payload, dict) or set(payload) - {"digest_date", "unresolved_count", "worklist_url"}:
+				raise ValueError("Shared SLA digest payload contains unsupported fields")
+			frappe.publish_realtime("student_sla_digest", payload, user=event.recipient_user)
+		else:
+			if event.aggregate_doctype != "CRM Student":
+				raise ValueError("Invalid shared SLA aggregate")
+			student = frappe.get_doc("CRM Student", event.aggregate_name)
+			if not has_student_permission(student, user=event.recipient_user, permission_type="read"):
+				_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_OUT_OF_SCOPE")
+				return True
+			if not isinstance(payload, dict) or set(payload) - {"student", "sla_event", "event_type", "correlation_token"}:
+				raise ValueError("Shared SLA payload contains unsupported fields")
+			frappe.publish_realtime("student_sla_alert", payload, user=event.recipient_user)
 	except Exception as exc:
 		_record_delivery_failure(event, str(exc), lease_id)
 		return False

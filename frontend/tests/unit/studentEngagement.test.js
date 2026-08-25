@@ -30,6 +30,20 @@ describe('student engagement UI helpers', () => {
     })
   })
 
+  it('accepts multiple evidence references separated by new lines', () => {
+    expect(
+      buildLifecycleTransitionPayload({
+        student: 'STU-1',
+        target: 'Enrolled',
+        reason: '',
+        evidence: 'intent:CRM Intent:INT-1\ndocument:CRM Student Document:DOC-1',
+        revision: 7,
+        idempotencyKey: 'idem-1',
+        correlationId: 'corr-1',
+      }).evidence_refs,
+    ).toEqual(['intent:CRM Intent:INT-1', 'document:CRM Student Document:DOC-1'])
+  })
+
   it('uses only server-provided permitted targets', () => {
     const lifecycle = {
       allowed_targets: [

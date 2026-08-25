@@ -2,7 +2,7 @@
   <Dialog v-model="show" :options="{ title: __('Change student lifecycle') }" @close="resetError">
     <template #body-content>
       <p class="mb-4 text-sm text-ink-gray-6">
-        {{ __('Current stage: {0}. The server checks your permission, evidence and the latest revision before recording this transition.', [lifecycle.current_stage || lifecycle.stage || __('Unavailable')]) }}
+        {{ __('Current stage: {0}. The server checks your permission, evidence and the latest revision before recording this transition.', [__(lifecycle.current_stage || lifecycle.stage || 'Unavailable')]) }}
       </p>
       <div v-if="targets.length" class="space-y-4">
         <FormControl v-model="target" type="select" :label="__('New stage')" :options="targets" required />
@@ -15,9 +15,13 @@
           required
         />
         <template v-if="selectedTarget?.requiresEvidence">
-          <FormControl v-model="evidenceCategory" type="select" :label="__('Evidence category')" :options="evidenceCategories" required />
-          <FormControl v-model="evidenceDoctype" :label="__('Evidence DocType')" :description="__('Use the DocType that owns the approved Student-linked record.')" required />
-          <FormControl v-model="evidenceName" :label="__('Evidence reference')" :description="__('Enter the exact record name; it is checked against this Student and your read permission.')" required />
+          <FormControl
+            v-model="evidenceReferences"
+            type="textarea"
+            :label="__('Evidence references')"
+            :description="__('Enter one or more category:DocType:record-name references, separated by commas or new lines. Each record is checked against this Student and your read permission.')"
+            required
+          />
         </template>
         <FormControl
           v-model="reason"
@@ -58,9 +62,7 @@ const props = defineProps({
 const emit = defineEmits(['changed', 'refresh-required'])
 const show = defineModel({ type: Boolean })
 const target = ref('')
-const evidenceCategory = ref('intent')
-const evidenceDoctype = ref('CRM Intent')
-const evidenceName = ref('')
+const evidenceReferences = ref('')
 const reason = ref('')
 const outcomeCode = ref('qualified')
 const error = ref('')
@@ -68,26 +70,22 @@ const loading = ref(false)
 const idempotencyKey = ref(createStudentEngagementCommandId())
 const correlationId = ref(createStudentEngagementCommandId())
 const targets = computed(() => lifecycleTargets(props.lifecycle))
-const outcomeOptions = ['connected', 'qualified', 'follow_up_required', 'completed']
-const evidenceCategories = ['intent', 'appointment', 'document']
+const outcomeOptions = ['connected', 'qualified', 'follow_up_required', 'completed'].map((value) => ({
+  label: __(value),
+  value,
+}))
 const selectedTarget = computed(() => targets.value.find((item) => item.value === target.value))
-const evidenceReference = computed(() => {
-  const parts = [evidenceCategory.value, evidenceDoctype.value, evidenceName.value].map((value) => String(value || '').trim())
-  return parts.every(Boolean) ? parts.join(':') : ''
-})
 const canSubmit = computed(() => !loading.value && isLifecycleCommandAllowed({
   target: target.value,
   reason: reason.value,
-  evidence: evidenceReference.value,
+  evidence: evidenceReferences.value,
   lifecycle: props.lifecycle,
 }))
 
 watch(show, (open) => {
   if (!open) return
   target.value = targets.value[0]?.value || ''
-  evidenceCategory.value = 'intent'
-  evidenceDoctype.value = 'CRM Intent'
-  evidenceName.value = ''
+  evidenceReferences.value = ''
   reason.value = ''
   outcomeCode.value = props.lifecycle?.latest_outcome?.outcome || 'qualified'
   error.value = ''
@@ -107,7 +105,7 @@ async function submit() {
       target: target.value,
       outcomeCode: selectedTarget.value?.requiresEvidence ? outcomeCode.value : undefined,
       reason: reason.value,
-      evidence: evidenceReference.value,
+      evidence: evidenceReferences.value,
       revision: props.lifecycle.revision,
       idempotencyKey: idempotencyKey.value,
       correlationId: correlationId.value,

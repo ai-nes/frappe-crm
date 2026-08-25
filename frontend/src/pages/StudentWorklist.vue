@@ -134,7 +134,7 @@
                         </div>
                         <div v-if="item.outcome">
                           <dt class="text-ink-gray-5">{{ __('Outcome') }}</dt>
-                          <dd class="mt-0.5 text-ink-gray-8">{{ item.outcome }}</dd>
+                          <dd class="mt-0.5 text-ink-gray-8">{{ __(item.outcome) }}</dd>
                         </div>
                       </dl>
                       <p

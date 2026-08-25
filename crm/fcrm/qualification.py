@@ -38,6 +38,14 @@ MEANINGFUL_OUTCOMES = frozenset({"connected", "qualified", "follow_up_required",
 EVIDENCE_CATEGORIES = frozenset({"intent", "appointment", "document", "outcome", "interaction"})
 MQL_EVIDENCE_CATEGORIES = frozenset({"intent", "appointment", "document"})
 APPLICANT_EVIDENCE_CATEGORIES = frozenset({"appointment", "document"})
+QUALIFICATION_STAGES = ("MQL", "Applicant", "Enrolled")
+EVIDENCE_DOCTYPES = {
+	"intent": frozenset({"CRM Intent", "CRM Interaction"}),
+	"appointment": frozenset({"CRM Appointment"}),
+	"document": frozenset({"CRM Student Document", "File"}),
+	"outcome": frozenset({"CRM Student Outcome"}),
+	"interaction": frozenset({"CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition"}),
+}
 
 
 class QualificationValidationError(ValueError):
@@ -105,25 +113,35 @@ def find_missing_qualification_evidence(
 ) -> list[str]:
 	"""Return missing evidence requirements for a lifecycle target.
 
-	``Lead`` and ``Lost`` do not require qualification evidence.  MQL requires
-	a qualifying outcome and at least one intent/appointment/document reference;
-	Applicant additionally requires an appointment or required-document
-	reference.  The function intentionally does not inspect an intent or score
-	field: those values are informative only until a referenced evidence record
-	is verified by the command service.
+	``Lead`` and ``Lost`` do not require qualification evidence.  Active targets
+	use cumulative gates, so a direct jump must satisfy the target and every
+	stage it passes: MQL requires a qualifying outcome and an
+	intent/appointment/document reference; Applicant adds an
+	appointment/document reference; Enrolled retains all Applicant gates and a
+	qualifying outcome.  References may satisfy more than one gate.  The
+	function intentionally does not inspect an intent or score field: those
+	values are informative only until a referenced evidence record is verified
+	by the command service.
 	"""
 	stage = (target_stage or "").strip()
-	if stage not in {"MQL", "Applicant", "Enrolled"}:
+	if stage not in QUALIFICATION_STAGES:
 		return []
 	missing: list[str] = []
-	if outcome_code not in MEANINGFUL_OUTCOMES:
-		missing.append("qualifying_outcome")
 	refs = normalize_evidence(evidence)
 	categories = {item["category"] for item in refs}
-	if not categories & MQL_EVIDENCE_CATEGORIES:
-		missing.append("intent_or_appointment_or_document")
-	if stage in {"Applicant", "Enrolled"} and not categories & APPLICANT_EVIDENCE_CATEGORIES:
-		missing.append("appointment_or_document")
+	for required_stage in QUALIFICATION_STAGES[: QUALIFICATION_STAGES.index(stage) + 1]:
+		if required_stage == "MQL":
+			if outcome_code not in MEANINGFUL_OUTCOMES:
+				missing.append("qualifying_outcome")
+			if not categories & MQL_EVIDENCE_CATEGORIES:
+				missing.append("intent_or_appointment_or_document")
+		elif required_stage == "Applicant" and not categories & APPLICANT_EVIDENCE_CATEGORIES:
+			missing.append("appointment_or_document")
+		elif required_stage == "Enrolled" and outcome_code not in MEANINGFUL_OUTCOMES:
+			# A single existing outcome reference/code can prove the MQL and
+			# Enrolled gate, so avoid reporting the same missing item twice.
+			if "qualifying_outcome" not in missing:
+				missing.append("qualifying_outcome")
 	return missing
 
 
@@ -140,6 +158,9 @@ def validate_qualification_evidence(
 	if outcome_code is not None and outcome_code not in OUTCOME_CODES:
 		raise QualificationValidationError("Unknown outcome code")
 	normalized = normalize_evidence(evidence)
+	for item in normalized:
+		if item["doctype"] not in EVIDENCE_DOCTYPES.get(item["category"], frozenset()):
+			raise QualificationValidationError("Evidence category does not match its DocType")
 	missing = find_missing_qualification_evidence(target_stage, outcome_code, normalized)
 	if missing:
 		raise QualificationValidationError("Missing qualification evidence: " + ", ".join(missing))

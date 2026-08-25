@@ -16,6 +16,7 @@ CANONICAL_FIXTURE_USERS = {
 }
 FIXTURE_PASSWORD_SITE_CONFIG_KEY = "crm_phase2_fixture_password"
 FIXTURE_SALES_TEAM_NAME = "Phase 2 Canonical Sales Team"
+FIXTURE_CAMPUS_NAME = "FPTU Ho Chi Minh Campus"
 
 
 def execute():
@@ -26,7 +27,7 @@ def execute():
 			frappe.ValidationError,
 		)
 
-	campus = frappe.db.get_value("CRM Campus", {}, "name")
+	campus = frappe.db.exists("CRM Campus", FIXTURE_CAMPUS_NAME) or frappe.db.get_value("CRM Campus", {}, "name")
 	if not campus:
 		campus = frappe.get_doc({"doctype": "CRM Campus", "campus_name": "Demo Campus"}).insert(
 			ignore_permissions=True
@@ -56,8 +57,9 @@ def execute():
 
 	team = _ensure_fixture_sales_team(campus)
 	_ensure_fixture_team_memberships(team)
+	pool = _ensure_fixture_student_pool(team)
 	frappe.db.commit()
-	return {"created": created, "count": len(created), "fixture_users": fixture_users, "team": team}
+	return {"created": created, "count": len(created), "fixture_users": fixture_users, "team": team, "pool": pool}
 
 
 def _ensure_canonical_fixture_user(email, fixture, password):
@@ -95,14 +97,52 @@ def _ensure_fixture_department(campus):
 
 
 def _ensure_fixture_sales_team(campus):
-	if frappe.db.exists("CRM Team", FIXTURE_SALES_TEAM_NAME):
-		return FIXTURE_SALES_TEAM_NAME
+	team_name = FIXTURE_SALES_TEAM_NAME
+	if frappe.db.exists("CRM Team", team_name):
+		existing_campus = frappe.db.get_value("CRM Team", team_name, "campus")
+		if existing_campus == campus:
+			return team_name
+		existing_team = frappe.get_all(
+			"CRM Team",
+			filters={"campus": campus, "team_type": "Sales", "is_active": 1},
+			pluck="name",
+			order_by="creation asc",
+			limit_page_length=1,
+		)
+		if existing_team:
+			return existing_team[0]
+		team_name = f"{FIXTURE_SALES_TEAM_NAME} - {campus}"
+	if frappe.db.exists("CRM Team", team_name):
+		return team_name
 	return frappe.get_doc(
 		{
 			"doctype": "CRM Team",
-			"team_name": FIXTURE_SALES_TEAM_NAME,
+			"team_name": team_name,
 			"team_type": "Sales",
 			"campus": campus,
+			"is_active": 1,
+		}
+	).insert(ignore_permissions=True).name
+
+
+def _ensure_fixture_student_pool(team):
+	pool_name = f"{team} Pool"
+	if frappe.db.exists("CRM Student Pool", pool_name):
+		return pool_name
+	team_doc = frappe.db.get_value("CRM Team", team, ["name", "campus"], as_dict=True)
+	existing_pool = frappe.db.get_value(
+		"CRM Student Pool",
+		{"team": team_doc.name, "campus": team_doc.campus, "is_active": 1},
+		"name",
+	)
+	if existing_pool:
+		return existing_pool
+	return frappe.get_doc(
+		{
+			"doctype": "CRM Student Pool",
+			"pool_name": pool_name,
+			"team": team_doc.name,
+			"campus": team_doc.campus,
 			"is_active": 1,
 		}
 	).insert(ignore_permissions=True).name

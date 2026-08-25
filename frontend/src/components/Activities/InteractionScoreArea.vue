@@ -32,12 +32,12 @@
                 </span>
                 <Badge
                   v-if="interaction.interaction_type"
-                  :label="interaction.interaction_type"
+                  :label="__(interaction.interaction_type)"
                   variant="subtle"
                 />
                 <Badge
                   v-if="interaction.outcome"
-                  :label="interaction.outcome"
+                  :label="__(interaction.outcome)"
                   theme="gray"
                   variant="subtle"
                 />

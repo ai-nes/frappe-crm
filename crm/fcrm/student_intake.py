@@ -1,9 +1,9 @@
 """Authoritative Student intake command.
 
-The intake boundary is deliberately small.  It resolves a strong identity and
-an admission cycle, then creates one Student case and its Case Key in the same
-transaction.  Phone and email are observations only; they never establish a
-new identity or make a Student globally unique.
+The intake boundary is deliberately small. It resolves a phone/email identity
+and an admission cycle, then creates one Student case and its Case Key in the
+same transaction. National ID remains an optional strong observation and
+conflict signal; it never establishes an identity by itself.
 
 The module does not create Contacts.  The small amount of metadata probing in
 this file is intentional: the data-contract migration and this command can be
@@ -650,6 +650,21 @@ def _find_observation_roots(identifier_type: str, value: str) -> list[dict[str, 
 	return roots
 
 
+def _resolve_phone_email_identity(
+	weak_roots: set[str], strong_roots: set[str], *, retracted: bool
+) -> tuple[str | None, str | None]:
+	"""Resolve identity from phone/email roots only.
+
+	The extra arguments remain for compatibility with older callers, but CCCD
+	is deliberately ignored and cannot establish, confirm or block a match.
+	"""
+	if len(weak_roots) > 1:
+		return None, "identity_conflict"
+	if weak_roots:
+		return next(iter(weak_roots)), None
+	return None, None
+
+
 def _case_key(identity: str, admission_year: str) -> dict[str, Any] | None:
 	if not _doctype_exists(CASE_KEY_DOCTYPE):
 		return None
@@ -670,11 +685,8 @@ def _create_identity(candidate: dict[str, Any]):
 	strong = candidate.get("strong")
 	secrets = _secret_versions() or [(HMAC_VERSION, b"")]
 	secret_version, secret = secrets[0]
-	# Identity names are opaque, deterministic for a strong identifier, and do
-	# not expose the normalized national ID.  Weak-only submissions are kept
-	# reviewable and receive a random root key only if a reviewer explicitly
-	# approves a new identity later.
-	identity_material = strong or uuid.uuid4().hex
+	# Identity names are opaque and do not expose normalized identifiers.
+	identity_material = uuid.uuid4().hex
 	identity_key = f"ID-{keyed_digest(secret, 'crm.identity.root.v1', identity_material)[:32]}"
 	values = {
 		"doctype": IDENTITY_DOCTYPE,
@@ -740,24 +752,12 @@ def _is_duplicate_error(exc: Exception) -> bool:
 
 
 def _add_weak_observations(identity: str, candidate: dict[str, Any]):
-	try:
-		doc = _get_doc(IDENTITY_DOCTYPE, identity)
-	except Exception:
-		doc = None
 	for identifier_type, value in (("phone", candidate.get("phone")), ("email", candidate.get("email"))):
 		if not value:
 			continue
-		# Never collapse a shared observation.  The physical child uniqueness is
-		# `(identity, type, digest)`, not `(type, digest)`.
-		if doc is not None:
-			child_field = _first_field(IDENTITY_DOCTYPE, ("identifiers", "identifier_rows", "identity_identifiers"))
-			if child_field:
-				try:
-					child_rows = doc.get(child_field) or []
-				except Exception:
-					child_rows = []
-				if any(_safe_get(row, "identifier_type", "type") == identifier_type for row in child_rows):
-					continue
+		# Never collapse a shared observation. The physical child uniqueness is
+		# `(identity, type, digest)`, so `_add_identifier` can safely add a new
+		# phone/email alias and ignore only an exact duplicate.
 		_add_identifier(identity, identifier_type, value)
 
 
@@ -961,8 +961,8 @@ def submit_intake(
 		_fail("INVALID_INPUT", "source_namespace, source_record_id and idempotency_key are required.")
 	authority = _resolve_authority(SUBMIT_CAPABILITY, signed_context=signed_context)
 	candidate = _identity_candidate(payload)
-	if not candidate["strong"] and not candidate["phone"] and not candidate["email"]:
-		_fail("INVALID_INPUT", "At least one approved identity identifier is required.")
+	if not candidate["phone"] and not candidate["email"]:
+		_fail("INVALID_INPUT", "At least one valid phone or email is required.")
 	admission_year = _normalize_admission_year(payload)
 	if not admission_year:
 		# Missing cycle is ambiguous work and is therefore reviewable, but it must
@@ -991,36 +991,21 @@ def submit_intake(
 		return persisted
 
 	strong = candidate.get("strong")
-	strong_rows = _find_observation_roots("national_id", strong) if strong else []
 	weak_rows = []
 	for identifier_type, value in (("phone", candidate.get("phone")), ("email", candidate.get("email"))):
 		for row in _find_observation_roots(identifier_type, value):
 			row["identifier_type"] = identifier_type
 			weak_rows.append(row)
-	strong_roots = {row["identity"] for row in strong_rows if row.get("identity")}
+	# Phone/email are the only identifiers that establish an identity root. A
+	# national ID is retained only as optional Student data and is never looked up.
 	weak_roots = {row["identity"] for row in weak_rows if row.get("identity")}
-	retracted = any(str(row.get("lifecycle")).casefold() in {"retracted", "revoked"} for row in strong_rows)
-	reason = None
-	identity = None
-	if not strong:
-		reason = "identity_conflict" if len(weak_roots) > 1 else "weak_only"
-	elif retracted:
-		reason = "retracted_identifier"
-	elif len(strong_roots) > 1 or (strong_roots and weak_roots - strong_roots):
-		reason = "identity_conflict"
-	elif not strong_roots:
-		# A new strong value alongside an existing weak observation is not an
-		# automatic attach: it may be a genuinely new person or a conflicting
-		# claim, so an authorized review must decide.
-		if weak_roots:
-			reason = "identity_conflict"
-		else:
-			identity = _create_identity(candidate)
-	else:
-		identity = next(iter(strong_roots))
+	identity, reason = _resolve_phone_email_identity(weak_roots, set(), retracted=False)
+	if not identity and not reason:
+		identity = _create_identity(candidate)
 	if identity and not reason:
 		key = _case_key(identity, admission_year)
 		if key:
+			_add_weak_observations(identity, candidate)
 			student_name = key.get("canonical_student") or key.get("student")
 			if student_name:
 				result = {"outcome": "attached", "student": student_name}
@@ -1029,13 +1014,11 @@ def submit_intake(
 	if reason:
 		result = {"outcome": "review_required", "error_code": "REVIEW_REQUIRED"}
 		candidate_identity = None
-		if len(strong_roots) == 1:
-			candidate_identity = next(iter(strong_roots))
-		elif len(weak_roots) == 1:
+		if len(weak_roots) == 1:
 			candidate_identity = next(iter(weak_roots))
 		review_id = _create_review(candidate, {**payload, "campus": campus}, reason, source_receipt=None, pool=pool, candidate_identity=candidate_identity)
 		result["review_id"] = review_id
-		result["candidates"] = ([{"identity_id": candidate_identity, "masked_label": candidate_identity}] if candidate_identity else [])
+		result["candidates"] = ([{"identity_id": candidate_identity, "masked_label": "Candidate identity"}] if candidate_identity else [])
 		persisted = _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace=source_namespace, _source_record_id=source_record_id, idempotency_key=idempotency_key, correlation_id=correlation_id, nonce=nonce)
 		_link_review_receipt(review_id, persisted.get("receipt"))
 		return persisted
@@ -1191,8 +1174,8 @@ def decide_intake_review(
 	elif decision == "approve_new_identity":
 		identity_data = identity_data or {}
 		candidate = _identity_candidate(identity_data)
-		if not candidate.get("strong") or not candidate.get("name"):
-			_fail("INVALID_INPUT", "approve_new_identity requires a verified name and strong identifier.")
+		if not candidate.get("name") or not (candidate.get("phone") or candidate.get("email")):
+			_fail("INVALID_INPUT", "approve_new_identity requires a verified name and phone or email.")
 		admission_year = _text(_safe_get(doc, "proposed_admission_year", "admission_year"))
 		campus = _text(_safe_get(doc, "proposed_campus", "campus"))
 		pool = _text(_safe_get(doc, "proposed_owning_team", "proposed_pool", "owning_team", "pool"))

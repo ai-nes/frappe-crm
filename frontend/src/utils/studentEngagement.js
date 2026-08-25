@@ -21,7 +21,7 @@ export function lifecycleTargets(lifecycle) {
   const targets = lifecycle?.allowed_targets || lifecycle?.allowed_transitions || []
   return targets
     .map((target) => ({
-      label: target.label || target.stage || target.target_stage,
+      label: __(target.label || target.stage || target.target_stage),
       value: target.stage || target.target_stage,
       requiresEvidence: Boolean(target.requires_evidence),
       requiresReason: Boolean(target.requires_reason),
@@ -84,5 +84,5 @@ export function safeLifecycleError(error, fallback) {
 
 function splitEvidenceReferences(value) {
   if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean)
-  return String(value || '').split(',').map((item) => item.trim()).filter(Boolean)
+  return String(value || '').split(/[\n,]/).map((item) => item.trim()).filter(Boolean)
 }

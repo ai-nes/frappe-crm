@@ -8,7 +8,14 @@ from typing import Any
 
 import frappe
 
-from crm.fcrm.qualification import QUALIFICATION_POLICY_VERSION, validate_qualification_evidence
+from crm.fcrm.qualification import (
+	MEANINGFUL_OUTCOMES,
+	EVIDENCE_DOCTYPES,
+	QUALIFICATION_POLICY_VERSION,
+	QualificationValidationError,
+	normalize_evidence,
+	validate_qualification_evidence,
+)
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled
@@ -39,9 +46,10 @@ def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str
 	if current_stage == LOST_STAGE:
 		return [{"stage": "Reopen", "label": "Reopen", "requires_reason": True}] if "lifecycle.reopen" in capabilities else []
 	targets = []
-	if current_stage in FORWARD_EDGES and "lifecycle.transition" in capabilities:
-		next_stage = FORWARD_EDGES[current_stage]
-		targets.append({"stage": next_stage, "label": next_stage, "requires_evidence": next_stage in {"MQL", "Applicant", "Enrolled"}})
+	if current_stage in ACTIVE_STAGES and "lifecycle.transition" in capabilities and enabled("lifecycle_write"):
+		current_index = ACTIVE_STAGES.index(current_stage)
+		for stage in ACTIVE_STAGES[current_index + 1 :]:
+			targets.append({"stage": stage, "label": stage, "requires_evidence": True})
 	if "lifecycle.lost" in capabilities:
 		targets.append({"stage": LOST_STAGE, "label": LOST_STAGE, "requires_reason": True})
 	return targets
@@ -66,11 +74,24 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 		if not str(reason or "").strip():
 			_fail("REASON_REQUIRED", "Lost requires a reason.")
 		return {"from_stage": current, "to_stage": target, "transition_kind": "lost", "reason": str(reason).strip(), "evidence": []}
-	if current not in FORWARD_EDGES or FORWARD_EDGES[current] != target:
+	if (
+		current not in ACTIVE_STAGES
+		or target not in ACTIVE_STAGES
+		or ACTIVE_STAGES.index(target) <= ACTIVE_STAGES.index(current)
+	):
 		_fail("INVALID_EDGE", f"{current} cannot transition directly to {target}.")
 	if "lifecycle.transition" not in capabilities:
 		_fail("FORBIDDEN", "You are not permitted to transition this Student.")
-	validated = validate_qualification_evidence(target, outcome_code, evidence, policy_version=QUALIFICATION_POLICY_VERSION)
+	try:
+		validated = validate_qualification_evidence(target, outcome_code, evidence, policy_version=QUALIFICATION_POLICY_VERSION)
+	except QualificationValidationError as exc:
+		_fail("INVALID_EVIDENCE", str(exc))
+	if target in {"MQL", "Applicant", "Enrolled"} and outcome_code in MEANINGFUL_OUTCOMES:
+		if not any(
+			item["category"] == "outcome" and item["doctype"] == "CRM Student Outcome"
+			for item in normalize_evidence(evidence)
+		):
+			_fail("INVALID_EVIDENCE", "A qualifying CRM Student Outcome record is required.")
 	return {"from_stage": current, "to_stage": target, "transition_kind": "forward", "reason": str(reason or "").strip() or None, "evidence": validated["evidence"]}
 
 
@@ -96,11 +117,11 @@ def _student(name: str):
 	return student
 
 
-def _verify_evidence(student: str, references: list[dict[str, str]]):
-	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
+def _verify_evidence(student: str, references: list[dict[str, str]], *, outcome_code: str | None = None):
+	outcome_found = False
 	for reference in references:
-		doctype, name = reference.get("doctype"), reference.get("name")
-		if doctype not in allowed:
+		category, doctype, name = reference.get("category"), reference.get("doctype"), reference.get("name")
+		if doctype not in EVIDENCE_DOCTYPES.get(category, frozenset()):
 			_fail("INVALID_EVIDENCE", "Evidence type is not allowed for lifecycle qualification.")
 		try:
 			doc = frappe.get_doc(doctype, name)
@@ -117,6 +138,12 @@ def _verify_evidence(student: str, references: list[dict[str, str]]):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
 		if linked_student != student:
 			_fail("OUT_OF_SCOPE", "Qualification evidence belongs to another Student.")
+		if category == "outcome":
+			outcome_found = True
+			if outcome_code and doc.get("outcome_code") != outcome_code:
+				_fail("INVALID_EVIDENCE", "The qualifying outcome does not match the requested outcome code.")
+	if outcome_code in MEANINGFUL_OUTCOMES and not outcome_found:
+		_fail("INVALID_EVIDENCE", "A qualifying CRM Student Outcome record is required.")
 
 
 def _stage(student) -> str:
@@ -245,7 +272,7 @@ def request_transition(
 	if expected_revision not in (None, "") and str(expected_revision) != str(revision):
 		_fail("STALE_REVISION", "Student lifecycle changed; reload before retrying.")
 	transition = validate_transition(current_stage, target_stage, reason=reason, evidence=evidence_refs, outcome_code=outcome_code, capabilities=capabilities)
-	_verify_evidence(student, transition["evidence"])
+	_verify_evidence(student, transition["evidence"], outcome_code=outcome_code)
 	prior_active = _prior_active_stage(student) if transition["transition_kind"] == "reopen" else None
 	if transition["transition_kind"] == "reopen":
 		if not prior_active:

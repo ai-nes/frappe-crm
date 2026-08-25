@@ -299,12 +299,13 @@ const engagementContext = createResource({
   auto: true,
   initialData: null,
 })
-const lifecycleStage = computed(() =>
-  engagementContext.data?.lifecycle?.current_stage ||
-  engagementContext.data?.lifecycle?.stage ||
-  doc.value?.enrollment_status ||
-  __('Lifecycle unavailable'),
-)
+const lifecycleStage = computed(() => {
+  const stage =
+    engagementContext.data?.lifecycle?.current_stage ||
+    engagementContext.data?.lifecycle?.stage ||
+    doc.value?.enrollment_status
+  return stage ? __(stage) : __('Lifecycle unavailable')
+})
 const canRequestLifecycleTransition = computed(() =>
   lifecycleTargets(engagementContext.data?.lifecycle).length > 0 &&
   engagementContext.data?.capabilities?.transition !== false,
@@ -330,9 +331,9 @@ const engagementActivityEntries = computed(() => {
       creation: event.occurred_at || event.creation,
       data: {
         summary: event.to_stage
-          ? __('Lifecycle changed to {0}', [event.to_stage])
+          ? __('Lifecycle changed to {0}', [__(event.to_stage)])
           : event.outcome
-            ? __('Outcome recorded: {0}', [event.outcome])
+            ? __('Outcome recorded: {0}', [__(event.outcome)])
             : event.summary || __('Student lifecycle updated'),
       },
     }))

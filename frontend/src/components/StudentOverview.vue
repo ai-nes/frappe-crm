@@ -101,7 +101,7 @@
             {{ __('Student routing') }}
           </h2>
           <span class="text-sm text-ink-gray-6">
-            {{ routingStatus.status }}
+            {{ __(routingStatus.status) }}
           </span>
         </div>
         <div class="mt-3 flex items-center justify-between gap-3 text-sm">
