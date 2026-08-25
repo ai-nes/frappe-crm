@@ -78,3 +78,4 @@ crm.patches.v1_0.phase4_prepare_student_routing_sla
 crm.patches.v1_0.phase4_backfill_and_reconcile_routing_sla
 crm.patches.v1_0.phase5_prepare_student_engagement
 crm.patches.v1_0.phase5_backfill_student_engagement
+crm.patches.v1_0.phase6_prepare_student_decisions

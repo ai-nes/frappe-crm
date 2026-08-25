@@ -21,6 +21,14 @@ _EVENT_PATHS = {
 	"sales_action.outcome_recorded.v1": "/api/v1/insight/sales-action-outcome",
 }
 _MAX_DELIVERY_ATTEMPTS = 10
+_LEASE_SECONDS = 120
+
+
+def _event_fields() -> set[str]:
+	try:
+		return {field.fieldname for field in frappe.get_meta("CRM Agent Event").fields}
+	except Exception:
+		return set()
 
 
 def quiesce_agent_events(aggregate_names: list[str]) -> dict:
@@ -96,13 +104,21 @@ def _event_body(event) -> bytes:
 
 
 def deliver_agent_event(event_name: str) -> None:
-	"""Deliver one pending event. Failures stay pending for scheduled replay."""
+	"""Deliver one event under a fenced lease (legacy schemas fail closed)."""
 	event = frappe.get_doc("CRM Agent Event", event_name)
-	if event.status != "pending":
+	fields = _event_fields()
+	if not {"lease_id", "lease_expires_at"}.issubset(fields):
+		# Do not claim a Phase 6 event with the old non-fenced protocol.
+		if str(event.event_type).startswith(("recommendation.", "sales_action.")):
+			frappe.throw("CRM Agent Event lease fields are required for Phase 6 delivery.")
+	if event.status not in {"pending", "processing"}:
 		return
+	lease_id = str(uuid.uuid4())
+	lease_until = now_datetime() + timedelta(seconds=_LEASE_SECONDS)
+	claim_condition = "(status = 'pending' or (status = 'processing' and lease_expires_at < %(now)s))" if {"lease_id", "lease_expires_at"}.issubset(fields) else "status = 'pending'"
 	frappe.db.sql(
-		"UPDATE `tabCRM Agent Event` SET status = 'processing' WHERE name = %s AND status = 'pending'",
-		(event.name,),
+		"UPDATE `tabCRM Agent Event` SET status = 'processing'" + (", lease_id = %(lease_id)s, lease_expires_at = %(lease_until)s" if {"lease_id", "lease_expires_at"}.issubset(fields) else "") + " WHERE name = %(name)s AND " + claim_condition,
+		{"name": event.name, "lease_id": lease_id, "lease_until": lease_until, "now": now_datetime()},
 	)
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		return
@@ -111,7 +127,7 @@ def deliver_agent_event(event_name: str) -> None:
 	secret = frappe.conf.get("crm_agents_webhook_secret")
 	kid = frappe.conf.get("crm_agents_webhook_kid", "v1")
 	if not base_url or not secret:
-		_record_delivery_failure(event, "crm_agents_url / crm_agents_webhook_secret not configured")
+		_record_delivery_failure(event, "crm_agents_url / crm_agents_webhook_secret not configured", lease_id)
 		return
 	body = _event_body(event)
 	timestamp = str(int(time.time()))
@@ -130,34 +146,49 @@ def deliver_agent_event(event_name: str) -> None:
 		)
 		response.raise_for_status()
 	except Exception as exc:
-		_record_delivery_failure(event, str(exc))
+		_record_delivery_failure(event, str(exc), lease_id)
 		frappe.log_error(title="crm-agents outbox delivery failed", message=f"event={event.name}: {exc}")
 		return
-	event.db_set("status", "delivered")
-	event.db_set("delivered_at", now_datetime())
-	event.db_set("last_error", None)
+	where = "name = %(name)s" + (" and lease_id = %(lease_id)s" if "lease_id" in fields else "")
+	frappe.db.sql("update `tabCRM Agent Event` set status = 'delivered', delivered_at = %(at)s, last_error = null where " + where, {"name": event.name, "lease_id": lease_id, "at": now_datetime()})
 
 
-def _record_delivery_failure(event, error: str) -> None:
+def _record_delivery_failure(event, error: str, lease_id: str | None = None) -> None:
 	"""Persist bounded exponential backoff and terminal dead-letter status."""
-	attempts = (event.attempts or 0) + 1
-	event.db_set("attempts", attempts)
-	event.db_set("last_error", error[:500])
-	if attempts >= _MAX_DELIVERY_ATTEMPTS:
-		event.db_set("status", "dead_letter")
+	fields = _event_fields()
+	where = "name = %(name)s"
+	values = {"name": event.name, "error": error[:500]}
+	if lease_id and "lease_id" in fields:
+		where += " AND lease_id = %(lease_id)s"
+		values["lease_id"] = lease_id
+	# Fence every failure write on the lease. A worker whose lease was reclaimed
+	# cannot reset the newer worker's delivered/pending state.
+	frappe.db.sql(f"UPDATE `tabCRM Agent Event` SET attempts = attempts + 1, last_error = %(error)s WHERE {where}", values)
+	updated = frappe.db.sql("SELECT attempts FROM `tabCRM Agent Event` WHERE name = %(name)s" + (" AND lease_id = %(lease_id)s" if lease_id and "lease_id" in fields else ""), values, as_dict=True)
+	if not updated:
 		return
-	event.db_set("status", "pending")
+	attempts = int(updated[0].attempts or 0)
+	if attempts >= _MAX_DELIVERY_ATTEMPTS:
+		frappe.db.sql(f"UPDATE `tabCRM Agent Event` SET status = 'dead_letter' WHERE {where}", values)
+		return
 	# Bound retries so one unavailable consumer cannot make the oldest events
 	# monopolise every scheduled replay pass.
 	delay_minutes = min(60 * (2 ** min(attempts - 1, 5)), 24 * 60)
-	event.db_set("next_attempt_at", now_datetime() + timedelta(minutes=delay_minutes))
+	values["next_attempt_at"] = now_datetime() + timedelta(minutes=delay_minutes)
+	frappe.db.sql(f"UPDATE `tabCRM Agent Event` SET status = 'pending', next_attempt_at = %(next_attempt_at)s WHERE {where}", values)
 
 
 def retry_pending_agent_events() -> None:
 	"""Bounded replay for transient failures; no event is deleted automatically."""
+	fields = _event_fields()
+	filters = [["next_attempt_at", "<=", now_datetime()]]
+	if {"lease_id", "lease_expires_at"}.issubset(fields):
+		filters = [["status", "in", ["pending", "processing"]], ["next_attempt_at", "<=", now_datetime()]]
+	else:
+		filters = [["status", "=", "pending"], ["next_attempt_at", "<=", now_datetime()]]
 	for name in frappe.get_all(
 		"CRM Agent Event",
-		filters=[["status", "=", "pending"], ["next_attempt_at", "<=", now_datetime()]],
+		filters=filters,
 		order_by="next_attempt_at asc, creation asc",
 		pluck="name",
 		limit_page_length=100,

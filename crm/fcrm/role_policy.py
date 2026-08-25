@@ -29,6 +29,8 @@ PROFILE_CAPABILITIES = {
 	"sales": frozenset(
 		{
 			"student.execute",
+			"recommendation.decide",
+			"sales_action.execute",
 			"interaction.record",
 			"outcome.record",
 			"lifecycle.transition",
@@ -42,6 +44,9 @@ PROFILE_CAPABILITIES = {
 	"lead_sales": frozenset(
 		{
 			"student.execute",
+			"recommendation.decide",
+			"sales_action.execute",
+			"sales_action.reassign",
 			"interaction.record",
 			"outcome.record",
 			"lifecycle.transition",
@@ -63,6 +68,9 @@ PROFILE_CAPABILITIES = {
 	"admissions_director": frozenset(
 		{
 			"admissions.oversee",
+			"recommendation.decide",
+			"sales_action.execute",
+			"sales_action.reassign",
 			"lifecycle.exception",
 			"lifecycle.transition",
 			"lifecycle.lost",
@@ -177,6 +185,22 @@ CANONICAL_PERMISSION_MATRIX = {
 		},
 		"row_scope": "campus_is_not_team_scope",
 	},
+	"decision_action": {
+		"doctypes": ("CRM Recommendation", "CRM Sales Action", "CRM Student Decision Event"),
+		"permissions": {
+			"system_manager": "rwcdx",
+			"sales": "r",
+			"lead_sales": "r",
+			"marketing": "-",
+			"admissions_director": "r",
+		},
+		"row_scope": {
+			"sales": "assigned",
+			"lead_sales": "team_and_team_pool",
+			"admissions_director": "all",
+			"default": "deny",
+		},
+	},
 	"control_plane": {
 		"doctypes": (
 			"Fields Layout",
@@ -210,8 +234,6 @@ CANONICAL_PERMISSION_MATRIX = {
 			"FCRM Note",
 			"CRM Score Template",
 			"CRM Score History",
-			"CRM Recommendation",
-			"CRM Sales Action",
 		),
 		"permissions": {
 			"system_manager": "unchanged",
@@ -555,6 +577,10 @@ def _overlay_permission_set(surface, template, doctype):
 	if surface == "admissions_case":
 		permission_set = template["case_permissions"]
 		return permission_set.get(doctype, "-") if isinstance(permission_set, dict) else permission_set
+	if surface == "decision_action":
+		# Legacy roles retain read visibility during the migration, but never gain
+		# a raw write path around the Phase 6 command service.
+		return "-" if template["row_scope"] == "no_case_scope" else "r"
 	key = {
 		"reference": "reference_permissions",
 		"acquisition": "acquisition_permissions",

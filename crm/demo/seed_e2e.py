@@ -346,6 +346,7 @@ def _ensure_cross_campus_negative_case(ctx):
         "evidence": {"fixture_run_id": FIXTURE_RUN_ID, "negative_case": True},
     })
     candidate.run_method("autoname")
+    candidate.flags.from_phase6_command = True
     candidate.insert(ignore_permissions=True)
     return student, candidate.name
 
@@ -374,6 +375,7 @@ def generate_capture_lifecycle() -> dict:
         if frappe.db.exists("CRM Recommendation", candidate.name):
             existing.append(candidate.name)
             continue
+        candidate.flags.from_phase6_command = True
         candidate.insert(ignore_permissions=True)
         created.append(candidate.name)
     return {"fixture_run_id": FIXTURE_RUN_ID, "created": created, "existing": existing}

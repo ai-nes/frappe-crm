@@ -740,6 +740,15 @@ def change_student_ownership(
 		if _revision_field():
 			updates[_revision_field()] = next_revision
 		frappe.db.set_value("CRM Student", student_name, updates, update_modified=True)
+		# Active Phase 6 work is reconciled in the same ownership transaction so a
+		# scope change cannot strand an action outside every executor queue.
+		from crm.fcrm.student_decision import reconcile_student_actions
+		reconcile_student_actions(
+			student_name,
+			next_owner_staff=target.get("owner_staff"),
+			next_owning_team=target.get("owning_team"),
+			correlation_id=correlation_id,
+		)
 
 		teams = _team_rows_for_actor(actor)
 		actor_scope = _actor_scope_snapshot(actor, profile, teams)

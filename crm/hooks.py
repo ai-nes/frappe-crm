@@ -263,12 +263,6 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_campaign_touchpoint_insert"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
-	"CRM Recommendation": {
-		"on_update": ["crm.fcrm.doctype.crm_recommendation.crm_recommendation.on_status_decided"],
-	},
-	"CRM Sales Action": {
-		"on_update": ["crm.fcrm.doctype.crm_sales_action.crm_sales_action.on_execution_or_outcome_change"],
-	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],

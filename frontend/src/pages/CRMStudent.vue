@@ -109,6 +109,28 @@
           :loading="engagementContext.loading"
           :error="engagementContextError"
         />
+        <section class="border-b p-1 sm:p-3" aria-label="Sales decisions and actions">
+          <Section
+            :label="__('Sales decisions and actions')"
+            label-class="px-2 font-semibold"
+            header-class="h-8"
+          >
+            <div class="space-y-2 px-3 pb-3 text-sm">
+              <p v-if="engagementContext.loading" class="text-ink-gray-5" role="status">{{ __('Loading decision context…') }}</p>
+              <template v-else-if="studentDecisionContext">
+                <p v-if="studentDecisionContext.pendingDecision" class="text-ink-gray-6">{{ __('Pending decision: {0}', [studentDecisionContext.pendingDecision.action || studentDecisionContext.pendingDecision.recommended_action || studentDecisionContext.pendingDecision.name]) }}</p>
+                <div v-if="studentDecisionContext.activeAction" class="rounded bg-surface-gray-1 p-2">
+                  <p class="font-medium text-ink-gray-8">{{ studentDecisionContext.activeAction.actionType }}</p>
+                  <p class="mt-1" :class="studentDecisionContext.activeAction.overdue ? 'font-medium text-red-600' : 'text-ink-gray-6'">{{ __('Status: {0} · Due: {1}', [studentDecisionContext.activeAction.status, studentDecisionContext.activeAction.dueAt || __('Not scheduled')]) }}</p>
+                  <Button v-if="studentDecisionContext.activeAction.permittedTransitions.length" class="mt-2" size="sm" :label="__('Update action')" @click="selectedSalesAction = studentDecisionContext.activeAction" />
+                </div>
+                <p v-if="studentDecisionContext.latestTerminalAction" class="text-ink-gray-6">{{ __('Latest action: {0}', [studentDecisionContext.latestTerminalAction.actionType]) }}<span v-if="studentDecisionContext.latestTerminalAction.linkedInteraction"> · {{ __('Linked interaction: {0}', [studentDecisionContext.latestTerminalAction.linkedInteraction]) }}</span></p>
+                <p v-if="!studentDecisionContext.pendingDecision && !studentDecisionContext.activeAction && !studentDecisionContext.latestTerminalAction" class="text-ink-gray-5">{{ __('No current decision or Sales Action.') }}</p>
+              </template>
+              <p v-else class="text-ink-gray-5">{{ __('Decision context is unavailable.') }}</p>
+            </div>
+          </Section>
+        </section>
         <section v-if="routingStatus.data" class="border-b px-5 py-3" aria-label="Student routing">
           <div class="flex items-center justify-between gap-3 text-sm">
             <span class="font-semibold text-ink-gray-8">{{ __('Student routing') }}</span>
@@ -172,6 +194,13 @@
     @changed="handleOutcomeChanged"
     @refresh-required="engagementContext.reload()"
   />
+  <SalesActionOutcomeDialog
+    v-if="selectedSalesAction"
+    v-model="showSalesActionModal"
+    :action="selectedSalesAction"
+    @changed="handleSalesActionChanged"
+    @refresh-required="engagementContext.reload()"
+  />
 </template>
 
 <script setup>
@@ -195,7 +224,9 @@ import StudentEngagementSection from '@/components/StudentEngagementSection.vue'
 import Section from '@/components/Section.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
+import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
 import { lifecycleTargets, safeLifecycleError, studentEngagementApi } from '@/utils/studentEngagement'
+import { salesActionItem } from '@/utils/studentDecision'
 import { copyToClipboard } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
@@ -211,14 +242,13 @@ import {
   call,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRouter } from 'vue-router'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
 
 const { brand } = getSettings()
 const { doctypeMeta } = getMeta('CRM Student')
 const { getCurrentUser } = usersStore()
 
-const route = useRoute()
 const router = useRouter()
 
 const props = defineProps({
@@ -234,6 +264,11 @@ const showOwnershipModal = ref(false)
 const showRouteModal = ref(false)
 const showLifecycleModal = ref(false)
 const showOutcomeModal = ref(false)
+const selectedSalesAction = ref(null)
+const showSalesActionModal = computed({
+  get: () => Boolean(selectedSalesAction.value),
+  set: (value) => { if (!value) selectedSalesAction.value = null },
+})
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
     'student.execute',
@@ -304,6 +339,17 @@ const canRequestLifecycleTransition = computed(() =>
 const engagementContextError = computed(() =>
   engagementContext.error ? safeLifecycleError(engagementContext.error, __('Unable to load engagement context.')) : '',
 )
+const studentDecisionContext = computed(() => {
+  // Phase 6 extends the existing Student context projection. Accept the
+  // versioned section name while remaining harmless during a staged rollout.
+  const context = engagementContext.data?.decision_context || engagementContext.data?.decisions || engagementContext.data?.phase_6 || engagementContext.data?.decision
+  if (!context) return null
+  return {
+    pendingDecision: context.pending_decision || context.pending_recommendation,
+    activeAction: context.active_action ? salesActionItem(context.active_action) : null,
+    latestTerminalAction: context.latest_terminal_action ? salesActionItem(context.latest_terminal_action) : null,
+  }
+})
 const engagementActivityEntries = computed(() => {
   const history = engagementContext.data?.history?.items || engagementContext.data?.history || []
   return history
@@ -365,6 +411,11 @@ function handleLifecycleChanged() {
 }
 
 function handleOutcomeChanged() {
+  engagementContext.reload()
+  sections.reload()
+}
+
+function handleSalesActionChanged() {
   engagementContext.reload()
   sections.reload()
 }

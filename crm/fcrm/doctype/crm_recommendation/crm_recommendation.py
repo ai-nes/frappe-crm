@@ -3,17 +3,41 @@ import hashlib
 import frappe
 from frappe import _
 from frappe.model.document import Document
-from frappe.utils import now_datetime
+
+from crm.fcrm.permissions import (
+	get_permission_query_conditions as get_student_permission_query_conditions,
+	has_permission as has_student_permission,
+)
 
 
 class CRMRecommendation(Document):
+	"""Immutable advice aggregate.
+
+	Only the Phase 6 command service/factory may create or mutate one.  The
+	flag is deliberately internal rather than a field a Desk/API caller can set.
+	It is the controller-level backstop while legacy DocPerm rows are retired.
+	"""
+
+	_PRODUCER_FIELDS = (
+		"student", "rule_key", "source_intent_id", "condition_version", "context_hash",
+		"policy_version", "producer_id", "producer_revision", "priority",
+		"expires_at", "recommended_action", "recommended_timing", "cta",
+		"talking_points", "reason", "evidence",
+	)
+	_DECISION_FIELDS = (
+		"status", "decision_reason", "revisit_at", "decision_revision",
+		"decision_actor", "decision_at", "decision_scope", "decision_correlation_id",
+		"decision_idempotency_key", "supersedes_decision_event",
+	)
 	_ALLOWED_TRANSITIONS = {
-		"new": {"acknowledged", "dismissed", "accepted", "rejected", "deferred", "modified", "expired", "superseded"},
-		"acknowledged": {"dismissed", "accepted", "rejected", "deferred", "modified", "expired", "superseded"},
-		"deferred": {"accepted", "rejected", "modified", "expired", "superseded"},
-		"accepted": {"modified", "expired", "superseded"},
-		"modified": {"expired", "superseded"},
+		"new": {"acknowledged", "accepted", "rejected", "deferred", "expired", "superseded"},
+		"acknowledged": {"accepted", "rejected", "deferred", "expired", "superseded"},
+		"deferred": {"accepted", "rejected", "expired", "superseded"},
 	}
+	_LEGACY_ONLY_STATUSES = {"dismissed", "modified"}
+
+	def _from_command(self):
+		return bool(getattr(self.flags, "from_phase6_command", False) or getattr(self.flags, "phase6_break_glass", False))
 
 	def validate(self):
 		"""Keep legacy rows readable while rejecting illegal lifecycle rewrites."""
@@ -22,13 +46,33 @@ class CRMRecommendation(Document):
 		# projection deliberately lands after scheduled work of the same rank.
 		self.worklist_timing_sort = self.recommended_timing or "9999-12-31 23:59:59.999999"
 		before = self.get_doc_before_save()
-		if not before or before.status == self.status:
+		if self.is_new():
+			if not self._from_command():
+				frappe.throw(_("CRM Recommendations may only be created by the approved server-side producer."))
+			if self.status in self._LEGACY_ONLY_STATUSES:
+				frappe.throw(_("Legacy CRM Recommendation status {0} cannot be created.").format(self.status))
+			return
+		if not before:
+			return
+		changed_fields = {field for field in self._PRODUCER_FIELDS + self._DECISION_FIELDS if self.get(field) != before.get(field)}
+		if changed_fields and not self._from_command():
+			frappe.throw(_("CRM Recommendation decisions and producer data must use a Phase 6 server command."))
+		immutable_changes = [field for field in self._PRODUCER_FIELDS if self.get(field) != before.get(field)]
+		if immutable_changes:
+			frappe.throw(_("CRM Recommendation producer fields are immutable: {0}").format(", ".join(immutable_changes)))
+		if before.status in self._LEGACY_ONLY_STATUSES and self.status != before.status:
+			frappe.throw(_("Legacy CRM Recommendation status {0} is read-only pending migration.").format(before.status))
+		if before.status == self.status:
 			return
 		allowed = self._ALLOWED_TRANSITIONS.get(before.status, set())
 		if self.status not in allowed:
 			frappe.throw(_("Illegal CRM Recommendation transition: {0} -> {1}").format(before.status, self.status))
-		if self.status in {"rejected", "deferred"} and not self.decision_reason:
-			frappe.throw(_("A decision reason is required when rejecting or deferring a recommendation."))
+		if self.status == "rejected" and not self.decision_reason:
+			frappe.throw(_("A decision reason is required when rejecting a recommendation."))
+		if self.status == "deferred" and not (self.revisit_at or self.decision_reason):
+			frappe.throw(_("A deferred recommendation needs a UTC revisit time or an archival reason."))
+		if self.status != "deferred" and self.revisit_at:
+			frappe.throw(_("revisit_at is only valid for a deferred recommendation."))
 	def autoname(self):
 		"""Deterministic name = hash(student, rule_key, source_intent_id, condition_version, context revision).
 
@@ -75,119 +119,34 @@ class CRMRecommendation(Document):
 		self.name = f"{prefix}{digest}"
 
 
-def _crm_staff_campus(user: str) -> tuple[str | None, str | None]:
-	"""Return (crm_staff_name, campus) for `user`, or (None, None) if unmapped."""
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
-	if not crm_staff_name:
-		return None, None
-	campus = frappe.db.get_value("CRM Staff", crm_staff_name, "campus")
-	return crm_staff_name, campus
-
-
 def get_permission_query_conditions(user=None):
-	"""LIST-view guard: only rows for students whose assigned_to falls in the
-	requesting user's own campus are visible.
-
-	Mirrors crm_contact.get_permission_query_conditions's campus-based
-	filtering — CRM Recommendation is batch-written by a service account
-	(the record `owner` is never the assigned Sale/CTV-Sale), so `if_owner`
-	cannot be used here: it would filter on `owner == current_user` and hide
-	every recommendation from every sales/marketing role, regardless of
-	whether the underlying student is assigned to them.
-	"""
+	"""Project the canonical CRM Student own/team/director scope onto advice."""
 	if not user:
 		user = frappe.session.user
-
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
 		return None
-
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
+	if student_condition == "1=0":
 		return "1=0"
-
-	crm_staff_in_campus = frappe.db.get_all(
-		"CRM Staff",
-		filters={"campus": campus},
-		pluck="name",
-	)
-	if not crm_staff_in_campus:
-		return "1=0"
-
-	escaped = ", ".join(frappe.db.escape(s) for s in crm_staff_in_campus)
 	return (
 		"`tabCRM Recommendation`.student in ("
 		"select `tabCRM Student`.name from `tabCRM Student` "
-		f"where `tabCRM Student`.assigned_to in ({escaped})"
+		f"where ({student_condition})"
 		")"
 	)
 
 
-def on_status_decided(doc, method=None):
-	"""Sales just decided Accept/Reject/Defer/Modify in the Frappe UI (a plain
-	write to `status`) — when the decision is accepted/modified, tell
-	crm-agents in the background so it can create the CRM Sales Action row
-	that will track execution/outcome for it.
-
-	Fires on every save, not just this one, so it detects the actual transition.
-	The Sales Action and outbox row are written in this same Frappe transaction;
-	the asynchronous delivery only signals crm-agents to re-read authoritative
-	CRM data.
-	"""
-	before = doc.get_doc_before_save()
-	previous_status = before.status if before else None
-	if doc.status == previous_status or doc.status not in ("accepted", "modified"):
-		return
-	_create_sales_action(doc)
-	from crm.api.agent_events import record_agent_event
-
-	record_agent_event("recommendation.decided.v1", doc)
-
-
-def _create_sales_action(recommendation) -> str:
-	"""Create the one linked Sales Action before committing the decision."""
-	existing = frappe.db.get_value("CRM Sales Action", {"recommendation": recommendation.name}, "name")
-	if existing:
-		return existing
-	action = frappe.get_doc(
-		{
-			"doctype": "CRM Sales Action",
-			"recommendation": recommendation.name,
-			"student": recommendation.student,
-			"action_type": recommendation.recommended_action,
-			"execution_status": "planned",
-			"created_at": now_datetime(),
-		}
-	)
-	action.insert(ignore_permissions=True)
-	return action.name
-
-
 def has_permission(doc, user=None, permission_type=None):
-	"""Direct-GET-by-name guard (also covers report/export and link-lookup reads
-	that resolve a specific document rather than running the list query).
-
-	`get_permission_query_conditions` only protects the LIST path — Frappe calls
-	this function separately for `frappe.get_doc("CRM Recommendation", name)`,
-	so both must independently enforce the same campus scope or a direct GET by
-	name bypasses the list filter entirely.
-	"""
+	"""Direct-GET-by-name guard using the same current Student scope."""
 	if not user:
 		user = frappe.session.user
-
-	if "System Manager" in frappe.get_roles(user) or "CRM Manager" in frappe.get_roles(user):
-		return True
 
 	student = doc.get("student") if isinstance(doc, dict) else getattr(doc, "student", None)
 	if not student:
 		return False
 
-	_crm_staff_name, campus = _crm_staff_campus(user)
-	if not campus:
+	try:
+		student_doc = frappe.get_doc("CRM Student", student)
+		return has_student_permission(student_doc, user=user, permission_type=permission_type)
+	except Exception:
 		return False
-
-	assigned_to = frappe.db.get_value("CRM Student", student, "assigned_to")
-	if not assigned_to:
-		return False
-
-	assigned_campus = frappe.db.get_value("CRM Staff", assigned_to, "campus")
-	return assigned_campus == campus

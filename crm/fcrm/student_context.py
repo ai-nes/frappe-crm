@@ -335,6 +335,26 @@ def _next_action(student: str, interaction: str | None = None) -> dict[str, Any]
 	return None
 
 
+def _decision_context(student: str) -> dict[str, Any]:
+	"""Bounded Phase 6 projection; it is not a lifecycle input."""
+	empty = {"pending_decision": None, "active_action": None, "latest_terminal_action": None, "events": []}
+	if not _exists("CRM Recommendation") or not _exists("CRM Sales Action"):
+		return empty
+	try:
+		recommendations = frappe.get_all("CRM Recommendation", filters={"student": student, "status": ["in", ["new", "acknowledged"]]}, fields=["name", "status", "recommended_action", "recommended_timing", "decision_revision"], order_by="creation desc", limit_page_length=1)
+		actions = frappe.get_all("CRM Sales Action", filters={"student": student}, fields=["name", "recommendation", "action_type", "execution_status", "due_at", "assignee_staff", "action_revision", "outcome_code"], order_by="creation desc", limit_page_length=20)
+		def project(row):
+			return {"name": _get(row, "name"), "recommendation": _get(row, "recommendation"), "action_type": _get(row, "action_type", "recommended_action"), "status": _get(row, "execution_status", "status"), "due_at": _iso(_get(row, "due_at", "recommended_timing")), "assignee_staff": _get(row, "assignee_staff"), "revision": _get(row, "action_revision", "decision_revision"), "outcome_code": _get(row, "outcome_code")}
+		active = next((project(row) for row in actions if _get(row, "execution_status") in {"planned", "in_progress"}), None)
+		terminal = next((project(row) for row in actions if _get(row, "execution_status") in {"completed", "failed", "cancelled"}), None)
+		events = []
+		if _exists("CRM Student Decision Event"):
+			events = frappe.get_all("CRM Student Decision Event", filters={"student": student}, fields=["name", "event_id", "event_kind", "occurred_at"], order_by="occurred_at desc, name desc", limit_page_length=5)
+		return {"pending_decision": project(recommendations[0]) if recommendations else None, "active_action": active, "latest_terminal_action": terminal, "events": [{"name": _get(row, "name", "event_id"), "kind": _get(row, "event_kind"), "occurred_at": _iso(_get(row, "occurred_at"))} for row in events]}
+	except Exception:
+		return empty
+
+
 def get_student_context(student: str, history_limit: int | str = 20, history_cursor: str | None = None) -> dict[str, Any]:
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
@@ -394,6 +414,7 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		"latest_interaction": latest_interaction,
 		"latest_outcome": _outcome(outcome_rows[0], student) if outcome_rows else None,
 		"next_action": _next_action(student, latest_interaction_name),
+		"decision": _decision_context(student),
 		"qualification_evidence": _evidence(outcome_rows[0], "qualification_evidence", student=student) if outcome_rows else [],
 		"history": page,
 		"next_cursor": _cursor(student, page[-1]) if len(history) > limit and page else None,
