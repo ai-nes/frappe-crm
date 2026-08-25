@@ -134,6 +134,72 @@ def _select_member(members: list[dict[str, Any]], cursor_staff: str | None):
 	return members[0]
 
 
+def route_pool_owned_student(
+	student: str,
+	*,
+	trigger: str = "pool_entry",
+	correlation_id: str | None = None,
+	expected_revision: int | None = None,
+) -> dict[str, Any]:
+	"""Synchronously route one currently pool-owned Student in the caller transaction.
+
+	No request, lease, retry, or cursor advancement is persisted unless the
+	ownership transition commits. Unresolved policy/member state remains the
+	Student's current pool ownership rather than becoming a business record.
+	"""
+	if not enabled("routing"):
+		return {"status": "deferred", "reason": "ROUTING_DISABLED", "student": student}
+	frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (student,))
+	student_doc = frappe.get_doc("CRM Student", student)
+	current_revision = int(student_doc.get("ownership_revision") or 0)
+	if expected_revision is not None and current_revision != int(expected_revision):
+		return {"status": "superseded", "reason": "STALE_OWNERSHIP_REVISION", "student": student_doc.name}
+	pool = _canonical_pool(student_doc)
+	policy = _active_policy(pool)
+	if not policy:
+		return {"status": "deferred", "reason": "NO_ACTIVE_POLICY", "student": student_doc.name}
+	# The Student lock is acquired first. The policy lock serializes cursor
+	# advancement and is retained through the ownership command.
+	frappe.db.sql("select name from `tabCRM Student Routing Policy` where name = %s for update", (policy.name,))
+	policy = frappe.get_doc("CRM Student Routing Policy", policy.name)
+	members = _eligible_members(pool)
+	member = _select_member(members, policy.get("cursor_staff"))
+	if not member:
+		return {"status": "deferred", "reason": "NO_ELIGIBLE_MEMBER", "student": student_doc.name}
+	route_key = f"route:{student_doc.name}:{current_revision}"
+	try:
+		result = change_student_ownership(
+			student=student_doc.name,
+			target_kind="owner",
+			target_id=member["staff"],
+			target_team_id=member["team"],
+			reason="Automatic round-robin routing",
+			idempotency_key=route_key,
+			expected_revision=current_revision,
+			correlation_id=correlation_id or str(uuid.uuid4()),
+			_internal_service=True,
+			_commit=False,
+			_route_trigger=trigger,
+			_routing_policy_version=policy.policy_version,
+		)
+	except StudentOwnershipError:
+		raise
+	cursor_revision = int(policy.get("cursor_revision") or 0)
+	frappe.db.set_value(
+		"CRM Student Routing Policy",
+		policy.name,
+		{"cursor_staff": member["staff"], "cursor_revision": cursor_revision + 1},
+		update_modified=False,
+	)
+	return {
+		"status": "applied",
+		"student": student_doc.name,
+		"owner_staff": member["staff"],
+		"ownership": result,
+		"replayed": bool(result.get("replayed")),
+	}
+
+
 def _save_request(request, *, status: str, **values):
 	request.status = status
 	request.revision = int(request.revision or 0) + 1

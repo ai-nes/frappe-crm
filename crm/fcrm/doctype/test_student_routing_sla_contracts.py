@@ -62,6 +62,11 @@ class TestStudentRoutingSLAContracts(TestCase):
 		events = {field["fieldname"]: field for field in load_schema("crm_student_sla_event")["fields"]}
 		self.assertIn("pause_expired", events["event_type"]["options"])
 
+	def test_shared_outbox_owns_recipient_retry_metadata(self):
+		fields = {field["fieldname"]: field for field in load_schema("crm_agent_event")["fields"]}
+		self.assertTrue({"delivery_key", "channel", "recipient_user", "recipient_role", "payload", "retention_until", "legal_hold"}.issubset(fields))
+		self.assertEqual(fields["delivery_key"].get("unique"), 1)
+
 	def test_interactions_require_backend_verified_source_for_sla(self):
 		fields = {field["fieldname"]: field for field in load_schema("crm_interaction")["fields"]}
 		self.assertEqual(fields["source_verified"].get("read_only"), 1)

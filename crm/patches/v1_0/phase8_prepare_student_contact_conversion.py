@@ -12,6 +12,8 @@ try:
 except ImportError:  # pragma: no cover
 	frappe = None
 
+from crm.fcrm.record_retention import persist_private_artifact, redacted_manifest
+
 
 def classify_legacy_link(row: dict, *, student: dict | None, contact: dict | None) -> str:
 	if row.get("identity_conflict"):
@@ -136,36 +138,23 @@ def _legacy_rows():
 
 
 def _persist_report(report: dict, *, mode: str = "dry_run"):
-	if not frappe.db.exists("DocType", "CRM Student Contact Conversion Reconciliation"):
-		frappe.log_error(frappe.as_json(report), "Phase 8 conversion preflight")
-		return None
-	previous_flag = getattr(frappe.flags, "student_contact_conversion_reconciliation_service", False)
-	frappe.flags.student_contact_conversion_reconciliation_service = True
-	try:
-		doc = frappe.get_doc(
-			{
-			"doctype": "CRM Student Contact Conversion Reconciliation",
-			"run_id": frappe.generate_hash(length=20),
-			"mode": mode,
-			"status": "completed",
-			"actor": getattr(getattr(frappe, "session", None), "user", None) or "Administrator",
-			"correlation_id": frappe.generate_hash(length=20),
-			"policy_version": "phase8-conversion-v1",
-			"schema_version": "phase8-v1",
-			"started_at": frappe.utils.now_datetime(),
-			"rows_checked": report["rows_checked"],
-			"aggregate_counts": json.dumps(report["counts"], sort_keys=True),
-			"reason_codes": json.dumps([item["classification"] for item in report["items"]]),
-			"redacted_row_identifiers": json.dumps(
-				[{"name": item.get("name"), "reason": item.get("classification")} for item in report["items"]]
-			),
-			"completed_at": frappe.utils.now_datetime(),
-			"notes": "Preflight only; no source rows were mutated." if mode == "dry_run" else "Approved apply run.",
-		}
-		).insert(ignore_permissions=True)
-		return doc.name
-	finally:
-		frappe.flags.student_contact_conversion_reconciliation_service = previous_flag
+	if frappe is None:
+		raise RuntimeError("Phase 8 migration requires a Frappe bench")
+	artifact = {
+		"kind": "student_contact_conversion_reconciliation",
+		"mode": mode,
+		"rows_checked": report["rows_checked"],
+		"counts": report["counts"],
+		"items": redacted_manifest(
+			[{"name": item.get("name"), "classification": item.get("classification")} for item in report["items"]],
+			safe_fields=("classification",),
+		),
+		"notes": "Preflight only; no source rows were mutated." if mode == "dry_run" else "Approved apply run.",
+	}
+	return persist_private_artifact(
+		filename=f"student-contact-conversion-{mode}-{frappe.generate_hash(length=12)}.json",
+		content=json.dumps(artifact, sort_keys=True, separators=(",", ":")),
+	)
 
 
 IDENTITY_UNIQUE_INDEX = "crm_contact_student_identity_uniq"

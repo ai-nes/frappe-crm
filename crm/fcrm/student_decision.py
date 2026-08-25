@@ -16,6 +16,7 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
 
 RECEIPT = "CRM Student Command Receipt"
@@ -169,7 +170,7 @@ def _new_receipt(kind, actor, student, key, fingerprint, scope, correlation_id):
 
 def _finish(receipt, result):
 	fields = _meta_fields(RECEIPT)
-	for field, value in {"outcome": "applied", "result_json": json.dumps(result, default=str), "result_revision": result.get("revision"), "completed_at": now_datetime()}.items():
+	for field, value in {"outcome": "applied", "result_json": json.dumps(result, default=str), "result_revision": result.get("revision"), "completed_at": now_datetime(), "retention_until": technical_retention_until("receipt")}.items():
 		if field in fields:
 			receipt.db_set(field, value, update_modified=False)
 

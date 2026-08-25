@@ -11,14 +11,22 @@ from crm.patches.v1_0.phase4_prepare_student_routing_sla import classify_student
 
 class TestPhase4ReleaseGates(FrappeTestCase):
 	def test_workers_are_safe_when_rollout_is_disabled(self):
-		keys = ["crm_student_routing_enabled", "crm_student_sla_enabled", "crm_student_delivery_enabled"]
+		keys = [
+			"crm_student_routing_enabled",
+			"crm_student_synchronous_routing_enabled",
+			"crm_student_sla_enabled",
+			"crm_student_delivery_enabled",
+			"crm_student_shared_sla_outbox_enabled",
+		]
 		previous = {key: frappe.conf.get(key) for key in keys}
 		try:
 			for key in keys:
 				frappe.conf.pop(key, None)
 			self.assertFalse(enabled("routing"))
+			self.assertFalse(enabled("synchronous_routing"))
 			self.assertFalse(enabled("sla"))
 			self.assertFalse(enabled("delivery"))
+			self.assertFalse(enabled("shared_sla_outbox"))
 			self.assertEqual(process_pending_routing_requests(), {"processed": 0, "failed": 0, "disabled": 1})
 			self.assertEqual(process_due_sla_attempts(), {"processed": 0, "failed": 0, "disabled": 1})
 			self.assertEqual(process_pending_sla_deliveries(), {"processed": 0, "failed": 0, "disabled": 1})

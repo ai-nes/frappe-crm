@@ -32,6 +32,7 @@
   "request_received_at",
   "completed_at",
   "encrypted_request_payload",
+  "retention_until",
   "legal_hold"
  ],
  "fields": [
@@ -77,6 +78,7 @@
   {"fieldname": "request_received_at", "fieldtype": "Datetime", "label": "Request Received At", "read_only": 1, "reqd": 1},
   {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
   {"fieldname": "encrypted_request_payload", "fieldtype": "Long Text", "hidden": 1, "label": "Encrypted Request Payload", "read_only": 1},
+  {"fieldname": "retention_until", "fieldtype": "Datetime", "hidden": 1, "label": "Retention Until", "read_only": 1},
   {"default": "0", "fieldname": "legal_hold", "fieldtype": "Check", "label": "Legal Hold", "read_only": 1}
  ],
  "index_web_pages_for_search": 0,

@@ -35,3 +35,7 @@ class TestCRMAgentEvent(FrappeTestCase):
 			enqueue_after_commit=True,
 			event_name=event_name,
 		)
+
+	def test_shared_outbox_schema_has_recipient_and_redacted_payload_fields(self):
+		fields = {field.fieldname for field in frappe.get_meta("CRM Agent Event").fields}
+		self.assertTrue({"delivery_key", "channel", "recipient_user", "payload", "retention_until", "legal_hold"}.issubset(fields))

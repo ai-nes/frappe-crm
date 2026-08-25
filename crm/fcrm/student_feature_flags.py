@@ -8,8 +8,10 @@ import frappe
 
 DEFAULTS = {
 	"routing": False,
+	"synchronous_routing": False,
 	"sla": False,
 	"delivery": False,
+	"shared_sla_outbox": False,
 	"context_read": False,
 	"engagement_write": False,
 	"lifecycle_write": False,

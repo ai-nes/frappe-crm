@@ -115,6 +115,7 @@ def _insert_event(attempt, event_type: str, *, actor: str, payload: dict[str, An
 
 
 def _insert_delivery(attempt, event, recipient_role: str, due_at=None):
+	"""Legacy delivery projection kept only while the shared-outbox flag is off."""
 	key = f"delivery:{event.name}:{recipient_role}"
 	existing = frappe.db.get_value(DELIVERY_DOCTYPE, {"idempotency_key": key}, "name")
 	if existing:
@@ -138,6 +139,34 @@ def _insert_delivery(attempt, event, recipient_role: str, due_at=None):
 		)
 		doc.insert(ignore_permissions=True)
 	return doc
+
+
+def _authorized_recipients(student, recipient_role: str) -> list[str]:
+	if recipient_role == "owner":
+		user = frappe.db.get_value("CRM Staff", student.owner_staff, "user") if student.owner_staff else None
+		candidates = [user] if user else []
+	else:
+		role = {"lead_sales": "Lead Sales", "admissions_director": "Admissions Director"}.get(recipient_role)
+		candidates = frappe.get_all("Has Role", filters={"role": role}, pluck="parent") if role else []
+	return [user for user in candidates if user and has_student_permission(student, user=user, permission_type="read")]
+
+
+def _schedule_delivery(attempt, event, recipient_role: str, due_at=None):
+	"""Use one shared infrastructure row per authorized SLA recipient when enabled."""
+	if not enabled("shared_sla_outbox"):
+		return _insert_delivery(attempt, event, recipient_role, due_at=due_at)
+	from crm.api.agent_events import record_sla_notification
+
+	student = frappe.get_doc("CRM Student", attempt.student)
+	return [
+		record_sla_notification(
+			sla_event=event,
+			student=student,
+			recipient_user=recipient,
+			recipient_role=recipient_role,
+		)
+		for recipient in _authorized_recipients(student, recipient_role)
+	]
 
 
 def open_sla_for_assignment(
@@ -510,19 +539,13 @@ def _process_due_attempt(name: str, now):
 		attempt.save(ignore_permissions=True)
 		payload = {"recipient_role": recipient} if event_type == "escalated" else {"due_at": str(now)}
 		event = _insert_event(attempt, event_type, actor=actor, payload=payload)
-		_insert_delivery(attempt, event, recipient)
+		_schedule_delivery(attempt, event, recipient)
 	frappe.db.commit()
 
 
 def _delivery_recipients(delivery) -> list[str]:
 	student = frappe.get_doc("CRM Student", delivery.student)
-	if delivery.recipient_role == "owner":
-		user = frappe.db.get_value("CRM Staff", student.owner_staff, "user") if student.owner_staff else None
-		candidates = [user] if user else []
-	else:
-		role = {"lead_sales": "Lead Sales", "admissions_director": "Admissions Director"}.get(delivery.recipient_role)
-		candidates = frappe.get_all("Has Role", filters={"role": role}, pluck="parent") if role else []
-	return [user for user in candidates if user and has_student_permission(student, user=user, permission_type="read")]
+	return _authorized_recipients(student, delivery.recipient_role)
 
 
 def _fence_delivery(name: str, *, from_status: str, to_status: str, lease_token: str, revision: int, values: dict[str, Any] | None = None, require_live: bool = True) -> bool:
@@ -549,7 +572,9 @@ def _fence_delivery(name: str, *, from_status: str, to_status: str, lease_token:
 
 def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 	"""Bounded, leased notification outbox with per-recipient reauthorization."""
-	if not enabled("delivery"):
+	# Shared-outbox cutover stops new legacy writes, not delivery of pre-cutover
+	# rows. Drain those rows even if the legacy writer flag is already off.
+	if not enabled("delivery") and not enabled("shared_sla_outbox"):
 		return {"processed": 0, "failed": 0, "disabled": 1}
 	now = now_datetime()
 	rows = frappe.get_all(

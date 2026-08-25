@@ -15,6 +15,9 @@ import frappe
 import requests
 from frappe.utils import now_datetime
 
+from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.record_retention import technical_retention_until
+
 
 _EVENT_PATHS = {
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
@@ -22,6 +25,8 @@ _EVENT_PATHS = {
 }
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120
+SLA_NOTIFICATION_EVENT = "student.sla.notification.v1"
+_SLA_OUTBOX_FIELDS = {"source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "retention_until", "legal_hold"}
 
 
 def _event_fields() -> set[str]:
@@ -57,33 +62,84 @@ def quiesce_agent_events(aggregate_names: list[str]) -> dict:
 	}
 
 
-def record_agent_event(event_type: str, doc) -> str:
-	"""Persist an event in the caller's current transaction and schedule delivery."""
-	if frappe.conf.get("crm_agents_outbox_enabled", 1) in (0, "0", False):
-		return ""
-	if event_type not in _EVENT_PATHS:
-		frappe.throw(f"Unsupported crm-agents event type: {event_type}")
-	event = frappe.get_doc(
-		{
-			"doctype": "CRM Agent Event",
-			"event_id": str(uuid.uuid4()),
-			"event_type": event_type,
-			"aggregate_doctype": doc.doctype,
-			"aggregate_name": doc.name,
-			"source_revision": str(doc.modified or now_datetime()),
-			"contract_version": 1,
-			"occurred_at": now_datetime(),
-			"status": "pending",
-			"next_attempt_at": now_datetime(),
-		}
-	)
-	event.insert(ignore_permissions=True)
+def _retention_until():
+	return technical_retention_until("outbox")
+
+
+def _enqueue_delivery(event) -> None:
 	frappe.enqueue(
 		"crm.api.agent_events.deliver_agent_event",
 		queue="short",
 		enqueue_after_commit=True,
 		event_name=event.name,
 	)
+
+
+def record_agent_event(event_type: str, doc) -> str:
+	"""Persist an agent-webhook event in the caller's current transaction."""
+	if frappe.conf.get("crm_agents_outbox_enabled", 1) in (0, "0", False):
+		return ""
+	if event_type not in _EVENT_PATHS:
+		frappe.throw(f"Unsupported crm-agents event type: {event_type}")
+	event_id = str(uuid.uuid4())
+	values = {
+		"doctype": "CRM Agent Event",
+		"event_id": event_id,
+		"event_type": event_type,
+		"aggregate_doctype": doc.doctype,
+		"aggregate_name": doc.name,
+		"source_revision": str(doc.modified or now_datetime()),
+		"contract_version": 1,
+		"occurred_at": now_datetime(),
+		"status": "pending",
+		"next_attempt_at": now_datetime(),
+	}
+	fields = _event_fields()
+	if "delivery_key" in fields:
+		values["delivery_key"] = f"agent:{event_id}"
+	if "retention_until" in fields:
+		values["retention_until"] = _retention_until()
+	event = frappe.get_doc(values)
+	event.insert(ignore_permissions=True)
+	_enqueue_delivery(event)
+	return event.name
+
+
+def record_sla_notification(*, sla_event, student, recipient_user: str, recipient_role: str) -> str:
+	"""Write one PII-minimized, per-recipient SLA notification to the shared outbox."""
+	fields = _event_fields()
+	if not _SLA_OUTBOX_FIELDS.issubset(fields):
+		frappe.throw("CRM Agent Event shared-outbox fields are not migrated.")
+	key = f"sla:{sla_event.name}:{recipient_user}:realtime"
+	existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
+	if existing:
+		return existing
+	payload = {"student": student.name, "sla_event": sla_event.name, "event_type": sla_event.event_type, "correlation_token": sla_event.correlation_token}
+	event = frappe.get_doc(
+		{
+			"doctype": "CRM Agent Event",
+			"event_id": str(uuid.uuid4()),
+			"event_type": SLA_NOTIFICATION_EVENT,
+			"aggregate_doctype": "CRM Student",
+			"aggregate_name": student.name,
+			"source_revision": str(sla_event.attempt_revision),
+			"contract_version": 1,
+			"source_doctype": "CRM Student SLA Event",
+			"source_event": sla_event.name,
+			"delivery_key": key,
+			"channel": "realtime",
+			"recipient_user": recipient_user,
+			"recipient_role": recipient_role,
+			"payload": json.dumps(payload, sort_keys=True, separators=(",", ":")),
+			"correlation_token": sla_event.correlation_token,
+			"occurred_at": now_datetime(),
+			"status": "pending",
+			"next_attempt_at": now_datetime(),
+			"retention_until": _retention_until(),
+		}
+	)
+	event.insert(ignore_permissions=True)
+	_enqueue_delivery(event)
 	return event.name
 
 
@@ -101,6 +157,36 @@ def _event_body(event) -> bytes:
 		sort_keys=True,
 		separators=(",", ":"),
 	).encode()
+
+
+def _complete_delivery(event, lease_id: str, *, status: str = "delivered", error: str | None = None) -> None:
+	fields = _event_fields()
+	where = "name = %(name)s" + (" and lease_id = %(lease_id)s" if "lease_id" in fields else "")
+	values = {"name": event.name, "lease_id": lease_id, "at": now_datetime(), "error": error}
+	frappe.db.sql(
+		"update `tabCRM Agent Event` set status = %(status)s, delivered_at = %(at)s, last_error = %(error)s where " + where,
+		{**values, "status": status},
+	)
+
+
+def _deliver_realtime_notification(event, lease_id: str) -> bool:
+	"""Publish an SLA alert only if the recipient remains in Student scope."""
+	try:
+		if not event.recipient_user or event.aggregate_doctype != "CRM Student" or not event.aggregate_name:
+			raise ValueError("Invalid shared SLA outbox contract")
+		student = frappe.get_doc("CRM Student", event.aggregate_name)
+		if not has_student_permission(student, user=event.recipient_user, permission_type="read"):
+			_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_OUT_OF_SCOPE")
+			return True
+		payload = json.loads(event.payload or "{}")
+		if not isinstance(payload, dict) or set(payload) - {"student", "sla_event", "event_type", "correlation_token"}:
+			raise ValueError("Shared SLA payload contains unsupported fields")
+		frappe.publish_realtime("student_sla_alert", payload, user=event.recipient_user)
+	except Exception as exc:
+		_record_delivery_failure(event, str(exc), lease_id)
+		return False
+	_complete_delivery(event, lease_id)
+	return True
 
 
 def deliver_agent_event(event_name: str) -> None:
@@ -123,6 +209,9 @@ def deliver_agent_event(event_name: str) -> None:
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		return
 	event.reload()
+	if (event.get("channel") or "agent_webhook") == "realtime":
+		_deliver_realtime_notification(event, lease_id)
+		return
 	base_url = frappe.conf.get("crm_agents_url")
 	secret = frappe.conf.get("crm_agents_webhook_secret")
 	kid = frappe.conf.get("crm_agents_webhook_kid", "v1")
@@ -149,8 +238,7 @@ def deliver_agent_event(event_name: str) -> None:
 		_record_delivery_failure(event, str(exc), lease_id)
 		frappe.log_error(title="crm-agents outbox delivery failed", message=f"event={event.name}: {exc}")
 		return
-	where = "name = %(name)s" + (" and lease_id = %(lease_id)s" if "lease_id" in fields else "")
-	frappe.db.sql("update `tabCRM Agent Event` set status = 'delivered', delivered_at = %(at)s, last_error = null where " + where, {"name": event.name, "lease_id": lease_id, "at": now_datetime()})
+	_complete_delivery(event, lease_id)
 
 
 def _record_delivery_failure(event, error: str, lease_id: str | None = None) -> None:
@@ -193,4 +281,8 @@ def retry_pending_agent_events() -> None:
 		pluck="name",
 		limit_page_length=100,
 	):
-		deliver_agent_event(name)
+		try:
+			deliver_agent_event(name)
+		except Exception as exc:
+			frappe.db.rollback()
+			frappe.log_error(title="crm-agents outbox replay failed", message=f"event={name}: {exc}")

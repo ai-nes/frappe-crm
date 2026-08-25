@@ -82,3 +82,4 @@ crm.patches.v1_0.phase6_prepare_student_decisions
 crm.patches.v1_0.phase7_prepare_student_attribution
 crm.patches.v1_0.phase8_prepare_student_contact_conversion
 crm.patches.v1_0.phase9_prepare_governance_audit
+crm.patches.v1_0.consolidate_admissions_technical_records

@@ -825,10 +825,14 @@ def change_student_ownership(
 		# Receipt is append-only evidence.  Updating its initially reserved
 		# processing row is the one supported completion mutation.
 		receipt.save(ignore_permissions=True)
-		if target.get("target_kind") == "pool" and frappe.db.exists("DocType", "CRM Student Routing Request"):
-			from crm.fcrm.student_routing import enqueue_student_routing
+		if target.get("target_kind") == "pool":
+			from crm.fcrm.student_feature_flags import enabled
+			from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
-			enqueue_student_routing(student_name, trigger="pool_return", correlation_id=correlation_id)
+			if enabled("synchronous_routing"):
+				route_pool_owned_student(student_name, trigger="pool_return", correlation_id=correlation_id)
+			elif frappe.db.exists("DocType", "CRM Student Routing Request"):
+				enqueue_student_routing(student_name, trigger="pool_return", correlation_id=correlation_id)
 		if _commit:
 			frappe.db.commit()
 		return result

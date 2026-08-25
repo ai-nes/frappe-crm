@@ -9,6 +9,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.qualification import QUALIFICATION_POLICY_VERSION, validate_qualification_evidence
+from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled
 
@@ -186,6 +187,8 @@ def _finish(receipt, result):
 		receipt.db_set("outcome", "applied", update_modified=False)
 	if "completed_at" in {field.fieldname for field in frappe.get_meta(RECEIPT_DOCTYPE).fields}:
 		receipt.db_set("completed_at", frappe.utils.now_datetime(), update_modified=False)
+	if "retention_until" in {field.fieldname for field in frappe.get_meta(RECEIPT_DOCTYPE).fields}:
+		receipt.db_set("retention_until", technical_retention_until("receipt"), update_modified=False)
 
 
 def _status_for_stage(stage: str) -> str | None:

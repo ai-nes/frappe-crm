@@ -1,5 +1,6 @@
 import frappe
 from frappe.model.document import Document
+from crm.fcrm.record_retention import technical_retention_until
 
 
 class CRMStudentCommandReceipt(Document):
@@ -14,6 +15,8 @@ class CRMStudentCommandReceipt(Document):
 	)
 
 	def validate(self):
+		if self.outcome in {"attached", "created", "review_required", "review_applied", "applied", "rejected", "failed"} and not self.retention_until:
+			self.retention_until = technical_retention_until("receipt")
 		if self.is_new():
 			return
 		previous = self.get_doc_before_save()

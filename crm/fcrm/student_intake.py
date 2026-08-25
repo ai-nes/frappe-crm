@@ -833,10 +833,13 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 	with service_context():
 		student = frappe.get_doc({"doctype": "CRM Student", **_supported_values("CRM Student", values)})
 		student.insert(ignore_permissions=True)
-	if _doctype_exists("CRM Student Routing Request"):
-		from crm.fcrm.student_routing import enqueue_student_routing
+	from crm.fcrm.student_feature_flags import enabled
+	from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
-		enqueue_student_routing(student.name, trigger="pool_entry")
+	if enabled("synchronous_routing"):
+		route_pool_owned_student(student.name, trigger="pool_entry")
+	elif _doctype_exists("CRM Student Routing Request"):
+			enqueue_student_routing(student.name, trigger="pool_entry")
 	case_values = {
 		"doctype": CASE_KEY_DOCTYPE,
 		"case_key": f"CK-{identity}-{admission_year}"[:140],

@@ -124,11 +124,6 @@ def execute():
 			frappe.db.set_value("CRM Student", student.name, "owning_pool", pool.name, update_modified=False)
 	for doctype, columns, index_name in (
 		(
-			"CRM Student Routing Request",
-			("student", "ownership_revision"),
-			"crm_student_routing_request_student_revision_uniq",
-		),
-		(
 			"CRM Student SLA Attempt",
 			("student", "opening_ownership_revision", "reset_sequence"),
 			"crm_student_sla_attempt_student_revision_reset_uniq",
@@ -136,15 +131,11 @@ def execute():
 	):
 		_add_unique_index(doctype, columns, index_name)
 	for doctype, columns, index_name in (
-		("CRM Student Routing Request", ("status", "due_at"), "crm_student_routing_request_status_due_idx"),
-		("CRM Student Routing Request", ("student_pool", "status"), "crm_student_routing_request_pool_status_idx"),
 		("CRM Student SLA Attempt", ("status", "warning_at"), "crm_student_sla_attempt_status_warning_idx"),
 		("CRM Student SLA Attempt", ("status", "next_transition_at"), "crm_student_sla_attempt_status_next_transition_idx"),
 		("CRM Student SLA Attempt", ("status", "breach_at"), "crm_student_sla_attempt_status_breach_idx"),
 		("CRM Student SLA Attempt", ("student_pool", "status"), "crm_student_sla_attempt_pool_status_idx"),
 		("CRM Student SLA Event", ("student", "event_type", "event_at"), "crm_student_sla_event_student_type_at_idx"),
-		("CRM Student SLA Delivery", ("status", "due_at"), "crm_student_sla_delivery_status_due_idx"),
-		("CRM Student SLA Delivery", ("student", "status"), "crm_student_sla_delivery_student_status_idx"),
 		("CRM Student Routing Policy", ("campus", "student_pool", "status", "effective_from"), "crm_student_routing_policy_scope_status_idx"),
 		("CRM Student SLA Policy", ("campus", "student_pool", "status", "effective_from"), "crm_student_sla_policy_scope_status_idx"),
 	):

@@ -14,6 +14,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
@@ -115,6 +116,7 @@ def _complete_receipt(receipt, result: dict[str, Any]):
 		"outcome": "created",
 		"result_json": json.dumps(result, default=str),
 		"completed_at": frappe.utils.now_datetime(),
+		"retention_until": technical_retention_until("receipt"),
 	}.items():
 		receipt.db_set(field, value, update_modified=False)
 

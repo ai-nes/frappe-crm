@@ -25,6 +25,7 @@ from crm.fcrm.qualification import (
 	validate_qualification_evidence,
 )
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.student_feature_flags import enabled
 
 OUTCOME_DOCTYPE = "CRM Student Outcome"
@@ -116,7 +117,7 @@ def _new_receipt(*, command_key: str, idempotency_key: str, fingerprint: str, ac
 
 
 def _update_receipt(receipt, result: dict[str, Any], *, outcome: str = "created", error_code: str | None = None):
-	values = {"outcome": outcome, "result_json": json.dumps(result, default=str), "completed_at": frappe.utils.now_datetime()}
+	values = {"outcome": outcome, "result_json": json.dumps(result, default=str), "completed_at": frappe.utils.now_datetime(), "retention_until": technical_retention_until("receipt")}
 	if error_code:
 		values["error_code"] = error_code
 	for field, value in values.items():

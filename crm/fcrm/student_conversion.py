@@ -14,6 +14,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled
 
@@ -188,6 +189,7 @@ def _complete_receipt(receipt, result: dict[str, Any], outcome: str):
 		"outcome": outcome,
 		"result_json": _canonical_json(result),
 		"completed_at": frappe.utils.now_datetime(),
+		"retention_until": technical_retention_until("receipt"),
 		"result_revision": result.get("lifecycle_revision"),
 	}
 	for fieldname, value in _supported_values(RECEIPT_DOCTYPE, updates).items():
