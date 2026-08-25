@@ -9,6 +9,13 @@
       </div>
 
       <template v-else-if="type === 'interactions'">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-ink-gray-9">{{ __('Interactions') }}</h2>
+            <p class="mt-1 text-sm text-ink-gray-5">{{ __('Review conversations and record their outcomes.') }}</p>
+          </div>
+          <Button v-if="canRecordOutcome" :label="__('Record outcome')" @click="$emit('record-outcome')" />
+        </div>
         <div v-if="interactions.data?.length" class="flex flex-col divide-y">
           <div
             v-for="interaction in interactions.data"
@@ -414,14 +421,16 @@
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
-import { Badge, LoadingIndicator, createResource } from 'frappe-ui'
+import { Badge, Button, LoadingIndicator, createResource } from 'frappe-ui'
 import { computed, h, watch } from 'vue'
 
 const props = defineProps({
   contact: { type: Object, default: null },
   student: { type: Object, default: null },
   type: { type: String, default: 'interactions' },
+  canRecordOutcome: { type: Boolean, default: false },
 })
+defineEmits(['record-outcome'])
 
 const emptyIcon = h(ActivityIcon, { class: 'text-ink-gray-4' })
 

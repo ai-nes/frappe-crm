@@ -1,3 +1,5 @@
+import json
+
 import frappe
 from frappe.model.document import Document
 
@@ -26,10 +28,10 @@ class CRMStudentSLAEvent(Document):
 			frappe.throw("Student SLA Events can only be created by the SLA service.")
 		if self.event_type and self.event_type not in self._EVENT_TYPES:
 			frappe.throw("Unsupported Student SLA event type")
-		payload = self.payload or {}
+		payload = _json_object(self.payload)
 		if not isinstance(payload, dict) or not set(payload).issubset(_PAYLOAD_KEYS.get(self.event_type, set())):
 			frappe.throw("Student SLA event payload contains unsupported or sensitive fields")
-		scope = self.scope_snapshot or {}
+		scope = _json_object(self.scope_snapshot)
 		if not isinstance(scope, dict) or not set(scope).issubset(
 			{"actor_user", "actor_staff", "campus_scope", "team_scope", "student_scope", "target_owner_or_pool"}
 		):
@@ -39,3 +41,12 @@ class CRMStudentSLAEvent(Document):
 
 	def on_trash(self):
 		frappe.throw("Student SLA Events are append-only")
+
+
+def _json_object(value):
+	if isinstance(value, str):
+		try:
+			value = json.loads(value)
+		except (TypeError, ValueError):
+			return None
+	return value

@@ -17,13 +17,13 @@ from frappe import _
 
 from crm.fcrm.qualification import (
 	ENGAGEMENT_POLICY_VERSION,
+	MEANINGFUL_OUTCOMES,
 	OUTCOME_CODES,
 	validate_continuity,
 	validate_qualification_evidence,
 )
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled
-
 
 OUTCOME_DOCTYPE = "CRM Student Outcome"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
@@ -129,9 +129,58 @@ def _student(name: str):
 	return student
 
 
+def _verify_linked_records(student: str, interaction: str | None, source_doctype: str | None, source_name: str | None):
+	if interaction:
+		try:
+			interaction_doc = frappe.get_doc("CRM Interaction", interaction)
+		except Exception:
+			_fail("NOT_FOUND", "The linked Interaction does not exist.")
+		if not interaction_doc.has_permission("read") or interaction_doc.get("student") != student:
+			_fail("OUT_OF_SCOPE", "The linked Interaction is outside the Student scope.")
+	if bool(source_doctype) != bool(source_name):
+		_fail("INVALID_INPUT", "source_doctype and source_name must be supplied together.")
+	if source_doctype and source_name:
+		try:
+			source_doc = frappe.get_doc(source_doctype, source_name)
+		except Exception:
+			_fail("NOT_FOUND", "The source evidence record does not exist.")
+		if not source_doc.has_permission("read"):
+			_fail("OUT_OF_SCOPE", "The source evidence is outside the Student scope.")
+		linked_student = source_doc.get("student")
+		if not linked_student and source_doc.get("reference_doctype") == "CRM Student":
+			linked_student = source_doc.get("reference_docname")
+		if not linked_student and source_doc.get("crm_contact"):
+			linked_student = frappe.db.get_value("CRM Contact", source_doc.get("crm_contact"), "student")
+		if linked_student and linked_student != student:
+			_fail("OUT_OF_SCOPE", "The source evidence belongs to another Student.")
+
+
+def _verify_evidence(student: str, references: list[dict[str, str]]):
+	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
+	for reference in references:
+		doctype, name = reference.get("doctype"), reference.get("name")
+		if doctype not in allowed:
+			_fail("INVALID_EVIDENCE", "Evidence type is not allowed for this outcome.")
+		try:
+			doc = frappe.get_doc(doctype, name)
+		except Exception:
+			_fail("INVALID_EVIDENCE", "A referenced evidence record does not exist.")
+		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
+			_fail("OUT_OF_SCOPE", "A referenced evidence record is outside your scope.")
+		linked_student = doc.get("student")
+		if not linked_student and doc.get("reference_doctype") == "CRM Student":
+			linked_student = doc.get("reference_docname")
+		if not linked_student and doc.get("attached_to_doctype") == "CRM Student":
+			linked_student = doc.get("attached_to_name")
+		if not linked_student and doc.get("interaction"):
+			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
+		if linked_student != student:
+			_fail("OUT_OF_SCOPE", "Evidence belongs to another Student.")
+
+
 def _lock_student(name: str):
 	try:
-		frappe.db.sql(f"select name from `tabCRM Student` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -144,6 +193,7 @@ def _revision(student) -> int:
 
 
 def _task(next_action: Any, student: str, interaction: str | None, assignee: str | None, due_at: Any):
+	is_existing = isinstance(next_action, str)
 	if isinstance(next_action, str):
 		doc = frappe.get_doc("Task", next_action)
 	else:
@@ -152,9 +202,18 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 		doc = frappe.get_doc(payload)
 	if doc.get("student") not in (None, "", student):
 		_fail("INVALID_CONTINUITY", "Next action belongs to a different Student.")
+	if doc.get("reference_doctype") == "CRM Student" and doc.get("reference_docname") not in (None, "", student):
+		_fail("INVALID_CONTINUITY", "Next action references a different Student.")
+	if is_existing:
+		if not doc.has_permission("write"):
+			_fail("FORBIDDEN", "You are not permitted to update this next action.")
+		if doc.get("student") != student and doc.get("reference_docname") != student:
+			_fail("INVALID_CONTINUITY", "An existing next action must already link to the Student.")
 	doc.student = student
 	if interaction:
 		doc.linked_interaction = interaction
+	doc.reference_doctype = "CRM Student"
+	doc.reference_docname = student
 	if assignee:
 		doc.assigned_to = assignee
 	if due_at:
@@ -163,6 +222,18 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 		_fail("INVALID_CONTINUITY", "A Task next action requires an assignee and due date.")
 	if doc.is_new():
 		doc.insert(ignore_permissions=True)
+	else:
+		doc.db_set(
+		{
+			"student": doc.student,
+			"linked_interaction": doc.get("linked_interaction"),
+			"reference_doctype": doc.get("reference_doctype"),
+			"reference_docname": doc.get("reference_docname"),
+			"assigned_to": doc.get("assigned_to"),
+			"due_date": doc.get("due_date"),
+		},
+		update_modified=False,
+	)
 	return doc
 
 
@@ -191,6 +262,7 @@ def record_outcome(
 	actor = _actor()
 	scope = _authorize(actor)
 	student_doc = _student(student)
+	_verify_linked_records(student, interaction, source_doctype, source_name)
 	idempotency_key = _required(idempotency_key, "idempotency_key")
 	outcome_code = _required(outcome_code, "outcome_code")
 	if expected_revision in (None, ""):
@@ -229,7 +301,7 @@ def record_outcome(
 	if expected_revision not in (None, "") and str(expected_revision) != str(current_revision):
 		_fail("STALE_REVISION", "Student engagement changed; reload before retrying.")
 	next_task = None
-	if continuity_kind == "task":
+	if continuity_kind == "task" and outcome_code in MEANINGFUL_OUTCOMES:
 		next_task = _task(next_action, student, interaction, next_action_assignee, next_action_due_at)
 	continuity = validate_continuity(
 		outcome_code,
@@ -239,10 +311,13 @@ def record_outcome(
 		expires_at=continuity_expires_at,
 	)
 	evidence = validate_qualification_evidence(None, outcome_code, qualification_evidence)["evidence"]
+	_verify_evidence(student, evidence)
 	if supersedes:
 		prior = frappe.get_doc(OUTCOME_DOCTYPE, supersedes)
 		if prior.student != student:
 			_fail("INVALID_INPUT", "A correction may only supersede an outcome for the same Student.")
+		if frappe.db.exists(OUTCOME_DOCTYPE, {"supersedes": supersedes}):
+			_fail("INVALID_INPUT", "This outcome has already been superseded.")
 	previous_service_flag = getattr(frappe.flags, SERVICE_FLAG, False)
 	setattr(frappe.flags, SERVICE_FLAG, True)
 	try:
@@ -260,12 +335,12 @@ def record_outcome(
 				"next_action_due_at": next_task.due_date if next_task else None,
 				"continuity_reason": continuity_reason,
 				"continuity_expires_at": continuity.get("expires_at"),
-				"qualification_evidence": evidence,
+				"qualification_evidence": json.dumps(evidence),
 				"source_doctype": source_doctype,
 				"source_name": source_name,
 				"source_key": source_key,
 				"actor": actor,
-				"actor_scope": scope,
+				"actor_scope": json.dumps(scope),
 				"occurred_at": frappe.utils.now_datetime(),
 				"supersedes": supersedes,
 				"command_receipt": receipt.name,

@@ -12,7 +12,6 @@ from crm.fcrm.qualification import QUALIFICATION_POLICY_VERSION, validate_qualif
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_feature_flags import enabled
 
-
 LIFECYCLE_EVENT_DOCTYPE = "CRM Student Lifecycle Event"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 POLICY_VERSION = "phase5-lifecycle-v1"
@@ -94,6 +93,29 @@ def _student(name: str):
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
+
+
+def _verify_evidence(student: str, references: list[dict[str, str]]):
+	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
+	for reference in references:
+		doctype, name = reference.get("doctype"), reference.get("name")
+		if doctype not in allowed:
+			_fail("INVALID_EVIDENCE", "Evidence type is not allowed for lifecycle qualification.")
+		try:
+			doc = frappe.get_doc(doctype, name)
+		except Exception:
+			_fail("INVALID_EVIDENCE", "A referenced qualification record does not exist.")
+		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
+			_fail("OUT_OF_SCOPE", "A referenced qualification record is outside your scope.")
+		linked_student = doc.get("student")
+		if not linked_student and doc.get("reference_doctype") == "CRM Student":
+			linked_student = doc.get("reference_docname")
+		if not linked_student and doc.get("attached_to_doctype") == "CRM Student":
+			linked_student = doc.get("attached_to_name")
+		if not linked_student and doc.get("interaction"):
+			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
+		if linked_student != student:
+			_fail("OUT_OF_SCOPE", "Qualification evidence belongs to another Student.")
 
 
 def _stage(student) -> str:
@@ -204,6 +226,8 @@ def request_transition(
 	idempotency_key = str(idempotency_key or "").strip()
 	if not idempotency_key:
 		_fail("INVALID_INPUT", "idempotency_key is required.")
+	if expected_revision in (None, ""):
+		_fail("INVALID_INPUT", "expected_revision is required.")
 	payload = {"student": student, "target_stage": target_stage, "reason": reason, "evidence_refs": evidence_refs, "outcome_code": outcome_code, "expected_revision": expected_revision}
 	fingerprint = _fingerprint(payload)
 	command_key = _command_key(actor, idempotency_key)
@@ -218,6 +242,7 @@ def request_transition(
 	if expected_revision not in (None, "") and str(expected_revision) != str(revision):
 		_fail("STALE_REVISION", "Student lifecycle changed; reload before retrying.")
 	transition = validate_transition(current_stage, target_stage, reason=reason, evidence=evidence_refs, outcome_code=outcome_code, capabilities=capabilities)
+	_verify_evidence(student, transition["evidence"])
 	prior_active = _prior_active_stage(student) if transition["transition_kind"] == "reopen" else None
 	if transition["transition_kind"] == "reopen":
 		if not prior_active:
@@ -237,9 +262,9 @@ def request_transition(
 				"transition_kind": transition["transition_kind"],
 				"prior_active_stage": prior_active or (current_stage if transition["transition_kind"] == "lost" else None),
 				"reason": transition["reason"],
-				"evidence_references": transition["evidence"],
+				"evidence_references": json.dumps(transition["evidence"]),
 				"actor": actor,
-				"actor_scope": {"actor": actor, "capabilities": sorted(capabilities)},
+				"actor_scope": json.dumps({"actor": actor, "capabilities": sorted(capabilities)}),
 				"occurred_at": frappe.utils.now_datetime(),
 				"command_receipt": receipt.name,
 				"idempotency_key": idempotency_key,
@@ -254,11 +279,8 @@ def request_transition(
 		if status:
 			updates["enrollment_status"] = status
 		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
-		try:
-			from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
-			record_transition(student, student_doc.get("enrollment_status"), status, source="phase5_lifecycle_event")
-		except Exception:
-			frappe.log_error(title="Phase 5 lifecycle compatibility projection failed", message=frappe.get_traceback())
+		from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
+		record_transition(student, student_doc.get("enrollment_status"), status, source="phase5_lifecycle_event")
 		result = {"status": "created", "event": event.name, "student": student, "from_stage": transition["from_stage"], "to_stage": transition["to_stage"], "transition_kind": transition["transition_kind"], "revision": new_revision, "receipt": receipt.name}
 		_finish(receipt, result)
 		return result

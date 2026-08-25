@@ -224,6 +224,11 @@ def create_interaction_from_task_update(doc, method=None):
 		return
 	if not (doc.has_value_changed("status") and doc.status == "Done"):
 		return
+	# A Phase 5 next-action Task may already be linked to the canonical
+	# Interaction that recorded its outcome. Completion must satisfy that event,
+	# not create a second timeline row.
+	if getattr(doc, "linked_interaction", None):
+		return
 	if not doc.description:
 		return
 	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):

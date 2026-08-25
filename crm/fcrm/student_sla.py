@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import frappe
-from frappe.utils import add_to_date, date_diff_in_seconds, now_datetime
+from frappe.utils import add_to_date, now_datetime, time_diff_in_seconds
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -101,10 +101,10 @@ def _insert_event(attempt, event_type: str, *, actor: str, payload: dict[str, An
 		"sla_policy": attempt.sla_policy,
 		"sla_policy_version": attempt.sla_policy_version,
 		"actor": actor,
-		"scope_snapshot": scope,
+		"scope_snapshot": json.dumps(scope),
 		"correlation_token": attempt.correlation_token,
 		"idempotency_key": key,
-		"payload": payload or {},
+		"payload": json.dumps(payload or {}),
 		"event_at": now_datetime(),
 		"schema_version": "phase4-v1",
 	}
@@ -190,7 +190,7 @@ def open_sla_for_assignment(
 		"breach_at": breach_at,
 		"escalation_at": escalation_at,
 		"next_transition_at": warning_at,
-		"pause_reasons": _policy_pause_reasons(policy),
+		"pause_reasons": json.dumps(_policy_pause_reasons(policy)),
 		"maximum_pause_minutes": int(policy.maximum_pause_minutes or 0),
 		"recipient_strategy": policy.recipient_strategy,
 		"opened_at": opened_at,
@@ -255,7 +255,7 @@ def resume_sla(attempt_name: str, *, expected_revision: int):
 	now = now_datetime()
 	if attempt.pause_deadline and now > attempt.pause_deadline:
 		_error("PAUSE_EXPIRED", "The approved pause window expired and was reconciled by the SLA worker.")
-	paused_minutes = max(0, int(date_diff_in_seconds(now, attempt.paused_at) // 60))
+	paused_minutes = max(0, int(time_diff_in_seconds(now, attempt.paused_at) // 60))
 	attempt.total_paused_minutes = int(attempt.total_paused_minutes or 0) + paused_minutes
 	attempt.warning_at = add_to_date(attempt.warning_at, minutes=paused_minutes)
 	attempt.breach_at = add_to_date(attempt.breach_at, minutes=paused_minutes)
@@ -471,7 +471,7 @@ def _process_due_attempt(name: str, now):
 	if attempt.status == "paused":
 		if not attempt.pause_deadline or attempt.pause_deadline > now:
 			return
-		paused_minutes = max(0, int(date_diff_in_seconds(now, attempt.paused_at) // 60))
+		paused_minutes = max(0, int(time_diff_in_seconds(now, attempt.paused_at) // 60))
 		remaining = max(0, int(attempt.maximum_pause_minutes or 0) - int(attempt.total_paused_minutes or 0))
 		paused_minutes = min(paused_minutes, remaining)
 		attempt.total_paused_minutes = int(attempt.total_paused_minutes or 0) + paused_minutes
@@ -508,7 +508,8 @@ def _process_due_attempt(name: str, now):
 	attempt.revision = int(attempt.revision or 0) + 1
 	with service_context():
 		attempt.save(ignore_permissions=True)
-		event = _insert_event(attempt, event_type, actor=actor, payload={"due_at": str(now), "recipient_role": recipient})
+		payload = {"recipient_role": recipient} if event_type == "escalated" else {"due_at": str(now)}
+		event = _insert_event(attempt, event_type, actor=actor, payload=payload)
 		_insert_delivery(attempt, event, recipient)
 	frappe.db.commit()
 

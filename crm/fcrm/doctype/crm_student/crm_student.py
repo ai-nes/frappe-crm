@@ -40,6 +40,14 @@ class CRMStudent(Document):
 
 	def before_save(self):
 		before = self.get_doc_before_save()
+		if before and not getattr(frappe.flags, "student_lifecycle_service", False):
+			lifecycle_fields = ("enrollment_status", "lifecycle_stage")
+			if any(before.get(field) != self.get(field) for field in lifecycle_fields):
+				frappe.throw(
+					_("Student lifecycle changes must use the lifecycle transition command."),
+					frappe.PermissionError,
+					title=_("Lifecycle command required"),
+				)
 		if before and not getattr(frappe.flags, "student_ownership_service", False):
 			ownership_fields = ("assigned_to", "owner_staff", "owning_team", "owning_pool")
 			if any(before.get(field) != self.get(field) for field in ownership_fields):
@@ -304,23 +312,24 @@ class CRMStudent(Document):
 @frappe.whitelist()
 def convert_to_contact(student_name):
 	student = frappe.get_doc("CRM Student", student_name)
+	if not student.has_permission("read"):
+		frappe.throw(_("You are not permitted to access this Student."), frappe.PermissionError)
+	if frappe.session.user not in {"Administrator", "Guest"}:
+		from crm.fcrm.role_policy import capabilities_for_roles
+
+		capabilities = capabilities_for_roles(frappe.get_roles(frappe.session.user))
+		if "student.execute" not in capabilities:
+			frappe.throw(_("You are not permitted to convert this Student."), frappe.PermissionError)
+	# Conversion is not a lifecycle command.  Do not allow this legacy endpoint
+	# to smuggle a status/stage mutation around the authoritative transition API.
+	if student.enrollment_status != "Có triển vọng":
+		frappe.throw(
+			_("Record the lifecycle transition to MQL before converting this Student to a Contact."),
+			frappe.ValidationError,
+		)
 
 	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
 	if existing_contact:
-		# Raw field writes (db_set / db.set_value) bypass validate(), so
-		# lifecycle_stage — normally derived automatically — must be set
-		# explicitly here too, or it drifts out of sync with enrollment_status
-		# (see crm.fcrm.lifecycle.get_lifecycle_stage).
-		reconverted_stage = get_lifecycle_stage("Có triển vọng")
-		if student.enrollment_status != "Có triển vọng":
-			set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
-			student.db_set("lifecycle_stage", reconverted_stage)
-		frappe.db.set_value(
-			"CRM Contact",
-			existing_contact,
-			{"enrollment_status": "Có triển vọng", "lifecycle_stage": reconverted_stage},
-			update_modified=False,
-		)
 		return existing_contact
 
 	if not student.phone:
@@ -348,9 +357,6 @@ def convert_to_contact(student_name):
 		"parent_phone": student.alt_phone,
 	})
 	contact.insert(ignore_permissions=True)
-
-	set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
-	student.db_set("lifecycle_stage", get_lifecycle_stage("Có triển vọng"))
 
 	return contact.name
 

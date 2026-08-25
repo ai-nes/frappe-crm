@@ -55,5 +55,14 @@ def get_outcome_vocabulary():
 
 
 @frappe.whitelist()
-def get_student_context(student: str, history_limit: int = 20, history_cursor: str | None = None):
-	return _get_student_context(student, history_limit=history_limit, history_cursor=history_cursor)
+def get_student_context(
+	student: str,
+	history_limit: int = 20,
+	history_page_size: int | None = None,
+	history_cursor: str | None = None,
+):
+	return _get_student_context(
+		student,
+		history_limit=history_page_size if history_page_size is not None else history_limit,
+		history_cursor=history_cursor,
+	)

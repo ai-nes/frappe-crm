@@ -19,29 +19,20 @@
         @click="showOwnershipModal = true"
       />
       <Button
-        v-if="doc.name && doc.enrollment_status === 'Mới'"
+        v-if="doc.name && doc.enrollment_status === 'Có triển vọng'"
         variant="solid"
         :label="__('Convert to Contact')"
         iconLeft="user-plus"
         :loading="converting"
         @click="convertToContact"
       />
-      <Dropdown
+      <Button
         v-if="doc.enrollment_status"
-        :options="enrollmentStatuses"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            :label="doc.enrollment_status"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="statusColor(doc.enrollment_status)" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
+        :label="lifecycleStage"
+        iconLeft="shuffle"
+        :disabled="!canRequestLifecycleTransition"
+        @click="showLifecycleModal = true"
+      />
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -59,12 +50,17 @@
           doctype="CRM Student"
           :docname="crmStudentId"
           :tabs="tabs"
+          :additional-activities="studentActivityEntries"
+          :additional-activities-has-more="Boolean(engagementHistoryCursor)"
           @afterSave="() => sections.reload()"
+          @load-more-additional-activities="loadMoreEngagementHistory"
         />
         <InteractionScoreArea
           v-else-if="tabs[tabIndex]?.name === 'Interactions'"
           :student="doc"
           type="interactions"
+          :can-record-outcome="Boolean(engagementContext.data)"
+          @record-outcome="showOutcomeModal = true"
         />
         <InteractionScoreArea
           v-else
@@ -84,21 +80,22 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
-        <section class="border-b px-5 py-4" aria-labelledby="ownership-heading">
-          <div class="flex items-center justify-between gap-2">
-            <h2 id="ownership-heading" class="text-sm font-medium text-ink-gray-8">{{ __('Ownership') }}</h2>
-            <span v-if="ownership.loading" class="text-xs text-ink-gray-5" role="status">{{ __('Loading…') }}</span>
-          </div>
-          <p v-if="ownership.data" class="mt-1 text-sm text-ink-gray-6">
-            {{ ownershipSummary }}
-          </p>
-          <p v-else class="mt-1 text-sm text-ink-gray-5">{{ __('Ownership details are unavailable.') }}</p>
-          <ol v-if="ownershipEvents.length" class="mt-3 space-y-2 border-l pl-3 text-xs text-ink-gray-6" aria-label="Ownership history">
-            <li v-for="event in ownershipEvents" :key="event.name || event.event_id || event.creation">
-              <span class="font-medium text-ink-gray-7">{{ event.summary || event.reason || __('Ownership changed') }}</span>
-              <span v-if="event.creation || event.timestamp"> · {{ event.creation || event.timestamp }}</span>
-            </li>
-          </ol>
+        <section class="border-b p-1 sm:p-3" aria-label="Ownership">
+          <Section
+            :label="__('Ownership')"
+            label-class="px-2 font-semibold"
+            header-class="h-8"
+          >
+            <template #actions>
+              <span v-if="ownership.loading" class="mr-2 text-xs text-ink-gray-5" role="status">{{ __('Loading…') }}</span>
+            </template>
+            <div class="px-3">
+              <p v-if="ownership.data" class="mt-3 text-sm text-ink-gray-6">
+                {{ ownershipSummary }}
+              </p>
+              <p v-else class="mt-3 text-sm text-ink-gray-5">{{ __('Ownership details are unavailable.') }}</p>
+            </div>
+          </Section>
         </section>
         <StudentSLASection
           :attempt="studentSLA.data?.attempt"
@@ -107,20 +104,25 @@
           @changed="handleSLAChanged"
           @refresh-required="studentSLA.reload()"
         />
-        <section v-if="routingStatus.data" class="border-b px-5 py-4" aria-labelledby="student-routing-heading">
-          <div class="flex items-center justify-between gap-3">
-            <div>
-              <h2 id="student-routing-heading" class="text-sm font-medium text-ink-gray-8">{{ __('Student routing') }}</h2>
-              <p class="mt-1 text-sm text-ink-gray-6">
+        <StudentEngagementSection
+          :context="engagementContext.data"
+          :loading="engagementContext.loading"
+          :error="engagementContextError"
+        />
+        <section v-if="routingStatus.data" class="border-b px-5 py-3" aria-label="Student routing">
+          <div class="flex items-center justify-between gap-3 text-sm">
+            <span class="font-semibold text-ink-gray-8">{{ __('Student routing') }}</span>
+            <div class="flex min-w-0 items-center gap-2">
+              <span class="truncate text-ink-gray-6" :title="routingStatus.data.last_error_code || undefined">
                 {{ __('Status: {0}', [routingStatus.data.status]) }}
-                <template v-if="routingStatus.data.last_error_code"> · {{ routingStatus.data.last_error_code }}</template>
-              </p>
+              </span>
+              <Button
+                v-if="['deferred', 'failed'].includes(routingStatus.data.status) && routingStatus.data.capabilities?.retry"
+                size="sm"
+                :label="__('Retry')"
+                @click="showRouteModal = true"
+              />
             </div>
-            <Button
-              v-if="['deferred', 'failed'].includes(routingStatus.data.status) && routingStatus.data.capabilities?.retry"
-              :label="__('Retry')"
-              @click="showRouteModal = true"
-            />
           </div>
         </section>
         <SidePanelLayout
@@ -154,13 +156,28 @@
     @changed="handleRoutingChanged"
     @refresh-required="routingStatus.reload()"
   />
+  <TransitionStudentLifecycleModal
+    v-if="showLifecycleModal && engagementContext.data"
+    v-model="showLifecycleModal"
+    :student="crmStudentId"
+    :lifecycle="engagementContext.data.lifecycle || {}"
+    @changed="handleLifecycleChanged"
+    @refresh-required="engagementContext.reload()"
+  />
+  <RecordStudentOutcomeModal
+    v-if="showOutcomeModal && engagementContext.data"
+    v-model="showOutcomeModal"
+    :student="crmStudentId"
+    :context="engagementContext.data"
+    @changed="handleOutcomeChanged"
+    @refresh-required="engagementContext.reload()"
+  />
 </template>
 
 <script setup>
 import ErrorPage from '@/components/ErrorPage.vue'
 import Icon from '@/components/Icon.vue'
 import Resizer from '@/components/Resizer.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
@@ -174,6 +191,11 @@ import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.v
 import ChangeStudentOwnershipModal from '@/components/Modals/ChangeStudentOwnershipModal.vue'
 import RouteStudentModal from '@/components/Modals/RouteStudentModal.vue'
 import StudentSLASection from '@/components/StudentSLASection.vue'
+import StudentEngagementSection from '@/components/StudentEngagementSection.vue'
+import Section from '@/components/Section.vue'
+import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
+import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
+import { lifecycleTargets, safeLifecycleError, studentEngagementApi } from '@/utils/studentEngagement'
 import { copyToClipboard } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
@@ -182,11 +204,11 @@ import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import {
   createResource,
-  Dropdown,
   Tabs,
   Breadcrumbs,
   usePageMeta,
   toast,
+  call,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -210,6 +232,8 @@ const errorMessage = ref('')
 const converting = ref(false)
 const showOwnershipModal = ref(false)
 const showRouteModal = ref(false)
+const showLifecycleModal = ref(false)
+const showOutcomeModal = ref(false)
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
     'student.execute',
@@ -242,7 +266,16 @@ const ownershipSummary = computed(() => {
     ? __('Owner: {0} · Revision {1}', [owner, state.revision ?? 0])
     : __('Pool: {0} · Revision {1}', [pool, state.revision ?? 0])
 })
-const ownershipEvents = computed(() => ownership.data?.events || ownership.data?.history || [])
+const ownershipActivityEntries = computed(() =>
+  (ownership.data?.events || ownership.data?.history || [])
+    .filter((event) => event?.creation || event?.timestamp)
+    .map((event) => ({
+      name: `student-ownership-${event.name || event.event_id || event.creation || event.timestamp}`,
+      activity_type: 'student_engagement',
+      creation: event.creation || event.timestamp,
+      data: { summary: event.summary || event.reason || __('Ownership changed') },
+    })),
+)
 const routingRequestId = computed(() =>
   ownership.data?.routing_request || ownership.data?.latest_routing_request || doc.value?.routing_request,
 )
@@ -252,6 +285,49 @@ const studentSLA = createResource({
   auto: true,
   initialData: null,
 })
+const engagementContext = createResource({
+  url: studentEngagementApi.getContext,
+  makeParams: () => ({ student: props.crmStudentId, history_limit: 50 }),
+  auto: true,
+  initialData: null,
+})
+const lifecycleStage = computed(() =>
+  engagementContext.data?.lifecycle?.current_stage ||
+  engagementContext.data?.lifecycle?.stage ||
+  doc.value?.enrollment_status ||
+  __('Lifecycle unavailable'),
+)
+const canRequestLifecycleTransition = computed(() =>
+  lifecycleTargets(engagementContext.data?.lifecycle).length > 0 &&
+  engagementContext.data?.capabilities?.transition !== false,
+)
+const engagementContextError = computed(() =>
+  engagementContext.error ? safeLifecycleError(engagementContext.error, __('Unable to load engagement context.')) : '',
+)
+const engagementActivityEntries = computed(() => {
+  const history = engagementContext.data?.history?.items || engagementContext.data?.history || []
+  return history
+    .filter((event) => event?.occurred_at || event?.creation)
+    .map((event) => ({
+      name: `student-engagement-${event.name || event.event_id || event.occurred_at}`,
+      activity_type: 'student_engagement',
+      creation: event.occurred_at || event.creation,
+      data: {
+        summary: event.to_stage
+          ? __('Lifecycle changed to {0}', [event.to_stage])
+          : event.outcome
+            ? __('Outcome recorded: {0}', [event.outcome])
+            : event.summary || __('Student lifecycle updated'),
+      },
+    }))
+})
+const engagementHistoryCursor = computed(() =>
+  engagementContext.data?.history?.next_cursor || engagementContext.data?.next_cursor,
+)
+const studentActivityEntries = computed(() => [
+  ...ownershipActivityEntries.value,
+  ...engagementActivityEntries.value,
+])
 const routingStatus = createResource({
   url: 'crm.api.student_routing.get_student_routing_status',
   makeParams: () => ({ request: routingRequestId.value }),
@@ -280,6 +356,40 @@ function handleRoutingChanged() {
   routingStatus.reload()
   ownership.reload()
   studentSLA.reload()
+}
+
+function handleLifecycleChanged() {
+  engagementContext.reload()
+  sections.reload()
+  document.reload?.()
+}
+
+function handleOutcomeChanged() {
+  engagementContext.reload()
+  sections.reload()
+}
+
+async function loadMoreEngagementHistory() {
+  if (!engagementHistoryCursor.value) return
+  try {
+    const nextPage = await call(studentEngagementApi.getContext, {
+      student: props.crmStudentId,
+      history_cursor: engagementHistoryCursor.value,
+      history_limit: 50,
+    })
+    const currentHistory = engagementContext.data?.history?.items || engagementContext.data?.history || []
+    const nextHistory = nextPage?.history?.items || nextPage?.history || []
+    engagementContext.data = {
+      ...engagementContext.data,
+      ...nextPage,
+      history: {
+        ...(nextPage?.history || {}),
+        items: [...currentHistory, ...nextHistory],
+      },
+    }
+  } catch (err) {
+    toast.error(safeLifecycleError(err, __('Unable to load more lifecycle history.')))
+  }
 }
 
 watch(error, (err) => {
@@ -323,30 +433,6 @@ const title = computed(() => {
 })
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
-
-const enrollmentStatusList = createResource({
-  url: 'frappe.client.get_list',
-  params: { doctype: 'CRM Enrollment Status', fields: ['name'], limit: 50, order_by: 'idx asc' },
-  auto: true,
-})
-
-function statusColor() {
-  return 'text-gray-500'
-}
-
-const enrollmentStatuses = computed(() =>
-  (enrollmentStatusList.data || []).map((s) => ({
-    label: s.name,
-    onClick: () => updateStatus(s.name),
-  })),
-)
-
-function updateStatus(status) {
-  doc.value.enrollment_status = status
-  document.save.submit(null, {
-    onError: (err) => toast.error(err.messages?.[0] || __('Error updating status')),
-  })
-}
 
 const convertResource = createResource({
   url: 'crm.fcrm.doctype.crm_student.crm_student.convert_to_contact',
@@ -399,6 +485,8 @@ const sections = createResource({
       'owning_team',
       'section_assignment_history',
       'assignment_log',
+      'enrollment_status',
+      'lifecycle_stage',
     ])
     return data.map((section) => ({
       ...section,

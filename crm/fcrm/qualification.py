@@ -70,9 +70,15 @@ def normalize_evidence(evidence: Any) -> list[dict[str, str]]:
 	for item in _as_list(evidence):
 		if isinstance(item, str):
 			parts = item.split(":", 2)
-			if len(parts) != 3:
+			if len(parts) == 1 and item.strip():
+				# The UI accepts a compact event id.  Treat it as an outcome
+				# reference; the command service still verifies existence,
+				# Student linkage and permissions before persisting it.
+				category, doctype, name = "outcome", "CRM Student Outcome", item
+			elif len(parts) == 3:
+				category, doctype, name = parts
+			else:
 				continue
-			category, doctype, name = parts
 		else:
 			if not isinstance(item, dict):
 				continue
