@@ -37,6 +37,64 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
+SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "CRM Event Participation", "WhatsApp Message"}
+
+
+def _source_matches_student(doctype, name, student, seen=None):
+	"""Resolve provenance through the source's canonical Student/Contact link."""
+	try:
+		if not doctype or not name or not frappe.db.exists(doctype, name):
+			return False
+	except Exception:
+		return False
+	seen = seen or set()
+	key = (doctype, name)
+	if key in seen:
+		return False
+	seen.add(key)
+	doc = frappe.get_doc(doctype, name)
+	if getattr(doc, "student", None):
+		return doc.student == student
+	for fieldname in ("crm_contact", "contact", "customer", "party"):
+		contact = getattr(doc, fieldname, None)
+		if contact and frappe.db.exists("CRM Contact", contact):
+			return frappe.db.get_value("CRM Contact", contact, "student") == student
+	ref_doctype = getattr(doc, "reference_doctype", None)
+	ref_name = getattr(doc, "reference_docname", None) or getattr(doc, "reference_name", None)
+	if ref_doctype and ref_name:
+		return _source_matches_student(ref_doctype, ref_name, student, seen)
+	for row in getattr(doc, "links", None) or []:
+		link_doctype = getattr(row, "link_doctype", None) or getattr(row, "doctype", None)
+		link_name = getattr(row, "link_name", None) or getattr(row, "name", None)
+		if link_doctype and link_name and _source_matches_student(link_doctype, link_name, student, seen):
+			return True
+	return False
+
+
+def _source_is_actionable(doctype, doc):
+	"""Require a completed/real source event, not an arbitrary reference string."""
+	if doctype == "Call Log":
+		return doc.status == "Completed" and bool(doc.duration or doc.end_time)
+	if doctype == "Task":
+		return doc.status == "Done"
+	if doctype == "CRM Event Participation":
+		return doc.status in {"Checked-in", "Feedback Given"}
+	if doctype == "Communication":
+		return doc.sent_or_received in {"Sent", "Received"}
+	if doctype == "WhatsApp Message":
+		return getattr(doc, "status", None) in {"Sent", "Delivered", "Read", "Received", "Completed"}
+	return False
+
+
+def verify_sla_source(doctype, name, student):
+	try:
+		if doctype not in SLA_SOURCE_DOCTYPES or not name or not frappe.db.exists(doctype, name):
+			return False
+		doc = frappe.get_doc(doctype, name)
+		return _source_is_actionable(doctype, doc) and _source_matches_student(doctype, name, student)
+	except Exception:
+		return False
+
 
 def create_interaction(
 	*,
@@ -68,8 +126,41 @@ def create_interaction(
 	interaction.actor = actor or frappe.session.user
 	interaction.summary = summary or interaction_type
 	interaction.outcome = outcome
-	interaction.insert(ignore_permissions=True)
+	if student and verify_sla_source(reference_doctype, reference_docname, student):
+		interaction.source_verified = 1
+	previous_flag = getattr(frappe.flags, "student_sla_source_service", False)
+	frappe.flags.student_sla_source_service = True
+	try:
+		interaction.insert(ignore_permissions=True)
+	finally:
+		frappe.flags.student_sla_source_service = previous_flag
 	return interaction.name
+
+
+def satisfy_student_sla_from_interaction(doc, method=None):
+	"""Close an eligible Student SLA once a source interaction has an outcome."""
+	if not doc.get("student"):
+		return None
+	if doc.get("outcome") not in {"Captured", "Follow Up Needed", "Resolved", "Converted"}:
+		return None
+	if doc.get("reference_doctype") not in {"Call Log", "Communication", "Task", "CRM Event Participation", "WhatsApp Message"}:
+		return None
+	if not doc.get("source_verified") or not verify_sla_source(doc.reference_doctype, doc.reference_docname, doc.student):
+		return None
+	from crm.fcrm.student_sla import get_student_sla_status, record_qualifying_response
+
+	status = get_student_sla_status(doc.student)
+	attempt = status.get("attempt")
+	if not attempt:
+		return None
+	try:
+		return record_qualifying_response(
+			attempt["attempt"], doc.name, expected_revision=attempt["revision"]
+		)
+	except Exception:
+		# An out-of-scope/system-generated interaction remains evidence but cannot
+		# satisfy the clock; the interaction write itself must not fail.
+		return None
 
 
 def _create_interaction_for_reference(

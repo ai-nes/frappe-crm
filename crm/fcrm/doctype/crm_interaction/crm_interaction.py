@@ -12,6 +12,17 @@ class CRMInteraction(Document):
 	def validate(self):
 		if not self.student and not self.crm_contact:
 			frappe.throw(frappe._("An interaction must be linked to a Student or a CRM Contact."))
+		previous = self.get_doc_before_save() if not self.is_new() else None
+		if ((self.source_verified and not previous) or (previous and bool(self.source_verified) != bool(previous.source_verified))) and not getattr(frappe.flags, "student_sla_source_service", False):
+			frappe.throw(frappe._("Only the interaction source service may verify provenance."))
+		if self.sla_response_sealed and not getattr(frappe.flags, "student_sla_response_service", False):
+			frappe.throw(frappe._("An SLA response interaction is immutable."))
+		if previous and previous.sla_response_sealed and not getattr(frappe.flags, "student_sla_response_service", False):
+			frappe.throw(frappe._("An SLA response interaction is immutable."))
+		if previous and previous.source_verified:
+			for fieldname in ("student", "reference_doctype", "reference_docname"):
+				if self.get(fieldname) != previous.get(fieldname):
+					frappe.throw(frappe._("A verified interaction source is immutable."))
 
 	@staticmethod
 	def default_list_data():

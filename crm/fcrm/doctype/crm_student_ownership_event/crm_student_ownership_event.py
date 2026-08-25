@@ -12,6 +12,8 @@ class CRMStudentOwnershipEvent(Document):
 		"actor",
 		"scope_snapshot",
 		"policy_version",
+		"route_trigger",
+		"routing_policy_version",
 		"schema_version",
 		"command_receipt",
 		"idempotency_key",

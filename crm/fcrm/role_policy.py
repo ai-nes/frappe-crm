@@ -26,24 +26,58 @@ PROFILE_ROLE_ALIASES = {
 }
 
 PROFILE_CAPABILITIES = {
-	"sales": frozenset({"student.execute", "interaction.record", "outcome.record"}),
+	"sales": frozenset(
+		{
+			"student.execute",
+			"interaction.record",
+			"outcome.record",
+			"lifecycle.transition",
+			"lifecycle.lost",
+			"student.routing.read",
+			"student.sla.read",
+			"student.sla.respond",
+		}
+	),
 	"marketing": frozenset({"acquisition.manage", "attribution.manage"}),
 	"lead_sales": frozenset(
 		{
 			"student.execute",
 			"interaction.record",
 			"outcome.record",
+			"lifecycle.transition",
+			"lifecycle.lost",
+			"lifecycle.reopen",
 			"team.oversee",
 			"team.pool.read",
 			"student.ownership.manage",
+			"student.routing.read",
+			"student.routing.operate",
+			"student.routing.retry",
+			"student.sla.read",
+			"student.sla.operate",
+			"student.sla.pause",
+			"student.sla.reset.request",
+			"student.sla.escalation.read",
 		}
 	),
 	"admissions_director": frozenset(
 		{
 			"admissions.oversee",
 			"lifecycle.exception",
+			"lifecycle.transition",
+			"lifecycle.lost",
+			"lifecycle.reopen",
 			"student.ownership.manage",
 			"student.audit.reason.read",
+			"student.routing.read",
+			"student.routing.operate",
+			"student.routing.retry",
+			"student.sla.read",
+			"student.sla.operate",
+			"student.sla.pause",
+			"student.sla.escalation.read",
+			"student.sla.reset.approve",
+			"student.policy.approve",
 		}
 	),
 }
@@ -299,7 +333,16 @@ ROLE_BACKFILL_SOURCES = frozenset(ROLE_BACKFILL_TARGETS)
 # receive it and existing assignments must be migrated explicitly.
 LEGACY_UNMAPPED_ROLES = frozenset({"CRM Data Steward", "Sales"})
 
-SYSTEM_MANAGER_CAPABILITIES = frozenset({"system.configure", "roles.manage", "system.recover"})
+SYSTEM_MANAGER_CAPABILITIES = frozenset(
+	{
+		"system.configure",
+		"roles.manage",
+		"system.recover",
+		"student.policy.manage",
+		"student.routing.read",
+		"student.sla.read",
+	}
+)
 LEGACY_OVERLAY_IDS = frozenset(LEGACY_COMPATIBILITY_OVERLAYS)
 LEGACY_OVERLAY_ROLES = frozenset().union(
 	*(LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"] for overlay in LEGACY_OVERLAY_IDS)

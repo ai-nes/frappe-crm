@@ -27,6 +27,51 @@ FULL_VISIBILITY_ROLES = frozenset(
 
 CACHE_TTL_SEC = 300
 
+# Operational records are never independently scoped.  They inherit the
+# current Student scope and are exposed only through masked service projections.
+OPERATIONAL_RECORD_STUDENT_FIELDS = {
+	"CRM Student Routing Request": "student",
+	"CRM Student SLA Attempt": "student",
+	"CRM Student SLA Event": "student",
+	"CRM Student SLA Delivery": "student",
+	"CRM Student SLA Delivery Attempt": "delivery",
+}
+
+
+def get_operational_record_permission_query_conditions(doctype, user=None):
+	"""Scope operational records through their linked Student aggregate."""
+	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doctype)
+	if not student_field:
+		return "1=0"
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	if student_condition == "1=0":
+		return "1=0"
+	if doctype == "CRM Student SLA Delivery Attempt":
+		return (
+			f"`tab{doctype}`.`delivery` in (select `tabCRM Student SLA Delivery`.`name` "
+			"from `tabCRM Student SLA Delivery` where `tabCRM Student SLA Delivery`.`student` in "
+			f"(select `tabCRM Student`.`name` from `tabCRM Student` where ({student_condition})))"
+		)
+	return (
+		f"`tab{doctype}`.`{student_field}` in "
+		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
+		f"where ({student_condition}))"
+	)
+
+
+def has_operational_record_permission(doc, user=None, permission_type=None):
+	"""Apply Student current-scope checks to direct operational-record reads."""
+	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
+	student_name = doc.get(student_field) if student_field else None
+	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
+		student_name = frappe.db.get_value("CRM Student SLA Delivery", student_name, "student")
+	if not student_name:
+		return False
+	student = frappe.get_doc("CRM Student", student_name)
+	return has_permission(student, user=user, permission_type=permission_type)
+
 
 def get_permission_query_conditions(doctype, user=None):
 	if not user:

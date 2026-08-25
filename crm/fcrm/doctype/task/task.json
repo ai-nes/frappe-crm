@@ -9,6 +9,8 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "student",
+  "linked_interaction",
   "priority",
   "start_date",
   "reference_doctype",
@@ -28,6 +30,19 @@
    "in_standard_filter": 1,
    "label": "Title",
    "reqd": 1
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "label": "Student",
+   "options": "CRM Student",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "linked_interaction",
+   "fieldtype": "Link",
+   "label": "Linked Interaction",
+   "options": "CRM Interaction"
   },
   {
    "fieldname": "priority",

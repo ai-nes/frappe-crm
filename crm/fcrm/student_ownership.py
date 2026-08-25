@@ -320,10 +320,24 @@ def _student_is_active(student) -> bool:
 def _validate_current_topology(student) -> tuple[str | None, str | None]:
 	owner = student.get("owner_staff") or None
 	pool = student.get("owning_team") or None
+	pool_id = student.get("owning_pool") or None
 	assigned = student.get("assigned_to") or None
 	if not _student_is_active(student):
 		_error("STUDENT_NOT_ACTIVE", "Only active Student cases may change ownership.")
-	if bool(owner) == bool(pool):
+	if pool and not pool_id:
+		_error("POOL_CANONICAL_MISSING", "Student pool ownership requires a canonical Student Pool link.")
+	if pool_id:
+		pool_row = frappe.db.get_value(
+			"CRM Student Pool", pool_id, ["name", "team", "campus", "is_active"], as_dict=True
+		)
+		if (
+			not pool_row
+			or not pool_row.get("is_active")
+			or pool_row.get("campus") != student.get("branch")
+			or pool_row.get("team") != pool
+		):
+			_error("INVALID_CURRENT_OWNERSHIP", "Student Pool, Team and Campus must form one valid topology.")
+	if bool(owner) == bool(pool_id):
 		_error("INVALID_CURRENT_OWNERSHIP", "Active Student must have exactly one owner or pool.")
 	if owner and assigned != owner:
 		_error("INVALID_CURRENT_OWNERSHIP", "Student assigned_to must match owner_staff.")
@@ -354,12 +368,15 @@ def _load_pool(pool_name: str, branch: str) -> tuple[dict[str, Any], dict[str, A
 	# only when it maps to one named active pool; current Student state remains
 	# the Team compatibility projection.
 	if not pool:
-		pool = frappe.db.get_value(
+		candidates = frappe.get_all(
 			"CRM Student Pool",
-			{"team": pool_name, "campus": branch, "is_active": 1},
-			["name", "pool_name", "team", "campus", "is_active"],
-			as_dict=True,
+			filters={"team": pool_name, "campus": branch, "is_active": 1},
+			fields=["name", "pool_name", "team", "campus", "is_active"],
+			limit_page_length=2,
 		)
+		if len(candidates) > 1:
+			_error("AMBIGUOUS_TARGET", "Target Team maps to multiple active Student Pools.")
+		pool = candidates[0] if candidates else None
 	if not pool or not pool.get("name") or not pool.get("is_active"):
 		_error("INVALID_TARGET", "Target pool does not exist or is inactive.")
 	if pool.get("campus") != branch:
@@ -374,11 +391,13 @@ def _pool_name_for_team(team_name: str | None, branch: str | None) -> str | None
 	if not team_name:
 		return None
 	try:
-		return frappe.db.get_value(
+		rows = frappe.get_all(
 			"CRM Student Pool",
-			{"team": team_name, "campus": branch, "is_active": 1},
-			"name",
+			filters={"team": team_name, "campus": branch, "is_active": 1},
+			fields=["name"],
+			limit_page_length=2,
 		)
+		return rows[0].name if len(rows) == 1 else None
 	except Exception:
 		return None
 
@@ -410,6 +429,7 @@ def resolve_student_operational_target(
 			"target_id": pool.name,
 			"owner_staff": None,
 			"owning_team": team.name,
+			"owning_pool": pool.name,
 			"pool": pool,
 			"team": team,
 		}
@@ -445,6 +465,7 @@ def resolve_student_operational_target(
 		# Student topology is XOR: an owner target keeps the Team as event/scope
 		# context but does not also populate the pool projection.
 		"owning_team": None,
+		"owning_pool": None,
 		"team": team,
 		"staff": staff,
 		"membership": active_memberships[0],
@@ -547,6 +568,8 @@ def _event_values(
 	reason: str,
 	correlation_id: str,
 	receipt_name: str,
+	route_trigger: str | None = None,
+	routing_policy_version: int | None = None,
 ) -> dict[str, Any]:
 	before = {"owner_staff": previous_owner, "owning_team": previous_pool}
 	after = {"owner_staff": target.get("owner_staff"), "owning_team": target.get("owning_team")}
@@ -592,6 +615,8 @@ def _event_values(
 		"correlation_token": correlation_id,
 		"reason": reason,
 		"reason_sensitivity": "operational",
+		"route_trigger": route_trigger,
+		"routing_policy_version": routing_policy_version,
 		"event_at": now_datetime(),
 		"occurred_at": now_datetime(),
 	}
@@ -606,6 +631,11 @@ def change_student_ownership(
 	idempotency_key: str,
 	expected_revision: Any,
 	correlation_id: str,
+	*,
+	_internal_service: bool = False,
+	_commit: bool = True,
+	_route_trigger: str | None = None,
+	_routing_policy_version: int | None = None,
 ) -> dict[str, Any]:
 	"""Atomically change one Student's owner/pool and append one event.
 
@@ -623,7 +653,7 @@ def change_student_ownership(
 	if expected_revision in (None, ""):
 		_error("INVALID_INPUT", "expected_revision is required.")
 
-	actor = _current_actor()
+	actor = "Administrator" if _internal_service else _current_actor()
 	profile, actor_policy = _authorize(actor)
 	_ensure_schema()
 
@@ -644,7 +674,7 @@ def change_student_ownership(
 		# Scope is checked from the current Student before any target Staff/Team
 		# lookup.  A historic event snapshot is never an authorization grant.
 		student_doc = frappe.get_doc("CRM Student", student_name)
-		if not has_student_permission(student_doc, user=actor, permission_type="read"):
+		if not _internal_service and not has_student_permission(student_doc, user=actor, permission_type="read"):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current scope.")
 
 		receipt = _lock_receipt(keys)
@@ -679,7 +709,7 @@ def change_student_ownership(
 			raise
 		_lock("CRM Student", student_name)
 		student_doc = frappe.get_doc("CRM Student", student_name)
-		if not has_student_permission(student_doc, user=actor, permission_type="read"):
+		if not _internal_service and not has_student_permission(student_doc, user=actor, permission_type="read"):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current scope.")
 		current_revision = _current_revision(student_doc)
 		if str(current_revision) != str(expected_revision):
@@ -704,6 +734,7 @@ def change_student_ownership(
 		updates = {
 			"owner_staff": target.get("owner_staff"),
 			"owning_team": target.get("owning_team"),
+			"owning_pool": target.get("owning_pool"),
 			"assigned_to": target.get("owner_staff"),
 		}
 		if _revision_field():
@@ -729,8 +760,24 @@ def change_student_ownership(
 				reason=reason,
 				correlation_id=correlation_id,
 				receipt_name=receipt.name,
+				route_trigger=_route_trigger or ("pool_return" if target.get("target_kind") == "pool" else None),
+				routing_policy_version=_routing_policy_version,
 			),
 		)
+		sla_attempt = None
+		if target.get("target_kind") == "owner" and frappe.db.exists("DocType", "CRM Student SLA Attempt"):
+			from crm.fcrm.student_sla import open_sla_for_assignment
+
+			sla_attempt = open_sla_for_assignment(
+				student_name,
+				ownership_event=event.name,
+				ownership_revision=next_revision,
+				owner_staff=target.get("owner_staff"),
+				owning_team=target.get("team", {}).get("name"),
+				student_pool=previous_pool_name,
+				correlation_token=correlation_id,
+				actor=actor,
+			)
 
 		result = {
 			"status": "applied",
@@ -739,11 +786,13 @@ def change_student_ownership(
 			"target_id": target["target_id"],
 			"owner_staff": target.get("owner_staff"),
 			"owning_team": target.get("owning_team"),
+			"owning_pool": target.get("owning_pool"),
 			"previous_owner_staff": previous_owner,
 			"previous_owning_team": previous_pool,
 			"revision": next_revision,
 			"event": event.name,
 			"correlation_id": correlation_id,
+			"sla_attempt": sla_attempt.name if sla_attempt else None,
 			"policy_version": POLICY_VERSION,
 			"replayed": False,
 		}
@@ -767,13 +816,20 @@ def change_student_ownership(
 		# Receipt is append-only evidence.  Updating its initially reserved
 		# processing row is the one supported completion mutation.
 		receipt.save(ignore_permissions=True)
-		frappe.db.commit()
+		if target.get("target_kind") == "pool" and frappe.db.exists("DocType", "CRM Student Routing Request"):
+			from crm.fcrm.student_routing import enqueue_student_routing
+
+			enqueue_student_routing(student_name, trigger="pool_return", correlation_id=correlation_id)
+		if _commit:
+			frappe.db.commit()
 		return result
 	except StudentOwnershipError:
-		frappe.db.rollback()
+		if _commit:
+			frappe.db.rollback()
 		raise
 	except Exception:
-		frappe.db.rollback()
+		if _commit:
+			frappe.db.rollback()
 		raise
 
 
@@ -815,9 +871,18 @@ def get_student_ownership(student: str) -> dict[str, Any]:
 		"owner_staff_label": _label("CRM Staff", student_doc.get("owner_staff"), "full_name"),
 		"owning_team": student_doc.get("owning_team"),
 		"owning_team_label": _label("CRM Team", student_doc.get("owning_team"), "team_name"),
+		"owning_pool": student_doc.get("owning_pool"),
+		"owning_pool_label": _label("CRM Student Pool", student_doc.get("owning_pool"), "pool_name"),
 		"revision": _current_revision(student_doc),
 		"events": [],
 	}
+	if frappe.db.exists("DocType", "CRM Student Routing Request"):
+		result["routing_request"] = frappe.db.get_value(
+			"CRM Student Routing Request",
+			{"student": student_doc.name},
+			"name",
+			order_by="creation desc",
+		)
 	if not frappe.db.exists("DocType", OWNERSHIP_EVENT_DOCTYPE):
 		return result
 	fields = _doctype_fields(OWNERSHIP_EVENT_DOCTYPE)

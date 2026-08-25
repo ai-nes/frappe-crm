@@ -100,6 +100,29 @@
             </li>
           </ol>
         </section>
+        <StudentSLASection
+          :attempt="studentSLA.data?.attempt"
+          :capabilities="studentSLA.data?.capabilities || {}"
+          :loading="studentSLA.loading"
+          @changed="handleSLAChanged"
+          @refresh-required="studentSLA.reload()"
+        />
+        <section v-if="routingStatus.data" class="border-b px-5 py-4" aria-labelledby="student-routing-heading">
+          <div class="flex items-center justify-between gap-3">
+            <div>
+              <h2 id="student-routing-heading" class="text-sm font-medium text-ink-gray-8">{{ __('Student routing') }}</h2>
+              <p class="mt-1 text-sm text-ink-gray-6">
+                {{ __('Status: {0}', [routingStatus.data.status]) }}
+                <template v-if="routingStatus.data.last_error_code"> · {{ routingStatus.data.last_error_code }}</template>
+              </p>
+            </div>
+            <Button
+              v-if="['deferred', 'failed'].includes(routingStatus.data.status) && routingStatus.data.capabilities?.retry"
+              :label="__('Retry')"
+              @click="showRouteModal = true"
+            />
+          </div>
+        </section>
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Student"
@@ -124,6 +147,13 @@
     @changed="handleOwnershipChanged"
     @refresh-required="ownership.reload()"
   />
+  <RouteStudentModal
+    v-if="showRouteModal && routingStatus.data"
+    v-model="showRouteModal"
+    :routing="routingStatus.data"
+    @changed="handleRoutingChanged"
+    @refresh-required="routingStatus.reload()"
+  />
 </template>
 
 <script setup>
@@ -142,6 +172,8 @@ import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
 import ChangeStudentOwnershipModal from '@/components/Modals/ChangeStudentOwnershipModal.vue'
+import RouteStudentModal from '@/components/Modals/RouteStudentModal.vue'
+import StudentSLASection from '@/components/StudentSLASection.vue'
 import { copyToClipboard } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
@@ -177,6 +209,7 @@ const errorTitle = ref('')
 const errorMessage = ref('')
 const converting = ref(false)
 const showOwnershipModal = ref(false)
+const showRouteModal = ref(false)
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
     'student.execute',
@@ -210,11 +243,43 @@ const ownershipSummary = computed(() => {
     : __('Pool: {0} · Revision {1}', [pool, state.revision ?? 0])
 })
 const ownershipEvents = computed(() => ownership.data?.events || ownership.data?.history || [])
+const routingRequestId = computed(() =>
+  ownership.data?.routing_request || ownership.data?.latest_routing_request || doc.value?.routing_request,
+)
+const studentSLA = createResource({
+  url: 'crm.api.student_sla.get_student_sla_status',
+  makeParams: () => ({ student: props.crmStudentId }),
+  auto: true,
+  initialData: null,
+})
+const routingStatus = createResource({
+  url: 'crm.api.student_routing.get_student_routing_status',
+  makeParams: () => ({ request: routingRequestId.value }),
+  auto: false,
+  initialData: null,
+})
+
+watch(routingRequestId, (request) => {
+  if (request) routingStatus.reload()
+  else routingStatus.data = null
+}, { immediate: true })
 
 function handleOwnershipChanged(response) {
   ownership.reload()
   sections.reload()
+  studentSLA.reload()
   if (response?.revision !== undefined) ownership.data = { ...ownership.data, ...response }
+}
+
+function handleSLAChanged(response) {
+  studentSLA.data = { ...studentSLA.data, attempt: response }
+  studentSLA.reload()
+}
+
+function handleRoutingChanged() {
+  routingStatus.reload()
+  ownership.reload()
+  studentSLA.reload()
 }
 
 watch(error, (err) => {

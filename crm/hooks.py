@@ -131,6 +131,11 @@ before_uninstall = "crm.uninstall.before_uninstall"
 permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
+	"CRM Student Routing Request": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Delivery": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
@@ -139,6 +144,11 @@ permission_query_conditions = {
 has_permission = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
+	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Attempt": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Delivery": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
@@ -181,6 +191,10 @@ doc_events = {
 	},
 	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
+	},
+	"CRM Interaction": {
+		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
+		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
 	},
 	"CRM Lead Source": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
@@ -271,6 +285,11 @@ scheduler_events = {
 	],
 	"cron": {
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+		"* * * * *": [
+			"crm.fcrm.student_routing.process_pending_routing_requests",
+			"crm.fcrm.student_sla.process_due_sla_attempts",
+			"crm.fcrm.student_sla.process_pending_sla_deliveries",
+		],
 	},
 }
 

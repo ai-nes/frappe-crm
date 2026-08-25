@@ -74,3 +74,5 @@ crm.patches.v1_0.backfill_canonical_role_targets
 crm.patches.v1_0.retire_duplicate_sales_role
 crm.patches.v1_0.phase3_prepare_student_intake_data
 crm.patches.v1_0.seed_student_pools
+crm.patches.v1_0.phase4_prepare_student_routing_sla
+crm.patches.v1_0.phase4_backfill_and_reconcile_routing_sla

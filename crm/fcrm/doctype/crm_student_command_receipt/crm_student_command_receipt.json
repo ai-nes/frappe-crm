@@ -41,7 +41,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Command Kind",
-   "options": "intake\nownership\nreview_decision",
+   "options": "intake\nownership\nreview_decision\nrouting\nsla\ninteraction_outcome\nlifecycle_transition",
    "read_only": 1,
    "reqd": 1
   },

@@ -41,7 +41,7 @@ class CRMStudent(Document):
 	def before_save(self):
 		before = self.get_doc_before_save()
 		if before and not getattr(frappe.flags, "student_ownership_service", False):
-			ownership_fields = ("assigned_to", "owner_staff", "owning_team")
+			ownership_fields = ("assigned_to", "owner_staff", "owning_team", "owning_pool")
 			if any(before.get(field) != self.get(field) for field in ownership_fields):
 				frappe.throw(
 					_("Student ownership changes must use the ownership command."),

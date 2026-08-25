@@ -762,39 +762,44 @@ def _add_weak_observations(identity: str, candidate: dict[str, Any]):
 
 
 def _resolve_case_team(pool_or_team: str, campus: str) -> str:
-	"""Return the active Sales Team projection for a pool or team reference."""
+	"""Return the active Sales Team projection for one canonical Student Pool."""
+	return _resolve_case_pool(pool_or_team, campus).team
+
+
+def _resolve_case_pool(pool_or_team: str, campus: str):
+	"""Resolve exactly one active pool; Team names are compatibility input only."""
 	pool_or_team = _text(pool_or_team)
 	if not pool_or_team:
 		_fail("NO_ELIGIBLE_POOL", "A named pool is required for a Student case.")
-	team = None
-	try:
-		team = frappe.db.get_value(
-			"CRM Team", pool_or_team, ["name", "campus", "team_type", "is_active"], as_dict=True
-		)
-	except Exception:
-		team = None
-	if not team:
-		pool = frappe.db.get_value(
+	pool = frappe.db.get_value(
+		"CRM Student Pool", pool_or_team,
+		["name", "team", "campus", "is_active"], as_dict=True,
+	)
+	if not pool:
+		candidates = frappe.get_all(
 			"CRM Student Pool",
-			pool_or_team,
-			["name", "team", "campus", "is_active"],
-			as_dict=True,
+			filters={"team": pool_or_team, "campus": campus, "is_active": 1},
+			fields=["name", "team", "campus", "is_active"],
+			limit_page_length=2,
 		)
-		if not pool or not pool.is_active or pool.campus != campus or not pool.team:
-			_fail("NO_ELIGIBLE_POOL", "The review pool is not active at the Student Campus.")
-		team = frappe.db.get_value(
-			"CRM Team", pool.team, ["name", "campus", "team_type", "is_active"], as_dict=True
-		)
+		if len(candidates) > 1:
+			_fail("AMBIGUOUS_POOL", "The Team maps to multiple active Student Pools.")
+		pool = candidates[0] if candidates else None
+	if not pool or not pool.is_active or pool.campus != campus or not pool.team:
+		_fail("NO_ELIGIBLE_POOL", "The review pool is not active at the Student Campus.")
+	team = frappe.db.get_value(
+		"CRM Team", pool.team, ["name", "campus", "team_type", "is_active"], as_dict=True
+	)
 	if not team or not team.is_active or team.team_type != "Sales" or team.campus != campus:
 		_fail("NO_ELIGIBLE_POOL", "The Student case Team must be an active Sales Team at the Campus.")
-	return team.name
+	return pool
 
 
 def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, Any], campus: str, pool: str) -> str:
 	admission_year = _text(payload.get("admission_year") or payload.get("admission_cycle") or payload.get("year"))
 	if not admission_year:
 		_fail("REVIEW_REQUIRED", "Admission cycle is required before a Student case can be created.")
-	pool = _resolve_case_team(pool, campus)
+	pool = _resolve_case_pool(pool, campus)
 	values = {
 		"doctype": "CRM Student",
 		"student_name": candidate.get("name") or "Unnamed Student",
@@ -803,7 +808,8 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 		"id_number": candidate.get("strong"),
 		"admission_year": admission_year,
 		"branch": campus,
-		"owning_team": pool,
+		"owning_team": pool.team,
+		"owning_pool": pool.name,
 		"identity": identity,
 		"intake_integrity_state": "resolved",
 		"ownership_revision": 0,
@@ -827,6 +833,10 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 	with service_context():
 		student = frappe.get_doc({"doctype": "CRM Student", **_supported_values("CRM Student", values)})
 		student.insert(ignore_permissions=True)
+	if _doctype_exists("CRM Student Routing Request"):
+		from crm.fcrm.student_routing import enqueue_student_routing
+
+		enqueue_student_routing(student.name, trigger="pool_entry")
 	case_values = {
 		"doctype": CASE_KEY_DOCTYPE,
 		"case_key": f"CK-{identity}-{admission_year}"[:140],

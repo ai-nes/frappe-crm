@@ -21,6 +21,7 @@
   "assigned_to",
   "owner_staff",
   "owning_team",
+  "owning_pool",
   "latest_score",
   "enrollment_date",
   "section_links",
@@ -64,6 +65,8 @@
   "identity",
   "case_key",
   "ownership_revision",
+  "engagement_revision",
+  "lifecycle_revision",
   "intake_integrity_state",
   "intake_quarantine_reason",
   "id_number",
@@ -161,6 +164,15 @@
    "options": "CRM Team",
    "read_only": 1,
    "description": "Compatibility projection of a named Student Pool's Team. Ownership commands are the authority."
+  },
+  {
+   "fieldname": "owning_pool",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Student Pool",
+   "options": "CRM Student Pool",
+   "read_only": 1,
+   "description": "Canonical pool identity for routing and SLA scope. Ownership commands are the authority."
   },
   {
    "fieldname": "latest_score",
@@ -418,6 +430,22 @@
    "label": "Ownership Revision",
    "read_only": 1,
    "description": "Optimistic-concurrency revision incremented by ownership commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "engagement_revision",
+   "fieldtype": "Int",
+   "label": "Engagement Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by Student outcome commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "lifecycle_revision",
+   "fieldtype": "Int",
+   "label": "Lifecycle Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by lifecycle commands."
   },
   {
    "default": "review_required",
