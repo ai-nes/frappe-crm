@@ -66,7 +66,7 @@ def _add_unique_index(doctype: str, columns: tuple[str, ...], index_name: str) -
 	if duplicates:
 		frappe.log_error(
 			f"Phase 4 skipped {index_name}; duplicate rows require quarantine",
-			"phase4_prepare_student_routing_sla",
+			"prepare_student_routing_sla",
 		)
 		return False
 	frappe.db.sql_ddl(

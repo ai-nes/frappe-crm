@@ -8,7 +8,7 @@ from crm.api.user import set_canonical_crm_profile
 from crm.fcrm.role_policy import is_crm_user
 
 
-CANONICAL_PHASE2_FIXTURE_USERS = {
+CANONICAL_FIXTURE_USERS = {
 	"sale@gmail.com": {"full_name": "Sale", "role": "Sale"},
 	"leadsale@gmail.com": {"full_name": "Lead Sales", "role": "Lead Sales"},
 	"marketing@gmail.com": {"full_name": "Marketing", "role": "Marketing"},
@@ -22,7 +22,7 @@ def execute():
 	fixture_password = frappe.conf.get(FIXTURE_PASSWORD_SITE_CONFIG_KEY)
 	if not fixture_password:
 		frappe.throw(
-			f"Set the {FIXTURE_PASSWORD_SITE_CONFIG_KEY} site config before seeding Phase 2 fixture users.",
+		f"Set the {FIXTURE_PASSWORD_SITE_CONFIG_KEY} site config before seeding canonical fixture users.",
 			frappe.ValidationError,
 		)
 
@@ -35,7 +35,7 @@ def execute():
 
 	created = []
 	fixture_users = []
-	for email, fixture in CANONICAL_PHASE2_FIXTURE_USERS.items():
+	for email, fixture in CANONICAL_FIXTURE_USERS.items():
 		user = _ensure_canonical_fixture_user(email, fixture, fixture_password)
 		fixture_users.append(user.name)
 	for user in frappe.get_all("User", filters={"enabled": 1}, fields=["name", "full_name"]):

@@ -108,7 +108,7 @@ class TestUserCanOverrideLifecycle(FrappeTestCase):
 				"email": email,
 				"first_name": "_Test",
 				"send_welcome_email": 0,
-				"roles": [{"role": "Team Leader"}],
+				"roles": [{"role": "Lead Sales"}],
 			}
 		)
 		user.insert(ignore_permissions=True)

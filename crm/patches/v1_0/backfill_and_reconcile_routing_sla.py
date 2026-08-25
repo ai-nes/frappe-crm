@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import frappe
-from crm.patches.v1_0.phase4_prepare_student_routing_sla import classify_student_topology
+from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topology
 
 
 def execute():

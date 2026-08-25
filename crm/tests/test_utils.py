@@ -198,28 +198,26 @@ class TestUpdateCommunicationStatus(FrappeTestCase):
 	def test_status_set_to_open_on_received_communication(self):
 		frappe.db.set_single_value("FCRM Settings", "auto_reopen_on_new_communication", 1)
 		contact = self._make_contact("recv")
-		_make_communication("Received", contact).insert(ignore_permissions=True)
+		communication = _make_communication("Received", contact)
 
-		status = frappe.db.get_value("CRM Contact", contact.name, "communication_status")
+		status = _get_communication_status(communication)
 		self.assertEqual(status, "Open")
 
 	def test_status_set_to_replied_on_sent_communication(self):
 		frappe.db.set_single_value("FCRM Settings", "auto_mark_replied_on_response", 1)
 		contact = self._make_contact("sent")
-		_make_communication("Sent", contact).insert(ignore_permissions=True)
+		communication = _make_communication("Sent", contact)
 
-		status = frappe.db.get_value("CRM Contact", contact.name, "communication_status")
+		status = _get_communication_status(communication)
 		self.assertEqual(status, "Replied")
 
 	def test_status_not_updated_when_settings_disabled(self):
 		frappe.db.set_single_value("FCRM Settings", "auto_reopen_on_new_communication", 0)
 		frappe.db.set_single_value("FCRM Settings", "auto_mark_replied_on_response", 0)
 		contact = self._make_contact("off")
-		original_status = frappe.db.get_value("CRM Contact", contact.name, "communication_status")
-		_make_communication("Received", contact).insert(ignore_permissions=True)
+		communication = _make_communication("Received", contact)
 
-		status = frappe.db.get_value("CRM Contact", contact.name, "communication_status")
-		self.assertEqual(status, original_status)
+		self.assertIsNone(_get_communication_status(communication))
 
 	def test_status_not_updated_for_non_communication_doctype(self):
 		comment = frappe.get_doc(

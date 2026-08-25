@@ -125,7 +125,7 @@ class TestCRMContact(FrappeTestCase):
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
 		contact = self._make_contact("_Test Reopen No Reason", "0933000003", enrollment_status="Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			contact.enrollment_status = "Có triển vọng"
@@ -138,7 +138,7 @@ class TestCRMContact(FrappeTestCase):
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
 		contact = self._make_contact("_Test Reopen Success", "0933000004", enrollment_status="Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			contact.enrollment_status = "Có triển vọng"

@@ -1,6 +1,6 @@
 import unittest
 
-from crm.patches.v1_0.phase3_prepare_student_intake_data import (
+from crm.patches.v1_0.prepare_student_intake_data import (
 	classify_student,
 	encode_lookup_key,
 	normalize_admission_year,

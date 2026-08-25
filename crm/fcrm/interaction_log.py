@@ -207,6 +207,11 @@ def create_interaction_from_communication_insert(doc, method=None):
 
 
 def create_interaction_from_communication_update(doc, method=None):
+	# Frappe can invoke on_update during insert.  A Received communication is
+	# only a reply when its direction changes on an existing record; treating
+	# the initial insert as a reply creates a phantom Connected interaction.
+	if doc.is_new() or doc.flags.in_insert:
+		return
 	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
 		return
 

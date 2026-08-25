@@ -126,6 +126,11 @@ class CRMStudent(Document):
 
 	def on_update(self):
 		self._log_enrollment_transition()
+		before = self.get_doc_before_save()
+		from crm.services.student_context import bump_student_context_revision, material_student_changed
+
+		if material_student_changed(self, before):
+			bump_student_context_revision(self.name, "student_material_change")
 
 	def _log_enrollment_transition(self):
 		# Fires on both insert and update (Frappe calls on_update after

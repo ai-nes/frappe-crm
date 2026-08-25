@@ -34,6 +34,19 @@ def resolve_crm_profile(roles):
 	return _resolve_crm_profile(roles)
 
 
+def resolve_copilot_profile(roles):
+	"""Return a Copilot profile while keeping System Manager control-plane-only."""
+	role_names = frozenset(roles)
+	if "System Manager" in role_names:
+		return None
+	profile = resolve_crm_profile(role_names)
+	label = CRM_PROFILE_LABELS.get(profile, profile)
+	# crm-agents requires the published profile to be one of the server-issued
+	# role names. Same-domain legacy aliases remain valid Desk identities but do
+	# not silently acquire a different Copilot persona.
+	return label if label in role_names else None
+
+
 def get_crm_user_role(roles):
 	"""Return the UI role label and profile for a User's actual Frappe roles."""
 	role_names = frozenset(roles)
@@ -70,6 +83,8 @@ def _session_role_flags(roles):
 		"is_sales_user": profile == "sales" and "System Manager" not in role_names,
 		"is_crm_user": is_crm_user(role_names),
 		"crm_profile": profile,
+		# Compatibility field consumed by the local crm-agents gateway.
+		"crm_role": CRM_PROFILE_LABELS.get(profile, profile),
 		"crm_role_state": role_state,
 		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
 		"crm_policy_version": POLICY_VERSION,
@@ -88,6 +103,7 @@ def get_session_role_flags():
 			"is_sales_user": False,
 			"is_crm_user": True,
 			"crm_profile": None,
+			"crm_role": None,
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
 			"crm_policy_version": POLICY_VERSION,
@@ -112,6 +128,7 @@ def get_my_roles():
 		"user": frappe.session.user,
 		"roles": frappe.get_roles(),
 		"crm_profile": flags["crm_profile"],
+		"crm_role": flags["crm_role"],
 		"crm_role_state": flags["crm_role_state"],
 		"crm_capabilities": flags["crm_capabilities"],
 		"crm_policy_version": flags["crm_policy_version"],
@@ -154,10 +171,12 @@ def get_users():
 			# holds every role, which trips get_crm_user_role()'s ambiguous-profile
 			# fail-closed check and would otherwise drop it from crm_users below.
 			user.role, user.crm_profile = "System Manager", None
+			user.crm_role = None
 			user.crm_role_state = "platform_superuser"
 			user.crm_capabilities = sorted(capabilities_for_roles(set(), administrator=True))
 		else:
 			user.role, user.crm_profile = get_crm_user_role(user.roles)
+			user.crm_role = CRM_PROFILE_LABELS.get(user.crm_profile, user.crm_profile)
 			user.crm_role_state = classify_role_set(user.roles)
 			user.crm_capabilities = sorted(capabilities_for_roles(user.roles))
 		if not user.role and "Guest" in user.roles:

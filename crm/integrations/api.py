@@ -217,4 +217,27 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	):
 		return contacts[0]
 
+	# Frappe's current Contact schema stores numbers in the Contact Phone child
+	# table; older sites may still expose a denormalized mobile_no column. Keep
+	# both paths so telephony lookup works across migrated sites.
+	ContactPhone = frappe.qb.DocType("Contact Phone")
+	normalized_phone_child = Replace(
+		Replace(
+			Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
+	)
+	phone_query = (
+		frappe.qb.from_(Contact)
+		.join(ContactPhone)
+		.on((ContactPhone.parent == Contact.name) & (ContactPhone.parenttype == "Contact"))
+		.select(Contact.name, Contact.full_name, Contact.image, ContactPhone.phone.as_("mobile_no"))
+		.where(ContactPhone.parentfield == "phone_nos")
+		.where(normalized_phone_child.like(f"%{cleaned_number}%"))
+		.orderby("modified", order=Order.desc)
+	)
+	phone_contacts = phone_query.run(as_dict=True)
+	if len(phone_contacts) and are_same_phone_number(
+		phone_contacts[0].mobile_no, phone_number, country, validate=not exact_match
+	):
+		return phone_contacts[0]
+
 	return {"mobile_no": phone_number}

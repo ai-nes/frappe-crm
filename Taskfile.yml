@@ -82,12 +82,12 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed data mẫu và tài khoản Phase 2 (chỉ local demo)
+    desc: Seed data mẫu và tài khoản CRM (chỉ local demo)
     aliases: [seed-student, seed-sample-student]
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_demo.execute"
       - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_phase2_staff.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_staff.execute"
 
   seed-phase345:
     desc: Seed một Student demo đầy đủ Ownership, SLA, routing và lifecycle (chỉ local demo)
@@ -98,7 +98,7 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_phase345_student.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_student.execute"
       - "{{.COMPOSE}} restart frappe"
 
   e2e-seed:

@@ -58,4 +58,3 @@ class TestPhase5Qualification(FrappeTestCase):
 			validate_continuity("follow_up_required", "waiting", reason="too long", expires_at=now + timedelta(days=31), now=now)
 		with self.assertRaises(QualificationValidationError):
 			validate_continuity("completed", "terminal")
-

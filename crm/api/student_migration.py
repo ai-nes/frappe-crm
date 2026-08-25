@@ -6,10 +6,10 @@ import frappe
 from frappe import _
 
 from crm.fcrm.student_feature_flags import enabled
-from crm.patches.v1_0.phase5_backfill_student_engagement import (
+from crm.patches.v1_0.backfill_student_engagement import (
 	apply_deterministic_lifecycle_projection,
 )
-from crm.patches.v1_0.phase5_backfill_student_engagement import (
+from crm.patches.v1_0.backfill_student_engagement import (
 	execute as dry_run_migration,
 )
 

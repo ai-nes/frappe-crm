@@ -1,8 +1,8 @@
-"""Idempotently seed one CRM Student for Phase 3–5 UI verification.
+"""Idempotently seed one CRM Student for lifecycle and routing UI verification.
 
 Run with::
 
-    bench --site crm.localhost execute crm.demo.seed_phase345_student.execute
+    bench --site crm.localhost execute crm.demo.seed_student.execute
 
 The fixture deliberately uses the public ownership, SLA, engagement and
 lifecycle services where available.  Its email is a stable test-only key, so
@@ -17,7 +17,7 @@ import json
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_phase2_staff
+from crm.demo import seed_staff
 
 
 EMAIL = "nguyen-minh-anh-admissions-demo@example.test"
@@ -31,7 +31,7 @@ LIFECYCLE_COMMAND_KEY = "admissions-demo-lifecycle-v1"
 
 
 def execute():
-	"""Create (or return) the dedicated Student used to inspect all three phases."""
+	"""Create (or return) the dedicated Student used to inspect lifecycle services."""
 	frappe.set_user("Administrator")
 	context = _ensure_context()
 	pool = _ensure_pool(context["campus"], context["team"])
@@ -58,19 +58,19 @@ def execute():
 
 
 def verify(student: str, **_unused):
-	"""Fail loudly if the fixture no longer exercises a Phase 3–5 UI surface."""
+	"""Fail loudly if the fixture no longer exercises a required UI surface."""
 	student_doc = frappe.get_doc("CRM Student", student)
 	required = {
-		"Phase 3 ownership": bool(student_doc.owner_staff and student_doc.ownership_revision),
-		"Phase 4 SLA": bool(frappe.db.exists("CRM Student SLA Attempt", {"student": student})),
-		"Phase 4 routing": bool(frappe.db.exists("CRM Student Routing Request", {"student": student, "status": "applied"})),
-		"Phase 5 outcome": bool(frappe.db.exists("CRM Student Outcome", {"student": student})),
-		"Phase 5 lifecycle": bool(frappe.db.exists("CRM Student Lifecycle Event", {"student": student})),
-		"Phase 5 next action": bool(frappe.db.exists("Task", {"student": student})),
+		"ownership": bool(student_doc.owner_staff and student_doc.ownership_revision),
+		"SLA": bool(frappe.db.exists("CRM Student SLA Attempt", {"student": student})),
+		"routing": bool(frappe.db.exists("CRM Student Routing Request", {"student": student, "status": "applied"})),
+		"outcome": bool(frappe.db.exists("CRM Student Outcome", {"student": student})),
+		"lifecycle": bool(frappe.db.exists("CRM Student Lifecycle Event", {"student": student})),
+		"next action": bool(frappe.db.exists("Task", {"student": student})),
 	}
 	missing = [label for label, present in required.items() if not present]
 	if missing:
-		raise frappe.ValidationError(f"Phase 3-5 UI seed is incomplete: {', '.join(missing)}")
+		raise frappe.ValidationError(f"Lifecycle UI seed is incomplete: {', '.join(missing)}")
 	return {"student": student, "verified": True, "checks": required}
 
 
@@ -89,12 +89,12 @@ def inspect():
 
 
 def _ensure_context():
-	seed_phase2_staff.execute()
+	seed_staff.execute()
 	campus = frappe.db.get_value("CRM Student", {"email": EMAIL}, "branch")
 	campus = campus or frappe.db.get_value("CRM Campus", {}, "name")
 	staff = _ensure_demo_owner(campus) if campus else None
 	if not campus or not staff:
-		raise frappe.ValidationError("Phase 3-5 demo prerequisites could not be created.")
+		raise frappe.ValidationError("Lifecycle demo prerequisites could not be created.")
 	team = _ensure_demo_team(campus, staff)
 	admission_year = frappe.db.get_value("CRM Admission Year", {}, "name")
 	if not admission_year:
@@ -204,7 +204,7 @@ def _ensure_student(campus: str, admission_year: str, pool: str):
 	)
 	student_name = result.get("student")
 	if result.get("outcome") != "created" or not student_name:
-		raise frappe.ValidationError(f"Phase 3-5 demo intake did not create a Student: {result}")
+		raise frappe.ValidationError(f"Demo intake did not create a Student: {result}")
 	return frappe.get_doc("CRM Student", student_name)
 
 
@@ -263,7 +263,7 @@ def _publish_demo_policy(values: dict):
 			"authored_by": "Administrator",
 			"approved_by": "Administrator",
 			"approved_at": now_datetime(),
-			"break_glass_reason": "Local Phase 3-5 UI fixture: Administrator authors and approves the demo policy.",
+			"break_glass_reason": "Local lifecycle UI fixture: Administrator authors and approves the demo policy.",
 		}
 	)
 	return _service_save(doc)

@@ -7,13 +7,27 @@ never writes generated permission JSON into the deployed source tree.
 
 import frappe
 
-from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES, LEGACY_UNMAPPED_ROLES, managed_docperm_rows
+from crm.fcrm.role_policy import (
+	CRM_POLICY_ROLE_NAMES,
+	LEGACY_OVERLAY_ROLES,
+	LEGACY_UNMAPPED_ROLES,
+	ROLE_BACKFILL_SOURCES,
+	managed_docperm_rows,
+)
 
 DOCTYPE_PERMS = managed_docperm_rows()
 # Frappe's username ``Administrator`` is the sole platform-superuser exception.
 # A regular account merely assigned the raw Administrator role remains unmapped,
 # so its historic DocPerm rows must be removed from policy-managed surfaces.
-MANAGED_DOCPERM_ROLE_NAMES = tuple(sorted(set(CRM_POLICY_ROLE_NAMES) | LEGACY_UNMAPPED_ROLES | {"Administrator"}))
+MANAGED_DOCPERM_ROLE_NAMES = tuple(
+	sorted(
+		set(CRM_POLICY_ROLE_NAMES)
+		| LEGACY_OVERLAY_ROLES
+		| ROLE_BACKFILL_SOURCES
+		| LEGACY_UNMAPPED_ROLES
+		| {"Administrator"}
+	)
+)
 
 # Historical patches import these names. They remain policy-derived aliases so
 # rerunning an old patch cannot bring back a second permission catalog.

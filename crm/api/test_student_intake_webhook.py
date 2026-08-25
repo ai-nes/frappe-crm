@@ -16,4 +16,3 @@ class TestStudentIntakeWebhook(FrappeTestCase):
 			signing_message(b'{"id":"2"}', "provider-a", "1700000000", "nonce-a"),
 			message,
 		)
-

@@ -162,19 +162,21 @@ def validate_delegated_session(session_id: str):
 
 
 def _require_copilot_user() -> None:
-	"""Require a current canonical CRM profile or System Manager for the BFF."""
+	"""Require a current canonical CRM business profile for the BFF."""
 	if frappe.session.user in ("", "Guest") or not frappe.session.sid:
 		frappe.throw("Authentication is required.", frappe.PermissionError)
 	from crm.api.session import get_session_role_flags
 
-	flags = get_session_role_flags()
-	if not _is_copilot_authorized(flags):
-		frappe.throw("A CRM profile or System Manager role is required.", frappe.PermissionError)
+	get_session_role_flags()
+	if not _is_copilot_authorized(frappe.get_roles()):
+		frappe.throw("A canonical CRM business role is required.", frappe.PermissionError)
 
 
-def _is_copilot_authorized(flags: dict) -> bool:
+def _is_copilot_authorized(roles) -> bool:
 	"""Keep BFF eligibility aligned with the session role contract."""
-	return bool(flags.get("crm_profile") or flags.get("is_system_manager"))
+	from crm.api.session import resolve_copilot_profile
+
+	return bool(resolve_copilot_profile(roles))
 
 
 def _agent_config() -> tuple[str, str]:
@@ -334,8 +336,11 @@ def stream_chat(payload=None):
 		upstream.close()
 		return _safe_error_response(upstream.status_code, "Copilot request was rejected.")
 
+	# Return the generator directly so production WSGI/ASGI servers forward the
+	# first event immediately and bound memory to the upstream chunk size.  The
+	# relay's finally block closes the upstream if the browser disconnects.
 	return Response(
-		_collect_upstream(upstream),
+		_relay_upstream(upstream),
 		content_type="text/event-stream",
 		headers={
 			"Cache-Control": "no-cache, no-store",

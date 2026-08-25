@@ -24,6 +24,13 @@ class CRMInteraction(Document):
 				if self.get(fieldname) != previous.get(fieldname):
 					frappe.throw(frappe._("A verified interaction source is immutable."))
 
+	def on_update(self):
+		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
+		if student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(student, "interaction_material_change")
+
 	@staticmethod
 	def default_list_data():
 		columns = [

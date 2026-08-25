@@ -399,29 +399,18 @@ LEGACY_OVERLAY_ROLES = frozenset().union(
 )
 CANONICAL_PROFILE_ROLES = frozenset().union(*PROFILE_ROLE_ALIASES.values())
 CRM_POLICY_ROLE_NAMES = tuple(
-	sorted(CANONICAL_SELECTABLE_ROLES | CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | ROLE_BACKFILL_SOURCES)
+	sorted(CANONICAL_SELECTABLE_ROLES)
 )
-CRM_BUSINESS_ROLES = CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | ROLE_BACKFILL_SOURCES
-CRM_ALLOWED_ROLES = frozenset(
-	{
-		SYSTEM_MANAGER_ROLE,
-		"Sale",
-		"CTV-Sale",
-		"Counseller",
-		"Sales Manager",
-		"Sales User",
-		"Marketing",
-		"Promoter-PR",
-		"Marketing Operator",
-		"Marketing Lead",
-		"Team Leader",
-		"Lead Sales",
-		"Admissions Director",
-		"Admissions Operations",
-		"Giám đốc Tuyển sinh",
-	}
-)
+CRM_BUSINESS_ROLES = CANONICAL_PROFILE_ROLES
+CRM_ALLOWED_ROLES = CANONICAL_SELECTABLE_ROLES
 FRAMEWORK_ROLE_NAMES = frozenset({"All", "Guest", "Desk User", "Website User"})
+_MIGRATION_ROLE_NAMES = frozenset(
+	CRM_ALLOWED_ROLES
+	| FRAMEWORK_ROLE_NAMES
+	| LEGACY_UNMAPPED_ROLES
+	| LEGACY_OVERLAY_ROLES
+	| ROLE_BACKFILL_SOURCES
+)
 
 # A number of pre-Phase-2 accounts carry both an operating sales alias and a
 # sales-lead alias.  These roles describe one sales domain, so they have one
@@ -437,7 +426,7 @@ _SALES_COMPATIBILITY_ROLES = (
 
 def _unknown_role_names(role_names):
 	"""Return role names outside the policy and Frappe's implicit roles."""
-	return role_names - CRM_ALLOWED_ROLES - FRAMEWORK_ROLE_NAMES - LEGACY_UNMAPPED_ROLES
+	return role_names - _MIGRATION_ROLE_NAMES
 
 
 def resolve_crm_profile(roles) -> str | None:
@@ -592,15 +581,6 @@ def managed_docperm_rows():
 				row = _docperm_row(role, permission_set)
 				if row:
 					rows.append(row)
-			for overlay in LEGACY_OVERLAY_IDS:
-				template = LEGACY_COMPATIBILITY_OVERLAYS[overlay]
-				permission_set = _overlay_permission_set(surface, template, doctype)
-				for role in template["roles"]:
-					if doctype in PHASE9_COMMAND_ONLY_DOCTYPES:
-						permission_set = "r"
-					row = _docperm_row(role, permission_set)
-					if row:
-						rows.append(row)
 			rows_by_doctype[doctype] = sorted(rows, key=lambda row: row["role"])
 	return rows_by_doctype
 

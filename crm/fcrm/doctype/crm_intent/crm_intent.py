@@ -22,10 +22,16 @@ class CRMIntent(Document):
 			existing = frappe.db.get_value("CRM Intent", filters, "name")
 			if existing:
 				frappe.throw(
-					_("Interaction {0} already has a Dominant intent ({1}). Only one Dominant intent is allowed per interaction.").format(
-						self.interaction, existing
-					)
+					_(
+						"Interaction {0} already has a Dominant intent ({1}). Only one Dominant intent is allowed per interaction."
+					).format(self.interaction, existing)
 				)
+
+	def on_update(self):
+		if self.student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(self.student, "intent_material_change")
 
 	@staticmethod
 	def default_list_data():
@@ -57,5 +63,15 @@ class CRMIntent(Document):
 			{"label": "Confidence", "type": "Percent", "key": "confidence", "width": "8rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "interaction", "student", "intent_type", "intent_role", "polarity", "importance", "confidence", "modified"]
+		rows = [
+			"name",
+			"interaction",
+			"student",
+			"intent_type",
+			"intent_role",
+			"polarity",
+			"importance",
+			"confidence",
+			"modified",
+		]
 		return {"columns": columns, "rows": rows}

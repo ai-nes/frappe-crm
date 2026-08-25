@@ -51,23 +51,6 @@
   },
   {
    "read": 1,
-   "role": "Admissions Operations"
-  },
-  {
-   "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Counseller"
-  },
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Giám đốc Tuyển sinh"
-  },
-  {
-   "read": 1,
    "role": "Lead Sales"
   },
   {
@@ -76,28 +59,7 @@
   },
   {
    "read": 1,
-   "role": "Marketing Lead"
-  },
-  {
-   "read": 1,
-   "role": "Marketing Operator"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "read": 1,
    "role": "Sale"
-  },
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
   },
   {
    "create": 1,
@@ -106,11 +68,6 @@
    "read": 1,
    "role": "System Manager",
    "write": 1
-  },
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Team Leader"
   }
  ],
  "quick_entry": 1,

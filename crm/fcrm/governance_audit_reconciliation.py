@@ -70,4 +70,3 @@ def execute(*, mode: str = "dry_run") -> dict:
 	if mode != "dry_run":
 		raise ValueError("Phase 9 reconciliation is dry-run only until an explicit apply command is approved")
 	return build_report(collect_rows())
-

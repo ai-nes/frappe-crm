@@ -2,7 +2,7 @@
   {
     "id": "phase-01-consent-log",
     "title": "Consent & Compliance Log",
-    "user_visible_behavior": "Sale/Counseller/Team Leader can log a consent event (opt-out, re-subscribe, marked test, bounced, suppressed) for a CRM Contact; the matching snapshot flag (is_opted_out/is_test_record/email_bounced) updates automatically and is filterable in the Contact list.",
+    "user_visible_behavior": "Sale/Lead Sales can log a consent event (opt-out, re-subscribe, marked test, bounced, suppressed) for a CRM Contact; the matching snapshot flag (is_opted_out/is_test_record/email_bounced) updates automatically and is filterable in the Contact list.",
     "verification_command": "bench migrate && bench console (create CRM Contact Consent Event records and inspect CRM Contact flags)",
     "status": "passing",
     "evidence": "Verified on local dev bench (docker crm-dev, site crm.localhost): bench migrate ran clean. bench console test on real contact CRMC-2026-00001: is_opted_out 0->1 on Opted Out insert, stays 1 on duplicate Opted Out insert (idempotent), 1->0 on Re-subscribed insert. Hook fires correctly via doc_events after_insert.",
@@ -20,7 +20,7 @@
   {
     "id": "phase-03-ai-lead-insight",
     "title": "AI Lead Insight for Contact",
-    "user_visible_behavior": "New CRM AI Lead Insight doctype linked to CRM Contact holds AI-generated summary/interests/objections/risk-flags plus a human review workflow (status/reviewed_by/reviewed_at/review_note); Sale/Counseller/Team Leader can action status but cannot edit AI-generated content fields directly (permlevel 1, read-only for those roles).",
+    "user_visible_behavior": "New CRM AI Lead Insight doctype linked to CRM Contact holds AI-generated summary/interests/objections/risk-flags plus a human review workflow (status/reviewed_by/reviewed_at/review_note); Sale/Lead Sales can action status but cannot edit AI-generated content fields directly (permlevel 1, read-only for those roles).",
     "verification_command": "bench migrate && bench console (create insight, attempt field edits as Sale-role test user)",
     "status": "passing",
     "evidence": "Verified on local dev bench: bench migrate clean. Created a Sale-role test user (sale-test@example.com) and confirmed via bench execute: (1) Sale user CAN save status/reviewed_by changes; (2) Sale user's attempted edit to summary is silently reverted by Frappe's permlevel enforcement on save (DB value confirmed unchanged after the Sale-user save call) -- field-level write restriction works as designed, just via silent-revert semantics rather than a raised PermissionError.",
@@ -38,11 +38,11 @@
   {
     "id": "phase-01-team-membership-foundation",
     "title": "Team & Membership Foundation",
-    "user_visible_behavior": "Staff can belong to multiple CRM Teams (via CRM Team Membership on CRM Staff); 4 new roles (Marketing Operator, Marketing Lead, Admissions Operations, Admissions Director) exist; CRM Contact and CRM Student list views are now both scoped by one shared function per the locked BR matrix (own-assigned for Sale/CTV-Sale, own-team+unassigned-pool for Team Leader, team/campus for Counseller/Promoter-PR) — closing Counseller's prior system-wide Student exposure.",
+    "user_visible_behavior": "Staff can belong to multiple CRM Teams (via CRM Team Membership on CRM Staff); canonical roles are Sale, Lead Sales, Marketing, and Admissions Director; CRM Contact and CRM Student list views are scoped by one shared function per the locked matrix.",
     "verification_command": "bench migrate && bench execute crm.patches.v1_0.backfill_team_membership_from_staff.execute (idempotency check: rerun, assert no duplicate membership rows) && per-role before/after visible-record-count comparison for every active CRM Staff account",
     "status": "not_started",
     "evidence": "",
-    "notes": "Implemented in this environment (no bench/site present here — cannot run bench migrate or tests). Code written: crm/fcrm/doctype/crm_team/, crm/fcrm/doctype/crm_team_membership/, crm/fcrm/permissions.py (shared scoping, gated by site_config crm_legacy_campus_scoping fallback), crm/patches/v1_0/{add_marketing_admissions_roles,backfill_team_membership_from_staff}.py, setup_crm_permissions.py updated (if_owner removed from Student Sale/CTV-Sale, new role perms added). Needs bench migrate + manual verification against a real site before status can move to passing. See plan.md Session Notes for design decisions made without a stop-and-ask (team-scoped-by-campus unassigned-pool approximation, Admissions Director/Operations bypass roles)."
+    "notes": "Implemented in this environment (no bench/site present here — cannot run bench migrate or tests). Code written: CRM team membership, shared row-level scoping, and canonical role permission patches. Needs bench migrate + manual verification against a real site before status can move to passing."
   },
   {
     "id": "phase-02-fix-contact-student-lifecycle-bug",

@@ -6,14 +6,14 @@ from crm.api.user import set_canonical_crm_profile
 
 class TestUserRoleContract(FrappeTestCase):
 	def setUp(self):
-		self.email = "_test_phase2_role_contract@example.com"
+		self.email = "_test_role_contract@example.com"
 		if frappe.db.exists("User", self.email):
 			frappe.delete_doc("User", self.email, force=True)
 		self.user = frappe.get_doc(
 			{
 				"doctype": "User",
 				"email": self.email,
-				"first_name": "Phase 2 Role Contract",
+				"first_name": "Role Contract",
 				"send_welcome_email": 0,
 				"roles": [{"role": "Sale"}],
 			}

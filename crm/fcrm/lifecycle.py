@@ -23,8 +23,8 @@ LOST_STAGE = "Lost"
 # Roles allowed to move a lead backward in its lifecycle or reopen it from
 # Lost — locked in Phase 3 planning as "Team Lead or GĐ Tuyển sinh
 # equivalent". Reuses the existing full-visibility bypass roles (System
-# Manager/Administrator always need an override path) plus Team Leader.
-LIFECYCLE_OVERRIDE_ROLES = FULL_VISIBILITY_ROLES | {"Team Leader"}
+# Manager/Administrator always need an override path) plus Lead Sales.
+LIFECYCLE_OVERRIDE_ROLES = FULL_VISIBILITY_ROLES | {"Lead Sales"}
 
 
 def get_lifecycle_stage(enrollment_status):
@@ -71,7 +71,7 @@ def enforce_lifecycle_change_policy(doc, before_enrollment_status):
 	if not user_can_override_lifecycle(frappe.session.user):
 		frappe.throw(
 			frappe._(
-				"Only a Team Leader or Admissions Director may move a lead backward "
+			"Only a Lead Sales user or Admissions Director may move a lead backward "
 				"in its lifecycle or reopen it from Lost."
 			),
 			frappe.PermissionError,

@@ -318,7 +318,7 @@ def _add_unique_index(table: str, columns: tuple[str, ...], index_name: str) -> 
 	if duplicates:
 		frappe.log_error(
 			f"Phase 3 skipped {index_name}; duplicate canonical data remains",
-			"phase3_prepare_student_intake_data",
+			"prepare_student_intake_data",
 		)
 		return False
 	frappe.db.sql_ddl(

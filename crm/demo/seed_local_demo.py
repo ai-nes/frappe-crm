@@ -1,14 +1,14 @@
-"""Seed one local Sale account with an immediately visible Phase 6 Recommendation.
+"""Seed one local Sale account with an immediately visible Recommendation.
 
 Run from a Frappe bench::
 
-    bench --site crm.localhost execute crm.demo.seed_phase6_local.execute
+    bench --site crm.localhost execute crm.demo.seed_local_demo.execute
 
 This fixture is intentionally opt-in and idempotent. It creates or updates the
 dedicated ``phase6.sales@example.test`` user, maps it to CRM Staff, assigns one
 Student to that Staff row, and creates a ``new`` Recommendation in scope. A
 subsequent run creates a fresh Recommendation only after the previous one has
-left the inbox; it never rewrites Phase 6 history or deletes outbox rows.
+left the inbox; it never rewrites decision history or deletes outbox rows.
 """
 
 from __future__ import annotations
@@ -39,7 +39,7 @@ def _ensure_user(password: str):
 		user = frappe.get_doc("User", USER_EMAIL)
 		if user.first_name != USER_FIRST_NAME or user.last_name != USER_LAST_NAME:
 			frappe.throw(
-				f"Refusing to repurpose existing User {USER_EMAIL}; this is not the Phase 6 local fixture.",
+				f"Refusing to repurpose existing User {USER_EMAIL}; this is not the local recommendation fixture.",
 				frappe.ValidationError,
 			)
 	else:
@@ -118,7 +118,7 @@ def _ensure_staff(user, campus: str, department: str, team: str):
 		staff = frappe.get_doc("CRM Staff", staff_name)
 		if staff.full_name != "Phase 6 Local Sales":
 			frappe.throw(
-				f"Refusing to repurpose existing CRM Staff {staff.name}; this is not the Phase 6 local fixture.",
+				f"Refusing to repurpose existing CRM Staff {staff.name}; this is not the local recommendation fixture.",
 				frappe.ValidationError,
 			)
 		staff.full_name = "Phase 6 Local Sales"
@@ -155,7 +155,7 @@ def _ensure_student(staff: str, campus: str):
 		student = frappe.get_doc("CRM Student", student_name)
 		if student.student_name != "Phase 6 Local Student":
 			frappe.throw(
-				f"Refusing to repurpose existing CRM Student {student.name}; this is not the Phase 6 local fixture.",
+				f"Refusing to repurpose existing CRM Student {student.name}; this is not the local recommendation fixture.",
 				frappe.ValidationError,
 			)
 		if (
@@ -165,7 +165,7 @@ def _ensure_student(staff: str, campus: str):
 			or student.branch != campus
 		):
 			frappe.throw(
-				"The Phase 6 local Student ownership changed; repair it through the ownership command or use a fresh fixture site.",
+			"The local Student ownership changed; repair it through the ownership command or use a fresh fixture site.",
 				frappe.ValidationError,
 			)
 		return student_name
@@ -183,7 +183,7 @@ def _ensure_student(staff: str, campus: str):
 				"enrollment_status": status,
 				"assigned_to": staff,
 				"branch": campus,
-				"notes": "Local Phase 6 recommendation fixture.",
+				"notes": "Local recommendation fixture.",
 			}
 		).insert(ignore_permissions=True)
 		return student.name
@@ -243,17 +243,17 @@ def execute(password: str | None = None):
 	site_name = str(getattr(frappe.local, "site", "") or "")
 	if not site_name.endswith((".localhost", ".local", ".test")):
 		frappe.throw(
-			f"Refusing to seed the Phase 6 local fixture on site {site_name!r}; use a .localhost/.local/.test site.",
+			f"Refusing to seed the local recommendation fixture on site {site_name!r}; use a .localhost/.local/.test site.",
 			frappe.ValidationError,
 		)
 	if frappe.conf.get(ENABLE_CONFIG_KEY) not in (1, "1", True):
 		frappe.throw(
-			f"Set {ENABLE_CONFIG_KEY}=1 on this local site before seeding the Phase 6 fixture.",
+			f"Set {ENABLE_CONFIG_KEY}=1 on this local site before seeding the local recommendation fixture.",
 			frappe.ValidationError,
 		)
 	if frappe.session.user != "Administrator" and "System Manager" not in frappe.get_roles():
 		frappe.throw(
-			"Only Administrator/System Manager may seed the Phase 6 local fixture.", frappe.PermissionError
+			"Only Administrator/System Manager may seed the local recommendation fixture.", frappe.PermissionError
 		)
 	password = password or frappe.conf.get(CREDENTIALS_CONFIG_KEY)
 	if not password:

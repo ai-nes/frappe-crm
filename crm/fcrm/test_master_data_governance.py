@@ -1,4 +1,4 @@
-"""Phase 7: propose -> check impact -> approve -> effective date/version ->
+"""Propose -> check impact -> approve -> effective date/version ->
 audit log for the 5 governed shared lookup doctypes, per
 crm/fcrm/master_data_governance.py."""
 
@@ -11,6 +11,7 @@ from frappe.tests.utils import FrappeTestCase
 from crm.fcrm.master_data_governance import (
 	GOVERNED_DOCTYPES,
 	_governance_roles_for_user,
+	_internal_flag,
 	assert_reference_effective,
 	approve_change,
 	check_impact,
@@ -24,9 +25,24 @@ from crm.fcrm.governed_reference_registry import GOVERNED_REFERENCE_REGISTRY, RE
 class TestMasterDataGovernance(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		self._cleanup_test_evidence()
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		self._cleanup_test_evidence()
+
+	def _cleanup_test_evidence(self):
+		logs = frappe.db.get_all(
+			"CRM Master Data Change Log",
+			filters={"reference_docname": ["like", "_Test Gov%"]},
+			pluck="name",
+		)
+		for name in frappe.db.get_all(
+			"CRM Master Data Change Approval", filters={"change_log": ["in", logs or ["__none__"]]}, pluck="name"
+		):
+			frappe.delete_doc("CRM Master Data Change Approval", name, force=True)
+		for name in logs:
+			frappe.delete_doc("CRM Master Data Change Log", name, force=True)
 
 	# ------------------------------------------------------------- set_governance_defaults
 
@@ -52,7 +68,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			},
 		)
 
-	def test_phase_9_registry_is_versioned_and_has_concrete_consumers(self):
+	def test_registry_is_versioned_and_has_concrete_consumers(self):
 		self.assertEqual(REGISTRY_REVISION, "P9-DEC-001")
 		self.assertIn("CRM Campaign Type", GOVERNED_REFERENCE_REGISTRY)
 		self.assertEqual(
@@ -282,16 +298,17 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_change_log_rejects_ungoverned_reference_doctype(self):
 		with self.assertRaises(frappe.ValidationError):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Master Data Change Log",
-					"reference_doctype": "User",
-					"reference_docname": "Administrator",
-					"action": "Retire",
-					"reason": "should never insert",
-					"status": "Proposed",
-				}
-			).insert(ignore_permissions=True)
+			with _internal_flag("crm_governance_log_insert"):
+				frappe.get_doc(
+					{
+						"doctype": "CRM Master Data Change Log",
+						"reference_doctype": "User",
+						"reference_docname": "Administrator",
+						"action": "Retire",
+						"reason": "should never insert",
+						"status": "Proposed",
+					}
+				).insert(ignore_permissions=True)
 
 	# ------------------------------------------------------------------- helpers
 

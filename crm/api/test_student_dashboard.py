@@ -20,6 +20,8 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			frappe.delete_doc("CRM Event Participation", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SD%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test SD%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test SD%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test SD%"]}, pluck="name"):
@@ -41,6 +43,23 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
+	def _make_student(self, name, phone):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": name,
+				"phone": phone,
+				"enrollment_status": "Có triển vọng",
+			}
+		)
+		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_intake_flag
+		return student.name
+
 	def _make_event(self, title, start_datetime="2026-09-01 10:00:00", event_date=None):
 		fields = {
 			"doctype": "CRM Event",
@@ -55,7 +74,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _make_contact(self, full_name, phone, crm_event=None):
+	def _make_contact(self, full_name, phone, crm_event=None, student=None):
 		fields = {
 			"doctype": "CRM Contact",
 			"full_name": full_name,
@@ -63,6 +82,8 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		}
 		if crm_event:
 			fields["crm_event"] = crm_event
+		if student:
+			fields["student"] = student
 		doc = frappe.get_doc(fields)
 		doc.insert(ignore_permissions=True)
 		return doc.name
@@ -85,8 +106,9 @@ class TestStudentDashboardEvents(FrappeTestCase):
 	def test_events_mapping_prefers_participation_over_legacy_field(self):
 		legacy_event = self._make_event("_Test SD Ignored Legacy Event", event_date="2026-09-10")
 		participation_event = self._make_event("_Test SD Participation Event", start_datetime="2026-09-20 09:00:00")
+		student = self._make_student("_Test SD Participation Student", "0987000002")
 		contact_name = self._make_contact(
-			"_Test SD Participation Contact", "0987000002", crm_event=legacy_event
+			"_Test SD Participation Contact", "0987000002", crm_event=legacy_event, student=student
 		)
 
 		participation = frappe.get_doc(
@@ -94,6 +116,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 				"doctype": "CRM Event Participation",
 				"crm_event": participation_event,
 				"crm_contact": contact_name,
+				"student": student,
 				"status": "Checked-in",
 			}
 		)
@@ -117,19 +140,24 @@ class TestStudentDashboardEvents(FrappeTestCase):
 
 	def test_events_mapping_maps_feedback_given_status(self):
 		event_name = self._make_event("_Test SD Feedback Event", start_datetime="2026-09-25 09:00:00")
-		contact_name = self._make_contact("_Test SD Feedback Contact", "0987000003")
+		student = self._make_student("_Test SD Feedback Student", "0987000003")
+		contact_name = self._make_contact("_Test SD Feedback Contact", "0987000003", student=student)
 
 		participation = frappe.get_doc(
 			{
 				"doctype": "CRM Event Participation",
 				"crm_event": event_name,
 				"crm_contact": contact_name,
+				"student": student,
 				"status": "Checked-in",
 			}
 		)
 		participation.insert(ignore_permissions=True)
-		participation.status = "Feedback Given"
-		participation.save(ignore_permissions=True)
+		# Attribution evidence is append-only in production; update the fixture
+		# directly to exercise the dashboard mapping for this stored status.
+		frappe.db.set_value(
+			"CRM Event Participation", participation.name, "status", "Feedback Given", update_modified=False
+		)
 
 		try:
 			result = get_student_dashboard(phone="0987000003")

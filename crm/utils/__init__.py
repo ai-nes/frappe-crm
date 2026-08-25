@@ -320,20 +320,11 @@ def on_communication_update(doc: Communication, method: str | None = None):
 		return
 
 	should_update_modified = _should_update_modified(doc)
-	status = _get_communication_status(doc)
 
 	values = {}
 
 	if should_update_modified:
 		values["modified"] = now()
-
-	if status:
-		last_communication = frappe.get_last_doc(
-			"Communication",
-			{"reference_doctype": doc.reference_doctype, "reference_name": doc.reference_name},
-		)
-		if last_communication and last_communication.name == doc.name:
-			values["communication_status"] = status
 
 	if not values:
 		return

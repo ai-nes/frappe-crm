@@ -113,7 +113,12 @@
  "naming_rule": "Naming Series",
  "naming_series_options": "CTP-.YYYY.-",
  "owner": "Administrator",
- "permissions": [{"read": 1, "role": "System Manager"}],
+ "permissions": [
+  {
+   "read": 1,
+   "role": "System Manager"
+  }
+ ],
  "quick_entry": 0,
  "row_format": "Dynamic",
  "search_fields": "crm_campaign,student",

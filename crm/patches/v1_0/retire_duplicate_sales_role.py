@@ -31,7 +31,13 @@ def _target_for_roles(roles):
 	role_names = set(roles)
 	if RETIRED_ROLE not in role_names or role_names & _BLOCKING_ROLES:
 		return None
-	unknown_roles = role_names - CRM_ALLOWED_ROLES - FRAMEWORK_ROLE_NAMES - LEGACY_UNMAPPED_ROLES
+	unknown_roles = (
+		role_names
+		- CRM_ALLOWED_ROLES
+		- FRAMEWORK_ROLE_NAMES
+		- LEGACY_UNMAPPED_ROLES
+		- ROLE_BACKFILL_SOURCES
+	)
 	if unknown_roles:
 		return None
 

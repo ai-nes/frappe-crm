@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from unittest import TestCase
 
-from crm.patches.v1_0.phase4_prepare_student_routing_sla import classify_student_topology
+from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topology
 
 
 DOCTYPE_ROOT = Path(__file__).parent

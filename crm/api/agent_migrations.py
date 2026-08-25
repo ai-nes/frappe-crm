@@ -65,6 +65,23 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
+	# crm-agents uses the shared advisory graph for every business Copilot
+	# persona. Keep this grant additive to the remote phase capabilities.
+	for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == "knowledge_graph.query"
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": "knowledge_graph.query"},
+		)
+		role.save(ignore_permissions=True)
+		changed = True
 	if changed:
 		# This helper is invoked by a one-shot migration command as well as
 		# hooks.  Persist the grant before the command returns, otherwise a

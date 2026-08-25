@@ -1,7 +1,11 @@
 """Thin HTTP adapters for Phase 6 decision commands."""
 from __future__ import annotations
 
+import hashlib
+import json
+
 import frappe
+from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.student_decision import (
@@ -10,6 +14,222 @@ from crm.fcrm.student_decision import (
 	reassign_sales_action as _reassign_sales_action,
 	transition_sales_action as _transition_sales_action,
 )
+
+
+# Local crm-agents Student Task v2 command contract. Remote Phase 6 decision
+# adapters remain authoritative for Recommendation/Sales Action commands.
+_TASK_TRANSITIONS = {
+	"PENDING": {"ACCEPTED", "CANCELLED", "SUPERSEDED"},
+	"ACCEPTED": {"IN_PROGRESS", "COMPLETED", "CANCELLED", "REQUIRES_REVIEW"},
+	"IN_PROGRESS": {"COMPLETED", "CANCELLED", "REQUIRES_REVIEW"},
+	"REQUIRES_REVIEW": {"ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"},
+}
+
+
+def _require_v2_service():
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	configured = frappe.conf.get("crm_agents_service_user")
+	if not configured or frappe.session.user != configured:
+		frappe.throw(
+			_("This command is restricted to the crm-agents service identity."), frappe.PermissionError
+		)
+
+
+def _task_result(task, *, idempotent=False):
+	return {
+		"name": task.name,
+		"student": task.student,
+		"state": task.state,
+		"disposition": task.disposition,
+		"action_type": task.action_type,
+		"generation_status": task.generation_status,
+		"generation_failed_at": str(task.generation_failed_at) if task.generation_failed_at else None,
+		"source_context_revision": task.source_context_revision,
+		"task_revision": str(task.modified),
+		"recommendation": task.recommendation,
+		"sales_action": task.sales_action,
+		"idempotent": idempotent,
+	}
+
+
+@frappe.whitelist()
+def upsert_student_next_task(
+	student: str,
+	expected_context_revision: int,
+	generation_idempotency_key: str,
+	producer_identity: str,
+	payload_digest: str,
+	rollout_epoch: int,
+	candidate: dict | str,
+) -> dict:
+	"""Only mutation endpoint for v2 generation; compare-and-swap + idempotency."""
+	_require_v2_service()
+	if isinstance(candidate, str):
+		candidate = frappe.parse_json(candidate)
+	if not isinstance(candidate, dict):
+		frappe.throw(_("Candidate must be an object."), frappe.ValidationError)
+	canonical = json.dumps(candidate, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
+	if hashlib.sha256(canonical.encode()).hexdigest() != payload_digest:
+		frappe.throw(_("Candidate payload digest does not match."), frappe.ValidationError)
+	if int(expected_context_revision) < 0 or int(rollout_epoch) < 0:
+		frappe.throw(_("Invalid revision."), frappe.ValidationError)
+	if frappe.conf.get("crm_agents_v2_rollout_epoch") is not None and int(
+		frappe.conf.get("crm_agents_v2_rollout_epoch", 0)
+	) != int(rollout_epoch):
+		frappe.throw(_("Stale rollout epoch."), frappe.ValidationError)
+	action_type = candidate.get("action_type")
+	disposition = candidate.get("disposition")
+	if int(candidate.get("context_revision", -1)) != int(expected_context_revision):
+		frappe.throw(_("Candidate revision does not match expected context revision."), frappe.ValidationError)
+	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
+		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
+	row = frappe.db.sql(
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		(student,),
+		as_dict=True,
+	)
+	if not row:
+		frappe.throw(_("Student not found."), frappe.DoesNotExistError)
+	existing = frappe.db.get_value(
+		"CRM Student Task",
+		{
+			"producer_identity": producer_identity,
+			"student": student,
+			"generation_idempotency_key": generation_idempotency_key,
+		},
+		["name", "payload_digest"],
+		as_dict=True,
+	)
+	if existing:
+		if existing.payload_digest != payload_digest:
+			frappe.throw(_("Generation idempotency key was reused with a different payload."), frappe.ValidationError)
+		return _task_result(frappe.get_doc("CRM Student Task", existing.name), idempotent=True)
+	current_revision = int(row[0].student_context_revision or 0)
+	if current_revision != int(expected_context_revision):
+		frappe.throw(_("Student context changed; retry from the newer projection."), frappe.ValidationError)
+	current = frappe.db.sql(
+		"SELECT name, state FROM `tabCRM Student Task` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
+		(student,),
+		as_dict=True,
+	)
+	if current:
+		from crm.services.student_context import is_committed_task_state
+
+		if is_committed_task_state(current[0].state):
+			task = frappe.get_doc("CRM Student Task", current[0].name)
+			task.requires_review = 1
+			task.review_revision = current_revision
+			task.state = "REQUIRES_REVIEW"
+			frappe.flags.student_task_command = True
+			try:
+				task.save(ignore_permissions=True)
+			finally:
+				frappe.flags.student_task_command = False
+			return _task_result(task)
+		frappe.db.set_value(
+			"CRM Student Task",
+			current[0].name,
+			{"current_slot": None, "state": "SUPERSEDED"},
+			update_modified=False,
+		)
+	from crm.services.sales_action_policy import V2_ACTION_TYPES
+
+	if action_type and action_type not in V2_ACTION_TYPES:
+		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+	task = frappe.get_doc(
+		{
+			"doctype": "CRM Student Task",
+			"student": student,
+			"current_slot": "CURRENT",
+			"source_context_revision": current_revision,
+			"disposition": disposition,
+			"action_type": action_type,
+			"objective": str(candidate.get("objective") or "")[:500],
+			"policy_version": candidate.get("policy_version"),
+			"context_version": candidate.get("snapshot_hash"),
+			"state": "PENDING",
+			"generation_status": "succeeded",
+			"requires_review": 0,
+			"action_revision": 1 if action_type else 0,
+			"execution_package_version": 1 if action_type else 0,
+			"generation_idempotency_key": generation_idempotency_key,
+			"producer_identity": producer_identity,
+			"payload_digest": payload_digest,
+			"evidence_references": json.dumps(candidate.get("evidence_refs", []), separators=(",", ":")),
+			"package_seed": json.dumps(candidate.get("package_seed") or {}, separators=(",", ":")),
+			"created_at": frappe.utils.now_datetime(),
+		}
+	).insert(ignore_permissions=True)
+	if disposition == "ACT":
+		recommendation = frappe.get_doc(
+			{
+				"doctype": "CRM Recommendation",
+				"student": student,
+				"rule_key": "student_next_task_v2",
+				"source_intent_id": f"v2:{generation_idempotency_key}",
+				"condition_version": 2,
+				"context_hash": payload_digest,
+				"policy_version": candidate.get("policy_version"),
+				"priority": "medium",
+				"status": "new",
+				"recommended_action": action_type,
+				"reason": task.objective,
+				"evidence": {"references": candidate.get("evidence_refs", [])},
+			}
+		).insert(ignore_permissions=True)
+		task.db_set("recommendation", recommendation.name, update_modified=False)
+		task.reload()
+	return _task_result(task)
+
+
+@frappe.whitelist()
+def record_student_task_generation_failure(
+	student: str, source_revision: int, reason: str, rollout_epoch: int = 0
+) -> dict:
+	"""Persist an explicit bounded failure for the convergence SLO."""
+	_require_v2_service()
+	row = frappe.db.sql(
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		(student,),
+		as_dict=True,
+	)
+	if not row or int(row[0].student_context_revision or 0) != int(source_revision):
+		return {"status": "deferred", "reason": "revision_moved"}
+	current = frappe.db.get_value("CRM Student Task", {"student": student, "current_slot": "CURRENT"}, "name")
+	if current:
+		frappe.db.set_value(
+			"CRM Student Task",
+			current,
+			{
+				"generation_status": "failed",
+				"generation_failed_at": frappe.utils.now_datetime(),
+				"generation_failure_reason": str(reason)[:500],
+			},
+			update_modified=False,
+		)
+		return {"status": "failed", "task": current}
+	task = frappe.get_doc(
+		{
+			"doctype": "CRM Student Task",
+			"student": student,
+			"current_slot": "CURRENT",
+			"source_context_revision": source_revision,
+			"disposition": "MONITOR",
+			"objective": "Generation failed; reconcile this Student context.",
+			"policy_version": "student-next-task-v2",
+			"context_version": "generation-failure",
+			"state": "PENDING",
+			"generation_status": "failed",
+			"generation_failed_at": frappe.utils.now_datetime(),
+			"generation_failure_reason": str(reason)[:500],
+			"generation_idempotency_key": f"failure:{student}:{source_revision}",
+			"producer_identity": "crm-agents:v2",
+			"payload_digest": "0" * 64,
+			"created_at": frappe.utils.now_datetime(),
+		}
+	).insert(ignore_permissions=True)
+	return {"status": "failed", "task": task.name}
 
 
 def _call(fn, **kwargs):

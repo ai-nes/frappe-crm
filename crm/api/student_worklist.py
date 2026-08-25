@@ -262,3 +262,112 @@ def _is_sort_key(value) -> bool:
 		and not isinstance(value[0], bool)
 		and all(isinstance(part, str) for part in value[1:])
 	)
+
+
+# Local crm-agents Student Task v2 read contract. The remote recommendation
+# and Sales Action queues remain the default UI surface; these helpers keep
+# the already-deployed agent task projection available during the merge.
+_V2_POLICY_VERSION = "worklist-v2"
+
+
+def _scope_version(principal: str) -> str:
+	return str(frappe.cache().get_value(f"crm:student-worklist-scope:{principal}") or "0")
+
+
+def _list_v2_student_worklist(cursor: str | None, page_size: int | str) -> dict:
+	page_size = _parse_page_size(page_size)
+	principal = frappe.session.user
+	roles = sorted(frappe.get_roles(principal))
+	scope_version = _scope_version(principal)
+	last = _decode_v2_cursor(cursor, principal, roles, scope_version) if cursor else None
+	from frappe.model.db_query import DatabaseQuery
+
+	permission_query = DatabaseQuery("CRM Student", user=principal).build_match_conditions(as_condition=True)
+	conditions = [
+		"task.current_slot = 'CURRENT'",
+		"task.state IN ('PENDING', 'REQUIRES_REVIEW', 'ACCEPTED', 'IN_PROGRESS')",
+	]
+	if permission_query:
+		conditions.append(f"({permission_query.replace('`tabCRM Student`', 'student')})")
+	values = {"limit": page_size + 1}
+	if last:
+		conditions.append("(task.creation > %(creation)s OR (task.creation = %(creation)s AND task.name > %(name)s))")
+		values.update({"creation": last[0], "name": last[1]})
+	rows = frappe.db.sql(
+		"""SELECT task.name, task.student, student.student_name, task.disposition, task.action_type,
+			task.objective, task.state, task.requires_review, task.generation_status, task.generation_failed_at,
+			task.source_context_revision, task.modified, task.creation, task.sales_action
+			FROM `tabCRM Student Task` task INNER JOIN `tabCRM Student` student ON student.name = task.student
+			WHERE {conditions} ORDER BY task.creation ASC, task.name ASC LIMIT %(limit)s""".format(
+			conditions=" AND ".join(conditions)
+		),
+		values,
+		as_dict=True,
+	)
+	page = rows[:page_size]
+	return {
+		"items": [
+			{
+				"task": row.name,
+				"student": row.student,
+				"student_name": row.student_name,
+				"disposition": row.disposition,
+				"action_type": row.action_type,
+				"objective": row.objective,
+				"state": row.state,
+				"requires_review": bool(row.requires_review),
+				"generation_status": row.generation_status,
+				"generation_failed_at": str(row.generation_failed_at) if row.generation_failed_at else None,
+				"source_context_revision": row.source_context_revision,
+				"revision": str(row.modified),
+				"sales_action": row.sales_action,
+			}
+			for row in page
+		],
+		"next_cursor": _encode_v2_cursor(
+			(str(page[-1].creation), str(page[-1].name)), principal, roles, scope_version
+		)
+		if len(rows) > len(page) and page
+		else None,
+		"policy_version": _V2_POLICY_VERSION,
+		"scope_version": scope_version,
+	}
+
+
+def _encode_v2_cursor(sort_key, principal: str, roles: list[str], scope_version: str) -> str:
+	payload = {
+		"expires_at": int(time.time()) + _CURSOR_TTL_SECONDS,
+		"last_sort_key": list(sort_key),
+		"policy_version": _V2_POLICY_VERSION,
+		"principal": principal,
+		"roles": roles,
+		"scope_version": scope_version,
+	}
+	body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+	signature = hmac.new(_cursor_secret(), body, hashlib.sha256).digest()
+	return f"{_urlsafe_encode(body)}.{_urlsafe_encode(signature)}"
+
+
+def _decode_v2_cursor(cursor: str, principal: str, roles: list[str], scope_version: str) -> list:
+	try:
+		encoded_body, encoded_signature = cursor.split(".", 1)
+		body, signature = _urlsafe_decode(encoded_body), _urlsafe_decode(encoded_signature)
+		payload = json.loads(body)
+		expected = hmac.new(_cursor_secret(), body, hashlib.sha256).digest()
+		if (
+			not hmac.compare_digest(signature, expected)
+			or payload.get("principal") != principal
+			or payload.get("roles") != roles
+			or payload.get("scope_version") != scope_version
+			or payload.get("policy_version") != _V2_POLICY_VERSION
+			or payload.get("expires_at", 0) < time.time()
+			or not _is_v2_sort_key(payload.get("last_sort_key"))
+		):
+			raise ValueError
+		return payload["last_sort_key"]
+	except (AttributeError, TypeError, ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError):
+		frappe.throw(_("Invalid or expired worklist cursor."), frappe.PermissionError)
+
+
+def _is_v2_sort_key(value) -> bool:
+	return isinstance(value, list) and len(value) == 2 and all(isinstance(part, str) for part in value)

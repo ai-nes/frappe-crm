@@ -181,7 +181,7 @@ def _add_unique_identity_index() -> bool:
 	if duplicates:
 		frappe.log_error(
 			"Phase 8 identity unique index blocked by duplicate Contact identities.",
-			"phase8_prepare_student_contact_conversion",
+			"prepare_student_contact_conversion",
 		)
 		return False
 	# Frappe Link fields may persist an empty string.  Normalize only blanks so

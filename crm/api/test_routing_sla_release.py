@@ -6,7 +6,7 @@ from frappe.tests.utils import FrappeTestCase
 from crm.fcrm.student_feature_flags import enabled
 from crm.fcrm.student_sla import process_due_sla_attempts, process_pending_sla_deliveries
 from crm.fcrm.student_routing import process_pending_routing_requests
-from crm.patches.v1_0.phase4_prepare_student_routing_sla import classify_student_topology
+from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topology
 
 
 class TestPhase4ReleaseGates(FrappeTestCase):

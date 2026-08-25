@@ -27,4 +27,3 @@ class TestPhase9ContractHelpers(unittest.TestCase):
 		self.assertEqual(report["counts"], {"ok": 1})
 		self.assertNotIn("private_note", report["items"][0])
 		self.assertEqual(report["write_mode"], "dry_run")
-

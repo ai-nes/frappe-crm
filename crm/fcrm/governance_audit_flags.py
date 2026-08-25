@@ -33,4 +33,3 @@ def governance_write_enabled() -> bool:
 
 def migration_enabled() -> bool:
 	return enabled("governance_migration")
-

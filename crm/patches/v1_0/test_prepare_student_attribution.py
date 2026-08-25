@@ -1,6 +1,6 @@
 import unittest
 
-from crm.patches.v1_0.phase7_prepare_student_attribution import build_backfill_report, classify_evidence_row
+from crm.patches.v1_0.prepare_student_attribution import build_backfill_report, classify_evidence_row
 
 
 class TestPhase7PrepareStudentAttribution(unittest.TestCase):

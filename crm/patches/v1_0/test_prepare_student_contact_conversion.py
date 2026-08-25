@@ -1,6 +1,6 @@
 import unittest
 
-from crm.patches.v1_0.phase8_prepare_student_contact_conversion import build_report, classify_legacy_link
+from crm.patches.v1_0.prepare_student_contact_conversion import build_report, classify_legacy_link
 
 
 class TestPhase8PrepareStudentContactConversion(unittest.TestCase):
