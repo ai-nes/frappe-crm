@@ -20,7 +20,41 @@
   "status",
   "due_date",
   "section_break_bzhd",
-  "description"
+  "description",
+  "section_break_recommendation",
+  "current_slot",
+  "source_context_revision",
+  "disposition",
+  "action_type",
+  "objective",
+  "policy_version",
+  "context_version",
+  "worklist_priority_rank",
+  "revisit_at",
+  "requires_review",
+  "review_revision",
+  "action_revision",
+  "execution_package_version",
+  "column_break_generation",
+  "generation_status",
+  "generation_failed_at",
+  "generation_failure_reason",
+  "generation_idempotency_key",
+  "producer_identity",
+  "payload_digest",
+  "legacy_student_task_name",
+  "recommendation",
+  "sales_action",
+  "evidence_references",
+  "package_seed",
+  "outcome",
+  "created_at",
+  "accepted_at",
+  "completed_at",
+  "decision_reason",
+  "decision_actor",
+  "decision_at",
+  "decision_revision"
  ],
  "fields": [
   {
@@ -49,7 +83,9 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Priority",
-   "options": "Low\nMedium\nHigh"
+   "options": "Low\nMedium\nHigh",
+   "default": "Medium",
+   "description": "AI-governed generation (crm-agents V2) never sets this explicitly; the schema default preserves CRM Student Task's former 'medium' default so worklist_priority_rank doesn't silently fall to the lowest rank. The Tasks.vue create modal overrides this to 'Low' for manual tasks, so this default has no visible effect on manual-task UX."
   },
   {
    "fieldname": "start_date",
@@ -65,7 +101,8 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Assigned To",
-   "options": "User"
+   "options": "User",
+   "description": "For an AI-governed task (producer_identity set), this is system-managed: written only by task generation and the ownership-sync hook, never by a direct edit."
   },
   {
    "fieldname": "status",
@@ -73,7 +110,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Backlog\nTodo\nIn Progress\nDone\nCanceled"
+   "options": "Backlog\nTodo\nIn Progress\nDone\nCanceled\nPENDING\nACCEPTED\nIN_PROGRESS\nREQUIRES_REVIEW\nCOMPLETED\nCANCELLED\nSUPERSEDED\nREJECTED\nDEFERRED",
+   "description": "Backlog/Todo/In Progress/Done/Canceled are manual-task values. PENDING/ACCEPTED/REQUIRES_REVIEW/COMPLETED/CANCELLED/SUPERSEDED/REJECTED/DEFERRED are the AI-governed state machine (former CRM Student Task.state) — kept verbatim rather than renamed to avoid rewriting the decision-command state machine."
   },
   {
    "fieldname": "due_date",
@@ -101,12 +139,232 @@
    "fieldtype": "Dynamic Link",
    "label": "Reference Doc",
    "options": "reference_doctype"
+  },
+  {
+   "fieldname": "section_break_recommendation",
+   "fieldtype": "Section Break",
+   "label": "AI Recommendation",
+   "depends_on": "eval:doc.producer_identity",
+   "description": "Fields below are populated only for AI-governed tasks (crm-agents Student Task V2). They are read-only and can only be changed by the controlled decision command service, never by a direct Desk edit."
+  },
+  {
+   "fieldname": "current_slot",
+   "fieldtype": "Select",
+   "options": "\nCURRENT",
+   "read_only": 1,
+   "in_list_view": 1,
+   "label": "Current Slot",
+   "description": "Leading blank option is required -- Frappe defaults an unset Select with no `default` to its first option on insert, and a single-option Select (`CURRENT`) with no blank would silently claim CURRENT for every new Task, manual or AI-governed."
+  },
+  {
+   "fieldname": "source_context_revision",
+   "fieldtype": "Int",
+   "read_only": 1,
+   "label": "Source Context Revision"
+  },
+  {
+   "fieldname": "disposition",
+   "fieldtype": "Select",
+   "options": "\nACT\nMONITOR\nNURTURE",
+   "read_only": 1,
+   "label": "Disposition"
+  },
+  {
+   "fieldname": "action_type",
+   "fieldtype": "Select",
+   "options": "\nCALL\nEMAIL\nMESSAGE\nCOUNSELING\nMEETING\nEVENT_INVITE\nCAMPUS_VISIT\nDOCUMENT_REQUEST\nAPPLICATION_SUPPORT\nPARENT_CONTACT\nHANDOFF",
+   "read_only": 1,
+   "label": "Action Type"
+  },
+  {
+   "fieldname": "objective",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "label": "Objective"
+  },
+  {
+   "fieldname": "policy_version",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Policy Version"
+  },
+  {
+   "fieldname": "context_version",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Context Version"
+  },
+  {
+   "fieldname": "worklist_priority_rank",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "read_only": 1,
+   "default": "99",
+   "label": "Worklist Priority Rank"
+  },
+  {
+   "fieldname": "revisit_at",
+   "fieldtype": "Datetime",
+   "label": "Revisit At",
+   "description": "Deferred work becomes visible at this UTC instant; blank archival deferrals never reactivate automatically."
+  },
+  {
+   "fieldname": "requires_review",
+   "fieldtype": "Check",
+   "read_only": 1,
+   "label": "Requires Review"
+  },
+  {
+   "fieldname": "review_revision",
+   "fieldtype": "Int",
+   "read_only": 1,
+   "label": "Review Revision"
+  },
+  {
+   "fieldname": "action_revision",
+   "fieldtype": "Int",
+   "read_only": 1,
+   "label": "Action Revision"
+  },
+  {
+   "fieldname": "execution_package_version",
+   "fieldtype": "Int",
+   "default": "0",
+   "read_only": 1,
+   "label": "Execution Package Version"
+  },
+  {
+   "fieldname": "column_break_generation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "generation_status",
+   "fieldtype": "Select",
+   "options": "pending\nsucceeded\nfailed\ndeferred",
+   "default": "pending",
+   "read_only": 1,
+   "label": "Generation Status"
+  },
+  {
+   "fieldname": "generation_failed_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Generation Failed At"
+  },
+  {
+   "fieldname": "generation_failure_reason",
+   "fieldtype": "Small Text",
+   "read_only": 1,
+   "label": "Generation Failure Reason"
+  },
+  {
+   "fieldname": "generation_idempotency_key",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Generation Idempotency Key"
+  },
+  {
+   "fieldname": "producer_identity",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Producer Identity",
+   "description": "Set only for AI-governed tasks (e.g. crm-agents:v2). Empty for a manual Task."
+  },
+  {
+   "fieldname": "payload_digest",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Payload Digest"
+  },
+  {
+   "fieldname": "legacy_student_task_name",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "hidden": 1,
+   "label": "Legacy CRM Student Task Name",
+   "description": "Set only by the CRM Student Task -> Task migration patch, for audit traceability back to the pre-merge row."
+  },
+  {
+   "fieldname": "recommendation",
+   "fieldtype": "Link",
+   "options": "CRM Recommendation",
+   "read_only": 1,
+   "label": "Recommendation"
+  },
+  {
+   "fieldname": "sales_action",
+   "fieldtype": "Link",
+   "options": "CRM Sales Action",
+   "read_only": 1,
+   "label": "Sales Action"
+  },
+  {
+   "fieldname": "evidence_references",
+   "fieldtype": "JSON",
+   "read_only": 1,
+   "label": "Evidence References"
+  },
+  {
+   "fieldname": "package_seed",
+   "fieldtype": "JSON",
+   "read_only": 1,
+   "label": "Package Seed"
+  },
+  {
+   "fieldname": "outcome",
+   "fieldtype": "Data",
+   "read_only": 1,
+   "label": "Outcome"
+  },
+  {
+   "fieldname": "created_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Created At (Generation)"
+  },
+  {
+   "fieldname": "accepted_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Accepted At"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Completed At"
+  },
+  {
+   "fieldname": "decision_reason",
+   "fieldtype": "Small Text",
+   "label": "Decision Reason",
+   "description": "Optional — why Sales rejected/deferred this task."
+  },
+  {
+   "fieldname": "decision_actor",
+   "fieldtype": "Link",
+   "options": "User",
+   "read_only": 1,
+   "label": "Decision Actor"
+  },
+  {
+   "fieldname": "decision_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Decision At"
+  },
+  {
+   "fieldname": "decision_revision",
+   "fieldtype": "Int",
+   "default": "0",
+   "read_only": 1,
+   "label": "Decision Revision"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-26 12:55:16.304522",
- "modified_by": "shariq@frappe.io",
+ "modified": "2026-08-26 14:44:00.000000",
+ "modified_by": "Administrator",
  "module": "FCRM",
  "name": "Task",
  "naming_rule": "Autoincrement",
@@ -150,6 +408,7 @@
   },
   {
    "read": 1,
+   "write": 1,
    "role": "Sale"
   },
   {

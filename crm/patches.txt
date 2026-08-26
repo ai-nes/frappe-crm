@@ -92,3 +92,5 @@ crm.patches.v1_0.add_student_next_task_v2
 crm.patches.v1_0.add_score_policy_versioning
 crm.patches.v1_0.add_score_revision_tracking
 crm.patches.v1_0.backfill_student_task_worklist_fields
+crm.patches.v1_0.add_task_current_slot_index
+crm.patches.v1_0.migrate_student_task_to_task

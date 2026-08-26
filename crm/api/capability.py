@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import time
 from functools import wraps
 
@@ -12,6 +13,13 @@ from crm.fcrm.permissions import FULL_VISIBILITY_ROLES
 
 OPERATIONS = ("read", "write", "create", "delete")
 CAPABILITY_CONTRACT_VERSION = "v1"
+DISCOVERY_CONTRACT_VERSION = "crm-discovery-1"
+_DISCOVERY_MAX_LIMIT = 50
+_DISCOVERY_FILTER_TYPES = frozenset(
+	{"Data", "Select", "Link", "Int", "Float", "Currency", "Percent", "Date", "Datetime", "Check"}
+)
+_DISCOVERY_SEARCH_TYPES = frozenset({"Data", "Small Text", "Text", "Long Text"})
+_DISCOVERY_HIDDEN_TYPES = frozenset({"Password", "Secret"})
 ROLE_MATRIX_EPOCH = "crm-roles-v1"
 AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 
@@ -107,6 +115,158 @@ def _doctype_columns(meta) -> list[str]:
 	`fields=[...]` query on a non-child doctype.
 	"""
 	return list(meta.get_valid_columns())
+
+
+def _safe_description(value) -> str:
+	"""Return bounded plain text from administrator-owned DocType metadata."""
+	text = re.sub(r"<[^>]+>", " ", str(value or ""))
+	text = " ".join(text.split())
+	return text[:240]
+
+
+def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
+	"""Build the deliberately small query envelope; never a query DSL."""
+	fields = {
+		df.fieldname: getattr(df, "fieldtype", "Data")
+		for df in getattr(meta, "fields", ())
+		if getattr(df, "fieldname", None) in readable
+	}
+	filter_fields = sorted(
+		field for field, fieldtype in fields.items() if fieldtype in _DISCOVERY_FILTER_TYPES
+	)
+	if "name" in readable and "name" not in filter_fields:
+		filter_fields.insert(0, "name")
+	search_candidates = sorted(
+		field for field, fieldtype in fields.items() if fieldtype in _DISCOVERY_SEARCH_TYPES
+	)
+	if doctype == "CRM Student" and "student_name" in search_candidates:
+		search_field = "student_name"
+	else:
+		search_field = search_candidates[0] if search_candidates else None
+	return {
+		"get": {"enabled": True},
+		"search": {
+			"enabled": search_field is not None,
+			"filter_fields": filter_fields,
+			"search_field": search_field,
+			"max_limit": _DISCOVERY_MAX_LIMIT,
+		},
+		"list": {
+			"enabled": True,
+			"filter_fields": filter_fields,
+			"max_limit": _DISCOVERY_MAX_LIMIT,
+		},
+		# Exact counts are still evaluated by Frappe's row-scope-aware query.
+		# A deployment that must hide cardinality can set this to "deny" here;
+		# agents consume the issued value and never infer it locally.
+		"count": {
+			"enabled": True,
+			"filter_fields": filter_fields,
+			"max_limit": _DISCOVERY_MAX_LIMIT,
+			"count_mode": "exact",
+		},
+	}
+
+
+def _discovery_view(doctype: str, meta, grant: dict) -> tuple[dict, dict]:
+	field_by_name = {
+		getattr(df, "fieldname", ""): df for df in getattr(meta, "fields", ())
+	}
+	readable = {
+		fieldname for fieldname in grant["fields"]
+		if fieldname == "name"
+		or getattr(field_by_name.get(fieldname), "fieldtype", "Data") not in _DISCOVERY_HIDDEN_TYPES
+	}
+	query_policy = _discovery_query_policy(doctype, meta, readable)
+	operations = sorted(
+		operation for operation, policy in query_policy.items() if policy.get("enabled")
+	)
+	catalog = {
+		"resource": doctype,
+		"label": str(getattr(meta, "label", None) or doctype),
+		"short_description": _safe_description(getattr(meta, "description", None)),
+		"operations": operations,
+	}
+	readable_fields = []
+	for fieldname in sorted(readable):
+		df = field_by_name.get(fieldname)
+		if fieldname == "name" and df is None:
+			readable_fields.append({"name": fieldname, "type": "Data", "label": "Name"})
+		elif df is not None:
+			readable_fields.append({
+				"name": fieldname,
+				"type": str(getattr(df, "fieldtype", "Data")),
+				"label": str(getattr(df, "label", None) or fieldname),
+			})
+	description = {
+		"resource": doctype,
+		"readable_fields": readable_fields,
+		"relationships": [],
+		"query_policy": query_policy,
+	}
+	return catalog, description
+
+
+def _build_discovery_contract(views: dict[str, tuple[object, dict]]) -> dict:
+	"""Build catalog, descriptions, and a hash of the exact disclosed policy."""
+	catalog = []
+	descriptions = {}
+	readable_resources = set()
+	for doctype, (_meta, grant) in sorted(views.items()):
+		if grant is _NO_GRANT or grant is _COMPUTE_ERROR or not grant["operations"]["read"]:
+			continue
+		entry, description = _discovery_view(doctype, _meta, grant)
+		catalog.append(entry)
+		descriptions[doctype] = description
+		readable_resources.add(doctype)
+	for doctype, (meta, _grant) in sorted(views.items()):
+		if doctype not in descriptions:
+			continue
+		field_names = {
+			field["name"] for field in descriptions[doctype]["readable_fields"]
+		}
+		relations = []
+		for df in getattr(meta, "fields", ()):
+			if getattr(df, "fieldname", None) not in field_names:
+				continue
+			if getattr(df, "fieldtype", None) != "Link":
+				continue
+			target = getattr(df, "options", None)
+			if isinstance(target, str) and target in readable_resources:
+				relations.append({"source_field": df.fieldname, "target_resource": target})
+		descriptions[doctype]["relationships"] = sorted(
+			relations, key=lambda item: (item["source_field"], item["target_resource"])
+		)
+	canonical = {"catalog": catalog, "descriptions": descriptions}
+	revision = _sha256_hex(canonical)
+	for description in descriptions.values():
+		description["discovery_revision"] = revision
+	return {
+		"contract_version": DISCOVERY_CONTRACT_VERSION,
+		"discovery_revision": revision,
+		"catalog": catalog,
+		"descriptions": descriptions,
+	}
+
+
+def _safe_discovery_filters(raw_filters, policy: dict) -> list:
+	if raw_filters in (None, "", []):
+		return []
+	filters = frappe.parse_json(raw_filters) if isinstance(raw_filters, str) else raw_filters
+	if not isinstance(filters, list):
+		frappe.throw(_("Discovery filters must be a list."), frappe.ValidationError)
+	allowed = set(policy.get("filter_fields", ()))
+	validated = []
+	for item in filters:
+		if not isinstance(item, (list, tuple)) or len(item) != 3:
+			frappe.throw(_("Discovery filter is invalid."), frappe.ValidationError)
+		fieldname, operator, value = item
+		if fieldname not in allowed or operator not in {"=", "in"}:
+			frappe.throw(_("Discovery filter is not permitted."), frappe.PermissionError)
+		if operator == "in" and (not isinstance(value, list) or len(value) > 50):
+			frappe.throw(_("Discovery filter is invalid."), frappe.ValidationError)
+		validated.append([fieldname, operator, value])
+	return validated
 
 
 def _project_ai_fields(doctype: str, fields: list[str], roles) -> list[str]:
@@ -441,6 +601,7 @@ def get_capability_manifest():
 	resources: dict[str, dict] = {}
 	version_entries = []
 	schema_entries = []
+	discovery_views: dict[str, tuple[object, dict]] = {}
 	for doctype in exposed:
 		if time.monotonic() - start > _TIME_BUDGET_S:
 			resources[doctype] = "unknown"
@@ -465,6 +626,8 @@ def get_capability_manifest():
 		schema_entries.append((doctype, sorted(columns)))
 
 		grant = _resource_grant(doctype, meta, columns)
+		if grant is not _NO_GRANT and grant is not _COMPUTE_ERROR:
+			discovery_views[doctype] = (meta, grant)
 		if grant is _NO_GRANT:
 			continue
 		if grant is _COMPUTE_ERROR:
@@ -498,6 +661,7 @@ def get_capability_manifest():
 			"data_scopes": data_scopes,
 		}
 	)
+	discovery = _build_discovery_contract(discovery_views)
 
 	return {
 		"contract_version": CAPABILITY_CONTRACT_VERSION,
@@ -510,7 +674,97 @@ def get_capability_manifest():
 		"data_scopes": data_scopes,
 		"schema_version": schema_version,
 		"capability_version": capability_version,
+		"discovery": {
+			key: value for key, value in discovery.items() if key != "descriptions"
+		},
 	}
+
+
+def _current_discovery_contract() -> dict:
+	"""Rebuild the principal-scoped discovery view for named read endpoints."""
+	get_session_role_flags()
+	roles = sorted(frappe.get_roles())
+	if resolve_copilot_profile(roles) is None:
+		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	exposed = sorted(
+		frappe.get_all("DocType", filters={"custom_ai_exposed": 1}, pluck="name", ignore_permissions=True)
+	)
+	exposed = [
+		doctype for doctype in exposed
+		if doctype != "CRM Student" or _student_ai_exposure_enabled()
+	]
+	views: dict[str, tuple[object, dict]] = {}
+	start = time.monotonic()
+	for doctype in exposed:
+		if time.monotonic() - start > _TIME_BUDGET_S:
+			break
+		try:
+			meta = frappe.get_meta(doctype)
+			grant = _resource_grant(doctype, meta, _doctype_columns(meta))
+			if grant is not _NO_GRANT and grant is not _COMPUTE_ERROR:
+				views[doctype] = (meta, grant)
+		except Exception:
+			frappe.log_error(message=frappe.get_traceback(), title=f"capability_gateway: discovery lookup failed for {doctype}")
+	return _build_discovery_contract(views)
+
+
+def _require_discovery_revision(expected_revision: str | None) -> dict:
+	contract = _current_discovery_contract()
+	if (
+		contract.get("contract_version") != DISCOVERY_CONTRACT_VERSION
+		or not isinstance(expected_revision, str)
+		or expected_revision != contract.get("discovery_revision")
+	):
+		frappe.throw(_("Discovery contract is stale."), frappe.PermissionError)
+	return contract
+
+
+@frappe.whitelist()
+@_session_rate_limit(limit=60, seconds=60)
+def get_ai_resource_catalog():
+	"""Return only the authenticated principal's compact discovery catalog."""
+	contract = _current_discovery_contract()
+	return {
+		"contract_version": contract["contract_version"],
+		"discovery_revision": contract["discovery_revision"],
+		"catalog": contract["catalog"],
+	}
+
+
+@frappe.whitelist()
+@_session_rate_limit(limit=120, seconds=60)
+def describe_ai_resource(resource: str, discovery_revision: str | None = None):
+	"""Describe one catalog resource, never a caller-selected hidden DocType."""
+	contract = _require_discovery_revision(discovery_revision)
+	if not isinstance(resource, str) or resource not in {
+		item["resource"] for item in contract["catalog"]
+	}:
+		frappe.throw(_("Resource is not available."), frappe.PermissionError)
+	return contract["descriptions"][resource]
+
+
+@frappe.whitelist()
+@_session_rate_limit(limit=120, seconds=60)
+def count_ai_resource(resource: str, filters=None, discovery_revision: str | None = None):
+	"""Named, row-scope-aware count operation; arbitrary methods stay denied."""
+	contract = _require_discovery_revision(discovery_revision)
+	description = contract["descriptions"].get(resource)
+	if description is None:
+		frappe.throw(_("Resource is not available."), frappe.PermissionError)
+	policy = description["query_policy"].get("count", {})
+	if not policy.get("enabled") or policy.get("count_mode") == "deny":
+		frappe.throw(_("Count is not available."), frappe.PermissionError)
+	if resource == "CRM Student":
+		# Keep the temporary protected DTO path authoritative for Student while
+		# the generic-path parity/exit criteria are still pending.
+		return count_ai_students(filters=filters)
+	rows = frappe.get_list(
+		resource,
+		fields=["count(name) as count"],
+		filters=_safe_discovery_filters(filters, policy),
+		page_length=1,
+	)
+	return {"count": int(rows[0].get("count", 0)) if rows else 0}
 
 
 @frappe.whitelist()

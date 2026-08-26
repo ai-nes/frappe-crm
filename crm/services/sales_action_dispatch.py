@@ -87,10 +87,10 @@ def persist_initial_package(task) -> dict:
 
 
 def edit_email_package(task_name: str, expected_revision: int, package: dict, reason: str) -> dict:
-	task = frappe.get_doc("CRM Student Task", task_name)
+	task = frappe.get_doc("Task", task_name)
 	if not task.has_permission("write"):
 		frappe.throw("Task is outside the actor's Student scope.", frappe.PermissionError)
-	if task.action_type != "EMAIL" or task.state not in {"ACCEPTED", "IN_PROGRESS"}:
+	if task.action_type != "EMAIL" or task.status not in {"ACCEPTED", "IN_PROGRESS"}:
 		frappe.throw("Only an accepted/in-progress EMAIL task can be edited.", frappe.ValidationError)
 	if int(task.execution_package_version or 0) != int(expected_revision):
 		frappe.throw("Email package changed; refresh before editing.", frappe.ValidationError)
@@ -111,20 +111,26 @@ def edit_email_package(task_name: str, expected_revision: int, package: dict, re
 		}
 	).insert(ignore_permissions=True)
 	frappe.flags.student_task_command = True
-	frappe.db.set_value(
-		"CRM Student Task",
-		task.name,
-		{"package_seed": package, "execution_package_version": new_revision},
-		update_modified=False,
-	)
-	frappe.flags.student_task_command = False
+	try:
+		frappe.db.set_value(
+			"Task",
+			task.name,
+			{"package_seed": package, "execution_package_version": new_revision},
+			update_modified=False,
+		)
+	finally:
+		frappe.flags.student_task_command = False
 	return {"task": task.name, "package_revision": new_revision, "package": package}
 
 
 def queue_dispatch(task: str, *, package_revision: int, channel: str, inputs: dict) -> dict:
 	"""Re-read task/policy/authority and create one durable dispatch fence."""
-	task_row = frappe.get_doc("CRM Student Task", task)
-	if task_row.state not in {"ACCEPTED", "IN_PROGRESS"} or task_row.requires_review:
+	task_row = frappe.get_doc("Task", task)
+	if (
+		not task_row.producer_identity
+		or task_row.status not in {"ACCEPTED", "IN_PROGRESS"}
+		or task_row.requires_review
+	):
 		frappe.throw("Task is not dispatchable until reviewed/resumed.", frappe.ValidationError)
 	package = _json_object(inputs.get("package") or task_row.package_seed)
 	validate_execution_package(task_row.action_type, package)

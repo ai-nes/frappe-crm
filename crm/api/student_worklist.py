@@ -1,4 +1,4 @@
-"""Session-scoped, permission-filtered CRM Student Task worklist."""
+"""Session-scoped, permission-filtered AI-governed Task worklist."""
 
 import base64
 import binascii
@@ -20,7 +20,7 @@ _POLICY_VERSION = "worklist-v1"
 
 @frappe.whitelist()
 def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) -> dict:
-	"""Return one deterministic page of CRM Student Task worklist items visible
+	"""Return one deterministic page of AI-governed Task worklist items visible
 	to this session (the `recommendation` DTO key is retained for compatibility;
 	see `_minimal_dto`).
 
@@ -131,7 +131,7 @@ def _sort_key(row) -> tuple[int, str, str, str]:
 	"""Explicit ordering: priority rank, revisit timing, creation, then stable ID.
 
 	Must read the same `worklist_priority_rank` column the SQL ORDER BY/keyset
-	predicate in `_fetch_page` uses (default 99, see CRMStudentTask.validate) --
+	predicate in `_fetch_page` uses (default 99, see Task._validate_ai_governed) --
 	recomputing rank here from the raw `priority` string with a different
 	default (previously 3) desynced the cursor from the SQL comparison and
 	could repeat or skip rows across pages.
@@ -144,10 +144,11 @@ def _sort_key(row) -> tuple[int, str, str, str]:
 
 
 def _minimal_dto(row) -> dict:
-	# `recommendation` intentionally holds the CRM Student Task name post-cutover
+	# `recommendation` intentionally holds the AI-governed Task name post-merge
 	# -- kept for frontend contract compatibility (frontend/src/utils/studentDecision.js
 	# falls back to this key). It is routed correctly regardless: `_decide_by_name`
-	# dispatches by checking which doctype the name actually belongs to.
+	# dispatches by checking whether the name is a producer_identity-governed Task
+	# or a pre-cutover CRM Recommendation row.
 	return {
 		"recommendation": row.name,
 		"student": row.student,
@@ -170,38 +171,39 @@ def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
 	"""Keyset query with Frappe's own permission condition, never an offset scan."""
 	from frappe.model.db_query import DatabaseQuery
 
-	frappe.has_permission("CRM Student Task", "read", user=principal, throw=True)
+	frappe.has_permission("Task", "read", user=principal, throw=True)
 	permission_query = DatabaseQuery("CRM Student", user=principal).build_match_conditions(as_condition=True)
 	values = {"states": _ACTIVE_STATES, "limit": limit, "now": frappe.utils.now_datetime()}
 	conditions = [
-		"`tabCRM Student Task`.current_slot = 'CURRENT'",
-		"(`tabCRM Student Task`.state IN %(states)s OR ("
-		"`tabCRM Student Task`.state = 'DEFERRED' AND "
-		"`tabCRM Student Task`.revisit_at IS NOT NULL AND "
-		"`tabCRM Student Task`.revisit_at <= %(now)s))",
+		"`tabTask`.current_slot = 'CURRENT'",
+		"ifnull(`tabTask`.producer_identity, '') != ''",
+		"(`tabTask`.status IN %(states)s OR ("
+		"`tabTask`.status = 'DEFERRED' AND "
+		"`tabTask`.revisit_at IS NOT NULL AND "
+		"`tabTask`.revisit_at <= %(now)s))",
 	]
 	if permission_query:
 		conditions.append(f"({permission_query})")
 	if last_sort_key:
 		conditions.append(
 			"""(
-				`tabCRM Student Task`.worklist_priority_rank > %(rank)s
-				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
-				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Student Task`.creation > %(creation)s)
-				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Student Task`.creation = %(creation)s AND `tabCRM Student Task`.name > %(name)s)
+				`tabTask`.worklist_priority_rank > %(rank)s
+				OR (`tabTask`.worklist_priority_rank = %(rank)s AND COALESCE(`tabTask`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
+				OR (`tabTask`.worklist_priority_rank = %(rank)s AND COALESCE(`tabTask`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabTask`.creation > %(creation)s)
+				OR (`tabTask`.worklist_priority_rank = %(rank)s AND COALESCE(`tabTask`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabTask`.creation = %(creation)s AND `tabTask`.name > %(name)s)
 			)"""
 		)
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key)))
 	return frappe.db.sql(
-		"""SELECT `tabCRM Student Task`.name, `tabCRM Student Task`.student, `tabCRM Student`.student_name,
-		`tabCRM Student Task`.priority, `tabCRM Student Task`.worklist_priority_rank, `tabCRM Student Task`.action_type,
-		`tabCRM Student Task`.revisit_at, `tabCRM Student Task`.objective,
-		`tabCRM Student Task`.modified, `tabCRM Student Task`.decision_revision, `tabCRM Student Task`.creation
-		FROM `tabCRM Student Task`
-		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Student Task`.student
+		"""SELECT `tabTask`.name, `tabTask`.student, `tabCRM Student`.student_name,
+		`tabTask`.priority, `tabTask`.worklist_priority_rank, `tabTask`.action_type,
+		`tabTask`.revisit_at, `tabTask`.objective,
+		`tabTask`.modified, `tabTask`.decision_revision, `tabTask`.creation
+		FROM `tabTask`
+		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabTask`.student
 		WHERE {conditions}
-		ORDER BY `tabCRM Student Task`.worklist_priority_rank ASC, COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
-		`tabCRM Student Task`.creation ASC, `tabCRM Student Task`.name ASC
+		ORDER BY `tabTask`.worklist_priority_rank ASC, COALESCE(`tabTask`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
+		`tabTask`.creation ASC, `tabTask`.name ASC
 		LIMIT %(limit)s""".format(conditions=" AND ".join(conditions)),
 		values,
 		as_dict=True,

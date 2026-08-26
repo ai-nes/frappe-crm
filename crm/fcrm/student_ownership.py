@@ -742,13 +742,16 @@ def change_student_ownership(
 		frappe.db.set_value("CRM Student", student_name, updates, update_modified=True)
 		# Active Phase 6 work is reconciled in the same ownership transaction so a
 		# scope change cannot strand an action outside every executor queue.
-		from crm.fcrm.student_decision import reconcile_student_actions
+		from crm.fcrm.student_decision import reconcile_student_actions, sync_task_assignment
 		reconcile_student_actions(
 			student_name,
 			next_owner_staff=target.get("owner_staff"),
 			next_owning_team=target.get("owning_team"),
 			correlation_id=correlation_id,
 		)
+		# The student's current AI-governed Task (if any) follows ownership too,
+		# even mid-flight (PENDING/ACCEPTED) -- not just at the next generation.
+		sync_task_assignment(student_name, next_owner_staff=target.get("owner_staff"))
 
 		teams = _team_rows_for_actor(actor)
 		actor_scope = _actor_scope_snapshot(actor, profile, teams)

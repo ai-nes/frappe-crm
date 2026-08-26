@@ -92,10 +92,12 @@ const routes = [
     meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
+    // AI-governed tasks now render inline in the unified Tasks view (Phase 3
+    // of the Task/CRM Student Task merge). StudentWorklist.vue stays in the
+    // tree, unrouted, until Phase 6 sign-off -- this redirect is the only
+    // remaining entry point for the old bookmark/link.
     path: '/my-recommendations',
-    name: 'My Recommendations',
-    component: () => import('@/pages/StudentWorklist.vue'),
-    meta: { anyOf: admissionsWorkspaceCapabilities },
+    redirect: '/tasks',
   },
   {
     path: '/crm-students/:crmStudentId',

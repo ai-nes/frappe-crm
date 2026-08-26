@@ -54,9 +54,9 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Student Task",
-   "options": "CRM Student Task",
+   "options": "Task",
    "read_only": 1,
-   "description": "The Student Task this action responds to — the canonical correlation path for actions created after the V2 cutover."
+   "description": "The Task this action responds to — the canonical correlation path for actions created after the V2 cutover."
   },
   {
    "fieldname": "student",

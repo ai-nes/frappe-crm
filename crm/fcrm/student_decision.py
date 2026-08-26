@@ -257,19 +257,19 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 
 
 def decide_student_task(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, decision_reason: str | None = None, due_at: Any = None, assignee_staff: str | None = None, revisit_at: Any = None, defer_kind: str | None = None, expected_modified: str | None = None):
-	"""V2-native counterpart of decide_recommendation, against CRM Student Task."""
+	"""V2-native counterpart of decide_recommendation, against Task (AI-governed rows)."""
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); correlation_id = correlation_id or frappe.generate_hash(length=20)
 	if status not in {"accepted", "rejected", "deferred"}: _fail("INVALID_INPUT", "Unsupported task decision.")
 	payload = {"name": name, "expected_revision": expected_revision, "status": status, "decision_reason": decision_reason, "due_at": due_at, "assignee_staff": assignee_staff, "revisit_at": revisit_at, "defer_kind": defer_kind}
 	fingerprint = _fingerprint(payload); command_key = _command_key("student_task_decision", actor, key)
-	TASK = "CRM Student Task"
+	TASK = "Task"
 	if replay := _replay(command_key, fingerprint): return replay
 	_lock(TASK, name)
 	if replay := _replay(command_key, fingerprint): return replay
 	doc = frappe.get_doc(TASK, name); scope = _can_decide(actor, doc)
 	if expected_modified and str(doc.modified) != str(expected_modified): _fail("STALE_REVISION", "Task changed; reload before retrying.")
 	if str(doc.get("decision_revision") or 0) != str(expected_revision): _fail("STALE_REVISION", "Task changed; reload before retrying.")
-	if doc.state not in {"PENDING", "REQUIRES_REVIEW"}: _fail("INVALID_STATE", "This task can no longer be decided.")
+	if doc.status not in {"PENDING", "REQUIRES_REVIEW"}: _fail("INVALID_STATE", "This task can no longer be decided.")
 	if status == "accepted":
 		if not due_at: _fail("INVALID_INPUT", "due_at is required when accepting.")
 		assignee_staff = assignee_staff or _staff_for_user(actor)
@@ -280,12 +280,12 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 		_required(decision_reason, "decision_reason")
 	if status == "deferred" and not revisit_at:
 		_required(decision_reason, "decision_reason")
-	previous_state = doc.state
+	previous_state = doc.status
 	receipt = _new_receipt("student_task_decision", actor, doc.student, key, fingerprint, scope, correlation_id)
 	previous_flag = getattr(frappe.flags, "phase6_decision_command", False); frappe.flags.phase6_decision_command = True
 	previous_task_flag = getattr(frappe.flags, "student_task_command", False); frappe.flags.student_task_command = True
 	try:
-		doc.state = {"accepted": "ACCEPTED", "rejected": "REJECTED", "deferred": "DEFERRED"}[status]
+		doc.status = {"accepted": "ACCEPTED", "rejected": "REJECTED", "deferred": "DEFERRED"}[status]
 		doc.decision_reason = decision_reason; doc.revisit_at = revisit_at if status == "deferred" else None
 		doc.decision_revision = int(doc.get("decision_revision") or 0) + 1; doc.decision_actor = actor; doc.decision_at = now_datetime()
 		doc.save(ignore_permissions=True)
@@ -386,6 +386,49 @@ def reassign_sales_action(name: str, expected_revision: Any, assignee_staff: str
 		_finish(receipt, result); return result
 	finally:
 		frappe.flags.phase6_decision_command = previous_flag
+
+
+def sync_task_assignment(student: str, next_owner_staff: str | None):
+	"""Keep an AI-governed Task's assignee current with Student ownership.
+
+	Sibling of reconcile_student_actions: called from the same ownership
+	commit site in student_ownership.py, inside the same transaction, but
+	targets the student's CURRENT Task (assigned_to) rather than active Sales
+	Actions. A manual Task (no producer_identity) is never touched -- only
+	the one current_slot='CURRENT' row an AI-governed student can have.
+	"""
+	task_name = frappe.db.get_value(
+		"Task",
+		{"student": student, "current_slot": "CURRENT", "producer_identity": ["is", "set"]},
+		"name",
+	)
+	if not task_name:
+		return
+	next_user = frappe.db.get_value("CRM Staff", next_owner_staff, "user") if next_owner_staff else None
+	task = frappe.get_doc("Task", task_name)
+	if task.assigned_to == next_user:
+		return
+	previous_flag = getattr(frappe.flags, "student_ownership_sync", False)
+	frappe.flags.student_ownership_sync = True
+	savepoint = f"sync_task_assignment_{task_name}"
+	frappe.db.savepoint(savepoint)
+	try:
+		task.assigned_to = next_user
+		task.save(ignore_permissions=True)
+	except Exception:
+		# The Task assignment side effect (frappe.desk.form.assign_to) must
+		# not roll back the caller's ownership-change transaction -- roll
+		# back only this partial assignment write (assign/unassign ToDo
+		# side effects run inside validate(), before Task itself is
+		# persisted) and continue; reconciled on the next ownership sync or
+		# task generation cycle.
+		frappe.db.rollback(save_point=savepoint)
+		frappe.log_error(
+			title="sync_task_assignment: Task save failed",
+			message=f"Task {task_name} assignment sync to {next_user} failed:\n{frappe.get_traceback()}",
+		)
+	finally:
+		frappe.flags.student_ownership_sync = previous_flag
 
 
 def reconcile_student_actions(student: str, next_owner_staff: str | None, next_owning_team: str | None, correlation_id: str):

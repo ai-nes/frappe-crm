@@ -38,6 +38,9 @@ class CRMSalesAction(Document):
 		key = self.recommendation or self.student_task
 		if not key:
 			frappe.throw(_("CRM Sales Action requires a recommendation or student_task before it can be named"))
+		# `student_task` now links to Task (autoincrement, integer PK) --
+		# `recommendation` still links to the string-named CRM Recommendation.
+		key = str(key)
 		digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
 		prefix = "SA-E2E-FPT-2026-" if key.startswith("REC-E2E-FPT-2026-") else "SA-"
 		self.name = f"{prefix}{digest}"
@@ -52,7 +55,7 @@ class CRMSalesAction(Document):
 			if self.recommendation:
 				source_student = frappe.db.get_value("CRM Recommendation", self.recommendation, "student")
 			elif self.student_task:
-				source_student = frappe.db.get_value("CRM Student Task", self.student_task, "student")
+				source_student = frappe.db.get_value("Task", self.student_task, "student")
 			else:
 				frappe.throw(_("CRM Sales Action requires a recommendation or student_task."))
 			if source_student != self.student:

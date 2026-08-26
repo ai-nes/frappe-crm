@@ -34,7 +34,7 @@
       </ListHeaderItem>
     </ListHeader>
     <ListRows
-      v-slot="{ idx, column, item }"
+      v-slot="{ idx, column, item, row }"
       class="mx-3 sm:mx-5"
       :rows="rows"
       doctype="Task"
@@ -87,9 +87,19 @@
                 })
             "
           >
-            <Tooltip :text="item.label">
-              <div>{{ item.timeAgo }}</div>
-            </Tooltip>
+            <div class="flex items-center gap-2">
+              <Tooltip :text="item.label">
+                <div>{{ item.timeAgo }}</div>
+              </Tooltip>
+              <Dropdown
+                v-if="column.key === 'modified' && row.producer_identity"
+                :options="rowActions(row.name)"
+                variant="ghost"
+                @click.stop.prevent
+              >
+                <Button icon="more-horizontal" variant="ghost" />
+              </Dropdown>
+            </div>
           </div>
           <div
             v-else-if="column.type === 'Text Editor'"
@@ -196,6 +206,7 @@ import {
 } from '@/utils'
 import {
   Avatar,
+  Button,
   ListView,
   ListHeader,
   ListHeaderItem,
@@ -211,6 +222,7 @@ import { ref, computed, watch } from 'vue'
 defineProps({
   rows: { type: Array, required: true },
   columns: { type: Array, required: true },
+  rowActions: { type: Function, default: () => [] },
   options: {
     type: Object,
     default: () => ({
