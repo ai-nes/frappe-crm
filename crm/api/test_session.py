@@ -201,6 +201,22 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertIsNone(flags["crm_profile"])
 		self.assertEqual(get_crm_user_role(roles), ("System Manager", None))
 
+	def test_system_manager_retains_crm_access_with_desk_management_roles(self):
+		roles = {"System Manager", "Workspace Manager", "Dashboard Manager", "Report Manager"}
+		self.assertEqual(classify_role_set(roles), "system_manager")
+		self.assertEqual(capabilities_for_roles(roles), capabilities_for_roles({"System Manager"}))
+		flags = _session_role_flags(roles)
+		self.assertTrue(flags["is_system_manager"])
+		self.assertIsNone(flags["crm_profile"])
+		self.assertEqual(get_crm_user_role(roles), ("System Manager", None))
+
+	def test_system_manager_with_unknown_role_fails_closed(self):
+		roles = {"System Manager", "Unrecognized Role"}
+		self.assertEqual(classify_role_set(roles), "mixed_or_unmapped")
+		self.assertEqual(capabilities_for_roles(roles), frozenset())
+		with self.assertRaises(frappe.PermissionError):
+			_session_role_flags(roles)
+
 	def test_legacy_role_sources_have_one_explicit_backfill_target(self):
 		self.assertEqual(backfill_target_for_roles({"Sales User"}), "Sale")
 		self.assertEqual(backfill_target_for_roles({"Sales Manager"}), "Lead Sales")

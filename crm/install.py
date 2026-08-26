@@ -36,6 +36,15 @@ def after_install(force=False):
 	frappe.db.commit()
 
 
+def complete_setup(_args: dict | None = None):
+	"""Finish Frappe setup without seeding optional demo records.
+
+	Demo fixtures predate the governed master-data and Student-conversion flows;
+	they must not make first-time setup fail.
+	"""
+	return None
+
+
 def add_chatwoot_cors_origin():
 	"""Allow Chatwoot dashboard requests to reach this site."""
 

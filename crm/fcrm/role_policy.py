@@ -10,6 +10,11 @@ from __future__ import annotations
 
 POLICY_VERSION = "phase2-v1"
 SYSTEM_MANAGER_ROLE = "System Manager"
+DESK_MANAGEMENT_ROLE_NAMES = (
+	"Workspace Manager",
+	"Dashboard Manager",
+	"Report Manager",
+)
 
 PROFILE_LABELS = {
 	"sales": "Sale",
@@ -407,6 +412,7 @@ FRAMEWORK_ROLE_NAMES = frozenset({"All", "Guest", "Desk User", "Website User"})
 _MIGRATION_ROLE_NAMES = frozenset(
 	CRM_ALLOWED_ROLES
 	| FRAMEWORK_ROLE_NAMES
+	| set(DESK_MANAGEMENT_ROLE_NAMES)
 	| LEGACY_UNMAPPED_ROLES
 	| LEGACY_OVERLAY_ROLES
 	| ROLE_BACKFILL_SOURCES
@@ -490,9 +496,8 @@ def classify_role_set(roles, *, administrator=False) -> str:
 	if unknown_roles:
 		known_business_roles = role_names & (CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | {SYSTEM_MANAGER_ROLE})
 		return "mixed_or_unmapped" if known_business_roles else "unmapped"
-	# System Manager owns the control plane.  Accidental or transitional
-	# operating-role assignments must not add operating capabilities, but also
-	# must not lock the account out of CRM administration.
+	# System Manager remains the CRM control plane when it also has known Frappe
+	# Desk-management roles. Unknown roles still fail closed above.
 	if SYSTEM_MANAGER_ROLE in role_names:
 		return "system_manager"
 
@@ -508,8 +513,6 @@ def classify_role_set(roles, *, administrator=False) -> str:
 		return "canonical_profile"
 	if overlay:
 		return "compatibility_overlay"
-	if SYSTEM_MANAGER_ROLE in role_names:
-		return "system_manager"
 	return "unmapped"
 
 
