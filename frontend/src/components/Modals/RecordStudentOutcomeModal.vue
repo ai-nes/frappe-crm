@@ -46,8 +46,14 @@ const evidence = ref('')
 const error = ref('')
 const loading = ref(false)
 const commandKey = ref(createStudentEngagementCommandId())
-const outcomeOptions = ['connected', 'qualified', 'follow_up_required', 'no_response', 'not_interested', 'invalid', 'completed']
-const continuityOptions = ['task', 'waiting', 'terminal']
+const outcomeOptions = ['connected', 'qualified', 'follow_up_required', 'no_response', 'not_interested', 'invalid', 'completed'].map((value) => ({
+  label: __(value),
+  value,
+}))
+const continuityOptions = ['task', 'waiting', 'terminal'].map((value) => ({
+  label: __(value),
+  value,
+}))
 const canSubmit = computed(() => !loading.value && outcome.value && continuity.value && (continuity.value === 'task' ? taskTitle.value && assignee.value && dueAt.value : continuity.value === 'waiting' ? reason.value.trim() && expiresAt.value : reason.value.trim()))
 
 watch(show, (open) => {

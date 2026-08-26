@@ -15,9 +15,18 @@ from crm.fcrm.qualification import (
 
 class TestPhase5Qualification(FrappeTestCase):
 	def test_mql_requires_outcome_and_non_score_evidence(self):
-		evidence = [{"category": "intent", "doctype": "CRM Interaction", "name": "INT-1", "private": "redact"}]
+		evidence = [
+			{"category": "outcome", "doctype": "CRM Student Outcome", "name": "OUT-1"},
+			{"category": "intent", "doctype": "CRM Interaction", "name": "INT-1", "private": "redact"},
+		]
 		result = validate_qualification_evidence("MQL", "qualified", evidence)
-		self.assertEqual(result["evidence"], [{"category": "intent", "doctype": "CRM Interaction", "name": "INT-1"}])
+		self.assertEqual(
+			result["evidence"],
+			[
+				{"category": "outcome", "doctype": "CRM Student Outcome", "name": "OUT-1"},
+				{"category": "intent", "doctype": "CRM Interaction", "name": "INT-1"},
+			],
+		)
 
 	def test_applicant_requires_appointment_or_document(self):
 		self.assertIn(

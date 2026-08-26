@@ -23,6 +23,7 @@
   "owning_team",
   "owning_pool",
   "latest_score",
+  "student_context_revision",
   "enrollment_date",
   "section_links",
   "high_school",
@@ -188,6 +189,15 @@
    "read_only": 1
   },
   {
+   "default": "0",
+   "fieldname": "student_context_revision",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Student Context Revision",
+   "read_only": 1,
+   "description": "Frappe-owned monotonic revision for material Student context changes. Never edit directly."
+  },
+  {
    "fieldname": "enrollment_date",
    "fieldtype": "Date",
    "in_list_view": 1,
@@ -228,7 +238,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Branch",
+   "label": "Campus",
    "options": "CRM Campus"
   },
   {
@@ -264,7 +274,7 @@
   {
    "fieldname": "admission_year",
    "fieldtype": "Link",
-   "label": "CRM Admission Year",
+   "label": "Admission Year",
    "options": "CRM Admission Year"
   },
   {

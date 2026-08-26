@@ -539,7 +539,10 @@ def _process_due_attempt(name: str, now):
 		attempt.save(ignore_permissions=True)
 		payload = {"recipient_role": recipient} if event_type == "escalated" else {"due_at": str(now)}
 		event = _insert_event(attempt, event_type, actor=actor, payload=payload)
-		_schedule_delivery(attempt, event, recipient)
+		# Daily-digest policy keeps the immutable per-lead escalation event but
+		# defers Director notification to the scheduled aggregate sender.
+		if not (event_type == "escalated" and attempt.recipient_strategy == "owner_warning_lead_breach_director_daily_digest"):
+			_schedule_delivery(attempt, event, recipient)
 	frappe.db.commit()
 
 

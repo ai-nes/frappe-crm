@@ -9,6 +9,7 @@ CRM Contact / CRM Student save-path tests (test_crm_contact.py / test_crm_studen
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
 
 from crm.fcrm.lifecycle import (
 	LIFECYCLE_ORDER,
@@ -17,6 +18,7 @@ from crm.fcrm.lifecycle import (
 	lifecycle_rank,
 	user_can_override_lifecycle,
 )
+from crm.fcrm.student_lifecycle import StudentLifecycleError, lifecycle_targets, validate_transition
 
 
 class TestLifecycleRank(FrappeTestCase):
@@ -116,3 +118,54 @@ class TestUserCanOverrideLifecycle(FrappeTestCase):
 			self.assertTrue(user_can_override_lifecycle(user.name))
 		finally:
 			frappe.delete_doc("User", user.name, force=True)
+
+
+class TestLifecycleJumps(FrappeTestCase):
+	def setUp(self):
+		self.capabilities = {"lifecycle.transition"}
+		self.evidence = [
+			{"category": "outcome", "doctype": "CRM Student Outcome", "name": "OUT-1"},
+			{"category": "intent", "doctype": "CRM Intent", "name": "INT-1"},
+			{"category": "document", "doctype": "CRM Student Document", "name": "DOC-1"},
+		]
+
+	def test_active_stage_lists_every_later_stage_when_writes_enabled(self):
+		with patch("crm.fcrm.student_lifecycle.enabled", return_value=True):
+			targets = lifecycle_targets("Lead", self.capabilities)
+		self.assertEqual([target["stage"] for target in targets], ["MQL", "Applicant", "Enrolled"])
+
+	def test_direct_jump_uses_cumulative_evidence(self):
+		transition = validate_transition(
+			"Lead", "Enrolled", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities
+		)
+		self.assertEqual(transition["transition_kind"], "forward")
+		self.assertEqual(transition["to_stage"], "Enrolled")
+		self.assertEqual(
+			validate_transition("MQL", "Enrolled", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities)["to_stage"],
+			"Enrolled",
+		)
+
+	def test_direct_jump_rejects_missing_skipped_stage_evidence(self):
+		with self.assertRaises(StudentLifecycleError) as error:
+			validate_transition(
+				"Lead",
+				"Enrolled",
+				outcome_code="qualified",
+				evidence=[{"category": "intent", "doctype": "CRM Intent", "name": "INT-1"}],
+				capabilities=self.capabilities,
+			)
+		self.assertEqual(error.exception.code, "INVALID_EVIDENCE")
+
+	def test_direct_jump_rejects_mislabeled_or_missing_outcome_record(self):
+		with self.assertRaises(StudentLifecycleError) as error:
+			validate_transition(
+				"Lead",
+				"Enrolled",
+				outcome_code="qualified",
+				evidence=[
+					{"category": "outcome", "doctype": "CRM Student Outcome", "name": "OUT-1"},
+					{"category": "document", "doctype": "CRM Intent", "name": "INT-1"},
+				],
+				capabilities=self.capabilities,
+			)
+		self.assertEqual(error.exception.code, "INVALID_EVIDENCE")

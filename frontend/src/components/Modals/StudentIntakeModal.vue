@@ -4,7 +4,7 @@
       <p class="mb-4 text-sm text-ink-gray-6">
         {{
           __(
-            'Fill in the student information. Phone and email may require an identity review.',
+            'Fill in the student information. Provide at least one valid phone number or email address.',
           )
         }}
       </p>
@@ -14,7 +14,7 @@
         doctype="CRM Student"
         :context="fieldLayoutContext"
       />
-      <ErrorMessage v-if="error" class="mt-4" :message="error" />
+      <ErrorMessage v-if="error" class="mt-4" :message="error" role="alert" />
       <div
         v-if="result"
         class="mt-4 rounded border p-3 text-sm"
@@ -148,7 +148,7 @@ const tabs = [
               {
                 fieldname: 'branch',
                 fieldtype: 'Link',
-                label: 'Branch',
+                label: 'Campus',
                 options: 'CRM Campus',
                 reqd: 1,
               },
@@ -167,7 +167,7 @@ const tabs = [
               {
                 fieldname: 'admission_year',
                 fieldtype: 'Link',
-                label: 'CRM Admission Year',
+                label: 'Admission Year',
                 options: 'CRM Admission Year',
                 reqd: 1,
               },
@@ -177,7 +177,7 @@ const tabs = [
       },
       {
         name: 'phase3-intake-controls',
-        label: 'Phase 3 intake controls',
+        label: 'Identity and assignment',
         collapsible: true,
         opened: false,
         columns: [
@@ -187,7 +187,7 @@ const tabs = [
               {
                 fieldname: 'id_number',
                 fieldtype: 'Data',
-                label: 'National ID (strong identifier)',
+                label: 'National ID (optional)',
               },
             ],
           },

@@ -322,6 +322,7 @@ scheduler_events = {
 		"crm.fcrm.master_data_governance.expire_break_glass_requests",
 	],
 	"cron": {
+		"10 8 * * *": ["crm.api.agent_events.send_daily_sla_director_digests"],
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
 		"* * * * *": [
 			"crm.fcrm.master_data_governance.apply_effective_changes",

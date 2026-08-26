@@ -330,7 +330,8 @@ router.beforeEach(async (to, from, next) => {
                 : to.name === 'CRM Event'
                   ? 'lastCRMEventTab'
                   : 'lastActivityTab'
-    const activeTab = localStorage.getItem(storageKey) || 'activity'
+    const defaultTab = to.name === 'CRM Student' ? 'overview' : 'activity'
+    const activeTab = localStorage.getItem(storageKey) || defaultTab
     const hash = '#' + activeTab
     next({ ...to, hash })
   } else if (

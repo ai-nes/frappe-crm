@@ -261,62 +261,6 @@ class CRMContact(Document):
 				title="Số điện thoại không hợp lệ",
 			)
 
-	def _validate_unique_phone(self):
-		if not self.phone:
-			return
-		existing = frappe.db.get_value(
-			"CRM Contact",
-			{"phone": self.phone, "name": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
-				title="Số điện thoại trùng",
-			)
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"phone": self.phone, "name": ("!=", self.student or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Số điện thoại trùng",
-			)
-
-	def _validate_unique_email(self):
-		if not self.email:
-			return
-		existing = frappe.db.get_value(
-			"CRM Contact",
-			{"email": self.email, "name": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
-				title="Email trùng",
-			)
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"email": self.email, "name": ("!=", self.student or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Email trùng",
-			)
-
 	def _normalize_shared_fields(self):
 		if isinstance(self.phone, str):
 			self.phone = self.phone.strip()

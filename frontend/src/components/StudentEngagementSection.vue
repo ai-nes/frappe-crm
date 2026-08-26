@@ -5,7 +5,7 @@
       <span v-if="loading" class="text-ink-gray-5" role="status">{{ __('Loading…') }}</span>
       <span v-else-if="error" class="truncate text-ink-red-3" role="alert">{{ error }}</span>
       <span v-else-if="context" class="font-medium text-ink-gray-7" :title="lifecycle.policy_version || undefined">
-        {{ lifecycle.current_stage || lifecycle.stage || __('Unavailable') }}
+        {{ __(lifecycle.current_stage || lifecycle.stage || 'Unavailable') }}
       </span>
       <span v-else class="text-ink-gray-5">{{ __('Unavailable') }}</span>
     </div>

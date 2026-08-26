@@ -34,8 +34,28 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel>
+        <StudentOverview
+          v-if="tabs[tabIndex]?.name === 'Overview'"
+          :student="crmStudentId"
+          :ownership-summary="ownershipSummary"
+          :ownership-loading="ownership.loading"
+          :lifecycle-stage="lifecycleStage"
+          :sla-attempt="studentSLA.data?.attempt"
+          :sla-capabilities="studentSLA.data?.capabilities || {}"
+          :sla-loading="studentSLA.loading"
+          :engagement-context="engagementContext.data"
+          :engagement-loading="engagementContext.loading"
+          :student-decision-context="studentDecisionContext"
+          :routing-status="routingStatus.data"
+          @sla-changed="handleSLAChanged"
+          @sla-refresh-required="studentSLA.reload()"
+          @update-action="selectedSalesAction = $event"
+          @retry-routing="showRouteModal = true"
+          @conversion-refresh-required="refreshConversionContext"
+          @converted="handleConverted"
+        />
         <Activities
-          v-if="!['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)"
+          v-else-if="!['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -68,85 +88,39 @@
       >
         {{ __(doc.student_name || crmStudentId) }}
       </div>
-      <div
-        v-if="sections.data"
-        class="flex flex-1 flex-col justify-between overflow-hidden"
-      >
-        <section class="border-b p-1 sm:p-3" aria-label="Ownership">
-          <Section
-            :label="__('Ownership')"
-            label-class="px-2 font-semibold"
-            header-class="h-8"
-          >
-            <template #actions>
-              <span v-if="ownership.loading" class="mr-2 text-xs text-ink-gray-5" role="status">{{ __('Loading…') }}</span>
-            </template>
-            <div class="px-3">
-              <p v-if="ownership.data" class="mt-3 text-sm text-ink-gray-6">
-                {{ ownershipSummary }}
-              </p>
-              <p v-else class="mt-3 text-sm text-ink-gray-5">{{ __('Ownership details are unavailable.') }}</p>
-            </div>
-          </Section>
-        </section>
-        <StudentSLASection
-          :attempt="studentSLA.data?.attempt"
-          :capabilities="studentSLA.data?.capabilities || {}"
-          :loading="studentSLA.loading"
-          @changed="handleSLAChanged"
-          @refresh-required="studentSLA.reload()"
-        />
-        <StudentEngagementSection
-          :context="engagementContext.data"
-          :loading="engagementContext.loading"
-          :error="engagementContextError"
-        />
-        <StudentConversionPanel
-          :student="crmStudentId"
-          :context="engagementContext.data"
-          :loading="engagementContext.loading"
-          @refresh-required="refreshConversionContext"
-          @converted="handleConverted"
-        />
-        <section class="border-b p-1 sm:p-3" aria-label="Sales decisions and actions">
-          <Section
-            :label="__('Sales decisions and actions')"
-            label-class="px-2 font-semibold"
-            header-class="h-8"
-          >
-            <div class="space-y-2 px-3 pb-3 text-sm">
-              <p v-if="engagementContext.loading" class="text-ink-gray-5" role="status">{{ __('Loading decision context…') }}</p>
-              <template v-else-if="studentDecisionContext">
-                <p v-if="studentDecisionContext.pendingDecision" class="text-ink-gray-6">{{ __('Pending decision: {0}', [studentDecisionContext.pendingDecision.action || studentDecisionContext.pendingDecision.recommended_action || studentDecisionContext.pendingDecision.name]) }}</p>
-                <div v-if="studentDecisionContext.activeAction" class="rounded bg-surface-gray-1 p-2">
-                  <p class="font-medium text-ink-gray-8">{{ studentDecisionContext.activeAction.actionType }}</p>
-                  <p class="mt-1" :class="studentDecisionContext.activeAction.overdue ? 'font-medium text-red-600' : 'text-ink-gray-6'">{{ __('Status: {0} · Due: {1}', [studentDecisionContext.activeAction.status, studentDecisionContext.activeAction.dueAt || __('Not scheduled')]) }}</p>
-                  <Button v-if="studentDecisionContext.activeAction.permittedTransitions.length" class="mt-2" size="sm" :label="__('Update action')" @click="selectedSalesAction = studentDecisionContext.activeAction" />
-                </div>
-                <p v-if="studentDecisionContext.latestTerminalAction" class="text-ink-gray-6">{{ __('Latest action: {0}', [studentDecisionContext.latestTerminalAction.actionType]) }}<span v-if="studentDecisionContext.latestTerminalAction.linkedInteraction"> · {{ __('Linked interaction: {0}', [studentDecisionContext.latestTerminalAction.linkedInteraction]) }}</span></p>
-                <p v-if="!studentDecisionContext.pendingDecision && !studentDecisionContext.activeAction && !studentDecisionContext.latestTerminalAction" class="text-ink-gray-5">{{ __('No current decision or Sales Action.') }}</p>
-              </template>
-              <p v-else class="text-ink-gray-5">{{ __('Decision context is unavailable.') }}</p>
-            </div>
-          </Section>
-        </section>
-        <section v-if="routingStatus.data" class="border-b px-5 py-3" aria-label="Student routing">
-          <div class="flex items-center justify-between gap-3 text-sm">
-            <span class="font-semibold text-ink-gray-8">{{ __('Student routing') }}</span>
-            <div class="flex min-w-0 items-center gap-2">
-              <span class="truncate text-ink-gray-6" :title="routingStatus.data.last_error_code || undefined">
-                {{ __('Status: {0}', [routingStatus.data.status]) }}
-              </span>
-              <Button
-                v-if="['deferred', 'failed'].includes(routingStatus.data.status) && routingStatus.data.capabilities?.retry"
-                size="sm"
-                :label="__('Retry')"
-                @click="showRouteModal = true"
-              />
-            </div>
+      <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <section class="border-b px-5 py-3" aria-label="Student summary">
+          <div class="mb-3 text-sm font-semibold text-ink-gray-8">
+            {{ __('At a glance') }}
           </div>
+          <dl class="space-y-3 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-ink-gray-5">{{ __('Lifecycle') }}</dt>
+              <dd class="truncate font-medium text-ink-gray-8">{{ lifecycleStage }}</dd>
+            </div>
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-ink-gray-5">{{ __('Owner') }}</dt>
+              <dd class="truncate text-right text-ink-gray-7" :title="ownershipSummary">
+                <span v-if="ownership.loading" class="text-ink-gray-5">{{ __('Loading…') }}</span>
+                <span v-else>{{ ownershipSummary }}</span>
+              </dd>
+            </div>
+            <div v-if="studentSLA.data?.attempt" class="flex items-center justify-between gap-3">
+              <dt class="text-ink-gray-5">{{ __('SLA') }}</dt>
+              <dd class="truncate text-right text-ink-gray-7">
+                <Badge :label="slaPresentation.label" :theme="slaPresentation.theme" variant="subtle" />
+              </dd>
+            </div>
+            <div v-if="studentSLA.data?.attempt?.next_transition_at" class="flex items-center justify-between gap-3">
+              <dt class="text-ink-gray-5">{{ __('Next deadline') }}</dt>
+              <dd class="truncate text-right text-ink-gray-7">
+                {{ formatStudentSLADate(studentSLA.data.attempt.next_transition_at) }}
+              </dd>
+            </div>
+          </dl>
         </section>
         <SidePanelLayout
+          class="min-h-0 flex-1"
           :sections="sections.data"
           doctype="CRM Student"
           :docname="crmStudentId"
@@ -185,7 +159,6 @@
     @changed="handleLifecycleChanged"
           @refresh-required="engagementContext.reload()"
         />
-        <AuditTimeline :student="crmStudentId" />
   <RecordStudentOutcomeModal
     v-if="showOutcomeModal && engagementContext.data"
     v-model="showOutcomeModal"
@@ -211,6 +184,7 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
+import DashboardIcon from '@/components/Icons/DashboardIcon.vue'
 import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
@@ -219,16 +193,13 @@ import CustomActions from '@/components/CustomActions.vue'
 import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
 import ChangeStudentOwnershipModal from '@/components/Modals/ChangeStudentOwnershipModal.vue'
 import RouteStudentModal from '@/components/Modals/RouteStudentModal.vue'
-import StudentSLASection from '@/components/StudentSLASection.vue'
-import StudentEngagementSection from '@/components/StudentEngagementSection.vue'
-import AuditTimeline from '@/components/Governance/AuditTimeline.vue'
-import StudentConversionPanel from '@/components/StudentConversion/StudentConversionPanel.vue'
-import Section from '@/components/Section.vue'
+import StudentOverview from '@/components/StudentOverview.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
 import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
 import { lifecycleTargets, safeLifecycleError, studentEngagementApi } from '@/utils/studentEngagement'
 import { salesActionItem } from '@/utils/studentDecision'
+import { formatStudentSLADate, slaStatusPresentation } from '@/utils/studentSLA'
 import { copyToClipboard } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
@@ -238,6 +209,7 @@ import { useDocument } from '@/data/document'
 import {
   createResource,
   Tabs,
+  Badge,
   Breadcrumbs,
   usePageMeta,
   toast,
@@ -318,24 +290,25 @@ const studentSLA = createResource({
   auto: true,
   initialData: null,
 })
+const slaPresentation = computed(() =>
+  slaStatusPresentation(studentSLA.data?.attempt?.status),
+)
 const engagementContext = createResource({
   url: studentEngagementApi.getContext,
   makeParams: () => ({ student: props.crmStudentId, history_limit: 50 }),
   auto: true,
   initialData: null,
 })
-const lifecycleStage = computed(() =>
-  engagementContext.data?.lifecycle?.current_stage ||
-  engagementContext.data?.lifecycle?.stage ||
-  doc.value?.enrollment_status ||
-  __('Lifecycle unavailable'),
-)
+const lifecycleStage = computed(() => {
+  const stage =
+    engagementContext.data?.lifecycle?.current_stage ||
+    engagementContext.data?.lifecycle?.stage ||
+    doc.value?.enrollment_status
+  return stage ? __(stage) : __('Lifecycle unavailable')
+})
 const canRequestLifecycleTransition = computed(() =>
   lifecycleTargets(engagementContext.data?.lifecycle).length > 0 &&
   engagementContext.data?.capabilities?.transition !== false,
-)
-const engagementContextError = computed(() =>
-  engagementContext.error ? safeLifecycleError(engagementContext.error, __('Unable to load engagement context.')) : '',
 )
 const studentDecisionContext = computed(() => {
   // Phase 6 extends the existing Student context projection. Accept the
@@ -358,9 +331,9 @@ const engagementActivityEntries = computed(() => {
       creation: event.occurred_at || event.creation,
       data: {
         summary: event.to_stage
-          ? __('Lifecycle changed to {0}', [event.to_stage])
+          ? __('Lifecycle changed to {0}', [__(event.to_stage)])
           : event.outcome
-            ? __('Outcome recorded: {0}', [event.outcome])
+            ? __('Outcome recorded: {0}', [__(event.outcome)])
             : event.summary || __('Student lifecycle updated'),
       },
     }))
@@ -386,7 +359,6 @@ watch(routingRequestId, (request) => {
 
 function handleOwnershipChanged(response) {
   ownership.reload()
-  sections.reload()
   studentSLA.reload()
   if (response?.revision !== undefined) ownership.data = { ...ownership.data, ...response }
 }
@@ -404,18 +376,15 @@ function handleRoutingChanged() {
 
 function handleLifecycleChanged() {
   engagementContext.reload()
-  sections.reload()
   document.reload?.()
 }
 
 function handleOutcomeChanged() {
   engagementContext.reload()
-  sections.reload()
 }
 
 function handleSalesActionChanged() {
   engagementContext.reload()
-  sections.reload()
 }
 
 function refreshConversionContext() {
@@ -425,7 +394,6 @@ function refreshConversionContext() {
 
 function handleConverted() {
   refreshConversionContext()
-  sections.reload()
 }
 
 async function loadMoreEngagementHistory() {
@@ -501,6 +469,7 @@ function handleSidePanelFieldChange() {
 }
 
 const tabs = computed(() => [
+  { name: 'Overview', label: __('Overview'), icon: DashboardIcon },
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },

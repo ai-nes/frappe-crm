@@ -43,7 +43,10 @@ const error = ref('')
 const loading = ref(false)
 const commandKey = ref(createStudentDecisionCommandId())
 const availableTransitions = computed(() => transitionOptions(props.action))
-const outcomeOptions = computed(() => props.action.outcomeCodes.map((outcome) => typeof outcome === 'string' ? { label: outcome, value: outcome } : outcome))
+const outcomeOptions = computed(() => props.action.outcomeCodes.map((outcome) => {
+  if (typeof outcome === 'string') return { label: __(outcome), value: outcome }
+  return { ...outcome, label: __(outcome.label || outcome.value) }
+}))
 const canSubmit = computed(() => !loading.value && status.value &&
   (status.value !== 'completed' || (outcomeCode.value && evidence.value.trim())) &&
   (!['failed', 'cancelled', 'canceled'].includes(status.value) || reason.value.trim()))

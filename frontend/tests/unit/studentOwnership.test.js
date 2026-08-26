@@ -116,6 +116,15 @@ describe('student ownership command UI helpers', () => {
     ])
   })
 
+  it('never uses a raw identity ID as a review option label', () => {
+    expect(
+      reviewCandidateOptions({
+        proposed_identity: 'IDENTITY-1',
+        candidates: [{ identity_id: 'IDENTITY-1' }],
+      }),
+    ).toEqual([{ label: 'Verified identity', value: 'IDENTITY-1' }])
+  })
+
   it('requires evidence and the decision-specific verified input', () => {
     expect(
       isValidIntakeReviewDecision({
@@ -156,14 +165,21 @@ describe('student ownership command UI helpers', () => {
       isValidIntakeReviewDecision({
         decision: 'approve_new_identity',
         evidence: 'Verified document',
-        identityData: { student_name: 'Lan', national_id: '012345678901' },
+        identityData: { student_name: 'Lan', phone: '0900000000' },
       }),
     ).toBe(true)
     expect(
       isValidIntakeReviewDecision({
         decision: 'approve_new_identity',
         evidence: 'Verified document',
-        identityData: { student_name: 'Lan', national_id: 'not-an-id' },
+        identityData: { student_name: 'Lan', email: 'lan@example.com' },
+      }),
+    ).toBe(true)
+    expect(
+      isValidIntakeReviewDecision({
+        decision: 'approve_new_identity',
+        evidence: 'Verified document',
+        identityData: { student_name: 'Lan', national_id: '012345678901' },
       }),
     ).toBe(false)
   })

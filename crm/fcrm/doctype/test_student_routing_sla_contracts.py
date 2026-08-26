@@ -47,7 +47,10 @@ class TestStudentRoutingSLAContracts(TestCase):
 		routing = {field["fieldname"]: field for field in load_schema("crm_student_routing_policy")["fields"]}
 		sla = {field["fieldname"]: field for field in load_schema("crm_student_sla_policy")["fields"]}
 		self.assertEqual(routing["strategy"]["options"], "round_robin")
-		self.assertEqual(sla["recipient_strategy"]["options"], "owner_warning_lead_breach_director_escalation")
+		self.assertEqual(
+			sla["recipient_strategy"]["options"],
+			"owner_warning_lead_breach_director_escalation\nowner_warning_lead_breach_director_daily_digest",
+		)
 
 	def test_reset_contract_is_explicit_and_auditable(self):
 		fields = {field["fieldname"]: field for field in load_schema("crm_student_sla_attempt")["fields"]}

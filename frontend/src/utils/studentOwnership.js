@@ -29,14 +29,15 @@ export function reviewCandidateOptions(review) {
   for (const candidate of candidates) {
     const value = candidate?.identity_id || candidate?.name
     if (!value) continue
+    const maskedLabel = candidate?.masked_label
     byId.set(value, {
-      label: candidate.masked_label || candidate.label || value,
+      label: maskedLabel && maskedLabel !== value ? maskedLabel : __('Verified identity'),
       value,
     })
   }
   if (proposedIdentity && !byId.has(proposedIdentity)) {
     byId.set(proposedIdentity, {
-      label: proposedIdentity,
+      label: __('Verified identity'),
       value: proposedIdentity,
     })
   }
@@ -57,13 +58,10 @@ export function isValidIntakeReviewDecision({
     return !availableIdentityIds || availableIdentityIds.includes(identityId)
   }
   if (decision === 'approve_new_identity') {
-    const nationalId = String(identityData?.national_id || '').replace(
-      /[ .-]/g,
-      '',
-    )
     return Boolean(
       String(identityData?.student_name || '').trim() &&
-      /^(?:\d{9}|\d{12})$/.test(nationalId),
+      (String(identityData?.phone || '').trim() ||
+        String(identityData?.email || '').trim()),
     )
   }
   return true
