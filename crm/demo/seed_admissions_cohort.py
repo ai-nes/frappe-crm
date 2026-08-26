@@ -15,9 +15,19 @@ from frappe.utils import now_datetime
 
 from crm.demo import seed_demo, seed_staff
 
-
 NAMESPACE = "local-admissions-cohort-2026"
 SALE_EMAIL = "nguyen-minh-khoi.sale@example.test"
+
+# The first cohort Student is the deterministic Student Detail walkthrough.
+# Keep these as ordinary Task rows so the real Task tab, activity feed and
+# status controls exercise the same records as production work.
+ADMISSIONS_TASK_TEMPLATES = (
+	{"key": "first-call", "title": "Gọi lần đầu", "priority": "High", "days": 0, "description": "Gọi lần đầu để xác nhận nhu cầu và khung giờ tư vấn phù hợp."},
+	{"key": "scholarship-info", "title": "Gửi thông tin học bổng", "priority": "High", "days": 1, "description": "Gửi điều kiện, mốc thời gian và checklist thông tin học bổng."},
+	{"key": "campus-tour-reminder", "title": "Nhắc tham dự Campus Tour", "priority": "Medium", "days": 2, "description": "Nhắc học sinh và phụ huynh xác nhận lịch tham dự Campus Tour."},
+	{"key": "parent-call", "title": "Gọi phụ huynh", "priority": "Medium", "days": 3, "description": "Gọi phụ huynh để trao đổi ảnh hưởng, tài chính và phương án phù hợp."},
+	{"key": "application-follow-up", "title": "Follow-up hồ sơ", "priority": "High", "days": 5, "description": "Theo dõi hồ sơ, bảng điểm và giấy tờ còn thiếu trước hạn xét tuyển."},
+)
 
 SCENARIOS = (
 	{
@@ -93,9 +103,10 @@ def execute() -> dict:
 		_ensure_lifecycle(student.name, scenario, outcome)
 		_ensure_attribution(student.name, scenario, context)
 		_ensure_potential_score(student.name, scenario)
+		task_names = _ensure_admissions_tasks(student.name, scenario)
 		if scenario["key"] == "minh-khang":
 			_ensure_escalated_sla(student.name)
-		manifest.append(_manifest_row(student.name, scenario))
+		manifest.append(_manifest_row(student.name, scenario, task_names=task_names))
 
 	frappe.db.commit()
 	return {"namespace": NAMESPACE, "accounts": seed_staff.CANONICAL_FIXTURE_USERS, "students": manifest}
@@ -417,6 +428,53 @@ def _ensure_attribution(student: str, scenario: dict, context: dict):
 			)
 
 
+def _ensure_admissions_tasks(student: str, scenario: dict) -> list[str]:
+	"""Create the five local walkthrough tasks exactly once for the hero Student."""
+	if scenario.get("key") != "thao-an":
+		return []
+	lock_name = f"{NAMESPACE}:admissions-tasks:{student}"
+	lock_result = frappe.db.sql("SELECT GET_LOCK(%s, 10)", (lock_name,))
+	if not lock_result or not lock_result[0][0]:
+		frappe.throw("Could not lock local admissions task seed; please retry.", frappe.DuplicateEntryError)
+	try:
+		names = []
+		for template in ADMISSIONS_TASK_TEMPLATES:
+			marker = f"[{NAMESPACE}:{scenario['key']}:task:{template['key']}]"
+			existing = frappe.db.get_value(
+				"Task",
+				{
+					"student": student,
+					"reference_doctype": "CRM Student",
+					"reference_docname": student,
+					"description": ["like", f"{marker}%"],
+				},
+				"name",
+			)
+			if existing:
+				names.append(existing)
+				continue
+			due_at = now_datetime() + timedelta(days=template["days"])
+			task = frappe.get_doc(
+				{
+					"doctype": "Task",
+					"title": template["title"],
+					"description": f"{marker}\n{template['description']}",
+					"priority": template["priority"],
+					"status": "Todo",
+					"assigned_to": SALE_EMAIL,
+					"start_date": due_at.date(),
+					"due_date": due_at,
+					"student": student,
+					"reference_doctype": "CRM Student",
+					"reference_docname": student,
+				}
+			).insert(ignore_permissions=True)
+			names.append(task.name)
+		return names
+	finally:
+		frappe.db.sql("SELECT RELEASE_LOCK(%s)", (lock_name,))
+
+
 def _ensure_potential_score(student: str, scenario: dict):
 	"""Append the current, Desk-visible potential score through the CAS writer."""
 	from crm.api.scoring_write import append_local_fixture_score
@@ -487,7 +545,7 @@ def _ensure_responded_sla(student: str, interaction: str):
 	return record_qualifying_response(attempt.name, interaction, expected_revision=int(attempt.revision or 0))
 
 
-def _manifest_row(student: str, scenario: dict) -> dict:
+def _manifest_row(student: str, scenario: dict, task_names: list[str] | None = None) -> dict:
 	doc = frappe.get_doc("CRM Student", student)
 	attempt = frappe.db.get_value(
 		"CRM Student SLA Attempt", {"student": student}, ["name", "status"], as_dict=True
@@ -501,4 +559,5 @@ def _manifest_row(student: str, scenario: dict) -> dict:
 		"owning_pool": doc.owning_pool,
 		"sla_attempt": attempt.name if attempt else None,
 		"sla_status": attempt.status if attempt else None,
+		"tasks": task_names or [],
 	}

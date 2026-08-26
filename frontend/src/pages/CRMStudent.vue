@@ -19,6 +19,11 @@
         @click="showOwnershipModal = true"
       />
       <Button
+        :label="__('Admissions action')"
+        iconLeft="plus"
+        @click="showAdmissionsAction = true"
+      />
+      <Button
         v-if="doc.enrollment_status"
         :label="lifecycleStage"
         iconLeft="shuffle"
@@ -45,6 +50,8 @@
           :sla-loading="studentSLA.loading"
           :engagement-context="engagementContext.data"
           :engagement-loading="engagementContext.loading"
+          :demo-context="studentDemoContext"
+          :demo-context-loading="engagementContext.loading"
           :student-decision-context="studentDecisionContext"
           :routing-status="routingStatus.data"
           @sla-changed="handleSLAChanged"
@@ -71,13 +78,16 @@
           v-else-if="tabs[tabIndex]?.name === 'Interactions'"
           :student="doc"
           type="interactions"
+          :refresh-key="interactionRefreshKey"
           :can-record-outcome="Boolean(engagementContext.data)"
           @record-outcome="showOutcomeModal = true"
+          @admissions-action="showAdmissionsAction = true"
         />
         <InteractionScoreArea
           v-else
           :student="doc"
           type="scores"
+          :refresh-key="interactionRefreshKey"
         />
       </template>
     </Tabs>
@@ -167,6 +177,14 @@
     @changed="handleOutcomeChanged"
     @refresh-required="engagementContext.reload()"
   />
+  <StudentAdmissionsActionDialog
+    v-if="showAdmissionsAction"
+    v-model="showAdmissionsAction"
+    :student="crmStudentId"
+    :expected-revision="engagementContext.data?.engagement_revision || 0"
+    :actions="availableAdmissionsActions"
+    @success="handleAdmissionsActionSuccess"
+  />
   <SalesActionOutcomeDialog
     v-if="selectedSalesAction"
     v-model="showSalesActionModal"
@@ -197,8 +215,10 @@ import StudentOverview from '@/components/StudentOverview.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
 import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
+import StudentAdmissionsActionDialog from '@/components/StudentAdmissionsActionDialog.vue'
 import { lifecycleTargets, safeLifecycleError, studentEngagementApi } from '@/utils/studentEngagement'
 import { salesActionItem } from '@/utils/studentDecision'
+import { normalizeStudentAdmissionsContext } from '@/utils/studentAdmissionsContext'
 import { formatStudentSLADate, slaStatusPresentation } from '@/utils/studentSLA'
 import { copyToClipboard } from '@/utils'
 import { usersStore } from '@/stores/users'
@@ -234,6 +254,8 @@ const showOwnershipModal = ref(false)
 const showRouteModal = ref(false)
 const showLifecycleModal = ref(false)
 const showOutcomeModal = ref(false)
+const showAdmissionsAction = ref(false)
+const interactionRefreshKey = ref(0)
 const selectedSalesAction = ref(null)
 const showSalesActionModal = computed({
   get: () => Boolean(selectedSalesAction.value),
@@ -321,6 +343,21 @@ const studentDecisionContext = computed(() => {
     latestTerminalAction: context.latest_terminal_action ? salesActionItem(context.latest_terminal_action) : null,
   }
 })
+const availableAdmissionsActions = computed(() => {
+  const actions = engagementContext.data?.capabilities?.actions
+  const admissionsActions = engagementContext.data?.admissions_context?.capabilities?.actions
+  return Array.isArray(actions)
+    ? actions
+    : Array.isArray(admissionsActions)
+      ? admissionsActions
+      : []
+})
+const studentDemoContext = computed(() =>
+  normalizeStudentAdmissionsContext(
+    engagementContext.data?.admissions_context || engagementContext.data?.demo_context,
+    studentDecisionContext.value,
+  ),
+)
 const engagementActivityEntries = computed(() => {
   const history = engagementContext.data?.history?.items || engagementContext.data?.history || []
   return history
@@ -341,9 +378,18 @@ const engagementActivityEntries = computed(() => {
 const engagementHistoryCursor = computed(() =>
   engagementContext.data?.history?.next_cursor || engagementContext.data?.next_cursor,
 )
+const demoContextActivityEntries = computed(() =>
+  studentDemoContext.value.activity.map((event) => ({
+    name: `student-demo-context-${event.key}`,
+    activity_type: 'student_engagement',
+    creation: event.occurredAt,
+    data: { summary: event.summary },
+  })),
+)
 const studentActivityEntries = computed(() => [
   ...ownershipActivityEntries.value,
   ...engagementActivityEntries.value,
+  ...demoContextActivityEntries.value,
 ])
 const routingStatus = createResource({
   url: 'crm.api.student_routing.get_student_routing_status',
@@ -381,6 +427,16 @@ function handleLifecycleChanged() {
 
 function handleOutcomeChanged() {
   engagementContext.reload()
+}
+
+function handleAdmissionsActionSuccess() {
+  interactionRefreshKey.value += 1
+  reload.value = true
+  document.reload?.()
+  engagementContext.reload()
+  ownership.reload()
+  studentSLA.reload()
+  toast.success(__('Admissions action saved.'))
 }
 
 function handleSalesActionChanged() {

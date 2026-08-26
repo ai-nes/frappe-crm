@@ -33,6 +33,11 @@
         </dl>
       </section>
 
+      <StudentAdmissionsContext
+        :context="demoContext"
+        :loading="demoContextLoading"
+      />
+
       <StudentSLASection
         v-if="slaAttempt || slaLoading"
         class="rounded-lg border border-outline-gray-2 bg-surface-white"
@@ -136,6 +141,7 @@
 import { computed } from 'vue'
 import { Button } from 'frappe-ui'
 import StudentSLASection from '@/components/StudentSLASection.vue'
+import StudentAdmissionsContext from '@/components/StudentAdmissionsContext.vue'
 import StudentConversionPanel from '@/components/StudentConversion/StudentConversionPanel.vue'
 import AuditTimeline from '@/components/Governance/AuditTimeline.vue'
 import { studentConversionState } from '@/utils/studentConversion'
@@ -150,6 +156,8 @@ const props = defineProps({
   slaLoading: { type: Boolean, default: false },
   engagementContext: { type: Object, default: null },
   engagementLoading: { type: Boolean, default: false },
+  demoContext: { type: Object, default: null },
+  demoContextLoading: { type: Boolean, default: false },
   studentDecisionContext: { type: Object, default: null },
   routingStatus: { type: Object, default: null },
 })

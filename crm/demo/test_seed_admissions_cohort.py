@@ -1,6 +1,6 @@
 from frappe.tests.utils import FrappeTestCase
 
-from crm.demo.seed_admissions_cohort import SCENARIOS
+from crm.demo.seed_admissions_cohort import ADMISSIONS_TASK_TEMPLATES, SCENARIOS
 
 
 class TestSeedAdmissionsCohortDefinition(FrappeTestCase):
@@ -11,3 +11,9 @@ class TestSeedAdmissionsCohortDefinition(FrappeTestCase):
 	def test_sla_cases_are_the_two_supervisable_sale_cases(self):
 		owned = {scenario["key"] for scenario in SCENARIOS if scenario["owner"]}
 		self.assertEqual(owned, {"gia-han", "minh-khang"})
+
+	def test_detail_walkthrough_has_the_five_admissions_task_templates(self):
+		self.assertEqual(
+			[template["title"] for template in ADMISSIONS_TASK_TEMPLATES],
+			["Gọi lần đầu", "Gửi thông tin học bổng", "Nhắc tham dự Campus Tour", "Gọi phụ huynh", "Follow-up hồ sơ"],
+		)

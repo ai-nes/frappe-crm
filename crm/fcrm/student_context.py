@@ -453,6 +453,7 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		conversion["can_convert"] = False
 		conversion["read_enabled"] = True
 		conversion["write_enabled"] = conversion_write_enabled
+	attribution_projection = _attribution_projection(student)
 	return {
 		"student": {"name": doc.name, "student_name": doc.get("student_name"), "owner_staff": doc.get("owner_staff") or doc.get("assigned_to"), "assigned_to": doc.get("assigned_to"), "owning_team": doc.get("owning_team"), "owning_pool": doc.get("owning_pool")},
 		"engagement_revision": int(doc.get("engagement_revision") or 0),
@@ -462,11 +463,10 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		"next_action": _next_action(student, latest_interaction_name),
 		"decision": _decision_context(student),
 		"conversion": conversion,
-		# Attribution is evidence-only and scoped by the Student permission
-		# check above.  A malformed/legacy row must never make the core context
-		# unavailable, so an empty bounded projection is safer than surfacing a
-		# partial Contact fallback.
-		"attribution": _attribution_context(student),
+		# Raw attribution evidence (campaign/event IDs and touchpoint metadata) is
+		# intentionally not part of the Student Detail DTO.  Admissions receives
+		# only the redacted ``admissions_context`` projection below.
+		"admissions_context": _admissions_context(student, doc, attribution_projection),
 		"qualification_evidence": _evidence(outcome_rows[0], "qualification_evidence", student=student) if outcome_rows else [],
 		"history": page,
 		"next_cursor": _cursor(student, page[-1]) if len(history) > limit and page else None,
@@ -475,14 +475,153 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 	}
 
 
-def _attribution_context(student: str) -> dict[str, Any]:
+def _attribution_projection(student: str) -> dict[str, Any]:
 	try:
-		projection = get_student_attribution(student)
-		return {
-			"first_touch": projection["firstTouch"],
-			"last_touch": projection["lastTouch"],
-			"equal_credit": projection["multiTouch"],
-			"timeline": projection["touchpoints"][:MAX_HISTORY_LIMIT],
-		}
+		return get_student_attribution(student)
 	except Exception:
-		return {"first_touch": None, "last_touch": None, "equal_credit": {}, "timeline": []}
+		return {"firstTouch": None, "lastTouch": None, "multiTouch": {}, "touchpoints": []}
+
+
+def _attribution_context(projection: dict[str, Any]) -> dict[str, Any]:
+	return {
+		"first_touch": projection["firstTouch"],
+		"last_touch": projection["lastTouch"],
+		"equal_credit": projection["multiTouch"],
+		"timeline": projection["touchpoints"][:MAX_HISTORY_LIMIT],
+	}
+
+
+def _admissions_context(student: str, doc: Any, attribution: dict[str, Any]) -> dict[str, Any]:
+	"""Display-only admissions projection for the Student Detail workspace."""
+	try:
+		from crm.fcrm.student_admissions import ACTION_CAPABILITIES
+		actor = getattr(getattr(frappe, "session", None), "user", None)
+		roles = frappe.get_roles(actor)
+		capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
+		actions = [
+			name
+			for name, required in ACTION_CAPABILITIES.items()
+			if actor == "Administrator" or "System Manager" in roles or required in capabilities or "admissions.oversee" in capabilities
+		]
+		document_visibility = actor == "Administrator" or "System Manager" in roles or "admissions.oversee" in capabilities
+	except Exception:
+		actions = []
+		document_visibility = False
+	touchpoints = [row for row in attribution.get("touchpoints", []) if not row.get("superseded")]
+	campaign_touchpoints = [row for row in touchpoints if row.get("campaign")]
+	event_touchpoints = [row for row in touchpoints if row.get("event")]
+	latest_campaign = campaign_touchpoints[-1] if campaign_touchpoints else None
+	latest_event = event_touchpoints[-1] if event_touchpoints else None
+
+	activity = []
+	for index, row in enumerate(touchpoints):
+		occurred_at = _iso(row.get("touched_at"))
+		if not occurred_at:
+			continue
+		if row.get("event") and row.get("status"):
+			activity.append(
+				{
+					"key": f"event-{index}",
+					"occurred_at": occurred_at,
+					"summary": _event_activity_summary(row.get("status"), row.get("event")),
+				}
+			)
+		elif _is_invitation_source(row.get("source")):
+			activity.append(
+				{
+					"key": f"campaign-{index}",
+					"occurred_at": occurred_at,
+					"summary": _("Invited to {0}").format(row.get("campaign") or _("admissions event")),
+				}
+			)
+
+	scholarship = _scholarship_interest(student)
+	next_action = _next_action(student)
+	input_revision = int(doc.get("score_input_revision") or 0)
+	applied_revision = int(doc.get("applied_score_input_revision") or 0)
+	return {
+		"campaign": _demo_campaign(latest_campaign),
+		"event": _demo_event(latest_event),
+		"scholarship": scholarship,
+		"next_action": {
+			"summary": next_action.get("title"),
+			"due_at": next_action.get("due_date"),
+		}
+		if next_action
+		else None,
+		"activity": [row for row in activity if row.get("summary")],
+		"capabilities": {"actions": actions, "document_visibility": document_visibility},
+		"score": {
+			"latest": doc.get("latest_score"),
+			"input_revision": input_revision,
+			"applied_input_revision": applied_revision,
+			"state": "unknown" if doc.get("latest_score") in (None, "") else ("current" if input_revision == applied_revision else "pending"),
+		},
+	}
+
+
+# Kept for local precursor tests while the production DTO migrates to its
+# admissions_context name. No API response exposes this compatibility symbol.
+def _demo_context(student: str, attribution: dict[str, Any]) -> dict[str, Any]:
+	return _admissions_context(student, {}, attribution)
+
+
+def _demo_campaign(row: dict[str, Any] | None) -> dict[str, Any] | None:
+	if not row:
+		return None
+	return {
+		"label": _text(row.get("campaign")),
+		"source": _text(row.get("source")),
+		"occurred_at": _iso(row.get("touched_at")),
+	}
+
+
+def _demo_event(row: dict[str, Any] | None) -> dict[str, Any] | None:
+	if not row:
+		return None
+	return {
+		"label": _text(row.get("event")),
+		"status": _text(row.get("status")),
+		"occurred_at": _iso(row.get("touched_at")),
+	}
+
+
+def _is_invitation_source(source: Any) -> bool:
+	return "invite" in str(source or "").casefold() or "mời" in str(source or "").casefold()
+
+
+def _event_activity_summary(status: Any, event: Any) -> str:
+	label = _text(event) or _("admissions event")
+	status_key = str(status or "").casefold()
+	if "check" in status_key:
+		return _("Checked in at {0}").format(label)
+	if "register" in status_key:
+		return _("Registered for {0}").format(label)
+	if "invite" in status_key:
+		return _("Invited to {0}").format(label)
+	return _("Event update: {0}").format(label)
+
+
+def _scholarship_interest(student: str) -> dict[str, Any] | None:
+	if not _exists("CRM Intent"):
+		return None
+	try:
+		rows = frappe.get_all(
+			"CRM Intent",
+			filters={"student": student, "intent_type": "Scholarship"},
+			fields=["name", "student", "intent_type", "importance", "confidence", "notes", "modified", "creation"],
+			order_by="modified desc, creation desc, name desc",
+			limit_page_length=20,
+		)
+	except Exception:
+		return None
+	for row in rows:
+		if _get(row, "student") != student or not _can_read_record("CRM Intent", _get(row, "name")):
+			continue
+		return {
+			"label": _text(_get(row, "intent_type")),
+			"importance": _text(_get(row, "importance")),
+			"confidence": _get(row, "confidence"),
+			"notes": _text(_get(row, "notes")),
+		}
+	return None

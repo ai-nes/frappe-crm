@@ -1,5 +1,6 @@
 """Run the local admissions fixture without persisting rollout flags."""
 
+import secrets
 from contextlib import contextmanager
 
 import frappe
@@ -7,7 +8,6 @@ import frappe
 from crm.demo import seed_admissions_cohort, seed_demo, seed_staff
 from crm.fcrm.student_intake import _secret_versions
 from crm.fcrm.student_ownership import _configured_secret
-
 
 LOCAL_FLAGS = {
 	"crm_student_routing_enabled": 1,
@@ -39,6 +39,27 @@ def _assert_integrity_keys():
 			"Configure the existing Student intake and receipt HMAC keys before running task seed.",
 			frappe.ValidationError,
 		)
+
+
+def ensure_local_integrity_keys():
+	"""Persist random HMAC keys for the disposable local site when absent.
+
+	Existing keys are intentionally preserved so rerunning the seed cannot
+	invalidate receipt/idempotency signatures or interfere with local rotation.
+	"""
+	if frappe.local.site != "crm.localhost":
+		frappe.throw("The local admissions seed only runs on crm.localhost.", frappe.PermissionError)
+
+	from frappe.installer import update_site_config
+
+	configured = []
+	if not _secret_versions():
+		update_site_config("student_intake_hmac_secret", secrets.token_urlsafe(32), validate=False)
+		configured.append("student_intake_hmac_secret")
+	if not _configured_secret("v1"):
+		update_site_config("crm_receipt_hmac_secret", secrets.token_urlsafe(32), validate=False)
+		configured.append("crm_receipt_hmac_secret")
+	return {"configured": configured}
 
 
 def execute():

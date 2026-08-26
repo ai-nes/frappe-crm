@@ -86,6 +86,16 @@ tasks:
     aliases: [seed-student, seed-sample-student]
     cmds:
       - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
+      # Keep the local Student Detail workflow enabled after seeding so the
+      # context projection and typed admissions actions are available in CRM.
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
+      # The Student intake and command-receipt services require durable local
+      # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.execute"
 
   seed-phase345:

@@ -152,6 +152,7 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"File": "crm.fcrm.file_permissions.has_permission",
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
 	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
@@ -215,6 +216,9 @@ doc_events = {
 	"CRM Interaction": {
 		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
 		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
+	},
+	"File": {
+		"before_insert": ["crm.fcrm.file_permissions.before_insert"],
 	},
 	"CRM Lead Source": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],

@@ -13,8 +13,18 @@
           <div>
             <h2 class="text-lg font-semibold text-ink-gray-9">{{ __('Interactions') }}</h2>
             <p class="mt-1 text-sm text-ink-gray-5">{{ __('Review conversations and record their outcomes.') }}</p>
+            <Badge
+              v-if="scorePending"
+              class="mt-2"
+              :label="__('Potential score recalculation pending')"
+              theme="orange"
+              variant="subtle"
+            />
           </div>
-          <Button v-if="canRecordOutcome" :label="__('Record outcome')" @click="$emit('record-outcome')" />
+          <div class="flex flex-wrap gap-2">
+            <Button :label="__('Admissions action')" variant="solid" @click="emit('admissions-action')" />
+            <Button v-if="canRecordOutcome" :label="__('Record outcome')" @click="emit('record-outcome')" />
+          </div>
         </div>
         <div v-if="interactions.data?.length" class="flex flex-col divide-y">
           <div
@@ -28,7 +38,7 @@
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-medium text-ink-gray-9">
-                  {{ interaction.summary || interaction.name }}
+                  {{ displayInteractionSummary(interaction.summary || interaction.name) }}
                 </span>
                 <Badge
                   v-if="interaction.interaction_type"
@@ -421,6 +431,7 @@
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
+import { admissionsSummaryTranslation } from '@/utils/studentAdmissionsActions'
 import { Badge, Button, LoadingIndicator, createResource } from 'frappe-ui'
 import { computed, h, watch } from 'vue'
 
@@ -429,8 +440,9 @@ const props = defineProps({
   student: { type: Object, default: null },
   type: { type: String, default: 'interactions' },
   canRecordOutcome: { type: Boolean, default: false },
+  refreshKey: { type: [Number, String], default: 0 },
 })
-defineEmits(['record-outcome'])
+const emit = defineEmits(['record-outcome', 'admissions-action'])
 
 const emptyIcon = h(ActivityIcon, { class: 'text-ink-gray-4' })
 
@@ -450,6 +462,12 @@ const scoreContext = computed(() => ({
   intents: scores.data?.intents || [],
   template: scores.data?.template || null,
 }))
+
+const scorePending = computed(() => {
+  const input = Number(props.student?.score_input_revision || 0)
+  const applied = Number(props.student?.applied_score_input_revision || 0)
+  return input > applied
+})
 
 const scoreBreakdown = computed(() => {
   let groups = new Map()
@@ -684,6 +702,12 @@ function displayScoreReason(value) {
   return reasonLabels[value] || __(value || '')
 }
 
+function displayInteractionSummary(value) {
+  const summary = String(value || '')
+  const translation = admissionsSummaryTranslation(summary)
+  return translation ? __(translation.key, translation.args) : summary
+}
+
 function scoreTier(value) {
   let score = Number(value || 0)
   if (score >= 80) return __('High Potential')
@@ -707,6 +731,7 @@ watch(
     props.contact?.name,
     props.contact?.student,
     props.student?.name,
+    props.refreshKey,
   ],
   () => {
     let studentName = props.student?.name || props.contact?.student

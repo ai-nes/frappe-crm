@@ -106,9 +106,11 @@
         v-else-if="title == 'Attachments'"
         class="px-3 pb-3 sm:px-10 sm:pb-5"
       >
-        <AttachmentArea
-          :attachments="activities"
-          @reload="all_activities.reload() && scroll()"
+          <AttachmentArea
+            :attachments="activities"
+            :allow-visibility-change="doctype !== 'CRM Student'"
+            :allow-delete="doctype !== 'CRM Student'"
+            @reload="all_activities.reload() && scroll()"
         />
       </div>
       <template v-else>
@@ -239,7 +241,7 @@
             v-else-if="activity.activity_type == 'student_engagement'"
             class="mb-4 flex items-center justify-stretch gap-2 py-1.5 text-base"
           >
-            <span class="font-medium text-ink-gray-8">{{ activity.type }}</span>
+            <span class="font-medium text-ink-gray-8">{{ displayStudentEngagementSummary(activity.type) }}</span>
             <div class="ml-auto whitespace-nowrap">
               <Tooltip :text="formatDate(activity.creation)">
                 <div class="text-sm text-ink-gray-5">
@@ -451,6 +453,7 @@
     v-model="showFilesUploader"
     :doctype="doctype"
     :docname="docname"
+    :options="doctype === 'CRM Student' ? { forcePrivate: true, makeAttachmentsPublic: false } : {}"
     @after="
       () => {
         all_activities.reload()
@@ -520,6 +523,7 @@ import {
   onBeforeUnmount,
 } from 'vue'
 import { useRoute } from 'vue-router'
+import { admissionsSummaryTranslation } from '@/utils/studentAdmissionsActions'
 
 const { $socket } = globalStore()
 const { getUser } = usersStore()
@@ -738,6 +742,12 @@ function update_activities_details(activity) {
   } else if (activity.activity_type == 'student_engagement') {
     activity.type = activity.data?.summary || __('Student lifecycle updated')
   }
+}
+
+function displayStudentEngagementSummary(value) {
+  const summary = String(value || '')
+  const translation = admissionsSummaryTranslation(summary)
+  return translation ? __(translation.key, translation.args) : summary
 }
 
 const top = computed(() => {
