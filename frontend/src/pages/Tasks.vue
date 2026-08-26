@@ -155,7 +155,6 @@
     v-model:list="tasks"
     :rows="rows"
     :columns="columns"
-    :rowActions="actions"
     :options="{
       showTooltip: false,
       resizeColumn: true,
@@ -178,15 +177,6 @@
     name="Tasks"
     :icon="Email2Icon"
   />
-
-  <RecommendationDecisionDialog
-    v-if="selectedRecommendation"
-    v-model="showDecision"
-    :item="selectedRecommendation"
-    :status="decisionStatus"
-    @changed="() => tasks.reload()"
-    @refresh-required="() => tasks.reload()"
-  />
 </template>
 
 <script setup>
@@ -201,8 +191,6 @@ import ViewControls from '@/components/ViewControls.vue'
 import TasksListView from '@/components/ListViews/TasksListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
-import RecommendationDecisionDialog from '@/components/StudentDecision/RecommendationDecisionDialog.vue'
-import { recommendationItem } from '@/utils/studentDecision'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
@@ -367,68 +355,17 @@ function createTask(column) {
   })
 }
 
-const selectedRecommendation = ref(null)
-const decisionStatus = ref('accepted')
-const showDecision = computed({
-  get: () => Boolean(selectedRecommendation.value),
-  set: (value) => {
-    if (!value) selectedRecommendation.value = null
-  },
-})
-
-function isAiGoverned(name) {
-  return Boolean(getRow(name, 'producer_identity')?.label)
-}
-
-function openDecision(name, status) {
-  const row = rows.value?.find((r) => r.name == name)
-  if (!row) return
-  selectedRecommendation.value = recommendationItem({
-    recommendation: row.name,
-    student: row.student,
-    priority: row.priority,
-    action_type: row.action_type,
-    timing: row.revisit_at,
-    reason: row.objective,
-    revision: row.decision_revision,
-  })
-  decisionStatus.value = status
-}
-
 function actions(name) {
-  const governed = isAiGoverned(name)
-  const items = governed
-    ? []
-    : [
-        {
-          label: __('Delete'),
-          icon: 'trash-2',
-          onClick: () => {
-            deleteTask(name)
-            tasks.value.reload()
-          },
-        },
-      ]
-  if (governed) {
-    items.unshift(
-      {
-        label: __('Accept'),
-        icon: 'check',
-        onClick: () => openDecision(name, 'accepted'),
+  return [
+    {
+      label: __('Delete'),
+      icon: 'trash-2',
+      onClick: () => {
+        deleteTask(name)
+        tasks.value.reload()
       },
-      {
-        label: __('Defer'),
-        icon: 'clock',
-        onClick: () => openDecision(name, 'deferred'),
-      },
-      {
-        label: __('Reject'),
-        icon: 'x',
-        onClick: () => openDecision(name, 'rejected'),
-      },
-    )
-  }
-  return items
+    },
+  ]
 }
 
 async function deleteTask(name) {

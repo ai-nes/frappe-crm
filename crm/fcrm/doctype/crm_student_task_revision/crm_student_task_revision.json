@@ -3,7 +3,7 @@
  "field_order": ["naming_series", "task", "revision", "package_type", "package", "author", "reason", "created_at"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "PKG-.YYYY.-", "options": "PKG-.YYYY.-"},
-  {"fieldname": "task", "fieldtype": "Link", "options": "Task", "reqd": 1, "read_only": 1},
+  {"fieldname": "task", "fieldtype": "Link", "options": "CRM Student Task", "reqd": 1, "read_only": 1},
   {"fieldname": "revision", "fieldtype": "Int", "reqd": 1, "read_only": 1},
   {"fieldname": "package_type", "fieldtype": "Select", "options": "CallScriptV1\nEmailPackageV1\nGeneric", "reqd": 1, "read_only": 1},
   {"fieldname": "package", "fieldtype": "JSON", "reqd": 1, "read_only": 1},

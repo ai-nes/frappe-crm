@@ -211,16 +211,12 @@ def get_execution_personalization_context(task: str, action: str | None = None) 
 	if frappe.session.user == "Guest":
 		frappe.throw("Authentication is required.", frappe.PermissionError)
 	task_row = frappe.db.get_value(
-		"Task",
+		"CRM Student Task",
 		task,
-		["name", "student", "status", "producer_identity", "action_type", "action_revision", "execution_package_version"],
+		["name", "student", "state", "action_type", "action_revision", "execution_package_version"],
 		as_dict=True,
 	)
-	if (
-		not task_row
-		or not task_row.producer_identity
-		or task_row.status not in {"ACCEPTED", "IN_PROGRESS", "REQUIRES_REVIEW"}
-	):
+	if not task_row or task_row.state not in {"ACCEPTED", "IN_PROGRESS", "REQUIRES_REVIEW"}:
 		frappe.throw("Execution context requires an accepted task.", frappe.ValidationError)
 	if not frappe.has_permission("CRM Student", "read", task_row.student, throw=False):
 		frappe.throw("Task is outside the actor's Student scope.", frappe.PermissionError)

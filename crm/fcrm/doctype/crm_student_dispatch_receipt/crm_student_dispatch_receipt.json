@@ -3,7 +3,7 @@
  "field_order": ["naming_series", "task", "package_revision", "channel", "provider_key", "fence", "status", "provider_receipt", "created_at"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "DSP-.YYYY.-", "options": "DSP-.YYYY.-"},
-  {"fieldname": "task", "fieldtype": "Link", "options": "Task", "reqd": 1, "read_only": 1},
+  {"fieldname": "task", "fieldtype": "Link", "options": "CRM Student Task", "reqd": 1, "read_only": 1},
   {"fieldname": "package_revision", "fieldtype": "Int", "reqd": 1, "read_only": 1},
   {"fieldname": "channel", "fieldtype": "Data", "reqd": 1, "read_only": 1},
   {"fieldname": "provider_key", "fieldtype": "Data", "reqd": 1, "unique": 1, "read_only": 1},

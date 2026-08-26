@@ -31,7 +31,7 @@ def _task_result(task, *, idempotent=False):
 	return {
 		"name": task.name,
 		"student": task.student,
-		"state": task.status,
+		"state": task.state,
 		"disposition": task.disposition,
 		"action_type": task.action_type,
 		"generation_status": task.generation_status,
@@ -76,15 +76,14 @@ def upsert_student_next_task(
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
 		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
 	row = frappe.db.sql(
-		"SELECT name, student_context_revision, owner_staff FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if not row:
 		frappe.throw(_("Student not found."), frappe.DoesNotExistError)
-	assigned_to = frappe.db.get_value("CRM Staff", row[0].owner_staff, "user") if row[0].owner_staff else None
 	existing = frappe.db.get_value(
-		"Task",
+		"CRM Student Task",
 		{
 			"producer_identity": producer_identity,
 			"student": student,
@@ -96,23 +95,23 @@ def upsert_student_next_task(
 	if existing:
 		if existing.payload_digest != payload_digest:
 			frappe.throw(_("Generation idempotency key was reused with a different payload."), frappe.ValidationError)
-		return _task_result(frappe.get_doc("Task", existing.name), idempotent=True)
+		return _task_result(frappe.get_doc("CRM Student Task", existing.name), idempotent=True)
 	current_revision = int(row[0].student_context_revision or 0)
 	if current_revision != int(expected_context_revision):
 		frappe.throw(_("Student context changed; retry from the newer projection."), frappe.ValidationError)
 	current = frappe.db.sql(
-		"SELECT name, status FROM `tabTask` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
+		"SELECT name, state FROM `tabCRM Student Task` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if current:
 		from crm.services.student_context import is_committed_task_state
 
-		if is_committed_task_state(current[0].status):
-			task = frappe.get_doc("Task", current[0].name)
+		if is_committed_task_state(current[0].state):
+			task = frappe.get_doc("CRM Student Task", current[0].name)
 			task.requires_review = 1
 			task.review_revision = current_revision
-			task.status = "REQUIRES_REVIEW"
+			task.state = "REQUIRES_REVIEW"
 			frappe.flags.student_task_command = True
 			try:
 				task.save(ignore_permissions=True)
@@ -120,9 +119,9 @@ def upsert_student_next_task(
 				frappe.flags.student_task_command = False
 			return _task_result(task)
 		frappe.db.set_value(
-			"Task",
+			"CRM Student Task",
 			current[0].name,
-			{"current_slot": None, "status": "SUPERSEDED"},
+			{"current_slot": None, "state": "SUPERSEDED"},
 			update_modified=False,
 		)
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
@@ -131,10 +130,8 @@ def upsert_student_next_task(
 		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
 	task = frappe.get_doc(
 		{
-			"doctype": "Task",
-			"title": str(candidate.get("objective") or "Student next task")[:140],
+			"doctype": "CRM Student Task",
 			"student": student,
-			"assigned_to": assigned_to,
 			"current_slot": "CURRENT",
 			"source_context_revision": current_revision,
 			"disposition": disposition,
@@ -142,7 +139,7 @@ def upsert_student_next_task(
 			"objective": str(candidate.get("objective") or "")[:500],
 			"policy_version": candidate.get("policy_version"),
 			"context_version": candidate.get("snapshot_hash"),
-			"status": "PENDING",
+			"state": "PENDING",
 			"generation_status": "succeeded",
 			"requires_review": 0,
 			"action_revision": 1 if action_type else 0,
@@ -165,17 +162,16 @@ def record_student_task_generation_failure(
 	"""Persist an explicit bounded failure for the convergence SLO."""
 	_require_v2_service()
 	row = frappe.db.sql(
-		"SELECT name, student_context_revision, owner_staff FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if not row or int(row[0].student_context_revision or 0) != int(source_revision):
 		return {"status": "deferred", "reason": "revision_moved"}
-	assigned_to = frappe.db.get_value("CRM Staff", row[0].owner_staff, "user") if row[0].owner_staff else None
-	current = frappe.db.get_value("Task", {"student": student, "current_slot": "CURRENT"}, "name")
+	current = frappe.db.get_value("CRM Student Task", {"student": student, "current_slot": "CURRENT"}, "name")
 	if current:
 		frappe.db.set_value(
-			"Task",
+			"CRM Student Task",
 			current,
 			{
 				"generation_status": "failed",
@@ -187,17 +183,15 @@ def record_student_task_generation_failure(
 		return {"status": "failed", "task": current}
 	task = frappe.get_doc(
 		{
-			"doctype": "Task",
-			"title": "Student next task — generation failed",
+			"doctype": "CRM Student Task",
 			"student": student,
-			"assigned_to": assigned_to,
 			"current_slot": "CURRENT",
 			"source_context_revision": source_revision,
 			"disposition": "MONITOR",
 			"objective": "Generation failed; reconcile this Student context.",
 			"policy_version": "student-next-task-v2",
 			"context_version": "generation-failure",
-			"status": "PENDING",
+			"state": "PENDING",
 			"generation_status": "failed",
 			"generation_failed_at": frappe.utils.now_datetime(),
 			"generation_failure_reason": str(reason)[:500],
@@ -219,15 +213,9 @@ def _call(fn, **kwargs):
 
 
 def _decide_by_name(name: str, **kwargs):
-	"""Dispatch to the V2 task-native command when `name` names an AI-governed
-	Task (producer_identity set — a manual Task with a student but no
-	producer_identity is not a decidable recommendation); CRM Recommendation
-	only ever holds pre-cutover historical rows."""
-	fn = (
-		_decide_student_task
-		if frappe.db.exists("Task", {"name": name, "producer_identity": ["is", "set"]})
-		else _decide_recommendation
-	)
+	"""Dispatch to the V2 task-native command when `name` names a CRM Student
+	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
+	fn = _decide_student_task if frappe.db.exists("CRM Student Task", name) else _decide_recommendation
 	result = _call(fn, name=name, **kwargs)
 	result.setdefault("name", result.get("recommendation") or result.get("task"))
 	return result

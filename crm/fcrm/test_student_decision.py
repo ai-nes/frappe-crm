@@ -37,9 +37,9 @@ class TestDecideStudentTask(FrappeTestCase):
 			frappe.delete_doc("CRM Sales Action", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
 		for name in frappe.db.get_all(
-			"Task", filters={"student": self._student.name}, pluck="name"
+			"CRM Student Task", filters={"student": self._student.name}, pluck="name"
 		):
-			frappe.delete_doc("Task", name, force=True)
+			frappe.delete_doc("CRM Student Task", name, force=True)
 		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
@@ -60,11 +60,9 @@ class TestDecideStudentTask(FrappeTestCase):
 	def _make_task(self, *, disposition="ACT", action_type="CALL"):
 		task = frappe.get_doc(
 			{
-				"doctype": "Task",
-				"title": "Follow up on application status.",
+				"doctype": "CRM Student Task",
 				"student": self._student.name,
 				"source_context_revision": 1,
-				"status": "PENDING",
 				"disposition": disposition,
 				"action_type": action_type if disposition == "ACT" else None,
 				"objective": "Follow up on application status.",
@@ -93,7 +91,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		self.assertTrue(result["sales_action"])
 
 		task.reload()
-		self.assertEqual(task.status, "ACCEPTED")
+		self.assertEqual(task.state, "ACCEPTED")
 		self.assertEqual(task.decision_revision, 1)
 		self.assertEqual(task.sales_action, result["sales_action"])
 
@@ -166,7 +164,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		)
 		self.assertEqual(result["status"], "rejected")
 		task.reload()
-		self.assertEqual(task.status, "REJECTED")
+		self.assertEqual(task.state, "REJECTED")
 
 	def test_replaying_the_same_idempotency_key_returns_the_original_result(self):
 		task = self._make_task()

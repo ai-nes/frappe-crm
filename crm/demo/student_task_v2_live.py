@@ -88,9 +88,9 @@ def run() -> dict:
 	student, intent = _new_student()
 	task = _wait_for(
 		lambda: frappe.db.get_value(
-			"Task",
+			"CRM Student Task",
 			{"student": student, "current_slot": "CURRENT"},
-			["name", "status", "generation_status", "action_type", "decision_revision", "source_context_revision"],
+			["name", "state", "generation_status", "action_type", "decision_revision", "source_context_revision"],
 			as_dict=True,
 		),
 		label="V2 Student Task",
@@ -131,12 +131,12 @@ def run() -> dict:
 		lambda: (
 			row
 			if (row := frappe.db.get_value(
-				"Task",
+				"CRM Student Task",
 				task.name,
-				["name", "status", "requires_review", "review_revision", "source_context_revision"],
+				["name", "state", "requires_review", "review_revision", "source_context_revision"],
 				as_dict=True,
 			))
-			and row.status == "REQUIRES_REVIEW"
+			and row.state == "REQUIRES_REVIEW"
 			and int(row.requires_review or 0) == 1
 			else None
 		),
@@ -147,7 +147,7 @@ def run() -> dict:
 		"student": student,
 		"intent": intent,
 		"context_revision": task.source_context_revision,
-		"task": {"name": task.name, "state_before": task.status, "action_type": task.action_type},
+		"task": {"name": task.name, "state_before": task.state, "action_type": task.action_type},
 		"sales_decision": {"status": accepted.get("status"), "task": task.name},
 		"sales_action": action,
 		"outcome": outcome,
