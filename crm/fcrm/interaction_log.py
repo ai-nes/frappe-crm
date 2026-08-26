@@ -65,6 +65,10 @@ def _source_matches_student(doctype, name, student, seen=None):
 			return False
 	except Exception:
 		return False
+	# A completed source may be linked directly to CRM Student. The name match is
+	# the same canonical identity boundary used for a CRM Contact relationship.
+	if doctype == "CRM Student":
+		return name == student
 	seen = seen or set()
 	key = (doctype, name)
 	if key in seen:

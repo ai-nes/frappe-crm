@@ -26,7 +26,7 @@ test.describe('Lead Sales direct-route boundary', () => {
     await page.goto(`crm-students/${encodeURIComponent(student)}#overview`)
     await expect(
       page.getByRole('button', {
-        name: localizedLabel('Change ownership', 'Đổi người phụ trách'),
+        name: localizedLabel('Change ownership', 'Cập nhật phân công'),
       }),
     ).toHaveCount(0)
     await expect(

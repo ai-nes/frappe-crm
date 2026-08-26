@@ -99,7 +99,7 @@
               <dd class="truncate font-medium text-ink-gray-8">{{ lifecycleStage }}</dd>
             </div>
             <div class="flex items-center justify-between gap-3">
-              <dt class="text-ink-gray-5">{{ __('Owner') }}</dt>
+              <dt class="text-ink-gray-5">{{ __('Current assignment') }}</dt>
               <dd class="truncate text-right text-ink-gray-7" :title="ownershipSummary">
                 <span v-if="ownership.loading" class="text-ink-gray-5">{{ __('Loading…') }}</span>
                 <span v-else>{{ ownershipSummary }}</span>

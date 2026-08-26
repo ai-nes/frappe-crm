@@ -111,7 +111,7 @@ export function buildOwnershipPayload({
     student,
     target_kind: target.kind,
     target_id: target.kind === 'owner' ? target.id : null,
-    target_team_id: target.kind === 'pool' ? target.id : null,
+    target_team_id: target.kind === 'owner' ? target.teamId : target.id,
     reason: reason.trim(),
     idempotency_key: idempotencyKey,
     expected_revision: revision,

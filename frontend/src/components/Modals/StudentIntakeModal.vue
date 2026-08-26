@@ -2,11 +2,7 @@
   <Dialog v-model="show" :options="{ title: __('Create Student'), size: 'xl' }">
     <template #body-content>
       <p class="mb-4 text-sm text-ink-gray-6">
-        {{
-          __(
-            'Fill in the student information. Provide at least one valid phone number or email address.',
-          )
-        }}
+        {{ __('Fill in the student information. Provide at least one valid phone number or email address.') }}
       </p>
       <FieldLayout
         :tabs="tabs"
@@ -177,7 +173,7 @@ const tabs = [
       },
       {
         name: 'phase3-intake-controls',
-        label: 'Identity and assignment',
+        label: __('Identity and assignment'),
         collapsible: true,
         opened: false,
         columns: [
@@ -229,9 +225,7 @@ const resultMessage = computed(() => {
   const messages = {
     attached: __('Intake attached to the existing admission case.'),
     created: __('Student intake created.'),
-    review_required: __(
-      'A review is required before this intake can continue.',
-    ),
+    review_required: __('A review is required before this intake can continue.'),
   }
   return messages[intakeResultKind(result.value)] || __('Intake completed.')
 })

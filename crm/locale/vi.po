@@ -9538,62 +9538,65 @@ msgid "Identity"
 msgstr "Giấy tờ tùy thân"
 
 # Student ownership UI
+msgid "Current assignment"
+msgstr "Phân công hiện tại"
+
 msgid "Change ownership"
-msgstr "Đổi người phụ trách"
+msgstr "Cập nhật phân công"
 
 msgid "Loading…"
 msgstr "Đang tải…"
 
 msgid "Change student ownership"
-msgstr "Đổi người phụ trách học sinh"
+msgstr "Cập nhật phân công học sinh"
 
 msgid "Owner: {0} · Revision {1}"
-msgstr "Người phụ trách: {0} · Phiên bản {1}"
+msgstr "Cá nhân phụ trách: {0} · Phiên bản {1}"
 
 msgid "Pool: {0} · Revision {1}"
 msgstr "Nhóm phụ trách: {0} · Phiên bản {1}"
 
 msgid "No active owner or pool."
-msgstr "Không có người hoặc nhóm phụ trách đang hoạt động."
+msgstr "Chưa có phân công đang hoạt động."
 
 msgid "Ownership changed"
-msgstr "Đã thay đổi người phụ trách"
+msgstr "Đã cập nhật phân công"
 
 msgid "Choose either an individual owner or a campus pool. The server verifies eligibility and scope."
-msgstr "Chọn người phụ trách hoặc nhóm phụ trách theo chi nhánh. Máy chủ sẽ kiểm tra điều kiện và phạm vi."
+msgstr "Chọn cá nhân hoặc nhóm phụ trách theo chi nhánh. Hệ thống sẽ kiểm tra điều kiện và phạm vi."
 
 msgid "Assign to"
-msgstr "Gán cho"
+msgstr "Phân công cho"
 
 msgid "Eligible owner"
-msgstr "Người phụ trách đủ điều kiện"
+msgstr "Cá nhân đủ điều kiện"
 
 msgid "Eligible pool"
-msgstr "Nhóm phụ trách đủ điều kiện"
+msgstr "Nhóm đủ điều kiện"
 
 msgid "Campus pool"
-msgstr "Nhóm phụ trách theo chi nhánh"
+msgstr "Nhóm theo chi nhánh"
 
 msgid "Individual owner"
-msgstr "Người phụ trách cá nhân"
+msgstr "Cá nhân phụ trách"
 
 msgid "This reason is recorded in the ownership history."
 msgstr "Lý do này được lưu trong lịch sử phân công."
 
 msgid "Loading eligible ownership targets…"
-msgstr "Đang tải danh sách người/nhóm phụ trách đủ điều kiện…"
+msgstr "Đang tải danh sách cá nhân/nhóm đủ điều kiện…"
 
 msgid "Save ownership"
 msgstr "Lưu phân công"
 
 msgid "Student ownership updated."
-msgstr "Đã cập nhật người phụ trách học sinh."
+msgstr "Đã cập nhật phân công học sinh."
 
 msgid "This ownership changed while you were editing. Reload it and review the current state before trying again."
-msgstr "Người phụ trách đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+msgstr "Phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
 
 msgid "Unable to change ownership."
-msgstr "Không thể thay đổi người phụ trách."
+msgstr "Không thể cập nhật phân công."
 
 # Sales-facing lifecycle and SLA labels
 msgid "At a glance"
@@ -9636,19 +9639,19 @@ msgid "Response recorded"
 msgstr "Đã ghi nhận phản hồi"
 
 msgid "Student routing"
-msgstr "Phân tuyến học sinh"
+msgstr "Phân công tự động"
 
 msgid "Routing is operating normally."
-msgstr "Phân tuyến đang hoạt động bình thường."
+msgstr "Hệ thống đang phân công tự động bình thường."
 
 msgid "applied"
-msgstr "Đã phân tuyến"
+msgstr "Đã phân công"
 
 msgid "deferred"
-msgstr "Chờ phân tuyến"
+msgstr "Chờ phân công"
 
 msgid "failed"
-msgstr "Phân tuyến thất bại"
+msgstr "Phân công thất bại"
 
 msgid "Lifecycle unavailable"
 msgstr "Chưa có thông tin giai đoạn tuyển sinh"
@@ -9741,25 +9744,25 @@ msgid "Unable to update the Student SLA."
 msgstr "Không thể cập nhật thời hạn xử lý học sinh."
 
 msgid "Retry student routing"
-msgstr "Thử lại phân tuyến học sinh"
+msgstr "Thử lại phân công học sinh"
 
 msgid "Retry this deferred routing request. The server rechecks the current Student ownership, pool policy and eligible members."
-msgstr "Thử lại yêu cầu phân tuyến đang chờ. Hệ thống sẽ kiểm tra lại người phụ trách, chính sách nhóm và nhân sự đủ điều kiện."
+msgstr "Thử lại yêu cầu phân công đang chờ. Hệ thống sẽ kiểm tra lại phân công hiện tại, chính sách nhóm và nhân sự đủ điều kiện."
 
 msgid "Current reason: {0}"
 msgstr "Lý do hiện tại: {0}"
 
 msgid "Retry routing"
-msgstr "Thử lại phân tuyến"
+msgstr "Thử lại phân công"
 
 msgid "Student routing retry submitted."
-msgstr "Đã gửi yêu cầu thử lại phân tuyến học sinh."
+msgstr "Đã gửi yêu cầu thử lại phân công học sinh."
 
 msgid "This routing request changed while you were editing. Reload it and review the current state before trying again."
-msgstr "Yêu cầu phân tuyến đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+msgstr "Yêu cầu phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
 
 msgid "Unable to retry student routing."
-msgstr "Không thể thử lại phân tuyến học sinh."
+msgstr "Không thể thử lại phân công học sinh."
 
 msgid "Review conversations and record their outcomes."
 msgstr "Xem lại các cuộc trao đổi và ghi nhận kết quả."
@@ -9829,3 +9832,34 @@ msgstr "Chờ phản hồi"
 
 msgid "terminal"
 msgstr "Kết thúc"
+
+# Student intake modal
+msgid "Fill in the student information. Provide at least one valid phone number or email address."
+msgstr "Điền thông tin học sinh. Cần có ít nhất một số điện thoại hợp lệ hoặc địa chỉ email."
+
+msgid "Identity and assignment"
+msgstr "Giấy tờ tùy thân và phân công"
+
+msgid "National ID (optional)"
+msgstr "Số CCCD (không bắt buộc)"
+
+msgid "Initial pool (optional)"
+msgstr "Nhóm phụ trách ban đầu (không bắt buộc)"
+
+msgid "Intake attached to the existing admission case."
+msgstr "Thông tin đã được gắn vào hồ sơ tuyển sinh hiện có."
+
+msgid "Student intake created."
+msgstr "Đã tạo học sinh."
+
+msgid "A review is required before this intake can continue."
+msgstr "Cần xem xét trước khi tiếp tục tiếp nhận học sinh."
+
+msgid "Intake completed."
+msgstr "Đã hoàn tất tiếp nhận."
+
+msgid "The intake service returned an invalid result."
+msgstr "Dịch vụ tiếp nhận trả về kết quả không hợp lệ."
+
+msgid "Unable to submit intake."
+msgstr "Không thể tạo học sinh."

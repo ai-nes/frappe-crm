@@ -16,6 +16,10 @@ from frappe.utils import now_datetime
 
 
 def _require_agent_identity():
+	if getattr(frappe.flags, "crm_local_fixture_score_write", False):
+		if frappe.local.site == "crm.localhost" and frappe.session.user == "Administrator":
+			return
+		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	configured = frappe.conf.get("crm_agents_service_user")
@@ -119,3 +123,15 @@ def append_score_if_current(
 		update_modified=False,
 	)
 	return {"history": history.name, "applied": True, "duplicate": False, "stale": False}
+
+
+def append_local_fixture_score(**values) -> dict:
+	"""Write a score for the fixed local seed without impersonating crm-agents."""
+	if frappe.local.site != "crm.localhost" or frappe.session.user != "Administrator":
+		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
+	previous_flag = getattr(frappe.flags, "crm_local_fixture_score_write", False)
+	frappe.flags.crm_local_fixture_score_write = True
+	try:
+		return append_score_if_current(**values)
+	finally:
+		frappe.flags.crm_local_fixture_score_write = previous_flag

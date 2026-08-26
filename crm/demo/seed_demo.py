@@ -1,5 +1,5 @@
 """
-Demo seed — master data + 3 test students (interactions + intents, no scoring).
+Demo seed — shared master data for local admissions fixtures.
 
 Run with:
   bench --site <site> execute crm.demo.seed_demo.execute
@@ -9,11 +9,6 @@ What this creates (all idempotent):
     CRM Intent Type         — 8 types
     CRM Score Signal        — 22 signals (Fit / Engagement / Intent / Negative)
     CRM Score Template      — "Default Scoring 2026" (active)
-
-  Test students
-    Student A  Nguyen Thu Ha   — high-potential lead (strong fit, recent activity)
-    Student B  Tran Quoc Bao   — cold / disengaged lead (low fit, inactive 50d)
-    Student C  Le Phuong Linh  — intent-driven, zero fit (grade 11, no certs)
 
   Shared context
     Province, Ward, Campus, High School, Major, Aspiration,
@@ -406,12 +401,9 @@ def execute():
     print("\n=== Seeding shared context ===")
     ctx = _ensure_shared_context()
 
-    print("\n=== Seeding test students ===")
-    for profile in STUDENTS:
-        _seed_student(profile, ctx)
-
     frappe.db.commit()
     print("\n=== Done ===")
+    return ctx
 
 
 # ---------------------------------------------------------------------------
@@ -422,12 +414,11 @@ def _seed_intent_types():
     created = 0
     for it in INTENT_TYPES:
         if not frappe.db.exists("CRM Intent Type", it["name"]):
-            frappe.get_doc({
-                "doctype": "CRM Intent Type",
-                "intent_type_name": it["name"],
-                "importance": it["importance"],
-                "description_vi": it["description_vi"],
-            }).insert(ignore_permissions=True)
+            _create_governed_additive_value(
+                "CRM Intent Type",
+                it["name"],
+                reason=f"Local scoring fixture: {it['description_vi']}",
+            )
             created += 1
     print(f"  Intent Types: {created} created, {len(INTENT_TYPES) - created} skipped")
 
@@ -496,7 +487,7 @@ def _ensure_shared_context():
         "event":    _ensure_event(),
         "admission_year": _ensure_admission_year(),
         "education_program": _ensure_education_program(),
-        "enrollment_status": _ensure_enrollment_status("Chưa xác nhận"),
+        "enrollment_status": _ensure_enrollment_status("Mới"),
     }
 
 
@@ -621,15 +612,11 @@ def _ensure_ward(province):
 def _ensure_campus(province):
     if frappe.db.exists("CRM Campus", CAMPUS):
         return CAMPUS
-    return frappe.get_doc({
-        "doctype": "CRM Campus",
-        "campus_name": CAMPUS,
-        "campus_code": "FPTU-HCM",
-        "is_default": 1,
-        "province": province,
-        "address": "Saigon Hi-Tech Park, Thu Duc City, Ho Chi Minh City",
-        "phone": "+84 28 7300 5588",
-    }).insert(ignore_permissions=True).name
+    return _create_governed_additive_value(
+        "CRM Campus",
+        CAMPUS,
+        reason="Local admissions fixture campus for the HCMC recruitment cohort.",
+    )
 
 
 def _ensure_high_school(province):
@@ -674,10 +661,11 @@ def _ensure_lead_source():
     name = "FPTU Open Day"
     if frappe.db.exists("CRM Lead Source", name):
         return name
-    return frappe.get_doc({
-        "doctype": "CRM Lead Source",
-        "source_name": name,
-    }).insert(ignore_permissions=True).name
+    return _create_governed_additive_value(
+        "CRM Lead Source",
+        name,
+        reason="Local admissions fixture source for the HCMC Open Day campaign.",
+    )
 
 
 def _ensure_admission_year():
@@ -722,11 +710,11 @@ def _ensure_campaign_type():
     name = "Open Day"
     if frappe.db.exists("CRM Campaign Type", name):
         return name
-    return frappe.get_doc({
-        "doctype": "CRM Campaign Type",
-        "campaign_type_name": name,
-        "description": "Campus visit and admission counseling campaign.",
-    }).insert(ignore_permissions=True).name
+    return _create_governed_additive_value(
+        "CRM Campaign Type",
+        name,
+        reason="Campus visit and admission counseling campaign for the local fixture.",
+    )
 
 
 def _ensure_event():
@@ -744,10 +732,17 @@ def _ensure_event():
 def _ensure_enrollment_status(status_name):
     if frappe.db.exists("CRM Enrollment Status", status_name):
         return status_name
-    return frappe.get_doc({
+    defaults = {"Mới": (10, "open", "Lead")}
+    stage_order, stage_category, lifecycle_stage = defaults.get(status_name, (10, "open", "Lead"))
+    doc = frappe.get_doc({
         "doctype": "CRM Enrollment Status",
         "status_name": status_name,
-    }).insert(ignore_permissions=True).name
+        "stage_order": stage_order,
+        "stage_category": stage_category,
+    }).insert(ignore_permissions=True)
+    if frappe.db.has_column("CRM Enrollment Status", "lifecycle_stage"):
+        frappe.db.set_value("CRM Enrollment Status", doc.name, "lifecycle_stage", lifecycle_stage, update_modified=False)
+    return doc.name
 
 
 def _ensure_interaction_type(name):
@@ -762,9 +757,22 @@ def _ensure_interaction_type(name):
 def _ensure_intent_type(name, importance, description_vi):
     if frappe.db.exists("CRM Intent Type", name):
         return name
-    return frappe.get_doc({
-        "doctype": "CRM Intent Type",
-        "intent_type_name": name,
-        "importance": importance,
-        "description_vi": description_vi,
-    }).insert(ignore_permissions=True).name
+    return _create_governed_additive_value(
+        "CRM Intent Type",
+        name,
+        reason=f"Local scoring fixture: {description_vi}",
+    )
+
+
+def _create_governed_additive_value(doctype, value, *, reason):
+    """Create an additive lookup through its required governance boundary."""
+    from crm.fcrm.master_data_governance import create_additive_value
+
+    result = create_additive_value(
+        doctype,
+        value,
+        reason=reason,
+        idempotency_key=f"local-admissions-fixture:{doctype}:{value}",
+        correlation_id="local-admissions-fixture",
+    )
+    return result["name"]

@@ -18,7 +18,7 @@
         </div>
         <dl class="grid gap-4 sm:grid-cols-2">
           <div>
-            <dt class="text-sm text-ink-gray-5">{{ __('Owner') }}</dt>
+            <dt class="text-sm text-ink-gray-5">{{ __('Current assignment') }}</dt>
             <dd class="mt-1 truncate text-base text-ink-gray-8">
               <span v-if="ownershipLoading" class="text-ink-gray-5">{{ __('Loading…') }}</span>
               <span v-else>{{ ownershipSummary }}</span>

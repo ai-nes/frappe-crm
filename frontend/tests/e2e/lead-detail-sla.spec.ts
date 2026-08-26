@@ -21,7 +21,7 @@ test('shows ownership and records an outcome against the named first-response SL
   ).toBeVisible()
   await expect(
     page.getByRole('button', {
-      name: localizedLabel('Change ownership', 'Đổi người phụ trách'),
+      name: localizedLabel('Change ownership', 'Cập nhật phân công'),
     }),
   ).toBeVisible()
 

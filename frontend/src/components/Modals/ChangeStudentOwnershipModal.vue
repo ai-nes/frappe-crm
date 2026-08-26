@@ -47,6 +47,10 @@ const targetOptions = computed(() => {
   const items = targetKind.value === 'owner' ? targets.data?.owners : targets.data?.pools
   return (items || []).map((item) => ({ label: item.label || item.name, value: item.name || item.id }))
 })
+const selectedTarget = computed(() => {
+  const items = targetKind.value === 'owner' ? targets.data?.owners : targets.data?.pools
+  return (items || []).find((item) => (item.name || item.id) === targetId.value)
+})
 const canSubmit = computed(() => Boolean(targetId.value && reason.value.trim() && !targets.loading))
 
 watch(show, (open) => {
@@ -71,7 +75,11 @@ async function submit() {
       'crm.api.student_ownership.change_student_ownership',
       buildOwnershipPayload({
         student: props.student,
-        target: { kind: targetKind.value, id: targetId.value },
+        target: {
+          kind: targetKind.value,
+          id: targetId.value,
+          teamId: selectedTarget.value?.team,
+        },
         reason: reason.value,
         revision: props.ownership.revision,
         idempotencyKey: createCommandId(),

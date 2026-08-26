@@ -27,7 +27,7 @@ test.describe('Sale ownership boundary', () => {
     await page.goto(`crm-students/${encodeURIComponent(student)}#overview`)
     await expect(
       page.getByRole('button', {
-        name: localizedLabel('Change ownership', 'Đổi người phụ trách'),
+        name: localizedLabel('Change ownership', 'Cập nhật phân công'),
       }),
     ).toHaveCount(0)
   })
@@ -47,15 +47,15 @@ test.describe('Lead Sales ownership journey', () => {
     await page.goto(`crm-students/${encodeURIComponent(student)}#overview`)
     await expect(
       page.getByRole('button', {
-        name: localizedLabel('Change ownership', 'Đổi người phụ trách'),
+        name: localizedLabel('Change ownership', 'Cập nhật phân công'),
       }),
     ).toBeVisible()
     const before = await readOwnership(page, student)
     await page.getByRole('button', {
-      name: localizedLabel('Change ownership', 'Đổi người phụ trách'),
+      name: localizedLabel('Change ownership', 'Cập nhật phân công'),
     }).click()
     const dialog = page.getByRole('dialog', {
-      name: /change student ownership|đổi người phụ trách/i,
+      name: /change student ownership|cập nhật phân công/i,
     })
     await expect(dialog).toBeVisible()
     await dialog.getByRole('combobox').nth(1).click()
