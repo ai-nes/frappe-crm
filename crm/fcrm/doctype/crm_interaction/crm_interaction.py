@@ -1,6 +1,8 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.interaction_log import external_id_for
+
 
 class CRMInteraction(Document):
 	def before_validate(self):
@@ -8,6 +10,8 @@ class CRMInteraction(Document):
 			self.interaction_datetime = frappe.utils.now_datetime()
 		if not self.actor:
 			self.actor = frappe.session.user
+		if not self.external_id:
+			self.external_id = external_id_for(self.reference_doctype, self.reference_docname, self.interaction_type)
 
 	def validate(self):
 		if not self.student and not self.crm_contact:
@@ -30,6 +34,25 @@ class CRMInteraction(Document):
 			from crm.services.student_context import mark_student_context_changed
 
 			mark_student_context_changed(student, "interaction_material_change")
+			# Every interaction is a direct Engagement-scorer input (see
+			# app/services/scoring/scorers.py) -- always scoring-relevant,
+			# unlike a generic Student field edit.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(student, "interaction_material_change")
+
+	def on_trash(self):
+		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
+		if student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(student, "interaction_deleted")
+			# Deleting an Engagement-scorer input changes the same fact
+			# surface as editing one -- the current score must not be left
+			# marked fresh against evidence that no longer exists.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(student, "interaction_deleted")
 
 	@staticmethod
 	def default_list_data():

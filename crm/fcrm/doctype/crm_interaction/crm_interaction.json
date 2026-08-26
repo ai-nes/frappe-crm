@@ -19,6 +19,7 @@
   "sla_response_sealed",
   "source_verified",
   "outcome_revision",
+  "external_id",
   "section_summary",
   "summary",
   "notes",
@@ -104,6 +105,15 @@
    "fieldtype": "Int",
    "label": "Outcome Revision",
    "read_only": 1
+  },
+  {
+   "description": "Deterministic identity for an auto-created interaction: `{reference_doctype}:{reference_docname}:{interaction_type}`. Lets a retried/concurrent writer resolve the same row instead of inserting a duplicate; manually created interactions (no reference) leave this null and are unaffected by the unique index (MariaDB unique indexes ignore multiple NULLs).",
+   "fieldname": "external_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "External ID",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "section_summary",

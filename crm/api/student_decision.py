@@ -11,19 +11,10 @@ from frappe.utils import now_datetime
 from crm.fcrm.student_decision import (
 	StudentDecisionError,
 	decide_recommendation as _decide_recommendation,
+	decide_student_task as _decide_student_task,
 	reassign_sales_action as _reassign_sales_action,
 	transition_sales_action as _transition_sales_action,
 )
-
-
-# Local crm-agents Student Task v2 command contract. Remote Phase 6 decision
-# adapters remain authoritative for Recommendation/Sales Action commands.
-_TASK_TRANSITIONS = {
-	"PENDING": {"ACCEPTED", "CANCELLED", "SUPERSEDED"},
-	"ACCEPTED": {"IN_PROGRESS", "COMPLETED", "CANCELLED", "REQUIRES_REVIEW"},
-	"IN_PROGRESS": {"COMPLETED", "CANCELLED", "REQUIRES_REVIEW"},
-	"REQUIRES_REVIEW": {"ACCEPTED", "IN_PROGRESS", "COMPLETED", "CANCELLED"},
-}
 
 
 def _require_v2_service():
@@ -161,25 +152,6 @@ def upsert_student_next_task(
 			"created_at": frappe.utils.now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	if disposition == "ACT":
-		recommendation = frappe.get_doc(
-			{
-				"doctype": "CRM Recommendation",
-				"student": student,
-				"rule_key": "student_next_task_v2",
-				"source_intent_id": f"v2:{generation_idempotency_key}",
-				"condition_version": 2,
-				"context_hash": payload_digest,
-				"policy_version": candidate.get("policy_version"),
-				"priority": "medium",
-				"status": "new",
-				"recommended_action": action_type,
-				"reason": task.objective,
-				"evidence": {"references": candidate.get("evidence_refs", [])},
-			}
-		).insert(ignore_permissions=True)
-		task.db_set("recommendation", recommendation.name, update_modified=False)
-		task.reload()
 	return _task_result(task)
 
 
@@ -240,6 +212,15 @@ def _call(fn, **kwargs):
 		frappe.throw(str(exc), exc_type)
 
 
+def _decide_by_name(name: str, **kwargs):
+	"""Dispatch to the V2 task-native command when `name` names a CRM Student
+	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
+	fn = _decide_student_task if frappe.db.exists("CRM Student Task", name) else _decide_recommendation
+	result = _call(fn, name=name, **kwargs)
+	result.setdefault("name", result.get("recommendation") or result.get("task"))
+	return result
+
+
 @frappe.whitelist(methods=["POST"])
 def transition_recommendation(name: str, expected_revision: str, status: str, decision_reason: str | None = None, **kwargs):
 	"""Compatibility adapter for the pre-Phase-6 Desk/demo call shape.
@@ -249,9 +230,8 @@ def transition_recommendation(name: str, expected_revision: str, status: str, de
 	writes or bypass the Phase 6 command service.
 	"""
 	if kwargs.get("idempotency_key"):
-		return _call(
-			_decide_recommendation,
-			name=name,
+		return _decide_by_name(
+			name,
 			expected_revision=expected_revision,
 			status=status,
 			decision_reason=decision_reason,
@@ -282,8 +262,8 @@ def transition_recommendation(name: str, expected_revision: str, status: str, de
 
 
 @frappe.whitelist(methods=["POST"])
-def decide_recommendation(**kwargs):
-	return _call(_decide_recommendation, **kwargs)
+def decide_recommendation(name: str, **kwargs):
+	return _decide_by_name(name, **kwargs)
 
 
 @frappe.whitelist(methods=["POST"])

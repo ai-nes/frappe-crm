@@ -14,7 +14,7 @@ class CRMSalesAction(Document):
 	"""Durable execution aggregate; lifecycle writes belong to Phase 6 commands."""
 
 	_IMMUTABLE_FIELDS = (
-		"recommendation", "student", "action_type", "created_at", "due_at",
+		"recommendation", "student_task", "student", "action_type", "created_at", "due_at",
 		"assignee_snapshot", "correlation_id", "idempotency_key",
 	)
 	_ALLOWED_TRANSITIONS = {
@@ -30,16 +30,16 @@ class CRMSalesAction(Document):
 		return bool(getattr(self.flags, "from_phase6_command", False) or getattr(self.flags, "phase6_break_glass", False))
 
 	def autoname(self):
-		"""Deterministic name = hash(recommendation) — one CRM Sales Action per
-		CRM Recommendation (Requirement: one row per accepted/modified
-		recommendation). A double-fire of the accept-decision wiring (e.g. a
-		retried write) fails on the duplicate primary key instead of silently
-		creating a second action row for the same recommendation.
+		"""Deterministic name = hash(recommendation or student_task) — one CRM
+		Sales Action per correlated aggregate. A double-fire of the
+		accept-decision wiring (e.g. a retried write) fails on the duplicate
+		primary key instead of silently creating a second action row.
 		"""
-		if not self.recommendation:
-			frappe.throw(_("CRM Sales Action requires a recommendation before it can be named"))
-		digest = hashlib.sha256(self.recommendation.encode("utf-8")).hexdigest()[:24]
-		prefix = "SA-E2E-FPT-2026-" if self.recommendation.startswith("REC-E2E-FPT-2026-") else "SA-"
+		key = self.recommendation or self.student_task
+		if not key:
+			frappe.throw(_("CRM Sales Action requires a recommendation or student_task before it can be named"))
+		digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+		prefix = "SA-E2E-FPT-2026-" if key.startswith("REC-E2E-FPT-2026-") else "SA-"
 		self.name = f"{prefix}{digest}"
 
 	def validate(self):
@@ -49,9 +49,14 @@ class CRMSalesAction(Document):
 				frappe.throw(_("CRM Sales Actions may only be created by a Phase 6 server command."))
 			if not self.due_at or not self.assignee_staff:
 				frappe.throw(_("CRM Sales Action requires due_at and assignee_staff."))
-			recommendation_student = frappe.db.get_value("CRM Recommendation", self.recommendation, "student")
-			if recommendation_student != self.student:
-				frappe.throw(_("CRM Sales Action must use the Recommendation's Student."))
+			if self.recommendation:
+				source_student = frappe.db.get_value("CRM Recommendation", self.recommendation, "student")
+			elif self.student_task:
+				source_student = frappe.db.get_value("CRM Student Task", self.student_task, "student")
+			else:
+				frappe.throw(_("CRM Sales Action requires a recommendation or student_task."))
+			if source_student != self.student:
+				frappe.throw(_("CRM Sales Action must use its source aggregate's Student."))
 			return
 		if not before:
 			return

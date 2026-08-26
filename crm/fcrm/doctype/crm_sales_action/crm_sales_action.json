@@ -9,6 +9,7 @@
  "engine": "InnoDB",
  "field_order": [
   "recommendation",
+  "student_task",
   "student",
   "action_type",
   "created_at",
@@ -45,8 +46,17 @@
    "label": "Recommendation",
    "options": "CRM Recommendation",
    "read_only": 1,
-   "reqd": 1,
-   "description": "The recommendation this action responds to. Mandatory — the only correlation path between a CRM Sales Action and a CRM Recommendation; never inferred by student+timestamp proximity."
+   "description": "Legacy correlation to a CRM Recommendation; populated only on actions created before the V2 cutover. Historical read-only — new actions correlate via student_task instead."
+  },
+  {
+   "fieldname": "student_task",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student Task",
+   "options": "CRM Student Task",
+   "read_only": 1,
+   "description": "The Student Task this action responds to — the canonical correlation path for actions created after the V2 cutover."
   },
   {
    "fieldname": "student",
@@ -57,7 +67,7 @@
    "options": "CRM Student",
    "read_only": 1,
    "reqd": 1,
-   "description": "Denormalized from the recommendation for query convenience only — not a substitute join key for recommendation-correlation."
+   "description": "Denormalized from the recommendation or student_task for query convenience only — not a substitute join key for either correlation."
   },
   {
    "fieldname": "action_type",
@@ -65,9 +75,9 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Action Type",
-   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
+   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nMESSAGE\nCOUNSELING\nMEETING\nEVENT_INVITE\nCAMPUS_VISIT\nDOCUMENT_REQUEST\nAPPLICATION_SUPPORT\nPARENT_CONTACT\nHANDOFF",
    "reqd": 1,
-   "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary."
+   "description": "WAIT/FOLLOW_UP are legacy-only, kept for historical rows. The rest matches CRM Student Task's V2 action vocabulary (crm-agents' app/services/decision/action_types.py) — the canonical set for new actions."
   },
   {
    "fieldname": "created_at",
@@ -271,7 +281,7 @@
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "student,recommendation,action_type,execution_status",
+ "search_fields": "student,recommendation,student_task,action_type,execution_status",
  "sort_field": "creation",
  "sort_order": "DESC",
  "states": [],

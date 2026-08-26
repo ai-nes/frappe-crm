@@ -6,6 +6,8 @@ from datetime import timedelta
 
 import frappe
 
+from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.scoring_policy import get_active_policy
 from crm.services.sales_action_policy import allowed_generation_actions
 from crm.services.student_context import snapshot_hash
 from crm.services.student_next_task_policy import choose_next_task_policy
@@ -21,6 +23,9 @@ _STUDENT_FIELDS = [
 	"student_context_revision",
 	"sla_evidence_state",
 	"sla_evidence_observed_at",
+	"score_input_revision",
+	"applied_score_input_revision",
+	"applied_policy_revision",
 ]
 
 
@@ -32,6 +37,76 @@ def _require_agent_identity():
 		frappe.throw(
 			"This endpoint is restricted to the crm-agents service identity.", frappe.PermissionError
 		)
+
+
+def _intent_provenance(intent: dict, student: str) -> dict:
+	"""Bounded source-interaction reference for the dominant CRM Intent row.
+
+	`interaction` is `reqd=1` on CRM Intent (crm_intent.json) for every new
+	row, so a null value here can only mean a pre-existing row saved before
+	that constraint existed — represent that explicitly as "legacy_missing"
+	rather than fabricating a reference or silently omitting provenance.
+	"""
+	if not intent:
+		return {"state": "none", "interaction": None}
+	interaction_name = intent.get("interaction")
+	if not interaction_name:
+		return {"state": "legacy_missing", "interaction": None}
+	source = frappe.db.get_value(
+		"CRM Interaction",
+		{"name": interaction_name, "student": student},
+		["interaction_type", "interaction_datetime"],
+		as_dict=True,
+	)
+	if not source:
+		# The link is set but its target CRM Interaction row is gone (deleted,
+		# never existed, or — on dirty data — belongs to a different student,
+		# which must never be exposed as this student's evidence) — distinct
+		# from a genuinely absent link.
+		return {"state": "stale_reference", "interaction": None}
+	canonical = resolve_interaction_type(source.interaction_type)
+	return {
+		"state": "linked",
+		"interaction": {
+			"id": interaction_name,
+			"channel": canonical["channel"] if canonical else None,
+			"purpose": canonical["purpose"] if canonical else None,
+			"disposition": canonical["disposition"] if canonical else None,
+			"at": source.interaction_datetime,
+		},
+	}
+
+
+def _score_projection(row: dict) -> dict:
+	"""Additive score evidence: `freshness` mirrors the same
+	(score_input_revision, policy_revision) tuple ordering
+	`append_score_if_current` already uses for its CAS write, so a consumer
+	never needs to duplicate that comparison logic to know whether the
+	last-written score reflects the student's current facts and policy.
+	`required_revision` is always None today -- no Recommendation/RCM rule yet
+	declares "fresh score mandatory"; it is reserved so a future rule can
+	populate it without another contract change.
+	"""
+	policy = get_active_policy() or {}
+	policy_revision = int(policy.get("policy_revision") or 0)
+	policy_hash = policy.get("policy_hash") or ""
+	current_revision = int(row.get("score_input_revision") or 0)
+	applied_input_revision = int(row.get("applied_score_input_revision") or 0)
+	applied_policy_revision = int(row.get("applied_policy_revision") or 0)
+	if row.get("latest_score") is None:
+		freshness = "unknown"
+	elif (applied_input_revision, applied_policy_revision) >= (current_revision, policy_revision):
+		freshness = "current"
+	else:
+		freshness = "pending"
+	return {
+		"current": row.get("latest_score"),
+		"freshness": freshness,
+		"current_revision": current_revision,
+		"required_revision": None,
+		"policy_revision": policy_revision,
+		"policy_hash": policy_hash,
+	}
 
 
 def _projection(student: str, minimum_revision: int) -> dict:
@@ -47,12 +122,13 @@ def _projection(student: str, minimum_revision: int) -> dict:
 		frappe.db.get_value(
 			"CRM Intent",
 			{"student": student},
-			["intent_type", "importance", "confidence"],
+			["intent_type", "importance", "confidence", "polarity", "interaction"],
 			order_by="creation desc",
 			as_dict=True,
 		)
 		or {}
 	)
+	intent_provenance = _intent_provenance(intent, student)
 	interaction = (
 		frappe.db.get_value(
 			"CRM Interaction",
@@ -82,8 +158,10 @@ def _projection(student: str, minimum_revision: int) -> dict:
 			"type": intent.get("intent_type"),
 			"importance": intent.get("importance"),
 			"confidence": intent.get("confidence"),
+			"polarity": intent.get("polarity"),
+			"provenance": intent_provenance,
 		},
-		"score": {"current": row.latest_score},
+		"score": _score_projection(row),
 		"interaction": {
 			"channel": interaction.get("interaction_type"),
 			"outcome": interaction.get("outcome"),
@@ -112,6 +190,7 @@ def _projection(student: str, minimum_revision: int) -> dict:
 	context["evidence_refs"] = [
 		f"student-context:revision:{revision}:intent",
 		f"student-context:revision:{revision}:stage",
+		f"score-input:revision:{context['score']['current_revision']}:score",
 	]
 	if action == "PARENT_CONTACT":
 		context["evidence_refs"].append(f"student-context:revision:{revision}:parent-authority")
@@ -123,8 +202,6 @@ def _projection(student: str, minimum_revision: int) -> dict:
 @frappe.whitelist()
 def get_student_decision_context(student: str, minimum_revision: int = 0, rollout_epoch: int = 0) -> dict:
 	_require_agent_identity()
-	if frappe.conf.get("crm_agents_v2_enabled", 0) in (0, "0", False):
-		frappe.throw("Student task v2 is disabled.", frappe.PermissionError)
 	return _projection(student, int(minimum_revision))
 
 

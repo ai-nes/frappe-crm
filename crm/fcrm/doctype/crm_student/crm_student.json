@@ -68,6 +68,12 @@
   "ownership_revision",
   "engagement_revision",
   "lifecycle_revision",
+  "student_context_revision",
+  "sla_evidence_state",
+  "sla_evidence_observed_at",
+  "score_input_revision",
+  "applied_score_input_revision",
+  "applied_policy_revision",
   "intake_integrity_state",
   "intake_quarantine_reason",
   "id_number",
@@ -456,6 +462,52 @@
    "label": "Lifecycle Revision",
    "read_only": 1,
    "description": "Optimistic-concurrency revision incremented by lifecycle commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "student_context_revision",
+   "fieldtype": "Int",
+   "label": "Student Context Revision",
+   "read_only": 1,
+   "description": "Monotonic revision incremented on any material Student-context fact change (plans/260825-interaction-scoring-v2). Backing field for CRM Student Context Change and the crm-agents v2 outbox/high-water contract."
+  },
+  {
+   "default": "unknown",
+   "fieldname": "sla_evidence_state",
+   "fieldtype": "Select",
+   "label": "SLA Evidence State",
+   "options": "known\nstale\nunknown",
+   "read_only": 1,
+   "description": "Set by crm.api.sla.recompute_sla_statuses(); never fabricated when SLA status is not resolvable."
+  },
+  {
+   "fieldname": "sla_evidence_observed_at",
+   "fieldtype": "Datetime",
+   "label": "SLA Evidence Observed At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "score_input_revision",
+   "fieldtype": "Int",
+   "label": "Score Input Revision",
+   "read_only": 1,
+   "description": "Monotonic revision incremented only on a scoring-relevant fact change (plans/260825-interaction-scoring-v2 Phase 5) -- distinct from student_context_revision, which covers all material Student-context facts."
+  },
+  {
+   "default": "0",
+   "fieldname": "applied_score_input_revision",
+   "fieldtype": "Int",
+   "label": "Applied Score Input Revision",
+   "read_only": 1,
+   "description": "The (score_input_revision, policy_revision) tuple actually used to compute the current latest_score -- set only by append_score_if_current's CAS write, never by a generic Student save."
+  },
+  {
+   "default": "0",
+   "fieldname": "applied_policy_revision",
+   "fieldtype": "Int",
+   "label": "Applied Policy Revision",
+   "read_only": 1
   },
   {
    "default": "review_required",

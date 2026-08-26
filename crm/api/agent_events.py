@@ -23,6 +23,8 @@ _EVENT_PATHS = {
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"sales_action.outcome_recorded.v1": "/api/v1/insight/sales-action-outcome",
 	"student.context_changed.v2": "/api/v1/insight/student-context-v2",
+	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
+	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
 }
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120
@@ -137,8 +139,6 @@ def record_agent_event(event_type: str, doc) -> str:
 
 def record_student_context_event(student: str, revision: int, *, event_id: str | None = None) -> str:
 	"""Coalesce only an undispatched v2 Student event; never rewrite a claim."""
-	if frappe.conf.get("crm_agents_v2_enabled", 0) in (0, "0", False):
-		return ""
 	rollout_epoch = int(frappe.conf.get("crm_agents_v2_rollout_epoch", 0) or 0)
 	pending = frappe.db.sql(
 		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
@@ -165,6 +165,53 @@ def record_student_context_event(student: str, revision: int, *, event_id: str |
 				"source_revision_bigint": revision,
 				"contract_version": 2,
 				"rollout_epoch": rollout_epoch,
+				"occurred_at": now_datetime(),
+				"status": "pending",
+				"next_attempt_at": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		event_name = event.name
+	_enqueue_delivery(frappe.get_doc("CRM Agent Event", event_name))
+	return event_name
+
+
+def record_score_input_event(student: str, revision: int, *, event_id: str | None = None) -> str:
+	"""Coalesce only an undispatched scoring event; never rewrite a claim.
+
+	Uses the same shared `CRM Agent Event` outbox as `record_student_context_event`
+	but its own `event_type`/`source_revision_bigint` lineage, so a burst of
+	Interaction/Intent/Student writes for one student collapses into a single
+	pending scoring event exactly like student-context-v2 does for its own
+	stream -- the two streams never coalesce into each other because the
+	`event_type` filter partitions them into an independent scoring
+	namespace.
+	"""
+	if frappe.conf.get("crm_agents_scoring_events_enabled", 0) in (0, "0", False):
+		return ""
+	pending = frappe.db.sql(
+		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
+		"AND event_type = %s AND status = 'pending' ORDER BY creation DESC LIMIT 1 FOR UPDATE",
+		("CRM Student", student, "student.score_input_changed.v1"),
+		as_dict=True,
+	)
+	if pending:
+		event_name = pending[0].name
+		frappe.db.sql(
+			"UPDATE `tabCRM Agent Event` SET source_revision = %s, source_revision_bigint = %s, "
+			"occurred_at = %s WHERE name = %s AND status = 'pending'",
+			(str(revision), revision, now_datetime(), event_name),
+		)
+	else:
+		event = frappe.get_doc(
+			{
+				"doctype": "CRM Agent Event",
+				"event_id": event_id or str(uuid.uuid4()),
+				"event_type": "student.score_input_changed.v1",
+				"aggregate_doctype": "CRM Student",
+				"aggregate_name": student,
+				"source_revision": str(revision),
+				"source_revision_bigint": revision,
+				"contract_version": 1,
 				"occurred_at": now_datetime(),
 				"status": "pending",
 				"next_attempt_at": now_datetime(),
@@ -310,6 +357,13 @@ def _event_body(event) -> bytes:
 				"rollout_epoch": int(event.rollout_epoch or 0),
 			}
 		)
+	elif event.event_type == "student.score_input_changed.v1":
+		payload.update(
+			{
+				"source_revision": int(event.source_revision_bigint or event.source_revision),
+				"contract_version": 1,
+			}
+		)
 	return json.dumps(
 		payload,
 		sort_keys=True,
@@ -366,9 +420,9 @@ def deliver_agent_event(event_name: str) -> None:
 	event = frappe.get_doc("CRM Agent Event", event_name)
 	fields = _event_fields()
 	if not {"lease_id", "lease_expires_at"}.issubset(fields):
-		# Do not claim a Phase 6 event with the old non-fenced protocol.
+		# Do not claim a fenced-lease event with the old non-fenced protocol.
 		if str(event.event_type).startswith(("recommendation.", "sales_action.")):
-			frappe.throw("CRM Agent Event lease fields are required for Phase 6 delivery.")
+			frappe.throw("CRM Agent Event lease fields are required for fenced delivery.")
 	if event.status not in {"pending", "processing"}:
 		return
 	lease_id = str(uuid.uuid4())
@@ -479,6 +533,28 @@ def reconcile_student_context_v2(limit: int = 500) -> dict:
 	)
 	for row in rows:
 		record_student_context_event(row.student, int(row.revision), event_id=row.event_id)
+	if rows:
+		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
+	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}
+
+
+def reconcile_score_input_v1(limit: int = 500) -> dict:
+	"""Replay `CRM Score Input Change`'s immutable global sequence with a
+	durable cursor -- recovers a missed scoring event without reprocessing a
+	revision the consumer's inbox high-water already settled."""
+	if frappe.conf.get("crm_agents_scoring_reconciliation_enabled", 0) in (0, "0", False):
+		return {"discovered": 0, "enabled": False}
+	cache_key = "crm_agents_scoring:score-input-cursor"
+	last = int(frappe.cache().get_value(cache_key) or 0)
+	rows = frappe.get_all(
+		"CRM Score Input Change",
+		filters=[["global_sequence", ">", last]],
+		fields=["name", "student", "revision", "global_sequence", "event_id"],
+		order_by="global_sequence asc",
+		limit_page_length=min(int(limit), 1000),
+	)
+	for row in rows:
+		record_score_input_event(row.student, int(row.revision), event_id=row.event_id)
 	if rows:
 		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
 	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}

@@ -17,7 +17,7 @@ import frappe
 from frappe.utils import now_datetime
 
 from crm.demo import seed_demo
-from crm.api.student_decision import accept_student_task, record_sales_action_outcome
+from crm.api.student_decision import decide_recommendation, record_sales_action_outcome
 
 
 PREFIX = "LIVE-V2-E2E"
@@ -84,29 +84,28 @@ def _new_student():
 def run() -> dict:
 	"""Run the real V2 event, task, decision, action, outcome loop."""
 	frappe.only_for("System Manager")
-	if frappe.conf.get("crm_agents_v2_enabled", 0) in (0, "0", False):
-		frappe.throw("crm_agents_v2_enabled must be enabled for the live V2 test.", frappe.PermissionError)
 
 	student, intent = _new_student()
 	task = _wait_for(
 		lambda: frappe.db.get_value(
 			"CRM Student Task",
 			{"student": student, "current_slot": "CURRENT"},
-			["name", "state", "generation_status", "action_type", "recommendation", "source_context_revision"],
+			["name", "state", "generation_status", "action_type", "decision_revision", "source_context_revision"],
 			as_dict=True,
 		),
 		label="V2 Student Task",
 	)
-	if task.generation_status != "succeeded" or task.action_type != "CALL" or not task.recommendation:
+	if task.generation_status != "succeeded" or task.action_type != "CALL":
 		raise RuntimeError(f"unexpected V2 task projection: {task}")
 
-	recommendation = frappe.db.get_value(
-		"CRM Recommendation",
-		task.recommendation,
-		["name", "rule_key", "recommended_action", "student"],
-		as_dict=True,
+	accepted = decide_recommendation(
+		task.name,
+		expected_revision=task.decision_revision or 0,
+		status="accepted",
+		idempotency_key=f"{PREFIX}-accept-{task.name}",
+		due_at=now_datetime(),
+		correlation_id=f"{PREFIX}-accept-{task.name}",
 	)
-	accepted = accept_student_task(task.name, str(frappe.db.get_value("CRM Student Task", task.name, "modified")))
 	frappe.db.commit()
 	if not accepted.get("sales_action"):
 		raise RuntimeError(f"Sales Decision did not create Sales Action: {accepted}")
@@ -148,9 +147,8 @@ def run() -> dict:
 		"student": student,
 		"intent": intent,
 		"context_revision": task.source_context_revision,
-		"recommendation": recommendation,
 		"task": {"name": task.name, "state_before": task.state, "action_type": task.action_type},
-		"sales_decision": {"status": accepted.get("state"), "task": task.name},
+		"sales_decision": {"status": accepted.get("status"), "task": task.name},
 		"sales_action": action,
 		"outcome": outcome,
 		"re_evaluation": reviewed,

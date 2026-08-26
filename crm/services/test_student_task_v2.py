@@ -27,5 +27,7 @@ class TestStudentTaskV2Contracts(FrappeTestCase):
 		self.assertTrue(material_student_changed(after, before))
 		self.assertFalse(material_student_changed(after, {"student_name": "A", "major": "N"}))
 		self.assertTrue(is_committed_task_state("ACCEPTED"))
+		self.assertTrue(is_committed_task_state("DEFERRED"))
+		self.assertTrue(is_committed_task_state("REJECTED"))
 		self.assertFalse(is_committed_task_state("PENDING"))
 		self.assertEqual(snapshot_hash({"b": 2, "a": 1}), snapshot_hash({"a": 1, "b": 2}))

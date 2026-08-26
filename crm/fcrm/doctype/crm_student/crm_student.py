@@ -128,6 +128,10 @@ class CRMStudent(Document):
 
 		if material_student_changed(self, before):
 			bump_student_context_revision(self.name, "student_material_change")
+		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
+
+		if student_score_input_changed(self, before):
+			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def _log_enrollment_transition(self):
 		# Fires on both insert and update (Frappe calls on_update after
