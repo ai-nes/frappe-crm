@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from typing import Any
 
 import frappe
-from frappe.utils import add_to_date, now_datetime, time_diff_in_seconds
+from frappe.utils import add_to_date, get_datetime, now_datetime as frappe_now_datetime, time_diff_in_seconds
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -22,6 +22,35 @@ SERVICE_FLAG = "student_sla_service"
 TERMINAL = {"responded", "closed", "closed_inactive", "superseded"}
 MEANINGFUL_OUTCOMES = {"Captured", "Follow Up Needed", "Resolved", "Converted"}
 LEASE_MINUTES = 5
+
+
+def _test_seam_active() -> bool:
+	"""Allow deterministic time only for the leased disposable Playwright site."""
+	run_id = str(frappe.conf.get("crm_playwright_e2e_run_id") or "").strip()
+	lease = frappe.cache().get_value("crm_playwright_e2e_lease") or {}
+	lease_run_id = str(lease.get("run_id") or "").strip()
+	expires_at = get_datetime(lease.get("expires_at")) if lease.get("expires_at") else None
+	return (
+		getattr(frappe.local, "site", None) == "crm.localhost"
+		and frappe.conf.get("crm_playwright_disposable") in (1, "1", True)
+		and frappe.conf.get("crm_playwright_test_seam_enabled") in (1, "1", True)
+		and bool(run_id)
+		and lease_run_id == run_id
+		and bool(expires_at and expires_at > frappe_now_datetime())
+	)
+
+
+def now_datetime():
+	"""Internal clock seam; production always uses Frappe's wall clock."""
+	configured = frappe.conf.get("crm_playwright_test_clock") if _test_seam_active() else None
+	return get_datetime(configured) if configured else frappe_now_datetime()
+
+
+def run_due_sla_worker_for_test(limit: int = 50) -> dict[str, int]:
+	"""Non-whitelisted, run-scoped synchronous worker hook for bench tests."""
+	if not _test_seam_active():
+		_error("TEST_SEAM_DISABLED", "The deterministic SLA worker is disposable-site only.")
+	return process_due_sla_attempts(limit=limit)
 
 
 class StudentSLAError(frappe.ValidationError):

@@ -169,6 +169,15 @@ class TestAttribution(FrappeTestCase):
 		self.assertEqual(touchpoints[0]["campaign"], self.campaign_b)
 		self.assertEqual(touchpoints[1]["campaign"], self.campaign_a)
 
+	def test_repeated_exposure_is_preserved_not_destructively_overwritten(self):
+		contact = self._make_contact("_Test Attr Repeated Exposure", "0966000010")
+		first = self._make_touchpoint(contact, self.campaign_a, "2026-01-01 08:00:00")
+		second = self._make_touchpoint(contact, self.campaign_a, "2026-01-02 08:00:00")
+		self.assertNotEqual(first, second)
+		touchpoints = get_contact_touchpoints(contact)
+		self.assertEqual([point["reference_docname"] for point in touchpoints], [first, second])
+		self.assertEqual(get_multi_touch_attribution(contact), {self.campaign_a: 1.0})
+
 	# --------------------------------------------------------------- multi-touch
 
 	def test_multi_touch_splits_credit_equally_across_resolvable_touchpoints(self):

@@ -1,7 +1,7 @@
 version: "3"
 
-# Local dev only — backend Docker (:8000) + frontend Vite (:5000)
-# App: http://crm.localhost:5000/crm
+# Local dev only — Frappe app (:8000); Vite (:5000) is optional frontend development
+# App: http://crm.localhost:8000/crm
 
 vars:
   COMPOSE: docker compose -f docker/docker-compose.dev.yml
@@ -102,14 +102,86 @@ tasks:
       - "{{.COMPOSE}} restart frappe"
 
   e2e-seed:
-    desc: Seed the isolated crm-agents E2E cohort and identities
+    desc: Seed the disposable Playwright Lead-processing cohort and manifest
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_e2e.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.execute"
 
   e2e-reset:
-    desc: Remove only the isolated crm-agents E2E cohort and identities
+    desc: Remove only the disposable Playwright cohort and manifest
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_e2e.reset"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.reset"
+
+  e2e-enable:
+    desc: Enable guarded Playwright writes on local crm.localhost only
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_disposable 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_seam_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
+
+  e2e-disable:
+    desc: Disable Playwright fixture guard and server-side write flags
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_disposable 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_seam_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_clock ''"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_e2e_run_id ''"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 0"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 0"
+
+  e2e-playwright:
+    desc: Run guarded Chromium E2E tests against an explicitly disposable site
+    cmds:
+      - cd frontend && npm run test:e2e
+
+  e2e-playwright-install:
+    desc: Install the Chromium binary required by Playwright
+    cmds:
+      - cd frontend && npm run e2e:install
+
+  e2e-preflight:
+    desc: Claim and validate the run-scoped disposable E2E harness
+    requires:
+      vars: [E2E_RUN_ID]
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_e2e_run_id {{.E2E_RUN_ID}}"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.acquire_lease"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.preflight"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.execute"
+
+  e2e-release:
+    desc: Release only the current run lease (does not purge immutable audit evidence)
+    requires:
+      vars: [E2E_RUN_ID]
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.release_lease"
+
+  e2e-full:
+    desc: Guarded E2E supervisor; requires an externally generated E2E_RUN_ID
+    requires:
+      vars: [E2E_RUN_ID]
+    cmds:
+      # Task defers run when a later command fails, so the write flags cannot
+      # survive a failed Playwright process. Lease release is intentionally
+      # separate: a crashed run must remain visible until its TTL expires.
+      - defer:
+          task: e2e-disable
+      - task: e2e-enable
+      - task: e2e-preflight
+      - cmd: cd frontend && $env:PLAYWRIGHT_E2E_ENABLED='1'; $env:PLAYWRIGHT_FIXTURE_MANIFEST=(Resolve-Path "playwright-fixture.{{.E2E_RUN_ID}}.json"); npm run test:e2e
+      - task: e2e-release
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart

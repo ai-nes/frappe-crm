@@ -134,6 +134,45 @@ class TestLifecycleJumps(FrappeTestCase):
 			targets = lifecycle_targets("Lead", self.capabilities)
 		self.assertEqual([target["stage"] for target in targets], ["MQL", "Applicant", "Enrolled"])
 
+	def test_each_forward_target_requires_its_cumulative_qualification_evidence(self):
+		for target in ("MQL", "Applicant", "Enrolled"):
+			transition = validate_transition(
+				"Lead", target, outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities
+			)
+			self.assertEqual(transition["to_stage"], target)
+
+	def test_lost_and_reopen_require_a_reason_and_capability(self):
+		with self.assertRaises(StudentLifecycleError) as lost:
+			validate_transition("Applicant", "Lost", capabilities={"lifecycle.lost"})
+		self.assertEqual(lost.exception.code, "REASON_REQUIRED")
+		self.assertEqual(
+			validate_transition("Applicant", "Lost", reason="Candidate withdrew", capabilities={"lifecycle.lost"})[
+				"transition_kind"
+			],
+			"lost",
+		)
+		with self.assertRaises(StudentLifecycleError) as reopen:
+			validate_transition("Lost", "Reopen", reason="Re-engaged", capabilities=set())
+		self.assertEqual(reopen.exception.code, "FORBIDDEN")
+		self.assertEqual(
+			validate_transition("Lost", "Reopen", reason="Re-engaged", capabilities={"lifecycle.reopen"})[
+				"transition_kind"
+			],
+			"reopen",
+		)
+
+	def test_forward_transition_rejects_missing_or_mislabeled_evidence(self):
+		with self.assertRaises(StudentLifecycleError) as missing:
+			validate_transition("Lead", "Applicant", outcome_code="qualified", evidence=[], capabilities=self.capabilities)
+		self.assertEqual(missing.exception.code, "INVALID_EVIDENCE")
+		foreign_kind = [
+			{"category": "outcome", "doctype": "CRM Student Outcome", "name": "OUT-1"},
+			{"category": "document", "doctype": "CRM Intent", "name": "INT-1"},
+		]
+		with self.assertRaises(StudentLifecycleError) as mislabeled:
+			validate_transition("Lead", "MQL", outcome_code="qualified", evidence=foreign_kind, capabilities=self.capabilities)
+		self.assertEqual(mislabeled.exception.code, "INVALID_EVIDENCE")
+
 	def test_direct_jump_uses_cumulative_evidence(self):
 		transition = validate_transition(
 			"Lead", "Enrolled", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities

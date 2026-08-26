@@ -4,3 +4,7 @@ dist
 dist-ssr
 *.local
 components.d.ts
+playwright/.auth/
+playwright-fixture.json
+playwright-report/
+test-results/

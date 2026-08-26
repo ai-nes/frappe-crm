@@ -6,6 +6,7 @@ there rather than replacing the command contract with an unfaithful mock.
 """
 
 import unittest
+from pathlib import Path
 
 try:
 	import frappe
@@ -35,3 +36,18 @@ class TestStudentConversionCommand(unittest.TestCase):
 		student = CRMStudent({"doctype": "CRM Student", "name": "STU-1"})
 		with self.assertRaises(Exception):
 			student.convert_to_contact()
+	def test_command_exposes_exact_once_boundaries_for_replay_and_races(self):
+		from crm.fcrm import student_conversion
+
+		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
+		self.assertIn("for update", source.lower())
+		self.assertIn("IDEMPOTENCY_KEY_REUSED", source)
+		self.assertIn("expected_lifecycle_revision", source)
+		self.assertIn("CONVERSION_DOCTYPE", source)
+
+	def test_only_enrolled_students_are_convertible(self):
+		from crm.fcrm import student_conversion
+
+		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
+		self.assertIn("Enrolled", source)
+		self.assertIn("INVALID_STATE", source)

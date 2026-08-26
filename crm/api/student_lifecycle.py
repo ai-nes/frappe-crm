@@ -19,6 +19,9 @@ from crm.fcrm.student_lifecycle import (
 
 
 def _read(callable_, **kwargs):
+	# Frappe includes the routed command name in RPC kwargs for adapters that
+	# accept **kwargs. It is transport metadata, never a domain command field.
+	kwargs.pop("cmd", None)
 	try:
 		return callable_(**kwargs)
 	except StudentLifecycleError as exc:

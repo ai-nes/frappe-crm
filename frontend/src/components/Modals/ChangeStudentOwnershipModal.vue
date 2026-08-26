@@ -56,7 +56,7 @@ watch(show, (open) => {
     error.value = ''
     targets.reload()
   }
-})
+}, { immediate: true })
 watch(targetKind, () => (targetId.value = ''))
 
 function resetError() {

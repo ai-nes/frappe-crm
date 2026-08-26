@@ -179,13 +179,13 @@ const routes = [
     path: '/crm-events/view/:viewType?',
     name: 'CRM Events',
     component: () => import('@/pages/CRMEvents.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: { anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities] },
   },
   {
     path: '/crm-events/:crmEventId',
     name: 'CRM Event',
     component: () => import('@/pages/CRMEvent.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: { anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities] },
     props: true,
   },
   {

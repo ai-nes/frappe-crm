@@ -241,7 +241,7 @@ const showSalesActionModal = computed({
 })
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
-    'student.execute',
+    'student.ownership.manage',
     'team.oversee',
     'admissions.oversee',
     'system.configure',

@@ -22,6 +22,9 @@ from crm.fcrm.student_engagement import (
 
 
 def _read(callable_, **kwargs):
+	# ``cmd`` is Frappe RPC routing metadata, not part of the engagement
+	# command payload accepted by the domain service.
+	kwargs.pop("cmd", None)
 	try:
 		return callable_(**kwargs)
 	except StudentEngagementError as exc:

@@ -29,3 +29,9 @@ class TestStudentContactConversionReaderInventory(unittest.TestCase):
 		resolver = (ROOT / "fcrm/student_contact_conversion.py").read_text(encoding="utf-8")
 		self.assertIn('get_value("CRM Contact", {"student": student}', resolver)
 		self.assertIn('get_value("CRM Contact", contact, "student")', resolver)
+
+	def test_conversion_service_keeps_contact_reads_behind_scope_checks(self):
+		conversion = (ROOT / "fcrm/student_conversion.py").read_text(encoding="utf-8")
+		self.assertIn("has_student_permission", conversion)
+		self.assertIn("OUT_OF_SCOPE", conversion)
+		self.assertIn("expected_lifecycle_revision", conversion)

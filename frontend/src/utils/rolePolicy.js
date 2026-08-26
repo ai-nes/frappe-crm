@@ -107,7 +107,9 @@ export const navigationEntries = [
     label: 'Events',
     icon: 'events',
     to: 'CRM Events',
-    anyOf: acquisitionWorkspaceCapabilities,
+    // Events are marketing-owned for mutations, but Sale and Lead Sales have
+    // an approved read projection for admissions attribution.
+    anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities],
   },
   {
     label: 'Staff',
