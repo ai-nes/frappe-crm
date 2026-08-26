@@ -5,8 +5,15 @@ const names = (groups) =>
   groups.flatMap((group) => group.items.map((item) => item.name1))
 
 describe('buildUserDropdownItems', () => {
-  it('keeps logout available when settings are unreadable', () => {
+  it('keeps account settings and logout available when settings are unreadable', () => {
     expect(names(buildUserDropdownItems(undefined, (item) => item))).toEqual([
+      'settings',
+      'logout',
+    ])
+  })
+
+  it('preserves an explicitly empty dropdown configuration', () => {
+    expect(names(buildUserDropdownItems([], (item) => item))).toEqual([
       'logout',
     ])
   })

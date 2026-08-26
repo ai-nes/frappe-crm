@@ -1,3 +1,10 @@
+const settingsItem = {
+  name1: 'settings',
+  label: 'Settings',
+  icon: 'settings',
+  is_standard: 1,
+}
+
 const logoutItem = {
   name1: 'logout',
   label: 'Log out',
@@ -5,8 +12,10 @@ const logoutItem = {
   is_standard: 1,
 }
 
+const fallbackItems = [settingsItem, { type: 'Separator' }, logoutItem]
+
 export function buildUserDropdownItems(items, mapItem) {
-  const visibleItems = (items || []).filter((item) => !item.hidden)
+  const visibleItems = (items ?? fallbackItems).filter((item) => !item.hidden)
   const groups = [{ group: 'Dropdown Items', hideLabel: true, items: [] }]
 
   visibleItems.forEach((item) => {

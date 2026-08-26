@@ -41,13 +41,35 @@ export const acquisitionWorkspaceCapabilities = [
   'system.configure',
 ]
 
+// Navigation capabilities are intentionally narrower than the route guard
+// capabilities above.  The router still protects every admissions route with
+// the broad workspace contract; these groups only control discoverability in
+// the desktop/mobile sidebars and saved-view affordances.
+export const admissionsManagementCapabilities = [
+  'team.oversee',
+  'admissions.oversee',
+  'system.configure',
+]
+
+export const admissionsDecisionCapabilities = [
+  'recommendation.decide',
+  'system.configure',
+]
+
+export const eventNavigationCapabilities = [
+  'interaction.record',
+  'acquisition.manage',
+  'admissions.oversee',
+  'system.configure',
+]
+
 // This declaration controls discoverability only; backend permissions remain authoritative.
 export const navigationEntries = [
   {
     label: 'Sales Dashboard',
     icon: 'salesDashboard',
     to: 'Dashboard',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsManagementCapabilities,
   },
   {
     label: 'Marketing Dashboard',
@@ -59,7 +81,7 @@ export const navigationEntries = [
     label: 'My Recommendations',
     icon: 'recommendations',
     to: 'My Recommendations',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsDecisionCapabilities,
   },
   {
     label: 'Prospective Students',
@@ -83,13 +105,13 @@ export const navigationEntries = [
     label: 'High Schools',
     icon: 'schools',
     to: 'High Schools',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsManagementCapabilities,
   },
   {
     label: 'Persons',
     icon: 'persons',
     to: 'CRM Persons',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsManagementCapabilities,
   },
   {
     label: 'Campaigns',
@@ -101,15 +123,15 @@ export const navigationEntries = [
     label: 'Segments',
     icon: 'segments',
     to: 'CRM Segments',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: acquisitionWorkspaceCapabilities,
   },
   {
     label: 'Events',
     icon: 'events',
     to: 'CRM Events',
-    // Events are marketing-owned for mutations, but Sale and Lead Sales have
-    // an approved read projection for admissions attribution.
-    anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities],
+    // Events are marketing-owned for mutations, but admissions operators need
+    // read access for Open Day/Campus Tour actions and attribution context.
+    anyOf: eventNavigationCapabilities,
   },
   {
     label: 'Staff',

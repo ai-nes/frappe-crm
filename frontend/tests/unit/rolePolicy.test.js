@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  admissionsWorkspaceCapabilities,
   canConfigureSystem,
   canManageAttribution,
   canAccessNavigationRoute,
@@ -40,8 +41,96 @@ describe('rolePolicy', () => {
     expect(marketingNavigation).toEqual([
       'Marketing Dashboard',
       'Campaigns',
+      'Segments',
       'Events',
     ])
+  })
+
+  it('keeps each admissions role within its operational workspace', () => {
+    const visibleLabels = (crm_capabilities) =>
+      visibleNavigation(navigationEntries, { crm_capabilities }).map(
+        (entry) => entry.label,
+      )
+
+    expect(
+      visibleLabels([
+        'student.execute',
+        'recommendation.decide',
+        'interaction.record',
+      ]),
+    ).toEqual([
+      'My Recommendations',
+      'Prospective Students',
+      'Contacts',
+      'Enrolled Students',
+      'Events',
+      'Notes',
+      'Tasks',
+      'Call Logs',
+    ])
+
+    expect(
+      visibleLabels([
+        'student.execute',
+        'recommendation.decide',
+        'interaction.record',
+        'team.oversee',
+      ]),
+    ).toEqual([
+      'Sales Dashboard',
+      'My Recommendations',
+      'Prospective Students',
+      'Contacts',
+      'Enrolled Students',
+      'High Schools',
+      'Persons',
+      'Events',
+      'Notes',
+      'Tasks',
+      'Call Logs',
+    ])
+
+    expect(
+      visibleLabels(['admissions.oversee', 'recommendation.decide']),
+    ).toEqual([
+      'Sales Dashboard',
+      'My Recommendations',
+      'Prospective Students',
+      'Contacts',
+      'Enrolled Students',
+      'High Schools',
+      'Persons',
+      'Events',
+      'Notes',
+      'Tasks',
+      'Call Logs',
+    ])
+  })
+
+  it('keeps event workflows available while hiding acquisition segmentation', () => {
+    const leadSalesUser = {
+      crm_capabilities: [
+        'student.execute',
+        'recommendation.decide',
+        'interaction.record',
+        'team.oversee',
+      ],
+    }
+
+    expect(canAccessNavigationRoute(leadSalesUser, 'CRM Segments')).toBe(false)
+    expect(canAccessNavigationRoute(leadSalesUser, 'CRM Events')).toBe(true)
+    expect(canAccessNavigationRoute(leadSalesUser, 'CRM Students')).toBe(true)
+  })
+
+  it('keeps broad route capability separate from sidebar discoverability', () => {
+    const saleUser = {
+      crm_capabilities: ['student.execute', 'recommendation.decide'],
+    }
+
+    expect(hasAnyCapability(saleUser, admissionsWorkspaceCapabilities)).toBe(
+      true,
+    )
+    expect(canAccessNavigationRoute(saleUser, 'High Schools')).toBe(false)
   })
 
   it('requires one declared capability for role-scoped affordances', () => {
@@ -76,8 +165,12 @@ describe('rolePolicy', () => {
     expect(canConfigureSystem(systemManager)).toBe(true)
     expect(canManageRoles(systemManager)).toBe(true)
     expect(canManageRoles({ crm_capabilities: ['team.oversee'] })).toBe(false)
-    expect(canManageAttribution({ crm_capabilities: ['attribution.manage'] })).toBe(true)
-    expect(canManageAttribution({ crm_capabilities: ['acquisition.manage'] })).toBe(false)
+    expect(
+      canManageAttribution({ crm_capabilities: ['attribution.manage'] }),
+    ).toBe(true)
+    expect(
+      canManageAttribution({ crm_capabilities: ['acquisition.manage'] }),
+    ).toBe(false)
   })
 
   it('keeps a shared navigation declaration and canonical selectable roles', () => {
@@ -89,6 +182,14 @@ describe('rolePolicy', () => {
     })
     expect(roleOptionFor('Sale')).toMatchObject({ value: 'Sale' })
     expect(roleOptionFor('Sales')).toBeUndefined()
+  })
+
+  it('keeps system managers able to discover every declared module', () => {
+    expect(
+      visibleNavigation(navigationEntries, {
+        crm_capabilities: ['system.configure'],
+      }),
+    ).toHaveLength(navigationEntries.length)
   })
 
   it('labels migration state without making it a capability grant', () => {

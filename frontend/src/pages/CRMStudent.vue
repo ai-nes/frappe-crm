@@ -7,7 +7,7 @@
         </template>
       </Breadcrumbs>
     </template>
-    <template v-if="!errorTitle" #right-header>
+    <template v-if="doc.name && !errorTitle" #right-header>
       <CustomActions
         v-if="document._actions?.length"
         :actions="document._actions"
@@ -32,7 +32,13 @@
       />
     </template>
   </LayoutHeader>
-  <div v-if="doc.name" class="flex h-full overflow-hidden">
+  <ErrorPage
+    v-if="errorTitle"
+    :errorTitle="errorTitle"
+    :errorMessage="errorMessage"
+  />
+  <StudentDetailLoadingState v-else-if="isDocumentPending" />
+  <div v-else-if="doc.name" class="flex h-full overflow-hidden">
     <Tabs
       v-model="tabIndex"
       :tabs="tabs"
@@ -44,12 +50,14 @@
           :student="crmStudentId"
           :ownership-summary="ownershipSummary"
           :ownership-loading="ownership.loading"
+          :ownership-fetched="ownership.fetched"
           :lifecycle-stage="lifecycleStage"
           :sla-attempt="studentSLA.data?.attempt"
           :sla-capabilities="studentSLA.data?.capabilities || {}"
           :sla-loading="studentSLA.loading"
           :engagement-context="engagementContext.data"
           :engagement-loading="engagementContext.loading"
+          :engagement-fetched="engagementContext.fetched"
           :demo-context="studentDemoContext"
           :demo-context-loading="engagementContext.loading"
           :student-decision-context="studentDecisionContext"
@@ -62,7 +70,9 @@
           @converted="handleConverted"
         />
         <Activities
-          v-else-if="!['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)"
+          v-else-if="
+            !['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)
+          "
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -106,30 +116,75 @@
           <dl class="space-y-3 text-sm">
             <div class="flex items-center justify-between gap-3">
               <dt class="text-ink-gray-5">{{ __('Lifecycle') }}</dt>
-              <dd class="truncate font-medium text-ink-gray-8">{{ lifecycleStage }}</dd>
+              <dd class="truncate font-medium text-ink-gray-8">
+                <span
+                  v-if="engagementContext.loading && !engagementContext.data"
+                  class="text-ink-gray-5"
+                >
+                  {{ __('Loading…') }}
+                </span>
+                <span v-else>{{ lifecycleStage }}</span>
+              </dd>
             </div>
             <div class="flex items-center justify-between gap-3">
               <dt class="text-ink-gray-5">{{ __('Current assignment') }}</dt>
-              <dd class="truncate text-right text-ink-gray-7" :title="ownershipSummary">
-                <span v-if="ownership.loading" class="text-ink-gray-5">{{ __('Loading…') }}</span>
+              <dd
+                class="truncate text-right text-ink-gray-7"
+                :title="ownershipSummary"
+              >
+                <span
+                  v-if="ownership.loading && !ownership.data"
+                  class="text-ink-gray-5"
+                  >{{ __('Loading…') }}</span
+                >
                 <span v-else>{{ ownershipSummary }}</span>
               </dd>
             </div>
-            <div v-if="studentSLA.data?.attempt" class="flex items-center justify-between gap-3">
+            <div
+              v-if="studentSLA.data?.attempt"
+              class="flex items-center justify-between gap-3"
+            >
               <dt class="text-ink-gray-5">{{ __('SLA') }}</dt>
               <dd class="truncate text-right text-ink-gray-7">
-                <Badge :label="slaPresentation.label" :theme="slaPresentation.theme" variant="subtle" />
+                <Badge
+                  :label="slaPresentation.label"
+                  :theme="slaPresentation.theme"
+                  variant="subtle"
+                />
               </dd>
             </div>
-            <div v-if="studentSLA.data?.attempt?.next_transition_at" class="flex items-center justify-between gap-3">
+            <div
+              v-if="studentSLA.data?.attempt?.next_transition_at"
+              class="flex items-center justify-between gap-3"
+            >
               <dt class="text-ink-gray-5">{{ __('Next deadline') }}</dt>
               <dd class="truncate text-right text-ink-gray-7">
-                {{ formatStudentSLADate(studentSLA.data.attempt.next_transition_at) }}
+                {{
+                  formatStudentSLADate(
+                    studentSLA.data.attempt.next_transition_at,
+                  )
+                }}
               </dd>
             </div>
           </dl>
         </section>
+        <StudentDetailLoadingState
+          v-if="!hasSidePanelSections && !sections.error"
+          class="min-h-0 flex-1 overflow-y-auto"
+          variant="side-panel"
+        />
+        <div
+          v-else-if="!hasSidePanelSections"
+          class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-5 text-center"
+          role="alert"
+        >
+          <p class="text-sm text-ink-gray-6">
+            {{ __('Unable to load student fields.') }}
+          </p>
+          <Button :label="__('Retry')" @click="sections.reload()" />
+        </div>
         <SidePanelLayout
+          v-else
           class="min-h-0 flex-1"
           :sections="sections.data"
           doctype="CRM Student"
@@ -141,11 +196,6 @@
       </div>
     </Resizer>
   </div>
-  <ErrorPage
-    v-else-if="errorTitle"
-    :errorTitle="errorTitle"
-    :errorMessage="errorMessage"
-  />
   <ChangeStudentOwnershipModal
     v-if="showOwnershipModal"
     v-model="showOwnershipModal"
@@ -167,8 +217,8 @@
     :student="crmStudentId"
     :lifecycle="engagementContext.data.lifecycle || {}"
     @changed="handleLifecycleChanged"
-          @refresh-required="engagementContext.reload()"
-        />
+    @refresh-required="engagementContext.reload()"
+  />
   <RecordStudentOutcomeModal
     v-if="showOutcomeModal && engagementContext.data"
     v-model="showOutcomeModal"
@@ -216,7 +266,12 @@ import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStude
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
 import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
 import StudentAdmissionsActionDialog from '@/components/StudentAdmissionsActionDialog.vue'
-import { lifecycleTargets, safeLifecycleError, studentEngagementApi } from '@/utils/studentEngagement'
+import StudentDetailLoadingState from '@/components/StudentDetailLoadingState.vue'
+import {
+  lifecycleTargets,
+  safeLifecycleError,
+  studentEngagementApi,
+} from '@/utils/studentEngagement'
 import { salesActionItem } from '@/utils/studentDecision'
 import { normalizeStudentAdmissionsContext } from '@/utils/studentAdmissionsContext'
 import { formatStudentSLADate, slaStatusPresentation } from '@/utils/studentSLA'
@@ -230,6 +285,7 @@ import {
   createResource,
   Tabs,
   Badge,
+  Button,
   Breadcrumbs,
   usePageMeta,
   toast,
@@ -259,7 +315,9 @@ const interactionRefreshKey = ref(0)
 const selectedSalesAction = ref(null)
 const showSalesActionModal = computed({
   get: () => Boolean(selectedSalesAction.value),
-  set: (value) => { if (!value) selectedSalesAction.value = null },
+  set: (value) => {
+    if (!value) selectedSalesAction.value = null
+  },
 })
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
@@ -270,12 +328,15 @@ const canChangeOwnership = computed(() =>
   ]),
 )
 
-const { document, error } = useDocument(
-  'CRM Student',
-  props.crmStudentId,
-)
+const { document, error } = useDocument('CRM Student', props.crmStudentId)
 
 const doc = computed(() => document.doc || {})
+const isDocumentPending = computed(
+  () =>
+    !doc.value.name &&
+    !errorTitle.value &&
+    (!document.get?.fetched || Boolean(document.get?.loading)),
+)
 
 const ownership = createResource({
   url: 'crm.api.student_ownership.get_student_ownership',
@@ -300,11 +361,16 @@ const ownershipActivityEntries = computed(() =>
       name: `student-ownership-${event.name || event.event_id || event.creation || event.timestamp}`,
       activity_type: 'student_engagement',
       creation: event.creation || event.timestamp,
-      data: { summary: event.summary || event.reason || __('Ownership changed') },
+      data: {
+        summary: event.summary || event.reason || __('Ownership changed'),
+      },
     })),
 )
-const routingRequestId = computed(() =>
-  ownership.data?.routing_request || ownership.data?.latest_routing_request || doc.value?.routing_request,
+const routingRequestId = computed(
+  () =>
+    ownership.data?.routing_request ||
+    ownership.data?.latest_routing_request ||
+    doc.value?.routing_request,
 )
 const studentSLA = createResource({
   url: 'crm.api.student_sla.get_student_sla_status',
@@ -328,24 +394,34 @@ const lifecycleStage = computed(() => {
     doc.value?.enrollment_status
   return stage ? __(stage) : __('Lifecycle unavailable')
 })
-const canRequestLifecycleTransition = computed(() =>
-  lifecycleTargets(engagementContext.data?.lifecycle).length > 0 &&
-  engagementContext.data?.capabilities?.transition !== false,
+const canRequestLifecycleTransition = computed(
+  () =>
+    lifecycleTargets(engagementContext.data?.lifecycle).length > 0 &&
+    engagementContext.data?.capabilities?.transition !== false,
 )
 const studentDecisionContext = computed(() => {
   // Phase 6 extends the existing Student context projection. Accept the
   // versioned section name while remaining harmless during a staged rollout.
-  const context = engagementContext.data?.decision_context || engagementContext.data?.decisions || engagementContext.data?.phase_6 || engagementContext.data?.decision
+  const context =
+    engagementContext.data?.decision_context ||
+    engagementContext.data?.decisions ||
+    engagementContext.data?.phase_6 ||
+    engagementContext.data?.decision
   if (!context) return null
   return {
     pendingDecision: context.pending_decision || context.pending_recommendation,
-    activeAction: context.active_action ? salesActionItem(context.active_action) : null,
-    latestTerminalAction: context.latest_terminal_action ? salesActionItem(context.latest_terminal_action) : null,
+    activeAction: context.active_action
+      ? salesActionItem(context.active_action)
+      : null,
+    latestTerminalAction: context.latest_terminal_action
+      ? salesActionItem(context.latest_terminal_action)
+      : null,
   }
 })
 const availableAdmissionsActions = computed(() => {
   const actions = engagementContext.data?.capabilities?.actions
-  const admissionsActions = engagementContext.data?.admissions_context?.capabilities?.actions
+  const admissionsActions =
+    engagementContext.data?.admissions_context?.capabilities?.actions
   return Array.isArray(actions)
     ? actions
     : Array.isArray(admissionsActions)
@@ -354,12 +430,16 @@ const availableAdmissionsActions = computed(() => {
 })
 const studentDemoContext = computed(() =>
   normalizeStudentAdmissionsContext(
-    engagementContext.data?.admissions_context || engagementContext.data?.demo_context,
+    engagementContext.data?.admissions_context ||
+      engagementContext.data?.demo_context,
     studentDecisionContext.value,
   ),
 )
 const engagementActivityEntries = computed(() => {
-  const history = engagementContext.data?.history?.items || engagementContext.data?.history || []
+  const history =
+    engagementContext.data?.history?.items ||
+    engagementContext.data?.history ||
+    []
   return history
     .filter((event) => event?.occurred_at || event?.creation)
     .map((event) => ({
@@ -375,8 +455,10 @@ const engagementActivityEntries = computed(() => {
       },
     }))
 })
-const engagementHistoryCursor = computed(() =>
-  engagementContext.data?.history?.next_cursor || engagementContext.data?.next_cursor,
+const engagementHistoryCursor = computed(
+  () =>
+    engagementContext.data?.history?.next_cursor ||
+    engagementContext.data?.next_cursor,
 )
 const demoContextActivityEntries = computed(() =>
   studentDemoContext.value.activity.map((event) => ({
@@ -398,15 +480,20 @@ const routingStatus = createResource({
   initialData: null,
 })
 
-watch(routingRequestId, (request) => {
-  if (request) routingStatus.reload()
-  else routingStatus.data = null
-}, { immediate: true })
+watch(
+  routingRequestId,
+  (request) => {
+    if (request) routingStatus.reload()
+    else routingStatus.data = null
+  },
+  { immediate: true },
+)
 
 function handleOwnershipChanged(response) {
   ownership.reload()
   studentSLA.reload()
-  if (response?.revision !== undefined) ownership.data = { ...ownership.data, ...response }
+  if (response?.revision !== undefined)
+    ownership.data = { ...ownership.data, ...response }
 }
 
 function handleSLAChanged(response) {
@@ -460,7 +547,10 @@ async function loadMoreEngagementHistory() {
       history_cursor: engagementHistoryCursor.value,
       history_limit: 50,
     })
-    const currentHistory = engagementContext.data?.history?.items || engagementContext.data?.history || []
+    const currentHistory =
+      engagementContext.data?.history?.items ||
+      engagementContext.data?.history ||
+      []
     const nextHistory = nextPage?.history?.items || nextPage?.history || []
     engagementContext.data = {
       ...engagementContext.data,
@@ -471,14 +561,18 @@ async function loadMoreEngagementHistory() {
       },
     }
   } catch (err) {
-    toast.error(safeLifecycleError(err, __('Unable to load more lifecycle history.')))
+    toast.error(
+      safeLifecycleError(err, __('Unable to load more lifecycle history.')),
+    )
   }
 }
 
 watch(error, (err) => {
   if (err) {
     errorTitle.value = __(
-      err.exc_type == 'DoesNotExistError' ? 'Document not found' : 'Error occurred',
+      err.exc_type == 'DoesNotExistError'
+        ? 'Document not found'
+        : 'Error occurred',
     )
     errorMessage.value = __(err.messages?.[0] || 'An error occurred')
   } else {
@@ -498,14 +592,19 @@ const breadcrumbs = computed(() => {
         name: 'CRM Students',
         query: {
           stage:
-            doc.value?.enrollment_status === 'Đã chuyển đổi' ? 'enrolled' : 'intake',
+            doc.value?.enrollment_status === 'Đã chuyển đổi'
+              ? 'enrolled'
+              : 'intake',
         },
       },
     },
   ]
   items.push({
     label: doc.value?.student_name || props.crmStudentId,
-    route: { name: 'CRM Student', params: { crmStudentId: props.crmStudentId } },
+    route: {
+      name: 'CRM Student',
+      params: { crmStudentId: props.crmStudentId },
+    },
   })
   return items
 })
@@ -520,7 +619,8 @@ usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 function handleSidePanelFieldChange() {
   document.save.submit(null, {
     onSuccess: () => sections.reload(),
-    onError: (err) => toast.error(err.messages?.[0] || __('Error updating field')),
+    onError: (err) =>
+      toast.error(err.messages?.[0] || __('Error updating field')),
   })
 }
 
@@ -556,11 +656,14 @@ const sections = createResource({
     ])
     return data.map((section) => ({
       ...section,
-      columns: section.columns?.map((col) => ({
-        ...col,
-        fields: col.fields?.filter((f) => !hiddenFields.has(f.fieldname)) || [],
-      })) || [],
+      columns:
+        section.columns?.map((col) => ({
+          ...col,
+          fields:
+            col.fields?.filter((f) => !hiddenFields.has(f.fieldname)) || [],
+        })) || [],
     }))
   },
 })
+const hasSidePanelSections = computed(() => Array.isArray(sections.data))
 </script>
