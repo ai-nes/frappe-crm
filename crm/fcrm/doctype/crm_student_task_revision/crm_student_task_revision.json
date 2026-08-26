@@ -1,0 +1,15 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "task", "revision", "package_type", "package", "author", "reason", "created_at"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "PKG-.YYYY.-", "options": "PKG-.YYYY.-"},
+  {"fieldname": "task", "fieldtype": "Link", "options": "CRM Student Task", "reqd": 1, "read_only": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "reqd": 1, "read_only": 1},
+  {"fieldname": "package_type", "fieldtype": "Select", "options": "CallScriptV1\nEmailPackageV1\nGeneric", "reqd": 1, "read_only": 1},
+  {"fieldname": "package", "fieldtype": "JSON", "reqd": 1, "read_only": 1},
+  {"fieldname": "author", "fieldtype": "Link", "options": "User", "reqd": 1, "read_only": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "read_only": 1},
+  {"fieldname": "created_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Task Revision", "permissions": [{"read": 1, "role": "System Manager"}], "sort_field": "creation", "sort_order": "DESC"
+}

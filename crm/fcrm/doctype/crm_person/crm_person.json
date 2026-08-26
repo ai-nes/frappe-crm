@@ -135,80 +135,22 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "if_owner": 1,
-   "print": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Admissions Operations",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "report": 1,
-   "role": "Admissions Director"
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
    "role": "Lead Sales",
    "share": 1,
    "write": 1
   },
   {
-   "create": 1,
-   "if_owner": 1,
-   "print": 1,
    "read": 1,
-   "role": "Sales Manager",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "if_owner": 1,
-   "print": 1,
-   "read": 1,
-   "role": "Sales User",
-   "write": 1
+   "role": "Sale"
   },
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 1,

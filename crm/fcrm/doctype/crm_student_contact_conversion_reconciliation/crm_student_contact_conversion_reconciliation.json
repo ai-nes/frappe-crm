@@ -1,0 +1,152 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:run_id",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "run_id",
+  "mode",
+  "status",
+  "actor",
+  "correlation_id",
+  "schema_version",
+  "policy_version",
+  "started_at",
+  "completed_at",
+  "rows_checked",
+  "aggregate_counts",
+  "reason_codes",
+  "redacted_row_identifiers",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "run_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Run ID",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mode",
+   "options": "dry_run\napply",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "completed",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "started\ncompleted\nfailed",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Link",
+   "label": "Actor",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Correlation ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "schema_version",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Schema Version",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "policy_version",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Policy Version",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "rows_checked",
+   "fieldtype": "Int",
+   "label": "Rows Checked",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "aggregate_counts",
+   "fieldtype": "JSON",
+   "label": "Aggregate Counts",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason_codes",
+   "fieldtype": "JSON",
+   "label": "Reason Codes",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redacted_row_identifiers",
+   "fieldtype": "JSON",
+   "label": "Redacted Row Identifiers",
+   "read_only": 1,
+   "description": "Stable non-PII row references and reason categories only; never a Student or Contact snapshot."
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes",
+   "read_only": 1,
+   "description": "Redacted operator notes; PII is not permitted."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Contact Conversion Reconciliation",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"export": 1, "read": 1, "role": "System Manager"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "started_at",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "title_field": "run_id"
+}

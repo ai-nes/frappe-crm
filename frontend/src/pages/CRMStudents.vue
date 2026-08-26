@@ -13,10 +13,11 @@
         :actions="listView.customListActions"
       />
       <Button
+        v-if="canSubmitIntake"
         variant="solid"
-        :label="__('Create')"
+        :label="__('New student')"
         iconLeft="plus"
-        @click="createStudent"
+        @click="showIntakeModal = true"
       />
     </template>
   </LayoutHeader>
@@ -56,6 +57,18 @@
     name="Students"
     :icon="EnrollmentIcon"
   />
+  <StudentIntakeModal
+    v-if="showIntakeModal"
+    v-model="showIntakeModal"
+    @completed="handleIntakeCompleted"
+    @review-required="handleReviewRequired"
+  />
+  <DecideStudentIntakeReviewModal
+    v-if="showReviewModal && intakeReview"
+    v-model="showReviewModal"
+    :review="intakeReview"
+    @resolved="handleIntakeCompleted"
+  />
 </template>
 
 <script setup>
@@ -65,18 +78,21 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import CRMStudentsListView from '@/components/ListViews/CRMStudentsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import ViewControls from '@/components/ViewControls.vue'
+import StudentIntakeModal from '@/components/Modals/StudentIntakeModal.vue'
+import DecideStudentIntakeReviewModal from '@/components/Modals/DecideStudentIntakeReviewModal.vue'
 import EnrollmentIcon from '~icons/lucide/graduation-cap'
-import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
+import { usersStore } from '@/stores/users'
+import { hasAnyCapability } from '@/utils/rolePolicy'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ref, computed, watch } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Student')
-const { showModal } = useDoctypeModal()
 const route = useRoute()
 const router = useRouter()
+const { getCurrentUser } = usersStore()
 
 const funnelStage = computed(() => route.query.stage || 'intake')
 
@@ -129,17 +145,30 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+const showIntakeModal = ref(false)
+const showReviewModal = ref(false)
+const intakeReview = ref(null)
+const canSubmitIntake = computed(() =>
+  hasAnyCapability(getCurrentUser(), [
+    'student.execute',
+    'team.oversee',
+    'admissions.oversee',
+    'system.configure',
+  ]),
+)
 
-function createStudent() {
-  showModal({
-    doctype: 'CRM Student',
-    title: __('Student'),
-    callbacks: {
-      afterInsert: (doc) => {
-        router.push({ name: 'CRM Student', params: { crmStudentId: doc.name } })
-      },
-    },
-  })
+function handleReviewRequired(review) {
+  intakeReview.value = review
+  showReviewModal.value = true
+}
+
+function handleIntakeCompleted(result) {
+  students.value?.reload?.()
+  const student = result?.student || result?.student_name || result?.case_name
+  if (student) {
+    showIntakeModal.value = false
+    router.push({ name: 'CRM Student', params: { crmStudentId: student } })
+  }
 }
 
 const rows = computed(() => {

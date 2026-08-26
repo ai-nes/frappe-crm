@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "hash",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["target_doctype", "target_docname", "action", "new_value", "before_version", "initiated_by", "initiated_at", "authorized_by", "authorized_at", "expires_at", "status", "nonce_hash", "reason", "evidence_reference", "correlation_id", "used_at", "reconciliation_id"],
+ "fields": [
+  {"fieldname": "target_doctype", "fieldtype": "Link", "label": "Target Type", "options": "DocType", "reqd": 1, "read_only": 1},
+  {"fieldname": "target_docname", "fieldtype": "Dynamic Link", "label": "Target", "options": "target_doctype", "reqd": 1, "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Select", "label": "Action", "options": "Retire\nReactivate\nSupersede", "reqd": 1, "read_only": 1},
+  {"fieldname": "new_value", "fieldtype": "Data", "label": "Successor Value", "read_only": 1},
+  {"fieldname": "before_version", "fieldtype": "Int", "label": "Target Version", "reqd": 1, "read_only": 1},
+  {"fieldname": "initiated_by", "fieldtype": "Link", "label": "Initiator", "options": "User", "reqd": 1, "read_only": 1},
+  {"fieldname": "initiated_at", "fieldtype": "Datetime", "label": "Initiated At", "reqd": 1, "read_only": 1},
+  {"fieldname": "authorized_by", "fieldtype": "Link", "label": "Authorizer", "options": "User", "read_only": 1},
+  {"fieldname": "authorized_at", "fieldtype": "Datetime", "label": "Authorized At", "read_only": 1},
+  {"fieldname": "expires_at", "fieldtype": "Datetime", "label": "Expires At (UTC)", "reqd": 1, "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "Requested\nAuthorized\nUsed\nExpired", "default": "Requested", "read_only": 1},
+  {"fieldname": "nonce_hash", "fieldtype": "Data", "label": "Nonce Hash", "unique": 1, "reqd": 1, "read_only": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "reqd": 1, "read_only": 1},
+  {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference", "read_only": 1},
+  {"fieldname": "correlation_id", "fieldtype": "Data", "label": "Correlation ID", "read_only": 1},
+  {"fieldname": "used_at", "fieldtype": "Datetime", "label": "Used At", "read_only": 1},
+  {"fieldname": "reconciliation_id", "fieldtype": "Data", "label": "Reconciliation Marker", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "module": "FCRM",
+ "name": "CRM Master Data Break Glass",
+ "permissions": [
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Admissions Director"}
+ ]
+}

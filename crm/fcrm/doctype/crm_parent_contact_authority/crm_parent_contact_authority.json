@@ -1,0 +1,20 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "contact", "relationship_verified", "relationship_type", "lawful_basis", "allowed_channels", "effective_at", "expires_at", "proof_reference", "revoked_at", "revocation_evidence"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "PCA-.YYYY.-", "options": "PCA-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1},
+  {"fieldname": "contact", "fieldtype": "Link", "options": "CRM Contact", "reqd": 1, "read_only": 1},
+  {"fieldname": "relationship_verified", "fieldtype": "Check", "reqd": 1, "read_only": 1},
+  {"fieldname": "relationship_type", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "lawful_basis", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "allowed_channels", "fieldtype": "JSON", "reqd": 1, "read_only": 1},
+  {"fieldname": "effective_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1},
+  {"fieldname": "expires_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "proof_reference", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "revoked_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "revocation_evidence", "fieldtype": "Small Text", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Parent Contact Authority", "owner": "Administrator",
+ "permissions": [{"create": 1, "read": 1, "role": "System Manager"}], "sort_field": "creation", "sort_order": "DESC"
+}

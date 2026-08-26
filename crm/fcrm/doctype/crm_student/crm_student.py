@@ -29,11 +29,32 @@ class CRMStudent(Document):
 		self.flags.ignore_links = True
 
 	def before_insert(self):
+		if not getattr(frappe.flags, "student_intake_service", False):
+			frappe.throw(
+				_("New CRM Students must be created through the Student intake command."),
+				title=_("Student intake required"),
+			)
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
 
 	def before_save(self):
+		before = self.get_doc_before_save()
+		if before and not getattr(frappe.flags, "student_lifecycle_service", False):
+			lifecycle_fields = ("enrollment_status", "lifecycle_stage")
+			if any(before.get(field) != self.get(field) for field in lifecycle_fields):
+				frappe.throw(
+					_("Student lifecycle changes must use the lifecycle transition command."),
+					frappe.PermissionError,
+					title=_("Lifecycle command required"),
+				)
+		if before and not getattr(frappe.flags, "student_ownership_service", False):
+			ownership_fields = ("assigned_to", "owner_staff", "owning_team", "owning_pool")
+			if any(before.get(field) != self.get(field) for field in ownership_fields):
+				frappe.throw(
+					_("Student ownership changes must use the ownership command."),
+					title=_("Ownership command required"),
+				)
 		self._normalize_phone_fields()
 		self._resolve_geo()
 		if self.cohort_end_year:
@@ -43,12 +64,11 @@ class CRMStudent(Document):
 		self._validate_phone_format()
 		self._resolve_geo()
 		self._validate_high_school_format()
-		self._validate_unique_phone()
-		self._validate_unique_email()
-		self._validate_unique_id_number()
-		self._derive_owner_fields()
+		if getattr(frappe.flags, "student_intake_service", False) or getattr(frappe.flags, "student_ownership_service", False) or not self.get_doc_before_save():
+			self._derive_owner_fields()
 		self._derive_lifecycle_stage()
-		self._log_assignment_change()
+		if getattr(frappe.flags, "student_ownership_service", False):
+			self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
 
@@ -103,6 +123,15 @@ class CRMStudent(Document):
 
 	def on_update(self):
 		self._log_enrollment_transition()
+		before = self.get_doc_before_save()
+		from crm.services.student_context import bump_student_context_revision, material_student_changed
+
+		if material_student_changed(self, before):
+			bump_student_context_revision(self.name, "student_material_change")
+		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
+
+		if student_score_input_changed(self, before):
+			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def _log_enrollment_transition(self):
 		# Fires on both insert and update (Frappe calls on_update after
@@ -151,78 +180,6 @@ class CRMStudent(Document):
 			self.email = self.email.strip().lower()
 		if isinstance(self.id_number, str):
 			self.id_number = self.id_number.strip()
-
-	def _validate_unique_phone(self):
-		if not self.phone:
-			return
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"phone": self.phone, "name": ("!=", self.name or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Số điện thoại trùng",
-			)
-		existing_contact = frappe.db.get_value(
-			"CRM Contact",
-			{"phone": self.phone, "student": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing_contact:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing_contact.name}">{existing_contact.full_name}</a>',
-				title="Số điện thoại trùng",
-			)
-
-	def _validate_unique_email(self):
-		if not self.email:
-			return
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"email": self.email, "name": ("!=", self.name or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Email trùng",
-			)
-		existing_contact = frappe.db.get_value(
-			"CRM Contact",
-			{"email": self.email, "student": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing_contact:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing_contact.name}">{existing_contact.full_name}</a>',
-				title="Email trùng",
-			)
-
-	def _validate_unique_id_number(self):
-		if not self.id_number:
-			return
-		existing = frappe.db.get_value(
-			"CRM Student",
-			{"id_number": self.id_number, "name": ("!=", self.name or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing:
-			frappe.throw(
-				f"Số CCCD <b>{self.id_number}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing.name}">{existing.student_name}</a>',
-				title="Số CCCD trùng",
-			)
 
 	@staticmethod
 	def default_list_data():
@@ -287,78 +244,34 @@ class CRMStudent(Document):
 
 
 @frappe.whitelist()
-def convert_to_contact(student_name):
-	student = frappe.get_doc("CRM Student", student_name)
-
-	existing_contact = frappe.db.get_value("CRM Contact", {"student": student.name}, "name")
-	if existing_contact:
-		# Raw field writes (db_set / db.set_value) bypass validate(), so
-		# lifecycle_stage — normally derived automatically — must be set
-		# explicitly here too, or it drifts out of sync with enrollment_status
-		# (see crm.fcrm.lifecycle.get_lifecycle_stage).
-		reconverted_stage = get_lifecycle_stage("Có triển vọng")
-		if student.enrollment_status != "Có triển vọng":
-			set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
-			student.db_set("lifecycle_stage", reconverted_stage)
-		frappe.db.set_value(
-			"CRM Contact",
-			existing_contact,
-			{"enrollment_status": "Có triển vọng", "lifecycle_stage": reconverted_stage},
-			update_modified=False,
+def convert_to_contact(
+	student_name,
+	expected_lifecycle_revision=None,
+	idempotency_key=None,
+	correlation_id=None,
+):
+	"""Retained route for old clients; it cannot bypass the conversion command."""
+	if expected_lifecycle_revision in (None, "") or not str(idempotency_key or "").strip():
+		frappe.throw(
+			_("CONVERSION_ENDPOINT_RETIRED: use crm.api.student_conversion.convert_student."),
+			frappe.ValidationError,
 		)
-		return existing_contact
+	from crm.fcrm.student_conversion import convert_student
 
-	if not student.phone:
-		frappe.throw(_("Student must have a phone number before converting to a contact."))
-
-	crm_staff_name = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
-
-	contact = frappe.get_doc({
-		"doctype": "CRM Contact",
-		"full_name": student.student_name,
-		"phone": student.phone,
-		"email": student.email,
-		"high_school": student.high_school,
-		"province": student.province,
-		"major": student.major,
-		"aspiration": student.aspiration,
-		"source": student.source,
-		"admission_year": student.admission_year,
-		"branch": student.branch,
-		"student": student.name,
-		"assigned_to": student.assigned_to or crm_staff_name,
-		"enrollment_status": "Có triển vọng",
-		"lead_status": "Mới",
-		"parent_name": student.alt_name,
-		"parent_phone": student.alt_phone,
-	})
-	contact.insert(ignore_permissions=True)
-
-	set_enrollment_status(student, "Có triển vọng", source="convert_to_contact")
-	student.db_set("lifecycle_stage", get_lifecycle_stage("Có triển vọng"))
-
-	return contact.name
+	return convert_student(
+		student=student_name,
+		expected_lifecycle_revision=expected_lifecycle_revision,
+		idempotency_key=idempotency_key,
+		correlation_id=correlation_id,
+	)
 
 
 @frappe.whitelist()
 def create_from_contact(contact):
-	contact_doc = frappe.get_doc("Contact", contact)
-
-	if not contact_doc.has_permission("read"):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
-
-	if not frappe.has_permission("CRM Student", "create"):
-		frappe.throw(_("Not permitted"), frappe.PermissionError)
-
-	student = frappe.get_doc({
-		"doctype": "CRM Student",
-		"student_name": contact_doc.full_name or contact_doc.name,
-		"phone": contact_doc.get("phone"),
-		"email": contact_doc.email_id,
-		"enrollment_status": "Mới",
-	})
-	student.insert()
-	return student.name
+	# Contact is post-conversion identity data. Creating an admissions Student
+	# from it bypasses identity/cycle resolution, review, pool selection, and
+	# command receipts; the canonical intake service is the only allowed writer.
+	frappe.throw(_("Creating a Student from Contact is retired; use the Student intake command."), frappe.PermissionError)
 
 
 def get_permission_query_conditions(user=None):

@@ -44,6 +44,10 @@ class TestCRMSegment(FrappeTestCase):
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
+		# attach_segment_to_campaign commits each batch; close any remaining test
+		# transaction before deleting the linked Student fixtures, otherwise a
+		# Frappe test connection can retain a row lock across teardown.
+		frappe.db.commit()
 		test_campaigns = frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name")
 		if test_campaigns:
 			for name in frappe.db.get_all(
@@ -56,8 +60,11 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.delete_doc("CRM Campaign", name, force=True)
 		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"phone": ["like", "00%"]}, pluck="name"):
-			frappe.delete_doc("CRM Student", name, force=True)
+		# Attribution attach commits in batches.  Use a direct bulk delete after
+		# dependent touchpoints are gone; delete_doc's row-locking path can race
+		# the test connection's just-committed batch and make teardown flaky.
+		frappe.db.delete("CRM Student", {"student_name": ["like", "_Test Segment%"]})
+		frappe.db.commit()
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
@@ -71,11 +78,15 @@ class TestCRMSegment(FrappeTestCase):
 		return doc.name
 
 	def _make_campaign(self, title, campus):
+		if frappe.db.exists("CRM Campaign", title):
+			for name in frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": title}, pluck="name"):
+				frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
+			frappe.delete_doc("CRM Campaign", title, force=True)
 		doc = frappe.get_doc({"doctype": "CRM Campaign", "title": title, "campus": campus})
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _make_user(self, prefix, roles=("Counseller",)):
+	def _make_user(self, prefix, roles=("Lead Sales",)):
 		email = f"{frappe.scrub(prefix)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
@@ -99,6 +110,10 @@ class TestCRMSegment(FrappeTestCase):
 		# counter can't collide with imported production-like data.
 		TestCRMSegment._next_test_phone += 1
 		phone = "00" + str(TestCRMSegment._next_test_phone).zfill(8)
+		if "student" not in kwargs:
+			kwargs["student"] = self._make_student(
+				suffix, f"09{str(40000000 + TestCRMSegment._next_test_phone).zfill(8)}"
+			)
 		lifecycle_stage = kwargs.pop("lifecycle_stage", None)
 		if lifecycle_stage:
 			kwargs["enrollment_status"] = self.LIFECYCLE_STAGE_ENROLLMENT_STATUS[lifecycle_stage]
@@ -111,6 +126,26 @@ class TestCRMSegment(FrappeTestCase):
 			}
 		)
 		doc.insert(ignore_permissions=True)
+		return doc.name
+
+	def _make_student(self, suffix, phone):
+		student_name = f"_Test Segment {suffix} Student"
+		if frappe.db.exists("CRM Student", student_name):
+			frappe.delete_doc("CRM Student", student_name, force=True)
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": student_name,
+				"phone": phone,
+				"enrollment_status": "Có triển vọng",
+			}
+		)
+		previous_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			doc.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_flag
 		return doc.name
 
 	def _make_segment(self, title, filters):
@@ -247,7 +282,7 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertEqual(len(result["contacts"]), 2)
 
 	def test_preview_private_segment_visible_to_owner(self):
-		owner_email = self._make_user("_Test Segment Owner", roles=("Counseller", "System Manager"))
+		owner_email = self._make_user("_Test Segment Owner", roles=("Lead Sales", "System Manager"))
 		frappe.set_user(owner_email)
 		try:
 			filters = {
@@ -288,8 +323,8 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_preview_public_segment_visible_to_other_users(self):
-		owner_email = self._make_user("_Test Segment PubOwner", roles=("Counseller", "System Manager"))
-		other_email = self._make_user("_Test Segment PubOther", roles=("Counseller", "System Manager"))
+		owner_email = self._make_user("_Test Segment PubOwner", roles=("Lead Sales", "System Manager"))
+		other_email = self._make_user("_Test Segment PubOther", roles=("Lead Sales", "System Manager"))
 
 		frappe.set_user(owner_email)
 		filters = {
@@ -406,6 +441,7 @@ class TestCRMSegment(FrappeTestCase):
 				"doctype": "CRM Campaign Touchpoint",
 				"crm_campaign": campaign,
 				"crm_contact": self.contacts[0],
+				"student": frappe.db.get_value("CRM Contact", self.contacts[0], "student"),
 				"source": "Manual",
 			}
 		).insert(ignore_permissions=True)
@@ -456,10 +492,14 @@ class TestCRMSegment(FrappeTestCase):
 		boundary between batches."""
 		campus = self._make_campus("_Test Segment Batch Campus")
 		campaign = self._make_campaign("_Test Segment Batch Campaign", campus)
-		extra_contacts = [
-			self._make_contact(f"Batch{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
-			for i in range(6)
-		]
+		extra_contacts = []
+		for i in range(6):
+			student = self._make_student(f"Batch{i}", f"09{str(20000000 + i).zfill(8)}")
+			extra_contacts.append(
+				self._make_contact(
+					f"Batch{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus, student=student
+				)
+			)
 		filters = {
 			"groups": [
 				{
@@ -495,10 +535,14 @@ class TestCRMSegment(FrappeTestCase):
 		remaining rows without duplicating anything already committed."""
 		campus = self._make_campus("_Test Segment Fail Campus")
 		campaign = self._make_campaign("_Test Segment Fail Campaign", campus)
-		extra_contacts = [
-			self._make_contact(f"Fail{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
-			for i in range(4)
-		]
+		extra_contacts = []
+		for i in range(4):
+			student = self._make_student(f"Fail{i}", f"09{str(30000000 + i).zfill(8)}")
+			extra_contacts.append(
+				self._make_contact(
+					f"Fail{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus, student=student
+				)
+			)
 		filters = {
 			"groups": [
 				{
@@ -614,7 +658,7 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertEqual(result["page_length"], segment_api.MAX_PREVIEW_PAGE_LENGTH)
 
 	def test_attach_denied_for_role_without_campaign_or_segment_access(self):
-		"""Promoter-PR has no DocPerm row on CRM Segment and read-only on CRM
+		"""Marketing has no DocPerm row on CRM Segment and read-only on CRM
 		Campaign, so it must be rejected before any Touchpoint is created."""
 		campus = self._make_campus("_Test Segment Perm Campus")
 		campaign = self._make_campaign("_Test Segment Perm Campaign", campus)
@@ -623,7 +667,7 @@ class TestCRMSegment(FrappeTestCase):
 		}
 		segment = self._make_segment("_Test Segment Perm", filters)
 
-		limited_email = self._make_user("_Test Segment Limited", roles=("Promoter-PR",))
+		limited_email = self._make_user("_Test Segment Limited", roles=("Marketing",))
 		frappe.set_user(limited_email)
 		try:
 			with self.assertRaises(frappe.PermissionError):

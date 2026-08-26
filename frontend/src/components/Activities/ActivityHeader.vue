@@ -106,7 +106,7 @@ const showWhatsappTemplates = defineModel('showWhatsappTemplates', {
 const showFilesUploader = defineModel('showFilesUploader', { type: Boolean })
 const emailBox = defineModel('emailBox', { type: Object, default: () => ({}) })
 const canAssignStaff = ref(false)
-const staffAssignableDoctypes = ['CRM Student', 'CRM Contact']
+const staffAssignableDoctypes = ['CRM Contact']
 
 const defaultActions = computed(() => {
   let actions = [
@@ -124,6 +124,7 @@ const defaultActions = computed(() => {
       icon: h(PhoneIcon, { class: 'h-4 w-4' }),
       label: __('Log a Call'),
       onClick: () => props.modalRef.createCallLog(),
+      condition: () => props.doctype !== 'CRM Student',
     },
     {
       icon: h(PhoneIcon, { class: 'h-4 w-4' }),
@@ -184,6 +185,7 @@ const callActions = computed(() => {
       label: __('Log a Call'),
       icon: 'plus',
       onClick: () => props.modalRef.createCallLog(),
+      condition: () => props.doctype !== 'CRM Student',
     },
     {
       label: __('Make a Call'),

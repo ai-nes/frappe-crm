@@ -10,7 +10,13 @@
         </p>
       </div>
       <div class="flex items-center space-x-2">
-        <Button :label="__('Add')" icon-left="plus" variant="solid" @click="addRecord()" />
+        <Button
+          v-if="!isGovernedDoctype(activeTab.doctype)"
+          :label="__('Add')"
+          icon-left="plus"
+          variant="solid"
+          @click="addRecord()"
+        />
       </div>
     </div>
 
@@ -25,7 +31,7 @@
             ? 'border-ink-gray-9 text-ink-gray-9 font-medium'
             : 'border-transparent text-ink-gray-5 hover:text-ink-gray-8'
         "
-        @click="activeIdx = tab.idx"
+        @click="selectTab(tab.idx)"
       >
         {{ __(tab.label) }}
       </button>
@@ -33,6 +39,11 @@
 
     <!-- Records list -->
     <div class="flex-1 overflow-y-auto px-2">
+      <GovernanceApprovalQueue
+        v-if="activeTab.doctype === 'CRM Lost Reason'"
+        :doctype="activeTab.doctype"
+        @decided="activeResource.reload()"
+      />
       <div v-if="activeResource.loading" class="flex items-center justify-center h-32">
         <LoadingIndicator class="size-6" />
       </div>
@@ -42,17 +53,36 @@
           :key="record.name"
           class="flex items-center justify-between py-3"
         >
-          <span class="text-base text-ink-gray-9">{{ record.name }}</span>
+          <button
+            v-if="isGovernedDoctype(activeTab.doctype)"
+            type="button"
+            class="min-h-11 text-left text-base text-ink-gray-9 underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-4"
+            :aria-expanded="selectedRecord?.name === record.name"
+            @click="selectedRecord = selectedRecord?.name === record.name ? null : record"
+          >
+            {{ record.name }}
+          </button>
+          <span v-else class="text-base text-ink-gray-9">{{ record.name }}</span>
           <div class="flex items-center gap-2">
-            <Button variant="ghost" icon="edit-2" @click="editRecord(record.name)" />
-            <Button
-              variant="ghost"
-              theme="red"
-              icon="trash-2"
-              @click="deleteRecord(record.name)"
-            />
+            <template v-if="!isGovernedDoctype(activeTab.doctype)">
+              <Button variant="ghost" icon="edit-2" @click="editRecord(record.name)" />
+              <Button
+                variant="ghost"
+                theme="red"
+                icon="trash-2"
+                @click="deleteRecord(record.name)"
+              />
+            </template>
+            <span v-else class="text-xs text-ink-gray-5">{{ record.approval_state || __('Current') }}</span>
           </div>
         </div>
+        <MasterDataChangePanel
+          v-if="isGovernedDoctype(activeTab.doctype) && selectedRecord"
+          class="mb-3"
+          :doctype="activeTab.doctype"
+          :record="selectedRecord"
+          @proposed="handleProposal"
+        />
       </div>
       <div v-else class="flex flex-col items-center justify-center h-32 text-ink-gray-5">
         {{ __('No records found') }}
@@ -63,6 +93,9 @@
 
 <script setup>
 import { ref, computed } from 'vue'
+import MasterDataChangePanel from '@/components/Governance/MasterDataChangePanel.vue'
+import GovernanceApprovalQueue from '@/components/Governance/GovernanceApprovalQueue.vue'
+import { isGovernedDoctype } from '@/utils/governanceAudit'
 import { createResource, LoadingIndicator, toast } from 'frappe-ui'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 
@@ -73,15 +106,21 @@ const subTabs = [
   { idx: 1, label: __('Ward/Commune'), doctype: 'CRM Ward' },
   { idx: 2, label: __('Major'), doctype: 'CRM Major' },
   { idx: 3, label: __('Campus'), doctype: 'CRM Campus' },
+  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Lost Reason' },
 ]
 
 const activeIdx = ref(0)
 const activeTab = computed(() => subTabs[activeIdx.value])
+const selectedRecord = ref(null)
 
 function makeListResource(doctype) {
   return createResource({
     url: 'frappe.client.get_list',
-    params: { doctype, fields: ['name'], limit_page_length: 200 },
+    params: {
+      doctype,
+      fields: isGovernedDoctype(doctype) ? ['name', 'approval_state', 'version'] : ['name'],
+      limit_page_length: 200,
+    },
     auto: true,
   })
 }
@@ -90,6 +129,7 @@ const resources = subTabs.map((tab) => makeListResource(tab.doctype))
 const activeResource = computed(() => resources[activeIdx.value])
 
 function addRecord() {
+  if (isGovernedDoctype(activeTab.value.doctype)) return
   showModal({
     doctype: activeTab.value.doctype,
     title: activeTab.value.label,
@@ -100,6 +140,7 @@ function addRecord() {
 }
 
 function editRecord(name) {
+  if (isGovernedDoctype(activeTab.value.doctype)) return
   showModal({
     doctype: activeTab.value.doctype,
     name,
@@ -113,6 +154,7 @@ function editRecord(name) {
 const deleteResource = createResource({ url: 'frappe.client.delete' })
 
 function deleteRecord(name) {
+  if (isGovernedDoctype(activeTab.value.doctype)) return
   deleteResource.submit(
     { doctype: activeTab.value.doctype, name },
     {
@@ -125,5 +167,15 @@ function deleteRecord(name) {
       },
     },
   )
+}
+
+function handleProposal() {
+  selectedRecord.value = null
+  activeResource.value.reload()
+}
+
+function selectTab(index) {
+  activeIdx.value = index
+  selectedRecord.value = null
 }
 </script>

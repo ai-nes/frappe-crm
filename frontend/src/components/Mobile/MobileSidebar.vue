@@ -109,49 +109,45 @@ import SchoolIcon from '~icons/lucide/school'
 import MegaphoneIcon from '~icons/lucide/megaphone'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
+import FilterIcon from '~icons/lucide/filter'
 import { viewsStore } from '@/stores/views'
 import { unreadNotificationsCount } from '@/stores/notifications'
 import { computed, h } from 'vue'
 import { mobileSidebarOpened as sidebarOpened } from '@/composables/settings'
+import { sessionStore } from '@/stores/session'
+import { usersStore } from '@/stores/users'
+import {
+  canAccessNavigationRoute,
+  navigationEntries,
+  visibleNavigation,
+} from '@/utils/rolePolicy'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
+const { user } = sessionStore()
+const { getUser } = usersStore()
 
-const links = [
-  {
-    label: __('Sales Dashboard'),
-    icon: LucideLayoutDashboard,
-    to: 'Dashboard',
-  },
-  {
-    label: __('Marketing Dashboard'),
-    icon: LucideBarChart3,
-    to: 'Marketing Dashboard',
-  },
-  {
-    label: __('My Recommendations'),
-    icon: ListChecksIcon,
-    to: 'My Recommendations',
-  },
-  {
-    label: __('Prospective Students'),
-    icon: SchoolIcon,
-    to: { name: 'CRM Students', query: { stage: 'intake' } },
-  },
-  { label: __('Contacts'), icon: UsersIcon, to: 'CRM Contacts' },
-  {
-    label: __('Enrolled Students'),
-    icon: GraduationCapIcon,
-    to: { name: 'CRM Contacts', query: { stage: 'enrolled' } },
-  },
-  { label: __('High Schools'), icon: SchoolIcon, to: 'High Schools' },
-  { label: __('Persons'), icon: UserIcon, to: 'CRM Persons' },
-  { label: __('Campaigns'), icon: MegaphoneIcon, to: 'CRM Campaigns' },
-  { label: __('Events'), icon: CalendarIcon, to: 'CRM Events' },
-  { label: __('Staff'), icon: BriefcaseIcon, to: 'CRM Staff' },
-  { label: __('Notes'), icon: NoteIcon, to: 'Notes' },
-  { label: __('Tasks'), icon: TaskIcon, to: 'Tasks' },
-  { label: __('Call Logs'), icon: PhoneIcon, to: 'Call Logs' },
-]
+const navigationIcons = {
+  salesDashboard: LucideLayoutDashboard,
+  marketingDashboard: LucideBarChart3,
+  recommendations: ListChecksIcon,
+  students: SchoolIcon,
+  contacts: UsersIcon,
+  enrolledStudents: GraduationCapIcon,
+  schools: SchoolIcon,
+  persons: UserIcon,
+  campaigns: MegaphoneIcon,
+  segments: FilterIcon,
+  events: CalendarIcon,
+  staff: BriefcaseIcon,
+  notes: NoteIcon,
+  tasks: TaskIcon,
+  callLogs: PhoneIcon,
+}
+
+const links = navigationEntries.map((link) => ({
+  ...link,
+  icon: navigationIcons[link.icon],
+}))
 
 const allViews = computed(() => {
   let _views = [
@@ -159,7 +155,7 @@ const allViews = computed(() => {
       name: 'All Views',
       hideLabel: true,
       opened: true,
-      views: links,
+      views: visibleNavigation(links, getUser(user.value)),
     },
   ]
   if (getPublicViews().length) {
@@ -181,17 +177,21 @@ const allViews = computed(() => {
 })
 
 function parseView(views) {
-  return views.map((view) => {
-    return {
-      label: view.label,
-      icon: getIcon(view.route_name, view.icon),
-      to: {
-        name: view.route_name,
-        params: { viewType: view.type || 'list' },
-        query: { view: view.name },
-      },
-    }
-  })
+  return views
+    .filter((view) =>
+      canAccessNavigationRoute(getUser(user.value), view.route_name),
+    )
+    .map((view) => {
+      return {
+        label: view.label,
+        icon: getIcon(view.route_name, view.icon),
+        to: {
+          name: view.route_name,
+          params: { viewType: view.type || 'list' },
+          query: { view: view.name },
+        },
+      }
+    })
 }
 
 function getIcon(routeName, icon) {

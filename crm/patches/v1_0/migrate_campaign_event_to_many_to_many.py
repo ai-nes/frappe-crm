@@ -14,6 +14,18 @@ avoid generating present-dated interactions for years-old historical touches.
 import frappe
 
 
+def _insert_migrated_evidence(values):
+	"""Insert legacy evidence without invoking live command guards.
+
+	This patch is the narrowly scoped historical bridge: it preserves unresolved
+	Contact-only rows for compatibility and must not become a runtime writer.
+	Using ``db_insert`` also bypasses interaction dispatch and append-only
+	validation while retaining the original creation timestamp.
+	"""
+	doc = frappe.get_doc(values)
+	doc.db_insert(ignore_if_duplicate=True)
+
+
 def execute():
 	frappe.reload_doc("fcrm", "doctype", "crm_campaign_touchpoint", force=True)
 	frappe.reload_doc("fcrm", "doctype", "crm_event_participation", force=True)
@@ -51,7 +63,7 @@ def _migrate_campaigns():
 			"CRM Campaign Touchpoint", {"crm_campaign": row.crm_campaign, "crm_contact": row.name}
 		):
 			continue
-		frappe.get_doc(
+		_insert_migrated_evidence(
 			{
 				"doctype": "CRM Campaign Touchpoint",
 				"crm_campaign": row.crm_campaign,
@@ -59,8 +71,10 @@ def _migrate_campaigns():
 				"student": row.student,
 				"touched_at": row.creation,
 				"source": "Migrated",
+				"creation": row.creation,
+				"modified": row.creation,
 			}
-		).insert(ignore_permissions=True)
+		)
 
 
 def _migrate_events():
@@ -74,7 +88,7 @@ def _migrate_events():
 			"CRM Event Participation", {"crm_event": row.crm_event, "crm_contact": row.name}
 		):
 			continue
-		frappe.get_doc(
+		_insert_migrated_evidence(
 			{
 				"doctype": "CRM Event Participation",
 				"crm_event": row.crm_event,
@@ -82,5 +96,7 @@ def _migrate_events():
 				"student": row.student,
 				"status": "Registered",
 				"registered_at": row.creation,
+				"creation": row.creation,
+				"modified": row.creation,
 			}
-		).insert(ignore_permissions=True)
+		)

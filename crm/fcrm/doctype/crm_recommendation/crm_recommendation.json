@@ -14,6 +14,8 @@
   "condition_version",
   "context_hash",
   "policy_version",
+  "producer_id",
+  "producer_revision",
   "worklist_priority_rank",
   "worklist_timing_sort",
   "column_break_1",
@@ -21,6 +23,14 @@
   "status",
   "expires_at",
   "created_at",
+  "revisit_at",
+  "decision_revision",
+  "decision_actor",
+  "decision_at",
+  "decision_scope",
+  "decision_correlation_id",
+  "decision_idempotency_key",
+  "supersedes_decision_event",
   "section_action",
   "recommended_action",
   "recommended_timing",
@@ -85,6 +95,21 @@
    "description": "Deterministic policy version that created this recommendation."
   },
   {
+   "fieldname": "producer_id",
+   "fieldtype": "Data",
+   "label": "Approved Producer ID",
+   "read_only": 1,
+   "description": "Authenticated, server-derived producer identity; never client supplied."
+  },
+  {
+   "default": "1",
+   "fieldname": "producer_revision",
+   "fieldtype": "Int",
+   "label": "Producer Revision",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
    "default": "99",
    "fieldname": "worklist_priority_rank",
    "fieldtype": "Int",
@@ -120,9 +145,9 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "new\nacknowledged\ndismissed\naccepted\nrejected\ndeferred\nmodified\nexpired\nsuperseded",
+   "options": "new\nacknowledged\naccepted\nrejected\ndeferred\nexpired\nsuperseded\ndismissed\nmodified",
    "reqd": 1,
-   "description": "new/acknowledged/dismissed are the original ack/dismiss lifecycle, kept valid for existing rows; accepted/rejected/deferred/modified/expired/superseded is the widened Sales feedback lifecycle."
+   "description": "New records use new, acknowledged, accepted, rejected, deferred, expired or superseded. dismissed and modified are legacy-only, read-only migration values."
   },
   {
    "fieldname": "expires_at",
@@ -136,6 +161,57 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "Created At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "revisit_at",
+   "fieldtype": "Datetime",
+   "label": "Revisit At (UTC)",
+   "description": "Deferred work becomes visible at this UTC instant; blank archival deferrals never reactivate automatically."
+  },
+  {
+   "default": "0",
+   "fieldname": "decision_revision",
+   "fieldtype": "Int",
+   "label": "Decision Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_actor",
+   "fieldtype": "Link",
+   "label": "Decision Actor",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_at",
+   "fieldtype": "Datetime",
+   "label": "Decision At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_scope",
+   "fieldtype": "JSON",
+   "label": "Decision Scope Snapshot",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_correlation_id",
+   "fieldtype": "Data",
+   "label": "Decision Correlation ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_idempotency_key",
+   "fieldtype": "Data",
+   "label": "Decision Idempotency Key",
+   "read_only": 1
+  },
+  {
+   "fieldname": "supersedes_decision_event",
+   "fieldtype": "Link",
+   "label": "Supersedes Decision Event",
+   "options": "CRM Student Decision Event",
    "read_only": 1
   },
   {
@@ -208,84 +284,24 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "read": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "Lead Sales"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
    "create": 1,
    "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
    "role": "System Manager",
-   "share": 1,
    "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Team Leader",
-   "write": 1
-  },
-  {
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "CTV-Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "email": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "Sales Manager",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "role": "Sales User",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
   }
  ],
  "quick_entry": 0,

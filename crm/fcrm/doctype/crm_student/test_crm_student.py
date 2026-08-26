@@ -17,11 +17,15 @@ class TestCRMStudent(FrappeTestCase):
 		student = frappe.get_doc({
 			"doctype": "CRM Student",
 			"student_name": name,
-			"phone": "0901234567",
+			"phone": "0981000001",
 			"email": "test.convert@example.com",
 			"enrollment_status": "Đã xác nhận",
 		})
-		student.insert(ignore_permissions=True)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def tearDown(self):
@@ -44,60 +48,31 @@ class TestCRMStudent(FrappeTestCase):
 		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
-	def test_convert_creates_crm_contact(self):
+	def test_legacy_convert_endpoint_requires_phase8_command_contract(self):
 		student = self._make_student()
-		contact_name = convert_to_contact(student.name)
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		self.assertEqual(contact.full_name, student.student_name)
-		self.assertEqual(contact.phone, student.phone)
-		self.assertEqual(contact.email, student.email)
-		self.assertEqual(contact.student, student.name)
-		self.assertEqual(contact.lifecycle_stage, "MQL")
-
+		with self.assertRaises(frappe.ValidationError):
+			convert_to_contact(student.name)
 		student.reload()
-		self.assertTrue(frappe.db.exists("CRM Contact", {"student": student.name}))
-		self.assertEqual(student.enrollment_status, "Có triển vọng")
+		self.assertEqual(student.enrollment_status, "Đã xác nhận")
 
-	def test_convert_double_conversion_returns_existing_contact(self):
-		student = self._make_student("_Test Double Convert Student")
-		contact_name = convert_to_contact(student.name)
+	def test_direct_contact_creation_is_retired(self):
+		# Test the production boundary rather than the test-fixture bypass used
+		# by the surrounding CRM Contact fixtures.
+		previous_in_test = getattr(frappe.flags, "in_test", False)
+		frappe.flags.in_test = False
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				frappe.get_doc(
+					{
+						"doctype": "CRM Contact",
+						"full_name": "_Test Direct Contact",
+						"phone": "0902222333",
+					}
+				).insert(ignore_permissions=True)
+		finally:
+			frappe.flags.in_test = previous_in_test
 
-		self.assertEqual(convert_to_contact(student.name), contact_name)
-
-	def test_student_phone_change_no_longer_syncs_to_linked_crm_contact(self):
-		# Regression guard for Phase 2 (removal of the continuous two-way sync bug):
-		# a Student field change must never silently overwrite its linked Contact.
-		student = self._make_student("_Test Student Phone Sync")
-		contact_name = convert_to_contact(student.name)
-		original_contact_phone = frappe.db.get_value("CRM Contact", contact_name, "phone")
-
-		# convert_to_contact() writes enrollment_status/lifecycle_stage via db_set()
-		# on its own internally-fetched copy of the student, bumping `modified` in
-		# the DB out from under this test's original in-memory `student` object.
-		student.reload()
-		student.phone = "0907654321"
-		student.save(ignore_permissions=True)
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		self.assertEqual(contact.phone, original_contact_phone)
-		self.assertNotEqual(contact.phone, "0907654321")
-
-	def test_crm_contact_phone_change_no_longer_syncs_to_student(self):
-		# Regression guard, mirror of the above for the Contact -> Student direction.
-		student = self._make_student("_Test Contact Phone Sync")
-		contact_name = convert_to_contact(student.name)
-		original_student_phone = student.phone
-
-		contact = frappe.get_doc("CRM Contact", contact_name)
-		contact.phone = "0902222333"
-		contact.save(ignore_permissions=True)
-
-		student.reload()
-		self.assertEqual(student.phone, original_student_phone)
-		self.assertNotEqual(student.phone, "0902222333")
-
-	def test_create_from_contact_creates_crm_student(self):
+	def test_create_from_contact_is_retired(self):
 		contact = frappe.get_doc({
 			"doctype": "Contact",
 			"first_name": "_Test",
@@ -107,12 +82,8 @@ class TestCRMStudent(FrappeTestCase):
 		})
 		contact.insert(ignore_permissions=True)
 
-		student_name = create_from_contact(contact.name)
-		student = frappe.get_doc("CRM Student", student_name)
-
-		self.assertEqual(student.student_name, contact.full_name)
-		self.assertEqual(student.phone, contact.phone)
-		self.assertEqual(student.email, contact.email_id)
+		with self.assertRaises(frappe.PermissionError):
+			create_from_contact(contact.name)
 
 	# ---------------------------------------------------------------- lifecycle stage
 
@@ -121,7 +92,12 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "Lead")
 
 		student.enrollment_status = "Có triển vọng"
-		student.save(ignore_permissions=True)  # must not raise
+		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
+		frappe.flags.student_lifecycle_service = True
+		try:
+			student.save(ignore_permissions=True)  # must not raise
+		finally:
+			frappe.flags.student_lifecycle_service = previous_flag
 		student.reload()
 		self.assertEqual(student.lifecycle_stage, "MQL")
 
@@ -141,7 +117,7 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
 		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
@@ -154,12 +130,17 @@ class TestCRMStudent(FrappeTestCase):
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
 		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			student.enrollment_status = "Có triển vọng"
 			student.status_change_reason = "Phụ huynh xác nhận vẫn quan tâm."
-			student.save(ignore_permissions=True)
+			previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
+			frappe.flags.student_lifecycle_service = True
+			try:
+				student.save(ignore_permissions=True)
+			finally:
+				frappe.flags.student_lifecycle_service = previous_flag
 		finally:
 			frappe.set_user("Administrator")
 
@@ -178,14 +159,22 @@ class TestCRMStudent(FrappeTestCase):
 
 		student = self._make_student("_Test Student Reassignment")
 		student.assigned_to = staff_a
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 		self.assertEqual(len(student.assignment_log), 1)
 		self.assertFalse(student.assignment_log[0].from_staff)
 		self.assertEqual(student.assignment_log[0].to_staff, staff_a)
 
 		student.assigned_to = staff_b
-		student.save(ignore_permissions=True)
+		frappe.flags.student_ownership_service = True
+		try:
+			student.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_ownership_service = False
 		student.reload()
 
 		self.assertEqual(len(student.assignment_log), 2)
@@ -212,7 +201,11 @@ class TestCRMStudent(FrappeTestCase):
 			"phone": phone,
 			"enrollment_status": enrollment_status,
 		})
-		student.insert(ignore_permissions=True)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
 		return student
 
 	def _make_user_and_staff(self, prefix, roles=None):

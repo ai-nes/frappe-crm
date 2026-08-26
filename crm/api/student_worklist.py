@@ -1,4 +1,4 @@
-"""Session-scoped, permission-filtered CRM Recommendation worklist."""
+"""Session-scoped, permission-filtered CRM Student Task worklist."""
 
 import base64
 import binascii
@@ -12,16 +12,17 @@ from frappe import _
 from frappe.utils.password import get_encryption_key
 
 
-_ACTIVE_STATUSES = ("new", "acknowledged")
+_ACTIVE_STATES = ("PENDING", "REQUIRES_REVIEW")
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
 _POLICY_VERSION = "worklist-v1"
-_PRIORITY_ORDER = {"high": 0, "medium": 1, "low": 2}
 
 
 @frappe.whitelist()
 def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) -> dict:
-	"""Return one deterministic page of recommendations visible to this session.
+	"""Return one deterministic page of CRM Student Task worklist items visible
+	to this session (the `recommendation` DTO key is retained for compatibility;
+	see `_minimal_dto`).
 
 	This endpoint intentionally has no user, campus, or role arguments. Frappe's
 	permission-aware list API applies the delegated session user's row scope.
@@ -46,6 +47,76 @@ def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) 
 	}
 
 
+@frappe.whitelist()
+def list_my_sales_actions(cursor: str | None = None, page_size: int | str = 20) -> dict:
+	"""Durable executor queue; never accepts an assignee or scope from clients."""
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	page_size = _parse_page_size(page_size)
+	staff = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
+	if not staff:
+		return {"items": [], "next_cursor": None, "policy_version": "phase6-worklist-v1"}
+	# Action rows are scoped twice: by their immutable assignee and Frappe's
+	# document permission hook (which is the canonical Student scope today).
+	from frappe.model.db_query import DatabaseQuery
+	permission_query = DatabaseQuery("CRM Sales Action", user=frappe.session.user).build_match_conditions(as_condition=True)
+	conditions = ["a.assignee_staff = %(staff)s", "a.execution_status in ('planned', 'in_progress')"]
+	if permission_query:
+		conditions.append("(" + permission_query.replace("`tabCRM Sales Action`", "a") + ")")
+	last_action = _decode_action_cursor(cursor, frappe.session.user) if cursor else None
+	due_expr = "COALESCE(a.due_at, '9999-12-31 23:59:59.999999')"
+	conditions.append(f"({due_expr} > %(after_due)s OR ({due_expr} = %(after_due)s AND a.creation > %(after_creation)s) OR ({due_expr} = %(after_due)s AND a.creation = %(after_creation)s AND a.name > %(after_name)s))") if last_action else None
+	values = {"staff": staff, "limit": page_size + 1, "after_due": last_action[0] if last_action else "0001-01-01 00:00:00", "after_creation": last_action[1] if last_action else "0001-01-01 00:00:00", "after_name": last_action[2] if last_action else ""}
+	rows = frappe.db.sql(
+		"""select a.name, a.student, s.student_name, a.action_type, a.execution_status,
+		a.due_at, {due_expr} as due_sort, a.assignee_staff, a.action_revision, a.linked_interaction, a.creation,
+		a.outcome_code from `tabCRM Sales Action` a
+		left join `tabCRM Student` s on s.name = a.student where {where}
+		order by due_sort asc, a.creation asc, a.name asc limit %(limit)s""".format(where=" and ".join(conditions), due_expr=due_expr),
+		values, as_dict=True,
+	)
+	has_more = len(rows) > page_size
+	rows = rows[:page_size]
+	now = frappe.utils.now_datetime()
+	items = []
+	for row in rows:
+		items.append({"name": row.name, "student": row.student, "student_name": row.student_name,
+			"action_type": row.action_type, "execution_status": row.execution_status, "due_at": str(row.due_at) if row.due_at else None,
+			"assignee_staff": row.assignee_staff, "revision": int(row.action_revision or 1),
+			"overdue": bool(row.due_at and row.due_at < now), "linked_interaction": row.linked_interaction,
+			"outcome": row.outcome_code, "outcome_codes": [
+				"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER",
+				"APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED",
+			], "permitted_transitions": sorted(_action_transitions(row.execution_status))})
+	return {"items": items, "next_cursor": _encode_action_cursor(rows[-1], frappe.session.user) if has_more and rows else None, "policy_version": "phase6-worklist-v1"}
+
+
+def _action_transitions(status):
+	return {"planned": {"in_progress", "cancelled"}, "in_progress": {"completed", "failed", "cancelled"}}.get(status, set())
+
+
+def _encode_action_cursor(row, principal):
+	payload = {"principal": principal, "policy": "phase6-worklist-v1", "due": str(row.due_sort), "creation": str(row.creation), "name": row.name}
+	body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+	signature = hmac.new(_cursor_secret(), body, hashlib.sha256).digest()
+	return f"{_urlsafe_encode(body)}.{_urlsafe_encode(signature)}"
+
+
+def _decode_action_cursor(cursor, principal):
+	try:
+		body_token, signature_token = cursor.split(".", 1)
+		body = _urlsafe_decode(body_token)
+		signature = _urlsafe_decode(signature_token)
+		if not hmac.compare_digest(signature, hmac.new(_cursor_secret(), body, hashlib.sha256).digest()):
+			raise ValueError
+		payload = json.loads(body)
+		if payload.get("principal") != principal or payload.get("policy") != "phase6-worklist-v1":
+			raise ValueError
+		return str(payload["due"]), str(payload["creation"]), str(payload["name"])
+	except (AttributeError, TypeError, ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError):
+		frappe.throw(_("Invalid or expired Sales Action cursor."), frappe.PermissionError)
+
+
 def _parse_page_size(value: int | str) -> int:
 	try:
 		page_size = int(value)
@@ -57,23 +128,36 @@ def _parse_page_size(value: int | str) -> int:
 
 
 def _sort_key(row) -> tuple[int, str, str, str]:
-	"""Explicit ordering: priority, due timing, creation, then stable ID."""
-	priority = _PRIORITY_ORDER.get(row.priority, len(_PRIORITY_ORDER))
-	# A missing recommendation time is not fabricated as urgency; it sorts after
+	"""Explicit ordering: priority rank, revisit timing, creation, then stable ID.
+
+	Must read the same `worklist_priority_rank` column the SQL ORDER BY/keyset
+	predicate in `_fetch_page` uses (default 99, see CRMStudentTask.validate) --
+	recomputing rank here from the raw `priority` string with a different
+	default (previously 3) desynced the cursor from the SQL comparison and
+	could repeat or skip rows across pages.
+	"""
+	priority = int(row.worklist_priority_rank if row.worklist_priority_rank is not None else 99)
+	# A task with no revisit timing is not fabricated as urgency; it sorts after
 	# scheduled work at the same priority, then creation provides a stable tie.
-	timing = str(row.recommended_timing or "9999-12-31 23:59:59.999999")
+	timing = str(row.revisit_at or "9999-12-31 23:59:59.999999")
 	return priority, timing, str(row.creation), str(row.name)
 
 
 def _minimal_dto(row) -> dict:
+	# `recommendation` intentionally holds the CRM Student Task name post-cutover
+	# -- kept for frontend contract compatibility (frontend/src/utils/studentDecision.js
+	# falls back to this key). It is routed correctly regardless: `_decide_by_name`
+	# dispatches by checking which doctype the name actually belongs to.
 	return {
 		"recommendation": row.name,
+		"student": row.student,
 		"student_name": row.student_name,
 		"priority": row.priority,
-		"action": row.recommended_action,
-		"timing": str(row.recommended_timing) if row.recommended_timing else None,
-		"reason": row.reason,
-		"revision": str(row.modified),
+		"action": row.action_type,
+		"timing": str(row.revisit_at) if row.revisit_at else None,
+		"reason": row.objective,
+		"revision": int(row.decision_revision or 0),
+		"permitted_decisions": ["accepted", "deferred", "rejected"],
 	}
 
 
@@ -86,31 +170,38 @@ def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
 	"""Keyset query with Frappe's own permission condition, never an offset scan."""
 	from frappe.model.db_query import DatabaseQuery
 
-	frappe.has_permission("CRM Recommendation", "read", user=principal, throw=True)
-	permission_query = DatabaseQuery("CRM Recommendation", user=principal).build_match_conditions(as_condition=True)
-	conditions = ["status IN %(statuses)s"]
-	values = {"statuses": _ACTIVE_STATUSES, "limit": limit}
+	frappe.has_permission("CRM Student Task", "read", user=principal, throw=True)
+	permission_query = DatabaseQuery("CRM Student", user=principal).build_match_conditions(as_condition=True)
+	values = {"states": _ACTIVE_STATES, "limit": limit, "now": frappe.utils.now_datetime()}
+	conditions = [
+		"`tabCRM Student Task`.current_slot = 'CURRENT'",
+		"(`tabCRM Student Task`.state IN %(states)s OR ("
+		"`tabCRM Student Task`.state = 'DEFERRED' AND "
+		"`tabCRM Student Task`.revisit_at IS NOT NULL AND "
+		"`tabCRM Student Task`.revisit_at <= %(now)s))",
+	]
 	if permission_query:
 		conditions.append(f"({permission_query})")
 	if last_sort_key:
 		conditions.append(
 			"""(
-				worklist_priority_rank > %(rank)s
-				OR (worklist_priority_rank = %(rank)s AND worklist_timing_sort > %(timing)s)
-				OR (worklist_priority_rank = %(rank)s AND worklist_timing_sort = %(timing)s AND creation > %(creation)s)
-				OR (worklist_priority_rank = %(rank)s AND worklist_timing_sort = %(timing)s AND creation = %(creation)s AND name > %(name)s)
+				`tabCRM Student Task`.worklist_priority_rank > %(rank)s
+				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
+				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Student Task`.creation > %(creation)s)
+				OR (`tabCRM Student Task`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Student Task`.creation = %(creation)s AND `tabCRM Student Task`.name > %(name)s)
 			)"""
 		)
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key)))
 	return frappe.db.sql(
-		"""SELECT `tabCRM Recommendation`.name, `tabCRM Student`.student_name,
-		`tabCRM Recommendation`.priority, `tabCRM Recommendation`.recommended_action,
-		`tabCRM Recommendation`.recommended_timing, `tabCRM Recommendation`.reason,
-		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
-		FROM `tabCRM Recommendation`
-		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Recommendation`.student
+		"""SELECT `tabCRM Student Task`.name, `tabCRM Student Task`.student, `tabCRM Student`.student_name,
+		`tabCRM Student Task`.priority, `tabCRM Student Task`.worklist_priority_rank, `tabCRM Student Task`.action_type,
+		`tabCRM Student Task`.revisit_at, `tabCRM Student Task`.objective,
+		`tabCRM Student Task`.modified, `tabCRM Student Task`.decision_revision, `tabCRM Student Task`.creation
+		FROM `tabCRM Student Task`
+		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Student Task`.student
 		WHERE {conditions}
-		ORDER BY worklist_priority_rank ASC, worklist_timing_sort ASC, creation ASC, name ASC
+		ORDER BY `tabCRM Student Task`.worklist_priority_rank ASC, COALESCE(`tabCRM Student Task`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
+		`tabCRM Student Task`.creation ASC, `tabCRM Student Task`.name ASC
 		LIMIT %(limit)s""".format(conditions=" AND ".join(conditions)),
 		values,
 		as_dict=True,
@@ -172,3 +263,4 @@ def _is_sort_key(value) -> bool:
 		and not isinstance(value[0], bool)
 		and all(isinstance(part, str) for part in value[1:])
 	)
+

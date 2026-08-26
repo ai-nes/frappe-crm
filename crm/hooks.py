@@ -87,7 +87,7 @@ website_route_rules = [
 # Setup wizard
 # setup_wizard_requires = "assets/crm/js/setup_wizard.js"
 # setup_wizard_stages = "crm.setup.setup_wizard.setup_wizard.get_setup_stages"
-setup_wizard_complete = "crm.demo.api.create_demo_data"
+setup_wizard_complete = "crm.install.complete_setup"
 # setup_wizard_test = "crm.setup.setup_wizard.test_setup_wizard.run_setup_wizard_test"
 
 # Installation
@@ -131,17 +131,48 @@ before_uninstall = "crm.uninstall.before_uninstall"
 permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
+	"CRM Student Routing Request": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Ownership Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Lifecycle Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Outcome": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Delivery": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.get_permission_query_conditions",
+	"CRM Student Task": "crm.fcrm.doctype.crm_student_task.crm_student_task.get_permission_query_conditions",
+	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.get_permission_query_conditions",
+	"CRM Event Participation": "crm.fcrm.student_attribution.get_permission_query_conditions",
+	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.get_permission_query_conditions",
+	"CRM Interaction": "crm.fcrm.permissions.get_interaction_permission_query_conditions",
+	"CRM Intent": "crm.fcrm.permissions.get_intent_permission_query_conditions",
+	"CRM Score History": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 }
 
 has_permission = {
+	"File": "crm.fcrm.file_permissions.has_permission",
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
+	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Ownership Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Lifecycle Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Outcome": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Attempt": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Delivery": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Sales Action": "crm.fcrm.doctype.crm_sales_action.crm_sales_action.has_permission",
+	"CRM Student Task": "crm.fcrm.doctype.crm_student_task.crm_student_task.has_permission",
+	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.has_permission",
+	"CRM Event Participation": "crm.fcrm.student_attribution.has_permission",
+	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.has_permission",
+	"CRM Interaction": "crm.fcrm.permissions.has_interaction_permission",
+	"CRM Intent": "crm.fcrm.permissions.has_intent_permission",
+	"CRM Score History": "crm.fcrm.permissions.has_operational_record_permission",
 }
 
 # DocType Class
@@ -182,6 +213,43 @@ doc_events = {
 	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 	},
+	"CRM Interaction": {
+		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
+		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
+	},
+	"File": {
+		"before_insert": ["crm.fcrm.file_permissions.before_insert"],
+	},
+	"CRM Lead Source": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Platform": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Intent Type": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Lost Reason": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Campus": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
+	"CRM Campaign Type": {
+		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
+		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
+		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
+	},
 	"ToDo": {
 		"after_insert": ["crm.api.todo.after_insert"],
 		"on_update": ["crm.api.todo.on_update"],
@@ -220,6 +288,8 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
+	# Keep legacy Contact-based attribution activity wired. Student-first
+	# attribution commands suppress these dispatchers via their service flag.
 	"CRM Event Participation": {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_insert"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_update"],
@@ -229,28 +299,47 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_campaign_touchpoint_insert"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
-	"CRM Recommendation": {
-		"on_update": ["crm.fcrm.doctype.crm_recommendation.crm_recommendation.on_status_decided"],
-	},
-	"CRM Sales Action": {
-		"on_update": ["crm.fcrm.doctype.crm_sales_action.crm_sales_action.on_execution_or_outcome_change"],
-	},
 	"User": {
 		"before_validate": ["crm.api.live_demo.validate_user"],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
 	},
 }
 
+# Consumer-side enforcement is required because retiring a Link target does
+# not cause Frappe to revalidate existing consumer writes automatically.
+for _governed_consumer_doctype in (
+	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
+	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
+	"CRM Staff", "CRM Quota Item", "CRM Student Pool", "CRM Student Routing Request",
+	"CRM Student SLA Attempt", "CRM Team", "CRM Tuition Policy Item",
+):
+	_governed_events = doc_events.setdefault(_governed_consumer_doctype, {})
+	_governed_events.setdefault("validate", []).append(
+		"crm.fcrm.master_data_governance.validate_governed_references"
+	)
+
 # Scheduled Tasks
 # ---------------
 
 scheduler_events = {
-	"hourly": ["crm.api.agent_events.retry_pending_agent_events"],
+	"hourly": [
+		"crm.api.agent_events.retry_pending_agent_events",
+		"crm.api.agent_events.reconcile_student_context_v2",
+		"crm.api.agent_events.reconcile_score_input_v1",
+	],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+		"crm.fcrm.master_data_governance.expire_break_glass_requests",
 	],
 	"cron": {
+		"10 8 * * *": ["crm.api.agent_events.send_daily_sla_director_digests"],
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
+		"* * * * *": [
+			"crm.fcrm.master_data_governance.apply_effective_changes",
+			"crm.fcrm.student_routing.process_pending_routing_requests",
+			"crm.fcrm.student_sla.process_due_sla_attempts",
+			"crm.fcrm.student_sla.process_pending_sla_deliveries",
+		],
 	},
 }
 

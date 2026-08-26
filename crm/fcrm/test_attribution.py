@@ -23,6 +23,7 @@ from crm.fcrm.attribution import (
 class TestAttribution(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		self.contact_students = {}
 		self.campus = self._make_campus("_Test Attr Campus")
 		self.campaign_a = self._make_campaign("_Test Attr Campaign A", self.campus)
 		self.campaign_b = self._make_campaign("_Test Attr Campaign B", self.campus)
@@ -42,6 +43,8 @@ class TestAttribution(FrappeTestCase):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test Attr%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campaign", name, force=True)
 		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test Attr%"]}, pluck="name"):
@@ -78,15 +81,31 @@ class TestAttribution(FrappeTestCase):
 		return doc.name
 
 	def _make_contact(self, name, phone):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": f"{name} Student",
+				"phone": phone,
+				"enrollment_status": "Có triển vọng",
+			}
+		)
+		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_intake_flag
 		contact = frappe.get_doc(
 			{
 				"doctype": "CRM Contact",
 				"full_name": name,
 				"phone": phone,
 				"enrollment_status": "Có triển vọng",
+				"student": student.name,
 			}
 		)
 		contact.insert(ignore_permissions=True)
+		self.contact_students[contact.name] = student.name
 		return contact.name
 
 	def _make_touchpoint(self, contact, campaign, touched_at):
@@ -95,6 +114,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Campaign Touchpoint",
 				"crm_campaign": campaign,
 				"crm_contact": contact,
+				"student": self.contact_students[contact],
 				"touched_at": touched_at,
 			}
 		)
@@ -107,6 +127,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Event Participation",
 				"crm_event": event,
 				"crm_contact": contact,
+				"student": self.contact_students[contact],
 				"registered_at": registered_at,
 			}
 		)
@@ -147,6 +168,15 @@ class TestAttribution(FrappeTestCase):
 		self.assertEqual(len(touchpoints), 2)
 		self.assertEqual(touchpoints[0]["campaign"], self.campaign_b)
 		self.assertEqual(touchpoints[1]["campaign"], self.campaign_a)
+
+	def test_repeated_exposure_is_preserved_not_destructively_overwritten(self):
+		contact = self._make_contact("_Test Attr Repeated Exposure", "0966000010")
+		first = self._make_touchpoint(contact, self.campaign_a, "2026-01-01 08:00:00")
+		second = self._make_touchpoint(contact, self.campaign_a, "2026-01-02 08:00:00")
+		self.assertNotEqual(first, second)
+		touchpoints = get_contact_touchpoints(contact)
+		self.assertEqual([point["reference_docname"] for point in touchpoints], [first, second])
+		self.assertEqual(get_multi_touch_attribution(contact), {self.campaign_a: 1.0})
 
 	# --------------------------------------------------------------- multi-touch
 

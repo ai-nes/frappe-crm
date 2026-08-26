@@ -1,0 +1,22 @@
+{
+  "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:event_id", "doctype": "DocType", "engine": "InnoDB",
+  "field_order": ["event_id", "event_type", "student", "sla_attempt", "attempt_revision", "ownership_revision", "sla_policy", "sla_policy_version", "actor", "scope_snapshot", "correlation_token", "idempotency_key", "payload", "event_at", "schema_version"],
+  "fields": [
+    {"fieldname": "event_id", "fieldtype": "Data", "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
+    {"fieldname": "event_type", "fieldtype": "Select", "label": "Event Type", "options": "opened\nwarned\npaused\nresumed\npause_expired\nbreached\nescalated\nresponded\nclosed\nreset_requested\nreset_approved", "read_only": 1},
+    {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+    {"fieldname": "sla_attempt", "fieldtype": "Link", "label": "SLA Attempt", "options": "CRM Student SLA Attempt", "read_only": 1, "reqd": 1},
+    {"fieldname": "attempt_revision", "fieldtype": "Int", "label": "Attempt Revision", "read_only": 1, "reqd": 1},
+    {"fieldname": "ownership_revision", "fieldtype": "Int", "label": "Ownership Revision", "read_only": 1, "reqd": 1},
+    {"fieldname": "sla_policy", "fieldtype": "Link", "label": "SLA Policy", "options": "CRM Student SLA Policy", "read_only": 1, "reqd": 1},
+    {"fieldname": "sla_policy_version", "fieldtype": "Int", "label": "SLA Policy Version", "read_only": 1, "reqd": 1},
+    {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "read_only": 1, "reqd": 1},
+    {"fieldname": "scope_snapshot", "fieldtype": "JSON", "label": "Scope Snapshot", "read_only": 1, "reqd": 1},
+    {"fieldname": "correlation_token", "fieldtype": "Data", "label": "Correlation Token", "read_only": 1, "reqd": 1},
+    {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "reqd": 1, "unique": 1},
+    {"fieldname": "payload", "fieldtype": "JSON", "label": "Approved Payload", "read_only": 1},
+    {"fieldname": "event_at", "fieldtype": "Datetime", "label": "Event At", "read_only": 1, "reqd": 1},
+    {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
+  ],
+  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Event", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
+}

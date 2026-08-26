@@ -71,6 +71,20 @@ const props = defineProps({
   docname: { type: String, required: true },
 })
 
+const studentAuthoritativeFields = new Set([
+  'converted',
+  'assigned_to',
+  'owner_staff',
+  'owning_team',
+  'owning_pool',
+  'lifecycle_stage',
+  'enrollment_status',
+  'latest_score',
+  'score_input_revision',
+  'applied_score_input_revision',
+  'applied_policy_revision',
+])
+
 const emit = defineEmits(['afterSave'])
 
 const { isManager } = usersStore()
@@ -93,7 +107,7 @@ const tabs = createResource({
         ...section,
         columns: section.columns?.map((col) => ({
           ...col,
-          fields: col.fields?.filter((f) => f.fieldname !== 'converted') || [],
+          fields: col.fields?.filter((f) => !studentAuthoritativeFields.has(f.fieldname)) || [],
         })) || [],
       })) || [],
     }))
@@ -107,6 +121,7 @@ async function saveChanges() {
   const baseDoc = document.originalDoc ? { ...document.originalDoc } : {}
 
   const changes = Object.keys(updatedDoc).reduce((acc, key) => {
+    if (props.doctype === 'CRM Student' && studentAuthoritativeFields.has(key)) return acc
     if (JSON.stringify(updatedDoc[key]) !== JSON.stringify(baseDoc[key])) {
       acc[key] = updatedDoc[key]
     }

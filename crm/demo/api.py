@@ -15,6 +15,7 @@ DEMO_CALL_LOGS_KEY = "crm_demo_call_logs"
 DEMO_INTERACTIONS_KEY = "crm_demo_interactions"
 DEMO_SCORE_TEMPLATES_KEY = "crm_demo_score_templates"
 DEMO_SCORE_HISTORIES_KEY = "crm_demo_score_histories"
+_DEMO_SCORE_TEMPLATE_OWNED = False
 
 DEMO_STUDENTS = [
 	{
@@ -51,7 +52,8 @@ def create_demo_data(_args: dict | None = None):
 	student_names = _create_demo_students()
 	contact_names = _create_demo_contacts(student_names)
 	interaction_names = _create_demo_interactions(student_names, contact_names)
-	score_template_names = [_ensure_score_template()]
+	template_name = _ensure_score_template()
+	score_template_names = [template_name] if _DEMO_SCORE_TEMPLATE_OWNED else []
 	score_history_names = _create_demo_score_histories(student_names)
 	note_names = _create_demo_notes(contact_names)
 	task_names = _create_demo_tasks(contact_names, demo_users)
@@ -72,7 +74,7 @@ def create_demo_data(_args: dict | None = None):
 
 @frappe.whitelist()
 def clear_demo_data():
-	frappe.only_for(["Sales Manager", "System Manager"], True)
+	frappe.only_for("System Manager", True)
 
 	if not frappe.db.get_default(DEMO_STATE_KEY):
 		return
@@ -122,9 +124,13 @@ def get_demo_state():
 def _create_demo_students():
 	names = []
 	for data in DEMO_STUDENTS:
-		existing = frappe.db.exists("CRM Student", {"email": data["email"]})
+		existing = frappe.db.get_value(
+			"CRM Student", {"email": data["email"]}, ["name", "email"], as_dict=True
+		) or frappe.db.get_value("CRM Student", {"phone": data["phone"]}, ["name", "email"], as_dict=True)
 		if existing:
-			names.append(existing)
+			if not existing.email:
+				frappe.db.set_value("CRM Student", existing.name, "email", data["email"], update_modified=False)
+			names.append(existing.name)
 			continue
 
 		doc = frappe.get_doc(
@@ -136,7 +142,13 @@ def _create_demo_students():
 				"enrollment_status": "Mới",
 				"source": _ensure_source(data["source"]),
 			}
-		).insert(ignore_permissions=True)
+		)
+		previous_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			doc.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_flag
 		_backdate("CRM Student", doc.name, len(names) + 8)
 		names.append(doc.name)
 
@@ -363,11 +375,16 @@ def _ensure_interaction_type(name):
 
 
 def _ensure_score_template():
+	global _DEMO_SCORE_TEMPLATE_OWNED
 	template_name = "Default Admission Scoring"
-	existing = frappe.db.get_value("CRM Score Template", {"template_name": template_name}, "name")
+	existing = frappe.db.get_value("CRM Score Template", {"template_name": template_name}, "name") or frappe.db.get_value(
+		"CRM Score Template", {"status": "Active"}, "name"
+	)
 	if existing:
+		_DEMO_SCORE_TEMPLATE_OWNED = False
 		return existing
 
+	_DEMO_SCORE_TEMPLATE_OWNED = True
 	return frappe.get_doc(
 		{
 			"doctype": "CRM Score Template",

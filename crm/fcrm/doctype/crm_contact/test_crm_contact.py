@@ -49,7 +49,7 @@ class TestCRMContact(FrappeTestCase):
 		self.assertFalse(contact.student)
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111111"}))
 
-	def test_transition_into_milestone_status_creates_linked_student(self):
+	def test_transition_into_milestone_status_does_not_create_student(self):
 		contact = self._make_contact("_Test Milestone Transition", "0911111112")
 		self.assertFalse(contact.student)
 
@@ -57,29 +57,28 @@ class TestCRMContact(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
-		self.assertTrue(contact.student)
-		student = frappe.get_doc("CRM Student", contact.student)
-		self.assertEqual(student.phone, "0911111112")
+		self.assertFalse(contact.student)
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111112"}))
 
-	def test_insert_directly_at_milestone_status_creates_linked_student(self):
+	def test_insert_directly_at_milestone_status_does_not_create_student(self):
 		contact = self._make_contact("_Test Milestone Insert", "0911111113", enrollment_status="Đã nhập học")
 		contact.reload()
 
-		self.assertTrue(contact.student)
-		self.assertTrue(frappe.db.exists("CRM Student", {"phone": "0911111113"}))
+		self.assertFalse(contact.student)
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0911111113"}))
 
-	def test_milestone_creation_does_not_refire_on_subsequent_saves(self):
+	def test_retired_milestone_writer_does_not_refire_on_subsequent_saves(self):
 		contact = self._make_contact("_Test Milestone Once", "0911111114", enrollment_status="Đã xác nhận")
 		contact.reload()
 		student_name = contact.student
-		self.assertTrue(student_name)
+		self.assertFalse(student_name)
 
 		contact.full_name = "_Test Milestone Once Renamed"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
 		self.assertEqual(contact.student, student_name)
-		self.assertEqual(frappe.db.count("CRM Student", {"phone": "0911111114"}), 1)
+		self.assertEqual(frappe.db.count("CRM Student", {"phone": "0911111114"}), 0)
 
 	# --------------------------------------------------------------- owner derivation
 
@@ -126,7 +125,7 @@ class TestCRMContact(FrappeTestCase):
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
 		contact = self._make_contact("_Test Reopen No Reason", "0933000003", enrollment_status="Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			contact.enrollment_status = "Có triển vọng"
@@ -139,7 +138,7 @@ class TestCRMContact(FrappeTestCase):
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
 		contact = self._make_contact("_Test Reopen Success", "0933000004", enrollment_status="Từ chối")
 
-		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Team Leader"])
+		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Lead Sales"])
 		frappe.set_user(user)
 		try:
 			contact.enrollment_status = "Có triển vọng"
@@ -202,7 +201,7 @@ class TestCRMContact(FrappeTestCase):
 		self.assertEqual(len(contact.assignment_log), 0)
 
 	# ------------------------------------------------------- CRM Interaction dispatch
-	# (Phase 4: crm.fcrm.interaction_log.create_interaction_from_contact_update)
+	# (crm.fcrm.interaction_log.create_interaction_from_contact_update)
 
 	def test_lifecycle_stage_change_creates_single_stage_changed_interaction(self):
 		self._ensure_interaction_type("Stage Changed")
@@ -224,6 +223,17 @@ class TestCRMContact(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		contact.reload()
 		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 1)
+
+		# A second genuine transition (MQL -> Applicant) is a distinct historical
+		# event and must not be collapsed into the first Stage Changed row just
+		# because both share the same contact + interaction_type -- CRM Contact
+		# is an enduring entity, not a discrete source event (see
+		# interaction_log.NON_DEDUPABLE_REFERENCE_DOCTYPES).
+		contact.enrollment_status = "Đã xác nhận"
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(contact.lifecycle_stage, "Applicant")
+		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 2)
 
 	def test_assignment_change_creates_lead_assigned_then_lead_reassigned_interactions(self):
 		self._ensure_interaction_type("Lead Assigned")
@@ -248,6 +258,16 @@ class TestCRMContact(FrappeTestCase):
 		contact.reload()
 		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
 		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 1)
+
+		# A second reassignment is a distinct historical event of the *same*
+		# interaction_type ("Lead Reassigned") on the same contact and must not
+		# be deduplicated away.
+		staff_c = self._make_staff("_Test Interaction Assign Staff C", campus, department, team)
+		contact.assigned_to = staff_c
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 2)
 
 	# ---------------------------------------------------------------------- helpers
 

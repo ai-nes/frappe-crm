@@ -80,7 +80,7 @@
           :options="[
             { label: __('All'), value: 'All' },
             { label: __('Admin'), value: 'System Manager' },
-            { label: __('Sales'), value: 'Sales' },
+            { label: __('Sale'), value: 'Sale' },
             { label: __('Marketing'), value: 'Marketing' },
             { label: __('Lead Sales'), value: 'Lead Sales' },
             { label: __('Admissions Director'), value: 'Admissions Director' },
@@ -103,6 +103,12 @@
                 <div class="text-p-sm text-ink-gray-5">
                   {{ user.name }}
                 </div>
+                <div
+                  v-if="roleStateLabel(user.crm_role_state)"
+                  class="text-p-xs text-ink-amber-6"
+                >
+                  {{ __(roleStateLabel(user.crm_role_state)) }}
+                </div>
               </div>
             </div>
             <div class="flex gap-2 items-center flex-row-reverse">
@@ -118,16 +124,16 @@
                 placement="right"
               />
               <Tooltip
-                v-if="isManager() && user.role == 'System Manager'"
+                v-if="canManageUsers() && user.role == 'System Manager'"
                 :text="__('Cannot change role of user with Admin access')"
               >
                 <Button :label="__('Admin')" icon-left="shield" />
               </Tooltip>
               <Dropdown
-                v-else-if="isManager()"
+                v-else-if="canManageUsers()"
                 :options="getDropdownOptions(user)"
                 :button="{
-                  label: roleMap[user.role],
+                  label: roleMap[user.role] || user.role,
                   iconRight: 'chevron-down',
                   iconLeft:
                     user.role === 'System Manager'
@@ -180,8 +186,13 @@ import {
 } from 'frappe-ui'
 import { ref, computed, onMounted } from 'vue'
 import { ConfirmDelete } from '../../utils'
+import {
+  canonicalRoleOptions,
+  canManageRoles,
+  roleStateLabel,
+} from '@/utils/rolePolicy'
 
-const { users, isAdmin, isManager } = usersStore()
+const { users, getCurrentUser } = usersStore()
 
 const showAddExistingModal = ref(false)
 const searchRef = ref(null)
@@ -190,13 +201,15 @@ const currentRole = ref('All')
 
 const roleMap = {
   'System Manager': __('Admin'),
-  Sales: __('Sales'),
-  Sale: __('Sales'),
-  'CTV-Sale': __('Sales'),
+  Sale: __('Sale'),
+  Sales: __('Sales (legacy)'),
+  'CTV-Sale': __('Sales (legacy)'),
   Marketing: __('Marketing'),
   'Lead Sales': __('Lead Sales'),
   'Admissions Director': __('Admissions Director'),
 }
+
+const canManageUsers = () => canManageRoles(getCurrentUser())
 
 const usersList = computed(() => {
   let filteredUsers =
@@ -227,65 +240,21 @@ function getMoreOptions(user) {
 }
 
 function getDropdownOptions(user) {
-  let options = [
-    {
-      label: __('Admin'),
-      component: () =>
-        DropdownOption({
-          option: __('Admin'),
-          icon: 'shield',
-          selected: user.role === 'System Manager',
-        }),
-      onClick: () => updateRole(user, 'System Manager'),
-      condition: () => isAdmin(),
-    },
-    {
-      label: __('Sales'),
-      component: () =>
-        DropdownOption({
-          option: __('Sales'),
-          icon: 'briefcase',
-          selected: user.role === 'Sales',
-        }),
-      onClick: () => updateRole(user, 'Sale'),
-      condition: () => isManager(),
-    },
-    {
-      label: __('Marketing'),
-      component: () =>
-        DropdownOption({
-          option: __('Marketing'),
-          icon: 'user-check',
-          selected: user.role === 'Marketing',
-        }),
-      onClick: () => updateRole(user, 'Marketing'),
-      condition: () => isAdmin(),
-    },
-    {
-      label: __('Lead Sales'),
-      component: () =>
-        DropdownOption({
-          option: __('Lead Sales'),
-          icon: 'briefcase',
-          selected: user.role === 'Lead Sales',
-        }),
-      onClick: () => updateRole(user, 'Lead Sales'),
-      condition: () => isAdmin(),
-    },
-    {
-      label: __('Admissions Director'),
-      component: () =>
-        DropdownOption({
-          option: __('Admissions Director'),
-          icon: 'shield',
-          selected: user.role === 'Admissions Director',
-        }),
-      onClick: () => updateRole(user, 'Admissions Director'),
-      condition: () => isAdmin(),
-    },
-  ]
-
-  return options.filter((option) => !option.condition || option.condition())
+  return canonicalRoleOptions.map((role) => ({
+    label: __(role.value === 'System Manager' ? 'Admin' : role.label),
+    component: () =>
+      DropdownOption({
+        option: __(role.value === 'System Manager' ? 'Admin' : role.label),
+        icon:
+          role.value === 'System Manager'
+            ? 'shield'
+            : role.value === 'Marketing'
+              ? 'user-check'
+              : 'briefcase',
+        selected: user.role === role.value,
+      }),
+    onClick: () => updateRole(user, role.value),
+  }))
 }
 
 function updateRole(user, newRole) {

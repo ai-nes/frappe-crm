@@ -1,5 +1,6 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
 
 from crm.api.student_import import upsert_student
 
@@ -25,77 +26,26 @@ class TestStudentImport(FrappeTestCase):
 				frappe.delete_doc(doctype, name, force=True)
 		frappe.set_user("Administrator")
 
-	def test_creates_student_from_payload_and_preserves_unmapped_fields(self):
-		result = upsert_student(self._payload())
-
-		self.assertEqual(result["action"], "created")
-		student = frappe.get_doc("CRM Student", result["name"])
-		self.assertEqual(student.student_name, "_Test Inbound An Nguyen")
-		self.assertEqual(student.phone, "0901234567")
-		self.assertEqual(student.email, "inbound@example.com")
-		self.assertEqual(student.branch, "_Test Inbound Campus")
-		self.assertEqual(student.province, "_Test Inbound Province")
-		self.assertEqual(student.high_school, "_Test Inbound High School")
-		self.assertEqual(student.major, "_Test Inbound Major")
-		self.assertEqual(student.aspiration, "_Test Inbound Aspiration")
-		self.assertEqual(student.admission_year, "2099")
-		self.assertEqual(student.source, "_Test Inbound Source")
-		self.assertEqual(student.enrollment_status, "Mới")
-		self.assertEqual(student.advertising_channel, "Facebook")
-		self.assertEqual(
-			student.notes,
-			"Thông tin bổ sung từ nguồn tích hợp:\n- ID người phụ trách: 19x1\n- Công ty: Example Co",
-		)
-
-	def test_retries_update_the_same_student(self):
-		first = upsert_student(self._payload())
-		payload = self._payload(lastname="Updated")
-		second = upsert_student(payload)
-
-		self.assertEqual(second, {"name": first["name"], "action": "updated"})
-		self.assertEqual(frappe.db.count("CRM Student", {"phone": "0901234567"}), 1)
-		self.assertEqual(
-			frappe.db.get_value("CRM Student", first["name"], "student_name"), "_Test Inbound Updated"
-		)
-
-	def test_resolves_high_school_from_school_code(self):
-		self._ensure(
-			"CRM Province",
-			{"province_name": "_Test Inbound Other Province", "province_code": "OTHR"},
-		)
-		self._ensure(
-			"CRM High School",
-			{
-				"school_name": "_Test Inbound Other High School",
-				"school_code": "TINB-HS",
-				"province_name": "_Test Inbound Other Province",
-				"province_code": "OTHR",
-			},
-		)
-		payload = self._payload()
-		payload.pop("cf_school")
-		payload["cf_school_code"] = "TINB-HS"
-
-		result = upsert_student(payload)
-
-		self.assertEqual(frappe.db.get_value("CRM Student", result["name"], "high_school"), "TINB-HS - TINB")
-
-	def test_guest_can_create_a_student(self):
+	def test_legacy_route_requires_authentication(self):
 		frappe.set_user("Guest")
 		try:
-			result = upsert_student(self._payload())
+			with self.assertRaises(frappe.PermissionError):
+				upsert_student(self._payload())
 		finally:
 			frappe.set_user("Administrator")
 
-		self.assertEqual(result["action"], "created")
-		self.assertTrue(frappe.db.exists("CRM Student", result["name"]))
-
-	def test_rejects_payload_when_phone_and_email_belong_to_different_students(self):
-		upsert_student(self._payload())
-		upsert_student(self._payload(mobile="0907654321", email="other@example.com", lastname="Other"))
-
+	def test_authenticated_legacy_route_requires_signed_command_identity(self):
 		with self.assertRaises(frappe.ValidationError):
-			upsert_student(self._payload(email="other@example.com"))
+			upsert_student(self._payload())
+
+	def test_authenticated_route_delegates_only_to_canonical_intake(self):
+		with patch("crm.api.student_import.submit_intake", return_value={"outcome": "created", "student": "CRM-STU-1"}) as intake:
+			result = upsert_student(
+				self._payload(source_record_id="legacy-1", idempotency_key="idem-1")
+			)
+		self.assertEqual(result["action"], "created")
+		self.assertEqual(result["name"], "CRM-STU-1")
+		intake.assert_called_once()
 
 	def _payload(self, **overrides):
 		payload = {

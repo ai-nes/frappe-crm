@@ -2,35 +2,79 @@
   <FadedScrollableDiv class="flex h-full flex-col overflow-y-auto">
     <div class="flex flex-col gap-4 px-3 pb-5 pt-3 sm:px-10">
       <div
-        v-if="loading"
+        v-if="isInitialLoading"
         class="flex h-40 items-center justify-center text-ink-gray-5"
       >
         <LoadingIndicator class="size-5" />
       </div>
 
+      <div
+        v-else-if="initialError"
+        class="flex h-40 flex-col items-center justify-center gap-3 text-center text-ink-gray-6"
+        role="alert"
+      >
+        <span>{{ __('Unable to load this information.') }}</span>
+        <Button :label="__('Retry')" @click="retryLoad" />
+      </div>
+
       <template v-else-if="type === 'interactions'">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold text-ink-gray-9">
+              {{ __('Interactions') }}
+            </h2>
+            <p class="mt-1 text-sm text-ink-gray-5">
+              {{ __('Review conversations and record their outcomes.') }}
+            </p>
+            <Badge
+              v-if="scorePending"
+              class="mt-2"
+              :label="__('Potential score recalculation pending')"
+              theme="orange"
+              variant="subtle"
+            />
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <Button
+              :label="__('Admissions action')"
+              variant="solid"
+              @click="emit('admissions-action')"
+            />
+            <Button
+              v-if="canRecordOutcome"
+              :label="__('Record outcome')"
+              @click="emit('record-outcome')"
+            />
+          </div>
+        </div>
         <div v-if="interactions.data?.length" class="flex flex-col divide-y">
           <div
             v-for="interaction in interactions.data"
             :key="interaction.name"
             class="flex gap-4 py-4"
           >
-            <div class="mt-1 flex size-8 shrink-0 items-center justify-center rounded bg-surface-gray-2">
+            <div
+              class="mt-1 flex size-8 shrink-0 items-center justify-center rounded bg-surface-gray-2"
+            >
               <ActivityIcon class="size-4 text-ink-gray-7" />
             </div>
             <div class="min-w-0 flex-1">
               <div class="flex flex-wrap items-center gap-2">
                 <span class="font-medium text-ink-gray-9">
-                  {{ interaction.summary || interaction.name }}
+                  {{
+                    displayInteractionSummary(
+                      interaction.summary || interaction.name,
+                    )
+                  }}
                 </span>
                 <Badge
                   v-if="interaction.interaction_type"
-                  :label="interaction.interaction_type"
+                  :label="__(interaction.interaction_type)"
                   variant="subtle"
                 />
                 <Badge
                   v-if="interaction.outcome"
-                  :label="interaction.outcome"
+                  :label="__(interaction.outcome)"
                   theme="gray"
                   variant="subtle"
                 />
@@ -64,7 +108,9 @@
                 {{ __('Lead Score') }}
               </div>
               <div class="mt-3 flex items-end gap-3">
-                <div class="text-5xl font-semibold leading-none text-ink-gray-9">
+                <div
+                  class="text-5xl font-semibold leading-none text-ink-gray-9"
+                >
                   {{ formatNumber(scoreContext.latest.final_score) }}
                 </div>
                 <div class="pb-1">
@@ -78,7 +124,9 @@
               <div class="mt-4 flex flex-wrap items-center gap-2">
                 <Badge
                   :label="scoreChangeLabel(scoreContext.latest.score_change)"
-                  :theme="scoreContext.latest.score_change >= 0 ? 'green' : 'red'"
+                  :theme="
+                    scoreContext.latest.score_change >= 0 ? 'green' : 'red'
+                  "
                   variant="subtle"
                 />
                 <span class="text-sm text-ink-gray-5">
@@ -114,7 +162,10 @@
                     v-if="scoreContext.template"
                     class="mt-1 text-sm text-ink-gray-5"
                   >
-                    {{ scoreContext.template.template_name || scoreContext.template.name }}
+                    {{
+                      scoreContext.template.template_name ||
+                      scoreContext.template.name
+                    }}
                   </div>
                 </div>
                 <div class="flex gap-2">
@@ -136,7 +187,9 @@
                       class="relative flex h-44 w-44 items-center justify-center rounded-full"
                       :style="{ background: scoreDonutGradient }"
                     >
-                      <div class="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-surface-white">
+                      <div
+                        class="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-surface-white"
+                      >
                         <div class="text-xs text-ink-gray-5">
                           {{ __('Total') }}
                         </div>
@@ -168,9 +221,14 @@
                         </span>
                         <span
                           class="w-10 text-right font-medium"
-                          :class="segment.negative ? 'text-ink-red-3' : 'text-ink-gray-9'"
+                          :class="
+                            segment.negative
+                              ? 'text-ink-red-3'
+                              : 'text-ink-gray-9'
+                          "
                         >
-                          {{ segment.negative ? '-' : '' }}{{ formatNumber(segment.value) }}
+                          {{ segment.negative ? '-' : ''
+                          }}{{ formatNumber(segment.value) }}
                         </span>
                       </div>
                     </div>
@@ -188,7 +246,9 @@
                       class="flex items-start justify-between gap-3 rounded bg-surface-white px-3 py-2"
                     >
                       <div class="min-w-0">
-                        <div class="truncate text-sm font-medium text-ink-gray-8">
+                        <div
+                          class="truncate text-sm font-medium text-ink-gray-8"
+                        >
                           {{ displayScoreSignal(signal) }}
                         </div>
                         <div class="text-xs text-ink-gray-5">
@@ -197,14 +257,22 @@
                       </div>
                       <span
                         class="shrink-0 text-sm font-semibold"
-                        :class="signal.score >= 0 ? 'text-ink-green-3' : 'text-ink-red-3'"
+                        :class="
+                          signal.score >= 0
+                            ? 'text-ink-green-3'
+                            : 'text-ink-red-3'
+                        "
                       >
                         {{ formatSignedNumber(signal.score) }}
                       </span>
                     </div>
                   </div>
                   <div v-else class="text-sm text-ink-gray-5">
-                    {{ __('No score detail rows were recorded for this snapshot.') }}
+                    {{
+                      __(
+                        'No score detail rows were recorded for this snapshot.',
+                      )
+                    }}
                   </div>
                 </div>
               </div>
@@ -248,7 +316,9 @@
                     </span>
                     <Badge
                       :label="displayIntentRole(intent.intent_role)"
-                      :theme="intent.intent_role === 'Dominant' ? 'orange' : 'gray'"
+                      :theme="
+                        intent.intent_role === 'Dominant' ? 'orange' : 'gray'
+                      "
                       variant="subtle"
                     />
                     <Badge
@@ -291,10 +361,7 @@
                 {{ scoreContext.latest.details?.length || 0 }}
               </span>
             </div>
-            <div
-              v-if="scoreBreakdown.length"
-              class="flex flex-col divide-y"
-            >
+            <div v-if="scoreBreakdown.length" class="flex flex-col divide-y">
               <div
                 v-for="group in scoreBreakdown"
                 :key="group.category"
@@ -335,7 +402,11 @@
                     </div>
                     <span
                       class="text-sm font-semibold md:text-right"
-                      :class="detail.score >= 0 ? 'text-ink-green-3' : 'text-ink-red-3'"
+                      :class="
+                        detail.score >= 0
+                          ? 'text-ink-green-3'
+                          : 'text-ink-red-3'
+                      "
                     >
                       {{ formatSignedNumber(detail.score) }}
                     </span>
@@ -372,22 +443,30 @@
                   <div class="truncate font-medium text-ink-gray-8">
                     {{ score.score_template || score.name }}
                   </div>
-                  <div class="mt-2 flex h-2 overflow-hidden rounded bg-surface-gray-2">
+                  <div
+                    class="mt-2 flex h-2 overflow-hidden rounded bg-surface-gray-2"
+                  >
                     <div
                       class="bg-surface-gray-7"
                       :style="{ width: `${historySegment(score.fit_score)}%` }"
                     />
                     <div
                       class="bg-surface-gray-5"
-                      :style="{ width: `${historySegment(score.engagement_score)}%` }"
+                      :style="{
+                        width: `${historySegment(score.engagement_score)}%`,
+                      }"
                     />
                     <div
                       class="bg-surface-gray-4"
-                      :style="{ width: `${historySegment(score.intent_score)}%` }"
+                      :style="{
+                        width: `${historySegment(score.intent_score)}%`,
+                      }"
                     />
                     <div
                       class="bg-surface-red-2"
-                      :style="{ width: `${historySegment(Math.abs(score.negative_score || 0))}%` }"
+                      :style="{
+                        width: `${historySegment(Math.abs(score.negative_score || 0))}%`,
+                      }"
                     />
                   </div>
                 </div>
@@ -401,7 +480,9 @@
         <EmptyState
           v-else
           :title="__('No Score History Found')"
-          :description="__('Score snapshots for the linked student will appear here.')"
+          :description="
+            __('Score snapshots for the linked student will appear here.')
+          "
           :icon="emptyIcon"
           top="30%"
         />
@@ -414,14 +495,19 @@
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
-import { Badge, LoadingIndicator, createResource } from 'frappe-ui'
+import { admissionsSummaryTranslation } from '@/utils/studentAdmissionsActions'
+import { getResourceViewState } from '@/utils/resourceLoading'
+import { Badge, Button, LoadingIndicator, createResource } from 'frappe-ui'
 import { computed, h, watch } from 'vue'
 
 const props = defineProps({
   contact: { type: Object, default: null },
   student: { type: Object, default: null },
   type: { type: String, default: 'interactions' },
+  canRecordOutcome: { type: Boolean, default: false },
+  refreshKey: { type: [Number, String], default: 0 },
 })
+const emit = defineEmits(['record-outcome', 'admissions-action'])
 
 const emptyIcon = h(ActivityIcon, { class: 'text-ink-gray-4' })
 
@@ -441,6 +527,12 @@ const scoreContext = computed(() => ({
   intents: scores.data?.intents || [],
   template: scores.data?.template || null,
 }))
+
+const scorePending = computed(() => {
+  const input = Number(props.student?.score_input_revision || 0)
+  const applied = Number(props.student?.applied_score_input_revision || 0)
+  return input > applied
+})
 
 const scoreBreakdown = computed(() => {
   let groups = new Map()
@@ -536,7 +628,9 @@ const scoreDonutSegments = computed(() => {
 })
 
 const scoreDonutGradient = computed(() => {
-  let visibleSegments = scoreDonutSegments.value.filter((segment) => segment.value > 0)
+  let visibleSegments = scoreDonutSegments.value.filter(
+    (segment) => segment.value > 0,
+  )
   let total = visibleSegments.reduce((sum, segment) => sum + segment.value, 0)
   if (!total) return '#e5e7eb'
 
@@ -563,16 +657,29 @@ const topSignals = computed(() => {
 const visibleIntents = computed(() => {
   return [...scoreContext.value.intents]
     .sort((a, b) => {
-      if (a.intent_role === 'Dominant' && b.intent_role !== 'Dominant') return -1
+      if (a.intent_role === 'Dominant' && b.intent_role !== 'Dominant')
+        return -1
       if (a.intent_role !== 'Dominant' && b.intent_role === 'Dominant') return 1
       return Number(b.confidence || 0) - Number(a.confidence || 0)
     })
     .slice(0, 3)
 })
 
-const loading = computed(() =>
-  props.type === 'interactions' ? interactions.loading : scores.loading,
+const activeResource = computed(() =>
+  props.type === 'interactions' ? interactions : scores,
 )
+const hasLinkedRecord = computed(() =>
+  Boolean(props.student?.name || props.contact?.student || props.contact?.name),
+)
+const activeResourceViewState = computed(() =>
+  getResourceViewState(activeResource.value, {
+    hasData: !hasLinkedRecord.value || activeResource.value.data != null,
+  }),
+)
+const isInitialLoading = computed(
+  () => activeResourceViewState.value === 'loading',
+)
+const initialError = computed(() => activeResourceViewState.value === 'error')
 
 const scoreCategoryLabels = {
   Fit: __('Hồ sơ phù hợp'),
@@ -604,7 +711,9 @@ const signalLabels = {
 }
 
 const reasonLabels = {
-  'Verified grade 12 from academic results.': __('Đã xác nhận đang học lớp 12 từ kết quả học tập.'),
+  'Verified grade 12 from academic results.': __(
+    'Đã xác nhận đang học lớp 12 từ kết quả học tập.',
+  ),
   'Transcript score 8.5 >= 8.0.': __('Điểm học bạ 8.5 >= 8.0.'),
 }
 
@@ -675,6 +784,12 @@ function displayScoreReason(value) {
   return reasonLabels[value] || __(value || '')
 }
 
+function displayInteractionSummary(value) {
+  const summary = String(value || '')
+  const translation = admissionsSummaryTranslation(summary)
+  return translation ? __(translation.key, translation.args) : summary
+}
+
 function scoreTier(value) {
   let score = Number(value || 0)
   if (score >= 80) return __('High Potential')
@@ -693,49 +808,56 @@ function historySegment(value) {
   return Math.min(Math.max(Number(value || 0), 0), 100)
 }
 
+function loadData() {
+  const studentName = props.student?.name || props.contact?.student
+  const contactName = props.contact?.name
+
+  if (studentName || contactName) {
+    let filters = studentName
+      ? { student: studentName }
+      : { crm_contact: contactName }
+
+    interactions.submit({
+      doctype: 'CRM Interaction',
+      fields: [
+        'name',
+        'interaction_type',
+        'interaction_datetime',
+        'outcome',
+        'summary',
+        'notes',
+      ],
+      filters,
+      order_by: 'interaction_datetime desc',
+      limit_page_length: 50,
+    })
+  } else {
+    interactions.data = []
+  }
+
+  if (props.type === 'scores' && (studentName || contactName)) {
+    scores.submit({
+      student: studentName,
+      contact: contactName,
+      limit: 50,
+    })
+  } else {
+    scores.data = null
+  }
+}
+
+function retryLoad() {
+  loadData()
+}
+
 watch(
   () => [
     props.contact?.name,
     props.contact?.student,
     props.student?.name,
+    props.refreshKey,
   ],
-  () => {
-    let studentName = props.student?.name || props.contact?.student
-    let contactName = props.contact?.name
-
-    if (studentName || contactName) {
-      let filters = studentName
-        ? { student: studentName }
-        : { crm_contact: contactName }
-
-      interactions.submit({
-        doctype: 'CRM Interaction',
-        fields: [
-          'name',
-          'interaction_type',
-          'interaction_datetime',
-          'outcome',
-          'summary',
-          'notes',
-        ],
-        filters,
-        order_by: 'interaction_datetime desc',
-        limit_page_length: 50,
-      })
-    } else {
-      interactions.data = []
-    }
-
-    if (props.type === 'scores' && (studentName || contactName)) {
-      scores.submit({
-        student: studentName,
-        contact: contactName,
-        limit: 50,
-      })
-    } else {
-      scores.data = null
-    }
-  },
+  loadData,
   { immediate: true },
 )
 </script>

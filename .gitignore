@@ -30,3 +30,5 @@ crm/migration/fixtures/*.csv
 .ck.json
 .mcp.json.claude/
 .codex/
+.agents/
+

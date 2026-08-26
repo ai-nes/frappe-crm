@@ -1,11 +1,17 @@
-import frappe
 from datetime import date, datetime, timedelta
+
+import frappe
 from frappe.utils import get_datetime
+
+from crm.fcrm.student_contact_conversion import contacts_for_student, students_for_contact
 from crm.utils import get_docs_by_phone, get_phone_lookup_terms
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_student_records_by_phone(phone: str | None = None):
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	if not actor or actor in {"Guest", "None"}:
+		frappe.throw("Authentication is required.", frappe.PermissionError)
 	if not phone:
 		return {
 			"students": [],
@@ -26,6 +32,8 @@ def get_student_records_by_phone(phone: str | None = None):
 		for s in students_list:
 			try:
 				doc = frappe.get_doc("CRM Student", s.name)
+				if not doc.has_permission("read"):
+					continue
 				students.append(doc.as_dict())
 			except frappe.DoesNotExistError:
 				pass
@@ -41,6 +49,8 @@ def get_student_records_by_phone(phone: str | None = None):
 		for c in contacts_list:
 			try:
 				doc = frappe.get_doc("CRM Contact", c.name)
+				if not doc.has_permission("read"):
+					continue
 				contacts.append(doc.as_dict())
 				contact_names.append(c.name)
 			except frappe.DoesNotExistError:
@@ -48,25 +58,25 @@ def get_student_records_by_phone(phone: str | None = None):
 
 	# Fetch contacts linked to the found students as well, ensuring no duplicates
 	if student_names:
-		linked_contacts_list = frappe.get_all(
-			"CRM Contact",
-			filters={"student": ["in", student_names]},
-			fields=["name"],
-			ignore_permissions=True
-		)
-		for lc in linked_contacts_list:
-			if lc.name not in contact_names:
+		linked_contact_names = []
+		for student_name in student_names:
+			linked_contact_names.extend(contacts_for_student(student_name))
+		for contact_name in dict.fromkeys(linked_contact_names):
+			if contact_name not in contact_names:
 				try:
-					doc = frappe.get_doc("CRM Contact", lc.name)
+					doc = frappe.get_doc("CRM Contact", contact_name)
+					if not doc.has_permission("read"):
+						continue
 					contacts.append(doc.as_dict())
-					contact_names.append(lc.name)
+					contact_names.append(contact_name)
 				except frappe.DoesNotExistError:
 					pass
 
 	# Fetch linked student names to search for other related entities in case they were not in the phone search
 	for c in contacts:
-		if c.get("student") and c.get("student") not in student_names:
-			student_names.append(c.get("student"))
+		for linked_student in students_for_contact(c.get("name")):
+			if linked_student not in student_names and _can_read_doc("CRM Student", linked_student):
+				student_names.append(linked_student)
 
 	# 4. Query CRM Score History
 	score_histories = []
@@ -216,7 +226,10 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 	if not student and contact:
 		if not _can_read_doc("CRM Contact", contact):
 			frappe.throw("Not permitted", frappe.PermissionError)
-		student = frappe.db.get_value("CRM Contact", contact, "student")
+		students = students_for_contact(contact)
+		if len(students) != 1:
+			frappe.throw("A Contact is linked to multiple Student cases; select a Student.", frappe.ValidationError)
+		student = students[0]
 
 	if not student:
 		return {
@@ -328,17 +341,18 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	# Try to link if only one is found
 	if student_doc and not contact_doc:
-		linked = frappe.get_all("CRM Contact", filters={"student": student_doc.name}, fields=["name"], limit=1)
+		linked = contacts_for_student(student_doc.name)
 		if linked:
 			try:
-				contact_doc = frappe.get_doc("CRM Contact", linked[0].name)
+				contact_doc = frappe.get_doc("CRM Contact", linked[0])
 			except frappe.DoesNotExistError:
 				pass
 
 	if contact_doc and not student_doc:
-		if contact_doc.student:
+		students = students_for_contact(contact_doc.name)
+		if len(students) == 1:
 			try:
-				student_doc = frappe.get_doc("CRM Student", contact_doc.student)
+				student_doc = frappe.get_doc("CRM Student", students[0])
 			except frappe.DoesNotExistError:
 				pass
 
@@ -350,7 +364,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"data": None
 		}
 
-	student_name = student_doc.name if student_doc else (contact_doc.student if contact_doc else None)
+	student_name = student_doc.name if student_doc else (students_for_contact(contact_doc.name)[0] if contact_doc and len(students_for_contact(contact_doc.name)) == 1 else None)
 	contact_name = contact_doc.name if contact_doc else None
 
 	# 3. Fetch related documents
@@ -425,7 +439,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	phone_val = student_doc.phone if student_doc else (contact_doc.phone if contact_doc else "")
 	
 	cohort = ""
-	cohort_source = contact_doc if contact_doc and contact_doc.cohort_start_year else student_doc
+	contact_cohort_start = getattr(contact_doc, "cohort_start_year", None) if contact_doc else None
+	cohort_source = contact_doc if contact_cohort_start else student_doc
 	if cohort_source and getattr(cohort_source, "cohort_start_year", None):
 		start = cohort_source.cohort_start_year
 		end = cohort_source.cohort_end_year or (start + 4)
@@ -489,9 +504,10 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			})
 
 	interested_programs = []
+	contact_program = getattr(contact_doc, "education_program", None) if contact_doc else None
 	prog = (
-		contact_doc.education_program
-		if contact_doc and contact_doc.education_program
+		contact_program
+		if contact_program
 		else (student_doc.education_program if student_doc and hasattr(student_doc, "education_program") else None)
 	)
 	if prog:

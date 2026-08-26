@@ -281,7 +281,7 @@ function addFiles(fileArray) {
         requestSucceeded: false,
         errorMessage: null,
         uploading: false,
-        private: !makeAttachmentsPublic.value,
+        private: props.options.forcePrivate ? true : !makeAttachmentsPublic.value,
       }
     })
 

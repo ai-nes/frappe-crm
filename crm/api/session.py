@@ -1,22 +1,26 @@
 import frappe
 from frappe import _
 
-CRM_ROLE_PROFILES = {
-	# Sales Manager/User are retained as migration aliases. They deliberately
-	# select the Sales persona only; they do not grant manager permissions.
-	"sales": frozenset({"Sale", "CTV-Sale", "Counseller", "Sales Manager", "Sales User"}),
-	"marketing": frozenset({"Marketing", "Promoter-PR"}),
-	"lead_sales": frozenset({"Team Leader", "Lead Sales"}),
-	"admissions_director": frozenset({"Admissions Director", "Giám đốc Tuyển sinh"}),
-}
-CRM_PROFILE_LABELS = {
-	"sales": "Sales",
-	"marketing": "Marketing",
-	"lead_sales": "Lead Sales",
-	"admissions_director": "Admissions Director",
-}
-CRM_BUSINESS_ROLES = frozenset().union(*CRM_ROLE_PROFILES.values())
-CRM_ALLOWED_ROLES = frozenset({"System Manager"}) | CRM_BUSINESS_ROLES
+from crm.fcrm.role_policy import (
+	CRM_ALLOWED_ROLES,
+	CRM_BUSINESS_ROLES,
+	LEGACY_COMPATIBILITY_OVERLAYS,
+	POLICY_VERSION,
+	PROFILE_LABELS,
+	PROFILE_ROLE_ALIASES,
+	capabilities_for_roles,
+	classify_role_set,
+	is_crm_user,
+	resolve_compatibility_overlay,
+)
+from crm.fcrm.role_policy import (
+	resolve_crm_profile as _resolve_crm_profile,
+)
+
+# Compatibility exports for existing API consumers. New consumers import the
+# canonical policy module rather than adding role literals here.
+CRM_ROLE_PROFILES = PROFILE_ROLE_ALIASES
+CRM_PROFILE_LABELS = PROFILE_LABELS
 
 
 def resolve_crm_profile(roles):
@@ -27,23 +31,37 @@ def resolve_crm_profile(roles):
 	caller: both fail closed rather than making declaration order a persona
 	selection policy.
 	"""
+	return _resolve_crm_profile(roles)
+
+
+def resolve_copilot_profile(roles):
+	"""Return a Copilot profile while keeping System Manager control-plane-only."""
 	role_names = frozenset(roles)
-	matches = [profile for profile, aliases in CRM_ROLE_PROFILES.items() if role_names & aliases]
-	return matches[0] if len(matches) == 1 else None
+	if "System Manager" in role_names:
+		return None
+	profile = resolve_crm_profile(role_names)
+	label = CRM_PROFILE_LABELS.get(profile, profile)
+	# crm-agents requires the published profile to be one of the server-issued
+	# role names. Same-domain legacy aliases remain valid Desk identities but do
+	# not silently acquire a different Copilot persona.
+	return label if label in role_names else None
 
 
 def get_crm_user_role(roles):
 	"""Return the UI role label and profile for a User's actual Frappe roles."""
 	role_names = frozenset(roles)
+	role_state = classify_role_set(role_names)
 	profile = resolve_crm_profile(role_names)
-	if profile:
+	if role_state == "canonical_profile" and profile:
 		return CRM_PROFILE_LABELS[profile], profile
-	if role_names & CRM_BUSINESS_ROLES:
-		# A System Manager must not mask a conflicting business-role set.  The
-		# caller must first remove/migrate the extra profile aliases.
-		return "", None
-	if "System Manager" in role_names:
+	overlay = resolve_compatibility_overlay(role_names)
+	if role_state == "compatibility_overlay" and overlay:
+		legacy_roles = role_names & LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"]
+		return sorted(legacy_roles)[0], None
+	if role_state == "system_manager":
 		return "System Manager", None
+	if role_names & CRM_BUSINESS_ROLES:
+		return "", None
 	return "", None
 
 
@@ -51,32 +69,32 @@ def _session_role_flags(roles):
 	"""Build flags from server-derived roles; shared with focused contract tests."""
 	role_names = frozenset(roles)
 	profile = resolve_crm_profile(role_names)
-	if role_names & CRM_BUSINESS_ROLES and profile is None:
+	role_state = classify_role_set(role_names)
+	if role_state in {"legacy_migration_required", "mixed_or_unmapped", "unmapped"}:
 		frappe.throw(_("Your CRM business roles are ambiguous or unsupported."), frappe.PermissionError)
-	if not profile and "System Manager" not in role_names:
+	if not is_crm_user(role_names):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 
-	# Keep the legacy booleans stable for older SPA callers. New consumers must
-	# use crm_profile/is_crm_user so a Marketing or Lead Sales account never
-	# masquerades as a Sales Manager/User.
+	# Keep the legacy booleans stable for older SPA callers, while mapping them
+	# to the canonical Sale / Lead Sales profiles.
 	return {
 		"is_system_manager": "System Manager" in role_names,
-		"is_sales_manager": "Sales Manager" in role_names and "System Manager" not in role_names,
-		"is_sales_user": (
-			"Sales User" in role_names
-			and "Sales Manager" not in role_names
-			and "System Manager" not in role_names
-		),
-		"is_crm_user": bool(profile) or "System Manager" in role_names,
+		"is_sales_manager": profile == "lead_sales" and "System Manager" not in role_names,
+		"is_sales_user": profile == "sales" and "System Manager" not in role_names,
+		"is_crm_user": is_crm_user(role_names),
 		"crm_profile": profile,
+		# Compatibility field consumed by the local crm-agents gateway.
+		"crm_role": CRM_PROFILE_LABELS.get(profile, profile),
+		"crm_role_state": role_state,
+		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
+		"crm_policy_version": POLICY_VERSION,
 	}
 
 
 def get_session_role_flags():
-	# Frappe auto-grants every Role in the system to the "Administrator" account,
-	# so it always trips the mixed-business-profile fail-closed check below. That
-	# check exists to catch real users with conflicting role assignments, not the
-	# framework superuser — mirrors the Administrator bypass in
+	# Frappe auto-grants every Role in the system to the "Administrator" account.
+	# Keep the explicit Administrator branch because it is a platform superuser,
+	# not a normal System Manager control-plane account — mirrors the Administrator bypass in
 	# crm.api.check_app_permission.
 	if frappe.session.user == "Administrator":
 		return {
@@ -85,6 +103,10 @@ def get_session_role_flags():
 			"is_sales_user": False,
 			"is_crm_user": True,
 			"crm_profile": None,
+			"crm_role": None,
+			"crm_role_state": "platform_superuser",
+			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
+			"crm_policy_version": POLICY_VERSION,
 		}
 	return _session_role_flags(frappe.get_roles())
 
@@ -102,7 +124,15 @@ def get_my_roles():
 	from client-supplied input.
 	"""
 	flags = get_session_role_flags()
-	return {"user": frappe.session.user, "roles": frappe.get_roles(), "crm_profile": flags["crm_profile"]}
+	return {
+		"user": frappe.session.user,
+		"roles": frappe.get_roles(),
+		"crm_profile": flags["crm_profile"],
+		"crm_role": flags["crm_role"],
+		"crm_role_state": flags["crm_role_state"],
+		"crm_capabilities": flags["crm_capabilities"],
+		"crm_policy_version": flags["crm_policy_version"],
+	}
 
 
 @frappe.whitelist()
@@ -141,8 +171,14 @@ def get_users():
 			# holds every role, which trips get_crm_user_role()'s ambiguous-profile
 			# fail-closed check and would otherwise drop it from crm_users below.
 			user.role, user.crm_profile = "System Manager", None
+			user.crm_role = None
+			user.crm_role_state = "platform_superuser"
+			user.crm_capabilities = sorted(capabilities_for_roles(set(), administrator=True))
 		else:
 			user.role, user.crm_profile = get_crm_user_role(user.roles)
+			user.crm_role = CRM_PROFILE_LABELS.get(user.crm_profile, user.crm_profile)
+			user.crm_role_state = classify_role_set(user.roles)
+			user.crm_capabilities = sorted(capabilities_for_roles(user.roles))
 		if not user.role and "Guest" in user.roles:
 			user.role = "Guest"
 
@@ -152,7 +188,7 @@ def get_users():
 		user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
 		user.language = user.language or system_language
 
-		if user.crm_profile or user.role == "System Manager":
+		if is_crm_user(user.roles, administrator=user.name == "Administrator"):
 			crm_users.append(user)
 
 	if not session_roles["is_system_manager"]:

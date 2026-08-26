@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:identity_key",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "identity_key",
+  "identity_status",
+  "strong_identifier_digest",
+  "strong_identifier_digest_version",
+  "national_id_digest",
+  "national_id_digest_version",
+  "section_identifiers",
+  "identifiers",
+  "source_system",
+  "evidence_reference",
+  "legal_hold"
+ ],
+ "fields": [
+  {
+   "fieldname": "identity_key",
+   "fieldtype": "Data",
+   "label": "Identity Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "active",
+   "fieldname": "identity_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Identity Status",
+   "options": "active\nretracted",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "strong_identifier_digest",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Strong Identifier Digest",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "strong_identifier_digest_version",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Strong Identifier Digest Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "national_id_digest",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "National ID Digest",
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "national_id_digest_version",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "National ID Digest Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_identifiers",
+   "fieldtype": "Section Break",
+   "label": "Identifier Evidence"
+  },
+  {
+   "fieldname": "identifiers",
+   "fieldtype": "Table",
+   "label": "Identifiers",
+   "options": "CRM Student Identity Identifier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_system",
+   "fieldtype": "Data",
+   "label": "Source System",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence_reference",
+   "fieldtype": "Data",
+   "label": "Evidence Reference",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "legal_hold",
+   "fieldtype": "Check",
+   "label": "Legal Hold",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Identity",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "System Manager"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
