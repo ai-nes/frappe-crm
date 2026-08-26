@@ -12,6 +12,10 @@
   "naming_series",
   "student",
   "score_template",
+  "source_score_input_revision",
+  "policy_revision",
+  "policy_hash",
+  "idempotency_key",
   "scoring_time",
   "scoring_date",
   "column_break_1",
@@ -53,6 +57,35 @@
    "label": "Score Template",
    "options": "CRM Score Template",
    "reqd": 1
+  },
+  {
+   "fieldname": "source_score_input_revision",
+   "fieldtype": "Int",
+   "label": "Source Score Input Revision",
+   "read_only": 1,
+   "description": "CRM Student.score_input_revision at calculation time (plans/260825-interaction-scoring-v2 Phase 5) -- nullable/0 for historical rows written before this field existed."
+  },
+  {
+   "fieldname": "policy_revision",
+   "fieldtype": "Int",
+   "label": "Policy Revision",
+   "read_only": 1,
+   "description": "CRM Score Template.policy_revision used for this calculation; participates in ordering/CAS alongside source_score_input_revision."
+  },
+  {
+   "fieldname": "policy_hash",
+   "fieldtype": "Data",
+   "label": "Policy Hash",
+   "read_only": 1,
+   "description": "Immutable content hash of the policy used -- provenance/audit only, never part of ordering/CAS."
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "read_only": 1,
+   "unique": 1,
+   "description": "student:source_score_input_revision:policy_revision -- a duplicate append_score_if_current call for the same tuple returns this existing row instead of writing a second one."
   },
   {
    "fieldname": "scoring_time",

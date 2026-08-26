@@ -143,6 +143,9 @@ permission_query_conditions = {
 	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.get_permission_query_conditions",
 	"CRM Event Participation": "crm.fcrm.student_attribution.get_permission_query_conditions",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.get_permission_query_conditions",
+	"CRM Interaction": "crm.fcrm.permissions.get_interaction_permission_query_conditions",
+	"CRM Intent": "crm.fcrm.permissions.get_intent_permission_query_conditions",
+	"CRM Score History": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 }
 
 has_permission = {
@@ -160,6 +163,9 @@ has_permission = {
 	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.has_permission",
 	"CRM Event Participation": "crm.fcrm.student_attribution.has_permission",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.has_permission",
+	"CRM Interaction": "crm.fcrm.permissions.has_interaction_permission",
+	"CRM Intent": "crm.fcrm.permissions.has_intent_permission",
+	"CRM Score History": "crm.fcrm.permissions.has_operational_record_permission",
 }
 
 # DocType Class
@@ -309,6 +315,7 @@ scheduler_events = {
 	"hourly": [
 		"crm.api.agent_events.retry_pending_agent_events",
 		"crm.api.agent_events.reconcile_student_context_v2",
+		"crm.api.agent_events.reconcile_score_input_v1",
 	],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -143,6 +145,109 @@ class TestCRMInteraction(FrappeTestCase):
 		interaction = frappe.get_doc("CRM Interaction", name)
 		self.assertEqual(interaction.actor, "Administrator")
 
+	# ------------------------------------------------------------- external_id dedup
+
+	def test_create_interaction_is_idempotent_for_same_reference_and_type(self):
+		# CRM Contact itself is excluded from dedup (NON_DEDUPABLE_REFERENCE_
+		# DOCTYPES -- see test_crm_contact.py's lifecycle/assignment regression
+		# tests), so this must reference a genuine discrete source event instead.
+		student = self._make_student()
+		event = self._make_consent_event("_Test Interaction Dedup Contact", "0919500010")
+
+		first = create_interaction(
+			interaction_type="_Test Phone Call",
+			student=student.name,
+			reference_doctype="CRM Contact Consent Event",
+			reference_docname=event.name,
+			summary="_Test dedup first",
+		)
+		second = create_interaction(
+			interaction_type="_Test Phone Call",
+			student=student.name,
+			reference_doctype="CRM Contact Consent Event",
+			reference_docname=event.name,
+			summary="_Test dedup retried",
+		)
+
+		self.assertEqual(first, second)
+		self.assertEqual(
+			frappe.db.count(
+				"CRM Interaction",
+				{
+					"reference_doctype": "CRM Contact Consent Event",
+					"reference_docname": event.name,
+					"interaction_type": "_Test Phone Call",
+				},
+			),
+			1,
+		)
+
+	def test_create_interaction_recovers_from_concurrent_duplicate_insert(self):
+		# Simulates two workers racing past the pre-insert existence check
+		# before either commits: the first frappe.db.get_value() call misses
+		# (patched to None) as if the winner's row hadn't landed yet, so
+		# create_interaction() proceeds to insert() and hits the real unique
+		# external_id constraint. It must resolve that to the winner's row
+		# instead of raising.
+		student = self._make_student()
+		event = self._make_consent_event("_Test Interaction Race Contact", "0919500011")
+		external_id = f"CRM Contact Consent Event:{event.name}:_Test Phone Call"
+
+		winner = frappe.get_doc(
+			{
+				"doctype": "CRM Interaction",
+				"student": student.name,
+				"interaction_type": "_Test Phone Call",
+				"reference_doctype": "CRM Contact Consent Event",
+				"reference_docname": event.name,
+				"summary": "_Test race winner",
+				"external_id": external_id,
+			}
+		)
+		winner.insert(ignore_permissions=True)
+		self.assertEqual(winner.external_id, external_id)
+
+		real_get_value = frappe.db.get_value
+		seen = {"n": 0}
+
+		def _flaky_get_value(doctype, filters=None, fieldname=None, *args, **kwargs):
+			# Target only create_interaction()'s external_id existence check --
+			# not any other frappe.db.get_value call the surrounding code paths
+			# make (e.g. frappe.db.exists() is implemented on top of get_value
+			# in some Frappe versions, so a bare global call counter would also
+			# intercept the unrelated "CRM Interaction Type" exists() check and
+			# make it spuriously report the type as unknown).
+			if doctype == "CRM Interaction" and isinstance(filters, dict) and filters.get("external_id") == external_id:
+				seen["n"] += 1
+				if seen["n"] == 1:
+					return None
+			return real_get_value(doctype, filters, fieldname, *args, **kwargs)
+
+		with patch.object(frappe.db, "get_value", side_effect=_flaky_get_value):
+			result = create_interaction(
+				interaction_type="_Test Phone Call",
+				student=student.name,
+				reference_doctype="CRM Contact Consent Event",
+				reference_docname=event.name,
+				summary="_Test race loser",
+			)
+
+		self.assertEqual(result, winner.name)
+		self.assertEqual(
+			frappe.db.count("CRM Interaction", {"external_id": external_id}),
+			1,
+		)
+
+	def test_manual_interaction_without_reference_is_not_deduplicated(self):
+		student = self._make_student()
+		first = create_interaction(
+			interaction_type="_Test Phone Call", student=student.name, summary="_Test manual one"
+		)
+		second = create_interaction(
+			interaction_type="_Test Phone Call", student=student.name, summary="_Test manual two"
+		)
+		self.assertNotEqual(first, second)
+
 	def test_create_interaction_honors_explicit_actor(self):
 		student = self._make_student()
 		name = create_interaction(
@@ -225,6 +330,36 @@ class TestCRMInteraction(FrappeTestCase):
 		self.assertFalse(interaction.reference_doctype)
 		self.assertFalse(interaction.reference_docname)
 
+	# ------------------------------------------------------------- on_trash() revision bump
+
+	def test_deleting_interaction_bumps_score_input_revision(self):
+		student = self._make_student()
+		interaction = self._make_interaction(student)
+		before_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+
+		frappe.delete_doc("CRM Interaction", interaction.name, force=True)
+
+		after_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		self.assertGreater(after_revision, before_revision)
+
+	def test_deleting_interaction_resolves_student_from_contact(self):
+		contact = self._make_contact("_Test Interaction Trash Contact", "0919500020")
+		student = self._make_student()
+		contact.db_set("student", student.name)
+		interaction = frappe.get_doc({
+			"doctype": "CRM Interaction",
+			"crm_contact": contact.name,
+			"interaction_type": "_Test Phone Call",
+			"summary": "_Test trash via contact",
+		})
+		interaction.insert(ignore_permissions=True)
+		before_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+
+		frappe.delete_doc("CRM Interaction", interaction.name, force=True)
+
+		after_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		self.assertGreater(after_revision, before_revision)
+
 	# ---------------------------------------------------------------------- helpers
 
 	def _make_contact(self, name, phone):
@@ -236,6 +371,23 @@ class TestCRMInteraction(FrappeTestCase):
 		contact.insert(ignore_permissions=True)
 		self.addCleanup(self._delete_if_exists, "CRM Contact", contact.name)
 		return contact
+
+	def _make_consent_event(self, contact_name, phone):
+		contact = self._make_contact(contact_name, phone)
+		event = frappe.get_doc(
+			{
+				"doctype": "CRM Contact Consent Event",
+				"contact": contact.name,
+				# "Marked Test" is excluded from CONSENT_EVENT_TO_INTERACTION_TYPE
+				# dispatch, so inserting this doesn't itself create an interaction
+				# and pollute the dedup counts this helper's callers assert on.
+				"event_type": "Marked Test",
+				"occurred_at": frappe.utils.now_datetime(),
+			}
+		)
+		event.insert(ignore_permissions=True)
+		self.addCleanup(self._delete_if_exists, "CRM Contact Consent Event", event.name)
+		return event
 
 	def _delete_if_exists(self, doctype, name):
 		if name and frappe.db.exists(doctype, name):

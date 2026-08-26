@@ -74,8 +74,13 @@ def get_pipeline_summary() -> dict:
 		fields=["student"], limit_page_length=1000, ignore_permissions=True,
 	)
 	recommendations = frappe.get_all(
-		"CRM Recommendation", filters={"student": ["in", student_ids], "status": ["in", ["new", "acknowledged", "accepted", "modified"]]},
-		fields=["student", "status"], limit_page_length=1000, ignore_permissions=True,
+		"CRM Student Task",
+		filters={
+			"student": ["in", student_ids],
+			"current_slot": "CURRENT",
+			"state": ["in", ["PENDING", "ACCEPTED", "IN_PROGRESS", "REQUIRES_REVIEW", "DEFERRED"]],
+		},
+		fields=["student", "state as status"], limit_page_length=1000, ignore_permissions=True,
 	)
 	return {
 		"cohort": "E2E-FPT-2026",

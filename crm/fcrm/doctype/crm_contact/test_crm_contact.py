@@ -201,7 +201,7 @@ class TestCRMContact(FrappeTestCase):
 		self.assertEqual(len(contact.assignment_log), 0)
 
 	# ------------------------------------------------------- CRM Interaction dispatch
-	# (Phase 4: crm.fcrm.interaction_log.create_interaction_from_contact_update)
+	# (crm.fcrm.interaction_log.create_interaction_from_contact_update)
 
 	def test_lifecycle_stage_change_creates_single_stage_changed_interaction(self):
 		self._ensure_interaction_type("Stage Changed")
@@ -223,6 +223,17 @@ class TestCRMContact(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		contact.reload()
 		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 1)
+
+		# A second genuine transition (MQL -> Applicant) is a distinct historical
+		# event and must not be collapsed into the first Stage Changed row just
+		# because both share the same contact + interaction_type -- CRM Contact
+		# is an enduring entity, not a discrete source event (see
+		# interaction_log.NON_DEDUPABLE_REFERENCE_DOCTYPES).
+		contact.enrollment_status = "Đã xác nhận"
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(contact.lifecycle_stage, "Applicant")
+		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 2)
 
 	def test_assignment_change_creates_lead_assigned_then_lead_reassigned_interactions(self):
 		self._ensure_interaction_type("Lead Assigned")
@@ -247,6 +258,16 @@ class TestCRMContact(FrappeTestCase):
 		contact.reload()
 		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
 		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 1)
+
+		# A second reassignment is a distinct historical event of the *same*
+		# interaction_type ("Lead Reassigned") on the same contact and must not
+		# be deduplicated away.
+		staff_c = self._make_staff("_Test Interaction Assign Staff C", campus, department, team)
+		contact.assigned_to = staff_c
+		contact.save(ignore_permissions=True)
+		contact.reload()
+		self.assertEqual(self._interaction_count(contact.name, "Lead Assigned"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "Lead Reassigned"), 2)
 
 	# ---------------------------------------------------------------------- helpers
 

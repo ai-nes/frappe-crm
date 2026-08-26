@@ -94,7 +94,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"occurred_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	if enqueue and frappe.conf.get("crm_agents_v2_enabled", 0) not in (0, "0", False):
+	if enqueue:
 		from crm.api.agent_events import record_student_context_event
 
 		record_student_context_event(student, revision, event_id=event_id)
@@ -120,4 +120,21 @@ def snapshot_hash(value: dict) -> str:
 
 
 def is_committed_task_state(state: str | None) -> bool:
-	return state in {"ACCEPTED", "IN_PROGRESS", "REQUIRES_REVIEW", "COMPLETED", "CANCELLED"}
+	"""States representing a Sales decision already made on this task.
+
+	A new context revision must never silently supersede one of these -- it
+	flags the task REQUIRES_REVIEW instead (see `upsert_student_next_task`).
+	DEFERRED and REJECTED are decisions just like ACCEPTED/COMPLETED/
+	CANCELLED, not an absence of one; a deferred task in particular carries a
+	`revisit_at` that would otherwise vanish from the worklist the moment the
+	student's context changes again, before it was ever revisited.
+	"""
+	return state in {
+		"ACCEPTED",
+		"IN_PROGRESS",
+		"REQUIRES_REVIEW",
+		"COMPLETED",
+		"CANCELLED",
+		"DEFERRED",
+		"REJECTED",
+	}

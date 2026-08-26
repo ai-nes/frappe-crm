@@ -28,10 +28,17 @@ class CRMStudentTask(Document):
 			"action_revision",
 			"execution_package_version",
 			"outcome",
+			"priority",
+			"revisit_at",
+			"decision_reason",
+			"decision_actor",
+			"decision_at",
+			"decision_revision",
 		}
 	)
 
 	def validate(self):
+		self.worklist_priority_rank = {"high": 0, "medium": 1, "low": 2}.get(self.priority, 99)
 		before = self.get_doc_before_save()
 		if before and not getattr(frappe.flags, "student_task_command", False):
 			for field in self._PROTECTED_FIELDS:
@@ -46,6 +53,8 @@ class CRMStudentTask(Document):
 			raise ValueError("ACT task requires action_type")
 		if self.disposition != "ACT" and self.action_type:
 			raise ValueError("MONITOR/NURTURE task cannot carry action_type")
+		if self.state != "DEFERRED" and self.revisit_at:
+			raise ValueError("revisit_at is only valid for a DEFERRED task")
 
 
 def get_permission_query_conditions(user=None):

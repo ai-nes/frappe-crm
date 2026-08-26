@@ -6,13 +6,13 @@ class CRMStudentDecisionEvent(Document):
 	"""Append-only audit envelope for Phase 6 decisions and action transitions."""
 
 	_IMMUTABLE_FIELDS = (
-		"event_id", "event_type", "student", "recommendation", "sales_action",
+		"event_id", "event_type", "student", "recommendation", "student_task", "sales_action",
 		"command_receipt", "aggregate_revision", "from_state", "to_state", "delta", "actor", "actor_scope",
 		"occurred_at", "reason", "correlation_id", "idempotency_key", "policy_version",
 		"schema_version", "supersedes",
 	)
 	_EVENT_TYPES = {
-		"recommendation_decided", "action_started", "action_completed", "action_failed",
+		"recommendation_decided", "task_decided", "action_started", "action_completed", "action_failed",
 		"action_cancelled", "action_reassigned", "action_superseded",
 	}
 

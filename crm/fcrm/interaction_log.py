@@ -1,15 +1,13 @@
-"""Phase 4/5/6: creates CRM Interaction records from the source events the
-admissions operating model considers meaningful lead touchpoints -- outgoing/
-incoming Communication, a completed Task, a Call Log entry, a CRM Contact
+"""Creates CRM Interaction records from the source events the admissions
+operating model considers meaningful lead touchpoints -- outgoing/incoming
+Communication, a completed Task, a Call Log entry, a CRM Contact
 lifecycle/assignment change, a Consent Event, a CRM Event Participation
-status change (Phase 5), and a CRM Campaign Touchpoint insert (Phase 6, added
-to satisfy the operating model's "no customer activity outside Interaction"
-condition, which a bare Touchpoint insert previously violated). Each
-dispatcher below is wired via hooks.py doc_events and fires only on the
-specific has_value_changed transition listed in the guard tables in
-plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md and
-phase-05-campaign-event-overhaul.md -- do not loosen these into a generic
-"on every save" check.
+status change, and a CRM Campaign Touchpoint insert (added to satisfy the
+operating model's "no customer activity outside Interaction" condition,
+which a bare Touchpoint insert previously violated). Each dispatcher below
+is wired via hooks.py doc_events and fires only on the specific
+has_value_changed transition each guard checks explicitly -- do not loosen
+these into a generic "on every save" check.
 
 Dispatchers are skipped while `frappe.flags.in_patch` is set, so migration
 patches that backfill historical records (e.g. converting existing singular
@@ -42,6 +40,22 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 # Attribution is evidence, not an admissions engagement.  In particular, an
 # event registration/check-in must not close Student SLA or create outcomes.
 SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
+
+# CRM Contact is the enduring lead/contact entity itself, not a discrete source
+# event -- create_interaction_from_contact_update reuses it as the reference
+# for every lifecycle/assignment transition on that contact. Keying
+# external_id off it would collapse distinct Stage Changed / Lead Assigned /
+# Lead Reassigned events on the same contact into a single deduplicated row,
+# destroying that history. Doctypes here never get an external_id.
+NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
+
+
+def external_id_for(reference_doctype, reference_docname, interaction_type):
+	if not reference_doctype or not reference_docname or not interaction_type:
+		return None
+	if reference_doctype in NON_DEDUPABLE_REFERENCE_DOCTYPES:
+		return None
+	return f"{reference_doctype}:{reference_docname}:{interaction_type}"
 
 
 def _source_matches_student(doctype, name, student, seen=None):
@@ -123,12 +137,19 @@ def create_interaction(
 		frappe.log_error(title=f"Unknown CRM Interaction Type: {interaction_type}")
 		return None
 
+	external_id = external_id_for(reference_doctype, reference_docname, interaction_type)
+	if external_id:
+		existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
+		if existing:
+			return existing
+
 	interaction = frappe.new_doc("CRM Interaction")
 	interaction.student = student
 	interaction.crm_contact = crm_contact
 	interaction.interaction_type = interaction_type
 	interaction.reference_doctype = reference_doctype
 	interaction.reference_docname = reference_docname
+	interaction.external_id = external_id
 	interaction.actor = actor or frappe.session.user
 	interaction.summary = summary or interaction_type
 	interaction.outcome = outcome
@@ -136,8 +157,28 @@ def create_interaction(
 		interaction.source_verified = 1
 	previous_flag = getattr(frappe.flags, "student_sla_source_service", False)
 	frappe.flags.student_sla_source_service = True
+	savepoint = "create_interaction_external_id_race"
 	try:
-		interaction.insert(ignore_permissions=True)
+		try:
+			if external_id:
+				frappe.db.savepoint(savepoint)
+			interaction.insert(ignore_permissions=True)
+		except (frappe.UniqueValidationError, frappe.DuplicateEntryError) as exc:
+			# Two concurrent writers (e.g. a retried webhook delivery and the
+			# original request) may both pass the existence check above before
+			# either inserts; MariaDB reports that race as a unique-constraint
+			# violation on the external_id index. Roll back only the failed
+			# insert (not the enclosing request transaction, which may hold the
+			# just-inserted source document that triggered this call), re-read,
+			# and return the winner's row instead of surfacing a spurious
+			# failure to the caller.
+			if not external_id:
+				raise
+			frappe.db.rollback(save_point=savepoint)
+			existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
+			if not existing:
+				raise
+			return existing
 	finally:
 		frappe.flags.student_sla_source_service = previous_flag
 	return interaction.name
@@ -236,9 +277,9 @@ def create_interaction_from_task_update(doc, method=None):
 		return
 	if not (doc.has_value_changed("status") and doc.status == "Done"):
 		return
-	# A Phase 5 next-action Task may already be linked to the canonical
-	# Interaction that recorded its outcome. Completion must satisfy that event,
-	# not create a second timeline row.
+	# A next-action Task may already be linked to the canonical Interaction
+	# that recorded its outcome. Completion must satisfy that event, not
+	# create a second timeline row.
 	if getattr(doc, "linked_interaction", None):
 		return
 	if not doc.description:

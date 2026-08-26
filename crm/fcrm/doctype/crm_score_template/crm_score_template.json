@@ -15,6 +15,9 @@
   "column_break_1",
   "start_time",
   "end_time",
+  "section_policy_version",
+  "policy_revision",
+  "policy_hash",
   "section_weights",
   "fit_weight",
   "engagement_weight",
@@ -75,6 +78,27 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "End Time"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_policy_version",
+   "fieldtype": "Section Break",
+   "label": "Policy Versioning"
+  },
+  {
+   "default": "0",
+   "description": "Monotonic per-template counter. Bumped automatically when this template's resolved rules/signals/weights content changes — never edited directly.",
+   "fieldname": "policy_revision",
+   "fieldtype": "Int",
+   "label": "Policy Revision",
+   "read_only": 1
+  },
+  {
+   "description": "Immutable content hash of the resolved policy (rules + negative rules + weights + time decay, joined with current signal content). Provenance/audit only — never used for ordering.",
+   "fieldname": "policy_hash",
+   "fieldtype": "Data",
+   "label": "Policy Hash",
+   "read_only": 1
   },
   {
    "fieldname": "section_weights",

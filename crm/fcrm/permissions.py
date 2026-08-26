@@ -36,6 +36,15 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Student SLA Event": "student",
 	"CRM Student SLA Delivery": "student",
 	"CRM Student SLA Delivery Attempt": "delivery",
+	# CRM Score History's `student` link is reqd (crm_score_history.json), so
+	# the Student-scope-inheriting condition applies directly. CRM Intent is
+	# NOT listed here even though it also has a `student` field: that field is
+	# read_only and derived from its (required) `interaction`'s student, so it
+	# is null for a Contact-only, pre-conversion interaction -- see
+	# get_intent_permission_query_conditions below, which falls back through
+	# the parent Interaction's own Student/Contact scope instead of requiring
+	# a non-null student.
+	"CRM Score History": "student",
 }
 
 
@@ -62,8 +71,23 @@ def get_operational_record_permission_query_conditions(doctype, user=None):
 	)
 
 
-def has_operational_record_permission(doc, user=None, permission_type=None):
-	"""Apply Student current-scope checks to direct operational-record reads."""
+def has_operational_record_permission(doc, user=None, permission_type=None, ptype=None):
+	"""Apply Student current-scope checks to direct operational-record reads.
+
+	Accepts both `ptype` and `permission_type`: frappe/__init__.py's has_permission
+	calls doctype has_permission hooks via frappe.call(method, doc=doc, ptype=ptype,
+	user=user, debug=debug) -- frappe.call's get_newargs() silently drops any kwarg
+	whose name doesn't match a parameter on the target function, so a hook that only
+	declares `permission_type` never actually receives the real value at all.
+	"""
+	permission_type = permission_type or ptype
+	if permission_type == "create":
+		# Frappe's has_permission hook fires on Document.insert()'s "create"
+		# check before the doctype's autoname assigns doc.name, so the row-scope
+		# query below (keyed on name) can't run yet. Row-level scoping still
+		# applies to every subsequent read/write once the row exists; only the
+		# DocType-level create grant governs who may create one at all.
+		return True
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
 	student_name = doc.get(student_field) if student_field else None
 	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
@@ -113,6 +137,158 @@ def get_permission_query_conditions(doctype, user=None):
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
+
+
+def get_interaction_permission_query_conditions(doctype, user=None):
+	"""Row-level scope for CRM Interaction: Student-linked or Contact-only.
+
+	A CRM Interaction has no independent row scope of its own -- before this
+	hook, its DocType-level role grants (e.g. Sale, Marketing) were the only
+	access check, so any role with a channel-based read grant could see every
+	student's interactions regardless of assignment.  This always derives from
+	the same Student/Contact scope as CRM Student/CRM Contact: never from
+	channel, interaction_type, or role alone. A pre-conversion (student is
+	null) interaction falls back to the linked CRM Contact's scope.
+	"""
+	if doctype != "CRM Interaction":
+		return "1=0"
+	user = user or frappe.session.user
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	contact_condition = get_permission_query_conditions("CRM Contact", user=user)
+	table = "`tabCRM Interaction`"
+
+	def _student_clause():
+		if student_condition is None:
+			return f"{table}.student is not null"
+		if student_condition == "1=0":
+			return None
+		return (
+			f"{table}.student in (select `tabCRM Student`.name from `tabCRM Student` "
+			f"where ({student_condition}))"
+		)
+
+	def _contact_clause():
+		if contact_condition is None:
+			return f"{table}.student is null and {table}.crm_contact is not null"
+		if contact_condition == "1=0":
+			return None
+		return (
+			f"{table}.student is null and {table}.crm_contact in "
+			f"(select `tabCRM Contact`.name from `tabCRM Contact` where ({contact_condition}))"
+		)
+
+	if student_condition is None and contact_condition is None:
+		return None
+	parts = [clause for clause in (_student_clause(), _contact_clause()) if clause]
+	if not parts:
+		return "1=0"
+	return "(" + " or ".join(parts) + ")"
+
+
+def _has_interaction_create_permission(doc, user=None) -> bool:
+	"""Check the unsaved Interaction's *target* scope, not its own row.
+
+	Unlike a name-keyed row-scope query (which needs doc.name and so cannot
+	run before insert -- see has_operational_record_permission's docstring),
+	the linked Student/Contact already exists and its scope can be checked
+	directly from the unsaved doc's link fields. A DocType-level create grant
+	(e.g. Sale) must never bypass this -- otherwise any role with that grant
+	could attach an interaction to a student/contact outside their scope.
+	"""
+	if doc.get("student"):
+		student = frappe.db.exists("CRM Student", doc.student)
+		if not student:
+			return False
+		return has_permission(frappe.get_doc("CRM Student", doc.student), user=user)
+	if doc.get("crm_contact"):
+		contact = frappe.db.exists("CRM Contact", doc.crm_contact)
+		if not contact:
+			return False
+		return has_permission(frappe.get_doc("CRM Contact", doc.crm_contact), user=user)
+	# Neither target is set -- nothing to scope against; deny rather than
+	# silently allow an orphaned interaction to bypass row scope.
+	return False
+
+
+def has_interaction_permission(doc, user=None, permission_type=None, ptype=None):
+	# Accepts both ptype and permission_type -- see has_operational_record_
+	# permission's docstring: frappe.call only forwards the kwarg name(s) a
+	# hook function actually declares, and the real hook call uses `ptype`.
+	permission_type = permission_type or ptype
+	if permission_type == "create":
+		return _has_interaction_create_permission(doc, user=user)
+	condition = get_interaction_permission_query_conditions("CRM Interaction", user=user)
+	if condition is None:
+		return True
+	if condition == "1=0":
+		return False
+	table = "`tabCRM Interaction`"
+	return bool(
+		frappe.db.sql(
+			f"select name from {table} where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
+
+
+def get_intent_permission_query_conditions(doctype, user=None):
+	"""Row-level scope for CRM Intent: derived from its parent Interaction.
+
+	CRM Intent.student is read_only and copied from its (required) `interaction`
+	link's student (crm_intent.py's before_validate), so it is null for a
+	Contact-only, pre-conversion interaction. Reusing the generic Student-scope
+	operational-record condition would wrongly deny every Intent on such an
+	interaction. Instead this joins through `interaction` and reuses that
+	doctype's own Student/Contact fallback scope directly.
+	"""
+	if doctype != "CRM Intent":
+		return "1=0"
+	interaction_condition = get_interaction_permission_query_conditions("CRM Interaction", user=user)
+	if interaction_condition is None:
+		return None
+	if interaction_condition == "1=0":
+		return "1=0"
+	return (
+		"`tabCRM Intent`.interaction in (select `tabCRM Interaction`.name "
+		f"from `tabCRM Interaction` where ({interaction_condition}))"
+	)
+
+
+def _has_intent_create_permission(doc, user=None) -> bool:
+	"""Check the unsaved Intent's linked Interaction scope, not its own row.
+
+	`interaction` is `reqd=1` on CRM Intent, so it is always present on an
+	unsaved doc. A DocType-level create grant must not bypass this -- it
+	would otherwise let a role attach an intent to an interaction outside
+	their scope.
+	"""
+	interaction_name = doc.get("interaction")
+	if not interaction_name:
+		return False
+	interaction = frappe.db.exists("CRM Interaction", interaction_name)
+	if not interaction:
+		return False
+	return has_permission(frappe.get_doc("CRM Interaction", interaction_name), user=user)
+
+
+def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
+	# See has_operational_record_permission's docstring for why both kwarg
+	# names are accepted.
+	permission_type = permission_type or ptype
+	if permission_type == "create":
+		return _has_intent_create_permission(doc, user=user)
+	condition = get_intent_permission_query_conditions("CRM Intent", user=user)
+	if condition is None:
+		return True
+	if condition == "1=0":
+		return False
+	table = "`tabCRM Intent`"
+	return bool(
+		frappe.db.sql(
+			f"select name from {table} where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
 
 
 def has_permission(doc, user=None, permission_type=None):
@@ -285,7 +461,7 @@ def _team_leader_condition(table, crm_staff_name):
 	if staff_clause:
 		parts.append(staff_clause)
 
-	# Unassigned-pool: Contact/Student now carry owning_team directly (Phase 2), so
+	# Unassigned-pool: Contact/Student now carry owning_team directly, so
 	# this is an exact match against the leader's own team(s) — no more approximating
 	# team ownership via a shared campus, which used to risk leaking a sibling team's
 	# unassigned records (constraint 3).

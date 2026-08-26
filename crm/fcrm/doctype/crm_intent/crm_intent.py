@@ -32,6 +32,23 @@ class CRMIntent(Document):
 			from crm.services.student_context import mark_student_context_changed
 
 			mark_student_context_changed(self.student, "intent_material_change")
+			# Every intent is a direct Intent-scorer input -- always
+			# scoring-relevant, unlike a generic Student field edit.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(self.student, "intent_material_change")
+
+	def on_trash(self):
+		if self.student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(self.student, "intent_deleted")
+			# Deleting an Intent-scorer input changes the same fact surface
+			# as editing one -- the current score must not be left marked
+			# fresh against evidence that no longer exists.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(self.student, "intent_deleted")
 
 	@staticmethod
 	def default_list_data():
