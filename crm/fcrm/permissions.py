@@ -48,7 +48,7 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 }
 
 
-def get_operational_record_permission_query_conditions(doctype, user=None):
+def get_operational_record_permission_query_conditions(user=None, doctype=None):
 	"""Scope operational records through their linked Student aggregate."""
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doctype)
 	if not student_field:
@@ -139,7 +139,7 @@ def get_permission_query_conditions(doctype, user=None):
 	return "1=0"
 
 
-def get_interaction_permission_query_conditions(doctype, user=None):
+def get_interaction_permission_query_conditions(user=None, doctype=None):
 	"""Row-level scope for CRM Interaction: Student-linked or Contact-only.
 
 	A CRM Interaction has no independent row scope of its own -- before this
@@ -217,7 +217,7 @@ def has_interaction_permission(doc, user=None, permission_type=None, ptype=None)
 	permission_type = permission_type or ptype
 	if permission_type == "create":
 		return _has_interaction_create_permission(doc, user=user)
-	condition = get_interaction_permission_query_conditions("CRM Interaction", user=user)
+	condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
 	if condition is None:
 		return True
 	if condition == "1=0":
@@ -231,7 +231,7 @@ def has_interaction_permission(doc, user=None, permission_type=None, ptype=None)
 	)
 
 
-def get_intent_permission_query_conditions(doctype, user=None):
+def get_intent_permission_query_conditions(user=None, doctype=None):
 	"""Row-level scope for CRM Intent: derived from its parent Interaction.
 
 	CRM Intent.student is read_only and copied from its (required) `interaction`
@@ -243,7 +243,7 @@ def get_intent_permission_query_conditions(doctype, user=None):
 	"""
 	if doctype != "CRM Intent":
 		return "1=0"
-	interaction_condition = get_interaction_permission_query_conditions("CRM Interaction", user=user)
+	interaction_condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
 	if interaction_condition is None:
 		return None
 	if interaction_condition == "1=0":
@@ -277,7 +277,7 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 	permission_type = permission_type or ptype
 	if permission_type == "create":
 		return _has_intent_create_permission(doc, user=user)
-	condition = get_intent_permission_query_conditions("CRM Intent", user=user)
+	condition = get_intent_permission_query_conditions(user=user, doctype="CRM Intent")
 	if condition is None:
 		return True
 	if condition == "1=0":

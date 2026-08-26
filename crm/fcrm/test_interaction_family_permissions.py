@@ -84,14 +84,14 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 
 	def test_system_manager_has_unrestricted_interaction_access(self):
 		user, _staff = self._make_user_and_staff("_Test IFP Admin", ["System Manager"])
-		self.assertIsNone(get_interaction_permission_query_conditions("CRM Interaction", user=user))
+		self.assertIsNone(get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction"))
 
 	def test_marketing_role_has_no_row_scope_despite_channel(self):
 		# Marketing has DocType-level read on CRM Interaction (crm_interaction.json),
 		# but must never see a row solely because the channel is Email/Chat -- it
 		# has no Student/Contact case scope in the canonical policy.
 		user, _staff = self._make_user_and_staff("_Test IFP Marketing", ["Marketing"])
-		self.assertEqual(get_interaction_permission_query_conditions("CRM Interaction", user=user), "1=0")
+		self.assertEqual(get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction"), "1=0")
 
 	def test_sale_only_sees_own_assigned_students_interaction(self):
 		user, staff = self._make_user_and_staff("_Test IFP Sale", ["Sale"])
@@ -100,7 +100,7 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		mine = self._make_interaction(student.name, "_Test IFP mine")
 		theirs = self._make_interaction(other_student.name, "_Test IFP theirs")
 
-		condition = get_interaction_permission_query_conditions("CRM Interaction", user=user)
+		condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
 		visible = frappe.db.sql(
 			f"select name from `tabCRM Interaction` where name in %(names)s and ({condition})",
 			{"names": [mine.name, theirs.name]},
@@ -191,7 +191,7 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		self.addCleanup(frappe.delete_doc, "CRM Intent", mine_intent.name, force=True)
 		self.addCleanup(frappe.delete_doc, "CRM Intent", theirs_intent.name, force=True)
 
-		condition = get_intent_permission_query_conditions("CRM Intent", user=user)
+		condition = get_intent_permission_query_conditions(user=user, doctype="CRM Intent")
 		visible = frappe.db.sql(
 			f"select name from `tabCRM Intent` where name in %(names)s and ({condition})",
 			{"names": [mine_intent.name, theirs_intent.name]},
