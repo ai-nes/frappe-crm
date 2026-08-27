@@ -6,7 +6,7 @@ the moment a staff member logs the first real contact. Locked thresholds:
 30 minutes to "Sắp quá hạn" (warning), 2 hours to "Quá SLA" (breach).
 Recomputed on a schedule (see hooks.py scheduler_events) rather than only on
 save, since a lead can breach purely by elapsed time with no new save event.
-See plans/260822-admissions-crm-alignment/phase-03-lead-status-routing-sla.md.
+The SLA contract is enforced by this module and scheduled recalculation.
 """
 
 import frappe

@@ -4,9 +4,10 @@ const terminalActionStatuses = new Set(['completed', 'failed', 'cancelled', 'can
 // without spreading endpoint names and wire-format assumptions through views.
 export const studentDecisionApi = Object.freeze({
   listRecommendations: 'crm.api.student_worklist.list_student_worklist',
-  listActions: 'crm.api.student_worklist.list_my_sales_actions',
+  createAction: 'crm.api.student_decision.create_action',
+  listActions: 'crm.api.student_worklist.list_my_actions',
   decideRecommendation: 'crm.api.student_decision.transition_recommendation',
-  transitionAction: 'crm.api.student_decision.transition_sales_action',
+  transitionAction: 'crm.api.student_decision.transition_action',
   getContext: 'crm.api.student_context.get_student_context',
 })
 
@@ -30,14 +31,14 @@ export function recommendationItem(dto = {}) {
   }
 }
 
-export function salesActionItem(dto = {}) {
+export function actionItem(dto = {}) {
   const status = dto.execution_status || dto.status || 'planned'
   const dueAt = dto.due_at || dto.due_date || null
   return {
-    name: dto.name || dto.sales_action || dto.action_id || '',
+    name: dto.name || dto.action_id || '',
     student: dto.student || dto.student_id || '',
     studentName: dto.student_name || dto.student_label || dto.student || __('Student unavailable'),
-    actionType: dto.action_type || dto.action || __('Sales action'),
+    actionType: dto.action_type || dto.action || __('Action'),
     status,
     dueAt,
     overdue: Boolean(dto.overdue) || isActionOverdue({ status, dueAt }),
@@ -98,7 +99,7 @@ export function toUtcInstant(value) {
   return Number.isNaN(date.getTime()) ? value : date.toISOString()
 }
 
-export function buildSalesActionTransitionPayload({ action, status, outcomeCode, evidence, reason, linkedInteraction, idempotencyKey, correlationId }) {
+export function buildActionTransitionPayload({ action, status, outcomeCode, evidence, reason, linkedInteraction, idempotencyKey, correlationId }) {
   const payload = {
     name: action.name,
     expected_revision: action.revision,

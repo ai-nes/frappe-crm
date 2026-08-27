@@ -18,7 +18,7 @@
     >
       <template #tab-panel>
         <Activities
-          v-if="!['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)"
+          v-if="!['Interactions', 'Scoring', 'Actions'].includes(tabs[tabIndex]?.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -26,6 +26,12 @@
           :docname="crmContactId"
           :tabs="tabs"
           @afterSave="() => sections.reload()"
+        />
+        <ActionsPanel
+          v-else-if="tabs[tabIndex]?.name === 'Actions'"
+          doctype="CRM Contact"
+          :name="crmContactId"
+          :student="doc.student"
         />
         <InteractionScoreArea
           v-else-if="tabs[tabIndex]?.name === 'Interactions'"
@@ -76,7 +82,7 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
-import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import ActionsPanel from '@/components/StudentDecision/ActionsPanel.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
@@ -146,7 +152,7 @@ const tabs = computed(() => [
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
   { name: 'Scoring', label: __('Potential Score'), icon: ActivityIcon },
-  { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
+  { name: 'Actions', label: __('Actions'), icon: ActivityIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
 ])

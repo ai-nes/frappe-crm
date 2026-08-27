@@ -3,7 +3,7 @@ import {
   buildRecommendationDecisionPayload,
   isActionOverdue,
   recommendationItem,
-  salesActionItem,
+  actionItem,
   transitionOptions,
   validateRecommendationDecision,
 } from '../../src/utils/studentDecision'
@@ -16,7 +16,7 @@ describe('student decision UI helpers', () => {
   })
 
   it('adapts planned v2 action DTOs and only exposes server-advertised transitions', () => {
-    const action = salesActionItem({ name: 'ACT-1', student: 'STU-1', student_name: 'Mai Nguyen', execution_status: 'planned', due_at: '2026-08-20T08:00:00Z', permitted_transitions: [{ status: 'in_progress', label: 'Start' }] })
+    const action = actionItem({ name: 'ACT-1', student: 'STU-1', student_name: 'Mai Nguyen', execution_status: 'planned', due_at: '2026-08-20T08:00:00Z', permitted_transitions: [{ status: 'in_progress', label: 'Start' }] })
     expect(action.overdue).toBe(true)
     expect(transitionOptions(action)).toEqual([{ value: 'in_progress', label: 'Start' }])
   })

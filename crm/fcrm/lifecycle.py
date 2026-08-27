@@ -1,6 +1,6 @@
 """Shared lifecycle-stage logic for CRM Contact and CRM Student.
 
-Implements Phase 3 of plans/260822-admissions-crm-alignment: a long-term
+Implements the long-term
 lifecycle track (Lead -> MQL -> Applicant -> Enrolled, with Lost as a
 separate terminal branch) derived from the existing CRM Enrollment Status
 master (its `lifecycle_stage` field — see

@@ -52,6 +52,7 @@ services:
       CRM_AGENTS_DELEGATION_ACTIVE_KID: ${CRM_AGENTS_DELEGATION_ACTIVE_KID:-v1}
       CRM_AGENTS_DELEGATION_ISSUER: ${CRM_AGENTS_DELEGATION_ISSUER:-http://crm.localhost:8001}
       CRM_E2E_FIXTURE_RUN_ID: ${CRM_E2E_FIXTURE_RUN_ID:-}
+      CRM_SKIP_FRONTEND_BUILD: ${CRM_SKIP_FRONTEND_BUILD:-0}
     working_dir: /home/frappe
     volumes:
       - ..:/workspace

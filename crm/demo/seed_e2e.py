@@ -275,7 +275,7 @@ def _reset_e2e_recommendation_lifecycle(students):
     The live acceptance suite must begin at ``new`` so it can exercise the
     genuine recommendation -> action -> outcome -> re-evaluation path on
     every rerun.  Student, intent, and interaction seed data remain stable;
-    sales actions are deleted before their recommendation parent.
+    canonical actions are deleted before their recommendation parent.
     """
     recommendations = frappe.get_all(
         "CRM Recommendation",
@@ -291,7 +291,7 @@ def _reset_e2e_recommendation_lifecycle(students):
     if not recommendations:
         return {"deleted": 0, "agent_state": _clear_agent_fixture_state([])}
     actions = frappe.get_all(
-        "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
+        "CRM Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
     )
     aggregate_names = [*recommendations, *actions]
     event_names = frappe.get_all(
@@ -301,7 +301,7 @@ def _reset_e2e_recommendation_lifecycle(students):
     if event_names:
         frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
     for action in actions:
-        frappe.delete_doc("CRM Sales Action", action, ignore_permissions=True, force=True)
+        frappe.delete_doc("CRM Action", action, ignore_permissions=True, force=True)
     for recommendation in recommendations:
         frappe.delete_doc("CRM Recommendation", recommendation, ignore_permissions=True, force=True)
     return {"deleted": len(recommendations), "agent_state": agent_state}
@@ -599,7 +599,13 @@ def rehearse_permissioned_lifecycle() -> dict:
             if student_campus != campus:
                 raise RuntimeError("Worklist returned a cross-campus recommendation")
 
-        sales_recommendation = frappe.get_doc("CRM Recommendation", rows[0]["name"])
+        # Accept the ACT fixture explicitly. The worklist is ordered by the
+        # recommendation name, not by action disposition, so rows[0] may be the
+        # MONITOR/FOLLOW_UP case.
+        accepted_row = next((row for row in rows if row.get("recommended_action") == "CALL"), None)
+        if not accepted_row:
+            raise RuntimeError("ACT rehearsal recommendation is missing")
+        sales_recommendation = frappe.get_doc("CRM Recommendation", accepted_row["name"])
         frappe.set_user(sales_email)
         from crm.api.student_decision import transition_recommendation
         accepted = transition_recommendation(
@@ -607,11 +613,11 @@ def rehearse_permissioned_lifecycle() -> dict:
             str(sales_recommendation.modified),
             "accepted",
         )
-        if not accepted.get("sales_action"):
-            raise RuntimeError("Sales acceptance did not create CRM Sales Action")
-        action = frappe.get_doc("CRM Sales Action", accepted["sales_action"])
-        from crm.api.student_decision import record_sales_action_outcome, transition_sales_action
-        transition_sales_action(
+        if not accepted.get("action"):
+            raise RuntimeError("Sales acceptance did not create CRM Action")
+        action = frappe.get_doc("CRM Action", accepted["action"])
+        from crm.api.student_decision import transition_action
+        transition_action(
             name=action.name,
             expected_revision=action.action_revision or 1,
             status="in_progress",
@@ -619,14 +625,18 @@ def rehearse_permissioned_lifecycle() -> dict:
             correlation_id=f"{FIXTURE_RUN_ID}:start:{action.name}",
         )
         action.reload()
-        outcome = record_sales_action_outcome(
-            action.name,
-            str(action.modified),
-            "INTEREST_INCREASED",
-            {"fixture_run_id": FIXTURE_RUN_ID, "note": "fixture permissioned outcome"},
+        outcome = transition_action(
+            name=action.name,
+            expected_revision=action.action_revision or 1,
+            status="completed",
+            idempotency_key=f"{FIXTURE_RUN_ID}:complete:{action.name}",
+            correlation_id=f"{FIXTURE_RUN_ID}:complete:{action.name}",
+            outcome_code="INTEREST_INCREASED",
+            evidence={"fixture_run_id": FIXTURE_RUN_ID, "note": "fixture permissioned outcome"},
         )
 
-        denied_recommendation = frappe.get_doc("CRM Recommendation", rows[1]["name"])
+        denied_row = next(row for row in rows if row["name"] != accepted_row["name"])
+        denied_recommendation = frappe.get_doc("CRM Recommendation", denied_row["name"])
         before_status = denied_recommendation.status
         frappe.set_user(marketing_email)
         try:
@@ -645,8 +655,8 @@ def rehearse_permissioned_lifecycle() -> dict:
             raise RuntimeError("Denied Marketing write changed the recommendation")
         return {
             "fixture_run_id": FIXTURE_RUN_ID,
-            "sales_accepted": accepted["name"],
-            "sales_action": accepted["sales_action"],
+            "action_accepted": accepted["action"],
+            "action": accepted["action"],
             "sales_outcome": outcome["name"],
             "marketing_denied": denied_recommendation.name,
             "cross_campus_denied": cross_campus_id,
@@ -730,7 +740,7 @@ def _reset():
         "CRM Recommendation", filters={"student": ["in", student_names]}, pluck="name"
     ) if student_names else []
     actions = frappe.get_all(
-        "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
+        "CRM Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
     ) if recommendations else []
     aggregate_names = [*recommendations, *actions]
     event_names = frappe.get_all(
@@ -741,7 +751,7 @@ def _reset():
     if event_names:
         frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
     for name in actions:
-        frappe.delete_doc("CRM Sales Action", name, ignore_permissions=True, force=True)
+        frappe.delete_doc("CRM Action", name, ignore_permissions=True, force=True)
     for name in recommendations:
         frappe.delete_doc("CRM Recommendation", name, ignore_permissions=True, force=True)
 

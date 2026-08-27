@@ -71,8 +71,12 @@ fi
 
 echo "Installing and building CRM frontend assets..."
 cd /workspace
-yarn install --check-files
-yarn build
+if [ "${CRM_SKIP_FRONTEND_BUILD:-0}" = "1" ]; then
+    echo "Skipping frontend build (CRM_SKIP_FRONTEND_BUILD=1)"
+else
+    yarn install --check-files
+    yarn build
+fi
 cd "${BENCH_DIR}"
 sync_public_assets
 

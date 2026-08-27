@@ -7,11 +7,15 @@ def execute():
 	for doctype in (
 		"CRM Student",
 		"CRM Agent Event",
-		"CRM Student Task",
 		"CRM Student Context Change",
 		"CRM Parent Contact Authority",
 	):
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
+	# Student Task was an intermediate admissions aggregate.  Upgrades from
+	# older sites may still have its table, but fresh installs must not require
+	# the deleted DocType to complete migration.
+	# Do not reload the deleted DocType.  If an upgrade still has its table,
+	# the dedicated migration patch below reads it with SQL/API only.
 	# Frappe creates DocType indexes during model sync; these explicit indexes
 	# make existing sites converge without rewriting any evidence rows.
 	frappe.db.add_index(
@@ -22,12 +26,13 @@ def execute():
 		["aggregate_doctype", "aggregate_name", "contract_version", "source_revision_bigint"],
 		index_name="agent_event_v2_revision_idx",
 	)
-	_ensure_unique_index("CRM Student Task", "student_task_current_slot_idx", ["student", "current_slot"])
-	_ensure_unique_index(
-		"CRM Student Task",
-		"student_task_idempotency_idx",
-		["producer_identity", "student", "generation_idempotency_key"],
-	)
+	if frappe.db.table_exists("CRM Student Task"):
+		_ensure_unique_index("CRM Student Task", "student_task_current_slot_idx", ["student", "current_slot"])
+		_ensure_unique_index(
+			"CRM Student Task",
+			"student_task_idempotency_idx",
+			["producer_identity", "student", "generation_idempotency_key"],
+		)
 	for student in frappe.get_all("CRM Student", pluck="name"):
 		if frappe.db.get_value("CRM Student", student, "student_context_revision") is None:
 			frappe.db.set_value("CRM Student", student, "student_context_revision", 0, update_modified=False)

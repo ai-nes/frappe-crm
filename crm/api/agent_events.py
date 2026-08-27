@@ -21,7 +21,7 @@ from crm.fcrm.record_retention import technical_retention_until
 
 _EVENT_PATHS = {
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
-	"sales_action.outcome_recorded.v1": "/api/v1/insight/sales-action-outcome",
+	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.context_changed.v2": "/api/v1/insight/student-context-v2",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
 	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
@@ -393,7 +393,7 @@ def deliver_agent_event(event_name: str) -> None:
 	fields = _event_fields()
 	if not {"lease_id", "lease_expires_at"}.issubset(fields):
 		# Do not claim a fenced-lease event with the old non-fenced protocol.
-		if str(event.event_type).startswith(("recommendation.", "sales_action.")):
+		if str(event.event_type).startswith(("recommendation.", "action.")):
 			frappe.throw("CRM Agent Event lease fields are required for fenced delivery.")
 	if event.status not in {"pending", "processing"}:
 		return

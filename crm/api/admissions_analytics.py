@@ -61,8 +61,8 @@ def get_pipeline_summary() -> dict:
 			"cohort": "E2E-FPT-2026", "total_students": 0,
 			"by_enrollment_status": {}, "by_source": {}, "by_campus": {},
 			"intent_count": 0, "interaction_count": 0,
-			"unresolved_interactions": 0, "active_recommendations": 0,
-			"recommendations_by_status": {},
+			"unresolved_interactions": 0, "active_actions": 0,
+			"actions_by_state": {},
 		}
 
 	interactions = frappe.get_all(
@@ -73,12 +73,12 @@ def get_pipeline_summary() -> dict:
 		"CRM Intent", filters={"student": ["in", student_ids]},
 		fields=["student"], limit_page_length=1000, ignore_permissions=True,
 	)
-	recommendations = frappe.get_all(
-		"CRM Student Task",
+	actions = frappe.get_all(
+		"CRM Action",
 		filters={
 			"student": ["in", student_ids],
 			"current_slot": "CURRENT",
-			"state": ["in", ["PENDING", "ACCEPTED", "IN_PROGRESS", "REQUIRES_REVIEW", "DEFERRED"]],
+			"state": ["in", ["pending", "accepted", "in-progress", "requires-review", "deferred"]],
 		},
 		fields=["student", "state as status"], limit_page_length=1000, ignore_permissions=True,
 	)
@@ -91,6 +91,6 @@ def get_pipeline_summary() -> dict:
 		"intent_count": len(intents),
 		"interaction_count": len(interactions),
 		"unresolved_interactions": sum(not row.outcome or row.outcome == "No Response" for row in interactions),
-		"active_recommendations": len(recommendations),
-		"recommendations_by_status": _count([row.status for row in recommendations]),
+		"active_actions": len(actions),
+		"actions_by_state": _count([row.status for row in actions]),
 	}

@@ -9,7 +9,6 @@ from frappe import _
 
 from crm.api.session import get_session_role_flags, resolve_copilot_profile
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
-from crm.fcrm.permissions import FULL_VISIBILITY_ROLES
 
 OPERATIONS = ("read", "write", "create", "delete")
 CAPABILITY_CONTRACT_VERSION = "v1"
@@ -23,11 +22,14 @@ _DISCOVERY_HIDDEN_TYPES = frozenset({"Password", "Secret"})
 ROLE_MATRIX_EPOCH = "crm-roles-v1"
 AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 
-# CRM Student is never broadly PII-exposed.  The manifest is the server-owned
-# projection contract consumed by crm-agents: Sales receives only the approved
-# contact PII needed for its self-scoped admissions workflow; every other
-# Copilot profile receives operational, non-PII fields only.  Identity,
-# academic, parent, and address fields are intentionally absent for everyone.
+# CRM Student is never broadly PII-exposed beyond what Frappe itself already
+# grants: the manifest is the server-owned projection contract consumed by
+# crm-agents, and it exposes exactly the operational + contact-PII fields the
+# caller's real Frappe permlevel access allows (see `readable_columns` in
+# `_student_projection_for_current_user`) -- the same fields that role already
+# sees in the CRM desk UI. Identity, academic, parent, and address fields
+# remain intentionally absent for everyone; this allowlist is a ceiling, not
+# an independent grant.
 _STUDENT_OPERATIONAL_FIELDS = frozenset(
 	{
 		"name", "enrollment_status", "lifecycle_stage", "assigned_to", "owner_staff",
@@ -35,11 +37,6 @@ _STUDENT_OPERATIONAL_FIELDS = frozenset(
 	}
 )
 _STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"student_name", "phone", "email"})
-_STUDENT_SELF_SCOPE_SALES_ROLES = frozenset({"Sale"})
-_STUDENT_NON_SELF_SCOPE_ROLES = frozenset({
-	"Lead Sales", "Admissions Director", "Marketing",
-}) | frozenset(FULL_VISIBILITY_ROLES)
-_STUDENT_STAGING_ENVIRONMENTS = frozenset({"isolated", "staging"})
 
 # The session contract is the sole authority for Copilot eligibility. Do not
 # add a broader local allowlist here: that would let an unsupported role obtain
@@ -269,46 +266,22 @@ def _safe_discovery_filters(raw_filters, policy: dict) -> list:
 	return validated
 
 
-def _project_ai_fields(doctype: str, fields: list[str], roles) -> list[str]:
+def _project_ai_fields(doctype: str, fields: list[str]) -> list[str]:
 	"""Apply the server-owned CRM Student projection after DocPerm filtering.
 
 	This is intentionally an intersection: a manifest cannot add a field that
-	the caller lacks normal Frappe read access to, and a role cannot regain PII
-	by requesting it from the agent.  The generic REST API is not an AI data
-	surface because CRM Student remains unexposed until the staged DTO endpoint
-	and raw delegated REST gate are complete.
+	the caller lacks normal Frappe read access to. Contact PII (student_name,
+	phone, email) is included whenever the caller's real permlevel access
+	already surfaces it -- the same fields that role already sees in the CRM
+	desk UI daily, so the Copilot boundary does not add restriction beyond
+	Frappe's own permission grant. The generic REST API is not an AI data
+	surface because CRM Student remains unexposed until the staged DTO
+	endpoint and raw delegated REST gate are complete.
 	"""
 	if doctype != "CRM Student":
 		return fields
-	allowed = _STUDENT_OPERATIONAL_FIELDS
-	# A Copilot persona may aggregate legacy roles with different row scopes.
-	# PII must therefore follow the Frappe role's *scope*, not its persona:
-	# Marketing, Lead Sales, and Admissions Director never
-	# inherit the self-scoped Sales contact exception.
-	if _has_self_scoped_student_pii(roles):
-		allowed |= _STUDENT_SALES_APPROVED_PII_FIELDS
+	allowed = _STUDENT_OPERATIONAL_FIELDS | _STUDENT_SALES_APPROVED_PII_FIELDS
 	return sorted(set(fields) & allowed)
-
-
-def _has_self_scoped_student_pii(roles) -> bool:
-	"""Grant Student PII only when no role can widen the Sales row scope."""
-	role_names = frozenset(roles)
-	return bool(role_names & _STUDENT_SELF_SCOPE_SALES_ROLES) and not bool(
-		role_names & _STUDENT_NON_SELF_SCOPE_ROLES
-	)
-
-
-def _student_ai_exposure_enabled() -> bool:
-	"""Explicit two-key staging gate; production remains dark by default."""
-	return (
-		frappe.conf.get("ai_student_exposure_environment") in _STUDENT_STAGING_ENVIRONMENTS
-		and bool(frappe.db.get_value("DocType", "CRM Student", "custom_ai_exposed"))
-	)
-
-
-def _require_student_ai_exposure() -> None:
-	if not _student_ai_exposure_enabled():
-		frappe.throw(_("CRM Student AI exposure is not enabled in this environment."), frappe.PermissionError)
 
 
 def _student_projection_for_current_user() -> list[str]:
@@ -322,7 +295,7 @@ def _student_projection_for_current_user() -> list[str]:
 		fieldname for fieldname in _doctype_columns(meta)
 		if permlevel_by_field.get(fieldname, 0) in allowed_permlevels
 	]
-	return _project_ai_fields("CRM Student", readable_columns, roles)
+	return _project_ai_fields("CRM Student", readable_columns)
 
 
 def _safe_student_filters(raw_filters, allowed_fields: set[str]):
@@ -353,7 +326,6 @@ def _safe_student_filters(raw_filters, allowed_fields: set[str]):
 @_session_rate_limit(limit=60, seconds=60)
 def get_ai_student(name: str):
 	"""Return one row-scoped, role-projected CRM Student DTO for Copilot."""
-	_require_student_ai_exposure()
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
 	doc = frappe.get_doc("CRM Student", name)
@@ -368,7 +340,6 @@ def get_ai_student(name: str):
 @_session_rate_limit(limit=60, seconds=60)
 def list_ai_students(filters=None, limit=20, offset=0):
 	"""Return only row-scoped, role-projected CRM Student DTOs for Copilot."""
-	_require_student_ai_exposure()
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
 	try:
@@ -394,19 +365,18 @@ def list_ai_students(filters=None, limit=20, offset=0):
 def search_ai_students(query: str, filters=None, limit=20):
 	"""Search projected Student contact fields in the caller's row scope.
 
-	Only Sales has approved contact PII, therefore only Sales may perform this
-	text search. Other personas retain aggregate/list workflows without gaining
-	an identity-discovery surface.
+	Only callers whose real permlevel access already surfaces contact PII may
+	search on it -- the same gate `_project_ai_fields` uses for reads. Personas
+	without that access retain aggregate/list workflows without gaining an
+	identity-discovery surface.
 	"""
-	_require_student_ai_exposure()
-	roles = frappe.get_roles()
 	get_session_role_flags()
-	if not _has_self_scoped_student_pii(roles):
+	fields = _student_projection_for_current_user()
+	if not _STUDENT_SALES_APPROVED_PII_FIELDS & set(fields):
 		frappe.throw(_("Student search is not permitted."), frappe.PermissionError)
 	query = (query or "").strip()
 	if not query or len(query) > 100:
 		frappe.throw(_("Student search query is invalid."), frappe.ValidationError)
-	fields = _student_projection_for_current_user()
 	try:
 		limit = int(limit)
 	except (TypeError, ValueError):
@@ -429,7 +399,6 @@ def search_ai_students(query: str, filters=None, limit=20):
 @_session_rate_limit(limit=60, seconds=60)
 def count_ai_students(filters=None):
 	"""Count only rows visible through the current user's Student scope."""
-	_require_student_ai_exposure()
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
 	rows = frappe.get_list(
@@ -439,8 +408,6 @@ def count_ai_students(filters=None):
 		page_length=1,
 	)
 	return {"count": int(rows[0].get("count", 0)) if rows else 0}
-
-
 def _resource_grant(doctype: str, meta, columns: list[str]):
 	"""Return one doctype's grant dict, `_NO_GRANT`, or `_COMPUTE_ERROR`.
 
@@ -464,7 +431,7 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 		allowed_permlevels = set(get_permlevel_access("read", doctype)) | {0}
 		permlevel_by_field = {df.fieldname: df.permlevel for df in meta.fields}
 		fields = sorted(col for col in columns if permlevel_by_field.get(col, 0) in allowed_permlevels)
-		fields = _project_ai_fields(doctype, fields, frappe.get_roles())
+		fields = _project_ai_fields(doctype, fields)
 		return {
 			"operations": ops,
 			"fields": fields,
@@ -559,12 +526,40 @@ def get_current_roles():
 
 
 @frappe.whitelist()
+@_session_rate_limit(limit=60, seconds=60)
+def get_capability_revision():
+	"""Cheap freshness signal for the caller's own capability manifest.
+
+	Grant *assignment* is the caller's role set; grant *content* (the
+	`custom_ai_capability_grants` child rows) lives on those `Role` documents,
+	so editing a grant always bumps the owning `Role.modified`. Hashing
+	`(role, modified)` pairs is therefore a valid staleness proxy for the full
+	manifest without recomputing it -- a single `Role` query versus a
+	`has_permission`/`get_permlevel_access` pass over every exposed doctype.
+	"""
+	if frappe.session.user in ("", "Guest"):
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if not _is_capability_gateway_user(get_session_role_flags()):
+		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	roles = sorted(frappe.get_roles(frappe.session.user))
+	stamps = frappe.get_all(
+		"Role", filters={"name": ["in", roles]}, fields=["name", "modified"], ignore_permissions=True,
+	)
+	fingerprint = sorted((row.name, str(row.modified)) for row in stamps)
+	return {
+		"roles": roles,
+		"revision": _sha256_hex({"role_matrix_epoch": ROLE_MATRIX_EPOCH, "roles": fingerprint}),
+	}
+
+
+@frappe.whitelist()
 @_session_rate_limit(limit=30, seconds=60)
 def get_capability_manifest():
 	"""Return the current session user's Frappe-granted capability manifest:
-	roles, per-DocType resource grants (all doctypes with
-	`custom_ai_exposed = 1`), semantic-capability/data-scope grants (from
-	`Role.custom_ai_capability_grants`), and stable content-hash versions.
+	roles, per-DocType resource grants (every DocType, gated purely by the
+	caller's real Frappe permission — no separate AI-exposure allowlist),
+	semantic-capability/data-scope grants (from `Role.custom_ai_capability_grants`),
+	and stable content-hash versions.
 
 	Consumed by crm-agents' FrappeCapabilityGateway — never called with a
 	caller-supplied username; always the current session's own grants.
@@ -578,19 +573,9 @@ def get_capability_manifest():
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 
 	start = time.monotonic()
-	# The exposure roster is Frappe-admin-published metadata, not any single
-	# user's data — every AI-capable caller is meant to see the same list, so
-	# this one read is intentionally not gated by the caller's own DocType
-	# permissions (ignore_permissions=True), unlike the per-doctype grants below.
-	exposed = sorted(
-		frappe.get_all("DocType", filters={"custom_ai_exposed": 1}, pluck="name", ignore_permissions=True)
-	)
-	# Student is additive and staging-only: even an accidental metadata toggle
-	# cannot publish it into a production capability manifest.
-	exposed = [
-		doctype for doctype in exposed
-		if doctype != "CRM Student" or _student_ai_exposure_enabled()
-	]
+	# Every DocType is a candidate; `_resource_grant` below is the sole gate,
+	# via the caller's real `frappe.has_permission` result per doctype.
+	exposed = sorted(frappe.get_all("DocType", pluck="name", ignore_permissions=True))
 
 	# One pass over `exposed` computes both the caller-scoped resource grant
 	# and the caller-independent schema entry together, under the same time
@@ -686,13 +671,7 @@ def _current_discovery_contract() -> dict:
 	roles = sorted(frappe.get_roles())
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
-	exposed = sorted(
-		frappe.get_all("DocType", filters={"custom_ai_exposed": 1}, pluck="name", ignore_permissions=True)
-	)
-	exposed = [
-		doctype for doctype in exposed
-		if doctype != "CRM Student" or _student_ai_exposure_enabled()
-	]
+	exposed = sorted(frappe.get_all("DocType", pluck="name", ignore_permissions=True))
 	views: dict[str, tuple[object, dict]] = {}
 	start = time.monotonic()
 	for doctype in exposed:
@@ -765,22 +744,3 @@ def count_ai_resource(resource: str, filters=None, discovery_revision: str | Non
 		page_length=1,
 	)
 	return {"count": int(rows[0].get("count", 0)) if rows else 0}
-
-
-@frappe.whitelist()
-def get_exposed_doctypes():
-	"""Return the server-published AI schema roster for the crm-agents service.
-
-	DocType custom fields are intentionally not usable as REST resource filters,
-	so schema bootstrap must use this narrow server-side read instead.
-	"""
-	_require_ai_exposure_administrator()
-	doctypes = frappe.get_all(
-		"DocType", filters={"custom_ai_exposed": 1}, pluck="name", ignore_permissions=True
-	)
-	return {
-		"doctypes": sorted(
-			doctype for doctype in doctypes
-			if doctype != "CRM Student" or _student_ai_exposure_enabled()
-		)
-	}

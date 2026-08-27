@@ -249,6 +249,7 @@ function createAssistantMessage(prompt) {
     error: '',
     retryable: false,
     approval: null,
+		activity: [],
 	}
 	messages.value.push(message)
 	// Read it back through the reactive array. Vue retains the caller's raw
@@ -328,6 +329,10 @@ async function streamReply(prompt, message) {
 			() => {
 				target.streaming = false
 				if (activeRun.value === run) activeRun.value = null
+			},
+			(activity) => {
+				if (!target.activity) target.activity = []
+				target.activity.push(activity)
 			},
 		)
 	})
