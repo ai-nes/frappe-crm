@@ -1,0 +1,15 @@
+{
+ "actions": [], "allow_rename": 0, "creation": "2026-08-27 00:00:00.000000", "doctype": "DocType", "editable_grid": 1, "engine": "InnoDB",
+ "field_order": ["line_kind", "major", "campus", "amount", "note", "scholarship_name", "criteria", "quota"],
+ "fields": [
+  {"fieldname": "line_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Line Kind", "options": "tuition\nscholarship\nquota", "reqd": 1},
+  {"fieldname": "major", "fieldtype": "Link", "label": "Major", "options": "CRM Major"},
+  {"fieldname": "campus", "fieldtype": "Link", "label": "Campus", "options": "CRM Campus"},
+  {"fieldname": "amount", "fieldtype": "Currency", "label": "Amount"},
+  {"fieldname": "note", "fieldtype": "Data", "label": "Note"},
+  {"fieldname": "scholarship_name", "fieldtype": "Data", "label": "Scholarship Name"},
+  {"fieldname": "criteria", "fieldtype": "Small Text", "label": "Criteria"},
+  {"fieldname": "quota", "fieldtype": "Int", "label": "Quota"}
+ ],
+ "index_web_pages_for_search": 0, "istable": 1, "links": [], "module": "CRM Master Data", "name": "CRM Academic Year Line", "owner": "Administrator", "permissions": [], "quick_entry": 0, "row_format": "Dynamic", "sort_field": "modified", "sort_order": "DESC", "states": []
+}
