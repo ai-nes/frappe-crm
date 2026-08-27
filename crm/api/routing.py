@@ -7,7 +7,7 @@ campus (branch):
 2. Among that team's active staff members, pick whoever was routed longest
    ago (CRM Staff.last_routed_at ascending — NULLs, i.e. never routed, sort
    first in MySQL).
-See plans/260822-admissions-crm-alignment/phase-03-lead-status-routing-sla.md.
+The routing contract is enforced by this module's selection rules.
 """
 
 import frappe

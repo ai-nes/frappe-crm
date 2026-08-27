@@ -5,8 +5,7 @@
 doc_events wired in hooks.py (Communication after_insert/on_update, Task
 on_update, Call Log after_insert) by inserting/saving the real source
 doctypes and asserting on the CRM Interaction rows they create, including the
-duplicate-guard scenarios called out in
-plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md.
+duplicate-guard scenarios.
 
 Pure create_interaction()/CRMInteraction.validate() unit coverage, consent
 event mapping, and cleanup-on-delete live in

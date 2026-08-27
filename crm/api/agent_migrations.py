@@ -3,6 +3,10 @@ import frappe
 
 
 SALES_WORKLIST_ROLE_NAMES = ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Team Leader")
+# Retired semantic grants must not remain advertised by Frappe after the
+# corresponding crm-agents tool is removed.  Keep this list explicit so a
+# future capability cannot disappear silently through a broad cleanup query.
+RETIRED_SEMANTIC_CAPABILITIES = ("readmodel.analytics_query",)
 
 
 def after_migrate() -> None:
@@ -26,6 +30,7 @@ def after_migrate() -> None:
 		"CRM Agent Event", ["status", "next_attempt_at", "creation"], "crm_agent_event_retry_idx"
 	)
 	_grant_sales_worklist_capability()
+	_remove_retired_capabilities()
 
 
 def _grant_sales_worklist_capability() -> None:
@@ -88,3 +93,21 @@ def _grant_sales_worklist_capability() -> None:
 		# fresh worker sees an unchanged manifest after the implicit rollback.
 		frappe.db.commit()
 		frappe.clear_cache()
+
+
+def _remove_retired_capabilities() -> None:
+	"""Remove grants for semantic capabilities with no active tool binding."""
+	if not RETIRED_SEMANTIC_CAPABILITIES:
+		return
+	if not frappe.get_meta("Role").has_field("custom_ai_capability_grants"):
+		return
+	frappe.db.delete(
+		"CRM AI Capability Grant",
+		{
+			"parenttype": "Role",
+			"grant_type": "semantic_capability",
+			"value": ["in", list(RETIRED_SEMANTIC_CAPABILITIES)],
+		},
+	)
+	frappe.db.commit()
+	frappe.clear_cache()

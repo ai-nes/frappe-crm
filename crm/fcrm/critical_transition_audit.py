@@ -141,7 +141,7 @@ def _read_source(manifest: dict[str, Any], student: str, as_of: str, cursor_payl
 	available = _fields(doctype) | {"name", "creation"}
 	if "student" not in available or manifest["time"] not in available:
 		return [], "student_scope_unavailable"
-	required = {"name", "student", "creation", manifest["time"], "event_id", "actor", "actor_scope", "scope_snapshot", "supersedes", "correlation_id", "correlation_token", "idempotency_key", "event_type", "outcome_code", "transition_kind", "from_stage", "to_stage", "from_state", "to_state", "status", "touch_type", "contact", "sales_action", "recommendation", "command_receipt", "evidence_reference", "evidence_references"}
+	required = {"name", "student", "creation", manifest["time"], "event_id", "actor", "actor_scope", "scope_snapshot", "supersedes", "correlation_id", "correlation_token", "idempotency_key", "event_type", "outcome_code", "transition_kind", "from_stage", "to_stage", "from_state", "to_state", "status", "touch_type", "contact", "action", "recommendation", "command_receipt", "evidence_reference", "evidence_references"}
 	fields = sorted(required & available)
 	if "name" not in fields:
 		fields.append("name")
@@ -219,7 +219,7 @@ def _adapt(manifest: dict[str, Any], row: Any, student: str, allow_restricted: b
 		scope_snapshot = _value(row, "actor_scope") or _value(row, "scope_snapshot")
 		if scope_snapshot:
 			event["authority_scope"] = _opaque(scope_snapshot)
-		for field in ("command_receipt", "sales_action", "recommendation", "evidence_reference", "evidence_references"):
+		for field in ("command_receipt", "action", "recommendation", "evidence_reference", "evidence_references"):
 			if _value(row, field):
 				event.setdefault("evidence", {})[field] = _opaque(_value(row, field))
 	return event

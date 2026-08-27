@@ -25,8 +25,8 @@ class CRMStaff(Document):
 
 	def _validate_one_primary_membership_per_context(self):
 		"""One staff member may hold only one *primary* membership per
-		(function, campus, term) — app-level guard only, see Phase 1 plan risks
-		for the known concurrent-insert race and its DB-level mitigation.
+		(function, campus, term). This app-level guard complements the database
+		constraint for the known concurrent-insert race.
 		Campus is read from CRM Team (not stored on the membership row) since a
 		team has exactly one campus."""
 		rows = self.get("team_memberships") or []

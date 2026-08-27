@@ -10,7 +10,7 @@ from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_prov
 
 # CRM Enrollment Status values that constitute the "application/enrollment" milestone
 # at which a CRM Student record should be created for a Contact — locked business
-# rule, see plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md.
+# rule for creating a student at the enrollment milestone.
 MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
 
 CONVERSION_SERVICE_FLAG = "student_conversion_service"

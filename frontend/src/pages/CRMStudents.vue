@@ -22,6 +22,7 @@
     </template>
   </LayoutHeader>
   <ViewControls
+    :key="funnelStage"
     ref="viewControls"
     v-model="students"
     v-model:loadMore="loadMore"
@@ -84,9 +85,10 @@ import EnrollmentIcon from '~icons/lucide/graduation-cap'
 import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
+import { getStudentFunnelFilters } from '@/utils/studentFunnel'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Student')
@@ -104,10 +106,7 @@ const funnelTitle = computed(() => {
 })
 
 const funnelFilters = computed(() => {
-  if (funnelStage.value === 'enrolled') {
-    return { enrollment_status: 'Đã chuyển đổi' }
-  }
-  return { enrollment_status: ['not in', ['Từ chối']] }
+  return getStudentFunnelFilters(funnelStage.value)
 })
 
 const potentialScoreFilters = computed(() => [
@@ -129,14 +128,6 @@ const potentialScoreFilters = computed(() => [
     after: 'enrollment_status',
   },
 ])
-
-watch(
-  () => route.query.stage,
-  () => {
-    students.value = {}
-    loadMore.value++
-  },
-)
 
 const listView = ref(null)
 

@@ -20,7 +20,18 @@
       class="flex min-h-0 flex-1 flex-col overflow-hidden [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:min-h-0 [&_[role='tabpanel']:not([hidden])]:flex-1 [&_[role='tabpanel']:not([hidden])]:overflow-y-auto"
     >
       <template #tab-panel>
-        <section class="flex min-h-0 flex-1 flex-col px-3 pb-5 pt-3 sm:px-5">
+        <section class="worklist-surface flex min-h-0 flex-1 flex-col px-3 pb-5 pt-3 sm:px-5">
+          <div class="worklist-intro mb-4 flex flex-col gap-3 rounded-lg border border-outline-gray-2 px-4 py-4 sm:flex-row sm:items-end sm:justify-between sm:px-5">
+            <div>
+              <div class="text-xs font-semibold tracking-[0.08em] text-ink-gray-5">{{ queue === 'recommendations' ? __('DECISION QUEUE') : __('EXECUTION QUEUE') }}</div>
+              <h1 class="mt-1 text-xl font-semibold tracking-tight text-ink-gray-9">{{ queue === 'recommendations' ? __('Recommendations to review') : __('Actions assigned to you') }}</h1>
+              <p class="mt-1 text-sm text-ink-gray-6">{{ queue === 'recommendations' ? __('Turn accepted recommendations into one clear Action.') : __('Work from due date first, then record the outcome.') }}</p>
+            </div>
+            <div class="flex items-center gap-4 text-sm tabular-nums text-ink-gray-6">
+              <span><strong class="text-ink-gray-9">{{ active.items.length }}</strong> {{ __('visible') }}</span>
+              <span v-if="queue === 'actions'"><strong class="text-red-600">{{ active.items.filter((item) => item.overdue).length }}</strong> {{ __('overdue') }}</span>
+            </div>
+          </div>
           <div
             v-if="active.loading && !active.items.length"
             class="flex min-h-40 flex-1 items-center justify-center text-ink-gray-5"
@@ -217,7 +228,7 @@
     @changed="handleChanged"
     @refresh-required="refresh"
   />
-  <SalesActionOutcomeDialog
+  <ActionOutcomeDialog
     v-if="selectedAction"
     v-model="showAction"
     :action="selectedAction"
@@ -230,12 +241,12 @@
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import RecommendationDecisionDialog from '@/components/StudentDecision/RecommendationDecisionDialog.vue'
-import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
+import ActionOutcomeDialog from '@/components/StudentDecision/ActionOutcomeDialog.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import {
   recommendationItem,
   safeStudentDecisionError,
-  salesActionItem,
+  actionItem,
   studentDecisionApi,
 } from '@/utils/studentDecision'
 import { Badge, Button, LoadingIndicator, Tabs, call, usePageMeta } from 'frappe-ui'
@@ -282,7 +293,7 @@ const emptyTitle = computed(() =>
 const emptyDescription = computed(() =>
   queue.value === 'recommendations'
     ? __('New or returning recommendations will appear here.')
-    : __('Your active Sales Actions will appear here.'),
+    : __('Your active Actions will appear here.'),
 )
 
 usePageMeta(() => ({ title: __('My Recommendations') }))
@@ -314,7 +325,7 @@ async function fetchPage(kind, cursor = null) {
         : studentDecisionApi.listActions,
       { ...(cursor ? { cursor } : {}), page_size: 20 },
     )
-    const mapper = kind === 'recommendations' ? recommendationItem : salesActionItem
+    const mapper = kind === 'recommendations' ? recommendationItem : actionItem
     const nextItems = (response.items || []).map(mapper)
     state.items = cursor ? [...state.items, ...nextItems] : nextItems
     state.nextCursor = response.next_cursor || null
@@ -346,3 +357,20 @@ function handleChanged() {
   refresh()
 }
 </script>
+
+<style scoped>
+.worklist-surface {
+  --queue-accent: oklch(0.68 0.16 55);
+  --queue-surface: oklch(0.985 0.008 250);
+  --queue-hero-start: oklch(0.985 0.008 250);
+  --queue-hero-end: oklch(0.965 0.018 70);
+  background: var(--queue-surface);
+}
+.worklist-intro {
+  background: linear-gradient(135deg, var(--queue-hero-start), var(--queue-hero-end));
+  border-top: 2px solid var(--queue-accent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .worklist-surface * { scroll-behavior: auto; }
+}
+</style>

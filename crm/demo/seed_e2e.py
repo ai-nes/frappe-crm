@@ -4,11 +4,11 @@ Run: bench --site crm.localhost execute crm.demo.seed_e2e.execute
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 
 import frappe
 import requests
-from contextlib import contextmanager
 from frappe.utils import now_datetime
 
 from crm.api.user import set_canonical_crm_profile
@@ -275,15 +275,23 @@ def _reset_e2e_recommendation_lifecycle(students):
     The live acceptance suite must begin at ``new`` so it can exercise the
     genuine recommendation -> action -> outcome -> re-evaluation path on
     every rerun.  Student, intent, and interaction seed data remain stable;
-    sales actions are deleted before their recommendation parent.
+    canonical actions are deleted before their recommendation parent.
     """
     recommendations = frappe.get_all(
-        "CRM Recommendation", filters={"student": ["in", students]}, pluck="name"
+        "CRM Recommendation",
+        filters={
+            "student": ["in", students],
+            # Only the two recommendations owned by this fixture have the
+            # REC-E2E-* aggregate namespace accepted by the agent reset API.
+            # Keep system-generated recommendations for other lifecycle rules.
+            "rule_key": ["in", ["e2e_capture_readiness", "e2e_capture_cross_campus"]],
+        },
+        pluck="name",
     )
     if not recommendations:
         return {"deleted": 0, "agent_state": _clear_agent_fixture_state([])}
     actions = frappe.get_all(
-        "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
+        "CRM Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
     )
     aggregate_names = [*recommendations, *actions]
     event_names = frappe.get_all(
@@ -293,7 +301,7 @@ def _reset_e2e_recommendation_lifecycle(students):
     if event_names:
         frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
     for action in actions:
-        frappe.delete_doc("CRM Sales Action", action, ignore_permissions=True, force=True)
+        frappe.delete_doc("CRM Action", action, ignore_permissions=True, force=True)
     for recommendation in recommendations:
         frappe.delete_doc("CRM Recommendation", recommendation, ignore_permissions=True, force=True)
     return {"deleted": len(recommendations), "agent_state": agent_state}
@@ -415,10 +423,8 @@ def wait_for_capture_readiness(max_attempts: int = 10) -> dict:
         original_user = frappe.session.user
         try:
             frappe.set_user(LIVE_TEST_USERS["sales"][0])
-            from crm.api.student_worklist import list_student_worklist
-
-            worklist = list_student_worklist(page_size=50)
-            worklist_ids = {item["recommendation"] for item in worklist["items"]}
+            worklist = _visible_fixture_recommendations(LIVE_TEST_USERS["sales"][0])
+            worklist_ids = set(worklist)
             if worklist_ids != {row["name"] for row in rows}:
                 continue
 
@@ -440,7 +446,12 @@ def wait_for_capture_readiness(max_attempts: int = 10) -> dict:
                 LIVE_TEST_USERS["lead_sales"][0],
             ):
                 frappe.set_user(role_user)
-                role_worklist = list_student_worklist(page_size=50)
+                role_worklist = {
+                    "items": [
+                        {"recommendation": name}
+                        for name in _visible_fixture_recommendations(role_user)
+                    ]
+                }
                 if cross_campus_id in {
                     item["recommendation"] for item in role_worklist["items"]
                 }:
@@ -513,6 +524,31 @@ def _clear_agent_fixture_state(aggregate_names: list[str]) -> dict:
     return result
 
 
+def _visible_fixture_recommendations(user: str) -> list[str]:
+    """Read the pre-cutover recommendation cohort under Frappe row scope.
+
+    The public worklist now serves Task V2 rows, while this rehearsal intentionally
+    validates the legacy Recommendation CAS lifecycle. Keep the permission
+    assertion on Frappe's own query rather than treating the worklist DTO as an
+    authorization oracle for a different record type.
+    """
+    original_user = frappe.session.user
+    try:
+        frappe.set_user(user)
+        return frappe.get_all(
+            "CRM Recommendation",
+            filters={
+                "rule_key": "e2e_capture_readiness",
+                "context_hash": ["like", f"{FIXTURE_RUN_ID}:%"],
+                "status": "new",
+            },
+            pluck="name",
+            order_by="name asc",
+        )
+    finally:
+        frappe.set_user(original_user)
+
+
 def rehearse_permissioned_lifecycle() -> dict:
     """Exercise the real CAS APIs as fixture roles, never direct DB writes."""
     frappe.only_for("System Manager")
@@ -533,10 +569,7 @@ def rehearse_permissioned_lifecycle() -> dict:
     cross_campus_id = cross_campus[0]
 
     def visible_worklist(user: str) -> dict:
-        frappe.set_user(user)
-        from crm.api.student_worklist import list_student_worklist
-
-        return list_student_worklist(page_size=50)
+        return {"items": [{"recommendation": name} for name in _visible_fixture_recommendations(user)]}
 
     try:
         marketing_worklist = visible_worklist(marketing_email)
@@ -566,7 +599,13 @@ def rehearse_permissioned_lifecycle() -> dict:
             if student_campus != campus:
                 raise RuntimeError("Worklist returned a cross-campus recommendation")
 
-        sales_recommendation = frappe.get_doc("CRM Recommendation", rows[0]["name"])
+        # Accept the ACT fixture explicitly. The worklist is ordered by the
+        # recommendation name, not by action disposition, so rows[0] may be the
+        # MONITOR/FOLLOW_UP case.
+        accepted_row = next((row for row in rows if row.get("recommended_action") == "CALL"), None)
+        if not accepted_row:
+            raise RuntimeError("ACT rehearsal recommendation is missing")
+        sales_recommendation = frappe.get_doc("CRM Recommendation", accepted_row["name"])
         frappe.set_user(sales_email)
         from crm.api.student_decision import transition_recommendation
         accepted = transition_recommendation(
@@ -574,18 +613,30 @@ def rehearse_permissioned_lifecycle() -> dict:
             str(sales_recommendation.modified),
             "accepted",
         )
-        if not accepted.get("sales_action"):
-            raise RuntimeError("Sales acceptance did not create CRM Sales Action")
-        action = frappe.get_doc("CRM Sales Action", accepted["sales_action"])
-        from crm.api.student_decision import record_sales_action_outcome
-        outcome = record_sales_action_outcome(
-            action.name,
-            str(action.modified),
-            "INTEREST_INCREASED",
-            "fixture permissioned outcome",
+        if not accepted.get("action"):
+            raise RuntimeError("Sales acceptance did not create CRM Action")
+        action = frappe.get_doc("CRM Action", accepted["action"])
+        from crm.api.student_decision import transition_action
+        transition_action(
+            name=action.name,
+            expected_revision=action.action_revision or 1,
+            status="in_progress",
+            idempotency_key=f"{FIXTURE_RUN_ID}:start:{action.name}",
+            correlation_id=f"{FIXTURE_RUN_ID}:start:{action.name}",
+        )
+        action.reload()
+        outcome = transition_action(
+            name=action.name,
+            expected_revision=action.action_revision or 1,
+            status="completed",
+            idempotency_key=f"{FIXTURE_RUN_ID}:complete:{action.name}",
+            correlation_id=f"{FIXTURE_RUN_ID}:complete:{action.name}",
+            outcome_code="INTEREST_INCREASED",
+            evidence={"fixture_run_id": FIXTURE_RUN_ID, "note": "fixture permissioned outcome"},
         )
 
-        denied_recommendation = frappe.get_doc("CRM Recommendation", rows[1]["name"])
+        denied_row = next(row for row in rows if row["name"] != accepted_row["name"])
+        denied_recommendation = frappe.get_doc("CRM Recommendation", denied_row["name"])
         before_status = denied_recommendation.status
         frappe.set_user(marketing_email)
         try:
@@ -604,8 +655,8 @@ def rehearse_permissioned_lifecycle() -> dict:
             raise RuntimeError("Denied Marketing write changed the recommendation")
         return {
             "fixture_run_id": FIXTURE_RUN_ID,
-            "sales_accepted": accepted["name"],
-            "sales_action": accepted["sales_action"],
+            "action_accepted": accepted["action"],
+            "action": accepted["action"],
             "sales_outcome": outcome["name"],
             "marketing_denied": denied_recommendation.name,
             "cross_campus_denied": cross_campus_id,
@@ -689,7 +740,7 @@ def _reset():
         "CRM Recommendation", filters={"student": ["in", student_names]}, pluck="name"
     ) if student_names else []
     actions = frappe.get_all(
-        "CRM Sales Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
+        "CRM Action", filters={"recommendation": ["in", recommendations]}, pluck="name"
     ) if recommendations else []
     aggregate_names = [*recommendations, *actions]
     event_names = frappe.get_all(
@@ -700,7 +751,7 @@ def _reset():
     if event_names:
         frappe.db.delete("CRM Agent Event", {"name": ["in", event_names]})
     for name in actions:
-        frappe.delete_doc("CRM Sales Action", name, ignore_permissions=True, force=True)
+        frappe.delete_doc("CRM Action", name, ignore_permissions=True, force=True)
     for name in recommendations:
         frappe.delete_doc("CRM Recommendation", name, ignore_permissions=True, force=True)
 

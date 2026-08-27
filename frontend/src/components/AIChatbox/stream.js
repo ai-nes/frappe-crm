@@ -14,6 +14,8 @@ export function applyUIStreamEvent(
   onSessionId,
   onApprovalRequired,
   onFinished,
+  onActivity,
+  onReasoning,
 ) {
   if (!event) return
 
@@ -52,6 +54,33 @@ export function applyUIStreamEvent(
       onSessionId(envelope.session_id || envelope.sessionId)
     }
     if (!message.text && envelope.answer) message.text = envelope.answer
+    return
+  }
+
+  if (event.type === 'data-agent-activity') {
+    const activity =
+      typeof event.data === 'string'
+        ? JSON.parse(event.data || '{}')
+        : event.data || {}
+    if (activity && typeof activity === 'object') onActivity?.(activity)
+    return
+  }
+
+  if (event.type === 'data-agent-reasoning') {
+    const reasoning =
+      typeof event.data === 'string'
+        ? JSON.parse(event.data || '{}')
+        : event.data || {}
+    if (reasoning && typeof reasoning === 'object') onReasoning?.(reasoning)
+    return
+  }
+
+  if (event.type === 'data-student-analysis') {
+    const brief =
+      typeof event.data === 'string'
+        ? JSON.parse(event.data || '{}')
+        : event.data || {}
+    message.analysisBrief = brief
     return
   }
 

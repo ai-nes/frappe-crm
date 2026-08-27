@@ -1,4 +1,5 @@
 import hashlib
+from typing import ClassVar
 
 import frappe
 from frappe import _
@@ -6,6 +7,8 @@ from frappe.model.document import Document
 
 from crm.fcrm.permissions import (
 	get_permission_query_conditions as get_student_permission_query_conditions,
+)
+from crm.fcrm.permissions import (
 	has_permission as has_student_permission,
 )
 
@@ -29,12 +32,12 @@ class CRMRecommendation(Document):
 		"decision_actor", "decision_at", "decision_scope", "decision_correlation_id",
 		"decision_idempotency_key", "supersedes_decision_event",
 	)
-	_ALLOWED_TRANSITIONS = {
+	_ALLOWED_TRANSITIONS: ClassVar = {
 		"new": {"acknowledged", "accepted", "rejected", "deferred", "expired", "superseded"},
 		"acknowledged": {"accepted", "rejected", "deferred", "expired", "superseded"},
 		"deferred": {"accepted", "rejected", "expired", "superseded"},
 	}
-	_LEGACY_ONLY_STATUSES = {"dismissed", "modified"}
+	_LEGACY_ONLY_STATUSES: ClassVar = {"dismissed", "modified"}
 
 	def _from_command(self):
 		return bool(getattr(self.flags, "from_phase6_command", False) or getattr(self.flags, "phase6_break_glass", False))
@@ -115,7 +118,9 @@ class CRMRecommendation(Document):
 		# The reset API accepts only this fixture namespace, never production
 		# REC-* IDs. Keep its marker in the durable aggregate identity so an
 		# agent-side cleanup can prove that an inbox event belongs to the fixture.
-		prefix = "REC-E2E-FPT-2026-" if self.rule_key == "e2e_capture_readiness" else "REC-"
+		prefix = "REC-E2E-FPT-2026-" if self.rule_key in {
+			"e2e_capture_readiness", "e2e_capture_cross_campus"
+		} else "REC-"
 		self.name = f"{prefix}{digest}"
 
 

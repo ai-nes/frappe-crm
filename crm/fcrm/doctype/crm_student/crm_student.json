@@ -469,7 +469,7 @@
    "fieldtype": "Int",
    "label": "Student Context Revision",
    "read_only": 1,
-   "description": "Monotonic revision incremented on any material Student-context fact change (plans/260825-interaction-scoring-v2). Backing field for CRM Student Context Change and the crm-agents v2 outbox/high-water contract."
+   "description": "Monotonic revision incremented on any material Student-context fact change. Backing field for CRM Student Context Change and the crm-agents v2 outbox/high-water contract."
   },
   {
    "default": "unknown",
@@ -492,7 +492,7 @@
    "fieldtype": "Int",
    "label": "Score Input Revision",
    "read_only": 1,
-   "description": "Monotonic revision incremented only on a scoring-relevant fact change (plans/260825-interaction-scoring-v2 Phase 5) -- distinct from student_context_revision, which covers all material Student-context facts."
+   "description": "Monotonic revision incremented only on a scoring-relevant fact change -- distinct from student_context_revision, which covers all material Student-context facts."
   },
   {
    "default": "0",

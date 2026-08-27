@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model="show" :options="{ title: __('Update sales action') }">
+  <Dialog v-model="show" :options="{ title: __('Update action') }">
     <template #body-content>
       <div class="space-y-4">
         <p class="text-sm text-ink-gray-6">{{ action.actionType }} · {{ action.studentName }}</p>
@@ -24,7 +24,7 @@
 import { Button, call } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import {
-  buildSalesActionTransitionPayload,
+  buildActionTransitionPayload,
   createStudentDecisionCommandId,
   safeStudentDecisionError,
   studentDecisionApi,
@@ -67,14 +67,14 @@ async function submit() {
   loading.value = true
   error.value = ''
   try {
-    const response = await call(studentDecisionApi.transitionAction, buildSalesActionTransitionPayload({
+    const response = await call(studentDecisionApi.transitionAction, buildActionTransitionPayload({
       action: props.action, status: status.value, outcomeCode: outcomeCode.value, evidence: evidence.value,
       reason: reason.value, linkedInteraction: linkedInteraction.value, idempotencyKey: commandKey.value, correlationId: commandKey.value,
     }))
     emit('changed', response)
     show.value = false
   } catch (err) {
-    error.value = safeStudentDecisionError(err, __('Unable to update this Sales Action.'))
+    error.value = safeStudentDecisionError(err, __('Unable to update this Action.'))
     if ([409, 412].includes(err?.httpStatusCode || err?.status)) emit('refresh-required')
   } finally {
     loading.value = false

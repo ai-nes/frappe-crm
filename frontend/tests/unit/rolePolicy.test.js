@@ -40,6 +40,7 @@ describe('rolePolicy', () => {
 
     expect(marketingNavigation).toEqual([
       'Marketing Dashboard',
+      'High Schools',
       'Campaigns',
       'Segments',
       'Events',
@@ -63,7 +64,6 @@ describe('rolePolicy', () => {
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
-      'Events',
       'Notes',
       'Tasks',
       'Call Logs',
@@ -82,9 +82,7 @@ describe('rolePolicy', () => {
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
-      'High Schools',
       'Persons',
-      'Events',
       'Notes',
       'Tasks',
       'Call Logs',
@@ -98,16 +96,14 @@ describe('rolePolicy', () => {
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
-      'High Schools',
       'Persons',
-      'Events',
       'Notes',
       'Tasks',
       'Call Logs',
     ])
   })
 
-  it('keeps event workflows available while hiding acquisition segmentation', () => {
+  it('keeps acquisition navigation outside the admissions workspace', () => {
     const leadSalesUser = {
       crm_capabilities: [
         'student.execute',
@@ -118,7 +114,7 @@ describe('rolePolicy', () => {
     }
 
     expect(canAccessNavigationRoute(leadSalesUser, 'CRM Segments')).toBe(false)
-    expect(canAccessNavigationRoute(leadSalesUser, 'CRM Events')).toBe(true)
+    expect(canAccessNavigationRoute(leadSalesUser, 'CRM Events')).toBe(false)
     expect(canAccessNavigationRoute(leadSalesUser, 'CRM Students')).toBe(true)
   })
 
@@ -152,6 +148,7 @@ describe('rolePolicy', () => {
     const marketingUser = { crm_capabilities: ['acquisition.manage'] }
     expect(canAccessNavigationRoute(marketingUser, 'CRM Events')).toBe(true)
     expect(canAccessNavigationRoute(marketingUser, 'CRM Students')).toBe(false)
+    expect(canAccessNavigationRoute(marketingUser, 'High Schools')).toBe(true)
     expect(canAccessNavigationRoute(marketingUser, 'DataImportList')).toBe(
       false,
     )
@@ -182,6 +179,14 @@ describe('rolePolicy', () => {
     })
     expect(roleOptionFor('Sale')).toMatchObject({ value: 'Sale' })
     expect(roleOptionFor('Sales')).toBeUndefined()
+  })
+
+  it('routes enrolled students to the Student lifecycle funnel', () => {
+    expect(
+      navigationEntries.find((entry) => entry.label === 'Enrolled Students'),
+    ).toMatchObject({
+      to: { name: 'CRM Students', query: { stage: 'enrolled' } },
+    })
   })
 
   it('keeps system managers able to discover every declared module', () => {

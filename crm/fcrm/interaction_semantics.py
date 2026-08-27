@@ -137,7 +137,7 @@ INTERACTION_TYPE_MAPPING = {
 # language (Resolved/Converted). `is_business_outcome_like` flags the latter
 # so a consumer can tell CRM Student Outcome (the real business result) apart
 # from this field without a schema rename -- see the Interaction Disposition
-# vs Student Outcome invariant in plan.md.
+# vs Student Outcome invariant.
 OUTCOME_FIELD_MAPPING = {
 	"Captured": {"disposition": "Captured", "is_business_outcome_like": False},
 	"Follow Up Needed": {"disposition": "Follow Up Needed", "is_business_outcome_like": False},

@@ -1,6 +1,6 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
-Implements the locked matrix in plans/260822-admissions-crm-alignment/business-rules-data-scope.md:
+Implements the locked row-level data-scope matrix:
 - Sale / CTV-Sale        -> own-assigned records only
 - Team Leader            -> own team(s) + own team's unassigned pool
 - Counseller / Promoter-PR -> team/campus scope (not system-wide)
