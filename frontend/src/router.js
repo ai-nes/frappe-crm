@@ -137,13 +137,13 @@ const routes = [
     path: '/high-schools/view/:viewType?',
     name: 'High Schools',
     component: () => import('@/pages/HighSchools.vue'),
-    meta: { anyOf: admissionsWorkspaceCapabilities },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
   },
   {
     path: '/high-schools/:highSchoolId',
     name: 'High School',
     component: () => import('@/pages/HighSchool.vue'),
-    meta: { anyOf: admissionsWorkspaceCapabilities },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: true,
   },
   {
@@ -179,13 +179,13 @@ const routes = [
     path: '/crm-events/view/:viewType?',
     name: 'CRM Events',
     component: () => import('@/pages/CRMEvents.vue'),
-    meta: { anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities] },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
   },
   {
     path: '/crm-events/:crmEventId',
     name: 'CRM Event',
     component: () => import('@/pages/CRMEvent.vue'),
-    meta: { anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities] },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: true,
   },
   {

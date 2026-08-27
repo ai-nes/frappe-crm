@@ -582,19 +582,14 @@ watch(error, (err) => {
 })
 
 const breadcrumbs = computed(() => {
+  const isEnrolled = doc.value?.lifecycle_stage === 'Enrolled'
   let items = [
     {
-      label:
-        doc.value?.enrollment_status === 'Đã chuyển đổi'
-          ? __('Enrolled Students')
-          : __('Prospective Students'),
+      label: isEnrolled ? __('Enrolled Students') : __('Prospective Students'),
       route: {
         name: 'CRM Students',
         query: {
-          stage:
-            doc.value?.enrollment_status === 'Đã chuyển đổi'
-              ? 'enrolled'
-              : 'intake',
+          stage: isEnrolled ? 'enrolled' : 'intake',
         },
       },
     },

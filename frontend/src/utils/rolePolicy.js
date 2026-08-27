@@ -56,13 +56,6 @@ export const admissionsDecisionCapabilities = [
   'system.configure',
 ]
 
-export const eventNavigationCapabilities = [
-  'interaction.record',
-  'acquisition.manage',
-  'admissions.oversee',
-  'system.configure',
-]
-
 // This declaration controls discoverability only; backend permissions remain authoritative.
 export const navigationEntries = [
   {
@@ -98,14 +91,14 @@ export const navigationEntries = [
   {
     label: 'Enrolled Students',
     icon: 'enrolledStudents',
-    to: { name: 'CRM Contacts', query: { stage: 'enrolled' } },
+    to: { name: 'CRM Students', query: { stage: 'enrolled' } },
     anyOf: admissionsWorkspaceCapabilities,
   },
   {
     label: 'High Schools',
     icon: 'schools',
     to: 'High Schools',
-    anyOf: admissionsManagementCapabilities,
+    anyOf: acquisitionWorkspaceCapabilities,
   },
   {
     label: 'Persons',
@@ -129,9 +122,7 @@ export const navigationEntries = [
     label: 'Events',
     icon: 'events',
     to: 'CRM Events',
-    // Events are marketing-owned for mutations, but admissions operators need
-    // read access for Open Day/Campus Tour actions and attribution context.
-    anyOf: eventNavigationCapabilities,
+    anyOf: acquisitionWorkspaceCapabilities,
   },
   {
     label: 'Staff',
