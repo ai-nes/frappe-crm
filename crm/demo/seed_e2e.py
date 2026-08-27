@@ -221,8 +221,14 @@ def _put_interaction(student, code, intent_type, importance, channel, days_ago, 
         "doctype": "CRM Interaction", "student": student, "interaction_type": seed_demo._ensure_interaction_type(channel),
         "interaction_datetime": now_datetime() - timedelta(days=days_ago), "outcome": outcome, "summary": summary, "notes": notes,
     }).insert(ignore_permissions=True)
+    # CRM Intent.importance is read-only and derived server-side from the
+    # intent_type term's metadata (crm_intent.py before_validate), so it is
+    # not set directly here -- _ensure_intent_type persists it on the term.
     kind = seed_demo._ensure_intent_type(intent_type, importance, f"{PREFIX} {intent_type}")
-    intent = frappe.get_doc({"doctype": "CRM Intent", "interaction": interaction.name, "intent_type": kind, "intent_role": "Dominant", "polarity": "Positive", "confidence": 90, "notes": notes}).insert(ignore_permissions=True)
+    intent = frappe.get_doc({
+        "doctype": "CRM Intent", "interaction": interaction.name, "intent_type": kind,
+        "intent_role": "Dominant", "polarity": "Positive", "confidence": 90, "notes": notes,
+    }).insert(ignore_permissions=True)
     # The live RCM rule measures intent-record age, not interaction age.
     # Backdate only fictional E2E records so the real SLA rule is testable.
     frappe.db.set_value("CRM Intent", intent.name, "creation", now_datetime() - timedelta(days=days_ago), update_modified=False)
@@ -250,16 +256,26 @@ def _put_student(ctx, assigned_to, item):
         )
         _normalize_e2e_intent_timestamps(existing, interaction_days)
         return existing
-    student = frappe.get_doc({
-        "doctype": "CRM Student", "student_name": f"{PREFIX}-{code} {name}", "email": email,
-        "phone": phone, "enrollment_status": "Mới", "assigned_to": assigned_to,
-        "owner": LIVE_TEST_USERS["sales"][0],
-        "high_school": ctx["high_school"], "province": ctx["province"], "ward": ctx["ward"], "branch": ctx["campus"],
-        "major": ctx["major"], "aspiration": ctx["aspiration"], "source": ctx["source"], "admission_year": ctx["admission_year"],
-        "education_program": ctx["education_program"], "cohort_start_year": 2026, "cohort_end_year": 2030,
-        "transcript_score": 8.2 if code in {"01", "02", "05"} else 7.1, "english_converted_score": 6.5 if code == "01" else 5.5,
-        "admission_method": "Transcript Review", "notes": notes,
-    }).insert(ignore_permissions=True)
+    # CRM Student.before_insert requires the trusted student-intake service
+    # boundary (crm.fcrm.student_intake) outside of a pytest run. This
+    # fixture module is local-only demo data, not an external-facing intake
+    # path, so it opts into that same boundary directly rather than routing
+    # through the full case-key/pool resolution flow real intake requires.
+    previous_intake_flag = getattr(frappe.flags, "student_intake_service", None)
+    frappe.flags.student_intake_service = True
+    try:
+        student = frappe.get_doc({
+            "doctype": "CRM Student", "student_name": f"{PREFIX}-{code} {name}", "email": email,
+            "phone": phone, "enrollment_status": "Mới", "assigned_to": assigned_to,
+            "owner": LIVE_TEST_USERS["sales"][0],
+            "high_school": ctx["high_school"], "province": ctx["province"], "ward": ctx["ward"], "branch": ctx["campus"],
+            "major": ctx["major"], "aspiration": ctx["aspiration"], "source": ctx["source"], "admission_year": ctx["admission_year"],
+            "education_program": ctx["education_program"], "cohort_start_year": 2026, "cohort_end_year": 2030,
+            "transcript_score": 8.2 if code in {"01", "02", "05"} else 7.1, "english_converted_score": 6.5 if code == "01" else 5.5,
+            "admission_method": "Transcript Review", "notes": notes,
+        }).insert(ignore_permissions=True)
+    finally:
+        frappe.flags.student_intake_service = previous_intake_flag
     if status != "Mới":
         student.db_set("enrollment_status", status, update_modified=False)
         record_transition(student.name, "Mới", status, occurred_at=now_datetime() - timedelta(days=stage_days), source=PREFIX)
@@ -657,7 +673,7 @@ def rehearse_permissioned_lifecycle() -> dict:
             "fixture_run_id": FIXTURE_RUN_ID,
             "action_accepted": accepted["action"],
             "action": accepted["action"],
-            "sales_outcome": outcome["name"],
+            "sales_outcome": outcome["action"],
             "marketing_denied": denied_recommendation.name,
             "cross_campus_denied": cross_campus_id,
         }

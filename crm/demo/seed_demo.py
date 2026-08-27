@@ -17,6 +17,7 @@ What this creates (all idempotent):
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 import frappe
@@ -754,14 +755,23 @@ def _ensure_interaction_type(name):
 
 
 def _ensure_intent_type(name, importance, description_vi):
-    if frappe.db.exists("CRM Term", name):
-        return name
-    return _create_governed_additive_value(
-        "CRM Term",
-        name,
-        reason=f"Local scoring fixture: {description_vi}",
-        category="intent_type",
-    )
+    term = frappe.db.exists("CRM Term", name)
+    if not term:
+        term = _create_governed_additive_value(
+            "CRM Term",
+            name,
+            reason=f"Local scoring fixture: {description_vi}",
+            category="intent_type",
+        )
+    # CRM Intent.importance is read-only and always derived from its
+    # intent_type term's metadata (crm_intent.py before_validate), so the
+    # term must carry the importance level, not the individual intent.
+    # Backfill on every call (not just creation) so terms left over from
+    # earlier fixture runs, seeded before this metadata existed, self-heal.
+    current_metadata = frappe.db.get_value("CRM Term", term, "metadata")
+    if not current_metadata or json.loads(current_metadata).get("importance") != importance:
+        frappe.db.set_value("CRM Term", term, "metadata", frappe.as_json({"importance": importance}))
+    return term
 
 
 def _create_governed_additive_value(doctype, value, *, reason, category=None):

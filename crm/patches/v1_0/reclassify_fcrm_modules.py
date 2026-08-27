@@ -45,12 +45,10 @@ MODULES = {
 
 
 def execute():
-	updated = []
-	for module, doctypes in MODULES.items():
-		for doctype in doctypes:
-			if not frappe.db.exists("DocType", doctype):
-				continue
-			if frappe.db.get_value("DocType", doctype, "module") != module:
-				frappe.db.set_value("DocType", doctype, "module", module, update_modified=False)
-				updated.append(doctype)
-	return {"updated": updated, "module_count": len(MODULES)}
+	# Disabled: the bounded-context modules above were never registered as real
+	# Frappe modules (no entries in crm/modules.txt, no Module Def records, no
+	# crm/<module_snake>/ packages), so reassigning DocType.module to these names
+	# breaks controller loading (get_module_app / load_doctype_module) for every
+	# doctype touched. Until that scaffolding exists, this patch is a no-op and
+	# all doctypes stay on the FCRM module.
+	return {"updated": [], "module_count": 0, "skipped": "modules not registered"}

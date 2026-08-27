@@ -25,7 +25,7 @@ def _drop(source):
 	if frappe.db.exists("DocType", source):
 		frappe.delete_doc("DocType", source, ignore_permissions=True, force=True)
 	if _table_exists(source):
-		frappe.db.sql_ddl(f"DROP TABLE `{source}`")
+		frappe.db.sql_ddl(f"DROP TABLE `tab{source}`")
 
 
 def execute():

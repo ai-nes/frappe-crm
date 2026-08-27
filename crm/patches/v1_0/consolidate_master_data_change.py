@@ -25,7 +25,7 @@ def _drop(doctype):
 	if frappe.db.exists("DocType", doctype):
 		frappe.delete_doc("DocType", doctype, ignore_permissions=True, force=True)
 	if _table_exists(doctype):
-		frappe.db.sql_ddl(f"DROP TABLE `{doctype}`")
+		frappe.db.sql_ddl(f"DROP TABLE `tab{doctype}`")
 
 
 def execute():
