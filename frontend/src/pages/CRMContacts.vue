@@ -27,7 +27,6 @@
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Contact"
-    :filters="stageFilters"
     :options="{
       allowedViews: ['list', 'group_by', 'kanban'],
     }"
@@ -110,13 +109,6 @@ import { getMeta } from '@/stores/meta'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
-
-const stageFilters = computed(() => {
-  if (route.query.stage === 'enrolled') {
-    return { enrollment_status: 'Đã nhập học' }
-  }
-  return {}
-})
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Contact')

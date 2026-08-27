@@ -1,9 +1,15 @@
 """Frappe-backed SLA lifecycle checks (run with ``bench run-tests``)."""
 
 import frappe
+from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.student_sla import MEANINGFUL_OUTCOMES, process_due_sla_attempts
+from crm.fcrm.student_sla import (
+	MEANINGFUL_OUTCOMES,
+	StudentSLAError,
+	process_due_sla_attempts,
+	record_qualifying_response,
+)
 
 
 class TestStudentSLA(FrappeTestCase):
@@ -18,3 +24,41 @@ class TestStudentSLA(FrappeTestCase):
 		finally:
 			if previous is not None:
 				frappe.conf.crm_student_sla_enabled = previous
+
+	def test_foreign_or_fabricated_interaction_cannot_satisfy_an_sla(self):
+		attempt = frappe._dict(name="SLA-1", student="STU-1", status="open", revision=3)
+		foreign = frappe._dict(
+			name="INT-1", student="STU-2", interaction_datetime="2026-01-01 10:00:00",
+			outcome="Resolved", actor="Administrator", reference_doctype="File", source_verified=1,
+		)
+		with patch("crm.fcrm.student_sla.enabled", return_value=True), patch(
+			"crm.fcrm.student_sla._lock_attempt", return_value=attempt
+		), patch("crm.fcrm.student_sla._assert_scope"), patch(
+			"crm.fcrm.student_sla.frappe.get_doc", return_value=foreign
+		), patch("crm.fcrm.student_sla.frappe.db.sql"), patch.object(
+			frappe.session, "user", "Administrator"
+		):
+			with self.assertRaises(StudentSLAError) as error:
+				record_qualifying_response("SLA-1", "INT-1", expected_revision=3)
+		self.assertEqual(error.exception.code, "INVALID_INTERACTION")
+		self.assertEqual(attempt.status, "open")
+		self.assertEqual(attempt.revision, 3)
+
+	def test_outcome_alone_is_not_a_qualifying_response(self):
+		attempt = frappe._dict(name="SLA-2", student="STU-1", status="open", revision=0)
+		interaction = frappe._dict(
+			name="INT-2", student="STU-1", interaction_datetime="9999-01-01 00:00:00",
+			outcome="Resolved", actor="Administrator", reference_doctype="File", source_verified=1,
+		)
+		interaction.reload = lambda: None
+		with patch("crm.fcrm.student_sla.enabled", return_value=True), patch(
+			"crm.fcrm.student_sla._lock_attempt", return_value=attempt
+		), patch("crm.fcrm.student_sla._assert_scope"), patch(
+			"crm.fcrm.student_sla.frappe.get_doc", return_value=interaction
+		), patch("crm.fcrm.student_sla.frappe.db.sql"), patch.object(
+			frappe.session, "user", "Administrator"
+		):
+			with self.assertRaises(StudentSLAError) as error:
+				record_qualifying_response("SLA-2", "INT-2", expected_revision=0)
+		self.assertEqual(error.exception.code, "INVALID_INTERACTION_SOURCE")
+		self.assertEqual(attempt.status, "open")

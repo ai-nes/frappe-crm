@@ -124,6 +124,7 @@ const defaultActions = computed(() => {
       icon: h(PhoneIcon, { class: 'h-4 w-4' }),
       label: __('Log a Call'),
       onClick: () => props.modalRef.createCallLog(),
+      condition: () => props.doctype !== 'CRM Student',
     },
     {
       icon: h(PhoneIcon, { class: 'h-4 w-4' }),
@@ -185,6 +186,7 @@ const callActions = computed(() => {
       label: __('Log a Call'),
       icon: 'plus',
       onClick: () => props.modalRef.createCallLog(),
+      condition: () => props.doctype !== 'CRM Student',
     },
     {
       label: __('Make a Call'),

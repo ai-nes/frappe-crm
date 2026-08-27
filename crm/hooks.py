@@ -87,7 +87,7 @@ website_route_rules = [
 # Setup wizard
 # setup_wizard_requires = "assets/crm/js/setup_wizard.js"
 # setup_wizard_stages = "crm.setup.setup_wizard.setup_wizard.get_setup_stages"
-setup_wizard_complete = "crm.demo.api.create_demo_data"
+setup_wizard_complete = "crm.install.complete_setup"
 # setup_wizard_test = "crm.setup.setup_wizard.test_setup_wizard.run_setup_wizard_test"
 
 # Installation
@@ -132,6 +132,9 @@ permission_query_conditions = {
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
 	"CRM Student Routing Request": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Ownership Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Lifecycle Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Outcome": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
@@ -148,9 +151,13 @@ permission_query_conditions = {
 }
 
 has_permission = {
+	"File": "crm.fcrm.file_permissions.has_permission",
 	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
 	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Ownership Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Lifecycle Event": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Outcome": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Attempt": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.has_operational_record_permission",
@@ -207,6 +214,9 @@ doc_events = {
 	"CRM Interaction": {
 		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
 		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
+	},
+	"File": {
+		"before_insert": ["crm.fcrm.file_permissions.before_insert"],
 	},
 	"CRM Lead Source": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],

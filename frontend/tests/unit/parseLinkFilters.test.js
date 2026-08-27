@@ -73,13 +73,15 @@ describe('getProvinceScopedLinkFilters', () => {
 })
 
 describe('getContextualLinkFilters', () => {
-  it('filters CRM Campus by selected province', () => {
+  it('does not filter CRM Campus by selected province', () => {
+    const baseFilters = { is_active: 1 }
     expect(
       getContextualLinkFilters(
         { fieldtype: 'Link', options: 'CRM Campus' },
         { province: 'Ha Noi' },
+        baseFilters,
       ),
-    ).toEqual({ province: 'Ha Noi' })
+    ).toBe(baseFilters)
   })
 
   it('filters CRM Campaign by selected branch', () => {
@@ -147,6 +149,16 @@ describe('getDependentFieldsToClear', () => {
         crm_campaign: 'Campaign',
       }),
     ).toEqual(['ward', 'high_school'])
+  })
+
+  it('keeps the selected campus when province changes', () => {
+    expect(
+      getDependentFieldsToClear('province', {
+        province: 'Ha Noi',
+        branch: 'Ho Chi Minh City',
+        campus: 'Ho Chi Minh City',
+      }),
+    ).toEqual([])
   })
 
   it('clears campaign when branch changes', () => {

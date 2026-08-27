@@ -13,7 +13,7 @@ from datetime import timedelta
 
 import frappe
 import requests
-from frappe.utils import now_datetime
+from frappe.utils import get_datetime, now_datetime as frappe_now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
@@ -31,6 +31,34 @@ _LEASE_SECONDS = 120
 SLA_NOTIFICATION_EVENT = "student.sla.notification.v1"
 SLA_DIGEST_EVENT = "student.sla.digest.v1"
 _SLA_OUTBOX_FIELDS = {"source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "retention_until", "legal_hold"}
+
+
+def _test_seam_active() -> bool:
+	run_id = str(frappe.conf.get("crm_playwright_e2e_run_id") or "").strip()
+	lease = frappe.cache().get_value("crm_playwright_e2e_lease") or {}
+	lease_run_id = str(lease.get("run_id") or "").strip()
+	expires_at = get_datetime(lease.get("expires_at")) if lease.get("expires_at") else None
+	return (
+		getattr(frappe.local, "site", None) == "crm.localhost"
+		and frappe.conf.get("crm_playwright_disposable") in (1, "1", True)
+		and frappe.conf.get("crm_playwright_test_seam_enabled") in (1, "1", True)
+		and bool(run_id)
+		and lease_run_id == run_id
+		and bool(expires_at and expires_at > frappe_now_datetime())
+	)
+
+
+def now_datetime():
+	configured = frappe.conf.get("crm_playwright_test_clock") if _test_seam_active() else None
+	return get_datetime(configured) if configured else frappe_now_datetime()
+
+
+def _record_test_delivery(event, body: bytes) -> None:
+	"""Persist only redacted metadata; test transport never opens a socket."""
+	if not _test_seam_active():
+		frappe.throw("TEST_SEAM_DISABLED", frappe.ValidationError)
+	key = f"crm_playwright_test_delivery:{frappe.conf.get('crm_playwright_e2e_run_id')}:{event.name}"
+	frappe.cache().set_value(key, {"event": event.name, "event_type": event.event_type, "bytes": len(body), "external_url": False})
 
 
 def _event_fields() -> set[str]:
@@ -417,6 +445,10 @@ def deliver_agent_event(event_name: str) -> None:
 		_record_delivery_failure(event, "crm_agents_url / crm_agents_webhook_secret not configured", lease_id)
 		return
 	body = _event_body(event)
+	if _test_seam_active():
+		_record_test_delivery(event, body)
+		_complete_delivery(event, lease_id)
+		return
 	timestamp = str(int(time.time()))
 	signature = hmac.new(secret.encode(), timestamp.encode() + b"." + body, hashlib.sha256).hexdigest()
 	try:

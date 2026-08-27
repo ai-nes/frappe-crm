@@ -4,7 +4,7 @@ from frappe.auth import LoginAttemptTracker
 from frappe.rate_limiter import rate_limit
 from frappe.utils.password import check_password, update_password
 
-from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES, CRM_BUSINESS_ROLES
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES, CRM_BUSINESS_ROLES, DESK_MANAGEMENT_ROLE_NAMES
 
 CRM_MANAGED_ROLES = CANONICAL_SELECTABLE_ROLES
 
@@ -24,10 +24,10 @@ def set_canonical_crm_profile(user_doc, new_role: str):
 		frappe.throw(_("Cannot assign this role"), frappe.ValidationError)
 	if new_role == "System Manager":
 		remove_roles(user_doc, *CRM_BUSINESS_ROLES)
-		user_doc.append_roles("System Manager")
+		user_doc.append_roles("System Manager", *DESK_MANAGEMENT_ROLE_NAMES)
 		user_doc.set("block_modules", [])
 		return
-	remove_roles(user_doc, "System Manager", *CRM_BUSINESS_ROLES)
+	remove_roles(user_doc, "System Manager", *DESK_MANAGEMENT_ROLE_NAMES, *CRM_BUSINESS_ROLES)
 	user_doc.append_roles(new_role)
 	update_module_in_user(user_doc, "FCRM")
 
@@ -161,7 +161,7 @@ def remove_crm_roles_from_user(user: str):
 
 	remove_roles(user_doc, *CRM_BUSINESS_ROLES)
 	if "System Manager" in roles:
-		remove_roles(user_doc, "System Manager")
+		remove_roles(user_doc, "System Manager", *DESK_MANAGEMENT_ROLE_NAMES)
 		update_module_in_user(user_doc, "FCRM")
 
 	user_doc.save(ignore_permissions=True)

@@ -31,6 +31,9 @@ CACHE_TTL_SEC = 300
 # Operational records are never independently scoped.  They inherit the
 # current Student scope and are exposed only through masked service projections.
 OPERATIONAL_RECORD_STUDENT_FIELDS = {
+	"CRM Student Ownership Event": "student",
+	"CRM Student Lifecycle Event": "student",
+	"CRM Student Outcome": "student",
 	"CRM Student Routing Request": "student",
 	"CRM Student SLA Attempt": "student",
 	"CRM Student SLA Event": "student",
@@ -345,6 +348,11 @@ def _contact_conversion_condition(user, roles, scope):
 		)
 	if student_condition == "1=0":
 		return "1=0"
+	# The nested query aliases CRM Student as ``student``.  Conditions returned
+	# by the shared scope builder use the fully-qualified table name, which is
+	# valid at the top level but becomes an unknown table reference inside this
+	# join unless it is rebound to the alias.
+	student_condition = student_condition.replace("`tabCRM Student`", "student")
 	return (
 		f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion "
 		"inner join `tabCRM Student` student on student.name = conversion.student "

@@ -14,11 +14,46 @@
   />
   <FadedScrollableDiv class="flex flex-col h-full overflow-y-auto">
     <div
-      v-if="all_activities?.loading"
+      v-if="isInitialActivitiesLoading && isActivitiesResourceTab"
       class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
     >
       <LoadingIndicator class="h-6 w-6" />
       <span>{{ __('Loading...') }}</span>
+    </div>
+    <div
+      v-else-if="initialActivitiesError && isActivitiesResourceTab"
+      class="flex flex-1 flex-col items-center justify-center gap-3 px-5 text-center text-ink-gray-6"
+      role="alert"
+    >
+      <span>{{ __('Unable to load activities.') }}</span>
+      <Button :label="__('Retry')" @click="all_activities.reload()" />
+    </div>
+    <div
+      v-else-if="
+        title == 'WhatsApp' &&
+        whatsappEnabled &&
+        !whatsappMessages.fetched &&
+        !whatsappMessages.data &&
+        !whatsappMessages.error
+      "
+      class="flex flex-1 flex-col items-center justify-center gap-3 text-xl font-medium text-ink-gray-4"
+      role="status"
+    >
+      <LoadingIndicator class="h-6 w-6" />
+      <span>{{ __('Loading...') }}</span>
+    </div>
+    <div
+      v-else-if="
+        title == 'WhatsApp' &&
+        whatsappEnabled &&
+        whatsappMessages.error &&
+        !whatsappMessages.data
+      "
+      class="flex flex-1 flex-col items-center justify-center gap-3 px-5 text-center text-ink-gray-6"
+      role="alert"
+    >
+      <span>{{ __('Unable to load WhatsApp messages.') }}</span>
+      <Button :label="__('Retry')" @click="whatsappMessages.reload()" />
     </div>
     <div
       v-else-if="
@@ -108,6 +143,8 @@
       >
         <AttachmentArea
           :attachments="activities"
+          :allow-visibility-change="doctype !== 'CRM Student'"
+          :allow-delete="doctype !== 'CRM Student'"
           @reload="all_activities.reload() && scroll()"
         />
       </div>
@@ -239,7 +276,9 @@
             v-else-if="activity.activity_type == 'student_engagement'"
             class="mb-4 flex items-center justify-stretch gap-2 py-1.5 text-base"
           >
-            <span class="font-medium text-ink-gray-8">{{ activity.type }}</span>
+            <span class="font-medium text-ink-gray-8">{{
+              displayStudentEngagementSummary(activity.type)
+            }}</span>
             <div class="ml-auto whitespace-nowrap">
               <Tooltip :text="formatDate(activity.creation)">
                 <div class="text-sm text-ink-gray-5">
@@ -397,7 +436,10 @@
           v-if="title == 'Activity' && additionalActivitiesHasMore"
           class="px-3 pb-5 sm:px-10"
         >
-          <Button :label="__('View more history')" @click="emit('load-more-additional-activities')" />
+          <Button
+            :label="__('View more history')"
+            @click="emit('load-more-additional-activities')"
+          />
         </div>
       </template>
     </div>
@@ -451,6 +493,11 @@
     v-model="showFilesUploader"
     :doctype="doctype"
     :docname="docname"
+    :options="
+      doctype === 'CRM Student'
+        ? { forcePrivate: true, makeAttachmentsPublic: false }
+        : {}
+    "
     @after="
       () => {
         all_activities.reload()
@@ -502,6 +549,7 @@ import AllModals from '@/components/Activities/AllModals.vue'
 import AssignStaffModal from '@/components/Modals/AssignStaffModal.vue'
 import FilesUploader from '@/components/FilesUploader/FilesUploader.vue'
 import { timeAgo, formatDate, startCase } from '@/utils'
+import { getResourceViewState } from '@/utils/resourceLoading'
 import { globalStore } from '@/stores/global'
 import { usersStore } from '@/stores/users'
 import { whatsappEnabled } from '@/composables/whatsapp'
@@ -520,6 +568,7 @@ import {
   onBeforeUnmount,
 } from 'vue'
 import { useRoute } from 'vue-router'
+import { admissionsSummaryTranslation } from '@/utils/studentAdmissionsActions'
 
 const { $socket } = globalStore()
 const { getUser } = usersStore()
@@ -533,7 +582,11 @@ const props = defineProps({
   additionalActivitiesHasMore: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['beforeSave', 'afterSave', 'load-more-additional-activities'])
+const emit = defineEmits([
+  'beforeSave',
+  'afterSave',
+  'load-more-additional-activities',
+])
 
 const route = useRoute()
 
@@ -571,6 +624,24 @@ const all_activities = createResource({
   },
   onSuccess: () => nextTick(() => scroll()),
 })
+const activitiesViewState = computed(() => getResourceViewState(all_activities))
+const isActivitiesResourceTab = computed(() =>
+  [
+    'Activity',
+    'Emails',
+    'Comments',
+    'Calls',
+    'Tasks',
+    'Notes',
+    'Attachments',
+  ].includes(title.value),
+)
+const isInitialActivitiesLoading = computed(
+  () => activitiesViewState.value === 'loading',
+)
+const initialActivitiesError = computed(
+  () => activitiesViewState.value === 'error',
+)
 
 const showWhatsappTemplates = ref(false)
 
@@ -738,6 +809,12 @@ function update_activities_details(activity) {
   } else if (activity.activity_type == 'student_engagement') {
     activity.type = activity.data?.summary || __('Student lifecycle updated')
   }
+}
+
+function displayStudentEngagementSummary(value) {
+  const summary = String(value || '')
+  const translation = admissionsSummaryTranslation(summary)
+  return translation ? __(translation.key, translation.args) : summary
 }
 
 const top = computed(() => {

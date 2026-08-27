@@ -35,7 +35,12 @@
  "name": "CRM Student Lifecycle Event",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
- "permissions": [{"read": 1, "role": "System Manager"}],
+ "permissions": [
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Admissions Director"}
+ ],
  "quick_entry": 0,
  "sort_field": "occurred_at",
  "sort_order": "DESC",

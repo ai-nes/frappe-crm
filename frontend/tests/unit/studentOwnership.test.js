@@ -90,6 +90,24 @@ describe('student ownership command UI helpers', () => {
     })
   })
 
+  it('sends the selected owner team with an owner target', () => {
+    expect(
+      buildOwnershipPayload({
+        student: 'STU-1',
+        target: { kind: 'owner', id: 'STAFF-1', teamId: 'TEAM-1' },
+        reason: 'Capacity',
+        revision: 4,
+        correlationId: 'c',
+        idempotencyKey: 'i',
+      }),
+    ).toMatchObject({
+      student: 'STU-1',
+      target_kind: 'owner',
+      target_id: 'STAFF-1',
+      target_team_id: 'TEAM-1',
+    })
+  })
+
   it('recognizes only terminal intake results and stale conflicts', () => {
     expect(intakeResultKind({ status: 'created' })).toBe('created')
     expect(intakeResultKind({ outcome: 'review_required' })).toBe(

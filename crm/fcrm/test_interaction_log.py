@@ -18,9 +18,17 @@ other save-path tests.
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
+
+from crm.fcrm.interaction_log import _source_matches_student
 
 
 class TestInteractionLogDispatch(FrappeTestCase):
+	def test_direct_student_reference_requires_the_same_student(self):
+		with patch("crm.fcrm.interaction_log.frappe.db.exists", return_value=True):
+			self.assertTrue(_source_matches_student("CRM Student", "STU-1", "STU-1"))
+			self.assertFalse(_source_matches_student("CRM Student", "STU-1", "STU-2"))
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._ensure_interaction_type("Outreach")

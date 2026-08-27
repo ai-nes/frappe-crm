@@ -8,6 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 from crm.fcrm.student_intake import (
 	StudentIntakeError,
 	_MEMORY_RECEIPTS,
+	_receipt_replay,
 	decide_intake_review,
 	encode_key,
 	keyed_digest,
@@ -38,6 +39,29 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 		error = StudentIntakeError("REVIEW_REQUIRED", "manual review")
 		self.assertEqual(error.code, "REVIEW_REQUIRED")
 		self.assertEqual(error.error_code, "REVIEW_REQUIRED")
+
+	def test_replay_returns_the_immutable_receipt_projection(self):
+		key = {"version": "v1", "command_key": "command-a", "source_key": "source-a", "nonce_key": None}
+		_MEMORY_RECEIPTS["command-a"] = {
+			"name": "RECEIPT-1",
+			"request_fingerprint": "same-body",
+			"result_json": '{"outcome":"created","student":"STU-1"}',
+		}
+		try:
+			result = _receipt_replay([key], "same-body", source_namespace="provider", idempotency_key="key-a")
+		finally:
+			_MEMORY_RECEIPTS.pop("command-a", None)
+		self.assertEqual(result, {"outcome": "created", "student": "STU-1", "receipt": "RECEIPT-1"})
+
+	def test_reused_idempotency_key_with_different_body_is_denied(self):
+		key = {"version": "v1", "command_key": "command-b", "source_key": "source-b", "nonce_key": None}
+		_MEMORY_RECEIPTS["command-b"] = {"name": "RECEIPT-2", "request_fingerprint": "first"}
+		try:
+			with self.assertRaises(StudentIntakeError) as error:
+				_receipt_replay([key], "second", source_namespace="provider", idempotency_key="key-b")
+		finally:
+			_MEMORY_RECEIPTS.pop("command-b", None)
+		self.assertEqual(error.exception.code, "IDEMPOTENCY_KEY_REUSED")
 
 
 class TestStudentIntakeReviewCAS(FrappeTestCase):

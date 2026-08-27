@@ -57,6 +57,13 @@ def _actor_and_scope() -> dict[str, Any]:
 		_fail("UNAUTHORIZED", "Authentication is required.")
 	roles = frappe.get_roles(actor)
 	capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
+	# The admissions command is an already-authorized Student-scoped boundary.
+	# It may compose campaign/event evidence for a counselor without granting
+	# that counselor unrestricted access to the raw attribution DocTypes.
+	if getattr(frappe.flags, "student_admissions_service", False):
+		scope = getattr(frappe.flags, "student_admissions_scope", None) or {}
+		if scope.get("actor") == actor and scope.get("student"):
+			return scope
 	if actor != "Administrator" and "System Manager" not in roles and CAPABILITY not in capabilities:
 		_fail("FORBIDDEN", "You are not permitted to manage attribution evidence.")
 	return {"actor": actor, "roles": sorted(roles), "capabilities": sorted(capabilities)}

@@ -92,6 +92,7 @@ crm.patches.v1_0.add_student_next_task_v2
 crm.patches.v1_0.add_score_policy_versioning
 crm.patches.v1_0.add_score_revision_tracking
 crm.patches.v1_0.backfill_student_task_worklist_fields
+crm.patches.v1_0.restore_desk_management_roles
 crm.patches.v1_0.migrate_student_tasks_to_crm_action
 crm.patches.v1_0.migrate_admissions_tasks_to_crm_action
 crm.patches.v1_0.migrate_sales_actions_to_crm_action

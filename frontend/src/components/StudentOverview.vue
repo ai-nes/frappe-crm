@@ -13,25 +13,44 @@
             {{ __('Current state') }}
           </h2>
           <p class="mt-1 text-sm text-ink-gray-5">
-            {{ __('The information most useful for the next admissions action.') }}
+            {{
+              __('The information most useful for the next admissions action.')
+            }}
           </p>
         </div>
         <dl class="grid gap-4 sm:grid-cols-2">
           <div>
-            <dt class="text-sm text-ink-gray-5">{{ __('Owner') }}</dt>
+            <dt class="text-sm text-ink-gray-5">
+              {{ __('Current assignment') }}
+            </dt>
             <dd class="mt-1 truncate text-base text-ink-gray-8">
-              <span v-if="ownershipLoading" class="text-ink-gray-5">{{ __('Loading…') }}</span>
+              <span
+                v-if="ownershipLoading && !ownershipFetched"
+                class="text-ink-gray-5"
+                >{{ __('Loading…') }}</span
+              >
               <span v-else>{{ ownershipSummary }}</span>
             </dd>
           </div>
           <div>
             <dt class="text-sm text-ink-gray-5">{{ __('Lifecycle') }}</dt>
             <dd class="mt-1 text-base font-medium text-ink-gray-8">
-              {{ lifecycleStage }}
+              <span
+                v-if="engagementLoading && !engagementFetched"
+                class="text-ink-gray-5"
+              >
+                {{ __('Loading…') }}
+              </span>
+              <span v-else>{{ lifecycleStage }}</span>
             </dd>
           </div>
         </dl>
       </section>
+
+      <StudentAdmissionsContext
+        :context="demoContext"
+        :loading="demoContextLoading"
+      />
 
       <StudentSLASection
         v-if="slaAttempt || slaLoading"
@@ -55,8 +74,17 @@
           {{ __('Sales decisions and actions') }}
         </h2>
         <div class="mt-3 space-y-3 text-sm">
-          <p v-if="studentDecisionContext.pendingDecision" class="text-ink-gray-6">
-            {{ __('Pending decision: {0}', [studentDecisionContext.pendingDecision.action || studentDecisionContext.pendingDecision.recommended_action || studentDecisionContext.pendingDecision.name]) }}
+          <p
+            v-if="studentDecisionContext.pendingDecision"
+            class="text-ink-gray-6"
+          >
+            {{
+              __('Pending decision: {0}', [
+                studentDecisionContext.pendingDecision.action ||
+                  studentDecisionContext.pendingDecision.recommended_action ||
+                  studentDecisionContext.pendingDecision.name,
+              ])
+            }}
           </p>
           <div
             v-if="studentDecisionContext.activeAction"
@@ -67,22 +95,52 @@
             </p>
             <p
               class="mt-1"
-              :class="studentDecisionContext.activeAction.overdue ? 'font-medium text-red-600' : 'text-ink-gray-6'"
+              :class="
+                studentDecisionContext.activeAction.overdue
+                  ? 'font-medium text-red-600'
+                  : 'text-ink-gray-6'
+              "
             >
-              {{ __('Status: {0} · Due: {1}', [studentDecisionContext.activeAction.status, studentDecisionContext.activeAction.dueAt || __('Not scheduled')]) }}
+              {{
+                __('Status: {0} · Due: {1}', [
+                  studentDecisionContext.activeAction.status,
+                  studentDecisionContext.activeAction.dueAt ||
+                    __('Not scheduled'),
+                ])
+              }}
             </p>
             <Button
-              v-if="studentDecisionContext.activeAction.permittedTransitions?.length"
+              v-if="
+                studentDecisionContext.activeAction.permittedTransitions?.length
+              "
               class="mt-2"
               size="sm"
               :label="__('Update action')"
-              @click="relay('update-action', studentDecisionContext.activeAction)"
+              @click="
+                relay('update-action', studentDecisionContext.activeAction)
+              "
             />
           </div>
-          <p v-if="studentDecisionContext.latestTerminalAction" class="text-ink-gray-6">
-            {{ __('Latest action: {0}', [studentDecisionContext.latestTerminalAction.actionType]) }}
-            <span v-if="studentDecisionContext.latestTerminalAction.linkedInteraction">
-              · {{ __('Linked interaction: {0}', [studentDecisionContext.latestTerminalAction.linkedInteraction]) }}
+          <p
+            v-if="studentDecisionContext.latestTerminalAction"
+            class="text-ink-gray-6"
+          >
+            {{
+              __('Latest action: {0}', [
+                studentDecisionContext.latestTerminalAction.actionType,
+              ])
+            }}
+            <span
+              v-if="
+                studentDecisionContext.latestTerminalAction.linkedInteraction
+              "
+            >
+              ·
+              {{
+                __('Linked interaction: {0}', [
+                  studentDecisionContext.latestTerminalAction.linkedInteraction,
+                ])
+              }}
             </span>
           </p>
         </div>
@@ -106,10 +164,16 @@
         </div>
         <div class="mt-3 flex items-center justify-between gap-3 text-sm">
           <span class="text-ink-gray-6">
-            {{ routingStatus.last_error_code || __('Routing is operating normally.') }}
+            {{
+              routingStatus.last_error_code ||
+              __('Routing is operating normally.')
+            }}
           </span>
           <Button
-            v-if="['deferred', 'failed'].includes(routingStatus.status) && routingStatus.capabilities?.retry"
+            v-if="
+              ['deferred', 'failed'].includes(routingStatus.status) &&
+              routingStatus.capabilities?.retry
+            "
             size="sm"
             :label="__('Retry')"
             @click="relay('retry-routing')"
@@ -136,6 +200,7 @@
 import { computed } from 'vue'
 import { Button } from 'frappe-ui'
 import StudentSLASection from '@/components/StudentSLASection.vue'
+import StudentAdmissionsContext from '@/components/StudentAdmissionsContext.vue'
 import StudentConversionPanel from '@/components/StudentConversion/StudentConversionPanel.vue'
 import AuditTimeline from '@/components/Governance/AuditTimeline.vue'
 import { studentConversionState } from '@/utils/studentConversion'
@@ -144,12 +209,16 @@ const props = defineProps({
   student: { type: String, required: true },
   ownershipSummary: { type: String, default: '' },
   ownershipLoading: { type: Boolean, default: false },
+  ownershipFetched: { type: Boolean, default: false },
   lifecycleStage: { type: String, default: '' },
   slaAttempt: { type: Object, default: null },
   slaCapabilities: { type: Object, default: () => ({}) },
   slaLoading: { type: Boolean, default: false },
   engagementContext: { type: Object, default: null },
   engagementLoading: { type: Boolean, default: false },
+  engagementFetched: { type: Boolean, default: false },
+  demoContext: { type: Object, default: null },
+  demoContextLoading: { type: Boolean, default: false },
   studentDecisionContext: { type: Object, default: null },
   routingStatus: { type: Object, default: null },
 })

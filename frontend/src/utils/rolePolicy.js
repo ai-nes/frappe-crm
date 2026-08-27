@@ -41,13 +41,28 @@ export const acquisitionWorkspaceCapabilities = [
   'system.configure',
 ]
 
+// Navigation capabilities are intentionally narrower than the route guard
+// capabilities above.  The router still protects every admissions route with
+// the broad workspace contract; these groups only control discoverability in
+// the desktop/mobile sidebars and saved-view affordances.
+export const admissionsManagementCapabilities = [
+  'team.oversee',
+  'admissions.oversee',
+  'system.configure',
+]
+
+export const admissionsDecisionCapabilities = [
+  'recommendation.decide',
+  'system.configure',
+]
+
 // This declaration controls discoverability only; backend permissions remain authoritative.
 export const navigationEntries = [
   {
     label: 'Sales Dashboard',
     icon: 'salesDashboard',
     to: 'Dashboard',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsManagementCapabilities,
   },
   {
     label: 'Marketing Dashboard',
@@ -59,7 +74,7 @@ export const navigationEntries = [
     label: 'My Recommendations',
     icon: 'recommendations',
     to: 'My Recommendations',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsDecisionCapabilities,
   },
   {
     label: 'Prospective Students',
@@ -76,20 +91,20 @@ export const navigationEntries = [
   {
     label: 'Enrolled Students',
     icon: 'enrolledStudents',
-    to: { name: 'CRM Contacts', query: { stage: 'enrolled' } },
+    to: { name: 'CRM Students', query: { stage: 'enrolled' } },
     anyOf: admissionsWorkspaceCapabilities,
   },
   {
     label: 'High Schools',
     icon: 'schools',
     to: 'High Schools',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: acquisitionWorkspaceCapabilities,
   },
   {
     label: 'Persons',
     icon: 'persons',
     to: 'CRM Persons',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: admissionsManagementCapabilities,
   },
   {
     label: 'Campaigns',
@@ -101,7 +116,7 @@ export const navigationEntries = [
     label: 'Segments',
     icon: 'segments',
     to: 'CRM Segments',
-    anyOf: admissionsWorkspaceCapabilities,
+    anyOf: acquisitionWorkspaceCapabilities,
   },
   {
     label: 'Events',

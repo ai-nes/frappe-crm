@@ -1,5 +1,5 @@
 <template>
-  <div v-if="field.visible" class="field">
+  <div v-if="field.visible" class="field" :data-fieldname="field.fieldname">
     <div
       v-if="
         field.fieldtype != 'Check' &&

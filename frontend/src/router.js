@@ -137,13 +137,13 @@ const routes = [
     path: '/high-schools/view/:viewType?',
     name: 'High Schools',
     component: () => import('@/pages/HighSchools.vue'),
-    meta: { anyOf: admissionsWorkspaceCapabilities },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
   },
   {
     path: '/high-schools/:highSchoolId',
     name: 'High School',
     component: () => import('@/pages/HighSchool.vue'),
-    meta: { anyOf: admissionsWorkspaceCapabilities },
+    meta: { anyOf: acquisitionWorkspaceCapabilities },
     props: true,
   },
   {
