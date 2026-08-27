@@ -33,7 +33,7 @@ MANAGED_DOCPERM_ROLE_NAMES = tuple(
 # rerunning an old patch cannot bring back a second permission catalog.
 EDUCATION_PROGRAM_PERMS = DOCTYPE_PERMS["CRM Education Program"]
 MARKETING_LOOKUP_PERMS = DOCTYPE_PERMS["CRM Lead Source"]
-LOST_REASON_PERMS = DOCTYPE_PERMS["CRM Lost Reason"]
+LOST_REASON_PERMS = DOCTYPE_PERMS["CRM Term"]
 CAMPUS_PERMS = DOCTYPE_PERMS["CRM Campus"]
 
 

@@ -1,5 +1,5 @@
 """Score policy resolution and versioning. Resolves an Active
-`CRM Score Template`'s Score Rule / Negative Score Rule child rows against
+`CRM Score Template`'s discriminated CRM Score Rule child rows against
 their linked `CRM Score Signal` content, and computes
 the `policy_hash`/`policy_revision` pair from exactly that resolved structure.
 
@@ -57,15 +57,16 @@ def _signal_docs(signal_names: set) -> dict:
 
 def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dict]]:
 	"""Return (rules, negative_rules, time_decay_config) resolved from
-	`template_doc`'s child rows joined with their current, active signal
+	`template_doc`'s discriminated child rows joined with their current, active signal
 	content — the exact shape both the versioning hash and the crm-agents
 	endpoint consume."""
-	signal_names = {row.signal for row in template_doc.rules if row.signal}
-	signal_names |= {row.signal for row in template_doc.negative_rules if row.signal}
+	signal_names = {row.signal for row in template_doc.rules if row.signal and row.rule_kind != "time_decay"}
 	signals = _signal_docs(signal_names)
 
 	rules = []
 	for row in template_doc.rules:
+		if (row.rule_kind or "positive") != "positive":
+			continue
 		sig = signals.get(row.signal)
 		if not sig:
 			frappe.logger("crm").warning(
@@ -92,7 +93,9 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 		)
 
 	negative_rules = []
-	for row in template_doc.negative_rules:
+	for row in template_doc.rules:
+		if row.rule_kind != "negative":
+			continue
 		sig = signals.get(row.signal)
 		if not sig:
 			frappe.logger("crm").warning(
@@ -115,12 +118,9 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 		)
 
 	time_decay_config = [
-		{
-			"max_days": int(row.max_days or 0),
-			"multiplier": float(row.multiplier or 1.0),
-			"tier_label": row.get("tier_label") or "",
-		}
-		for row in template_doc.time_decay_config
+		{"max_days": int(row.max_days or 0), "multiplier": float(row.multiplier or 1.0), "tier_label": row.get("tier_label") or ""}
+		for row in template_doc.rules
+		if row.rule_kind == "time_decay"
 	]
 	return rules, negative_rules, time_decay_config
 
@@ -166,14 +166,13 @@ def bump_active_templates_for_signal(signal_name: str) -> None:
 	crm-agents observes the change without waiting for an unrelated template
 	edit."""
 	template_names: set = set()
-	for table in ("CRM Score Rule", "CRM Negative Score Rule"):
-		parents = frappe.get_all(
-			table,
-			filters={"signal": signal_name, "parenttype": "CRM Score Template"},
-			fields=["parent"],
-			distinct=True,
-		)
-		template_names.update(p.parent for p in parents)
+	parents = frappe.get_all(
+		"CRM Score Rule",
+		filters={"signal": signal_name, "parenttype": "CRM Score Template"},
+		fields=["parent"],
+		distinct=True,
+	)
+	template_names.update(p.parent for p in parents)
 	if not template_names:
 		return
 	active = frappe.get_all(

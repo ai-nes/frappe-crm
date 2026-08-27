@@ -1,5 +1,4 @@
 import frappe
-from frappe import _
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
 from crm.api.admissions_dashboard_auth import check_dashboard_access
@@ -246,8 +245,9 @@ def get_sales_dashboard(
 			cnt = frappe.db.sql(
 				"""
 				SELECT COUNT(DISTINCT parent)
-				FROM `tabCRM AI Lead Insight Interest`
+				FROM `tabCRM AI Lead Insight Item`
 				WHERE dimension_code = %s
+				AND item_kind = 'interest'
 				""",
 				(dim["code"],),
 			)[0][0] or 0
@@ -257,8 +257,8 @@ def get_sales_dashboard(
 				"""
 				SELECT COUNT(DISTINCT c.name)
 				FROM `tabCRM Contact` c
-				JOIN `tabCRM AI Lead Insight Interest` i ON i.parent = c.name
-				WHERE i.dimension_code = %s AND c.enrollment_status = 'Đã nhập học'
+				JOIN `tabCRM AI Lead Insight Item` i ON i.parent = c.name
+				WHERE i.dimension_code = %s AND i.item_kind = 'interest' AND c.enrollment_status = 'Đã nhập học'
 				""",
 				(dim["code"],),
 			)[0][0] or 0
@@ -480,58 +480,21 @@ def get_sales_dashboard(
 
 
 def _contact_names_touched_by_campaign(campaign):
-	"""Union of the deprecated singular crm_campaign field and the Phase 5
-	CRM Campaign Touchpoint many-to-many table, so dashboards read correctly
+	"""Union of the deprecated singular crm_campaign field and the canonical
+	CRM Marketing Engagement table, so dashboards read correctly
 	whether a contact's campaign attribution came from before or after the
 	Phase 5 migration."""
 	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
-	names.update(frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"))
+	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
 	return names
 
 
 def _contact_names_with_event_participation():
-	"""Union of the deprecated singular crm_event field and the Phase 5
-	CRM Event Participation many-to-many table."""
+	"""Union of the deprecated singular crm_event field and the canonical
+	CRM Marketing Engagement table."""
 	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
-	names.update(frappe.db.get_all("CRM Event Participation", pluck="crm_contact"))
+	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
 	return names
-
-
-def _legacy_last_touch_campaign_by_contact():
-	"""Temporary internal dual-read fallback; never a Contact public API."""
-	touches = [
-		{"contact": row.crm_contact, "campaign": row.crm_campaign, "at": row.touched_at, "name": row.name}
-		for row in frappe.db.get_all("CRM Campaign Touchpoint", fields=["name", "crm_contact", "crm_campaign", "touched_at"])
-		if row.crm_contact and row.touched_at
-	]
-	superseded_touchpoints = set(
-		frappe.db.get_all(
-			"CRM Campaign Touchpoint",
-			filters={"supersedes": ["in", [row["name"] for row in touches] or ["__none__"]]},
-			pluck="supersedes",
-		)
-	)
-	touches = [row for row in touches if row["name"] not in superseded_touchpoints]
-	events = frappe.db.get_all("CRM Event Participation", fields=["name", "crm_contact", "crm_event", "registered_at"])
-	superseded_events = set(
-		frappe.db.get_all(
-			"CRM Event Participation",
-			filters={"supersedes": ["in", [row.name for row in events] or ["__none__"]]},
-			pluck="supersedes",
-		)
-	)
-	event_campaigns = {
-		row.name: row.crm_campaign
-		for row in frappe.db.get_all("CRM Event", filters={"name": ["in", list({row.crm_event for row in events if row.crm_event}) or ["__none__"]]}, fields=["name", "crm_campaign"])
-	}
-	for row in events:
-		if row.crm_contact and row.registered_at and row.name not in superseded_events:
-			touches.append({"contact": row.crm_contact, "campaign": event_campaigns.get(row.crm_event), "at": row.registered_at, "name": row.name})
-	last = {}
-	for row in touches:
-		if row["campaign"] and (row["contact"] not in last or (str(row["at"]), row["name"]) > (str(last[row["contact"]]["at"]), last[row["contact"]]["name"])):
-			last[row["contact"]] = row
-	return {contact: row["campaign"] for contact, row in last.items()}
 
 
 def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
@@ -554,17 +517,6 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	students_by_campaign = {}
 	for student, campaign in last_touch_by_student.items():
 		students_by_campaign.setdefault(campaign, set()).add(student)
-	# Retain historical Contact evidence only while Student reconciliation is
-	# incomplete. This is an internal read bridge, not an authorization path.
-	legacy_contacts_by_campaign = {}
-	contact_students = {
-		contact: next(iter(students_for_contact(contact)), None)
-		for contact in scoped_contacts
-	}
-	for contact, campaign in _legacy_last_touch_campaign_by_contact().items():
-		if contact in scoped_contacts and last_touch_by_student.get(contact_students.get(contact)) != campaign:
-			legacy_contacts_by_campaign.setdefault(campaign, set()).add(contact)
-
 	cost_data = []
 	for camp in campaign_list:
 		c_name = camp.title or camp.name
@@ -576,15 +528,11 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 		camp_spend = sum(row.amount or 0.0 for row in camp_spend_rows)
 		attributed_students = students_by_campaign.get(camp.name) or set()
 		# Attribution is Student-first. Contact-only filters are intentionally
-		# not applied to this canonical projection; they are legacy dashboard
-		# filters and must not authorize or silently reinterpret Student data.
+		# not applied to this canonical projection.
 		attributed_conversions = frappe.db.count(
 			"CRM Student",
 			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
 		)
-		legacy_contacts = legacy_contacts_by_campaign.get(camp.name) or set()
-		if legacy_contacts:
-			attributed_conversions += frappe.db.count("CRM Contact", filters=base_filters + [["name", "in", list(legacy_contacts)], ["enrollment_status", "=", "Đã nhập học"]])
 		cost_data.append({
 			"campaign": c_name,
 			"spend": camp_spend,
@@ -867,8 +815,11 @@ def get_offline_marketing_dashboard(team="all", from_date=None, to_date=None, ca
 	]
 
 	# Verified Lead by Province
-	# Get all province mappings
-	mappings = frappe.db.get_all("CRM Province Mapping", fields=["old_province", "new_province"])
+	# Canonical province former-name children.
+	mappings = [
+		{"old_province": row.former_name, "new_province": row.parent}
+		for row in frappe.db.get_all("CRM Province Former Name", fields=["former_name", "parent"], filters={"parentfield": "previous_names"})
+	]
 	province_rows = []
 	if mappings:
 		province_groups = {}

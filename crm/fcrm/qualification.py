@@ -44,7 +44,7 @@ EVIDENCE_DOCTYPES = {
 	"appointment": frozenset({"CRM Appointment"}),
 	"document": frozenset({"CRM Student Document", "File"}),
 	"outcome": frozenset({"CRM Student Outcome"}),
-	"interaction": frozenset({"CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition"}),
+	"interaction": frozenset({"CRM Interaction", "Task", "CRM Student Lifecycle Event"}),
 }
 
 

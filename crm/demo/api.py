@@ -362,13 +362,14 @@ def _ensure_source(source):
 
 
 def _ensure_interaction_type(name):
-	if frappe.db.exists("CRM Interaction Type", name):
+	if frappe.db.exists("CRM Term", name):
 		return name
 
 	return frappe.get_doc(
 		{
-			"doctype": "CRM Interaction Type",
-			"interaction_type_name": name,
+			"doctype": "CRM Term",
+			"term_name": name,
+			"category": "interaction_type",
 			"description": "Admissions counselor interaction.",
 		}
 	).insert(ignore_permissions=True).name

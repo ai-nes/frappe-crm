@@ -18,6 +18,8 @@ STAGE_CATEGORY_MAP = {
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return
 	frappe.reload_doc("fcrm", "doctype", "crm_enrollment_status", force=True)
 
 	for status_name, stage_category in STAGE_CATEGORY_MAP.items():

@@ -9,7 +9,6 @@ class CRMStudentLifecycleEvent(Document):
 		"event_id", "student", "from_stage", "to_stage", "transition_kind", "prior_active_stage",
 		"reason", "evidence_references", "actor", "actor_scope", "occurred_at", "command_receipt",
 		"idempotency_key", "correlation_id", "policy_version", "schema_version", "supersedes",
-		"legacy_transition",
 	)
 
 	def validate(self):

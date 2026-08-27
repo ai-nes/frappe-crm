@@ -135,15 +135,14 @@ permission_query_conditions = {
 	"CRM Student Ownership Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Outcome": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Revision Journal": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
-	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.get_permission_query_conditions",
-	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.get_permission_query_conditions",
-	"CRM Event Participation": "crm.fcrm.student_attribution.get_permission_query_conditions",
+	"CRM Marketing Engagement": "crm.fcrm.student_attribution.get_permission_query_conditions",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.get_permission_query_conditions",
 	"CRM Interaction": "crm.fcrm.permissions.get_interaction_permission_query_conditions",
 	"CRM Intent": "crm.fcrm.permissions.get_intent_permission_query_conditions",
@@ -158,15 +157,14 @@ has_permission = {
 	"CRM Student Ownership Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Outcome": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Revision Journal": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Attempt": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student SLA Delivery": "crm.fcrm.permissions.has_operational_record_permission",
-	"CRM Student SLA Delivery Attempt": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.has_permission",
-	"CRM Campaign Touchpoint": "crm.fcrm.student_attribution.has_permission",
-	"CRM Event Participation": "crm.fcrm.student_attribution.has_permission",
+	"CRM Marketing Engagement": "crm.fcrm.student_attribution.has_permission",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.has_permission",
 	"CRM Interaction": "crm.fcrm.permissions.has_interaction_permission",
 	"CRM Intent": "crm.fcrm.permissions.has_intent_permission",
@@ -228,22 +226,12 @@ doc_events = {
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
 		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
-	"CRM Intent Type": {
-		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
-		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
-		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
-	},
-	"CRM Lost Reason": {
+	"CRM Term": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
 		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
 	"CRM Campus": {
-		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
-		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
-		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
-	},
-	"CRM Campaign Type": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
 		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
@@ -286,15 +274,11 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
-	# Keep legacy Contact-based attribution activity wired. Student-first
+	# Canonical marketing evidence emits attribution interactions. Student-first
 	# attribution commands suppress these dispatchers via their service flag.
-	"CRM Event Participation": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_insert"],
-		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_event_participation_update"],
-		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
-	},
-	"CRM Campaign Touchpoint": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_campaign_touchpoint_insert"],
+	"CRM Marketing Engagement": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_marketing_engagement_insert"],
+		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_marketing_engagement_update"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"User": {
@@ -308,8 +292,8 @@ doc_events = {
 for _governed_consumer_doctype in (
 	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
 	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
-	"CRM Staff", "CRM Quota Item", "CRM Student Pool", "CRM Student Routing Request",
-	"CRM Student SLA Attempt", "CRM Team", "CRM Tuition Policy Item",
+	"CRM Staff", "CRM Academic Year Line", "CRM Student Pool", "CRM Student Routing Request",
+	"CRM Student SLA Attempt", "CRM Team", "CRM Term",
 ):
 	_governed_events = doc_events.setdefault(_governed_consumer_doctype, {})
 	_governed_events.setdefault("validate", []).append(

@@ -682,7 +682,7 @@ def _execute(*, rehearse: bool = True):
             "doctype": "CRM Campus", "campus_name": f"{PREFIX} Campus", "campus_code": "E2E26", "province": province,
         }).insert(ignore_permissions=True).name
     # Do not call seed_demo._ensure_shared_context(): its legacy status helper
-    # predates CRM Enrollment Status.stage_order, while this E2E cohort uses
+    # predates CRM Term.stage_order, while this E2E cohort uses
     # the already-installed Mới/Có triển vọng/enrolled/lost stages.
     ctx = {
         "province": province,

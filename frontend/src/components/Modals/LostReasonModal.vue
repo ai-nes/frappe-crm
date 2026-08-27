@@ -22,7 +22,7 @@
             ref="linkRef"
             class="form-control flex-1 truncate"
             :value="lostReason"
-            doctype="CRM Lost Reason"
+            doctype="CRM Term"
             :onCreate="onCreate"
             @change="(v) => (lostReason = v)"
           />
@@ -102,7 +102,8 @@ async function onCreate(value, close) {
   const idempotencyKey = createGovernanceCommandId()
   try {
     await call(governanceAuditApi.proposeAdditiveValue, buildAdditiveValuePayload({
-      doctype: 'CRM Lost Reason', value,
+      doctype: 'CRM Term', value,
+      category: 'lost_reason',
       reason: 'New lost reason requested from the loss dialog', idempotencyKey,
     }))
     close()

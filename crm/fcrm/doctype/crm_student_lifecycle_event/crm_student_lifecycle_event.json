@@ -6,7 +6,7 @@
  "creation": "2026-08-25 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["event_id", "student", "from_stage", "to_stage", "transition_kind", "prior_active_stage", "reason", "evidence_references", "actor", "actor_scope", "occurred_at", "command_receipt", "idempotency_key", "correlation_id", "policy_version", "schema_version", "supersedes", "legacy_transition"],
+ "field_order": ["event_id", "student", "from_stage", "to_stage", "transition_kind", "prior_active_stage", "reason", "evidence_references", "actor", "actor_scope", "occurred_at", "command_receipt", "idempotency_key", "correlation_id", "policy_version", "schema_version", "supersedes"],
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
@@ -24,8 +24,7 @@
   {"fieldname": "correlation_id", "fieldtype": "Data", "hidden": 1, "label": "Correlation ID", "read_only": 1},
   {"default": "phase5-lifecycle-v1", "fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
   {"default": "phase5-v1", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
-  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Student Lifecycle Event", "read_only": 1},
-  {"fieldname": "legacy_transition", "fieldtype": "Link", "label": "Legacy Transition", "options": "CRM Enrollment Transition", "read_only": 1}
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Student Lifecycle Event", "read_only": 1}
  ],
  "index_web_pages_for_search": 0,
  "links": [],

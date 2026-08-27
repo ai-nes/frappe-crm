@@ -374,23 +374,6 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 	lifecycle_rows = _current_events(_event_rows("CRM Student Lifecycle Event", student, limit + 1, cursor_key))
 	canonical_lifecycle_present = bool(lifecycle_rows)
 	legacy = legacy_read_enabled()
-	if not lifecycle_rows and legacy and _exists("CRM Enrollment Transition"):
-		try:
-			if cursor_key and cursor_key[0]:
-				lifecycle_rows = frappe.db.sql(
-					"select `name`, `from_status`, `to_status`, `from_date`, `to_date` from `tabCRM Enrollment Transition` where `student` = %s and (`from_date` < %s or (`from_date` = %s and `name` < %s)) order by `from_date` desc, `name` desc limit %s",
-					(student, cursor_key[0], cursor_key[0], cursor_key[1], limit + 1),
-					as_dict=True,
-				)
-			else:
-				lifecycle_rows = frappe.get_all("CRM Enrollment Transition", filters={"student": student}, fields=["name", "from_status", "to_status", "from_date", "to_date"], order_by="from_date desc, name desc", limit_page_length=limit + 1)
-			lifecycle_rows = [row for row in lifecycle_rows if _can_read_record("CRM Enrollment Transition", _get(row, "name"))]
-		except Exception:
-			try:
-				lifecycle_rows = frappe.get_all("CRM Enrollment Transition", filters={"student": student}, fields=["name", "from_status", "to_status", "from_date", "to_date"], order_by="from_date desc, name desc", limit_page_length=(limit + 1) * 2)
-				lifecycle_rows = [row for row in lifecycle_rows if _can_read_record("CRM Enrollment Transition", _get(row, "name")) and (not cursor_key or (str(_get(row, "from_date") or ""), str(_get(row, "name") or "")) < cursor_key)]
-			except Exception:
-				lifecycle_rows = []
 	latest_interaction_name = _get(outcome_rows[0], "interaction") if outcome_rows else None
 	latest_interaction = next((_interaction(row) for row in interactions if _get(row, "name") == latest_interaction_name), None)
 	if latest_interaction is None and interactions and (outcome_rows or legacy):

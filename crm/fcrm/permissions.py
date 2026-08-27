@@ -38,7 +38,6 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Student SLA Attempt": "student",
 	"CRM Student SLA Event": "student",
 	"CRM Student SLA Delivery": "student",
-	"CRM Student SLA Delivery Attempt": "delivery",
 	# CRM Score History's `student` link is reqd (crm_score_history.json), so
 	# the Student-scope-inheriting condition applies directly. CRM Intent is
 	# NOT listed here even though it also has a `student` field: that field is
@@ -61,12 +60,6 @@ def get_operational_record_permission_query_conditions(user=None, doctype=None):
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	if doctype == "CRM Student SLA Delivery Attempt":
-		return (
-			f"`tab{doctype}`.`delivery` in (select `tabCRM Student SLA Delivery`.`name` "
-			"from `tabCRM Student SLA Delivery` where `tabCRM Student SLA Delivery`.`student` in "
-			f"(select `tabCRM Student`.`name` from `tabCRM Student` where ({student_condition})))"
-		)
 	return (
 		f"`tab{doctype}`.`{student_field}` in "
 		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
@@ -93,8 +86,6 @@ def has_operational_record_permission(doc, user=None, permission_type=None, ptyp
 		return True
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
 	student_name = doc.get(student_field) if student_field else None
-	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
-		student_name = frappe.db.get_value("CRM Student SLA Delivery", student_name, "student")
 	if not student_name:
 		return False
 	student = frappe.get_doc("CRM Student", student_name)

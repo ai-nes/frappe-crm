@@ -164,19 +164,18 @@ def _ensure_demo_team(campus: str, staff_name: str):
 
 
 def _ensure_enrollment_status(name: str, order: int, category: str, lifecycle_stage: str):
-	if frappe.db.exists("CRM Enrollment Status", name):
+	if frappe.db.exists("CRM Term", name):
 		return name
 	doc = frappe.get_doc(
 		{
-			"doctype": "CRM Enrollment Status",
-			"status_name": name,
-			"stage_order": order,
-			"stage_category": category,
+			"doctype": "CRM Term",
+			"term_name": name,
+			"category": "enrollment_status",
+			"sort_order": order,
+			"metadata": {"stage_category": category, "lifecycle_stage": lifecycle_stage},
 		}
 	)
 	doc.insert(ignore_permissions=True)
-	if frappe.db.has_column("CRM Enrollment Status", "lifecycle_stage"):
-		frappe.db.set_value("CRM Enrollment Status", doc.name, "lifecycle_stage", lifecycle_stage, update_modified=False)
 	return doc.name
 
 
@@ -291,10 +290,10 @@ def _ensure_routing_and_sla(student: str, pool: str):
 
 
 def _ensure_interaction(student: str):
-	interaction_type = frappe.db.get_value("CRM Interaction Type", {}, "name")
+	interaction_type = frappe.db.get_value("CRM Term", {}, "name")
 	if not interaction_type:
 		interaction_type = frappe.get_doc(
-			{"doctype": "CRM Interaction Type", "type_name": "Phone Consultation"}
+			{"doctype": "CRM Term", "term_name": "Phone Consultation", "category": "interaction_type"}
 		).insert(ignore_permissions=True).name
 	name = frappe.db.get_value("CRM Interaction", {"student": student, "summary": "Tư vấn hồ sơ và điều kiện xét tuyển"}, "name")
 	if name:

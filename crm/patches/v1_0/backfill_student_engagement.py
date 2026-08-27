@@ -97,6 +97,8 @@ def _load_rows() -> tuple[list[Any], list[Any]]:
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return {"status": "taxonomy_pending"}
 	"""Run the safe default dry-run patch and return its report."""
 	students, statuses = _load_rows()
 	return build_dry_run_report(students, statuses)

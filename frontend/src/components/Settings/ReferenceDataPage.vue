@@ -40,7 +40,7 @@
     <!-- Records list -->
     <div class="flex-1 overflow-y-auto px-2">
       <GovernanceApprovalQueue
-        v-if="activeTab.doctype === 'CRM Lost Reason'"
+        v-if="activeTab.doctype === 'CRM Term'"
         :doctype="activeTab.doctype"
         @decided="activeResource.reload()"
       />
@@ -106,7 +106,7 @@ const subTabs = [
   { idx: 1, label: __('Ward/Commune'), doctype: 'CRM Ward' },
   { idx: 2, label: __('Major'), doctype: 'CRM Major' },
   { idx: 3, label: __('Campus'), doctype: 'CRM Campus' },
-  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Lost Reason' },
+  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Term' },
 ]
 
 const activeIdx = ref(0)

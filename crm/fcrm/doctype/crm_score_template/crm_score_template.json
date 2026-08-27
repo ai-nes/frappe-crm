@@ -24,10 +24,6 @@
   "intent_weight",
   "section_rules",
   "rules",
-  "section_time_decay",
-  "time_decay_config",
-  "section_negative",
-  "negative_rules",
   "section_legacy",
   "fit_scoring",
   "engagement_scoring",
@@ -133,28 +129,6 @@
    "fieldtype": "Table",
    "label": "Rules",
    "options": "CRM Score Rule"
-  },
-  {
-   "fieldname": "section_time_decay",
-   "fieldtype": "Section Break",
-   "label": "Time Decay"
-  },
-  {
-   "fieldname": "time_decay_config",
-   "fieldtype": "Table",
-   "label": "Time Decay Config",
-   "options": "CRM Time Decay Config"
-  },
-  {
-   "fieldname": "section_negative",
-   "fieldtype": "Section Break",
-   "label": "Negative Rules"
-  },
-  {
-   "fieldname": "negative_rules",
-   "fieldtype": "Table",
-   "label": "Negative Rules",
-   "options": "CRM Negative Score Rule"
   },
   {
    "collapsible": 1,

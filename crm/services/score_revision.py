@@ -86,17 +86,15 @@ def _child_rows_changed(table: str, before_rows: list, after_rows: list) -> bool
 	return before_key != after_key
 
 
-def _next_global_sequence() -> int:
-	frappe.db.sql("SELECT GET_LOCK('crm_score_input_global_sequence', 10)")
-	try:
-		row = frappe.db.sql(
-			"SELECT COALESCE(MAX(global_sequence), 0) + 1 AS next_sequence "
-			"FROM `tabCRM Score Input Change`",
-			as_dict=True,
-		)
-		return int(row[0].next_sequence if row else 1)
-	finally:
-		frappe.db.sql("SELECT RELEASE_LOCK('crm_score_input_global_sequence')")
+def _next_stream_sequence(stream: str) -> int:
+	frappe.db.sql(
+		"INSERT IGNORE INTO `tabCRM Event Stream Cursor` (name, stream, counter, creation, modified, owner, modified_by) VALUES (%s, %s, 0, NOW(), NOW(), %s, %s)",
+		(stream, stream, frappe.session.user, frappe.session.user),
+	)
+	row = frappe.db.sql("SELECT counter FROM `tabCRM Event Stream Cursor` WHERE stream=%s FOR UPDATE", (stream,), as_dict=True)
+	sequence = int(row[0].counter or 0) + 1
+	frappe.db.sql("UPDATE `tabCRM Event Stream Cursor` SET counter=%s, modified=NOW() WHERE stream=%s", (sequence, stream))
+	return sequence
 
 
 def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True) -> dict:
@@ -116,14 +114,23 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 		"UPDATE `tabCRM Student` SET score_input_revision = %s WHERE name = %s",
 		(revision, student),
 	)
-	sequence = _next_global_sequence()
+	sequence = _next_stream_sequence("scoring")
 	event_id = frappe.generate_hash(length=32)
 	change = frappe.get_doc(
 		{
-			"doctype": "CRM Score Input Change",
+			"doctype": "CRM Student Revision Journal",
+			"event_type": "score_input_changed",
+			"stream": "scoring",
 			"student": student,
 			"revision": revision,
-			"global_sequence": sequence,
+			"stream_sequence": sequence,
+			"actor": frappe.session.user,
+			"actor_scope": {"source": "score_revision"},
+			"idempotency_key": event_id,
+			"correlation_id": event_id,
+			"policy_version": "score-input-v2",
+			"schema_version": "revision-journal-v1",
+			"payload": {"revision": revision},
 			"reason": reason,
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
@@ -133,4 +140,4 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 		from crm.api.agent_events import record_score_input_event
 
 		record_score_input_event(student, revision, event_id=event_id)
-	return {"student": student, "revision": revision, "global_sequence": sequence, "change": change.name}
+	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}

@@ -6,24 +6,11 @@ frappe.ui.form.on("CRM Score Template", {
 				.map(r => r.signal)
 				.filter(Boolean);
 
-			const filters = [
-				["category", "in", ["Fit", "Engagement", "Intent"]],
-				["is_active", "=", 1],
-			];
-			if (used.length) filters.push(["name", "not in", used]);
-			return { filters, filter_description: "" };
-		});
-
-		frm.set_query("signal", "negative_rules", function(doc, cdt, cdn) {
-			const used = (doc.negative_rules || [])
-				.filter(r => r.name !== cdn)
-				.map(r => r.signal)
-				.filter(Boolean);
-
-			const filters = [
-				["category", "=", "Negative"],
-				["is_active", "=", 1],
-			];
+			const kind = doc.rules?.find(r => r.name === cdn)?.rule_kind || "positive";
+			const filters = [["is_active", "=", 1]];
+			filters.push(kind === "negative"
+				? ["category", "=", "Negative"]
+				: ["category", "in", ["Fit", "Engagement", "Intent"]]);
 			if (used.length) filters.push(["name", "not in", used]);
 			return { filters, filter_description: "" };
 		});

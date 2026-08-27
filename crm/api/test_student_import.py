@@ -18,7 +18,7 @@ class TestStudentImport(FrappeTestCase):
 			("CRM Province", {"province_name": "_Test Inbound Other Province"}),
 			("CRM Campus", {"campus_name": "_Test Inbound Campus"}),
 			("CRM Major", {"major_name": "_Test Inbound Major"}),
-			("CRM Aspiration", {"aspiration_name": "_Test Inbound Aspiration"}),
+			("CRM Term", {"aspiration_name": "_Test Inbound Aspiration"}),
 			("CRM Admission Year", {"year_name": "2099"}),
 			("CRM Lead Source", {"source_name": "_Test Inbound Source"}),
 		):
@@ -70,7 +70,7 @@ class TestStudentImport(FrappeTestCase):
 
 	def _ensure_master_data(self):
 		self._ensure(
-			"CRM Enrollment Status",
+			"CRM Term",
 			{"status_name": "Mới", "stage_category": "open", "lifecycle_stage": "Lead"},
 		)
 		self._ensure("CRM Lead Source", {"source_name": "_Test Inbound Source"})
@@ -79,7 +79,7 @@ class TestStudentImport(FrappeTestCase):
 			"CRM Campus", {"campus_name": "_Test Inbound Campus", "campus_code": "test_inbound_campus"}
 		)
 		self._ensure("CRM Major", {"major_name": "_Test Inbound Major", "major_code": "TINB"})
-		self._ensure("CRM Aspiration", {"aspiration_name": "_Test Inbound Aspiration"})
+		self._ensure("CRM Term", {"aspiration_name": "_Test Inbound Aspiration"})
 		self._ensure("CRM Admission Year", {"year_name": "2099"})
 		self._ensure(
 			"CRM High School",

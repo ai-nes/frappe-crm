@@ -170,7 +170,7 @@ def _ensure_student(staff: str, campus: str):
 			)
 		return student_name
 
-	status = frappe.db.get_value("CRM Enrollment Status", {}, "name") or "Mới"
+	status = frappe.db.get_value("CRM Term", {}, "name") or "Mới"
 	previous_flag = getattr(frappe.flags, "student_intake_service", False)
 	frappe.flags.student_intake_service = True
 	try:

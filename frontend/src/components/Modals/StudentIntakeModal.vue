@@ -122,7 +122,7 @@ const tabs = [
                 fieldname: 'aspiration',
                 fieldtype: 'Link',
                 label: 'Aspiration',
-                options: 'CRM Aspiration',
+                options: 'CRM Term',
               },
             ],
           },
@@ -133,7 +133,7 @@ const tabs = [
                 fieldname: 'enrollment_status',
                 fieldtype: 'Link',
                 label: 'Enrollment Status',
-                options: 'CRM Enrollment Status',
+                options: 'CRM Term',
               },
               {
                 fieldname: 'source',

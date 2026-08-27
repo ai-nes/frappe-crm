@@ -10,7 +10,7 @@ duplicate-guard scenarios.
 Pure create_interaction()/CRMInteraction.validate() unit coverage, consent
 event mapping, and cleanup-on-delete live in
 crm/fcrm/doctype/crm_interaction/test_crm_interaction.py instead, since that
-file already has the CRM Interaction Type fixtures those need. Contact
+file already has the CRM Term fixtures those need. Contact
 lifecycle-stage/assignment-change interaction coverage lives in
 crm/fcrm/doctype/crm_contact/test_crm_contact.py alongside that doctype's
 other save-path tests.
@@ -40,16 +40,16 @@ class TestInteractionLogDispatch(FrappeTestCase):
 	# ---------------------------------------------------------------------- helpers
 
 	def _ensure_interaction_type(self, name):
-		# These are the same production CRM Interaction Type names the
+		# These are the same production CRM Term names the
 		# seed_crm_interaction_types patch installs -- create_interaction() is a
 		# no-op if the type doesn't already exist, so tests must seed it
 		# themselves in this bench-less environment. Intentionally not
 		# _Test-prefixed and not cleaned up in tearDown, matching how the real
 		# patch would leave them in place.
-		if not frappe.db.exists("CRM Interaction Type", name):
+		if not frappe.db.exists("CRM Term", name):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": name,
+				"doctype": "CRM Term",
+				"term_name": name, "category": "interaction_type",
 			}).insert(ignore_permissions=True)
 
 	def _delete_if_exists(self, doctype, name):

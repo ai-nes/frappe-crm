@@ -676,13 +676,14 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	}
 
 	if contact_doc:
-		participations = frappe.get_all(
-			"CRM Event Participation",
-			filters={"crm_contact": contact_doc.name},
-			fields=["crm_event", "status", "registered_at", "checked_in_at"],
+		participations = list(frappe.get_all(
+			"CRM Marketing Engagement",
+			filters={"crm_contact": contact_doc.name, "engagement_kind": "event_participation"},
+			fields=["name", "crm_event", "status", "registered_at", "checked_in_at"],
 			order_by="registered_at desc",
 			ignore_permissions=True,
-		)
+		))
+		participations.sort(key=lambda row: str(row.registered_at or ""), reverse=True)
 		for participation in participations:
 			try:
 				evt_doc = frappe.get_doc("CRM Event", participation.crm_event)

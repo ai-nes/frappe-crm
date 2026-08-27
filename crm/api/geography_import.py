@@ -164,13 +164,13 @@ def _import_row(data):
 	_required(data, "region_code", "Khu Vực")
 
 	region = _upsert_doc(
-		"CRM Region",
-		{"region_code": data["region_code"]},
+		"CRM Term",
+		{"term_name": data["region_code"], "category": "region"},
 		{
-			"region_name": data["region_code"],
-			"region_code": data["region_code"],
+			"term_name": data["region_code"],
+			"category": "region",
 		},
-		fallback_filters={"region_name": data["region_code"]},
+		fallback_filters={"term_name": data["region_code"], "category": "region"},
 	)
 	province = _upsert_doc(
 		"CRM Province",

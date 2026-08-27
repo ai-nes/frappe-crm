@@ -103,6 +103,16 @@ archives/        — old docs preserved verbatim
 When a phase completes: move its spec from PLAN.md to ARCHIVE.md, update SPEC.md if
 the API surface changed.
 
+## Doctype growth rule
+
+Before adding a DocType, the change author must answer these questions:
+
+1. Is this a genuinely new grain or aggregate? If it is only a variant of an existing event, add an event type and typed fields instead.
+2. Is it a label-only master-data value? Prefer a Select field or shared CRM term where appropriate.
+3. Is it a one-to-many record accessed only through its parent? Make it a child table, not a top-level DocType.
+
+Pull requests that add a DocType must include the answers and explain why an existing canonical DocType or child table cannot be reused.
+
 <!-- hs-skills:begin -->
 # HS Skills runtime instructions
 

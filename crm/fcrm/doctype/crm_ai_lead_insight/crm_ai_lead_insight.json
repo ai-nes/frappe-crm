@@ -22,12 +22,8 @@
   "summary",
   "readiness_suggestion",
   "next_action_summary",
-  "section_interests",
-  "detected_interests",
-  "section_objections",
-  "detected_objections",
-  "section_risks",
-  "risk_flags",
+  "section_items",
+  "items",
   "section_review",
   "status",
   "col_break_review",
@@ -121,42 +117,8 @@
    "label": "Next Action Summary",
    "permlevel": 1
   },
-  {
-   "fieldname": "section_interests",
-   "fieldtype": "Section Break",
-   "label": "Detected Interests"
-  },
-  {
-   "fieldname": "detected_interests",
-   "fieldtype": "Table",
-   "label": "Detected Interests",
-   "options": "CRM AI Lead Insight Interest",
-   "permlevel": 1
-  },
-  {
-   "fieldname": "section_objections",
-   "fieldtype": "Section Break",
-   "label": "Detected Objections"
-  },
-  {
-   "fieldname": "detected_objections",
-   "fieldtype": "Table",
-   "label": "Detected Objections",
-   "options": "CRM AI Lead Insight Objection",
-   "permlevel": 1
-  },
-  {
-   "fieldname": "section_risks",
-   "fieldtype": "Section Break",
-   "label": "Risk Flags"
-  },
-  {
-   "fieldname": "risk_flags",
-   "fieldtype": "Table",
-   "label": "Risk Flags",
-   "options": "CRM AI Lead Insight Risk Flag",
-   "permlevel": 1
-  },
+  {"fieldname": "section_items", "fieldtype": "Section Break", "label": "Insight Items"},
+  {"fieldname": "items", "fieldtype": "Table", "label": "Insight Items", "options": "CRM AI Lead Insight Item", "permlevel": 1},
   {
    "fieldname": "section_review",
    "fieldtype": "Section Break",

@@ -14,10 +14,9 @@ def execute():
 	]
 
 	for name in default_aspirations:
-		if not frappe.db.exists("CRM Aspiration", name):
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "aspiration"}):
 			frappe.get_doc({
-				"doctype": "CRM Aspiration",
-				"aspiration_name": name,
+				"doctype": "CRM Term", "term_name": name, "category": "aspiration",
 			}).insert(ignore_permissions=True)
 
 	frappe.db.commit()

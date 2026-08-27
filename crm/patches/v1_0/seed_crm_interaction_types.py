@@ -30,12 +30,10 @@ INTERACTION_TYPES = [
 
 
 def execute():
-	frappe.reload_doc("fcrm", "doctype", "crm_interaction_type", force=True)
 	frappe.reload_doc("fcrm", "doctype", "crm_interaction", force=True)
 
 	for interaction_type_name in INTERACTION_TYPES:
-		if not frappe.db.exists("CRM Interaction Type", interaction_type_name):
+		if not frappe.db.exists("CRM Term", {"term_name": interaction_type_name, "category": "interaction_type"}):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": interaction_type_name,
+				"doctype": "CRM Term", "term_name": interaction_type_name, "category": "interaction_type",
 			}).insert(ignore_permissions=True)

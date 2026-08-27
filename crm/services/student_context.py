@@ -49,19 +49,20 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 )
 
 
-def _next_global_sequence() -> int:
-	# MariaDB's named lock closes the empty-table race that a MAX()+1 query
-	# alone would leave during the first concurrent material changes.
-	frappe.db.sql("SELECT GET_LOCK('crm_student_context_global_sequence', 10)")
+def _next_stream_sequence(stream: str) -> int:
+	"""Advance one stream cursor under a row lock; context and scoring do not serialize."""
+	frappe.db.sql(
+		"INSERT IGNORE INTO `tabCRM Event Stream Cursor` (name, stream, counter, creation, modified, owner, modified_by) VALUES (%s, %s, 0, NOW(), NOW(), %s, %s)",
+		(stream, stream, frappe.session.user, frappe.session.user),
+	)
+	row = frappe.db.sql("SELECT counter FROM `tabCRM Event Stream Cursor` WHERE stream=%s FOR UPDATE", (stream,), as_dict=True)
+	sequence = int(row[0].counter or 0) + 1
+	frappe.flags.crm_event_stream_cursor_service = True
 	try:
-		row = frappe.db.sql(
-			"SELECT COALESCE(MAX(global_sequence), 0) + 1 AS next_sequence "
-			"FROM `tabCRM Student Context Change`",
-			as_dict=True,
-		)
-		return int(row[0].next_sequence if row else 1)
+		frappe.db.sql("UPDATE `tabCRM Event Stream Cursor` SET counter=%s, modified=NOW() WHERE stream=%s", (sequence, stream))
 	finally:
-		frappe.db.sql("SELECT RELEASE_LOCK('crm_student_context_global_sequence')")
+		frappe.flags.crm_event_stream_cursor_service = False
+	return sequence
 
 
 def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = True) -> dict:
@@ -81,14 +82,23 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 		"UPDATE `tabCRM Student` SET student_context_revision = %s WHERE name = %s",
 		(revision, student),
 	)
-	sequence = _next_global_sequence()
+	sequence = _next_stream_sequence("context")
 	event_id = frappe.generate_hash(length=32)
 	change = frappe.get_doc(
 		{
-			"doctype": "CRM Student Context Change",
+			"doctype": "CRM Student Revision Journal",
+			"event_type": "context_changed",
+			"stream": "context",
 			"student": student,
 			"revision": revision,
-			"global_sequence": sequence,
+			"stream_sequence": sequence,
+			"actor": frappe.session.user,
+			"actor_scope": {"source": "student_context"},
+			"idempotency_key": event_id,
+			"correlation_id": event_id,
+			"policy_version": "student-context-v2",
+			"schema_version": "revision-journal-v1",
+			"payload": {"revision": revision},
 			"reason": reason,
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
@@ -98,7 +108,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 		from crm.api.agent_events import record_student_context_event
 
 		record_student_context_event(student, revision, event_id=event_id)
-	return {"student": student, "revision": revision, "global_sequence": sequence, "change": change.name}
+	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
 
 
 def material_student_changed(doc, before=None) -> bool:

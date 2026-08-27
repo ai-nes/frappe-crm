@@ -2,13 +2,15 @@
 
 Implements the long-term
 lifecycle track (Lead -> MQL -> Applicant -> Enrolled, with Lost as a
-separate terminal branch) derived from the existing CRM Enrollment Status
+separate terminal branch) derived from the existing CRM Term
 master (its `lifecycle_stage` field — see
 crm.fcrm.doctype.crm_enrollment_status), rather than from the day-to-day
 enrollment_status/lead_status working values directly. This keeps the two
 tracks from drifting: lifecycle_stage is a pure, read-only function of
 enrollment_status, recomputed on every save.
 """
+
+import json
 
 import frappe
 
@@ -32,8 +34,18 @@ def get_lifecycle_stage(enrollment_status):
 		return None
 	return _cached(
 		f"crm_enrollment_status_lifecycle_stage::{enrollment_status}",
-		lambda: frappe.db.get_value("CRM Enrollment Status", enrollment_status, "lifecycle_stage") or "",
+		lambda: _term_lifecycle_stage(enrollment_status),
 	) or None
+
+
+def _term_lifecycle_stage(enrollment_status):
+	metadata = frappe.db.get_value("CRM Term", {"name": enrollment_status, "category": "enrollment_status"}, "metadata") or {}
+	if isinstance(metadata, str):
+		try:
+			metadata = json.loads(metadata)
+		except (TypeError, ValueError):
+			metadata = {}
+	return metadata.get("lifecycle_stage") or ""
 
 
 def lifecycle_rank(stage):

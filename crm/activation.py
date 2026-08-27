@@ -24,7 +24,7 @@ def get_sales_data(site_info):
 		"FCRM Note",
 		"Call Log",
 		"CRM Lead Source",
-		"CRM Lost Reason",
+		"CRM Term",
 		"Form Script",
 		"Fields Layout",
 		"View Settings",

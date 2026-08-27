@@ -13,8 +13,7 @@ READER_FILES = (
 	"api/student_dashboard.py",
 	"api/admissions_dashboard.py",
 	"api/segment.py",
-	"fcrm/doctype/crm_campaign_touchpoint/crm_campaign_touchpoint.py",
-	"fcrm/doctype/crm_event_participation/crm_event_participation.py",
+	"fcrm/doctype/crm_marketing_engagement/crm_marketing_engagement.py",
 )
 
 

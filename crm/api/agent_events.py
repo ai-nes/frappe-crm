@@ -525,17 +525,17 @@ def reconcile_student_context_v2(limit: int = 500) -> dict:
 	cache_key = "crm_agents_v2:context-change-cursor"
 	last = int(frappe.cache().get_value(cache_key) or 0)
 	rows = frappe.get_all(
-		"CRM Student Context Change",
-		filters=[["global_sequence", ">", last]],
-		fields=["name", "student", "revision", "global_sequence", "event_id"],
-		order_by="global_sequence asc",
+		"CRM Student Revision Journal",
+		filters={"stream": "context", "event_type": "context_changed", "stream_sequence": [">", last]},
+		fields=["name", "student", "revision", "stream_sequence", "event_id"],
+		order_by="stream_sequence asc",
 		limit_page_length=min(int(limit), 1000),
 	)
 	for row in rows:
 		record_student_context_event(row.student, int(row.revision), event_id=row.event_id)
 	if rows:
-		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
-	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}
+		frappe.cache().set_value(cache_key, int(rows[-1].stream_sequence))
+	return {"discovered": len(rows), "oldest_unchecked": rows[0].stream_sequence if rows else None}
 
 
 def reconcile_score_input_v1(limit: int = 500) -> dict:
@@ -547,14 +547,14 @@ def reconcile_score_input_v1(limit: int = 500) -> dict:
 	cache_key = "crm_agents_scoring:score-input-cursor"
 	last = int(frappe.cache().get_value(cache_key) or 0)
 	rows = frappe.get_all(
-		"CRM Score Input Change",
-		filters=[["global_sequence", ">", last]],
-		fields=["name", "student", "revision", "global_sequence", "event_id"],
-		order_by="global_sequence asc",
+		"CRM Student Revision Journal",
+		filters={"stream": "scoring", "event_type": "score_input_changed", "stream_sequence": [">", last]},
+		fields=["name", "student", "revision", "stream_sequence", "event_id"],
+		order_by="stream_sequence asc",
 		limit_page_length=min(int(limit), 1000),
 	)
 	for row in rows:
 		record_score_input_event(row.student, int(row.revision), event_id=row.event_id)
 	if rows:
-		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
-	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}
+		frappe.cache().set_value(cache_key, int(rows[-1].stream_sequence))
+	return {"discovered": len(rows), "oldest_unchecked": rows[0].stream_sequence if rows else None}

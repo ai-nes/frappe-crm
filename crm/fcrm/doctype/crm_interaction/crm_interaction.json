@@ -67,7 +67,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Interaction Type",
-   "options": "CRM Interaction Type",
+   "options": "CRM Term",
    "reqd": 1
   },
   {

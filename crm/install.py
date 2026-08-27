@@ -324,12 +324,10 @@ def add_default_lost_reasons():
 	]
 
 	for reason in lost_reasons:
-		if frappe.db.exists("CRM Lost Reason", reason["reason"]):
+		if frappe.db.exists("CRM Term", {"term_name": reason["reason"], "category": "lost_reason"}):
 			continue
 
-		doc = frappe.new_doc("CRM Lost Reason")
-		doc.lost_reason = reason["reason"]
-		doc.description = reason["description"]
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": reason["reason"], "category": "lost_reason", "description": reason["description"]})
 		doc.insert()
 
 
@@ -354,11 +352,10 @@ def add_default_lead_statuses():
 	]
 
 	for status in lead_statuses:
-		if frappe.db.exists("CRM Lead Status", status):
+		if frappe.db.exists("CRM Term", {"term_name": status, "category": "lead_status"}):
 			continue
 
-		doc = frappe.new_doc("CRM Lead Status")
-		doc.status_name = status
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "lead_status"})
 		doc.insert()
 
 
@@ -375,14 +372,12 @@ def add_default_enrollment_statuses():
 		"Từ chối": (6, "lost"),
 	}
 
+	lifecycle_stages = {"Mới": "Lead", "Có triển vọng": "MQL", "Đã xác nhận": "Applicant", "Đã nhập học": "Enrolled", "Đã chuyển đổi": "Enrolled", "Từ chối": "Lost"}
 	for status, (order, category) in enrollment_statuses.items():
-		if frappe.db.exists("CRM Enrollment Status", status):
+		if frappe.db.exists("CRM Term", {"term_name": status, "category": "enrollment_status"}):
 			continue
 
-		doc = frappe.new_doc("CRM Enrollment Status")
-		doc.status_name = status
-		doc.stage_order = order
-		doc.stage_category = category
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "enrollment_status", "sort_order": order, "metadata": {"stage_category": category, "lifecycle_stage": lifecycle_stages[status]}})
 		doc.insert()
 
 
@@ -397,11 +392,10 @@ def add_default_interaction_types():
 	]
 
 	for interaction_type in interaction_types:
-		if frappe.db.exists("CRM Interaction Type", interaction_type):
+		if frappe.db.exists("CRM Term", {"term_name": interaction_type, "category": "interaction_type"}):
 			continue
 
-		doc = frappe.new_doc("CRM Interaction Type")
-		doc.interaction_type_name = interaction_type
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": interaction_type, "category": "interaction_type"})
 		doc.insert()
 
 

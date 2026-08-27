@@ -132,7 +132,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Enrollment Status",
-   "options": "CRM Enrollment Status"
+   "options": "CRM Term"
   },
   {
    "fieldname": "lifecycle_stage",
@@ -252,7 +252,7 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Aspiration",
-   "options": "CRM Aspiration"
+   "options": "CRM Term"
   },
   {
    "default": "1",
@@ -469,7 +469,7 @@
    "fieldtype": "Int",
    "label": "Student Context Revision",
    "read_only": 1,
-   "description": "Monotonic revision incremented on any material Student-context fact change. Backing field for CRM Student Context Change and the crm-agents v2 outbox/high-water contract."
+   "description": "Monotonic revision incremented on any material Student-context fact change. Backing field for CRM Student Revision Journal and the crm-agents v2 outbox/high-water contract."
   },
   {
    "default": "unknown",

@@ -7,7 +7,7 @@ def execute():
 	for doctype in (
 		"CRM Student",
 		"CRM Agent Event",
-		"CRM Student Context Change",
+		"CRM Student Revision Journal",
 		"CRM Parent Contact Authority",
 	):
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))

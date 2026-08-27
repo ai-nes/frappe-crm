@@ -219,9 +219,21 @@ def _finish(receipt, result):
 
 
 def _status_for_stage(stage: str) -> str | None:
-	if frappe.db.exists("CRM Enrollment Status", {"lifecycle_stage": stage}):
-		return frappe.db.get_value("CRM Enrollment Status", {"lifecycle_stage": stage}, "name")
-	return {"Lead": "Mới", "MQL": "Có triển vọng", "Applicant": "Đã nộp hồ sơ", "Enrolled": "Đã nhập học", "Lost": "Không quan tâm"}.get(stage)
+	rows = frappe.get_all("CRM Term", filters={"category": "enrollment_status"}, fields=["name", "metadata"], order_by="sort_order asc, name asc")
+	for row in rows:
+		metadata = row.get("metadata") or {}
+		if isinstance(metadata, str):
+			try:
+				metadata = json.loads(metadata)
+			except (TypeError, ValueError):
+				metadata = {}
+		if metadata.get("lifecycle_stage") == stage:
+			return row.name
+	return frappe.db.get_value(
+		"CRM Term",
+		{"term_name": {"Lead": "Mới", "MQL": "Có triển vọng", "Applicant": "Đã nộp hồ sơ", "Enrolled": "Đã nhập học", "Lost": "Không quan tâm"}.get(stage), "category": "enrollment_status"},
+		"name",
+	)
 
 
 def _lock(name: str):
@@ -309,8 +321,6 @@ def request_transition(
 		if status:
 			updates["enrollment_status"] = status
 		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
-		from crm.fcrm.doctype.crm_student.enrollment_transition import record_transition
-		record_transition(student, student_doc.get("enrollment_status"), status, source="phase5_lifecycle_event")
 		result = {"status": "created", "event": event.name, "student": student, "from_stage": transition["from_stage"], "to_stage": transition["to_stage"], "transition_kind": transition["transition_kind"], "revision": new_revision, "receipt": receipt.name}
 		_finish(receipt, result)
 		return result

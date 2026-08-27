@@ -1,8 +1,8 @@
 """Creates CRM Interaction records from the source events the admissions
 operating model considers meaningful lead touchpoints -- outgoing/incoming
 Communication, a completed Task, a Call Log entry, a CRM Contact
-lifecycle/assignment change, a Consent Event, a CRM Event Participation
-status change, and a CRM Campaign Touchpoint insert (added to satisfy the
+lifecycle/assignment change, a Consent Event, and a CRM Marketing Engagement
+insert/status change (added to satisfy the
 operating model's "no customer activity outside Interaction" condition,
 which a bare Touchpoint insert previously violated). Each dispatcher below
 is wired via hooks.py doc_events and fires only on the specific
@@ -11,8 +11,7 @@ these into a generic "on every save" check.
 
 Dispatchers are skipped while `frappe.flags.in_patch` is set, so migration
 patches that backfill historical records (e.g. converting existing singular
-CRM Contact campaign/event fields into CRM Campaign Touchpoint / CRM Event
-Participation rows) don't flood the interaction timeline with
+CRM Contact campaign/event fields into CRM Marketing Engagement rows) don't flood the interaction timeline with
 present-dated interactions for years-old activity.
 """
 
@@ -33,7 +32,7 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	"Checked-in": "Checked-in",
 	"No-show": "No-show",
 	"Feedback Given": "Feedback",
-	# "Registered" is handled separately in create_interaction_from_event_participation_insert,
+	# "Registered" is handled by the canonical Marketing Engagement insert hook,
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
@@ -137,8 +136,8 @@ def create_interaction(
 	if not student and not crm_contact:
 		return None
 
-	if not frappe.db.exists("CRM Interaction Type", interaction_type):
-		frappe.log_error(title=f"Unknown CRM Interaction Type: {interaction_type}")
+	if not frappe.db.exists("CRM Term", {"name": interaction_type, "category": "interaction_type", "is_active": 1}):
+		frappe.log_error(title=f"Unknown interaction term: {interaction_type}")
 		return None
 
 	external_id = external_id_for(reference_doctype, reference_docname, interaction_type)
@@ -377,39 +376,41 @@ def create_interaction_from_consent_event(doc, method=None):
 		frappe.log_error(title="CRM Interaction creation failed (Consent event)")
 
 
-def create_interaction_from_event_participation_insert(doc, method=None):
+def create_interaction_from_marketing_engagement_insert(doc, method=None):
 	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
-
 	try:
-		create_interaction(
-			interaction_type="Registered",
-			crm_contact=doc.crm_contact,
-			student=doc.student,
-			reference_doctype=doc.doctype,
-			reference_docname=doc.name,
-			actor=doc.actor,
-			summary=f"Registered for {doc.crm_event}",
-		)
+		if doc.engagement_kind == "event_participation":
+			create_interaction(
+				interaction_type="Registered",
+				crm_contact=doc.crm_contact,
+				student=doc.student,
+				reference_doctype=doc.doctype,
+				reference_docname=doc.name,
+				actor=doc.actor,
+				summary=f"Registered for {doc.crm_event}",
+			)
+		elif doc.engagement_kind == "campaign_touch":
+			create_interaction(
+				interaction_type="Campaign Touched",
+				crm_contact=doc.crm_contact,
+				student=doc.student,
+				reference_doctype=doc.doctype,
+				reference_docname=doc.name,
+				summary=f"Touched by {doc.crm_campaign}",
+			)
 	except Exception:
-		frappe.log_error(title="CRM Interaction creation failed (Event Participation insert)")
+		frappe.log_error(title="CRM Interaction creation failed (Marketing Engagement insert)")
 
 
-def create_interaction_from_event_participation_update(doc, method=None):
+def create_interaction_from_marketing_engagement_update(doc, method=None):
 	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
-	# See create_interaction_from_task_update -- on_update fires during insert
-	# too, after is_new() has already flipped to False; flags.in_insert is the
-	# reliable signal there.
-	if doc.is_new() or doc.flags.in_insert:
+	if doc.is_new() or doc.flags.in_insert or doc.engagement_kind != "event_participation" or not doc.has_value_changed("status"):
 		return
-	if not doc.has_value_changed("status"):
-		return
-
 	interaction_type = EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE.get(doc.status)
 	if not interaction_type:
 		return
-
 	try:
 		create_interaction(
 			interaction_type=interaction_type,
@@ -421,24 +422,7 @@ def create_interaction_from_event_participation_update(doc, method=None):
 			summary=f"{interaction_type} at {doc.crm_event}",
 		)
 	except Exception:
-		frappe.log_error(title="CRM Interaction creation failed (Event Participation update)")
-
-
-def create_interaction_from_campaign_touchpoint_insert(doc, method=None):
-	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
-		return
-
-	try:
-		create_interaction(
-			interaction_type="Campaign Touched",
-			crm_contact=doc.crm_contact,
-			student=doc.student,
-			reference_doctype=doc.doctype,
-			reference_docname=doc.name,
-			summary=f"Touched by {doc.crm_campaign}",
-		)
-	except Exception:
-		frappe.log_error(title="CRM Interaction creation failed (Campaign Touchpoint insert)")
+		frappe.log_error(title="CRM Interaction creation failed (Marketing Engagement update)")
 
 
 def clear_interaction_reference(doc, method=None):

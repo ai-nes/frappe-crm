@@ -281,9 +281,9 @@ def _ensure_manual_interaction(student: str, scenario: dict) -> str:
 
 
 def _ensure_interaction_type(name: str) -> str:
-	if frappe.db.exists("CRM Interaction Type", name):
+	if frappe.db.exists("CRM Term", name):
 		return name
-	return frappe.get_doc({"doctype": "CRM Interaction Type", "interaction_type_name": name}).insert(
+	return frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "interaction_type"}).insert(
 		ignore_permissions=True
 	).name
 
@@ -407,7 +407,7 @@ def _ensure_attribution(student: str, scenario: dict, context: dict):
 	for interaction_type in ("Campaign Touched", "Registered", "Checked-in"):
 		_ensure_interaction_type(interaction_type)
 	campaign_key = f"{NAMESPACE}:campaign:{scenario['key']}"
-	if not frappe.db.exists("CRM Campaign Touchpoint", {"idempotency_key": campaign_key}):
+	if not frappe.db.exists("CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "idempotency_key": campaign_key}):
 		record_campaign_touchpoint(
 			student,
 			context["campaign"],
@@ -418,7 +418,7 @@ def _ensure_attribution(student: str, scenario: dict, context: dict):
 		)
 	if scenario["key"] in {"thao-an", "gia-han"}:
 		event_key = f"{NAMESPACE}:event:{scenario['key']}"
-		if not frappe.db.exists("CRM Event Participation", {"idempotency_key": event_key}):
+		if not frappe.db.exists("CRM Marketing Engagement", {"engagement_kind": "event_participation", "idempotency_key": event_key}):
 			record_event_participation(
 				student,
 				context["event"],

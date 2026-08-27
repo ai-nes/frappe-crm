@@ -311,7 +311,13 @@ def _student_is_active(student) -> bool:
 		return False
 	status = student.get("enrollment_status")
 	if status:
-		stage_category = _get_value("CRM Enrollment Status", status, "stage_category")
+		stage_category = _get_value("CRM Term", {"name": status, "category": "enrollment_status"}, "metadata")
+		if isinstance(stage_category, str):
+			import json
+			try:
+				stage_category = json.loads(stage_category).get("stage_category")
+			except ValueError:
+				stage_category = None
 		if stage_category in {"closed", "lost", "terminal"}:
 			return False
 	return True

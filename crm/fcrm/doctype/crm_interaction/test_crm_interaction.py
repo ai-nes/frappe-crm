@@ -20,17 +20,17 @@ class TestCRMInteraction(FrappeTestCase):
 			frappe.delete_doc("CRM Student", name, force=True)
 
 	def _ensure_master_data(self):
-		if not frappe.db.exists("CRM Interaction Type", "_Test Phone Call"):
+		if not frappe.db.exists("CRM Term", "_Test Phone Call"):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": "_Test Phone Call",
+				"doctype": "CRM Term",
+				"term_name": "_Test Phone Call", "category": "interaction_type",
 			}).insert(ignore_permissions=True)
 
-		if not frappe.db.exists("CRM Intent Type", "_Test Tuition Inquiry"):
+		if not frappe.db.exists("CRM Term", "_Test Tuition Inquiry"):
 			frappe.get_doc({
-				"doctype": "CRM Intent Type",
-				"intent_type_name": "_Test Tuition Inquiry",
-				"importance": "Very High",
+				"doctype": "CRM Term",
+				"term_name": "_Test Tuition Inquiry", "category": "intent_type",
+				"metadata": {"importance": "Very High"},
 			}).insert(ignore_permissions=True)
 
 	def _make_student(self):
@@ -215,7 +215,7 @@ class TestCRMInteraction(FrappeTestCase):
 			# not any other frappe.db.get_value call the surrounding code paths
 			# make (e.g. frappe.db.exists() is implemented on top of get_value
 			# in some Frappe versions, so a bare global call counter would also
-			# intercept the unrelated "CRM Interaction Type" exists() check and
+			# intercept the unrelated "CRM Term" exists() check and
 			# make it spuriously report the type as unknown).
 			if doctype == "CRM Interaction" and isinstance(filters, dict) and filters.get("external_id") == external_id:
 				seen["n"] += 1

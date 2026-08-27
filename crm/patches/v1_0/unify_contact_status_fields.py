@@ -74,6 +74,8 @@ DATA_FIELDS = '[{"name":"first_tab","sections":[{"label":"Details","name":"detai
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status") or not frappe.db.exists("DocType", "CRM Lead Status"):
+		return {"status": "taxonomy_pending"}
 	# 1. Seed CRM Lead Status (Vietnamese)
 	for status in LEAD_STATUSES:
 		if not frappe.db.exists("CRM Lead Status", status):
