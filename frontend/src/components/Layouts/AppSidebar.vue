@@ -29,7 +29,20 @@
           </template>
         </SidebarLink>
       </div>
-      <div v-for="view in allViews" :key="view.label">
+
+      <!-- Role-based Navigation Tree -->
+      <nav class="flex flex-col space-y-[2px] my-2">
+        <SidebarItemNode
+          v-for="item in currentNavItems"
+          :key="item.id || item.label"
+          :item="item"
+          :isCollapsed="isSidebarCollapsed"
+          :isMobile="false"
+        />
+      </nav>
+
+      <!-- Public and Pinned Views -->
+      <div v-for="view in customViews" :key="view.name">
         <div class="mx-2 my-1.5" />
         <Section
           :label="view.name"
@@ -69,6 +82,7 @@
         </Section>
       </div>
     </div>
+
     <div class="m-2 flex flex-col gap-1">
       <div class="flex flex-col gap-2 mb-1">
         <SalesHierarchyBanner
@@ -91,7 +105,7 @@
         />
       </div>
       <SidebarLink
-        v-if="canConfigureSystem(getUser(user)) && isDemoDataCreated"
+        v-if="canConfigureSystem(currentUser) && isDemoDataCreated"
         class="text-ink-red-3 hover:bg-surface-red-2 focus:bg-surface-red-2"
         :label="__('Clear Demo Data')"
         :isCollapsed="isSidebarCollapsed"
@@ -119,7 +133,6 @@
       <SidebarLink
         :label="isSidebarCollapsed ? __('Expand') : __('Collapse')"
         :isCollapsed="isSidebarCollapsed"
-        class=""
         @click="isSidebarCollapsed = !isSidebarCollapsed"
       >
         <template #icon>
@@ -154,9 +167,6 @@
 
 <script setup>
 import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
-import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
-import LucideBarChart3 from '~icons/lucide/bar-chart-3'
-import ListChecksIcon from '~icons/lucide/list-checks'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
@@ -179,6 +189,7 @@ import CollapseSidebar from '@/components/Icons/CollapseSidebar.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
 import HelpIcon from '@/components/Icons/HelpIcon.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
+import SidebarItemNode from '@/components/SidebarItemNode.vue'
 import Notifications from '@/components/Notifications.vue'
 import Settings from '@/components/Settings/Settings.vue'
 import SalesHierarchyBanner from '@/components/SalesHierarchyBanner.vue'
@@ -189,9 +200,10 @@ import {
 } from '@/stores/notifications'
 import { usersStore } from '@/stores/users'
 import { sessionStore } from '@/stores/session'
+import { useNavigationBadgesStore } from '@/stores/navigationBadges'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 import { showChangePasswordModal } from '@/composables/modals'
-import { FeatherIcon, call } from 'frappe-ui'
+import { FeatherIcon, Badge, call } from 'frappe-ui'
 import {
   SignupBanner,
   TrialBanner,
@@ -210,15 +222,15 @@ import {
   canConfigureSystem,
   canAccessNavigationRoute,
   canManageRoles,
-  navigationEntries,
-  visibleNavigation,
 } from '@/utils/rolePolicy'
+import { getNavigationForUser } from '@/utils/navigationConfig'
 import { ref, reactive, computed, markRaw, onMounted } from 'vue'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
 const { toggle: toggleNotificationPanel } = notificationsStore()
 const { capture } = useTelemetry()
 const { clearDemoData, isDemoDataCreated } = useDemoData()
+const badgesStore = useNavigationBadgesStore()
 
 const isSidebarCollapsed = useStorage('isSidebarCollapsed', false)
 
@@ -226,44 +238,17 @@ const isFCSite = ref(window.is_fc_site)
 const isDemoSite = ref(window.is_demo_site)
 const showSalesHierarchyBanner = ref(!!window.show_sales_hierarchy_banner)
 
-// Admission funnel: Prospective (at school) → CRM Contact (interest) → Enrolled
-const navigationIcons = {
-  salesDashboard: LucideLayoutDashboard,
-  marketingDashboard: LucideBarChart3,
-  recommendations: ListChecksIcon,
-  students: SchoolIcon,
-  contacts: UsersIcon,
-  enrolledStudents: GraduationCapIcon,
-  schools: SchoolIcon,
-  persons: UserIcon,
-  campaigns: MegaphoneIcon,
-  segments: FilterIcon,
-  events: CalendarIcon,
-  staff: BriefcaseIcon,
-  notes: NoteIcon,
-  tasks: TaskIcon,
-  callLogs: PhoneIcon,
-}
+// User & Role Navigation
+const { user } = sessionStore()
+const { users, getUser } = usersStore()
+const currentUser = computed(() => getUser(user.value))
 
-const links = navigationEntries.map((link) => ({
-  ...link,
-  icon: navigationIcons[link.icon],
-}))
+const currentNavItems = computed(() => {
+  return getNavigationForUser(currentUser.value)
+})
 
-const allViews = computed(() => {
-  let _views = [
-    {
-      name: 'All Views',
-      hideLabel: true,
-      opened: true,
-      views: visibleNavigation(links, getUser(user.value)).filter((link) => {
-        if (link.condition) {
-          return link.condition()
-        }
-        return true
-      }),
-    },
-  ]
+const customViews = computed(() => {
+  let _views = []
   if (getPublicViews().length) {
     _views.push({
       name: 'Public Views',
@@ -285,7 +270,7 @@ const allViews = computed(() => {
 function parseView(views) {
   return views
     .filter((view) =>
-      canAccessNavigationRoute(getUser(user.value), view.route_name),
+      canAccessNavigationRoute(currentUser.value, view.route_name),
     )
     .map((view) => {
       return {
@@ -332,8 +317,6 @@ function getIcon(routeName, icon) {
 }
 
 // onboarding
-const { user } = sessionStore()
-const { users, getUser } = usersStore()
 const { isOnboardingStepsCompleted, setUp } = useOnboarding('frappecrm')
 
 async function getFirstCRMStudent() {
@@ -385,7 +368,7 @@ const steps = reactive([
       activeSettingsPage.value = 'Invite User'
       capture('onboarding_step_clicked_invite_your_team')
     },
-    condition: () => canManageRoles(getUser(user.value)),
+    condition: () => canManageRoles(currentUser.value),
   },
   {
     name: 'convert_student_to_contact',
@@ -494,6 +477,7 @@ const steps = reactive([
 
 onMounted(async () => {
   await users.promise
+  badgesStore.fetchBadges()
 
   const filteredSteps = steps.filter((step) => {
     if (step.condition) {

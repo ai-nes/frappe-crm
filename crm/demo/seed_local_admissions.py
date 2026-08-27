@@ -12,20 +12,35 @@ from crm.fcrm.student_ownership import _configured_secret
 LOCAL_FLAGS = {
 	"crm_student_routing_enabled": 1,
 	"crm_student_sla_enabled": 1,
+	"crm_student_context_read_enabled": 1,
 	"crm_student_engagement_write_enabled": 1,
 	"crm_student_lifecycle_write_enabled": 1,
+	"crm_student_conversion_read_enabled": 1,
+	"crm_student_conversion_write_enabled": 1,
 	"crm_phase9_governance_write_enabled": 1,
+	"crm_phase9_audit_read_enabled": 1,
 }
 
 
 @contextmanager
 def _temporary_local_flags():
 	previous = {key: frappe.conf.get(key) for key in LOCAL_FLAGS}
+	prev_flags = {
+		"crm_governance_additive": frappe.flags.get("crm_governance_additive"),
+		"crm_governance_change": frappe.flags.get("crm_governance_change"),
+	}
 	try:
 		for key, value in LOCAL_FLAGS.items():
 			frappe.conf[key] = value
+		frappe.flags.crm_governance_additive = True
+		frappe.flags.crm_governance_change = True
 		yield
 	finally:
+		for key, value in prev_flags.items():
+			if value is None:
+				frappe.flags.pop(key, None)
+			else:
+				frappe.flags[key] = value
 		for key, value in previous.items():
 			if value is None:
 				frappe.conf.pop(key, None)

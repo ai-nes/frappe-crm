@@ -94,8 +94,10 @@ def execute() -> dict:
 	_ensure_policies(staff_context["campus"], staff_context["pool"])
 
 	manifest = []
+	students_by_scenario = {}
 	for scenario in SCENARIOS:
 		student = _ensure_student(scenario, context, staff_context["pool"])
+		students_by_scenario[scenario["key"]] = student.name
 		if scenario["owner"]:
 			_ensure_assigned(student.name)
 		interaction = _ensure_engagement(student.name, scenario)
@@ -108,8 +110,41 @@ def execute() -> dict:
 			_ensure_escalated_sla(student.name)
 		manifest.append(_manifest_row(student.name, scenario, task_names=task_names))
 
+	_ensure_crm_contacts(context, staff_context, students_by_scenario)
+	_ensure_marketing_and_spend(context, staff_context)
+	_ensure_master_data_changes(context)
+	_ensure_telephony_agents()
+
 	frappe.db.commit()
 	return {"namespace": NAMESPACE, "accounts": seed_staff.CANONICAL_FIXTURE_USERS, "students": manifest}
+
+
+def _ensure_lead_statuses():
+	lead_statuses = [
+		("Mới", 10),
+		("Unassigned", 10),
+		("Chưa nhận", 10),
+		("Assigned", 15),
+		("Mới nhận", 15),
+		("Counseling", 20),
+		("Đang tư vấn", 20),
+		("Awaiting Documents", 30),
+		("Chờ nộp hồ sơ", 30),
+		("Nurture", 35),
+		("Nguội", 35),
+		("Won", 40),
+		("Đã chốt", 40),
+		("Lost", 50),
+		("Từ chối", 50),
+	]
+	for name, order in lead_statuses:
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "lead_status"}):
+			frappe.get_doc({
+				"doctype": "CRM Term",
+				"term_name": name,
+				"category": "lead_status",
+				"sort_order": order,
+			}).insert(ignore_permissions=True)
 
 
 def _ensure_lifecycle_statuses():
@@ -123,6 +158,8 @@ def _ensure_lifecycle_statuses():
 		("Từ chối", 50, "lost", "Lost"),
 	):
 		_ensure_enrollment_status(name, order, category, stage)
+	_ensure_lead_statuses()
+
 
 
 def _ensure_policies(campus: str, pool: str):
@@ -194,7 +231,15 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	student_name = result.get("student")
 	if result.get("outcome") not in {"created", "attached"} or not student_name:
 		raise frappe.ValidationError(f"Could not create local admissions Student {scenario['key']}: {result}")
-	return frappe.get_doc("CRM Student", student_name)
+	doc = frappe.get_doc("CRM Student", student_name)
+	if not doc.lifecycle_stage and doc.enrollment_status:
+		from crm.fcrm.lifecycle import get_lifecycle_stage
+
+		stage = get_lifecycle_stage(doc.enrollment_status) or "Lead"
+		frappe.db.set_value("CRM Student", student_name, "lifecycle_stage", stage, update_modified=False)
+		doc.reload()
+	return doc
+
 
 
 def _ensure_assigned(student: str):
@@ -561,3 +606,248 @@ def _manifest_row(student: str, scenario: dict, task_names: list[str] | None = N
 		"sla_status": attempt.status if attempt else None,
 		"tasks": task_names or [],
 	}
+
+
+def _ensure_crm_contacts(context: dict, staff_context: dict, students_by_scenario: dict):
+	"""Ensure CRM Contact records exist for the entire admissions pipeline."""
+	if not frappe.db.table_exists("CRM Contact"):
+		return
+
+	previous_conversion = frappe.flags.get("student_conversion_service")
+	previous_in_test = getattr(frappe.flags, "in_test", False)
+	frappe.flags.student_conversion_service = True
+	frappe.flags.in_test = True
+	try:
+		sale_staff = staff_context["staff_by_user"].get(SALE_EMAIL)
+		team = staff_context["team"]
+		campus = staff_context["campus"]
+
+		stage_status_map = {
+			"thao-an": ("Lead", "Unassigned", None, None),
+			"gia-han": ("MQL", "Counseling", sale_staff, sale_staff),
+			"minh-khang": ("Applicant", "Awaiting Documents", sale_staff, sale_staff),
+			"khanh-linh": ("Lost", "Lost", None, None),
+			"nhat-minh": ("Enrolled", "Won", None, None),
+		}
+
+		for scenario in SCENARIOS:
+			key = scenario["key"]
+			student_name = students_by_scenario.get(key)
+			stage, status, assigned_staff, owner_staff = stage_status_map.get(key, ("Lead", "Unassigned", None, None))
+			contact_name = frappe.db.get_value("CRM Contact", {"email": scenario["email"]}, "name")
+			contact_data = {
+				"doctype": "CRM Contact",
+				"full_name": scenario["student_name"],
+				"phone": scenario["phone"],
+				"email": scenario["email"],
+				"lifecycle_stage": stage,
+				"lead_status": status,
+				"owning_team": team,
+				"owner_staff": owner_staff,
+				"assigned_to": assigned_staff,
+				"student": student_name,
+				"branch": campus,
+				"major": context["major"],
+				"high_school": context["high_school"],
+				"source": context["source"],
+				"crm_campaign": context["campaign"],
+				"crm_event": context["event"],
+				"admission_year": context["admission_year"],
+				"notes": scenario["notes"],
+			}
+			if contact_name:
+				doc = frappe.get_doc("CRM Contact", contact_name)
+				doc.update(contact_data)
+				doc.save(ignore_permissions=True)
+			else:
+				frappe.get_doc(contact_data).insert(ignore_permissions=True)
+
+		extra_contacts = [
+			{
+				"full_name": "Nguyễn Thảo An (Trùng form)",
+				"phone": "0901803101",
+				"email": "nguyen-thao-an.2026.duplicate@example.test",
+				"lifecycle_stage": "Lead",
+				"lead_status": "Unassigned",
+				"owning_team": team,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ nghi trùng số điện thoại với học sinh Nguyễn Thảo An",
+			},
+			{
+				"full_name": "Hoàng Đức Anh",
+				"phone": "0901803106",
+				"email": "hoang-duc-anh.2026@example.test",
+				"lifecycle_stage": "Lead",
+				"lead_status": "Assigned",
+				"owning_team": team,
+				"owner_staff": sale_staff,
+				"assigned_to": sale_staff,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ mới nhận từ chiến dịch Open Day, cần gọi trong 15 phút",
+			},
+			{
+				"full_name": "Lê Quốc Bảo",
+				"phone": "0901803107",
+				"email": "le-quoc-bao.2026@example.test",
+				"lifecycle_stage": "MQL",
+				"lead_status": "Nurture",
+				"owning_team": team,
+				"owner_staff": sale_staff,
+				"assigned_to": sale_staff,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ nguội (>7 ngày chưa có tương tác lại)",
+			},
+		]
+
+		for extra in extra_contacts:
+			c_name = frappe.db.get_value("CRM Contact", {"email": extra["email"]}, "name")
+			if c_name:
+				doc = frappe.get_doc("CRM Contact", c_name)
+				doc.update(extra)
+				doc.save(ignore_permissions=True)
+			else:
+				frappe.get_doc({"doctype": "CRM Contact", **extra}).insert(ignore_permissions=True)
+	finally:
+		frappe.flags.in_test = previous_in_test
+		if previous_conversion is None:
+			frappe.flags.pop("student_conversion_service", None)
+		else:
+			frappe.flags.student_conversion_service = previous_conversion
+
+
+
+
+def _ensure_marketing_and_spend(context: dict, staff_context: dict):
+	"""Ensure Marketing Campaigns, Spends, Events and Segments exist."""
+	campus = staff_context["campus"]
+	mkt_staff = staff_context["staff_by_user"].get("pham-bao-chau.marketing@example.test")
+
+	campaigns = [
+		{"title": context["campaign"], "status": "Active", "budget": 500000000},
+		{"title": "FPTU 2025 Early Bird Admission Campaign", "status": "Completed", "budget": 200000000},
+		{"title": "FPTU 2026 Fall Scholarship Drive", "status": "Draft", "budget": 100000000},
+	]
+	for c in campaigns:
+		if not frappe.db.exists("CRM Campaign", c["title"]):
+			frappe.get_doc({
+				"doctype": "CRM Campaign",
+				"title": c["title"],
+				"status": c["status"],
+				"campus": campus,
+				"budget": c["budget"],
+				"owner_staff": mkt_staff,
+			}).insert(ignore_permissions=True)
+
+	# Spend record
+	if frappe.db.table_exists("CRM Campaign Spend") and not frappe.db.exists("CRM Campaign Spend", {"crm_campaign": context["campaign"]}):
+		frappe.get_doc({
+			"doctype": "CRM Campaign Spend",
+			"spend_date": now_datetime().date(),
+			"lead_source": context["source"],
+			"crm_campaign": context["campaign"],
+			"campus": campus,
+			"amount": 25000000,
+			"impressions": 50000,
+			"clicks": 1250,
+			"notes": "Chi phí quảng cáo Facebook Ads kỳ tuyển sinh 2026",
+		}).insert(ignore_permissions=True)
+
+	# Events
+	events = [
+		{
+			"title": context["event"],
+			"start_datetime": now_datetime() + timedelta(days=14),
+			"end_datetime": now_datetime() + timedelta(days=14, hours=4),
+			"location": "Hội trường A - Campus TP.HCM",
+		},
+		{
+			"title": "FPTU HCMC Career Orientation Workshop - May 2026",
+			"start_datetime": now_datetime() - timedelta(days=30),
+			"end_datetime": now_datetime() - timedelta(days=30, hours=-3),
+			"location": "Trường THPT Trần Đại Nghĩa",
+		},
+	]
+	for ev in events:
+		if not frappe.db.exists("CRM Event", ev["title"]):
+			frappe.get_doc({
+				"doctype": "CRM Event",
+				"title": ev["title"],
+				"crm_campaign": context["campaign"],
+				"start_datetime": ev["start_datetime"],
+				"end_datetime": ev["end_datetime"],
+				"location": ev["location"],
+				"owner_staff": mkt_staff,
+			}).insert(ignore_permissions=True)
+
+	# Segment
+	segment_title = "Học sinh THPT TP.HCM quan tâm CNTT - 2026"
+	if frappe.db.table_exists("CRM Segment") and not frappe.db.exists("CRM Segment", {"title": segment_title}):
+		frappe.get_doc({
+			"doctype": "CRM Segment",
+			"title": segment_title,
+			"is_public": 1,
+			"filters": json.dumps({
+				"groups": [
+					{
+						"conditions": [
+							{
+								"field": "source",
+								"operator": "=",
+								"value": context["source"],
+							}
+						]
+					}
+				]
+			}),
+		}).insert(ignore_permissions=True)
+
+
+def _ensure_master_data_changes(context: dict):
+	"""Ensure pending master data change records for manager approvals queue."""
+	if not frappe.db.table_exists("CRM Master Data Change"):
+		return
+	existing = frappe.db.get_value("CRM Master Data Change", {"status": "Proposed"}, "name")
+	if not existing:
+		prev_log_insert = frappe.flags.get("crm_governance_log_insert")
+		frappe.flags.crm_governance_log_insert = True
+		try:
+			frappe.get_doc({
+				"doctype": "CRM Master Data Change",
+				"change_kind": "normal",
+				"reference_doctype": "CRM Campus",
+				"reference_docname": context["campus"],
+				"action": "Create",
+				"status": "Proposed",
+				"registry_revision": "P9-DEC-002",
+				"reason": "Bổ sung cơ sở đào tạo mới phục vụ tuyển sinh 2026",
+				"new_value": "Campus Cần Thơ",
+				"idempotency_key": f"{NAMESPACE}:mdc:can-tho-campus",
+				"correlation_id": f"{NAMESPACE}:mdc",
+				"proposed_by": "Administrator",
+				"proposed_at": now_datetime(),
+			}).insert(ignore_permissions=True)
+		finally:
+			if prev_log_insert is None:
+				frappe.flags.pop("crm_governance_log_insert", None)
+			else:
+				frappe.flags.crm_governance_log_insert = prev_log_insert
+
+
+
+
+
+def _ensure_telephony_agents():
+	"""Ensure Telephony Agent records for fixture sales users."""
+	if not frappe.db.table_exists("Telephony Agent"):
+		return
+	for email in (SALE_EMAIL, "le-thanh-huong.leadsales@example.test"):
+		if not frappe.db.exists("Telephony Agent", {"user": email}):
+			frappe.get_doc({
+				"doctype": "Telephony Agent",
+				"user": email,
+				"agent_id": email.split("@")[0],
+			}).insert(ignore_permissions=True)
+

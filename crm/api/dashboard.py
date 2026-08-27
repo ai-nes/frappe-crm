@@ -304,3 +304,77 @@ def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=No
 		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
 
 	return query.run(as_dict=True) or []
+
+
+@frappe.whitelist()
+def get_sidebar_badge_counts():
+	"""Return dynamic badge counts for the current user's session navigation."""
+	user = frappe.session.user
+	roles = frappe.get_roles(user)
+	is_admin = "System Manager" in roles or user == "Administrator"
+	staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
+
+	# Urgent SLA / Recommendation count
+	urgent_sla_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		sla_filters = {"status": "open"}
+		if not is_admin and staff_name:
+			urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
+		else:
+			urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
+
+	# Unassigned / Pool count
+	pool_count = 0
+	if frappe.db.table_exists("CRM Contact"):
+		pool_count = frappe.db.count(
+			"CRM Contact",
+			filters={"lead_status": ["in", ["Unassigned", "Assigned"]], "owner_staff": ["is", "not set"]},
+		)
+	elif frappe.db.table_exists("CRM Student"):
+		pool_count = frappe.db.count("CRM Student", filters={"owner_staff": ["is", "not set"]})
+
+	# Team SLA breached / near breach count
+	team_sla_breached_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		team_sla_breached_count = frappe.db.count(
+			"CRM Student SLA Attempt",
+			filters={"status": ["in", ["breached", "near_breach", "escalated"]]},
+		)
+
+	# Suspected duplicates count
+	duplicate_count = 0
+	if frappe.db.table_exists("CRM Contact"):
+		duplicate_count = frappe.db.count(
+			"CRM Contact",
+			filters={"full_name": ["like", "%(Trùng%"]},
+		)
+
+	# Pending spend approvals
+	pending_spend_approval_count = 0
+	if frappe.db.table_exists("CRM Campaign Spend"):
+		pending_spend_approval_count = frappe.db.count("CRM Campaign Spend")
+
+	# Manager approvals
+	manager_approvals_count = pending_spend_approval_count
+	if frappe.db.table_exists("CRM Master Data Change"):
+		manager_approvals_count += frappe.db.count("CRM Master Data Change", filters={"status": "Pending"})
+
+	# Tasks count for my tasks
+	my_task_count = 0
+	if frappe.db.table_exists("Task"):
+		task_filters = {"status": ["in", ["Todo", "In Progress"]]}
+		if not is_admin:
+			task_filters["assigned_to"] = user
+		my_task_count = frappe.db.count("Task", filters=task_filters)
+
+	return {
+		"urgentSlaCount": urgent_sla_count,
+		"poolCount": pool_count,
+		"teamSlaBreachedCount": team_sla_breached_count,
+		"unassignedCount": pool_count,
+		"duplicateCount": duplicate_count,
+		"pendingSpendApprovalCount": pending_spend_approval_count,
+		"managerApprovalsCount": manager_approvals_count,
+		"myTaskCount": my_task_count,
+	}
+
