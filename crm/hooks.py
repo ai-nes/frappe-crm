@@ -413,6 +413,7 @@ before_request = ["crm.api.resource.normalize_resource_phone_filters"]
 # ]
 
 after_migrate = [
+	"crm.install.after_migrate",
 	"crm.fcrm.doctype.fcrm_settings.fcrm_settings.after_migrate",
 	"crm.api.whatsapp.add_roles",
 	"crm.api.agent_migrations.after_migrate",

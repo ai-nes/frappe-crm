@@ -10,6 +10,15 @@ from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboar
 
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
+# AI CRM is currently exposed directly from the EC2 host while its public
+# domain is not configured yet. Keep this allowlist explicit; never use '*'
+# for the production Frappe site.
+CRM_CORS_ORIGINS = (
+	CHATWOOT_CORS_ORIGIN,
+	"http://54.66.53.9:5173",
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
+)
 
 
 def before_install():
@@ -36,6 +45,11 @@ def after_install(force=False):
 	frappe.db.commit()
 
 
+def after_migrate():
+	"""Keep integration CORS origins present on every production migration."""
+	add_chatwoot_cors_origin()
+
+
 def complete_setup(_args: dict | None = None):
 	"""Finish Frappe setup without seeding optional demo records.
 
@@ -46,26 +60,13 @@ def complete_setup(_args: dict | None = None):
 
 
 def add_chatwoot_cors_origin():
-	"""Allow Chatwoot dashboard requests to reach this site."""
+	"""Allow approved integration and AI CRM origins to reach this site."""
 
 	current_allow_cors = frappe.conf.get("allow_cors")
 
-	if current_allow_cors == "*":
+	allow_cors = merge_cors_origins(current_allow_cors, CRM_CORS_ORIGINS)
+	if allow_cors == current_allow_cors:
 		return
-
-	if not current_allow_cors:
-		allow_cors = CHATWOOT_CORS_ORIGIN
-	elif isinstance(current_allow_cors, list):
-		if CHATWOOT_CORS_ORIGIN in current_allow_cors:
-			return
-		allow_cors = [*current_allow_cors, CHATWOOT_CORS_ORIGIN]
-	elif isinstance(current_allow_cors, str):
-		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
-		if CHATWOOT_CORS_ORIGIN in origins:
-			return
-		allow_cors = ",".join([*origins, CHATWOOT_CORS_ORIGIN])
-	else:
-		allow_cors = CHATWOOT_CORS_ORIGIN
 
 	site_config_path = frappe.get_site_path("site_config.json")
 	with open(site_config_path) as site_config_file:
@@ -78,7 +79,30 @@ def add_chatwoot_cors_origin():
 		site_config_file.write("\n")
 
 	frappe.conf.allow_cors = allow_cors
-	click.secho(f"* Allowing CORS for {CHATWOOT_CORS_ORIGIN}")
+	click.secho(f"* Allowing CORS for {', '.join(CRM_CORS_ORIGINS)}")
+
+
+def merge_cors_origins(current_allow_cors, required_origins):
+	"""Merge exact CORS origins while preserving the existing config shape."""
+
+	if current_allow_cors == "*":
+		return "*"
+
+	if isinstance(current_allow_cors, list):
+		origins = [str(origin).strip() for origin in current_allow_cors if str(origin).strip()]
+		as_list = True
+	elif isinstance(current_allow_cors, str):
+		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
+		as_list = False
+	else:
+		origins = []
+		as_list = False
+
+	for origin in required_origins:
+		if origin not in origins:
+			origins.append(origin)
+
+	return origins if as_list else ",".join(origins)
 
 
 def sync_frappe_crm_workspace():
