@@ -29,17 +29,19 @@ for app in frappe crm; do
     target_dir="sites/assets/${app}"
 
     if [ -d "${public_dir}" ]; then
-        # A bench can already expose an app's public directory at the target
-        # through a symlink.  In that case `cp -r` reports "same file" and
-        # exits 1, which incorrectly makes the one-shot assets/site service
-        # fail after an otherwise successful migration.
-        if [ -e "${target_dir}" ] && [ "$(readlink -f "${public_dir}")" = "$(readlink -f "${target_dir}")" ]; then
-            echo "Assets already available at ${target_dir}; source and target are identical"
-        else
-            echo "Copying ${public_dir} -> ${target_dir}"
-            mkdir -p "${target_dir}"
-            cp -r "${public_dir}/." "${target_dir}/"
+        # `sites/assets` is mounted into the Nginx container, while `apps`
+        # exists only in the application image.  Bench may seed an absolute
+        # symlink here; it works in the app container but is broken in Nginx.
+        # Replace that link with real files so every runtime container can
+        # serve the assets from the shared sites volume.
+        if [ -L "${target_dir}" ]; then
+            echo "Replacing asset symlink ${target_dir} with copied files"
+            rm "${target_dir}"
         fi
+
+        echo "Copying ${public_dir} -> ${target_dir}"
+        mkdir -p "${target_dir}"
+        cp -r "${public_dir}/." "${target_dir}/"
     else
         echo "Missing public directory: ${public_dir}" >&2
         exit 1
