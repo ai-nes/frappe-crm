@@ -29,9 +29,17 @@ for app in frappe crm; do
     target_dir="sites/assets/${app}"
 
     if [ -d "${public_dir}" ]; then
-        echo "Copying ${public_dir} -> ${target_dir}"
-        mkdir -p "${target_dir}"
-        cp -r "${public_dir}/." "${target_dir}/"
+        # A bench can already expose an app's public directory at the target
+        # through a symlink.  In that case `cp -r` reports "same file" and
+        # exits 1, which incorrectly makes the one-shot assets/site service
+        # fail after an otherwise successful migration.
+        if [ -e "${target_dir}" ] && [ "$(readlink -f "${public_dir}")" = "$(readlink -f "${target_dir}")" ]; then
+            echo "Assets already available at ${target_dir}; source and target are identical"
+        else
+            echo "Copying ${public_dir} -> ${target_dir}"
+            mkdir -p "${target_dir}"
+            cp -r "${public_dir}/." "${target_dir}/"
+        fi
     else
         echo "Missing public directory: ${public_dir}" >&2
         exit 1
