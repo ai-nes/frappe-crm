@@ -20,6 +20,10 @@ DEFAULTS = {
 	"conversion_read": False,
 	"conversion_write": False,
 	"role_workspace_read": False,
+	# Director analytics is the primary Director workspace, not an experimental
+	# replacement for Sales/Marketing workspaces. Keep its server reader on by
+	# default while the broad role-workspace rollout remains opt-in.
+	"director_analytics_read": True,
 }
 ALIASES = {
 	"context_read": "context",
@@ -58,3 +62,13 @@ def legacy_read_enabled() -> bool:
 def role_workspace_read_enabled() -> bool:
 	"""Whether the read-only role-workspace facade is available server-side."""
 	return enabled("role_workspace_read")
+
+
+def director_analytics_read_enabled() -> bool:
+	"""Whether the Director analytics canary is enabled alongside the workspace reader.
+
+	The caller must still be authorized as an Admissions Director by the
+	workspace policy.  This function deliberately only defines the two server
+	rollout switches; it never accepts a browser-provided override.
+	"""
+	return enabled("director_analytics_read")

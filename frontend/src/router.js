@@ -9,6 +9,7 @@ import {
   hasAnyCapability,
 } from '@/utils/rolePolicy'
 import {
+  getWorkspaceRoute,
   resolveWorkspaceRoute,
   sanitizeWorkspaceQuery,
 } from '@/utils/workspaceRegistry'
@@ -422,12 +423,12 @@ router.beforeEach(async (to, from, next) => {
   if (isLoggedIn && to.name !== 'Not Permitted' && !isCrmUser()) {
     next({ name: 'Not Permitted' })
   } else if (to.name === 'Home' && isLoggedIn) {
-    const defaultRoute = hasAnyCapability(
-      getCurrentUser(),
-      admissionsWorkspaceCapabilities,
-    )
-      ? { name: 'Dashboard' }
-      : { name: 'Digital Marketing Dashboard' }
+    const user = getCurrentUser()
+    const defaultRoute = user?.crm_profile === 'admissions_director'
+      ? getWorkspaceRoute('mgr_overview')
+      : hasAnyCapability(user, admissionsWorkspaceCapabilities)
+        ? { name: 'Dashboard' }
+        : { name: 'Digital Marketing Dashboard' }
     next(defaultRoute)
     return
   } else if (!isLoggedIn) {

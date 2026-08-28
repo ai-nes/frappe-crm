@@ -15,7 +15,6 @@ from crm.fcrm.role_policy import (
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
 )
-from crm.fcrm.student_feature_flags import role_workspace_read_enabled
 
 # Compatibility exports for existing API consumers. New consumers import the
 # canonical policy module rather than adding role literals here.
@@ -65,6 +64,20 @@ def get_crm_user_role(roles):
 	return "", None
 
 
+def _crm_feature_flags(profile):
+	"""Return rollout state that the SPA may use for progressive enhancement.
+
+	Director analytics is intentionally not advertised to other CRM profiles or
+	platform administrators.  Server-side workspace authorization remains the
+	security boundary; this only prevents the client from rendering a canary
+	entry it cannot use.
+	"""
+	return {
+		"role_workspace_read": role_workspace_read_enabled(),
+		"director_analytics_read": profile == "admissions_director" and director_analytics_read_enabled(),
+	}
+
+
 def _session_role_flags(roles):
 	"""Build flags from server-derived roles; shared with focused contract tests."""
 	role_names = frozenset(roles)
@@ -88,7 +101,7 @@ def _session_role_flags(roles):
 		"crm_role_state": role_state,
 		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
 		"crm_policy_version": POLICY_VERSION,
-		"crm_feature_flags": {"role_workspace_read": role_workspace_read_enabled()},
+		"crm_feature_flags": _crm_feature_flags(profile),
 	}
 
 
@@ -108,7 +121,7 @@ def get_session_role_flags():
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
 			"crm_policy_version": POLICY_VERSION,
-			"crm_feature_flags": {"role_workspace_read": role_workspace_read_enabled()},
+			"crm_feature_flags": _crm_feature_flags(None),
 		}
 	return _session_role_flags(frappe.get_roles())
 

@@ -88,3 +88,35 @@ class TestRoleWorkspaces(FrappeTestCase):
 		self.assertEqual(badge["contractStatus"], "migration_required")
 		self.assertIn("snapshot", badge)
 		self.assertNotIn("legacyContactCount", badge)
+
+	def test_export_keeps_legacy_providers_migration_required(self):
+		policy = frappe._dict(actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset(), scope_version="scope-a")
+		with (
+			patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=True),
+			patch("crm.api.role_workspaces.derive_workspace_policy", return_value=policy),
+			patch("crm.api.role_workspaces.get_encryption_key", return_value="test-key"),
+		):
+			response = role_workspaces.get_workspace_export("sales-urgent", "queue")
+		self.assertEqual(response["contractStatus"], "migration_required")
+		self.assertIsNone(response["download"])
+
+	def test_director_canary_does_not_disable_sales_workspace_facade(self):
+		policy = frappe._dict(actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset(), scope_version="scope-a")
+		with (
+			patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=True),
+			patch("crm.api.role_workspaces.director_analytics_read_enabled", return_value=False),
+			patch("crm.api.role_workspaces.derive_workspace_policy", return_value=policy),
+			patch("crm.api.role_workspaces.get_encryption_key", return_value="test-key"),
+		):
+			response = role_workspaces.get_workspace_summary("sales-urgent", "queue")
+		self.assertEqual(response["contractStatus"], "migration_required")
+
+	def test_row_detail_rechecks_current_student_campus(self):
+		policy = frappe._dict(actor="director@example.com", profile="admissions_director", campuses=("Campus A",), scope_version="scope-a")
+		with (
+			patch("crm.api.role_workspaces._request", return_value=(policy, "all", {}, "snapshot")),
+			patch("crm.api.director_analytics.validate_row_detail_token", return_value="STU-1"),
+			patch("crm.api.role_workspaces.frappe.db.get_value", return_value="Campus B"),
+		):
+			with self.assertRaises(frappe.PermissionError):
+				role_workspaces.resolve_workspace_row_detail("director-records", "all", snapshot="snapshot", token="opaque")

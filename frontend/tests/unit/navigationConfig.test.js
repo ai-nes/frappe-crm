@@ -3,6 +3,7 @@ import {
   roleNavigationTrees,
   resolveUserNavigationRole,
   getNavigationForUser,
+  isDirectorWorkspaceNavigationEnabled,
   isRoleWorkspaceNavigationEnabled,
 } from '../../src/utils/navigationConfig'
 
@@ -35,6 +36,64 @@ describe('navigationConfig', () => {
     })
     expect(isRoleWorkspaceNavigationEnabled({
       crm_feature_flags: { role_workspace_read: true },
+    })).toBe(true)
+  })
+
+  it('routes every Director dashboard to its workspace even without rollout flags', () => {
+    const workspace = getNavigationForUser({
+      crm_profile: 'admissions_director',
+    })
+    const people = workspace.find((item) => item.id === 'mgr_teams_staff')
+    const overview = workspace.find((item) => item.id === 'mgr_overview')
+    expect(overview.to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-overview', view: 'overview' },
+    })
+    expect(overview.children.map((item) => item.to)).toEqual([
+      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'quota-progress' } },
+      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'campus' } },
+      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'program' } },
+    ])
+    expect(workspace.find((item) => item.id === 'mgr_all_records').to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-records', view: 'all' },
+    })
+    expect(workspace.find((item) => item.id === 'mgr_funnel_forecast').to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-forecast', view: 'funnel' },
+    })
+    const sla = workspace.find((item) => item.id === 'mgr_sla_system')
+    expect(sla.to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-sla', view: 'team' },
+    })
+    expect(sla.children.map((item) => item.to.params.view)).toEqual([
+      'team', 'campus', 'ranking',
+    ])
+    expect(workspace.find((item) => item.id === 'mgr_quota_tuition').to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'admissions-reference', view: 'quota-tuition' },
+    })
+    expect(people.to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-people', view: 'team-performance' },
+    })
+    expect(people.children[0].to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-people', view: 'team-performance' },
+    })
+    expect(people.children[1].to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-people', view: 'workload' },
+    })
+    expect(people.children[2].to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'director-people', view: 'rebalance' },
+    })
+    expect(typeof workspace.find((item) => item.id === 'mgr_business_config').action)
+      .toBe('function')
+    expect(isDirectorWorkspaceNavigationEnabled({
+      crm_profile: 'admissions_director',
     })).toBe(true)
   })
 

@@ -5,7 +5,7 @@ from contextlib import contextmanager
 
 import frappe
 
-from crm.demo import seed_admissions_cohort, seed_demo, seed_staff
+from crm.demo import seed_admissions_cohort, seed_demo, seed_director_analytics, seed_staff
 from crm.fcrm.student_intake import _secret_versions
 from crm.fcrm.student_ownership import _configured_secret
 
@@ -84,6 +84,12 @@ def execute():
 	_assert_integrity_keys()
 	frappe.set_user("Administrator")
 	with _temporary_local_flags():
-		seed_demo.execute()
-		seed_staff.execute()
-		return seed_admissions_cohort.execute()
+		context = seed_demo.execute()
+		staff_context = seed_staff.execute()
+		admissions = seed_admissions_cohort.execute()
+		return {
+			**admissions,
+			"director_analytics": seed_director_analytics.execute(
+				admissions=admissions, context=context, staff_context=staff_context
+			),
+		}

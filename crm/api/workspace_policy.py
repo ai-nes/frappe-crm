@@ -74,6 +74,13 @@ class WorkspacePolicyError(frappe.PermissionError):
 	"""One fail-closed error type for an invalid workspace reader request."""
 
 
+def authorize_director_view(policy, workspace: str, view: str) -> None:
+	"""Apply the separately granted entitlement for sensitive Director views."""
+	if policy.profile == "admissions_director" and (workspace, view) == ("approvals", "break-glass"):
+		if "governance.break_glass.read" not in policy.capabilities:
+			raise WorkspacePolicyError(_("Break-glass approvals are not available for your role."))
+
+
 def derive_workspace_policy() -> frappe._dict:
 	"""Build a policy snapshot from the current session, never browser inputs."""
 	actor = getattr(getattr(frappe, "session", None), "user", None)
@@ -143,7 +150,7 @@ def authorize_workspace(policy: frappe._dict, workspace: str, view: str | None) 
 	return view
 
 
-def normalize_filters(workspace: str, filters) -> dict:
+def normalize_filters(workspace: str, filters, *, view: str | None = None, policy=None) -> dict:
 	"""Parse only schema-owned filters and produce a stable token payload."""
 	if filters in (None, "", {}):
 		return {}
@@ -154,6 +161,25 @@ def normalize_filters(workspace: str, filters) -> dict:
 			raise WorkspacePolicyError(_("filters must be a JSON object.")) from exc
 	if not isinstance(filters, dict):
 		raise WorkspacePolicyError(_("filters must be an object."))
+	if policy and policy.profile == "admissions_director":
+		from crm.api.director_analytics import filter_keys
+		allowed = set(filter_keys(workspace, view))
+		if set(filters) - allowed:
+			raise WorkspacePolicyError(_("One or more filters are not supported."))
+		# Campus is a scope ceiling, never a browser-selectable expansion.
+		if "campus" in filters and filters["campus"] not in policy.campuses:
+			raise WorkspacePolicyError(_("This campus is not available for your role."))
+		# Date predicates are deliberately rejected until the provider has a
+		# released half-open UTC range implementation; accepting and ignoring one
+		# would be a misleading reporting surface.
+		if "dateRange" in filters or "period" in filters:
+			raise WorkspacePolicyError(_("Date filters are not released for this Director view."))
+		for key in {"campus", "program", "team", "slaBucket", "attributionMethod", "approvalState", "sort", "page"} & set(filters):
+			if not isinstance(filters[key], str) or not filters[key].strip() or len(filters[key]) > 140:
+				raise WorkspacePolicyError(_("A workspace filter is invalid."))
+		if "lifecycle" in filters and (not isinstance(filters["lifecycle"], list) or not filters["lifecycle"] or any(item not in _FILTER_VALUES["lifecycle"] | {"Lead", "Enrolled", "Lost"} for item in filters["lifecycle"])):
+			raise WorkspacePolicyError(_("A workspace filter is invalid."))
+		return {key: filters[key] for key in sorted(filters)}
 	if set(filters) - set(_FILTER_VALUES):
 		raise WorkspacePolicyError(_("One or more filters are not supported."))
 	normalized = {}

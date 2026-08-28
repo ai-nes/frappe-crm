@@ -712,6 +712,42 @@ function bindWorkspaceDestinations(items) {
   }))
 }
 
+const directorWorkspaceMenuIds = new Set([
+  'mgr_overview',
+  'mgr_progress_quota',
+  'mgr_by_campus',
+  'mgr_by_major',
+  'mgr_all_records',
+  'mgr_funnel_forecast',
+  'mgr_sla_system',
+  'mgr_sla_by_team',
+  'mgr_sla_by_campus',
+  'mgr_sla_ranking',
+  'mgr_teams_staff',
+  'mgr_team_perf',
+  'mgr_workload',
+  'mgr_rebalance',
+  'mgr_marketing_roi',
+  'mgr_approvals',
+  'mgr_appr_spend',
+  'mgr_appr_master_data',
+  'mgr_appr_break_glass',
+  'mgr_quota_tuition',
+  'mgr_reports',
+])
+
+function bindDirectorWorkspaceDestinations(items) {
+  return items.map((item) => ({
+    ...item,
+    ...(directorWorkspaceMenuIds.has(item.id) && {
+      to: getWorkspaceRoute(item.id),
+    }),
+    ...(item.children && {
+      children: bindDirectorWorkspaceDestinations(item.children),
+    }),
+  }))
+}
+
 // Every role menu opens a named workspace. Legacy Dashboard, CRM Contact and
 // Settings-modal shortcuts are intentionally not retained for operational use.
 export const roleNavigationTrees = Object.fromEntries(
@@ -729,6 +765,12 @@ export const roleNavigationTrees = Object.fromEntries(
  */
 export function isRoleWorkspaceNavigationEnabled(user) {
   return user?.crm_feature_flags?.role_workspace_read === true
+}
+
+export function isDirectorWorkspaceNavigationEnabled(user) {
+  // A Director destination must never fall back to the unrelated Sales
+  // dashboard. The workspace owns its own empty/unavailable state.
+  return resolveUserNavigationRole(user) === 'admissions_director'
 }
 
 /**
@@ -769,6 +811,16 @@ export function resolveUserNavigationRole(user) {
  */
 export function getNavigationForUser(user) {
   const roleKey = resolveUserNavigationRole(user)
+  if (isDirectorWorkspaceNavigationEnabled(user)) {
+    return bindDirectorWorkspaceDestinations(
+      rawRoleNavigationTrees.admissions_director,
+    )
+  }
+  // The broad workspace rollout has not released most Director views yet.
+  // Keep their legacy routes until a dedicated Director workspace is ready.
+  if (roleKey === 'admissions_director') {
+    return rawRoleNavigationTrees.admissions_director
+  }
   const trees = isRoleWorkspaceNavigationEnabled(user)
     ? roleNavigationTrees
     : rawRoleNavigationTrees
