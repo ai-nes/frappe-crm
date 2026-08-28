@@ -118,4 +118,5 @@ jobs:
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml config --quiet && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml pull && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans && \
+             sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml restart nginx && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml ps"
