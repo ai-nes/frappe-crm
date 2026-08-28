@@ -164,19 +164,31 @@ def _ensure_demo_team(campus: str, staff_name: str):
 
 
 def _ensure_enrollment_status(name: str, order: int, category: str, lifecycle_stage: str):
-	if frappe.db.exists("CRM Term", name):
-		return name
+	meta = {"stage_category": category, "lifecycle_stage": lifecycle_stage}
+	term_name = frappe.db.get_value("CRM Term", {"term_name": name, "category": "enrollment_status"}, "name")
+	if not term_name and frappe.db.exists("CRM Term", name):
+		cat = frappe.db.get_value("CRM Term", name, "category")
+		if cat == "enrollment_status":
+			term_name = name
+	if term_name:
+		doc = frappe.get_doc("CRM Term", term_name)
+		doc.sort_order = order
+		doc.metadata = meta
+		doc.save(ignore_permissions=True)
+		return doc.name
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Term",
 			"term_name": name,
 			"category": "enrollment_status",
 			"sort_order": order,
-			"metadata": {"stage_category": category, "lifecycle_stage": lifecycle_stage},
+			"metadata": meta,
 		}
 	)
 	doc.insert(ignore_permissions=True)
 	return doc.name
+
+
 
 
 def _ensure_student(campus: str, admission_year: str, pool: str):

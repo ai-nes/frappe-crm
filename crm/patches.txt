@@ -110,3 +110,4 @@ crm.patches.v1_0.consolidate_score_rule_children
 crm.patches.v1_0.consolidate_ai_lead_insight_items
 crm.patches.v1_0.consolidate_academic_year_lines
 crm.patches.v1_0.consolidate_master_data_change
+crm.patches.v1_0.set_default_system_and_user_language_vi

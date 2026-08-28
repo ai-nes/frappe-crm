@@ -17,6 +17,10 @@ from crm.demo import seed_demo, seed_staff
 
 NAMESPACE = "local-admissions-cohort-2026"
 SALE_EMAIL = "nguyen-minh-khoi.sale@example.test"
+SIBLING_LEAD_EMAIL = "leadsales@example.com"
+SIBLING_SALE_EMAIL = "sale@example.com"
+SIBLING_TEAM_NAME = "Tư vấn tuyển sinh TP.HCM — Nhóm đối chứng"
+SIBLING_POOL_NAME = "Nguồn tuyển sinh TP.HCM — Nhóm đối chứng"
 
 # The first cohort Student is the deterministic Student Detail walkthrough.
 # Keep these as ordinary Task rows so the real Task tab, activity feed and
@@ -85,17 +89,72 @@ SCENARIOS = (
 )
 
 
+# These Students exist solely to make every operational SLA queue visible after
+# ``task seed``.  Keep them separate from ``SCENARIOS``: the latter is the
+# lifecycle cohort and is deliberately stable for the Student walkthrough.
+SLA_SHOWCASE_SCENARIOS = (
+	{
+		"key": "sla-open",
+		"student_name": "Lê Hải Đăng",
+		"email": "le-hai-dang.sla-open@example.test",
+		"phone": "0901803201",
+		"sla_status": "open",
+	},
+	{
+		"key": "sla-warned",
+		"student_name": "Phạm Quỳnh Như",
+		"email": "pham-quynh-nhu.sla-warned@example.test",
+		"phone": "0901803202",
+		"sla_status": "warned",
+	},
+	{
+		"key": "sla-breached",
+		"student_name": "Hoàng Đức Thành",
+		"email": "hoang-duc-thanh.sla-breached@example.test",
+		"phone": "0901803203",
+		"sla_status": "breached",
+	},
+)
+
+# A sibling-team record is deliberately included in the local fixture so a
+# Lead Sales reader can prove it does not aggregate another team's work.
+SIBLING_TEAM_SCENARIO = {
+	"key": "sibling-team",
+	"student_name": "Đặng Mai Anh",
+	"email": "dang-mai-anh.sibling-team@example.test",
+	"phone": "0901803291",
+	"sla_status": "breached",
+}
+
+_SLA_STATUS_RANK = {"open": 0, "warned": 1, "breached": 2, "escalated": 3}
+_SLA_TRANSITION_FIELDS = {
+	"open": (),
+	"warned": ("warning_at",),
+	"breached": ("warning_at", "breach_at"),
+	"escalated": ("warning_at", "breach_at", "escalation_at"),
+}
+
+
 def execute() -> dict:
 	"""Create the local workday cohort and return its Desk-facing manifest."""
 	frappe.set_user("Administrator")
 	context = seed_demo.execute()
 	staff_context = seed_staff.execute()
+	workspace_topology = _ensure_lead_workspace_topology(staff_context)
 	_ensure_lifecycle_statuses()
 	_ensure_policies(staff_context["campus"], staff_context["pool"])
+	_ensure_policies(
+		staff_context["campus"],
+		workspace_topology["sibling_pool"],
+		policy_namespace=f"{NAMESPACE}-sibling",
+		include_readonly_history=False,
+	)
 
 	manifest = []
+	students_by_scenario = {}
 	for scenario in SCENARIOS:
 		student = _ensure_student(scenario, context, staff_context["pool"])
+		students_by_scenario[scenario["key"]] = student.name
 		if scenario["owner"]:
 			_ensure_assigned(student.name)
 		interaction = _ensure_engagement(student.name, scenario)
@@ -108,8 +167,79 @@ def execute() -> dict:
 			_ensure_escalated_sla(student.name)
 		manifest.append(_manifest_row(student.name, scenario, task_names=task_names))
 
+	sla_showcase = []
+	for scenario in SLA_SHOWCASE_SCENARIOS:
+		student = _ensure_student(scenario, context, staff_context["pool"])
+		_ensure_assigned(student.name)
+		attempt = _ensure_sla_status(student.name, scenario["sla_status"])
+		sla_showcase.append(
+			{
+				"student": student.name,
+				"student_name": student.student_name,
+				"email": scenario["email"],
+				"sla_attempt": attempt.name,
+				"sla_status": attempt.status,
+			}
+		)
+
+	sibling_student = _ensure_student(
+		SIBLING_TEAM_SCENARIO, context, workspace_topology["sibling_pool"]
+	)
+	_ensure_sibling_team_assignment(sibling_student.name, workspace_topology)
+	sibling_attempt = _ensure_sla_status(
+		sibling_student.name, SIBLING_TEAM_SCENARIO["sla_status"]
+	)
+	workspace_actions = _ensure_lead_workspace_actions(
+		students_by_scenario, staff_context
+	)
+
+	_ensure_crm_contacts(context, staff_context, students_by_scenario)
+	_ensure_marketing_and_spend(context, staff_context)
+	_ensure_master_data_changes(context)
+	_ensure_telephony_agents()
+
 	frappe.db.commit()
-	return {"namespace": NAMESPACE, "accounts": seed_staff.CANONICAL_FIXTURE_USERS, "students": manifest}
+	return {
+		"namespace": NAMESPACE,
+		"accounts": seed_staff.CANONICAL_FIXTURE_USERS,
+		"students": manifest,
+		"sla_showcase": sla_showcase,
+		"lead_workspace": {
+			"primary_team": staff_context["team"],
+			"sibling_team": workspace_topology["sibling_team"],
+			"sibling_student": sibling_student.name,
+			"sibling_sla_attempt": sibling_attempt.name,
+			"actions": workspace_actions,
+		},
+	}
+
+
+def _ensure_lead_statuses():
+	lead_statuses = [
+		("Mới", 10),
+		("Unassigned", 10),
+		("Chưa nhận", 10),
+		("Assigned", 15),
+		("Mới nhận", 15),
+		("Counseling", 20),
+		("Đang tư vấn", 20),
+		("Awaiting Documents", 30),
+		("Chờ nộp hồ sơ", 30),
+		("Nurture", 35),
+		("Nguội", 35),
+		("Won", 40),
+		("Đã chốt", 40),
+		("Lost", 50),
+		("Từ chối", 50),
+	]
+	for name, order in lead_statuses:
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "lead_status"}):
+			frappe.get_doc({
+				"doctype": "CRM Term",
+				"term_name": name,
+				"category": "lead_status",
+				"sort_order": order,
+			}).insert(ignore_permissions=True)
 
 
 def _ensure_lifecycle_statuses():
@@ -123,16 +253,24 @@ def _ensure_lifecycle_statuses():
 		("Từ chối", 50, "lost", "Lost"),
 	):
 		_ensure_enrollment_status(name, order, category, stage)
+	_ensure_lead_statuses()
 
 
-def _ensure_policies(campus: str, pool: str):
+
+def _ensure_policies(
+	campus: str,
+	pool: str,
+	*,
+	policy_namespace: str = NAMESPACE,
+	include_readonly_history: bool = True,
+):
 	from crm.api.student_policy import _service_save
 
 	now = now_datetime() - timedelta(minutes=1)
 	policies = (
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v1",
+			"policy_key": f"{policy_namespace}-routing-v1",
 			"policy_version": 1,
 			"campus": campus,
 			"student_pool": pool,
@@ -141,7 +279,7 @@ def _ensure_policies(campus: str, pool: str):
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v1",
+			"policy_key": f"{policy_namespace}-sla-v1",
 			"policy_version": 1,
 			"campus": campus,
 			"student_pool": pool,
@@ -154,20 +292,178 @@ def _ensure_policies(campus: str, pool: str):
 			"effective_from": now,
 		},
 	)
+	if include_readonly_history:
+		policies += (
+			{
+				"doctype": "CRM Student SLA Policy",
+				"policy_key": f"{policy_namespace}-sla-v2",
+				"policy_version": 2,
+				"campus": campus,
+				"student_pool": pool,
+				"warning_minutes": 10,
+				"breach_minutes": 25,
+				"escalation_minutes": 40,
+				"pause_reasons": json.dumps([]),
+				"maximum_pause_minutes": 0,
+				"recipient_strategy": "owner_warning_lead_breach_director_escalation",
+				"effective_from": now,
+				"status": "draft",
+			},
+		)
 	for values in policies:
 		if frappe.db.exists(values["doctype"], {"policy_key": values["policy_key"]}):
 			continue
 		doc = frappe.get_doc(
 			{
 				**values,
-				"status": "active",
+				"status": values.get("status", "active"),
 				"authored_by": "Administrator",
-				"approved_by": "Administrator",
-				"approved_at": now_datetime(),
-				"break_glass_reason": "Local-only admissions cohort requires one approved operational policy.",
+				**(
+					{
+						"approved_by": "Administrator",
+						"approved_at": now_datetime(),
+						"break_glass_reason": "Local-only admissions cohort requires one approved operational policy.",
+					}
+					if values.get("status", "active") == "active"
+					else {}
+				),
 			}
 		)
 		_service_save(doc)
+
+
+def _ensure_lead_workspace_topology(staff_context: dict) -> dict:
+	"""Create the second local Lead team used only for scope-proof fixtures."""
+	campus = staff_context["campus"]
+	sibling_team = frappe.db.exists("CRM Team", SIBLING_TEAM_NAME)
+	if not sibling_team:
+		sibling_team = frappe.get_doc(
+			{
+				"doctype": "CRM Team",
+				"team_name": SIBLING_TEAM_NAME,
+				"team_type": "Sales",
+				"campus": campus,
+				"is_active": 1,
+			}
+		).insert(ignore_permissions=True).name
+
+	sibling_pool = frappe.db.exists("CRM Student Pool", SIBLING_POOL_NAME)
+	if not sibling_pool:
+		sibling_pool = frappe.get_doc(
+			{
+				"doctype": "CRM Student Pool",
+				"pool_name": SIBLING_POOL_NAME,
+				"team": sibling_team,
+				"campus": campus,
+				"is_active": 1,
+			}
+		).insert(ignore_permissions=True).name
+
+	sibling_staff = frappe.db.get_value("CRM Staff", {"user": SIBLING_LEAD_EMAIL}, "name")
+	if not sibling_staff:
+		raise frappe.ValidationError("Missing sibling Lead Sales fixture staff.")
+	staff = frappe.get_doc("CRM Staff", sibling_staff)
+	membership = next((row for row in staff.team_memberships if row.team == sibling_team), None)
+	if membership:
+		membership.function = "Lead Sales"
+		membership.is_primary = 1
+		membership.is_team_lead = 1
+	else:
+		staff.append(
+			"team_memberships",
+			{
+				"team": sibling_team,
+				"function": "Lead Sales",
+				"is_primary": 1,
+				"is_team_lead": 1,
+			},
+		)
+	staff.save(ignore_permissions=True)
+	# Repair any prior local seed run that put the current team's Sale in the
+	# sibling team. The two membership sets must remain disjoint for scope proof.
+	primary_sales = frappe.get_doc("CRM Staff", staff_context["staff_by_user"][SALE_EMAIL])
+	for row in list(primary_sales.team_memberships):
+		if row.team == sibling_team:
+			primary_sales.remove(row)
+	primary_sales.save(ignore_permissions=True)
+
+	sibling_sales_staff = frappe.db.get_value("CRM Staff", {"user": SIBLING_SALE_EMAIL}, "name")
+	if not sibling_sales_staff:
+		raise frappe.ValidationError("Missing sibling Sale fixture staff.")
+	sibling_sales = frappe.get_doc("CRM Staff", sibling_sales_staff)
+	sales_membership = next(
+		(row for row in sibling_sales.team_memberships if row.team == sibling_team),
+		None,
+	)
+	if not sales_membership:
+		sibling_sales.append(
+			"team_memberships",
+			{
+				"team": sibling_team,
+				"function": "Sale",
+				"is_primary": 0,
+				"is_team_lead": 0,
+			},
+		)
+		sibling_sales.save(ignore_permissions=True)
+	return {
+		"sibling_team": sibling_team,
+		"sibling_pool": sibling_pool,
+		"sibling_staff": sibling_staff,
+		"sibling_sales_staff": sibling_sales_staff,
+	}
+
+
+def _ensure_sibling_team_assignment(student: str, topology: dict) -> str:
+	"""Assign the scope-proof Student through the canonical ownership command."""
+	doc = frappe.get_doc("CRM Student", student)
+	if doc.owner_staff == topology["sibling_sales_staff"] and doc.owning_team == topology["sibling_team"]:
+		return doc.owner_staff
+	from crm.fcrm.student_ownership import change_student_ownership
+
+	result = change_student_ownership(
+		student=doc.name,
+		target_kind="owner",
+		target_id=topology["sibling_sales_staff"],
+		target_team_id=topology["sibling_team"],
+		reason="Assign local scope-proof Student to the sibling Lead Sales team.",
+		idempotency_key=f"{NAMESPACE}:sibling-assignment:{doc.name}:{doc.ownership_revision}",
+		expected_revision=int(doc.ownership_revision or 0),
+		correlation_id=f"{NAMESPACE}:sibling-assignment:{doc.name}",
+		_internal_service=True,
+	)
+	return result["owner_staff"]
+
+
+def _ensure_lead_workspace_actions(students_by_scenario: dict, staff_context: dict) -> list[str]:
+	"""Seed canonical Actions for the team queue through the governed command."""
+	from crm.fcrm.student_decision import _command_key, create_manual_action
+
+	owner = staff_context["staff_by_user"][SALE_EMAIL]
+	actions = []
+	for key, action_type, objective, priority in (
+		("gia-han", "CALL", "Xác nhận checklist hồ sơ học bổng.", "high"),
+		("minh-khang", "DOCUMENT_REQUEST", "Theo dõi bảng điểm còn thiếu.", "medium"),
+	):
+		idempotency_key = f"{NAMESPACE}:lead-workspace-action:{key}"
+		command_key = _command_key("manual_action", "Administrator", idempotency_key)
+		existing_action = frappe.db.get_value(
+			"CRM Action", {"generation_idempotency_key": command_key}, "name"
+		)
+		if existing_action:
+			actions.append(existing_action)
+			continue
+		result = create_manual_action(
+			students_by_scenario[key],
+			action_type,
+			objective,
+			idempotency_key=idempotency_key,
+			due_at=now_datetime() + timedelta(hours=4),
+			priority=priority,
+			assignee_staff=owner,
+		)
+		actions.append(result["action"])
+	return actions
 
 
 def _ensure_student(scenario: dict, context: dict, pool: str):
@@ -194,17 +490,31 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	student_name = result.get("student")
 	if result.get("outcome") not in {"created", "attached"} or not student_name:
 		raise frappe.ValidationError(f"Could not create local admissions Student {scenario['key']}: {result}")
-	return frappe.get_doc("CRM Student", student_name)
+	doc = frappe.get_doc("CRM Student", student_name)
+	if not doc.lifecycle_stage and doc.enrollment_status:
+		from crm.fcrm.lifecycle import get_lifecycle_stage
+
+		stage = get_lifecycle_stage(doc.enrollment_status) or "Lead"
+		frappe.db.set_value("CRM Student", student_name, "lifecycle_stage", stage, update_modified=False)
+		doc.reload()
+	return doc
+
 
 
 def _ensure_assigned(student: str):
-	from crm.fcrm.student_routing import enqueue_student_routing, process_routing_request
+	from crm.fcrm.student_routing import (
+		enqueue_student_routing,
+		process_routing_request,
+		retry_student_routing,
+	)
 
 	doc = frappe.get_doc("CRM Student", student)
 	if doc.owner_staff:
 		return doc.owner_staff
 	request = enqueue_student_routing(student, trigger="pool_entry", correlation_id=f"{NAMESPACE}:{student}")
 	result = process_routing_request(request.name)
+	if result.get("status") == "deferred":
+		result = retry_student_routing(request.name)
 	if result.get("status") != "applied":
 		raise frappe.ValidationError(f"Could not route local admissions Student {student}: {result}")
 	return result.get("owner_staff")
@@ -517,20 +827,69 @@ def _ensure_potential_score(student: str, scenario: dict):
 
 
 def _ensure_escalated_sla(student: str):
+	return _ensure_sla_status(student, "escalated").name
+
+
+def _sla_due_times(attempt, target_status: str) -> tuple:
+	"""Return the SLA worker timestamps needed to reach a showcase state."""
+	try:
+		return tuple(getattr(attempt, fieldname) for fieldname in _SLA_TRANSITION_FIELDS[target_status])
+	except KeyError as exc:
+		raise ValueError(f"Unsupported SLA showcase status: {target_status}") from exc
+
+
+def _latest_sla_attempt(student: str):
+	rows = frappe.get_all(
+		"CRM Student SLA Attempt",
+		filters={"student": student},
+		fields=["name", "status", "revision"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
+	return frappe.get_doc("CRM Student SLA Attempt", rows[0].name) if rows else None
+
+
+def _reset_sla_attempt(attempt):
+	"""Use the approved SLA reset workflow when a fixture state has drifted backwards."""
+	from crm.fcrm.student_sla import approve_sla_reset, request_sla_reset
+
+	request_sla_reset(
+		attempt.name,
+		reason="Reconcile the deterministic local SLA showcase state.",
+		evidence_reference=f"{NAMESPACE}:sla-showcase:{attempt.student}",
+		expected_revision=int(attempt.revision or 0),
+	)
+	attempt.reload()
+	approve_sla_reset(attempt.name, expected_revision=int(attempt.revision or 0))
+	return _latest_sla_attempt(attempt.student)
+
+
+def _ensure_sla_status(student: str, target_status: str):
+	"""Reconcile one local fixture through SLA commands and worker transitions only."""
 	from crm.fcrm.student_sla import _process_due_attempt
 
-	attempt_name = frappe.db.get_value("CRM Student SLA Attempt", {"student": student}, "name")
-	if not attempt_name:
+	if target_status not in _SLA_STATUS_RANK:
+		raise ValueError(f"Unsupported SLA showcase status: {target_status}")
+	attempt = _latest_sla_attempt(student)
+	if not attempt:
 		raise frappe.ValidationError(f"Local admissions Student {student} has no SLA attempt.")
-	attempt = frappe.get_doc("CRM Student SLA Attempt", attempt_name)
-	if attempt.status == "escalated":
-		return attempt.name
-	for due_at in (attempt.warning_at, attempt.breach_at, attempt.escalation_at):
+	if attempt.status not in _SLA_STATUS_RANK:
+		raise frappe.ValidationError(
+			f"Local admissions Student {student} has non-reconcilable SLA status {attempt.status}."
+		)
+	if _SLA_STATUS_RANK[attempt.status] > _SLA_STATUS_RANK[target_status]:
+		attempt = _reset_sla_attempt(attempt)
+	for due_at in _sla_due_times(attempt, target_status):
 		attempt.reload()
-		if attempt.status == "escalated":
+		if attempt.status == target_status:
 			break
 		_process_due_attempt(attempt.name, due_at)
-	return attempt.name
+	attempt.reload()
+	if attempt.status != target_status:
+		raise frappe.ValidationError(
+			f"Could not reconcile local admissions Student {student} to SLA status {target_status}; got {attempt.status}."
+		)
+	return attempt
 
 
 def _ensure_responded_sla(student: str, interaction: str):
@@ -561,3 +920,248 @@ def _manifest_row(student: str, scenario: dict, task_names: list[str] | None = N
 		"sla_status": attempt.status if attempt else None,
 		"tasks": task_names or [],
 	}
+
+
+def _ensure_crm_contacts(context: dict, staff_context: dict, students_by_scenario: dict):
+	"""Ensure CRM Contact records exist for the entire admissions pipeline."""
+	if not frappe.db.table_exists("CRM Contact"):
+		return
+
+	previous_conversion = frappe.flags.get("student_conversion_service")
+	previous_in_test = getattr(frappe.flags, "in_test", False)
+	frappe.flags.student_conversion_service = True
+	frappe.flags.in_test = True
+	try:
+		sale_staff = staff_context["staff_by_user"].get(SALE_EMAIL)
+		team = staff_context["team"]
+		campus = staff_context["campus"]
+
+		stage_status_map = {
+			"thao-an": ("Lead", "Unassigned", None, None),
+			"gia-han": ("MQL", "Counseling", sale_staff, sale_staff),
+			"minh-khang": ("Applicant", "Awaiting Documents", sale_staff, sale_staff),
+			"khanh-linh": ("Lost", "Lost", None, None),
+			"nhat-minh": ("Enrolled", "Won", None, None),
+		}
+
+		for scenario in SCENARIOS:
+			key = scenario["key"]
+			student_name = students_by_scenario.get(key)
+			stage, status, assigned_staff, owner_staff = stage_status_map.get(key, ("Lead", "Unassigned", None, None))
+			contact_name = frappe.db.get_value("CRM Contact", {"email": scenario["email"]}, "name")
+			contact_data = {
+				"doctype": "CRM Contact",
+				"full_name": scenario["student_name"],
+				"phone": scenario["phone"],
+				"email": scenario["email"],
+				"lifecycle_stage": stage,
+				"lead_status": status,
+				"owning_team": team,
+				"owner_staff": owner_staff,
+				"assigned_to": assigned_staff,
+				"student": student_name,
+				"branch": campus,
+				"major": context["major"],
+				"high_school": context["high_school"],
+				"source": context["source"],
+				"crm_campaign": context["campaign"],
+				"crm_event": context["event"],
+				"admission_year": context["admission_year"],
+				"notes": scenario["notes"],
+			}
+			if contact_name:
+				doc = frappe.get_doc("CRM Contact", contact_name)
+				doc.update(contact_data)
+				doc.save(ignore_permissions=True)
+			else:
+				frappe.get_doc(contact_data).insert(ignore_permissions=True)
+
+		extra_contacts = [
+			{
+				"full_name": "Nguyễn Thảo An (Trùng form)",
+				"phone": "0901803101",
+				"email": "nguyen-thao-an.2026.duplicate@example.test",
+				"lifecycle_stage": "Lead",
+				"lead_status": "Unassigned",
+				"owning_team": team,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ nghi trùng số điện thoại với học sinh Nguyễn Thảo An",
+			},
+			{
+				"full_name": "Hoàng Đức Anh",
+				"phone": "0901803106",
+				"email": "hoang-duc-anh.2026@example.test",
+				"lifecycle_stage": "Lead",
+				"lead_status": "Assigned",
+				"owning_team": team,
+				"owner_staff": sale_staff,
+				"assigned_to": sale_staff,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ mới nhận từ chiến dịch Open Day, cần gọi trong 15 phút",
+			},
+			{
+				"full_name": "Lê Quốc Bảo",
+				"phone": "0901803107",
+				"email": "le-quoc-bao.2026@example.test",
+				"lifecycle_stage": "MQL",
+				"lead_status": "Nurture",
+				"owning_team": team,
+				"owner_staff": sale_staff,
+				"assigned_to": sale_staff,
+				"branch": campus,
+				"major": context["major"],
+				"notes": "Hồ sơ nguội (>7 ngày chưa có tương tác lại)",
+			},
+		]
+
+		for extra in extra_contacts:
+			c_name = frappe.db.get_value("CRM Contact", {"email": extra["email"]}, "name")
+			if c_name:
+				doc = frappe.get_doc("CRM Contact", c_name)
+				doc.update(extra)
+				doc.save(ignore_permissions=True)
+			else:
+				frappe.get_doc({"doctype": "CRM Contact", **extra}).insert(ignore_permissions=True)
+	finally:
+		frappe.flags.in_test = previous_in_test
+		if previous_conversion is None:
+			frappe.flags.pop("student_conversion_service", None)
+		else:
+			frappe.flags.student_conversion_service = previous_conversion
+
+
+
+
+def _ensure_marketing_and_spend(context: dict, staff_context: dict):
+	"""Ensure Marketing Campaigns, Spends, Events and Segments exist."""
+	campus = staff_context["campus"]
+	mkt_staff = staff_context["staff_by_user"].get("pham-bao-chau.marketing@example.test")
+
+	campaigns = [
+		{"title": context["campaign"], "status": "Active", "budget": 500000000},
+		{"title": "FPTU 2025 Early Bird Admission Campaign", "status": "Completed", "budget": 200000000},
+		{"title": "FPTU 2026 Fall Scholarship Drive", "status": "Draft", "budget": 100000000},
+	]
+	for c in campaigns:
+		if not frappe.db.exists("CRM Campaign", c["title"]):
+			frappe.get_doc({
+				"doctype": "CRM Campaign",
+				"title": c["title"],
+				"status": c["status"],
+				"campus": campus,
+				"budget": c["budget"],
+				"owner_staff": mkt_staff,
+			}).insert(ignore_permissions=True)
+
+	# Spend record
+	if frappe.db.table_exists("CRM Campaign Spend") and not frappe.db.exists("CRM Campaign Spend", {"crm_campaign": context["campaign"]}):
+		frappe.get_doc({
+			"doctype": "CRM Campaign Spend",
+			"spend_date": now_datetime().date(),
+			"lead_source": context["source"],
+			"crm_campaign": context["campaign"],
+			"campus": campus,
+			"amount": 25000000,
+			"impressions": 50000,
+			"clicks": 1250,
+			"notes": "Chi phí quảng cáo Facebook Ads kỳ tuyển sinh 2026",
+		}).insert(ignore_permissions=True)
+
+	# Events
+	events = [
+		{
+			"title": context["event"],
+			"start_datetime": now_datetime() + timedelta(days=14),
+			"end_datetime": now_datetime() + timedelta(days=14, hours=4),
+			"location": "Hội trường A - Campus TP.HCM",
+		},
+		{
+			"title": "FPTU HCMC Career Orientation Workshop - May 2026",
+			"start_datetime": now_datetime() - timedelta(days=30),
+			"end_datetime": now_datetime() - timedelta(days=30, hours=-3),
+			"location": "Trường THPT Trần Đại Nghĩa",
+		},
+	]
+	for ev in events:
+		if not frappe.db.exists("CRM Event", ev["title"]):
+			frappe.get_doc({
+				"doctype": "CRM Event",
+				"title": ev["title"],
+				"crm_campaign": context["campaign"],
+				"start_datetime": ev["start_datetime"],
+				"end_datetime": ev["end_datetime"],
+				"location": ev["location"],
+				"owner_staff": mkt_staff,
+			}).insert(ignore_permissions=True)
+
+	# Segment
+	segment_title = "Học sinh THPT TP.HCM quan tâm CNTT - 2026"
+	if frappe.db.table_exists("CRM Segment") and not frappe.db.exists("CRM Segment", {"title": segment_title}):
+		frappe.get_doc({
+			"doctype": "CRM Segment",
+			"title": segment_title,
+			"is_public": 1,
+			"filters": json.dumps({
+				"groups": [
+					{
+						"conditions": [
+							{
+								"field": "source",
+								"operator": "=",
+								"value": context["source"],
+							}
+						]
+					}
+				]
+			}),
+		}).insert(ignore_permissions=True)
+
+
+def _ensure_master_data_changes(context: dict):
+	"""Ensure pending master data change records for manager approvals queue."""
+	if not frappe.db.table_exists("CRM Master Data Change"):
+		return
+	existing = frappe.db.get_value("CRM Master Data Change", {"status": "Proposed"}, "name")
+	if not existing:
+		prev_log_insert = frappe.flags.get("crm_governance_log_insert")
+		frappe.flags.crm_governance_log_insert = True
+		try:
+			frappe.get_doc({
+				"doctype": "CRM Master Data Change",
+				"change_kind": "normal",
+				"reference_doctype": "CRM Campus",
+				"reference_docname": context["campus"],
+				"action": "Create",
+				"status": "Proposed",
+				"registry_revision": "P9-DEC-002",
+				"reason": "Bổ sung cơ sở đào tạo mới phục vụ tuyển sinh 2026",
+				"new_value": "Campus Cần Thơ",
+				"idempotency_key": f"{NAMESPACE}:mdc:can-tho-campus",
+				"correlation_id": f"{NAMESPACE}:mdc",
+				"proposed_by": "Administrator",
+				"proposed_at": now_datetime(),
+			}).insert(ignore_permissions=True)
+		finally:
+			if prev_log_insert is None:
+				frappe.flags.pop("crm_governance_log_insert", None)
+			else:
+				frappe.flags.crm_governance_log_insert = prev_log_insert
+
+
+
+
+
+def _ensure_telephony_agents():
+	"""Ensure Telephony Agent records for fixture sales users."""
+	if not frappe.db.table_exists("Telephony Agent"):
+		return
+	for email in (SALE_EMAIL, "le-thanh-huong.leadsales@example.test"):
+		if not frappe.db.exists("Telephony Agent", {"user": email}):
+			frappe.get_doc({
+				"doctype": "Telephony Agent",
+				"user": email,
+				"agent_id": email.split("@")[0],
+			}).insert(ignore_permissions=True)
+

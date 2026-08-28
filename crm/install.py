@@ -17,6 +17,7 @@ def before_install():
 
 
 def after_install(force=False):
+	set_default_system_language()
 	add_chatwoot_cors_origin()
 	add_default_fields_layout(force)
 	add_property_setter()
@@ -34,6 +35,13 @@ def after_install(force=False):
 	add_assignment_rule_property_setters()
 	sync_frappe_crm_workspace()
 	frappe.db.commit()
+
+
+def set_default_system_language():
+	frappe.db.set_single_value("System Settings", "language", "vi")
+	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value("User", "Administrator", "language"):
+		frappe.db.set_value("User", "Administrator", "language", "vi")
+
 
 
 def complete_setup(_args: dict | None = None):

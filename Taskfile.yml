@@ -49,6 +49,7 @@ tasks:
   migrate:
     desc: Schema, patches, workspace sync
     cmds:
+      - python scripts/validate_doctype_json.py
       - "{{.EXEC}} {{.BENCH}} migrate"
 
   workspace:
@@ -93,6 +94,10 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
       - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_governance_write_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.ensure_local_integrity_keys"

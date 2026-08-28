@@ -282,7 +282,10 @@ doc_events = {
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"User": {
-		"before_validate": ["crm.api.live_demo.validate_user"],
+		"before_validate": [
+			"crm.api.live_demo.validate_user",
+			"crm.api.session.set_default_user_language",
+		],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
 	},
 }
