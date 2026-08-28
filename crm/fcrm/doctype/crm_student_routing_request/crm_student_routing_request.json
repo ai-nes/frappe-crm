@@ -1,0 +1,27 @@
+{
+ "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:request_key", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["request_key", "status", "revision", "student", "ownership_revision", "pool_revision_key", "campus", "student_pool", "routing_policy", "routing_policy_version", "route_trigger", "idempotency_key", "correlation_token", "due_at", "lease_token", "lease_expires_at", "attempt_count", "last_error_code", "completed_at", "schema_version"],
+ "fields": [
+  {"fieldname": "request_key", "fieldtype": "Data", "label": "Request Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"default": "pending", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "pending\nleased\ndeferred\napplied\nfailed\nsuperseded", "read_only": 1, "reqd": 1},
+  {"default": "0", "fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "ownership_revision", "fieldtype": "Int", "label": "Ownership Revision", "read_only": 1, "reqd": 1},
+  {"fieldname": "pool_revision_key", "fieldtype": "Data", "label": "Pool Revision Key", "read_only": 1, "reqd": 1},
+  {"fieldname": "campus", "fieldtype": "Link", "label": "Campus", "options": "CRM Campus", "read_only": 1, "reqd": 1},
+  {"fieldname": "student_pool", "fieldtype": "Link", "label": "Student Pool", "options": "CRM Student Pool", "read_only": 1, "reqd": 1},
+  {"fieldname": "routing_policy", "fieldtype": "Link", "label": "Routing Policy", "options": "CRM Student Routing Policy", "read_only": 1},
+  {"fieldname": "routing_policy_version", "fieldtype": "Int", "label": "Routing Policy Version", "read_only": 1},
+  {"default": "pool_entry", "fieldname": "route_trigger", "fieldtype": "Select", "label": "Route Trigger", "options": "pool_entry\npool_return", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1},
+  {"fieldname": "correlation_token", "fieldtype": "Data", "label": "Correlation Token", "read_only": 1, "reqd": 1},
+  {"fieldname": "due_at", "fieldtype": "Datetime", "label": "Due At", "read_only": 1},
+  {"fieldname": "lease_token", "fieldtype": "Data", "label": "Lease Token", "read_only": 1},
+  {"fieldname": "lease_expires_at", "fieldtype": "Datetime", "label": "Lease Expires At", "read_only": 1},
+  {"default": "0", "fieldname": "attempt_count", "fieldtype": "Int", "label": "Attempt Count", "read_only": 1, "reqd": 1},
+  {"fieldname": "last_error_code", "fieldtype": "Data", "label": "Last Error Code", "read_only": 1},
+  {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
+  {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Routing Request", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
+}

@@ -545,7 +545,7 @@ msgstr "Thêm Tab"
 
 #: frontend/src/components/Modals/CallLogDetailModal.vue:25
 msgid "Add Task"
-msgstr "Thêm Công Việc"
+msgstr "Thêm Task"
 
 #. Label of the add_weekly_holidays_section (Section Break) field in DocType
 #. 'Holiday List'
@@ -568,7 +568,7 @@ msgstr "Thêm ghi chú"
 
 #: frontend/src/components/Telephony/ExotelCallUI.vue:191
 msgid "Add a Task"
-msgstr "Thêm Một Công Việc"
+msgstr "Thêm Task"
 
 #: frontend/src/components/Settings/LeadSyncing/leadSyncSourceConfig.js:25
 msgid "Add a name for your source"
@@ -1300,7 +1300,7 @@ msgstr "Nhật ký thay đổi trạng thái CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/task/task.json
 msgid "Task"
-msgstr "Công việc CRM"
+msgstr "Task"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/telephony_agent/telephony_agent.json
@@ -1964,7 +1964,7 @@ msgstr "Tạo Ghi chú"
 
 #: frontend/src/components/Modals/TaskModal.vue:8
 msgid "Create Task"
-msgstr "Tạo Công việc"
+msgstr "Tạo Task"
 
 #: frontend/src/components/Modals/ViewModal.vue:9
 #: frontend/src/components/ViewControls.vue:696
@@ -2385,7 +2385,7 @@ msgstr "Xóa Trường THPT"
 
 #: frontend/src/components/Activities/TaskArea.vue:59
 msgid "Delete Task"
-msgstr "Xóa Công việc"
+msgstr "Xóa Task"
 
 #: frontend/src/components/ViewControls.vue:1115
 #: frontend/src/components/ViewControls.vue:1123
@@ -2758,7 +2758,7 @@ msgstr "Chỉnh sửa Hàng"
 #: frontend/src/components/Modals/CallLogDetailModal.vue:25
 #: frontend/src/components/Modals/TaskModal.vue:8
 msgid "Edit Task"
-msgstr "Chỉnh sửa Công việc"
+msgstr "Chỉnh sửa Task"
 
 #: frontend/src/components/Modals/ViewModal.vue:6
 msgid "Edit View"
@@ -4923,7 +4923,7 @@ msgstr "Tab mới"
 #: frontend/src/components/Activities/ActivityHeader.vue:48
 #: frontend/src/pages/Deals.vue:527 frontend/src/pages/Leads.vue:561
 msgid "New Task"
-msgstr "Thêm nhiệm vụ"
+msgstr "Thêm Task"
 
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:10
 msgid "New Template"
@@ -5468,11 +5468,11 @@ msgstr "Đi"
 #. Label of the log_owner (Link) field in DocType 'Status Change Log'
 #: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "Owner"
-msgstr "Chủ sở hữu"
+msgstr "Người phụ trách"
 
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:146
 msgid "Owner: {0}"
-msgstr "Chủ sở hữu: {0}"
+msgstr "Người phụ trách: {0}"
 
 #. Label of the page (Link) field in DocType 'Facebook Lead Form'
 #: crm/lead_syncing/doctype/facebook_lead_form/facebook_lead_form.json
@@ -6204,7 +6204,7 @@ msgstr "Hàng"
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
 msgid "SLA"
-msgstr "SLA"
+msgstr "Thời hạn xử lý (SLA)"
 
 #. Label of the sla_creation (Datetime) field in DocType 'CRM Deal'
 #. Label of the sla_creation (Datetime) field in DocType 'CRM Lead'
@@ -7068,12 +7068,12 @@ msgstr "Ghi chú..."
 #: frontend/src/components/Activities/ActivityHeader.vue:151
 #: frontend/src/components/Layouts/AppSidebar.vue:579
 msgid "Task"
-msgstr "Nhiệm vụ"
+msgstr "Task"
 
 #: frontend/src/pages/Deal.vue:590 frontend/src/pages/Lead.vue:442
 #: frontend/src/pages/MobileDeal.vue:464 frontend/src/pages/MobileLead.vue:309
 msgid "Tasks"
-msgstr "Nhiệm vụ"
+msgstr "Tasks"
 
 #: frontend/src/components/Settings/Settings.vue:210
 msgid "Telephony"
@@ -8755,7 +8755,7 @@ msgid "Links"
 msgstr "Liên kết"
 
 msgid "Major"
-msgstr "Ngành"
+msgstr "Ngành quan tâm"
 
 msgid "Source"
 msgstr "Nguồn"
@@ -9536,3 +9536,647 @@ msgstr "Thông tin phụ huynh"
 
 msgid "Identity"
 msgstr "Giấy tờ tùy thân"
+
+# Student ownership UI
+msgid "Current assignment"
+msgstr "Phân công hiện tại"
+
+msgid "Change ownership"
+msgstr "Cập nhật phân công"
+
+msgid "Loading…"
+msgstr "Đang tải…"
+
+msgid "Change student ownership"
+msgstr "Cập nhật phân công học sinh"
+
+msgid "Owner: {0} · Revision {1}"
+msgstr "Cá nhân phụ trách: {0} · Phiên bản {1}"
+
+msgid "Pool: {0} · Revision {1}"
+msgstr "Nhóm phụ trách: {0} · Phiên bản {1}"
+
+msgid "No active owner or pool."
+msgstr "Chưa có phân công đang hoạt động."
+
+msgid "Ownership changed"
+msgstr "Đã cập nhật phân công"
+
+msgid "Choose either an individual owner or a campus pool. The server verifies eligibility and scope."
+msgstr "Chọn cá nhân hoặc nhóm phụ trách theo chi nhánh. Hệ thống sẽ kiểm tra điều kiện và phạm vi."
+
+msgid "Assign to"
+msgstr "Phân công cho"
+
+msgid "Eligible owner"
+msgstr "Cá nhân đủ điều kiện"
+
+msgid "Eligible pool"
+msgstr "Nhóm đủ điều kiện"
+
+msgid "Campus pool"
+msgstr "Nhóm theo chi nhánh"
+
+msgid "Individual owner"
+msgstr "Cá nhân phụ trách"
+
+msgid "This reason is recorded in the ownership history."
+msgstr "Lý do này được lưu trong lịch sử phân công."
+
+msgid "Loading eligible ownership targets…"
+msgstr "Đang tải danh sách cá nhân/nhóm đủ điều kiện…"
+
+msgid "Save ownership"
+msgstr "Lưu phân công"
+
+msgid "Student ownership updated."
+msgstr "Đã cập nhật phân công học sinh."
+
+msgid "This ownership changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to change ownership."
+msgstr "Không thể cập nhật phân công."
+
+# Sales-facing lifecycle and SLA labels
+msgid "At a glance"
+msgstr "Tổng quan nhanh"
+
+msgid "Current state"
+msgstr "Trạng thái hiện tại"
+
+msgid "The information most useful for the next admissions action."
+msgstr "Thông tin quan trọng nhất cho bước tuyển sinh tiếp theo."
+
+msgid "Lifecycle"
+msgstr "Giai đoạn tuyển sinh"
+
+msgid "MQL"
+msgstr "MQL (Đủ điều kiện tư vấn)"
+
+msgid "Initial-response SLA"
+msgstr "Thời hạn phản hồi ban đầu (SLA)"
+
+msgid "Next deadline"
+msgstr "Hạn xử lý tiếp theo"
+
+msgid "Breach deadline"
+msgstr "Thời điểm quá hạn"
+
+msgid "Policy version"
+msgstr "Phiên bản chính sách"
+
+msgid "Escalated"
+msgstr "Cần xử lý gấp"
+
+msgid "Breached"
+msgstr "Đã quá hạn"
+
+msgid "Warning sent"
+msgstr "Đã gửi cảnh báo"
+
+msgid "Response recorded"
+msgstr "Đã ghi nhận phản hồi"
+
+msgid "Student routing"
+msgstr "Phân công tự động"
+
+msgid "Routing is operating normally."
+msgstr "Hệ thống đang phân công tự động bình thường."
+
+msgid "applied"
+msgstr "Đã phân công"
+
+msgid "deferred"
+msgstr "Chờ phân công"
+
+msgid "failed"
+msgstr "Phân công thất bại"
+
+msgid "Lifecycle unavailable"
+msgstr "Chưa có thông tin giai đoạn tuyển sinh"
+
+msgid "SLA Status"
+msgstr "Trạng thái thời hạn xử lý (SLA)"
+
+msgid "Change student lifecycle"
+msgstr "Chuyển giai đoạn tuyển sinh"
+
+msgid "Current stage: {0}. The server checks your permission, evidence and the latest revision before recording this transition."
+msgstr "Giai đoạn hiện tại: {0}. Hệ thống sẽ kiểm tra quyền, minh chứng và phiên bản mới nhất trước khi ghi nhận thay đổi."
+
+msgid "New stage"
+msgstr "Giai đoạn mới"
+
+msgid "Qualifying outcome"
+msgstr "Kết quả đủ điều kiện"
+
+msgid "Evidence category"
+msgstr "Loại minh chứng"
+
+msgid "Evidence DocType"
+msgstr "Loại dữ liệu minh chứng"
+
+msgid "Use the DocType that owns the approved Student-linked record."
+msgstr "Dùng loại dữ liệu chứa bản ghi đã được duyệt và liên kết với học sinh."
+
+msgid "Evidence reference"
+msgstr "Mã minh chứng"
+
+msgid "Enter the exact record name; it is checked against this Student and your read permission."
+msgstr "Nhập đúng tên bản ghi; hệ thống sẽ kiểm tra bản ghi với học sinh này và quyền xem của bạn."
+
+msgid "A reason is required for this transition and will be recorded in the lifecycle history."
+msgstr "Bắt buộc nhập lý do chuyển giai đoạn; lý do sẽ được lưu trong lịch sử tuyển sinh."
+
+msgid "Optional context recorded with this transition."
+msgstr "Thông tin bổ sung không bắt buộc, được lưu cùng lần chuyển giai đoạn này."
+
+msgid "No lifecycle transitions are currently available to you."
+msgstr "Hiện không có thao tác chuyển giai đoạn nào khả dụng với bạn."
+
+msgid "Record transition"
+msgstr "Ghi nhận chuyển giai đoạn"
+
+msgid "Lifecycle changed to {0}"
+msgstr "Đã chuyển sang giai đoạn {0}"
+
+msgid "Student lifecycle updated."
+msgstr "Đã cập nhật giai đoạn tuyển sinh."
+
+msgid "Unable to change the student lifecycle."
+msgstr "Không thể thay đổi giai đoạn tuyển sinh."
+
+msgid "Resume SLA"
+msgstr "Tiếp tục thời hạn xử lý"
+
+msgid "Pause SLA"
+msgstr "Tạm dừng thời hạn xử lý"
+
+msgid "No active Student SLA attempt."
+msgstr "Chưa có thời hạn xử lý đang hoạt động."
+
+msgid "Resume the SLA clock. The elapsed pause will be recorded."
+msgstr "Tiếp tục bộ đếm thời hạn xử lý. Thời gian đã tạm dừng sẽ được ghi nhận."
+
+msgid "Pause the SLA clock with an approved waiting reason."
+msgstr "Tạm dừng bộ đếm thời hạn xử lý với lý do chờ đã được phê duyệt."
+
+msgid "Pause reason"
+msgstr "Lý do tạm dừng"
+
+msgid "Resume Student SLA"
+msgstr "Tiếp tục thời hạn xử lý học sinh"
+
+msgid "Pause Student SLA"
+msgstr "Tạm dừng thời hạn xử lý học sinh"
+
+msgid "Student SLA resumed."
+msgstr "Đã tiếp tục thời hạn xử lý học sinh."
+
+msgid "Student SLA paused."
+msgstr "Đã tạm dừng thời hạn xử lý học sinh."
+
+msgid "This SLA changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Thời hạn xử lý đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to update the Student SLA."
+msgstr "Không thể cập nhật thời hạn xử lý học sinh."
+
+msgid "Retry student routing"
+msgstr "Thử lại phân công học sinh"
+
+msgid "Retry this deferred routing request. The server rechecks the current Student ownership, pool policy and eligible members."
+msgstr "Thử lại yêu cầu phân công đang chờ. Hệ thống sẽ kiểm tra lại phân công hiện tại, chính sách nhóm và nhân sự đủ điều kiện."
+
+msgid "Current reason: {0}"
+msgstr "Lý do hiện tại: {0}"
+
+msgid "Retry routing"
+msgstr "Thử lại phân công"
+
+msgid "Student routing retry submitted."
+msgstr "Đã gửi yêu cầu thử lại phân công học sinh."
+
+msgid "This routing request changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Yêu cầu phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to retry student routing."
+msgstr "Không thể thử lại phân công học sinh."
+
+msgid "Review conversations and record their outcomes."
+msgstr "Xem lại các cuộc trao đổi và ghi nhận kết quả."
+
+msgid "Record outcome"
+msgstr "Ghi nhận kết quả"
+
+msgid "Record student outcome"
+msgstr "Ghi nhận kết quả trao đổi"
+
+msgid "Continuity"
+msgstr "Bước tiếp theo"
+
+msgid "Next action"
+msgstr "Bước tiếp theo"
+
+msgid "Waiting until"
+msgstr "Chờ đến"
+
+msgid "Reason / waiting context"
+msgstr "Lý do / bối cảnh chờ"
+
+msgid "Evidence references"
+msgstr "Mã minh chứng"
+
+msgid "Use outcome IDs or category:doctype:name references, separated by commas."
+msgstr "Nhập mã kết quả hoặc mã minh chứng theo dạng category:doctype:name, ngăn cách bằng dấu phẩy."
+
+msgid "Follow up with student"
+msgstr "Theo dõi lại học sinh"
+
+msgid "Student outcome recorded."
+msgstr "Đã ghi nhận kết quả trao đổi."
+
+msgid "Unable to record the Student outcome."
+msgstr "Không thể ghi nhận kết quả trao đổi."
+
+msgid "Outcome recorded: {0}"
+msgstr "Đã ghi nhận kết quả: {0}"
+
+msgid "connected"
+msgstr "Đã liên hệ"
+
+msgid "qualified"
+msgstr "Đủ điều kiện"
+
+msgid "follow_up_required"
+msgstr "Cần theo dõi"
+
+msgid "no_response"
+msgstr "Chưa phản hồi"
+
+msgid "not_interested"
+msgstr "Không quan tâm"
+
+msgid "invalid"
+msgstr "Không hợp lệ"
+
+msgid "completed"
+msgstr "Hoàn tất"
+
+msgid "task"
+msgstr "Tạo Task tiếp theo"
+
+msgid "waiting"
+msgstr "Chờ phản hồi"
+
+msgid "terminal"
+msgstr "Kết thúc"
+
+# Student intake modal
+msgid "Fill in the student information. Provide at least one valid phone number or email address."
+msgstr "Điền thông tin học sinh. Cần có ít nhất một số điện thoại hợp lệ hoặc địa chỉ email."
+
+msgid "Identity and assignment"
+msgstr "Giấy tờ tùy thân và phân công"
+
+msgid "National ID (optional)"
+msgstr "Số CCCD (không bắt buộc)"
+
+msgid "Initial pool (optional)"
+msgstr "Nhóm phụ trách ban đầu (không bắt buộc)"
+
+msgid "Intake attached to the existing admission case."
+msgstr "Thông tin đã được gắn vào hồ sơ tuyển sinh hiện có."
+
+msgid "Student intake created."
+msgstr "Đã tạo học sinh."
+
+msgid "A review is required before this intake can continue."
+msgstr "Cần xem xét trước khi tiếp tục tiếp nhận học sinh."
+
+msgid "Intake completed."
+msgstr "Đã hoàn tất tiếp nhận."
+
+msgid "The intake service returned an invalid result."
+msgstr "Dịch vụ tiếp nhận trả về kết quả không hợp lệ."
+
+msgid "Unable to submit intake."
+msgstr "Không thể tạo học sinh."
+
+# Student Detail admissions workspace
+msgid "Admissions action"
+msgstr "Thao tác tuyển sinh"
+
+msgid "Admissions action saved."
+msgstr "Đã lưu hoạt động tuyển sinh."
+
+msgid "Admissions context"
+msgstr "Bối cảnh tuyển sinh"
+
+msgid "Campaign, event and scholarship signals for the next conversation."
+msgstr "Tín hiệu từ chiến dịch, sự kiện và học bổng cho lần tư vấn tiếp theo."
+
+msgid "Loading admissions context…"
+msgstr "Đang tải bối cảnh tuyển sinh…"
+
+msgid "No campaign, event, scholarship, or next-action context is available yet."
+msgstr "Chưa có thông tin chiến dịch, sự kiện, học bổng hoặc hành động tiếp theo."
+
+msgid "Potential score recalculation pending"
+msgstr "Điểm tiềm năng đang được tính lại"
+
+msgid "Sensitive document · private"
+msgstr "Tài liệu nhạy cảm · riêng tư"
+
+msgid "Open Day / event"
+msgstr "Open Day / sự kiện"
+
+msgid "Scholarship interest"
+msgstr "Quan tâm học bổng"
+
+msgid "Next best action"
+msgstr "Hành động tiếp theo phù hợp nhất"
+
+msgid "Up to date"
+msgstr "Đã cập nhật"
+
+msgid "Recalculation pending"
+msgstr "Đang chờ tính lại"
+
+msgid "Not calculated yet"
+msgstr "Chưa tính điểm"
+
+msgid "confidence"
+msgstr "độ tin cậy"
+
+msgid "Potential score freshness"
+msgstr "Trạng thái cập nhật điểm tiềm năng"
+
+msgid "Latest score: {0}"
+msgstr "Điểm mới nhất: {0}"
+
+msgid "Sales decisions and actions"
+msgstr "Quyết định và công việc bán hàng"
+
+msgid "Pending decision: {0}"
+msgstr "Quyết định đang chờ: {0}"
+
+msgid "Status: {0} · Due: {1}"
+msgstr "Trạng thái: {0} · Hạn: {1}"
+
+msgid "Update action"
+msgstr "Cập nhật công việc"
+
+msgid "Latest action: {0}"
+msgstr "Công việc gần nhất: {0}"
+
+msgid "Linked interaction: {0}"
+msgstr "Tương tác liên kết: {0}"
+
+msgid "Not scheduled"
+msgstr "Chưa lên lịch"
+
+msgid "Unable to load more lifecycle history."
+msgstr "Không thể tải thêm lịch sử giai đoạn tuyển sinh."
+
+msgid "Other"
+msgstr "Khác"
+
+msgid "Competing schools"
+msgstr "Trường đang cân nhắc"
+
+msgid "Reason for choosing the major"
+msgstr "Lý do chọn ngành"
+
+msgid "Finance and scholarship"
+msgstr "Tài chính và học bổng"
+
+msgid "Parent influence"
+msgstr "Ảnh hưởng của phụ huynh"
+
+msgid "Lead hotness"
+msgstr "Mức độ tiềm năng"
+
+msgid "Action"
+msgstr "Hoạt động"
+
+msgid "Save action"
+msgstr "Lưu hoạt động"
+
+msgid "Unable to save this admissions action."
+msgstr "Không thể lưu hoạt động tuyển sinh này."
+
+msgid "Digital signal"
+msgstr "Tín hiệu số"
+
+msgid "Record an acquisition or digital behaviour."
+msgstr "Ghi nhận nguồn tiếp cận hoặc hành vi số."
+
+msgid "Call attempt"
+msgstr "Cuộc gọi chưa kết nối"
+
+msgid "Record an unanswered or attempted call."
+msgstr "Ghi nhận cuộc gọi không bắt máy hoặc chưa kết nối."
+
+msgid "Successful call"
+msgstr "Cuộc gọi kết nối thành công"
+
+msgid "Record a connected counselling call."
+msgstr "Ghi nhận cuộc gọi tư vấn đã kết nối."
+
+msgid "Brochure sent"
+msgstr "Đã gửi brochure"
+
+msgid "Record admissions information sent to the student."
+msgstr "Ghi nhận thông tin tuyển sinh đã gửi cho học sinh."
+
+msgid "Update major interest"
+msgstr "Cập nhật ngành quan tâm"
+
+msgid "Capture a change in programme interest."
+msgstr "Ghi nhận thay đổi ngành học quan tâm."
+
+msgid "Change lead status"
+msgstr "Chuyển trạng thái lead"
+
+msgid "Request a governed lifecycle transition."
+msgstr "Yêu cầu chuyển trạng thái theo quy trình."
+
+msgid "Invite to Open Day"
+msgstr "Mời tham dự Open Day"
+
+msgid "Record an event invitation."
+msgstr "Ghi nhận lời mời tham dự sự kiện."
+
+msgid "Register for event"
+msgstr "Đăng ký sự kiện"
+
+msgid "Record event registration."
+msgstr "Ghi nhận đăng ký sự kiện."
+
+msgid "Check in to event"
+msgstr "Check-in sự kiện"
+
+msgid "Record event check-in."
+msgstr "Ghi nhận check-in sự kiện."
+
+msgid "Capture scholarship target and confidence."
+msgstr "Ghi nhận mức học bổng quan tâm và độ tin cậy."
+
+msgid "Admissions task"
+msgstr "Công việc tuyển sinh"
+
+msgid "Create a follow-up task linked to this Student."
+msgstr "Tạo công việc theo dõi liên kết với học sinh này."
+
+msgid "Admissions insight"
+msgstr "Insight học sinh"
+
+msgid "Create a structured counselling note."
+msgstr "Tạo ghi chú tư vấn theo cấu trúc."
+
+msgid "Assign counselor"
+msgstr "Phân công tư vấn viên"
+
+msgid "Assign the Student to a counselor through the ownership command."
+msgstr "Phân công học sinh cho tư vấn viên qua thao tác phân công sở hữu."
+
+msgid "Facebook Ads click"
+msgstr "Nhấp quảng cáo Facebook"
+
+msgid "Landing Page visit"
+msgstr "Truy cập Landing Page"
+
+msgid "Messenger chat"
+msgstr "Chat Messenger"
+
+msgid "Zalo chat"
+msgstr "Chat Zalo"
+
+msgid "Website visit"
+msgstr "Truy cập website"
+
+msgid "Admissions prediction tool"
+msgstr "Dùng công cụ dự đoán tuyển sinh"
+
+msgid "Form submit"
+msgstr "Gửi biểu mẫu"
+
+msgid "New lead status"
+msgstr "Trạng thái lead mới"
+
+msgid "Scholarship target"
+msgstr "Mức học bổng quan tâm"
+
+msgid "Confidence (%)"
+msgstr "Mức độ tin cậy (%)"
+
+msgid "Task title"
+msgstr "Tiêu đề công việc"
+
+msgid "Due date"
+msgstr "Hạn hoàn thành"
+
+msgid "Counselor"
+msgstr "Tư vấn viên"
+
+msgid "Team (optional when unambiguous)"
+msgstr "Nhóm phụ trách (không bắt buộc nếu đã xác định rõ)"
+
+msgid "Please provide at least one admissions insight."
+msgstr "Hãy nhập ít nhất một insight học sinh."
+
+msgid "Please provide: {0}."
+msgstr "Hãy nhập: {0}."
+
+msgid "Invited"
+msgstr "Đã mời"
+
+msgid "Registered"
+msgstr "Đã đăng ký"
+
+msgid "Checked-in"
+msgstr "Đã check-in"
+
+# Student Detail admissions service messages
+msgid "Authentication is required."
+msgstr "Bạn cần đăng nhập để tiếp tục."
+
+msgid "Student is outside your current scope."
+msgstr "Học sinh nằm ngoài phạm vi hiện tại của bạn."
+
+msgid "You are not permitted to perform this admissions action."
+msgstr "Bạn không có quyền thực hiện hoạt động tuyển sinh này."
+
+msgid "You are not permitted to edit this Student profile."
+msgstr "Bạn không có quyền chỉnh sửa hồ sơ học sinh này."
+
+msgid "{0} is required."
+msgstr "Bắt buộc nhập {0}."
+
+msgid "Payload must be an object."
+msgstr "Dữ liệu gửi lên phải là một đối tượng."
+
+msgid "The idempotency key was already used for another request."
+msgstr "Khóa idempotency đã được dùng cho một yêu cầu khác."
+
+msgid "Student phone is required for a call action."
+msgstr "Cần có số điện thoại học sinh để thực hiện cuộc gọi."
+
+msgid "The event does not exist."
+msgstr "Sự kiện không tồn tại."
+
+msgid "Invited to {0}"
+msgstr "Đã mời tham dự {0}"
+
+msgid "Checked-in at {0}"
+msgstr "Đã check-in tại {0}"
+
+msgid "Registered for {0}"
+msgstr "Đã đăng ký {0}"
+
+msgid "Open Day invitation"
+msgstr "Mời tham dự Open Day"
+
+msgid "The selected major does not exist."
+msgstr "Ngành đã chọn không tồn tại."
+
+msgid "Scholarship intent type is not configured."
+msgstr "Chưa cấu hình loại mối quan tâm học bổng."
+
+msgid "Team is required when the counselor belongs to multiple teams."
+msgstr "Cần chọn nhóm khi tư vấn viên thuộc nhiều nhóm."
+
+msgid "Admissions assignment"
+msgstr "Phân công tuyển sinh"
+
+msgid "Unsupported admissions action."
+msgstr "Hoạt động tuyển sinh không được hỗ trợ."
+
+msgid "Expected revision is required."
+msgstr "Bắt buộc có phiên bản dự kiến."
+
+msgid "Occurred at is required."
+msgstr "Bắt buộc có thời điểm xảy ra."
+
+msgid "Student activity changed; reload before retrying."
+msgstr "Hoạt động của học sinh đã thay đổi; hãy tải lại trước khi thử lại."
+
+msgid "Only an admissions supervisor may change document visibility."
+msgstr "Chỉ quản lý tuyển sinh mới được thay đổi chế độ hiển thị tài liệu."
+
+msgid "File is not attached to this Student."
+msgstr "Tệp không được đính kèm với học sinh này."
+
+msgid "Making a Student document public requires confirmation."
+msgstr "Cần xác nhận trước khi công khai tài liệu của học sinh."
+
+msgid "Counseling"
+msgstr "Tư vấn"
+
+msgid "Outreach"
+msgstr "Tiếp cận"
+
+msgid "Connected"
+msgstr "Đã kết nối"

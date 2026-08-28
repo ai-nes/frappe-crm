@@ -22,10 +22,33 @@ class CRMIntent(Document):
 			existing = frappe.db.get_value("CRM Intent", filters, "name")
 			if existing:
 				frappe.throw(
-					_("Interaction {0} already has a Dominant intent ({1}). Only one Dominant intent is allowed per interaction.").format(
-						self.interaction, existing
-					)
+					_(
+						"Interaction {0} already has a Dominant intent ({1}). Only one Dominant intent is allowed per interaction."
+					).format(self.interaction, existing)
 				)
+
+	def on_update(self):
+		if self.student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(self.student, "intent_material_change")
+			# Every intent is a direct Intent-scorer input -- always
+			# scoring-relevant, unlike a generic Student field edit.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(self.student, "intent_material_change")
+
+	def on_trash(self):
+		if self.student:
+			from crm.services.student_context import mark_student_context_changed
+
+			mark_student_context_changed(self.student, "intent_deleted")
+			# Deleting an Intent-scorer input changes the same fact surface
+			# as editing one -- the current score must not be left marked
+			# fresh against evidence that no longer exists.
+			from crm.services.score_revision import bump_score_input_revision
+
+			bump_score_input_revision(self.student, "intent_deleted")
 
 	@staticmethod
 	def default_list_data():
@@ -57,5 +80,15 @@ class CRMIntent(Document):
 			{"label": "Confidence", "type": "Percent", "key": "confidence", "width": "8rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "interaction", "student", "intent_type", "intent_role", "polarity", "importance", "confidence", "modified"]
+		rows = [
+			"name",
+			"interaction",
+			"student",
+			"intent_type",
+			"intent_role",
+			"polarity",
+			"importance",
+			"confidence",
+			"modified",
+		]
 		return {"columns": columns, "rows": rows}

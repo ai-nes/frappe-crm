@@ -9,7 +9,7 @@ CUSTOM_FIELDS = {
 			"label": "AI Exposed",
 			"default": "0",
 			"description": "Whether this DocType is discoverable/servable through the crm-agents "
-			"Capability Gateway. Changing this requires the AI Capability Admin role.",
+			"Capability Gateway. Changing this requires the System Manager role.",
 			"insert_after": "custom",
 		}
 	],
@@ -38,17 +38,7 @@ def execute():
 		frappe.db.sql_ddl(
 			"ALTER TABLE `tabDocType` ADD COLUMN `custom_ai_exposed` INT(1) NOT NULL DEFAULT 0"
 		)
-	_ensure_ai_capability_admin_role()
 	_seed_exposed_crm_doctypes()
-
-
-def _ensure_ai_capability_admin_role():
-	if frappe.db.exists("Role", "AI Capability Admin"):
-		return
-	role = frappe.new_doc("Role")
-	role.role_name = "AI Capability Admin"
-	role.desk_access = 1
-	role.insert(ignore_permissions=True)
 
 
 def _seed_exposed_crm_doctypes():
@@ -64,6 +54,7 @@ def _seed_exposed_crm_doctypes():
 	# distinct from 0 and would otherwise silently skip the row.
 	frappe.db.sql(
 		"UPDATE `tabDocType` SET custom_ai_exposed = 1 "
-		"WHERE name LIKE 'CRM%' AND istable = 0 AND issingle = 0 "
+		"WHERE name LIKE 'CRM%' AND name NOT IN ('CRM Student', 'CRM Intent', 'CRM Interaction') "
+		"AND istable = 0 AND issingle = 0 "
 		"AND COALESCE(custom_ai_exposed, 0) != 1"
 	)

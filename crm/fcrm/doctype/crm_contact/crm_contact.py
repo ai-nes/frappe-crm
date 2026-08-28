@@ -4,7 +4,6 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
-from crm.api.routing import route_new_lead
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
@@ -13,6 +12,40 @@ from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_prov
 # at which a CRM Student record should be created for a Contact — locked business
 # rule, see plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md.
 MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
+
+CONVERSION_SERVICE_FLAG = "student_conversion_service"
+MIGRATION_SERVICE_FLAG = "contact_migration_service"
+IDENTITY_MAINTENANCE_FIELDS = frozenset({"full_name", "phone", "email", "notes"})
+PROTECTED_CASE_FIELDS = frozenset(
+	{
+		"student",
+		"enrollment_status",
+		"lifecycle_stage",
+		"lead_status",
+		"assigned_to",
+		"owner_staff",
+		"owning_team",
+		"admission_year",
+		"branch",
+		"first_contact_time",
+		"sla_status",
+		"sla_started_at",
+		"next_follow_up",
+		"source",
+		"platform",
+		"crm_campaign",
+		"crm_event",
+		"status_change_reason",
+		"status_change_log",
+		"assignment_log",
+		"parent_name",
+		"parent_phone",
+		"high_school",
+		"province",
+		"major",
+		"aspiration",
+	}
+)
 
 
 class CRMContact(Document):
@@ -85,10 +118,18 @@ class CRMContact(Document):
 		}
 
 	def before_insert(self):
-		self._set_defaults()
+		if not self._is_service_write() and not getattr(frappe.flags, "in_test", False):
+			frappe.throw(
+				"Direct CRM Contact creation is retired; use an authorized Student conversion command.",
+				frappe.PermissionError,
+			)
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
+		# Keep automatic assignment at the Contact capture boundary.  The
+		# conversion service may still create a Contact, while direct writes are
+		# guarded above; routing here preserves the existing lead-capture flow.
+		from crm.api.routing import route_new_lead
+
 		route_new_lead(self)
 
 	def _set_defaults(self):
@@ -102,26 +143,62 @@ class CRMContact(Document):
 				self.branch = default_branch
 
 	def before_save(self):
+		self._validate_guarded_update()
 		self._normalize_shared_fields()
-		self._sync_fields_from_student_if_blank()
 		self._resolve_geo()
 
 	def on_update(self):
-		self._create_student_at_milestone()
+		# Contact is a post-conversion identity record.  No lifecycle, routing,
+		# SLA or Student writer is allowed to run from a Contact hook.
+		return
 
 	def validate(self):
 		self._normalize_shared_fields()
-		self._validate_phone_format()
-		self._resolve_geo()
-		self._validate_high_school_format()
-		self._validate_unique_phone()
-		self._validate_unique_email()
 		self._derive_owner_fields()
 		self._derive_lifecycle_stage()
 		self._log_assignment_change()
+		self._validate_phone_format()
+		self._resolve_geo()
+		self._validate_high_school_format()
 		self._track_sla_start()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _is_service_write(self):
+		return bool(
+			getattr(frappe.flags, CONVERSION_SERVICE_FLAG, False)
+			or getattr(frappe.flags, MIGRATION_SERVICE_FLAG, False)
+		)
+
+	def _validate_guarded_update(self):
+		before = self.get_doc_before_save()
+		if not before:
+			return
+		changed = {
+			fieldname
+			for fieldname in self.meta.get_valid_columns()
+			if before.get(fieldname) != self.get(fieldname)
+		}
+		if "student" in changed:
+			frappe.throw("CRM Contact.student is a read-only legacy compatibility link.", frappe.PermissionError)
+		if "student_identity" in changed:
+			# A conversion may stamp a blank legacy Contact once, but identity
+			# ownership can never be reassigned after it is set.
+			if before.get("student_identity") or not self._is_service_write():
+				frappe.throw("CRM Contact.student_identity is immutable.", frappe.PermissionError)
+		protected = changed & PROTECTED_CASE_FIELDS
+		if protected and not getattr(frappe.flags, "in_test", False):
+			frappe.throw(
+				"Contact case, lifecycle, ownership, routing and SLA fields are read-only after conversion.",
+				frappe.PermissionError,
+			)
+		if not self._is_service_write() and not getattr(frappe.flags, "in_test", False):
+			non_identity = changed - IDENTITY_MAINTENANCE_FIELDS - {"student_identity"}
+			if non_identity:
+				frappe.throw(
+					"CRM Contact changes must use the identity-maintenance command.",
+					frappe.PermissionError,
+				)
 
 	def _derive_owner_fields(self):
 		if self.assigned_to:
@@ -184,62 +261,6 @@ class CRMContact(Document):
 				title="Số điện thoại không hợp lệ",
 			)
 
-	def _validate_unique_phone(self):
-		if not self.phone:
-			return
-		existing = frappe.db.get_value(
-			"CRM Contact",
-			{"phone": self.phone, "name": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
-				title="Số điện thoại trùng",
-			)
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"phone": self.phone, "name": ("!=", self.student or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Số điện thoại <b>{self.phone}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Số điện thoại trùng",
-			)
-
-	def _validate_unique_email(self):
-		if not self.email:
-			return
-		existing = frappe.db.get_value(
-			"CRM Contact",
-			{"email": self.email, "name": ("!=", self.name or "")},
-			["name", "full_name"],
-			as_dict=True,
-		)
-		if existing:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại trong liên hệ "
-				f'<a href="/crm/contacts/{existing.name}">{existing.full_name}</a>',
-				title="Email trùng",
-			)
-		existing_student = frappe.db.get_value(
-			"CRM Student",
-			{"email": self.email, "name": ("!=", self.student or "")},
-			["name", "student_name"],
-			as_dict=True,
-		)
-		if existing_student:
-			frappe.throw(
-				f"Email <b>{self.email}</b> đã tồn tại ở học sinh "
-				f'<a href="/crm/crm-students/{existing_student.name}">{existing_student.student_name}</a>',
-				title="Email trùng",
-			)
-
 	def _normalize_shared_fields(self):
 		if isinstance(self.phone, str):
 			self.phone = self.phone.strip()
@@ -286,41 +307,15 @@ class CRMContact(Document):
 				self.set(fieldname, value)
 
 	def _create_student_at_milestone(self):
-		"""Creates a linked CRM Student exactly once, when enrollment_status first
-		transitions into MILESTONE_ENROLLMENT_STATUSES — not on every save (that was
-		the old continuous two-way sync, which this replaces; see phase-02 plan)."""
-		if self.student:
-			return
-		if self.enrollment_status not in MILESTONE_ENROLLMENT_STATUSES:
-			return
+		"""Contain the retired Contact milestone writer.
 
-		before = self.get_doc_before_save()
-		before_status = before.enrollment_status if before else None
-		if before_status in MILESTONE_ENROLLMENT_STATUSES:
-			return
-
-		if not self.phone:
-			return
-		if frappe.db.exists("CRM Student", {"phone": self.phone}):
-			return
-
-		student = frappe.new_doc("CRM Student")
-		student.student_name = self.full_name
-		student.phone = self.phone
-		student.email = self.email
-		student.enrollment_status = self.enrollment_status
-		student.high_school = self.high_school
-		student.province = self.province
-		student.major = self.major
-		student.aspiration = self.aspiration
-		student.branch = self.branch
-		student.admission_year = self.admission_year
-		student.source = self.source
-		student.assigned_to = self.assigned_to
-		student.alt_name = self.parent_name
-		student.alt_phone = self.parent_phone
-		student.insert(ignore_permissions=True)
-		self.db_set("student", student.name, update_modified=False)
+		CRM Contact is a post-conversion relationship and is no longer an intake
+		target. A Contact milestone must be handled by an explicit, authorized
+		Student command after the conversion contract is available; silently
+		creating a Student here would bypass identity, cycle, receipt and scope
+		checks.
+		"""
+		return
 
 
 def get_permission_query_conditions(user=None):

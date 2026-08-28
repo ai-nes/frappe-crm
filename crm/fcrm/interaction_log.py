@@ -1,15 +1,13 @@
-"""Phase 4/5/6: creates CRM Interaction records from the source events the
-admissions operating model considers meaningful lead touchpoints -- outgoing/
-incoming Communication, a completed Task, a Call Log entry, a CRM Contact
+"""Creates CRM Interaction records from the source events the admissions
+operating model considers meaningful lead touchpoints -- outgoing/incoming
+Communication, a completed Task, a Call Log entry, a CRM Contact
 lifecycle/assignment change, a Consent Event, a CRM Event Participation
-status change (Phase 5), and a CRM Campaign Touchpoint insert (Phase 6, added
-to satisfy the operating model's "no customer activity outside Interaction"
-condition, which a bare Touchpoint insert previously violated). Each
-dispatcher below is wired via hooks.py doc_events and fires only on the
-specific has_value_changed transition listed in the guard tables in
-plans/260822-admissions-crm-alignment/phase-04-interaction-standard.md and
-phase-05-campaign-event-overhaul.md -- do not loosen these into a generic
-"on every save" check.
+status change, and a CRM Campaign Touchpoint insert (added to satisfy the
+operating model's "no customer activity outside Interaction" condition,
+which a bare Touchpoint insert previously violated). Each dispatcher below
+is wired via hooks.py doc_events and fires only on the specific
+has_value_changed transition each guard checks explicitly -- do not loosen
+these into a generic "on every save" check.
 
 Dispatchers are skipped while `frappe.flags.in_patch` is set, so migration
 patches that backfill historical records (e.g. converting existing singular
@@ -19,6 +17,8 @@ present-dated interactions for years-old activity.
 """
 
 import frappe
+
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
 
 CONSENT_EVENT_TO_INTERACTION_TYPE = {
 	"Opted Out": "Opt-out",
@@ -37,6 +37,84 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
+# Attribution is evidence, not an admissions engagement.  In particular, an
+# event registration/check-in must not close Student SLA or create outcomes.
+SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
+
+# CRM Contact is the enduring lead/contact entity itself, not a discrete source
+# event -- create_interaction_from_contact_update reuses it as the reference
+# for every lifecycle/assignment transition on that contact. Keying
+# external_id off it would collapse distinct Stage Changed / Lead Assigned /
+# Lead Reassigned events on the same contact into a single deduplicated row,
+# destroying that history. Doctypes here never get an external_id.
+NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
+
+
+def external_id_for(reference_doctype, reference_docname, interaction_type):
+	if not reference_doctype or not reference_docname or not interaction_type:
+		return None
+	if reference_doctype in NON_DEDUPABLE_REFERENCE_DOCTYPES:
+		return None
+	return f"{reference_doctype}:{reference_docname}:{interaction_type}"
+
+
+def _source_matches_student(doctype, name, student, seen=None):
+	"""Resolve provenance through the source's canonical Student/Contact link."""
+	try:
+		if not doctype or not name or not frappe.db.exists(doctype, name):
+			return False
+	except Exception:
+		return False
+	# A completed source may be linked directly to CRM Student. The name match is
+	# the same canonical identity boundary used for a CRM Contact relationship.
+	if doctype == "CRM Student":
+		return name == student
+	seen = seen or set()
+	key = (doctype, name)
+	if key in seen:
+		return False
+	seen.add(key)
+	doc = frappe.get_doc(doctype, name)
+	if getattr(doc, "student", None):
+		return doc.student == student
+	for fieldname in ("crm_contact", "contact", "customer", "party"):
+		contact = getattr(doc, fieldname, None)
+		if contact and frappe.db.exists("CRM Contact", contact):
+			return contact_is_linked_to_student(contact, student)
+	ref_doctype = getattr(doc, "reference_doctype", None)
+	ref_name = getattr(doc, "reference_docname", None) or getattr(doc, "reference_name", None)
+	if ref_doctype and ref_name:
+		return _source_matches_student(ref_doctype, ref_name, student, seen)
+	for row in getattr(doc, "links", None) or []:
+		link_doctype = getattr(row, "link_doctype", None) or getattr(row, "doctype", None)
+		link_name = getattr(row, "link_name", None) or getattr(row, "name", None)
+		if link_doctype and link_name and _source_matches_student(link_doctype, link_name, student, seen):
+			return True
+	return False
+
+
+def _source_is_actionable(doctype, doc):
+	"""Require a completed/real source event, not an arbitrary reference string."""
+	if doctype == "Call Log":
+		return doc.status == "Completed" and bool(doc.duration or doc.end_time)
+	if doctype == "Task":
+		return doc.status == "Done"
+	if doctype == "Communication":
+		return doc.sent_or_received in {"Sent", "Received"}
+	if doctype == "WhatsApp Message":
+		return getattr(doc, "status", None) in {"Sent", "Delivered", "Read", "Received", "Completed"}
+	return False
+
+
+def verify_sla_source(doctype, name, student):
+	try:
+		if doctype not in SLA_SOURCE_DOCTYPES or not name or not frappe.db.exists(doctype, name):
+			return False
+		doc = frappe.get_doc(doctype, name)
+		return _source_is_actionable(doctype, doc) and _source_matches_student(doctype, name, student)
+	except Exception:
+		return False
+
 
 def create_interaction(
 	*,
@@ -50,7 +128,11 @@ def create_interaction(
 	outcome=None,
 ):
 	if not student and crm_contact:
-		student = frappe.db.get_value("CRM Contact", crm_contact, "student")
+		students = students_for_contact(crm_contact)
+		# A Contact can belong to multiple historical cases.  Source events that
+		# need one Student must provide the Student explicitly; do not silently
+		# choose a latest/first case.
+		student = students[0] if len(students) == 1 else None
 
 	if not student and not crm_contact:
 		return None
@@ -59,17 +141,77 @@ def create_interaction(
 		frappe.log_error(title=f"Unknown CRM Interaction Type: {interaction_type}")
 		return None
 
+	external_id = external_id_for(reference_doctype, reference_docname, interaction_type)
+	if external_id:
+		existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
+		if existing:
+			return existing
+
 	interaction = frappe.new_doc("CRM Interaction")
 	interaction.student = student
 	interaction.crm_contact = crm_contact
 	interaction.interaction_type = interaction_type
 	interaction.reference_doctype = reference_doctype
 	interaction.reference_docname = reference_docname
+	interaction.external_id = external_id
 	interaction.actor = actor or frappe.session.user
 	interaction.summary = summary or interaction_type
 	interaction.outcome = outcome
-	interaction.insert(ignore_permissions=True)
+	if student and verify_sla_source(reference_doctype, reference_docname, student):
+		interaction.source_verified = 1
+	previous_flag = getattr(frappe.flags, "student_sla_source_service", False)
+	frappe.flags.student_sla_source_service = True
+	savepoint = "create_interaction_external_id_race"
+	try:
+		try:
+			if external_id:
+				frappe.db.savepoint(savepoint)
+			interaction.insert(ignore_permissions=True)
+		except (frappe.UniqueValidationError, frappe.DuplicateEntryError) as exc:
+			# Two concurrent writers (e.g. a retried webhook delivery and the
+			# original request) may both pass the existence check above before
+			# either inserts; MariaDB reports that race as a unique-constraint
+			# violation on the external_id index. Roll back only the failed
+			# insert (not the enclosing request transaction, which may hold the
+			# just-inserted source document that triggered this call), re-read,
+			# and return the winner's row instead of surfacing a spurious
+			# failure to the caller.
+			if not external_id:
+				raise
+			frappe.db.rollback(save_point=savepoint)
+			existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
+			if not existing:
+				raise
+			return existing
+	finally:
+		frappe.flags.student_sla_source_service = previous_flag
 	return interaction.name
+
+
+def satisfy_student_sla_from_interaction(doc, method=None):
+	"""Close an eligible Student SLA once a source interaction has an outcome."""
+	if not doc.get("student"):
+		return None
+	if doc.get("outcome") not in {"Captured", "Follow Up Needed", "Resolved", "Converted"}:
+		return None
+	if doc.get("reference_doctype") not in {"Call Log", "Communication", "Task", "WhatsApp Message"}:
+		return None
+	if not doc.get("source_verified") or not verify_sla_source(doc.reference_doctype, doc.reference_docname, doc.student):
+		return None
+	from crm.fcrm.student_sla import get_student_sla_status, record_qualifying_response
+
+	status = get_student_sla_status(doc.student)
+	attempt = status.get("attempt")
+	if not attempt:
+		return None
+	try:
+		return record_qualifying_response(
+			attempt["attempt"], doc.name, expected_revision=attempt["revision"]
+		)
+	except Exception:
+		# An out-of-scope/system-generated interaction remains evidence but cannot
+		# satisfy the clock; the interaction write itself must not fail.
+		return None
 
 
 def _create_interaction_for_reference(
@@ -79,7 +221,8 @@ def _create_interaction_for_reference(
 		student, crm_contact = reference_name, None
 	elif reference_doctype == "CRM Contact":
 		crm_contact = reference_name
-		student = frappe.db.get_value("CRM Contact", reference_name, "student")
+		students = students_for_contact(reference_name)
+		student = students[0] if len(students) == 1 else None
 	else:
 		return None
 
@@ -109,6 +252,11 @@ def create_interaction_from_communication_insert(doc, method=None):
 
 
 def create_interaction_from_communication_update(doc, method=None):
+	# Frappe can invoke on_update during insert.  A Received communication is
+	# only a reply when its direction changes on an existing record; treating
+	# the initial insert as a reply creates a phantom Connected interaction.
+	if doc.is_new() or doc.flags.in_insert:
+		return
 	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
 		return
 
@@ -132,6 +280,11 @@ def create_interaction_from_task_update(doc, method=None):
 	if doc.is_new() or doc.flags.in_insert:
 		return
 	if not (doc.has_value_changed("status") and doc.status == "Done"):
+		return
+	# A next-action Task may already be linked to the canonical Interaction
+	# that recorded its outcome. Completion must satisfy that event, not
+	# create a second timeline row.
+	if getattr(doc, "linked_interaction", None):
 		return
 	if not doc.description:
 		return
@@ -225,7 +378,7 @@ def create_interaction_from_consent_event(doc, method=None):
 
 
 def create_interaction_from_event_participation_insert(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 
 	try:
@@ -243,7 +396,7 @@ def create_interaction_from_event_participation_insert(doc, method=None):
 
 
 def create_interaction_from_event_participation_update(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 	# See create_interaction_from_task_update -- on_update fires during insert
 	# too, after is_new() has already flipped to False; flags.in_insert is the
@@ -272,7 +425,7 @@ def create_interaction_from_event_participation_update(doc, method=None):
 
 
 def create_interaction_from_campaign_touchpoint_insert(doc, method=None):
-	if frappe.flags.in_patch:
+	if frappe.flags.in_patch or getattr(frappe.flags, "student_attribution_service", False):
 		return
 
 	try:

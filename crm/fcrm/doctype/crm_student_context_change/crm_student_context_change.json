@@ -1,0 +1,16 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "revision", "global_sequence", "reason", "event_id", "occurred_at"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "CTX-.YYYY.-", "options": "CTX-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "global_sequence", "fieldtype": "Int", "reqd": 1, "unique": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "reason", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "event_id", "fieldtype": "Data", "unique": 1, "read_only": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Context Change",
+ "owner": "Administrator", "permissions": [{"read": 1, "role": "System Manager"}],
+ "sort_field": "global_sequence", "sort_order": "DESC"
+}

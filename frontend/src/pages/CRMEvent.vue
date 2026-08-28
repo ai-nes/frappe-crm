@@ -43,6 +43,7 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
+        <AttributionPanel kind="event" :record="crmEventId" />
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Event"
@@ -72,6 +73,7 @@ import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
+import AttributionPanel from '@/components/Attribution/AttributionPanel.vue'
 import { copyToClipboard } from '@/utils'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'

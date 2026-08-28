@@ -54,8 +54,8 @@
 </template>
 <script setup>
 import Link from '@/components/Controls/Link.vue'
-import { createDocument } from '@/composables/document'
-import { Dialog } from 'frappe-ui'
+import { buildAdditiveValuePayload, createGovernanceCommandId, governanceAuditApi, governanceErrorState } from '@/utils/governanceAudit'
+import { Dialog, call, toast } from 'frappe-ui'
 import { ref } from 'vue'
 
 const props = defineProps({
@@ -97,11 +97,18 @@ function save() {
   props.document.save.submit()
 }
 
-function onCreate(value, close) {
-  let doc = { lost_reason: value }
-  createDocument('CRM Lost Reason', doc, close, (doc) => {
-    lostReason.value = doc.name
-    linkRef.value?.reload('', true)
-  })
+async function onCreate(value, close) {
+  error.value = ''
+  const idempotencyKey = createGovernanceCommandId()
+  try {
+    await call(governanceAuditApi.proposeAdditiveValue, buildAdditiveValuePayload({
+      doctype: 'CRM Lost Reason', value,
+      reason: 'New lost reason requested from the loss dialog', idempotencyKey,
+    }))
+    close()
+    toast.success(__('Lost Reason proposal submitted for independent approval.'))
+  } catch (requestError) {
+    error.value = governanceErrorState(requestError).message
+  }
 }
 </script>

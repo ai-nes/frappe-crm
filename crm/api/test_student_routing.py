@@ -1,0 +1,48 @@
+"""Frappe-backed routing command checks (run with ``bench run-tests``)."""
+
+import frappe
+from unittest.mock import patch
+from frappe.tests.utils import FrappeTestCase
+
+from crm.fcrm.student_routing import _select_member, process_pending_routing_requests, route_pool_owned_student
+
+
+class TestStudentRouting(FrappeTestCase):
+	def test_round_robin_selection_advances_after_cursor(self):
+		members = [{"staff": "STAFF-1"}, {"staff": "STAFF-2"}, {"staff": "STAFF-3"}]
+		self.assertEqual(_select_member(members, None)["staff"], "STAFF-1")
+		self.assertEqual(_select_member(members, "STAFF-1")["staff"], "STAFF-2")
+		self.assertEqual(_select_member(members, "STAFF-3")["staff"], "STAFF-1")
+
+	def test_disabled_worker_does_not_mutate_requests(self):
+		previous = frappe.conf.pop("crm_student_routing_enabled", None)
+		try:
+			self.assertEqual(process_pending_routing_requests(), {"processed": 0, "failed": 0, "disabled": 1})
+		finally:
+			if previous is not None:
+				frappe.conf.crm_student_routing_enabled = previous
+
+	def test_missing_policy_defers_without_selecting_member_or_changing_owner(self):
+		student = {"name": "STU-1", "ownership_revision": 4}
+		with patch("crm.fcrm.student_routing.enabled", return_value=True), patch(
+			"crm.fcrm.student_routing.frappe.db.sql"
+		), patch("crm.fcrm.student_routing.frappe.get_doc", return_value=student), patch(
+			"crm.fcrm.student_routing._canonical_pool", return_value={"name": "POOL-1"}
+		), patch("crm.fcrm.student_routing._active_policy", return_value=None), patch(
+			"crm.fcrm.student_routing._eligible_members"
+		) as members:
+			result = route_pool_owned_student("STU-1", expected_revision=4)
+		self.assertEqual(result, {"status": "deferred", "reason": "NO_ACTIVE_POLICY", "student": "STU-1"})
+		members.assert_not_called()
+
+	def test_stale_revision_is_a_noop_before_pool_or_policy_lookup(self):
+		student = {"name": "STU-2", "ownership_revision": 5}
+		with patch("crm.fcrm.student_routing.enabled", return_value=True), patch(
+			"crm.fcrm.student_routing.frappe.db.sql"
+		), patch("crm.fcrm.student_routing.frappe.get_doc", return_value=student), patch(
+			"crm.fcrm.student_routing._canonical_pool"
+		) as pool:
+			result = route_pool_owned_student("STU-2", expected_revision=4)
+		self.assertEqual(result["status"], "superseded")
+		self.assertEqual(result["reason"], "STALE_OWNERSHIP_REVISION")
+		pool.assert_not_called()

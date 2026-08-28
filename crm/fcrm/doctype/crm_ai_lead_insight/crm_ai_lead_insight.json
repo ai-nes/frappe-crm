@@ -243,26 +243,26 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
+   "role": "Lead Sales",
    "write": 1
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Team Leader"
+   "role": "Lead Sales"
   },
   {
    "email": 1,
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Counseller",
+   "role": "Sale",
    "write": 1
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Counseller"
+   "role": "Sale"
   },
   {
    "email": 1,
@@ -281,12 +281,12 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "CTV-Sale"
+   "role": "Sale"
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "CTV-Sale"
+   "role": "Sale"
   }
  ],
  "quick_entry": 0,

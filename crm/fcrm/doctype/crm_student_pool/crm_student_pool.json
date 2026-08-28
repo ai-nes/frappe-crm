@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:pool_name",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["pool_name", "team", "campus", "is_active"],
+ "fields": [
+  {"fieldname": "pool_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Pool Name", "reqd": 1, "unique": 1},
+  {"fieldname": "team", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Team", "options": "CRM Team", "reqd": 1},
+  {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus", "reqd": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "in_standard_filter": 1, "label": "Is Active", "reqd": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Pool",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Admissions Director"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "pool_name",
+ "sort_order": "ASC",
+ "track_changes": 1
+}

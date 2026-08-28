@@ -5,6 +5,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
+
 
 class Invitation(Document):
 	# begin: auto-generated types
@@ -20,12 +22,13 @@ class Invitation(Document):
 		email_sent_at: DF.Datetime | None
 		invited_by: DF.Link | None
 		key: DF.Data | None
-		role: DF.Literal["", "Sale", "Marketing", "Lead Sales", "Admissions Director", "Sales User", "Sales Manager", "System Manager"]
+		role: DF.Literal["", "Sale", "Marketing", "Lead Sales", "Admissions Director", "System Manager"]
 		status: DF.Literal["", "Pending", "Accepted", "Expired"]
 	# end: auto-generated types
 
 	def before_insert(self):
 		frappe.utils.validate_email_address(self.email, True)
+		self._validate_canonical_role()
 
 		self.key = frappe.generate_hash(length=12)
 		self.invited_by = frappe.session.user
@@ -53,26 +56,30 @@ class Invitation(Document):
 
 	@frappe.whitelist()
 	def accept_invitation(self):
-		frappe.only_for(["System Manager", "Sales Manager"], True)
+		from crm.api.session import get_session_role_flags
+
+		if not get_session_role_flags()["is_system_manager"]:
+			frappe.throw(_("You are not allowed to accept invitations"), frappe.PermissionError)
 		self.accept()
 
 	def accept(self):
-		if self.status == "Expired":
+		if self.status != "Pending":
 			frappe.throw(_("Invalid or expired key"))
+		self._validate_canonical_role()
 
 		user = self.create_user_if_not_exists()
-		user.append_roles(self.role)
-		if self.role == "System Manager":
-			user.append_roles("Sales Manager", "Sales User")
-		elif self.role == "Sales Manager":
-			user.append_roles("Sales User")
-		if self.role != "System Manager":
-			self.update_module_in_user(user, "FCRM")
+		from crm.api.user import set_canonical_crm_profile
+
+		set_canonical_crm_profile(user, self.role)
 		user.save(ignore_permissions=True)
 
 		self.status = "Accepted"
 		self.accepted_at = frappe.utils.now()
 		self.save(ignore_permissions=True)
+
+	def _validate_canonical_role(self):
+		if self.role not in CANONICAL_SELECTABLE_ROLES:
+			frappe.throw(_("Invitation role must be a canonical CRM role"), frappe.ValidationError)
 
 	def update_module_in_user(self, user, module):
 		block_modules = frappe.get_all(

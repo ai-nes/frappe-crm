@@ -26,29 +26,34 @@ class TestAdmissionsDashboard(FrappeTestCase):
 				}
 			).insert(ignore_permissions=True)
 
-		if not frappe.db.exists("CRM Contact", "CRMC-TEST-DASH-01"):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Contact",
-					"name": "CRMC-TEST-DASH-01",
-					"full_name": "_Test Dash Student",
-					"phone": "0981112223",
-					"source": "_Test Dash Source",
-					"enrollment_status": "Có triển vọng",
-					"lead_status": "Mới",
-					"is_test_record": 0,
-					"readiness_level": "Level 2 - Đang so sánh",
-					"quality_bucket": "Hot",
-					"is_verified_lead": 1,
-					"sla_status": "Đúng SLA",
-				}
-			).insert(ignore_permissions=True)
+		if not frappe.db.exists("CRM Contact", {"phone": "0981112223"}):
+			previous_migration_flag = getattr(frappe.flags, "contact_migration_service", False)
+			frappe.flags.contact_migration_service = True
+			try:
+				frappe.get_doc(
+					{
+						"doctype": "CRM Contact",
+						"full_name": "_Test Dash Student",
+						"phone": "0981112223",
+						"source": "_Test Dash Source",
+						"enrollment_status": "Có triển vọng",
+						"lead_status": "Mới",
+						"is_test_record": 0,
+						"readiness_level": "Level 2 - Đang so sánh",
+						"quality_bucket": "Hot",
+						"is_verified_lead": 1,
+						"sla_status": "Đúng SLA",
+					}
+				).insert(ignore_permissions=True)
+			finally:
+				frappe.flags.contact_migration_service = previous_migration_flag
 
 	def tearDown(self):
-		if frappe.db.exists("CRM Contact", "CRMC-TEST-DASH-01"):
-			frappe.delete_doc("CRM Contact", "CRMC-TEST-DASH-01", force=True)
+		contact_name = frappe.db.get_value("CRM Contact", {"phone": "0981112223"}, "name")
+		if contact_name:
+			frappe.delete_doc("CRM Contact", contact_name, force=True)
 		if frappe.db.exists("CRM Lead Source", "_Test Dash Source"):
-			frappe.delete_doc("CRM Lead Source", "_Test Dash Source", force=True)
+			self._delete_doc("CRM Lead Source", "_Test Dash Source")
 
 	def test_get_sales_dashboard(self):
 		items = get_sales_dashboard(from_date="2020-01-01", to_date="2030-12-31")
@@ -88,16 +93,23 @@ class TestAdmissionsDashboard(FrappeTestCase):
 		legacy_contact = self._make_dash_contact(
 			"_Test Dash Legacy Attribution", "0981112224", crm_campaign=campaign
 		)
-		migrated_contact = self._make_dash_contact("_Test Dash New Attribution", "0981112225")
+		student = self._make_dash_student()
+		migrated_contact = self._make_dash_contact("_Test Dash New Attribution", "0981112225", student=student)
 		touchpoint = frappe.get_doc(
 			{
 				"doctype": "CRM Campaign Touchpoint",
 				"crm_campaign": campaign,
 				"crm_contact": migrated_contact,
+				"student": student,
 			}
 		)
-		touchpoint.insert(ignore_permissions=True)
-		self.addCleanup(lambda: frappe.delete_doc("CRM Campaign Touchpoint", touchpoint.name, force=True))
+		previous_attribution_flag = getattr(frappe.flags, "student_attribution_service", False)
+		frappe.flags.student_attribution_service = True
+		try:
+			touchpoint.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_attribution_service = previous_attribution_flag
+		self.addCleanup(lambda: frappe.db.delete("CRM Campaign Touchpoint", {"name": touchpoint.name}))
 
 		names = _contact_names_touched_by_campaign(campaign)
 
@@ -112,16 +124,23 @@ class TestAdmissionsDashboard(FrappeTestCase):
 		legacy_contact = self._make_dash_contact(
 			"_Test Dash Legacy Event Attribution", "0981112226", crm_event=event
 		)
-		migrated_contact = self._make_dash_contact("_Test Dash New Event Attribution", "0981112227")
+		student = self._make_dash_student()
+		migrated_contact = self._make_dash_contact("_Test Dash New Event Attribution", "0981112227", student=student)
 		participation = frappe.get_doc(
 			{
 				"doctype": "CRM Event Participation",
 				"crm_event": event,
 				"crm_contact": migrated_contact,
+				"student": student,
 			}
 		)
-		participation.insert(ignore_permissions=True)
-		self.addCleanup(lambda: frappe.delete_doc("CRM Event Participation", participation.name, force=True))
+		previous_attribution_flag = getattr(frappe.flags, "student_attribution_service", False)
+		frappe.flags.student_attribution_service = True
+		try:
+			participation.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_attribution_service = previous_attribution_flag
+		self.addCleanup(lambda: frappe.db.delete("CRM Event Participation", {"name": participation.name}))
 
 		names = _contact_names_with_event_participation()
 
@@ -270,11 +289,20 @@ class TestAdmissionsDashboard(FrappeTestCase):
 
 	def _make_campus_for_dash(self, name):
 		if frappe.db.exists("CRM Campus", name):
-			frappe.delete_doc("CRM Campus", name, force=True)
+			self._delete_doc("CRM Campus", name)
 		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
 		doc.insert(ignore_permissions=True)
-		self.addCleanup(lambda: frappe.delete_doc("CRM Campus", doc.name, force=True))
+		self.addCleanup(lambda: self._delete_doc("CRM Campus", doc.name))
 		return doc.name
+
+	@staticmethod
+	def _delete_doc(doctype, name):
+		previous_governance_flag = getattr(frappe.flags, "crm_governance_change", False)
+		frappe.flags.crm_governance_change = True
+		try:
+			frappe.delete_doc(doctype, name, force=True)
+		finally:
+			frappe.flags.crm_governance_change = previous_governance_flag
 
 	def _make_campaign_for_dash(self, title, campus):
 		if frappe.db.exists("CRM Campaign", title):
@@ -299,7 +327,25 @@ class TestAdmissionsDashboard(FrappeTestCase):
 		self.addCleanup(lambda: frappe.delete_doc("CRM Event", doc.name, force=True))
 		return doc.name
 
-	def _make_dash_contact(self, name, phone, crm_campaign=None, crm_event=None):
+	def _make_dash_student(self):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": "_Test Dash Student Anchor",
+				"phone": "0981112230",
+				"enrollment_status": "Có triển vọng",
+			}
+		)
+		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous_intake_flag
+		self.addCleanup(lambda: frappe.delete_doc("CRM Student", student.name, force=True))
+		return student.name
+
+	def _make_dash_contact(self, name, phone, crm_campaign=None, crm_event=None, student=None):
 		payload = {
 			"doctype": "CRM Contact",
 			"full_name": name,
@@ -310,7 +356,14 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			payload["crm_campaign"] = crm_campaign
 		if crm_event:
 			payload["crm_event"] = crm_event
+		if student:
+			payload["student"] = student
 		contact = frappe.get_doc(payload)
-		contact.insert(ignore_permissions=True)
+		previous_migration_flag = getattr(frappe.flags, "contact_migration_service", False)
+		frappe.flags.contact_migration_service = True
+		try:
+			contact.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.contact_migration_service = previous_migration_flag
 		self.addCleanup(lambda: frappe.delete_doc("CRM Contact", contact.name, force=True))
 		return contact.name

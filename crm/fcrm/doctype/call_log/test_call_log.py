@@ -178,7 +178,7 @@ class TestCallLog(FrappeTestCase):
 		self.assertEqual(result["_tasks"][0]["name"], task.name)
 
 	def test_create_contact_from_call_log_basic(self):
-		call = create_test_call_log(type="Incoming", from_number="+1234567890")
+		call = create_test_call_log(type="Incoming", from_number="+84912345678")
 
 		contact_name = create_contact_from_call_log(
 			call_log=frappe.as_json({"name": call.name}),
@@ -188,19 +188,19 @@ class TestCallLog(FrappeTestCase):
 		self.assertTrue(frappe.db.exists("CRM Contact", contact_name))
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		self.assertEqual(contact.full_name, "John Doe")
-		self.assertEqual(contact.phone, "+1234567890")
+		self.assertEqual(contact.phone, "0912345678")
 
 		call.reload()
 		self.assertTrue(call.has_link("CRM Contact", contact_name))
 
 	def test_create_contact_from_call_log_no_details(self):
-		call = create_test_call_log(type="Incoming", from_number="+1112223333")
+		call = create_test_call_log(type="Incoming", from_number="+84987654321")
 
 		contact_name = create_contact_from_call_log(call_log=frappe.as_json({"name": call.name}))
 
 		contact = frappe.get_doc("CRM Contact", contact_name)
 		self.assertTrue(contact.full_name.startswith("Contact from call"))
-		self.assertEqual(contact.phone, "+1112223333")
+		self.assertEqual(contact.phone, "0987654321")
 
 	def test_create_contact_from_call_log_invalid_call_log(self):
 		with self.assertRaises(frappe.DoesNotExistError):

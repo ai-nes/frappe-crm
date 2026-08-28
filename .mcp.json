@@ -4,10 +4,14 @@
       "command": "npx",
       "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
     },
-    "token-optimizer": {
+    "chrome-devtools": {
       "command": "npx",
-      "args": ["-y", "token-optimizer-mcp"],
-      "description": "Token optimization for long repository context via content deduplication and compression"
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browserUrl",
+        "http://127.0.0.1:9222"
+      ]
     }
   }
 }

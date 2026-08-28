@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "student",
+  "student_identity",
+  "case_key",
+  "contact",
+  "lifecycle_event",
+  "actor",
+  "actor_scope",
+  "converted_at",
+  "command_receipt",
+  "idempotency_key",
+  "correlation_id",
+  "policy_version",
+  "schema_version"
+ ],
+ "fields": [
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "student_identity",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student Identity",
+   "options": "CRM Student Identity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "case_key",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Admission Case Key",
+   "options": "CRM Student Case Key",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "contact",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Contact",
+   "options": "CRM Contact",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "lifecycle_event",
+   "fieldtype": "Link",
+   "label": "Lifecycle Event",
+   "options": "CRM Student Lifecycle Event",
+   "read_only": 1
+  },
+  {
+   "fieldname": "actor",
+   "fieldtype": "Link",
+   "label": "Actor",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "actor_scope",
+   "fieldtype": "JSON",
+   "label": "Actor Scope",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Converted At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "command_receipt",
+   "fieldtype": "Link",
+   "label": "Command Receipt",
+   "options": "CRM Student Command Receipt",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Idempotency Key",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "correlation_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Correlation ID",
+   "read_only": 1
+  },
+  {
+   "default": "phase8-v1",
+   "fieldname": "policy_version",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Policy Version",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "phase8-v1",
+   "fieldname": "schema_version",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Schema Version",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "indexes": [
+  {
+   "fields": ["contact", "converted_at", "name"],
+   "name": "crm_student_contact_conversion_contact_at_idx",
+   "unique": 0
+  },
+  {
+   "fields": ["student_identity", "contact"],
+   "name": "crm_student_contact_conversion_identity_contact_idx",
+   "unique": 0
+  }
+ ],
+ "links": [],
+ "modified": "2026-08-25 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Contact Conversion",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"export": 1, "read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Admissions Operations"},
+  {"read": 1, "role": "CTV-Sale"},
+  {"read": 1, "role": "Counseller"},
+  {"export": 1, "read": 1, "role": "Giám đốc Tuyển sinh"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Promoter-PR"},
+  {"read": 1, "role": "Sale"},
+  {"export": 1, "read": 1, "role": "Sales Manager"},
+  {"read": 1, "role": "Sales User"},
+  {"export": 1, "read": 1, "role": "System Manager"},
+  {"export": 1, "read": 1, "role": "Team Leader"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "converted_at",
+ "sort_order": "DESC",
+ "track_changes": 1,
+ "title_field": "contact"
+}

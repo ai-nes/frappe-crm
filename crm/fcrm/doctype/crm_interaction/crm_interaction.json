@@ -16,6 +16,10 @@
   "interaction_type",
   "interaction_datetime",
   "outcome",
+  "sla_response_sealed",
+  "source_verified",
+  "outcome_revision",
+  "external_id",
   "section_summary",
   "summary",
   "notes",
@@ -80,6 +84,36 @@
    "in_standard_filter": 1,
    "label": "Outcome",
    "options": "\nCaptured\nFollow Up Needed\nResolved\nConverted\nNo Response\nData Error\nUncontactable"
+  },
+  {
+   "default": "0",
+   "fieldname": "sla_response_sealed",
+   "fieldtype": "Check",
+   "label": "SLA Response Sealed",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "source_verified",
+   "fieldtype": "Check",
+   "label": "Source Verified",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "outcome_revision",
+   "fieldtype": "Int",
+   "label": "Outcome Revision",
+   "read_only": 1
+  },
+  {
+   "description": "Deterministic identity for an auto-created interaction: `{reference_doctype}:{reference_docname}:{interaction_type}`. Lets a retried/concurrent writer resolve the same row instead of inserting a duplicate; manually created interactions (no reference) leave this null and are unaffected by the unique index (MariaDB unique indexes ignore multiple NULLs).",
+   "fieldname": "external_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "External ID",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "section_summary",
@@ -179,7 +213,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
+   "role": "Lead Sales",
    "share": 1,
    "write": 1
   },
@@ -189,7 +223,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Counseller",
+   "role": "Sale",
    "share": 1,
    "write": 1
   },
@@ -206,12 +240,12 @@
    "if_owner": 1,
    "print": 1,
    "read": 1,
-   "role": "CTV-Sale",
+   "role": "Sale",
    "write": 1
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+   "role": "Marketing"
   }
  ],
  "quick_entry": 0,

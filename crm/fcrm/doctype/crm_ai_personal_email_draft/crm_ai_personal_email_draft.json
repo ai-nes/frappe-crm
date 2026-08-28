@@ -223,13 +223,13 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader",
+   "role": "Lead Sales",
    "write": 1
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Team Leader",
+   "role": "Lead Sales",
    "write": 1
   },
   {
@@ -238,13 +238,13 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Counseller",
+   "role": "Sale",
    "write": 1
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "Counseller"
+   "role": "Sale"
   },
   {
    "create": 1,
@@ -265,13 +265,13 @@
    "if_owner": 1,
    "print": 1,
    "read": 1,
-   "role": "CTV-Sale",
+   "role": "Sale",
    "write": 1
   },
   {
    "permlevel": 1,
    "read": 1,
-   "role": "CTV-Sale"
+   "role": "Sale"
   }
  ],
  "quick_entry": 0,

@@ -66,6 +66,7 @@ import TelephonyPage from '@/components/Settings/Telephony/TelephonyPage.vue'
 import EmailConfig from '@/components/Settings/EmailConfig.vue'
 import SidebarLink from '@/components/SidebarLink.vue'
 import { usersStore } from '@/stores/users'
+import { canConfigureSystem, canManageRoles } from '@/utils/rolePolicy'
 import {
   showSettings,
   activeSettingsPage,
@@ -80,9 +81,11 @@ import SlaConfig from './Sla/SlaConfig.vue'
 import ReferenceDataPage from './ReferenceDataPage.vue'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 
-const { isManager, getUser } = usersStore()
+const { getUser } = usersStore()
 
 const user = computed(() => getUser() || {})
+const canConfigure = () => canConfigureSystem(user.value)
+const canManageUsers = () => canManageRoles(user.value)
 
 const tabs = computed(() => {
   let _tabs = [
@@ -125,7 +128,7 @@ const tabs = computed(() => {
           component: markRaw(BrandSettings),
         },
       ],
-      condition: () => isManager(),
+      condition: canConfigure,
     },
     {
       label: __('User Management'),
@@ -134,16 +137,16 @@ const tabs = computed(() => {
           label: __('Users'),
           icon: 'user',
           component: markRaw(Users),
-          condition: () => isManager(),
+          condition: canManageUsers,
         },
         {
           label: __('Invite User'),
           icon: 'user-plus',
           component: markRaw(InviteUserPage),
-          condition: () => isManager(),
+          condition: canManageUsers,
         },
       ],
-      condition: () => isManager(),
+      condition: canConfigure,
     },
     {
       label: __('Email'),
@@ -152,14 +155,16 @@ const tabs = computed(() => {
           label: __('Accounts'),
           icon: Email2Icon,
           component: markRaw(EmailConfig),
-          condition: () => isManager(),
+          condition: canConfigure,
         },
         {
           label: __('Templates'),
           icon: EmailTemplateIcon,
           component: markRaw(EmailTemplatePage),
+          condition: canConfigure,
         },
       ],
+      condition: canConfigure,
     },
     {
       label: __('Automation & Rules'),
@@ -175,7 +180,7 @@ const tabs = computed(() => {
           component: markRaw(SlaConfig),
         },
       ],
-      condition: () => isManager(),
+      condition: canConfigure,
     },
     {
       label: __('Customization'),
@@ -186,7 +191,7 @@ const tabs = computed(() => {
           icon: 'home',
         },
       ],
-      condition: () => isManager(),
+      condition: canConfigure,
     },
     {
       label: __('Reference Data'),
@@ -195,10 +200,10 @@ const tabs = computed(() => {
           label: __('Categories'),
           icon: GraduationCapIcon,
           component: markRaw(ReferenceDataPage),
-          condition: () => isManager(),
+          condition: canConfigure,
         },
       ],
-      condition: () => isManager(),
+      condition: canConfigure,
     },
     {
       label: __('Integrations', null, 'FCRM'),
@@ -207,14 +212,16 @@ const tabs = computed(() => {
           label: __('Telephony'),
           icon: PhoneIcon,
           component: markRaw(TelephonyPage),
+          condition: canConfigure,
         },
         {
           label: __('WhatsApp'),
           icon: WhatsAppIcon,
           component: markRaw(WhatsAppSettings),
-          condition: () => isWhatsappInstalled.value && isManager(),
+          condition: () => isWhatsappInstalled.value && canConfigure(),
         },
       ],
+      condition: canConfigure,
     },
   ]
 

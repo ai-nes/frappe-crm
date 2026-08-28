@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "field:intent_type_name",
  "creation": "2026-06-11 00:00:00.000000",
  "default_view": "List",
@@ -90,42 +90,16 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
+   "role": "Lead Sales"
   },
   {
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Team Leader"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller"
+   "role": "Marketing"
   },
   {
    "read": 1,
@@ -133,52 +107,7 @@
   },
   {
    "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "create": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Marketing Operator",
-   "write": 1
-  },
-  {
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Marketing Lead"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Operations"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Director"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
+   "role": "System Manager"
   }
  ],
  "quick_entry": 1,

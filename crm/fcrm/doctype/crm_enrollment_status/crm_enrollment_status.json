@@ -12,6 +12,7 @@
   "status_name",
   "stage_order",
   "stage_category",
+  "lifecycle_stage",
   "description"
  ],
  "fields": [
@@ -42,6 +43,16 @@
    "reqd": 1
   },
   {
+   "default": "Lead",
+   "fieldname": "lifecycle_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Lifecycle Stage",
+   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
    "fieldname": "description",
    "fieldtype": "Small Text",
    "label": "Description"
@@ -57,81 +68,29 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Administrator",
-   "share": 1,
-   "write": 1
+   "role": "Lead Sales"
   },
   {
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Team Leader"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller"
+   "role": "Marketing"
   },
   {
    "read": 1,
    "role": "Sale"
   },
   {
-   "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Operations"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Director"
-  },
-  {
+   "create": 1,
+   "delete": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
+   "role": "System Manager",
+   "write": 1
   }
  ],
  "quick_entry": 1,

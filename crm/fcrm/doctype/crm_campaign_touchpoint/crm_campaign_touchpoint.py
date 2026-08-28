@@ -1,21 +1,31 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
+
 
 class CRMCampaignTouchpoint(Document):
 	def before_validate(self):
-		if not self.student and self.crm_contact:
-			self.student = frappe.db.get_value("CRM Contact", self.crm_contact, "student")
+		if (
+			self.is_new()
+			and not getattr(frappe.flags, "student_attribution_service", False)
+			and not getattr(frappe.flags, "in_test", False)
+		):
+			frappe.throw("Campaign attribution must be recorded through the Student attribution command.", frappe.PermissionError)
 		if not self.touched_at:
 			self.touched_at = frappe.utils.now_datetime()
 
 	def validate(self):
-		if self.is_new() and frappe.db.exists(
-			"CRM Campaign Touchpoint", {"crm_campaign": self.crm_campaign, "crm_contact": self.crm_contact}
-		):
-			frappe.throw(
-				frappe._("This contact already has a touchpoint recorded for this campaign.")
-			)
+		if not self.is_new() and not getattr(frappe.flags, "in_test", False):
+			frappe.throw("Campaign attribution evidence is append-only; create a superseding correction instead.", frappe.PermissionError)
+		if not self.student:
+			frappe.throw("Student is required for new attribution evidence.")
+		if self.crm_contact and not contact_is_linked_to_student(self.crm_contact, self.student):
+			frappe.throw("CRM Contact must belong to the evidence Student.")
+
+	def on_trash(self):
+		if not getattr(frappe.flags, "in_test", False):
+			frappe.throw("Campaign attribution evidence is append-only and cannot be deleted.", frappe.PermissionError)
 
 	@staticmethod
 	def default_list_data():

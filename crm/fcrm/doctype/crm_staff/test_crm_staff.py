@@ -103,7 +103,7 @@ class TestCRMStaff(FrappeTestCase):
 			"team_memberships",
 			{
 				"team": self._team_b,
-				"function": "Team Leader",
+				"function": "Lead Sales",
 				"term": "2026-1",
 				"is_primary": 1,
 			},

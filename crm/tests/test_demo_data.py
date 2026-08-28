@@ -67,7 +67,7 @@ class TestDemoData(FrappeTestCase):
 		for contact_name in contact_names:
 			contact = frappe.get_doc("CRM Contact", contact_name)
 			self.assertTrue(contact.full_name)
-			self.assertIn(contact.stage, ["Interested", "Qualified", "Enrolled"])
+			self.assertIn(contact.enrollment_status, ["Mới", "Có triển vọng", "Đã xác nhận", "Đã chuyển đổi"])
 
 		avatar_dir = os.path.abspath(
 			os.path.join(os.path.dirname(__file__), "..", "..", "crm", "public", "images", "demo")

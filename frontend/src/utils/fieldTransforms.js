@@ -46,7 +46,6 @@ export function getContextualLinkFilters(field, doc, baseFilters = null) {
       ...(wardCode ? { ward_code: wardCode } : {}),
       ...(wardName ? { ward_name: wardName } : {}),
     },
-    'CRM Campus': doc.province ? { province: doc.province } : null,
     'CRM Department': campus ? { campus } : null,
     'CRM Campaign': campus ? { campus } : null,
     'CRM Staff': {
@@ -75,7 +74,7 @@ export function getProvinceScopedLinkFilters(field, doc, baseFilters = null) {
 
 export function getDependentFieldsToClear(fieldname, doc = {}) {
   const dependencies = {
-    province: ['ward', 'high_school', 'branch', 'campus', 'crm_event'],
+    province: ['ward', 'high_school', 'crm_event'],
     ward: ['high_school'],
     branch: ['crm_campaign'],
     campus: ['department', 'crm_campaign'],

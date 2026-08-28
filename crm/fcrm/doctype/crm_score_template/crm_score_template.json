@@ -15,6 +15,9 @@
   "column_break_1",
   "start_time",
   "end_time",
+  "section_policy_version",
+  "policy_revision",
+  "policy_hash",
   "section_weights",
   "fit_weight",
   "engagement_weight",
@@ -75,6 +78,27 @@
    "fieldtype": "Datetime",
    "in_list_view": 1,
    "label": "End Time"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_policy_version",
+   "fieldtype": "Section Break",
+   "label": "Policy Versioning"
+  },
+  {
+   "default": "0",
+   "description": "Monotonic per-template counter. Bumped automatically when this template's resolved rules/signals/weights content changes — never edited directly.",
+   "fieldname": "policy_revision",
+   "fieldtype": "Int",
+   "label": "Policy Revision",
+   "read_only": 1
+  },
+  {
+   "description": "Immutable content hash of the resolved policy (rules + negative rules + weights + time decay, joined with current signal content). Provenance/audit only — never used for ordering.",
+   "fieldname": "policy_hash",
+   "fieldtype": "Data",
+   "label": "Policy Hash",
+   "read_only": 1
   },
   {
    "fieldname": "section_weights",
@@ -213,14 +237,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Team Leader"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Counseller"
+   "role": "Lead Sales"
   },
   {
    "read": 1,
@@ -228,38 +245,11 @@
   },
   {
    "read": 1,
-   "role": "CTV-Sale"
-  },
-  {
-   "read": 1,
-   "role": "Promoter-PR"
-  },
-  {
-   "read": 1,
-   "role": "Admissions Operations"
+   "role": "Marketing"
   },
   {
    "read": 1,
    "role": "Admissions Director"
-  },
-  {
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Lead Sales"
-  },
-  {
-   "read": 1,
-   "role": "Sales Manager"
-  },
-  {
-   "read": 1,
-   "role": "Sales User"
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
   }
  ],
  "quick_entry": 0,
