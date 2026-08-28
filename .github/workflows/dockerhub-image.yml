@@ -23,6 +23,7 @@ jobs:
     name: Docker Hub
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    environment: production
     permissions:
       contents: read
 
@@ -53,6 +54,12 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+      - name: Verify commit image is available in Docker Hub
+        run: |
+          set -euo pipefail
+          docker buildx imagetools inspect \
+            "${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
 
   deploy-ec2:
     name: Deploy to EC2
@@ -107,6 +114,7 @@ jobs:
              test -f /opt/frappe-crm/docker/.env && \
              cd /opt/frappe-crm && \
              export CRM_IMAGE='$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG' && \
+             sudo docker pull '$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG' && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml config --quiet && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml pull && \
              sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans && \
