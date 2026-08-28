@@ -136,8 +136,21 @@ def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
 	search_candidates = sorted(
 		field for field, fieldtype in fields.items() if fieldtype in _DISCOVERY_SEARCH_TYPES
 	)
+	# Prefer the DocType's own declared `search_fields` (curated by whoever
+	# defined the DocType) over an alphabetical guess — otherwise a field like
+	# a hidden `external_id` dedup key can "win" purely by sorting first,
+	# silently making crm_search return zero rows for records where it's
+	# unset regardless of query content.
+	declared_search_fields = [
+		name.strip()
+		for name in (getattr(meta, "search_fields", "") or "").split(",")
+		if name.strip()
+	]
+	declared_candidates = [name for name in declared_search_fields if name in set(search_candidates)]
 	if doctype == "CRM Student" and "student_name" in search_candidates:
 		search_field = "student_name"
+	elif declared_candidates:
+		search_field = declared_candidates[0]
 	else:
 		search_field = search_candidates[0] if search_candidates else None
 	return {
