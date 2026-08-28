@@ -53,3 +53,61 @@ jobs:
           tags: |
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
             ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  deploy-ec2:
+    name: Deploy to EC2
+    needs: dockerhub
+    if: ${{ needs.dockerhub.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+
+      - name: Trust EC2 host
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Upload production Compose file
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=yes \
+            docker/docker-compose.prod.yml \
+            "$EC2_USER@$EC2_HOST:/opt/frappe-crm/docker/docker-compose.prod.yml"
+
+      - name: Pull image and restart production stack
+        env:
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$DOCKER_PASSWORD" | ssh -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "sudo docker login --username '$DOCKER_USERNAME' --password-stdin && \
+             test -f /opt/frappe-crm/docker/.env && \
+             cd /opt/frappe-crm && \
+             export CRM_IMAGE='$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG' && \
+             sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml config --quiet && \
+             sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml pull && \
+             sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml up -d --remove-orphans && \
+             sudo --preserve-env=CRM_IMAGE docker compose --env-file docker/.env -f docker/docker-compose.prod.yml ps"
