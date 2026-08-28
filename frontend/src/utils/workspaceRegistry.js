@@ -136,6 +136,14 @@ export const workspaceRegistry = [
   ),
 
   entry(
+    'lead_sales_dashboard',
+    'lead_sales',
+    'sales-results',
+    'overview',
+    'sales-results',
+    { ownership: 'mine' },
+  ),
+  entry(
     'lead_team_dashboard',
     'lead_sales',
     'team-dashboard',
@@ -211,14 +219,6 @@ export const workspaceRegistry = [
     { ownership: 'unassigned' },
   ),
   entry(
-    'lead_records_cold',
-    'lead_sales',
-    'team-records',
-    'cold-abandoned',
-    'student-worklist',
-    { lifecycle: ['Cold', 'Abandoned'] },
-  ),
-  entry(
     'lead_assignment',
     'lead_sales',
     'team-assignment',
@@ -233,13 +233,6 @@ export const workspaceRegistry = [
     'team-performance',
   ),
   entry('lead_team_tasks', 'lead_sales', 'team-tasks', 'open', 'task-worklist'),
-  entry(
-    'lead_duplicates',
-    'lead_sales',
-    'team-duplicates',
-    'review',
-    'duplicate-review',
-  ),
   entry(
     'lead_team_reports',
     'lead_sales',

@@ -328,8 +328,7 @@ def get_sidebar_badge_counts():
 
 	urgent_sla_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):
-		sla_filters = {"status": "open"}
-		urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
+		urgent_sla_count = get_readable_count("CRM Student SLA Attempt", {"status": "open"})
 
 	pool_count = 0
 	if frappe.db.table_exists("CRM Contact"):
@@ -342,9 +341,8 @@ def get_sidebar_badge_counts():
 
 	team_sla_breached_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):
-		team_sla_breached_count = frappe.db.count(
-			"CRM Student SLA Attempt",
-			filters={"status": ["in", ["breached", "near_breach", "escalated"]]},
+		team_sla_breached_count = get_readable_count(
+			"CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}
 		)
 
 	duplicate_count = 0
@@ -376,4 +374,19 @@ def get_sidebar_badge_counts():
 		"managerApprovalsCount": manager_approvals_count,
 		"myTaskCount": my_task_count,
 	}
+
+
+def get_readable_count(doctype, filters):
+	"""Count records using Frappe's permission-aware list API.
+
+	Sidebar indicators are visible to non-admin users, so they must observe the
+	same row-level permissions as the list view they link to.
+	"""
+	result = frappe.get_list(
+		doctype,
+		filters=filters,
+		fields=["count(name) as count"],
+		limit_page_length=1,
+	)
+	return int(result[0].get("count", 0)) if result else 0
 

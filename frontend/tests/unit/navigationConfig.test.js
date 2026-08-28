@@ -111,16 +111,103 @@ describe('navigationConfig', () => {
     const leadTree = getNavigationForUser({ crm_profile: 'lead_sales' })
     const labels = leadTree.map((item) => item.label)
 
+    expect(labels).toContain('Dashboard Sale')
     expect(labels).toContain('Bảng điều khiển nhóm')
     expect(labels).toContain('SLA nhóm')
     expect(labels).toContain('Hồ sơ nhóm')
-    expect(labels).toContain('Phân công')
+    expect(labels).toContain('Hồ sơ chưa phân công')
     expect(labels).toContain('Hiệu suất thành viên')
     expect(labels).toContain('Việc nhóm')
-    expect(labels).toContain('Hồ sơ nghi trùng')
     expect(labels).toContain('Báo cáo nhóm')
     expect(labels).toContain('Tra cứu')
     expect(labels).toContain('Chính sách SLA (chỉ đọc)')
+    expect(labels).not.toContain('Hồ sơ nghi trùng')
+
+    expect(
+      leadTree.find((item) => item.id === 'lead_sales_dashboard').to,
+    ).toEqual({
+      name: 'Dashboard',
+      params: { section: 'overview' },
+      query: { scope: 'my' },
+    })
+
+    const slaItem = leadTree.find((item) => item.id === 'lead_team_sla')
+    expect(slaItem.to).toBe('CRM Student SLA Attempts')
+    expect(slaItem.badgeKey).toBeUndefined()
+    expect(slaItem.children).toBeDefined()
+    expect(slaItem.children[0].to).toEqual({
+      name: 'CRM Student SLA Attempts',
+      query: { tab: 'running' },
+    })
+    expect(slaItem.children[1].to).toEqual({
+      name: 'CRM Student SLA Attempts',
+      query: { tab: 'near_breach' },
+    })
+    expect(slaItem.children[2].to).toEqual({
+      name: 'CRM Student SLA Attempts',
+      query: { tab: 'breached' },
+    })
+    expect(slaItem.children[2]).toMatchObject({
+      badgeKey: 'teamSlaBreachedCount',
+      badgeVariant: 'red',
+    })
+    expect(slaItem.children[3].to).toEqual({
+      name: 'CRM Student SLA Attempts',
+      query: { tab: 'history' },
+    })
+
+    const records = leadTree.find((item) => item.id === 'lead_team_records')
+    expect(records.to).toEqual({
+      name: 'CRM Students',
+      query: { lead_view: 'by_stage' },
+    })
+    expect(records.children[0].to).toEqual({
+      name: 'CRM Students',
+      params: { viewType: 'list' },
+      query: { lead_view: 'by_stage' },
+    })
+    expect(records.children[1].to).toEqual({
+      name: 'CRM Students',
+      params: { viewType: 'group_by' },
+      query: { lead_view: 'by_agent' },
+    })
+    expect(records.children[2].to).toEqual({
+      name: 'CRM Students',
+      query: { owner: 'unassigned', lead_view: 'unassigned' },
+    })
+
+    expect(leadTree.find((item) => item.id === 'lead_assignment').to).toEqual({
+      name: 'CRM Students',
+      query: { owner: 'unassigned', lead_view: 'unassigned' },
+    })
+    expect(leadTree.find((item) => item.id === 'lead_assignment')).toMatchObject({
+      label: 'Hồ sơ chưa phân công',
+    })
+    expect(leadTree.find((item) => item.id === 'lead_assignment').badgeKey).toBeUndefined()
+
+    expect(records.children.map((item) => item.id)).not.toContain(
+      'lead_records_cold',
+    )
+    expect(records.children.map((item) => item.label)).not.toContain(
+      'Nguội / Bỏ rơi',
+    )
+    expect(leadTree.map((item) => item.id)).not.toContain('lead_duplicates')
+
+    expect(leadTree.find((item) => item.id === 'lead_team_dashboard').to).toBe(
+      'Lead Sales Dashboard',
+    )
+    expect(
+      leadTree.find((item) => item.id === 'lead_member_performance').to,
+    ).toBe('Lead Sales Performance')
+    expect(leadTree.find((item) => item.id === 'lead_team_tasks').to).toBe(
+      'Lead Sales Tasks',
+    )
+    expect(leadTree.find((item) => item.id === 'lead_team_reports').to).toBe(
+      'Lead Sales Reports',
+    )
+    expect(
+      leadTree.find((item) => item.id === 'lead_sla_policy_readonly').to,
+    ).toBe('Lead Sales SLA Policies')
   })
 
   it('verifies Marketing navigation items structure', () => {

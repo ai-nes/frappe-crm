@@ -6,7 +6,12 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api import role_workspaces
-from crm.api.workspace_policy import WorkspacePolicyError, authorize_workspace, normalize_filters
+from crm.api.workspace_policy import (
+	WorkspacePolicyError,
+	authorize_workspace,
+	normalize_filters,
+	route_for_menu_id,
+)
 
 
 class TestRoleWorkspaces(FrappeTestCase):
@@ -22,6 +27,11 @@ class TestRoleWorkspaces(FrappeTestCase):
 		self.assertEqual(authorize_workspace(policy, "sales-records", None), "new")
 		with self.assertRaises(WorkspacePolicyError):
 			authorize_workspace(policy, "sales-records", "queue")
+
+	def test_lead_policy_does_not_retain_removed_cold_or_duplicate_menu_routes(self):
+		for menu_id in ("lead_records_cold", "lead_duplicates"):
+			with self.assertRaises(WorkspacePolicyError):
+				route_for_menu_id("lead_sales", menu_id)
 
 	def test_disabled_reader_returns_the_uniform_unavailable_contract(self):
 		with patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=False):

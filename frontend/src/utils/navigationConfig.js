@@ -91,25 +91,32 @@ const rawRoleNavigationTrees = {
   // 2. Lead Sales — Trưởng nhóm
   lead_sales: [
     {
+      id: 'lead_sales_dashboard',
+      label: 'Dashboard Sale',
+      icon: 'layout-dashboard',
+      to: {
+        name: 'Dashboard',
+        params: { section: 'overview' },
+        query: { scope: 'my' },
+      },
+    },
+    {
       id: 'lead_team_dashboard',
       label: 'Bảng điều khiển nhóm',
       icon: 'layout-dashboard',
-      to: { name: 'Dashboard', params: { section: 'overview' } },
+      to: 'Lead Sales Dashboard',
     },
     {
       id: 'lead_team_sla',
       label: 'SLA nhóm',
       icon: 'clock',
-      to: { name: 'Dashboard', params: { section: 'sla' } },
-      badgeKey: 'teamSlaBreachedCount',
-      badgeVariant: 'red',
+      to: 'CRM Student SLA Attempts',
       children: [
         {
           id: 'lead_sla_running',
           label: 'Đang chạy',
           to: {
-            name: 'Dashboard',
-            params: { section: 'sla' },
+            name: 'CRM Student SLA Attempts',
             query: { tab: 'running' },
           },
         },
@@ -117,8 +124,7 @@ const rawRoleNavigationTrees = {
           id: 'lead_sla_near_breach',
           label: 'Sắp trễ (<30 phút)',
           to: {
-            name: 'Dashboard',
-            params: { section: 'sla' },
+            name: 'CRM Student SLA Attempts',
             query: { tab: 'near_breach' },
           },
         },
@@ -126,17 +132,17 @@ const rawRoleNavigationTrees = {
           id: 'lead_sla_breached',
           label: 'Đã trễ',
           to: {
-            name: 'Dashboard',
-            params: { section: 'sla' },
+            name: 'CRM Student SLA Attempts',
             query: { tab: 'breached' },
           },
+          badgeKey: 'teamSlaBreachedCount',
+          badgeVariant: 'red',
         },
         {
           id: 'lead_sla_violations',
           label: 'Lịch sử vi phạm',
           to: {
-            name: 'Dashboard',
-            params: { section: 'sla' },
+            name: 'CRM Student SLA Attempts',
             query: { tab: 'history' },
           },
         },
@@ -146,63 +152,62 @@ const rawRoleNavigationTrees = {
       id: 'lead_team_records',
       label: 'Hồ sơ nhóm',
       icon: 'users',
-      to: 'CRM Contacts',
+      to: { name: 'CRM Students', query: { lead_view: 'by_stage' } },
       children: [
         {
           id: 'lead_records_by_stage',
           label: 'Theo giai đoạn',
-          to: { name: 'CRM Contacts', params: { viewType: 'kanban' } },
+          to: {
+            name: 'CRM Students',
+            params: { viewType: 'list' },
+            query: { lead_view: 'by_stage' },
+          },
         },
         {
           id: 'lead_records_by_agent',
           label: 'Theo tư vấn viên',
-          to: { name: 'CRM Contacts', params: { viewType: 'group_by' } },
+          to: {
+            name: 'CRM Students',
+            params: { viewType: 'group_by' },
+            query: { lead_view: 'by_agent' },
+          },
         },
         {
           id: 'lead_records_unassigned',
           label: 'Không có chủ sở hữu',
-          to: { name: 'CRM Contacts', query: { owner: 'unassigned' } },
-        },
-        {
-          id: 'lead_records_cold',
-          label: 'Nguội / Bỏ rơi',
-          to: { name: 'CRM Contacts', query: { stage: 'cold' } },
+          to: {
+            name: 'CRM Students',
+            query: { owner: 'unassigned', lead_view: 'unassigned' },
+          },
         },
       ],
     },
     {
       id: 'lead_assignment',
-      label: 'Phân công',
+      label: 'Hồ sơ chưa phân công',
       icon: 'git-fork',
-      to: { name: 'CRM Contacts', query: { pool: 'unassigned' } },
-      badgeKey: 'unassignedCount',
-      badgeVariant: 'orange',
+      to: {
+        name: 'CRM Students',
+        query: { owner: 'unassigned', lead_view: 'unassigned' },
+      },
     },
     {
       id: 'lead_member_performance',
       label: 'Hiệu suất thành viên',
       icon: 'user-check',
-      to: 'CRM Persons',
+      to: 'Lead Sales Performance',
     },
     {
       id: 'lead_team_tasks',
       label: 'Việc nhóm',
       icon: 'list-checks',
-      to: 'Tasks',
-    },
-    {
-      id: 'lead_duplicates',
-      label: 'Hồ sơ nghi trùng',
-      icon: 'link',
-      to: { name: 'CRM Contacts', query: { filter: 'duplicate' } },
-      badgeKey: 'duplicateCount',
-      badgeVariant: 'orange',
+      to: 'Lead Sales Tasks',
     },
     {
       id: 'lead_team_reports',
       label: 'Báo cáo nhóm',
       icon: 'bar-chart-3',
-      to: { name: 'Dashboard', params: { section: 'reports' } },
+      to: 'Lead Sales Reports',
     },
     {
       id: 'lead_lookups',
@@ -214,10 +219,7 @@ const rawRoleNavigationTrees = {
       id: 'lead_sla_policy_readonly',
       label: 'Chính sách SLA (chỉ đọc)',
       icon: 'shield-check',
-      action: () => {
-        showSettings.value = true
-        activeSettingsPage.value = 'SLA Policies'
-      },
+      to: 'Lead Sales SLA Policies',
     },
   ],
 
@@ -379,22 +381,31 @@ const rawRoleNavigationTrees = {
       id: 'mgr_sla_system',
       label: 'SLA toàn hệ',
       icon: 'clock',
-      to: { name: 'Dashboard', params: { section: 'sla_system' } },
+      to: 'CRM Student SLA Attempts',
       children: [
         {
           id: 'mgr_sla_by_team',
           label: 'Theo nhóm',
-          to: { name: 'Dashboard', params: { section: 'sla_teams' } },
+          to: {
+            name: 'CRM Student SLA Attempts',
+            query: { tab: 'running' },
+          },
         },
         {
           id: 'mgr_sla_by_campus',
           label: 'Theo campus',
-          to: { name: 'Dashboard', params: { section: 'sla_campuses' } },
+          to: {
+            name: 'CRM Student SLA Attempts',
+            query: { tab: 'near_breach' },
+          },
         },
         {
           id: 'mgr_sla_ranking',
           label: 'Xếp hạng vi phạm',
-          to: { name: 'Dashboard', params: { section: 'sla_violations' } },
+          to: {
+            name: 'CRM Student SLA Attempts',
+            query: { tab: 'breached' },
+          },
         },
       ],
     },

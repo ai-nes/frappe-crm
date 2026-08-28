@@ -256,10 +256,27 @@ import {
 } from '@/utils/studentDecision'
 import { Badge, Button, FeatherIcon, LoadingIndicator, Tabs, call, usePageMeta } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
-const queue = ref('recommendations')
+const route = useRoute()
+const queue = ref(
+  ['actions', 'breached', 'history'].includes(route.query?.tab)
+    ? 'actions'
+    : 'recommendations',
+)
+
+watch(
+  () => route.query?.tab,
+  (tab) => {
+    if (['actions', 'breached', 'history'].includes(tab)) {
+      queue.value = 'actions'
+    } else if (['running', 'near_breach', 'recommendations'].includes(tab)) {
+      queue.value = 'recommendations'
+    }
+  },
+)
+
 const workTabs = computed(() => [
   { name: 'recommendations', label: __('Đề xuất liên hệ') },
   { name: 'actions', label: __('Nhiệm vụ của tôi') },

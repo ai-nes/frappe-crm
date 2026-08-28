@@ -1,9 +1,11 @@
 """Frappe-backed SLA lifecycle checks (run with ``bench run-tests``)."""
 
-import frappe
 from unittest.mock import patch
+
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api.doc import get_data
 from crm.fcrm.student_sla import (
 	MEANINGFUL_OUTCOMES,
 	StudentSLAError,
@@ -13,6 +15,42 @@ from crm.fcrm.student_sla import (
 
 
 class TestStudentSLA(FrappeTestCase):
+	def test_sla_attempt_has_default_list_configuration(self):
+		"""A first-time SLA list view must not require saved View Settings."""
+		original_exists = frappe.db.exists
+
+		def exists_without_view_settings(doctype, filters=None, *args, **kwargs):
+			if doctype == "View Settings":
+				return None
+			return original_exists(doctype, filters, *args, **kwargs)
+
+		with patch("crm.api.doc.frappe.db.exists", side_effect=exists_without_view_settings):
+			list_data = get_data(
+				doctype="CRM Student SLA Attempt",
+				filters={},
+				order_by="modified desc",
+				view={"view_type": "list", "custom_view_name": "", "group_by_field": "owner"},
+				default_filters={"status": ["in", ["breached", "escalated"]]},
+			)
+
+		self.assertEqual(
+			[column["key"] for column in list_data["columns"]],
+			["student", "owner_staff", "status", "warning_at", "breach_at", "modified"],
+		)
+		self.assertEqual(
+			list_data["rows"],
+			[
+				"name",
+				"student",
+				"owner_staff",
+				"status",
+				"warning_at",
+				"breach_at",
+				"modified",
+				"owner",
+			],
+		)
+
 	def test_only_meaningful_outcomes_can_satisfy_response(self):
 		self.assertIn("Resolved", MEANINGFUL_OUTCOMES)
 		self.assertNotIn("No Response", MEANINGFUL_OUTCOMES)

@@ -43,8 +43,7 @@
             :hoverDelay="1.5"
           >
             <span
-              v-if="!isCollapsed"
-              class="truncate text-sm transition-all duration-300 ease-in-out"
+              class="truncate transition-all duration-300 ease-in-out"
               :class="[
                 depth > 0 ? 'ml-2 text-xs text-ink-gray-7 group-hover:text-ink-gray-9' : 'ml-2.5 text-sm',
                 isActive ? 'font-medium text-ink-gray-9' : ''
@@ -75,11 +74,10 @@
             :class="{ 'rotate-90 text-ink-gray-8': isExpanded }"
             @click.stop="toggleExpand"
           >
-            <ChevronRightIcon class="size-3.5" />
+            <FeatherIcon name="chevron-right" class="size-3.5" />
           </button>
         </div>
 
-        <!-- Collapsed Badge Dot Indicator -->
         <div
           v-else-if="badgeCount"
           class="absolute top-1.5 right-1.5 size-2 rounded-full ring-2 ring-white"
@@ -106,13 +104,12 @@
 </template>
 
 <script setup>
-import { ref, computed, markRaw } from 'vue'
+import { ref, computed, markRaw, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Tooltip, Badge } from 'frappe-ui'
+import { Tooltip, Badge, FeatherIcon } from 'frappe-ui'
 import { useNavigationBadgesStore } from '@/stores/navigationBadges'
 import { mobileSidebarOpened } from '@/composables/settings'
 
-// Import Lucide Icons
 import FlameIcon from '~icons/lucide/flame'
 import ClipboardListIcon from '~icons/lucide/clipboard-list'
 import InboxIcon from '~icons/lucide/inbox'
@@ -148,7 +145,6 @@ import ActivityIcon from '~icons/lucide/activity'
 import HardDriveIcon from '~icons/lucide/hard-drive'
 import LockIcon from '~icons/lucide/lock'
 import EyeIcon from '~icons/lucide/eye'
-import ChevronRightIcon from '~icons/lucide/chevron-right'
 
 const props = defineProps({
   item: { type: Object, required: true },
@@ -252,10 +248,20 @@ function toggleExpand() {
   isExpanded.value = !isExpanded.value
 }
 
+watch(
+  () => [props.item.children, route.fullPath],
+  () => {
+    if (props.item.children?.some((child) => checkRouteMatch(child.to))) {
+      isExpanded.value = true
+    }
+  },
+  { immediate: true },
+)
+
 function handleClick() {
   if (hasChildren.value && !props.isCollapsed) {
     toggleExpand()
-    if (!props.item.to && !props.item.action) return
+    return
   }
 
   if (props.item.action) {
@@ -278,4 +284,3 @@ function handleClick() {
   }
 }
 </script>
-
