@@ -16,6 +16,7 @@ from crm.fcrm.role_policy import (
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
 )
+from crm.fcrm.student_feature_flags import role_workspace_read_enabled
 
 # Compatibility exports for existing API consumers. New consumers import the
 # canonical policy module rather than adding role literals here.
@@ -86,8 +87,9 @@ def _session_role_flags(roles):
 		# Compatibility field consumed by the local crm-agents gateway.
 		"crm_role": CRM_PROFILE_LABELS.get(profile, profile),
 		"crm_role_state": role_state,
-		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
-		"crm_policy_version": POLICY_VERSION,
+                "crm_capabilities": sorted(capabilities_for_roles(role_names)),
+                "crm_policy_version": POLICY_VERSION,
+                "crm_feature_flags": {"role_workspace_read": role_workspace_read_enabled()},
 	}
 
 
@@ -105,8 +107,9 @@ def get_session_role_flags():
 			"crm_profile": None,
 			"crm_role": None,
 			"crm_role_state": "platform_superuser",
-			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
-			"crm_policy_version": POLICY_VERSION,
+                        "crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
+                        "crm_policy_version": POLICY_VERSION,
+                        "crm_feature_flags": {"role_workspace_read": role_workspace_read_enabled()},
 		}
 	return _session_role_flags(frappe.get_roles())
 
@@ -130,8 +133,9 @@ def get_my_roles():
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_role_state": flags["crm_role_state"],
-		"crm_capabilities": flags["crm_capabilities"],
-		"crm_policy_version": flags["crm_policy_version"],
+                "crm_capabilities": flags["crm_capabilities"],
+                "crm_policy_version": flags["crm_policy_version"],
+                "crm_feature_flags": flags["crm_feature_flags"],
 	}
 
 
@@ -163,6 +167,7 @@ def get_users():
 	for user in users:
 		if frappe.session.user == user.name:
 			user.session_user = True
+			user.crm_feature_flags = session_roles["crm_feature_flags"]
 
 		user.roles = frappe.get_roles(user.name)
 

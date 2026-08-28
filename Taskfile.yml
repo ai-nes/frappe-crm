@@ -49,6 +49,7 @@ tasks:
   migrate:
     desc: Schema, patches, workspace sync
     cmds:
+      - python scripts/validate_doctype_json.py
       - "{{.EXEC}} {{.BENCH}} migrate"
 
   workspace:

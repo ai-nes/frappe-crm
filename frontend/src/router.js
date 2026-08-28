@@ -5,8 +5,13 @@ import { viewsStore } from '@/stores/views'
 import {
   acquisitionWorkspaceCapabilities,
   admissionsWorkspaceCapabilities,
+  canAccessWorkspace,
   hasAnyCapability,
 } from '@/utils/rolePolicy'
+import {
+  resolveWorkspaceRoute,
+  sanitizeWorkspaceQuery,
+} from '@/utils/workspaceRegistry'
 
 const routes = [
   {
@@ -133,17 +138,39 @@ const routes = [
     props: true,
   },
   {
+    alias: '/admissions-lookups',
+    path: '/lookups',
+    name: 'Lookups',
+    component: () => import('@/pages/Lookups.vue'),
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
+  },
+  {
     alias: '/high-schools',
     path: '/high-schools/view/:viewType?',
     name: 'High Schools',
     component: () => import('@/pages/HighSchools.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
   },
   {
     path: '/high-schools/:highSchoolId',
     name: 'High School',
     component: () => import('@/pages/HighSchool.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
     props: true,
   },
   {
@@ -227,6 +254,29 @@ const routes = [
     component: () => import('@/pages/Welcome.vue'),
   },
   {
+    path: '/workspaces/system/:workspace/:view?',
+    name: 'System Workspace',
+    component: () => import('@/pages/SystemWorkspace.vue'),
+    props: (route) => ({
+      workspace: resolveWorkspaceRoute(
+        route.params.workspace,
+        route.params.view,
+      ),
+    }),
+  },
+  {
+    path: '/workspaces/:workspace/:view?',
+    name: 'Role Workspace',
+    // The registry guard prevents this shared shell becoming a broad route.
+    component: () => import('@/pages/RoleWorkspace.vue'),
+    props: (route) => ({
+      workspace: resolveWorkspaceRoute(
+        route.params.workspace,
+        route.params.view,
+      ),
+    }),
+  },
+  {
     path: '/:invalidpath',
     name: 'Invalid Page',
     component: () => import('@/pages/InvalidPage.vue'),
@@ -258,6 +308,41 @@ router.beforeEach(async (to, from, next) => {
       await users.promise
     } catch (error) {
       console.error('Error loading users', error)
+    }
+  }
+
+  const isWorkspaceRoute = ['Role Workspace', 'System Workspace'].includes(
+    to.name,
+  )
+  const workspaceEntry = isWorkspaceRoute
+    ? resolveWorkspaceRoute(to.params.workspace, to.params.view)
+    : null
+
+  if (isLoggedIn && isWorkspaceRoute && !workspaceEntry) {
+    next({ name: 'Invalid Page' })
+    return
+  }
+
+  if (
+    isLoggedIn &&
+    workspaceEntry &&
+    ((workspaceEntry.role === 'system_manager') !==
+      (to.name === 'System Workspace') ||
+      !canAccessWorkspace(getCurrentUser(), workspaceEntry))
+  ) {
+    next({ name: 'Not Permitted' })
+    return
+  }
+
+  if (isLoggedIn && workspaceEntry) {
+    const query = sanitizeWorkspaceQuery(
+      to.params.workspace,
+      to.params.view,
+      to.query,
+    )
+    if (Object.keys(query).length !== Object.keys(to.query).length) {
+      next({ name: to.name, params: to.params, query, hash: to.hash })
+      return
     }
   }
 

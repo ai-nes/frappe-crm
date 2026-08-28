@@ -223,7 +223,10 @@ import {
   canAccessNavigationRoute,
   canManageRoles,
 } from '@/utils/rolePolicy'
-import { getNavigationForUser } from '@/utils/navigationConfig'
+import {
+  getNavigationForUser,
+  isRoleWorkspaceNavigationEnabled,
+} from '@/utils/navigationConfig'
 import { ref, reactive, computed, markRaw, onMounted } from 'vue'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
@@ -314,6 +317,13 @@ function getIcon(routeName, icon) {
     default:
       return PinIcon
   }
+}
+
+function navigationBadgeKeys(items) {
+  return items.flatMap((item) => [
+    ...(item.badgeKey ? [item.badgeKey] : []),
+    ...navigationBadgeKeys(item.children || []),
+  ])
 }
 
 // onboarding
@@ -477,7 +487,10 @@ const steps = reactive([
 
 onMounted(async () => {
   await users.promise
-  badgesStore.fetchBadges()
+  await badgesStore.fetchBadges(
+    navigationBadgeKeys(currentNavItems.value),
+    isRoleWorkspaceNavigationEnabled(currentUser.value),
+  )
 
   const filteredSteps = steps.filter((step) => {
     if (step.condition) {

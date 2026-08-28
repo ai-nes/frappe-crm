@@ -1,44 +1,46 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="High Schools" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Majors"
+        :label="__('Ngành & Chương trình')"
+      />
     </template>
     <template #right-header>
       <CustomActions
         v-if="listView?.customListActions"
         :actions="listView.customListActions"
       />
-      <template v-if="canConfigure">
-        <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
-        <Button
-          variant="solid"
-          :label="__('Create')"
-          iconLeft="plus"
-          @click="createHighSchool"
-        />
-      </template>
+      <Button
+        v-if="canConfigure"
+        variant="solid"
+        :label="__('Create')"
+        iconLeft="plus"
+        @click="createMajor"
+      />
     </template>
   </LayoutHeader>
   <ViewControls
     ref="viewControls"
-    v-model="highSchools"
+    v-model="majors"
     v-model:loadMore="loadMore"
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM High School"
+    doctype="CRM Major"
   />
-  <HighSchoolsListView
-    v-if="highSchools.data && rows.length"
+  <CRMMajorsListView
+    v-if="majors.data && rows.length"
     ref="listView"
-    v-model="highSchools.data.page_length_count"
-    v-model:list="highSchools"
+    v-model="majors.data.page_length_count"
+    v-model:list="majors"
     :rows="rows"
     :columns="columns"
     :options="{
       showTooltip: false,
       resizeColumn: true,
-      rowCount: highSchools.data.row_count,
-      totalCount: highSchools.data.total_count,
+      rowCount: majors.data.row_count,
+      totalCount: majors.data.total_count,
     }"
     @loadMore="() => loadMore++"
     @columnWidthUpdated="() => triggerResize++"
@@ -49,69 +51,63 @@
     @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
   />
   <EmptyState
-    v-else-if="highSchools.data && !rows.length"
-    name="High Schools"
-    :icon="SchoolIcon"
+    v-else-if="majors.data && !rows.length"
+    name="CRM Major"
+    :icon="GraduationCapIcon"
   />
 </template>
 
 <script setup>
-import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
-import HighSchoolsListView from '@/components/ListViews/HighSchoolsListView.vue'
+import CRMMajorsListView from '@/components/ListViews/CRMMajorsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
+import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import ViewControls from '@/components/ViewControls.vue'
-import GeographyImportButton from '@/components/GeographyImportButton.vue'
-import SchoolIcon from '~icons/lucide/school'
 import { useDoctypeModal } from '@/composables/doctypeModal'
 import { usersStore } from '@/stores/users'
-import { canConfigureSystem } from '@/utils/rolePolicy'
 import { formatDate, timeAgo } from '@/utils'
-import { useRouter } from 'vue-router'
-import { ref, computed } from 'vue'
+import { canConfigureSystem } from '@/utils/rolePolicy'
+import GraduationCapIcon from '~icons/lucide/graduation-cap'
+import { computed, ref } from 'vue'
 
 const { showModal } = useDoctypeModal()
 const { getUser } = usersStore()
-const router = useRouter()
 
 const user = computed(() => getUser() || {})
 const canConfigure = computed(() => canConfigureSystem(user.value))
 
 const listView = ref(null)
-const highSchools = ref({})
+const majors = ref({})
 const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
-function createHighSchool() {
+
+function createMajor() {
   showModal({
-    doctype: 'CRM High School',
-    title: __('High School'),
+    doctype: 'CRM Major',
+    title: __('CRM Major'),
     callbacks: {
-      afterInsert: (doc) => {
-        router.push({ name: 'High School', params: { highSchoolId: doc.name } })
+      afterInsert: () => {
+        majors.value.reload?.()
       },
     },
   })
 }
 
-function reloadHighSchools() {
-  highSchools.value.reload?.()
-}
-
 const rows = computed(() => {
   if (
-    !highSchools.value?.data?.data ||
-    !['list', 'group_by'].includes(highSchools.value.data.view_type)
+    !majors.value?.data?.data ||
+    !['list', 'group_by'].includes(majors.value.data.view_type)
   )
     return []
-  return highSchools.value.data.data.map((hs) => {
+  return majors.value.data.data.map((item) => {
     let _rows = {}
-    highSchools.value.data.rows.forEach((row) => {
-      _rows[row] = hs[row]
+    majors.value.data.rows.forEach((row) => {
+      _rows[row] = item[row]
 
-      let fieldType = highSchools.value.data.columns?.find(
+      let fieldType = majors.value.data.columns?.find(
         (col) => (col.key || col.value) == row,
       )?.type
 
@@ -120,13 +116,13 @@ const rows = computed(() => {
         ['Date', 'Datetime'].includes(fieldType) &&
         !['modified', 'creation'].includes(row)
       ) {
-        _rows[row] = formatDate(hs[row], '', true, fieldType == 'Datetime')
+        _rows[row] = formatDate(item[row], '', true, fieldType == 'Datetime')
       }
 
       if (['modified', 'creation'].includes(row)) {
         _rows[row] = {
-          label: formatDate(hs[row]),
-          timeAgo: __(timeAgo(hs[row])),
+          label: formatDate(item[row]),
+          timeAgo: __(timeAgo(item[row])),
         }
       }
     })
@@ -135,7 +131,7 @@ const rows = computed(() => {
 })
 
 const columns = computed(() => {
-  let _columns = highSchools.value?.data?.columns || []
+  let _columns = majors.value?.data?.columns || []
   if (_columns.length) {
     _columns = _columns.map((col, index) => {
       if (index === _columns.length - 1) {

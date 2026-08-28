@@ -3,6 +3,7 @@ import {
   roleNavigationTrees,
   resolveUserNavigationRole,
   getNavigationForUser,
+  isRoleWorkspaceNavigationEnabled,
 } from '../../src/utils/navigationConfig'
 
 describe('navigationConfig', () => {
@@ -18,6 +19,23 @@ describe('navigationConfig', () => {
     expect(resolveUserNavigationRole({ crm_profile: 'sales', role: 'Sale' })).toBe('sales')
     expect(resolveUserNavigationRole({})).toBe('sales')
     expect(resolveUserNavigationRole(null)).toBe('sales')
+  })
+
+  it('keeps legacy destinations until the server enables workspace navigation', () => {
+    const legacy = getNavigationForUser({ crm_profile: 'sales' })
+    expect(legacy.find((item) => item.id === 'sales_my_records').to).toBe('CRM Contacts')
+    expect(isRoleWorkspaceNavigationEnabled({ crm_profile: 'sales' })).toBe(false)
+    const workspace = getNavigationForUser({
+      crm_profile: 'sales',
+      crm_feature_flags: { role_workspace_read: true },
+    })
+    expect(workspace.find((item) => item.id === 'sales_my_records').to).toEqual({
+      name: 'Role Workspace',
+      params: { workspace: 'sales-records', view: 'new' },
+    })
+    expect(isRoleWorkspaceNavigationEnabled({
+      crm_feature_flags: { role_workspace_read: true },
+    })).toBe(true)
   })
 
   it('resolves lead_sales role for lead_sales profile', () => {
@@ -68,12 +86,13 @@ describe('navigationConfig', () => {
     const salesTree = getNavigationForUser({ crm_profile: 'sales' })
     const labels = salesTree.map((item) => item.label)
 
+    expect(salesTree[0].label).toBe('Dashboard')
+    expect(labels).toContain('Dashboard')
     expect(labels).toContain('Cần liên hệ ngay')
     expect(labels).toContain('Hồ sơ của tôi')
     expect(labels).toContain('Hồ sơ chưa nhận')
     expect(labels).toContain('Việc của tôi')
     expect(labels).toContain('Lịch hẹn')
-    expect(labels).toContain('Kết quả của tôi')
     expect(labels).toContain('Tra cứu')
 
     const myRecords = salesTree.find((item) => item.label === 'Hồ sơ của tôi')
@@ -149,4 +168,3 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Nhật ký truy cập')
   })
 })
-

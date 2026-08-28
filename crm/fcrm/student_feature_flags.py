@@ -19,6 +19,7 @@ DEFAULTS = {
 	"migration": False,
 	"conversion_read": False,
 	"conversion_write": False,
+	"role_workspace_read": False,
 }
 ALIASES = {
 	"context_read": "context",
@@ -52,3 +53,8 @@ def context_read_enabled() -> bool:
 
 def legacy_read_enabled() -> bool:
 	return enabled("legacy_read", default=True)
+
+
+def role_workspace_read_enabled() -> bool:
+	"""Whether the read-only role-workspace facade is available server-side."""
+	return enabled("role_workspace_read")

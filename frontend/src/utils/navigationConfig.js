@@ -2,11 +2,22 @@
  * Role-based navigation structure according to role-navigation-menu-structure.md
  */
 
+import { getWorkspaceRoute } from '@/utils/workspaceRegistry'
 import { showSettings, activeSettingsPage } from '@/composables/settings'
 
-export const roleNavigationTrees = {
+const rawRoleNavigationTrees = {
   // 1. Sales — Tư vấn viên
   sales: [
+    {
+      id: 'sales_my_results',
+      label: 'Dashboard',
+      icon: 'layout-dashboard',
+      to: {
+        name: 'Dashboard',
+        params: { section: 'overview' },
+        query: { scope: 'my' },
+      },
+    },
     {
       id: 'sales_immediate_contact',
       label: 'Cần liên hệ ngay',
@@ -70,45 +81,10 @@ export const roleNavigationTrees = {
       to: 'Call Logs',
     },
     {
-      id: 'sales_my_results',
-      label: 'Kết quả của tôi',
-      icon: 'layout-dashboard',
-      to: {
-        name: 'Dashboard',
-        params: { section: 'overview' },
-        query: { scope: 'my' },
-      },
-    },
-    {
       id: 'sales_lookups',
       label: 'Tra cứu',
       icon: 'book-open',
-      to: 'High Schools',
-      children: [
-        {
-          id: 'sales_lookup_majors',
-          label: 'Ngành & Chương trình',
-          action: () => {
-            showSettings.value = true
-            activeSettingsPage.value = 'Categories'
-          },
-        },
-        {
-          id: 'sales_lookup_tuition',
-          label: 'Học phí & Học bổng',
-          to: { name: 'CRM Contacts', query: { lookup: 'tuition' } },
-        },
-        {
-          id: 'sales_lookup_quota',
-          label: 'Chỉ tiêu còn lại',
-          to: { name: 'CRM Students', query: { stage: 'intake' } },
-        },
-        {
-          id: 'sales_lookup_high_schools',
-          label: 'Trường THPT',
-          to: 'High Schools',
-        },
-      ],
+      to: 'Lookups',
     },
   ],
 
@@ -131,22 +107,38 @@ export const roleNavigationTrees = {
         {
           id: 'lead_sla_running',
           label: 'Đang chạy',
-          to: { name: 'Dashboard', params: { section: 'sla' }, query: { tab: 'running' } },
+          to: {
+            name: 'Dashboard',
+            params: { section: 'sla' },
+            query: { tab: 'running' },
+          },
         },
         {
           id: 'lead_sla_near_breach',
           label: 'Sắp trễ (<30 phút)',
-          to: { name: 'Dashboard', params: { section: 'sla' }, query: { tab: 'near_breach' } },
+          to: {
+            name: 'Dashboard',
+            params: { section: 'sla' },
+            query: { tab: 'near_breach' },
+          },
         },
         {
           id: 'lead_sla_breached',
           label: 'Đã trễ',
-          to: { name: 'Dashboard', params: { section: 'sla' }, query: { tab: 'breached' } },
+          to: {
+            name: 'Dashboard',
+            params: { section: 'sla' },
+            query: { tab: 'breached' },
+          },
         },
         {
           id: 'lead_sla_violations',
           label: 'Lịch sử vi phạm',
-          to: { name: 'Dashboard', params: { section: 'sla' }, query: { tab: 'history' } },
+          to: {
+            name: 'Dashboard',
+            params: { section: 'sla' },
+            query: { tab: 'history' },
+          },
         },
       ],
     },
@@ -216,32 +208,7 @@ export const roleNavigationTrees = {
       id: 'lead_lookups',
       label: 'Tra cứu',
       icon: 'book-open',
-      to: 'High Schools',
-      children: [
-        {
-          id: 'lead_lookup_majors',
-          label: 'Ngành & Chương trình',
-          action: () => {
-            showSettings.value = true
-            activeSettingsPage.value = 'Categories'
-          },
-        },
-        {
-          id: 'lead_lookup_tuition',
-          label: 'Học phí & Học bổng',
-          to: { name: 'CRM Contacts', query: { lookup: 'tuition' } },
-        },
-        {
-          id: 'lead_lookup_quota',
-          label: 'Chỉ tiêu còn lại',
-          to: { name: 'CRM Students', query: { stage: 'intake' } },
-        },
-        {
-          id: 'lead_lookup_high_schools',
-          label: 'Trường THPT',
-          to: 'High Schools',
-        },
-      ],
+      to: 'Lookups',
     },
     {
       id: 'lead_sla_policy_readonly',
@@ -260,22 +227,34 @@ export const roleNavigationTrees = {
       id: 'mkt_overview',
       label: 'Tổng quan marketing',
       icon: 'line-chart',
-      to: { name: 'Digital Marketing Dashboard', params: { section: 'overview' } },
+      to: {
+        name: 'Digital Marketing Dashboard',
+        params: { section: 'overview' },
+      },
       children: [
         {
           id: 'mkt_cpl',
           label: 'CPL theo kênh',
-          to: { name: 'Digital Marketing Dashboard', params: { section: 'cpl' } },
+          to: {
+            name: 'Digital Marketing Dashboard',
+            params: { section: 'cpl' },
+          },
         },
         {
           id: 'mkt_cpa',
           label: 'CPA (chi phí / học sinh)',
-          to: { name: 'Digital Marketing Dashboard', params: { section: 'cpa' } },
+          to: {
+            name: 'Digital Marketing Dashboard',
+            params: { section: 'cpa' },
+          },
         },
         {
           id: 'mkt_trends',
           label: 'Xu hướng theo tuần',
-          to: { name: 'Digital Marketing Dashboard', params: { section: 'trends' } },
+          to: {
+            name: 'Digital Marketing Dashboard',
+            params: { section: 'trends' },
+          },
         },
       ],
     },
@@ -337,13 +316,19 @@ export const roleNavigationTrees = {
       id: 'mkt_sources_attribution',
       label: 'Nguồn & Attribution',
       icon: 'search',
-      to: { name: 'Digital Marketing Dashboard', params: { section: 'attribution' } },
+      to: {
+        name: 'Digital Marketing Dashboard',
+        params: { section: 'attribution' },
+      },
     },
     {
       id: 'mkt_funnel',
       label: 'Phễu chuyển đổi',
       icon: 'filter',
-      to: { name: 'Digital Marketing Dashboard', params: { section: 'funnel' } },
+      to: {
+        name: 'Digital Marketing Dashboard',
+        params: { section: 'funnel' },
+      },
     },
     {
       id: 'mkt_segments_consent',
@@ -708,6 +693,33 @@ export const roleNavigationTrees = {
   ],
 }
 
+function bindWorkspaceDestinations(items) {
+  return items.map(({ action: _action, children, ...item }) => ({
+    ...item,
+    to: getWorkspaceRoute(item.id),
+    ...(children && { children: bindWorkspaceDestinations(children) }),
+  }))
+}
+
+// Every role menu opens a named workspace. Legacy Dashboard, CRM Contact and
+// Settings-modal shortcuts are intentionally not retained for operational use.
+export const roleNavigationTrees = Object.fromEntries(
+  Object.entries(rawRoleNavigationTrees).map(([role, items]) => [
+    role,
+    bindWorkspaceDestinations(items),
+  ]),
+)
+
+/**
+ * The workspace reader is dark-launched server-side. Keep existing menu
+ * destinations until the session has received an explicit, server-issued
+ * rollout flag; a missing flag must never turn a normal CRM click into an
+ * unavailable workspace.
+ */
+export function isRoleWorkspaceNavigationEnabled(user) {
+  return user?.crm_feature_flags?.role_workspace_read === true
+}
+
 /**
  * Resolves the primary role/profile key for a user object.
  */
@@ -746,6 +758,8 @@ export function resolveUserNavigationRole(user) {
  */
 export function getNavigationForUser(user) {
   const roleKey = resolveUserNavigationRole(user)
-  return roleNavigationTrees[roleKey] || roleNavigationTrees.sales
+  const trees = isRoleWorkspaceNavigationEnabled(user)
+    ? roleNavigationTrees
+    : rawRoleNavigationTrees
+  return trees[roleKey] || trees.sales
 }
-

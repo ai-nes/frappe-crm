@@ -9358,6 +9358,388 @@ msgstr "Không tìm thấy lịch sử chấm điểm"
 msgid "Score snapshots for the linked student will appear here."
 msgstr "Các lần chấm điểm của học sinh liên kết sẽ hiển thị tại đây."
 
+# Student Worklist & Admissions Decision Queue
+msgid "My Recommendations"
+msgstr "Cần liên hệ ngay"
+
+msgid "Immediate Follow-up"
+msgstr "Cần liên hệ ngay"
+
+msgid "Cần liên hệ ngay"
+msgstr "Cần liên hệ ngay"
+
+msgid "Recommendation inbox"
+msgstr "Đề xuất liên hệ"
+
+msgid "My actions"
+msgstr "Nhiệm vụ của tôi"
+
+msgid "Đề xuất liên hệ"
+msgstr "Đề xuất liên hệ"
+
+msgid "Nhiệm vụ của tôi"
+msgstr "Nhiệm vụ của tôi"
+
+msgid "DECISION QUEUE"
+msgstr "DANH SÁCH CẦN LIÊN HỆ"
+
+msgid "EXECUTION QUEUE"
+msgstr "DANH SÁCH NHIỆM VỤ"
+
+msgid "Recommendations to review"
+msgstr "Đề xuất liên hệ & tư vấn thí sinh"
+
+msgid "Actions assigned to you"
+msgstr "Nhiệm vụ tư vấn được giao"
+
+msgid "Turn accepted recommendations into one clear Action."
+msgstr "Tiếp nhận và lên lịch tư vấn để theo dõi tiến độ chăm sóc thí sinh."
+
+msgid "Work from due date first, then record the outcome."
+msgstr "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+
+msgid "Đề xuất liên hệ & tư vấn thí sinh"
+msgstr "Đề xuất liên hệ & tư vấn thí sinh"
+
+msgid "Nhiệm vụ tư vấn được giao"
+msgstr "Nhiệm vụ tư vấn được giao"
+
+msgid "Ưu tiên liên hệ theo thời hạn SLA và nhu cầu đăng ký xét tuyển của thí sinh."
+msgstr "Ưu tiên liên hệ theo thời hạn SLA và nhu cầu đăng ký xét tuyển của thí sinh."
+
+msgid "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+msgstr "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+
+msgid "đề xuất"
+msgstr "đề xuất"
+
+msgid "nhiệm vụ"
+msgstr "nhiệm vụ"
+
+msgid "quá hạn SLA"
+msgstr "quá hạn SLA"
+
+msgid "{0} quá hạn"
+msgstr "{0} quá hạn"
+
+msgid "No recommendations to decide"
+msgstr "Không có thí sinh cần liên hệ khẩn"
+
+msgid "New or returning recommendations will appear here."
+msgstr "Các thí sinh mới đăng ký hoặc đến lịch nhắc lại sẽ hiển thị tại đây."
+
+msgid "No actions assigned to you"
+msgstr "Không có nhiệm vụ cần thực hiện"
+
+msgid "Your active Actions will appear here."
+msgstr "Các lịch hẹn gọi điện, tư vấn và theo dõi hồ sơ của bạn sẽ xuất hiện tại đây."
+
+msgid "Không có thí sinh cần liên hệ khẩn"
+msgstr "Không có thí sinh cần liên hệ khẩn"
+
+msgid "Tất cả đề xuất tư vấn và chăm sóc thí sinh đã được xử lý hoặc lên lịch."
+msgstr "Tất cả đề xuất tư vấn và chăm sóc thí sinh đã được xử lý hoặc lên lịch."
+
+msgid "Không có nhiệm vụ cần thực hiện"
+msgstr "Không có nhiệm vụ cần thực hiện"
+
+msgid "Bạn đã hoàn thành tất cả nhiệm vụ tư vấn và chăm sóc hồ sơ được giao."
+msgstr "Bạn đã hoàn thành tất cả nhiệm vụ tư vấn và chăm sóc hồ sơ được giao."
+
+msgid "Loading work"
+msgstr "Đang tải danh sách..."
+
+msgid "Đang tải danh sách..."
+msgstr "Đang tải danh sách..."
+
+msgid "Work could not be loaded"
+msgstr "Không thể tải danh sách"
+
+msgid "Không thể tải danh sách"
+msgstr "Không thể tải danh sách"
+
+msgid "Try again"
+msgstr "Thử lại"
+
+msgid "Thử lại"
+msgstr "Thử lại"
+
+msgid "Student"
+msgstr "Thí sinh"
+
+msgid "Thí sinh"
+msgstr "Thí sinh"
+
+msgid "Scheduled"
+msgstr "Lịch hẹn đề xuất"
+
+msgid "Not scheduled"
+msgstr "Chưa lên lịch"
+
+msgid "Chưa lên lịch"
+msgstr "Chưa lên lịch"
+
+msgid "Chưa đặt hạn"
+msgstr "Chưa đặt hạn"
+
+msgid "Due"
+msgstr "Hạn xử lý (SLA)"
+
+msgid "Hạn xử lý (SLA)"
+msgstr "Hạn xử lý (SLA)"
+
+msgid "Assignee"
+msgstr "Tư vấn viên"
+
+msgid "Tư vấn viên"
+msgstr "Tư vấn viên"
+
+msgid "Outcome"
+msgstr "Kết quả tư vấn"
+
+msgid "Kết quả tư vấn"
+msgstr "Kết quả tư vấn"
+
+msgid "Linked interaction"
+msgstr "Cuộc gọi / Tương tác liên quan"
+
+msgid "Cuộc gọi / Tương tác liên quan"
+msgstr "Cuộc gọi / Tương tác liên quan"
+
+msgid "Open student"
+msgstr "Xem hồ sơ"
+
+msgid "Xem hồ sơ"
+msgstr "Xem hồ sơ"
+
+msgid "Update action"
+msgstr "Ghi nhận kết quả"
+
+msgid "Ghi nhận kết quả"
+msgstr "Ghi nhận kết quả"
+
+msgid "Ghi nhận kết quả tư vấn"
+msgstr "Ghi nhận kết quả tư vấn"
+
+msgid "Accept"
+msgstr "Tiếp nhận & Lên lịch"
+
+msgid "Tiếp nhận & Lên lịch"
+msgstr "Tiếp nhận & Lên lịch"
+
+msgid "Defer"
+msgstr "Hẹn lại"
+
+msgid "Hẹn lại"
+msgstr "Hẹn lại"
+
+msgid "Reject"
+msgstr "Bỏ qua"
+
+msgid "Bỏ qua"
+msgstr "Bỏ qua"
+
+msgid "Load more"
+msgstr "Tải thêm"
+
+msgid "Tải thêm"
+msgstr "Tải thêm"
+
+msgid "High priority"
+msgstr "Ưu tiên cao"
+
+msgid "Medium priority"
+msgstr "Ưu tiên trung bình"
+
+msgid "Low priority"
+msgstr "Ưu tiên thấp"
+
+msgid "Ưu tiên cao"
+msgstr "Ưu tiên cao"
+
+msgid "Ưu tiên trung bình"
+msgstr "Ưu tiên trung bình"
+
+msgid "Ưu tiên thấp"
+msgstr "Ưu tiên thấp"
+
+msgid "Không có độ ưu tiên"
+msgstr "Không có độ ưu tiên"
+
+msgid "Độ ưu tiên {0}"
+msgstr "Độ ưu tiên {0}"
+
+msgid "Overdue"
+msgstr "Quá hạn SLA"
+
+msgid "Quá hạn SLA"
+msgstr "Quá hạn SLA"
+
+msgid "Accept recommendation"
+msgstr "Tiếp nhận & Lên lịch tư vấn"
+
+msgid "Defer recommendation"
+msgstr "Hẹn liên hệ lại"
+
+msgid "Reject recommendation"
+msgstr "Bỏ qua đề xuất liên hệ"
+
+msgid "Decide recommendation"
+msgstr "Xử lý đề xuất liên hệ"
+
+msgid "Tiếp nhận & Lên lịch tư vấn"
+msgstr "Tiếp nhận & Lên lịch tư vấn"
+
+msgid "Hẹn liên hệ lại"
+msgstr "Hẹn liên hệ lại"
+
+msgid "Bỏ qua đề xuất liên hệ"
+msgstr "Bỏ qua đề xuất liên hệ"
+
+msgid "Bỏ qua đề xuất"
+msgstr "Bỏ qua đề xuất"
+
+msgid "Xử lý đề xuất liên hệ"
+msgstr "Xử lý đề xuất liên hệ"
+
+msgid "Xác nhận lên lịch"
+msgstr "Xác nhận lên lịch"
+
+msgid "Xác nhận hẹn lại"
+msgstr "Xác nhận hẹn lại"
+
+msgid "Xác nhận bỏ qua"
+msgstr "Xác nhận bỏ qua"
+
+msgid "Deciding recommendation for {0}."
+msgstr "Lên lịch tư vấn cho thí sinh {0}."
+
+msgid "Lên lịch tư vấn cho thí sinh {0}."
+msgstr "Lên lịch tư vấn cho thí sinh {0}."
+
+msgid "Due time"
+msgstr "Thời hạn thực hiện / Lịch hẹn"
+
+msgid "Thời hạn thực hiện / Lịch hẹn"
+msgstr "Thời hạn thực hiện / Lịch hẹn"
+
+msgid "Executor"
+msgstr "Tư vấn viên phụ trách"
+
+msgid "Tư vấn viên phụ trách"
+msgstr "Tư vấn viên phụ trách"
+
+msgid "Only executors permitted by the server are shown."
+msgstr "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+
+msgid "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+msgstr "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+
+msgid "Deferral"
+msgstr "Hình thức hẹn lại"
+
+msgid "Hình thức hẹn lại"
+msgstr "Hình thức hẹn lại"
+
+msgid "Return to inbox later"
+msgstr "Nhắc lại sau vào danh sách"
+
+msgid "Nhắc lại sau vào danh sách"
+msgstr "Nhắc lại sau vào danh sách"
+
+msgid "Archive with reason"
+msgstr "Đóng đề xuất kèm lý do"
+
+msgid "Đóng đề xuất kèm lý do"
+msgstr "Đóng đề xuất kèm lý do"
+
+msgid "Return to inbox at"
+msgstr "Thời điểm nhắc lại"
+
+msgid "Thời điểm nhắc lại"
+msgstr "Thời điểm nhắc lại"
+
+msgid "Rejection reason"
+msgstr "Lý do bỏ qua"
+
+msgid "Lý do bỏ qua"
+msgstr "Lý do bỏ qua"
+
+msgid "Archival reason"
+msgstr "Lý do đóng đề xuất"
+
+msgid "Lý do đóng đề xuất"
+msgstr "Lý do đóng đề xuất"
+
+msgid "Next status"
+msgstr "Trạng thái xử lý"
+
+msgid "Trạng thái xử lý"
+msgstr "Trạng thái xử lý"
+
+msgid "Execution outcome"
+msgstr "Kết quả tư vấn"
+
+msgid "Evidence"
+msgstr "Nội dung / Ghi chú tư vấn"
+
+msgid "Nội dung / Ghi chú tư vấn"
+msgstr "Nội dung / Ghi chú tư vấn"
+
+msgid "Record execution evidence. A linked interaction must belong to this Student and already have its engagement outcome."
+msgstr "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+
+msgid "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+msgstr "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+
+msgid "Linked interaction (optional)"
+msgstr "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+
+msgid "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+msgstr "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+
+msgid "Lý do không thành công"
+msgstr "Lý do không thành công"
+
+msgid "Save action"
+msgstr "Lưu kết quả tư vấn"
+
+msgid "Lưu kết quả tư vấn"
+msgstr "Lưu kết quả tư vấn"
+
+msgid "Không thể lưu quyết định này."
+msgstr "Không thể lưu quyết định này."
+
+msgid "Không thể cập nhật công việc này."
+msgstr "Không thể cập nhật công việc này."
+
+msgid "Không nghe máy / Chưa kết nối"
+msgstr "Không nghe máy / Chưa kết nối"
+
+msgid "Quan tâm cao / Muốn đăng ký xét tuyển"
+msgstr "Quan tâm cao / Muốn đăng ký xét tuyển"
+
+msgid "Cần gửi thêm thông tin ngành & học phí"
+msgstr "Cần gửi thêm thông tin ngành & học phí"
+
+msgid "Hẹn gọi lại sau"
+msgstr "Hẹn gọi lại sau"
+
+msgid "Bắt đầu nộp hồ sơ xét tuyển"
+msgstr "Bắt đầu nộp hồ sơ xét tuyển"
+
+msgid "Đã hoàn tất hồ sơ xét tuyển"
+msgstr "Đã hoàn tất hồ sơ xét tuyển"
+
+msgid "Không có nhu cầu xét tuyển"
+msgstr "Không có nhu cầu xét tuyển"
+
+msgid "Đang tư vấn"
+msgstr "Đang tư vấn"
+
+msgid "Đã hủy"
+msgstr "Đã hủy"
+
 msgid "Interaction"
 msgstr "Tương tác"
 

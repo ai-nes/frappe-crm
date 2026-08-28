@@ -59,6 +59,35 @@ export function transitionOptions(action) {
     .filter((transition) => transition.value)
 }
 
+export const admissionsOutcomeMap = {
+  NO_RESPONSE: 'Không nghe máy / Chưa kết nối',
+  INTEREST_INCREASED: 'Quan tâm cao / Muốn đăng ký xét tuyển',
+  NEEDS_MORE_INFORMATION: 'Cần gửi thêm thông tin ngành & học phí',
+  CALL_BACK_LATER: 'Hẹn gọi lại sau',
+  APPLICATION_STARTED: 'Bắt đầu nộp hồ sơ xét tuyển',
+  APPLICATION_COMPLETED: 'Đã hoàn tất hồ sơ xét tuyển',
+  NOT_INTERESTED: 'Không có nhu cầu xét tuyển',
+}
+
+export const admissionsActionStatusMap = {
+  planned: 'Đã lên lịch',
+  in_progress: 'Đang tư vấn',
+  completed: 'Đã hoàn thành',
+  failed: 'Không thành công',
+  cancelled: 'Đã hủy',
+  canceled: 'Đã hủy',
+}
+
+export function formatOutcomeLabel(outcome) {
+  if (!outcome) return ''
+  return __(admissionsOutcomeMap[outcome] || outcome)
+}
+
+export function formatActionStatusLabel(status) {
+  if (!status) return ''
+  return __(admissionsActionStatusMap[status] || status)
+}
+
 export function isActionOverdue(action, now = new Date()) {
   if (!action?.dueAt || terminalActionStatuses.has(String(action.status || '').toLowerCase())) return false
   const due = new Date(action.dueAt)

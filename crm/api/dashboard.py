@@ -308,22 +308,29 @@ def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=No
 
 @frappe.whitelist()
 def get_sidebar_badge_counts():
-	"""Return dynamic badge counts for the current user's session navigation."""
+	"""Return legacy counters only during the workspace reader dark launch.
+
+	The frontend stops calling this endpoint once the server-issued
+	``role_workspace_read`` flag is true. It remains as a compatibility path so
+	default-off users do not lose existing sidebar indicators while the scoped
+	reader contracts are being released.
+	"""
+	from crm.fcrm.student_feature_flags import role_workspace_read_enabled
+
+	if role_workspace_read_enabled():
+		from crm.api.role_workspaces import get_workspace_badges
+
+		return get_workspace_badges()
+
 	user = frappe.session.user
 	roles = frappe.get_roles(user)
 	is_admin = "System Manager" in roles or user == "Administrator"
-	staff_name = frappe.db.get_value("CRM Staff", {"user": user}, "name")
 
-	# Urgent SLA / Recommendation count
 	urgent_sla_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):
 		sla_filters = {"status": "open"}
-		if not is_admin and staff_name:
-			urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
-		else:
-			urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
+		urgent_sla_count = frappe.db.count("CRM Student SLA Attempt", filters=sla_filters)
 
-	# Unassigned / Pool count
 	pool_count = 0
 	if frappe.db.table_exists("CRM Contact"):
 		pool_count = frappe.db.count(
@@ -333,7 +340,6 @@ def get_sidebar_badge_counts():
 	elif frappe.db.table_exists("CRM Student"):
 		pool_count = frappe.db.count("CRM Student", filters={"owner_staff": ["is", "not set"]})
 
-	# Team SLA breached / near breach count
 	team_sla_breached_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):
 		team_sla_breached_count = frappe.db.count(
@@ -341,25 +347,18 @@ def get_sidebar_badge_counts():
 			filters={"status": ["in", ["breached", "near_breach", "escalated"]]},
 		)
 
-	# Suspected duplicates count
 	duplicate_count = 0
 	if frappe.db.table_exists("CRM Contact"):
-		duplicate_count = frappe.db.count(
-			"CRM Contact",
-			filters={"full_name": ["like", "%(Trùng%"]},
-		)
+		duplicate_count = frappe.db.count("CRM Contact", filters={"full_name": ["like", "%(Trùng%"]})
 
-	# Pending spend approvals
 	pending_spend_approval_count = 0
 	if frappe.db.table_exists("CRM Campaign Spend"):
 		pending_spend_approval_count = frappe.db.count("CRM Campaign Spend")
 
-	# Manager approvals
 	manager_approvals_count = pending_spend_approval_count
 	if frappe.db.table_exists("CRM Master Data Change"):
 		manager_approvals_count += frappe.db.count("CRM Master Data Change", filters={"status": "Pending"})
 
-	# Tasks count for my tasks
 	my_task_count = 0
 	if frappe.db.table_exists("Task"):
 		task_filters = {"status": ["in", ["Todo", "In Progress"]]}
