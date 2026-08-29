@@ -47,7 +47,7 @@
           {{ __('Recent conversations') }}
         </div>
         <button
-          class="text-xs text-ink-blue-5 hover:underline"
+          class="text-xs text-[--brand-ink] hover:underline"
           @click="$emit('new-chat')"
         >
           {{ __('New') }}
@@ -130,7 +130,7 @@
           </div>
           <button
             v-if="message.retryable"
-            class="mt-2 text-xs font-medium text-ink-blue-5 hover:underline"
+            class="mt-2 text-xs font-medium text-[--brand-ink] hover:underline"
             @click="$emit('retry', message)"
           >
             {{ __('Retry') }}

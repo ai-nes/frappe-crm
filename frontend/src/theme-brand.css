@@ -1,0 +1,60 @@
+/*
+ * FPT brand theme — layered on top of frappe-ui's design tokens.
+ *
+ * frappe-ui `blue` tokens are intentionally left untouched: they carry
+ * informational semantics (info Alert/Badge, links inside frappe-ui components).
+ * Brand / interactive surfaces use the `brand` scale defined here and in
+ * tailwind.config.js. Chart palettes (Dashboard) are also left untouched.
+ */
+
+:root {
+  --brand-50: #fff4ed;
+  --brand-100: #ffe6d5;
+  --brand-200: #fecdaa;
+  --brand-300: #fdac74;
+  --brand-400: #fb8b3c;
+  --brand-500: #f37024;
+  --brand-600: #ec5f16; /* ~10% lighter than burnt #e4520a — the applied brand tone */
+  --brand-700: #c9490f;
+  --brand-800: #a23d14;
+  --brand-900: #833318;
+
+  /* Semantic roles — reference these from components, not the raw ramp. */
+  --brand-ink: var(--brand-600); /* text / icon on light bg (~3.4:1 on white) */
+  --brand-surface: var(--brand-600); /* solid fill + white text (~3.4:1) */
+  --brand-surface-subtle: #ffefe2; /* active-item fill — a hair above the sidebar ground */
+  --brand-outline: var(--brand-300); /* borders */
+  --brand-ring: var(--brand-400); /* focus ring */
+
+  /* Main navigation sidebar — lightest possible warm tint. Items don't fill on
+     hover (text darkens + icon goes brand); only the active item gets a fill. */
+  --sidebar-bg: #fff8f3;
+}
+
+:root[data-theme='dark'] {
+  --sidebar-bg: var(--surface-menu-bar); /* keep dark sidebar neutral */
+  --brand-ink: var(--brand-400);
+  --brand-surface: var(--brand-500);
+  --brand-surface-subtle: #3a1b0e;
+  --brand-outline: var(--brand-700);
+  --brand-ring: var(--brand-500);
+}
+
+/*
+ * Primary call-to-action buttons.
+ *
+ * frappe-ui renders `<Button variant="solid">` (the frappe-crm primary CTA) with
+ * the near-black `bg-surface-gray-7` utility. Re-point that one utility to the
+ * brand fill, scoped to <button> so dark surfaces / tooltips that reuse the same
+ * token are unaffected. If frappe-ui renames the class this degrades gracefully
+ * back to black.
+ */
+button.bg-surface-gray-7 {
+  background-color: var(--brand-surface);
+}
+button.hover\:bg-surface-gray-6:hover {
+  background-color: var(--brand-700);
+}
+button.active\:bg-surface-gray-5:active {
+  background-color: var(--brand-800);
+}

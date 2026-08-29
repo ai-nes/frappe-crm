@@ -25,7 +25,7 @@ def get_context():
 	from crm.api import check_app_permission
 
 	if not check_app_permission():
-		frappe.throw(_("You do not have permission to access Frappe CRM"), frappe.PermissionError)
+		frappe.throw(_("You do not have permission to access FPTU CRM"), frappe.PermissionError)
 
 	set_crm_session_language()
 	frappe.db.commit()

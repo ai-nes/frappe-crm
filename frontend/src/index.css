@@ -1,4 +1,5 @@
 @import 'frappe-ui/style.css';
+@import './theme-brand.css';
 
 @layer components {
   .prose-f {

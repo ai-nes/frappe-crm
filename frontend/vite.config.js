@@ -37,8 +37,10 @@ export default defineConfig(async ({ mode }) => {
         },
         manifest: {
           display: 'standalone',
-          name: 'Frappe CRM',
-          short_name: 'Frappe CRM',
+          name: 'FPTU CRM',
+          short_name: 'FPTU CRM',
+          theme_color: '#F37024',
+          background_color: '#FFFFFF',
           start_url: '/crm',
           description:
             'Modern & 100% Open-source CRM tool to supercharge your sales operations',

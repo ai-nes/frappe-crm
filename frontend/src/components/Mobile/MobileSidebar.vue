@@ -11,7 +11,7 @@
         leave-to="-translate-x-full"
       >
         <div
-          class="relative z-10 flex h-full w-[260px] flex-col justify-between border-r bg-surface-menu-bar transition-all duration-300 ease-in-out"
+          class="relative z-10 flex h-full w-[260px] flex-col justify-between border-r bg-[--sidebar-bg] transition-all duration-300 ease-in-out"
         >
           <div>
             <UserDropdown class="p-2" :isCollapsed="!sidebarOpened" />

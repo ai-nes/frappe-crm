@@ -2,9 +2,9 @@
   <div class="flex flex-col select-none">
     <!-- Main Node Item -->
     <div
-      class="group relative flex h-7.5 cursor-pointer items-center rounded text-ink-gray-8 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+      class="group relative flex h-7.5 cursor-pointer items-center rounded transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
       :class="[
-        isActive ? 'bg-surface-selected font-medium text-ink-gray-9 shadow-sm' : 'hover:bg-surface-gray-2',
+        isActive ? 'bg-[--brand-surface-subtle] font-medium text-[--brand-ink]' : 'text-ink-gray-8 group-hover:!text-[--brand-ink]',
         depth > 0 ? 'ml-4 pl-1 text-xs' : '',
         isCollapsed ? 'justify-center mx-1 px-1' : 'mx-2 px-2 py-[7px]'
       ]"
@@ -23,14 +23,9 @@
                 v-if="resolvedIcon"
                 class="size-4 shrink-0 transition-transform duration-200"
                 :class="[
-                  isActive ? 'text-ink-gray-9' : 'text-ink-gray-7 group-hover:text-ink-gray-9',
+                  isActive ? 'text-[--brand-ink]' : 'text-ink-gray-7 group-hover:!text-[--brand-ink]',
                   isCollapsed ? 'size-4' : 'size-4'
                 ]"
-              />
-              <div
-                v-else-if="depth > 0"
-                class="size-1.5 rounded-full bg-ink-gray-4 group-hover:bg-ink-gray-7 shrink-0 mr-1"
-                :class="{ '!bg-ink-gray-9': isActive }"
               />
             </div>
           </Tooltip>
@@ -45,8 +40,12 @@
             <span
               class="truncate transition-all duration-300 ease-in-out"
               :class="[
-                depth > 0 ? 'ml-2 text-xs text-ink-gray-7 group-hover:text-ink-gray-9' : 'ml-2.5 text-sm',
-                isActive ? 'font-medium text-ink-gray-9' : ''
+                depth > 0 ? 'ml-2 text-xs' : 'ml-2.5 text-sm',
+                isActive
+                  ? 'font-medium text-[--brand-ink]'
+                  : depth > 0
+                    ? 'text-ink-gray-7 group-hover:!text-[--brand-ink]'
+                    : 'group-hover:!text-[--brand-ink]'
               ]"
             >
               {{ __(item.label) }}
