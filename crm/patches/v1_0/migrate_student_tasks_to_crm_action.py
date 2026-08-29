@@ -39,12 +39,3 @@ def execute():
 				values[target] = row.get(source)
 		values["state"] = {"PENDING":"pending", "ACCEPTED":"accepted", "IN_PROGRESS":"in-progress", "REQUIRES_REVIEW":"requires-review", "COMPLETED":"completed", "CANCELLED":"cancelled", "SUPERSEDED":"superseded", "REJECTED":"rejected", "DEFERRED":"deferred"}.get(row.state, "pending")
 		frappe.get_doc(values).insert(ignore_permissions=True)
-	# Older sites may still retain the historical Sales Action table.  It is an
-	# archive only; never require it on fresh installs after the hard cutover.
-	if frappe.db.table_exists("CRM Sales Action"):
-		frappe.db.sql(
-			"""UPDATE `tabCRM Sales Action` sa
-			INNER JOIN `tabCRM Action` a ON a.legacy_student_task = sa.student_task
-			SET sa.action = a.name
-			WHERE sa.student_task IS NOT NULL AND sa.student_task != ''"""
-		)
