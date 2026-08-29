@@ -24,7 +24,6 @@ from contextlib import contextmanager
 from typing import Any
 
 import frappe
-from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.role_policy import resolve_crm_profile
@@ -376,6 +375,54 @@ def _staff_team_scope(staff_name: str | None, campus: str | None, profile: str |
 		return sorted(frappe.get_all("CRM Team", filters=filters, pluck="name"))
 	except Exception:
 		return []
+
+
+def _is_first_party_manual_intake(authority: dict[str, Any]) -> bool:
+	"""Whether initial ownership must be derived from the signed-in CRM user."""
+	return not authority.get("signed") and authority.get("profile") in {"sales", "lead_sales"}
+
+
+def _resolve_manual_initial_ownership(authority: dict[str, Any]) -> tuple[str, str, str | None]:
+	"""Resolve the only permitted initial ownership for a manual Sale/Lead intake.
+
+	The client never selects a staff member or pool.  Both the Campus and the
+	primary eligible Sales Team are authoritative CRM topology.  A Sale owns the
+	new case directly; a Lead Sales creates it in their primary pool for normal
+	routing.  Missing or ambiguous topology fails closed with a stable code.
+	"""
+	staff_name = _text(authority.get("actor_staff"))
+	campuses = [_text(value) for value in authority.get("campus_scope") or []]
+	campuses = [value for value in campuses if value]
+	if not staff_name or len(set(campuses)) != 1:
+		_fail("INVALID_TOPOLOGY", "The current CRM Staff record needs one Campus.")
+	campus = campuses[0]
+	try:
+		memberships = frappe.get_all(
+			"CRM Team Membership",
+			filters={"parent": staff_name, "parenttype": "CRM Staff", "is_primary": 1},
+			fields=["team", "is_primary"],
+		)
+	except Exception:
+		_fail("INVALID_TOPOLOGY", "The current CRM Staff team membership is unavailable.")
+
+	eligible_teams = []
+	for membership in memberships:
+		team_name = _text(membership.get("team"))
+		if not team_name:
+			continue
+		team = frappe.db.get_value(
+			"CRM Team", team_name, ["name", "campus", "team_type", "is_active"], as_dict=True
+		)
+		if team and team.is_active and team.team_type == "Sales" and team.campus == campus:
+			eligible_teams.append(team.name)
+	if not eligible_teams:
+		_fail("NO_ELIGIBLE_POOL", "The current CRM Staff has no primary active Sales Team at their Campus.")
+	if len(set(eligible_teams)) != 1:
+		_fail("AMBIGUOUS_POOL", "The current CRM Staff has multiple primary eligible Sales Teams.")
+
+	pool = _resolve_case_pool(eligible_teams[0], campus)
+	assigned_to = staff_name if authority.get("profile") == "sales" else None
+	return campus, pool.name, assigned_to
 
 
 def _assert_campus_and_pool(payload: dict[str, Any], authority: dict[str, Any]) -> tuple[str, str]:
@@ -939,7 +986,13 @@ def _resolve_case_pool(pool_or_team: str, campus: str):
 
 
 def _create_case(
-	identity: str, candidate: dict[str, Any], payload: dict[str, Any], campus: str, pool: str
+	identity: str,
+	candidate: dict[str, Any],
+	payload: dict[str, Any],
+	campus: str,
+	pool: str,
+	*,
+	correlation_id: str | None = None,
 ) -> str:
 	admission_year = _text(
 		payload.get("admission_year") or payload.get("admission_cycle") or payload.get("year")
@@ -1002,13 +1055,25 @@ def _create_case(
 	with service_context():
 		student = frappe.get_doc({"doctype": "CRM Student", **_supported_values("CRM Student", values)})
 		student.insert(ignore_permissions=True)
+	initial_owner = _text(payload.get("assigned_to"))
+	if initial_owner:
+		_assign_initial_manual_owner(
+			student.name,
+			initial_owner,
+			pool.team,
+			correlation_id,
+			_text(payload.get("_intake_actor_user")),
+		)
 	from crm.fcrm.student_feature_flags import enabled
 	from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
-	if enabled("synchronous_routing"):
-		route_pool_owned_student(student.name, trigger="pool_entry")
-	elif _doctype_exists("CRM Student Routing Request"):
-		enqueue_student_routing(student.name, trigger="pool_entry")
+	# A Sale's manual intake is now staff-owned through the canonical ownership
+	# command. Only pool-owned cases are eligible for the routing worker.
+	if not initial_owner:
+		if enabled("synchronous_routing"):
+			route_pool_owned_student(student.name, trigger="pool_entry")
+		elif _doctype_exists("CRM Student Routing Request"):
+			enqueue_student_routing(student.name, trigger="pool_entry")
 	case_values = {
 		"doctype": CASE_KEY_DOCTYPE,
 		"case_key": f"CK-{identity}-{admission_year}"[:140],
@@ -1028,6 +1093,37 @@ def _create_case(
 	if _has_field("CRM Student", "case_key"):
 		student.db_set("case_key", case.name, update_modified=False)
 	return student.name
+
+
+def _assign_initial_manual_owner(
+	student_name: str,
+	staff_name: str,
+	team_name: str,
+	correlation_id: str | None,
+	actor_user: str | None = None,
+) -> dict[str, Any]:
+	"""Create the first direct owner through the canonical ownership transaction.
+
+	Inserting ``assigned_to`` directly skips the immutable ownership event, SLA
+	opening and notification outbox. The new case is therefore inserted pool-owned
+	at revision 0, then atomically moved to the authenticated Sale at revision 1.
+	The enclosing intake command can roll both writes back together.
+	"""
+	from crm.fcrm.student_ownership import change_student_ownership
+
+	return change_student_ownership(
+		student_name,
+		"owner",
+		staff_name,
+		team_name,
+		"Manual intake self-assignment",
+		f"intake-initial-owner:{student_name}",
+		expected_revision=0,
+		correlation_id=correlation_id or f"intake:{student_name}",
+		_internal_service=True,
+		_internal_actor=actor_user,
+		_commit=False,
+	)
 
 
 def _create_review(
@@ -1254,7 +1350,23 @@ def submit_intake(
 		# Missing cycle is ambiguous work and is therefore reviewable, but it must
 		# still have a durable source receipt before a review is opened.
 		pass
-	campus, pool = _assert_campus_and_pool(payload, authority)
+	if _is_first_party_manual_intake(authority):
+		campus, pool, assigned_to = _resolve_manual_initial_ownership(authority)
+		# Explicit assignment/pool fields are client input, never authority.  The
+		# server-owned value is only used inside this command after validation.
+		payload = {
+			**payload,
+			"campus": campus,
+			"branch": campus,
+			"owning_team": pool,
+			"_intake_actor_user": authority.get("actor_user"),
+		}
+		if assigned_to:
+			payload["assigned_to"] = assigned_to
+		else:
+			payload.pop("assigned_to", None)
+	else:
+		campus, pool = _assert_campus_and_pool(payload, authority)
 	principal = authority.get("actor_user") or source_namespace
 	keys = receipt_keys(source_namespace, source_record_id, idempotency_key, principal, nonce)
 	fingerprint_payload = {
@@ -1365,7 +1477,12 @@ def submit_intake(
 		return persisted
 	_add_weak_observations(identity, candidate)
 	student_name = _create_case(
-		identity, candidate, {**payload, "admission_year": admission_year}, campus, pool
+		identity,
+		candidate,
+		{**payload, "admission_year": admission_year},
+		campus,
+		pool,
+		correlation_id=correlation_id,
 	)
 	result = {"outcome": "created", "student": student_name}
 	return _persist_intake_result(

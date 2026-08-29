@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildIntakePayload,
   buildOwnershipPayload,
+  intakeAssignmentExpectation,
   intakeResultKind,
+  isServerManagedIntakeProfile,
   isValidIntakeReviewDecision,
   isStaleOwnershipError,
   reviewCandidateOptions,
@@ -26,7 +28,6 @@ describe('student ownership command UI helpers', () => {
         student_name: 'Lan',
         admission_year: '2026',
         branch: 'HN',
-        owning_team: undefined,
         phone: '0901',
         email: undefined,
         id_number: '0123',
@@ -36,7 +37,7 @@ describe('student ownership command UI helpers', () => {
     })
   })
 
-  it('keeps the full manual student form fields in the intake payload', () => {
+  it('keeps manual fields while excluding a client-supplied assignment', () => {
     expect(
       buildIntakePayload(
         {
@@ -52,7 +53,7 @@ describe('student ownership command UI helpers', () => {
           aspiration: 'Aspiration-1',
           phone: '0900000000',
           id_number: '012345678901',
-          owning_team: 'POOL-1',
+          owning_team: 'UNTRUSTED-POOL',
         },
         { source_record_id: 'manual-full-1' },
       ).payload,
@@ -66,8 +67,35 @@ describe('student ownership command UI helpers', () => {
       major: 'Major-1',
       aspiration: 'Aspiration-1',
       id_number: '012345678901',
-      owning_team: 'POOL-1',
     })
+    expect(
+      buildIntakePayload(
+        {
+          student_name: 'Lan',
+          admission_year: '2026',
+          branch: 'CAMPUS-1',
+          owning_team: 'UNTRUSTED-POOL',
+        },
+        { source_record_id: 'manual-no-assignment' },
+      ).payload,
+    ).not.toHaveProperty('owning_team')
+  })
+
+  it('explains assignment without exposing a selectable recipient', () => {
+    expect(intakeAssignmentExpectation('sales')).toMatchObject({
+      kind: 'self',
+      message: 'This student will be assigned to you automatically.',
+    })
+    expect(intakeAssignmentExpectation('lead_sales')).toMatchObject({
+      kind: 'team',
+      message: 'This student will be placed in your team pool automatically.',
+    })
+    expect(intakeAssignmentExpectation('unknown')).toMatchObject({
+      kind: 'automatic',
+    })
+    expect(isServerManagedIntakeProfile('sales')).toBe(true)
+    expect(isServerManagedIntakeProfile('lead_sales')).toBe(true)
+    expect(isServerManagedIntakeProfile('admissions_director')).toBe(false)
   })
 
   it('maps exactly one ownership target into the command contract', () => {

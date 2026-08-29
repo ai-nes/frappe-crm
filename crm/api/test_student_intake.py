@@ -6,7 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.student_intake import _intake_response, _normalize_contact_payload
+from crm.api.student_intake import _intake_response, _normalize_contact_payload, _normalize_manual_payload
 from crm.fcrm.student_intake import (
 	_MEMORY_RECEIPTS,
 	StudentIntakeError,
@@ -55,6 +55,22 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 			{"student_id": "STU-1", "contact_id": None, "status": "created", "receipt_id": "REC-1"},
 		)
 
+	def test_review_response_preserves_modal_context(self):
+		response = _intake_response(
+			{
+				"outcome": "review_required",
+				"receipt": "REC-2",
+				"review_id": "REVIEW-1",
+				"candidates": [{"identity_id": "IDENTITY-1", "masked_label": "Candidate identity"}],
+				"proposed_identity": "IDENTITY-1",
+				"error_code": "REVIEW_REQUIRED",
+			}
+		)
+		self.assertEqual(response["review_id"], "REVIEW-1")
+		self.assertEqual(response["candidates"][0]["identity_id"], "IDENTITY-1")
+		self.assertEqual(response["proposed_identity"], "IDENTITY-1")
+		self.assertEqual(response["error_code"], "REVIEW_REQUIRED")
+
 	def test_prd_contact_payload_rejects_unknown_source_system(self):
 		with self.assertRaises(StudentIntakeError) as error:
 			_normalize_contact_payload(
@@ -65,6 +81,21 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 				}
 			)
 		self.assertEqual(error.exception.code, "INVALID_INPUT")
+
+	def test_manual_modal_payload_is_unwrapped_without_external_source_rules(self):
+		canonical = _normalize_manual_payload(
+			{
+				"source_namespace": "crm.manual_intake",
+				"source_record_id": "manual-42",
+				"idempotency_key": "manual-idem-42",
+				"correlation_id": "manual-correlation-42",
+				"payload": {"student_name": "Manual Student", "owning_team": "untrusted-team"},
+			}
+		)
+		self.assertEqual(canonical["source_namespace"], "crm.manual_intake")
+		self.assertEqual(canonical["source_record_id"], "manual-42")
+		self.assertEqual(canonical["student_name"], "Manual Student")
+		self.assertEqual(canonical["owning_team"], "untrusted-team")
 
 	def test_provenance_is_bounded_and_excludes_request_pii(self):
 		provenance = redact_provenance(

@@ -120,12 +120,34 @@ def _contact_for_student(student_id: str | None) -> str | None:
 
 def _intake_response(result: dict[str, Any]) -> dict[str, Any]:
 	student_id = result.get("student")
-	return {
+	response = {
 		"student_id": student_id,
 		"contact_id": _contact_for_student(student_id),
 		"status": result.get("outcome"),
 		"receipt_id": result.get("receipt"),
 	}
+	# The Desk review modal consumes these server-masked fields immediately after
+	# intake. Do not collapse a review-required command into a generic status.
+	for fieldname in ("review_id", "candidates", "proposed_identity", "error_code"):
+		if fieldname in result:
+			response[fieldname] = result[fieldname]
+	return response
+
+
+def _normalize_manual_payload(payload: dict[str, Any]) -> dict[str, Any]:
+	"""Unwrap the Desk modal command without applying external-source rules."""
+	manual = payload.get("payload")
+	if not isinstance(manual, dict):
+		_fail("INVALID_INPUT", "Manual intake payload must be a JSON object.")
+	canonical = dict(manual)
+	canonical["source_namespace"] = "crm.manual_intake"
+	canonical["source_record_id"] = payload.get("source_record_id")
+	canonical["idempotency_key"] = payload.get("idempotency_key")
+	if payload.get("correlation_id"):
+		canonical["correlation_id"] = payload["correlation_id"]
+	if not canonical["source_record_id"] or not canonical["idempotency_key"]:
+		_fail("INVALID_INPUT", "source_record_id and idempotency_key are required.")
+	return canonical
 
 
 def _request_json(payload: Any = None):
@@ -157,6 +179,31 @@ def submit_intake(
 			_fail("INVALID_INPUT", "Payload must be a valid JSON object.")
 	if not isinstance(payload, dict):
 		_fail("INVALID_INPUT", "Payload must be a JSON object.")
+	# frappe-ui sends the nested form as the ``payload`` argument and the
+	# command identifiers as sibling RPC args. Support that normal Frappe call
+	# shape as well as a JSON envelope supplied by an API client.
+	manual_source = source_namespace or payload.get("source_namespace")
+	if manual_source == "crm.manual_intake":
+		manual_envelope = payload
+		if not isinstance(payload.get("payload"), dict):
+			manual_envelope = {
+				"payload": payload,
+				"source_namespace": source_namespace,
+				"source_record_id": source_record_id,
+				"idempotency_key": idempotency_key,
+				"correlation_id": correlation_id,
+			}
+		canonical = _normalize_manual_payload(manual_envelope)
+		result = _submit_intake(
+			canonical,
+			source_namespace=canonical["source_namespace"],
+			source_record_id=str(canonical["source_record_id"]),
+			idempotency_key=str(canonical["idempotency_key"]),
+			correlation_id=canonical.get("correlation_id"),
+			expected_review_id=expected_review_id,
+			request_payload=payload,
+		)
+		return _intake_response(result)
 	if "consent" not in payload:
 		_fail("INVALID_INPUT", "consent is required for external contact intake.")
 	adapter_payload = dict(payload)
