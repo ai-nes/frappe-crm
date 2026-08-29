@@ -1,10 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs routeName="My Recommendations" />
+      <ViewBreadcrumbs routeName="My Recommendations" :label="__('Cần liên hệ ngay')" />
     </template>
     <template #right-header>
       <Button
+        variant="ghost"
         :label="__('Refresh')"
         iconLeft="refresh-cw"
         :loading="active.loading"
@@ -13,21 +14,51 @@
     </template>
   </LayoutHeader>
 
-  <div class="flex h-full min-h-0 flex-col overflow-hidden">
+  <div class="flex h-full min-h-0 flex-col overflow-hidden bg-surface-white">
     <Tabs
       v-model="tabIndex"
       :tabs="workTabs"
-      class="flex min-h-0 flex-1 flex-col overflow-hidden [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:min-h-0 [&_[role='tabpanel']:not([hidden])]:flex-1 [&_[role='tabpanel']:not([hidden])]:overflow-y-auto"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist']::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:min-h-0 [&_[role='tabpanel']:not([hidden])]:flex-1 [&_[role='tabpanel']:not([hidden])]:flex-col [&_[role='tabpanel']:not([hidden])]:overflow-hidden"
     >
       <template #tab-panel>
-        <section class="flex min-h-0 flex-1 flex-col px-3 pb-5 pt-3 sm:px-5">
+        <!-- Sub-header bar -->
+        <div class="border-b border-outline-gray-2 bg-surface-white px-4 py-3 sm:px-5">
+          <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div class="flex items-center gap-2">
+                <h1 class="text-base font-semibold text-ink-gray-9">
+                  {{ queue === 'recommendations' ? __('Đề xuất liên hệ & tư vấn thí sinh') : __('Nhiệm vụ tư vấn được giao') }}
+                </h1>
+                <Badge
+                  :label="`${active.items.length} ${queue === 'recommendations' ? __('đề xuất') : __('nhiệm vụ')}`"
+                  variant="subtle"
+                  theme="gray"
+                  size="sm"
+                />
+                <Badge
+                  v-if="queue === 'actions' && active.items.filter((item) => item.overdue).length"
+                  :label="`${active.items.filter((item) => item.overdue).length} ${__('quá hạn SLA')}`"
+                  variant="subtle"
+                  theme="red"
+                  size="sm"
+                />
+              </div>
+              <p class="mt-0.5 text-xs text-ink-gray-6">
+                {{ queue === 'recommendations' ? __('Ưu tiên liên hệ theo thời hạn SLA và nhu cầu đăng ký xét tuyển của thí sinh.') : __('Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót.') }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Scrollable content surface -->
+        <div class="flex-1 min-h-0 overflow-y-auto bg-surface-gray-2/40 p-4 sm:p-5">
           <div
             v-if="active.loading && !active.items.length"
-            class="flex min-h-40 flex-1 items-center justify-center text-ink-gray-5"
+            class="flex min-h-60 flex-1 items-center justify-center text-ink-gray-5"
             role="status"
           >
-            <LoadingIndicator class="size-5" />
-            <span class="sr-only">{{ __('Loading work') }}</span>
+            <LoadingIndicator class="size-6" />
+            <span class="sr-only">{{ __('Đang tải danh sách...') }}</span>
           </div>
 
           <div
@@ -35,37 +66,34 @@
             class="flex flex-1 items-center justify-center py-8"
             role="alert"
           >
-            <div class="w-full max-w-md rounded border border-outline-gray-modals bg-surface-white p-5">
-              <p class="font-medium text-ink-gray-9">
-                {{ __('Work could not be loaded') }}
-              </p>
+            <div class="w-full max-w-md rounded-lg border border-outline-gray-2 bg-surface-white p-5 shadow-sm">
+              <p class="font-medium text-ink-gray-9">{{ __('Không thể tải danh sách') }}</p>
               <p class="mt-1 text-sm text-ink-gray-5">{{ active.error }}</p>
-              <Button class="mt-4" :label="__('Try again')" @click="refresh" />
+              <Button class="mt-4" :label="__('Thử lại')" @click="refresh" />
             </div>
           </div>
 
           <EmptyState
             v-else-if="!active.items.length"
-            class="min-h-64 flex-1"
-            name="Work"
-            icon="inbox"
+            class="min-h-72 flex-1"
+            name="Thí sinh"
+            :icon="queue === 'recommendations' ? 'inbox' : 'check-square'"
             :title="emptyTitle"
             :description="emptyDescription"
           />
 
           <template v-else>
-            <div class="flex flex-col divide-y rounded border border-outline-gray-2 bg-surface-white">
+            <div class="mx-auto flex w-full max-w-4xl flex-col gap-3">
               <article
                 v-for="(item, index) in active.items"
                 :key="item.recommendation || item.name"
-                class="p-4 transition-colors hover:bg-surface-gray-1 sm:p-5"
+                class="rounded-lg border border-outline-gray-2 bg-surface-white p-4 shadow-sm transition-all hover:border-outline-gray-3 hover:shadow sm:p-5"
               >
-                <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div class="min-w-0 flex-1">
+                <div class="flex flex-col gap-3">
+                  <!-- Header row: badges & timing -->
+                  <div class="flex items-center justify-between gap-2">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-xs font-medium text-ink-gray-5">
-                        #{{ index + 1 }}
-                      </span>
+                      <span class="text-xs font-medium text-ink-gray-5">#{{ index + 1 }}</span>
                       <Badge
                         v-if="queue === 'recommendations'"
                         :label="priorityLabel(item.priority)"
@@ -75,136 +103,122 @@
                       />
                       <Badge
                         v-else
-                        :label="item.overdue ? __('Overdue') : item.status"
+                        :label="item.overdue ? __('Quá hạn SLA') : formatActionStatusLabel(item.status)"
                         :theme="item.overdue ? 'red' : 'gray'"
                         variant="subtle"
                         size="sm"
                       />
                     </div>
-
-                    <template v-if="queue === 'recommendations'">
-                      <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <h2 class="text-base font-semibold text-ink-gray-9">
-                          {{ item.action }}
-                        </h2>
-                        <span class="text-sm text-ink-gray-6">· {{ item.studentName }}</span>
-                      </div>
-                      <p
-                        v-if="item.reason"
-                        class="mt-1 whitespace-pre-wrap text-sm leading-6 text-ink-gray-6"
-                      >
-                        {{ item.reason }}
-                      </p>
-                      <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                        <div>
-                          <dt class="text-ink-gray-5">{{ __('Student') }}</dt>
-                          <dd class="mt-0.5 font-medium text-ink-gray-8">
-                            {{ item.studentName }}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt class="text-ink-gray-5">{{ __('Scheduled') }}</dt>
-                          <dd class="mt-0.5 text-ink-gray-8">
-                            {{ item.timing || __('Not scheduled') }}
-                          </dd>
-                        </div>
-                      </dl>
-                    </template>
-
-                    <template v-else>
-                      <div class="mt-2 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <h2 class="text-base font-semibold text-ink-gray-9">
-                          {{ item.actionType }}
-                        </h2>
-                        <span class="text-sm text-ink-gray-6">· {{ item.studentName }}</span>
-                      </div>
-                      <dl class="mt-4 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
-                        <div>
-                          <dt class="text-ink-gray-5">{{ __('Due') }}</dt>
-                          <dd
-                            class="mt-0.5"
-                            :class="item.overdue ? 'font-medium text-red-600' : 'text-ink-gray-8'"
-                          >
-                            {{ item.dueAt || __('Not scheduled') }}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt class="text-ink-gray-5">{{ __('Assignee') }}</dt>
-                          <dd class="mt-0.5 text-ink-gray-8">{{ item.assignee }}</dd>
-                        </div>
-                        <div v-if="item.outcome">
-                          <dt class="text-ink-gray-5">{{ __('Outcome') }}</dt>
-                          <dd class="mt-0.5 text-ink-gray-8">{{ __(item.outcome) }}</dd>
-                        </div>
-                      </dl>
-                      <p
-                        v-if="item.linkedInteraction"
-                        class="mt-3 text-sm text-ink-gray-6"
-                      >
-                        {{ __('Linked interaction') }}: {{ item.linkedInteraction }}
-                      </p>
-                    </template>
+                    <div class="flex items-center gap-1 text-xs text-ink-gray-5">
+                      <FeatherIcon name="clock" class="size-3.5" />
+                      <span>{{ queue === 'recommendations' ? (item.timing || __('Chưa lên lịch')) : (item.dueAt || __('Chưa đặt hạn')) }}</span>
+                    </div>
                   </div>
 
-                  <div class="flex shrink-0 flex-wrap gap-2">
+                  <!-- Content: title, student, reason -->
+                  <div>
+                    <div class="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <h2
+                        class="text-base font-semibold text-ink-gray-9 transition-colors hover:text-ink-gray-7 cursor-pointer"
+                        @click="item.student && openStudent(item.student)"
+                      >
+                        {{ queue === 'recommendations' ? item.action : item.actionType }}
+                      </h2>
+                      <span class="text-sm font-medium text-ink-gray-6">· {{ item.studentName }}</span>
+                    </div>
+
+                    <p
+                      v-if="item.reason"
+                      class="mt-2 rounded-md border border-outline-gray-1 bg-surface-gray-2/60 p-2.5 text-sm leading-relaxed text-ink-gray-7"
+                    >
+                      {{ item.reason }}
+                    </p>
+
+                    <dl class="mt-3 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-3">
+                      <div>
+                        <dt class="text-ink-gray-5">{{ __('Thí sinh') }}</dt>
+                        <dd class="mt-0.5 font-medium text-ink-gray-8">{{ item.studentName }}</dd>
+                      </div>
+                      <div v-if="queue === 'actions'">
+                        <dt class="text-ink-gray-5">{{ __('Tư vấn viên') }}</dt>
+                        <dd class="mt-0.5 text-ink-gray-8">{{ item.assignee }}</dd>
+                      </div>
+                      <div v-if="item.outcome">
+                        <dt class="text-ink-gray-5">{{ __('Kết quả tư vấn') }}</dt>
+                        <dd class="mt-0.5 text-ink-gray-8">{{ formatOutcomeLabel(item.outcome) }}</dd>
+                      </div>
+                      <div v-if="item.linkedInteraction" class="sm:col-span-2">
+                        <dt class="text-ink-gray-5">{{ __('Cuộc gọi / Tương tác liên quan') }}</dt>
+                        <dd class="mt-0.5 text-ink-gray-8">{{ item.linkedInteraction }}</dd>
+                      </div>
+                    </dl>
+                  </div>
+
+                  <!-- Footer / Actions -->
+                  <div class="mt-1 flex flex-wrap items-center justify-between gap-2 border-t border-outline-gray-1 pt-3">
                     <Button
                       size="sm"
                       variant="outline"
-                      :label="__('Open student')"
+                      :label="__('Xem hồ sơ')"
+                      iconLeft="user"
                       :disabled="!item.student"
                       @click="openStudent(item.student)"
                     />
-                    <Button
-                      v-if="queue === 'actions' && item.permittedTransitions.length"
-                      size="sm"
-                      variant="solid"
-                      :label="__('Update action')"
-                      @click="selectedAction = item"
-                    />
-                  </div>
-                </div>
 
-                <div
-                  v-if="queue === 'recommendations'"
-                  class="mt-4 flex flex-wrap gap-2 border-t border-outline-gray-1 pt-3"
-                >
-                  <Button
-                    v-if="item.permittedDecisions.includes('accepted')"
-                    size="sm"
-                    variant="solid"
-                    theme="green"
-                    :label="__('Accept')"
-                    @click="openDecision(item, 'accepted')"
-                  />
-                  <Button
-                    v-if="item.permittedDecisions.includes('deferred')"
-                    size="sm"
-                    variant="outline"
-                    theme="gray"
-                    :label="__('Defer')"
-                    @click="openDecision(item, 'deferred')"
-                  />
-                  <Button
-                    v-if="item.permittedDecisions.includes('rejected')"
-                    size="sm"
-                    variant="outline"
-                    theme="red"
-                    :label="__('Reject')"
-                    @click="openDecision(item, 'rejected')"
-                  />
+                    <div v-if="queue === 'recommendations'" class="flex items-center gap-2">
+                      <Button
+                        v-if="item.permittedDecisions.includes('accepted')"
+                        size="sm"
+                        variant="solid"
+                        theme="blue"
+                        :label="__('Tiếp nhận & Lên lịch')"
+                        iconLeft="calendar-plus"
+                        @click="openDecision(item, 'accepted')"
+                      />
+                      <Button
+                        v-if="item.permittedDecisions.includes('deferred')"
+                        size="sm"
+                        variant="outline"
+                        theme="gray"
+                        :label="__('Hẹn lại')"
+                        iconLeft="clock"
+                        @click="openDecision(item, 'deferred')"
+                      />
+                      <Button
+                        v-if="item.permittedDecisions.includes('rejected')"
+                        size="sm"
+                        variant="ghost"
+                        theme="red"
+                        :label="__('Bỏ qua')"
+                        iconLeft="x"
+                        @click="openDecision(item, 'rejected')"
+                      />
+                    </div>
+
+                    <div v-else-if="queue === 'actions' && item.permittedTransitions.length" class="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="solid"
+                        theme="blue"
+                        :label="__('Ghi nhận kết quả')"
+                        iconLeft="check-circle"
+                        @click="selectedAction = item"
+                      />
+                    </div>
+                  </div>
                 </div>
               </article>
             </div>
 
-            <div v-if="active.nextCursor" class="flex justify-center pt-4">
+            <div v-if="active.nextCursor" class="flex justify-center pt-4 pb-2">
               <Button
-                :label="__('Load more')"
+                :label="__('Tải thêm')"
                 :loading="active.loading"
                 @click="loadMore"
               />
             </div>
           </template>
-        </section>
+        </div>
       </template>
     </Tabs>
   </div>
@@ -217,7 +231,7 @@
     @changed="handleChanged"
     @refresh-required="refresh"
   />
-  <SalesActionOutcomeDialog
+  <ActionOutcomeDialog
     v-if="selectedAction"
     v-model="showAction"
     :action="selectedAction"
@@ -230,28 +244,47 @@
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import RecommendationDecisionDialog from '@/components/StudentDecision/RecommendationDecisionDialog.vue'
-import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
+import ActionOutcomeDialog from '@/components/StudentDecision/ActionOutcomeDialog.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import {
   recommendationItem,
   safeStudentDecisionError,
-  salesActionItem,
+  actionItem,
   studentDecisionApi,
+  formatOutcomeLabel,
+  formatActionStatusLabel,
 } from '@/utils/studentDecision'
-import { Badge, Button, LoadingIndicator, Tabs, call, usePageMeta } from 'frappe-ui'
+import { Badge, Button, FeatherIcon, LoadingIndicator, Tabs, call, usePageMeta } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 
 const router = useRouter()
-const queue = ref('recommendations')
-const workTabs = [
-  { name: 'recommendations', label: __('Recommendation inbox') },
-  { name: 'actions', label: __('My actions') },
-]
+const route = useRoute()
+const queue = ref(
+  ['actions', 'breached', 'history'].includes(route.query?.tab)
+    ? 'actions'
+    : 'recommendations',
+)
+
+watch(
+  () => route.query?.tab,
+  (tab) => {
+    if (['actions', 'breached', 'history'].includes(tab)) {
+      queue.value = 'actions'
+    } else if (['running', 'near_breach', 'recommendations'].includes(tab)) {
+      queue.value = 'recommendations'
+    }
+  },
+)
+
+const workTabs = computed(() => [
+  { name: 'recommendations', label: __('Đề xuất liên hệ') },
+  { name: 'actions', label: __('Nhiệm vụ của tôi') },
+])
 const tabIndex = computed({
   get: () => (queue.value === 'actions' ? 1 : 0),
   set: (value) => {
-    queue.value = workTabs[Number(value)]?.name || 'recommendations'
+    queue.value = workTabs.value[Number(value)]?.name || 'recommendations'
   },
 })
 const recommendations = ref({ items: [], nextCursor: null, loading: false, error: '' })
@@ -276,16 +309,16 @@ const active = computed(() =>
 )
 const emptyTitle = computed(() =>
   queue.value === 'recommendations'
-    ? __('No recommendations to decide')
-    : __('No actions assigned to you'),
+    ? __('Không có thí sinh cần liên hệ khẩn')
+    : __('Không có nhiệm vụ cần thực hiện'),
 )
 const emptyDescription = computed(() =>
   queue.value === 'recommendations'
-    ? __('New or returning recommendations will appear here.')
-    : __('Your active Sales Actions will appear here.'),
+    ? __('Tất cả đề xuất tư vấn và chăm sóc thí sinh đã được xử lý hoặc lên lịch.')
+    : __('Bạn đã hoàn thành tất cả nhiệm vụ tư vấn và chăm sóc hồ sơ được giao.'),
 )
 
-usePageMeta(() => ({ title: __('My Recommendations') }))
+usePageMeta(() => ({ title: __('Cần liên hệ ngay') }))
 
 watch(
   queue,
@@ -296,7 +329,13 @@ watch(
 )
 
 function priorityLabel(priority) {
-  return priority ? __('{0} priority', [priority]) : __('Priority unavailable')
+  if (!priority) return __('Không có độ ưu tiên')
+  const map = {
+    high: __('Ưu tiên cao'),
+    medium: __('Ưu tiên trung bình'),
+    low: __('Ưu tiên thấp'),
+  }
+  return map[priority] || __('Độ ưu tiên {0}', [priority])
 }
 
 function priorityTheme(priority) {
@@ -314,12 +353,12 @@ async function fetchPage(kind, cursor = null) {
         : studentDecisionApi.listActions,
       { ...(cursor ? { cursor } : {}), page_size: 20 },
     )
-    const mapper = kind === 'recommendations' ? recommendationItem : salesActionItem
+    const mapper = kind === 'recommendations' ? recommendationItem : actionItem
     const nextItems = (response.items || []).map(mapper)
     state.items = cursor ? [...state.items, ...nextItems] : nextItems
     state.nextCursor = response.next_cursor || null
   } catch (err) {
-    state.error = safeStudentDecisionError(err, __('Please try again.'))
+    state.error = safeStudentDecisionError(err, __('Vui lòng thử lại.'))
   } finally {
     state.loading = false
   }

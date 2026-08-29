@@ -32,14 +32,10 @@ class TestDecideStudentTask(FrappeTestCase):
 		# a raw delete is the only way to clean it up in a test.
 		frappe.db.delete("CRM Student Decision Event", {"student": self._student.name})
 		for name in frappe.db.get_all(
-			"CRM Sales Action", filters={"student": self._student.name}, pluck="name"
+			"CRM Action", filters={"student": self._student.name}, pluck="name"
 		):
-			frappe.delete_doc("CRM Sales Action", name, force=True)
+			frappe.delete_doc("CRM Action", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		for name in frappe.db.get_all(
-			"CRM Student Task", filters={"student": self._student.name}, pluck="name"
-		):
-			frappe.delete_doc("CRM Student Task", name, force=True)
 		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
@@ -60,13 +56,14 @@ class TestDecideStudentTask(FrappeTestCase):
 	def _make_task(self, *, disposition="ACT", action_type="CALL"):
 		task = frappe.get_doc(
 			{
-				"doctype": "CRM Student Task",
+				"doctype": "CRM Action",
 				"student": self._student.name,
+				"origin": "ai",
 				"source_context_revision": 1,
 				"disposition": disposition,
 				"action_type": action_type if disposition == "ACT" else None,
 				"objective": "Follow up on application status.",
-				"policy_version": "test-v1",
+				"policy_context_version": "test-v1",
 				"generation_idempotency_key": frappe.generate_hash(length=20),
 				"producer_identity": "test-suite",
 				"payload_digest": frappe.generate_hash(length=32),
@@ -75,7 +72,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		task.insert(ignore_permissions=True)
 		return task
 
-	def test_accept_creates_correlated_sales_action_and_decision_event(self):
+	def test_accept_creates_canonical_action_and_decision_event(self):
 		task = self._make_task()
 		result = decide_student_task(
 			task.name,
@@ -87,23 +84,16 @@ class TestDecideStudentTask(FrappeTestCase):
 		)
 
 		self.assertEqual(result["status"], "accepted")
-		self.assertEqual(result["task"], task.name)
-		self.assertTrue(result["sales_action"])
+		self.assertEqual(result["action"], task.name)
 
 		task.reload()
-		self.assertEqual(task.state, "ACCEPTED")
+		self.assertEqual(task.state, "accepted")
 		self.assertEqual(task.decision_revision, 1)
-		self.assertEqual(task.sales_action, result["sales_action"])
-
-		action = frappe.get_doc("CRM Sales Action", result["sales_action"])
-		self.assertEqual(action.student_task, task.name)
-		self.assertEqual(action.action_type, "CALL")
-		self.assertFalse(action.recommendation)
 
 		event = frappe.get_doc("CRM Student Decision Event", result["event"])
-		self.assertEqual(event.student_task, task.name)
+		self.assertEqual(event.action, task.name)
 		self.assertIsNone(event.recommendation)
-		self.assertEqual(event.event_type, "task_decided")
+		self.assertEqual(event.event_type, "action_started")
 
 	def test_accept_does_not_write_a_legacy_agent_event(self):
 		task = self._make_task()
@@ -164,7 +154,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		)
 		self.assertEqual(result["status"], "rejected")
 		task.reload()
-		self.assertEqual(task.state, "REJECTED")
+		self.assertEqual(task.state, "rejected")
 
 	def test_replaying_the_same_idempotency_key_returns_the_original_result(self):
 		task = self._make_task()
@@ -188,5 +178,4 @@ class TestDecideStudentTask(FrappeTestCase):
 			assignee_staff=self._sale_staff,
 		)
 		self.assertTrue(second["replayed"])
-		self.assertEqual(second["task"], first["task"])
-		self.assertEqual(second["sales_action"], first["sales_action"])
+		self.assertEqual(second["action"], first["action"])

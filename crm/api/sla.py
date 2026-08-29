@@ -6,7 +6,7 @@ the moment a staff member logs the first real contact. Locked thresholds:
 30 minutes to "Sắp quá hạn" (warning), 2 hours to "Quá SLA" (breach).
 Recomputed on a schedule (see hooks.py scheduler_events) rather than only on
 save, since a lead can breach purely by elapsed time with no new save event.
-See plans/260822-admissions-crm-alignment/phase-03-lead-status-routing-sla.md.
+The SLA contract is enforced by this module and scheduled recalculation.
 """
 
 import frappe
@@ -20,10 +20,11 @@ WARNING = "Sắp quá hạn"
 BREACH = "Quá SLA"
 
 # Only leads still in an "open" enrollment_status bucket need a live SLA
-# clock — reuses CRM Enrollment Status.stage_category (Phase 1/2) rather
+# clock — reuses CRM Term.stage_category (Phase 1/2) rather
 # than re-deriving the same open/enrolled/lost split a second way.
 _OPEN_STATUS_SUBQUERY = (
-	"enrollment_status in (select status_name from `tabCRM Enrollment Status` where stage_category = 'open')"
+	"enrollment_status in (select term_name from `tabCRM Term` where category = 'enrollment_status' "
+	"and JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.stage_category')) = 'open')"
 )
 
 

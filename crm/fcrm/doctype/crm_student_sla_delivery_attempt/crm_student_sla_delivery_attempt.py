@@ -5,7 +5,7 @@ from frappe.model.document import Document
 class CRMStudentSLADeliveryAttempt(Document):
 	"""Provider-submission evidence with a service-fenced completion update."""
 
-	_IDENTITY_FIELDS = ("delivery_attempt_key", "delivery", "recipient", "attempt_number", "provider_submission_key")
+	_IDENTITY_FIELDS = ("delivery_attempt_key", "parent", "parenttype", "parentfield", "recipient", "attempt_number", "provider_submission_key")
 
 	def validate(self):
 		if not getattr(frappe.flags, "student_sla_delivery_service", False):

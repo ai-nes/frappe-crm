@@ -1,4 +1,4 @@
-"""Fenced, send-time reauthorization for controlled Sales Actions."""
+"""Fenced, send-time reauthorization for controlled Actions."""
 
 from __future__ import annotations
 
@@ -69,8 +69,8 @@ def persist_initial_package(task) -> dict:
 	revision = int(task.execution_package_version or 0) + 1
 	frappe.get_doc(
 		{
-			"doctype": "CRM Student Task Revision",
-			"task": task.name,
+			"doctype": "CRM Action Revision",
+			"action": task.name,
 			"revision": revision,
 			"package_type": "CallScriptV1"
 			if task.action_type == "CALL"
@@ -87,11 +87,11 @@ def persist_initial_package(task) -> dict:
 
 
 def edit_email_package(task_name: str, expected_revision: int, package: dict, reason: str) -> dict:
-	task = frappe.get_doc("CRM Student Task", task_name)
+	task = frappe.get_doc("CRM Action", task_name)
 	if not task.has_permission("write"):
-		frappe.throw("Task is outside the actor's Student scope.", frappe.PermissionError)
-	if task.action_type != "EMAIL" or task.state not in {"ACCEPTED", "IN_PROGRESS"}:
-		frappe.throw("Only an accepted/in-progress EMAIL task can be edited.", frappe.ValidationError)
+		frappe.throw("Action is outside the actor's Student scope.", frappe.PermissionError)
+	if task.action_type != "EMAIL" or task.state not in {"accepted", "in-progress"}:
+		frappe.throw("Only an accepted/in-progress EMAIL Action can be edited.", frappe.ValidationError)
 	if int(task.execution_package_version or 0) != int(expected_revision):
 		frappe.throw("Email package changed; refresh before editing.", frappe.ValidationError)
 	if not reason or len(reason) > 500:
@@ -100,8 +100,8 @@ def edit_email_package(task_name: str, expected_revision: int, package: dict, re
 	new_revision = int(expected_revision) + 1
 	frappe.get_doc(
 		{
-			"doctype": "CRM Student Task Revision",
-			"task": task.name,
+			"doctype": "CRM Action Revision",
+			"action": task.name,
 			"revision": new_revision,
 			"package_type": "EmailPackageV1",
 			"package": package,
@@ -110,42 +110,42 @@ def edit_email_package(task_name: str, expected_revision: int, package: dict, re
 			"created_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	frappe.flags.student_task_command = True
+	frappe.flags.crm_action_command = True
 	frappe.db.set_value(
-		"CRM Student Task",
+		"CRM Action",
 		task.name,
 		{"package_seed": package, "execution_package_version": new_revision},
 		update_modified=False,
 	)
-	frappe.flags.student_task_command = False
-	return {"task": task.name, "package_revision": new_revision, "package": package}
+	frappe.flags.crm_action_command = False
+	return {"action": task.name, "package_revision": new_revision, "package": package}
 
 
-def queue_dispatch(task: str, *, package_revision: int, channel: str, inputs: dict) -> dict:
-	"""Re-read task/policy/authority and create one durable dispatch fence."""
-	task_row = frappe.get_doc("CRM Student Task", task)
-	if task_row.state not in {"ACCEPTED", "IN_PROGRESS"} or task_row.requires_review:
-		frappe.throw("Task is not dispatchable until reviewed/resumed.", frappe.ValidationError)
-	package = _json_object(inputs.get("package") or task_row.package_seed)
-	validate_execution_package(task_row.action_type, package)
+def queue_dispatch(action: str, *, package_revision: int, channel: str, inputs: dict) -> dict:
+	"""Re-read Action/policy/authority and create one durable dispatch fence."""
+	action_row = frappe.get_doc("CRM Action", action)
+	if action_row.state not in {"accepted", "in-progress"} or action_row.requires_review:
+		frappe.throw("Action is not dispatchable until reviewed/resumed.", frappe.ValidationError)
+	package = _json_object(inputs.get("package") or action_row.package_seed)
+	validate_execution_package(action_row.action_type, package)
 	validate_action_command(
-		task_row.action_type,
-		student=task_row.student,
-		inputs={**inputs, "objective": task_row.objective, "package": package},
+		action_row.action_type,
+		student=action_row.student,
+		inputs={**inputs, "objective": action_row.objective, "package": package},
 		actor_roles=set(frappe.get_roles(frappe.session.user)),
 	)
-	provider_key = hashlib.sha256(f"{task_row.name}:{package_revision}:{channel}".encode()).hexdigest()
+	provider_key = hashlib.sha256(f"{action_row.name}:{package_revision}:{channel}".encode()).hexdigest()
 	existing = frappe.db.get_value("CRM Student Dispatch Receipt", {"provider_key": provider_key}, "name")
 	if existing:
 		return {"receipt": existing, "idempotent": True}
 	receipt = frappe.get_doc(
 		{
 			"doctype": "CRM Student Dispatch Receipt",
-			"task": task_row.name,
+			"action": action_row.name,
 			"package_revision": package_revision,
 			"channel": channel,
 			"provider_key": provider_key,
-			"fence": str(task_row.modified),
+			"fence": str(action_row.modified),
 			"status": "queued",
 			"created_at": now_datetime(),
 		}

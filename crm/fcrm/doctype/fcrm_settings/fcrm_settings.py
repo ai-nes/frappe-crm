@@ -81,6 +81,9 @@ def get_standard_dropdown_items():
 
 def after_migrate():
 	sync_table("dropdown_items", "standard_dropdown_items")
+	if not frappe.db.get_single_value("System Settings", "language"):
+		frappe.db.set_single_value("System Settings", "language", "vi")
+
 
 
 def sync_table(key, hook):

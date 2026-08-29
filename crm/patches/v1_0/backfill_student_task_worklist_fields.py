@@ -1,20 +1,16 @@
-"""Backfill CRM Student Task worklist/decision fields from the linked legacy
-CRM Recommendation row created by the retired dual-write in
-upsert_student_next_task(). Forward-only and idempotent — safe to re-run."""
+"""Backfill legacy Student Task fields when upgrading an older site.
+
+The intermediate DocType may already have been removed on a fresh install;
+in that case this historical patch is a no-op.
+"""
 
 import frappe
 
 
 def execute():
-	if not frappe.db.table_exists("CRM Recommendation"):
+	if not frappe.db.table_exists("CRM Recommendation") or not frappe.db.table_exists("CRM Student Task"):
 		return
-	for doctype in (
-		"crm_student_task",
-		"crm_sales_action",
-		"crm_student_decision_event",
-		"crm_student_command_receipt",
-	):
-		frappe.reload_doc("fcrm", "doctype", doctype)
+	frappe.reload_doc("fcrm", "doctype", "crm_student_decision_event")
 	frappe.db.sql(
 		"""
 		UPDATE `tabCRM Student Task` task

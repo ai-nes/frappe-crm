@@ -1,6 +1,6 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
-Implements the locked matrix in plans/260822-admissions-crm-alignment/business-rules-data-scope.md:
+Implements the locked row-level data-scope matrix:
 - Sale / CTV-Sale        -> own-assigned records only
 - Team Leader            -> own team(s) + own team's unassigned pool
 - Counseller / Promoter-PR -> team/campus scope (not system-wide)
@@ -38,7 +38,6 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Student SLA Attempt": "student",
 	"CRM Student SLA Event": "student",
 	"CRM Student SLA Delivery": "student",
-	"CRM Student SLA Delivery Attempt": "delivery",
 	# CRM Score History's `student` link is reqd (crm_score_history.json), so
 	# the Student-scope-inheriting condition applies directly. CRM Intent is
 	# NOT listed here even though it also has a `student` field: that field is
@@ -61,12 +60,6 @@ def get_operational_record_permission_query_conditions(user=None, doctype=None):
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	if doctype == "CRM Student SLA Delivery Attempt":
-		return (
-			f"`tab{doctype}`.`delivery` in (select `tabCRM Student SLA Delivery`.`name` "
-			"from `tabCRM Student SLA Delivery` where `tabCRM Student SLA Delivery`.`student` in "
-			f"(select `tabCRM Student`.`name` from `tabCRM Student` where ({student_condition})))"
-		)
 	return (
 		f"`tab{doctype}`.`{student_field}` in "
 		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
@@ -93,8 +86,6 @@ def has_operational_record_permission(doc, user=None, permission_type=None, ptyp
 		return True
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
 	student_name = doc.get(student_field) if student_field else None
-	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
-		student_name = frappe.db.get_value("CRM Student SLA Delivery", student_name, "student")
 	if not student_name:
 		return False
 	student = frappe.get_doc("CRM Student", student_name)
@@ -294,7 +285,7 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 	)
 
 
-def has_permission(doc, user=None, permission_type=None):
+def has_permission(doc, user=None, permission_type=None, ptype=None):
 	"""Single-document counterpart of get_permission_query_conditions.
 
 	permission_query_conditions only filters list/report-view SQL — Frappe never
@@ -304,6 +295,14 @@ def has_permission(doc, user=None, permission_type=None):
 	"""
 	if not user:
 		user = frappe.session.user
+	# Frappe passes the requested permission as ``ptype`` to hook methods.  A
+	# new document has no database name yet, so applying a name-keyed row-scope
+	# query would both be meaningless and deny otherwise valid create grants.
+	# The regular DocType permission check remains responsible for deciding who
+	# may create; this hook scopes existing rows only.
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)
 	if condition is None:

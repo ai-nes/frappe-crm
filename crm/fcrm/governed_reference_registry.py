@@ -1,13 +1,9 @@
-"""Declarative Phase 9 reference inventory.
-
-This is deliberately data, not a collection of ad-hoc ``db.count`` calls.  A
-consumer must be named here before a retirement or supersession can be applied.
-The registry is also the single source used by validation and reconciliation.
-"""
+"""Declarative governed-reference inventory."""
 
 from __future__ import annotations
 
-REGISTRY_REVISION = "P9-DEC-001"
+
+REGISTRY_REVISION = "P9-DEC-002"
 
 
 def _refs(*values):
@@ -25,23 +21,20 @@ GOVERNED_REFERENCE_REGISTRY = {
 		"additive_requires_approval": False, "required_fields": ("lead_source",),
 		"consumers": _refs(("CRM Contact", "platform"), ("CRM Campaign", "platform"), ("CRM Campaign Spend", "platform")),
 	},
-	"CRM Intent Type": {
-		"name_field": "intent_type_name", "owner_role": "Marketing", "approver_roles": frozenset({"Marketing"}),
+	"CRM Term": {
+		"name_field": "term_name", "owner_role": "Lead Sales", "approver_roles": frozenset({"Lead Sales", "Marketing"}),
 		"additive_requires_approval": False,
-		"consumers": _refs(("CRM Intent", "intent_type"), ("CRM Score Signal", "intent_type")),
-	},
-	"CRM Lost Reason": {
-		"name_field": "lost_reason", "owner_role": "Lead Sales", "approver_roles": frozenset({"Lead Sales", "Marketing"}),
-		"additive_requires_approval": True, "consumers": _refs(),
+		"consumers": _refs(
+			("CRM Contact", "enrollment_status"), ("CRM Contact", "lead_status"), ("CRM Contact", "aspiration"),
+			("CRM Student", "enrollment_status"), ("CRM Student", "aspiration"), ("CRM Campaign", "campaign_type"),
+			("CRM Intent", "intent_type"), ("CRM Interaction", "interaction_type"), ("CRM Score Signal", "intent_type"),
+			("CRM High School", "school_type"), ("CRM Major", "major_group"), ("CRM Province", "region"),
+		),
 	},
 	"CRM Campus": {
 		"name_field": "campus_name", "owner_role": "Admissions Director", "approver_roles": frozenset({"Admissions Director"}),
 		"additive_requires_approval": False,
-		"consumers": _refs(("CRM Contact", "branch"), ("CRM Department", "campus"), ("CRM Staff", "campus"), ("CRM Campaign", "campus"), ("CRM Campaign Spend", "campus"), ("CRM Quota Item", "campus"), ("CRM Student", "branch"), ("CRM Student Pool", "campus"), ("CRM Student Routing Request", "campus"), ("CRM Student SLA Attempt", "campus"), ("CRM Team", "campus"), ("CRM Tuition Policy Item", "campus")),
-	},
-	"CRM Campaign Type": {
-		"name_field": "campaign_type_name", "owner_role": "Marketing", "approver_roles": frozenset({"Marketing"}),
-		"additive_requires_approval": False, "consumers": _refs(("CRM Campaign", "campaign_type")),
+		"consumers": _refs(("CRM Contact", "branch"), ("CRM Department", "campus"), ("CRM Staff", "campus"), ("CRM Campaign", "campus"), ("CRM Campaign Spend", "campus"), ("CRM Student Pool", "campus"), ("CRM Student Routing Request", "campus"), ("CRM Student SLA Attempt", "campus"), ("CRM Team", "campus")),
 	},
 }
 
@@ -66,11 +59,8 @@ def reference_fields(doctype):
 
 
 def validate_registry():
-	"""Pure contract check used by tests and the reconciliation preflight."""
 	for doctype, config in GOVERNED_REFERENCE_REGISTRY.items():
-		if not config.get("name_field") or not config.get("owner_role"):
-			return False
-		if not config.get("approver_roles"):
+		if not config.get("name_field") or not config.get("owner_role") or not config.get("approver_roles"):
 			return False
 		seen = set()
 		for consumer in config.get("consumers", ()):

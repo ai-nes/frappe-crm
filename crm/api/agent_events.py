@@ -21,7 +21,7 @@ from crm.fcrm.record_retention import technical_retention_until
 
 _EVENT_PATHS = {
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
-	"sales_action.outcome_recorded.v1": "/api/v1/insight/sales-action-outcome",
+	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.context_changed.v2": "/api/v1/insight/student-context-v2",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
 	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
@@ -421,7 +421,7 @@ def deliver_agent_event(event_name: str) -> None:
 	fields = _event_fields()
 	if not {"lease_id", "lease_expires_at"}.issubset(fields):
 		# Do not claim a fenced-lease event with the old non-fenced protocol.
-		if str(event.event_type).startswith(("recommendation.", "sales_action.")):
+		if str(event.event_type).startswith(("recommendation.", "action.")):
 			frappe.throw("CRM Agent Event lease fields are required for fenced delivery.")
 	if event.status not in {"pending", "processing"}:
 		return
@@ -525,17 +525,17 @@ def reconcile_student_context_v2(limit: int = 500) -> dict:
 	cache_key = "crm_agents_v2:context-change-cursor"
 	last = int(frappe.cache().get_value(cache_key) or 0)
 	rows = frappe.get_all(
-		"CRM Student Context Change",
-		filters=[["global_sequence", ">", last]],
-		fields=["name", "student", "revision", "global_sequence", "event_id"],
-		order_by="global_sequence asc",
+		"CRM Student Revision Journal",
+		filters={"stream": "context", "event_type": "context_changed", "stream_sequence": [">", last]},
+		fields=["name", "student", "revision", "stream_sequence", "event_id"],
+		order_by="stream_sequence asc",
 		limit_page_length=min(int(limit), 1000),
 	)
 	for row in rows:
 		record_student_context_event(row.student, int(row.revision), event_id=row.event_id)
 	if rows:
-		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
-	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}
+		frappe.cache().set_value(cache_key, int(rows[-1].stream_sequence))
+	return {"discovered": len(rows), "oldest_unchecked": rows[0].stream_sequence if rows else None}
 
 
 def reconcile_score_input_v1(limit: int = 500) -> dict:
@@ -547,14 +547,14 @@ def reconcile_score_input_v1(limit: int = 500) -> dict:
 	cache_key = "crm_agents_scoring:score-input-cursor"
 	last = int(frappe.cache().get_value(cache_key) or 0)
 	rows = frappe.get_all(
-		"CRM Score Input Change",
-		filters=[["global_sequence", ">", last]],
-		fields=["name", "student", "revision", "global_sequence", "event_id"],
-		order_by="global_sequence asc",
+		"CRM Student Revision Journal",
+		filters={"stream": "scoring", "event_type": "score_input_changed", "stream_sequence": [">", last]},
+		fields=["name", "student", "revision", "stream_sequence", "event_id"],
+		order_by="stream_sequence asc",
 		limit_page_length=min(int(limit), 1000),
 	)
 	for row in rows:
 		record_score_input_event(row.student, int(row.revision), event_id=row.event_id)
 	if rows:
-		frappe.cache().set_value(cache_key, int(rows[-1].global_sequence))
-	return {"discovered": len(rows), "oldest_unchecked": rows[0].global_sequence if rows else None}
+		frappe.cache().set_value(cache_key, int(rows[-1].stream_sequence))
+	return {"discovered": len(rows), "oldest_unchecked": rows[0].stream_sequence if rows else None}

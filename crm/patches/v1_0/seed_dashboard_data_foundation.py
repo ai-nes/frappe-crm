@@ -37,13 +37,12 @@ LEAD_SOURCE_CONFIG = {
 
 
 def execute():
-	# 1. Seed CRM Region
+	# 1. Seed region terms
 	for reg in REGIONS:
-		if not frappe.db.exists("CRM Region", reg["region_name"]):
+		if not frappe.db.exists("CRM Term", {"term_name": reg["region_name"], "category": "region"}):
 			frappe.get_doc({
-				"doctype": "CRM Region",
-				"region_name": reg["region_name"],
-				"region_code": reg["region_code"]
+				"doctype": "CRM Term", "term_name": reg["region_name"], "category": "region",
+				"metadata": {"region_code": reg["region_code"]},
 			}).insert(ignore_permissions=True)
 
 	# 2. Update CRM Province region

@@ -19,7 +19,7 @@ def execute():
 		apply_managed_docperms()
 		# This governed-workflow support DocType is not in the managed matrix, but
 		# the retired migration-only role must not retain authority through it.
-		frappe.db.delete("DocPerm", {"parent": "CRM Master Data Change Log", "role": "CRM Data Steward"})
+		frappe.db.delete("DocPerm", {"parent": "CRM Master Data Change", "role": "CRM Data Steward"})
 	except Exception:
 		frappe.db.rollback(save_point="phase2_role_policy")
 		raise

@@ -1,0 +1,16 @@
+{
+ "actions": [], "allow_import": 1, "allow_rename": 1, "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["term_name", "category", "owner_role", "is_active", "sort_order", "metadata", "description"],
+ "fields": [
+  {"fieldname": "term_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Term", "reqd": 1},
+  {"fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Category", "options": "lead_status\nlost_reason\ncampaign_type\nintent_type\ninteraction_type\nschool_type\nmajor_group\naspiration\nregion\nenrollment_status", "reqd": 1},
+  {"fieldname": "owner_role", "fieldtype": "Link", "label": "Owner Role", "options": "Role"},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},
+  {"default": "0", "fieldname": "sort_order", "fieldtype": "Int", "in_list_view": 1, "label": "Sort Order"},
+  {"fieldname": "metadata", "fieldtype": "JSON", "label": "Metadata"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
+ ],
+ "index_web_pages_for_search": 1, "links": [], "module": "FCRM", "name": "CRM Term", "naming_rule": "By script", "owner": "Administrator",
+ "permissions": [{"create": 1, "read": 1, "write": 1, "delete": 1, "role": "System Manager"}, {"read": 1, "role": "Sale"}, {"read": 1, "role": "Lead Sales"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}],
+ "sort_field": "sort_order", "sort_order": "ASC", "translated_doctype": 1
+}

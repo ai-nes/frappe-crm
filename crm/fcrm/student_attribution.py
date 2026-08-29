@@ -163,7 +163,8 @@ def _validate_supersedes(doctype: str, supersedes: str | None, student: str):
 	return supersedes
 
 
-def _record(*, doctype: str, kind: str, student: str, crm_contact: str | None, idempotency_key: str, correlation_id: str | None, supersedes: str | None, values: dict[str, Any]):
+def _record(*, kind: str, student: str, crm_contact: str | None, idempotency_key: str, correlation_id: str | None, supersedes: str | None, values: dict[str, Any]):
+	doctype = "CRM Marketing Engagement"
 	scope = _actor_and_scope()
 	student = _student(student)
 	crm_contact = _linked_contact(student, crm_contact)
@@ -192,7 +193,7 @@ def record_campaign_touchpoint(student, crm_campaign, crm_contact=None, touched_
 	"""Append campaign evidence; retries return the originally created row."""
 	_actor_and_scope()
 	crm_campaign = _existing_target("CRM Campaign", crm_campaign, "CRM Campaign")
-	return _record(doctype="CRM Campaign Touchpoint", kind="campaign_touchpoint", student=student, crm_contact=crm_contact, idempotency_key=idempotency_key, correlation_id=correlation_id, supersedes=supersedes, values={"crm_campaign": crm_campaign, "touched_at": touched_at or frappe.utils.now_datetime(), "source": source or "Manual", "crm_segment": crm_segment, "notes": notes})
+	return _record(kind="campaign_touchpoint", student=student, crm_contact=crm_contact, idempotency_key=idempotency_key, correlation_id=correlation_id, supersedes=supersedes, values={"engagement_kind": "campaign_touch", "reference_doctype": "CRM Campaign", "reference_name": crm_campaign, "crm_campaign": crm_campaign, "touched_at": touched_at or frappe.utils.now_datetime(), "source": source or "Manual", "crm_segment": crm_segment, "notes": notes})
 
 
 @frappe.whitelist()
@@ -200,7 +201,7 @@ def record_event_participation(student, crm_event, crm_contact=None, status="Reg
 	"""Append event evidence; status corrections supersede rather than mutate."""
 	_actor_and_scope()
 	crm_event = _existing_target("CRM Event", crm_event, "CRM Event")
-	return _record(doctype="CRM Event Participation", kind="event_participation", student=student, crm_contact=crm_contact, idempotency_key=idempotency_key, correlation_id=correlation_id, supersedes=supersedes, values={"crm_event": crm_event, "status": status or "Registered", "registered_at": registered_at or frappe.utils.now_datetime(), "checked_in_at": checked_in_at, "feedback_rating": feedback_rating, "feedback_notes": feedback_notes})
+	return _record(kind="event_participation", student=student, crm_contact=crm_contact, idempotency_key=idempotency_key, correlation_id=correlation_id, supersedes=supersedes, values={"engagement_kind": "event_participation", "reference_doctype": "CRM Event", "reference_name": crm_event, "crm_event": crm_event, "status": status or "Registered", "registered_at": registered_at or frappe.utils.now_datetime(), "checked_in_at": checked_in_at, "feedback_rating": feedback_rating, "feedback_notes": feedback_notes})
 
 
 def _redacted_read_authorized():
@@ -252,12 +253,8 @@ def _superseded_page_names(doctype, rows):
 	return set(frappe.db.get_all(doctype, filters={"supersedes": ["in", names]}, pluck="supersedes"))
 
 
-def _student_metrics_for(doctype, field, value):
-	rows = frappe.db.sql(
-		f"select distinct student from `tab{doctype}` where `{field}`=%s and student is not null and student!=''",
-		(value,),
-		as_dict=True,
-	)
+def _student_metrics_for(kind, field, value):
+	rows = frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": kind, field: value}, fields=["name", "student"])
 	return _metrics(rows)
 
 
@@ -267,11 +264,13 @@ def get_campaign_attribution(crm_campaign, limit=100, cursor=None):
 	_redacted_read_authorized()
 	crm_campaign = _existing_target("CRM Campaign", crm_campaign, "CRM Campaign")
 	limit, offset = _page_args(limit, cursor)
-	rows = frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": crm_campaign}, fields=["name", "student", "touched_at", "source", "supersedes"], order_by="touched_at asc, creation asc, name asc", limit_start=offset, limit_page_length=limit + 1)
+	rows = frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": crm_campaign}, fields=["name", "student", "touched_at", "source", "supersedes", "creation"])
+	rows.sort(key=lambda row: (str(row.touched_at or ""), str(row.creation or ""), str(row.name or "")))
+	rows = rows[offset : offset + limit + 1]
 	has_next = len(rows) > limit
 	page = rows[:limit]
-	superseded = _superseded_page_names("CRM Campaign Touchpoint", page)
-	return {"metrics": _student_metrics_for("CRM Campaign Touchpoint", "crm_campaign", crm_campaign), "timeline": [{"name": row.name, "student": row.student, "touched_at": row.touched_at, "source": row.source, "superseded": row.name in superseded} for row in page], "next_cursor": str(offset + limit) if has_next else None}
+	superseded = _superseded_page_names("CRM Marketing Engagement", page)
+	return {"metrics": _student_metrics_for("campaign_touch", "crm_campaign", crm_campaign), "timeline": [{"name": row.name, "student": row.student, "touched_at": row.touched_at, "source": row.source, "superseded": row.name in superseded} for row in page], "next_cursor": str(offset + limit) if has_next else None}
 
 
 @frappe.whitelist()
@@ -280,8 +279,10 @@ def get_event_attribution(crm_event, limit=100, cursor=None):
 	_redacted_read_authorized()
 	crm_event = _existing_target("CRM Event", crm_event, "CRM Event")
 	limit, offset = _page_args(limit, cursor)
-	rows = frappe.db.get_all("CRM Event Participation", filters={"crm_event": crm_event}, fields=["name", "student", "registered_at", "status", "supersedes"], order_by="registered_at asc, creation asc, name asc", limit_start=offset, limit_page_length=limit + 1)
+	rows = frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation", "crm_event": crm_event}, fields=["name", "student", "registered_at", "status", "supersedes", "creation"])
+	rows.sort(key=lambda row: (str(row.registered_at or ""), str(row.creation or ""), str(row.name or "")))
+	rows = rows[offset : offset + limit + 1]
 	has_next = len(rows) > limit
 	page = rows[:limit]
-	superseded = _superseded_page_names("CRM Event Participation", page)
-	return {"metrics": _student_metrics_for("CRM Event Participation", "crm_event", crm_event), "timeline": [{"name": row.name, "student": row.student, "registered_at": row.registered_at, "status": row.status, "superseded": row.name in superseded} for row in page], "next_cursor": str(offset + limit) if has_next else None}
+	superseded = _superseded_page_names("CRM Marketing Engagement", page)
+	return {"metrics": _student_metrics_for("event_participation", "crm_event", crm_event), "timeline": [{"name": row.name, "student": row.student, "registered_at": row.registered_at, "status": row.status, "superseded": row.name in superseded} for row in page], "next_cursor": str(offset + limit) if has_next else None}

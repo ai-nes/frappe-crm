@@ -1,0 +1,16 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "fields": [
+  {"fieldname": "former_name", "fieldtype": "Data", "in_list_view": 1, "label": "Former Province Name", "reqd": 1}
+ ],
+ "istable": 1,
+ "module": "FCRM",
+ "name": "CRM Province Former Name",
+ "permissions": [],
+ "quick_entry": 0
+}

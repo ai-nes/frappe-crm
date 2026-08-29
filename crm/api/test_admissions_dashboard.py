@@ -80,27 +80,25 @@ class TestAdmissionsDashboard(FrappeTestCase):
 		self.assertIn("mock_offline_province", item_names)
 
 	# ------------------------------------------------------------------------
-	# Phase 5: dashboard helpers must union the deprecated singular
-	# crm_campaign/crm_event Link fields on CRM Contact with the new
-	# CRM Campaign Touchpoint / CRM Event Participation junction tables, so
-	# dashboards read correctly whether attribution predates or postdates
-	# the Phase 5 migration.
+	# Canonical marketing engagement is the only dashboard attribution source.
 
-	def test_contact_names_touched_by_campaign_unions_old_and_new_attribution(self):
+	def test_contact_names_touched_by_campaign_reads_canonical_engagement(self):
 		campus = self._make_campus_for_dash("_Test Dash Union Campus")
 		campaign = self._make_campaign_for_dash("_Test Dash Union Campaign", campus)
 
-		legacy_contact = self._make_dash_contact(
-			"_Test Dash Legacy Attribution", "0981112224", crm_campaign=campaign
-		)
-		student = self._make_dash_student()
-		migrated_contact = self._make_dash_contact("_Test Dash New Attribution", "0981112225", student=student)
+		student_a = self._make_dash_student()
+		contact_a = self._make_dash_contact("_Test Dash Campaign Attribution A", "0981112224", student=student_a)
+		student_b = self._make_dash_student()
+		contact_b = self._make_dash_contact("_Test Dash Campaign Attribution B", "0981112225", student=student_b)
 		touchpoint = frappe.get_doc(
 			{
-				"doctype": "CRM Campaign Touchpoint",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "campaign_touch",
+				"reference_doctype": "CRM Campaign",
+				"reference_name": campaign,
 				"crm_campaign": campaign,
-				"crm_contact": migrated_contact,
-				"student": student,
+				"crm_contact": contact_a,
+				"student": student_a,
 			}
 		)
 		previous_attribution_flag = getattr(frappe.flags, "student_attribution_service", False)
@@ -109,29 +107,38 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			touchpoint.insert(ignore_permissions=True)
 		finally:
 			frappe.flags.student_attribution_service = previous_attribution_flag
-		self.addCleanup(lambda: frappe.db.delete("CRM Campaign Touchpoint", {"name": touchpoint.name}))
+		self.addCleanup(lambda: frappe.db.delete("CRM Marketing Engagement", {"name": touchpoint.name}))
+		second = frappe.get_doc({
+			"doctype": "CRM Marketing Engagement", "engagement_kind": "campaign_touch",
+			"reference_doctype": "CRM Campaign", "reference_name": campaign,
+			"crm_campaign": campaign, "crm_contact": contact_b, "student": student_b,
+		})
+		second.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.db.delete("CRM Marketing Engagement", {"name": second.name}))
 
 		names = _contact_names_touched_by_campaign(campaign)
 
-		self.assertIn(legacy_contact, names)
-		self.assertIn(migrated_contact, names)
+		self.assertIn(contact_a, names)
+		self.assertIn(contact_b, names)
 
-	def test_contact_names_with_event_participation_unions_old_and_new_attribution(self):
+	def test_contact_names_with_event_participation_reads_canonical_engagement(self):
 		campus = self._make_campus_for_dash("_Test Dash Union Event Campus")
 		campaign = self._make_campaign_for_dash("_Test Dash Union Event Campaign", campus)
 		event = self._make_event_for_dash("_Test Dash Union Event", campaign)
 
-		legacy_contact = self._make_dash_contact(
-			"_Test Dash Legacy Event Attribution", "0981112226", crm_event=event
-		)
-		student = self._make_dash_student()
-		migrated_contact = self._make_dash_contact("_Test Dash New Event Attribution", "0981112227", student=student)
+		student_a = self._make_dash_student()
+		contact_a = self._make_dash_contact("_Test Dash Event Attribution A", "0981112226", student=student_a)
+		student_b = self._make_dash_student()
+		contact_b = self._make_dash_contact("_Test Dash Event Attribution B", "0981112227", student=student_b)
 		participation = frappe.get_doc(
 			{
-				"doctype": "CRM Event Participation",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": event,
 				"crm_event": event,
-				"crm_contact": migrated_contact,
-				"student": student,
+				"crm_contact": contact_a,
+				"student": student_a,
 			}
 		)
 		previous_attribution_flag = getattr(frappe.flags, "student_attribution_service", False)
@@ -140,12 +147,19 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			participation.insert(ignore_permissions=True)
 		finally:
 			frappe.flags.student_attribution_service = previous_attribution_flag
-		self.addCleanup(lambda: frappe.db.delete("CRM Event Participation", {"name": participation.name}))
+		self.addCleanup(lambda: frappe.db.delete("CRM Marketing Engagement", {"name": participation.name}))
+		second = frappe.get_doc({
+			"doctype": "CRM Marketing Engagement", "engagement_kind": "event_participation",
+			"reference_doctype": "CRM Event", "reference_name": event,
+			"crm_event": event, "crm_contact": contact_b, "student": student_b,
+		})
+		second.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.db.delete("CRM Marketing Engagement", {"name": second.name}))
 
 		names = _contact_names_with_event_participation()
 
-		self.assertIn(legacy_contact, names)
-		self.assertIn(migrated_contact, names)
+		self.assertIn(contact_a, names)
+		self.assertIn(contact_b, names)
 
 	# ------------------------------------------------------------------------
 	# Phase 6: campaign-scoped total_spend and per-campaign cost data

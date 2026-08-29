@@ -35,8 +35,8 @@ SOURCE_MANIFESTS = (
 	{"source": "outcome", "doctype": "CRM Student Outcome", "time": "occurred_at", "kind": "outcome_code", "family": "outcome"},
 	{"source": "lifecycle", "doctype": "CRM Student Lifecycle Event", "time": "occurred_at", "kind": "transition_kind", "family": "lifecycle"},
 	{"source": "decision", "doctype": "CRM Student Decision Event", "time": "occurred_at", "kind": "event_type", "family": "decision"},
-	{"source": "attribution", "doctype": "CRM Campaign Touchpoint", "time": "touched_at", "kind": "touch_type", "family": "attribution"},
-	{"source": "participation", "doctype": "CRM Event Participation", "time": "registered_at", "kind": "status", "family": "attribution"},
+	{"source": "attribution", "doctype": "CRM Marketing Engagement", "time": "touched_at", "kind": "touch_type", "family": "attribution", "filters": {"engagement_kind": "campaign_touch"}},
+	{"source": "participation", "doctype": "CRM Marketing Engagement", "time": "registered_at", "kind": "status", "family": "attribution", "filters": {"engagement_kind": "event_participation"}},
 	{"source": "conversion", "doctype": "CRM Student Contact Conversion", "time": "converted_at", "kind": None, "family": "conversion"},
 )
 SOURCE_CONTRACT_HASH = hashlib.sha256(json.dumps(SOURCE_MANIFESTS, sort_keys=True).encode()).hexdigest()
@@ -141,7 +141,7 @@ def _read_source(manifest: dict[str, Any], student: str, as_of: str, cursor_payl
 	available = _fields(doctype) | {"name", "creation"}
 	if "student" not in available or manifest["time"] not in available:
 		return [], "student_scope_unavailable"
-	required = {"name", "student", "creation", manifest["time"], "event_id", "actor", "actor_scope", "scope_snapshot", "supersedes", "correlation_id", "correlation_token", "idempotency_key", "event_type", "outcome_code", "transition_kind", "from_stage", "to_stage", "from_state", "to_state", "status", "touch_type", "contact", "sales_action", "recommendation", "command_receipt", "evidence_reference", "evidence_references"}
+	required = {"name", "student", "creation", manifest["time"], "event_id", "actor", "actor_scope", "scope_snapshot", "supersedes", "correlation_id", "correlation_token", "idempotency_key", "event_type", "outcome_code", "transition_kind", "from_stage", "to_stage", "from_state", "to_state", "status", "touch_type", "contact", "action", "recommendation", "command_receipt", "evidence_reference", "evidence_references"}
 	fields = sorted(required & available)
 	if "name" not in fields:
 		fields.append("name")
@@ -149,6 +149,10 @@ def _read_source(manifest: dict[str, Any], student: str, as_of: str, cursor_payl
 		event_key = "COALESCE(`event_id`, `name`)" if "event_id" in available else "`name`"
 		where = ["student = %s"]
 		params: list[Any] = [student]
+		for field, value in manifest.get("filters", {}).items():
+			if field in available:
+				where.append(f"`{field}` = %s")
+				params.append(value)
 		if "creation" in available:
 			where.append("creation <= %s")
 			params.append(as_of)
@@ -177,6 +181,8 @@ def _read_source(manifest: dict[str, Any], student: str, as_of: str, cursor_payl
 
 
 def _event_type(manifest: dict[str, Any], row: Any) -> str:
+	if manifest["family"] == "attribution" and manifest["source"] == "attribution":
+		return f"attribution.{_value(row, 'touch_type') or 'recorded'}"
 	kind = _value(row, manifest.get("kind") or "")
 	if manifest["source"] == "conversion":
 		return "conversion.completed"
@@ -219,7 +225,7 @@ def _adapt(manifest: dict[str, Any], row: Any, student: str, allow_restricted: b
 		scope_snapshot = _value(row, "actor_scope") or _value(row, "scope_snapshot")
 		if scope_snapshot:
 			event["authority_scope"] = _opaque(scope_snapshot)
-		for field in ("command_receipt", "sales_action", "recommendation", "evidence_reference", "evidence_references"):
+		for field in ("command_receipt", "action", "recommendation", "evidence_reference", "evidence_references"):
 			if _value(row, field):
 				event.setdefault("evidence", {})[field] = _opaque(_value(row, field))
 	return event

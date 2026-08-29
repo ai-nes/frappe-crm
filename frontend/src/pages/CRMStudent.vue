@@ -71,7 +71,9 @@
         />
         <Activities
           v-else-if="
-            !['Interactions', 'Scoring'].includes(tabs[tabIndex]?.name)
+            !['Interactions', 'Scoring', 'Actions', 'AI Analysis'].includes(
+              tabs[tabIndex]?.name,
+            )
           "
           ref="activities"
           v-model:reload="reload"
@@ -94,10 +96,21 @@
           @admissions-action="showAdmissionsAction = true"
         />
         <InteractionScoreArea
-          v-else
+          v-else-if="tabs[tabIndex]?.name === 'Scoring'"
           :student="doc"
           type="scores"
           :refresh-key="interactionRefreshKey"
+        />
+        <ActionsPanel
+          v-else-if="tabs[tabIndex]?.name === 'Actions'"
+          doctype="CRM Student"
+          :name="crmStudentId"
+        />
+        <StudentAnalysisPanel
+          v-else
+          :student="crmStudentId"
+          :context-revision="doc.modified"
+          @open-actions="openActionsTab"
         />
       </template>
     </Tabs>
@@ -235,7 +248,7 @@
     :actions="availableAdmissionsActions"
     @success="handleAdmissionsActionSuccess"
   />
-  <SalesActionOutcomeDialog
+  <ActionOutcomeDialog
     v-if="selectedSalesAction"
     v-model="showSalesActionModal"
     :action="selectedSalesAction"
@@ -253,9 +266,10 @@ import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import DashboardIcon from '@/components/Icons/DashboardIcon.vue'
-import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import ActionsPanel from '@/components/StudentDecision/ActionsPanel.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+import SparklesIcon from '@/components/Icons/SparklesIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
@@ -264,7 +278,8 @@ import RouteStudentModal from '@/components/Modals/RouteStudentModal.vue'
 import StudentOverview from '@/components/StudentOverview.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
-import SalesActionOutcomeDialog from '@/components/StudentDecision/SalesActionOutcomeDialog.vue'
+import ActionOutcomeDialog from '@/components/StudentDecision/ActionOutcomeDialog.vue'
+import StudentAnalysisPanel from '@/components/StudentAnalysisPanel.vue'
 import StudentAdmissionsActionDialog from '@/components/StudentAdmissionsActionDialog.vue'
 import StudentDetailLoadingState from '@/components/StudentDetailLoadingState.vue'
 import {
@@ -272,7 +287,7 @@ import {
   safeLifecycleError,
   studentEngagementApi,
 } from '@/utils/studentEngagement'
-import { salesActionItem } from '@/utils/studentDecision'
+import { actionItem } from '@/utils/studentDecision'
 import { normalizeStudentAdmissionsContext } from '@/utils/studentAdmissionsContext'
 import { formatStudentSLADate, slaStatusPresentation } from '@/utils/studentSLA'
 import { copyToClipboard } from '@/utils'
@@ -411,10 +426,10 @@ const studentDecisionContext = computed(() => {
   return {
     pendingDecision: context.pending_decision || context.pending_recommendation,
     activeAction: context.active_action
-      ? salesActionItem(context.active_action)
+      ? actionItem(context.active_action)
       : null,
     latestTerminalAction: context.latest_terminal_action
-      ? salesActionItem(context.latest_terminal_action)
+      ? actionItem(context.latest_terminal_action)
       : null,
   }
 })
@@ -539,6 +554,11 @@ function handleConverted() {
   refreshConversionContext()
 }
 
+function openActionsTab() {
+  const index = tabs.value.findIndex((tab) => tab.name === 'Actions')
+  if (index >= 0) tabIndex.value = index
+}
+
 async function loadMoreEngagementHistory() {
   if (!engagementHistoryCursor.value) return
   try {
@@ -625,9 +645,10 @@ const tabs = computed(() => [
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
   { name: 'Scoring', label: __('Potential Score'), icon: ActivityIcon },
-  { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
+  { name: 'Actions', label: __('Actions'), icon: ActivityIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
+  { name: 'AI Analysis', label: __('Analysis / Recommendations'), icon: SparklesIcon },
 ])
 
 const { tabIndex } = useActiveTabManager(tabs, 'lastCRMStudentTab')

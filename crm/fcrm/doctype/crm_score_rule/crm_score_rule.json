@@ -6,21 +6,15 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": [
-  "signal",
-  "column_break_1",
-  "base_points",
-  "max_points",
-  "is_active"
- ],
+ "field_order": ["rule_kind", "signal", "is_active", "column_break_1", "base_points", "max_points", "penalty_amount", "cooldown_days", "max_penalties", "max_days", "multiplier", "tier_label"],
  "fields": [
+  {"fieldname": "rule_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Rule Kind", "options": "positive\nnegative\ntime_decay", "default": "positive", "reqd": 1},
   {
    "fieldname": "signal",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Signal",
-   "options": "CRM Score Signal",
-   "reqd": 1
+   "options": "CRM Score Signal"
   },
   {
    "fieldname": "column_break_1",
@@ -45,7 +39,13 @@
    "fieldtype": "Check",
    "in_list_view": 1,
    "label": "Active"
-  }
+  },
+  {"default": "0", "fieldname": "penalty_amount", "fieldtype": "Float", "label": "Penalty Points"},
+  {"default": "0", "fieldname": "cooldown_days", "fieldtype": "Int", "label": "Cooldown Days"},
+  {"default": "0", "fieldname": "max_penalties", "fieldtype": "Int", "label": "Max Penalties"},
+  {"default": "0", "fieldname": "max_days", "fieldtype": "Int", "label": "Max Days"},
+  {"default": "1.0", "fieldname": "multiplier", "fieldtype": "Float", "label": "Multiplier"},
+  {"fieldname": "tier_label", "fieldtype": "Data", "label": "Tier Label"}
  ],
  "index_web_pages_for_search": 0,
  "istable": 1,

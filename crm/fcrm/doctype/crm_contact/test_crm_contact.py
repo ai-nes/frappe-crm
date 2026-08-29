@@ -272,13 +272,13 @@ class TestCRMContact(FrappeTestCase):
 	# ---------------------------------------------------------------------- helpers
 
 	def _ensure_interaction_type(self, name):
-		# Same production CRM Interaction Type names the seed_crm_interaction_types
+		# Same production CRM Term names the seed_crm_interaction_types
 		# patch installs; not _Test-prefixed and intentionally left in place
 		# across tests (create_interaction() no-ops if the type is missing).
-		if not frappe.db.exists("CRM Interaction Type", name):
+		if not frappe.db.exists("CRM Term", name):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": name,
+				"doctype": "CRM Term",
+				"term_name": name, "category": "interaction_type",
 			}).insert(ignore_permissions=True)
 
 	def _stage_changed_interactions(self, contact_name):

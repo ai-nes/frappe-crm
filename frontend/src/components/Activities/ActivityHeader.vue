@@ -141,6 +141,7 @@ const defaultActions = computed(() => {
       icon: h(TaskIcon, { class: 'h-4 w-4' }),
       label: __('Task'),
       onClick: () => props.modalRef.showTask(),
+      condition: () => !['CRM Student', 'CRM Contact'].includes(props.doctype),
     },
     {
       icon: h(AttachmentIcon, { class: 'h-4 w-4' }),

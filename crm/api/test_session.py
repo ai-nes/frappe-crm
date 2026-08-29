@@ -78,6 +78,7 @@ class TestSessionRoleContract(FrappeTestCase):
 			({"Sale"}, "sales", "Sale"),
 			({"Marketing"}, "marketing", "Marketing"),
 			({"Lead Sales"}, "lead_sales", "Lead Sales"),
+			({"Admissions Director"}, "admissions_director", "Admissions Director"),
 		):
 			with self.subTest(roles=roles):
 				flags = _session_role_flags(roles)

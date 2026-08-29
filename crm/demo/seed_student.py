@@ -164,20 +164,31 @@ def _ensure_demo_team(campus: str, staff_name: str):
 
 
 def _ensure_enrollment_status(name: str, order: int, category: str, lifecycle_stage: str):
-	if frappe.db.exists("CRM Enrollment Status", name):
-		return name
+	meta = {"stage_category": category, "lifecycle_stage": lifecycle_stage}
+	term_name = frappe.db.get_value("CRM Term", {"term_name": name, "category": "enrollment_status"}, "name")
+	if not term_name and frappe.db.exists("CRM Term", name):
+		cat = frappe.db.get_value("CRM Term", name, "category")
+		if cat == "enrollment_status":
+			term_name = name
+	if term_name:
+		doc = frappe.get_doc("CRM Term", term_name)
+		doc.sort_order = order
+		doc.metadata = meta
+		doc.save(ignore_permissions=True)
+		return doc.name
 	doc = frappe.get_doc(
 		{
-			"doctype": "CRM Enrollment Status",
-			"status_name": name,
-			"stage_order": order,
-			"stage_category": category,
+			"doctype": "CRM Term",
+			"term_name": name,
+			"category": "enrollment_status",
+			"sort_order": order,
+			"metadata": meta,
 		}
 	)
 	doc.insert(ignore_permissions=True)
-	if frappe.db.has_column("CRM Enrollment Status", "lifecycle_stage"):
-		frappe.db.set_value("CRM Enrollment Status", doc.name, "lifecycle_stage", lifecycle_stage, update_modified=False)
 	return doc.name
+
+
 
 
 def _ensure_student(campus: str, admission_year: str, pool: str):
@@ -291,10 +302,10 @@ def _ensure_routing_and_sla(student: str, pool: str):
 
 
 def _ensure_interaction(student: str):
-	interaction_type = frappe.db.get_value("CRM Interaction Type", {}, "name")
+	interaction_type = frappe.db.get_value("CRM Term", {}, "name")
 	if not interaction_type:
 		interaction_type = frappe.get_doc(
-			{"doctype": "CRM Interaction Type", "type_name": "Phone Consultation"}
+			{"doctype": "CRM Term", "term_name": "Phone Consultation", "category": "interaction_type"}
 		).insert(ignore_permissions=True).name
 	name = frappe.db.get_value("CRM Interaction", {"student": student, "summary": "Tư vấn hồ sơ và điều kiện xét tuyển"}, "name")
 	if name:

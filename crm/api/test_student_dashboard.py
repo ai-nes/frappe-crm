@@ -15,9 +15,9 @@ class TestStudentDashboardEvents(FrappeTestCase):
 
 	def tearDown(self):
 		for name in frappe.db.get_all(
-			"CRM Event Participation", filters={"crm_event": ["like", "_Test SD%"]}, pluck="name"
+			"CRM Marketing Engagement", filters={"engagement_kind": "event_participation", "crm_event": ["like", "_Test SD%"]}, pluck="name"
 		):
-			frappe.delete_doc("CRM Event Participation", name, force=True)
+			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SD%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test SD%"]}, pluck="name"):
@@ -88,9 +88,16 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def test_events_mapping_falls_back_to_legacy_field_when_no_participation(self):
+	def test_events_mapping_reads_canonical_participation(self):
 		event_name = self._make_event("_Test SD Legacy Event", event_date="2026-09-10")
-		contact_name = self._make_contact("_Test SD Legacy Contact", "0987000001", crm_event=event_name)
+		student = self._make_student("_Test SD Canonical Student", "0987000001")
+		contact_name = self._make_contact("_Test SD Canonical Contact", "0987000001", student=student)
+		participation = frappe.get_doc({
+			"doctype": "CRM Marketing Engagement", "engagement_kind": "event_participation",
+			"reference_doctype": "CRM Event", "reference_name": event_name,
+			"crm_event": event_name, "crm_contact": contact_name, "student": student,
+		})
+		participation.insert(ignore_permissions=True)
 
 		try:
 			result = get_student_dashboard(phone="0987000001")
@@ -100,20 +107,23 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			self.assertEqual(event_items[0]["id"], event_name)
 			self.assertEqual(event_items[0]["status"], "attended")
 		finally:
+			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
 			frappe.delete_doc("CRM Contact", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)
 
-	def test_events_mapping_prefers_participation_over_legacy_field(self):
-		legacy_event = self._make_event("_Test SD Ignored Legacy Event", event_date="2026-09-10")
+	def test_events_mapping_returns_only_canonical_participation(self):
 		participation_event = self._make_event("_Test SD Participation Event", start_datetime="2026-09-20 09:00:00")
 		student = self._make_student("_Test SD Participation Student", "0987000002")
 		contact_name = self._make_contact(
-			"_Test SD Participation Contact", "0987000002", crm_event=legacy_event, student=student
+			"_Test SD Participation Contact", "0987000002", student=student
 		)
 
 		participation = frappe.get_doc(
 			{
-				"doctype": "CRM Event Participation",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": participation_event,
 				"crm_event": participation_event,
 				"crm_contact": contact_name,
 				"student": student,
@@ -128,15 +138,13 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			event_ids = [item["id"] for item in event_items]
 
 			self.assertIn(participation_event, event_ids)
-			self.assertNotIn(legacy_event, event_ids)
 
 			matched = next(item for item in event_items if item["id"] == participation_event)
 			self.assertEqual(matched["status"], "attended")
 		finally:
-			frappe.delete_doc("CRM Event Participation", participation.name, force=True)
+			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
 			frappe.delete_doc("CRM Contact", contact_name, force=True)
 			frappe.delete_doc("CRM Event", participation_event, force=True)
-			frappe.delete_doc("CRM Event", legacy_event, force=True)
 
 	def test_events_mapping_maps_feedback_given_status(self):
 		event_name = self._make_event("_Test SD Feedback Event", start_datetime="2026-09-25 09:00:00")
@@ -145,7 +153,10 @@ class TestStudentDashboardEvents(FrappeTestCase):
 
 		participation = frappe.get_doc(
 			{
-				"doctype": "CRM Event Participation",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": event_name,
 				"crm_event": event_name,
 				"crm_contact": contact_name,
 				"student": student,
@@ -156,7 +167,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		# Attribution evidence is append-only in production; update the fixture
 		# directly to exercise the dashboard mapping for this stored status.
 		frappe.db.set_value(
-			"CRM Event Participation", participation.name, "status", "Feedback Given", update_modified=False
+			"CRM Marketing Engagement", participation.name, "status", "Feedback Given", update_modified=False
 		)
 
 		try:
@@ -165,7 +176,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			matched = next(item for item in event_items if item["id"] == event_name)
 			self.assertEqual(matched["status"], "feedback_given")
 		finally:
-			frappe.delete_doc("CRM Event Participation", participation.name, force=True)
+			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
 			frappe.delete_doc("CRM Contact", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)
 

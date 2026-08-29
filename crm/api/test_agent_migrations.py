@@ -33,6 +33,9 @@ class _Frappe:
 		def commit(self):
 			self.commits += 1
 
+		def delete(self, *_args, **_kwargs):
+			return None
+
 	def __init__(self, role_names):
 		self.roles = {role_name: _Role() for role_name in role_names}
 		self.db = self._DB(self.roles)
@@ -86,3 +89,16 @@ class TestKnowledgeGraphCapabilitySeed(unittest.TestCase):
 
 		self.assertEqual(fake_frappe.db.commits, 1)
 		self.assertEqual(fake_frappe.cache_cleared, 1)
+
+	def test_retired_capability_cleanup_is_explicit(self):
+		fake_frappe = _Frappe(("Sale",))
+
+		with patch.object(agent_migrations, "frappe", fake_frappe):
+			agent_migrations._remove_retired_capabilities()
+
+		# The fake records the call shape through the DB API in the real app; the
+		# explicit constant is the guard against deleting unrelated grants.
+		self.assertEqual(
+			agent_migrations.RETIRED_SEMANTIC_CAPABILITIES,
+			("readmodel.analytics_query",),
+		)

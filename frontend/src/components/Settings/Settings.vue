@@ -200,10 +200,8 @@ const tabs = computed(() => {
           label: __('Categories'),
           icon: GraduationCapIcon,
           component: markRaw(ReferenceDataPage),
-          condition: canConfigure,
         },
       ],
-      condition: canConfigure,
     },
     {
       label: __('Integrations', null, 'FCRM'),

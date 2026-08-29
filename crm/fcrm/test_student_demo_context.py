@@ -15,7 +15,7 @@ class TestStudentDemoContext(FrappeTestCase):
 					"campaign": "Open Day 2026",
 					"source": "Open Day invitation",
 					"touched_at": "2026-08-20 09:00:00",
-					"reference_doctype": "CRM Campaign Touchpoint",
+					"reference_doctype": "CRM Marketing Engagement",
 					"reference_docname": "CMP-PRIVATE",
 				},
 				{
@@ -23,7 +23,7 @@ class TestStudentDemoContext(FrappeTestCase):
 					"event": "Open Day HCM",
 					"status": "Checked-in",
 					"touched_at": "2026-08-24 08:00:00",
-					"reference_doctype": "CRM Event Participation",
+					"reference_doctype": "CRM Marketing Engagement",
 					"reference_docname": "EVT-PRIVATE",
 				},
 			]

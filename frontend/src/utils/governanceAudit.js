@@ -13,10 +13,8 @@ export const governanceAuditApi = Object.freeze({
 export const governedDoctypes = Object.freeze({
   'CRM Lead Source': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
   'CRM Platform': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
-  'CRM Intent Type': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
-  'CRM Lost Reason': { ownerRole: 'Lead Sales', approverRoles: ['Lead Sales', 'Marketing'] },
+  'CRM Term': { ownerRole: 'Lead Sales', approverRoles: ['Lead Sales', 'Marketing'] },
   'CRM Campus': { ownerRole: 'Admissions Director', approverRoles: ['Admissions Director'] },
-  'CRM Campaign Type': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
 })
 
 export function createGovernanceCommandId() {
@@ -41,7 +39,7 @@ export function buildProposalPayload({ doctype, docname, action, newValue, reaso
   }
 }
 
-export function buildAdditiveValuePayload({ doctype, value, reason, idempotencyKey, correlationId, leadSource }) {
+export function buildAdditiveValuePayload({ doctype, value, reason, idempotencyKey, correlationId, leadSource, category }) {
   return {
     doctype: String(doctype || '').trim(),
     value: String(value || '').trim(),
@@ -49,6 +47,7 @@ export function buildAdditiveValuePayload({ doctype, value, reason, idempotencyK
     idempotency_key: idempotencyKey,
     correlation_id: correlationId || idempotencyKey,
     ...(leadSource ? { lead_source: leadSource } : {}),
+    ...(category ? { category } : {}),
   }
 }
 

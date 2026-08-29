@@ -8,13 +8,15 @@
         v-if="listView?.customListActions"
         :actions="listView.customListActions"
       />
-      <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
-      <Button
-        variant="solid"
-        :label="__('Create')"
-        iconLeft="plus"
-        @click="createHighSchool"
-      />
+      <template v-if="canConfigure">
+        <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
+        <Button
+          variant="solid"
+          :label="__('Create')"
+          iconLeft="plus"
+          @click="createHighSchool"
+        />
+      </template>
     </template>
   </LayoutHeader>
   <ViewControls
@@ -63,15 +65,18 @@ import ViewControls from '@/components/ViewControls.vue'
 import GeographyImportButton from '@/components/GeographyImportButton.vue'
 import SchoolIcon from '~icons/lucide/school'
 import { useDoctypeModal } from '@/composables/doctypeModal'
-import { getMeta } from '@/stores/meta'
+import { usersStore } from '@/stores/users'
+import { canConfigureSystem } from '@/utils/rolePolicy'
 import { formatDate, timeAgo } from '@/utils'
 import { useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
 
-const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
-  getMeta('CRM High School')
 const { showModal } = useDoctypeModal()
+const { getUser } = usersStore()
 const router = useRouter()
+
+const user = computed(() => getUser() || {})
+const canConfigure = computed(() => canConfigureSystem(user.value))
 
 const listView = ref(null)
 const highSchools = ref({})
@@ -79,7 +84,6 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
-
 function createHighSchool() {
   showModal({
     doctype: 'CRM High School',

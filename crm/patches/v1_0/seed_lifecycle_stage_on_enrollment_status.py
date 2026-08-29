@@ -3,8 +3,7 @@ Status and backfill the 6 canonical statuses — the Phase 3 two-track model's
 mapping from day-to-day working status onto the long-term funnel position.
 Locked mapping (5-stage reduced form): SQL and Admitted are folded into
 Applicant/Enrolled respectively since the existing statuses don't carry
-enough resolution to distinguish them — see
-plans/260822-admissions-crm-alignment/phase-03-lead-status-routing-sla.md.
+enough resolution to distinguish them.
 """
 
 import frappe
@@ -20,6 +19,8 @@ LIFECYCLE_STAGE_MAP = {
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return
 	frappe.reload_doc("fcrm", "doctype", "crm_enrollment_status", force=True)
 
 	for status_name, lifecycle_stage in LIFECYCLE_STAGE_MAP.items():

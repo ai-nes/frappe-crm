@@ -13,8 +13,9 @@
         :actions="listView.customListActions"
       />
       <Button
+        v-if="canSubmitIntake"
         variant="solid"
-        :label="__('Create')"
+        :label="__('New student')"
         iconLeft="plus"
         @click="createContact"
       />
@@ -93,6 +94,18 @@
     name="Contacts"
     :icon="ContactIcon"
   />
+  <StudentIntakeModal
+    v-if="showIntakeModal"
+    v-model="showIntakeModal"
+    @completed="handleIntakeCompleted"
+    @review-required="handleReviewRequired"
+  />
+  <DecideStudentIntakeReviewModal
+    v-if="showReviewModal && intakeReview"
+    v-model="showReviewModal"
+    :review="intakeReview"
+    @resolved="handleIntakeCompleted"
+  />
 </template>
 
 <script setup>
@@ -103,17 +116,20 @@ import CRMContactsListView from '@/components/ListViews/CRMContactsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import KanbanView from '@/components/Kanban/KanbanView.vue'
 import ViewControls from '@/components/ViewControls.vue'
+import StudentIntakeModal from '@/components/Modals/StudentIntakeModal.vue'
+import DecideStudentIntakeReviewModal from '@/components/Modals/DecideStudentIntakeReviewModal.vue'
 import ContactIcon from '~icons/lucide/users'
-import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
+import { usersStore } from '@/stores/users'
+import { hasAnyCapability } from '@/utils/rolePolicy'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute } from 'vue-router'
 import { ref, computed } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Contact')
-const { showModal } = useDoctypeModal()
 const route = useRoute()
+const { getCurrentUser } = usersStore()
 
 const listView = ref(null)
 const contacts = ref({})
@@ -121,6 +137,17 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+const showIntakeModal = ref(false)
+const showReviewModal = ref(false)
+const intakeReview = ref(null)
+const canSubmitIntake = computed(() =>
+  hasAnyCapability(getCurrentUser(), [
+    'student.execute',
+    'team.oversee',
+    'admissions.oversee',
+    'system.configure',
+  ]),
+)
 
 function getRow(name, field) {
   function getValue(value) {
@@ -132,13 +159,18 @@ function getRow(name, field) {
   return getValue(contacts.value?.data?.data?.find((r) => r.name === name)?.[field])
 }
 
-function createContact(column) {
-  const defaults = column?.column_value ? { stage: column.column_value } : {}
-  showModal({
-    doctype: 'CRM Contact',
-    title: __('Contact'),
-    defaults,
-  })
+function createContact() {
+  showIntakeModal.value = true
+}
+
+function handleReviewRequired(review) {
+  intakeReview.value = review
+  showReviewModal.value = true
+}
+
+function handleIntakeCompleted() {
+  contacts.value?.reload?.()
+  showIntakeModal.value = false
 }
 
 const rows = computed(() => {

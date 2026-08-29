@@ -14,7 +14,7 @@ class TestPhase9ContractHelpers(unittest.TestCase):
 	def test_registry_is_versioned_and_covers_campaign_type(self):
 		self.assertTrue(validate_registry())
 		self.assertEqual(REGISTRY_REVISION, "P9-DEC-001")
-		self.assertIn("CRM Campaign Type", GOVERNED_REFERENCE_REGISTRY)
+		self.assertIn("CRM Term", GOVERNED_REFERENCE_REGISTRY)
 
 	def test_reconciliation_classification_is_deterministic_and_redacted(self):
 		self.assertEqual(

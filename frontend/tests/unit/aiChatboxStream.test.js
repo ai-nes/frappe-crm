@@ -154,4 +154,88 @@ describe('AI chat stream terminal handling', () => {
     expect(message.approval).toEqual(approval)
     expect(message.streaming).toBe(false)
   })
+
+  it('forwards only the runtime activity event to the UI activity surface', () => {
+    const run = { finished: false }
+    const message = { text: '', streaming: true }
+    let activity = null
+
+    applyUIStreamEvent(
+      {
+        type: 'data-agent-activity',
+        data: {
+          phase: 'tool_end',
+          resource: 'CRM Lead',
+          operation: 'search',
+          evidence_count: 3,
+        },
+      },
+      message,
+      run,
+      true,
+      () => {},
+      () => {},
+      () => {},
+      (value) => {
+        activity = value
+      },
+    )
+
+    expect(activity).toEqual({
+      phase: 'tool_end',
+      resource: 'CRM Lead',
+      operation: 'search',
+      evidence_count: 3,
+    })
+  })
+
+  it('stores the structured student analysis envelope', () => {
+    const run = { finished: false }
+    const message = { text: '', streaming: true }
+    applyUIStreamEvent(
+      { type: 'data-student-analysis', data: { status: 'completed', anchor: { anchor_resource: 'CRM Student', anchor_id: 'STU-1' }, recommended_actions: ['Call'] } },
+      message,
+      run,
+      true,
+      () => {},
+    )
+    expect(message.analysisBrief.anchor.anchor_id).toBe('STU-1')
+    expect(message.analysisBrief.recommended_actions).toEqual(['Call'])
+  })
+
+  it('forwards model-authored reasoning summaries separately from graph activity', () => {
+    const run = { finished: false }
+    const message = { text: '', streaming: true }
+    let reasoning = null
+
+    applyUIStreamEvent(
+      {
+        type: 'data-agent-reasoning',
+        data: {
+          node_id: 'run:analysis.reasoning:1',
+          evidence_count: 1,
+          reasoning: {
+            observed: '1 record / 13 fields',
+            analysis: 'The score is a signal.',
+            implication: 'Prioritize a focused follow-up.',
+            uncertainty: 'Intent is not proven.',
+            next_step: 'Ask an open question.',
+          },
+        },
+      },
+      message,
+      run,
+      true,
+      () => {},
+      () => {},
+      () => {},
+      () => {},
+      (value) => {
+        reasoning = value
+      },
+    )
+
+    expect(reasoning.reasoning.analysis).toBe('The score is a signal.')
+    expect(reasoning.evidence_count).toBe(1)
+  })
 })

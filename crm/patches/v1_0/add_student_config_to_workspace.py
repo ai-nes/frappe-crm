@@ -13,8 +13,8 @@ def execute():
 	_ensure_link(
 		workspace,
 		label="Enrollment Statuses",
-		link_to="CRM Enrollment Status",
-		after_link_to="CRM School Type",
+		link_to="CRM Term",
+		after_link_to="CRM High School",
 	)
 
 	workspace.save(ignore_permissions=True)

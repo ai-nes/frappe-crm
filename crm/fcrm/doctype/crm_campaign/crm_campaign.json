@@ -56,8 +56,8 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campaign Type",
-   "options": "CRM Campaign Type"
+   "label": "Campaign Type",
+   "options": "CRM Term"
   },
   {
    "fieldname": "event_type",

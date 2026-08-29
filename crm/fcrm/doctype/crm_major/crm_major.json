@@ -37,7 +37,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Major Group",
-   "options": "CRM Major Group"
+   "options": "CRM Term"
   },
   {
    "default": "1",

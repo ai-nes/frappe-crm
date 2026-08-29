@@ -13,6 +13,8 @@ DOCTYPES = ["CRM Contact", "CRM Student"]
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return {"status": "taxonomy_pending"}
 	frappe.reload_doc("fcrm", "doctype", "crm_contact", force=True)
 	frappe.reload_doc("fcrm", "doctype", "crm_student", force=True)
 

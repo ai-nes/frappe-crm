@@ -9,10 +9,10 @@ class CRMSegment(Document):
 		self.filters = validate_segment_filters(self.filters)
 
 	def on_trash(self):
-		if frappe.db.exists("CRM Campaign Touchpoint", {"crm_segment": self.name}):
+		if frappe.db.exists("CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "crm_segment": self.name}):
 			frappe.throw(
 				frappe._(
-					"This Segment cannot be deleted because it has Campaign Touchpoint records "
+				"This Segment cannot be deleted because it has marketing engagement records "
 					"attached to it. Remove those references first."
 				)
 			)

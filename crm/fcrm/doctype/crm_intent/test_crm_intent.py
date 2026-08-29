@@ -16,16 +16,16 @@ class TestCRMIntent(FrappeTestCase):
 			frappe.delete_doc("CRM Student", name, force=True)
 
 	def _ensure_master_data(self):
-		if not frappe.db.exists("CRM Interaction Type", "_Test Intent Trash Call"):
+		if not frappe.db.exists("CRM Term", "_Test Intent Trash Call"):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": "_Test Intent Trash Call",
+				"doctype": "CRM Term",
+				"term_name": "_Test Intent Trash Call", "category": "interaction_type",
 			}).insert(ignore_permissions=True)
-		if not frappe.db.exists("CRM Intent Type", "_Test Intent Trash Type"):
+		if not frappe.db.exists("CRM Term", "_Test Intent Trash Type"):
 			frappe.get_doc({
-				"doctype": "CRM Intent Type",
-				"intent_type_name": "_Test Intent Trash Type",
-				"importance": "Very High",
+				"doctype": "CRM Term",
+				"term_name": "_Test Intent Trash Type", "category": "intent_type",
+				"metadata": {"importance": "Very High"},
 			}).insert(ignore_permissions=True)
 
 	def _make_student(self):

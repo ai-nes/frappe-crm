@@ -63,7 +63,7 @@
    "fieldtype": "Int",
    "label": "Source Score Input Revision",
    "read_only": 1,
-   "description": "CRM Student.score_input_revision at calculation time (plans/260825-interaction-scoring-v2 Phase 5) -- nullable/0 for historical rows written before this field existed."
+   "description": "CRM Student.score_input_revision at calculation time -- nullable/0 for historical rows written before this field existed."
   },
   {
    "fieldname": "policy_revision",

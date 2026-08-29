@@ -18,7 +18,7 @@ class CRMHighSchool(Document):
 				"label": "School Type",
 				"type": "Link",
 				"key": "school_type",
-				"options": "CRM School Type",
+				"options": "CRM Term",
 				"width": "10rem",
 			},
 			{

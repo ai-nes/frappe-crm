@@ -1,9 +1,8 @@
 {
   "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:delivery_attempt_key", "doctype": "DocType", "engine": "InnoDB",
-  "field_order": ["delivery_attempt_key", "delivery", "recipient", "attempt_number", "provider_submission_key", "outcome", "provider_reference", "error_code", "submitted_at", "completed_at", "schema_version"],
+  "field_order": ["delivery_attempt_key", "recipient", "attempt_number", "provider_submission_key", "outcome", "provider_reference", "error_code", "submitted_at", "completed_at", "schema_version"],
   "fields": [
     {"fieldname": "delivery_attempt_key", "fieldtype": "Data", "label": "Delivery Attempt Key", "read_only": 1, "reqd": 1, "unique": 1},
-    {"fieldname": "delivery", "fieldtype": "Link", "label": "Delivery", "options": "CRM Student SLA Delivery", "read_only": 1, "reqd": 1},
     {"fieldname": "recipient", "fieldtype": "Link", "label": "Recipient", "options": "User", "read_only": 1},
     {"fieldname": "attempt_number", "fieldtype": "Int", "label": "Attempt Number", "read_only": 1, "reqd": 1},
     {"fieldname": "provider_submission_key", "fieldtype": "Data", "label": "Provider Submission Key", "read_only": 1, "reqd": 1, "unique": 1},
@@ -14,5 +13,5 @@
     {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
     {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
   ],
-  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Delivery Attempt", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
+  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Delivery Attempt", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1, "istable": 1
 }

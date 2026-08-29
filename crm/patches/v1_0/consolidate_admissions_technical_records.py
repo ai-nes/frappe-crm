@@ -13,12 +13,10 @@ except ImportError:  # pragma: no cover - pure manifest tests run outside bench
 from crm.fcrm.record_retention import persist_private_artifact, redacted_manifest
 
 
-RETIRED_DOCTYPES = (
-	"CRM Student Routing Request",
-	"CRM Student SLA Delivery",
-	"CRM Student SLA Delivery Attempt",
-	"CRM Student Contact Conversion Reconciliation",
-)
+# This historical report patch is intentionally empty after the selected
+# consolidation. Routing and SLA records remain active; retired records are
+# handled by their dedicated cutover patches.
+RETIRED_DOCTYPES = ()
 
 
 def build_manifest(rows_by_doctype: dict[str, list[dict]]) -> dict:

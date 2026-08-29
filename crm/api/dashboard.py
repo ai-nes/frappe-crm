@@ -304,3 +304,89 @@ def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=No
 		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
 
 	return query.run(as_dict=True) or []
+
+
+@frappe.whitelist()
+def get_sidebar_badge_counts():
+	"""Return legacy counters only during the workspace reader dark launch.
+
+	The frontend stops calling this endpoint once the server-issued
+	``role_workspace_read`` flag is true. It remains as a compatibility path so
+	default-off users do not lose existing sidebar indicators while the scoped
+	reader contracts are being released.
+	"""
+	from crm.fcrm.student_feature_flags import role_workspace_read_enabled
+
+	if role_workspace_read_enabled():
+		from crm.api.role_workspaces import get_workspace_badges
+
+		return get_workspace_badges()
+
+	user = frappe.session.user
+	roles = frappe.get_roles(user)
+	is_admin = "System Manager" in roles or user == "Administrator"
+
+	urgent_sla_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		urgent_sla_count = get_readable_count("CRM Student SLA Attempt", {"status": "open"})
+
+	pool_count = 0
+	if frappe.db.table_exists("CRM Contact"):
+		pool_count = frappe.db.count(
+			"CRM Contact",
+			filters={"lead_status": ["in", ["Unassigned", "Assigned"]], "owner_staff": ["is", "not set"]},
+		)
+	elif frappe.db.table_exists("CRM Student"):
+		pool_count = frappe.db.count("CRM Student", filters={"owner_staff": ["is", "not set"]})
+
+	team_sla_breached_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		team_sla_breached_count = get_readable_count(
+			"CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}
+		)
+
+	duplicate_count = 0
+	if frappe.db.table_exists("CRM Contact"):
+		duplicate_count = frappe.db.count("CRM Contact", filters={"full_name": ["like", "%(Trùng%"]})
+
+	pending_spend_approval_count = 0
+	if frappe.db.table_exists("CRM Campaign Spend"):
+		pending_spend_approval_count = frappe.db.count("CRM Campaign Spend")
+
+	manager_approvals_count = pending_spend_approval_count
+	if frappe.db.table_exists("CRM Master Data Change"):
+		manager_approvals_count += frappe.db.count("CRM Master Data Change", filters={"status": "Pending"})
+
+	my_task_count = 0
+	if frappe.db.table_exists("Task"):
+		task_filters = {"status": ["in", ["Todo", "In Progress"]]}
+		if not is_admin:
+			task_filters["assigned_to"] = user
+		my_task_count = frappe.db.count("Task", filters=task_filters)
+
+	return {
+		"urgentSlaCount": urgent_sla_count,
+		"poolCount": pool_count,
+		"teamSlaBreachedCount": team_sla_breached_count,
+		"unassignedCount": pool_count,
+		"duplicateCount": duplicate_count,
+		"pendingSpendApprovalCount": pending_spend_approval_count,
+		"managerApprovalsCount": manager_approvals_count,
+		"myTaskCount": my_task_count,
+	}
+
+
+def get_readable_count(doctype, filters):
+	"""Count records using Frappe's permission-aware list API.
+
+	Sidebar indicators are visible to non-admin users, so they must observe the
+	same row-level permissions as the list view they link to.
+	"""
+	result = frappe.get_list(
+		doctype,
+		filters=filters,
+		fields=["count(name) as count"],
+		limit_page_length=1,
+	)
+	return int(result[0].get("count", 0)) if result else 0
+

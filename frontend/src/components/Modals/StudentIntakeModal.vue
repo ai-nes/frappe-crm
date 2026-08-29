@@ -4,6 +4,15 @@
       <p class="mb-4 text-sm text-ink-gray-6">
         {{ __('Fill in the student information. Provide at least one valid phone number or email address.') }}
       </p>
+      <div
+        class="mb-4 rounded border border-outline-gray-2 bg-surface-gray-1 p-3 text-sm text-ink-gray-6"
+        role="status"
+      >
+        {{ __(assignmentExpectation.message) }}
+        <p v-if="isServerManagedCampus" class="mt-1">
+          {{ __('Campus is set automatically from your staff profile.') }}
+        </p>
+      </div>
       <FieldLayout
         :tabs="tabs"
         :data="form"
@@ -41,17 +50,25 @@
 
 <script setup>
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
+import { usersStore } from '@/stores/users'
 import { call, toast } from 'frappe-ui'
 import { computed, reactive, ref } from 'vue'
 import {
   buildIntakePayload,
   createCommandId,
+  intakeAssignmentExpectation,
   intakeResultKind,
+  isServerManagedIntakeProfile,
   safeCommandError,
 } from '@/utils/studentOwnership'
 
 const emit = defineEmits(['completed', 'review-required'])
 const show = defineModel({ type: Boolean })
+const { getCurrentUser } = usersStore()
+const currentProfile = computed(() => getCurrentUser()?.crm_profile)
+const isServerManagedCampus = computed(() =>
+  isServerManagedIntakeProfile(currentProfile.value),
+)
 
 const form = reactive({
   student_name: '',
@@ -67,7 +84,6 @@ const form = reactive({
   aspiration: '',
   admission_year: '',
   id_number: '',
-  owning_team: '',
 })
 
 const fieldLayoutContext = reactive({
@@ -75,7 +91,7 @@ const fieldLayoutContext = reactive({
   fieldHtmlMap: {},
 })
 
-const tabs = [
+const tabs = computed(() => [
   {
     name: 'student-intake',
     label: '',
@@ -122,7 +138,7 @@ const tabs = [
                 fieldname: 'aspiration',
                 fieldtype: 'Link',
                 label: 'Aspiration',
-                options: 'CRM Aspiration',
+                options: 'CRM Term',
               },
             ],
           },
@@ -133,7 +149,7 @@ const tabs = [
                 fieldname: 'enrollment_status',
                 fieldtype: 'Link',
                 label: 'Enrollment Status',
-                options: 'CRM Enrollment Status',
+                options: 'CRM Term',
               },
               {
                 fieldname: 'source',
@@ -147,6 +163,7 @@ const tabs = [
                 label: 'Campus',
                 options: 'CRM Campus',
                 reqd: 1,
+                hidden: isServerManagedCampus.value,
               },
               {
                 fieldname: 'high_school',
@@ -173,7 +190,7 @@ const tabs = [
       },
       {
         name: 'phase3-intake-controls',
-        label: __('Identity and assignment'),
+        label: __('Identity'),
         collapsible: true,
         opened: false,
         columns: [
@@ -187,22 +204,11 @@ const tabs = [
               },
             ],
           },
-          {
-            name: 'phase3-intake-right',
-            fields: [
-              {
-                fieldname: 'owning_team',
-                fieldtype: 'Link',
-                label: 'Initial pool (optional)',
-                options: 'CRM Student Pool',
-              },
-            ],
-          },
         ],
       },
     ],
   },
-]
+])
 
 const idempotencyKey = ref(createCommandId())
 const identifiers = reactive({
@@ -212,11 +218,15 @@ const loading = ref(false)
 const error = ref('')
 const result = ref(null)
 
+const assignmentExpectation = computed(() =>
+  intakeAssignmentExpectation(currentProfile.value),
+)
+
 const isValid = computed(() =>
   Boolean(
     form.student_name.trim() &&
     form.admission_year &&
-    form.branch &&
+    (isServerManagedCampus.value || form.branch) &&
     (form.phone.trim() || form.email.trim()),
   ),
 )
@@ -244,8 +254,12 @@ async function submit() {
     if (!kind)
       throw new Error(__('The intake service returned an invalid result.'))
     result.value = response
-    if (kind === 'review_required') emit('review-required', response)
-    else emit('completed', response)
+    if (kind === 'review_required') {
+      show.value = false
+      emit('review-required', response)
+    } else {
+      emit('completed', response)
+    }
     toast.success(resultMessage.value)
     idempotencyKey.value = createCommandId()
   } catch (err) {

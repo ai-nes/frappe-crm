@@ -13,7 +13,8 @@
   "province_name",
   "region",
   "city_type",
-  "import_source_id"
+  "import_source_id",
+  "previous_names"
  ],
  "fields": [
   {
@@ -37,7 +38,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Region",
-   "options": "CRM Region"
+   "options": "CRM Term"
   },
   {
    "fieldname": "city_type",
@@ -52,6 +53,13 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Import Source ID"
+  },
+  {
+   "fieldname": "previous_names",
+   "fieldtype": "Table",
+   "label": "Previous Names",
+   "options": "CRM Province Former Name",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

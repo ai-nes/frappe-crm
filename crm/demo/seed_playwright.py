@@ -303,10 +303,10 @@ def _interaction(student: str, key: str) -> str:
     existing = frappe.db.get_value("CRM Interaction", {"student": student, "summary": summary}, "name")
     if existing:
         return existing
-    interaction_type = frappe.db.get_value("CRM Interaction Type", {}, "name")
+    interaction_type = frappe.db.get_value("CRM Term", {}, "name")
     if not interaction_type:
         interaction_type = frappe.get_doc(
-            {"doctype": "CRM Interaction Type", "type_name": "Playwright evidence"}
+            {"doctype": "CRM Term", "term_name": "Playwright evidence", "category": "interaction_type"}
         ).insert(ignore_permissions=True).name
     return frappe.get_doc(
         {
@@ -381,10 +381,10 @@ def _recommendation(student: str) -> str:
     if existing:
         return existing
     interaction = _interaction(student, "recommendation")
-    intent_type = frappe.db.get_value("CRM Intent Type", {}, "name")
+    intent_type = frappe.db.get_value("CRM Term", {}, "name")
     if not intent_type:
         intent_type = frappe.get_doc(
-            {"doctype": "CRM Intent Type", "intent_type_name": "Playwright intent"}
+            {"doctype": "CRM Term", "term_name": "Playwright intent", "category": "intent_type"}
         ).insert(ignore_permissions=True).name
     intent = frappe.get_doc(
         {

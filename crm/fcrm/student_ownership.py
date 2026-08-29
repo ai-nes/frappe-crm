@@ -311,7 +311,13 @@ def _student_is_active(student) -> bool:
 		return False
 	status = student.get("enrollment_status")
 	if status:
-		stage_category = _get_value("CRM Enrollment Status", status, "stage_category")
+		stage_category = _get_value("CRM Term", {"name": status, "category": "enrollment_status"}, "metadata")
+		if isinstance(stage_category, str):
+			import json
+			try:
+				stage_category = json.loads(stage_category).get("stage_category")
+			except ValueError:
+				stage_category = None
 		if stage_category in {"closed", "lost", "terminal"}:
 			return False
 	return True
@@ -633,6 +639,7 @@ def change_student_ownership(
 	correlation_id: str,
 	*,
 	_internal_service: bool = False,
+	_internal_actor: str | None = None,
 	_commit: bool = True,
 	_route_trigger: str | None = None,
 	_routing_policy_version: int | None = None,
@@ -653,8 +660,22 @@ def change_student_ownership(
 	if expected_revision in (None, ""):
 		_error("INVALID_INPUT", "expected_revision is required.")
 
-	actor = "Administrator" if _internal_service else _current_actor()
-	profile, actor_policy = _authorize(actor)
+	if _internal_service:
+		# A trusted service may preserve the authenticated business actor in its
+		# immutable event without granting that actor the public ownership command.
+		# ``_internal_actor`` is private-only; request data can never choose it.
+		actor = _internal_actor or "Administrator"
+		if actor == "Administrator":
+			profile, actor_policy = _authorize(actor)
+		else:
+			roles = set(frappe.get_roles(actor))
+			profile = resolve_crm_profile(roles)
+			if not profile:
+				_error("UNAUTHORIZED", "The internal ownership actor has no CRM profile.")
+			actor_policy = {"roles": sorted(roles), "profile": profile}
+	else:
+		actor = _current_actor()
+		profile, actor_policy = _authorize(actor)
 	_ensure_schema()
 
 	request = {

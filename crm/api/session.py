@@ -2,7 +2,6 @@ import frappe
 from frappe import _
 
 from crm.fcrm.role_policy import (
-	CRM_ALLOWED_ROLES,
 	CRM_BUSINESS_ROLES,
 	LEGACY_COMPATIBILITY_OVERLAYS,
 	POLICY_VERSION,
@@ -13,6 +12,7 @@ from crm.fcrm.role_policy import (
 	is_crm_user,
 	resolve_compatibility_overlay,
 )
+from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role_workspace_read_enabled
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
 )
@@ -65,6 +65,20 @@ def get_crm_user_role(roles):
 	return "", None
 
 
+def _crm_feature_flags(profile):
+	"""Return rollout state that the SPA may use for progressive enhancement.
+
+	Director analytics is intentionally not advertised to other CRM profiles or
+	platform administrators.  Server-side workspace authorization remains the
+	security boundary; this only prevents the client from rendering a canary
+	entry it cannot use.
+	"""
+	return {
+		"role_workspace_read": role_workspace_read_enabled(),
+		"director_analytics_read": profile == "admissions_director" and director_analytics_read_enabled(),
+	}
+
+
 def _session_role_flags(roles):
 	"""Build flags from server-derived roles; shared with focused contract tests."""
 	role_names = frozenset(roles)
@@ -88,6 +102,7 @@ def _session_role_flags(roles):
 		"crm_role_state": role_state,
 		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
 		"crm_policy_version": POLICY_VERSION,
+		"crm_feature_flags": _crm_feature_flags(profile),
 	}
 
 
@@ -107,6 +122,7 @@ def get_session_role_flags():
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
 			"crm_policy_version": POLICY_VERSION,
+			"crm_feature_flags": _crm_feature_flags(None),
 		}
 	return _session_role_flags(frappe.get_roles())
 
@@ -132,6 +148,7 @@ def get_my_roles():
 		"crm_role_state": flags["crm_role_state"],
 		"crm_capabilities": flags["crm_capabilities"],
 		"crm_policy_version": flags["crm_policy_version"],
+		"crm_feature_flags": flags["crm_feature_flags"],
 	}
 
 
@@ -158,11 +175,12 @@ def get_users():
 	).run(as_dict=1)
 
 	crm_users = []
-	system_language = frappe.db.get_single_value("System Settings", "language")
+	system_language = frappe.db.get_single_value("System Settings", "language") or "vi"
 
 	for user in users:
 		if frappe.session.user == user.name:
 			user.session_user = True
+			user.crm_feature_flags = session_roles["crm_feature_flags"]
 
 		user.roles = frappe.get_roles(user.name)
 
@@ -186,7 +204,7 @@ def get_users():
 			user.session_user = True
 
 		user.is_telephony_agent = frappe.db.exists("Telephony Agent", {"user": user.name})
-		user.language = user.language or system_language
+		user.language = user.language or system_language or "vi"
 
 		if is_crm_user(user.roles, administrator=user.name == "Administrator"):
 			crm_users.append(user)
@@ -195,6 +213,12 @@ def get_users():
 		users = crm_users
 
 	return users, crm_users
+
+
+def set_default_user_language(doc, event=None):
+	"""Ensure user records default to Vietnamese ('vi') if no language is specified."""
+	if not doc.language:
+		doc.language = "vi"
 
 
 @frappe.whitelist()

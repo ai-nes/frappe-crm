@@ -12,12 +12,11 @@ import frappe
 
 
 def execute():
-	frappe.reload_doc("fcrm", "doctype", "crm_interaction_type", force=True)
+	frappe.reload_doc("fcrm", "doctype", "crm_interaction", force=True)
 
-	if not frappe.db.exists("CRM Interaction Type", "Campaign Touched"):
+	if not frappe.db.exists("CRM Term", {"term_name": "Campaign Touched", "category": "interaction_type"}):
 		frappe.get_doc(
 			{
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": "Campaign Touched",
+				"doctype": "CRM Term", "term_name": "Campaign Touched", "category": "interaction_type",
 			}
 		).insert(ignore_permissions=True)

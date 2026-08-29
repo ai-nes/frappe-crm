@@ -1,6 +1,5 @@
 """Read-only reconciliation report for CRM Student records created by the old
-continuous Contact<->Student sync bug (fixed in Phase 2 — see
-plans/260822-admissions-crm-alignment/phase-02-fix-contact-student-lifecycle-bug.md).
+continuous Contact<->Student sync bug.
 
 Strictly report-only: this patch never writes, archives, or deletes any record. No
 staging/production-copy environment exists to validate a write-mode reconciliation

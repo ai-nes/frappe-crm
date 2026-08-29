@@ -2,6 +2,8 @@ import frappe
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return
 	if not frappe.db.exists("CRM Enrollment Status", "Pending Confirmation"):
 		frappe.get_doc({
 			"doctype": "CRM Enrollment Status",

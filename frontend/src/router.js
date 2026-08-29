@@ -5,8 +5,16 @@ import { viewsStore } from '@/stores/views'
 import {
   acquisitionWorkspaceCapabilities,
   admissionsWorkspaceCapabilities,
+  canAccessWorkspace,
   hasAnyCapability,
 } from '@/utils/rolePolicy'
+import {
+  getWorkspaceRoute,
+  resolveWorkspaceRoute,
+  sanitizeWorkspaceQuery,
+} from '@/utils/workspaceRegistry'
+import { resolveUserNavigationRole } from '@/utils/navigationConfig'
+import { getLegacyLeadSalesRoute } from '@/utils/leadSalesLegacyRoutes'
 
 const routes = [
   {
@@ -92,10 +100,47 @@ const routes = [
     meta: { anyOf: admissionsWorkspaceCapabilities },
   },
   {
+    alias: '/crm-student-sla-attempts',
+    path: '/crm-student-sla-attempts/view/:viewType?',
+    name: 'CRM Student SLA Attempts',
+    component: () => import('@/pages/CRMStudentSLAs.vue'),
+    meta: { anyOf: admissionsWorkspaceCapabilities },
+  },
+  {
     path: '/my-recommendations',
     name: 'My Recommendations',
     component: () => import('@/pages/StudentWorklist.vue'),
     meta: { anyOf: admissionsWorkspaceCapabilities },
+  },
+  {
+    path: '/lead-sales/dashboard',
+    name: 'Lead Sales Dashboard',
+    component: () => import('@/pages/LeadSalesDashboard.vue'),
+    meta: { anyOf: ['team.oversee'] },
+  },
+  {
+    path: '/lead-sales/performance',
+    name: 'Lead Sales Performance',
+    component: () => import('@/pages/LeadSalesPerformance.vue'),
+    meta: { anyOf: ['team.oversee'] },
+  },
+  {
+    path: '/lead-sales/tasks',
+    name: 'Lead Sales Tasks',
+    component: () => import('@/pages/LeadSalesTasks.vue'),
+    meta: { anyOf: ['team.oversee'] },
+  },
+  {
+    path: '/lead-sales/reports',
+    name: 'Lead Sales Reports',
+    component: () => import('@/pages/LeadSalesReports.vue'),
+    meta: { anyOf: ['team.oversee'] },
+  },
+  {
+    path: '/lead-sales/sla-policies',
+    name: 'Lead Sales SLA Policies',
+    component: () => import('@/pages/LeadSalesSlaPolicies.vue'),
+    meta: { anyOf: ['team.oversee'] },
   },
   {
     path: '/crm-students/:crmStudentId',
@@ -133,17 +178,39 @@ const routes = [
     props: true,
   },
   {
+    alias: '/admissions-lookups',
+    path: '/lookups',
+    name: 'Lookups',
+    component: () => import('@/pages/Lookups.vue'),
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
+  },
+  {
     alias: '/high-schools',
     path: '/high-schools/view/:viewType?',
     name: 'High Schools',
     component: () => import('@/pages/HighSchools.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
   },
   {
     path: '/high-schools/:highSchoolId',
     name: 'High School',
     component: () => import('@/pages/HighSchool.vue'),
-    meta: { anyOf: acquisitionWorkspaceCapabilities },
+    meta: {
+      anyOf: [
+        ...acquisitionWorkspaceCapabilities,
+        ...admissionsWorkspaceCapabilities,
+      ],
+    },
     props: true,
   },
   {
@@ -227,6 +294,29 @@ const routes = [
     component: () => import('@/pages/Welcome.vue'),
   },
   {
+    path: '/workspaces/system/:workspace/:view?',
+    name: 'System Workspace',
+    component: () => import('@/pages/SystemWorkspace.vue'),
+    props: (route) => ({
+      workspace: resolveWorkspaceRoute(
+        route.params.workspace,
+        route.params.view,
+      ),
+    }),
+  },
+  {
+    path: '/workspaces/:workspace/:view?',
+    name: 'Role Workspace',
+    // The registry guard prevents this shared shell becoming a broad route.
+    component: () => import('@/pages/RoleWorkspace.vue'),
+    props: (route) => ({
+      workspace: resolveWorkspaceRoute(
+        route.params.workspace,
+        route.params.view,
+      ),
+    }),
+  },
+  {
     path: '/:invalidpath',
     name: 'Invalid Page',
     component: () => import('@/pages/InvalidPage.vue'),
@@ -261,6 +351,65 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  const isWorkspaceRoute = ['Role Workspace', 'System Workspace'].includes(
+    to.name,
+  )
+  const workspaceEntry = isWorkspaceRoute
+    ? resolveWorkspaceRoute(to.params.workspace, to.params.view)
+    : null
+
+  if (isLoggedIn && isWorkspaceRoute && !workspaceEntry) {
+    next({ name: 'Invalid Page' })
+    return
+  }
+
+  const navigationRole = isLoggedIn
+    ? resolveUserNavigationRole(getCurrentUser())
+    : null
+  if (
+    isLoggedIn &&
+    [
+      'Lead Sales Dashboard',
+      'Lead Sales Performance',
+      'Lead Sales Tasks',
+      'Lead Sales Reports',
+      'Lead Sales SLA Policies',
+    ].includes(to.name) &&
+    navigationRole !== 'lead_sales'
+  ) {
+    next({ name: 'Not Permitted' })
+    return
+  }
+
+  const legacyLeadRoute = getLegacyLeadSalesRoute(to)
+  if (navigationRole === 'lead_sales' && legacyLeadRoute) {
+    next(legacyLeadRoute)
+    return
+  }
+
+  if (
+    isLoggedIn &&
+    workspaceEntry &&
+    ((workspaceEntry.role === 'system_manager') !==
+      (to.name === 'System Workspace') ||
+      !canAccessWorkspace(getCurrentUser(), workspaceEntry))
+  ) {
+    next({ name: 'Not Permitted' })
+    return
+  }
+
+  if (isLoggedIn && workspaceEntry) {
+    const query = sanitizeWorkspaceQuery(
+      to.params.workspace,
+      to.params.view,
+      to.query,
+    )
+    if (Object.keys(query).length !== Object.keys(to.query).length) {
+      next({ name: to.name, params: to.params, query, hash: to.hash })
+      return
+    }
+  }
+
   const requiredCapabilities = to.meta?.anyOf
   if (
     isLoggedIn &&
@@ -274,33 +423,14 @@ router.beforeEach(async (to, from, next) => {
   if (isLoggedIn && to.name !== 'Not Permitted' && !isCrmUser()) {
     next({ name: 'Not Permitted' })
   } else if (to.name === 'Home' && isLoggedIn) {
-    const { views, getDefaultView } = viewsStore()
-    await views.promise
-
-    let defaultView = getDefaultView()
-    if (!defaultView) {
-      const defaultRoute = hasAnyCapability(
-        getCurrentUser(),
-        admissionsWorkspaceCapabilities,
-      )
-        ? { name: 'CRM Students', query: { stage: 'intake' } }
+    const user = getCurrentUser()
+    const defaultRoute = user?.crm_profile === 'admissions_director'
+      ? getWorkspaceRoute('mgr_overview')
+      : hasAnyCapability(user, admissionsWorkspaceCapabilities)
+        ? { name: 'Dashboard' }
         : { name: 'Digital Marketing Dashboard' }
-      next(defaultRoute)
-      return
-    }
-
-    let { route_name, type, name, is_standard } = defaultView
-    route_name = route_name || 'CRM Students'
-
-    if (name && !is_standard) {
-      next({
-        name: route_name,
-        params: { viewType: type },
-        query: { view: name },
-      })
-    } else {
-      next({ name: route_name, params: { viewType: type } })
-    }
+    next(defaultRoute)
+    return
   } else if (!isLoggedIn) {
     window.location.href = '/login?redirect-to=/crm'
   } else if (to.matched.length === 0) {
@@ -341,6 +471,7 @@ router.beforeEach(async (to, from, next) => {
       'Tasks',
       'Call Logs',
       'CRM Students',
+      'CRM Student SLA Attempts',
       'CRM Contacts',
       'CRM Persons',
       'High Schools',
@@ -363,6 +494,7 @@ router.beforeEach(async (to, from, next) => {
         Tasks: 'Task',
         'Call Logs': 'Call Log',
         'CRM Students': 'CRM Student',
+        'CRM Student SLA Attempts': 'CRM Student SLA Attempt',
         'CRM Contacts': 'CRM Contact',
         'CRM Persons': 'CRM Person',
         'High Schools': 'CRM High School',

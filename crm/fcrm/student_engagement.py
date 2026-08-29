@@ -160,7 +160,7 @@ def _verify_linked_records(student: str, interaction: str | None, source_doctype
 
 
 def _verify_evidence(student: str, references: list[dict[str, str]]):
-	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Enrollment Transition", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
+	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
 	for reference in references:
 		doctype, name = reference.get("doctype"), reference.get("name")
 		if doctype not in allowed:

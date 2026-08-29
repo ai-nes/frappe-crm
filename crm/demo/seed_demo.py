@@ -6,7 +6,7 @@ Run with:
 
 What this creates (all idempotent):
   Master data
-    CRM Intent Type         — 8 types
+    CRM Term         — 8 types
     CRM Score Signal        — 22 signals (Fit / Engagement / Intent / Negative)
     CRM Score Template      — "Default Scoring 2026" (active)
 
@@ -17,6 +17,7 @@ What this creates (all idempotent):
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 import frappe
@@ -413,11 +414,12 @@ def execute():
 def _seed_intent_types():
     created = 0
     for it in INTENT_TYPES:
-        if not frappe.db.exists("CRM Intent Type", it["name"]):
+        if not frappe.db.exists("CRM Term", it["name"]):
             _create_governed_additive_value(
-                "CRM Intent Type",
+                "CRM Term",
                 it["name"],
                 reason=f"Local scoring fixture: {it['description_vi']}",
+                category="intent_type",
             )
             created += 1
     print(f"  Intent Types: {created} created, {len(INTENT_TYPES) - created} skipped")
@@ -434,11 +436,11 @@ def _seed_signals():
 
 def _seed_score_template():
     rules = [
-        {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
+        {"rule_kind": "positive", "signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
         for r in SCORE_RULES
     ]
     neg_rules = [
-        {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
+        {"rule_kind": "negative", "signal": r["signal"], "penalty_amount": r["penalty_amount"],
          "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
         for r in NEGATIVE_RULES
     ]
@@ -447,9 +449,7 @@ def _seed_score_template():
     if name:
         doc = frappe.get_doc("CRM Score Template", name)
         doc.update({"status": "Active", "fit_weight": 0.4, "intent_weight": 0.3, "engagement_weight": 0.3})
-        doc.set("rules", rules)
-        doc.set("time_decay_config", TIME_DECAY_TIERS)
-        doc.set("negative_rules", neg_rules)
+        doc.set("rules", rules + [{"rule_kind": "time_decay", **tier} for tier in TIME_DECAY_TIERS] + neg_rules)
         doc.save(ignore_permissions=True)
         print(f"  Score Template: '{TEMPLATE_NAME}' updated")
         return
@@ -461,9 +461,7 @@ def _seed_score_template():
         "fit_weight": 0.4,
         "intent_weight": 0.3,
         "engagement_weight": 0.3,
-        "rules": rules,
-        "time_decay_config": TIME_DECAY_TIERS,
-        "negative_rules": neg_rules,
+        "rules": rules + [{"rule_kind": "time_decay", **tier} for tier in TIME_DECAY_TIERS] + neg_rules,
     }).insert(ignore_permissions=True)
     print(f"  Score Template: '{TEMPLATE_NAME}' created")
 
@@ -648,11 +646,12 @@ def _ensure_major():
 
 def _ensure_aspiration():
     name = "NV1"
-    if frappe.db.exists("CRM Aspiration", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return frappe.get_doc({
-        "doctype": "CRM Aspiration",
-        "aspiration_name": name,
+        "doctype": "CRM Term",
+        "term_name": name,
+        "category": "aspiration",
         "description": "First choice admission aspiration.",
     }).insert(ignore_permissions=True).name
 
@@ -708,12 +707,13 @@ def _ensure_campaign(campus=None):
 
 def _ensure_campaign_type():
     name = "Open Day"
-    if frappe.db.exists("CRM Campaign Type", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return _create_governed_additive_value(
-        "CRM Campaign Type",
+        "CRM Term",
         name,
         reason="Campus visit and admission counseling campaign for the local fixture.",
+        category="campaign_type",
     )
 
 
@@ -730,41 +730,51 @@ def _ensure_event():
 
 
 def _ensure_enrollment_status(status_name):
-    if frappe.db.exists("CRM Enrollment Status", status_name):
+    if frappe.db.exists("CRM Term", status_name):
         return status_name
     defaults = {"Mới": (10, "open", "Lead")}
     stage_order, stage_category, lifecycle_stage = defaults.get(status_name, (10, "open", "Lead"))
     doc = frappe.get_doc({
-        "doctype": "CRM Enrollment Status",
-        "status_name": status_name,
-        "stage_order": stage_order,
-        "stage_category": stage_category,
+        "doctype": "CRM Term",
+        "term_name": status_name,
+        "category": "enrollment_status",
+        "sort_order": stage_order,
+        "metadata": {"stage_category": stage_category, "lifecycle_stage": lifecycle_stage},
     }).insert(ignore_permissions=True)
-    if frappe.db.has_column("CRM Enrollment Status", "lifecycle_stage"):
-        frappe.db.set_value("CRM Enrollment Status", doc.name, "lifecycle_stage", lifecycle_stage, update_modified=False)
     return doc.name
 
 
 def _ensure_interaction_type(name):
-    if frappe.db.exists("CRM Interaction Type", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return frappe.get_doc({
-        "doctype": "CRM Interaction Type",
-        "interaction_type_name": name,
+        "doctype": "CRM Term",
+        "term_name": name,
+        "category": "interaction_type",
     }).insert(ignore_permissions=True).name
 
 
 def _ensure_intent_type(name, importance, description_vi):
-    if frappe.db.exists("CRM Intent Type", name):
-        return name
-    return _create_governed_additive_value(
-        "CRM Intent Type",
-        name,
-        reason=f"Local scoring fixture: {description_vi}",
-    )
+    term = frappe.db.exists("CRM Term", name)
+    if not term:
+        term = _create_governed_additive_value(
+            "CRM Term",
+            name,
+            reason=f"Local scoring fixture: {description_vi}",
+            category="intent_type",
+        )
+    # CRM Intent.importance is read-only and always derived from its
+    # intent_type term's metadata (crm_intent.py before_validate), so the
+    # term must carry the importance level, not the individual intent.
+    # Backfill on every call (not just creation) so terms left over from
+    # earlier fixture runs, seeded before this metadata existed, self-heal.
+    current_metadata = frappe.db.get_value("CRM Term", term, "metadata")
+    if not current_metadata or json.loads(current_metadata).get("importance") != importance:
+        frappe.db.set_value("CRM Term", term, "metadata", frappe.as_json({"importance": importance}))
+    return term
 
 
-def _create_governed_additive_value(doctype, value, *, reason):
+def _create_governed_additive_value(doctype, value, *, reason, category=None):
     """Create an additive lookup through its required governance boundary."""
     from crm.fcrm.master_data_governance import create_additive_value
 
@@ -774,5 +784,6 @@ def _create_governed_additive_value(doctype, value, *, reason):
         reason=reason,
         idempotency_key=f"local-admissions-fixture:{doctype}:{value}",
         correlation_id="local-admissions-fixture",
+        category=category,
     )
     return result["name"]

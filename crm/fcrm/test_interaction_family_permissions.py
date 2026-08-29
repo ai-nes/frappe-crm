@@ -29,9 +29,9 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		self._department = TestSharedScopingPermissions._get_or_create_department(
 			self, "_Test IFP Dept", self._campus
 		)
-		if not frappe.db.exists("CRM Interaction Type", "_Test IFP Call"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Call"):
 			frappe.get_doc(
-				{"doctype": "CRM Interaction Type", "interaction_type_name": "_Test IFP Call"}
+				{"doctype": "CRM Term", "term_name": "_Test IFP Call", "category": "interaction_type"}
 			).insert(ignore_permissions=True)
 
 	def tearDown(self):
@@ -167,12 +167,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 	def test_intent_scoped_to_own_assigned_student(self):
 		from crm.fcrm.permissions import get_intent_permission_query_conditions, has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Intent Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Intent Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Intent Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Intent Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -210,12 +210,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# own Contact condition instead of denying every such Intent outright.
 		from crm.fcrm.permissions import get_intent_permission_query_conditions, has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Contact Intent Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Contact Intent Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Contact Intent Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Contact Intent Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -258,12 +258,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# just on a name this test happens to choose.
 		from crm.fcrm.permissions import has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Create Guard Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Create Guard Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Create Guard Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Create Guard Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -292,12 +292,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# with no interaction/student row yet can actually insert a CRM Intent,
 		# going through the real frappe.has_permission -> hooks.py wiring ->
 		# has_intent_permission dispatch.
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Create Path Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Create Path Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Create Path Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Create Path Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 

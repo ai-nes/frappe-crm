@@ -291,7 +291,7 @@ const offlineInterestData: Record<OfflineTeam, { interest: string; count: number
 }
 
 // Placeholder old→new province merger grouping — replace with the authoritative
-// CRM Province Mapping list once supplied.
+// CRM Province.previous_names list once supplied.
 const offlineProvinceGroups: Record<
   OfflineTeam,
   { newProvince: string; oldProvinces: { name: string; count: number }[] }[]

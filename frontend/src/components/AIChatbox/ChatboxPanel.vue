@@ -98,6 +98,22 @@
         >
           <!-- eslint-disable vue/no-v-html -->
           <div
+            v-if="message.activity?.length"
+            class="mb-2 space-y-1 border-b border-outline-gray-2 pb-2 text-xs text-ink-gray-6"
+            data-testid="agent-activity"
+          >
+            <div
+              v-for="(activity, index) in message.activity"
+              :key="`${activity.activity_id || 'activity'}-${activity.phase}-${index}`"
+              class="flex items-start gap-1.5"
+            >
+              <span class="w-3 shrink-0 text-center" aria-hidden="true">
+                {{ activityStatusIcon(activity) }}
+              </span>
+              <span>{{ activityLabel(activity) }}</span>
+            </div>
+          </div>
+          <div
             v-if="message.text"
             class="prose-sm"
             v-html="renderMarkdown(message.text) + (message.streaming ? streamingCursor : '')"
@@ -121,9 +137,9 @@
           </button>
           <span
             v-if="message.streaming && !message.text"
-            class="animate-pulse text-ink-gray-6"
+            class="text-ink-gray-6"
           >
-            {{ __('Thinking...') }}
+            {{ latestActivityLabel(message) || __('Waiting for a live runtime event...') }}
           </span>
         </div>
       </div>
@@ -181,10 +197,54 @@ import MaximizeIcon from '@/components/Icons/MaximizeIcon.vue'
 import MinimizeIcon from '@/components/Icons/MinimizeIcon.vue'
 import { sanitizeHTML } from '@/utils'
 
-const streamingCursor = '<span class="animate-pulse">▍</span>'
+const streamingCursor = '<span>▍</span>'
 
 function renderMarkdown(text) {
   return sanitizeHTML(marked.parse(text || ''))
+}
+
+function activityStatusIcon(activity) {
+  if (activity?.status === 'running') return '…'
+  if (activity?.status === 'succeeded' || activity?.status === 'completed') return '✓'
+  if (activity?.status === 'started') return '›'
+  return '!'
+}
+
+function activityLabel(activity) {
+  const resource = activity?.resource || __('CRM data')
+  const tool = activity?.tool || __('tool')
+  const evidenceCount = Number.isInteger(activity?.evidence_count)
+    ? ` · ${activity.evidence_count} ${__('evidence item(s)')}`
+    : ''
+
+  if (activity?.phase === 'resource_selected') {
+    return `${__('Selected resource')}: ${resource} · ${activity.navigation_reason || ''}`
+  }
+  if (activity?.phase === 'tool_start') {
+    return `${tool} · ${activity.navigation || activity.operation || __('working')} · ${resource} · ${activity.navigation_reason || ''}`
+  }
+  if (activity?.phase === 'tool_end') {
+    return `${tool} · ${activity.status || __('completed')}${evidenceCount}`
+  }
+  if (activity?.phase === 'evidence_summary') {
+    const status = {
+      evidence: __('evidence available'),
+      none: __('no evidence collected'),
+      error: __('evidence collection encountered an error'),
+      forbidden: __('evidence was restricted'),
+    }[activity.status] || activity.status || __('evidence status updated')
+    return `${__('Evidence status')}: ${status}${evidenceCount}`
+  }
+  const actionPhase = String(activity?.phase || '').replace('action_', '')
+  if (actionPhase) {
+    return `${__('Action')} · ${actionPhase} · ${activity.status || __('updated')}`
+  }
+  return __('Agent activity updated')
+}
+
+function latestActivityLabel(message) {
+  const latest = message?.activity?.at(-1)
+  return latest ? activityLabel(latest) : ''
 }
 
 const props = defineProps({
