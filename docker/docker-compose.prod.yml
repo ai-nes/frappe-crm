@@ -182,6 +182,9 @@ services:
   backend:
     <<: *crm-service
     restart: unless-stopped
+    networks:
+      - default
+      - ai-crm_backend
     command:
       - bash
       - /opt/frappe/scripts/prod-runtime.sh
@@ -306,3 +309,10 @@ volumes:
   mariadb-data:
   sites:
   logs:
+
+networks:
+  default:
+    name: crm-prod_default
+  ai-crm_backend:
+    external: true
+    name: ai-crm_backend
