@@ -1,13 +1,15 @@
 import hashlib
 import hmac
 import uuid
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api.student_intake import _intake_response, _normalize_contact_payload
 from crm.fcrm.student_intake import (
-	StudentIntakeError,
 	_MEMORY_RECEIPTS,
+	StudentIntakeError,
 	_receipt_replay,
 	decide_intake_review,
 	encode_key,
@@ -15,10 +17,74 @@ from crm.fcrm.student_intake import (
 	normalize_email,
 	normalize_national_id,
 	normalize_phone,
+	redact_provenance,
 )
 
 
 class TestStudentIntakeHelpers(FrappeTestCase):
+	def test_prd_contact_payload_maps_to_canonical_command(self):
+		payload = _normalize_contact_payload(
+			{
+				"source_system": "chatwoot",
+				"external_id": "conversation-42",
+				"idempotency_key": "idem-42",
+				"full_name": "Nguyen Test",
+				"phone": "+84 901 100 001",
+				"province_code": "HCM",
+				"high_school_code": "THPT-1",
+				"major_code": "CS",
+				"lead_source": "website",
+				"consent": {"granted": True, "granted_at": "2026-08-29 09:00:00"},
+			}
+		)
+
+		self.assertEqual(payload["source_namespace"], "chatwoot")
+		self.assertEqual(payload["source_record_id"], "conversation-42")
+		self.assertEqual(payload["student_name"], "Nguyen Test")
+		self.assertEqual(payload["province"], "HCM")
+		self.assertEqual(payload["high_school"], "THPT-1")
+		self.assertEqual(payload["major"], "CS")
+		self.assertEqual(payload["source"], "website")
+
+	def test_prd_contact_response_is_stable_and_contact_stays_nullable(self):
+		with patch("crm.api.student_intake._contact_for_student", return_value=None):
+			response = _intake_response({"outcome": "created", "student": "STU-1", "receipt": "REC-1"})
+
+		self.assertEqual(
+			response,
+			{"student_id": "STU-1", "contact_id": None, "status": "created", "receipt_id": "REC-1"},
+		)
+
+	def test_prd_contact_payload_rejects_unknown_source_system(self):
+		with self.assertRaises(StudentIntakeError) as error:
+			_normalize_contact_payload(
+				{
+					"source_system": "unknown-provider",
+					"external_id": "record-1",
+					"idempotency_key": "idem-1",
+				}
+			)
+		self.assertEqual(error.exception.code, "INVALID_INPUT")
+
+	def test_provenance_is_bounded_and_excludes_request_pii(self):
+		provenance = redact_provenance(
+			{
+				"source_system": "chatwoot",
+				"external_id": "conversation-43",
+				"full_name": "Nguyen Sensitive",
+				"phone": "0901000000",
+				"email": "sensitive@example.com",
+				"raw_payload": {"full_name": "Nguyen Sensitive", "notes": "x" * 20_000},
+			}
+		)
+
+		self.assertLessEqual(len(str(provenance).encode("utf-8")), 4096)
+		self.assertNotIn("full_name", provenance)
+		self.assertNotIn("phone", provenance)
+		self.assertNotIn("email", provenance)
+		self.assertNotIn("raw_payload", provenance)
+		self.assertIn("raw_payload_fingerprint", provenance)
+
 	def test_normalizers_keep_weak_values_canonical_without_global_identity_policy(self):
 		self.assertEqual(normalize_phone("+84 901-100-001"), "0901100001")
 		self.assertEqual(normalize_email("  Student@Example.COM "), "student@example.com")
@@ -33,7 +99,10 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 		secret = b"test-secret"
 		message = encode_key("crm.receipt.command.v1", "intake", "user@example.com", "idempotency-1")
 		expected = hmac.new(secret, message, hashlib.sha256).hexdigest()
-		self.assertEqual(keyed_digest(secret, "crm.receipt.command.v1", "intake", "user@example.com", "idempotency-1"), expected)
+		self.assertEqual(
+			keyed_digest(secret, "crm.receipt.command.v1", "intake", "user@example.com", "idempotency-1"),
+			expected,
+		)
 
 	def test_command_error_exposes_stable_machine_code(self):
 		error = StudentIntakeError("REVIEW_REQUIRED", "manual review")

@@ -1,8 +1,9 @@
 """Signed external ingress for Student intake.
 
 The adapter authenticates the raw request bytes and replay tuple before the
-canonical command sees the payload.  It deliberately never logs or stores the
-raw body; receipts retain only opaque fingerprints and command outcomes.
+canonical command sees the payload. It deliberately never logs or stores the
+raw body; receipts retain an opaque fingerprint and bounded encrypted
+provenance alongside the command outcome.
 """
 
 from __future__ import annotations
@@ -16,7 +17,8 @@ from typing import Any
 
 import frappe
 
-from crm.fcrm.student_intake import StudentIntakeError, _secret_versions, submit_intake
+from crm.api.student_intake import _intake_response, _normalize_contact_payload
+from crm.fcrm.student_intake import StudentIntakeError, _secret_versions, body_fingerprint, submit_intake
 
 TIMESTAMP_WINDOW_SECONDS = 300
 SIGNATURE_HEADER = "X-CRM-Intake-Signature"
@@ -96,7 +98,9 @@ def _raise_replay(code: str, message: str):
 	raise StudentIntakeError(code, message)
 
 
-def verify_signature(raw_body: bytes, source_namespace: str, timestamp: str, nonce: str, provided: str) -> str:
+def verify_signature(
+	raw_body: bytes, source_namespace: str, timestamp: str, nonce: str, provided: str
+) -> str:
 	if not source_namespace or not timestamp or not nonce or not provided:
 		_raise_replay("REPLAY_REJECTED", "Signed ingress headers are incomplete.")
 	try:
@@ -114,7 +118,9 @@ def verify_signature(raw_body: bytes, source_namespace: str, timestamp: str, non
 	except Exception:
 		pass
 	for version, secret in _source_secret(source_namespace):
-		expected = hmac.new(secret, signing_message(raw_body, source_namespace, str(timestamp), nonce), hashlib.sha256).hexdigest()
+		expected = hmac.new(
+			secret, signing_message(raw_body, source_namespace, str(timestamp), nonce), hashlib.sha256
+		).hexdigest()
 		if any(hmac.compare_digest(expected, candidate) for candidate in provided_candidates):
 			return version
 	_raise_replay("REPLAY_REJECTED", "Signed ingress signature is invalid.")
@@ -159,15 +165,28 @@ def receive():
 	correlation_id = _header(CORRELATION_HEADER) or payload.get("correlation_id")
 	if not record_id or not idempotency_key:
 		_raise_replay("INVALID_INPUT", "Signed ingress source record and idempotency key are required.")
-	return submit_intake(
-		payload,
+	if "consent" not in payload:
+		_raise_replay("INVALID_INPUT", "consent is required for external contact intake.")
+	canonical_payload = _normalize_contact_payload(
+		{
+			**payload,
+			"source_namespace": namespace,
+			"external_id": record_id,
+			"idempotency_key": idempotency_key,
+		}
+	)
+	result = submit_intake(
+		canonical_payload,
 		source_namespace=namespace,
 		source_record_id=str(record_id),
 		idempotency_key=str(idempotency_key),
 		correlation_id=str(correlation_id) if correlation_id else None,
 		nonce=nonce,
 		signed_context=context,
+		request_payload=payload,
+		request_fingerprint=body_fingerprint(raw_body),
 	)
+	return _intake_response(result)
 
 
 # Stable aliases used by provider integrations during rollout.

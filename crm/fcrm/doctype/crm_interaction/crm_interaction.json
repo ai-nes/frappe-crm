@@ -20,6 +20,12 @@
   "source_verified",
   "outcome_revision",
   "external_id",
+  "source_namespace",
+  "source_record_id",
+  "channel",
+  "direction",
+  "conversation_id",
+  "agent_id",
   "section_summary",
   "summary",
   "notes",
@@ -114,6 +120,49 @@
    "label": "External ID",
    "read_only": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "source_namespace",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Namespace",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_record_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Record ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Channel",
+   "read_only": 1
+  },
+  {
+   "fieldname": "direction",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Direction",
+   "options": "inbound\noutbound",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conversation_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Conversation ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "agent_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Agent ID",
+   "read_only": 1
   },
   {
    "fieldname": "section_summary",
