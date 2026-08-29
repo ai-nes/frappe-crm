@@ -97,7 +97,13 @@ jobs:
           set -euo pipefail
           scp -o StrictHostKeyChecking=yes \
             docker/docker-compose.prod.yml \
-            "$EC2_USER@$EC2_HOST:/opt/frappe-crm/docker/docker-compose.prod.yml"
+            "$EC2_USER@$EC2_HOST:/tmp/frappe-crm-docker-compose.prod.yml"
+          ssh -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "sudo install -o root -g root -m 0644 \
+             /tmp/frappe-crm-docker-compose.prod.yml \
+             /opt/frappe-crm/docker/docker-compose.prod.yml && \
+             rm -f /tmp/frappe-crm-docker-compose.prod.yml"
 
       - name: Pull image and restart production stack
         env:
