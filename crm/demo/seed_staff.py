@@ -194,6 +194,8 @@ def _ensure_fixture_team_memberships(team):
 	for email, function, is_team_lead in (
 		("nguyen-minh-khoi.sale@example.test", "Sale", 0),
 		("le-thanh-huong.leadsales@example.test", "Lead Sales", 1),
+		("sale@gmail.com", "Sale", 0),
+		("leadsales@gmail.com", "Lead Sales", 1),
 	):
 		staff_name = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 		if not staff_name:

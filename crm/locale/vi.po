@@ -4288,7 +4288,7 @@ msgstr "Bố cục"
 #: frontend/src/components/Telephony/ExotelCallUI.vue:200
 #: frontend/src/pages/Tasks.vue:133
 msgid "Lead"
-msgstr "Thí sinh tiềm năng"
+msgstr "Lead"
 
 #. Label of the lead_data (Code) field in DocType 'Failed Lead Sync Log'
 #: crm/lead_syncing/doctype/failed_lead_sync_log/failed_lead_sync_log.json
@@ -8656,7 +8656,7 @@ msgid "Admission Year"
 msgstr "Năm tuyển sinh"
 
 msgid "Campus"
-msgstr "Chi nhánh"
+msgstr "Campus"
 
 msgid "Reference Data"
 msgstr "Dữ liệu tham chiếu"

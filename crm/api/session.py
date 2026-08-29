@@ -221,6 +221,15 @@ def set_default_user_language(doc, event=None):
 		doc.language = "vi"
 
 
+def set_default_crm_app_for_sales(doc, event=None):
+	"""Send Sales users to the CRM application after sign-in by default."""
+	if doc.default_app:
+		return
+	roles = {row.role for row in doc.get("roles", [])}
+	if roles & {"Sale", "Lead Sales"}:
+		doc.default_app = "crm"
+
+
 @frappe.whitelist()
 def get_high_schools():
 	get_session_role_flags()

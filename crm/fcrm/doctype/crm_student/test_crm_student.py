@@ -55,6 +55,21 @@ class TestCRMStudent(FrappeTestCase):
 		student.reload()
 		self.assertEqual(student.enrollment_status, "Đã xác nhận")
 
+	def test_direct_student_creation_is_allowed(self):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": "_Test Direct Student",
+				"phone": "0981000099",
+				"enrollment_status": "Mới",
+			}
+		)
+
+		student.insert(ignore_permissions=True)
+
+		self.assertTrue(student.name)
+		self.assertEqual(student.lifecycle_stage, "Lead")
+
 	def test_direct_contact_creation_is_retired(self):
 		# Test the production boundary rather than the test-fixture bypass used
 		# by the surrounding CRM Contact fixtures.

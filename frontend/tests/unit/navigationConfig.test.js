@@ -148,22 +148,14 @@ describe('navigationConfig', () => {
     expect(salesTree[0].label).toBe('Dashboard')
     expect(labels).toContain('Dashboard')
     expect(labels).toContain('Cần liên hệ ngay')
-    expect(labels).toContain('Hồ sơ của tôi')
-    expect(labels).toContain('Hồ sơ chưa nhận')
+    expect(labels).toContain('Lead')
+    expect(labels).not.toContain('Hồ sơ chưa nhận')
     expect(labels).toContain('Việc của tôi')
     expect(labels).toContain('Lịch hẹn')
     expect(labels).toContain('Tra cứu')
 
-    const myRecords = salesTree.find((item) => item.label === 'Hồ sơ của tôi')
-    expect(myRecords.children).toBeDefined()
-    const recordSubLabels = myRecords.children.map((c) => c.label)
-    expect(recordSubLabels).toEqual([
-      'Mới nhận',
-      'Đang tư vấn',
-      'Chờ nộp hồ sơ',
-      'Nguội (>7 ngày)',
-      'Đã chốt',
-    ])
+    const leads = salesTree.find((item) => item.label === 'Lead')
+    expect(leads.children).toBeUndefined()
   })
 
   it('verifies Lead Sales navigation items structure', () => {

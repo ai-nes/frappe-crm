@@ -285,6 +285,7 @@ doc_events = {
 		"before_validate": [
 			"crm.api.live_demo.validate_user",
 			"crm.api.session.set_default_user_language",
+			"crm.api.session.set_default_crm_app_for_sales",
 		],
 		"validate_reset_password": ["crm.api.live_demo.validate_reset_password"],
 	},
@@ -336,9 +337,9 @@ before_tests = "crm.tests.before_tests"
 # Overriding Methods
 # ------------------------------
 #
-# override_whitelisted_methods = {
-# "frappe.desk.doctype.event.event.get_events": "crm.event.get_events"
-# }
+override_whitelisted_methods = {
+	"frappe.desk.desktop.get_desktop_page": "crm.api.desk.get_desktop_page",
+}
 #
 # each overriding function accepts a `data` argument;
 # generated from the base implementation of the doctype dashboard,

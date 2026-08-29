@@ -111,3 +111,8 @@ crm.patches.v1_0.consolidate_ai_lead_insight_items
 crm.patches.v1_0.consolidate_academic_year_lines
 crm.patches.v1_0.consolidate_master_data_change
 crm.patches.v1_0.set_default_system_and_user_language_vi
+crm.patches.v1_0.normalize_enrollment_term_names
+crm.patches.v1_0.repair_enrollment_status_term_references
+crm.patches.v1_0.restrict_frappe_crm_workspace
+crm.patches.v1_0.enforce_frappe_crm_workspace_access
+crm.patches.v1_0.set_sales_default_crm_app

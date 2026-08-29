@@ -1,5 +1,10 @@
 <template>
-  <div v-if="field.visible" class="field" :data-fieldname="field.fieldname">
+  <div
+    v-if="field.visible"
+    class="field"
+    :class="{ 'validation-error': field.description_is_error }"
+    :data-fieldname="field.fieldname"
+  >
     <div
       v-if="
         field.fieldtype != 'Check' &&
@@ -484,7 +489,7 @@ const field = computed(() => {
     })
   }
 
-  if (field.fieldtype === 'Link' && field.options !== 'User') {
+  if (field.fieldtype === 'Link' && field.options !== 'User' && !field.no_create) {
     if (!field.create) {
       field.create = (value, close) => {
         const callback = (d) => {
@@ -611,6 +616,12 @@ async function fieldChange(value, df) {
   }
 }
 </script>
+
+<style scoped>
+.validation-error :deep(.text-ink-gray-5) {
+  color: rgb(var(--ink-red-3)) !important;
+}
+</style>
 <style scoped>
 :deep(.form-control.prefix select) {
   padding-left: 2rem;
