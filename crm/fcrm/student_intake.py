@@ -24,7 +24,6 @@ from contextlib import contextmanager
 from typing import Any
 
 import frappe
-from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.role_policy import resolve_crm_profile
@@ -35,6 +34,7 @@ HMAC_VERSION = "v1"
 REVIEW_OPEN = "open"
 REVIEW_APPLIED = "applied"
 SUBMIT_CAPABILITY = "student.intake.submit"
+INTERACTION_CAPABILITY = "student.interaction.ingest"
 REVIEW_CAPABILITY = "student.intake.review.decide"
 
 IDENTITY_DOCTYPE = "CRM Student Identity"
@@ -153,6 +153,78 @@ def _json(value: Any) -> str:
 	return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+PROVENANCE_SCHEMA_VERSION = "v1"
+MAX_PROVENANCE_BYTES = 4096
+PROVENANCE_ALLOWED_KEYS = frozenset(
+	{
+		"source_system",
+		"source_namespace",
+		"external_id",
+		"source_record_id",
+		"idempotency_key",
+		"captured_at",
+		"lead_source",
+		"campaign_code",
+		"event_code",
+		"province_code",
+		"high_school_code",
+		"major_code",
+		"consent",
+		"raw_payload",
+	}
+)
+
+
+def redact_provenance(payload: dict[str, Any] | None) -> dict[str, Any]:
+	"""Return bounded provenance metadata without retaining request PII."""
+	if not isinstance(payload, dict):
+		return {"schema_version": PROVENANCE_SCHEMA_VERSION}
+
+	redacted: dict[str, Any] = {"schema_version": PROVENANCE_SCHEMA_VERSION}
+	for fieldname in PROVENANCE_ALLOWED_KEYS - {"raw_payload", "consent"}:
+		value = payload.get(fieldname)
+		if isinstance(value, str):
+			value = value[:256]
+		if value is not None and isinstance(value, (str, int, float, bool)):
+			redacted[fieldname] = value
+
+	consent = payload.get("consent")
+	if isinstance(consent, dict):
+		redacted["consent"] = {
+			"granted": consent.get("granted") if isinstance(consent.get("granted"), bool) else None,
+			"granted_at": str(consent.get("granted_at"))[:64] if consent.get("granted_at") else None,
+			"purpose": str(consent.get("purpose"))[:128] if consent.get("purpose") else None,
+			"scope": str(consent.get("scope"))[:128] if consent.get("scope") else None,
+		}
+
+	raw_payload = payload.get("raw_payload")
+	if raw_payload is not None:
+		try:
+			redacted["raw_payload_fingerprint"] = body_fingerprint(raw_payload)
+		except (TypeError, ValueError):
+			redacted["raw_payload_fingerprint"] = "unavailable"
+
+	try:
+		if len(_json(redacted).encode("utf-8")) <= MAX_PROVENANCE_BYTES:
+			return redacted
+	except (TypeError, ValueError):
+		pass
+	return {"schema_version": PROVENANCE_SCHEMA_VERSION, "truncated": True}
+
+
+def encrypt_provenance(payload: dict[str, Any]) -> str:
+	"""Encrypt already-redacted provenance with the site-owned Frappe key."""
+	try:
+		from frappe.utils.password import encrypt
+
+		expected = encrypt(_json(payload))
+	except (ImportError, AttributeError, TypeError, ValueError) as exc:
+		_fail("CONFIGURATION_ERROR", "Receipt provenance encryption is unavailable.", cause=str(exc))
+	if not expected:
+		_fail("CONFIGURATION_ERROR", "Receipt provenance encryption returned no value.")
+	return str(expected)
+
+
 def _doctype_exists(doctype: str) -> bool:
 	try:
 		return bool(frappe.db.exists("DocType", doctype))
@@ -259,11 +331,8 @@ def _resolve_authority(capability: str, *, signed_context: dict[str, Any] | None
 	profile = resolve_crm_profile(roles)
 	allowed = (
 		profile in {"sales", "lead_sales", "admissions_director"}
-		and capability == SUBMIT_CAPABILITY
-	) or (
-		profile in {"lead_sales", "admissions_director"}
-		and capability == REVIEW_CAPABILITY
-	)
+		and capability in {SUBMIT_CAPABILITY, INTERACTION_CAPABILITY}
+	) or (profile in {"lead_sales", "admissions_director"} and capability == REVIEW_CAPABILITY)
 	if not allowed:
 		_fail("UNAUTHORIZED", "The current CRM profile cannot execute this command.")
 	staff = None
@@ -308,14 +377,68 @@ def _staff_team_scope(staff_name: str | None, campus: str | None, profile: str |
 		return []
 
 
+def _is_first_party_manual_intake(authority: dict[str, Any]) -> bool:
+	"""Whether initial ownership must be derived from the signed-in CRM user."""
+	return not authority.get("signed") and authority.get("profile") in {"sales", "lead_sales"}
+
+
+def _resolve_manual_initial_ownership(authority: dict[str, Any]) -> tuple[str, str, str | None]:
+	"""Resolve the only permitted initial ownership for a manual Sale/Lead intake.
+
+	The client never selects a staff member or pool.  Both the Campus and the
+	primary eligible Sales Team are authoritative CRM topology.  A Sale owns the
+	new case directly; a Lead Sales creates it in their primary pool for normal
+	routing.  Missing or ambiguous topology fails closed with a stable code.
+	"""
+	staff_name = _text(authority.get("actor_staff"))
+	campuses = [_text(value) for value in authority.get("campus_scope") or []]
+	campuses = [value for value in campuses if value]
+	if not staff_name or len(set(campuses)) != 1:
+		_fail("INVALID_TOPOLOGY", "The current CRM Staff record needs one Campus.")
+	campus = campuses[0]
+	try:
+		memberships = frappe.get_all(
+			"CRM Team Membership",
+			filters={"parent": staff_name, "parenttype": "CRM Staff", "is_primary": 1},
+			fields=["team", "is_primary"],
+		)
+	except Exception:
+		_fail("INVALID_TOPOLOGY", "The current CRM Staff team membership is unavailable.")
+
+	eligible_teams = []
+	for membership in memberships:
+		team_name = _text(membership.get("team"))
+		if not team_name:
+			continue
+		team = frappe.db.get_value(
+			"CRM Team", team_name, ["name", "campus", "team_type", "is_active"], as_dict=True
+		)
+		if team and team.is_active and team.team_type == "Sales" and team.campus == campus:
+			eligible_teams.append(team.name)
+	if not eligible_teams:
+		_fail("NO_ELIGIBLE_POOL", "The current CRM Staff has no primary active Sales Team at their Campus.")
+	if len(set(eligible_teams)) != 1:
+		_fail("AMBIGUOUS_POOL", "The current CRM Staff has multiple primary eligible Sales Teams.")
+
+	pool = _resolve_case_pool(eligible_teams[0], campus)
+	assigned_to = staff_name if authority.get("profile") == "sales" else None
+	return campus, pool.name, assigned_to
+
+
 def _assert_campus_and_pool(payload: dict[str, Any], authority: dict[str, Any]) -> tuple[str, str]:
 	campus = _text(payload.get("campus") or payload.get("branch"))
+	configured_campuses = list(authority.get("campus_scope") or [])
+	if not campus and len(configured_campuses) == 1:
+		campus = _text(configured_campuses[0])
 	if not campus:
 		_fail("INVALID_INPUT", "Campus is required for Student intake.")
 	if _doctype_exists("CRM Campus") and not frappe.db.exists("CRM Campus", campus):
 		_fail("INVALID_INPUT", "Campus is not a valid CRM Campus.")
 	allowed_campuses = set(authority.get("campus_scope") or [])
-	if not authority.get("signed") and authority.get("profile") not in {"platform_superuser", "admissions_director"}:
+	if not authority.get("signed") and authority.get("profile") not in {
+		"platform_superuser",
+		"admissions_director",
+	}:
 		if campus not in allowed_campuses:
 			_fail("UNAUTHORIZED", "The requested Campus is outside the current scope.")
 	requested_pool = _text(payload.get("owning_team") or payload.get("pool") or payload.get("team"))
@@ -331,24 +454,32 @@ def _assert_campus_and_pool(payload: dict[str, Any], authority: dict[str, Any]) 
 		except Exception:
 			continue
 	if authority.get("signed"):
-		configured_campuses = set(authority.get("campus_scope") or [])
-		if not configured_campuses or campus not in configured_campuses:
+		if not configured_campuses or campus not in set(configured_campuses):
 			_fail("UNAUTHORIZED", "The signed source is not configured for this Campus.")
 	if requested_pool:
 		team_name = requested_pool
 		try:
 			if not frappe.db.exists("CRM Team", team_name):
 				team_name = frappe.db.get_value("CRM Student Pool", requested_pool, "team") or team_name
-			team = frappe.db.get_value("CRM Team", team_name, ["name", "campus", "team_type", "is_active"], as_dict=True)
+			team = frappe.db.get_value(
+				"CRM Team", team_name, ["name", "campus", "team_type", "is_active"], as_dict=True
+			)
 			if not team or not team.is_active or team.team_type != "Sales" or team.campus != campus:
-				_fail("NO_ELIGIBLE_POOL", "The requested pool does not match an active Sales Team at this Campus.")
+				_fail(
+					"NO_ELIGIBLE_POOL",
+					"The requested pool does not match an active Sales Team at this Campus.",
+				)
 		except StudentIntakeError:
 			raise
 		except Exception:
 			_fail("NO_ELIGIBLE_POOL", "The requested pool cannot be resolved.")
 		if authority.get("signed") and team_name not in eligible_for_campus:
 			_fail("NO_ELIGIBLE_POOL", "The requested pool is not eligible in this scope.")
-		if not authority.get("signed") and authority.get("profile") not in {"platform_superuser", "admissions_director"} and team_name not in eligible_for_campus:
+		if (
+			not authority.get("signed")
+			and authority.get("profile") not in {"platform_superuser", "admissions_director"}
+			and team_name not in eligible_for_campus
+		):
 			_fail("NO_ELIGIBLE_POOL", "The requested pool is not eligible in this scope.")
 		return campus, team_name
 	if eligible_for_campus:
@@ -374,28 +505,41 @@ def _parse_payload(payload: dict[str, Any] | str | None) -> dict[str, Any]:
 
 def _identity_candidate(payload: dict[str, Any]) -> dict[str, Any]:
 	strong = normalize_national_id(
-		payload.get("national_id") or payload.get("id_number") or payload.get("cccd") or payload.get("citizen_id")
+		payload.get("national_id")
+		or payload.get("id_number")
+		or payload.get("cccd")
+		or payload.get("citizen_id")
 	)
 	phone = normalize_phone(payload.get("phone") or payload.get("mobile") or payload.get("telephone"))
 	email = normalize_email(payload.get("email") or payload.get("email_id"))
 	name = _text(payload.get("student_name") or payload.get("full_name"))
 	if not name:
-		name = " ".join(part for part in (_text(payload.get("firstname")), _text(payload.get("lastname"))) if part)
+		name = " ".join(
+			part for part in (_text(payload.get("firstname")), _text(payload.get("lastname"))) if part
+		)
 	return {"strong": strong, "phone": phone, "email": email, "name": name}
 
 
 def _secret_versions() -> list[tuple[str, bytes]]:
 	configured = None
 	try:
-		configured = frappe.conf.get("student_intake_hmac_secrets") or frappe.conf.get("student_intake_hmac_secret")
+		configured = frappe.conf.get("student_intake_hmac_secrets") or frappe.conf.get(
+			"student_intake_hmac_secret"
+		)
 	except Exception:
 		configured = None
 	if not configured:
 		configured = os.environ.get("CRM_STUDENT_INTAKE_HMAC_SECRET")
 	if isinstance(configured, dict):
-		return [(str(version), str(secret).encode("utf-8")) for version, secret in configured.items() if secret]
+		return [
+			(str(version), str(secret).encode("utf-8")) for version, secret in configured.items() if secret
+		]
 	if isinstance(configured, (list, tuple)):
-		return [(HMAC_VERSION if idx == 0 else f"v{idx + 1}", str(value).encode("utf-8")) for idx, value in enumerate(configured) if value]
+		return [
+			(HMAC_VERSION if idx == 0 else f"v{idx + 1}", str(value).encode("utf-8"))
+			for idx, value in enumerate(configured)
+			if value
+		]
 	if configured:
 		return [(HMAC_VERSION, str(configured).encode("utf-8"))]
 	try:
@@ -409,15 +553,28 @@ def _secret_versions() -> list[tuple[str, bytes]]:
 	return []
 
 
-def receipt_keys(source_namespace: str, source_record_id: str, idempotency_key: str, principal: str, nonce: str | None = None):
+def receipt_keys(
+	source_namespace: str,
+	source_record_id: str,
+	idempotency_key: str,
+	principal: str,
+	nonce: str | None = None,
+	command_kind: str = "intake",
+):
 	keys = []
 	for version, secret in _secret_versions():
 		keys.append(
 			{
 				"version": version,
-				"command_key": keyed_digest(secret, f"crm.receipt.command.{version}", "intake", principal, idempotency_key),
-				"source_key": keyed_digest(secret, f"crm.receipt.source.{version}", source_namespace, source_record_id),
-				"nonce_key": keyed_digest(secret, f"crm.receipt.nonce.{version}", source_namespace, nonce) if nonce else None,
+				"command_key": keyed_digest(
+					secret, f"crm.receipt.command.{version}", command_kind, principal, idempotency_key
+				),
+				"source_key": keyed_digest(
+					secret, f"crm.receipt.source.{version}", source_namespace, source_record_id
+				),
+				"nonce_key": keyed_digest(secret, f"crm.receipt.nonce.{version}", source_namespace, nonce)
+				if nonce
+				else None,
 			}
 		)
 	return keys
@@ -476,6 +633,7 @@ def _persist_receipt(
 	correlation_id: str,
 	nonce: str | None = None,
 	kind: str = "intake",
+	provenance_payload: dict[str, Any] | None = None,
 ):
 	key_set = keys[0] if keys else {}
 	command_kind = "review_decision" if kind == "review" else kind
@@ -487,6 +645,9 @@ def _persist_receipt(
 	except Exception:
 		actor_value = principal
 	now = now_datetime()
+	encrypted_payload = None
+	if provenance_payload is not None:
+		encrypted_payload = encrypt_provenance(redact_provenance(provenance_payload))
 	values = {
 		"receipt_key": key_set.get("command_key"),
 		"command_key": key_set.get("command_key"),
@@ -500,6 +661,7 @@ def _persist_receipt(
 		"outcome": receipt_outcome,
 		"error_code": result.get("error_code"),
 		"target_student": result.get("student"),
+		"target_contact": result.get("contact"),
 		"student": result.get("student"),
 		"review": result.get("review_id"),
 		"review_id": result.get("review_id"),
@@ -516,6 +678,8 @@ def _persist_receipt(
 		"request_received_at": now,
 		"completed_at": now,
 	}
+	if encrypted_payload:
+		values["encrypted_request_payload"] = encrypted_payload
 	if _doctype_exists(RECEIPT_DOCTYPE):
 		doc = frappe.get_doc({"doctype": RECEIPT_DOCTYPE, **_supported_values(RECEIPT_DOCTYPE, values)})
 		doc.insert(ignore_permissions=True)
@@ -638,11 +802,25 @@ def _find_observation_roots(identifier_type: str, value: str) -> list[dict[str, 
 		return []
 	roots: list[dict[str, Any]] = []
 	for version, secret in _secret_versions() or [(HMAC_VERSION, b"")]:
-		domain = f"crm.identity.strong.{version}" if identifier_type == "national_id" else f"crm.identity.weak.{version}"
-		digest = keyed_digest(secret, domain, value) if identifier_type == "national_id" else keyed_digest(secret, domain, identifier_type, value)
+		domain = (
+			f"crm.identity.strong.{version}"
+			if identifier_type == "national_id"
+			else f"crm.identity.weak.{version}"
+		)
+		digest = (
+			keyed_digest(secret, domain, value)
+			if identifier_type == "national_id"
+			else keyed_digest(secret, domain, identifier_type, value)
+		)
 		for row in _identifier_rows(identifier_type, digest):
 			if row.get("_identity"):
-				roots.append({"identity": row["_identity"], "lifecycle": row.get("_lifecycle", "active"), "digest": digest})
+				roots.append(
+					{
+						"identity": row["_identity"],
+						"lifecycle": row.get("_lifecycle", "active"),
+						"digest": digest,
+					}
+				)
 	# Compatibility with pre-keyed test fixtures and the migration's encrypted
 	# lookup columns.  This path is multimap for weak values by design.
 	if _doctype_exists(IDENTIFIER_DOCTYPES[0]):
@@ -673,7 +851,9 @@ def _case_key(identity: str, admission_year: str) -> dict[str, Any] | None:
 	if not identity_field or not year_field:
 		return None
 	try:
-		rows = frappe.get_all(CASE_KEY_DOCTYPE, filters={identity_field: identity, year_field: admission_year}, fields=["*"])
+		rows = frappe.get_all(
+			CASE_KEY_DOCTYPE, filters={identity_field: identity, year_field: admission_year}, fields=["*"]
+		)
 	except Exception:
 		rows = []
 	return dict(rows[0]) if rows else None
@@ -716,8 +896,16 @@ def _add_identifier(identity_doc_or_name: Any, identifier_type: str, value: str,
 	identity = identity_doc_or_name.name if hasattr(identity_doc_or_name, "name") else identity_doc_or_name
 	secrets = _secret_versions() or [(HMAC_VERSION, b"")]
 	for version, secret in secrets:
-		domain = f"crm.identity.strong.{version}" if identifier_type == "national_id" else f"crm.identity.weak.{version}"
-		digest = keyed_digest(secret, domain, value) if identifier_type == "national_id" else keyed_digest(secret, domain, identifier_type, value)
+		domain = (
+			f"crm.identity.strong.{version}"
+			if identifier_type == "national_id"
+			else f"crm.identity.weak.{version}"
+		)
+		digest = (
+			keyed_digest(secret, domain, value)
+			if identifier_type == "national_id"
+			else keyed_digest(secret, domain, identifier_type, value)
+		)
 		for doctype in IDENTIFIER_DOCTYPES:
 			if not _doctype_exists(doctype):
 				continue
@@ -772,8 +960,10 @@ def _resolve_case_pool(pool_or_team: str, campus: str):
 	if not pool_or_team:
 		_fail("NO_ELIGIBLE_POOL", "A named pool is required for a Student case.")
 	pool = frappe.db.get_value(
-		"CRM Student Pool", pool_or_team,
-		["name", "team", "campus", "is_active"], as_dict=True,
+		"CRM Student Pool",
+		pool_or_team,
+		["name", "team", "campus", "is_active"],
+		as_dict=True,
 	)
 	if not pool:
 		candidates = frappe.get_all(
@@ -795,8 +985,18 @@ def _resolve_case_pool(pool_or_team: str, campus: str):
 	return pool
 
 
-def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, Any], campus: str, pool: str) -> str:
-	admission_year = _text(payload.get("admission_year") or payload.get("admission_cycle") or payload.get("year"))
+def _create_case(
+	identity: str,
+	candidate: dict[str, Any],
+	payload: dict[str, Any],
+	campus: str,
+	pool: str,
+	*,
+	correlation_id: str | None = None,
+) -> str:
+	admission_year = _text(
+		payload.get("admission_year") or payload.get("admission_cycle") or payload.get("year")
+	)
 	if not admission_year:
 		_fail("REVIEW_REQUIRED", "Admission cycle is required before a Student case can be created.")
 	pool = _resolve_case_pool(pool, campus)
@@ -816,8 +1016,29 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 		"enrollment_status": payload.get("enrollment_status") or "Mới",
 		"source": payload.get("source"),
 		"advertising_channel": payload.get("advertising_channel"),
+		"province": payload.get("province"),
+		"high_school": payload.get("high_school"),
+		"major": payload.get("major"),
 	}
-	values.update({key: value for key, value in payload.items() if key in {"gender", "date_of_birth", "high_school", "province", "ward", "major", "aspiration", "alt_name", "alt_phone"}})
+	values.update(
+		{
+			key: value
+			for key, value in payload.items()
+			if key
+			in {
+				"gender",
+				"date_of_birth",
+				"high_school",
+				"province",
+				"ward",
+				"major",
+				"aspiration",
+				"alt_name",
+				"alt_phone",
+			}
+		}
+	)
+
 	@contextmanager
 	def service_context():
 		flags = getattr(frappe, "flags", None)
@@ -830,15 +1051,28 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 		finally:
 			if flags is not None:
 				flags.student_intake_service = previous
+
 	with service_context():
 		student = frappe.get_doc({"doctype": "CRM Student", **_supported_values("CRM Student", values)})
 		student.insert(ignore_permissions=True)
+	initial_owner = _text(payload.get("assigned_to"))
+	if initial_owner:
+		_assign_initial_manual_owner(
+			student.name,
+			initial_owner,
+			pool.team,
+			correlation_id,
+			_text(payload.get("_intake_actor_user")),
+		)
 	from crm.fcrm.student_feature_flags import enabled
 	from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
-	if enabled("synchronous_routing"):
-		route_pool_owned_student(student.name, trigger="pool_entry")
-	elif _doctype_exists("CRM Student Routing Request"):
+	# A Sale's manual intake is now staff-owned through the canonical ownership
+	# command. Only pool-owned cases are eligible for the routing worker.
+	if not initial_owner:
+		if enabled("synchronous_routing"):
+			route_pool_owned_student(student.name, trigger="pool_entry")
+		elif _doctype_exists("CRM Student Routing Request"):
 			enqueue_student_routing(student.name, trigger="pool_entry")
 	case_values = {
 		"doctype": CASE_KEY_DOCTYPE,
@@ -861,6 +1095,37 @@ def _create_case(identity: str, candidate: dict[str, Any], payload: dict[str, An
 	return student.name
 
 
+def _assign_initial_manual_owner(
+	student_name: str,
+	staff_name: str,
+	team_name: str,
+	correlation_id: str | None,
+	actor_user: str | None = None,
+) -> dict[str, Any]:
+	"""Create the first direct owner through the canonical ownership transaction.
+
+	Inserting ``assigned_to`` directly skips the immutable ownership event, SLA
+	opening and notification outbox. The new case is therefore inserted pool-owned
+	at revision 0, then atomically moved to the authenticated Sale at revision 1.
+	The enclosing intake command can roll both writes back together.
+	"""
+	from crm.fcrm.student_ownership import change_student_ownership
+
+	return change_student_ownership(
+		student_name,
+		"owner",
+		staff_name,
+		team_name,
+		"Manual intake self-assignment",
+		f"intake-initial-owner:{student_name}",
+		expected_revision=0,
+		correlation_id=correlation_id or f"intake:{student_name}",
+		_internal_service=True,
+		_internal_actor=actor_user,
+		_commit=False,
+	)
+
+
 def _create_review(
 	candidate: dict[str, Any],
 	payload: dict[str, Any],
@@ -869,7 +1134,7 @@ def _create_review(
 	source_receipt: str | None,
 	pool: str | None = None,
 	candidate_identity: str | None = None,
-	):
+):
 	review_type = {
 		"weak_only": "identity_conflict",
 		"retracted_identifier": "identity_conflict",
@@ -879,9 +1144,18 @@ def _create_review(
 	}.get(reason, "malformed_identifier")
 	pool_name = pool
 	try:
-		pool_name = frappe.db.get_value(
-			"CRM Student Pool", {"team": pool, "campus": _text(payload.get("campus") or payload.get("branch")), "is_active": 1}, "name"
-		) or pool
+		pool_name = (
+			frappe.db.get_value(
+				"CRM Student Pool",
+				{
+					"team": pool,
+					"campus": _text(payload.get("campus") or payload.get("branch")),
+					"is_active": 1,
+				},
+				"name",
+			)
+			or pool
+		)
 	except Exception:
 		pass
 	values = {
@@ -897,7 +1171,11 @@ def _create_review(
 		"proposed_owning_team": pool_name,
 		"proposed_admission_year": _normalize_admission_year(payload),
 		"scope_anchor": pool,
-		"evidence_reference": keyed_digest((_secret_versions() or [(HMAC_VERSION, b"")])[0][1], "crm.review.proposed.v1", candidate.get("strong") or candidate.get("phone") or candidate.get("email") or ""),
+		"evidence_reference": keyed_digest(
+			(_secret_versions() or [(HMAC_VERSION, b"")])[0][1],
+			"crm.review.proposed.v1",
+			candidate.get("strong") or candidate.get("phone") or candidate.get("email") or "",
+		),
 		"reason_sensitivity": "operational",
 	}
 	if not _doctype_exists(REVIEW_DOCTYPE):
@@ -935,6 +1213,106 @@ def _normalize_admission_year(payload: dict[str, Any]) -> str | None:
 		return value
 
 
+def _normalize_consent(value: Any) -> dict[str, Any] | None:
+	if value is None:
+		return None
+	if not isinstance(value, dict):
+		_fail("INVALID_INPUT", "consent must be a JSON object.")
+	granted = value.get("granted")
+	if not isinstance(granted, bool):
+		_fail("INVALID_INPUT", "consent.granted must be boolean.")
+	if not granted:
+		return {"granted": False}
+	granted_at = _text(value.get("granted_at"))
+	if not granted_at:
+		_fail("INVALID_INPUT", "consent.granted_at is required when consent is granted.")
+	try:
+		parsed_granted_at = frappe.utils.get_datetime(granted_at)
+	except (TypeError, ValueError):
+		_fail("INVALID_INPUT", "consent.granted_at must be a valid datetime.")
+	if not parsed_granted_at:
+		_fail("INVALID_INPUT", "consent.granted_at must be a valid datetime.")
+	granted_at = str(parsed_granted_at)
+	for fieldname in ("purpose", "scope", "source"):
+		field_value = _text(value.get(fieldname))
+		if field_value and len(field_value) > 140:
+			_fail("INVALID_INPUT", f"consent.{fieldname} exceeds its size limit.")
+	return {
+		"granted": True,
+		"granted_at": granted_at,
+		"purpose": _text(value.get("purpose")) or "student_intake",
+		"scope": _text(value.get("scope")) or "admissions_processing",
+		"source": _text(value.get("source")),
+	}
+
+
+def _persist_consent_grant(
+	student: str | None,
+	consent: dict[str, Any] | None,
+	*,
+	receipt: str | None,
+	source_namespace: str,
+):
+	if not student or not consent or not consent.get("granted"):
+		return None
+	if not _doctype_exists("CRM Contact Consent Event"):
+		_fail("CONFIGURATION_ERROR", "Consent event data contract is not installed.")
+	values = {
+		"doctype": "CRM Contact Consent Event",
+		"student": student,
+		"event_type": "Granted",
+		"occurred_at": consent["granted_at"],
+		"granted_at": consent["granted_at"],
+		"purpose": consent.get("purpose") or "student_intake",
+		"scope": consent.get("scope") or "admissions_processing",
+		"source": consent.get("source") or source_namespace,
+		"command_receipt": receipt,
+	}
+	doc = frappe.get_doc({key: value for key, value in values.items() if value is not None})
+	try:
+		doc.insert(ignore_permissions=True)
+	except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
+		if receipt and _has_field("CRM Contact Consent Event", "command_receipt"):
+			return frappe.db.get_value("CRM Contact Consent Event", {"command_receipt": receipt}, "name")
+		raise
+	return doc.name
+
+
+def _persist_intake_result(
+	result: dict[str, Any],
+	*,
+	keys: list[dict[str, Any]],
+	fingerprint: str,
+	principal: str,
+	source_namespace: str,
+	source_record_id: str,
+	idempotency_key: str,
+	correlation_id: str,
+	nonce: str | None,
+	provenance_payload: dict[str, Any],
+	consent: dict[str, Any] | None,
+) -> dict[str, Any]:
+	persisted = _persist_receipt(
+		keys,
+		request_fp=fingerprint,
+		result=result,
+		principal=principal,
+		source_namespace=source_namespace,
+		_source_record_id=source_record_id,
+		idempotency_key=idempotency_key,
+		correlation_id=correlation_id,
+		nonce=nonce,
+		provenance_payload=provenance_payload,
+	)
+	_persist_consent_grant(
+		persisted.get("student"),
+		consent,
+		receipt=persisted.get("receipt"),
+		source_namespace=source_namespace,
+	)
+	return persisted
+
+
 def submit_intake(
 	payload: dict[str, Any] | str | None = None,
 	*,
@@ -945,6 +1323,8 @@ def submit_intake(
 	expected_review_id: str | None = None,
 	nonce: str | None = None,
 	signed_context: dict[str, Any] | None = None,
+	request_payload: dict[str, Any] | str | None = None,
+	request_fingerprint: str | None = None,
 ) -> dict[str, Any]:
 	"""Submit one deterministic Student intake command.
 
@@ -953,6 +1333,8 @@ def submit_intake(
 	receipt, and never update a Student.
 	"""
 	payload = _parse_payload(payload)
+	original_payload = _parse_payload(request_payload) if request_payload is not None else payload
+	consent = _normalize_consent(payload.get("consent"))
 	source_namespace = _text(source_namespace) or _text(payload.get("source_namespace"))
 	source_record_id = _text(source_record_id) or _text(payload.get("source_record_id"))
 	idempotency_key = _text(idempotency_key) or _text(payload.get("idempotency_key"))
@@ -968,29 +1350,65 @@ def submit_intake(
 		# Missing cycle is ambiguous work and is therefore reviewable, but it must
 		# still have a durable source receipt before a review is opened.
 		pass
-	campus, pool = _assert_campus_and_pool(payload, authority)
+	if _is_first_party_manual_intake(authority):
+		campus, pool, assigned_to = _resolve_manual_initial_ownership(authority)
+		# Explicit assignment/pool fields are client input, never authority.  The
+		# server-owned value is only used inside this command after validation.
+		payload = {
+			**payload,
+			"campus": campus,
+			"branch": campus,
+			"owning_team": pool,
+			"_intake_actor_user": authority.get("actor_user"),
+		}
+		if assigned_to:
+			payload["assigned_to"] = assigned_to
+		else:
+			payload.pop("assigned_to", None)
+	else:
+		campus, pool = _assert_campus_and_pool(payload, authority)
 	principal = authority.get("actor_user") or source_namespace
 	keys = receipt_keys(source_namespace, source_record_id, idempotency_key, principal, nonce)
 	fingerprint_payload = {
-		"payload": payload,
+		"payload": original_payload,
 		"source_namespace": source_namespace,
 		"source_record_id": source_record_id,
 		"expected_review_id": expected_review_id,
 	}
-	fingerprint = body_fingerprint(fingerprint_payload)
-	replay = _receipt_replay(keys, fingerprint, source_namespace=source_namespace, idempotency_key=idempotency_key)
+	fingerprint = request_fingerprint or body_fingerprint(fingerprint_payload)
+	provenance_payload = {**original_payload, **payload}
+	replay = _receipt_replay(
+		keys, fingerprint, source_namespace=source_namespace, idempotency_key=idempotency_key
+	)
 	if replay:
 		_assert_replay_scope(replay, authority)
 		return replay
 	if not admission_year:
 		result = {"outcome": "review_required", "error_code": "REVIEW_REQUIRED"}
-		review_id = _create_review(candidate, payload, "missing_admission_cycle", source_receipt=None, pool=pool)
+		review_id = _create_review(
+			candidate,
+			{**payload, "campus": campus},
+			"missing_admission_cycle",
+			source_receipt=None,
+			pool=pool,
+		)
 		result["review_id"] = review_id
-		persisted = _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace=source_namespace, _source_record_id=source_record_id, idempotency_key=idempotency_key, correlation_id=correlation_id, nonce=nonce)
+		persisted = _persist_intake_result(
+			result,
+			keys=keys,
+			fingerprint=fingerprint,
+			principal=principal,
+			source_namespace=source_namespace,
+			source_record_id=source_record_id,
+			idempotency_key=idempotency_key,
+			correlation_id=correlation_id,
+			nonce=nonce,
+			provenance_payload=provenance_payload,
+			consent=consent,
+		)
 		_link_review_receipt(review_id, persisted.get("receipt"))
 		return persisted
 
-	strong = candidate.get("strong")
 	weak_rows = []
 	for identifier_type, value in (("phone", candidate.get("phone")), ("email", candidate.get("email"))):
 		for row in _find_observation_roots(identifier_type, value):
@@ -1009,30 +1427,86 @@ def submit_intake(
 			student_name = key.get("canonical_student") or key.get("student")
 			if student_name:
 				result = {"outcome": "attached", "student": student_name}
-				return _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace=source_namespace, _source_record_id=source_record_id, idempotency_key=idempotency_key, correlation_id=correlation_id, nonce=nonce)
+				return _persist_intake_result(
+					result,
+					keys=keys,
+					fingerprint=fingerprint,
+					principal=principal,
+					source_namespace=source_namespace,
+					source_record_id=source_record_id,
+					idempotency_key=idempotency_key,
+					correlation_id=correlation_id,
+					nonce=nonce,
+					provenance_payload=provenance_payload,
+					consent=consent,
+				)
 			reason = "quarantined_case_key"
 	if reason:
 		result = {"outcome": "review_required", "error_code": "REVIEW_REQUIRED"}
 		candidate_identity = None
 		if len(weak_roots) == 1:
 			candidate_identity = next(iter(weak_roots))
-		review_id = _create_review(candidate, {**payload, "campus": campus}, reason, source_receipt=None, pool=pool, candidate_identity=candidate_identity)
+		review_id = _create_review(
+			candidate,
+			{**payload, "campus": campus},
+			reason,
+			source_receipt=None,
+			pool=pool,
+			candidate_identity=candidate_identity,
+		)
 		result["review_id"] = review_id
-		result["candidates"] = ([{"identity_id": candidate_identity, "masked_label": "Candidate identity"}] if candidate_identity else [])
-		persisted = _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace=source_namespace, _source_record_id=source_record_id, idempotency_key=idempotency_key, correlation_id=correlation_id, nonce=nonce)
+		result["candidates"] = (
+			[{"identity_id": candidate_identity, "masked_label": "Candidate identity"}]
+			if candidate_identity
+			else []
+		)
+		persisted = _persist_intake_result(
+			result,
+			keys=keys,
+			fingerprint=fingerprint,
+			principal=principal,
+			source_namespace=source_namespace,
+			source_record_id=source_record_id,
+			idempotency_key=idempotency_key,
+			correlation_id=correlation_id,
+			nonce=nonce,
+			provenance_payload=provenance_payload,
+			consent=consent,
+		)
 		_link_review_receipt(review_id, persisted.get("receipt"))
 		return persisted
 	_add_weak_observations(identity, candidate)
-	student_name = _create_case(identity, candidate, {**payload, "admission_year": admission_year}, campus, pool)
+	student_name = _create_case(
+		identity,
+		candidate,
+		{**payload, "admission_year": admission_year},
+		campus,
+		pool,
+		correlation_id=correlation_id,
+	)
 	result = {"outcome": "created", "student": student_name}
-	return _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace=source_namespace, _source_record_id=source_record_id, idempotency_key=idempotency_key, correlation_id=correlation_id, nonce=nonce)
+	return _persist_intake_result(
+		result,
+		keys=keys,
+		fingerprint=fingerprint,
+		principal=principal,
+		source_namespace=source_namespace,
+		source_record_id=source_record_id,
+		idempotency_key=idempotency_key,
+		correlation_id=correlation_id,
+		nonce=nonce,
+		provenance_payload=provenance_payload,
+		consent=consent,
+	)
 
 
 def _review_doc(review_id: str):
 	if not _doctype_exists(REVIEW_DOCTYPE):
 		_fail("INVALID_INPUT", "The requested review does not exist.")
 	try:
-		frappe.db.sql("select name from `tabCRM Student Intake Review` where name = %s for update", (review_id,))
+		frappe.db.sql(
+			"select name from `tabCRM Student Intake Review` where name = %s for update", (review_id,)
+		)
 		return frappe.get_doc(REVIEW_DOCTYPE, review_id)
 	except Exception:
 		_fail("INVALID_INPUT", "The requested review does not exist.")
@@ -1055,7 +1529,11 @@ def _review_scope(doc, authority: dict[str, Any]):
 		proposed_campus = _text(_safe_get(doc, "proposed_campus", "campus"))
 		if not campuses or proposed_campus not in campuses or (not teams or (anchor and anchor not in teams)):
 			return False
-	if anchor and authority.get("profile") not in {"platform_superuser", "admissions_director", "signed_ingress"}:
+	if anchor and authority.get("profile") not in {
+		"platform_superuser",
+		"admissions_director",
+		"signed_ingress",
+	}:
 		if anchor not in set(authority.get("team_scope") or []):
 			return False
 	student = _safe_get(doc, "candidate_student", "resulting_student", "canonical_student")
@@ -1075,7 +1553,9 @@ def _review_scope(doc, authority: dict[str, Any]):
 
 def _validate_review_identity(doc, identity_id: str | None) -> str:
 	"""Accept only the durable, active candidate attached to this review."""
-	identity = _text(identity_id) or _text(_safe_get(doc, "proposed_identity", "candidate_identity", "identity"))
+	identity = _text(identity_id) or _text(
+		_safe_get(doc, "proposed_identity", "candidate_identity", "identity")
+	)
 	proposed = _text(_safe_get(doc, "proposed_identity", "candidate_identity", "identity"))
 	if not identity or not proposed or identity != proposed:
 		_fail("INVALID_INPUT", "The selected identity is not an allowed review candidate.")
@@ -1085,7 +1565,9 @@ def _validate_review_identity(doc, identity_id: str | None) -> str:
 		identity_doc = frappe.get_doc(IDENTITY_DOCTYPE, identity)
 	except Exception:
 		_fail("INVALID_INPUT", "The selected identity does not exist.")
-	status = str(_safe_get(identity_doc, "identity_status", "status", "lifecycle", default="active")).casefold()
+	status = str(
+		_safe_get(identity_doc, "identity_status", "status", "lifecycle", default="active")
+	).casefold()
 	if status not in {"active", "verified"}:
 		_fail("INVALID_INPUT", "The selected identity is not active.")
 	return identity
@@ -1105,7 +1587,9 @@ def decide_intake_review(
 	identity_id: str | None = None,
 ) -> dict[str, Any]:
 	authority = _resolve_authority(REVIEW_CAPABILITY, signed_context=signed_context)
-	decision = {"attach_existing": "attach_identity", "approve_new": "approve_new_identity"}.get(decision, decision)
+	decision = {"attach_existing": "attach_identity", "approve_new": "approve_new_identity"}.get(
+		decision, decision
+	)
 	if decision not in {"attach_identity", "approve_new_identity", "reject"}:
 		_fail("INVALID_INPUT", "Unsupported intake review decision.")
 	if not _text(reason):
@@ -1145,8 +1629,18 @@ def decide_intake_review(
 		{"version": key_set.get("version"), "command_key": key_set.get("command_key")}
 		for key_set in receipt_keys("review", str(review_id), str(idempotency_key), principal)
 	]
-	fingerprint = body_fingerprint({"review": review_id, "decision": decision, "evidence": evidence, "reason": reason, "revision": submitted_revision})
-	replay = _receipt_replay(keys, fingerprint, source_namespace="review", idempotency_key=str(idempotency_key))
+	fingerprint = body_fingerprint(
+		{
+			"review": review_id,
+			"decision": decision,
+			"evidence": evidence,
+			"reason": reason,
+			"revision": submitted_revision,
+		}
+	)
+	replay = _receipt_replay(
+		keys, fingerprint, source_namespace="review", idempotency_key=str(idempotency_key)
+	)
 	if replay:
 		return replay
 	if submitted_revision is not None and submitted_revision != current_revision:
@@ -1170,7 +1664,9 @@ def decide_intake_review(
 			if not student_name:
 				_fail("INVALID_INPUT", "The review is missing a verified Student name.")
 			candidate = {"name": student_name}
-			result["student"] = _create_case(identity, candidate, {"admission_year": admission_year}, campus, pool)
+			result["student"] = _create_case(
+				identity, candidate, {"admission_year": admission_year}, campus, pool
+			)
 	elif decision == "approve_new_identity":
 		identity_data = identity_data or {}
 		candidate = _identity_candidate(identity_data)
@@ -1183,10 +1679,34 @@ def decide_intake_review(
 			_fail("INVALID_INPUT", "The review is missing its cycle, Campus, or pool.")
 		identity = _create_identity(candidate)
 		_add_weak_observations(identity, candidate)
-		result["student"] = _create_case(identity, candidate, {"admission_year": admission_year}, campus, pool)
+		result["student"] = _create_case(
+			identity, candidate, {"admission_year": admission_year}, campus, pool
+		)
 	# ``reject`` intentionally creates no Student or Identity.
 	new_revision = current_revision + 1
 	result["revision"] = new_revision
-	_set_supported(doc, {"review_status": decision if decision != "reject" else "reject", "revision": new_revision, "decision_actor": principal, "decision_reason": reason, "evidence_reference": "; ".join(evidence), "decision_at": now_datetime(), "correlation_token": correlation_id or uuid.uuid4().hex, "resulting_student": result.get("student")})
+	_set_supported(
+		doc,
+		{
+			"review_status": decision if decision != "reject" else "reject",
+			"revision": new_revision,
+			"decision_actor": principal,
+			"decision_reason": reason,
+			"evidence_reference": "; ".join(evidence),
+			"decision_at": now_datetime(),
+			"correlation_token": correlation_id or uuid.uuid4().hex,
+			"resulting_student": result.get("student"),
+		},
+	)
 	doc.save(ignore_permissions=True)
-	return _persist_receipt(keys, request_fp=fingerprint, result=result, principal=principal, source_namespace="review", _source_record_id=str(review_id), idempotency_key=str(idempotency_key), correlation_id=correlation_id or uuid.uuid4().hex, kind="review")
+	return _persist_receipt(
+		keys,
+		request_fp=fingerprint,
+		result=result,
+		principal=principal,
+		source_namespace="review",
+		_source_record_id=str(review_id),
+		idempotency_key=str(idempotency_key),
+		correlation_id=correlation_id or uuid.uuid4().hex,
+		kind="review",
+	)

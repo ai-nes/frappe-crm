@@ -168,7 +168,11 @@ function handleReviewRequired(review) {
 
 function handleIntakeCompleted(result) {
   students.value?.reload?.()
-  const student = result?.student || result?.student_name || result?.case_name
+  const student =
+    result?.student ||
+    result?.student_id ||
+    result?.student_name ||
+    result?.case_name
   if (student) {
     showIntakeModal.value = false
     router.push({ name: 'CRM Student', params: { crmStudentId: student } })

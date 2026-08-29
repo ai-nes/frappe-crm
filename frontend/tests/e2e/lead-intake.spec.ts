@@ -34,14 +34,6 @@ test.describe('canonical Student intake', () => {
     await dialog
       .locator('[data-fieldname="email"] input')
       .fill(`${suffix.toLowerCase()}@example.test`)
-    await dialog
-      .getByRole('button', { name: /Identity and assignment/i })
-      .click()
-    await fillLink(
-      page,
-      'owning_team',
-      fixtureValue('PLAYWRIGHT_INITIAL_POOL_ID'),
-    )
     await fillLink(
       page,
       'branch',

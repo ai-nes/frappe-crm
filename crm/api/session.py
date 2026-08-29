@@ -12,6 +12,7 @@ from crm.fcrm.role_policy import (
 	is_crm_user,
 	resolve_compatibility_overlay,
 )
+from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role_workspace_read_enabled
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
 )

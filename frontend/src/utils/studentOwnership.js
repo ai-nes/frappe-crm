@@ -20,6 +20,29 @@ export function intakeResultKind(result) {
   return terminalIntakeStatuses.has(outcome) ? outcome : null
 }
 
+export function intakeAssignmentExpectation(profile) {
+  if (profile === 'sales') {
+    return {
+      kind: 'self',
+      message: 'This student will be assigned to you automatically.',
+    }
+  }
+  if (profile === 'lead_sales') {
+    return {
+      kind: 'team',
+      message: 'This student will be placed in your team pool automatically.',
+    }
+  }
+  return {
+    kind: 'automatic',
+    message: 'Assignment will be determined automatically from your access.',
+  }
+}
+
+export function isServerManagedIntakeProfile(profile) {
+  return profile === 'sales' || profile === 'lead_sales'
+}
+
 export function reviewCandidateOptions(review) {
   const candidates = Array.isArray(review?.candidates) ? review.candidates : []
   const proposedIdentity =
@@ -87,7 +110,6 @@ export function buildIntakePayload(form, identifiers) {
       student_name: form.student_name?.trim(),
       admission_year: form.admission_year,
       branch: form.branch,
-      owning_team: form.owning_team || undefined,
       phone: form.phone?.trim() || undefined,
       email: form.email?.trim() || undefined,
       id_number:

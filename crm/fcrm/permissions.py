@@ -285,7 +285,7 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 	)
 
 
-def has_permission(doc, user=None, permission_type=None):
+def has_permission(doc, user=None, permission_type=None, ptype=None):
 	"""Single-document counterpart of get_permission_query_conditions.
 
 	permission_query_conditions only filters list/report-view SQL — Frappe never
@@ -295,6 +295,14 @@ def has_permission(doc, user=None, permission_type=None):
 	"""
 	if not user:
 		user = frappe.session.user
+	# Frappe passes the requested permission as ``ptype`` to hook methods.  A
+	# new document has no database name yet, so applying a name-keyed row-scope
+	# query would both be meaningless and deny otherwise valid create grants.
+	# The regular DocType permission check remains responsible for deciding who
+	# may create; this hook scopes existing rows only.
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)
 	if condition is None:

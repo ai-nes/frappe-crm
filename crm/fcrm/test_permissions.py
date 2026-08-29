@@ -101,6 +101,16 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			shared_has_permission(frappe._dict(doctype="CRM Contact", name="not-queried"), user=user)
 		)
 
+	def test_new_document_create_uses_ptype_without_running_name_scope_sql(self):
+		# Frappe invokes hooks with ``ptype``. An unsaved document has no name,
+		# therefore the row predicate must not be queried with ``name = None``.
+		with patch("crm.fcrm.permissions.frappe.db.sql") as sql:
+			allowed = shared_has_permission(
+				frappe._dict(doctype="CRM Student", name=None), user="sale@example.com", ptype="create"
+			)
+		self.assertTrue(allowed)
+		sql.assert_not_called()
+
 	# ------------------------------------------------------------------- role precedence
 
 	def test_team_leader_condition_scopes_to_team_and_unassigned_pool(self):
