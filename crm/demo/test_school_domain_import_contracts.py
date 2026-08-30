@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import sys
 import types
+import json
 from importlib import import_module
 from pathlib import Path
 
@@ -28,6 +29,7 @@ def _ensure_frappe_importable():
 _ensure_frappe_importable()
 
 importer = import_module("crm.demo.school_domain_import")
+extractor = import_module("crm.demo.extract_school_domain_json")
 
 
 SEED_HEADERS = [
@@ -172,6 +174,78 @@ def test_ts_rows_missing_ne_or_adjustment_are_in_review_report(tmp_path):
 	assert {row["source_row"] for row in report["review_rows"]} == {3, 4}
 
 
+def test_compact_json_inputs_round_trip_from_excel(tmp_path):
+	canonical_xlsx = _write_workbook(
+		tmp_path / "school-seed.xlsx",
+		"Canonical schools",
+		SEED_HEADERS,
+		[["01", "TP.HCM", "011", "Ward", "S001", "THPT Nguyễn Du", "1 Main Street"]],
+	)
+	canonical_json = tmp_path / "school-seed.json"
+	extractor.extract_school_seed(canonical_xlsx, canonical_json)
+
+	ts_xlsx = _write_workbook(
+		tmp_path / "ts.xlsx",
+		importer.PRIMARY_TS_SHEET,
+		["Tên tỉnh", "Tên trường", "NE 2025", "Target 2026"],
+		[["Bình Dương", "THPT Nguyễn Du", 12, 20]],
+	)
+	ts_json = tmp_path / "ts.json"
+	extractor.extract_ts_workbook(ts_xlsx, ts_json)
+
+	canonical_payload = json.loads(canonical_json.read_text(encoding="utf-8"))
+	ts_payload = json.loads(ts_json.read_text(encoding="utf-8"))
+	assert isinstance(canonical_payload["rows"][0], list)
+	assert isinstance(ts_payload["rows"][0], list)
+	assert importer.reconcile_school_seed(canonical_json)["total_rows"] == 1
+	report = importer.reconcile_ts_workbook(ts_json, canonical_path=canonical_json)
+	assert report["source_file"] == "ts.xlsx"
+	assert report["total_rows"] == 1
+	assert report["status_counts"] == {"matched": 1}
+
+
+def test_ne_2026_supplement_resolves_explicit_canonical_targets(tmp_path, monkeypatch):
+	supplement_path = tmp_path / "ne-2026.json"
+	supplement_path.write_text(
+		json.dumps({
+			"source_file": "TS-HCM-2026.xlsx",
+			"source_sheet": "NE 2026 bổ sung",
+			"rows": [{
+				"source_row": 2,
+				"province_name": "TP.HCM",
+				"school_name": "THPT Nguyễn Du",
+				"ne_2026": 7,
+				"canonical_source_identity": "01:011:S001",
+			}],
+		}, ensure_ascii=False),
+		encoding="utf-8",
+	)
+	monkeypatch.setattr(importer, "NE_2026_SUPPLEMENT_PATH", supplement_path)
+
+	_supplement, rows = importer._resolve_ne_2026_supplement({
+		"01:011:S001": {"source_identity": "01:011:S001"},
+	}, "TS-HCM-2026.json")
+
+	assert rows[0]["match_status"] == "matched"
+	assert rows[0]["ne_2026"] == 7
+
+
+def test_ts_pic_falls_back_to_promoter_owner(monkeypatch):
+	class _PromoterDB:
+		def get_value(self, doctype, filters, _field):
+			assert doctype == "CRM Staff"
+			assert filters == {"user": importer.TS_PROMOTER_OWNER_USER}
+			return "PROMOTER-STAFF"
+
+	class _PromoterFrappe:
+		db = _PromoterDB()
+
+	monkeypatch.setattr(importer, "frappe", _PromoterFrappe())
+	monkeypatch.setattr(importer, "_resolve_staff", lambda _alias: (None, None))
+
+	assert importer._resolve_ts_promoter_owner("PIC alias") == ("PROMOTER-STAFF", None)
+
+
 def test_snapshot_import_maps_history_to_matching_admission_years(monkeypatch, tmp_path):
 	captured = []
 	monkeypatch.setattr(importer, "_ensure_admission_year", lambda year: str(year))
@@ -217,6 +291,47 @@ def test_conflicting_source_code_is_not_silently_matched_by_name():
 	assert _match is None
 	assert status == "unmatched"
 	assert reasons == ["school_code_not_found"]
+
+
+def test_explicit_manual_mapping_wins_over_duplicate_name_candidates(monkeypatch):
+	seed_rows = [
+		_seed_row("Tp. Hồ Chí Minh", "THPT Nguyễn Du", "S001", ward_code="011"),
+		_seed_row("Tp. Hồ Chí Minh", "THPT Nguyễn Du", "S002", ward_code="012"),
+	]
+	by_name, by_global_name, by_identity = importer._school_index(seed_rows)
+	monkeypatch.setitem(importer.MANUAL_SCHOOL_MAPPINGS, "Source:7", "01:012:S002")
+
+	matched = importer._match_school(
+		{"province_name": "TP.HCM", "school_name": "THPT Nguyễn Du", "school_code": "", "address": ""},
+		by_name,
+		by_global_name,
+		by_identity,
+		source_sheet="Source",
+		source_row=7,
+	)
+
+	assert matched[1:4] == ("matched", 1.0, ["manual_canonical_mapping"])
+	assert matched[0]["source_identity"] == "01:012:S002"
+
+
+def test_khu_vuc_accepts_legacy_school_code_when_name_and_province_are_unique():
+	seed_rows = [_seed_row("Tp. Hồ Chí Minh", "THPT Nguyễn Du", "NEW-CODE")]
+	by_name, by_global_name, by_identity = importer._school_index(seed_rows)
+
+	matched = importer._match_school(
+		{"province_name": "TP.HCM", "school_name": "THPT Nguyễn Du", "school_code": "OLD-CODE", "address": ""},
+		by_name,
+		by_global_name,
+		by_identity,
+		source_sheet="KHU VỰC 1",
+		source_row=2,
+	)
+
+	assert matched[1:4] == (
+		"matched",
+		0.88,
+		["normalized_name_and_province", "legacy_school_code_changed"],
+	)
 
 
 class _NoWriteFrappe:

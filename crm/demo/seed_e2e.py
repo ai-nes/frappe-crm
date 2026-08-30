@@ -66,6 +66,45 @@ def _fixture_lock():
         yield
 
 
+@contextmanager
+def _fixture_governance_writes():
+    """Enable the additive governance boundary only while seeding localhost.
+
+    The E2E cohort needs two isolated campuses for its row-scope negative
+    case.  Campus is governed reference data, so the fixture must exercise the
+    same additive command as the regular local seed instead of inserting rows
+    directly.  Keep this process-local and restore it afterwards: running a
+    fixture must not alter rollout flags on the site.
+    """
+    config_key = "crm_phase9_governance_write_enabled"
+    previous_config = frappe.conf.get(config_key)
+    previous_flag = frappe.flags.get("crm_governance_additive")
+    try:
+        frappe.conf[config_key] = 1
+        frappe.flags.crm_governance_additive = True
+        yield
+    finally:
+        if previous_flag is None:
+            frappe.flags.pop("crm_governance_additive", None)
+        else:
+            frappe.flags.crm_governance_additive = previous_flag
+        if previous_config is None:
+            frappe.conf.pop(config_key, None)
+        else:
+            frappe.conf[config_key] = previous_config
+
+
+def _ensure_fixture_campus(campus_name: str) -> str:
+    existing = frappe.db.exists("CRM Campus", {"campus_name": campus_name})
+    if existing:
+        return existing
+    return seed_demo._create_governed_additive_value(
+        "CRM Campus",
+        campus_name,
+        reason="Local E2E fixture campus for delegated row-scope validation.",
+    )
+
+
 def _ensure_staff(ctx):
     user = "crm.rep1@example.com"
     doc = frappe.get_doc("User", user)
@@ -330,12 +369,7 @@ def _ensure_cross_campus_negative_case(ctx):
     different rule key, so readiness still expects exactly the two positive
     capture rows. The role rehearsal proves Frappe filters this row out.
     """
-    other_campus = frappe.db.exists("CRM Campus", {"campus_name": f"{PREFIX} Other Campus"})
-    if not other_campus:
-        other_campus = frappe.get_doc({
-            "doctype": "CRM Campus", "campus_name": f"{PREFIX} Other Campus",
-            "campus_code": "E2E26-OTHER", "province": ctx["province"],
-        }).insert(ignore_permissions=True).name
+    other_campus = _ensure_fixture_campus(f"{PREFIX} Other Campus")
     other_ctx = {**ctx, "campus": other_campus}
     other_staff, other_user = _ensure_cross_campus_staff(other_ctx)
     student = _put_student(
@@ -692,11 +726,7 @@ def _execute(*, rehearse: bool = True):
     if not frappe.db.exists("CRM Score Template", {"status": "Active"}):
         seed_demo._seed_score_template()
     province = seed_demo._ensure_province()
-    campus = frappe.db.exists("CRM Campus", {"campus_name": f"{PREFIX} Campus"})
-    if not campus:
-        campus = frappe.get_doc({
-            "doctype": "CRM Campus", "campus_name": f"{PREFIX} Campus", "campus_code": "E2E26", "province": province,
-        }).insert(ignore_permissions=True).name
+    campus = _ensure_fixture_campus(f"{PREFIX} Campus")
     # Do not call seed_demo._ensure_shared_context(): its legacy status helper
     # predates CRM Term.stage_order, while this E2E cohort uses
     # the already-installed Mới/Có triển vọng/enrolled/lost stages.
@@ -738,7 +768,8 @@ def _execute(*, rehearse: bool = True):
 @frappe.whitelist()
 def execute(rehearse: bool = True):
     with _fixture_lock():
-        return _execute(rehearse=rehearse)
+        with _fixture_governance_writes():
+            return _execute(rehearse=rehearse)
 
 
 def _reset():

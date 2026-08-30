@@ -45,6 +45,8 @@ _STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"student_name", "phone", "email"
 # Timeout budget for the whole call, not per doctype — a stalled meta lookup on
 # one exposed doctype must not block the rest from being reported.
 _TIME_BUDGET_S = 8.0
+_MANIFEST_CACHE_TTL_S = 300
+_MANIFEST_CACHE_PREFIX = "crm:capability-manifest:v1:"
 
 
 def _is_capability_gateway_user(session_flags: dict) -> bool:
@@ -502,6 +504,23 @@ def _staff_scope_fingerprint(user: str | None = None) -> list[tuple[str, str, st
 	)
 
 
+def _capability_revision_snapshot() -> tuple[list[str], str]:
+	"""Return the caller's roles and the revision that invalidates its manifest."""
+	roles = sorted(frappe.get_roles(frappe.session.user))
+	stamps = frappe.get_all(
+		"Role", filters={"name": ["in", roles]}, fields=["name", "modified"], ignore_permissions=True,
+	)
+	fingerprint = sorted((row.name, str(row.modified)) for row in stamps)
+	scope_fingerprint = _staff_scope_fingerprint()
+	return roles, _sha256_hex(
+		{
+			"role_matrix_epoch": ROLE_MATRIX_EPOCH,
+			"roles": fingerprint,
+			"staff_scope": scope_fingerprint,
+		}
+	)
+
+
 def _can_manage_ai_exposure(roles) -> bool:
 	"""Return whether server-derived roles include the sole exposure authority.
 
@@ -569,21 +588,10 @@ def get_capability_revision():
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	if not _is_capability_gateway_user(get_session_role_flags()):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
-	roles = sorted(frappe.get_roles(frappe.session.user))
-	stamps = frappe.get_all(
-		"Role", filters={"name": ["in", roles]}, fields=["name", "modified"], ignore_permissions=True,
-	)
-	fingerprint = sorted((row.name, str(row.modified)) for row in stamps)
-	scope_fingerprint = _staff_scope_fingerprint()
+	roles, revision = _capability_revision_snapshot()
 	return {
 		"roles": roles,
-		"revision": _sha256_hex(
-			{
-				"role_matrix_epoch": ROLE_MATRIX_EPOCH,
-				"roles": fingerprint,
-				"staff_scope": scope_fingerprint,
-			}
-		),
+		"revision": revision,
 	}
 
 
@@ -603,9 +611,15 @@ def get_capability_manifest():
 	throttle all users together instead of each caller individually.
 	"""
 	get_session_role_flags()
-	roles = sorted(frappe.get_roles())
+	roles, capability_revision = _capability_revision_snapshot()
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	cache_key = frappe.cache.make_key(
+		f"{_MANIFEST_CACHE_PREFIX}{frappe.session.user}:{capability_revision}"
+	)
+	cached = frappe.cache().get_value(cache_key)
+	if isinstance(cached, dict):
+		return cached
 
 	start = time.monotonic()
 	# Every DocType is a candidate; `_resource_grant` below is the sole gate,
@@ -684,7 +698,7 @@ def get_capability_manifest():
 	)
 	discovery = _build_discovery_contract(discovery_views)
 
-	return {
+	result = {
 		"contract_version": CAPABILITY_CONTRACT_VERSION,
 		"roles": roles,
 		"crm_role": resolve_copilot_profile(roles),
@@ -699,6 +713,8 @@ def get_capability_manifest():
 			key: value for key, value in discovery.items() if key != "descriptions"
 		},
 	}
+	frappe.cache().set_value(cache_key, result, expires_in_sec=_MANIFEST_CACHE_TTL_S)
+	return result
 
 
 def _current_discovery_contract() -> dict:

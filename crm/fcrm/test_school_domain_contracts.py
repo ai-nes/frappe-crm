@@ -231,6 +231,10 @@ def test_annual_snapshot_lock_field_bypasses_frappe_document_lock_property(monke
 		is_locked = property(lambda self: True)
 
 		def __init__(self):
+			self.ne_actual = 0
+			self.adjusted_ne_threshold = 10
+			self.verification_status = "Review Required"
+			self.verified_by = None
 			self._values = {
 				"high_school": "HS-1",
 				"admission_year": "2026",
@@ -254,7 +258,13 @@ def test_annual_snapshot_lock_field_bypasses_frappe_document_lock_property(monke
 		def is_new(self):
 			return True
 
+		def get_doc_before_save(self):
+			return None
+
 	doc = _FrameworkLockedDoc()
+	doc._validate_grain = lambda: None
+	doc._validate_threshold = lambda: None
+	doc._validate_lock = lambda: snapshot_module.CRMHighSchoolAnnualSnapshot._validate_lock(doc)
 	snapshot_module.CRMHighSchoolAnnualSnapshot.validate(doc)
 	assert doc.get("locked_by") is None
 	assert doc.get("locked_at") is None
