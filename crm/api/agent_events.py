@@ -26,8 +26,17 @@ _EVENT_PATHS = {
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
 	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
 }
+_EXPECTED_CONTRACT_VERSIONS = {
+	"recommendation.decided.v1": 1,
+	"action.outcome_recorded.v1": 1,
+	"student.context_changed.v2": 2,
+	"student.score_input_changed.v1": 1,
+	"scoring.policy_changed.v1": 1,
+}
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120
+_AGENT_MANIFEST_CACHE_KEY = "crm_agents:contract_manifest:v1"
+_AGENT_MANIFEST_CACHE_TTL_SECONDS = 60
 SLA_NOTIFICATION_EVENT = "student.sla.notification.v1"
 SLA_DIGEST_EVENT = "student.sla.digest.v1"
 _SLA_OUTBOX_FIELDS = {"source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "retention_until", "legal_hold"}
@@ -371,6 +380,84 @@ def _event_body(event) -> bytes:
 	).encode()
 
 
+def _check_agent_contract_version(event) -> bool:
+	"""Validate the producer/consumer version before webhook delivery.
+
+	When the deployment has configured the crm-agents API key, prefer the
+	producer's cached manifest.  The local map remains a safe fallback while
+	the BFF is unavailable or during older deployments that predate the
+	manifest endpoint.
+	"""
+	expected = _EXPECTED_CONTRACT_VERSIONS.get(event.event_type)
+	manifest = _fetch_agent_contract_manifest()
+	if manifest is not None:
+		advertised = {
+			item.get("event_type"): item.get("contract_version")
+			for item in manifest.get("events", [])
+			if isinstance(item, dict)
+		}
+		if event.event_type not in advertised:
+			frappe.logger("crm.api.agent_events").warning(
+				"AGENT_CONTRACT_VERSION_MISMATCH event=%s event_type=%s expected=unsupported actual=%s",
+				event.name,
+				event.event_type,
+				event.contract_version,
+			)
+			return False
+		expected = advertised[event.event_type]
+	if expected is None:
+		return True
+	try:
+		actual = int(event.contract_version)
+	except (TypeError, ValueError):
+		actual = None
+	if actual == expected:
+		return True
+	frappe.logger("crm.api.agent_events").warning(
+		"AGENT_CONTRACT_VERSION_MISMATCH event=%s event_type=%s expected=%s actual=%s",
+		event.name,
+		event.event_type,
+		expected,
+		actual,
+	)
+	return False
+
+
+def _fetch_agent_contract_manifest() -> dict | None:
+	"""Fetch and cache the producer contract without affecting delivery flow."""
+	base_url = frappe.conf.get("crm_agents_url")
+	api_key = frappe.conf.get("crm_agents_api_key")
+	if not isinstance(base_url, str) or not base_url.strip() or not isinstance(api_key, str) or not api_key:
+		return None
+	cache = frappe.cache()
+	cached = cache.get_value(_AGENT_MANIFEST_CACHE_KEY)
+	if isinstance(cached, dict):
+		return cached
+	try:
+		response = requests.get(
+			f"{base_url.rstrip('/')}/api/v1/contract-manifest",
+			headers={"X-API-Key": api_key, "Accept": "application/json"},
+			timeout=2,
+		)
+		response.raise_for_status()
+		manifest = response.json()
+		if not isinstance(manifest, dict) or not isinstance(manifest.get("events"), list):
+			raise ValueError("crm-agents contract manifest has an invalid shape")
+		cache.set_value(
+			_AGENT_MANIFEST_CACHE_KEY,
+			manifest,
+			expires_in_sec=_AGENT_MANIFEST_CACHE_TTL_SECONDS,
+		)
+		return manifest
+	except Exception as exc:
+		frappe.logger("crm.api.agent_events").warning(
+			"AGENT_CONTRACT_MANIFEST_UNAVAILABLE url=%s error=%s",
+			base_url,
+			type(exc).__name__,
+		)
+		return None
+
+
 def _complete_delivery(event, lease_id: str, *, status: str = "delivered", error: str | None = None) -> None:
 	fields = _event_fields()
 	where = "name = %(name)s" + (" and lease_id = %(lease_id)s" if "lease_id" in fields else "")
@@ -379,6 +466,91 @@ def _complete_delivery(event, lease_id: str, *, status: str = "delivered", error
 		"update `tabCRM Agent Event` set status = %(status)s, delivered_at = %(at)s, last_error = %(error)s where " + where,
 		{**values, "status": status},
 	)
+
+
+def _quiesce_contract_mismatch(event) -> None:
+	"""Stop delivery until an incompatible producer/consumer is repaired."""
+	frappe.db.sql(
+		"UPDATE `tabCRM Agent Event` SET status = 'quiesced', last_error = %(error)s "
+		"WHERE name = %(name)s AND status IN ('pending', 'processing')",
+		{
+			"name": event.name,
+			"error": "CONTRACT_VERSION_MISMATCH",
+		},
+	)
+
+
+def _require_contract_replay_operator() -> None:
+	"""Only an operator may release events held for contract repair."""
+	if frappe.session.user == "Administrator":
+		return
+	if "System Manager" not in set(frappe.get_roles()):
+		frappe.throw(
+			"Only a System Manager may replay quiesced agent events.",
+			frappe.PermissionError,
+		)
+
+
+@frappe.whitelist(methods=["POST"])
+def requeue_quiesced_agent_events(event_names=None) -> dict:
+	"""Revalidate and explicitly requeue contract-quiesced webhook events.
+
+	Events are never released merely because a deployment changed. The operator
+	action rechecks the live manifest first, clears only the exact mismatch
+	marker, and schedules delivery after the database update.
+	"""
+	_require_contract_replay_operator()
+	if isinstance(event_names, str):
+		try:
+			event_names = frappe.parse_json(event_names)
+		except Exception as exc:
+			frappe.throw("event_names must be a JSON array.", frappe.ValidationError)
+	if event_names is not None and (
+		not isinstance(event_names, list)
+		or len(event_names) > 100
+		or any(not isinstance(name, str) or not name.strip() for name in event_names)
+	):
+		frappe.throw("event_names must be a list of at most 100 names.", frappe.ValidationError)
+	filters = {"status": "quiesced", "last_error": "CONTRACT_VERSION_MISMATCH"}
+	if event_names:
+		filters["name"] = ["in", event_names]
+	names = frappe.get_all(
+		"CRM Agent Event",
+		filters=filters,
+		pluck="name",
+		limit_page_length=100,
+		ignore_permissions=True,
+	)
+	requeued = 0
+	blocked = 0
+	for name in names:
+		event = frappe.get_doc("CRM Agent Event", name)
+		if not _check_agent_contract_version(event):
+			blocked += 1
+			continue
+		fields = _event_fields()
+		reset_columns = [
+			"status = 'pending'",
+			"next_attempt_at = %(now)s",
+			"last_error = NULL",
+		]
+		# Keep the operator recovery endpoint usable during a rolling migration:
+		# old Agent Event tables may not have received the fencing columns yet.
+		if "lease_id" in fields:
+			reset_columns.append("lease_id = NULL")
+		if "lease_expires_at" in fields:
+			reset_columns.append("lease_expires_at = NULL")
+		frappe.db.sql(
+			"UPDATE `tabCRM Agent Event` SET "
+			+ ", ".join(reset_columns)
+			+ " WHERE name = %(name)s AND status = 'quiesced'"
+			+ " AND last_error = 'CONTRACT_VERSION_MISMATCH'",
+			{"name": name, "now": now_datetime()},
+		)
+		if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected == 1:
+			requeued += 1
+			_enqueue_delivery(frappe.get_doc("CRM Agent Event", name))
+	return {"requeued": requeued, "blocked": blocked}
 
 
 def _deliver_realtime_notification(event, lease_id: str) -> bool:
@@ -424,6 +596,15 @@ def deliver_agent_event(event_name: str) -> None:
 		if str(event.event_type).startswith(("recommendation.", "action.")):
 			frappe.throw("CRM Agent Event lease fields are required for fenced delivery.")
 	if event.status not in {"pending", "processing"}:
+		return
+	if (
+		(event.get("channel") or "agent_webhook") != "realtime"
+		and not _check_agent_contract_version(event)
+	):
+		# A log-only mismatch check allowed an event with an incompatible payload
+		# to cross the HTTP boundary. Quiesce it instead; replay is explicit after
+		# the two deployments agree on the contract.
+		_quiesce_contract_mismatch(event)
 		return
 	lease_id = str(uuid.uuid4())
 	lease_until = now_datetime() + timedelta(seconds=_LEASE_SECONDS)

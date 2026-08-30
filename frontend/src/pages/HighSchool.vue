@@ -21,7 +21,13 @@
       class="flex flex-1 overflow-hidden flex-col [&_[role='tab']]:px-0 [&_[role='tab']]:shrink-0 [&_[role='tablist']]:px-5 [&_[role='tablist'::-webkit-scrollbar]:h-0 [&_[role='tablist']]:min-h-[45px] [&_[role='tablist']]:gap-7.5 [&_[role='tabpanel']:not([hidden])]:flex [&_[role='tabpanel']:not([hidden])]:grow"
     >
       <template #tab-panel>
+        <SchoolDomainPanel
+          v-if="tabs[tabIndex]?.name === 'School Data'"
+          :key="highSchoolId"
+          :highSchoolId="highSchoolId"
+        />
         <Activities
+          v-else
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -32,7 +38,7 @@
         />
       </template>
     </Tabs>
-    <Resizer class="flex flex-col justify-between border-l" side="right">
+    <Resizer class="hidden flex-col justify-between border-l lg:flex" side="right">
       <div
         class="flex h-[45px] cursor-copy items-center border-b px-5 py-2.5 text-lg font-medium text-ink-gray-9"
         @click="copyToClipboard(highSchoolId)"
@@ -70,6 +76,8 @@ import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
+import SchoolDomainPanel from '@/components/HighSchool/SchoolDomainPanel.vue'
+import SchoolIcon from '~icons/lucide/school'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
 import CustomActions from '@/components/CustomActions.vue'
 import { copyToClipboard } from '@/utils'
@@ -128,6 +136,7 @@ usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
 const tabs = computed(() => [
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
+  { name: 'School Data', label: __('School Data'), icon: SchoolIcon },
   { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },

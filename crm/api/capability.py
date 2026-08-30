@@ -487,6 +487,21 @@ def _capability_grants(roles: list[str]) -> tuple[list[str], list[str]]:
 	return sorted(semantic_capabilities), sorted(data_scopes)
 
 
+def _staff_scope_fingerprint(user: str | None = None) -> list[tuple[str, str, str]]:
+	user = user or frappe.session.user
+	staff_scope = frappe.get_all(
+		"CRM Staff",
+		filters={"user": user},
+		fields=["name", "campus", "modified"],
+		ignore_permissions=True,
+		limit_page_length=1,
+	)
+	return sorted(
+		(row.name, str(row.campus or ""), str(row.modified))
+		for row in staff_scope
+	)
+
+
 def _can_manage_ai_exposure(roles) -> bool:
 	"""Return whether server-derived roles include the sole exposure authority.
 
@@ -559,9 +574,16 @@ def get_capability_revision():
 		"Role", filters={"name": ["in", roles]}, fields=["name", "modified"], ignore_permissions=True,
 	)
 	fingerprint = sorted((row.name, str(row.modified)) for row in stamps)
+	scope_fingerprint = _staff_scope_fingerprint()
 	return {
 		"roles": roles,
-		"revision": _sha256_hex({"role_matrix_epoch": ROLE_MATRIX_EPOCH, "roles": fingerprint}),
+		"revision": _sha256_hex(
+			{
+				"role_matrix_epoch": ROLE_MATRIX_EPOCH,
+				"roles": fingerprint,
+				"staff_scope": scope_fingerprint,
+			}
+		),
 	}
 
 
@@ -657,6 +679,7 @@ def get_capability_manifest():
 			"resources": sorted(version_entries),
 			"semantic_capabilities": semantic_capabilities,
 			"data_scopes": data_scopes,
+			"staff_scope": _staff_scope_fingerprint(),
 		}
 	)
 	discovery = _build_discovery_contract(discovery_views)

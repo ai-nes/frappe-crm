@@ -56,7 +56,9 @@ def append_score_if_current(
 	history row, no new write) and `{"stale": True}` for a tuple that is not
 	newer than what is already applied (silently accepted as settled, per the
 	plan's "stale CAS is non-retryable" rule -- this is not an error, since a
-	newer or concurrent calculation has already won).
+	newer or concurrent calculation has already won). Stale responses also
+	include the applied score-input and policy revisions so the caller can
+	observe which tuple won the CAS comparison.
 	"""
 	_require_agent_identity()
 	if isinstance(details, str):
@@ -87,7 +89,14 @@ def append_score_if_current(
 	)
 	incoming_tuple = (source_score_input_revision, policy_revision)
 	if incoming_tuple <= current_tuple:
-		return {"history": None, "applied": False, "duplicate": False, "stale": True}
+		return {
+			"history": None,
+			"applied": False,
+			"duplicate": False,
+			"stale": True,
+			"current_revision": current_tuple[0],
+			"current_policy_revision": current_tuple[1],
+		}
 
 	payload = {
 		"doctype": "CRM Score History",

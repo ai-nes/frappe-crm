@@ -147,6 +147,10 @@ permission_query_conditions = {
 	"CRM Interaction": "crm.fcrm.permissions.get_interaction_permission_query_conditions",
 	"CRM Intent": "crm.fcrm.permissions.get_intent_permission_query_conditions",
 	"CRM Score History": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Person": "crm.fcrm.doctype.crm_person.crm_person.get_permission_query_conditions",
+	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.get_permission_query_conditions",
+	"CRM AI Lead Insight": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
+	"CRM Agent Event": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 }
 
 has_permission = {
@@ -169,6 +173,10 @@ has_permission = {
 	"CRM Interaction": "crm.fcrm.permissions.has_interaction_permission",
 	"CRM Intent": "crm.fcrm.permissions.has_intent_permission",
 	"CRM Score History": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Person": "crm.fcrm.doctype.crm_person.crm_person.has_permission",
+	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.has_permission",
+	"CRM AI Lead Insight": "crm.fcrm.permissions.has_student_projection_permission",
+	"CRM Agent Event": "crm.fcrm.permissions.has_student_projection_permission",
 }
 
 # DocType Class

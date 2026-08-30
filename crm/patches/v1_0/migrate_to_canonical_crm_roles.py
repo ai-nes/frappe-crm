@@ -15,7 +15,7 @@ import frappe
 from crm.patches.v1_0.setup_crm_roles import create_roles
 
 
-CANONICAL_BUSINESS_ROLES = frozenset({"Sale", "Lead Sales", "Marketing", "Admissions Director"})
+CANONICAL_BUSINESS_ROLES = frozenset({"Sale", "Lead Sales", "Marketing", "Promoter", "Admissions Director"})
 CONTROL_ROLES = frozenset({"System Manager"})
 CANONICAL_ROLES = CANONICAL_BUSINESS_ROLES | CONTROL_ROLES
 

@@ -300,7 +300,14 @@
               <span class="font-medium text-ink-gray-9">{{ signal.lead }}</span>
               <span class="text-xs text-ink-gray-5">{{ signal.time }}</span>
             </div>
-            <div class="mt-1 text-xs leading-5 text-ink-gray-6">
+            <div
+              v-if="signal.ai_available === false"
+              class="mt-1 text-xs leading-5 text-ink-gray-5"
+              role="status"
+            >
+              {{ __('Phân tích AI tạm không khả dụng') }}
+            </div>
+            <div v-else class="mt-1 text-xs leading-5 text-ink-gray-6">
               {{ signal.message }}
             </div>
           </div>

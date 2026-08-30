@@ -42,7 +42,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Command Kind",
-   "options": "intake\ninteraction\nownership\nreview_decision\nrouting\nsla\ninteraction_outcome\nlifecycle_transition\nrecommendation_decision\naction_decision\naction_reassign\nstudent_task_decision\nsales_action\nsales_action_reassign\nadmissions_action\ncampaign_touchpoint\nevent_participation\nconversion",
+   "options": "intake\ninteraction\nai_insight\nai_action\nownership\nreview_decision\nrouting\nsla\ninteraction_outcome\nlifecycle_transition\nrecommendation_decision\naction_decision\naction_reassign\nstudent_task_decision\nsales_action\nsales_action_reassign\nadmissions_action\ncampaign_touchpoint\nevent_participation\nconversion",
    "read_only": 1,
    "reqd": 1
   },

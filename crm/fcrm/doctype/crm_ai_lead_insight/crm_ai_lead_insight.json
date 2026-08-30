@@ -11,8 +11,22 @@
  "field_order": [
   "naming_series",
   "contact",
+  "student",
   "insight_type",
   "generated_at",
+  "ai_generated_at",
+  "ai_source_context_revision",
+  "ai_policy_version",
+  "generation_idempotency_key",
+  "producer_identity",
+  "payload_digest",
+  "command_receipt",
+  "ai_score",
+  "ai_score_reason",
+  "ai_next_action",
+  "ai_summary",
+  "ai_detected_interests",
+  "ai_risk_flags",
   "col_break_1",
   "confidence_score",
   "model_version",
@@ -50,6 +64,14 @@
    "reqd": 1
   },
   {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
    "fieldname": "insight_type",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -65,6 +87,19 @@
    "label": "Generated At",
    "reqd": 1
   },
+  {"fieldname": "ai_generated_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "AI Generated At", "read_only": 1},
+  {"fieldname": "ai_source_context_revision", "fieldtype": "Int", "label": "AI Source Context Revision", "read_only": 1},
+  {"fieldname": "ai_policy_version", "fieldtype": "Data", "label": "AI Policy Version", "read_only": 1},
+  {"fieldname": "generation_idempotency_key", "fieldtype": "Data", "label": "Generation Idempotency Key", "read_only": 1, "unique": 1},
+  {"fieldname": "producer_identity", "fieldtype": "Data", "label": "Producer Identity", "read_only": 1},
+  {"fieldname": "payload_digest", "fieldtype": "Data", "label": "Payload Digest", "read_only": 1},
+  {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1},
+  {"fieldname": "ai_score", "fieldtype": "Float", "label": "AI Score", "permlevel": 1, "read_only": 1},
+  {"fieldname": "ai_score_reason", "fieldtype": "Long Text", "label": "AI Score Reason", "permlevel": 1, "read_only": 1},
+  {"fieldname": "ai_next_action", "fieldtype": "Small Text", "label": "AI Next Action", "permlevel": 1, "read_only": 1},
+  {"fieldname": "ai_summary", "fieldtype": "Long Text", "label": "AI Summary", "permlevel": 1, "read_only": 1},
+  {"fieldname": "ai_detected_interests", "fieldtype": "JSON", "label": "AI Detected Interests", "permlevel": 1, "read_only": 1},
+  {"fieldname": "ai_risk_flags", "fieldtype": "JSON", "label": "AI Risk Flags", "permlevel": 1, "read_only": 1},
   {
    "fieldname": "col_break_1",
    "fieldtype": "Column Break"

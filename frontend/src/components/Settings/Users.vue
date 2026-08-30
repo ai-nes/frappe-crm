@@ -82,6 +82,7 @@
             { label: __('Admin'), value: 'System Manager' },
             { label: __('Sale'), value: 'Sale' },
             { label: __('Marketing'), value: 'Marketing' },
+            { label: __('Promoter'), value: 'Promoter' },
             { label: __('Lead Sales'), value: 'Lead Sales' },
             { label: __('Admissions Director'), value: 'Admissions Director' },
           ]"

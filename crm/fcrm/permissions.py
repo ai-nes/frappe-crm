@@ -262,7 +262,7 @@ def _has_intent_create_permission(doc, user=None) -> bool:
 	interaction = frappe.db.exists("CRM Interaction", interaction_name)
 	if not interaction:
 		return False
-	return has_permission(frappe.get_doc("CRM Interaction", interaction_name), user=user)
+	return has_interaction_permission(frappe.get_doc("CRM Interaction", interaction_name), user=user)
 
 
 def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
@@ -280,6 +280,71 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 	return bool(
 		frappe.db.sql(
 			f"select name from {table} where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
+
+
+def get_student_projection_permission_query_conditions(user=None, doctype=None):
+	"""Scope Student-linked projections through the canonical Student policy.
+
+	AI Insight and Agent Event are projections, not independent authorization
+	roots.  Their DocType role grants only describe who may use the projection;
+	the linked Student scope remains the source of truth. Events whose aggregate
+	is a Student-bearing operational record are joined back to that Student.
+	Global events (for example scoring-policy changes) remain unavailable through
+	the row-scoped event stream instead of becoming an unscoped side channel.
+	"""
+	if doctype not in {"CRM AI Lead Insight", "CRM Agent Event"}:
+		return "1=0"
+	user = user or frappe.session.user
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	if student_condition == "1=0":
+		return "1=0"
+	student_names = (
+		"select `tabCRM Student`.name from `tabCRM Student` "
+		f"where ({student_condition})"
+	)
+	if doctype == "CRM AI Lead Insight":
+		return f"`tabCRM AI Lead Insight`.student in ({student_names})"
+	return (
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student' and "
+		f"`tabCRM Agent Event`.aggregate_name in ({student_names})) OR "
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Action' and "
+		"`tabCRM Agent Event`.aggregate_name in (select action_scope.name "
+		"from `tabCRM Action` action_scope where action_scope.student in "
+		f"({student_names}))) OR "
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student Decision Event' and "
+		"`tabCRM Agent Event`.aggregate_name in (select decision_scope.name "
+		"from `tabCRM Student Decision Event` decision_scope where decision_scope.student in "
+		f"({student_names})))"
+	)
+
+
+def has_student_projection_permission(doc, user=None, permission_type=None, ptype=None):
+	"""Apply the Student row scope to single projection records as well."""
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		student_name = doc.get("student") if doc.doctype == "CRM AI Lead Insight" else None
+		if doc.doctype == "CRM Agent Event" and doc.get("aggregate_doctype") == "CRM Student":
+			student_name = doc.get("aggregate_name")
+		if not student_name:
+			return False
+		if not frappe.db.exists("CRM Student", student_name):
+			return False
+		return has_permission(frappe.get_doc("CRM Student", student_name), user=user)
+	condition = get_student_projection_permission_query_conditions(
+		user=user, doctype=doc.doctype
+	)
+	if condition is None:
+		return True
+	if condition == "1=0":
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tab{doc.doctype}` where name = %s and ({condition}) limit 1",
 			(doc.name,),
 		)
 	)

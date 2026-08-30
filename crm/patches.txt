@@ -111,3 +111,5 @@ crm.patches.v1_0.consolidate_ai_lead_insight_items
 crm.patches.v1_0.consolidate_academic_year_lines
 crm.patches.v1_0.consolidate_master_data_change
 crm.patches.v1_0.set_default_system_and_user_language_vi
+crm.patches.v1_0.add_ai_insight_writeback_fields
+crm.patches.v1_0.prepare_school_domain
