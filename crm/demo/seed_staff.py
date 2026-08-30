@@ -1,4 +1,4 @@
-"""Idempotently create the named local admissions cohort."""
+"""Internal account bootstrap used only by ``seed_showcase``."""
 
 import frappe
 
@@ -7,21 +7,10 @@ from frappe.utils.password import update_password
 from crm.api.user import set_canonical_crm_profile
 from crm.fcrm.master_data_governance import create_additive_value
 CANONICAL_FIXTURE_USERS = {
-	"nguyen-minh-khoi.sale@example.test": {"full_name": "Nguyễn Minh Khôi", "role": "Sale"},
-	"le-thanh-huong.leadsales@example.test": {"full_name": "Lê Thanh Hương", "role": "Lead Sales"},
-	"pham-bao-chau.marketing@example.test": {"full_name": "Phạm Bảo Châu", "role": "Marketing"},
-	"tran-quoc-duy.director@example.test": {"full_name": "Trần Quốc Duy", "role": "Admissions Director"},
-}
-
-CONVENIENCE_ALIAS_USERS = {
-	"sale@gmail.com": {"full_name": "Sale Gmail", "role": "Sale"},
-	"sale@example.com": {"full_name": "Sale Example", "role": "Sale"},
-	"leadsales@gmail.com": {"full_name": "Lead Sales Gmail", "role": "Lead Sales"},
-	"leadsales@example.com": {"full_name": "Lead Sales Example", "role": "Lead Sales"},
-	"marketing@gmail.com": {"full_name": "Marketing Gmail", "role": "Marketing"},
-	"marketing@example.com": {"full_name": "Marketing Example", "role": "Marketing"},
-	"director@gmail.com": {"full_name": "Director Gmail", "role": "Admissions Director"},
-	"director@example.com": {"full_name": "Director Example", "role": "Admissions Director"},
+	"nguyen.minh.khoi@gmail.com": {"full_name": "Nguyễn Minh Khôi", "role": "Sale"},
+	"le.thanh.huong@gmail.com": {"full_name": "Lê Thanh Hương", "role": "Lead Sales"},
+	"pham.bao.chau@gmail.com": {"full_name": "Phạm Bảo Châu", "role": "Marketing"},
+	"tran.quoc.duy@gmail.com": {"full_name": "Trần Quốc Duy", "role": "Admissions Director"},
 }
 
 FIXTURE_PASSWORD_SITE_CONFIG_KEY = "crm_phase2_fixture_password"
@@ -31,7 +20,7 @@ FIXTURE_DEPARTMENT_NAME = "Tuyển sinh TP.HCM — Kỳ Thu 2026"
 FIXTURE_CAMPUS_NAME = "FPTU Ho Chi Minh Campus"
 
 
-def execute():
+def _bootstrap():
 	fixture_password = frappe.conf.get(FIXTURE_PASSWORD_SITE_CONFIG_KEY)
 	if not fixture_password:
 		frappe.throw(
@@ -60,10 +49,6 @@ def execute():
 		staff_by_user[email] = staff_name
 		if was_created:
 			created.append(staff_name)
-
-	for email, fixture in CONVENIENCE_ALIAS_USERS.items():
-		_ensure_canonical_fixture_user(email, fixture, fixture_password)
-		_ensure_fixture_staff(email, fixture, department, campus)
 
 	frappe.db.set_single_value("System Settings", "language", "vi")
 	if frappe.db.exists("User", "Administrator"):
@@ -192,10 +177,8 @@ def _ensure_fixture_student_pool(team):
 
 def _ensure_fixture_team_memberships(team):
 	for email, function, is_team_lead in (
-		("nguyen-minh-khoi.sale@example.test", "Sale", 0),
-		("le-thanh-huong.leadsales@example.test", "Lead Sales", 1),
-		("sale@gmail.com", "Sale", 0),
-		("leadsales@gmail.com", "Lead Sales", 1),
+		("nguyen.minh.khoi@gmail.com", "Sale", 0),
+		("le.thanh.huong@gmail.com", "Lead Sales", 1),
 	):
 		staff_name = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 		if not staff_name:

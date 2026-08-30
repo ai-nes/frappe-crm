@@ -6,7 +6,6 @@ from frappe import _
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.model.document import Document
 
-from crm.demo.api import create_demo_data
 from crm.install import after_install
 
 
@@ -42,10 +41,6 @@ class FCRMSettings(Document):
 	@frappe.whitelist()
 	def restore_defaults(self, force: bool = False):
 		after_install(force)
-
-	@frappe.whitelist()
-	def restore_demo_data(self):
-		create_demo_data()
 
 	def validate(self):
 		self.do_not_allow_to_delete_if_standard()

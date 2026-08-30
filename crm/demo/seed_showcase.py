@@ -392,7 +392,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"gender": "Nam",
 		"admission_method": "Direct Admission",
 		"email": _natural_email("Hồ Minh Quân"),
-		"phone": "0901900209",
+		"phone": "0901999999",
 		"target_stage": "Lead",
 		"owner": True,
 		"summary": "Đã liên lạc được, đang thu thập nhu cầu",
@@ -735,7 +735,7 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 		"outcome": ["Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable"],
 	},
 	"CRM Person": {
-		"full_name": ["Nguyễn Thị Hồng Vân", "Trần Văn Hậu", "Lê Thị Thanh Nga", "Phạm Minh Quân", "Võ Hoàng Yến"],
+		"full_name": ["Nguyễn Thị Hồng Vân", "Trần Văn Hậu", "Lê Thị Thanh Nga", "Phạm Minh Quân"],
 	},
 	"CRM School Stakeholder": {
 		"relationship_status": ["New", "Active", "Dormant", "Do Not Contact"],
@@ -1013,8 +1013,19 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 			else:
 				raise
 		student_name = result.get("student")
+		if student_name and frappe.db.get_value("CRM Student", student_name, "email") != scenario["email"]:
+			# A previous run may have persisted a source receipt after attaching
+			# this scenario to a different identity (for example after a fixture
+			# phone was corrected). Use a new source identity for the repair rather
+			# than silently accepting a Student with another person's email.
+			result = _do_intake(":repair")
+			student_name = result.get("student")
 		if result.get("outcome") not in {"created", "attached"} or not student_name:
 			raise frappe.ValidationError(f"Intake did not create Student {scenario['key']}: {result}")
+		if frappe.db.get_value("CRM Student", student_name, "email") != scenario["email"]:
+			raise frappe.ValidationError(
+				f"Intake attached Student {student_name} to the wrong email for {scenario['key']}."
+			)
 	doc = frappe.get_doc("CRM Student", student_name)
 	if not doc.lifecycle_stage and doc.enrollment_status:
 		stage = get_lifecycle_stage(doc.enrollment_status) or "Lead"
@@ -1680,7 +1691,6 @@ _STAKEHOLDER_NAMES = (
 	"Trần Văn Hậu",
 	"Lê Thị Thanh Nga",
 	"Phạm Minh Quân",
-	"Võ Hoàng Yến",
 )
 _ACTIVITY_STATUS = ("Planned", "Completed", "Cancelled")
 _ACTIVITY_OUTCOME = ("Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable")
@@ -1838,7 +1848,13 @@ def _showcase_key_account_schools(school_domain_import) -> list[str]:
 	canonical annual snapshot set. New schools are only appended to fill empty
 	slots.
 	"""
-	curated = []
+	curated = frappe.get_all(
+		"CRM School Activity",
+		filters={"owner_staff": ["is", "set"]},
+		pluck="high_school",
+		limit_page_length=0,
+	)
+	curated = sorted({school for school in curated if school})
 	out = [s for s in curated if s][:_SHOWCASE_KEY_ACCOUNT_COUNT]
 	if len(out) >= _SHOWCASE_KEY_ACCOUNT_COUNT:
 		return out
@@ -2489,8 +2505,8 @@ def _seed_intake_review_coverage(notes: list[str]) -> None:
 def _seed_all() -> dict:
 	frappe.set_user("Administrator")
 	legacy_cleanup = _cleanup_legacy_seed_data()
-	context = seed_demo.execute()
-	staff_context = seed_staff.execute()
+	context = seed_demo._bootstrap()
+	staff_context = seed_staff._bootstrap()
 	if context["campus"] != FPTU_HCMC_CAMPUS or staff_context["campus"] != FPTU_HCMC_CAMPUS:
 		raise frappe.ValidationError(
 			f"Seed context must be scoped to {FPTU_HCMC_CAMPUS}; "
@@ -2721,6 +2737,8 @@ _LEGACY_DEMO_USERS = (
 	"nguyen-minh-anh-admissions-demo@example.test",
 	"tran-quoc-minh-admissions-demo@example.test",
 	"phase6.sales@example.test",
+	"e2e.local-service@example.test",
+	"e2e.other-campus@example.test",
 	"e2e.sales@example.test",
 	"e2e.marketing@example.test",
 	"e2e.lead-sales@example.test",
@@ -2791,6 +2809,29 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 			frappe.get_all("CRM Student", filters=filters, pluck="name", limit_page_length=0)
 		)
 	legacy_student_list = sorted(legacy_students)
+	if frappe.db.table_exists("CRM Student Identity Identifier"):
+		from crm.fcrm.student_intake import _find_observation_roots
+
+		for scenario in SCENARIOS:
+			for identifier_type, value in (("phone", scenario["phone"]), ("email", scenario["email"])):
+				for root in _find_observation_roots(identifier_type, value):
+					wrong_students = frappe.get_all(
+						"CRM Student",
+						filters={"identity": root["identity"]},
+						fields=["name", "email"],
+					)
+					if any(row.email == scenario["email"] for row in wrong_students):
+						continue
+					wrong_observations = frappe.get_all(
+						"CRM Student Identity Identifier",
+						filters={
+							"parent": root["identity"],
+							"identifier_type": identifier_type,
+							"keyed_digest": root["digest"],
+						},
+						pluck="name",
+					)
+					delete_docs("CRM Student Identity Identifier", wrong_observations, raw=True)
 	legacy_interactions = (
 		frappe.get_all(
 			"CRM Interaction", filters={"student": ["in", legacy_student_list]}, pluck="name"
@@ -2859,6 +2900,22 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 			if row.target_student and not frappe.db.exists("CRM Student", row.target_student)
 		]
 		delete_docs("CRM Student Command Receipt", orphan_receipts, raw=True)
+		expected_receipt_emails = {
+			f"{NAMESPACE}:{scenario['key']}": scenario["email"] for scenario in SCENARIOS
+		}
+		stale_identity_receipts = [
+			row.name
+			for row in frappe.get_all(
+				"CRM Student Command Receipt",
+				filters={"correlation_token": ["like", f"{NAMESPACE}:%"]},
+				fields=["name", "target_student", "correlation_token"],
+			)
+			if row.correlation_token in expected_receipt_emails
+			and row.target_student
+			and frappe.db.get_value("CRM Student", row.target_student, "email")
+			!= expected_receipt_emails[row.correlation_token]
+		]
+		delete_docs("CRM Student Command Receipt", stale_identity_receipts, raw=True)
 	if frappe.db.table_exists("CRM Student Case Key"):
 		orphan_cases = [
 			row.name
@@ -2950,6 +3007,18 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 				pluck="name",
 			),
 		)
+	if frappe.db.table_exists("CRM Person"):
+		legacy_persons = frappe.get_all(
+			"CRM Person", filters={"full_name": ["like", "Thầy/Cô phụ trách%"]}, pluck="name"
+		)
+		if legacy_persons and frappe.db.table_exists("CRM School Stakeholder"):
+			delete_docs(
+				"CRM School Stakeholder",
+				frappe.get_all(
+					"CRM School Stakeholder", filters={"person": ["in", legacy_persons]}, pluck="name"
+				),
+			)
+		delete_docs("CRM Person", legacy_persons)
 	delete_docs("CRM Student", legacy_student_list)
 	delete_docs("CRM Student Case Key", legacy_case_names)
 	delete_docs("CRM Student Identity", [name for name in legacy_identity_names if name])
@@ -2971,6 +3040,8 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 		if frappe.db.table_exists("Notification"):
 			frappe.db.delete("Notification", {"from_user": email})
 			frappe.db.delete("Notification", {"to_user": email})
+		if frappe.db.table_exists("Notification Settings"):
+			frappe.db.delete("Notification Settings", {"name": email})
 		delete_docs("User", [email])
 
 	# E2E and local fixtures also created isolated topology and OAuth records.

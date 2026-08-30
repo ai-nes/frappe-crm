@@ -7,7 +7,6 @@
  "field_order": [
   "defaults_tab",
   "restore_defaults",
-  "restore_demo_data",
   "update_timestamp_on_new_communication",
   "auto_mark_replied_on_response",
   "auto_reopen_on_new_communication",
@@ -122,11 +121,6 @@
    "fieldname": "auto_reopen_on_new_communication",
    "fieldtype": "Check",
    "label": "Reopen CRM contact on new communication"
-  },
-  {
-   "fieldname": "restore_demo_data",
-   "fieldtype": "Button",
-   "label": "Restore Demo Data"
   }
  ],
  "index_web_pages_for_search": 1,
