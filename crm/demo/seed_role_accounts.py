@@ -26,6 +26,11 @@ PASSWORD = "12345@"
 def execute() -> dict:
 	from frappe.utils.password import update_password
 
+	# Shared weak password — never seed these on anything but the local dev site,
+	# even when allow_demo_seed forces the rest of the showcase onto a demo server.
+	if getattr(frappe.local, "site", None) != "crm.localhost":
+		return {"skipped": "non-local site — shared-password test logins not seeded"}
+
 	created, updated = [], []
 	for role, email, full_name in ROLE_ACCOUNTS:
 		first, _, last = full_name.partition(" ")

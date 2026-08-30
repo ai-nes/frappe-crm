@@ -118,8 +118,17 @@ def _temporary_local_flags():
 
 
 def _assert_local_site() -> None:
-	if getattr(frappe.local, "site", None) != LOCAL_SITE:
-		frappe.throw("The curated CRM demo seed only runs on crm.localhost.", frappe.PermissionError)
+	if getattr(frappe.local, "site", None) == LOCAL_SITE:
+		return
+	# A deliberate opt-in for demo/staging servers: `bench set-config allow_demo_seed 1`.
+	# Real production sites must never carry this flag.
+	if frappe.conf.get("allow_demo_seed"):
+		return
+	frappe.throw(
+		"The curated CRM demo seed only runs on crm.localhost. Set site config "
+		"allow_demo_seed=1 to force it on a demo/staging server.",
+		frappe.PermissionError,
+	)
 
 
 def _assert_integrity_keys() -> None:
