@@ -23,12 +23,20 @@
   "owning_team",
   "owning_pool",
   "latest_score",
+  "section_student_360",
+  "assessment_status",
+  "assessment_revision",
+  "interest_level",
+  "fit_level",
+  "primary_barrier",
   "student_context_revision",
   "enrollment_date",
   "section_links",
   "province",
   "ward",
   "high_school",
+  "current_grade",
+  "study_stage",
   "col_break_2",
   "branch",
   "major",
@@ -55,6 +63,7 @@
   "col_break_parent",
   "alt_phone",
   "alt_address",
+  "privacy_status",
   "section_status_history",
   "status_change_reason",
   "status_change_log",
@@ -189,6 +198,50 @@
    "read_only": 1
   },
   {
+   "collapsed": 1,
+   "collapsible": 1,
+   "fieldname": "section_student_360",
+   "fieldtype": "Section Break",
+   "label": "Student 360 Assessment"
+  },
+  {
+   "fieldname": "assessment_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assessment Status",
+   "options": "\nproposed\nconfirmed\nsuperseded\nrejected",
+   "read_only": 1,
+   "description": "Read-only projection of the canonical CRM Student Assessment record."
+  },
+  {
+   "fieldname": "assessment_revision",
+   "fieldtype": "Int",
+   "label": "Assessment Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "interest_level",
+   "fieldtype": "Select",
+   "label": "Interest",
+   "options": "\nHigh\nMedium\nLow\nUnknown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fit_level",
+   "fieldtype": "Select",
+   "label": "Fit",
+   "options": "\nHigh\nMedium\nLow\nUnknown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_barrier",
+   "fieldtype": "Select",
+   "label": "Primary Barrier",
+   "options": "\nCost\nCapability\nFamily\nInformation\nGeography\nCompetition\nNone\nUnknown",
+   "read_only": 1
+  },
+  {
    "default": "0",
    "fieldname": "student_context_revision",
    "fieldtype": "Int",
@@ -215,6 +268,24 @@
    "in_standard_filter": 1,
    "label": "High School",
    "options": "CRM High School"
+  },
+  {
+   "fieldname": "current_grade",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Current Grade",
+   "options": "10\n11\n12\npost_exam",
+   "reqd": 0,
+   "description": "Current learning stage supplied by the student or staff. Use post_exam after the final high-school exam and before enrollment; leave blank when unknown. Do not infer from cohort dates."
+  },
+  {
+   "fieldname": "study_stage",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Study Stage",
+   "options": "grade_10\ngrade_11\ngrade_12_h1\ngrade_12_h2\npost_exam",
+   "reqd": 0,
+   "description": "Academic recruitment stage supplied by the student or staff. Grade 12 is split by semester for stage-appropriate content; never infer from cohort dates."
   },
   {
    "fieldname": "province",
@@ -375,6 +446,14 @@
    "fieldname": "alt_address",
    "fieldtype": "Text",
    "label": "Parent Address"
+  },
+  {
+   "fieldname": "privacy_status",
+   "fieldtype": "Select",
+   "label": "Privacy Status",
+   "options": "unknown\ngranted\nopted_out\nwithdrawn\nexpired",
+   "read_only": 1,
+   "description": "Read-only projection of the latest consent event."
   },
   {
    "fieldname": "section_status_history",

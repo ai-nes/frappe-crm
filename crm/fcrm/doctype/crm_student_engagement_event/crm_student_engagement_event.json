@@ -1,0 +1,26 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "event_type", "occurred_at", "interaction", "marketing_engagement", "outcome", "campaign", "school_activity", "consent_state", "supersedes", "source_doctype", "source_name", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"default": "ENG-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "ENG-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Event Type", "options": "Interaction\nMarketing Engagement\nOutcome\nCampaign\nSchool Activity", "reqd": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Occurred At", "reqd": 1},
+  {"fieldname": "interaction", "fieldtype": "Link", "in_list_view": 1, "label": "Interaction", "options": "CRM Interaction"},
+  {"fieldname": "marketing_engagement", "fieldtype": "Link", "in_list_view": 1, "label": "Marketing Engagement", "options": "CRM Marketing Engagement"},
+  {"fieldname": "outcome", "fieldtype": "Link", "in_list_view": 1, "label": "Outcome", "options": "CRM Student Outcome"},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign"},
+  {"fieldname": "school_activity", "fieldtype": "Link", "in_list_view": 1, "label": "School Activity", "options": "CRM School Activity"},
+  {"fieldname": "consent_state", "fieldtype": "Select", "in_list_view": 1, "label": "Consent State", "options": "Unknown\nGranted\nDenied\nWithdrawn", "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Student Engagement Event"},
+  {"fieldname": "source_doctype", "fieldtype": "Link", "hidden": 1, "label": "Source DocType", "options": "DocType", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_name", "fieldtype": "Data", "hidden": 1, "label": "Source Name", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
+  {"default": "admissions-erd-v2", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["student", "occurred_at", "event_type"], "name": "crm_student_engagement_event_student_time_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Engagement Event", "naming_rule": "Naming Series", "naming_series_options": "ENG-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Sale"}],
+ "row_format": "Dynamic", "search_fields": "student,event_type,campaign,source_reference", "sort_field": "occurred_at", "sort_order": "DESC", "track_changes": 1
+}

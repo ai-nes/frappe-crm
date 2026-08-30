@@ -4,6 +4,8 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime, nowdate
 
+from crm.fcrm.admissions_migration import stable_fingerprint
+
 DEFAULT_NE_THRESHOLD = 10
 GOVERNANCE_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director"})
 
@@ -29,14 +31,22 @@ def compute_crm_metrics(high_school, admission_year):
 	student_names = frappe.get_all("CRM Student", filters=student_filters, pluck="name")
 	conversion_count = 0
 	if student_names and frappe.db.exists("DocType", "CRM Student Contact Conversion"):
-		conversion_count = frappe.db.count("CRM Student Contact Conversion", {"student": ["in", student_names]})
+		conversion_count = frappe.db.count(
+			"CRM Student Contact Conversion", {"student": ["in", student_names]}
+		)
 	enrolled_count = max(enrolled_contacts, enrolled_students)
+	conversion_rate = (enrolled_count / applicant_count * 100) if applicant_count else 0
+	enrollment_rate = (enrolled_count / student_count * 100) if student_count else 0
 	return {
 		"applicant_count": applicant_count,
 		"enrolled_count": enrolled_count,
 		"contact_count": contact_count,
 		"student_count": student_count,
 		"conversion_count": conversion_count,
+		"ne_registered": applicant_count,
+		"ne_achieved": enrolled_count,
+		"conversion_rate": round(conversion_rate, 2),
+		"enrollment_rate": round(enrollment_rate, 2),
 	}
 
 
@@ -68,23 +78,70 @@ def refresh_school_key_account(high_school):
 
 
 class CRMHighSchoolAnnualSnapshot(Document):
+	_IMMUTABLE_FIELDS = (
+		"high_school",
+		"admission_year",
+		"measured_on",
+		"period_type",
+		"period",
+		"revision",
+		"timezone",
+		"ne_target",
+		"ne_actual",
+		"ne_actual_semantics",
+		"source_system",
+		"source_run",
+		"recorded_at",
+		"supersedes",
+	)
+
 	def before_validate(self):
 		if self.adjusted_ne_threshold in (None, ""):
 			self.adjusted_ne_threshold = DEFAULT_NE_THRESHOLD
 		if not self.snapshot_date:
 			self.snapshot_date = nowdate()
+		if not self.get("measured_on"):
+			self.measured_on = self.snapshot_date
+		if not self.get("period_type"):
+			self.period_type = "Annual"
+		if not self.get("period"):
+			self.period = str(self.measured_on)
+		if not self.get("revision"):
+			self.revision = 1
+		if not self.get("timezone"):
+			self.timezone = "Asia/Ho_Chi_Minh"
+		if not self.get("recorded_at"):
+			self.recorded_at = now_datetime()
+		if not self.get("source_system"):
+			self.source_system = "crm"
+		if not self.get("source_run"):
+			self.source_run = f"snapshot:{self.high_school}:{self.admission_year}:{self.period}"
+		if not self.get("idempotency_fingerprint"):
+			self.idempotency_fingerprint = stable_fingerprint(
+				"snapshot",
+				self.high_school,
+				self.admission_year,
+				self.period_type,
+				self.period,
+				self.revision,
+				self.source_system,
+				self.source_run,
+			)
 		if self.high_school and self.admission_year:
 			self._set_crm_metrics()
 
 	def validate(self):
-		self._validate_grain()
-		self._validate_threshold()
-		self._validate_lock()
-		self.key_account_eligible = int(
-			self.ne_actual not in (None, "")
-			and int(self.ne_actual) >= int(self.adjusted_ne_threshold)
-		)
-		if self.verification_status == "Verified" and not self.verified_by:
+		# The guards are methods on a real Frappe Document.  Keeping the calls
+		# capability-based also lets lightweight contract fixtures exercise the
+		# lock projection without pretending to be a full Document instance.
+		for validator in ("_validate_grain", "_validate_threshold", "_validate_lock"):
+			check = getattr(self, validator, None)
+			if check:
+				check()
+		ne_actual = self.get("ne_actual")
+		threshold = self.get("adjusted_ne_threshold")
+		self.key_account_eligible = int(ne_actual not in (None, "") and int(ne_actual) >= int(threshold))
+		if self.get("verification_status") == "Verified" and not self.get("verified_by"):
 			self.verified_by = frappe.session.user
 			self.verified_at = now_datetime()
 		# Frappe Document reserves the ``is_locked`` attribute for its internal
@@ -93,23 +150,41 @@ class CRMHighSchoolAnnualSnapshot(Document):
 		if self.get("is_locked") and not self.get("locked_by"):
 			self.set("locked_by", frappe.session.user)
 			self.set("locked_at", now_datetime())
+		self._validate_immutable_fact()
 
 	def on_update(self):
 		refresh_school_key_account(self.high_school)
 
 	def on_trash(self):
-		refresh_school_key_account(self.high_school)
+		frappe.throw("Snapshots are append-only.", frappe.PermissionError)
 
 	def _set_crm_metrics(self):
 		for fieldname, value in compute_crm_metrics(self.high_school, self.admission_year).items():
 			setattr(self, fieldname, value)
 
 	def _validate_grain(self):
-		filters = {"high_school": self.high_school, "admission_year": self.admission_year}
+		filters = {
+			"high_school": self.high_school,
+			"admission_year": self.admission_year,
+			"period_type": self.period_type,
+			"period": self.period,
+			"revision": self.revision,
+		}
 		if not self.is_new():
 			filters["name"] = ["!=", self.name]
 		if frappe.db.exists("CRM High School Annual Snapshot", filters):
-			frappe.throw("Only one annual snapshot is allowed per school and admission year.", frappe.DuplicateEntryError)
+			frappe.throw("This school snapshot revision already exists.", frappe.DuplicateEntryError)
+		if int(self.revision or 0) > 1 and not self.supersedes:
+			frappe.throw("A snapshot correction must supersede an earlier revision.", frappe.ValidationError)
+
+	def _validate_immutable_fact(self):
+		if self.is_new():
+			return
+		previous = self.get_doc_before_save()
+		if previous and any(
+			self.get(fieldname) != previous.get(fieldname) for fieldname in self._IMMUTABLE_FIELDS
+		):
+			frappe.throw("Snapshots are immutable; write a new revision.", frappe.PermissionError)
 
 	def _validate_threshold(self):
 		if int(self.adjusted_ne_threshold) < 0:
@@ -127,7 +202,9 @@ class CRMHighSchoolAnnualSnapshot(Document):
 			previous.get(fieldname) != self.get(fieldname)
 			for fieldname in ("ne_target", "adjusted_ne_threshold", "is_locked")
 		):
-			frappe.throw("Only governance roles can change target, threshold or lock state.", frappe.PermissionError)
+			frappe.throw(
+				"Only governance roles can change target, threshold or lock state.", frappe.PermissionError
+			)
 
 
 def get_snapshot_metrics(high_school, admission_year):

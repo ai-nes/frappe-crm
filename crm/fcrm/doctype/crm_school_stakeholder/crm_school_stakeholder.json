@@ -17,6 +17,14 @@
   "owner_staff",
   "owning_team",
   "is_primary",
+  "relationship_score",
+  "last_touch_date",
+  "next_touch_date",
+  "contact_preference",
+  "source_note",
+  "effective_from",
+  "effective_until",
+  "source_reference",
   "notes"
  ],
  "fields": [
@@ -29,6 +37,14 @@
   {"fieldname": "owner_staff", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Owner", "options": "CRM Staff"},
   {"fieldname": "owning_team", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Owning Team", "options": "CRM Team"},
   {"fieldname": "is_primary", "fieldtype": "Check", "in_list_view": 1, "label": "Primary Stakeholder"},
+  {"fieldname": "relationship_score", "fieldtype": "Percent", "in_list_view": 1, "label": "Relationship Score"},
+  {"fieldname": "last_touch_date", "fieldtype": "Date", "in_list_view": 1, "label": "Last Touch Date"},
+  {"fieldname": "next_touch_date", "fieldtype": "Date", "in_list_view": 1, "label": "Next Touch Date"},
+  {"fieldname": "contact_preference", "fieldtype": "Select", "label": "Contact Preference", "options": "Email\nPhone\nZalo\nNo Preference\nDo Not Contact"},
+  {"fieldname": "source_note", "fieldtype": "Small Text", "label": "Source Note"},
+  {"fieldname": "effective_from", "fieldtype": "Date", "label": "Effective From"},
+  {"fieldname": "effective_until", "fieldtype": "Date", "label": "Effective Until"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "notes", "fieldtype": "Text", "label": "Notes"}
  ],
  "indexes": [

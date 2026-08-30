@@ -17,6 +17,10 @@ class CRMSchoolStakeholder(Document):
 
 	def validate(self):
 		validate_portfolio_update(self)
+		if self.effective_from and self.effective_until and self.effective_from > self.effective_until:
+			frappe.throw("Effective Until must not be before Effective From.", frappe.ValidationError)
+		if not 0 <= float(self.relationship_score or 0) <= 100:
+			frappe.throw("Relationship Score must be between 0 and 100.", frappe.ValidationError)
 		if self.stakeholder_role:
 			category = frappe.db.get_value("CRM Term", self.stakeholder_role, "category")
 			if category and category != "stakeholder_role":
@@ -29,6 +33,14 @@ class CRMSchoolStakeholder(Document):
 				"This person is already linked to the selected high school.",
 				frappe.DuplicateEntryError,
 			)
+		if self.is_primary:
+			primary_filters = {"high_school": self.high_school, "is_primary": 1}
+			if not self.is_new():
+				primary_filters["name"] = ["!=", self.name]
+			if frappe.db.exists("CRM School Stakeholder", primary_filters):
+				frappe.throw(
+					"A high school may have only one primary stakeholder.", frappe.DuplicateEntryError
+				)
 
 	@staticmethod
 	def get_permission_query_conditions(user=None, doctype=None):
@@ -43,15 +55,41 @@ class CRMSchoolStakeholder(Document):
 	@staticmethod
 	def default_list_data():
 		columns = [
-			{"label": "High School", "type": "Link", "key": "high_school", "options": "CRM High School", "width": "16rem"},
+			{
+				"label": "High School",
+				"type": "Link",
+				"key": "high_school",
+				"options": "CRM High School",
+				"width": "16rem",
+			},
 			{"label": "Person", "type": "Link", "key": "person", "options": "CRM Person", "width": "14rem"},
-			{"label": "Role", "type": "Link", "key": "stakeholder_role", "options": "CRM Term", "width": "12rem"},
+			{
+				"label": "Role",
+				"type": "Link",
+				"key": "stakeholder_role",
+				"options": "CRM Term",
+				"width": "12rem",
+			},
 			{"label": "Relationship", "type": "Select", "key": "relationship_status", "width": "10rem"},
-			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
+			{
+				"label": "Owner",
+				"type": "Link",
+				"key": "owner_staff",
+				"options": "CRM Staff",
+				"width": "12rem",
+			},
 		]
 		return {
 			"columns": columns,
-			"rows": ["name", "high_school", "person", "stakeholder_role", "relationship_status", "owner_staff", "modified"],
+			"rows": [
+				"name",
+				"high_school",
+				"person",
+				"stakeholder_role",
+				"relationship_status",
+				"owner_staff",
+				"modified",
+			],
 		}
 
 

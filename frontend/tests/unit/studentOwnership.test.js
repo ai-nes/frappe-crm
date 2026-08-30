@@ -51,6 +51,7 @@ describe('student ownership command UI helpers', () => {
           ward: 'W-1',
           major: 'Major-1',
           aspiration: 'Aspiration-1',
+          current_grade: '11',
           phone: '0900000000',
           id_number: '012345678901',
           owning_team: 'UNTRUSTED-POOL',
@@ -66,6 +67,7 @@ describe('student ownership command UI helpers', () => {
       ward: 'W-1',
       major: 'Major-1',
       aspiration: 'Aspiration-1',
+      current_grade: '11',
       id_number: '012345678901',
     })
     expect(

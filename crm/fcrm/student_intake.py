@@ -169,6 +169,7 @@ PROVENANCE_ALLOWED_KEYS = frozenset(
 		"province_code",
 		"high_school_code",
 		"major_code",
+		"study_stage",
 		"consent",
 		"raw_payload",
 	}
@@ -1023,6 +1024,8 @@ def _create_case(
 		"enrollment_status": payload.get("enrollment_status") or "Mới",
 		"source": payload.get("source"),
 		"advertising_channel": payload.get("advertising_channel"),
+		"current_grade": payload.get("current_grade"),
+		"study_stage": payload.get("study_stage"),
 		"province": payload.get("province"),
 		"high_school": payload.get("high_school"),
 		"major": payload.get("major"),
@@ -1040,6 +1043,8 @@ def _create_case(
 				"ward",
 				"major",
 				"aspiration",
+				"current_grade",
+				"study_stage",
 				"alt_name",
 				"alt_phone",
 			}
@@ -1081,24 +1086,17 @@ def _create_case(
 			route_pool_owned_student(student.name, trigger="pool_entry")
 		elif _doctype_exists("CRM Student Routing Request"):
 			enqueue_student_routing(student.name, trigger="pool_entry")
-	case_values = {
-		"doctype": CASE_KEY_DOCTYPE,
-		"case_key": f"CK-{identity}-{admission_year}"[:140],
-		"identity": identity,
-		"identity_root": identity,
-		"admission_year": admission_year,
-		"admission_cycle": admission_year,
-		"canonical_student": student.name,
-		"source_student": student.name,
-		"integrity_state": "resolved",
-		"status": "resolved",
-	}
 	if not _doctype_exists(CASE_KEY_DOCTYPE):
 		_fail("CONFIGURATION_ERROR", "Student Case Key data contract is not installed.")
-	case = frappe.get_doc({"doctype": CASE_KEY_DOCTYPE, **_supported_values(CASE_KEY_DOCTYPE, case_values)})
-	case.insert(ignore_permissions=True)
-	if _has_field("CRM Student", "case_key"):
-		student.db_set("case_key", case.name, update_modified=False)
+	from crm.fcrm.admission_case_key import ensure_case_key
+
+	ensure_case_key(
+		identity=identity,
+		admission_year=admission_year,
+		canonical_student=student.name,
+		source_reference=correlation_id,
+		correlation_token=correlation_id,
+	)
 	return student.name
 
 
@@ -1276,13 +1274,15 @@ def _persist_consent_grant(
 		"command_receipt": receipt,
 	}
 	doc = frappe.get_doc({key: value for key, value in values.items() if value is not None})
+	consent_event_name = None
 	try:
 		doc.insert(ignore_permissions=True)
 	except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
 		if receipt and _has_field("CRM Contact Consent Event", "command_receipt"):
-			return frappe.db.get_value("CRM Contact Consent Event", {"command_receipt": receipt}, "name")
-		raise
-	return doc.name
+			consent_event_name = frappe.db.get_value("CRM Contact Consent Event", {"command_receipt": receipt}, "name")
+		else:
+			raise
+	return consent_event_name or doc.name
 
 
 def _persist_intake_result(

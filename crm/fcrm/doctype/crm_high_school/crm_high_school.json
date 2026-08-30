@@ -13,9 +13,13 @@
   "school_code",
   "school_type",
   "school_area",
+  "school_tier",
+  "boarding_type",
   "column_break_1",
   "province",
   "ward",
+  "latitude",
+  "longitude",
   "section_break_1",
   "section_key_account",
   "is_key_account",
@@ -63,6 +67,22 @@
    "options": "CRM Term"
   },
   {
+   "fieldname": "school_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "School Tier",
+   "options": "\nA\nB\nC\nUnclassified"
+  },
+  {
+   "fieldname": "boarding_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Boarding Type",
+   "options": "\nDay School\nBoarding School\nMixed\nUnknown"
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -83,6 +103,16 @@
    "label": "Ward",
    "options": "CRM Ward",
    "reqd": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
   },
   {
    "fieldname": "section_break_1",

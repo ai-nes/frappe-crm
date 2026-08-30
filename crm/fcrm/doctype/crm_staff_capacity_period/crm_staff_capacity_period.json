@@ -1,0 +1,42 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "staff", "team", "territory", "campus", "period_type", "period_start", "period_end", "capacity_units", "max_active_students", "approved", "effective_from", "effective_until", "source_reference"],
+ "fields": [
+  {"default": "CAP-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "CAP-.YYYY.-"},
+  {"fieldname": "staff", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Staff", "options": "CRM Staff", "reqd": 1},
+  {"fieldname": "team", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Team", "options": "CRM Team"},
+  {"fieldname": "territory", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Territory", "options": "CRM Territory"},
+  {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus"},
+  {"default": "Month", "fieldname": "period_type", "fieldtype": "Select", "in_list_view": 1, "label": "Period Type", "options": "Month\nQuarter\nTerm\nYear", "reqd": 1},
+  {"fieldname": "period_start", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period Start", "reqd": 1},
+  {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period End", "reqd": 1},
+  {"fieldname": "capacity_units", "fieldtype": "Int", "in_list_view": 1, "label": "Capacity Units", "reqd": 1},
+  {"fieldname": "max_active_students", "fieldtype": "Int", "in_list_view": 1, "label": "Max Active Students"},
+  {"default": "0", "fieldname": "approved", "fieldtype": "Check", "in_list_view": 1, "label": "Approved"},
+  {"fieldname": "effective_from", "fieldtype": "Date", "label": "Effective From"},
+  {"fieldname": "effective_until", "fieldtype": "Date", "label": "Effective Until"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["staff", "period_start", "period_end"], "name": "crm_staff_capacity_period_idx", "unique": 1}],
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Staff Capacity Period",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "CAP-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"export": 1, "read": 1, "role": "Lead Sales"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "staff,team,period_start,period_end",
+ "sort_field": "period_start",
+ "sort_order": "DESC"
+}

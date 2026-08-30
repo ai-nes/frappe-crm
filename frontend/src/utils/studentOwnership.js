@@ -99,6 +99,8 @@ export function buildIntakePayload(form, identifiers) {
     'ward',
     'major',
     'aspiration',
+    'current_grade',
+    'study_stage',
   ]
   const optionalPayload = Object.fromEntries(
     optionalFields

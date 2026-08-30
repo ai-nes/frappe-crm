@@ -13,6 +13,12 @@
   "campus_code",
   "is_default",
   "province",
+  "city",
+  "latitude",
+  "longitude",
+  "current_enrolled",
+  "target_enrolled",
+  "highlight_major",
   "address",
   "phone",
   "import_source_id",
@@ -52,6 +58,42 @@
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province"
+  },
+  {
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "City"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
+  },
+  {
+   "fieldname": "current_enrolled",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Current Enrolled"
+  },
+  {
+   "fieldname": "target_enrolled",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Target Enrolled"
+  },
+  {
+   "fieldname": "highlight_major",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Highlight Major",
+   "options": "CRM Major"
   },
   {
    "fieldname": "address",
