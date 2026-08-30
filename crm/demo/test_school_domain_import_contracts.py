@@ -230,7 +230,7 @@ def test_ne_2026_supplement_resolves_explicit_canonical_targets(tmp_path, monkey
 	assert rows[0]["ne_2026"] == 7
 
 
-def test_ts_pic_falls_back_to_promoter_owner(monkeypatch):
+def test_unknown_ts_pic_requires_staff_match(monkeypatch):
 	class _PromoterDB:
 		def get_value(self, doctype, filters, _field):
 			assert doctype == "CRM Staff"
@@ -243,7 +243,7 @@ def test_ts_pic_falls_back_to_promoter_owner(monkeypatch):
 	monkeypatch.setattr(importer, "frappe", _PromoterFrappe())
 	monkeypatch.setattr(importer, "_resolve_staff", lambda _alias: (None, None))
 
-	assert importer._resolve_ts_promoter_owner("PIC alias") == ("PROMOTER-STAFF", None)
+	assert importer._resolve_ts_promoter_owner("PIC alias") == (None, None)
 
 
 def test_snapshot_import_maps_history_to_matching_admission_years(monkeypatch, tmp_path):
@@ -375,6 +375,27 @@ def test_ts_dry_run_never_calls_frappe_api(tmp_path, monkeypatch):
 	assert result["dry_run"] is True
 	assert result["mutations"] == {}
 	assert result["report"]["total_rows"] == 1
+
+
+def test_person_rows_expose_explicit_review_key_and_are_not_auto_applied(tmp_path):
+	canonical_path = _write_workbook(
+		tmp_path / "school-seed.xlsx",
+		"Canonical schools",
+		SEED_HEADERS,
+		[["01", "TP.HCM", "011", "Ward", "S001", "THPT Nguyễn Du", "1 Main Street"]],
+	)
+	ts_path = _write_workbook(
+		tmp_path / "ts.xlsx",
+		importer.PRIMARY_TS_SHEET,
+		["Tên tỉnh", "Tên trường", "Người liên hệ"],
+		[["Bình Dương", "THPT Nguyễn Du", "Cô Lan"]],
+	)
+
+	report = importer.reconcile_ts_workbook(ts_path, canonical_path=canonical_path)
+
+	assert report["review_rows"][0]["source_sheet"] == importer.PRIMARY_TS_SHEET
+	assert report["review_rows"][0]["source_row"] == 3
+	assert "person_manual_review_required" in report["review_rows"][0]["reasons"]
 
 
 class _SeedDB:

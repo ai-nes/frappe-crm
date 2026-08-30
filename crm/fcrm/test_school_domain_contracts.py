@@ -140,20 +140,24 @@ class _Frappe:
 		raise (exception or Exception)(message)
 
 
-def test_new_school_domain_schema_preserves_canonical_links_and_provenance():
+def test_school_domain_schema_uses_canonical_links_and_minimal_fields():
 	high_school = _meta("crm/fcrm/doctype/crm_high_school/crm_high_school.json")
 	snapshot = _meta("crm/fcrm/doctype/crm_high_school_annual_snapshot/crm_high_school_annual_snapshot.json")
 	activity = _meta("crm/fcrm/doctype/crm_school_activity/crm_school_activity.json")
+	association = _meta("crm/fcrm/doctype/crm_school_stakeholder/crm_school_stakeholder.json")
 	high_school_fields = _fields(high_school)
 	snapshot_fields = _fields(snapshot)
 	activity_fields = _fields(activity)
+	association_fields = _fields(association)
 
 	assert high_school_fields["school_type"]["options"] == "CRM Term"
+	assert high_school_fields["school_area"]["fieldtype"] == "Link"
+	assert high_school_fields["school_area"]["options"] == "CRM Term"
 	assert high_school_fields["province"]["options"] == "CRM Province"
 	assert high_school_fields["ward"]["options"] == "CRM Ward"
-	assert high_school_fields["source_identity"]["unique"] == 1
 	assert high_school_fields["is_key_account"]["read_only"] == 1
 	assert high_school_fields["is_key_account"]["fieldtype"] == "Check"
+	assert not {"province_name", "ward_name", "source_identity"} & set(high_school_fields)
 
 	assert snapshot_fields["high_school"] == {
 		"fieldname": "high_school",
@@ -171,11 +175,14 @@ def test_new_school_domain_schema_preserves_canonical_links_and_provenance():
 	assert {"applicant_count", "enrolled_count", "contact_count", "student_count", "conversion_count"} <= set(
 		snapshot_fields
 	)
+	assert not {"ne_registered", "ne_achieved", "context_raw_counts", "source_reference"} & set(snapshot_fields)
 
-	assert activity_fields["source_identity"]["unique"] == 1
+	assert activity_fields["stakeholder"]["options"] == "CRM School Stakeholder"
 	assert activity_fields["activity_type"]["options"] == "CRM Term"
 	assert activity_fields["status"]["options"].splitlines() == ["Planned", "Completed", "Cancelled"]
-	assert {"contact_count", "application_count", "ne_output"} <= set(activity_fields)
+	assert {"contact_count", "application_count"} <= set(activity_fields)
+	assert not {"ne_output", "source_record_id", "source_identity", "source_doctype", "source_docname"} & set(activity_fields)
+	assert {"high_school", "person", "stakeholder_role", "position_title", "owner_staff", "owning_team"} <= set(association_fields)
 
 	unique_indexes = [index for index in snapshot["indexes"] if index.get("unique")]
 	assert any(set(index["fields"]) == {"high_school", "admission_year"} for index in unique_indexes)
@@ -290,7 +297,6 @@ def test_latest_snapshot_projects_derived_key_account_to_school(monkeypatch):
 			ne_actual=10,
 			adjusted_ne_threshold=10,
 			snapshot_date="2026-08-01",
-			source_file="TS HCM 2026.xlsx",
 		)
 	]
 	monkeypatch.setattr(high_school_module, "frappe", fake_frappe)
@@ -299,11 +305,6 @@ def test_latest_snapshot_projects_derived_key_account_to_school(monkeypatch):
 	high_school_module.CRMHighSchool._sync_derived_key_account(doc)
 
 	assert doc.is_key_account == 1
-	assert doc.key_account_status == "Eligible"
-	assert doc.key_account_since == "2026-08-01"
-	assert doc.key_account_last_review == "2026-08-01"
-	assert doc.key_account_source == "TS HCM 2026.xlsx"
-	assert doc.key_account_reason == "Derived from admission year 2026 annual snapshot."
 
 
 def test_promoter_cannot_change_key_account_governance_fields(monkeypatch):
