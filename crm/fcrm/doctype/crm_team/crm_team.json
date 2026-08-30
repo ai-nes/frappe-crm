@@ -80,6 +80,14 @@
   },
   {
    "read": 1,
+   "role": "Promoter"
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
+  },
+  {
+   "read": 1,
    "role": "Sale"
   },
   {

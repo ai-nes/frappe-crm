@@ -4,7 +4,7 @@
       <ViewBreadcrumbs
         v-model="viewControls"
         routeName="CRM Contacts"
-        :label="__('Contacts')"
+        :label="__('Lead')"
       />
     </template>
     <template #right-header>
@@ -15,7 +15,7 @@
       <Button
         v-if="canSubmitIntake"
         variant="solid"
-        :label="__('New student')"
+        :label="__('New Lead')"
         iconLeft="plus"
         @click="createContact"
       />
@@ -91,7 +91,7 @@
   />
   <EmptyState
     v-else-if="contacts.data && !rows.length"
-    name="Contacts"
+    name="Lead"
     :icon="ContactIcon"
   />
   <StudentIntakeModal

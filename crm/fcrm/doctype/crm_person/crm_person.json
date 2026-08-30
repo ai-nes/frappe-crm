@@ -12,14 +12,27 @@
   "naming_series",
   "full_name",
   "role",
+  "stakeholder_role",
   "column_break_1",
   "high_school",
   "province",
+  "is_active",
+  "relationship_status",
+  "influence",
+  "owner_staff",
+  "owning_team",
   "section_contact",
   "phone",
   "email",
   "column_break_2",
-  "notes"
+  "last_follow_up_at",
+  "next_follow_up_date",
+  "notes",
+  "section_provenance",
+  "source_file",
+  "source_sheet",
+  "source_row",
+  "source_identity"
  ],
  "fields": [
   {
@@ -47,6 +60,15 @@
    "description": "e.g. Principal / Counselor / Teacher"
   },
   {
+   "fieldname": "stakeholder_role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stakeholder Role",
+   "link_filters": "{\"category\":\"stakeholder_role\"}",
+   "options": "CRM Term"
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
@@ -64,6 +86,44 @@
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Active"
+  },
+  {
+   "fieldname": "relationship_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Relationship Status",
+   "options": "\nNew\nActive\nDormant\nDo Not Contact"
+  },
+  {
+   "fieldname": "influence",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Influence",
+   "options": "\nLow\nMedium\nHigh\nDecision Maker"
+  },
+  {
+   "fieldname": "owner_staff",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owner",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "owning_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Team",
+   "options": "CRM Team"
   },
   {
    "fieldname": "section_contact",
@@ -88,14 +148,60 @@
    "fieldtype": "Column Break"
   },
   {
+   "fieldname": "last_follow_up_at",
+   "fieldtype": "Datetime",
+   "label": "Last Follow-up"
+  },
+  {
+   "fieldname": "next_follow_up_date",
+   "fieldtype": "Date",
+   "in_standard_filter": 1,
+   "label": "Next Follow-up"
+  },
+  {
    "fieldname": "notes",
    "fieldtype": "Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "section_provenance",
+   "fieldtype": "Section Break",
+   "label": "Source Provenance",
+   "collapsible": 1
+  },
+  {
+   "fieldname": "source_file",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source File",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_sheet",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Sheet",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_row",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Source Row",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_identity",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Source Identity",
+   "read_only": 1,
+   "unique": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-03 00:00:00.000000",
+ "modified": "2026-08-30 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Person",
@@ -146,6 +252,18 @@
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Promoter"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Promoter-PR"
   },
   {
    "read": 1,

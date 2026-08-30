@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 import frappe
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
@@ -7,6 +9,25 @@ from crm.fcrm.attribution import (
 	get_last_touch_campaign_by_student,
 )
 from crm.fcrm.student_contact_conversion import students_for_contact
+from crm.api._ai_staleness import ai_field_or_unavailable, ai_staleness_threshold_seconds
+
+
+def _insight_scope_sql(scoped_staff):
+	"""Return the same campus scope used by the dashboard's Contact queries."""
+	if scoped_staff is None:
+		return "", ()
+	if not scoped_staff:
+		return "AND 1 = 0", ()
+	placeholders = ", ".join("%s" for _ in scoped_staff)
+	return (
+		"AND ("
+		"insight.student IN (SELECT student_scope.name FROM `tabCRM Student` student_scope "
+		f"WHERE student_scope.owner_staff IN ({placeholders})) OR "
+		"insight.contact IN (SELECT contact_scope.name FROM `tabCRM Contact` contact_scope "
+		f"WHERE contact_scope.assigned_to IN ({placeholders}))"
+		")",
+		tuple(scoped_staff) + tuple(scoped_staff),
+	)
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -239,28 +260,56 @@ def get_sales_dashboard(
 		total_contacts = frappe.db.count("CRM Contact", filters=base_filters) or 1
 		interest_card_items = []
 		funnel_rows = []
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		ai_threshold = ai_staleness_threshold_seconds()
+		if "ai_generated_at" not in insight_fields or ai_threshold is None:
+			interest_freshness_sql = "AND 1 = 0"
+			interest_freshness_params = ()
+		else:
+			interest_cutoff = (
+				now_datetime() - timedelta(seconds=ai_threshold)
+				if ai_threshold != float("inf")
+				else None
+			)
+			interest_freshness_sql = "AND insight.ai_generated_at IS NOT NULL"
+			interest_freshness_params = (interest_cutoff,) if interest_cutoff else ()
+			if interest_cutoff:
+				interest_freshness_sql += " AND insight.ai_generated_at >= %s"
+		insight_scope_sql, insight_scope_params = _insight_scope_sql(scoped_staff)
 
 		for idx, dim in enumerate(core_dimensions):
 			# Count distinct contacts with this interest
 			cnt = frappe.db.sql(
-				"""
-				SELECT COUNT(DISTINCT parent)
-				FROM `tabCRM AI Lead Insight Item`
-				WHERE dimension_code = %s
-				AND item_kind = 'interest'
+				f"""
+				SELECT COUNT(DISTINCT insight.contact)
+				FROM `tabCRM AI Lead Insight Item` item
+				JOIN `tabCRM AI Lead Insight` insight ON insight.name = item.parent
+				WHERE item.parenttype = 'CRM AI Lead Insight'
+				AND item.parentfield = 'items'
+				AND item.dimension_code = %s
+				AND item.item_kind = 'interest'
+				{interest_freshness_sql}
+				{insight_scope_sql}
 				""",
-				(dim["code"],),
+				(dim["code"], *interest_freshness_params, *insight_scope_params),
 			)[0][0] or 0
 
 			ratio_pct = round((cnt / total_contacts * 100.0), 1)
 			enrolled_with_dim = frappe.db.sql(
-				"""
+				f"""
 				SELECT COUNT(DISTINCT c.name)
 				FROM `tabCRM Contact` c
-				JOIN `tabCRM AI Lead Insight Item` i ON i.parent = c.name
-				WHERE i.dimension_code = %s AND i.item_kind = 'interest' AND c.enrollment_status = 'Đã nhập học'
+				JOIN `tabCRM AI Lead Insight` insight ON insight.contact = c.name
+				JOIN `tabCRM AI Lead Insight Item` i ON i.parent = insight.name
+				WHERE i.parenttype = 'CRM AI Lead Insight'
+				AND i.parentfield = 'items'
+				AND i.dimension_code = %s
+				AND i.item_kind = 'interest'
+				{interest_freshness_sql}
+				{insight_scope_sql}
+				AND c.enrollment_status = 'Đã nhập học'
 				""",
-				(dim["code"],),
+				(dim["code"], *interest_freshness_params, *insight_scope_params),
 			)[0][0] or 0
 			conv_rate = f"{round((enrolled_with_dim / cnt * 100.0), 1)}%" if cnt else "0.0%"
 
@@ -367,21 +416,51 @@ def get_sales_dashboard(
 	# -------------------------------------------------------------
 	if section == "actions":
 		# Signal feed: get latest insights from CRM AI Lead Insight
-		insights = frappe.db.get_all(
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		fields = ["name", "contact", "summary", "generated_at"]
+		if "ai_summary" in insight_fields:
+			fields.append("ai_summary")
+		if "ai_generated_at" in insight_fields:
+			fields.append("ai_generated_at")
+		# `get_list` is intentional here: it applies the Student-linked row-scope
+		# hook for CRM AI Lead Insight. `db.get_all` would bypass that boundary.
+		insights = frappe.get_list(
 			"CRM AI Lead Insight",
-			fields=["name", "contact", "summary", "generated_at"],
-			order_by="generated_at desc",
+			fields=fields,
+			order_by=("ai_generated_at desc, generated_at desc" if "ai_generated_at" in insight_fields else "generated_at desc"),
 			limit=10,
 		)
 		signals = []
 		for ins in insights:
 			c_name = frappe.db.get_value("CRM Contact", ins["contact"], "full_name") or ins["contact"]
-			time_str = frappe.utils.format_time(ins["generated_at"], "HH:mm") if ins["generated_at"] else "Vừa xong"
-			signals.append({
+			if "ai_generated_at" not in insight_fields:
+				# Pre-migration schema: preserve the legacy signal feed exactly.
+				generated_at = ins.get("generated_at")
+				message = ins.get("summary") or "Có tương tác mới được AI phân tích."
+				ai_available = None
+				reason = None
+			elif "ai_summary" not in insight_fields:
+				# A partial migration must not expose the legacy value as current AI
+				# analysis merely because the timestamp column arrived first.
+				generated_at = ins.get("generated_at")
+				message = "Phân tích AI tạm không khả dụng."
+				ai_available = False
+				reason = "schema_incomplete"
+			else:
+				ai_summary = ai_field_or_unavailable(ins, "ai_summary")
+				generated_at = ai_summary.get("generated_at")
+				message = ai_summary.get("value") if ai_summary["ai_available"] else "Phân tích AI tạm không khả dụng."
+				ai_available = ai_summary["ai_available"]
+				reason = ai_summary.get("reason")
+			time_str = frappe.utils.format_time(generated_at, "HH:mm") if generated_at else "Vừa xong"
+			signal = {
 				"time": time_str,
 				"lead": c_name,
-				"message": ins["summary"] or "Có tương tác mới được AI phân tích.",
-			})
+				"message": message,
+			}
+			if ai_available is not None:
+				signal.update({"ai_available": ai_available, "reason": reason})
+			signals.append(signal)
 
 		if not signals:
 			signals = [{"time": "--:--", "lead": "Hệ thống", "message": "Chưa có tín hiệu tương tác mới nào."}]

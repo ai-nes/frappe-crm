@@ -149,6 +149,22 @@ export function isStaleOwnershipError(error) {
 }
 
 export function safeCommandError(error, fallback) {
+  const responseData = error?.response?.data || error?.data
+  if (responseData) {
+    const detail = responseData.message || responseData._server_messages || responseData.exc
+    if (detail && detail !== 'Internal Server Error') {
+      if (typeof detail === 'string' && detail.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(detail)
+          const text = parsed.map((item) => item.message || item).filter(Boolean).join('; ')
+          if (text) return text
+        } catch {
+          // Continue with the raw detail.
+        }
+      }
+      return String(detail)
+    }
+  }
   const status = error?.httpStatusCode || error?.status
   if ([401, 403].includes(status))
     return __('You are not permitted to perform this action.')
@@ -156,5 +172,31 @@ export function safeCommandError(error, fallback) {
     return __('This record changed. Reload it and review the current state.')
   if (status === 422)
     return __('Please correct the highlighted information and try again.')
-  return error?.messages?.[0] || error?.message || fallback
+  const serverMessages = error?._server_messages || error?.server_messages
+  if (serverMessages) {
+    try {
+      const parsed = typeof serverMessages === 'string' ? JSON.parse(serverMessages) : serverMessages
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      const detail = messages
+        .map((message) => {
+          if (typeof message === 'string') {
+            try {
+              const decoded = JSON.parse(message)
+              return decoded.message || decoded.exc || message
+            } catch {
+              return message
+            }
+          }
+          return message?.message || message?.exc
+        })
+        .filter(Boolean)
+        .join('; ')
+      if (detail) return detail
+    } catch {
+      // Fall through to the other Frappe error fields.
+    }
+  }
+  if (error?.messages?.length) return error.messages.join('; ')
+  if (error?.exc && error.exc !== 'Internal Server Error') return error.exc
+  return error?.message || fallback
 }

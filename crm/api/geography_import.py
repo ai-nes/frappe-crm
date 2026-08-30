@@ -197,14 +197,20 @@ def _import_row(data):
 	)
 	_upsert_doc(
 		"CRM High School",
-		{"school_code": data["school_code"], "province_code": data["province_code"]},
+		{
+			"source_identity": f"{data['province_code']}:{data['ward_code']}:{data['school_code']}",
+		},
 		{
 			"school_name": data["school_name"],
 			"school_code": data["school_code"],
+			"province": province.name,
+			"ward": ward.name,
+			"school_area": data.get("region_code"),
 			"province_code": data["province_code"],
 			"province_name": data["province_name"],
 			"ward_code": data["ward_code"],
 			"ward_name": data["ward_name"],
+			"source_identity": f"{data['province_code']}:{data['ward_code']}:{data['school_code']}",
 			"address": data.get("address"),
 		},
 		fallback_filters={

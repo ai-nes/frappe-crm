@@ -29,7 +29,7 @@ PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CR
 
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
-	"marketing": frozenset({"Marketing"}),
+	"marketing": frozenset({"Marketing", "Promoter"}),
 	"lead_sales": frozenset({"Lead Sales"}),
 	"admissions_director": frozenset({"Admissions Director"}),
 }
@@ -50,7 +50,9 @@ PROFILE_CAPABILITIES = {
 			"student.sla.respond",
 		}
 	),
-	"marketing": frozenset({"acquisition.manage", "attribution.manage"}),
+	"marketing": frozenset({
+		"acquisition.manage", "attribution.manage", "school.activity.manage", "school.person.manage",
+	}),
 	"lead_sales": frozenset(
 		{
 			"student.execute",
@@ -102,7 +104,7 @@ PROFILE_CAPABILITIES = {
 	),
 }
 
-CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values()})
+CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
 
 _PERMISSION_FLAGS = {
 	"r": "read",

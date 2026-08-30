@@ -5,6 +5,14 @@ from frappe.model.document import Document
 class CRMTerm(Document):
 	def autoname(self):
 		candidate = (self.term_name or "").strip()
+		# Enrollment Status is surfaced directly throughout admissions Desk forms.
+		# Reserve its human-readable document names; colliding shared-catalogue
+		# terms keep a category prefix instead.
+		if self.category != "enrollment_status" and frappe.db.exists(
+			"CRM Term", {"term_name": candidate, "category": "enrollment_status"}
+		):
+			self.name = f"{self.category}:{candidate}"
+			return
 		existing_category = frappe.db.get_value("CRM Term", candidate, "category")
 		self.name = candidate if not existing_category or existing_category == self.category else f"{self.category}:{candidate}"
 

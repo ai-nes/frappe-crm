@@ -83,8 +83,12 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed cohort tuyển sinh local gồm tài khoản và Student nghiệp vụ thực tế
+    desc: Seed bộ dữ liệu demo CRM curated trên crm.localhost và in coverage manifest
     aliases: [seed-student, seed-sample-student]
+    # The school domain is imported from real workbooks. Drop `school-seed.xlsx`
+    # and `TS-HCM-2026.xlsx` into `crm/demo/data/` (gitignored -- they carry PIC
+    # PII). Without them the seed still runs; the school matrix is reported as a
+    # gap instead of being covered.
     cmds:
       - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
       # Keep the local Student Detail workflow enabled after seeding so the
@@ -100,20 +104,18 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.ensure_local_integrity_keys"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
 
-  seed-phase345:
-    desc: Seed một Student demo đầy đủ Ownership, SLA, routing và lifecycle (chỉ local demo)
+  seed-reset:
+    desc: Xoá business rows của bộ demo CRM curated (giữ lại audit/receipt/ledger)
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_student.execute"
-      - "{{.COMPOSE}} restart frappe"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
+
+  seed-verify:
+    desc: Kiểm tra mọi state value trong coverage matrix đã có bản ghi
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
   e2e-seed:
     desc: Seed the disposable Playwright Lead-processing cohort and manifest

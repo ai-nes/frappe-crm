@@ -1,0 +1,13 @@
+{
+  "version": "school-domain-2026-08-30",
+  "source": "Nghị quyết 202/2025/QH15 plus school-seed.xlsx canonical names",
+  "aliases": {
+    "Tp. Hồ Chí Minh": ["TP.HCM", "TP HCM", "HCM", "Hồ Chí Minh", "Bình Dương", "Bà Rịa-Vũng Tàu", "BR - VT", "Bà Rịa - Vũng Tàu"],
+    "TP. Đồng Nai": ["Đồng Nai", "Bình Phước"],
+    "Tây Ninh": ["Tây Ninh", "Long An"],
+    "Lâm Đồng": ["Lâm Đồng", "Bình Thuận", "Đắk Nông"],
+    "Đắk Lắk": ["Đắk Lắk", "Đăk Lắk", "Dak Lak"],
+    "Đồng Tháp": ["Đồng Tháp", "Tiền Giang"],
+    "Khánh Hoà": ["Khánh Hòa", "Khánh Hoà"]
+  }
+}

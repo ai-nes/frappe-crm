@@ -1,10 +1,107 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
 # For license information, please see license.txt
 
+import frappe
 from frappe.model.document import Document
 
 
 class CRMHighSchool(Document):
+	def before_validate(self):
+		self._sync_canonical_geography()
+
+	def validate(self):
+		self._validate_geography()
+		self._validate_source_identity()
+		self._validate_key_account_governance()
+		self._sync_derived_key_account()
+
+	def _sync_canonical_geography(self):
+		if self.province and frappe.db.exists("CRM Province", self.province):
+			province = frappe.db.get_value(
+				"CRM Province", self.province, ["province_code", "province_name"], as_dict=True
+			)
+			if self.province_name and self.province_name != province.province_name:
+				self.legacy_province_name = self.province_name
+			self.province_code = province.province_code
+			self.province_name = province.province_name
+
+		if self.ward and frappe.db.exists("CRM Ward", self.ward):
+			ward = frappe.db.get_value(
+				"CRM Ward", self.ward, ["ward_code", "ward_name", "province"], as_dict=True
+			)
+			if self.ward_name and self.ward_name != ward.ward_name:
+				self.legacy_ward_name = self.ward_name
+			self.ward_code = ward.ward_code
+			self.ward_name = ward.ward_name
+			if not self.province:
+				self.province = ward.province
+
+	def _validate_geography(self):
+		if self.province and self.ward:
+			ward_province = frappe.db.get_value("CRM Ward", self.ward, "province")
+			if ward_province and ward_province != self.province:
+				frappe.throw("The selected ward must belong to the selected province.", frappe.ValidationError)
+
+	def _validate_source_identity(self):
+		if self.province_code and self.ward_code and self.school_code:
+			identity = f"{self.province_code}:{self.ward_code}:{self.school_code}"
+			if self.source_identity and self.source_identity != identity:
+				frappe.throw("School source identity cannot change after reconciliation.", frappe.ValidationError)
+			self.source_identity = identity
+			filters = {
+				"school_code": self.school_code,
+				"province_code": self.province_code,
+				"ward_code": self.ward_code,
+			}
+			if not self.is_new():
+				filters["name"] = ["!=", self.name]
+			if frappe.db.exists("CRM High School", filters):
+				frappe.throw("A school with the same province, ward and school code already exists.", frappe.DuplicateEntryError)
+
+	def _sync_derived_key_account(self):
+		"""Project the latest annual eligibility without accepting manual input."""
+		if not frappe.db.exists("DocType", "CRM High School Annual Snapshot"):
+			return
+		rows = frappe.get_all(
+			"CRM High School Annual Snapshot",
+			filters={"high_school": self.name},
+			fields=["admission_year", "ne_actual", "adjusted_ne_threshold", "key_account_eligible", "snapshot_date", "source_file"],
+			order_by="admission_year desc, modified desc",
+			limit_page_length=1,
+		)
+		if not rows:
+			self.is_key_account = 0
+			self.key_account_status = "Review Required"
+			self.key_account_reason = "No annual snapshot is available."
+			return
+		snapshot = rows[0]
+		if snapshot.ne_actual in (None, "") or snapshot.adjusted_ne_threshold in (None, ""):
+			self.is_key_account = 0
+			self.key_account_status = "Review Required"
+			self.key_account_reason = f"Admission year {snapshot.admission_year} requires review."
+			return
+		self.is_key_account = int(bool(snapshot.key_account_eligible))
+		self.key_account_status = "Eligible" if self.is_key_account else "Not Eligible"
+		self.key_account_since = snapshot.snapshot_date if self.is_key_account else None
+		self.key_account_last_review = snapshot.snapshot_date
+		self.key_account_source = snapshot.source_file
+		self.key_account_reason = (
+			f"Derived from admission year {snapshot.admission_year} annual snapshot."
+		)
+
+	def _validate_key_account_governance(self):
+		if not self.get_doc_before_save() or frappe.session.user in {"Administrator"}:
+			return
+		roles = set(frappe.get_roles(frappe.session.user))
+		if not roles & {"Promoter", "Promoter-PR"}:
+			return
+		previous = self.get_doc_before_save()
+		if any(
+			previous.get(fieldname) != self.get(fieldname)
+			for fieldname in ("key_account_tier", "key_account_owner", "key_account_team", "is_key_account")
+		):
+			frappe.throw("Promoters cannot change key-account governance fields.", frappe.PermissionError)
+
 	@staticmethod
 	def default_list_data():
 		columns = [
@@ -22,16 +119,37 @@ class CRMHighSchool(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Area",
+				"type": "Select",
+				"key": "school_area",
+				"width": "8rem",
+			},
+			{
 				"label": "Province",
-				"type": "Data",
-				"key": "province_name",
+				"type": "Link",
+				"key": "province",
+				"options": "CRM Province",
 				"width": "12rem",
 			},
 			{
 				"label": "Ward",
-				"type": "Data",
-				"key": "ward_name",
+				"type": "Link",
+				"key": "ward",
+				"options": "CRM Ward",
 				"width": "14rem",
+			},
+			{
+				"label": "Key Account",
+				"type": "Check",
+				"key": "is_key_account",
+				"width": "8rem",
+			},
+			{
+				"label": "Owner",
+				"type": "Link",
+				"key": "key_account_owner",
+				"options": "CRM Staff",
+				"width": "12rem",
 			},
 			{
 				"label": "Address",
@@ -44,8 +162,11 @@ class CRMHighSchool(Document):
 			"name",
 			"school_name",
 			"school_type",
-			"province_name",
-			"ward_name",
+			"school_area",
+			"province",
+			"ward",
+			"is_key_account",
+			"key_account_owner",
 			"address",
 			"modified",
 		]

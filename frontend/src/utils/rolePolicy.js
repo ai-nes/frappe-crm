@@ -11,6 +11,11 @@ export const canonicalRoleOptions = [
     description: 'Can access permitted campaign and aggregate CRM information.',
   },
   {
+    value: 'Promoter',
+    label: 'Promoter',
+    description: 'Marketing / Offline Marketing role for school relationship activities.',
+  },
+  {
     value: 'Lead Sales',
     label: 'Lead Sales',
     description:

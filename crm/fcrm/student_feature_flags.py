@@ -72,3 +72,12 @@ def director_analytics_read_enabled() -> bool:
 	rollout switches; it never accepts a browser-provided override.
 	"""
 	return enabled("director_analytics_read")
+
+
+def ai_staleness_threshold_seconds() -> float | None:
+	"""Return the server-owned AI freshness window; invalid values fail safe."""
+	# Imported lazily: crm.api.__init__ pulls in crm.api.session, which imports
+	# back from this module — a module-level import here would be circular.
+	from crm.api._ai_staleness import ai_staleness_threshold_seconds as _threshold
+
+	return _threshold()

@@ -86,6 +86,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 # destroying that history. Doctypes here never get an external_id.
 NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
+MAX_EXTERNAL_INTERACTION_INTENTS = 20
 
 
 def external_id_for(reference_doctype, reference_docname, interaction_type):
@@ -170,6 +171,7 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		_interaction_fail("INVALID_INPUT", "A Student, Contact or external target is required.")
 	if student_id and contact_id and student_id == contact_id:
 		_interaction_fail("INVALID_INPUT", "Student and Contact targets are ambiguous.")
+	intents = _normalize_external_intents(payload.get("intents"))
 
 	return {
 		"source_namespace": source_namespace,
@@ -184,7 +186,83 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		"occurred_at": occurred_at,
 		"agent_id": agent_id,
 		"conversation_id": conversation_id,
+		"intents": intents,
 	}
+
+
+def _normalize_external_intents(value) -> list[dict]:
+	"""Normalize optional derived intents for one atomic interaction command."""
+	if value in (None, ""):
+		return []
+	if not isinstance(value, list) or len(value) > MAX_EXTERNAL_INTERACTION_INTENTS:
+		_interaction_fail("INVALID_INPUT", "intents must be a bounded list.")
+	result = []
+	for index, item in enumerate(value):
+		if not isinstance(item, dict):
+			_interaction_fail("INVALID_INPUT", f"intents[{index}] must be an object.")
+		intent_type = _text(item.get("intent_type_frappe_name") or item.get("intent_type"))
+		role = _text(item.get("intent_role")) or "Support"
+		if not intent_type or role not in {"Dominant", "Support"}:
+			_interaction_fail("INVALID_INPUT", f"intents[{index}] has invalid identity.")
+		try:
+			confidence = float(item.get("confidence"))
+		except (TypeError, ValueError):
+			_interaction_fail("INVALID_INPUT", f"intents[{index}].confidence must be numeric.")
+		if 0 <= confidence <= 1:
+			confidence *= 100
+		if not 0 <= confidence <= 100:
+			_interaction_fail("INVALID_INPUT", f"intents[{index}].confidence is out of range.")
+		if not frappe.db.exists(
+			"CRM Term", {"name": intent_type, "category": "intent_type", "is_active": 1}
+		):
+			_interaction_fail("INVALID_INPUT", f"intents[{index}].intent_type is not active.")
+		result.append(
+			{
+				"intent_type": intent_type,
+				"intent_role": role,
+				"confidence": round(confidence),
+				"notes": _text(item.get("reasoning") or item.get("notes")) or "",
+			}
+		)
+	return result
+
+
+def _ensure_external_interaction_intents(interaction_name: str, student: str | None, intents: list[dict]) -> list[str]:
+	"""Create only missing derived children inside the interaction command transaction."""
+	# The external interaction receipt is idempotent, but CRM Intent has no
+	# natural unique key. Serialize repairs for one parent before checking the
+	# child set; otherwise two concurrent retries can both observe a missing
+	# child and insert duplicates.
+	if not frappe.db.exists("CRM Interaction", interaction_name):
+		_interaction_fail("INVALID_TARGET", "The interaction target is no longer available.")
+	frappe.db.sql(
+		"SELECT name FROM `tabCRM Interaction` WHERE name = %s FOR UPDATE",
+		(interaction_name,),
+	)
+	names = []
+	for item in intents:
+		filters = {
+			"interaction": interaction_name,
+			"intent_type": item["intent_type"],
+			"intent_role": item["intent_role"],
+		}
+		name = frappe.db.get_value("CRM Intent", filters, "name")
+		if name:
+			names.append(name)
+			continue
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Intent",
+				"interaction": interaction_name,
+				"student": student,
+				"intent_type": item["intent_type"],
+				"intent_role": item["intent_role"],
+				"confidence": item["confidence"],
+				"notes": item["notes"],
+			}
+		).insert(ignore_permissions=True)
+		names.append(doc.name)
+	return names
 
 
 def _source_matches_student(doctype, name, student, seen=None):
@@ -444,12 +522,18 @@ def ingest_external_interaction(payload: dict) -> dict:
 				"IDEMPOTENCY_KEY_REUSED",
 				"The external interaction key was already used with another message.",
 			)
+	intent_names = _ensure_external_interaction_intents(
+		interaction_name,
+		target.get("student"),
+		payload.get("intents") or [],
+	)
 
 	result = {
 		"outcome": "created",
 		"interaction": interaction_name,
 		"student": target.get("student"),
 		"contact": target.get("contact"),
+		"intents": intent_names,
 	}
 	return _persist_receipt(
 		keys,
