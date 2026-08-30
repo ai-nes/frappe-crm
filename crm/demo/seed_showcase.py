@@ -31,7 +31,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_demo, seed_staff
+from crm.demo import seed_demo, seed_role_accounts, seed_staff
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "crm-demo-showcase"
@@ -118,8 +118,17 @@ def _temporary_local_flags():
 
 
 def _assert_local_site() -> None:
-	if getattr(frappe.local, "site", None) != LOCAL_SITE:
-		frappe.throw("The curated CRM demo seed only runs on crm.localhost.", frappe.PermissionError)
+	if getattr(frappe.local, "site", None) == LOCAL_SITE:
+		return
+	# A deliberate opt-in for demo/staging servers: `bench set-config allow_demo_seed 1`.
+	# Real production sites must never carry this flag.
+	if frappe.conf.get("allow_demo_seed"):
+		return
+	frappe.throw(
+		"The curated CRM demo seed only runs on crm.localhost. Set site config "
+		"allow_demo_seed=1 to force it on a demo/staging server.",
+		frappe.PermissionError,
+	)
 
 
 def _assert_integrity_keys() -> None:
@@ -131,6 +140,26 @@ def _assert_integrity_keys() -> None:
 			"Configure the existing Student intake and receipt HMAC keys before running task seed.",
 			frappe.ValidationError,
 		)
+
+
+def ensure_demo_config() -> dict:
+	"""Persist the rollout flags + fixture password a demo site keeps after seeding.
+
+	``execute`` sets ``LOCAL_FLAGS`` only for the duration of the run; this makes
+	the Student Detail workflow (context projection, typed admissions actions)
+	stay enabled on the seeded site. Shared by ``task seed`` and the container
+	first-run seed so the list lives in one place.
+	"""
+	_assert_local_site()
+	from frappe.installer import update_site_config
+
+	persisted = {**LOCAL_FLAGS, "crm_phase2_fixture_password": "123456"}
+	changed = []
+	for key, value in persisted.items():
+		if frappe.conf.get(key) != value:
+			update_site_config(key, value, validate=False)
+			changed.append(key)
+	return {"changed": changed}
 
 
 def ensure_local_integrity_keys() -> dict:
@@ -1053,12 +1082,13 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 		"outcome": ["Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable"],
 	},
 	"CRM Person": {
+		# One stakeholder per curated key-account slot; must stay in lockstep with
+		# _STAKEHOLDER_NAMES (the no-snapshot slot deliberately has no person).
 		"full_name": [
 			"Nguyễn Thị Hồng Vân",
 			"Trần Văn Hậu",
 			"Lê Thị Thanh Nga",
 			"Phạm Minh Quân",
-			"Võ Hoàng Yến",
 		],
 	},
 	"CRM School Stakeholder": {
@@ -2226,6 +2256,22 @@ def _ensure_promoter_fixture(staff_context: dict) -> str:
 			.insert(ignore_permissions=True)
 			.name
 		)
+	# The TS workbook import assigns every relationship to this staff via their
+	# primary team (school_domain_import._resolve_ts_promoter_owner), so the
+	# Promoter must carry a primary CRM Team Membership.
+	team = staff_context.get("team")
+	if team and not frappe.db.exists(
+		"CRM Team Membership",
+		{"parent": staff_name, "parenttype": "CRM Staff", "team": team},
+	):
+		staff_doc = frappe.get_doc("CRM Staff", staff_name)
+		has_primary = any(row.is_primary for row in staff_doc.team_memberships)
+		staff_doc.append(
+			"team_memberships",
+			{"team": team, "function": "Promoter", "is_primary": 0 if has_primary else 1},
+		)
+		staff_doc.save(ignore_permissions=True)
+
 	staff_context["staff_by_user"][PROMOTER_EMAIL] = staff_name
 	return staff_name
 
@@ -2391,20 +2437,28 @@ def _curate_key_account_school(idx: int, school: str, promoter: str | None, coun
 				"phone": phone,
 			},
 		)
-		_upsert(
+		assoc_name, assoc_state = _upsert(
 			"CRM School Stakeholder",
 			{"high_school": school, "person": person},
 			{
 				"high_school": school,
 				"person": person,
 				"stakeholder_role": role_term,
-				"relationship_status": _PERSON_REL[idx],
 				"influence": _PERSON_INF[idx],
 				"owner_staff": promoter,
 				"position_title": "Đầu mối tuyển sinh",
 			},
 		)
-		counts["persons"] += 1 if state in ("created", "updated") else 0
+		# relationship_status is governed (new associations start "New"; changes go
+		# through the transition command with a Relationship Touch + evidence). The
+		# seed just needs the matrix value present, so land it straight in the DB.
+		frappe.db.set_value(
+			"CRM School Stakeholder",
+			assoc_name,
+			{"relationship_status": _PERSON_REL[idx]},
+			update_modified=False,
+		)
+		counts["persons"] += 1 if assoc_state in ("created", "updated") else 0
 
 	# Three activities per key-account school: every status, rotating outcomes.
 	for slot, status in enumerate(_ACTIVITY_STATUS):
@@ -2429,39 +2483,47 @@ def _curate_key_account_school(idx: int, school: str, promoter: str | None, coun
 		)
 		counts["activities"] += 1 if state in ("created", "updated") else 0
 
-	# Snapshot state. The importer writes every snapshot as "Review Required" /
-	# "New Enter History" / unlocked with the 2026 row's ne_actual empty; steer the
-	# latest row per slot so the key-account projection and snapshot matrix are covered.
-	# All writes go through doc.save so validate() recomputes key_account_eligible
-	# and fills locked_by / verified_by.
+	# Snapshot state. The importer writes each row as "Review Required" /
+	# "New Enter History" / unlocked. Snapshot facts (ne_actual, ne_actual_semantics,
+	# ...) are immutable once written, so replace the importer's rows wholesale with
+	# one fresh revision-1 carrying the curated matrix values.
 	snaps = frappe.get_all(
 		"CRM High School Annual Snapshot",
 		filters={"high_school": school},
-		fields=["name"],
-		order_by="admission_year desc",
+		fields=["name", "admission_year", "ne_target"],
+		order_by="admission_year desc, revision desc",
 		limit_page_length=0,
 	)
 	if snapshot_mode == "no_snapshot":
-		# Only reached right after the importer (re)created these rows this run.
 		frappe.db.delete("CRM High School Annual Snapshot", {"high_school": school})
 	elif snaps:
-		latest = frappe.get_doc("CRM High School Annual Snapshot", snaps[0].name)
+		prev = snaps[0]
+		frappe.db.delete("CRM High School Annual Snapshot", {"high_school": school})
+		values = {
+			"doctype": "CRM High School Annual Snapshot",
+			"high_school": school,
+			"admission_year": prev.admission_year,
+			"ne_target": prev.ne_target,
+		}
 		if snapshot_mode == "below_threshold":
-			latest.ne_actual = 2
-			latest.adjusted_ne_threshold = 50  # -> is_key_account 0
+			values.update(ne_actual=2, adjusted_ne_threshold=50)  # -> key_account_eligible 0
 		else:
-			latest.ne_actual = 25
-			latest.adjusted_ne_threshold = 10  # -> "Eligible" / is_key_account 1
-			latest.verification_status = {
-				"eligible_verified": "Verified",
-				"eligible_rejected": "Rejected",
-				"eligible_review": "Review Required",
-			}[snapshot_mode]
-			latest.ne_actual_semantics = (
-				"Official Achieved New Enter" if snapshot_mode == "eligible_verified" else "New Enter History"
+			values.update(
+				ne_actual=25,
+				adjusted_ne_threshold=10,  # -> key_account_eligible 1
+				verification_status={
+					"eligible_verified": "Verified",
+					"eligible_rejected": "Rejected",
+					"eligible_review": "Review Required",
+				}[snapshot_mode],
+				ne_actual_semantics=(
+					"Official Achieved New Enter"
+					if snapshot_mode == "eligible_verified"
+					else "New Enter History"
+				),
+				is_locked=1,
 			)
-			latest.set("is_locked", 1)  # avoid Frappe Document.is_locked property collision
-		latest.save(ignore_permissions=True)
+		frappe.get_doc(values).insert(ignore_permissions=True)
 
 	# Re-save so the school's read-only key-account projection matches the snapshot
 	# state (this is what lands "Review Required" for the no_snapshot slot).
@@ -3097,6 +3159,7 @@ def _seed_all() -> dict:
 	marketing = _seed_marketing(context, staff_context)
 	governance = _seed_governance(context)
 	edge = _seed_edge_states(context, staff_context)
+	role_accounts = seed_role_accounts.execute()
 
 	frappe.db.commit()
 	return {
@@ -3123,6 +3186,7 @@ def _seed_all() -> dict:
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,
+		"role_accounts": role_accounts,
 		"known_gaps": list(KNOWN_GAPS),
 	}
 

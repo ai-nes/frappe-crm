@@ -87,27 +87,32 @@ tasks:
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      # Keep the local Student Detail workflow enabled after seeding so the
-      # context projection and typed admissions actions are available in CRM.
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_governance_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
+      # Persist the rollout flags + fixture password so the Student Detail
+      # workflow stays enabled after seeding (list lives in seed_showcase).
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_demo_config"
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
 
+  seed-fresh:
+    desc: Reset site (reinstall) + migrate + seed đầy đủ — dùng khi muốn làm lại từ đầu
+    prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
+      - "{{.EXEC}} {{.BENCH}} migrate"
+      - task: seed
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
+
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
     cmds:
       - python -X utf8 -m crm.demo.extract_school_domain_json
+
+  seed-roles:
+    desc: 1 tài khoản test cho mỗi canonical role (mật khẩu 12345@) — đã nằm trong `task seed`
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
 
   seed-reset:
     desc: Xoá business rows của bộ demo CRM curated (giữ lại audit/receipt/ledger)
@@ -120,7 +125,18 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
   pull:
-    desc: Sau git pull — deps + migrate + clear-cache + restart
+    desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data
+    cmds:
+      - task: deps
+      - task: migrate
+      - task: cache
+      - task: restart
+      # seed_showcase.execute idempotent — chạy lại để data khớp bản vừa pull.
+      # Không đụng site (không reinstall); bỏ qua bước này: task pull-fast.
+      - task: seed
+
+  pull-fast:
+    desc: Như `task pull` nhưng KHÔNG seed lại (chỉ code + schema)
     cmds:
       - task: deps
       - task: migrate

@@ -210,6 +210,41 @@ def test_compact_json_inputs_round_trip_from_excel(tmp_path):
 	assert report["status_counts"] == {"review_required": 1}
 
 
+def test_coordinate_parsing_tolerates_blank_and_non_numeric():
+	assert importer._coordinate("12.2849853") == 12.2849853
+	assert importer._coordinate(109.1894813) == 109.1894813
+	assert importer._coordinate("") is None
+	assert importer._coordinate(None) is None
+	assert importer._coordinate("no_match") is None
+
+
+def test_school_seed_carries_geocoded_latitude_and_longitude(tmp_path):
+	path = _write_workbook(
+		tmp_path / "school-seed.xlsx",
+		"Schoolmap",
+		SEED_HEADERS + ["Latitude", "Longitude"],
+		[
+			["01", "TP.HCM", "011", "Ward", "S001", "THPT Nguyễn Du", "1 Main Street", "10.77", "106.7"],
+			["01", "TP.HCM", "011", "Ward", "S002", "THPT Chưa Geocode", "2 Main Street", "", ""],
+		],
+	)
+
+	report = importer.reconcile_school_seed(path)
+	by_code = {row["data"]["school_code"]: row["data"] for row in report["rows"]}
+	assert by_code["S001"]["latitude"] == "10.77"
+	assert by_code["S001"]["longitude"] == "106.7"
+	assert not by_code["S002"].get("latitude")
+
+	canonical_json = tmp_path / "school-seed.json"
+	extractor.extract_school_seed(path, canonical_json)
+	payload = json.loads(canonical_json.read_text(encoding="utf-8"))
+	assert "latitude" in payload["fields"] and "longitude" in payload["fields"]
+	code_col = payload["fields"].index("school_code")
+	lat_col = payload["fields"].index("latitude")
+	geocoded = next(values for _source_row, values in payload["rows"] if values[code_col] == "S001")
+	assert geocoded[lat_col] == "10.77"
+
+
 def test_ne_2026_supplement_resolves_explicit_canonical_targets(tmp_path, monkeypatch):
 	supplement_path = tmp_path / "ne-2026.json"
 	supplement_path.write_text(
