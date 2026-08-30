@@ -26,10 +26,6 @@ plans/*
 crm/migration/id_maps/*.json
 crm/migration/fixtures/*.csv
 
-# School domain workbooks: operational inputs that carry PIC contact PII.
-# The seed reads them from here but they must never be committed.
-crm/demo/data/*.xlsx
-
 # Cache files
 .ck.json
 .mcp.json.claude/
