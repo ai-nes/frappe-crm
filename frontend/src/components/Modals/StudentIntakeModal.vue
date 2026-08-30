@@ -116,6 +116,7 @@ const tabs = computed(() => [
                 label: 'Điện thoại',
                 options: 'Phone',
                 description: phoneError.value,
+                description_is_error: Boolean(phoneError.value),
               },
               {
                 fieldname: 'email',
@@ -123,6 +124,7 @@ const tabs = computed(() => [
                 label: 'Email',
                 options: 'Email',
                 description: emailError.value,
+                description_is_error: Boolean(emailError.value),
               },
               {
                 fieldname: 'province',

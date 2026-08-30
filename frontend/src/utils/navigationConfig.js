@@ -30,7 +30,7 @@ const rawRoleNavigationTrees = {
       id: 'sales_my_records',
       label: 'Lead',
       icon: 'clipboard-list',
-      to: 'CRM Contacts',
+      to: 'CRM Students',
     },
     {
       id: 'sales_my_tasks',

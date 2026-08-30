@@ -621,6 +621,10 @@ async function fieldChange(value, df) {
 .validation-error :deep(.text-ink-gray-5) {
   color: rgb(var(--ink-red-3)) !important;
 }
+
+.validation-error :deep(p) {
+  color: rgb(var(--ink-red-3)) !important;
+}
 </style>
 <style scoped>
 :deep(.form-control.prefix select) {

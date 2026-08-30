@@ -24,7 +24,7 @@ describe('navigationConfig', () => {
 
   it('keeps legacy destinations until the server enables workspace navigation', () => {
     const legacy = getNavigationForUser({ crm_profile: 'sales' })
-    expect(legacy.find((item) => item.id === 'sales_my_records').to).toBe('CRM Contacts')
+    expect(legacy.find((item) => item.id === 'sales_my_records').to).toBe('CRM Students')
     expect(isRoleWorkspaceNavigationEnabled({ crm_profile: 'sales' })).toBe(false)
     const workspace = getNavigationForUser({
       crm_profile: 'sales',

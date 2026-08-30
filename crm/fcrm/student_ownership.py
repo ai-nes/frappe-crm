@@ -740,7 +740,13 @@ def change_student_ownership(
 		# actor's current Team/Campus scope must be evaluated against the same
 		# snapshot that will be mutated.
 		target = resolve_student_operational_target(
-			student_doc, target_kind, target_id, target_team_id, actor=actor
+			student_doc,
+			target_kind,
+			target_id,
+			target_team_id,
+			# Internal service callers already establish the actor and topology
+			# before entering this transaction; public commands remain authorized.
+			actor=None if _internal_service else actor,
 		)
 		_lock("CRM Team", target["owning_team"])
 		if target.get("staff"):
