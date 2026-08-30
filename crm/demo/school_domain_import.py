@@ -26,7 +26,10 @@ DEFAULT_TS_PATH = _DATA_DIR / "TS-HCM-2026.json"
 DEFAULT_SCHOOL_SEED_XLSX_PATH = _DATA_DIR / "school-seed.xlsx"
 DEFAULT_TS_XLSX_PATH = _DATA_DIR / "TS-HCM-2026.xlsx"
 NE_2026_SUPPLEMENT_PATH = _DATA_DIR / "reference" / "ts_hcm_2026_ne_2026.json"
-TS_PROMOTER_OWNER_USER = "vo-thi-lan.promoter@example.test"
+# Must match the Promoter account created by
+# crm.demo.seed_showcase._ensure_promoter_fixture (PROMOTER_EMAIL); the TS import
+# assigns every workbook relationship to that portfolio.
+TS_PROMOTER_OWNER_USER = "vo.thi.lan@gmail.com"
 MANUAL_SCHOOL_MAPPING_PATH = _DATA_DIR / "reference" / "ts_school_manual_mapping.json"
 PRIMARY_TS_SHEET = "Địa bàn TĐ THPT 2026"
 KEY_ACCOUNT_SOURCE_SHEETS = frozenset({PRIMARY_TS_SHEET})
@@ -58,6 +61,17 @@ def _number(value):
 		return None
 	try:
 		return int(float(value))
+	except (TypeError, ValueError):
+		return None
+
+
+def _coordinate(value):
+	"""Parse a geocoded latitude/longitude cell; blank or non-numeric yields ``None``."""
+	value = _text(value)
+	if not value:
+		return None
+	try:
+		return round(float(value), 7)
 	except (TypeError, ValueError):
 		return None
 
@@ -119,9 +133,9 @@ def _header_key(value) -> str | None:
 		return "province_code"
 	if normalized in {"tentinhtp", "tentinh", "tentinhthanhpho", "province", "tinh", "tinhthanhpho"}:
 		return "province_name"
-	if normalized in {"maxaphuong", "maxa", "maphuong", "maxaphuongthitran", "wardcode"}:
+	if normalized in {"maxaphuong", "maxa", "maphuong", "maphuongxa", "maxaphuongthitran", "wardcode"}:
 		return "ward_code"
-	if normalized in {"tenxaphuong", "tenxa", "tenphuong", "tenxaphuongthitran", "ward", "wardname"}:
+	if normalized in {"tenxaphuong", "tenxa", "tenphuong", "phuongxa", "tenphuongxa", "tenxaphuongthitran", "ward", "wardname"}:
 		return "ward_name"
 	if normalized in {"matruong", "schoolcode", "code"}:
 		return "school_code"
@@ -129,6 +143,10 @@ def _header_key(value) -> str | None:
 		return "school_name"
 	if normalized in {"diachi", "address", "diachitruong"} or normalized.startswith("diachitruong"):
 		return "address"
+	if normalized in {"latitude", "lat", "vido"}:
+		return "latitude"
+	if normalized in {"longitude", "long", "lng", "lon", "kinhdo"}:
+		return "longitude"
 	if normalized in {"loaihinh", "loaitruong", "schooltype", "type"}:
 		return "school_type"
 	if normalized in {"khuvuc", "schoolarea", "area", "kv"}:
@@ -816,6 +834,8 @@ def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True, commit_poli
 					"province": province.name,
 					"ward": ward.name,
 					"address": data.get("address"),
+					"latitude": _coordinate(data.get("latitude")),
+					"longitude": _coordinate(data.get("longitude")),
 				},
 			)
 			counts[f"school_{state}"] += 1

@@ -179,7 +179,20 @@ def me():
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_capabilities": flags["crm_capabilities"],
+		# The cross-origin SPA has no server-rendered page to read frappe.boot
+		# from, so hand it the CSRF token it must send as `X-Frappe-CSRF-Token`
+		# on write requests (production enforces CSRF; dev sets ignore_csrf).
+		"csrf_token": _csrf_token(),
 	}
+
+
+def _csrf_token() -> str | None:
+	try:
+		from frappe.sessions import get_csrf_token
+
+		return get_csrf_token()
+	except Exception:
+		return None
 
 
 @frappe.whitelist()
