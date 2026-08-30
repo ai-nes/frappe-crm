@@ -57,6 +57,8 @@ MARKETING_EMAIL = "pham-bao-chau.marketing@example.test"
 # owned by the Promoter portfolio, not the Sales roles seed_staff creates.
 PROMOTER_EMAIL = "vo-thi-lan.promoter@example.test"
 PROMOTER_FULL_NAME = "Võ Thị Lan"
+FPTU_HCMC_CAMPUS = "FPTU Ho Chi Minh Campus"
+FPTU_ADMISSIONS_CONTEXT = "FPTU tuyển sinh Hồ Chí Minh — kỳ tuyển sinh 2026"
 
 # Rollout flags this fixture needs while it runs. Restored afterwards so a demo
 # site keeps its persisted configuration and instant rollback stays intact.
@@ -538,11 +540,20 @@ _CONSENT_EVENTS = {
 # checks only rows this seed creates, not the whole table.
 _SHOWCASE_CAMPAIGNS = (
 	("FPTU 2026 Admission Campaign - HCMC", "Active", "On-Campus"),
-	("FPTU 2025 Early Bird Admission", "Completed", "Off-Campus"),
-	("FPTU 2026 Fall Scholarship Drive", "Draft", "On-Campus"),
-	("FPTU 2026 Regional Roadshow", "Approved", "Off-Campus"),
-	("FPTU 2025 Referral Pilot", "Cancelled", "On-Campus"),
+	("FPTU HCMC 2025 Early Bird Admissions", "Completed", "Off-Campus"),
+	("FPTU HCMC 2026 Scholarship Drive", "Draft", "On-Campus"),
+	("FPTU HCMC 2026 High School Roadshow", "Approved", "Off-Campus"),
+	("FPTU HCMC 2025 Referral Admissions Pilot", "Cancelled", "On-Campus"),
 )
+# Titles used by earlier runs of this seed. They are renamed in-place so a
+# rerun does not leave old, out-of-scope campaign names behind or create a
+# second set of records for the same admissions fixtures.
+_SHOWCASE_CAMPAIGN_RENAMES = {
+	"FPTU 2025 Early Bird Admission": "FPTU HCMC 2025 Early Bird Admissions",
+	"FPTU 2026 Fall Scholarship Drive": "FPTU HCMC 2026 Scholarship Drive",
+	"FPTU 2026 Regional Roadshow": "FPTU HCMC 2026 High School Roadshow",
+	"FPTU 2025 Referral Pilot": "FPTU HCMC 2025 Referral Admissions Pilot",
+}
 _SHOWCASE_CAMPAIGN_TITLES = [title for title, _, _ in _SHOWCASE_CAMPAIGNS]
 _SHOWCASE_EDUCATION_PROGRAMS = (
 	("FPTU Chính quy CNTT", "Chính quy"),
@@ -1610,11 +1621,12 @@ _SHOWCASE_KEY_ACCOUNT_COUNT = len(_KEY_ACCOUNT_SLOTS)
 
 
 def _seed_school_domain(context: dict, staff_context: dict) -> dict:
-	"""Import the real school domain from the workbooks, then curate key accounts.
+	"""Import the real school domain from compact JSON inputs, then curate key accounts.
 
 	The base data (CRM Province / Ward / High School, plus annual snapshots and
 	stakeholders for the TS key-account list) comes straight from
-	``school_domain_import`` -- no synthetic schools. On top of that this seed
+	``school_domain_import`` -- no synthetic schools. Excel is an extraction source;
+	the seed consumes only the compact JSON projection. On top of that this seed
 	guarantees COVERAGE_MATRIX state on ``_KEY_ACCOUNT_SLOTS`` real key-account
 	schools and gives each three CRM School Activity rows (Planned / Completed /
 	Cancelled). Every top-up row is tagged ``source_file = NAMESPACE`` and owned
@@ -1639,7 +1651,7 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 	try:
 		if not school_domain_import.DEFAULT_SCHOOL_SEED_PATH.exists():
 			counts["gaps"].append(
-				{"stage": "workbook", "error": f"missing {school_domain_import.DEFAULT_SCHOOL_SEED_PATH.name}"}
+				{"stage": "json", "error": f"missing {school_domain_import.DEFAULT_SCHOOL_SEED_PATH.name}"}
 			)
 			return counts
 		base = school_domain_import.seed_school_seed(dry_run=False)
@@ -1649,7 +1661,7 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 			counts["ts_import"] = ts.get("mutations", {})
 		else:
 			counts["gaps"].append(
-				{"stage": "workbook", "error": f"missing {school_domain_import.DEFAULT_TS_PATH.name}; "
+				{"stage": "json", "error": f"missing {school_domain_import.DEFAULT_TS_PATH.name}; "
 				 "key-account curation skipped, school matrix will report a gap"}
 			)
 			return counts
@@ -1827,6 +1839,11 @@ def _curate_key_account_school(idx: int, school: str, promoter: str | None, coun
 def _seed_marketing(context: dict, staff_context: dict) -> dict:
 	campus = staff_context["campus"]
 	mkt_staff = staff_context["staff_by_user"].get(MARKETING_EMAIL)
+	renamed_campaigns = []
+	for old_title, new_title in _SHOWCASE_CAMPAIGN_RENAMES.items():
+		if frappe.db.exists("CRM Campaign", old_title) and not frappe.db.exists("CRM Campaign", new_title):
+			frappe.rename_doc("CRM Campaign", old_title, new_title)
+			renamed_campaigns.append({"from": old_title, "to": new_title})
 	campaign_names = []
 	for title, status, event_type in _SHOWCASE_CAMPAIGNS:
 		name, _ = _upsert(
@@ -1834,6 +1851,7 @@ def _seed_marketing(context: dict, staff_context: dict) -> dict:
 			{
 				"title": title, "status": status, "event_type": event_type,
 				"campus": campus, "budget": 100_000_000, "owner_staff": mkt_staff,
+				"notes": f"{FPTU_ADMISSIONS_CONTEXT}; campaign thuộc {campus}.",
 			},
 		)
 		campaign_names.append(name)
@@ -1864,7 +1882,7 @@ def _seed_marketing(context: dict, staff_context: dict) -> dict:
 	# values are not reachable through the attribution commands (they only emit
 	# Manual campaign_touch / event_participation), so cover them directly.
 	_seed_marketing_engagement_variants(campaign_names[0], context)
-	return {"campaigns": campaign_names}
+	return {"campaigns": campaign_names, "renamed_campaigns": renamed_campaigns}
 
 
 def _seed_marketing_engagement_variants(campaign: str, context: dict) -> None:
@@ -1950,7 +1968,11 @@ def _seed_governance(context: dict) -> dict:
 	for source_name, channel, approval_state in _LEAD_SOURCE_CHANNELS:
 		name, _ = _upsert(
 			"CRM Lead Source", {"source_name": source_name},
-			{"source_name": source_name, "channel_family": channel},
+			{
+				"source_name": source_name,
+				"channel_family": channel,
+				"details": f"{FPTU_ADMISSIONS_CONTEXT}; nguồn {channel.lower()} của {context['campus']}.",
+			},
 		)
 		# approval_state is governed: set_governance_defaults() forces every plain
 		# insert to "Approved". "Proposed"/"Retired" are only reached by driving
@@ -1967,15 +1989,28 @@ def _seed_governance(context: dict) -> dict:
 		frappe.flags.crm_governance_log_insert = True
 		try:
 			specs = [
-				("Create", "Proposed", "Campus Cần Thơ"),
-				("Rename", "Applied", "FPTU HCMC Campus"),
-				("Retire", "Rejected", "Nguồn cũ 2019"),
-				("Reactivate", "Applied", "Nguồn Facebook 2022"),
-				("Supersede", "Cancelled", "Nguồn hợp nhất 2026"),
+				("Create", "Proposed", f"{FPTU_HCMC_CAMPUS} — tuyển sinh 2026"),
+				("Rename", "Applied", FPTU_HCMC_CAMPUS),
+				("Retire", "Rejected", "Nguồn tuyển sinh FPTU HCMC 2019"),
+				("Reactivate", "Applied", "Nguồn tuyển sinh FPTU HCMC trên Facebook 2022"),
+				("Supersede", "Cancelled", "Nguồn hợp nhất tuyển sinh FPTU HCMC 2026"),
 			]
 			for action, status, new_value in specs:
 				key = _idempotency_key("mdc", action.lower())
-				if frappe.db.exists("CRM Master Data Change", {"idempotency_key": key}):
+				existing = frappe.db.get_value("CRM Master Data Change", {"idempotency_key": key}, "name")
+				if existing:
+					doc = frappe.get_doc("CRM Master Data Change", existing)
+					updates = {
+						"reference_docname": context["campus"],
+						"status": status,
+						"reason": f"{NAMESPACE}: {FPTU_ADMISSIONS_CONTEXT}; {action} demo governance record",
+						"new_value": new_value,
+					}
+					changed = any(doc.get(field) != value for field, value in updates.items())
+					if changed:
+						doc.update(updates)
+						doc.save(ignore_permissions=True)
+					created["master_data_changes"].append(doc.name)
 					continue
 				doc = frappe.get_doc(
 					{
@@ -1986,7 +2021,7 @@ def _seed_governance(context: dict) -> dict:
 						"action": action,
 						"status": status,
 						"registry_revision": "P9-DEC-001",
-						"reason": f"{NAMESPACE}: {action} demo governance record",
+						"reason": f"{NAMESPACE}: {FPTU_ADMISSIONS_CONTEXT}; {action} demo governance record",
 						"new_value": new_value,
 						"idempotency_key": key,
 						"correlation_id": _idempotency_key("mdc"),
@@ -2328,6 +2363,11 @@ def _seed_all() -> dict:
 	frappe.set_user("Administrator")
 	context = seed_demo.execute()
 	staff_context = seed_staff.execute()
+	if context["campus"] != FPTU_HCMC_CAMPUS or staff_context["campus"] != FPTU_HCMC_CAMPUS:
+		raise frappe.ValidationError(
+			f"Seed context must be scoped to {FPTU_HCMC_CAMPUS}; "
+			f"got demo={context['campus']!r}, staff={staff_context['campus']!r}."
+		)
 	_ensure_lifecycle_statuses()
 	_ensure_policies(staff_context["campus"], staff_context["pool"])
 
@@ -2343,6 +2383,12 @@ def _seed_all() -> dict:
 	frappe.db.commit()
 	return {
 		"namespace": NAMESPACE,
+		"context": {
+			"brand": "FPTU",
+			"campus": FPTU_HCMC_CAMPUS,
+			"focus": "admissions",
+			"admission_year": "2026",
+		},
 		"accounts": {
 			"password_site_config": seed_staff.FIXTURE_PASSWORD_SITE_CONFIG_KEY,
 			"users": {
