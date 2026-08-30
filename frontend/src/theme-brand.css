@@ -26,9 +26,10 @@
   --brand-outline: var(--brand-300); /* borders */
   --brand-ring: var(--brand-400); /* focus ring */
 
-  /* Main navigation sidebar — lightest possible warm tint. Items don't fill on
-     hover (text darkens + icon goes brand); only the active item gets a fill. */
-  --sidebar-bg: #fff8f3;
+  /* Main navigation sidebar — barely-there warm tint, kept close to white.
+     Items don't fill on hover (text darkens + icon goes brand); only the
+     active item gets a fill. */
+  --sidebar-bg: #fffbf7;
 }
 
 :root[data-theme='dark'] {
