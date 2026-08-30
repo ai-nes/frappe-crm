@@ -225,26 +225,19 @@ class CRMHighSchoolAnnualSnapshot(Document):
 				"Only governance roles can change target, threshold or lock state.", frappe.PermissionError
 			)
 
-	@staticmethod
-	def get_permission_query_conditions(user=None, doctype=None):
-		if doctype not in (None, "CRM High School Annual Snapshot"):
-			return "1=0"
-		return school_portfolio_condition(
-			"CRM High School Annual Snapshot", user, school_field="high_school"
-		)
-
-	@staticmethod
-	def has_permission(doc, user=None, permission_type=None, ptype=None):
-		return has_school_portfolio_permission(doc, user, permission_type, ptype)
-
-
 def get_snapshot_metrics(high_school, admission_year):
 	return compute_crm_metrics(high_school, admission_year)
 
 
+# Module-level permission hooks (registered in hooks.py). Kept out of the
+# Document subclass so ``has_permission`` never shadows Document.has_permission.
 def get_permission_query_conditions(user=None, doctype=None):
-	return CRMHighSchoolAnnualSnapshot.get_permission_query_conditions(user, doctype)
+	if doctype not in (None, "CRM High School Annual Snapshot"):
+		return "1=0"
+	return school_portfolio_condition(
+		"CRM High School Annual Snapshot", user, school_field="high_school"
+	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
-	return CRMHighSchoolAnnualSnapshot.has_permission(doc, user, permission_type, ptype)
+	return has_school_portfolio_permission(doc, user, permission_type, ptype)

@@ -61,16 +61,6 @@ class CRMHighSchool(Document):
 			return
 		self.is_key_account = int(bool(snapshot.key_account_eligible))
 
-	@staticmethod
-	def get_permission_query_conditions(user=None, doctype=None):
-		if doctype not in (None, "CRM High School"):
-			return "1=0"
-		return school_portfolio_condition("CRM High School", user)
-
-	@staticmethod
-	def has_permission(doc, user=None, permission_type=None, ptype=None):
-		return has_school_portfolio_permission(doc, user, permission_type, ptype)
-
 	def _validate_key_account_governance(self):
 		if not self.get_doc_before_save() or frappe.session.user in {"Administrator"}:
 			return
@@ -155,9 +145,14 @@ class CRMHighSchool(Document):
 		return {"columns": columns, "rows": rows}
 
 
+# Module-level permission hooks (registered in hooks.py). Kept out of the
+# Document subclass so they never shadow Document.has_permission, which would
+# bypass the ignore_permissions guard and mis-bind permtype as the doc arg.
 def get_permission_query_conditions(user=None, doctype=None):
-	return CRMHighSchool.get_permission_query_conditions(user, doctype)
+	if doctype not in (None, "CRM High School"):
+		return "1=0"
+	return school_portfolio_condition("CRM High School", user)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
-	return CRMHighSchool.has_permission(doc, user, permission_type, ptype)
+	return has_school_portfolio_permission(doc, user, permission_type, ptype)

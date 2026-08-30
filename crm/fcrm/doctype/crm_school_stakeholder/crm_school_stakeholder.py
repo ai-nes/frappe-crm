@@ -48,16 +48,6 @@ class CRMSchoolStakeholder(Document):
 				)
 
 	@staticmethod
-	def get_permission_query_conditions(user=None, doctype=None):
-		if doctype not in (None, "CRM School Stakeholder"):
-			return "1=0"
-		return portfolio_condition("CRM School Stakeholder", user)
-
-	@staticmethod
-	def has_permission(doc, user=None, permission_type=None, ptype=None):
-		return has_portfolio_permission(doc, user, permission_type, ptype)
-
-	@staticmethod
 	def default_list_data():
 		columns = [
 			{
@@ -98,9 +88,13 @@ class CRMSchoolStakeholder(Document):
 		}
 
 
+# Module-level permission hooks (registered in hooks.py). Kept out of the
+# Document subclass so ``has_permission`` never shadows Document.has_permission.
 def get_permission_query_conditions(user=None, doctype=None):
-	return CRMSchoolStakeholder.get_permission_query_conditions(user, doctype)
+	if doctype not in (None, "CRM School Stakeholder"):
+		return "1=0"
+	return portfolio_condition("CRM School Stakeholder", user)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
-	return CRMSchoolStakeholder.has_permission(doc, user, permission_type, ptype)
+	return has_portfolio_permission(doc, user, permission_type, ptype)
