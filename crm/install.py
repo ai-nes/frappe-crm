@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and Contributors
 # MIT License. See license.txt
 import json
+import os
+from urllib.parse import urlsplit
 
 import click
 import frappe
@@ -28,6 +30,7 @@ def before_install():
 def after_install(force=False):
 	set_default_system_language()
 	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
 	add_default_fields_layout(force)
 	add_property_setter()
 	add_email_template_custom_fields()
@@ -49,6 +52,7 @@ def after_install(force=False):
 def after_migrate():
 	"""Keep integration CORS origins present on every production migration."""
 	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
 
 
 def set_default_system_language():
@@ -67,12 +71,16 @@ def complete_setup(_args: dict | None = None):
 	return None
 
 
-def add_chatwoot_cors_origin():
-	"""Allow approved integration and AI CRM origins to reach this site."""
+def _persist_cors_origins(required_origins):
+	"""Merge exact CORS origins into site_config.json, preserving its existing shape."""
+
+	required_origins = tuple(origin for origin in required_origins if origin)
+	if not required_origins:
+		return
 
 	current_allow_cors = frappe.conf.get("allow_cors")
 
-	allow_cors = merge_cors_origins(current_allow_cors, CRM_CORS_ORIGINS)
+	allow_cors = merge_cors_origins(current_allow_cors, required_origins)
 	if allow_cors == current_allow_cors:
 		return
 
@@ -87,7 +95,35 @@ def add_chatwoot_cors_origin():
 		site_config_file.write("\n")
 
 	frappe.conf.allow_cors = allow_cors
-	click.secho(f"* Allowing CORS for {', '.join(CRM_CORS_ORIGINS)}")
+	click.secho(f"* Allowing CORS for {', '.join(required_origins)}")
+
+
+def add_chatwoot_cors_origin():
+	"""Allow approved integration and AI CRM origins to reach this site."""
+	_persist_cors_origins(CRM_CORS_ORIGINS)
+
+
+def dashboard_cors_origins():
+	"""Origins for the external admissions dashboard, derived from the OAuth config.
+
+	Reuses CRM_GOOGLE_OAUTH_DASHBOARD_URL (the value the login flow allowlists as a
+	post-login redirect target) so the CORS grant and the redirect target never drift.
+	"""
+	raw = os.getenv("CRM_GOOGLE_OAUTH_DASHBOARD_URL") or ""
+	origins = []
+	for entry in raw.split(","):
+		entry = entry.strip()
+		if not entry:
+			continue
+		parts = urlsplit(entry)
+		if parts.scheme and parts.netloc:
+			origins.append(f"{parts.scheme}://{parts.netloc}")
+	return tuple(dict.fromkeys(origins))
+
+
+def add_dashboard_cors_origin():
+	"""Allow the configured admissions dashboard origin to reach this site."""
+	_persist_cors_origins(dashboard_cors_origins())
 
 
 def merge_cors_origins(current_allow_cors, required_origins):
