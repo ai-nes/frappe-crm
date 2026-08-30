@@ -37,8 +37,6 @@ def compute_crm_metrics(high_school, admission_year):
 		"contact_count": contact_count,
 		"student_count": student_count,
 		"conversion_count": conversion_count,
-		"ne_registered": applicant_count,
-		"ne_achieved": enrolled_count,
 	}
 
 
@@ -46,7 +44,7 @@ def _snapshot_for_school(high_school):
 	return frappe.get_all(
 		"CRM High School Annual Snapshot",
 		filters={"high_school": high_school},
-		fields=["name", "admission_year", "key_account_eligible", "snapshot_date", "source_file"],
+		fields=["name", "admission_year", "key_account_eligible", "snapshot_date"],
 		order_by="admission_year desc, modified desc",
 		limit_page_length=1,
 	)
@@ -64,14 +62,7 @@ def refresh_school_key_account(high_school):
 	frappe.db.set_value(
 		"CRM High School",
 		high_school,
-		{
-			"is_key_account": eligible,
-			"key_account_status": "Eligible" if eligible else "Not Eligible",
-			"key_account_since": snapshot.snapshot_date if eligible else None,
-			"key_account_last_review": snapshot.snapshot_date,
-			"key_account_source": snapshot.source_file,
-			"key_account_reason": f"Derived from admission year {snapshot.admission_year} annual snapshot.",
-		},
+		{"is_key_account": eligible},
 		update_modified=False,
 	)
 
@@ -112,13 +103,6 @@ class CRMHighSchoolAnnualSnapshot(Document):
 	def _set_crm_metrics(self):
 		for fieldname, value in compute_crm_metrics(self.high_school, self.admission_year).items():
 			setattr(self, fieldname, value)
-		self.context_raw_counts = {
-			"applicant_count": self.applicant_count,
-			"enrolled_count": self.enrolled_count,
-			"contact_count": self.contact_count,
-			"student_count": self.student_count,
-			"conversion_count": self.conversion_count,
-		}
 
 	def _validate_grain(self):
 		filters = {"high_school": self.high_school, "admission_year": self.admission_year}

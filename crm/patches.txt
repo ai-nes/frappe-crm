@@ -8,6 +8,7 @@ crm.patches.v1_0.rename_enrollment_student_to_crm_student
 crm.patches.v1_0.rename_remaining_reference_doctypes_to_crm_prefix
 crm.patches.v1_0.rename_campaign_type_to_crm_campaign_type
 crm.patches.v1_0.rename_non_admission_doctypes_without_crm_prefix
+crm.patches.v1_0.simplify_school_domain_schema
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated

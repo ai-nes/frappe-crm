@@ -55,7 +55,6 @@ def portfolio_condition(doctype: str, user: str | None = None, *, owner_field="o
 		return None
 	if not roles & PORTFOLIO_ROLES:
 		return "1=0"
-
 	staff_name = _staff_name(user)
 	teams = _team_names(staff_name)
 	table = f"`tab{doctype}`"
@@ -67,6 +66,52 @@ def portfolio_condition(doctype: str, user: str | None = None, *, owner_field="o
 	if team_clause:
 		parts.append(team_clause)
 	return "(" + " or ".join(parts) + ")" if parts else "1=0"
+
+
+def person_portfolio_condition(user: str | None = None):
+	"""Scope CRM Person through its school-stakeholder associations."""
+	roles = _user_roles(user)
+	if roles & FULL_ACCESS_ROLES or roles & READ_ALL_ROLES:
+		return None
+	if not roles & PORTFOLIO_ROLES:
+		return "1=0"
+	if hasattr(frappe.db, "table_exists") and not frappe.db.table_exists("CRM School Stakeholder"):
+		return "1=0"
+	staff_name = _staff_name(user)
+	teams = _team_names(staff_name)
+	parts = []
+	owner_clause = _in_clause("association.`owner_staff`", [staff_name] if staff_name else [])
+	team_clause = _in_clause("association.`owning_team`", teams)
+	if owner_clause:
+		parts.append(owner_clause)
+	if team_clause:
+		parts.append(team_clause)
+	if not parts:
+		return "1=0"
+	return (
+		"exists (select 1 from `tabCRM School Stakeholder` association "
+		"where association.`person` = `tabCRM Person`.`name` and ("
+		+ " or ".join(parts)
+		+ "))"
+	)
+
+
+def has_person_portfolio_permission(doc, user=None, permission_type=None, ptype=None):
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
+	condition = person_portfolio_condition(user)
+	if condition is None:
+		return True
+	if condition == "1=0" or not getattr(doc, "name", None):
+		return False
+	return bool(
+		frappe.db.sql(
+			"select person.name from `tabCRM Person` person "
+			"where person.name = %s and " + condition.replace("`tabCRM Person`", "person"),
+			(doc.name,),
+		)
+	)
 
 
 def has_portfolio_permission(

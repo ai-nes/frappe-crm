@@ -56,7 +56,7 @@
           <h3 id="school-people-heading" class="text-base font-semibold text-ink-gray-9">
             {{ __('People') }}
           </h3>
-          <a :href="listUrl('CRM Person')" class="text-sm text-ink-blue-7 hover:underline focus-visible:outline focus-visible:outline-2">
+          <a :href="listUrl('CRM School Stakeholder')" class="text-sm text-ink-blue-7 hover:underline focus-visible:outline focus-visible:outline-2">
             {{ __('View list') }}
           </a>
         </div>
@@ -68,11 +68,11 @@
           <router-link
             v-for="person in people.data || []"
             :key="person.name"
-            :to="{ name: 'CRM Person', params: { crmPersonId: person.name } }"
+            :to="{ name: 'CRM Person', params: { crmPersonId: person.person } }"
             class="rounded-lg border p-3 hover:bg-surface-gray-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ink-blue-7"
           >
-            <div class="font-medium text-ink-gray-9">{{ person.full_name }}</div>
-            <div class="text-sm text-ink-gray-6">{{ person.stakeholder_role || person.role || __('Stakeholder') }}</div>
+            <div class="font-medium text-ink-gray-9">{{ person.full_name || person.person }}</div>
+            <div class="text-sm text-ink-gray-6">{{ person.stakeholder_role || person.position_title || __('Stakeholder') }}</div>
             <div class="mt-1 text-xs text-ink-gray-5">{{ person.relationship_status || __('No relationship status') }}</div>
           </router-link>
           <div v-if="!(people.data || []).length" class="rounded-lg border p-4 text-sm text-ink-gray-5">
@@ -112,7 +112,7 @@
                 <td class="px-3 py-2">{{ activity.activity_type }}</td>
                 <td class="px-3 py-2">{{ activity.status }}</td>
                 <td class="px-3 py-2">{{ activity.owner_staff || __('Unassigned') }}</td>
-                <td class="px-3 py-2">{{ displayNumber(activity.ne_output) }}</td>
+                <td class="px-3 py-2">{{ displayNumber(activity.application_count) }}</td>
               </tr>
               <tr v-if="!(activities.data || []).length">
                 <td colspan="5" class="px-3 py-4 text-center text-ink-gray-5">{{ __('No school activities') }}</td>
@@ -154,13 +154,14 @@ const snapshots = listResource(
   ['name', 'admission_year', 'ne_target', 'ne_actual', 'key_account_eligible', 'verification_status'],
   5,
 )
-const people = listResource(
-  'CRM Person',
-  ['name', 'full_name', 'role', 'stakeholder_role', 'relationship_status'],
-)
+const people = createResource({
+  url: 'crm.api.school_domain.get_school_stakeholders',
+  params: { high_school: props.highSchoolId, limit: 50 },
+  auto: true,
+})
 const activities = listResource(
   'CRM School Activity',
-  ['name', 'activity_date', 'activity_type', 'status', 'owner_staff', 'ne_output'],
+  ['name', 'activity_date', 'activity_type', 'status', 'owner_staff', 'application_count'],
 )
 
 const loading = computed(() => snapshots.loading || people.loading || activities.loading)

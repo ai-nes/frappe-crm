@@ -42,6 +42,7 @@ def execute():
 	for doctype in (
 		"crm_high_school",
 		"crm_person",
+		"crm_school_stakeholder",
 		"crm_high_school_annual_snapshot",
 		"crm_school_activity",
 	):

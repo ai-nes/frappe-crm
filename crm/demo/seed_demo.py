@@ -618,17 +618,15 @@ def _ensure_campus(province):
 
 
 def _ensure_high_school(province):
-    existing = frappe.db.exists("CRM High School", {"school_name": HIGH_SCHOOL, "province_code": PROVINCE_CODE})
+    existing = frappe.db.exists("CRM High School", {"school_name": HIGH_SCHOOL, "province": province})
     if existing:
         return existing
     return frappe.get_doc({
         "doctype": "CRM High School",
         "school_name": HIGH_SCHOOL,
         "school_code": "HCM-TDN",
-        "ward_code": WARD_CODE,
-        "ward_name": WARD_NAME,
-        "province_code": PROVINCE_CODE,
-        "province_name": PROVINCE_NAME,
+        "province": province,
+        "ward": _ensure_ward(province),
         "address": "20 Ly Tu Trong, District 1, Ho Chi Minh City",
     }).insert(ignore_permissions=True).name
 

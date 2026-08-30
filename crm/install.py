@@ -118,7 +118,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Person-Quick Entry": {
 			"doctype": "CRM Person",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","role","phone","email"]},{"name":"col_school","fields":["province","high_school"]}]}]',
+		"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -141,11 +141,11 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
-			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["ward","province_name","region"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+		"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
 		},
 		"CRM Person-Side Panel": {
 			"doctype": "CRM Person",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","role","phone","email"]}]},{"label":"School","name":"school_section","opened":true,"columns":[{"name":"col_school","fields":["province","high_school","notes"]}]}]',
+		"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
 		},
 		"CRM Campaign-Side Panel": {
 			"doctype": "CRM Campaign",
@@ -172,7 +172,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
-			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["ward","province_name","region"]}]}]}]',
+		"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
 		},
 	}
 
@@ -411,7 +411,7 @@ def add_default_quick_filters():
 	quick_filters = {
 		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
-		"CRM High School": ["province_name", "ward_name", "school_name"],
+		"CRM High School": ["province", "ward", "school_name"],
 		"Contact": ["status", "email_id", "phone"],
 		"Task": ["title", "priority", "assigned_to", "status", "due_date"],
 		"Call Log": ["telephony_medium", "type", "status", "from", "to"],
