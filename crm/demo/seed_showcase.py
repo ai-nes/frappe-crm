@@ -2437,20 +2437,28 @@ def _curate_key_account_school(idx: int, school: str, promoter: str | None, coun
 				"phone": phone,
 			},
 		)
-		_upsert(
+		assoc_name, assoc_state = _upsert(
 			"CRM School Stakeholder",
 			{"high_school": school, "person": person},
 			{
 				"high_school": school,
 				"person": person,
 				"stakeholder_role": role_term,
-				"relationship_status": _PERSON_REL[idx],
 				"influence": _PERSON_INF[idx],
 				"owner_staff": promoter,
 				"position_title": "Đầu mối tuyển sinh",
 			},
 		)
-		counts["persons"] += 1 if state in ("created", "updated") else 0
+		# relationship_status is governed (new associations start "New"; changes go
+		# through the transition command with a Relationship Touch + evidence). The
+		# seed just needs the matrix value present, so land it straight in the DB.
+		frappe.db.set_value(
+			"CRM School Stakeholder",
+			assoc_name,
+			{"relationship_status": _PERSON_REL[idx]},
+			update_modified=False,
+		)
+		counts["persons"] += 1 if assoc_state in ("created", "updated") else 0
 
 	# Three activities per key-account school: every status, rotating outcomes.
 	for slot, status in enumerate(_ACTIVITY_STATUS):
