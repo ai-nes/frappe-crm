@@ -114,6 +114,7 @@ def test_promoter_without_staff_scope_fails_closed(monkeypatch):
 	monkeypatch.setattr(permissions, "frappe", fake_frappe)
 
 	assert permissions.person_portfolio_condition("promoter@example.com") == "1=0"
+	assert permissions.school_portfolio_condition("CRM High School", "promoter@example.com") == "1=0"
 
 
 def test_unscoped_roles_are_not_granted_relationship_rows(monkeypatch):
@@ -131,6 +132,23 @@ def test_marketing_and_governance_roles_keep_explicit_full_row_contract(monkeypa
 	for role in ("Marketing", "Sale", "Lead Sales", "Admissions Director"):
 		fake_frappe.roles = [role]
 		assert permissions.person_portfolio_condition("other@example.com") is None
+		assert permissions.school_portfolio_condition("CRM High School", "other@example.com") is None
+
+
+def test_promoter_school_and_snapshot_scope_follow_stakeholder_portfolio(monkeypatch):
+	fake_frappe = _Frappe()
+	monkeypatch.setattr(permissions, "frappe", fake_frappe)
+
+	school_condition = permissions.school_portfolio_condition("CRM High School", "promoter@example.com")
+	snapshot_condition = permissions.school_portfolio_condition(
+		"CRM High School Annual Snapshot", "promoter@example.com", school_field="high_school"
+	)
+
+	assert "CRM School Stakeholder" in school_condition
+	assert "`tabCRM High School`.`name`" in school_condition
+	assert "`tabCRM High School Annual Snapshot`.`high_school`" in snapshot_condition
+	assert "STAFF-1" in school_condition
+	assert "TEAM-A" in snapshot_condition
 
 
 def test_create_is_allowed_to_docperm_but_existing_rows_use_portfolio_ceiling(monkeypatch):
@@ -156,6 +174,15 @@ def test_new_relationship_record_defaults_to_current_staff_and_team(monkeypatch)
 
 	assert doc.owner_staff == "STAFF-1"
 	assert doc.owning_team == "TEAM-A"
+
+
+def test_promoter_cannot_grant_another_portfolio_scope_on_create(monkeypatch):
+	fake_frappe = _Frappe()
+	monkeypatch.setattr(permissions, "frappe", fake_frappe)
+	doc = _Doc(owner_staff="STAFF-OTHER", owning_team="TEAM-OTHER", name=None)
+
+	with pytest.raises(_PermissionError):
+		permissions.validate_portfolio_update(doc, "promoter@example.com")
 
 
 def test_promoter_cannot_update_record_outside_portfolio(monkeypatch):
@@ -208,6 +235,16 @@ def test_permission_hooks_are_registered_for_both_relationship_doctypes():
 	assert hooks.permission_query_conditions["CRM School Activity"].endswith(
 		"crm_school_activity.get_permission_query_conditions"
 	)
+	assert hooks.permission_query_conditions["CRM High School"].endswith(
+		"crm_high_school.get_permission_query_conditions"
+	)
+	assert hooks.permission_query_conditions["CRM High School Annual Snapshot"].endswith(
+		"crm_high_school_annual_snapshot.get_permission_query_conditions"
+	)
 	assert hooks.has_permission["CRM Person"].endswith("crm_person.has_permission")
 	assert hooks.has_permission["CRM School Stakeholder"].endswith("crm_school_stakeholder.has_permission")
 	assert hooks.has_permission["CRM School Activity"].endswith("crm_school_activity.has_permission")
+	assert hooks.has_permission["CRM High School"].endswith("crm_high_school.has_permission")
+	assert hooks.has_permission["CRM High School Annual Snapshot"].endswith(
+		"crm_high_school_annual_snapshot.has_permission"
+	)

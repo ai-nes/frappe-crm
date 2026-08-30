@@ -96,6 +96,62 @@ def person_portfolio_condition(user: str | None = None):
 	)
 
 
+def school_portfolio_condition(doctype: str, user: str | None = None, *, school_field: str = "name") -> str | None:
+	"""Scope School-domain roots through authorised stakeholder associations.
+
+	High School and Annual Snapshot do not own a portfolio field.  A scoped
+	Promoter therefore receives a row only when an association for that school is
+	inside their owner/team portfolio.  This is intentionally an ``exists``
+	predicate so list, aggregate, and bounded-DTO queries can reuse it verbatim.
+	"""
+	roles = _user_roles(user)
+	if roles & FULL_ACCESS_ROLES or roles & READ_ALL_ROLES:
+		return None
+	if not roles & PORTFOLIO_ROLES:
+		return "1=0"
+	if hasattr(frappe.db, "table_exists") and not frappe.db.table_exists("CRM School Stakeholder"):
+		return "1=0"
+	staff_name = _staff_name(user)
+	teams = _team_names(staff_name)
+	parts = []
+	owner_clause = _in_clause("association.`owner_staff`", [staff_name] if staff_name else [])
+	team_clause = _in_clause("association.`owning_team`", teams)
+	if owner_clause:
+		parts.append(owner_clause)
+	if team_clause:
+		parts.append(team_clause)
+	if not parts:
+		return "1=0"
+	return (
+		"exists (select 1 from `tabCRM School Stakeholder` association "
+		f"where association.`high_school` = `tab{doctype}`.`{school_field}` and ("
+		+ " or ".join(parts)
+		+ "))"
+	)
+
+
+def has_school_portfolio_permission(doc, user=None, permission_type=None, ptype=None) -> bool:
+	"""Direct-record counterpart of :func:`school_portfolio_condition`."""
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
+	condition = school_portfolio_condition(
+		doc.doctype,
+		user,
+		school_field="name" if doc.doctype == "CRM High School" else "high_school",
+	)
+	if condition is None:
+		return True
+	if condition == "1=0" or not getattr(doc, "name", None):
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tab{doc.doctype}` where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
+
+
 def has_person_portfolio_permission(doc, user=None, permission_type=None, ptype=None):
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
@@ -187,12 +243,12 @@ def validate_portfolio_update(
 	# Administrator / System Manager (and the other full-access roles) also carry
 	# the Promoter role by inheritance; the portfolio ceiling is not meant for
 	# them, mirroring portfolio_condition()'s role check.
-	if _user_roles(user) & FULL_ACCESS_ROLES:
-		return
-	if doc.is_new():
+	if _user_roles(user) & (FULL_ACCESS_ROLES | READ_ALL_ROLES):
 		return
 	if not _values_in_portfolio(doc.get(owner_field), doc.get(team_field), user):
 		frappe.throw("You can only manage school relationship records in your portfolio.", frappe.PermissionError)
+	if doc.is_new():
+		return
 
 	previous = doc.get_doc_before_save()
 	if previous and not _values_in_portfolio(previous.get(owner_field), previous.get(team_field), user):

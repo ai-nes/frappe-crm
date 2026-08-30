@@ -17,6 +17,11 @@ class CRMSchoolStakeholder(Document):
 
 	def validate(self):
 		validate_portfolio_update(self)
+		# A scoped Promoter must not create an association merely to make an
+		# otherwise out-of-scope school visible through the portfolio predicate.
+		# System/governance users still pass Frappe's normal High School permission.
+		if self.high_school and not frappe.has_permission("CRM High School", "read", self.high_school):
+			frappe.throw("You are not permitted to link a stakeholder to this school.", frappe.PermissionError)
 		if self.stakeholder_role:
 			category = frappe.db.get_value("CRM Term", self.stakeholder_role, "category")
 			if category and category != "stakeholder_role":

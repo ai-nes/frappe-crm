@@ -48,6 +48,7 @@
   {"fieldname": "application_count", "fieldtype": "Int", "label": "Applications"},
   {"fieldname": "next_action", "fieldtype": "Small Text", "label": "Next Action"},
   {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference"},
+  {"fieldname": "import_idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Import Idempotency Key"},
   {"fieldname": "notes", "fieldtype": "Text", "label": "Notes"}
  ],
  "index_web_pages_for_search": 1,
@@ -55,6 +56,7 @@
   {"fields": ["high_school", "activity_date"], "name": "crm_school_activity_school_date_idx", "unique": 0},
   {"fields": ["owner_staff", "activity_date"], "name": "crm_school_activity_owner_date_idx", "unique": 0},
   {"fields": ["owning_team", "activity_date"], "name": "crm_school_activity_team_date_idx", "unique": 0}
+  ,{"fields": ["import_idempotency_key"], "name": "crm_school_activity_import_key_idx", "unique": 1}
  ],
  "links": [],
  "modified": "2026-08-30 00:00:00.000000",

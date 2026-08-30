@@ -155,7 +155,14 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Tra cứu')
 
     const leads = salesTree.find((item) => item.label === 'Lead')
-    expect(leads.children).toBeUndefined()
+    expect(leads.children.map((item) => item.id)).toEqual([
+      'sales_records_new',
+      'sales_records_counseling',
+      'sales_records_awaiting_docs',
+      'sales_records_cold',
+      'sales_records_won',
+      'sales_unassigned_pool',
+    ])
   })
 
   it('verifies Lead Sales navigation items structure', () => {

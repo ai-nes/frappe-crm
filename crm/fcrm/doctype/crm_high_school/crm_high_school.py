@@ -4,6 +4,11 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.school_domain_permissions import (
+	has_school_portfolio_permission,
+	school_portfolio_condition,
+)
+
 
 class CRMHighSchool(Document):
 	def before_validate(self):
@@ -42,7 +47,7 @@ class CRMHighSchool(Document):
 			return
 		rows = frappe.get_all(
 			"CRM High School Annual Snapshot",
-			filters={"high_school": self.name},
+			filters={"high_school": self.name, "verification_status": "Verified"},
 			fields=["admission_year", "ne_actual", "adjusted_ne_threshold", "key_account_eligible", "snapshot_date"],
 			order_by="admission_year desc, modified desc",
 			limit_page_length=1,
@@ -55,6 +60,16 @@ class CRMHighSchool(Document):
 			self.is_key_account = 0
 			return
 		self.is_key_account = int(bool(snapshot.key_account_eligible))
+
+	@staticmethod
+	def get_permission_query_conditions(user=None, doctype=None):
+		if doctype not in (None, "CRM High School"):
+			return "1=0"
+		return school_portfolio_condition("CRM High School", user)
+
+	@staticmethod
+	def has_permission(doc, user=None, permission_type=None, ptype=None):
+		return has_school_portfolio_permission(doc, user, permission_type, ptype)
 
 	def _validate_key_account_governance(self):
 		if not self.get_doc_before_save() or frappe.session.user in {"Administrator"}:
@@ -138,3 +153,11 @@ class CRMHighSchool(Document):
 			"modified",
 		]
 		return {"columns": columns, "rows": rows}
+
+
+def get_permission_query_conditions(user=None, doctype=None):
+	return CRMHighSchool.get_permission_query_conditions(user, doctype)
+
+
+def has_permission(doc, user=None, permission_type=None, ptype=None):
+	return CRMHighSchool.has_permission(doc, user, permission_type, ptype)

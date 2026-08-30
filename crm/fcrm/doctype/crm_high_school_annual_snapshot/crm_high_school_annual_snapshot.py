@@ -4,6 +4,11 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime, nowdate
 
+from crm.fcrm.school_domain_permissions import (
+	has_school_portfolio_permission,
+	school_portfolio_condition,
+)
+
 DEFAULT_NE_THRESHOLD = 10
 GOVERNANCE_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director"})
 
@@ -43,7 +48,7 @@ def compute_crm_metrics(high_school, admission_year):
 def _snapshot_for_school(high_school):
 	return frappe.get_all(
 		"CRM High School Annual Snapshot",
-		filters={"high_school": high_school},
+		filters={"high_school": high_school, "verification_status": "Verified"},
 		fields=["name", "admission_year", "key_account_eligible", "snapshot_date"],
 		order_by="admission_year desc, modified desc",
 		limit_page_length=1,
@@ -56,6 +61,12 @@ def refresh_school_key_account(high_school):
 		return
 	rows = _snapshot_for_school(high_school)
 	if not rows:
+		frappe.db.set_value(
+			"CRM High School",
+			high_school,
+			{"is_key_account": 0},
+			update_modified=False,
+		)
 		return
 	snapshot = rows[0]
 	eligible = int(bool(snapshot.key_account_eligible))
@@ -73,7 +84,8 @@ class CRMHighSchoolAnnualSnapshot(Document):
 			self.adjusted_ne_threshold = DEFAULT_NE_THRESHOLD
 		if not self.snapshot_date:
 			self.snapshot_date = nowdate()
-		if self.high_school and self.admission_year:
+		previous = self.get_doc_before_save()
+		if self.high_school and self.admission_year and not (previous and previous.verification_status == "Verified"):
 			self._set_crm_metrics()
 
 	def validate(self):
@@ -97,7 +109,8 @@ class CRMHighSchoolAnnualSnapshot(Document):
 	def on_update(self):
 		refresh_school_key_account(self.high_school)
 
-	def on_trash(self):
+	def after_delete(self):
+		"""Reproject only after the deleted snapshot is no longer queryable."""
 		refresh_school_key_account(self.high_school)
 
 	def _set_crm_metrics(self):
@@ -121,6 +134,11 @@ class CRMHighSchoolAnnualSnapshot(Document):
 			if self.get("is_locked") and not _is_governance_user():
 				frappe.throw("Only governance roles can lock an annual snapshot.", frappe.PermissionError)
 			return
+		if previous.verification_status == "Verified" and any(
+			previous.get(fieldname) != self.get(fieldname)
+			for fieldname in ("high_school", "admission_year", "ne_actual")
+		):
+			frappe.throw("Verified snapshot identity and source outcomes are immutable.", frappe.PermissionError)
 		if previous.get("is_locked") and not _is_governance_user():
 			frappe.throw("This annual snapshot is locked by governance.", frappe.PermissionError)
 		if not _is_governance_user() and any(
@@ -129,6 +147,26 @@ class CRMHighSchoolAnnualSnapshot(Document):
 		):
 			frappe.throw("Only governance roles can change target, threshold or lock state.", frappe.PermissionError)
 
+	@staticmethod
+	def get_permission_query_conditions(user=None, doctype=None):
+		if doctype not in (None, "CRM High School Annual Snapshot"):
+			return "1=0"
+		return school_portfolio_condition(
+			"CRM High School Annual Snapshot", user, school_field="high_school"
+		)
+
+	@staticmethod
+	def has_permission(doc, user=None, permission_type=None, ptype=None):
+		return has_school_portfolio_permission(doc, user, permission_type, ptype)
+
 
 def get_snapshot_metrics(high_school, admission_year):
 	return compute_crm_metrics(high_school, admission_year)
+
+
+def get_permission_query_conditions(user=None, doctype=None):
+	return CRMHighSchoolAnnualSnapshot.get_permission_query_conditions(user, doctype)
+
+
+def has_permission(doc, user=None, permission_type=None, ptype=None):
+	return CRMHighSchoolAnnualSnapshot.has_permission(doc, user, permission_type, ptype)

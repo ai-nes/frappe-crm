@@ -6,7 +6,9 @@ import frappe
 @frappe.whitelist()
 def get_school_stakeholders(high_school: str, limit: int = 50):
 	"""Return school associations with the linked Person identity for the panel."""
-	associations = frappe.get_all(
+	# Use permission-aware list queries: Promoter scope is enforced by the
+	# DocType hooks and must also apply to this whitelisted panel endpoint.
+	associations = frappe.get_list(
 		"CRM School Stakeholder",
 		filters={"high_school": high_school},
 		fields=[
@@ -19,10 +21,10 @@ def get_school_stakeholders(high_school: str, limit: int = 50):
 	person_names = [row.person for row in associations if row.person]
 	people = {
 		row.name: row
-		for row in frappe.get_all(
+		for row in frappe.get_list(
 			"CRM Person",
 			filters={"name": ["in", person_names]} if person_names else {"name": "__none__"},
-			fields=["name", "full_name", "phone", "email"],
+			fields=["name", "full_name"],
 			limit_page_length=0,
 		)
 	}
@@ -30,8 +32,6 @@ def get_school_stakeholders(high_school: str, limit: int = 50):
 		{
 			**row,
 			"full_name": people.get(row.person, {}).get("full_name") if row.person else None,
-			"phone": people.get(row.person, {}).get("phone") if row.person else None,
-			"email": people.get(row.person, {}).get("email") if row.person else None,
 		}
 		for row in associations
 	]

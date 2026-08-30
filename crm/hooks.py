@@ -150,6 +150,8 @@ permission_query_conditions = {
 	"CRM Person": "crm.fcrm.doctype.crm_person.crm_person.get_permission_query_conditions",
 	"CRM School Stakeholder": "crm.fcrm.doctype.crm_school_stakeholder.crm_school_stakeholder.get_permission_query_conditions",
 	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.get_permission_query_conditions",
+	"CRM High School": "crm.fcrm.doctype.crm_high_school.crm_high_school.get_permission_query_conditions",
+	"CRM High School Annual Snapshot": "crm.fcrm.doctype.crm_high_school_annual_snapshot.crm_high_school_annual_snapshot.get_permission_query_conditions",
 	"CRM AI Lead Insight": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Agent Event": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 }
@@ -177,6 +179,8 @@ has_permission = {
 	"CRM Person": "crm.fcrm.doctype.crm_person.crm_person.has_permission",
 	"CRM School Stakeholder": "crm.fcrm.doctype.crm_school_stakeholder.crm_school_stakeholder.has_permission",
 	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.has_permission",
+	"CRM High School": "crm.fcrm.doctype.crm_high_school.crm_high_school.has_permission",
+	"CRM High School Annual Snapshot": "crm.fcrm.doctype.crm_high_school_annual_snapshot.crm_high_school_annual_snapshot.has_permission",
 	"CRM AI Lead Insight": "crm.fcrm.permissions.has_student_projection_permission",
 	"CRM Agent Event": "crm.fcrm.permissions.has_student_projection_permission",
 }

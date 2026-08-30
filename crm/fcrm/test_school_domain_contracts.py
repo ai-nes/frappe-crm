@@ -108,6 +108,7 @@ class _DB:
 	def __init__(self):
 		self.exists_result = False
 		self.values = {}
+		self.set_values = []
 
 	def exists(self, doctype, _filters=None):
 		return self.exists_result
@@ -117,6 +118,9 @@ class _DB:
 		if as_dict:
 			return value
 		return value.get(fields) if value else None
+
+	def set_value(self, doctype, name, values, **kwargs):
+		self.set_values.append((doctype, name, values, kwargs))
 
 
 class _Frappe:
@@ -129,8 +133,10 @@ class _Frappe:
 		self.session = types.SimpleNamespace(user="Administrator")
 		self.snapshot_rows = []
 		self.roles = []
+		self.last_get_all_kwargs = None
 
 	def get_all(self, *_args, **_kwargs):
+		self.last_get_all_kwargs = _kwargs
 		return self.snapshot_rows
 
 	def get_roles(self, _user):
@@ -305,6 +311,55 @@ def test_latest_snapshot_projects_derived_key_account_to_school(monkeypatch):
 	high_school_module.CRMHighSchool._sync_derived_key_account(doc)
 
 	assert doc.is_key_account == 1
+	assert fake_frappe.last_get_all_kwargs["filters"]["verification_status"] == "Verified"
+
+
+def test_removing_last_verified_snapshot_clears_key_account_projection(monkeypatch):
+	fake_frappe = _Frappe()
+	fake_frappe.db.exists_result = True
+	monkeypatch.setattr(snapshot_module, "frappe", fake_frappe)
+
+	snapshot_module.refresh_school_key_account("HS-1")
+
+	assert fake_frappe.db.set_values == [
+		("CRM High School", "HS-1", {"is_key_account": 0}, {"update_modified": False})
+	]
+
+
+def test_snapshot_reprojects_key_account_only_after_delete(monkeypatch):
+	refreshed = []
+	monkeypatch.setattr(snapshot_module, "refresh_school_key_account", refreshed.append)
+
+	snapshot_module.CRMHighSchoolAnnualSnapshot.after_delete(_Doc(high_school="HS-1"))
+
+	assert refreshed == ["HS-1"]
+	assert not hasattr(snapshot_module.CRMHighSchoolAnnualSnapshot, "on_trash")
+
+
+@pytest.mark.parametrize("fieldname, value", [("ne_actual", 12), ("high_school", "HS-2"), ("admission_year", "2027")])
+def test_verified_snapshot_identity_and_source_outcome_are_immutable(monkeypatch, fieldname, value):
+	fake_frappe = _Frappe()
+	monkeypatch.setattr(snapshot_module, "frappe", fake_frappe)
+	doc = _snapshot_doc(
+		high_school="HS-1",
+		admission_year="2026",
+		ne_actual=12,
+		adjusted_ne_threshold=10,
+		verification_status="Verified",
+		verified_by="owner@example.com",
+		verified_at="2026-08-30 00:00:00",
+		is_locked=0,
+		locked_by=None,
+		locked_at=None,
+		name="HS-1 - 2026",
+		_previous=_Doc(verification_status="Verified", ne_actual=10, is_locked=0),
+	)
+	setattr(doc, fieldname, value)
+	setattr(doc._previous, "high_school", "HS-1")
+	setattr(doc._previous, "admission_year", "2026")
+
+	with pytest.raises(_PermissionError):
+		snapshot_module.CRMHighSchoolAnnualSnapshot._validate_lock(doc)
 
 
 def test_promoter_cannot_change_key_account_governance_fields(monkeypatch):

@@ -103,6 +103,7 @@
                 <th scope="col" class="px-3 py-2">{{ __('Activity') }}</th>
                 <th scope="col" class="px-3 py-2">{{ __('Status') }}</th>
                 <th scope="col" class="px-3 py-2">{{ __('Owner') }}</th>
+                <th scope="col" class="px-3 py-2">{{ __('Stakeholder') }}</th>
                 <th scope="col" class="px-3 py-2">{{ __('NE Output') }}</th>
               </tr>
             </thead>
@@ -112,10 +113,11 @@
                 <td class="px-3 py-2">{{ activity.activity_type }}</td>
                 <td class="px-3 py-2">{{ activity.status }}</td>
                 <td class="px-3 py-2">{{ activity.owner_staff || __('Unassigned') }}</td>
+                <td class="px-3 py-2">{{ activity.stakeholder || __('Unassigned') }}</td>
                 <td class="px-3 py-2">{{ displayNumber(activity.application_count) }}</td>
               </tr>
               <tr v-if="!(activities.data || []).length">
-                <td colspan="5" class="px-3 py-4 text-center text-ink-gray-5">{{ __('No school activities') }}</td>
+                <td colspan="6" class="px-3 py-4 text-center text-ink-gray-5">{{ __('No school activities') }}</td>
               </tr>
             </tbody>
           </table>
@@ -161,7 +163,7 @@ const people = createResource({
 })
 const activities = listResource(
   'CRM School Activity',
-  ['name', 'activity_date', 'activity_type', 'status', 'owner_staff', 'application_count'],
+  ['name', 'activity_date', 'activity_type', 'status', 'owner_staff', 'stakeholder', 'application_count'],
 )
 
 const loading = computed(() => snapshots.loading || people.loading || activities.loading)
