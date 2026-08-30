@@ -105,7 +105,9 @@ export default defineConfig(async ({ mode }) => {
       buildConfig: {
         indexHtmlPath: '../crm/www/crm.html',
         emptyOutDir: true,
-        sourcemap: true,
+        // Source maps substantially increase the memory needed by the
+        // production bundle. Enable them explicitly for a diagnostic build.
+        sourcemap: process.env.CRM_SOURCEMAP === 'true',
       },
     }),
   )

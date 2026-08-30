@@ -4,6 +4,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV BENCH_DIR=/home/frappe/frappe-bench
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 ENV PYTHONDONTWRITEBYTECODE=1
+# The production bundle is large enough to hit Node's default heap limit.
+# Keep the limit explicit so CI can complete the build on the hosted runner.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
@@ -53,12 +56,14 @@ COPY --chown=frappe:frappe . ${BENCH_DIR}/apps/crm
 
 RUN bench get-app --branch version-15 --skip-assets https://github.com/developmentforpeople/dfp_external_storage.git
 
-RUN ./env/bin/pip install --no-cache-dir -e apps/crm \
-    && cd apps/crm/frontend \
-    && yarn build \
-    && cd "${BENCH_DIR}" \
-    && bench build --app frappe --production \
-    && mkdir -p sites/assets/locale/vi/LC_MESSAGES \
+RUN ./env/bin/pip install --no-cache-dir -e apps/crm
+
+RUN cd apps/crm/frontend \
+    && yarn build
+
+RUN bench build --app frappe --production
+
+RUN mkdir -p sites/assets/locale/vi/LC_MESSAGES \
     && msguniq --use-first apps/crm/crm/locale/vi.po | msgfmt - -o sites/assets/locale/vi/LC_MESSAGES/crm.mo \
     && cp -a sites /opt/frappe/sites-template
 
