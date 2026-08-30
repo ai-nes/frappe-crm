@@ -133,6 +133,26 @@ def _assert_integrity_keys() -> None:
 		)
 
 
+def ensure_demo_config() -> dict:
+	"""Persist the rollout flags + fixture password a demo site keeps after seeding.
+
+	``execute`` sets ``LOCAL_FLAGS`` only for the duration of the run; this makes
+	the Student Detail workflow (context projection, typed admissions actions)
+	stay enabled on the seeded site. Shared by ``task seed`` and the container
+	first-run seed so the list lives in one place.
+	"""
+	_assert_local_site()
+	from frappe.installer import update_site_config
+
+	persisted = {**LOCAL_FLAGS, "crm_phase2_fixture_password": "123456"}
+	changed = []
+	for key, value in persisted.items():
+		if frappe.conf.get(key) != value:
+			update_site_config(key, value, validate=False)
+			changed.append(key)
+	return {"changed": changed}
+
+
 def ensure_local_integrity_keys() -> dict:
 	"""Persist random HMAC keys for the disposable local site when absent.
 

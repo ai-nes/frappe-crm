@@ -87,22 +87,22 @@ tasks:
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      # Keep the local Student Detail workflow enabled after seeding so the
-      # context projection and typed admissions actions are available in CRM.
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_governance_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
+      # Persist the rollout flags + fixture password so the Student Detail
+      # workflow stays enabled after seeding (list lives in seed_showcase).
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_demo_config"
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
+
+  seed-fresh:
+    desc: Reset site (reinstall) + migrate + seed đầy đủ — dùng khi muốn làm lại từ đầu
+    prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
+      - "{{.EXEC}} {{.BENCH}} migrate"
+      - task: seed
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
