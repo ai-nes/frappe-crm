@@ -2,7 +2,7 @@
   <div class="flex flex-col select-none">
     <!-- Main Node Item -->
     <div
-      class="group relative flex h-7.5 cursor-pointer items-center rounded transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+      class="group relative flex h-7.5 cursor-pointer items-center rounded transition-colors duration-150 ease-in-out focus:outline-none focus-visible:ring-2 focus-visible:ring-outline-gray-3"
       :class="[
         isActive ? 'bg-[--brand-surface-subtle] font-medium text-[--brand-ink]' : 'text-ink-gray-8 group-hover:!text-[--brand-ink]',
         depth > 0 ? 'ml-4 pl-1 text-xs' : '',
@@ -21,7 +21,7 @@
               <component
                 :is="resolvedIcon"
                 v-if="resolvedIcon"
-                class="size-4 shrink-0 transition-transform duration-200"
+                class="size-4 shrink-0 transition-[transform,color] duration-150 ease-in-out"
                 :class="[
                   isActive ? 'text-[--brand-ink]' : 'text-ink-gray-7 group-hover:!text-[--brand-ink]',
                   isCollapsed ? 'size-4' : 'size-4'
@@ -38,7 +38,7 @@
             :hoverDelay="1.5"
           >
             <span
-              class="truncate transition-all duration-300 ease-in-out"
+              class="truncate transition-colors duration-150 ease-in-out"
               :class="[
                 depth > 0 ? 'ml-2 text-xs' : 'ml-2.5 text-sm',
                 isActive

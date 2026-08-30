@@ -1,6 +1,6 @@
 <template>
   <button
-    class="group flex h-7.5 cursor-pointer items-center rounded duration-300 ease-in-out focus:outline-none focus:transition-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-outline-gray-3"
+    class="group flex h-7.5 cursor-pointer items-center rounded transition-colors duration-150 ease-in-out focus:outline-none focus:transition-none focus-visible:rounded focus-visible:ring-2 focus-visible:ring-outline-gray-3"
     :class="
       isActive
         ? 'bg-[--brand-surface-subtle] text-[--brand-ink]'
@@ -17,7 +17,7 @@
           <slot name="icon">
             <Icon
               :icon="icon"
-              class="flex items-center size-4"
+              class="flex items-center size-4 transition-colors duration-150 ease-in-out"
               :class="isActive ? 'text-[--brand-ink]' : 'text-ink-gray-8 group-hover:!text-[--brand-ink]'"
             />
           </slot>
@@ -29,7 +29,7 @@
           :hoverDelay="1.5"
         >
           <span
-            class="flex-1 flex-shrink-0 truncate text-sm duration-300 ease-in-out"
+            class="flex-1 flex-shrink-0 truncate text-sm transition-[color,margin,width,opacity] duration-150 ease-in-out"
             :class="[
               isCollapsed
                 ? 'ml-0 w-0 overflow-hidden opacity-0'
