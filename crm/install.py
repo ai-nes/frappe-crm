@@ -20,6 +20,8 @@ CRM_CORS_ORIGINS = (
 	"http://54.66.53.9:5173",
 	"http://localhost:5173",
 	"http://127.0.0.1:5173",
+	"http://localhost:3000",
+	"https://faip.pro",
 )
 
 
@@ -127,7 +129,7 @@ def add_dashboard_cors_origin():
 
 
 def merge_cors_origins(current_allow_cors, required_origins):
-	"""Merge exact CORS origins while preserving the existing config shape."""
+	"""Merge exact CORS origins using a list whenever multiple origins are present."""
 
 	if current_allow_cors == "*":
 		return "*"
@@ -137,7 +139,7 @@ def merge_cors_origins(current_allow_cors, required_origins):
 		as_list = True
 	elif isinstance(current_allow_cors, str):
 		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
-		as_list = False
+		as_list = len(origins) > 1
 	else:
 		origins = []
 		as_list = False
@@ -146,7 +148,9 @@ def merge_cors_origins(current_allow_cors, required_origins):
 		if origin not in origins:
 			origins.append(origin)
 
-	return origins if as_list else ",".join(origins)
+	if len(origins) > 1:
+		as_list = True
+	return origins if as_list else (origins[0] if origins else None)
 
 
 def sync_frappe_crm_workspace():
