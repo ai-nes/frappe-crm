@@ -72,9 +72,9 @@ git pull
 task pull
 ```
 
-`task pull` = cài deps + migrate + clear cache + restart backend.
+`task pull` = deps + migrate + clear cache + restart backend + **seed lại demo data** (idempotent, không reinstall).
 
-Nếu biết chính xác đổi gì, có thể chạy riêng (xem bảng dưới).
+Không muốn seed lại: `task pull-fast`. Biết chính xác đổi gì thì chạy riêng (xem bảng dưới).
 
 ---
 

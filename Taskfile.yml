@@ -125,7 +125,18 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
   pull:
-    desc: Sau git pull — deps + migrate + clear-cache + restart
+    desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data
+    cmds:
+      - task: deps
+      - task: migrate
+      - task: cache
+      - task: restart
+      # seed_showcase.execute idempotent — chạy lại để data khớp bản vừa pull.
+      # Không đụng site (không reinstall); bỏ qua bước này: task pull-fast.
+      - task: seed
+
+  pull-fast:
+    desc: Như `task pull` nhưng KHÔNG seed lại (chỉ code + schema)
     cmds:
       - task: deps
       - task: migrate
