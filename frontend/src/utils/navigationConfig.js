@@ -31,6 +31,14 @@ const rawRoleNavigationTrees = {
       label: 'Lead',
       icon: 'clipboard-list',
       to: 'CRM Students',
+      children: [
+        { id: 'sales_records_new', label: 'Mới' },
+        { id: 'sales_records_counseling', label: 'Đang tư vấn' },
+        { id: 'sales_records_awaiting_docs', label: 'Chờ hồ sơ' },
+        { id: 'sales_records_cold', label: 'Chưa chăm sóc' },
+        { id: 'sales_records_won', label: 'Đã chuyển đổi' },
+        { id: 'sales_unassigned_pool', label: 'Chưa phân công' },
+      ],
     },
     {
       id: 'sales_my_tasks',

@@ -430,8 +430,30 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		conversion["read_enabled"] = True
 		conversion["write_enabled"] = conversion_write_enabled
 	attribution_projection = _attribution_projection(student)
+	assessment_context = _assessment_context(student)
+	parent_context = _parent_context(student)
+	privacy_context = _privacy_context(student, doc)
+	geography_context = _geography_context(student)
 	return {
-		"student": {"name": doc.name, "student_name": doc.get("student_name"), "owner_staff": doc.get("owner_staff") or doc.get("assigned_to"), "assigned_to": doc.get("assigned_to"), "owning_team": doc.get("owning_team"), "owning_pool": doc.get("owning_pool")},
+		"student": {
+			"name": doc.name,
+			"student_name": doc.get("student_name"),
+			"high_school": doc.get("high_school"),
+			"province": doc.get("province"),
+			"ward": doc.get("ward"),
+			"current_grade": doc.get("current_grade"),
+			"study_stage": doc.get("study_stage"),
+			"assessment_status": doc.get("assessment_status"),
+			"assessment_revision": doc.get("assessment_revision"),
+			"interest_level": doc.get("interest_level"),
+			"fit_level": doc.get("fit_level"),
+			"primary_barrier": doc.get("primary_barrier"),
+			"privacy_status": doc.get("privacy_status"),
+			"owner_staff": doc.get("owner_staff") or doc.get("assigned_to"),
+			"assigned_to": doc.get("assigned_to"),
+			"owning_team": doc.get("owning_team"),
+			"owning_pool": doc.get("owning_pool"),
+		},
 		"engagement_revision": int(doc.get("engagement_revision") or 0),
 		"lifecycle": {**lifecycle_context, "stage": lifecycle_context.get("current_stage") or doc.get("lifecycle_stage"), "enrollment_status": doc.get("enrollment_status"), "lost": next((item for item in history if item.get("to_stage") == "Lost"), None), "reopen": next((item for item in history if item.get("transition_kind") == "reopen"), None)},
 		"latest_interaction": latest_interaction,
@@ -443,12 +465,163 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		# intentionally not part of the Student Detail DTO.  Admissions receives
 		# only the redacted ``admissions_context`` projection below.
 		"admissions_context": _admissions_context(student, doc, attribution_projection),
+		"assessment": assessment_context,
+		"parent_context": parent_context,
+		"privacy": privacy_context,
+		"geography": geography_context,
 		"qualification_evidence": _evidence(outcome_rows[0], "qualification_evidence", student=student) if outcome_rows else [],
 		"history": page,
 		"next_cursor": _cursor(student, page[-1]) if len(history) > limit and page else None,
 		"policy_version": CONTEXT_POLICY_VERSION,
 		"legacy_read": bool(legacy and (not outcome_rows or not canonical_lifecycle_present)),
 	}
+
+
+def _assessment_context(student: str) -> dict[str, Any]:
+	"""Return the canonical assessment read model without making context brittle."""
+	try:
+		from crm.fcrm.student_assessment import get_student_assessment_context
+
+		return get_student_assessment_context(student)
+	except Exception:
+		return {"current": None, "pending": None, "history": [], "policy_version": None}
+
+
+def _parent_context(student: str) -> list[dict[str, Any]]:
+	if not _exists("CRM Parent Contact Authority"):
+		return []
+	try:
+		rows = frappe.get_all(
+			"CRM Parent Contact Authority",
+			filters={"student": student},
+			fields=[
+				"name", "contact", "relationship_type", "relationship_verified",
+				"decision_role", "decision_influence", "concerns", "allowed_channels",
+				"lawful_basis", "effective_at", "expires_at", "revoked_at",
+			],
+			order_by="effective_at desc",
+			limit_page_length=20,
+		)
+		output = []
+		now = frappe.utils.now_datetime()
+		for row in rows:
+			if not _can_read_record("CRM Parent Contact Authority", row.get("name")):
+				continue
+			if row.get("contact") and not _can_read_record("CRM Contact", row.get("contact")):
+				continue
+			if row.get("revoked_at") or (row.get("expires_at") and row.get("expires_at") <= now) or (row.get("effective_at") and row.get("effective_at") > now):
+				continue
+			output.append(
+				{
+					"name": row.get("name"),
+					"contact": row.get("contact"),
+					"relationship_type": row.get("relationship_type"),
+					"relationship_verified": bool(row.get("relationship_verified")),
+					"decision_role": row.get("decision_role") or "Unknown",
+					"decision_influence": row.get("decision_influence") or "Unknown",
+					"concerns": _text(row.get("concerns"), 1000),
+					"allowed_channels": _json(row.get("allowed_channels")) or [],
+					"lawful_basis": row.get("lawful_basis"),
+					"effective_at": _iso(row.get("effective_at")),
+					"expires_at": _iso(row.get("expires_at")),
+					"revoked_at": _iso(row.get("revoked_at")),
+				}
+			)
+		return output
+	except Exception:
+		return []
+
+
+def _privacy_context(student: str, doc: Any) -> dict[str, Any]:
+	requests = []
+	consent_at = None
+	retention_until = None
+	if _exists("CRM Contact Consent Event"):
+		try:
+			consent_rows = frappe.get_all(
+				"CRM Contact Consent Event",
+				filters={"student": student},
+				fields=["name", "occurred_at", "granted_at"],
+				order_by="occurred_at desc, creation desc",
+				limit_page_length=1,
+			)
+			if consent_rows and _can_read_record("CRM Contact Consent Event", consent_rows[0].get("name")):
+				consent = consent_rows[0]
+				consent_at = consent.get("granted_at") or consent.get("occurred_at")
+				retention_days = frappe.conf.get("crm_student_privacy_retention_days")
+				try:
+					retention_days = int(retention_days) if retention_days not in (None, "") else None
+				except (TypeError, ValueError):
+					retention_days = None
+				if retention_days and retention_days > 0 and consent.get("occurred_at"):
+					retention_until = frappe.utils.add_days(consent.get("occurred_at"), retention_days)
+		except Exception:
+			consent_at = None
+			retention_until = None
+	if _exists("CRM Student Privacy Request"):
+		try:
+			rows = frappe.get_all(
+				"CRM Student Privacy Request",
+				filters={"student": student},
+				fields=["name", "request_type", "status", "requested_at", "requested_by", "resolved_at", "resolved_by", "resolution", "evidence_reference"],
+				order_by="requested_at desc",
+				limit_page_length=20,
+			)
+			for row in rows:
+				if _can_read_record("CRM Student Privacy Request", row.get("name")):
+					requests.append(
+						{
+							"name": row.get("name"),
+							"request_type": row.get("request_type"),
+							"status": row.get("status"),
+							"requested_at": _iso(row.get("requested_at")),
+							"requested_by": row.get("requested_by"),
+							"resolved_at": _iso(row.get("resolved_at")),
+							"resolved_by": row.get("resolved_by"),
+							"resolution": _text(row.get("resolution"), 1000),
+							"evidence_reference": row.get("evidence_reference"),
+						}
+					)
+		except Exception:
+			requests = []
+	return {
+		"status": doc.get("privacy_status") or "unknown",
+		"consent_at": _iso(consent_at),
+		"retention_until": _iso(retention_until),
+		"requests": requests,
+	}
+
+
+def _geography_context(student: str) -> dict[str, Any]:
+	"""Expose dated geography snapshots without leaking unrelated Student rows."""
+	if not _exists("CRM Student Geography Snapshot"):
+		return {"current": None, "history": []}
+	try:
+		rows = frappe.get_all(
+			"CRM Student Geography Snapshot",
+			filters={"student": student},
+			fields=["name", "captured_at", "province", "ward", "high_school", "source", "change_reason"],
+			order_by="captured_at desc, name desc",
+			limit_page_length=20,
+		)
+		history = []
+		for row in rows:
+			if not _can_read_record("CRM Student Geography Snapshot", row.get("name")):
+				continue
+			history.append(
+				{
+					"name": row.get("name"),
+					"captured_at": _iso(row.get("captured_at")),
+					"province": row.get("province"),
+					"ward": row.get("ward"),
+					"high_school": row.get("high_school"),
+					"source": row.get("source"),
+					"change_reason": _text(row.get("change_reason"), 500),
+				}
+			)
+		return {"current": history[0] if history else None, "history": history}
+	except Exception:
+		return {"current": None, "history": []}
 
 
 def _attribution_projection(student: str) -> dict[str, Any]:
@@ -516,6 +689,12 @@ def _admissions_context(student: str, doc: Any, attribution: dict[str, Any]) -> 
 	input_revision = int(doc.get("score_input_revision") or 0)
 	applied_revision = int(doc.get("applied_score_input_revision") or 0)
 	return {
+		"current_grade": doc.get("current_grade"),
+		"study_stage": doc.get("study_stage"),
+		"assessment_status": doc.get("assessment_status"),
+		"interest": doc.get("interest_level"),
+		"fit": doc.get("fit_level"),
+		"primary_barrier": doc.get("primary_barrier"),
 		"campaign": _demo_campaign(latest_campaign),
 		"event": _demo_event(latest_event),
 		"scholarship": scholarship,

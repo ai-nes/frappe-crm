@@ -47,6 +47,10 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	# the parent Interaction's own Student/Contact scope instead of requiring
 	# a non-null student.
 	"CRM Score History": "student",
+	"CRM Student Geography Snapshot": "student",
+	"CRM Admission Application": "student",
+	"CRM Student Payment": "student",
+	"CRM Revenue Recognition": "student",
 }
 
 

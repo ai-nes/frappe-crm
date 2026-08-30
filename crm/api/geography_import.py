@@ -195,28 +195,28 @@ def _import_row(data):
 		},
 		fallback_filters={"ward_name": data["ward_name"], "province": province.name},
 	)
+	school_area = frappe.db.get_value(
+		"CRM Term", {"term_name": data.get("region_code"), "category": "school_area"}, "name"
+	) if data.get("region_code") else None
 	_upsert_doc(
 		"CRM High School",
 		{
-			"source_identity": f"{data['province_code']}:{data['ward_code']}:{data['school_code']}",
+			"school_code": data["school_code"],
+			"province": province.name,
+			"ward": ward.name,
 		},
 		{
 			"school_name": data["school_name"],
 			"school_code": data["school_code"],
 			"province": province.name,
 			"ward": ward.name,
-			"school_area": data.get("region_code"),
-			"province_code": data["province_code"],
-			"province_name": data["province_name"],
-			"ward_code": data["ward_code"],
-			"ward_name": data["ward_name"],
-			"source_identity": f"{data['province_code']}:{data['ward_code']}:{data['school_code']}",
+			"school_area": school_area,
 			"address": data.get("address"),
 		},
 		fallback_filters={
 			"school_name": data["school_name"],
-			"ward_code": data["ward_code"],
-			"province_code": data["province_code"],
+			"ward": ward.name,
+			"province": province.name,
 		},
 	)
 

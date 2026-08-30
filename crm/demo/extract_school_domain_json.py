@@ -28,6 +28,8 @@ CANONICAL_FIELDS = (
 	"school_area",
 	"school_type",
 	"address",
+	"latitude",
+	"longitude",
 )
 TS_FIELDS = (
 	"province_code",

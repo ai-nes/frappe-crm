@@ -4,6 +4,11 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.school_domain_permissions import (
+	has_school_portfolio_permission,
+	school_portfolio_condition,
+)
+
 
 class CRMHighSchool(Document):
 	def before_validate(self):
@@ -11,30 +16,15 @@ class CRMHighSchool(Document):
 
 	def validate(self):
 		self._validate_geography()
-		self._validate_source_identity()
+		self._validate_business_identity()
 		self._validate_key_account_governance()
 		self._sync_derived_key_account()
 
 	def _sync_canonical_geography(self):
-		if self.province and frappe.db.exists("CRM Province", self.province):
-			province = frappe.db.get_value(
-				"CRM Province", self.province, ["province_code", "province_name"], as_dict=True
-			)
-			if self.province_name and self.province_name != province.province_name:
-				self.legacy_province_name = self.province_name
-			self.province_code = province.province_code
-			self.province_name = province.province_name
-
 		if self.ward and frappe.db.exists("CRM Ward", self.ward):
-			ward = frappe.db.get_value(
-				"CRM Ward", self.ward, ["ward_code", "ward_name", "province"], as_dict=True
-			)
-			if self.ward_name and self.ward_name != ward.ward_name:
-				self.legacy_ward_name = self.ward_name
-			self.ward_code = ward.ward_code
-			self.ward_name = ward.ward_name
+			ward_province = frappe.db.get_value("CRM Ward", self.ward, "province")
 			if not self.province:
-				self.province = ward.province
+				self.province = ward_province
 
 	def _validate_geography(self):
 		if self.province and self.ward:
@@ -42,21 +32,14 @@ class CRMHighSchool(Document):
 			if ward_province and ward_province != self.province:
 				frappe.throw("The selected ward must belong to the selected province.", frappe.ValidationError)
 
-	def _validate_source_identity(self):
-		if self.province_code and self.ward_code and self.school_code:
-			identity = f"{self.province_code}:{self.ward_code}:{self.school_code}"
-			if self.source_identity and self.source_identity != identity:
-				frappe.throw("School source identity cannot change after reconciliation.", frappe.ValidationError)
-			self.source_identity = identity
-			filters = {
-				"school_code": self.school_code,
-				"province_code": self.province_code,
-				"ward_code": self.ward_code,
-			}
-			if not self.is_new():
-				filters["name"] = ["!=", self.name]
-			if frappe.db.exists("CRM High School", filters):
-				frappe.throw("A school with the same province, ward and school code already exists.", frappe.DuplicateEntryError)
+	def _validate_business_identity(self):
+		if not (self.province and self.ward and self.school_code):
+			return
+		filters = {"school_code": self.school_code, "province": self.province, "ward": self.ward}
+		if not self.is_new():
+			filters["name"] = ["!=", self.name]
+		if frappe.db.exists("CRM High School", filters):
+			frappe.throw("A school with the same province, ward and school code already exists.", frappe.DuplicateEntryError)
 
 	def _sync_derived_key_account(self):
 		"""Project the latest annual eligibility without accepting manual input."""
@@ -64,30 +47,19 @@ class CRMHighSchool(Document):
 			return
 		rows = frappe.get_all(
 			"CRM High School Annual Snapshot",
-			filters={"high_school": self.name},
-			fields=["admission_year", "ne_actual", "adjusted_ne_threshold", "key_account_eligible", "snapshot_date", "source_file"],
-			order_by="admission_year desc, modified desc",
+			filters={"high_school": self.name, "verification_status": "Verified", "period_type": "Annual"},
+			fields=["admission_year", "ne_actual", "adjusted_ne_threshold", "key_account_eligible", "snapshot_date"],
+			order_by="admission_year desc, snapshot_date desc, revision desc",
 			limit_page_length=1,
 		)
 		if not rows:
 			self.is_key_account = 0
-			self.key_account_status = "Review Required"
-			self.key_account_reason = "No annual snapshot is available."
 			return
 		snapshot = rows[0]
 		if snapshot.ne_actual in (None, "") or snapshot.adjusted_ne_threshold in (None, ""):
 			self.is_key_account = 0
-			self.key_account_status = "Review Required"
-			self.key_account_reason = f"Admission year {snapshot.admission_year} requires review."
 			return
 		self.is_key_account = int(bool(snapshot.key_account_eligible))
-		self.key_account_status = "Eligible" if self.is_key_account else "Not Eligible"
-		self.key_account_since = snapshot.snapshot_date if self.is_key_account else None
-		self.key_account_last_review = snapshot.snapshot_date
-		self.key_account_source = snapshot.source_file
-		self.key_account_reason = (
-			f"Derived from admission year {snapshot.admission_year} annual snapshot."
-		)
 
 	def _validate_key_account_governance(self):
 		if not self.get_doc_before_save() or frappe.session.user in {"Administrator"}:
@@ -98,7 +70,7 @@ class CRMHighSchool(Document):
 		previous = self.get_doc_before_save()
 		if any(
 			previous.get(fieldname) != self.get(fieldname)
-			for fieldname in ("key_account_tier", "key_account_owner", "key_account_team", "is_key_account")
+			for fieldname in ("key_account_tier", "key_account_owner", "key_account_team")
 		):
 			frappe.throw("Promoters cannot change key-account governance fields.", frappe.PermissionError)
 
@@ -171,3 +143,16 @@ class CRMHighSchool(Document):
 			"modified",
 		]
 		return {"columns": columns, "rows": rows}
+
+
+# Module-level permission hooks (registered in hooks.py). Kept out of the
+# Document subclass so they never shadow Document.has_permission, which would
+# bypass the ignore_permissions guard and mis-bind permtype as the doc arg.
+def get_permission_query_conditions(user=None, doctype=None):
+	if doctype not in (None, "CRM High School"):
+		return "1=0"
+	return school_portfolio_condition("CRM High School", user)
+
+
+def has_permission(doc, user=None, permission_type=None, ptype=None):
+	return has_school_portfolio_permission(doc, user, permission_type, ptype)

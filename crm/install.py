@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and Contributors
 # MIT License. See license.txt
 import json
+import os
+from urllib.parse import urlsplit
 
 import click
 import frappe
@@ -18,6 +20,8 @@ CRM_CORS_ORIGINS = (
 	"http://54.66.53.9:5173",
 	"http://localhost:5173",
 	"http://127.0.0.1:5173",
+	"http://localhost:3000",
+	"https://faip.pro",
 )
 
 
@@ -28,6 +32,7 @@ def before_install():
 def after_install(force=False):
 	set_default_system_language()
 	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
 	add_default_fields_layout(force)
 	add_property_setter()
 	add_email_template_custom_fields()
@@ -49,6 +54,7 @@ def after_install(force=False):
 def after_migrate():
 	"""Keep integration CORS origins present on every production migration."""
 	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
 
 
 def set_default_system_language():
@@ -67,12 +73,16 @@ def complete_setup(_args: dict | None = None):
 	return None
 
 
-def add_chatwoot_cors_origin():
-	"""Allow approved integration and AI CRM origins to reach this site."""
+def _persist_cors_origins(required_origins):
+	"""Merge exact CORS origins into site_config.json, preserving its existing shape."""
+
+	required_origins = tuple(origin for origin in required_origins if origin)
+	if not required_origins:
+		return
 
 	current_allow_cors = frappe.conf.get("allow_cors")
 
-	allow_cors = merge_cors_origins(current_allow_cors, CRM_CORS_ORIGINS)
+	allow_cors = merge_cors_origins(current_allow_cors, required_origins)
 	if allow_cors == current_allow_cors:
 		return
 
@@ -87,11 +97,39 @@ def add_chatwoot_cors_origin():
 		site_config_file.write("\n")
 
 	frappe.conf.allow_cors = allow_cors
-	click.secho(f"* Allowing CORS for {', '.join(CRM_CORS_ORIGINS)}")
+	click.secho(f"* Allowing CORS for {', '.join(required_origins)}")
+
+
+def add_chatwoot_cors_origin():
+	"""Allow approved integration and AI CRM origins to reach this site."""
+	_persist_cors_origins(CRM_CORS_ORIGINS)
+
+
+def dashboard_cors_origins():
+	"""Origins for the external admissions dashboard, derived from the OAuth config.
+
+	Reuses CRM_GOOGLE_OAUTH_DASHBOARD_URL (the value the login flow allowlists as a
+	post-login redirect target) so the CORS grant and the redirect target never drift.
+	"""
+	raw = os.getenv("CRM_GOOGLE_OAUTH_DASHBOARD_URL") or ""
+	origins = []
+	for entry in raw.split(","):
+		entry = entry.strip()
+		if not entry:
+			continue
+		parts = urlsplit(entry)
+		if parts.scheme and parts.netloc:
+			origins.append(f"{parts.scheme}://{parts.netloc}")
+	return tuple(dict.fromkeys(origins))
+
+
+def add_dashboard_cors_origin():
+	"""Allow the configured admissions dashboard origin to reach this site."""
+	_persist_cors_origins(dashboard_cors_origins())
 
 
 def merge_cors_origins(current_allow_cors, required_origins):
-	"""Merge exact CORS origins while preserving the existing config shape."""
+	"""Merge exact CORS origins using a list whenever multiple origins are present."""
 
 	if current_allow_cors == "*":
 		return "*"
@@ -101,7 +139,7 @@ def merge_cors_origins(current_allow_cors, required_origins):
 		as_list = True
 	elif isinstance(current_allow_cors, str):
 		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
-		as_list = False
+		as_list = len(origins) > 1
 	else:
 		origins = []
 		as_list = False
@@ -110,7 +148,9 @@ def merge_cors_origins(current_allow_cors, required_origins):
 		if origin not in origins:
 			origins.append(origin)
 
-	return origins if as_list else ",".join(origins)
+	if len(origins) > 1:
+		as_list = True
+	return origins if as_list else (origins[0] if origins else None)
 
 
 def sync_frappe_crm_workspace():
@@ -142,7 +182,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Person-Quick Entry": {
 			"doctype": "CRM Person",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","role","phone","email"]},{"name":"col_school","fields":["province","high_school"]}]}]',
+		"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -165,11 +205,11 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
-			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["ward","province_name","region"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+		"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
 		},
 		"CRM Person-Side Panel": {
 			"doctype": "CRM Person",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","role","phone","email"]}]},{"label":"School","name":"school_section","opened":true,"columns":[{"name":"col_school","fields":["province","high_school","notes"]}]}]',
+		"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
 		},
 		"CRM Campaign-Side Panel": {
 			"doctype": "CRM Campaign",
@@ -196,7 +236,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
-			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["ward","province_name","region"]}]}]}]',
+		"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
 		},
 	}
 
@@ -435,7 +475,7 @@ def add_default_quick_filters():
 	quick_filters = {
 		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
-		"CRM High School": ["province_name", "ward_name", "school_name"],
+		"CRM High School": ["province", "ward", "school_name"],
 		"Contact": ["status", "email_id", "phone"],
 		"Task": ["title", "priority", "assigned_to", "status", "due_date"],
 		"Call Log": ["telephony_medium", "type", "status", "from", "to"],

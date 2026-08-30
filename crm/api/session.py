@@ -152,6 +152,49 @@ def get_my_roles():
 	}
 
 
+@frappe.whitelist(allow_guest=True)
+def me():
+	"""Identity for an external SPA (the admissions dashboard) served cross-origin.
+
+	Returns ``{"user": None}`` for an unauthenticated session instead of raising,
+	so the client can treat "logged out" as a normal state and route to /login.
+	An authenticated non-CRM user still fails closed via ``get_session_role_flags``.
+	"""
+	if frappe.session.user == "Guest":
+		return {"user": None}
+
+	flags = get_session_role_flags()
+	user = frappe.db.get_value(
+		"User",
+		frappe.session.user,
+		["name", "email", "full_name", "user_image"],
+		as_dict=True,
+	)
+	return {
+		"user": user.name,
+		"email": user.email,
+		"full_name": user.full_name,
+		"user_image": user.user_image,
+		"roles": frappe.get_roles(),
+		"crm_profile": flags["crm_profile"],
+		"crm_role": flags["crm_role"],
+		"crm_capabilities": flags["crm_capabilities"],
+		# The cross-origin SPA has no server-rendered page to read frappe.boot
+		# from, so hand it the CSRF token it must send as `X-Frappe-CSRF-Token`
+		# on write requests (production enforces CSRF; dev sets ignore_csrf).
+		"csrf_token": _csrf_token(),
+	}
+
+
+def _csrf_token() -> str | None:
+	try:
+		from frappe.sessions import get_csrf_token
+
+		return get_csrf_token()
+	except Exception:
+		return None
+
+
 @frappe.whitelist()
 def get_users():
 	session_roles = get_session_role_flags()

@@ -31,3 +31,17 @@ Configure these repository or `production` environment secrets:
 The deploy workflow uploads only the Compose file. Application code and all
 runtime scripts are already inside the image, so the EC2 host does not build
 Frappe during normal deployments.
+
+## Seeding demo data on a server (manual, opt-in)
+
+Deploys run only `bench migrate` — they never seed. To populate the curated
+demo dataset (schools + coordinates, ~100 students, campaigns, edge cases) on a
+**demo / staging** deployment, from the compose directory on the server:
+
+```bash
+bash scripts/seed-server.sh          # or: COMPOSE_DIR=/opt/frappe-crm bash scripts/seed-server.sh
+```
+
+It re-asks for the site name, sets `allow_demo_seed=1` for the run, seeds, then
+clears the flag. The shared-password test logins (`seed_role_accounts`) are
+skipped on any non-local site. Never run this against a real production site.

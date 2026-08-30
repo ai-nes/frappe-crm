@@ -25,10 +25,10 @@ class CRMSchoolActivity(Document):
 			if category and category != "activity_type":
 				frappe.throw("Activity Type must use an activity_type term.", frappe.ValidationError)
 		if self.stakeholder and self.high_school:
-			stakeholder_school = frappe.db.get_value("CRM Person", self.stakeholder, "high_school")
+			stakeholder_school = frappe.db.get_value("CRM School Stakeholder", self.stakeholder, "high_school")
 			if stakeholder_school and stakeholder_school != self.high_school:
 				frappe.throw("The stakeholder must belong to the selected high school.", frappe.ValidationError)
-		for fieldname in ("attendance", "prospect_count", "contact_count", "application_count", "ne_output"):
+		for fieldname in ("attendance", "prospect_count", "contact_count", "application_count"):
 			if self.get(fieldname) not in (None, "") and int(self.get(fieldname)) < 0:
 				frappe.throw(f"{fieldname} cannot be negative.", frappe.ValidationError)
 
@@ -40,9 +40,8 @@ class CRMSchoolActivity(Document):
 			{"label": "Activity", "type": "Link", "key": "activity_type", "options": "CRM Term", "width": "12rem"},
 			{"label": "Status", "type": "Select", "key": "status", "width": "9rem"},
 			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
-			{"label": "NE Output", "type": "Int", "key": "ne_output", "width": "8rem"},
 		]
-		rows = ["name", "high_school", "activity_date", "activity_type", "status", "outcome", "owner_staff", "ne_output", "modified"]
+		rows = ["name", "high_school", "activity_date", "activity_type", "status", "outcome", "owner_staff", "application_count", "modified"]
 		return {"columns": columns, "rows": rows}
 
 

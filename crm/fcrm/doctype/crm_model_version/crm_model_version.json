@@ -1,0 +1,21 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "field:model_key", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["model_key", "model_name", "model_version", "model_type", "status", "owner", "effective_from", "effective_until", "prompt_version", "policy_version", "knowledge_version", "notes"],
+ "fields": [
+  {"fieldname": "model_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Model Key", "reqd": 1, "unique": 1},
+  {"fieldname": "model_name", "fieldtype": "Data", "in_list_view": 1, "label": "Model Name", "reqd": 1},
+  {"fieldname": "model_version", "fieldtype": "Data", "in_list_view": 1, "label": "Model Version", "reqd": 1},
+  {"fieldname": "model_type", "fieldtype": "Select", "in_list_view": 1, "label": "Model Type", "options": "Forecast\nAssessment\nAttribution", "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nApproved\nRetired", "reqd": 1},
+  {"fieldname": "owner", "fieldtype": "Link", "in_list_view": 1, "label": "Owner", "options": "User", "reqd": 1},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "label": "Effective Until"},
+  {"fieldname": "prompt_version", "fieldtype": "Data", "label": "Prompt Version"},
+  {"fieldname": "policy_version", "fieldtype": "Data", "label": "Policy Version"},
+  {"fieldname": "knowledge_version", "fieldtype": "Data", "label": "Knowledge Version"},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Model Version", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "model_key,model_name,model_version", "sort_field": "effective_from", "sort_order": "DESC"
+}

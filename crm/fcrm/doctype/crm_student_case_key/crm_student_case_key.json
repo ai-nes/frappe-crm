@@ -104,7 +104,7 @@
    "read_only": 1
   },
   {
-   "default": "phase3-v1",
+   "default": "admissions-erd-v2",
    "fieldname": "schema_version",
    "fieldtype": "Data",
    "hidden": 1,
@@ -121,7 +121,11 @@
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-08-25 00:00:00.000000",
+ "indexes": [
+  {"fields": ["identity", "admission_year"], "name": "crm_student_case_key_identity_year_uniq", "unique": 1},
+  {"fields": ["canonical_student"], "name": "crm_student_case_key_canonical_student_uniq", "unique": 1}
+ ],
+ "modified": "2026-08-30 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Student Case Key",

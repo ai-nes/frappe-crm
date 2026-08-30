@@ -8,6 +8,7 @@ repository.  This module exposes pure reconciliation functions plus explicit
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 import unicodedata
 from collections import Counter, defaultdict
@@ -25,7 +26,10 @@ DEFAULT_TS_PATH = _DATA_DIR / "TS-HCM-2026.json"
 DEFAULT_SCHOOL_SEED_XLSX_PATH = _DATA_DIR / "school-seed.xlsx"
 DEFAULT_TS_XLSX_PATH = _DATA_DIR / "TS-HCM-2026.xlsx"
 NE_2026_SUPPLEMENT_PATH = _DATA_DIR / "reference" / "ts_hcm_2026_ne_2026.json"
-TS_PROMOTER_OWNER_USER = "vo-thi-lan.promoter@example.test"
+# Must match the Promoter account created by
+# crm.demo.seed_showcase._ensure_promoter_fixture (PROMOTER_EMAIL); the TS import
+# assigns every workbook relationship to that portfolio.
+TS_PROMOTER_OWNER_USER = "vo.thi.lan@gmail.com"
 MANUAL_SCHOOL_MAPPING_PATH = _DATA_DIR / "reference" / "ts_school_manual_mapping.json"
 PRIMARY_TS_SHEET = "Địa bàn TĐ THPT 2026"
 KEY_ACCOUNT_SOURCE_SHEETS = frozenset({PRIMARY_TS_SHEET})
@@ -57,6 +61,17 @@ def _number(value):
 		return None
 	try:
 		return int(float(value))
+	except (TypeError, ValueError):
+		return None
+
+
+def _coordinate(value):
+	"""Parse a geocoded latitude/longitude cell; blank or non-numeric yields ``None``."""
+	value = _text(value)
+	if not value:
+		return None
+	try:
+		return round(float(value), 7)
 	except (TypeError, ValueError):
 		return None
 
@@ -118,9 +133,9 @@ def _header_key(value) -> str | None:
 		return "province_code"
 	if normalized in {"tentinhtp", "tentinh", "tentinhthanhpho", "province", "tinh", "tinhthanhpho"}:
 		return "province_name"
-	if normalized in {"maxaphuong", "maxa", "maphuong", "maxaphuongthitran", "wardcode"}:
+	if normalized in {"maxaphuong", "maxa", "maphuong", "maphuongxa", "maxaphuongthitran", "wardcode"}:
 		return "ward_code"
-	if normalized in {"tenxaphuong", "tenxa", "tenphuong", "tenxaphuongthitran", "ward", "wardname"}:
+	if normalized in {"tenxaphuong", "tenxa", "tenphuong", "phuongxa", "tenphuongxa", "tenxaphuongthitran", "ward", "wardname"}:
 		return "ward_name"
 	if normalized in {"matruong", "schoolcode", "code"}:
 		return "school_code"
@@ -128,6 +143,10 @@ def _header_key(value) -> str | None:
 		return "school_name"
 	if normalized in {"diachi", "address", "diachitruong"} or normalized.startswith("diachitruong"):
 		return "address"
+	if normalized in {"latitude", "lat", "vido"}:
+		return "latitude"
+	if normalized in {"longitude", "long", "lng", "lon", "kinhdo"}:
+		return "longitude"
 	if normalized in {"loaihinh", "loaitruong", "schooltype", "type"}:
 		return "school_type"
 	if normalized in {"khuvuc", "schoolarea", "area", "kv"}:
@@ -152,8 +171,8 @@ def _header_key(value) -> str | None:
 		return "ne_2025"
 	if normalized in {"stakeholder", "stakeholdername", "nguoilienhe", "dautuyensinh", "dautuyensinhthpt"}:
 		return "stakeholder_name"
-	if normalized in {"promoter", "tenpromoterlienhe", "promoterphutrach"}:
-		return "stakeholder_name"
+	if normalized in {"promoter", "tenpromoterlienhe", "tenpromoterphutrach", "promoterphutrach"}:
+		return "pic"
 	if normalized == "cbcongtac":
 		return "pic"
 	if normalized in {"stakeholderrole", "vaitro", "chucvu", "role"}:
@@ -233,7 +252,7 @@ def _json_rows(payload, *, canonical=False):
 			source_sheet, source_row, values = row
 		data = {
 			field: value
-			for field, value in zip(fields, values)
+			for field, value in zip(fields, values, strict=True)
 			if value not in (None, "")
 		}
 		yield {"source_sheet": source_sheet, "source_row": source_row, "data": data}
@@ -269,8 +288,6 @@ def _sheet_records(sheet):
 	header_row, headers = _find_header_row(rows)
 	if header_row is None:
 		return [], {"status": "unresolved", "reason": "header_not_found"}
-	if _sheet_kind(sheet.title) == "activity" and "stakeholder_name" in headers:
-		headers["pic"] = headers.pop("stakeholder_name")
 	records = []
 	for row_number, row in enumerate(rows[header_row + 1 :], start=header_row + 2):
 		values = {key: _text(row[index]) if index < len(row) else "" for key, index in headers.items()}
@@ -288,6 +305,7 @@ def _sanitized_row(record):
 		"school_name": data.get("school_name"),
 		"province_name": data.get("province_name"),
 		"school_code": data.get("school_code"),
+		"source_identity": record.get("source_identity") or record.get("canonical_source_identity"),
 		"match_status": record.get("match_status"),
 		"confidence": record.get("confidence"),
 		"review_required": record.get("review_required", False),
@@ -327,6 +345,10 @@ def reconcile_school_seed(path=DEFAULT_SCHOOL_SEED_PATH) -> dict:
 			seen.add(identity)
 			record["canonical_province"] = province
 			record["source_identity"] = identity
+			record["source_pic_fingerprint"] = (
+			hashlib.sha256(_text(data.get("pic")).encode("utf-8")).hexdigest()[:16]
+			if data.get("pic") else None
+		)
 			record["match_status"] = "ready" if not reasons else "review_required"
 			record["reasons"] = reasons
 			status_counts[record["match_status"]] += 1
@@ -393,11 +415,13 @@ def _match_school(data, by_name, by_global_name, by_identity, *, source_file=Non
 	if len(candidates) == 1:
 		if data.get("school_code") and candidates[0].get("school_code") and data["school_code"] != candidates[0]["school_code"]:
 			if source_sheet == "KHU VỰC 1":
-				return candidates[0], "matched", 0.88, ["normalized_name_and_province", "legacy_school_code_changed"]
+				return candidates[0], "review_required", 0.88, ["normalized_name_and_province", "legacy_school_code_changed"]
 			return None, "unmatched", 0, ["school_code_not_found"]
+		if province and data.get("school_code") == candidates[0].get("school_code"):
+			return candidates[0], "matched", 0.98, ["name_province_and_source_code"]
 		if province:
-			return candidates[0], "matched", 0.9, ["normalized_name_and_province"]
-		return candidates[0], "matched", 0.75, ["unique_school_name_without_province"]
+			return candidates[0], "review_required", 0.9, ["normalized_name_and_province_require_review"]
+		return candidates[0], "review_required", 0.75, ["unique_school_name_without_province"]
 	if data.get("school_code"):
 		by_code = [row for row in candidates if row["school_code"] == data["school_code"]]
 		if len(by_code) == 1:
@@ -511,6 +535,11 @@ def reconcile_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL
 				source_sheet=record["source_sheet"],
 				source_row=record["source_row"],
 			)
+			record["canonical_source_identity"] = candidate.get("source_identity") if candidate else None
+			record["source_pic_fingerprint"] = (
+				hashlib.sha256(_text(data.get("pic")).encode("utf-8")).hexdigest()[:16]
+				if data.get("pic") else None
+			)
 			if kind == "aggregate_or_calendar" and not data.get("school_name"):
 				status, confidence, reasons = "unmatched", 0, ["aggregate_or_calendar_without_school_grain"]
 			if kind == "primary":
@@ -518,6 +547,8 @@ def reconcile_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL
 					reasons.append("missing_ne_value")
 				if not data.get("adjusted_ne_threshold"):
 					reasons.append("missing_adjusted_ne_threshold")
+			if data.get("stakeholder_name"):
+				reasons.append("person_manual_review_required")
 			record.update({
 				"candidate": candidate,
 				"match_status": status,
@@ -555,13 +586,29 @@ def reconcile_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL
 	return result
 
 
-def write_reconciliation_report(report: dict, path) -> str:
-	"""Write a report without raw workbook rows or contact PII."""
+def _public_reconciliation_report(report: dict) -> dict:
+	"""Return review metadata without raw workbook rows or contact PII."""
 	public = {key: value for key, value in report.items() if key not in {"rows", "_ne_2026_rows"}}
 	public["review_rows"] = [
 		{key: value for key, value in row.items() if key not in {"data", "candidate"}}
 		for row in report.get("review_rows", [])
 	]
+	public["provenance_rows"] = [
+		{
+			"source_sheet": row.get("source_sheet"),
+			"source_row": row.get("source_row"),
+			"source_identity": row.get("source_identity") or row.get("canonical_source_identity"),
+			"source_pic_fingerprint": row.get("source_pic_fingerprint"),
+			"match_status": row.get("match_status"),
+		}
+		for row in report.get("rows", [])
+	]
+	return public
+
+
+def write_reconciliation_report(report: dict, path) -> str:
+	"""Write a report without raw workbook rows or contact PII."""
+	public = _public_reconciliation_report(report)
 	path = Path(path)
 	path.parent.mkdir(parents=True, exist_ok=True)
 	path.write_text(json.dumps(public, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
@@ -571,6 +618,15 @@ def write_reconciliation_report(report: dict, path) -> str:
 def _upsert(doctype, filters, values):
 	name = frappe.db.get_value(doctype, filters, "name")
 	if name:
+		# Serialize concurrent updates for the unique business key. The initial
+		# lookup identifies the row; the row lock makes the subsequent read/save
+		# one transaction so a later importer cannot silently overwrite a stale
+		# version observed by this importer.
+		if hasattr(frappe.db, "sql"):
+			frappe.db.sql(
+				f"select name from `tab{doctype}` where name = %s for update",
+				(name,),
+			)
 		doc = frappe.get_doc(doctype, name)
 		changed = False
 		for fieldname, value in values.items():
@@ -581,8 +637,24 @@ def _upsert(doctype, filters, values):
 			doc.save(ignore_permissions=True)
 		return doc, "updated"
 	doc = frappe.get_doc({"doctype": doctype, **values})
-	doc.insert(ignore_permissions=True)
-	return doc, "created"
+	try:
+		doc.insert(ignore_permissions=True)
+		return doc, "created"
+	except Exception as exc:
+		# Unique business-key indexes are the concurrency authority. If another
+		# importer wins the insert race, re-read that row and apply the same
+		# idempotent update instead of surfacing a duplicate or creating a second
+		# identity.
+		duplicate_error = getattr(frappe, "DuplicateEntryError", ())
+		if not duplicate_error or not isinstance(exc, duplicate_error):
+			raise
+		name = frappe.db.get_value(doctype, filters, "name")
+		if not name:
+			raise
+		doc = frappe.get_doc(doctype, name)
+		# The concurrent winner is authoritative; do not overwrite it with the
+		# losing transaction's potentially stale payload.
+		return doc, "existing_after_race"
 
 
 def _ensure_admission_year(year):
@@ -626,14 +698,77 @@ def _resolve_staff(alias):
 
 
 def _resolve_ts_promoter_owner(alias):
-	"""Assign every TS workbook relationship to the HCMC Promoter portfolio.
+	"""Return the explicitly configured CRM owner/team for TS imports.
 
-	The workbook PIC is retained as source provenance, but it is not treated as
-	an owner because this import represents the Promoter operating model. This
-	also covers KHU rows where the source PIC is blank.
+	The workbook PIC is provenance only and is deliberately not resolved into
+	CRM ownership.
 	"""
+	# Source PIC is provenance only. CRM ownership always comes from the
+	# explicitly configured import owner and its primary team.
 	staff = frappe.db.get_value("CRM Staff", {"user": TS_PROMOTER_OWNER_USER}, "name")
-	return staff, None
+	team = (
+		frappe.db.get_value(
+			"CRM Team Membership",
+			{"parent": staff, "parenttype": "CRM Staff", "is_primary": 1},
+			"team",
+		)
+		if staff
+		else None
+	)
+	return staff, team
+
+
+def _ts_owner_preflight(records):
+	"""Resolve every owner before the first TS workbook mutation.
+
+	A workbook containing only school/snapshot facts does not need a portfolio
+	owner. Any Person or Activity row does: an unresolved configured owner, PIC,
+	or team is a review-required import and cannot partially create records.
+	"""
+	issues = []
+	for record in records:
+		if record.get("match_status") != "matched":
+			continue
+		data = record.get("data", {})
+		needs_owner = bool(data.get("stakeholder_name")) or record.get("import_kind") == "activity"
+		if not needs_owner:
+			continue
+		staff, team = _resolve_ts_promoter_owner(None)
+		if not staff:
+			issues.append({
+				"source_sheet": record.get("source_sheet"),
+				"source_row": record.get("source_row"),
+				"reason": "unresolved_import_owner",
+			})
+		elif not team:
+			issues.append({
+				"source_sheet": record.get("source_sheet"),
+				"source_row": record.get("source_row"),
+				"reason": "import_owner_team_unresolved",
+			})
+	return issues
+
+
+def _blocking_review(record) -> bool:
+	"""Return whether a reconciled row must be entirely write-blocked."""
+	if record.get("match_status") != "matched":
+		return True
+	approved = {"manual_canonical_mapping", "name_province_and_source_code", "person_manual_review_required"}
+	return any(reason not in approved for reason in record.get("reasons", ()))
+
+
+def _school_db_filters(candidate):
+	province = frappe.db.get_value("CRM Province", {"province_code": candidate.get("province_code")}, "name")
+	ward = frappe.db.get_value(
+		"CRM Ward",
+		{"ward_code": candidate.get("ward_code"), "province": province},
+		"name",
+	)
+	return {
+		"school_code": candidate.get("school_code"),
+		"province": province,
+		"ward": ward,
+	}
 
 
 def _resolve_term(category, value):
@@ -646,10 +781,12 @@ def _resolve_term(category, value):
 	return None
 
 
-def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True):
+def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True, commit_policy="partial"):
+	if commit_policy not in {"partial", "all"}:
+		frappe.throw("commit_policy must be 'partial' or 'all'.")
 	report = reconcile_school_seed(path)
 	if dry_run:
-		return {"dry_run": True, "report": report, "mutations": {}}
+		return {"dry_run": True, "report": _public_reconciliation_report(report), "mutations": {}, "commit_policy": commit_policy}
 	frappe.only_for("System Manager", True)
 	counts = Counter()
 	errors = []
@@ -681,33 +818,24 @@ def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True):
 				},
 			)
 			counts[f"ward_{state}"] += 1
-			school_filters = {"source_identity": record["source_identity"]}
-			if not frappe.db.exists("CRM High School", school_filters):
-				school_filters = {
-					"school_code": data["school_code"],
-					"province_code": data["province_code"],
-					"ward_code": data["ward_code"],
-				}
+			school_filters = {
+				"school_code": data["school_code"],
+				"province": province.name,
+				"ward": ward.name,
+			}
+			school_area = _resolve_term("school_area", data.get("school_area")) if data.get("school_area") else None
 			_school, state = _upsert(
 				"CRM High School",
 				school_filters,
 				{
 					"school_name": data["school_name"],
 					"school_code": data["school_code"],
-					"school_area": data.get("school_area"),
+					"school_area": school_area,
 					"province": province.name,
 					"ward": ward.name,
-					"province_code": data["province_code"],
-					"province_name": record["canonical_province"],
-					"ward_code": data["ward_code"],
-					"ward_name": data.get("ward_name"),
-					"legacy_province_name": data.get("province_name"),
-					"legacy_ward_name": data.get("ward_name"),
-					"source_identity": record["source_identity"],
-					"source_file": _source_file_name(path) if frappe.get_meta("CRM High School").has_field("source_file") else None,
-					"source_sheet": record.get("source_sheet") if frappe.get_meta("CRM High School").has_field("source_sheet") else None,
-					"source_row": record.get("source_row") if frappe.get_meta("CRM High School").has_field("source_row") else None,
 					"address": data.get("address"),
+					"latitude": _coordinate(data.get("latitude")),
+					"longitude": _coordinate(data.get("longitude")),
 				},
 			)
 			counts[f"school_{state}"] += 1
@@ -715,8 +843,11 @@ def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True):
 			frappe.db.rollback(save_point=savepoint)
 			counts["errors"] += 1
 			errors.append({"source_row": record["source_row"], "message": str(exc)})
+	if commit_policy == "all" and errors:
+		frappe.db.rollback()
+		return {"dry_run": False, "report": report, "mutations": {}, "errors": errors, "commit_policy": commit_policy}
 	frappe.db.commit()
-	return {"dry_run": False, "report": report, "mutations": dict(counts), "errors": errors}
+	return {"dry_run": False, "report": report, "mutations": dict(counts), "errors": errors, "commit_policy": commit_policy}
 
 
 def _import_snapshot(record, path):
@@ -724,9 +855,6 @@ def _import_snapshot(record, path):
 	data = record["data"]
 	if record["source_sheet"] not in KEY_ACCOUNT_SOURCE_SHEETS:
 		return 0
-	staff, team = _resolve_ts_promoter_owner(data.get("pic")) if data.get("pic") else (None, None)
-	if data.get("pic") and not staff and not team:
-		record.setdefault("reasons", []).append("unresolved_pic_alias")
 	created = 0
 	for year in ANNUAL_YEARS:
 		actual = _number(data.get(f"ne_{year}")) if year != 2026 else None
@@ -745,11 +873,6 @@ def _import_snapshot(record, path):
 			"ne_actual_semantics": "New Enter History",
 			"adjusted_ne_threshold": threshold,
 			"verification_status": "Review Required",
-			"source_file": _source_file_name(path),
-			"source_sheet": record["source_sheet"],
-			"source_row": record["source_row"],
-			"source_record_id": f"{record['source_sheet']}:{record['source_row']}",
-			"source_reference": f"{_source_file_name(path)}#{record['source_sheet']}:{record['source_row']}",
 		}
 		_imported, _state = _upsert(
 			"CRM High School Annual Snapshot",
@@ -774,36 +897,57 @@ def _import_explicit_school_type(record):
 	return True
 
 
-def _import_person(record, path):
+def _person_review_key(record):
+	return f"{record.get('source_sheet', '')}:{record.get('source_row', '')}"
+
+
+def _import_person(record, path, approved_person_rows=None):
 	data = record["data"]
 	if record["match_status"] != "matched" or not data.get("stakeholder_name"):
 		return False
-	role_label = data.get("stakeholder_role") or "Đầu mối tuyển sinh"
-	role = _resolve_term("stakeholder_role", role_label)
+	record.setdefault("reasons", []).append("person_manual_review_required")
+	review_key = _person_review_key(record)
+	if hasattr(approved_person_rows, "get"):
+		person_action = approved_person_rows.get(review_key)
+	else:
+		person_action = "create" if review_key in {str(value) for value in (approved_person_rows or ())} else None
+	if not person_action:
+		return False
+	role = _resolve_term("stakeholder_role", data.get("stakeholder_role") or data.get("role"))
 	if not role:
 		record.setdefault("reasons", []).append("unresolved_stakeholder_role")
 		return False
-	staff, team = _resolve_ts_promoter_owner(data.get("pic"))
-	identity = f"{_source_file_name(path)}:{record['source_sheet']}:{record['source_row']}:person:{_normalize(data['stakeholder_name'])}"
-	_upsert(
-		"CRM Person",
-		{"source_identity": identity},
+	staff, team = _resolve_ts_promoter_owner(None)
+	if person_action == "create":
+		# Explicit approval may create a new identity, but never silently merge it
+		# into an existing Person based on name/phone/email.
+		person = frappe.get_doc(
+			{
+				"doctype": "CRM Person",
+				"full_name": data["stakeholder_name"],
+				"phone": data.get("stakeholder_phone"),
+				"email": data.get("stakeholder_email"),
+			}
+		).insert(ignore_permissions=True)
+	else:
+		if not frappe.db.exists("CRM Person", person_action):
+			record.setdefault("reasons", []).append("approved_person_target_not_found")
+			return False
+		person = frappe.get_doc("CRM Person", person_action)
+	record["approved_person"] = person.name
+	association, _association_status = _upsert(
+		"CRM School Stakeholder",
+		{"high_school": record["candidate"]["name"], "person": person.name},
 		{
-			"full_name": data["stakeholder_name"],
-			"stakeholder_role": role,
-			"role": data.get("stakeholder_role") or "Promoter",
 			"high_school": record["candidate"]["name"],
-			"province": frappe.db.get_value("CRM High School", record["candidate"]["name"], "province"),
+			"person": person.name,
+			"stakeholder_role": role,
+			"position_title": data.get("position_title") or data.get("role"),
 			"owner_staff": staff,
 			"owning_team": team,
-			"phone": data.get("stakeholder_phone"),
-			"email": data.get("stakeholder_email"),
-			"source_file": _source_file_name(path),
-			"source_sheet": record["source_sheet"],
-			"source_row": record["source_row"],
-			"source_identity": identity,
 		},
 	)
+	record["stakeholder_association"] = association.name
 	return True
 
 
@@ -816,11 +960,11 @@ def _import_activity(record, path):
 	if not activity_type or not activity_date:
 		record.setdefault("reasons", []).append("activity_type_or_date_missing")
 		return False
-	staff, team = _resolve_ts_promoter_owner(data.get("pic"))
+	staff, team = _resolve_ts_promoter_owner(None)
 	year = _number(data.get("admission_year"))
-	identity = f"{_source_file_name(path)}:{record['source_sheet']}:{record['source_row']}"
 	values = {
 		"high_school": record["candidate"]["name"],
+		"stakeholder": record.get("stakeholder_association"),
 		"admission_year": _ensure_admission_year(year) if year else None,
 		"activity_type": activity_type,
 		"activity_date": activity_date,
@@ -828,35 +972,69 @@ def _import_activity(record, path):
 		"owning_team": team,
 		"status": data.get("status") if data.get("status") in {"Planned", "Completed", "Cancelled"} else "Planned",
 		"outcome": data.get("outcome"),
-		"evidence_reference": f"{_source_file_name(path)}#{record['source_sheet']}:{record['source_row']}",
-		"source_file": _source_file_name(path),
-		"source_sheet": record["source_sheet"],
-		"source_row": record["source_row"],
-		"source_record_id": identity,
-		"source_identity": identity,
 	}
-	_upsert("CRM School Activity", {"source_identity": identity}, values)
+	values["import_idempotency_key"] = _activity_import_key(path, record, values)
+	_upsert(
+		"CRM School Activity",
+		{"import_idempotency_key": values["import_idempotency_key"]},
+		values,
+	)
 	return True
 
 
-def seed_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL_SEED_PATH, dry_run=True):
+def _activity_import_key(path, record, values):
+	return hashlib.sha256(
+		"|".join(str(value or "") for value in (
+			_source_file_name(path), record.get("source_sheet"), record.get("source_row"),
+			values.get("high_school"), values.get("activity_date"), values.get("activity_type"),
+			values.get("owner_staff"), values.get("owning_team"),
+		)).encode("utf-8")
+	).hexdigest()
+
+
+def seed_ts_workbook(
+	path=DEFAULT_TS_PATH,
+	*,
+	canonical_path=DEFAULT_SCHOOL_SEED_PATH,
+	dry_run=True,
+	approved_person_rows=None,
+	commit_policy="partial",
+):
+	"""Apply TS data after school matching and explicit Person approval.
+
+	``approved_person_rows`` accepts either review keys (which explicitly mean
+	``create``) or a mapping of review key to an existing CRM Person name. The
+	returned ``person_approval_targets`` lets a rerun switch a created row to its
+	explicit Person ID without any implicit contact-based merge.
+	"""
+	if commit_policy not in {"partial", "all"}:
+		frappe.throw("commit_policy must be 'partial' or 'all'.")
 	report = reconcile_ts_workbook(path, canonical_path=canonical_path)
 	if dry_run:
-		return {"dry_run": True, "report": report, "mutations": {}}
+		return {"dry_run": True, "report": _public_reconciliation_report(report), "mutations": {}, "commit_policy": commit_policy}
 	frappe.only_for("System Manager", True)
+	preflight_issues = _ts_owner_preflight(report["rows"])
+	if preflight_issues:
+		return {
+			"dry_run": False,
+			"report": report,
+			"mutations": {},
+			"errors": preflight_issues,
+			"preflight": "failed",
+			"commit_policy": commit_policy,
+		}
 	counts = Counter()
+	person_approval_targets = {}
 	errors = []
 	for record in report["rows"]:
-		if record["match_status"] != "matched":
+		if _blocking_review(record):
 			counts["review_required"] += 1
 			continue
 		savepoint = f"crm_ts_seed_{record['source_row']}"
 		frappe.db.savepoint(savepoint)
 		try:
 			candidate = record["candidate"]
-			candidate["name"] = frappe.db.get_value(
-				"CRM High School", {"source_identity": candidate["source_identity"]}, "name"
-			)
+			candidate["name"] = frappe.db.get_value("CRM High School", _school_db_filters(candidate), "name")
 			if not candidate["name"]:
 				counts["review_required"] += 1
 				record.setdefault("reasons", []).append("canonical_school_not_seeded")
@@ -865,8 +1043,11 @@ def seed_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL_SEED
 				counts["school_types"] += 1
 			if _import_snapshot(record, path):
 				counts["annual_snapshots"] += 1
-			if _import_person(record, path):
+			if _import_person(record, path, approved_person_rows):
 				counts["persons"] += 1
+				person_approval_targets[_person_review_key(record)] = record["approved_person"]
+			elif "person_manual_review_required" in record.get("reasons", []):
+				counts["person_review_required"] += 1
 			if _import_activity(record, path):
 				counts["activities"] += 1
 		except Exception as exc:
@@ -878,7 +1059,7 @@ def seed_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL_SEED
 	supplement = _load_ne_2026_supplement(path)
 	grouped = defaultdict(lambda: {"ne_2026": 0, "rows": []})
 	for record in report.get("_ne_2026_rows", []):
-		if record["match_status"] != "matched":
+		if _blocking_review(record):
 			counts["review_required"] += 1
 			continue
 		value = _number(record.get("ne_2026"))
@@ -889,12 +1070,12 @@ def seed_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL_SEED
 		grouped[record["canonical_source_identity"]]["rows"].append(record["source_row"])
 	for identity, payload in grouped.items():
 		candidate = by_identity[identity]
-		candidate["name"] = frappe.db.get_value(
-			"CRM High School", {"source_identity": identity}, "name"
-		)
+		candidate["name"] = frappe.db.get_value("CRM High School", _school_db_filters(candidate), "name")
 		if not candidate["name"]:
 			counts["review_required"] += 1
 			continue
+		savepoint = f"crm_ne_2026_{min(payload['rows'])}"
+		frappe.db.savepoint(savepoint)
 		try:
 			_upsert(
 				"CRM High School Annual Snapshot",
@@ -905,16 +1086,30 @@ def seed_ts_workbook(path=DEFAULT_TS_PATH, *, canonical_path=DEFAULT_SCHOOL_SEED
 					"ne_actual": payload["ne_2026"],
 					"ne_actual_semantics": "New Enter History",
 					"verification_status": "Review Required",
-					"source_file": supplement["source_file"],
-					"source_sheet": supplement["source_sheet"],
-					"source_row": min(payload["rows"]),
-					"source_record_id": f"{supplement['source_sheet']}:{','.join(map(str, payload['rows']))}",
-					"source_reference": f"{supplement['source_file']}#{supplement['source_sheet']}:{','.join(map(str, payload['rows']))}",
 				},
 			)
 			counts["annual_snapshots"] += 1
 		except Exception as exc:
+			frappe.db.rollback(save_point=savepoint)
 			counts["errors"] += 1
 			errors.append({"source_sheet": supplement["source_sheet"], "source_row": min(payload["rows"]), "message": str(exc)})
+	if commit_policy == "all" and errors:
+		frappe.db.rollback()
+		return {
+			"dry_run": False,
+			"report": report,
+			"mutations": {},
+			"errors": errors,
+			"commit_policy": commit_policy,
+		}
 	frappe.db.commit()
-	return {"dry_run": False, "report": report, "mutations": dict(counts), "errors": errors}
+	mutations = dict(counts)
+	if person_approval_targets:
+		mutations["person_approval_targets"] = person_approval_targets
+	return {
+		"dry_run": False,
+		"report": report,
+		"mutations": mutations,
+		"errors": errors,
+		"commit_policy": commit_policy,
+	}

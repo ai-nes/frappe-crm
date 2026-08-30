@@ -8,6 +8,7 @@ crm.patches.v1_0.rename_enrollment_student_to_crm_student
 crm.patches.v1_0.rename_remaining_reference_doctypes_to_crm_prefix
 crm.patches.v1_0.rename_campaign_type_to_crm_campaign_type
 crm.patches.v1_0.rename_non_admission_doctypes_without_crm_prefix
+crm.patches.v1_0.simplify_school_domain_schema
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -112,9 +113,13 @@ crm.patches.v1_0.consolidate_academic_year_lines
 crm.patches.v1_0.consolidate_master_data_change
 crm.patches.v1_0.set_default_system_and_user_language_vi
 crm.patches.v1_0.add_ai_insight_writeback_fields
+crm.patches.v1_0.backfill_team_membership_from_staff
 crm.patches.v1_0.prepare_school_domain
+crm.patches.v1_0.finalize_school_domain_schema_migration
 crm.patches.v1_0.normalize_enrollment_term_names
 crm.patches.v1_0.repair_enrollment_status_term_references
 crm.patches.v1_0.restrict_frappe_crm_workspace
 crm.patches.v1_0.enforce_frappe_crm_workspace_access
 crm.patches.v1_0.set_sales_default_crm_app
+crm.patches.v1_0.admissions_erd_baseline
+crm.patches.v1_0.backfill_admission_applications

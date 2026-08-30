@@ -1,0 +1,22 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "high_school", "contact", "relationship_level", "relationship_score", "is_primary", "last_touch_at", "next_touch_at", "owner_staff", "owning_team", "source_reference", "notes"],
+ "fields": [
+  {"default": "SCHR-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "SCHR-.YYYY.-"},
+  {"fieldname": "high_school", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "High School", "options": "CRM High School", "reqd": 1},
+  {"fieldname": "contact", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Contact", "options": "CRM Contact", "reqd": 1},
+  {"fieldname": "relationship_level", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Relationship Level", "options": "Prospect\nEngaged\nPartner\nStrategic", "reqd": 1},
+  {"fieldname": "relationship_score", "fieldtype": "Percent", "in_list_view": 1, "label": "Relationship Score"},
+  {"default": "0", "fieldname": "is_primary", "fieldtype": "Check", "in_list_view": 1, "label": "Primary Relationship"},
+  {"fieldname": "last_touch_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Last Touch At"},
+  {"fieldname": "next_touch_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Next Touch At"},
+  {"fieldname": "owner_staff", "fieldtype": "Link", "in_list_view": 1, "label": "Owner", "options": "CRM Staff"},
+  {"fieldname": "owning_team", "fieldtype": "Link", "in_list_view": 1, "label": "Owning Team", "options": "CRM Team"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes"}
+ ],
+ "indexes": [{"fields": ["high_school", "contact"], "name": "crm_school_relationship_school_contact_idx", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM School Relationship", "naming_rule": "Naming Series", "naming_series_options": "SCHR-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"export": 1, "read": 1, "role": "System Manager"}, {"export": 1, "read": 1, "role": "Admissions Director"}, {"export": 1, "read": 1, "role": "Marketing"}, {"read": 1, "role": "Promoter"}],
+ "row_format": "Dynamic", "search_fields": "high_school,contact,relationship_level", "sort_field": "modified", "sort_order": "DESC"
+}

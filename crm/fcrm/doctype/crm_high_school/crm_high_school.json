@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "format:{school_code} - {province_code}",
+ "autoname": "hash",
  "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
@@ -13,36 +13,24 @@
   "school_code",
   "school_type",
   "school_area",
+  "school_tier",
+  "boarding_type",
   "column_break_1",
   "province",
   "ward",
-  "ward_code",
-  "ward_name",
-  "province_code",
-  "province_name",
-  "legacy_province_name",
-  "legacy_ward_name",
-  "source_identity",
-  "source_file",
-  "source_sheet",
-  "source_row",
+  "latitude",
+  "longitude",
   "section_break_1",
   "section_key_account",
   "is_key_account",
   "key_account_tier",
-  "key_account_status",
   "key_account_owner",
   "key_account_team",
-  "key_account_reason",
-  "key_account_since",
-  "key_account_last_review",
-  "key_account_source",
   "section_contact",
   "address",
   "column_break_2",
   "phone",
-  "email",
-  "import_source_id"
+  "email"
  ],
  "fields": [
   {
@@ -71,11 +59,28 @@
   },
   {
    "fieldname": "school_area",
-   "fieldtype": "Select",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "School Area",
-   "options": "\nKV1\nKV2\nKV2_NT\nKV3"
+   "link_filters": "{\"category\":\"school_area\"}",
+   "options": "CRM Term"
+  },
+  {
+   "fieldname": "school_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "School Tier",
+   "options": "\nA\nB\nC\nUnclassified"
+  },
+  {
+   "fieldname": "boarding_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Boarding Type",
+   "options": "\nDay School\nBoarding School\nMixed\nUnknown"
   },
   {
    "fieldname": "column_break_1",
@@ -87,7 +92,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Province",
-   "options": "CRM Province"
+   "options": "CRM Province",
+   "reqd": 1
   },
   {
    "fieldname": "ward",
@@ -95,76 +101,18 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Ward",
-   "options": "CRM Ward"
-  },
-  {
-   "fieldname": "ward_code",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Ward Code"
-  },
-  {
-   "fieldname": "ward_name",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Ward Name"
-  },
-  {
-   "fieldname": "province_code",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Province Code",
+   "options": "CRM Ward",
    "reqd": 1
   },
   {
-   "fieldname": "province_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Province Name"
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
   },
   {
-   "fieldname": "legacy_province_name",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Legacy Province Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "legacy_ward_name",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Legacy Ward Name",
-   "read_only": 1
-  },
-  {
-   "fieldname": "source_identity",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Source Identity",
-   "read_only": 1,
-   "unique": 1
-  },
-  {
-   "fieldname": "source_file",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Source File",
-   "read_only": 1
-  },
-  {
-   "fieldname": "source_sheet",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Source Sheet",
-   "read_only": 1
-  },
-  {
-   "fieldname": "source_row",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Source Row",
-   "read_only": 1
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
   },
   {
    "fieldname": "section_break_1",
@@ -193,15 +141,6 @@
    "permlevel": 1
   },
   {
-   "fieldname": "key_account_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Key Account Status",
-   "options": "\nEligible\nNot Eligible\nReview Required",
-   "read_only": 1
-  },
-  {
    "fieldname": "key_account_owner",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -216,31 +155,6 @@
    "label": "Key Account Team",
    "options": "CRM Team",
    "permlevel": 1
-  },
-  {
-   "fieldname": "key_account_reason",
-   "fieldtype": "Small Text",
-   "label": "Key Account Reason",
-   "read_only": 1
-  },
-  {
-   "fieldname": "key_account_since",
-   "fieldtype": "Date",
-   "label": "Key Account Since",
-   "read_only": 1
-  },
-  {
-   "fieldname": "key_account_last_review",
-   "fieldtype": "Date",
-   "label": "Last Key Account Review",
-   "read_only": 1
-  },
-  {
-   "fieldname": "key_account_source",
-   "fieldtype": "Data",
-   "hidden": 1,
-   "label": "Key Account Source",
-   "read_only": 1
   },
   {
    "fieldname": "section_contact",
@@ -266,13 +180,10 @@
    "fieldtype": "Data",
    "label": "Email",
    "options": "Email"
-  },
-  {
-   "fieldname": "import_source_id",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Import Source ID"
   }
+ ],
+ "indexes": [
+  {"fields": ["province", "ward", "school_code"], "name": "crm_high_school_location_code_idx", "unique": 1}
  ],
  "index_web_pages_for_search": 1,
  "links": [],

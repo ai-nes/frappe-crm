@@ -117,4 +117,19 @@ bench --site crm.localhost clear-cache
 bench --site crm.localhost migrate
 bench use crm.localhost
 
+# Seed the curated demo dataset once, on first site creation. Set
+# CRM_SEED_DEMO=0 (e.g. for e2e runs) to keep the site empty. Failure here must
+# not stop the container from starting, so it is explicitly non-fatal.
+if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" ]; then
+    echo "Seeding curated demo dataset (first run; set CRM_SEED_DEMO=0 to skip)..."
+    bench --site crm.localhost execute crm.demo.seed_showcase.ensure_demo_config || true
+    bench --site crm.localhost execute crm.demo.seed_showcase.ensure_local_integrity_keys || true
+    if bench --site crm.localhost execute crm.demo.seed_showcase.execute; then
+        touch "sites/crm.localhost/.demo-seeded"
+        echo "Demo seed complete."
+    else
+        echo "WARNING: demo seed failed. Run 'task seed' after the container is up." >&2
+    fi
+fi
+
 bench start

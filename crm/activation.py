@@ -15,6 +15,7 @@ def get_sales_data(site_info):
 		"CRM High School",
 		"CRM High School Annual Snapshot",
 		"CRM School Activity",
+		"CRM School Stakeholder",
 		"CRM Person",
 		"CRM Campaign",
 		"CRM Event",

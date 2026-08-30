@@ -1,0 +1,22 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "period", "dimension_key", "dimension_type", "dimension_value", "spend", "impressions", "clicks", "leads", "applications", "enrolled", "source_reference"],
+ "fields": [
+  {"default": "CPD-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "CPD-.YYYY.-"},
+  {"fieldname": "period", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Performance Period", "options": "CRM Campaign Performance Period", "reqd": 1},
+  {"fieldname": "dimension_key", "fieldtype": "Data", "in_list_view": 1, "label": "Dimension Key", "reqd": 1},
+  {"fieldname": "dimension_type", "fieldtype": "Select", "in_list_view": 1, "label": "Dimension Type", "options": "Campus\nChannel\nLead Source\nLanding Page\nForm", "reqd": 1},
+  {"fieldname": "dimension_value", "fieldtype": "Data", "in_list_view": 1, "label": "Dimension Value", "reqd": 1},
+  {"fieldname": "spend", "fieldtype": "Currency", "in_list_view": 1, "label": "Spend"},
+  {"fieldname": "impressions", "fieldtype": "Int", "in_list_view": 1, "label": "Impressions"},
+  {"fieldname": "clicks", "fieldtype": "Int", "in_list_view": 1, "label": "Clicks"},
+  {"fieldname": "leads", "fieldtype": "Int", "in_list_view": 1, "label": "Leads"},
+  {"fieldname": "applications", "fieldtype": "Int", "in_list_view": 1, "label": "Applications"},
+  {"fieldname": "enrolled", "fieldtype": "Int", "in_list_view": 1, "label": "Enrolled"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["period", "dimension_key"], "name": "crm_campaign_performance_dimension_uniq", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Performance Dimension", "naming_rule": "Naming Series", "naming_series_options": "CPD-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "period,dimension_key,dimension_value", "sort_field": "modified", "sort_order": "DESC"
+}

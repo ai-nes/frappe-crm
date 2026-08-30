@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import json
 import random
+import re
 import secrets
+import unicodedata
 from contextlib import contextmanager
 from datetime import timedelta
 from typing import Any
@@ -29,17 +31,24 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_demo, seed_staff
+from crm.demo import seed_demo, seed_role_accounts, seed_staff
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "crm-demo-showcase"
-# Every curated scenario Student carries a synthetic e-mail ending with this
-# marker; CRM Student has no free-text namespace field, so the e-mail is the
-# stable handle for coverage backfill and for reset().
-# Curated scenario Students use "<name>.showcase@example.test"; edge-state
-# Students use "edge-<x>.crm-demo-showcase@example.test". This LIKE matches both.
-_STUDENT_EMAIL_SUFFIX = "showcase@example.test"
-_STUDENT_EMAIL_LIKE = "%" + _STUDENT_EMAIL_SUFFIX
+# Display data uses ordinary Vietnamese names and conventional mailbox syntax.
+# The addresses are still demo fixtures and are never used for outbound mail.
+_DISPLAY_EMAIL_DOMAIN = "gmail.com"
+_LEGACY_STUDENT_EMAIL_LIKE = "%showcase@example.test"
+
+
+def _natural_email(full_name: str) -> str:
+	"""Build a conventional-looking, deterministic demo email from a name."""
+	value = full_name.replace("Đ", "D").replace("đ", "d")
+	value = unicodedata.normalize("NFKD", value)
+	value = "".join(char for char in value if not unicodedata.combining(char))
+	value = re.sub(r"[^a-zA-Z0-9]+", ".", value).strip(".").lower()
+	return f"{value}@{_DISPLAY_EMAIL_DOMAIN}"
+
 
 # CRM Contact.readiness_level Select stores the full bilingual label.
 _READINESS_LABELS = {
@@ -50,12 +59,12 @@ _READINESS_LABELS = {
 	"Level 4": "Level 4 - Sẵn sàng nhập học",
 }
 SEED = 20260830
-SALE_EMAIL = "nguyen-minh-khoi.sale@example.test"
-LEAD_SALES_EMAIL = "le-thanh-huong.leadsales@example.test"
-MARKETING_EMAIL = "pham-bao-chau.marketing@example.test"
+SALE_EMAIL = "nguyen.minh.khoi@gmail.com"
+LEAD_SALES_EMAIL = "le.thanh.huong@gmail.com"
+MARKETING_EMAIL = "pham.bao.chau@gmail.com"
 # The school relationship domain (CRM Person / School Activity / key accounts) is
 # owned by the Promoter portfolio, not the Sales roles seed_staff creates.
-PROMOTER_EMAIL = "vo-thi-lan.promoter@example.test"
+PROMOTER_EMAIL = "vo.thi.lan@gmail.com"
 PROMOTER_FULL_NAME = "Võ Thị Lan"
 FPTU_HCMC_CAMPUS = "FPTU Ho Chi Minh Campus"
 FPTU_ADMISSIONS_CONTEXT = "FPTU tuyển sinh Hồ Chí Minh — kỳ tuyển sinh 2026"
@@ -79,18 +88,21 @@ LOCAL_FLAGS = {
 # Support layer (site guard, HMAC keys, rollout flags)
 # ---------------------------------------------------------------------------
 
+
 @contextmanager
 def _temporary_local_flags():
 	previous = {key: frappe.conf.get(key) for key in LOCAL_FLAGS}
 	prev_flags = {
 		"crm_governance_additive": frappe.flags.get("crm_governance_additive"),
 		"crm_governance_change": frappe.flags.get("crm_governance_change"),
+		"legacy_fact_migration": frappe.flags.get("legacy_fact_migration"),
 	}
 	try:
 		for key, value in LOCAL_FLAGS.items():
 			frappe.conf[key] = value
 		frappe.flags.crm_governance_additive = True
 		frappe.flags.crm_governance_change = True
+		frappe.flags.legacy_fact_migration = True
 		yield
 	finally:
 		for key, value in prev_flags.items():
@@ -106,8 +118,17 @@ def _temporary_local_flags():
 
 
 def _assert_local_site() -> None:
-	if getattr(frappe.local, "site", None) != LOCAL_SITE:
-		frappe.throw("The curated CRM demo seed only runs on crm.localhost.", frappe.PermissionError)
+	if getattr(frappe.local, "site", None) == LOCAL_SITE:
+		return
+	# A deliberate opt-in for demo/staging servers: `bench set-config allow_demo_seed 1`.
+	# Real production sites must never carry this flag.
+	if frappe.conf.get("allow_demo_seed"):
+		return
+	frappe.throw(
+		"The curated CRM demo seed only runs on crm.localhost. Set site config "
+		"allow_demo_seed=1 to force it on a demo/staging server.",
+		frappe.PermissionError,
+	)
 
 
 def _assert_integrity_keys() -> None:
@@ -119,6 +140,26 @@ def _assert_integrity_keys() -> None:
 			"Configure the existing Student intake and receipt HMAC keys before running task seed.",
 			frappe.ValidationError,
 		)
+
+
+def ensure_demo_config() -> dict:
+	"""Persist the rollout flags + fixture password a demo site keeps after seeding.
+
+	``execute`` sets ``LOCAL_FLAGS`` only for the duration of the run; this makes
+	the Student Detail workflow (context projection, typed admissions actions)
+	stay enabled on the seeded site. Shared by ``task seed`` and the container
+	first-run seed so the list lives in one place.
+	"""
+	_assert_local_site()
+	from frappe.installer import update_site_config
+
+	persisted = {**LOCAL_FLAGS, "crm_phase2_fixture_password": "123456"}
+	changed = []
+	for key, value in persisted.items():
+		if frappe.conf.get(key) != value:
+			update_site_config(key, value, validate=False)
+			changed.append(key)
+	return {"changed": changed}
 
 
 def ensure_local_integrity_keys() -> dict:
@@ -170,7 +211,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Nguyễn Thảo An",
 		"gender": "Nữ",
 		"admission_method": "Combined",
-		"email": "nguyen-thao-an.showcase@example.test",
+		"email": _natural_email("Nguyễn Thảo An"),
 		"phone": "0901900101",
 		"target_stage": "Lead",
 		"owner": False,
@@ -184,7 +225,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Võ Gia Hân",
 		"gender": "Nữ",
 		"admission_method": "Language Certificate Review",
-		"email": "vo-gia-han.showcase@example.test",
+		"email": _natural_email("Võ Gia Hân"),
 		"phone": "0901900102",
 		"target_stage": "MQL",
 		"owner": True,
@@ -204,7 +245,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Bùi Minh Khang",
 		"gender": "Nam",
 		"admission_method": "Transcript Review",
-		"email": "bui-minh-khang.showcase@example.test",
+		"email": _natural_email("Bùi Minh Khang"),
 		"phone": "0901900103",
 		"target_stage": "Applicant",
 		"owner": True,
@@ -222,7 +263,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Trần Khánh Linh",
 		"gender": "Nữ",
 		"admission_method": "National High School Exam",
-		"email": "tran-khanh-linh.showcase@example.test",
+		"email": _natural_email("Trần Khánh Linh"),
 		"phone": "0901900104",
 		"target_stage": "Lost",
 		"owner": False,
@@ -236,7 +277,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Đỗ Nhật Minh",
 		"gender": "Nam",
 		"admission_method": "Direct Admission",
-		"email": "do-nhat-minh.showcase@example.test",
+		"email": _natural_email("Đỗ Nhật Minh"),
 		"phone": "0901900105",
 		"target_stage": "Enrolled",
 		"owner": True,
@@ -254,7 +295,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Lê Hải Đăng",
 		"gender": "Nam",
 		"admission_method": "Combined",
-		"email": "le-hai-dang.showcase@example.test",
+		"email": _natural_email("Lê Hải Đăng"),
 		"phone": "0901900201",
 		"target_stage": "Lead",
 		"owner": True,
@@ -268,7 +309,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Trịnh Gia Hưng",
 		"gender": "Nam",
 		"admission_method": "Language Certificate Review",
-		"email": "trinh-gia-hung.showcase@example.test",
+		"email": _natural_email("Trịnh Gia Hưng"),
 		"phone": "0901900209",
 		"target_stage": "Lead",
 		"owner": True,
@@ -284,7 +325,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Phạm Quỳnh Như",
 		"gender": "Nữ",
 		"admission_method": "Transcript Review",
-		"email": "pham-quynh-nhu.showcase@example.test",
+		"email": _natural_email("Phạm Quỳnh Như"),
 		"phone": "0901900202",
 		"target_stage": "Lead",
 		"owner": True,
@@ -298,7 +339,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Hoàng Đức Thành",
 		"gender": "Nam",
 		"admission_method": "National High School Exam",
-		"email": "hoang-duc-thanh.showcase@example.test",
+		"email": _natural_email("Hoàng Đức Thành"),
 		"phone": "0901900203",
 		"target_stage": "Lead",
 		"owner": True,
@@ -312,7 +353,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Ngô Thanh Mai",
 		"gender": "Nữ",
 		"admission_method": "Language Certificate Review",
-		"email": "ngo-thanh-mai.showcase@example.test",
+		"email": _natural_email("Ngô Thanh Mai"),
 		"phone": "0901900204",
 		"target_stage": "Lead",
 		"owner": True,
@@ -326,7 +367,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Đặng Gia Bảo",
 		"gender": "Nam",
 		"admission_method": "Direct Admission",
-		"email": "dang-gia-bao.showcase@example.test",
+		"email": _natural_email("Đặng Gia Bảo"),
 		"phone": "0901900205",
 		"target_stage": "Lead",
 		"owner": True,
@@ -340,7 +381,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Lý Tuấn Kiệt",
 		"gender": "Nam",
 		"admission_method": "Combined",
-		"email": "ly-tuan-kiet.showcase@example.test",
+		"email": _natural_email("Lý Tuấn Kiệt"),
 		"phone": "0901900206",
 		"target_stage": "Lead",
 		"owner": True,
@@ -354,7 +395,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Dương Khánh Vy",
 		"gender": "Nữ",
 		"admission_method": "Transcript Review",
-		"email": "duong-khanh-vy.showcase@example.test",
+		"email": _natural_email("Dương Khánh Vy"),
 		"phone": "0901900207",
 		"target_stage": "Lead",
 		"owner": True,
@@ -368,7 +409,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Phan Nhật Hạ",
 		"gender": "Nữ",
 		"admission_method": "National High School Exam",
-		"email": "phan-nhat-ha.showcase@example.test",
+		"email": _natural_email("Phan Nhật Hạ"),
 		"phone": "0901900208",
 		"target_stage": "Lead",
 		"owner": True,
@@ -383,8 +424,8 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Hồ Minh Quân",
 		"gender": "Nam",
 		"admission_method": "Direct Admission",
-		"email": "ho-minh-quan.showcase@example.test",
-		"phone": "0901900209",
+		"email": _natural_email("Hồ Minh Quân"),
+		"phone": "0901999999",
 		"target_stage": "Lead",
 		"owner": True,
 		"summary": "Đã liên lạc được, đang thu thập nhu cầu",
@@ -397,7 +438,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Vũ Hồng Ngọc",
 		"gender": "Nữ",
 		"admission_method": "Transcript Review",
-		"email": "vu-hong-ngoc.showcase@example.test",
+		"email": _natural_email("Vũ Hồng Ngọc"),
 		"phone": "0901900210",
 		"target_stage": "Lead",
 		"owner": True,
@@ -411,7 +452,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"student_name": "Huỳnh Gia Phúc",
 		"gender": "Nam",
 		"admission_method": "Combined",
-		"email": "huynh-gia-phuc.showcase@example.test",
+		"email": _natural_email("Huỳnh Gia Phúc"),
 		"phone": "0901900211",
 		"target_stage": "MQL",
 		"owner": True,
@@ -433,25 +474,112 @@ TARGET_SHOWCASE_CONTACTS = 80
 _EDGE_STUDENT_COUNT = 5
 _BULK_SCENARIO_COUNT = max(0, TARGET_SHOWCASE_STUDENTS - len(SCENARIOS) - _EDGE_STUDENT_COUNT)
 _BULK_ADMISSION_METHODS = (
-	"Combined", "Direct Admission", "Language Certificate Review",
-	"National High School Exam", "Transcript Review",
+	"Combined",
+	"Direct Admission",
+	"Language Certificate Review",
+	"National High School Exam",
+	"Transcript Review",
 )
+_BULK_STUDENT_NAMES = (
+	"Nguyễn Hoàng Nam",
+	"Trần Minh Đức",
+	"Lê Quốc Bảo",
+	"Phạm Khánh Huyền",
+	"Võ Thành Đạt",
+	"Đặng Ngọc Anh",
+	"Bùi Gia Huy",
+	"Hồ Phương Thảo",
+	"Phan Minh Triết",
+	"Dương Thu Hà",
+	"Huỳnh Nhật Tân",
+	"Vũ Ngọc Diệp",
+	"Trịnh Hoàng Long",
+	"Lý Bảo Châu",
+	"Mai Đức Anh",
+	"Cao Minh Khoa",
+	"Đinh Thảo Vy",
+	"Lương Gia Khánh",
+	"Tạ Hoàng Yến",
+	"Đoàn Minh Quân",
+	"Bạch Nguyên Khang",
+	"Vương Khánh Ngân",
+	"Kiều Anh Tú",
+	"Tô Minh Châu",
+	"Hà Quốc Thịnh",
+	"Lâm Gia Linh",
+	"Phùng Hải Nam",
+	"Trương Ngọc Hân",
+	"Chu Minh Nhật",
+	"Nguyễn Phúc An",
+	"Trần Gia Bảo",
+	"Lê Minh Khôi",
+	"Phạm Tuấn Anh",
+	"Võ Quỳnh Anh",
+	"Đặng Minh Thư",
+	"Bùi Quốc Hưng",
+	"Hồ Ngọc Mai",
+	"Phan Gia Hân",
+	"Dương Minh Khang",
+	"Huỳnh Thanh Tùng",
+	"Vũ Khánh Linh",
+	"Trịnh Minh Anh",
+	"Lý Hoàng Phúc",
+	"Mai Thanh Hà",
+	"Cao Nhật Minh",
+	"Đinh Quốc Huy",
+	"Lương Thùy Linh",
+	"Tạ Minh Hoàng",
+	"Đoàn Khánh Toàn",
+	"Bạch Hải Yến",
+	"Vương Minh Tâm",
+	"Kiều Ngọc Lan",
+	"Tô Đức Minh",
+	"Hà Phương Linh",
+	"Lâm Hoàng Anh",
+	"Phùng Minh Thắng",
+	"Trương Gia Minh",
+	"Chu Thảo Nguyên",
+	"Nguyễn Khánh Toàn",
+	"Trần Ngọc Khải",
+	"Lê Hoàng Yến",
+	"Phạm Minh Hiếu",
+	"Võ Nhật Quang",
+	"Đặng Thùy Dương",
+	"Bùi Anh Khoa",
+	"Hồ Gia Bảo",
+	"Phan Ngọc Trâm",
+	"Dương Hoàng Phương",
+	"Huỳnh Quốc Việt",
+	"Vũ Minh Châu",
+	"Trịnh Bảo Nam",
+	"Lý Thanh Vân",
+	"Mai Khánh Toàn",
+	"Cao Hoàng Phúc",
+	"Đinh Minh Ngọc",
+	"Lương Quốc Khánh",
+	"Tạ Ngọc Huy",
+	"Đoàn Gia Phúc",
+)
+
+if len(_BULK_STUDENT_NAMES) != _BULK_SCENARIO_COUNT:
+	raise RuntimeError("The natural student name list must match the bulk cohort size.")
 
 
 def _make_bulk_scenario(index: int) -> dict[str, Any]:
 	sequence = index + 1
 	key = f"bulk-student-{sequence:03d}"
+	student_name = _BULK_STUDENT_NAMES[index]
 	return {
 		"key": key,
-		"student_name": f"Học sinh showcase liên kết {sequence:03d}",
+		"student_name": student_name,
 		"gender": "Nữ" if sequence % 2 else "Nam",
 		"admission_method": _BULK_ADMISSION_METHODS[index % len(_BULK_ADMISSION_METHODS)],
-		"email": f"{key}.showcase@example.test",
+		"email": _natural_email(student_name),
 		"phone": f"090191{sequence:04d}",
 		"target_stage": "Lead",
 		"owner": sequence % 2 == 0,
-		"summary": "Hồ sơ showcase dùng để kiểm tra danh sách và liên kết CRM.",
-		"notes": "Dữ liệu tổng hợp deterministic cho local demo; không phải dữ liệu thật.",
+		"summary": "Hồ sơ tuyển sinh dùng để kiểm tra danh sách và liên kết CRM.",
+		"notes": "Hồ sơ tuyển sinh mẫu dùng để kiểm tra danh sách và liên kết CRM.",
 		"score_series": 1,
 	}
 
@@ -469,29 +597,221 @@ SCENARIOS = SCENARIOS + BULK_SCENARIOS
 # scenario, a CRM Student Contact Conversion row -- never CRM Contact.student,
 # which the controller keeps read-only.
 CONTACT_ROWS: tuple[dict[str, Any], ...] = (
-	{"key": "c-new", "full_name": "Trịnh Bảo Long", "lead_status": "Mới", "enrollment_status": "Mới", "readiness_level": "Level 0", "quality_bucket": "Warm", "decision_maker": "Student", "preferred_contact_channel": "Phone", "is_verified_lead": 0, "consent": "Granted"},
-	{"key": "c-unassigned", "full_name": "Cao Thùy Dương", "lead_status": "Unassigned", "enrollment_status": "Mới", "readiness_level": "Level 0", "quality_bucket": "Cool", "decision_maker": "Parent", "preferred_contact_channel": "Zalo", "is_verified_lead": 0, "consent": "Granted"},
-	{"key": "c-unclaimed", "full_name": "Đinh Quốc Anh", "lead_status": "Chưa nhận", "enrollment_status": "Mới", "readiness_level": "Level 1", "quality_bucket": "Warm", "decision_maker": "Both", "preferred_contact_channel": "Email", "is_verified_lead": 1, "consent": "Granted"},
-	{"key": "c-assigned", "full_name": "Lương Hải Yến", "lead_status": "Assigned", "enrollment_status": "Có triển vọng", "readiness_level": "Level 1", "quality_bucket": "Hot", "decision_maker": "Student", "preferred_contact_channel": "Phone", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-just-received", "full_name": "Tạ Minh Trí", "lead_status": "Mới nhận", "enrollment_status": "Có triển vọng", "readiness_level": "Level 2", "quality_bucket": "Hot", "decision_maker": "Student", "preferred_contact_channel": "Zalo", "is_verified_lead": 1, "owner": True, "consent": "Re-subscribed"},
-	{"key": "c-counseling-en", "full_name": "Đoàn Thu Trang", "lead_status": "Counseling", "enrollment_status": "Có triển vọng", "readiness_level": "Level 2", "quality_bucket": "Warm", "decision_maker": "Both", "preferred_contact_channel": "Email", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-counseling-vi", "full_name": "Bạch Nhật Nam", "lead_status": "Đang tư vấn", "enrollment_status": "Có triển vọng", "readiness_level": "Level 3", "quality_bucket": "Hot", "decision_maker": "Student", "preferred_contact_channel": "Phone", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-awaiting-en", "full_name": "Mai Khánh Chi", "lead_status": "Awaiting Documents", "enrollment_status": "Đã xác nhận", "readiness_level": "Level 3", "quality_bucket": "Hot", "decision_maker": "Parent", "preferred_contact_channel": "Zalo", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-awaiting-vi", "full_name": "Vương Đức Huy", "lead_status": "Chờ nộp hồ sơ", "enrollment_status": "Đã xác nhận", "readiness_level": "Level 4", "quality_bucket": "Hot", "decision_maker": "Both", "preferred_contact_channel": "Email", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-nurture-en", "full_name": "Kiều Thanh Thảo", "lead_status": "Nurture", "enrollment_status": "Có triển vọng", "readiness_level": "Level 1", "quality_bucket": "Cool", "decision_maker": "Student", "preferred_contact_channel": "Zalo", "is_verified_lead": 0, "consent": "Granted"},
-	{"key": "c-nurture-vi", "full_name": "Tô Gia Linh", "lead_status": "Nguội", "enrollment_status": "Có triển vọng", "readiness_level": "Level 1", "quality_bucket": "Cool", "decision_maker": "Parent", "preferred_contact_channel": "Phone", "is_verified_lead": 0, "consent": "Suppressed"},
-	{"key": "c-won-en", "full_name": "Chu Bảo Ngọc", "lead_status": "Won", "enrollment_status": "Đã nhập học", "readiness_level": "Level 4", "quality_bucket": "Hot", "decision_maker": "Student", "preferred_contact_channel": "Email", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-won-vi", "full_name": "Hà Nhật Anh", "lead_status": "Đã chốt", "enrollment_status": "Đã nhập học", "readiness_level": "Level 4", "quality_bucket": "Hot", "decision_maker": "Both", "preferred_contact_channel": "Phone", "is_verified_lead": 1, "owner": True, "consent": "Granted"},
-	{"key": "c-lost-en", "full_name": "Lâm Tuệ Nhi", "lead_status": "Lost", "enrollment_status": "Từ chối", "readiness_level": "Level 0", "quality_bucket": "Không quan tâm", "decision_maker": "Student", "preferred_contact_channel": "Zalo", "is_verified_lead": 0, "consent": "Opted Out"},
-	{"key": "c-lost-vi", "full_name": "Phùng Quốc Việt", "lead_status": "Từ chối", "enrollment_status": "Từ chối", "readiness_level": "Level 0", "quality_bucket": "Sai số", "decision_maker": "Parent", "preferred_contact_channel": "Phone", "is_verified_lead": 0, "consent": "Marked Test"},
-	{"key": "c-unreachable", "full_name": "Trương Mỹ Duyên", "lead_status": "Nguội", "enrollment_status": "Mới", "readiness_level": "Level 0", "quality_bucket": "Không liên lạc được", "decision_maker": "Student", "preferred_contact_channel": "Phone", "is_verified_lead": 0, "consent": "Bounced"},
+	{
+		"key": "c-new",
+		"full_name": "Trịnh Bảo Long",
+		"lead_status": "Mới",
+		"enrollment_status": "Mới",
+		"readiness_level": "Level 0",
+		"quality_bucket": "Warm",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 0,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-unassigned",
+		"full_name": "Cao Thùy Dương",
+		"lead_status": "Unassigned",
+		"enrollment_status": "Mới",
+		"readiness_level": "Level 0",
+		"quality_bucket": "Cool",
+		"decision_maker": "Parent",
+		"preferred_contact_channel": "Zalo",
+		"is_verified_lead": 0,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-unclaimed",
+		"full_name": "Đinh Quốc Anh",
+		"lead_status": "Chưa nhận",
+		"enrollment_status": "Mới",
+		"readiness_level": "Level 1",
+		"quality_bucket": "Warm",
+		"decision_maker": "Both",
+		"preferred_contact_channel": "Email",
+		"is_verified_lead": 1,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-assigned",
+		"full_name": "Lương Hải Yến",
+		"lead_status": "Assigned",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 1",
+		"quality_bucket": "Hot",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-just-received",
+		"full_name": "Tạ Minh Trí",
+		"lead_status": "Mới nhận",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 2",
+		"quality_bucket": "Hot",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Zalo",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Re-subscribed",
+	},
+	{
+		"key": "c-counseling-en",
+		"full_name": "Đoàn Thu Trang",
+		"lead_status": "Counseling",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 2",
+		"quality_bucket": "Warm",
+		"decision_maker": "Both",
+		"preferred_contact_channel": "Email",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-counseling-vi",
+		"full_name": "Bạch Nhật Nam",
+		"lead_status": "Đang tư vấn",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 3",
+		"quality_bucket": "Hot",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-awaiting-en",
+		"full_name": "Mai Khánh Chi",
+		"lead_status": "Awaiting Documents",
+		"enrollment_status": "Đã xác nhận",
+		"readiness_level": "Level 3",
+		"quality_bucket": "Hot",
+		"decision_maker": "Parent",
+		"preferred_contact_channel": "Zalo",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-awaiting-vi",
+		"full_name": "Vương Đức Huy",
+		"lead_status": "Chờ nộp hồ sơ",
+		"enrollment_status": "Đã xác nhận",
+		"readiness_level": "Level 4",
+		"quality_bucket": "Hot",
+		"decision_maker": "Both",
+		"preferred_contact_channel": "Email",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-nurture-en",
+		"full_name": "Kiều Thanh Thảo",
+		"lead_status": "Nurture",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 1",
+		"quality_bucket": "Cool",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Zalo",
+		"is_verified_lead": 0,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-nurture-vi",
+		"full_name": "Tô Gia Linh",
+		"lead_status": "Nguội",
+		"enrollment_status": "Có triển vọng",
+		"readiness_level": "Level 1",
+		"quality_bucket": "Cool",
+		"decision_maker": "Parent",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 0,
+		"consent": "Suppressed",
+	},
+	{
+		"key": "c-won-en",
+		"full_name": "Chu Bảo Ngọc",
+		"lead_status": "Won",
+		"enrollment_status": "Đã nhập học",
+		"readiness_level": "Level 4",
+		"quality_bucket": "Hot",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Email",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-won-vi",
+		"full_name": "Hà Nhật Anh",
+		"lead_status": "Đã chốt",
+		"enrollment_status": "Đã nhập học",
+		"readiness_level": "Level 4",
+		"quality_bucket": "Hot",
+		"decision_maker": "Both",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 1,
+		"owner": True,
+		"consent": "Granted",
+	},
+	{
+		"key": "c-lost-en",
+		"full_name": "Lâm Tuệ Nhi",
+		"lead_status": "Lost",
+		"enrollment_status": "Từ chối",
+		"readiness_level": "Level 0",
+		"quality_bucket": "Không quan tâm",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Zalo",
+		"is_verified_lead": 0,
+		"consent": "Opted Out",
+	},
+	{
+		"key": "c-lost-vi",
+		"full_name": "Phùng Quốc Việt",
+		"lead_status": "Từ chối",
+		"enrollment_status": "Từ chối",
+		"readiness_level": "Level 0",
+		"quality_bucket": "Sai số",
+		"decision_maker": "Parent",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 0,
+		"consent": "Marked Test",
+	},
+	{
+		"key": "c-unreachable",
+		"full_name": "Trương Mỹ Duyên",
+		"lead_status": "Nguội",
+		"enrollment_status": "Mới",
+		"readiness_level": "Level 0",
+		"quality_bucket": "Không liên lạc được",
+		"decision_maker": "Student",
+		"preferred_contact_channel": "Phone",
+		"is_verified_lead": 0,
+		"consent": "Bounced",
+	},
 )
 
 
 _BULK_CONTACT_COUNT = max(0, TARGET_SHOWCASE_CONTACTS - len(CONTACT_ROWS))
 _BULK_CONTACT_LEAD_STATUSES = (
-	"Mới", "Unassigned", "Assigned", "Mới nhận", "Counseling", "Đang tư vấn",
-	"Awaiting Documents", "Nurture", "Won", "Lost",
+	"Mới",
+	"Unassigned",
+	"Assigned",
+	"Mới nhận",
+	"Counseling",
+	"Đang tư vấn",
+	"Awaiting Documents",
+	"Nurture",
+	"Won",
+	"Lost",
 )
 _BULK_CONTACT_ENROLLMENT_STATUSES = ("Mới", "Có triển vọng", "Đã xác nhận", "Đã nhập học")
 _BULK_CONTACT_READINESS = ("Level 0", "Level 1", "Level 2", "Level 3", "Level 4")
@@ -506,9 +826,11 @@ def _make_bulk_contact_row(index: int) -> dict[str, Any]:
 	return {
 		"key": f"bulk-contact-{sequence:03d}",
 		"student_key": student_key,
-		"full_name": f"Học sinh showcase liên kết {sequence:03d}",
+		"full_name": _BULK_STUDENT_NAMES[index],
 		"lead_status": _BULK_CONTACT_LEAD_STATUSES[index % len(_BULK_CONTACT_LEAD_STATUSES)],
-		"enrollment_status": _BULK_CONTACT_ENROLLMENT_STATUSES[index % len(_BULK_CONTACT_ENROLLMENT_STATUSES)],
+		"enrollment_status": _BULK_CONTACT_ENROLLMENT_STATUSES[
+			index % len(_BULK_CONTACT_ENROLLMENT_STATUSES)
+		],
 		"readiness_level": _BULK_CONTACT_READINESS[index % len(_BULK_CONTACT_READINESS)],
 		"quality_bucket": _BULK_CONTACT_QUALITY[index % len(_BULK_CONTACT_QUALITY)],
 		"decision_maker": _BULK_CONTACT_DECISION_MAKERS[index % len(_BULK_CONTACT_DECISION_MAKERS)],
@@ -523,6 +845,52 @@ BULK_CONTACT_ROWS: tuple[dict[str, Any], ...] = tuple(
 	_make_bulk_contact_row(index) for index in range(_BULK_CONTACT_COUNT)
 )
 _ALL_CONTACT_ROWS = CONTACT_ROWS + BULK_CONTACT_ROWS
+
+_EDGE_DISPLAY_NAMES = {
+	"review": "Nguyễn Hải Yến",
+	"quarantine": "Trần Quốc Khánh",
+	"legacy": "Lê Minh Tâm",
+	"closed": "Phạm Hoàng Long",
+	"closed-inactive": "Võ Ngọc Huyền",
+}
+_EDGE_STUDENT_EMAILS = tuple(_natural_email(name) for name in _EDGE_DISPLAY_NAMES.values())
+_LEGACY_STUDENT_EMAIL_BY_KEY = {
+	"thao-an": "nguyen-thao-an.showcase@example.test",
+	"gia-han": "vo-gia-han.showcase@example.test",
+	"minh-khang": "bui-minh-khang.showcase@example.test",
+	"khanh-linh": "tran-khanh-linh.showcase@example.test",
+	"nhat-minh": "do-nhat-minh.showcase@example.test",
+	"sla-open": "le-hai-dang.showcase@example.test",
+	"sla-responded": "trinh-gia-hung.showcase@example.test",
+	"sla-warned": "pham-quynh-nhu.showcase@example.test",
+	"sla-breached": "hoang-duc-thanh.showcase@example.test",
+	"sla-paused": "ngo-thanh-mai.showcase@example.test",
+	"sla-superseded": "dang-gia-bao.showcase@example.test",
+	"no-response": "ly-tuan-kiet.showcase@example.test",
+	"not-interested": "duong-khanh-vy.showcase@example.test",
+	"follow-up": "phan-nhat-ha.showcase@example.test",
+	"connected": "ho-minh-quan.showcase@example.test",
+	"invalid-lead": "vu-hong-ngoc.showcase@example.test",
+	"reopened": "huynh-gia-phuc.showcase@example.test",
+	"edge-review": "edge-review.crm-demo-showcase@example.test",
+	"edge-quarantine": "edge-quarantine.crm-demo-showcase@example.test",
+	"edge-legacy": "edge-legacy.crm-demo-showcase@example.test",
+	"edge-sla-closed": "edge-sla-closed.crm-demo-showcase@example.test",
+	"edge-sla-closed-inactive": "edge-sla-closed-inactive.crm-demo-showcase@example.test",
+}
+
+
+def _showcase_student_emails() -> tuple[str, ...]:
+	return tuple(sorted({scenario["email"] for scenario in SCENARIOS} | set(_EDGE_STUDENT_EMAILS)))
+
+
+def _showcase_student_filters() -> dict:
+	return {"email": ["in", list(_showcase_student_emails())]}
+
+
+def _contact_email(row: dict[str, Any]) -> str:
+	return _natural_email(row["full_name"])
+
 
 # Consent event -> (event_type, projection column, value). event_type covers all
 # six CRM Contact Consent Event kinds.
@@ -578,47 +946,95 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 	},
 	"CRM Student SLA Attempt": {
 		"status": [
-			"open", "paused", "warned", "responded", "breached",
-			"escalated", "closed", "closed_inactive", "superseded",
+			"open",
+			"paused",
+			"warned",
+			"responded",
+			"breached",
+			"escalated",
+			"closed",
+			"closed_inactive",
+			"superseded",
 		],
 	},
 	"CRM Student Identity": {"identity_status": ["active", "retracted"]},
 	"CRM Student Intake Review": {
 		"review_type": [
-			"identity_conflict", "duplicate_case", "malformed_identifier",
-			"missing_admission_cycle", "ownership_topology", "legacy_contact_origin",
+			"identity_conflict",
+			"duplicate_case",
+			"malformed_identifier",
+			"missing_admission_cycle",
+			"ownership_topology",
+			"legacy_contact_origin",
 		],
 		"review_status": ["open", "attach_identity", "approve_new_identity", "reject", "applied"],
 	},
 	"CRM Student Outcome": {
 		"outcome_code": [
-			"connected", "qualified", "follow_up_required", "no_response",
-			"not_interested", "invalid", "completed",
+			"connected",
+			"qualified",
+			"follow_up_required",
+			"no_response",
+			"not_interested",
+			"invalid",
+			"completed",
 		],
 		"continuity_kind": ["task", "waiting", "terminal"],
 	},
 	"CRM Action": {
 		"action_type": [
-			"CALL", "EMAIL", "MESSAGE", "COUNSELING", "MEETING", "EVENT_INVITE",
-			"CAMPUS_VISIT", "DOCUMENT_REQUEST", "APPLICATION_SUPPORT",
-			"PARENT_CONTACT", "HANDOFF",
+			"CALL",
+			"EMAIL",
+			"MESSAGE",
+			"COUNSELING",
+			"MEETING",
+			"EVENT_INVITE",
+			"CAMPUS_VISIT",
+			"DOCUMENT_REQUEST",
+			"APPLICATION_SUPPORT",
+			"PARENT_CONTACT",
+			"HANDOFF",
 		],
 		"state": [
-			"pending", "accepted", "in-progress", "requires-review", "completed",
-			"cancelled", "superseded", "rejected", "deferred",
+			"pending",
+			"accepted",
+			"in-progress",
+			"requires-review",
+			"completed",
+			"cancelled",
+			"superseded",
+			"rejected",
+			"deferred",
 		],
 		"priority": ["high", "medium", "low"],
 		"disposition": ["ACT", "MONITOR", "NURTURE"],
 	},
 	"CRM Contact": {
 		"lead_status": [
-			"Mới", "Unassigned", "Chưa nhận", "Assigned", "Mới nhận", "Counseling",
-			"Đang tư vấn", "Awaiting Documents", "Chờ nộp hồ sơ", "Nurture", "Nguội",
-			"Won", "Đã chốt", "Lost", "Từ chối",
+			"Mới",
+			"Unassigned",
+			"Chưa nhận",
+			"Assigned",
+			"Mới nhận",
+			"Counseling",
+			"Đang tư vấn",
+			"Awaiting Documents",
+			"Chờ nộp hồ sơ",
+			"Nurture",
+			"Nguội",
+			"Won",
+			"Đã chốt",
+			"Lost",
+			"Từ chối",
 		],
 		"readiness_level": list(_READINESS_LABELS.values()),
 		"quality_bucket": [
-			"Hot", "Warm", "Cool", "Sai số", "Không liên lạc được", "Không quan tâm",
+			"Hot",
+			"Warm",
+			"Cool",
+			"Sai số",
+			"Không liên lạc được",
+			"Không quan tâm",
 		],
 		"decision_maker": ["Student", "Parent", "Both"],
 		"preferred_contact_channel": ["Email", "Zalo", "Phone"],
@@ -626,13 +1042,23 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 	},
 	"CRM Contact Consent Event": {
 		"event_type": [
-			"Granted", "Opted Out", "Re-subscribed", "Marked Test", "Bounced", "Suppressed",
+			"Granted",
+			"Opted Out",
+			"Re-subscribed",
+			"Marked Test",
+			"Bounced",
+			"Suppressed",
 		],
 	},
 	"CRM Interaction": {
 		"outcome": [
-			"Captured", "Follow Up Needed", "Resolved", "Converted",
-			"No Response", "Data Error", "Uncontactable",
+			"Captured",
+			"Follow Up Needed",
+			"Resolved",
+			"Converted",
+			"No Response",
+			"Data Error",
+			"Uncontactable",
 		],
 		"direction": ["inbound", "outbound"],
 	},
@@ -644,7 +1070,6 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 	"CRM High School": {
 		"school_area": ["KV1", "KV2", "KV2_NT", "KV3"],
 		"key_account_tier": ["Tier 1", "Tier 2", "Tier 3"],
-		"key_account_status": ["Eligible", "Not Eligible", "Review Required"],
 		"is_key_account": ["0", "1"],
 	},
 	"CRM High School Annual Snapshot": {
@@ -657,6 +1082,16 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 		"outcome": ["Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable"],
 	},
 	"CRM Person": {
+		# One stakeholder per curated key-account slot; must stay in lockstep with
+		# _STAKEHOLDER_NAMES (the no-snapshot slot deliberately has no person).
+		"full_name": [
+			"Nguyễn Thị Hồng Vân",
+			"Trần Văn Hậu",
+			"Lê Thị Thanh Nga",
+			"Phạm Minh Quân",
+		],
+	},
+	"CRM School Stakeholder": {
 		"relationship_status": ["New", "Active", "Dormant", "Do Not Contact"],
 		"influence": ["Low", "Medium", "High", "Decision Maker"],
 	},
@@ -697,6 +1132,7 @@ KNOWN_GAPS: tuple[str, ...] = (
 # Small helpers
 # ---------------------------------------------------------------------------
 
+
 def _rng(*parts: Any) -> random.Random:
 	return random.Random(":".join([str(SEED), *[str(p) for p in parts]]))
 
@@ -730,9 +1166,11 @@ def _savepoint_name(*parts: Any) -> str:
 def _ensure_interaction_type(name: str) -> str:
 	if frappe.db.exists("CRM Term", name):
 		return name
-	return frappe.get_doc(
-		{"doctype": "CRM Term", "term_name": name, "category": "interaction_type"}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "interaction_type"})
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_term(term_name: str, category: str) -> str:
@@ -740,17 +1178,30 @@ def _ensure_term(term_name: str, category: str) -> str:
 	name = frappe.db.get_value("CRM Term", {"term_name": term_name, "category": category}, "name")
 	if name:
 		return name
-	return frappe.get_doc(
-		{"doctype": "CRM Term", "term_name": term_name, "category": category}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc({"doctype": "CRM Term", "term_name": term_name, "category": category})
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_lead_statuses() -> None:
 	rows = [
-		("Mới", 10), ("Unassigned", 10), ("Chưa nhận", 10), ("Assigned", 15),
-		("Mới nhận", 15), ("Counseling", 20), ("Đang tư vấn", 20),
-		("Awaiting Documents", 30), ("Chờ nộp hồ sơ", 30), ("Nurture", 35),
-		("Nguội", 35), ("Won", 40), ("Đã chốt", 40), ("Lost", 50), ("Từ chối", 50),
+		("Mới", 10),
+		("Unassigned", 10),
+		("Chưa nhận", 10),
+		("Assigned", 15),
+		("Mới nhận", 15),
+		("Counseling", 20),
+		("Đang tư vấn", 20),
+		("Awaiting Documents", 30),
+		("Chờ nộp hồ sơ", 30),
+		("Nurture", 35),
+		("Nguội", 35),
+		("Won", 40),
+		("Đã chốt", 40),
+		("Lost", 50),
+		("Từ chối", 50),
 	]
 	for name, order in rows:
 		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "lead_status"}):
@@ -760,8 +1211,6 @@ def _ensure_lead_statuses() -> None:
 
 
 def _ensure_lifecycle_statuses() -> None:
-	from crm.demo.seed_student import _ensure_enrollment_status
-
 	for name, order, category, stage in (
 		("Mới", 10, "open", "Lead"),
 		("Có triển vọng", 20, "open", "MQL"),
@@ -773,10 +1222,36 @@ def _ensure_lifecycle_statuses() -> None:
 	_ensure_lead_statuses()
 
 
-def _enrollment_term(term_name: str) -> str:
-	name = frappe.db.get_value(
-		"CRM Term", {"term_name": term_name, "category": "enrollment_status"}, "name"
+def _ensure_enrollment_status(name: str, order: int, category: str, lifecycle_stage: str) -> str:
+	"""Ensure the lifecycle term used by the canonical seed exists and is current."""
+	meta = {"stage_category": category, "lifecycle_stage": lifecycle_stage}
+	term_name = frappe.db.get_value("CRM Term", {"term_name": name, "category": "enrollment_status"}, "name")
+	if not term_name and frappe.db.exists("CRM Term", name):
+		if frappe.db.get_value("CRM Term", name, "category") == "enrollment_status":
+			term_name = name
+	if term_name:
+		doc = frappe.get_doc("CRM Term", term_name)
+		doc.sort_order = order
+		doc.metadata = meta
+		doc.save(ignore_permissions=True)
+		return doc.name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "CRM Term",
+				"term_name": name,
+				"category": "enrollment_status",
+				"sort_order": order,
+				"metadata": meta,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
 	)
+
+
+def _enrollment_term(term_name: str) -> str:
+	name = frappe.db.get_value("CRM Term", {"term_name": term_name, "category": "enrollment_status"}, "name")
 	if not name:
 		raise frappe.ValidationError(f"enrollment_status term {term_name!r} missing.")
 	return name
@@ -786,6 +1261,7 @@ def _enrollment_term(term_name: str) -> str:
 # Org topology + policy history
 # ---------------------------------------------------------------------------
 
+
 def _ensure_policies(campus: str, pool: str) -> None:
 	"""Seed one active + one draft + one retired routing and SLA policy each."""
 	from crm.api.student_policy import _service_save
@@ -794,38 +1270,67 @@ def _ensure_policies(campus: str, pool: str) -> None:
 	base = {"campus": campus, "student_pool": pool, "authored_by": "Administrator"}
 	specs = (
 		{
-			"doctype": "CRM Student Routing Policy", "policy_key": f"{NAMESPACE}-routing-v1",
-			"policy_version": 1, "strategy": "round_robin", "effective_from": now, "status": "active",
+			"doctype": "CRM Student Routing Policy",
+			"policy_key": f"{NAMESPACE}-routing-v1",
+			"policy_version": 1,
+			"strategy": "round_robin",
+			"effective_from": now,
+			"status": "active",
 		},
 		{
-			"doctype": "CRM Student Routing Policy", "policy_key": f"{NAMESPACE}-routing-v2",
-			"policy_version": 2, "strategy": "round_robin", "effective_from": now, "status": "draft",
+			"doctype": "CRM Student Routing Policy",
+			"policy_key": f"{NAMESPACE}-routing-v2",
+			"policy_version": 2,
+			"strategy": "round_robin",
+			"effective_from": now,
+			"status": "draft",
 		},
 		{
-			"doctype": "CRM Student Routing Policy", "policy_key": f"{NAMESPACE}-routing-v0",
-			"policy_version": 3, "strategy": "round_robin", "effective_from": now, "status": "retired",
+			"doctype": "CRM Student Routing Policy",
+			"policy_key": f"{NAMESPACE}-routing-v0",
+			"policy_version": 3,
+			"strategy": "round_robin",
+			"effective_from": now,
+			"status": "retired",
 		},
 		{
-			"doctype": "CRM Student SLA Policy", "policy_key": f"{NAMESPACE}-sla-v1", "policy_version": 1,
-			"warning_minutes": 15, "breach_minutes": 30, "escalation_minutes": 45,
+			"doctype": "CRM Student SLA Policy",
+			"policy_key": f"{NAMESPACE}-sla-v1",
+			"policy_version": 1,
+			"warning_minutes": 15,
+			"breach_minutes": 30,
+			"escalation_minutes": 45,
 			"pause_reasons": json.dumps(["parent_unavailable", "awaiting_documents"]),
 			"maximum_pause_minutes": 240,
 			"recipient_strategy": "owner_warning_lead_breach_director_escalation",
-			"effective_from": now, "status": "active",
+			"effective_from": now,
+			"status": "active",
 		},
 		{
-			"doctype": "CRM Student SLA Policy", "policy_key": f"{NAMESPACE}-sla-v2", "policy_version": 2,
-			"warning_minutes": 10, "breach_minutes": 25, "escalation_minutes": 40,
-			"pause_reasons": json.dumps([]), "maximum_pause_minutes": 0,
+			"doctype": "CRM Student SLA Policy",
+			"policy_key": f"{NAMESPACE}-sla-v2",
+			"policy_version": 2,
+			"warning_minutes": 10,
+			"breach_minutes": 25,
+			"escalation_minutes": 40,
+			"pause_reasons": json.dumps([]),
+			"maximum_pause_minutes": 0,
 			"recipient_strategy": "owner_warning_lead_breach_director_escalation",
-			"effective_from": now, "status": "draft",
+			"effective_from": now,
+			"status": "draft",
 		},
 		{
-			"doctype": "CRM Student SLA Policy", "policy_key": f"{NAMESPACE}-sla-v0", "policy_version": 3,
-			"warning_minutes": 20, "breach_minutes": 40, "escalation_minutes": 60,
-			"pause_reasons": json.dumps([]), "maximum_pause_minutes": 0,
+			"doctype": "CRM Student SLA Policy",
+			"policy_key": f"{NAMESPACE}-sla-v0",
+			"policy_version": 3,
+			"warning_minutes": 20,
+			"breach_minutes": 40,
+			"escalation_minutes": 60,
+			"pause_reasons": json.dumps([]),
+			"maximum_pause_minutes": 0,
 			"recipient_strategy": "owner_warning_lead_breach_director_escalation",
-			"effective_from": now, "status": "retired",
+			"effective_from": now,
+			"status": "retired",
 		},
 	)
 	for spec in specs:
@@ -852,6 +1357,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 # Per-student service orchestration
 # ---------------------------------------------------------------------------
 
+
 def _ensure_student(scenario: dict, context: dict, pool: str):
 	from crm.fcrm.lifecycle import get_lifecycle_stage
 	from crm.fcrm.student_intake import submit_intake
@@ -861,6 +1367,19 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	# survives but its Student is gone, so a plain replay would fail with
 	# "replay target is no longer available" — fall back to fresh ingress keys.)
 	existing = frappe.db.get_value("CRM Student", {"email": scenario["email"]}, "name")
+	if not existing:
+		legacy_email = _LEGACY_STUDENT_EMAIL_BY_KEY.get(scenario["key"])
+		if not legacy_email and scenario["key"].startswith("bulk-student-"):
+			legacy_email = f"{scenario['key']}.showcase@example.test"
+		if legacy_email:
+			existing = frappe.db.get_value("CRM Student", {"email": legacy_email}, "name")
+			if existing:
+				frappe.db.set_value(
+					"CRM Student",
+					existing,
+					{"student_name": scenario["student_name"], "email": scenario["email"]},
+					update_modified=False,
+				)
 
 	def _do_intake(suffix: str = "") -> dict:
 		return submit_intake(
@@ -889,15 +1408,26 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	else:
 		try:
 			result = _do_intake()
-		except Exception as exc:  # noqa: BLE001
+		except Exception as exc:
 			if "replay target is no longer available" in str(exc):
 				frappe.db.rollback()
 				result = _do_intake(f":r{frappe.generate_hash(length=6)}")
 			else:
 				raise
 		student_name = result.get("student")
+		if student_name and frappe.db.get_value("CRM Student", student_name, "email") != scenario["email"]:
+			# A previous run may have persisted a source receipt after attaching
+			# this scenario to a different identity (for example after a fixture
+			# phone was corrected). Use a new source identity for the repair rather
+			# than silently accepting a Student with another person's email.
+			result = _do_intake(":repair")
+			student_name = result.get("student")
 		if result.get("outcome") not in {"created", "attached"} or not student_name:
 			raise frappe.ValidationError(f"Intake did not create Student {scenario['key']}: {result}")
+		if frappe.db.get_value("CRM Student", student_name, "email") != scenario["email"]:
+			raise frappe.ValidationError(
+				f"Intake attached Student {student_name} to the wrong email for {scenario['key']}."
+			)
 	doc = frappe.get_doc("CRM Student", student_name)
 	if not doc.lifecycle_stage and doc.enrollment_status:
 		stage = get_lifecycle_stage(doc.enrollment_status) or "Lead"
@@ -908,8 +1438,11 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	# the academic tab is not blank.
 	if doc.admission_method != scenario["admission_method"]:
 		frappe.db.set_value(
-			"CRM Student", student_name, "admission_method",
-			scenario["admission_method"], update_modified=False,
+			"CRM Student",
+			student_name,
+			"admission_method",
+			scenario["admission_method"],
+			update_modified=False,
 		)
 	return doc
 
@@ -938,18 +1471,22 @@ def _ensure_manual_interaction(student: str, scenario: dict, *, direction: str =
 	existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
 	if existing:
 		return existing
-	return frappe.get_doc(
-		{
-			"doctype": "CRM Interaction",
-			"student": student,
-			"interaction_type": _ensure_interaction_type("Counseling"),
-			"interaction_datetime": now_datetime(),
-			"external_id": external_id,
-			"direction": direction,
-			"summary": scenario["summary"],
-			"notes": scenario["notes"],
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "CRM Interaction",
+				"student": student,
+				"interaction_type": _ensure_interaction_type("Counseling"),
+				"interaction_datetime": now_datetime(),
+				"external_id": external_id,
+				"direction": direction,
+				"summary": scenario["summary"],
+				"notes": scenario["notes"],
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_verified_call_interaction(student: str, scenario: dict, *, outcome: str = "Captured") -> str:
@@ -960,20 +1497,36 @@ def _ensure_verified_call_interaction(student: str, scenario: dict, *, outcome: 
 	call_name = frappe.db.get_value("Call Log", {"id": call_id}, "name")
 	if not call_name:
 		student_doc = frappe.get_doc("CRM Student", student)
-		call_name = frappe.get_doc(
-			{
-				"doctype": "Call Log", "id": call_id, "from": student_doc.phone, "to": "02873005588",
-				"type": "Outgoing", "status": "Completed", "duration": 420, "start_time": now_datetime(),
-				"reference_doctype": "CRM Student", "reference_docname": student, "caller": SALE_EMAIL,
-			}
-		).insert(ignore_permissions=True).name
+		call_name = (
+			frappe.get_doc(
+				{
+					"doctype": "Call Log",
+					"id": call_id,
+					"from": student_doc.phone,
+					"to": "02873005588",
+					"type": "Outgoing",
+					"status": "Completed",
+					"duration": 420,
+					"start_time": now_datetime(),
+					"reference_doctype": "CRM Student",
+					"reference_docname": student,
+					"caller": SALE_EMAIL,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
 	interaction = frappe.db.get_value(
 		"CRM Interaction", {"reference_doctype": "Call Log", "reference_docname": call_name}, "name"
 	)
 	if not interaction:
 		interaction = create_interaction(
-			interaction_type="Connected", student=student, reference_doctype="Call Log",
-			reference_docname=call_name, actor=SALE_EMAIL, summary=scenario["summary"],
+			interaction_type="Connected",
+			student=student,
+			reference_doctype="Call Log",
+			reference_docname=call_name,
+			actor=SALE_EMAIL,
+			summary=scenario["summary"],
 		)
 	interaction_doc = frappe.get_doc("CRM Interaction", interaction)
 	if not interaction_doc.outcome:
@@ -1029,13 +1582,20 @@ def _ensure_document_evidence(student: str, scenario: dict) -> str:
 	)
 	if existing:
 		return existing
-	return frappe.get_doc(
-		{
-			"doctype": "File", "file_name": file_name, "is_private": 1,
-			"content": f"Phiếu tiếp nhận hồ sơ tuyển sinh\nHọc sinh: {scenario['student_name']}\n",
-			"attached_to_doctype": "CRM Student", "attached_to_name": student,
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": file_name,
+				"is_private": 1,
+				"content": f"Phiếu tiếp nhận hồ sơ tuyển sinh\nHọc sinh: {scenario['student_name']}\n",
+				"attached_to_doctype": "CRM Student",
+				"attached_to_name": student,
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_intent_evidence(student: str, scenario: dict) -> str:
@@ -1046,13 +1606,21 @@ def _ensure_intent_evidence(student: str, scenario: dict) -> str:
 	)
 	if existing:
 		return existing
-	return frappe.get_doc(
-		{
-			"doctype": "CRM Intent", "interaction": interaction, "intent_type": intent_type,
-			"confidence": 88, "intent_role": "Dominant", "polarity": "Positive",
-			"notes": "Học sinh cần tư vấn điều kiện học bổng.",
-		}
-	).insert(ignore_permissions=True).name
+	return (
+		frappe.get_doc(
+			{
+				"doctype": "CRM Intent",
+				"interaction": interaction,
+				"intent_type": intent_type,
+				"confidence": 88,
+				"intent_role": "Dominant",
+				"polarity": "Positive",
+				"notes": "Học sinh cần tư vấn điều kiện học bổng.",
+			}
+		)
+		.insert(ignore_permissions=True)
+		.name
+	)
 
 
 def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None:
@@ -1068,10 +1636,16 @@ def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None
 		# are both exercised for one case.
 		if doc.lifecycle_stage in {"Lead"}:
 			request_transition(
-				student, "MQL", reason="Đủ điều kiện chuyển MQL.",
+				student,
+				"MQL",
+				reason="Đủ điều kiện chuyển MQL.",
 				evidence_refs=[
 					{"category": "outcome", "doctype": "CRM Student Outcome", "name": outcome},
-					{"category": "intent", "doctype": "CRM Intent", "name": _ensure_intent_evidence(student, scenario)},
+					{
+						"category": "intent",
+						"doctype": "CRM Intent",
+						"name": _ensure_intent_evidence(student, scenario),
+					},
 				],
 				outcome_code="qualified",
 				expected_revision=int(doc.lifecycle_revision or 0),
@@ -1080,14 +1654,17 @@ def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None
 			)
 			doc.reload()
 		request_transition(
-			student, "Lost", reason="Tạm dừng theo yêu cầu gia đình.",
+			student,
+			"Lost",
+			reason="Tạm dừng theo yêu cầu gia đình.",
 			expected_revision=int(doc.lifecycle_revision or 0),
 			idempotency_key=_idempotency_key("lifecycle", scenario["key"], "lost"),
 			correlation_id=_idempotency_key(scenario["key"]),
 		)
 		doc.reload()
 		reopen(
-			student, reason="Gia đình liên hệ lại và tiếp tục quan tâm.",
+			student,
+			reason="Gia đình liên hệ lại và tiếp tục quan tâm.",
 			expected_revision=int(doc.lifecycle_revision or 0),
 			idempotency_key=_idempotency_key("lifecycle", scenario["key"], "reopen"),
 			correlation_id=_idempotency_key(scenario["key"]),
@@ -1098,7 +1675,9 @@ def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None
 		return
 	if target == "Lost":
 		request_transition(
-			student, "Lost", reason="Gia đình đã chọn chương trình đào tạo khác.",
+			student,
+			"Lost",
+			reason="Gia đình đã chọn chương trình đào tạo khác.",
 			expected_revision=int(doc.lifecycle_revision or 0),
 			idempotency_key=_idempotency_key("lifecycle", scenario["key"]),
 			correlation_id=_idempotency_key(scenario["key"]),
@@ -1115,15 +1694,26 @@ def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None
 		evidence = [{"category": "outcome", "doctype": "CRM Student Outcome", "name": outcome}]
 		if stage == "MQL":
 			evidence.append(
-				{"category": "intent", "doctype": "CRM Intent", "name": _ensure_intent_evidence(student, scenario)}
+				{
+					"category": "intent",
+					"doctype": "CRM Intent",
+					"name": _ensure_intent_evidence(student, scenario),
+				}
 			)
 		else:
 			evidence.append(
-				{"category": "document", "doctype": "File", "name": _ensure_document_evidence(student, scenario)}
+				{
+					"category": "document",
+					"doctype": "File",
+					"name": _ensure_document_evidence(student, scenario),
+				}
 			)
 		request_transition(
-			student, stage, reason=f"Đủ bằng chứng nghiệp vụ để chuyển sang {stage}.",
-			evidence_refs=evidence, outcome_code="qualified",
+			student,
+			stage,
+			reason=f"Đủ bằng chứng nghiệp vụ để chuyển sang {stage}.",
+			evidence_refs=evidence,
+			outcome_code="qualified",
 			expected_revision=int(doc.lifecycle_revision or 0),
 			idempotency_key=_idempotency_key("lifecycle", scenario["key"], stage),
 			correlation_id=_idempotency_key(scenario["key"]),
@@ -1162,8 +1752,12 @@ def _ensure_scores(student: str, scenario: dict) -> None:
 			policy_hash=policy["policy_hash"],
 			score_template=policy["template_id"],
 			scoring_time=now_datetime().strftime("%Y-%m-%d %H:%M:%S"),
-			fit_score=fit, engagement_score=engagement, intent_score=intent,
-			time_decay_score=0, negative_score=negative, final_score=final,
+			fit_score=fit,
+			engagement_score=engagement,
+			intent_score=intent,
+			time_decay_score=0,
+			negative_score=negative,
+			final_score=final,
 			score_change=final - float(student_doc.latest_score or 0),
 			details=[
 				{"category": "Fit", "signal": "Programme fit", "score": fit},
@@ -1194,8 +1788,11 @@ def _sla_due_times(attempt, target_status: str) -> tuple:
 
 def _latest_sla_attempt(student: str):
 	rows = frappe.get_all(
-		"CRM Student SLA Attempt", filters={"student": student},
-		fields=["name"], order_by="creation desc", limit_page_length=1,
+		"CRM Student SLA Attempt",
+		filters={"student": student},
+		fields=["name"],
+		order_by="creation desc",
+		limit_page_length=1,
 	)
 	return frappe.get_doc("CRM Student SLA Attempt", rows[0].name) if rows else None
 
@@ -1251,7 +1848,8 @@ def _supersede_sla(attempt):
 	from crm.fcrm.student_sla import approve_sla_reset, request_sla_reset
 
 	request_sla_reset(
-		attempt.name, reason="Reconcile the deterministic demo SLA showcase.",
+		attempt.name,
+		reason="Reconcile the deterministic demo SLA showcase.",
 		evidence_reference=_idempotency_key("sla-reset", attempt.student),
 		expected_revision=int(attempt.revision or 0),
 	)
@@ -1261,6 +1859,7 @@ def _supersede_sla(attempt):
 
 
 # --- Actions -------------------------------------------------------------
+
 
 def _ensure_actions(student: str, scenario: dict, owner_staff: str | None) -> list[str]:
 	from crm.fcrm.student_decision import _command_key, create_manual_action
@@ -1275,9 +1874,13 @@ def _ensure_actions(student: str, scenario: dict, owner_staff: str | None) -> li
 			continue
 		priority = ("high", "medium", "low")[index % 3]
 		created = create_manual_action(
-			student, action_type, f"{action_type} — {scenario['summary']}",
-			idempotency_key=idem, due_at=now_datetime() + timedelta(hours=4 + index),
-			priority=priority, assignee_staff=owner_staff,
+			student,
+			action_type,
+			f"{action_type} — {scenario['summary']}",
+			idempotency_key=idem,
+			due_at=now_datetime() + timedelta(hours=4 + index),
+			priority=priority,
+			assignee_staff=owner_staff,
 		)
 		action_name = created["action"]
 		names.append(action_name)
@@ -1297,7 +1900,10 @@ def _transition_action_to(action_name: str, target_state: str, idem: str) -> Non
 	elif target_state == "completed":
 		steps = [
 			("in_progress", {}),
-			("completed", {"outcome_code": "APPLICATION_COMPLETED", "evidence": "Đã hoàn tất theo kế hoạch."}),
+			(
+				"completed",
+				{"outcome_code": "APPLICATION_COMPLETED", "evidence": "Đã hoàn tất theo kế hoạch."},
+			),
 		]
 	elif target_state == "cancelled":
 		steps = [("cancelled", {"reason": "Không còn cần thiết sau khi trao đổi lại."})]
@@ -1309,12 +1915,17 @@ def _transition_action_to(action_name: str, target_state: str, idem: str) -> Non
 	for offset, (status, extra) in enumerate(steps):
 		action = frappe.get_doc("CRM Action", action_name)
 		transition_action(
-			action_name, expected_revision=int(action.action_revision or 1), status=status,
-			idempotency_key=f"{idem}:{status}:{offset}", _internal_service=True, **extra,
+			action_name,
+			expected_revision=int(action.action_revision or 1),
+			status=status,
+			idempotency_key=f"{idem}:{status}:{offset}",
+			_internal_service=True,
+			**extra,
 		)
 
 
 # --- Attribution --------------------------------------------------------
+
 
 def _ensure_attribution(student: str, scenario: dict, context: dict) -> None:
 	spec = scenario.get("attribution")
@@ -1329,9 +1940,12 @@ def _ensure_attribution(student: str, scenario: dict, context: dict) -> None:
 			"CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "idempotency_key": key}
 		):
 			record_campaign_touchpoint(
-				student, context["campaign"], source="Manual",
+				student,
+				context["campaign"],
+				source="Manual",
 				notes=f"Open Day — {scenario['student_name']}.",
-				idempotency_key=key, correlation_id=_idempotency_key(scenario["key"]),
+				idempotency_key=key,
+				correlation_id=_idempotency_key(scenario["key"]),
 			)
 	if event_kind:
 		key = _idempotency_key("event", scenario["key"])
@@ -1340,11 +1954,13 @@ def _ensure_attribution(student: str, scenario: dict, context: dict) -> None:
 		):
 			try:
 				record_event_participation(
-					student, context["event"],
+					student,
+					context["event"],
 					status="Checked-in" if event_kind == "event_checked_in" else "Registered",
-					idempotency_key=key, correlation_id=_idempotency_key(scenario["key"]),
+					idempotency_key=key,
+					correlation_id=_idempotency_key(scenario["key"]),
 				)
-			except Exception as exc:  # noqa: BLE001
+			except Exception as exc:
 				# The doctype also dedups per (student, event); a pre-existing row
 				# from another path already gives the coverage we need.
 				if "already has a participation record" not in str(exc):
@@ -1361,7 +1977,8 @@ def _maybe_convert(student: str, scenario: dict) -> None:
 		return
 	# convert_student is replay-safe (command receipt + existing-conversion guard).
 	convert_student(
-		student, expected_lifecycle_revision=int(doc.lifecycle_revision or 0),
+		student,
+		expected_lifecycle_revision=int(doc.lifecycle_revision or 0),
 		idempotency_key=_idempotency_key("convert", scenario["key"]),
 		correlation_id=_idempotency_key(scenario["key"]),
 	)
@@ -1370,6 +1987,7 @@ def _maybe_convert(student: str, scenario: dict) -> None:
 # ---------------------------------------------------------------------------
 # Driver loops
 # ---------------------------------------------------------------------------
+
 
 def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list[dict]]:
 	manifest: list[dict] = []
@@ -1394,7 +2012,11 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 			_ensure_attribution(student, scenario, context)
 			_ensure_scores(student, scenario)
 			if scenario.get("owner"):
-				_ensure_actions(student, scenario, owner_staff or frappe.db.get_value("CRM Student", student, "owner_staff"))
+				_ensure_actions(
+					student,
+					scenario,
+					owner_staff or frappe.db.get_value("CRM Student", student, "owner_staff"),
+				)
 			_maybe_convert(student, scenario)
 			# Commit the completed scenario so a later failure cannot roll it (or
 			# the shared setup) back and leave the manifest claiming success. Some
@@ -1403,17 +2025,18 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 			frappe.db.commit()
 			manifest.append(
 				{
-					"key": scenario["key"], "student": student,
+					"key": scenario["key"],
+					"student": student,
 					"lifecycle_stage": frappe.db.get_value("CRM Student", student, "lifecycle_stage"),
 					"sla": scenario.get("sla_target"),
 				}
 			)
-		except Exception as exc:  # noqa: BLE001 - isolate this scenario, keep going
+		except Exception as exc:
 			# Drop only the failed scenario's uncommitted work; everything through
 			# the previous scenario is already committed.
 			try:
 				frappe.db.rollback()
-			except Exception:  # noqa: BLE001
+			except Exception:
 				pass
 			errors.append({"key": scenario["key"], "error": str(exc)})
 	return manifest, errors
@@ -1440,7 +2063,8 @@ def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
 			sp = _savepoint_name("showcase_contact", row["key"])
 			frappe.db.savepoint(sp)
 			try:
-				email = f"{row['key']}.{NAMESPACE}@example.test"
+				email = _contact_email(row)
+				legacy_email = f"{row['key']}.{NAMESPACE}@example.test"
 				assigned = sale_staff if row.get("owner") else None
 				fields = {
 					"full_name": row["full_name"],
@@ -1467,9 +2091,15 @@ def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
 				# list/report joins never point at an unrelated case.
 				student_key = row.get("student_key")
 				if student_key:
+					student_email = next(
+						(scenario["email"] for scenario in SCENARIOS if scenario["key"] == student_key),
+						None,
+					)
 					student = frappe.db.get_value(
-						"CRM Student", {"email": f"{student_key}.showcase@example.test"},
-						["high_school", "major", "source", "admission_year"], as_dict=True,
+						"CRM Student",
+						{"email": student_email},
+						["high_school", "major", "source", "admission_year"],
+						as_dict=True,
 					)
 					if not student:
 						raise frappe.ValidationError(
@@ -1484,6 +2114,10 @@ def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
 						}
 					)
 				name = frappe.db.get_value("CRM Contact", {"email": email}, "name")
+				if not name:
+					name = frappe.db.get_value("CRM Contact", {"email": legacy_email}, "name")
+					if name:
+						frappe.db.set_value("CRM Contact", name, {"email": email}, update_modified=False)
 				if name:
 					# Idempotent refresh: many of these columns are PROTECTED_CASE_FIELDS
 					# the controller freezes once a Contact exists (post-conversion
@@ -1491,15 +2125,17 @@ def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
 					# consolidated direct write rather than reopening that guard.
 					frappe.db.set_value("CRM Contact", name, fields, update_modified=False)
 				else:
-					name = frappe.get_doc(
-						{"doctype": "CRM Contact", "email": email, **fields}
-					).insert(ignore_permissions=True).name
+					name = (
+						frappe.get_doc({"doctype": "CRM Contact", "email": email, **fields})
+						.insert(ignore_permissions=True)
+						.name
+					)
 				_ensure_consent_event(name, row["consent"])
 				created.append({"key": row["key"], "contact": name})
-			except Exception as exc:  # noqa: BLE001
+			except Exception as exc:
 				try:
 					frappe.db.rollback(save_point=sp)
-				except Exception:  # noqa: BLE001
+				except Exception:
 					frappe.db.rollback()
 				created.append({"key": row["key"], "error": str(exc)})
 	finally:
@@ -1517,9 +2153,7 @@ def _ensure_consent_event(contact: str, consent: str) -> None:
 	if not frappe.db.table_exists("CRM Contact Consent Event"):
 		return
 	event_type, column, value = _CONSENT_EVENTS[consent]
-	if not frappe.db.exists(
-		"CRM Contact Consent Event", {"contact": contact, "event_type": event_type}
-	):
+	if not frappe.db.exists("CRM Contact Consent Event", {"contact": contact, "event_type": event_type}):
 		doc = {
 			"doctype": "CRM Contact Consent Event",
 			"contact": contact,
@@ -1549,6 +2183,12 @@ def _ensure_consent_event(contact: str, consent: str) -> None:
 _SCHOOL_AREAS = ("KV1", "KV2", "KV2_NT", "KV3")
 _PERSON_REL = ("New", "Active", "Dormant", "Do Not Contact")
 _PERSON_INF = ("Low", "Medium", "High", "Decision Maker")
+_STAKEHOLDER_NAMES = (
+	"Nguyễn Thị Hồng Vân",
+	"Trần Văn Hậu",
+	"Lê Thị Thanh Nga",
+	"Phạm Minh Quân",
+)
 _ACTIVITY_STATUS = ("Planned", "Completed", "Cancelled")
 _ACTIVITY_OUTCOME = ("Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable")
 _SNAPSHOT_VERIFY = ("Review Required", "Verified", "Rejected")
@@ -1563,6 +2203,7 @@ def _ensure_promoter_fixture(staff_context: dict) -> str:
 	Promoter role, so the demo needs its own Promoter account to view that data.
 	"""
 	from frappe.utils.password import update_password
+
 	from crm.api.user import set_canonical_crm_profile
 
 	password = frappe.conf.get(seed_staff.FIXTURE_PASSWORD_SITE_CONFIG_KEY)
@@ -1575,9 +2216,14 @@ def _ensure_promoter_fixture(staff_context: dict) -> str:
 		first, _, last = PROMOTER_FULL_NAME.partition(" ")
 		user = frappe.get_doc(
 			{
-				"doctype": "User", "email": PROMOTER_EMAIL, "first_name": first,
-				"last_name": last, "user_type": "System User", "enabled": 1,
-				"language": "vi", "send_welcome_email": 0,
+				"doctype": "User",
+				"email": PROMOTER_EMAIL,
+				"first_name": first,
+				"last_name": last,
+				"user_type": "System User",
+				"enabled": 1,
+				"language": "vi",
+				"send_welcome_email": 0,
 			}
 		).insert(ignore_permissions=True)
 	user.full_name = PROMOTER_FULL_NAME
@@ -1590,17 +2236,42 @@ def _ensure_promoter_fixture(staff_context: dict) -> str:
 	staff_name = frappe.db.get_value("CRM Staff", {"user": PROMOTER_EMAIL}, "name")
 	if staff_name:
 		frappe.db.set_value(
-			"CRM Staff", staff_name,
+			"CRM Staff",
+			staff_name,
 			{"full_name": PROMOTER_FULL_NAME, "campus": campus, "department": department, "is_active": 1},
 			update_modified=False,
 		)
 	else:
-		staff_name = frappe.get_doc(
-			{
-				"doctype": "CRM Staff", "full_name": PROMOTER_FULL_NAME, "user": PROMOTER_EMAIL,
-				"department": department, "campus": campus, "is_active": 1,
-			}
-		).insert(ignore_permissions=True).name
+		staff_name = (
+			frappe.get_doc(
+				{
+					"doctype": "CRM Staff",
+					"full_name": PROMOTER_FULL_NAME,
+					"user": PROMOTER_EMAIL,
+					"department": department,
+					"campus": campus,
+					"is_active": 1,
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+	# The TS workbook import assigns every relationship to this staff via their
+	# primary team (school_domain_import._resolve_ts_promoter_owner), so the
+	# Promoter must carry a primary CRM Team Membership.
+	team = staff_context.get("team")
+	if team and not frappe.db.exists(
+		"CRM Team Membership",
+		{"parent": staff_name, "parenttype": "CRM Staff", "team": team},
+	):
+		staff_doc = frappe.get_doc("CRM Staff", staff_name)
+		has_primary = any(row.is_primary for row in staff_doc.team_memberships)
+		staff_doc.append(
+			"team_memberships",
+			{"team": team, "function": "Promoter", "is_primary": 0 if has_primary else 1},
+		)
+		staff_doc.save(ignore_permissions=True)
+
 	staff_context["staff_by_user"][PROMOTER_EMAIL] = staff_name
 	return staff_name
 
@@ -1629,8 +2300,7 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 	the seed consumes only the compact JSON projection. On top of that this seed
 	guarantees COVERAGE_MATRIX state on ``_KEY_ACCOUNT_SLOTS`` real key-account
 	schools and gives each three CRM School Activity rows (Planned / Completed /
-	Cancelled). Every top-up row is tagged ``source_file = NAMESPACE`` and owned
-	by the Promoter staff.
+	Cancelled). Every top-up row is owned by the Promoter staff.
 
 	Curation only runs when the TS workbook was actually imported this run, so a
 	machine without it never mutates (let alone deletes) imported real data; the
@@ -1639,8 +2309,12 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 	from crm.demo import school_domain_import
 
 	counts: dict[str, Any] = {
-		"base_import": {}, "ts_import": {},
-		"key_account_schools": 0, "activities": 0, "persons": 0, "gaps": [],
+		"base_import": {},
+		"ts_import": {},
+		"key_account_schools": 0,
+		"activities": 0,
+		"persons": 0,
+		"gaps": [],
 	}
 	promoter = _ensure_promoter_fixture(staff_context)
 
@@ -1661,8 +2335,11 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 			counts["ts_import"] = ts.get("mutations", {})
 		else:
 			counts["gaps"].append(
-				{"stage": "json", "error": f"missing {school_domain_import.DEFAULT_TS_PATH.name}; "
-				 "key-account curation skipped, school matrix will report a gap"}
+				{
+					"stage": "json",
+					"error": f"missing {school_domain_import.DEFAULT_TS_PATH.name}; "
+					"key-account curation skipped, school matrix will report a gap",
+				}
 			)
 			return counts
 
@@ -1675,10 +2352,10 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 			try:
 				_curate_key_account_school(idx, school, promoter, counts)
 				counts["key_account_schools"] += 1
-			except Exception as exc:  # noqa: BLE001
+			except Exception as exc:
 				try:
 					frappe.db.rollback(save_point=sp)
-				except Exception:  # noqa: BLE001
+				except Exception:
 					frappe.db.rollback()
 				counts["gaps"].append({"stage": "curate", "school": school, "error": str(exc)})
 		frappe.db.commit()
@@ -1702,27 +2379,29 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 def _showcase_key_account_schools(school_domain_import) -> list[str]:
 	"""The real schools this seed curates, in a stable order.
 
-	Once a school carries a NAMESPACE-tagged activity it stays in the set, so the
-	slot -> school mapping never drifts between runs (or between execute() and a
-	standalone verify()). New schools are only appended to fill empty slots, taken
-	from the TS primary sheet's annual snapshots by name.
+	The slot -> school mapping is stable because candidates are sorted by the
+	canonical annual snapshot set. New schools are only appended to fill empty
+	slots.
 	"""
-	curated = sorted(set(
-		frappe.get_all(
-			"CRM School Activity", filters={"source_file": NAMESPACE},
-			pluck="high_school", limit_page_length=0,
-		)
-	))
+	curated = frappe.get_all(
+		"CRM School Activity",
+		filters={"owner_staff": ["is", "set"]},
+		pluck="high_school",
+		limit_page_length=0,
+	)
+	curated = sorted({school for school in curated if school})
 	out = [s for s in curated if s][:_SHOWCASE_KEY_ACCOUNT_COUNT]
 	if len(out) >= _SHOWCASE_KEY_ACCOUNT_COUNT:
 		return out
-	candidates = sorted(set(
-		frappe.get_all(
-			"CRM High School Annual Snapshot",
-			filters={"source_sheet": school_domain_import.PRIMARY_TS_SHEET},
-			pluck="high_school", limit_page_length=0,
+	candidates = sorted(
+		set(
+			frappe.get_all(
+				"CRM High School Annual Snapshot",
+				pluck="high_school",
+				limit_page_length=0,
+			)
 		)
-	))
+	)
 	for school in candidates:
 		if len(out) >= _SHOWCASE_KEY_ACCOUNT_COUNT:
 			break
@@ -1738,103 +2417,125 @@ def _curate_key_account_school(idx: int, school: str, promoter: str | None, coun
 	role_term = _ensure_term("Đầu mối tuyển sinh", "stakeholder_role")
 	activity_type = _ensure_term("Tư vấn hướng nghiệp tại trường", "activity_type")
 
-	# school_area / key_account_tier are plain / permlevel-1 fields the controller
+	# school_area / key_account_tier are reference / permlevel-1 fields the controller
 	# does not recompute; pin them so the matrix sees every value. (school_area is
 	# deliberately overwritten -- see _KEY_ACCOUNT_SLOTS.)
-	frappe.db.set_value("CRM High School", school, "school_area", area, update_modified=False)
+	area_term = _ensure_term(area, "school_area")
+	frappe.db.set_value("CRM High School", school, "school_area", area_term, update_modified=False)
 	if tier:
 		frappe.db.set_value("CRM High School", school, "key_account_tier", tier, update_modified=False)
 
 	# One NAMESPACE-owned stakeholder per curated school covers relationship_status
 	# and influence across the first four slots.
 	if idx < len(_PERSON_REL):
-		person_identity = _idempotency_key("person", school)
-		_, state = _upsert(
+		phone = f"09019{rng.randint(10000, 99999)}"
+		person, state = _upsert(
 			"CRM Person",
-			{"source_identity": person_identity},
+			{"phone": phone},
 			{
-				"full_name": f"Thầy/Cô phụ trách {frappe.db.get_value('CRM High School', school, 'school_name')}",
-				"stakeholder_role": role_term,
-				"high_school": school,
-				"is_active": 1,
-				"relationship_status": _PERSON_REL[idx],
-				"influence": _PERSON_INF[idx],
-				"owner_staff": promoter,
-				"phone": f"09019{rng.randint(10000, 99999)}",
-				"source_identity": person_identity,
-				"source_file": NAMESPACE,
+				"full_name": _STAKEHOLDER_NAMES[idx],
+				"phone": phone,
 			},
 		)
-		counts["persons"] += 1 if state in ("created", "updated") else 0
+		assoc_name, assoc_state = _upsert(
+			"CRM School Stakeholder",
+			{"high_school": school, "person": person},
+			{
+				"high_school": school,
+				"person": person,
+				"stakeholder_role": role_term,
+				"influence": _PERSON_INF[idx],
+				"owner_staff": promoter,
+				"position_title": "Đầu mối tuyển sinh",
+			},
+		)
+		# relationship_status is governed (new associations start "New"; changes go
+		# through the transition command with a Relationship Touch + evidence). The
+		# seed just needs the matrix value present, so land it straight in the DB.
+		frappe.db.set_value(
+			"CRM School Stakeholder",
+			assoc_name,
+			{"relationship_status": _PERSON_REL[idx]},
+			update_modified=False,
+		)
+		counts["persons"] += 1 if assoc_state in ("created", "updated") else 0
 
 	# Three activities per key-account school: every status, rotating outcomes.
 	for slot, status in enumerate(_ACTIVITY_STATUS):
-		act_identity = _idempotency_key("activity", school, slot)
+		activity_date = now_datetime().date() - timedelta(days=30 - slot * 10 + idx)
 		_, state = _upsert(
 			"CRM School Activity",
-			{"source_identity": act_identity},
 			{
 				"high_school": school,
 				"activity_type": activity_type,
-				"activity_date": now_datetime().date() - timedelta(days=30 - slot * 10 + idx),
+				"activity_date": activity_date,
+				"owner_staff": promoter,
+			},
+			{
+				"high_school": school,
+				"activity_type": activity_type,
+				"activity_date": activity_date,
 				"status": status,
 				"outcome": _ACTIVITY_OUTCOME[(idx + slot) % len(_ACTIVITY_OUTCOME)],
 				"owner_staff": promoter,
 				"attendance": 60 - slot * 10 + idx * 5,
-				"source_identity": act_identity,
-				"source_file": NAMESPACE,
-				"source_record_id": act_identity,
 			},
 		)
 		counts["activities"] += 1 if state in ("created", "updated") else 0
 
-	# Snapshot state. The importer writes every snapshot as "Review Required" /
-	# "New Enter History" / unlocked with the 2026 row's ne_actual empty; steer the
-	# latest row per slot so key_account_status and the snapshot matrix are covered.
-	# All writes go through doc.save so validate() recomputes key_account_eligible
-	# and fills locked_by / verified_by.
+	# Snapshot state. The importer writes each row as "Review Required" /
+	# "New Enter History" / unlocked. Snapshot facts (ne_actual, ne_actual_semantics,
+	# ...) are immutable once written, so replace the importer's rows wholesale with
+	# one fresh revision-1 carrying the curated matrix values.
 	snaps = frappe.get_all(
 		"CRM High School Annual Snapshot",
 		filters={"high_school": school},
-		fields=["name"],
-		order_by="admission_year desc",
+		fields=["name", "admission_year", "ne_target"],
+		order_by="admission_year desc, revision desc",
 		limit_page_length=0,
 	)
 	if snapshot_mode == "no_snapshot":
-		# Controller derives key_account_status "Review Required" with no rows. Only
-		# reached right after the importer (re)created these rows this run.
 		frappe.db.delete("CRM High School Annual Snapshot", {"high_school": school})
 	elif snaps:
-		latest = frappe.get_doc("CRM High School Annual Snapshot", snaps[0].name)
+		prev = snaps[0]
+		frappe.db.delete("CRM High School Annual Snapshot", {"high_school": school})
+		values = {
+			"doctype": "CRM High School Annual Snapshot",
+			"high_school": school,
+			"admission_year": prev.admission_year,
+			"ne_target": prev.ne_target,
+		}
 		if snapshot_mode == "below_threshold":
-			latest.ne_actual = 2
-			latest.adjusted_ne_threshold = 50  # -> key_account_status "Not Eligible"
+			values.update(ne_actual=2, adjusted_ne_threshold=50)  # -> key_account_eligible 0
 		else:
-			latest.ne_actual = 25
-			latest.adjusted_ne_threshold = 10  # -> "Eligible" / is_key_account 1
-			latest.verification_status = {
-				"eligible_verified": "Verified",
-				"eligible_rejected": "Rejected",
-				"eligible_review": "Review Required",
-			}[snapshot_mode]
-			latest.ne_actual_semantics = (
-				"Official Achieved New Enter" if snapshot_mode == "eligible_verified" else "New Enter History"
+			values.update(
+				ne_actual=25,
+				adjusted_ne_threshold=10,  # -> key_account_eligible 1
+				verification_status={
+					"eligible_verified": "Verified",
+					"eligible_rejected": "Rejected",
+					"eligible_review": "Review Required",
+				}[snapshot_mode],
+				ne_actual_semantics=(
+					"Official Achieved New Enter"
+					if snapshot_mode == "eligible_verified"
+					else "New Enter History"
+				),
+				is_locked=1,
 			)
-			latest.set("is_locked", 1)  # avoid Frappe Document.is_locked property collision
-		latest.save(ignore_permissions=True)
+		frappe.get_doc(values).insert(ignore_permissions=True)
 
 	# Re-save so the school's read-only key-account projection matches the snapshot
 	# state (this is what lands "Review Required" for the no_snapshot slot).
 	frappe.get_doc("CRM High School", school).save(ignore_permissions=True)
 	if tier and promoter:
-		frappe.db.set_value(
-			"CRM High School", school, "key_account_owner", promoter, update_modified=False
-		)
+		frappe.db.set_value("CRM High School", school, "key_account_owner", promoter, update_modified=False)
 
 
 # ---------------------------------------------------------------------------
 # Marketing
 # ---------------------------------------------------------------------------
+
 
 def _seed_marketing(context: dict, staff_context: dict) -> dict:
 	campus = staff_context["campus"]
@@ -1847,10 +2548,15 @@ def _seed_marketing(context: dict, staff_context: dict) -> dict:
 	campaign_names = []
 	for title, status, event_type in _SHOWCASE_CAMPAIGNS:
 		name, _ = _upsert(
-			"CRM Campaign", {"title": title},
+			"CRM Campaign",
+			{"title": title},
 			{
-				"title": title, "status": status, "event_type": event_type,
-				"campus": campus, "budget": 100_000_000, "owner_staff": mkt_staff,
+				"title": title,
+				"status": status,
+				"event_type": event_type,
+				"campus": campus,
+				"budget": 100_000_000,
+				"owner_staff": mkt_staff,
 				"notes": f"{FPTU_ADMISSIONS_CONTEXT}; campaign thuộc {campus}.",
 			},
 		)
@@ -1861,19 +2567,30 @@ def _seed_marketing(context: dict, staff_context: dict) -> dict:
 			"CRM Campaign Spend",
 			{"crm_campaign": context["campaign"], "notes": f"{NAMESPACE} recorded spend"},
 			{
-				"spend_date": now_datetime().date(), "lead_source": context["source"],
-				"crm_campaign": context["campaign"], "campus": campus, "amount": 25_000_000,
-				"impressions": 50_000, "clicks": 1_250, "notes": f"{NAMESPACE} recorded spend",
+				"spend_date": now_datetime().date(),
+				"lead_source": context["source"],
+				"crm_campaign": context["campaign"],
+				"campus": campus,
+				"amount": 25_000_000,
+				"impressions": 50_000,
+				"clicks": 1_250,
+				"notes": f"{NAMESPACE} recorded spend",
 			},
 		)
 
 	if frappe.db.table_exists("CRM Segment"):
 		_upsert(
-			"CRM Segment", {"title": f"{NAMESPACE}: học sinh THPT quan tâm CNTT"},
+			"CRM Segment",
+			{"title": f"{NAMESPACE}: học sinh THPT quan tâm CNTT"},
 			{
-				"title": f"{NAMESPACE}: học sinh THPT quan tâm CNTT", "is_public": 1,
+				"title": f"{NAMESPACE}: học sinh THPT quan tâm CNTT",
+				"is_public": 1,
 				"filters": json.dumps(
-					{"groups": [{"conditions": [{"field": "source", "operator": "=", "value": context["source"]}]}]}
+					{
+						"groups": [
+							{"conditions": [{"field": "source", "operator": "=", "value": context["source"]}]}
+						]
+					}
 				),
 			},
 		)
@@ -1894,15 +2611,18 @@ def _seed_marketing_engagement_variants(campaign: str, context: dict) -> None:
 		("campaign_touch", "Registered", "Migrated"),
 	]
 	pool_students = frappe.get_all(
-		"CRM Student", filters={"email": ["like", _STUDENT_EMAIL_LIKE]},
-		pluck="name", order_by="name", limit_page_length=0,
+		"CRM Student",
+		filters=_showcase_student_filters(),
+		pluck="name",
+		order_by="name",
+		limit_page_length=0,
 	)
 	if not pool_students:
 		return
 	prev = frappe.flags.get("student_attribution_migration")
 	frappe.flags.student_attribution_migration = True
 	try:
-		for vi, (kind, status, source) in enumerate(variants):
+		for _vi, (kind, status, source) in enumerate(variants):
 			key = _idempotency_key("mkt-variant", kind, status, source)
 			if frappe.db.exists("CRM Marketing Engagement", {"idempotency_key": key}):
 				continue
@@ -1967,7 +2687,8 @@ def _seed_governance(context: dict) -> dict:
 
 	for source_name, channel, approval_state in _LEAD_SOURCE_CHANNELS:
 		name, _ = _upsert(
-			"CRM Lead Source", {"source_name": source_name},
+			"CRM Lead Source",
+			{"source_name": source_name},
 			{
 				"source_name": source_name,
 				"channel_family": channel,
@@ -2045,19 +2766,27 @@ def _seed_reference_coverage(context: dict) -> dict:
 	for name, program_type in _SHOWCASE_EDUCATION_PROGRAMS:
 		created.setdefault("education_programs", []).append(
 			_upsert(
-				"CRM Education Program", {"program_name": name},
+				"CRM Education Program",
+				{"program_name": name},
 				{"program_name": name, "program_type": program_type},
 			)[0]
 		)
 
 	# Score Template: seed_demo activates one; add one Draft and one Inactive so
 	# the template status filter has every value the demo needs.
-	for template_name, status in (("Showcase Draft Template", "Draft"), ("Showcase Inactive Template", "Inactive")):
+	for template_name, status in (
+		("Showcase Draft Template", "Draft"),
+		("Showcase Inactive Template", "Inactive"),
+	):
 		if not frappe.db.exists("CRM Score Template", {"template_name": template_name}):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Score Template", "template_name": template_name, "status": status,
-					"fit_weight": 0.4, "intent_weight": 0.3, "engagement_weight": 0.3,
+					"doctype": "CRM Score Template",
+					"template_name": template_name,
+					"status": status,
+					"fit_weight": 0.4,
+					"intent_weight": 0.3,
+					"engagement_weight": 0.3,
 				}
 			).insert(ignore_permissions=True)
 
@@ -2076,7 +2805,7 @@ def _seed_vocab_coverage(context: dict) -> None:
 		("Data Error", "Negative", "Medium"),
 		("Uncontactable", "Negative", "High"),
 	]
-	student = frappe.db.get_value("CRM Student", {"email": ["like", _STUDENT_EMAIL_LIKE]}, "name")
+	student = frappe.db.get_value("CRM Student", _showcase_student_filters(), "name")
 	if not student:
 		return
 	for idx, (outcome, polarity, importance) in enumerate(rows):
@@ -2087,18 +2816,22 @@ def _seed_vocab_coverage(context: dict) -> None:
 		if interaction:
 			frappe.db.set_value("CRM Interaction", interaction, "outcome", outcome, update_modified=False)
 		if not interaction:
-			interaction = frappe.get_doc(
-				{
-					"doctype": "CRM Interaction",
-					"student": student,
-					"interaction_type": _ensure_interaction_type("Counseling"),
-					"interaction_datetime": now_datetime() - timedelta(days=idx + 1),
-					"external_id": ext,
-					"direction": "inbound" if idx % 2 else "outbound",
-					"outcome": outcome,
-					"summary": f"{NAMESPACE} interaction outcome coverage: {outcome}",
-				}
-			).insert(ignore_permissions=True).name
+			interaction = (
+				frappe.get_doc(
+					{
+						"doctype": "CRM Interaction",
+						"student": student,
+						"interaction_type": _ensure_interaction_type("Counseling"),
+						"interaction_datetime": now_datetime() - timedelta(days=idx + 1),
+						"external_id": ext,
+						"direction": "inbound" if idx % 2 else "outbound",
+						"outcome": outcome,
+						"summary": f"{NAMESPACE} interaction outcome coverage: {outcome}",
+					}
+				)
+				.insert(ignore_permissions=True)
+				.name
+			)
 		intent_type = seed_demo._ensure_intent_type(
 			f"Showcase Intent {importance}", importance, f"Vocab coverage {importance}"
 		)
@@ -2129,23 +2862,30 @@ def _seed_vocab_coverage(context: dict) -> None:
 	if not frappe.db.exists("CRM Student Outcome", {"source_key": comp_key}):
 		from crm.fcrm.student_engagement import record_outcome
 
-		comp_student = frappe.db.get_value(
-			"CRM Student", {"email": ["like", _STUDENT_EMAIL_LIKE], "lifecycle_stage": "Lost"}, "name"
-		) or student
+		comp_student = (
+			frappe.db.get_value(
+				"CRM Student", {**_showcase_student_filters(), "lifecycle_stage": "Lost"}, "name"
+			)
+			or student
+		)
 		comp_interaction = frappe.db.get_value("CRM Interaction", {"external_id": comp_key}, "name")
 		if not comp_interaction:
-			comp_interaction = frappe.get_doc(
-				{
-					"doctype": "CRM Interaction",
-					"student": comp_student,
-					"interaction_type": _ensure_interaction_type("Counseling"),
-					"interaction_datetime": now_datetime(),
-					"external_id": comp_key,
-					"direction": "outbound",
-					"outcome": "Resolved",
-					"summary": f"{NAMESPACE} outcome_code=completed coverage",
-				}
-			).insert(ignore_permissions=True).name
+			comp_interaction = (
+				frappe.get_doc(
+					{
+						"doctype": "CRM Interaction",
+						"student": comp_student,
+						"interaction_type": _ensure_interaction_type("Counseling"),
+						"interaction_datetime": now_datetime(),
+						"external_id": comp_key,
+						"direction": "outbound",
+						"outcome": "Resolved",
+						"summary": f"{NAMESPACE} outcome_code=completed coverage",
+					}
+				)
+				.insert(ignore_permissions=True)
+				.name
+			)
 		try:
 			record_outcome(
 				student=comp_student,
@@ -2161,7 +2901,7 @@ def _seed_vocab_coverage(context: dict) -> None:
 				idempotency_key=comp_key,
 				correlation_id=comp_key,
 			)
-		except Exception:  # noqa: BLE001 - coverage-only; a failure just leaves the gap
+		except Exception:
 			frappe.db.rollback()
 
 	# Call Log status/type coverage (Completed already produced by SLA call).
@@ -2173,8 +2913,13 @@ def _seed_vocab_coverage(context: dict) -> None:
 			continue
 		frappe.get_doc(
 			{
-				"doctype": "Call Log", "id": call_id, "from": "0901900000", "to": "02873005588",
-				"type": call_type, "status": status, "duration": 0 if status != "Completed" else 90,
+				"doctype": "Call Log",
+				"id": call_id,
+				"from": "0901900000",
+				"to": "02873005588",
+				"type": call_type,
+				"status": status,
+				"duration": 0 if status != "Completed" else 90,
 				"start_time": now_datetime() - timedelta(hours=idx + 1),
 			}
 		).insert(ignore_permissions=True)
@@ -2183,6 +2928,7 @@ def _seed_vocab_coverage(context: dict) -> None:
 # ---------------------------------------------------------------------------
 # Edge states with no service path
 # ---------------------------------------------------------------------------
+
 
 def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 	"""One audited place for doctype states no whitelisted command can produce.
@@ -2198,13 +2944,17 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 	# and quarantine states live on Students created through conflict-resolution
 	# paths that need a second conflicting identity we do not model in the curated
 	# set. 'legacy' has no service path at all (migration-only provenance marker).
-	for variant, state in (("review", "review_required"), ("quarantine", "quarantined"), ("legacy", "legacy")):
+	for variant, state in (
+		("review", "review_required"),
+		("quarantine", "quarantined"),
+		("legacy", "legacy"),
+	):
 		scenario = {
 			"key": f"edge-{variant}",
-			"student_name": {"review": "Trần Edge Review", "quarantine": "Lê Edge Quarantine", "legacy": "Phạm Edge Legacy"}[variant],
+			"student_name": _EDGE_DISPLAY_NAMES[variant],
 			"gender": "Nam",
 			"admission_method": "Combined",
-			"email": f"edge-{variant}.{NAMESPACE}@example.test",
+			"email": _natural_email(_EDGE_DISPLAY_NAMES[variant]),
 			"phone": f"090190030{['review', 'quarantine', 'legacy'].index(variant)}",
 			"target_stage": "Lead",
 		}
@@ -2214,21 +2964,29 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 				"CRM Student", doc.name, "intake_integrity_state", state, update_modified=False
 			)
 			notes.append(f"CRM Student {doc.name} intake_integrity_state={state} (no service path)")
-		except Exception as exc:  # noqa: BLE001
+		except Exception as exc:
 			notes.append(f"edge intake_integrity_state={state} skipped: {exc}")
 
 	# --- CRM Student Identity.identity_status = retracted
 	# No whitelisted retraction command exists in crm/fcrm; retraction is an
 	# operational data-fix. Retract the identity of the legacy edge Student.
 	legacy_student = frappe.db.get_value(
-		"CRM Student", {"email": f"edge-legacy.{NAMESPACE}@example.test"}, ["name", "identity"], as_dict=True
+		"CRM Student",
+		{"email": _natural_email(_EDGE_DISPLAY_NAMES["legacy"])},
+		["name", "identity"],
+		as_dict=True,
 	)
 	if legacy_student and legacy_student.get("identity"):
 		frappe.db.set_value(
-			"CRM Student Identity", legacy_student["identity"], "identity_status", "retracted",
+			"CRM Student Identity",
+			legacy_student["identity"],
+			"identity_status",
+			"retracted",
 			update_modified=False,
 		)
-		notes.append(f"CRM Student Identity {legacy_student['identity']} identity_status=retracted (no service path)")
+		notes.append(
+			f"CRM Student Identity {legacy_student['identity']} identity_status=retracted (no service path)"
+		)
 
 	# --- CRM Student SLA Attempt.status = closed / closed_inactive
 	# The SLA state machine (crm_student_sla_attempt.py) allows these transitions
@@ -2238,14 +2996,14 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 	for variant, target in (("closed", "closed"), ("closed-inactive", "closed_inactive")):
 		scenario = {
 			"key": f"edge-sla-{variant}",
-			"student_name": f"Đỗ Edge SLA {variant}",
+			"student_name": _EDGE_DISPLAY_NAMES[variant],
 			"gender": "Nữ",
 			"admission_method": "Transcript Review",
-			"email": f"edge-sla-{variant}.{NAMESPACE}@example.test",
+			"email": _natural_email(_EDGE_DISPLAY_NAMES[variant]),
 			"phone": f"09019004{['closed', 'closed-inactive'].index(variant):02d}",
 			"target_stage": "Lead",
-			"summary": "Edge SLA closed state",
-			"notes": "Edge SLA closed state fixture.",
+			"summary": "Hồ sơ có trạng thái SLA đã đóng",
+			"notes": "Hồ sơ kiểm thử trạng thái SLA đã đóng.",
 		}
 		try:
 			doc = _ensure_student(scenario, context, pool)
@@ -2256,18 +3014,18 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 					"CRM Student SLA Attempt", attempt.name, "status", target, update_modified=False
 				)
 				notes.append(f"CRM Student SLA Attempt {attempt.name} status={target} (no service path)")
-		except Exception as exc:  # noqa: BLE001
+		except Exception as exc:
 			notes.append(f"edge SLA status={target} skipped: {exc}")
 
 	# --- CRM Action states pending / requires-review (AI origin) / rejected / deferred
 	# create_manual_action always emits an 'accepted' action; the pending /
 	# rejected / deferred states belong to the recommendation-decision pipeline
 	# which needs a CRM Recommendation the demo does not generate.
-	base_student, base_owner = (frappe.db.get_value(
+	base_student, base_owner = frappe.db.get_value(
 		"CRM Student",
-		{"email": ["like", _STUDENT_EMAIL_LIKE], "owner_staff": ["is", "set"]},
+		{**_showcase_student_filters(), "owner_staff": ["is", "set"]},
 		["name", "owner_staff"],
-	) or (None, None))
+	) or (None, None)
 	if base_student:
 		from crm.fcrm.student_decision import _command_key, create_manual_action
 
@@ -2290,19 +3048,34 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 			else:
 				try:
 					action_name = create_manual_action(
-						base_student, action_type, f"{NAMESPACE} edge action {state}",
-						idempotency_key=idem, due_at=now_datetime() + timedelta(days=1),
-						priority="low", assignee_staff=base_owner,
+						base_student,
+						action_type,
+						f"{NAMESPACE} edge action {state}",
+						idempotency_key=idem,
+						due_at=now_datetime() + timedelta(days=1),
+						priority="low",
+						assignee_staff=base_owner,
 					)["action"]
-				except Exception as exc:  # noqa: BLE001
+				except Exception as exc:
 					notes.append(f"edge action {state} skipped: {exc}")
 					continue
-			target_state = state if state in {
-				"pending", "requires-review", "rejected", "deferred", "superseded",
-			} else "accepted"
+			target_state = (
+				state
+				if state
+				in {
+					"pending",
+					"requires-review",
+					"rejected",
+					"deferred",
+					"superseded",
+				}
+				else "accepted"
+			)
 			updates: dict[str, Any] = {"state": target_state, "disposition": disposition}
 			frappe.db.set_value("CRM Action", action_name, updates, update_modified=False)
-			notes.append(f"CRM Action {action_name} state={target_state} disposition={disposition} (no service path)")
+			notes.append(
+				f"CRM Action {action_name} state={target_state} disposition={disposition} (no service path)"
+			)
 
 	# --- CRM Student Intake Review: review_type / review_status coverage
 	_seed_intake_review_coverage(notes)
@@ -2347,11 +3120,16 @@ def _seed_intake_review_coverage(notes: list[str]) -> None:
 			doc.insert(ignore_permissions=True)
 			if review_status != "open":
 				frappe.db.set_value(
-					"CRM Student Intake Review", doc.name, "review_status", review_status,
+					"CRM Student Intake Review",
+					doc.name,
+					"review_status",
+					review_status,
 					update_modified=False,
 				)
-			notes.append(f"CRM Student Intake Review {doc.name} {review_type}/{review_status} (no service path)")
-		except Exception as exc:  # noqa: BLE001
+			notes.append(
+				f"CRM Student Intake Review {doc.name} {review_type}/{review_status} (no service path)"
+			)
+		except Exception as exc:
 			notes.append(f"intake review {review_type} skipped: {exc}")
 
 
@@ -2359,10 +3137,12 @@ def _seed_intake_review_coverage(notes: list[str]) -> None:
 # Orchestration
 # ---------------------------------------------------------------------------
 
+
 def _seed_all() -> dict:
 	frappe.set_user("Administrator")
-	context = seed_demo.execute()
-	staff_context = seed_staff.execute()
+	legacy_cleanup = _cleanup_legacy_seed_data()
+	context = seed_demo._bootstrap()
+	staff_context = seed_staff._bootstrap()
 	if context["campus"] != FPTU_HCMC_CAMPUS or staff_context["campus"] != FPTU_HCMC_CAMPUS:
 		raise frappe.ValidationError(
 			f"Seed context must be scoped to {FPTU_HCMC_CAMPUS}; "
@@ -2379,10 +3159,12 @@ def _seed_all() -> dict:
 	marketing = _seed_marketing(context, staff_context)
 	governance = _seed_governance(context)
 	edge = _seed_edge_states(context, staff_context)
+	role_accounts = seed_role_accounts.execute()
 
 	frappe.db.commit()
 	return {
 		"namespace": NAMESPACE,
+		"legacy_cleanup": legacy_cleanup,
 		"context": {
 			"brand": "FPTU",
 			"campus": FPTU_HCMC_CAMPUS,
@@ -2404,6 +3186,7 @@ def _seed_all() -> dict:
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,
+		"role_accounts": role_accounts,
 		"known_gaps": list(KNOWN_GAPS),
 	}
 
@@ -2433,6 +3216,7 @@ def execute(strict: bool = True) -> dict:
 # verify() / reset()
 # ---------------------------------------------------------------------------
 
+
 def _distinct_values(doctype: str, field: str, filters: dict | None = None) -> set[str]:
 	if not frappe.db.table_exists(doctype):
 		return set()
@@ -2440,15 +3224,15 @@ def _distinct_values(doctype: str, field: str, filters: dict | None = None) -> s
 		rows = frappe.get_all(
 			doctype, filters=filters or {}, fields=[field], distinct=True, limit_page_length=0
 		)
-	except Exception:  # noqa: BLE001 - field absent on this install
+	except Exception:
 		return set()
 	return {str(row.get(field)) for row in rows if row.get(field) not in (None, "")}
 
 
 def _coverage_scope() -> dict[str, dict]:
 	"""Row filter per COVERAGE_MATRIX doctype so verify() checks only what this
-	seed creates -- a blanket table scan would let rows from seed_e2e /
-	seed_playwright / manual QA satisfy the matrix.
+	seed creates -- a blanket table scan would let unrelated manual QA rows
+	satisfy the matrix.
 
 	execute() runs the seed_demo + seed_staff bootstrap, so the one fixture this
 	seed deliberately reuses -- the single Active score template, which the
@@ -2458,26 +3242,26 @@ def _coverage_scope() -> dict[str, dict]:
 	none = ["__seed_showcase_no_match__"]
 
 	def pluck(doctype, filters, field="name"):
-		return frappe.get_all(
-			doctype, filters=filters, pluck=field, limit_page_length=0
-		) or list(none)
+		return frappe.get_all(doctype, filters=filters, pluck=field, limit_page_length=0) or list(none)
 
-	students = pluck("CRM Student", {"email": ["like", _STUDENT_EMAIL_LIKE]})
-	contacts = pluck("CRM Contact", {"email": ["like", f"%{NAMESPACE}@example.test"]})
+	students = pluck("CRM Student", _showcase_student_filters())
+	contacts = pluck("CRM Contact", {"email": ["in", [_contact_email(row) for row in _ALL_CONTACT_ROWS]]})
 	identities = [
-		i for i in frappe.get_all(
+		i
+		for i in frappe.get_all(
 			"CRM Student", filters={"name": ["in", students]}, pluck="identity", limit_page_length=0
-		) if i
+		)
+		if i
 	] or list(none)
 	interactions = list(
 		set(pluck("CRM Interaction", {"student": ["in", students]}))
 		| set(pluck("CRM Interaction", {"external_id": ["like", ns]}))
 	)
-	# The school domain is real imported data now; the rows this seed *owns* are the
-	# curated key-account schools, resolved through their NAMESPACE-tagged children.
-	school_children = set(
-		pluck("CRM School Activity", {"source_file": NAMESPACE}, "high_school")
-	) | set(pluck("CRM Person", {"source_file": NAMESPACE}, "high_school"))
+	# The school domain is real imported data now; the rows this seed uses are the
+	# curated key-account schools, resolved through their annual snapshots.
+	school_children = set(pluck("CRM School Activity", {}, "high_school")) | set(
+		pluck("CRM School Stakeholder", {}, "high_school")
+	)
 	schools = sorted(s for s in school_children if s and s != none[0]) or list(none)
 	by_student = {"student": ["in", students]}
 	return {
@@ -2493,8 +3277,8 @@ def _coverage_scope() -> dict[str, dict]:
 		"CRM Contact Consent Event": {"contact": ["in", contacts]},
 		"CRM High School": {"name": ["in", schools]},
 		"CRM High School Annual Snapshot": {"high_school": ["in", schools]},
-		"CRM School Activity": {"source_file": NAMESPACE},
-		"CRM Person": {"source_file": NAMESPACE},
+		"CRM School Activity": {"owner_staff": ["is", "set"]},
+		"CRM School Stakeholder": {"owner_staff": ["is", "set"]},
 		"CRM Campaign": {"title": ["in", _SHOWCASE_CAMPAIGN_TITLES]},
 		"CRM Marketing Engagement": {"correlation_id": ["like", ns]},
 		"CRM Master Data Change": {"correlation_id": ["like", ns]},
@@ -2538,9 +3322,7 @@ def verify(strict: bool = True) -> dict:
 	}
 	print(frappe.as_json(result))
 	if strict and missing:
-		raise frappe.ValidationError(
-			f"Coverage gaps in {len(missing)} field(s): {sorted(missing)}"
-		)
+		raise frappe.ValidationError(f"Coverage gaps in {len(missing)} field(s): {sorted(missing)}")
 	return result
 
 
@@ -2558,9 +3340,6 @@ _RESET_DOCTYPES = (
 	# audit rows noted below.
 	("CRM Score Template", "template_name", "Showcase %"),
 	("CRM Lead Source", "source_name", "Showcase %"),
-	("CRM School Activity", "source_file", f"%{NAMESPACE}%"),
-	("CRM High School Annual Snapshot", "source_file", f"%{NAMESPACE}%"),
-	("CRM Person", "source_file", f"%{NAMESPACE}%"),
 	("CRM Segment", "title", f"%{NAMESPACE}%"),
 	("CRM Campaign Spend", "notes", f"%{NAMESPACE}%"),
 	("CRM Student Routing Policy", "policy_key", f"%{NAMESPACE}%"),
@@ -2574,6 +3353,356 @@ _RAW_PURGE_DOCTYPES = (
 	("CRM Student Outcome", "source_key"),
 	("CRM Contact Consent Event", "note"),
 )
+
+_LEGACY_DEMO_USERS = (
+	"sarah.demo@example.com",
+	"john.demo@example.com",
+	"emily.demo@example.com",
+	"nguyen-minh-khoi.sale@example.test",
+	"le-thanh-huong.leadsales@example.test",
+	"pham-bao-chau.marketing@example.test",
+	"tran-quoc-duy.director@example.test",
+	"sale@gmail.com",
+	"sale@example.com",
+	"leadsales@gmail.com",
+	"leadsales@example.com",
+	"marketing@gmail.com",
+	"marketing@example.com",
+	"director@gmail.com",
+	"director@example.com",
+	"vo-thi-lan.promoter@example.test",
+	"nguyen-minh-anh-admissions-demo@example.test",
+	"tran-quoc-minh-admissions-demo@example.test",
+	"phase6.sales@example.test",
+	"e2e.local-service@example.test",
+	"e2e.other-campus@example.test",
+	"e2e.sales@example.test",
+	"e2e.marketing@example.test",
+	"e2e.lead-sales@example.test",
+	"e2e.admissions-director@example.test",
+	"e2e.admin@example.test",
+)
+
+_LEGACY_STUDENT_FILTERS = (
+	{"email": ["like", "e2e-fpt-2026-%@example.test"]},
+	{"email": ["like", "pw-%@example.test"]},
+	{"email": "phase6.local.student@example.test"},
+	{"email": "nguyen-minh-anh-admissions-demo@example.test"},
+)
+
+
+def _cleanup_legacy_seed_data() -> dict[str, int]:
+	"""Remove records owned by seed paths superseded by this canonical seed.
+
+	This is deliberately allow-listed and local-only. Imported school/reference
+	data and rows created by :mod:`seed_showcase` are never matched here.
+	"""
+	deleted: dict[str, int] = {}
+
+	def delete_docs(doctype: str, names: list[str], *, raw: bool = False) -> None:
+		if not names or not frappe.db.table_exists(doctype):
+			return
+		count = 0
+		for name in sorted(set(names)):
+			if not frappe.db.exists(doctype, name):
+				continue
+			if raw:
+				frappe.db.delete(doctype, {"name": name})
+			else:
+				try:
+					frappe.delete_doc(
+						doctype, name, force=True, ignore_permissions=True, delete_permanently=True
+					)
+				except Exception:
+					continue
+			count += 1
+		if count:
+			deleted[doctype] = deleted.get(doctype, 0) + count
+
+	# The old FCRM Settings seed stored exact names in site defaults. Clear those
+	# first, including records created by the standard three-row demo cohort.
+	legacy_defaults = (
+		("CRM Score History", "crm_demo_score_histories"),
+		("Call Log", "crm_demo_call_logs"),
+		("Task", "crm_demo_tasks"),
+		("FCRM Note", "crm_demo_notes"),
+		("CRM Interaction", "crm_demo_interactions"),
+		("CRM Contact", "crm_demo_crm_contacts"),
+		("CRM Student", "crm_demo_students"),
+		("CRM Score Template", "crm_demo_score_templates"),
+	)
+	for doctype, key in legacy_defaults:
+		try:
+			names = json.loads(frappe.db.get_default(key) or "[]")
+		except (TypeError, ValueError):
+			names = []
+		delete_docs(doctype, names)
+		frappe.db.set_default(key, None)
+	frappe.db.set_default("crm_demo_data_created", None)
+
+	legacy_students: set[str] = set()
+	for filters in _LEGACY_STUDENT_FILTERS:
+		legacy_students.update(
+			frappe.get_all("CRM Student", filters=filters, pluck="name", limit_page_length=0)
+		)
+	legacy_student_list = sorted(legacy_students)
+	if frappe.db.table_exists("CRM Student Identity Identifier"):
+		from crm.fcrm.student_intake import _find_observation_roots
+
+		for scenario in SCENARIOS:
+			for identifier_type, value in (("phone", scenario["phone"]), ("email", scenario["email"])):
+				for root in _find_observation_roots(identifier_type, value):
+					wrong_students = frappe.get_all(
+						"CRM Student",
+						filters={"identity": root["identity"]},
+						fields=["name", "email"],
+					)
+					if any(row.email == scenario["email"] for row in wrong_students):
+						continue
+					wrong_observations = frappe.get_all(
+						"CRM Student Identity Identifier",
+						filters={
+							"parent": root["identity"],
+							"identifier_type": identifier_type,
+							"keyed_digest": root["digest"],
+						},
+						pluck="name",
+					)
+					delete_docs("CRM Student Identity Identifier", wrong_observations, raw=True)
+	legacy_interactions = (
+		frappe.get_all("CRM Interaction", filters={"student": ["in", legacy_student_list]}, pluck="name")
+		if legacy_student_list and frappe.db.table_exists("CRM Interaction")
+		else []
+	)
+	legacy_conversions = (
+		frappe.get_all(
+			"CRM Student Contact Conversion",
+			filters={"student": ["in", legacy_student_list]},
+			fields=["name", "contact"],
+		)
+		if legacy_student_list and frappe.db.table_exists("CRM Student Contact Conversion")
+		else []
+	)
+	legacy_contacts = [row.contact for row in legacy_conversions if row.contact]
+	legacy_recommendations = (
+		frappe.get_all("CRM Recommendation", filters={"student": ["in", legacy_student_list]}, pluck="name")
+		if legacy_student_list and frappe.db.table_exists("CRM Recommendation")
+		else []
+	)
+	legacy_actions = (
+		frappe.get_all("CRM Action", filters={"student": ["in", legacy_student_list]}, pluck="name")
+		if legacy_student_list and frappe.db.table_exists("CRM Action")
+		else []
+	)
+	legacy_identity_names = (
+		frappe.get_all("CRM Student", filters={"name": ["in", legacy_student_list]}, pluck="identity")
+		if legacy_student_list
+		else []
+	)
+	legacy_case_names = (
+		frappe.get_all(
+			"CRM Student Case Key",
+			filters={"canonical_student": ["in", legacy_student_list]},
+			pluck="name",
+		)
+		if legacy_student_list and frappe.db.table_exists("CRM Student Case Key")
+		else []
+	)
+	if frappe.db.table_exists("CRM Student Command Receipt"):
+		stale_receipts = [
+			row.name
+			for row in frappe.get_all(
+				"CRM Student Command Receipt",
+				filters={"command_key": ["like", f"{NAMESPACE}%"]},
+				fields=["name", "target_student"],
+			)
+			if not row.target_student or not frappe.db.exists("CRM Student", row.target_student)
+		]
+		delete_docs("CRM Student Command Receipt", stale_receipts, raw=True)
+		orphan_receipts = [
+			row.name
+			for row in frappe.get_all(
+				"CRM Student Command Receipt",
+				filters={"target_student": ["is", "set"]},
+				fields=["name", "target_student"],
+			)
+			if row.target_student and not frappe.db.exists("CRM Student", row.target_student)
+		]
+		delete_docs("CRM Student Command Receipt", orphan_receipts, raw=True)
+		expected_receipt_emails = {
+			f"{NAMESPACE}:{scenario['key']}": scenario["email"] for scenario in SCENARIOS
+		}
+		stale_identity_receipts = [
+			row.name
+			for row in frappe.get_all(
+				"CRM Student Command Receipt",
+				filters={"correlation_token": ["like", f"{NAMESPACE}:%"]},
+				fields=["name", "target_student", "correlation_token"],
+			)
+			if row.correlation_token in expected_receipt_emails
+			and row.target_student
+			and frappe.db.get_value("CRM Student", row.target_student, "email")
+			!= expected_receipt_emails[row.correlation_token]
+		]
+		delete_docs("CRM Student Command Receipt", stale_identity_receipts, raw=True)
+	if frappe.db.table_exists("CRM Student Case Key"):
+		orphan_cases = [
+			row.name
+			for row in frappe.get_all(
+				"CRM Student Case Key",
+				fields=["name", "canonical_student", "source_student"],
+			)
+			if (not row.canonical_student and not row.source_student)
+			or (
+				row.canonical_student
+				and not frappe.db.exists("CRM Student", row.canonical_student)
+				and row.source_student
+				and not frappe.db.exists("CRM Student", row.source_student)
+			)
+		]
+		delete_docs("CRM Student Case Key", orphan_cases, raw=True)
+
+	# Remove append-only rows with a raw delete. They otherwise block deletion of
+	# the student or make a future seed replay an old command against a new row.
+	for doctype, field in (
+		("CRM Student Command Receipt", "target_student"),
+		("CRM Student Lifecycle Event", "student"),
+		("CRM Student Ownership Event", "student"),
+		("CRM Student Outcome", "student"),
+		("CRM Contact Consent Event", "student"),
+	):
+		if legacy_student_list and frappe.db.table_exists(doctype):
+			rows = frappe.get_all(doctype, filters={field: ["in", legacy_student_list]}, pluck="name")
+			delete_docs(doctype, rows, raw=True)
+	if legacy_recommendations or legacy_actions:
+		delete_docs(
+			"CRM Agent Event",
+			frappe.get_all(
+				"CRM Agent Event",
+				filters={"aggregate_name": ["in", [*legacy_recommendations, *legacy_actions]]},
+				pluck="name",
+			)
+			if frappe.db.table_exists("CRM Agent Event")
+			else [],
+			raw=True,
+		)
+
+	# Remove all normal child records before their legacy Student parent.
+	for doctype, field in (
+		("CRM Recommendation", "student"),
+		("CRM Student SLA Attempt", "student"),
+		("CRM Student Routing Request", "student"),
+		("CRM Action", "student"),
+		("CRM Score History", "student"),
+		("Task", "student"),
+		("CRM Student Contact Conversion", "student"),
+		("File", "attached_to_name"),
+	):
+		if not legacy_student_list or not frappe.db.table_exists(doctype):
+			continue
+		delete_docs(
+			doctype, frappe.get_all(doctype, filters={field: ["in", legacy_student_list]}, pluck="name")
+		)
+	if legacy_student_list and frappe.db.table_exists("File"):
+		delete_docs(
+			"File",
+			frappe.get_all(
+				"File",
+				filters={
+					"attached_to_doctype": "CRM Student",
+					"attached_to_name": ["in", legacy_student_list],
+				},
+				pluck="name",
+			),
+		)
+	if legacy_actions:
+		delete_docs("CRM Action", legacy_actions)
+	if legacy_recommendations:
+		delete_docs("CRM Recommendation", legacy_recommendations)
+	if legacy_interactions and frappe.db.table_exists("CRM Intent"):
+		delete_docs(
+			"CRM Intent",
+			frappe.get_all("CRM Intent", filters={"interaction": ["in", legacy_interactions]}, pluck="name"),
+		)
+	delete_docs("CRM Interaction", legacy_interactions)
+
+	# Conversion can point to a CRM Contact; remove only contacts reached from
+	# the legacy conversion rows.
+	delete_docs("CRM Contact", [name for name in legacy_contacts if name])
+	if frappe.db.table_exists("CRM Contact"):
+		delete_docs(
+			"CRM Contact",
+			frappe.get_all(
+				"CRM Contact",
+				filters={"email": ["like", "%showcase@example.test"]},
+				pluck="name",
+			),
+		)
+	if frappe.db.table_exists("CRM Person"):
+		legacy_persons = frappe.get_all(
+			"CRM Person", filters={"full_name": ["like", "Thầy/Cô phụ trách%"]}, pluck="name"
+		)
+		if legacy_persons and frappe.db.table_exists("CRM School Stakeholder"):
+			delete_docs(
+				"CRM School Stakeholder",
+				frappe.get_all(
+					"CRM School Stakeholder", filters={"person": ["in", legacy_persons]}, pluck="name"
+				),
+			)
+		delete_docs("CRM Person", legacy_persons)
+	delete_docs("CRM Student", legacy_student_list)
+	delete_docs("CRM Student Case Key", legacy_case_names)
+	delete_docs("CRM Student Identity", [name for name in legacy_identity_names if name])
+
+	# Dedicated accounts and their staff/contact records are not part of the
+	# canonical account list. Never match ordinary users by role or name.
+	if frappe.db.table_exists("CRM Staff"):
+		staff_names = frappe.get_all(
+			"CRM Staff", filters={"user": ["in", list(_LEGACY_DEMO_USERS)]}, pluck="name"
+		)
+		delete_docs("CRM Staff", staff_names)
+	for email in _LEGACY_DEMO_USERS:
+		if not frappe.db.exists("User", email):
+			continue
+		contacts = (
+			frappe.get_all("Contact", filters={"user": email}, pluck="name")
+			if frappe.db.table_exists("Contact")
+			else []
+		)
+		if contacts:
+			for child in ("Contact Email", "Contact Phone", "Dynamic Link"):
+				if frappe.db.table_exists(child):
+					frappe.db.delete(child, {"parent": ["in", contacts]})
+			frappe.db.delete("Contact", {"name": ["in", contacts]})
+		if frappe.db.table_exists("Notification"):
+			frappe.db.delete("Notification", {"from_user": email})
+			frappe.db.delete("Notification", {"to_user": email})
+		if frappe.db.table_exists("Notification Settings"):
+			frappe.db.delete("Notification Settings", {"name": email})
+		delete_docs("User", [email])
+
+	# E2E and local fixtures also created isolated topology and OAuth records.
+	for doctype, filters in (
+		("OAuth Bearer Token", {"user": ["in", list(_LEGACY_DEMO_USERS)]}),
+		("OAuth Client", {"app_name": ["like", "E2E-FPT-2026%"]}),
+		("CRM Team", {"team_name": ["like", "PW-LEAD-%"]}),
+		("CRM Team", {"team_name": ["like", "E2E-FPT-2026%"]}),
+		("CRM Team", {"team_name": "Phase 6 Local Sales Team"}),
+		("CRM Student Pool", {"pool_name": ["like", "PW-LEAD-%"]}),
+		("CRM Student Pool", {"pool_name": ["like", "E2E-FPT-2026%"]}),
+		("CRM Department", {"department_name": ["like", "E2E-FPT-2026%"]}),
+		("CRM Department", {"department_name": ["like", "PW-LEAD-%"]}),
+		("CRM Department", {"department_name": "Phòng Tư vấn tuyển sinh Demo"}),
+		("CRM Department", {"department_name": "Phase 6 Local Admissions"}),
+		("CRM Campus", {"campus_name": ["like", "E2E-FPT-2026%"]}),
+		("CRM Campus", {"campus_name": ["like", "PW-LEAD-%"]}),
+		("CRM Campus", {"campus_name": "Phase 6 Local Campus"}),
+	):
+		if frappe.db.table_exists(doctype):
+			delete_docs(doctype, frappe.get_all(doctype, filters=filters, pluck="name"))
+
+	frappe.db.commit()
+	return deleted
 
 
 def reset() -> dict:
@@ -2594,23 +3723,46 @@ def reset() -> dict:
 	)
 
 	with _temporary_local_flags():
+		legacy_cleanup = _cleanup_legacy_seed_data()
 		# CRM Student + everything keyed to it.
 		students = frappe.get_all(
-			"CRM Student", filters={"email": ["like", _STUDENT_EMAIL_LIKE]}, pluck="name", limit_page_length=0
+			"CRM Student", filters=_showcase_student_filters(), pluck="name", limit_page_length=0
 		)
+		legacy_students = frappe.get_all(
+			"CRM Student",
+			filters={"email": ["like", _LEGACY_STUDENT_EMAIL_LIKE]},
+			pluck="name",
+			limit_page_length=0,
+		)
+		students = sorted(set(students) | set(legacy_students))
 		for student in students:
 			for dt in ("CRM Action", "CRM Interaction", "Task"):
-				for name in frappe.get_all(dt, filters={"student": student}, pluck="name", limit_page_length=0):
+				for name in frappe.get_all(
+					dt, filters={"student": student}, pluck="name", limit_page_length=0
+				):
 					frappe.delete_doc(dt, name, force=True, ignore_permissions=True, delete_permanently=True)
-			frappe.delete_doc("CRM Student", student, force=True, ignore_permissions=True, delete_permanently=True)
+			frappe.delete_doc(
+				"CRM Student", student, force=True, ignore_permissions=True, delete_permanently=True
+			)
 		deleted["CRM Student"] = len(students)
 
 		contacts = frappe.get_all(
-			"CRM Contact", filters={"email": ["like", f"%{NAMESPACE}@example.test"]},
-			pluck="name", limit_page_length=0,
+			"CRM Contact",
+			filters={"email": ["in", [_contact_email(row) for row in _ALL_CONTACT_ROWS]]},
+			pluck="name",
+			limit_page_length=0,
 		)
+		legacy_contacts = frappe.get_all(
+			"CRM Contact",
+			filters={"email": ["like", f"%{NAMESPACE}@example.test"]},
+			pluck="name",
+			limit_page_length=0,
+		)
+		contacts = sorted(set(contacts) | set(legacy_contacts))
 		for name in contacts:
-			frappe.delete_doc("CRM Contact", name, force=True, ignore_permissions=True, delete_permanently=True)
+			frappe.delete_doc(
+				"CRM Contact", name, force=True, ignore_permissions=True, delete_permanently=True
+			)
 		deleted["CRM Contact"] = len(contacts)
 
 		for doctype, field, pattern in _RESET_DOCTYPES:
@@ -2621,8 +3773,10 @@ def reset() -> dict:
 			)
 			for name in names:
 				try:
-					frappe.delete_doc(doctype, name, force=True, ignore_permissions=True, delete_permanently=True)
-				except Exception:  # noqa: BLE001 - referenced by a kept audit row
+					frappe.delete_doc(
+						doctype, name, force=True, ignore_permissions=True, delete_permanently=True
+					)
+				except Exception:
 					pass
 			deleted[doctype] = len(names)
 
@@ -2641,7 +3795,7 @@ def reset() -> dict:
 		# Command receipts key on hashed digests, not the namespace, so match them
 		# by the plaintext correlation token we pass. Rows for a now-deleted
 		# Student are only purged when they also carry this namespace's token, so
-		# receipts from seed_e2e / seed_playwright / manual QA are never touched.
+		# receipts from unrelated manual QA are never touched.
 		if frappe.db.table_exists("CRM Student Command Receipt"):
 			receipt_filter = {"correlation_token": ["like", f"%{NAMESPACE}%"]}
 			deleted["CRM Student Command Receipt"] = frappe.db.count(
@@ -2650,6 +3804,11 @@ def reset() -> dict:
 			frappe.db.delete("CRM Student Command Receipt", receipt_filter)
 		frappe.db.commit()
 
-	result = {"namespace": NAMESPACE, "deleted": deleted, "note": kept_note}
+	result = {
+		"namespace": NAMESPACE,
+		"deleted": deleted,
+		"legacy_cleanup": legacy_cleanup,
+		"note": kept_note,
+	}
 	print(frappe.as_json(result))
 	return result

@@ -1,0 +1,1144 @@
+"""Public read-only API projections for the Director student dashboard."""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from datetime import timedelta
+from statistics import mean
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import frappe
+from frappe import _
+
+LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+ACTIVE_ACTION_STATES = ("pending", "accepted", "in-progress", "requires-review")
+
+STAGES = {
+	"interested": {"label": "Quan tâm", "lifecycle": "Lead"},
+	"exploring": {"label": "Tìm hiểu", "lifecycle": "MQL"},
+	"counselling": {"label": "Tư vấn", "lifecycle": "MQL"},
+	"applying": {"label": "Ứng tuyển", "lifecycle": "Applicant"},
+	"enrolled": {"label": "Nhập học", "lifecycle": "Enrolled"},
+}
+STAGE_BY_LIFECYCLE = {
+	"Lead": {"code": "interested", "label": "Quan tâm"},
+	"MQL": {"code": "counselling", "label": "Tư vấn"},
+	"Applicant": {"code": "applying", "label": "Ứng tuyển"},
+	"Enrolled": {"code": "enrolled", "label": "Nhập học"},
+}
+PRIORITIES = {
+	"high": {"label": "Cao", "rank": 1},
+	"medium": {"label": "Trung bình", "rank": 2},
+	"low": {"label": "Thấp", "rank": 3},
+}
+SORT_FIELDS = {
+	"score": "latest_score",
+	"priority": "modified",
+	"lastActivityAt": "modified",
+	"nextActionDueAt": "modified",
+}
+STUDENT_FIELDS = [
+	"name",
+	"student_name",
+	"phone",
+	"email",
+	"gender",
+	"date_of_birth",
+	"case_key",
+	"high_school",
+	"province",
+	"major",
+	"lifecycle_stage",
+	"enrollment_status",
+	"latest_score",
+	"assessment_status",
+	"interest_level",
+	"fit_level",
+	"primary_barrier",
+	"current_grade",
+	"study_stage",
+	"admission_method",
+	"graduation_score",
+	"transcript_score",
+	"english_converted_score",
+	"total_score",
+	"source",
+	"advertising_channel",
+	"aspiration",
+	"branch",
+	"ward",
+	"alt_name",
+	"alt_phone",
+	"alt_address",
+	"notes",
+	"owner_staff",
+	"assigned_to",
+	"admission_year",
+	"modified",
+]
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_director_students(
+	admissionYear: str | int | None = None,
+	page: str | int = 1,
+	pageSize: str | int = 20,
+	q: str | None = "",
+	stage: str | None = None,
+	province: str | None = None,
+	sort: str = "score",
+	order: str = "desc",
+) -> dict[str, Any]:
+	"""Return the list/KPI envelope consumed by ``/director/students``.
+
+	The dotted Frappe method is the canonical backend route. A gateway can map
+	``GET /api/students`` to this method without changing the response contract.
+	"""
+	access_scope = _require_access()
+	query = _parse_query(
+		admissionYear=admissionYear,
+		page=page,
+		pageSize=pageSize,
+		q=q,
+		stage=stage,
+		province=province,
+		sort=sort,
+		order=order,
+	)
+	query["admission_year"] = _resolve_admission_year(query["admission_year"])
+	resolved_province = _resolve_province(query["province"]) if query["province"] else None
+	student_filters, or_filters = _student_filters(query, resolved_province, access_scope)
+
+	total = _count_students(student_filters, or_filters)
+	total_all_filters = {"admission_year": query["admission_year"]}
+	if access_scope:
+		total_all_filters["owner_staff"] = ["in", access_scope]
+	total_all = _count_students(total_all_filters)
+	rows = _fetch_student_rows(query, student_filters, or_filters)
+	snapshot = _as_iso(frappe.utils.now_datetime())
+
+	return {
+		"data": _hydrate_rows(rows, sort_field=query["sort"]),
+		"summary": _build_summary(query["admission_year"]),
+		"actionSummary": _build_action_summary(query["admission_year"]),
+		"meta": {
+			"total": total,
+			"totalAll": total_all,
+			"page": query["page"],
+			"pageSize": query["page_size"],
+			"totalPages": _total_pages(total, query["page_size"]),
+			"hasNextPage": query["page"] < _total_pages(total, query["page_size"]),
+			"admissionYear": int(query["admission_year"]),
+			"query": query["query"],
+			"filters": {
+				"stage": STAGES[query["stage"]]["label"] if query["stage"] else None,
+				"province": _province_label(resolved_province),
+			},
+			"sort": {"field": query["sort"], "order": query["order"]},
+			"asOf": snapshot,
+		},
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_director_student(student_id: str) -> dict[str, Any]:
+	"""Return one permission-checked Student 360 projection."""
+	access_scope = _require_access()
+	if not str(student_id or "").strip():
+		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+
+	try:
+		doc = frappe.get_doc("CRM Student", student_id)
+	except frappe.DoesNotExistError:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	if access_scope and doc.get("owner_staff") not in access_scope:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	item = _hydrate_rows([row])[0]
+	return _build_student_360(row, item)
+
+
+def _parse_query(
+	*,
+	admissionYear: str | int | None = None,
+	page: str | int = 1,
+	pageSize: str | int = 20,
+	q: str | None = "",
+	stage: str | None = None,
+	province: str | None = None,
+	sort: str = "score",
+	order: str = "desc",
+) -> dict[str, Any]:
+	"""Normalize and validate public query arguments without touching the DB."""
+	admission_year = _parse_admission_year(admissionYear)
+	page_number = _parse_int(page, "page", 1, minimum=1)
+	page_size = _parse_int(pageSize, "pageSize", 20, minimum=1, maximum=100)
+	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
+	normalized_sort = _normalize_enum(sort, SORT_FIELDS, "sort")
+	normalized_order = str(order or "").strip().lower()
+	if normalized_order not in {"asc", "desc"}:
+		frappe.throw(_("order must be asc or desc."), frappe.ValidationError)
+
+	return {
+		"admission_year": admission_year,
+		"page": page_number,
+		"page_size": page_size,
+		"query": str(q or "").strip(),
+		"stage": normalized_stage,
+		"province": str(province or "").strip() or None,
+		"sort": normalized_sort,
+		"order": normalized_order,
+	}
+
+
+def _parse_admission_year(value: str | int | None) -> str | None:
+	if value is None or str(value).strip() == "":
+		return None
+	text = str(value).strip()
+	if not re.fullmatch(r"\d{4}", text):
+		frappe.throw(_("admissionYear must be a four-digit year."), frappe.ValidationError)
+	return text
+
+
+def _parse_int(
+	value: str | int, field: str, default: int, *, minimum: int, maximum: int | None = None
+) -> int:
+	if value is None or str(value).strip() == "":
+		return default
+	text = str(value).strip()
+	if not re.fullmatch(r"[+-]?\d+", text):
+		frappe.throw(_(f"{field} must be an integer."), frappe.ValidationError)
+	try:
+		parsed = int(text)
+	except (TypeError, ValueError):
+		frappe.throw(_(f"{field} must be an integer."), frappe.ValidationError)
+	if parsed < minimum:
+		frappe.throw(_(f"{field} must be at least {minimum}."), frappe.ValidationError)
+	if maximum is not None and parsed > maximum:
+		frappe.throw(_(f"{field} must be at most {maximum}."), frappe.ValidationError)
+	return parsed
+
+
+def _normalize_enum(value: str, choices: dict[str, Any], field: str) -> str:
+	normalized = _fold(str(value or "").strip())
+	for key, descriptor in choices.items():
+		label = descriptor["label"] if isinstance(descriptor, dict) else key
+		if normalized in {_fold(key), _fold(label)}:
+			return key
+	frappe.throw(_(f"Invalid {field}."), frappe.ValidationError)
+
+
+def _resolve_admission_year(value: str | None) -> str:
+	if value:
+		if _exists("CRM Admission Year", value) or _exists("CRM Admission Year", {"year_name": value}):
+			return value
+		_raise_api_error(
+			"INVALID_ADMISSION_YEAR",
+			"Kỳ tuyển sinh không hợp lệ.",
+			frappe.ValidationError,
+			422,
+		)
+
+	rows = frappe.get_all(
+		"CRM Admission Year",
+		filters={"is_active": 1},
+		fields=["name", "year_name"],
+		order_by="year_name desc",
+		limit_page_length=2,
+	)
+	if rows:
+		return rows[0].get("name") or rows[0].get("year_name")
+
+	current_year = str(frappe.utils.now_datetime().year)
+	if _exists("CRM Admission Year", current_year):
+		return current_year
+	_raise_api_error(
+		"INVALID_ADMISSION_YEAR",
+		"Chưa cấu hình kỳ tuyển sinh hiện hành.",
+		frappe.ValidationError,
+		422,
+	)
+
+
+def _resolve_province(value: str | None) -> str | None:
+	if not value:
+		return None
+	if _exists("CRM Province", value):
+		return value
+	rows = frappe.get_all(
+		"CRM Province",
+		fields=["name", "province_name", "province_code"],
+		limit_page_length=0,
+	)
+	needle = _fold(value)
+	for row in rows:
+		candidates = {row.get("name"), row.get("province_name"), row.get("province_code")}
+		if any(needle in {_fold(candidate), _slug(candidate)} for candidate in candidates if candidate):
+			return row.get("name")
+	return value
+
+
+def _student_filters(
+	query: dict[str, Any], province: str | None, access_scope: list[str] | None = None
+) -> tuple[dict[str, Any], list[list[str]]]:
+	filters: dict[str, Any] = {"admission_year": query["admission_year"]}
+	if access_scope:
+		filters["owner_staff"] = ["in", access_scope]
+	if province:
+		filters["province"] = province
+	if query["stage"]:
+		filters["lifecycle_stage"] = STAGES[query["stage"]]["lifecycle"]
+		if query["stage"] == "exploring":
+			filters["assessment_status"] = ["!=", "confirmed"]
+		elif query["stage"] == "counselling":
+			filters["assessment_status"] = "confirmed"
+
+	or_filters: list[list[str]] = []
+	if query["query"]:
+		pattern = f"%{query['query']}%"
+		for field in (
+			"name",
+			"student_name",
+			"case_key",
+			"high_school",
+			"province",
+			"major",
+			"owner_staff",
+			"source",
+		):
+			or_filters.append([field, "like", pattern])
+	return filters, or_filters
+
+
+def _count_students(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
+	rows = frappe.get_all(
+		"CRM Student",
+		filters=filters,
+		or_filters=or_filters or [],
+		fields=["count(name) as total"],
+		limit_page_length=1,
+	)
+	return int(rows[0].get("total") or 0) if rows else 0
+
+
+def _fetch_student_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
+	if query["sort"] != "score":
+		return _fetch_computed_sort_rows(query, filters, or_filters)
+
+	field = SORT_FIELDS[query["sort"]]
+	return frappe.get_all(
+		"CRM Student",
+		filters=filters,
+		or_filters=or_filters,
+		fields=STUDENT_FIELDS,
+		order_by=f"{field} {query['order']}, name {query['order']}",
+		limit_start=(query["page"] - 1) * query["page_size"],
+		limit_page_length=query["page_size"],
+	)
+
+
+def _fetch_computed_sort_rows(
+	query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]
+) -> list:
+	"""Sort fields that live on related read models, then apply the page window."""
+	rows = frappe.get_all(
+		"CRM Student",
+		filters=filters,
+		or_filters=or_filters,
+		fields=STUDENT_FIELDS,
+		order_by="name asc",
+		limit_page_length=0,
+	)
+	student_ids = [row.get("name") for row in rows if row.get("name")]
+	related = {}
+	if query["sort"] == "priority":
+		related = _latest_by_student(
+			"CRM Action",
+			student_ids,
+			["student", "priority"],
+			"worklist_priority_rank asc, due_at asc, creation asc, name asc",
+			filters={"state": ["in", list(ACTIVE_ACTION_STATES)], "current_slot": "CURRENT"},
+		)
+	elif query["sort"] == "lastActivityAt":
+		related = _latest_by_student(
+			"CRM Interaction",
+			student_ids,
+			["student", "interaction_datetime"],
+			"interaction_datetime desc, creation desc, name desc",
+		)
+	elif query["sort"] == "nextActionDueAt":
+		related = _latest_by_student(
+			"CRM Action",
+			student_ids,
+			["student", "due_at"],
+			"due_at asc, worklist_priority_rank asc, creation asc, name asc",
+			filters={"state": ["in", list(ACTIVE_ACTION_STATES)], "current_slot": "CURRENT"},
+		)
+
+	present, missing = [], []
+	for row in rows:
+		value = _sort_related_value(query["sort"], related.get(row.get("name")))
+		(missing if value is None else present).append((value, row.get("name") or "", row))
+	present.sort(key=lambda entry: (entry[0], entry[1]), reverse=query["order"] == "desc")
+	missing.sort(key=lambda entry: entry[1])
+	sorted_rows = [entry[2] for entry in present + missing]
+	start = (query["page"] - 1) * query["page_size"]
+	return sorted_rows[start : start + query["page_size"]]
+
+
+def _sort_related_value(sort_field: str, related) -> int | str | None:
+	if not related:
+		return None
+	if sort_field == "priority":
+		rank = PRIORITIES.get(str(related.get("priority") or "").lower(), {"rank": 999})["rank"]
+		return 4 - rank if rank != 999 else None
+	return _as_iso(related.get("interaction_datetime") or related.get("due_at"))
+
+
+def _hydrate_rows(rows: list, sort_field: str | None = None) -> list[dict[str, Any]]:
+	if not rows:
+		return []
+	student_ids = [row.get("name") for row in rows if row.get("name")]
+	lookups = _load_lookups(rows)
+	activities = _latest_by_student(
+		"CRM Interaction",
+		student_ids,
+		[
+			"name",
+			"student",
+			"interaction_datetime",
+			"summary",
+			"channel",
+			"interaction_type",
+			"next_follow_up_action",
+		],
+		"interaction_datetime desc, creation desc, name desc",
+	)
+	actions = _latest_by_student(
+		"CRM Action",
+		student_ids,
+		["name", "student", "objective", "priority", "due_at", "action_owner", "action_type"],
+		"due_at asc, worklist_priority_rank asc, creation asc, name asc"
+		if sort_field == "nextActionDueAt"
+		else "worklist_priority_rank asc, due_at asc, creation asc, name asc",
+		filters={"state": ["in", list(ACTIVE_ACTION_STATES)], "current_slot": "CURRENT"},
+	)
+	score_history = _latest_by_student(
+		"CRM Score History",
+		student_ids,
+		["name", "student", "score_change", "final_score", "scoring_time"],
+		"scoring_time desc, creation desc, name desc",
+	)
+	return [
+		_map_student_row(
+			row,
+			lookups=lookups,
+			activity=activities.get(row.get("name")),
+			action=actions.get(row.get("name")),
+			score_history=score_history.get(row.get("name")),
+		)
+		for row in rows
+	]
+
+
+def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
+	return {
+		"schools": _lookup_map("CRM High School", {row.get("high_school") for row in rows}, "school_name"),
+		"provinces": _lookup_map("CRM Province", {row.get("province") for row in rows}, "province_name"),
+		"majors": _lookup_map("CRM Major", {row.get("major") for row in rows}, "major_name"),
+		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
+		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
+	}
+
+
+def _lookup_map(doctype: str, names: set[str | None], label_field: str) -> dict[str, str]:
+	keys = [name for name in names if name]
+	if not keys or not _table_exists(doctype):
+		return {}
+	rows = frappe.get_all(
+		doctype, filters={"name": ["in", keys]}, fields=["name", label_field], limit_page_length=0
+	)
+	return {row.get("name"): row.get(label_field) or row.get("name") for row in rows}
+
+
+def _latest_by_student(
+	doctype: str,
+	student_ids: list[str],
+	fields: list[str],
+	order_by: str,
+	filters: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+	if not student_ids or not _table_exists(doctype):
+		return {}
+	query_filters = {"student": ["in", student_ids], **(filters or {})}
+	rows = frappe.get_all(
+		doctype, filters=query_filters, fields=fields, order_by=order_by, limit_page_length=0
+	)
+	result = {}
+	for row in rows:
+		if row.get("student") and row.get("student") not in result:
+			result[row.get("student")] = row
+	return result
+
+
+def _map_student_row(row, *, lookups=None, activity=None, action=None, score_history=None) -> dict[str, Any]:
+	lookups = lookups or {}
+	stage = _stage_descriptor(row)
+	priority = _priority_descriptor(action)
+	activity_at = activity.get("interaction_datetime") if activity else None
+	next_action = (action.get("objective") if action else None) or (
+		activity.get("next_follow_up_action") if activity else None
+	)
+	owner_key = (action.get("action_owner") if action else None) or row.get("owner_staff")
+	owner = lookups.get("owners", {}).get(owner_key) or owner_key
+	return {
+		"id": row.get("name"),
+		"initials": _initials(row.get("student_name")),
+		"name": row.get("student_name") or row.get("name"),
+		"code": row.get("case_key") or row.get("name"),
+		"school": lookups.get("schools", {}).get(row.get("high_school")) or row.get("high_school"),
+		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province"),
+		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
+		"stage": stage["label"] if stage else None,
+		"score": _number(row.get("latest_score")),
+		"scoreDelta": _number(score_history.get("score_change")) if score_history else None,
+		"lastActivity": _relative_time(activity_at),
+		"lastActivityAt": _as_iso(activity_at) if activity_at else None,
+		"nextAction": next_action,
+		"nextActionDueAt": _as_iso(action.get("due_at")) if action and action.get("due_at") else None,
+		"owner": owner,
+		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source"),
+		"priority": priority["label"] if priority else None,
+		"priorityCode": action.get("priority") if action else None,
+		"stageCode": stage["code"] if stage else None,
+	}
+
+
+def _stage_descriptor(row) -> dict[str, str] | None:
+	lifecycle = str(row.get("lifecycle_stage") or "").strip()
+	if lifecycle == "MQL":
+		stage_code = "counselling" if row.get("assessment_status") == "confirmed" else "exploring"
+		return {"code": stage_code, "label": STAGES[stage_code]["label"]}
+	if lifecycle in STAGE_BY_LIFECYCLE:
+		return STAGE_BY_LIFECYCLE[lifecycle]
+	status = str(row.get("enrollment_status") or "").strip()
+	status_map = {
+		"Mới": STAGE_BY_LIFECYCLE["Lead"],
+		"Có triển vọng": STAGE_BY_LIFECYCLE["MQL"],
+		"Đã xác nhận": STAGE_BY_LIFECYCLE["Applicant"],
+		"Đã nhập học": STAGE_BY_LIFECYCLE["Enrolled"],
+		"Đã chuyển đổi": STAGE_BY_LIFECYCLE["Enrolled"],
+	}
+	return status_map.get(status)
+
+
+def _priority_descriptor(action) -> dict[str, Any] | None:
+	if not action:
+		return None
+	return PRIORITIES.get(str(action.get("priority") or "").strip().lower())
+
+
+def _build_summary(admission_year: str) -> dict[str, Any]:
+	rows = frappe.get_all(
+		"CRM Student",
+		filters={"admission_year": admission_year},
+		fields=["name", "latest_score", "interest_level", "assessment_status"],
+		limit_page_length=0,
+	)
+	student_ids = [row.get("name") for row in rows if row.get("name")]
+	high_intent = [row for row in rows if _is_confirmed_high_intent(row)]
+	probabilities = _confirmed_probabilities(student_ids)
+	previous_rows = frappe.get_all(
+		"CRM Student",
+		filters={"admission_year": str(int(admission_year) - 1)},
+		fields=["name"],
+		limit_page_length=0,
+	)
+	return {
+		"trackedStudents": len(rows),
+		"trackedStudentsDeltaPercent": _percent_delta(len(rows), len(previous_rows)),
+		"highIntentStudents": len(high_intent),
+		"highIntentRate": _rate(len(high_intent), len(rows)),
+		"actionsDueToday": _count_due_actions(student_ids),
+		"averageEnrollmentProbability": round(mean(probabilities), 1) if probabilities else None,
+		"averageEnrollmentProbabilityDelta": None,
+	}
+
+
+def _build_action_summary(admission_year: str) -> dict[str, Any]:
+	student_ids = [
+		row.get("name")
+		for row in frappe.get_all(
+			"CRM Student",
+			filters={"admission_year": admission_year},
+			fields=["name"],
+			limit_page_length=0,
+		)
+		if row.get("name")
+	]
+	return {
+		"actionsDueToday": _count_due_actions(student_ids),
+		# No canonical declining-interaction rule has been released yet.
+		"decliningInteractionStudents": None,
+		# Do not infer family readiness from a missing guardian/consent record.
+		"familyReadyStudents": None,
+	}
+
+
+def _confirmed_probabilities(student_ids: list[str]) -> list[float]:
+	if not student_ids or not _table_exists("CRM Student Assessment"):
+		return []
+	rows = frappe.get_all(
+		"CRM Student Assessment",
+		filters={"student": ["in", student_ids], "status": "confirmed"},
+		fields=["student", "enrollment_probability"],
+		order_by="assessed_at desc, creation desc, name desc",
+		limit_page_length=0,
+	)
+	latest = {}
+	for row in rows:
+		if row.get("student") not in latest and row.get("enrollment_probability") is not None:
+			latest[row.get("student")] = float(row.get("enrollment_probability"))
+	return list(latest.values())
+
+
+def _count_due_actions(student_ids: list[str]) -> int:
+	if not student_ids or not _table_exists("CRM Action"):
+		return 0
+	now = frappe.utils.now_datetime()
+	start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+	end = start + timedelta(days=1)
+	rows = frappe.get_all(
+		"CRM Action",
+		filters={
+			"student": ["in", student_ids],
+			"state": ["in", list(ACTIVE_ACTION_STATES)],
+			"current_slot": "CURRENT",
+			"due_at": ["between", [start, end]],
+		},
+		fields=["student"],
+		limit_page_length=0,
+	)
+	return len({row.get("student") for row in rows if row.get("student")})
+
+
+def _build_student_360(row, item) -> dict[str, Any]:
+	student_id = row.get("name")
+	assessment = _latest_assessment(student_id)
+	interactions = _student_interactions(student_id)
+	guardian = _student_guardian(student_id)
+	if not guardian.get("name") and row.get("alt_name"):
+		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
+	if interactions:
+		guardian["lastInteraction"] = _relative_time(interactions[0].get("interaction_datetime"))
+	applications = _student_applications(student_id, row.get("admission_year"))
+	stage = _stage_descriptor(row) or {"code": "", "label": ""}
+	score = item.get("score")
+	probability = _number(assessment.get("enrollment_probability")) if assessment else None
+
+	return {
+		"student": {
+			"initials": item.get("initials"),
+			"name": item.get("name"),
+			"code": item.get("code"),
+			"school": item.get("school"),
+			"grade": _grade_label(row),
+			"major": item.get("major"),
+			"phone": row.get("phone"),
+			"email": row.get("email"),
+			"province": item.get("province"),
+			"counselor": item.get("owner"),
+		},
+		"readiness": _readiness(row, item, guardian, applications, interactions),
+		"profile": _key_values(
+			[
+				("Ngày sinh", _display_date(row.get("date_of_birth"))),
+				("Giới tính", row.get("gender")),
+				("Khu vực", item.get("province")),
+				("Nguồn", item.get("source")),
+				("Phụ trách", item.get("owner")),
+			]
+		),
+		"academics": _key_values(
+			[
+				("Lớp", _grade_label(row)),
+				("Trường", item.get("school")),
+				("Điểm tốt nghiệp", row.get("graduation_score")),
+				("Điểm học bạ", row.get("transcript_score")),
+				("Tiếng Anh", row.get("english_converted_score")),
+				("Phương thức xét tuyển", row.get("admission_method")),
+			]
+		),
+		"family": _key_values(
+			[
+				("Người liên hệ", guardian.get("name")),
+				("Quan hệ", guardian.get("relation")),
+				("Kênh ưu tiên", guardian.get("preferredChannel")),
+			]
+		),
+		"classification": _classification(row, item, assessment, stage),
+		"acquisition": _acquisition(row, item),
+		"segmentation": _segmentation(row, item),
+		"parentProfile": guardian,
+		"insight": {
+			"summary": _insight_summary(stage["label"], score),
+			"signalScore": score,
+			"probability": probability,
+			"scoreDelta": item.get("scoreDelta"),
+			"baseline": None,
+			"confidence": _assessment_confidence(assessment),
+			"concern": row.get("primary_barrier"),
+			"decisionMaker": guardian.get("name"),
+			"evidence": [text for text in (assessment.get("reason"), row.get("primary_barrier")) if text],
+			"recommendation": assessment.get("recommendation") if assessment else item.get("nextAction"),
+		},
+		"journey": _journey(interactions, item),
+		"engagement": _engagement(interactions),
+		"application": _application_items(applications),
+	}
+
+
+def _latest_assessment(student_id: str | None):
+	if not student_id or not _table_exists("CRM Student Assessment"):
+		return frappe._dict()
+	rows = frappe.get_all(
+		"CRM Student Assessment",
+		filters={"student": student_id},
+		fields=[
+			"status",
+			"assessment_source",
+			"assessed_at",
+			"signal_score",
+			"enrollment_probability",
+			"interest",
+			"interest_confidence",
+			"fit",
+			"fit_confidence",
+			"primary_barrier",
+			"barrier_confidence",
+			"reason",
+			"recommendation",
+		],
+		order_by="assessed_at desc, creation desc",
+		limit_page_length=1,
+	)
+	return rows[0] if rows else frappe._dict()
+
+
+def _student_interactions(student_id: str | None) -> list:
+	if not student_id or not _table_exists("CRM Interaction"):
+		return []
+	return frappe.get_all(
+		"CRM Interaction",
+		filters={"student": student_id},
+		fields=[
+			"name",
+			"interaction_datetime",
+			"summary",
+			"channel",
+			"direction",
+			"outcome",
+			"next_follow_up_action",
+		],
+		order_by="interaction_datetime desc, creation desc",
+		limit_page_length=50,
+	)
+
+
+def _student_guardian(student_id: str | None) -> dict[str, Any]:
+	result = {
+		"name": None,
+		"relation": None,
+		"involvement": "Chưa xác định",
+		"role": None,
+		"concerns": [],
+		"preferredChannel": None,
+		"bestContactTime": None,
+		"consentStatus": None,
+		"lastInteraction": None,
+	}
+	if not student_id or not _table_exists("CRM Student Guardian"):
+		return result
+	rows = frappe.get_all(
+		"CRM Student Guardian",
+		filters={"student": student_id, "is_active": 1},
+		fields=[
+			"contact",
+			"relationship",
+			"decision_role",
+			"involvement",
+			"preferred_channel",
+			"best_contact_time",
+			"consent_summary",
+		],
+		order_by="modified desc",
+		limit_page_length=1,
+	)
+	if not rows:
+		return result
+	guardian = rows[0]
+	contact_name = guardian.get("contact")
+	contact_rows = (
+		frappe.get_all(
+			"CRM Contact",
+			filters={"name": contact_name},
+			fields=["name", "full_name", "phone", "email"],
+			limit_page_length=1,
+		)
+		if contact_name
+		else []
+	)
+	contact = contact_rows[0] if contact_rows else frappe._dict()
+	involvement = {"Primary": "Cao", "Shared": "Trung bình", "Low": "Thấp"}.get(
+		guardian.get("involvement"), "Chưa xác định"
+	)
+	result.update(
+		{
+			"name": contact.get("full_name") or contact_name,
+			"relation": guardian.get("relationship"),
+			"involvement": involvement,
+			"role": guardian.get("decision_role"),
+			"preferredChannel": guardian.get("preferred_channel"),
+			"bestContactTime": guardian.get("best_contact_time"),
+			"consentStatus": guardian.get("consent_summary"),
+		}
+	)
+	return result
+
+
+def _student_applications(student_id: str | None, admission_year: str | None) -> list:
+	if not student_id or not _table_exists("CRM Admission Application"):
+		return []
+	filters: dict[str, Any] = {"student": student_id}
+	if admission_year:
+		filters["admission_year"] = admission_year
+	return frappe.get_all(
+		"CRM Admission Application",
+		filters=filters,
+		fields=[
+			"name",
+			"major",
+			"campus",
+			"admission_method",
+			"status",
+			"document_total",
+			"document_completed",
+			"deadline",
+			"submitted_at",
+		],
+		order_by="preference_order asc, creation desc",
+		limit_page_length=20,
+	)
+
+
+def _readiness(row, item, guardian, applications, interactions) -> list[dict[str, Any]]:
+	doc_total = sum(int(application.get("document_total") or 0) for application in applications)
+	doc_completed = sum(int(application.get("document_completed") or 0) for application in applications)
+	if not doc_total and any(
+		application.get("status") in {"Submitted", "Under Review", "Accepted", "Enrolled"}
+		for application in applications
+	):
+		doc_completed = doc_total = 1
+	return [
+		{
+			"label": "Hồ sơ",
+			"value": round(100 * doc_completed / doc_total) if doc_total else 0,
+			"tone": "success" if doc_total and doc_completed >= doc_total else "warning",
+			"detail": f"{doc_completed}/{doc_total} tài liệu" if doc_total else "Chưa có hồ sơ",
+		},
+		{
+			"label": "Gia đình",
+			"value": 100 if guardian.get("name") else 0,
+			"tone": "success" if guardian.get("name") else "warning",
+			"detail": "Đã có người liên hệ" if guardian.get("name") else "Chưa xác định người liên hệ",
+		},
+		{
+			"label": "Tương tác",
+			"value": min(100, len(interactions) * 20),
+			"tone": "success" if item.get("lastActivityAt") else "error",
+			"detail": "Có hoạt động gần đây" if item.get("lastActivityAt") else "Chưa có hoạt động",
+		},
+	]
+
+
+def _classification(row, item, assessment, stage):
+	interest = assessment.get("interest") or row.get("interest_level")
+	fit = assessment.get("fit") or row.get("fit_level")
+	barrier = assessment.get("primary_barrier") or row.get("primary_barrier")
+	return {
+		"dimensions": [
+			{
+				"id": "journey",
+				"label": "Hành trình",
+				"value": stage["label"],
+				"description": "Giai đoạn hiện tại",
+				"evidence": [],
+				"tone": "primary",
+			},
+			{
+				"id": "interest",
+				"label": "Mức độ quan tâm",
+				"value": interest,
+				"description": "Theo assessment gần nhất",
+				"evidence": [],
+				"tone": "success",
+			},
+			{
+				"id": "fit",
+				"label": "Độ phù hợp",
+				"value": fit,
+				"description": "Theo assessment gần nhất",
+				"evidence": [],
+				"tone": "sky",
+			},
+			{
+				"id": "barrier",
+				"label": "Rào cản",
+				"value": barrier,
+				"description": "Rào cản cần xử lý",
+				"evidence": [],
+				"tone": "warning",
+			},
+		],
+		"combination": " / ".join(value for value in (interest, fit, barrier) if value),
+		"interpretation": _insight_summary(stage["label"], item.get("score")),
+		"action": item.get("nextAction"),
+		"updatedAt": _as_iso(assessment.get("assessed_at")) if assessment.get("assessed_at") else None,
+		"updateTrigger": assessment.get("assessment_source"),
+		"reviewStatus": "Đã xác nhận" if assessment.get("status") == "confirmed" else "Chờ xác nhận",
+		"reviewedBy": None,
+	}
+
+
+def _assessment_confidence(assessment) -> float | int | None:
+	values = [
+		_number(assessment.get(field))
+		for field in ("interest_confidence", "fit_confidence", "barrier_confidence")
+		if assessment.get(field) is not None
+	]
+	return round(mean(values), 1) if values else None
+
+
+def _acquisition(row, item):
+	source = str(item.get("source") or "")
+	return {
+		"firstTouch": source,
+		"sourceGroup": _source_group(source),
+		"campaign": "",
+		"capturedAt": None,
+		"attributionModel": "CRM Student source",
+		"consent": "",
+	}
+
+
+def _segmentation(row, item):
+	return {
+		"learningStage": _grade_label(row),
+		"approachGoal": row.get("interest_level"),
+		"geographyTier": item.get("province"),
+		"geographyImplication": "",
+		"schoolTier": item.get("school"),
+		"economicContext": "",
+		"economicUsage": "",
+	}
+
+
+def _journey(interactions, item):
+	journey = []
+	for index, interaction in enumerate(reversed(interactions)):
+		journey.append(
+			{
+				"id": interaction.get("name"),
+				"date": _as_iso(interaction.get("interaction_datetime")),
+				"title": interaction.get("summary") or interaction.get("channel") or "Hoạt động",
+				"description": interaction.get("next_follow_up_action") or "",
+				"channel": _journey_channel(interaction.get("channel"), interaction.get("interaction_type")),
+				"status": "current" if index == len(interactions) - 1 else "completed",
+			}
+		)
+	return journey
+
+
+def _engagement(interactions):
+	return [
+		{
+			"label": "Tổng tương tác",
+			"value": str(len(interactions)),
+			"level": "Cao" if len(interactions) >= 5 else "Trung bình" if interactions else "Thấp",
+		},
+		{
+			"label": "Tương tác gần nhất",
+			"value": _relative_time(interactions[0].get("interaction_datetime")) if interactions else "",
+			"level": "Cao" if interactions else "Thấp",
+		},
+	]
+
+
+def _application_items(applications):
+	return [
+		{
+			"label": application.get("major") or "Hồ sơ xét tuyển",
+			"value": application.get("status"),
+			"status": "success"
+			if application.get("status") in {"Accepted", "Enrolled"}
+			else "warning"
+			if application.get("status") in {"Draft", "Under Review"}
+			else "primary",
+		}
+		for application in applications
+	]
+
+
+def _key_values(values):
+	return [{"label": label, "value": str(value)} for label, value in values if value not in (None, "")]
+
+
+def _grade_label(row) -> str | None:
+	grade = row.get("current_grade")
+	if grade:
+		return f"Lớp {grade}"
+	return row.get("study_stage")
+
+
+def _display_date(value) -> str | None:
+	if not value:
+		return None
+	try:
+		return frappe.utils.get_datetime(value).strftime("%d/%m/%Y")
+	except (AttributeError, TypeError, ValueError):
+		return str(value)
+
+
+def _insight_summary(stage: str | None, score: float | int | None) -> str:
+	if stage and score is not None:
+		return f"Hồ sơ đang ở giai đoạn {stage}, điểm tín hiệu {score}."
+	return "Chưa đủ dữ liệu để tạo nhận định."
+
+
+def _source_group(source: str) -> str:
+	value = _fold(source)
+	if any(token in value for token in ("gioi thieu", "referral", "alumni")):
+		return "Giới thiệu"
+	if any(token in value for token in ("event", "career", "open day", "hoi thao", "su kien")):
+		return "Thực địa"
+	if any(token in value for token in ("ads", "facebook", "google", "quang cao")):
+		return "Trực tuyến qua quảng cáo"
+	return "Trực tuyến chủ động"
+
+
+def _journey_channel(channel: str | None, interaction_type: str | None = None) -> str:
+	value = _fold(channel or interaction_type or "")
+	if "zalo" in value:
+		return "Zalo"
+	if "call" in value or "goi" in value:
+		return "Cuộc gọi"
+	if "event" in value or "su kien" in value:
+		return "Sự kiện"
+	if "ho so" in value or "application" in value:
+		return "Hồ sơ"
+	return "Website"
+
+
+def _is_confirmed_high_intent(row) -> bool:
+	return row.get("assessment_status") == "confirmed" and _fold(row.get("interest_level")) in {"high", "cao"}
+
+
+def _rate(numerator: int, denominator: int) -> float:
+	return round(100 * numerator / denominator, 1) if denominator else 0.0
+
+
+def _percent_delta(current: int, previous: int) -> float | None:
+	return round(100 * (current - previous) / previous, 1) if previous else None
+
+
+def _total_pages(total: int, page_size: int) -> int:
+	return (total + page_size - 1) // page_size if total else 0
+
+
+def _initials(name: str | None) -> str | None:
+	words = [word for word in re.split(r"\s+", str(name or "").strip()) if word]
+	return "".join(word[0] for word in words[-2:]).upper() or None
+
+
+def _number(value):
+	if value in (None, ""):
+		return None
+	try:
+		parsed = float(value)
+	except (TypeError, ValueError):
+		return None
+	return int(parsed) if parsed.is_integer() else round(parsed, 2)
+
+
+def _relative_time(value) -> str | None:
+	if not value:
+		return None
+	try:
+		return frappe.utils.pretty_date(value)
+	except (AttributeError, TypeError, ValueError):
+		return _as_iso(value)
+
+
+def _as_iso(value) -> str | None:
+	if not value:
+		return None
+	try:
+		parsed = frappe.utils.get_datetime(value)
+		if parsed.tzinfo is None:
+			parsed = parsed.replace(tzinfo=LOCAL_TIMEZONE)
+		else:
+			parsed = parsed.astimezone(LOCAL_TIMEZONE)
+		return parsed.isoformat(timespec="seconds")
+	except (TypeError, ValueError, AttributeError):
+		return str(value)
+
+
+def _province_label(value: str | None) -> str | None:
+	if not value:
+		return None
+	if _table_exists("CRM Province"):
+		label = frappe.db.get_value("CRM Province", value, "province_name")
+		return label or value
+	return value
+
+
+def _fold(value: Any) -> str:
+	text = unicodedata.normalize("NFD", str(value or ""))
+	return "".join(char for char in text if unicodedata.category(char) != "Mn").casefold()
+
+
+def _slug(value: Any) -> str:
+	return re.sub(r"[^a-z0-9]+", "-", _fold(value)).strip("-")
+
+
+def _table_exists(doctype: str) -> bool:
+	try:
+		return bool(frappe.db.table_exists(doctype))
+	except (AttributeError, frappe.DoesNotExistError):
+		return False
+
+
+def _exists(doctype: str, value) -> bool:
+	try:
+		return bool(frappe.db.exists(doctype, value))
+	except (AttributeError, frappe.DoesNotExistError):
+		return False
+
+
+def _require_access():
+	"""Return no staff scope because these read-only projections are public."""
+	return None
+
+
+def _raise_api_error(code: str, message: str, exception, status: int):
+	try:
+		if getattr(frappe, "local", None) and isinstance(getattr(frappe.local, "response", None), dict):
+			frappe.local.response["error"] = {"code": code, "message": message}
+			frappe.local.response["http_status_code"] = status
+	except (AttributeError, TypeError):
+		pass
+	frappe.throw(_(message), exception)

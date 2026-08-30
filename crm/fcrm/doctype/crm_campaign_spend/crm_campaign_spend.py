@@ -3,6 +3,8 @@
 
 from frappe.model.document import Document
 
+from crm.fcrm.legacy_fact_guard import reject_legacy_fact_write
+
 
 class CRMCampaignSpend(Document):
 	# begin: auto-generated types
@@ -25,4 +27,5 @@ class CRMCampaignSpend(Document):
 		spend_date: DF.Date
 	# end: auto-generated types
 
-	pass
+	def before_validate(self):
+		reject_legacy_fact_write("CRM Campaign Spend")

@@ -13,6 +13,7 @@
   "team_type",
   "column_break_1",
   "campus",
+  "territory",
   "is_active"
  ],
  "fields": [
@@ -46,6 +47,14 @@
    "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Territory",
+   "options": "CRM Territory"
   },
   {
    "default": "1",

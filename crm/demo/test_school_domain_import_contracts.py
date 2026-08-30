@@ -91,6 +91,12 @@ def test_all_canonical_provinces_and_declared_aliases_resolve():
 			assert importer.canonical_province_name(value) == canonical
 
 
+def test_internal_promoter_headers_are_staff_pic_not_person_stakeholder():
+	assert importer._header_key("Promoter") == "pic"
+	assert importer._header_key("Tên Promoter phụ trách") == "pic"
+	assert importer._header_key("Người liên hệ") == "stakeholder_name"
+
+
 def test_school_seed_reconciliation_counts_review_rows_and_provenance(tmp_path):
 	path = _write_workbook(
 		tmp_path / "school-seed.xlsx",
@@ -201,7 +207,42 @@ def test_compact_json_inputs_round_trip_from_excel(tmp_path):
 	report = importer.reconcile_ts_workbook(ts_json, canonical_path=canonical_json)
 	assert report["source_file"] == "ts.xlsx"
 	assert report["total_rows"] == 1
-	assert report["status_counts"] == {"matched": 1}
+	assert report["status_counts"] == {"review_required": 1}
+
+
+def test_coordinate_parsing_tolerates_blank_and_non_numeric():
+	assert importer._coordinate("12.2849853") == 12.2849853
+	assert importer._coordinate(109.1894813) == 109.1894813
+	assert importer._coordinate("") is None
+	assert importer._coordinate(None) is None
+	assert importer._coordinate("no_match") is None
+
+
+def test_school_seed_carries_geocoded_latitude_and_longitude(tmp_path):
+	path = _write_workbook(
+		tmp_path / "school-seed.xlsx",
+		"Schoolmap",
+		SEED_HEADERS + ["Latitude", "Longitude"],
+		[
+			["01", "TP.HCM", "011", "Ward", "S001", "THPT Nguyễn Du", "1 Main Street", "10.77", "106.7"],
+			["01", "TP.HCM", "011", "Ward", "S002", "THPT Chưa Geocode", "2 Main Street", "", ""],
+		],
+	)
+
+	report = importer.reconcile_school_seed(path)
+	by_code = {row["data"]["school_code"]: row["data"] for row in report["rows"]}
+	assert by_code["S001"]["latitude"] == "10.77"
+	assert by_code["S001"]["longitude"] == "106.7"
+	assert not by_code["S002"].get("latitude")
+
+	canonical_json = tmp_path / "school-seed.json"
+	extractor.extract_school_seed(path, canonical_json)
+	payload = json.loads(canonical_json.read_text(encoding="utf-8"))
+	assert "latitude" in payload["fields"] and "longitude" in payload["fields"]
+	code_col = payload["fields"].index("school_code")
+	lat_col = payload["fields"].index("latitude")
+	geocoded = next(values for _source_row, values in payload["rows"] if values[code_col] == "S001")
+	assert geocoded[lat_col] == "10.77"
 
 
 def test_ne_2026_supplement_resolves_explicit_canonical_targets(tmp_path, monkeypatch):
@@ -230,12 +271,14 @@ def test_ne_2026_supplement_resolves_explicit_canonical_targets(tmp_path, monkey
 	assert rows[0]["ne_2026"] == 7
 
 
-def test_ts_pic_falls_back_to_promoter_owner(monkeypatch):
+def test_unknown_ts_pic_requires_staff_match(monkeypatch):
 	class _PromoterDB:
 		def get_value(self, doctype, filters, _field):
-			assert doctype == "CRM Staff"
-			assert filters == {"user": importer.TS_PROMOTER_OWNER_USER}
-			return "PROMOTER-STAFF"
+			if doctype == "CRM Staff":
+				assert filters == {"user": importer.TS_PROMOTER_OWNER_USER}
+				return "PROMOTER-STAFF"
+			assert doctype == "CRM Team Membership"
+			return "TEAM-A"
 
 	class _PromoterFrappe:
 		db = _PromoterDB()
@@ -243,7 +286,99 @@ def test_ts_pic_falls_back_to_promoter_owner(monkeypatch):
 	monkeypatch.setattr(importer, "frappe", _PromoterFrappe())
 	monkeypatch.setattr(importer, "_resolve_staff", lambda _alias: (None, None))
 
-	assert importer._resolve_ts_promoter_owner("PIC alias") == ("PROMOTER-STAFF", None)
+	assert importer._resolve_ts_promoter_owner("PIC alias") == ("PROMOTER-STAFF", "TEAM-A")
+
+
+def test_ts_owner_preflight_fails_closed_before_relationship_writes(monkeypatch):
+	monkeypatch.setattr(importer, "_resolve_ts_promoter_owner", lambda _alias: (None, None))
+	records = [{
+		"source_sheet": importer.PRIMARY_TS_SHEET,
+		"source_row": 3,
+		"match_status": "matched",
+		"import_kind": "primary",
+		"data": {"stakeholder_name": "Cô Lan", "pic": "Unknown PIC"},
+	}]
+
+	issues = importer._ts_owner_preflight(records)
+
+	assert issues == [{
+		"source_sheet": importer.PRIMARY_TS_SHEET,
+		"source_row": 3,
+		"reason": "unresolved_import_owner",
+	}]
+
+
+def test_ts_owner_preflight_requires_team_for_configured_owner(monkeypatch):
+	monkeypatch.setattr(importer, "_resolve_ts_promoter_owner", lambda _alias: ("STAFF-1", None))
+	records = [{
+		"source_sheet": "LỊCH CÔNG TÁC",
+		"source_row": 8,
+		"match_status": "matched",
+		"import_kind": "activity",
+		"data": {"pic": "PIC alias"},
+	}]
+
+	assert importer._ts_owner_preflight(records)[0]["reason"] == "import_owner_team_unresolved"
+
+
+def test_approved_identity_matches_are_writeable_but_normalized_matches_are_not():
+	assert importer._blocking_review({"match_status": "matched", "reasons": ["manual_canonical_mapping"]}) is False
+	assert importer._blocking_review({"match_status": "matched", "reasons": ["name_province_and_source_code"]}) is False
+	assert importer._blocking_review({"match_status": "review_required", "reasons": ["legacy_school_code_changed"]}) is True
+
+
+def test_activity_import_key_includes_source_row_grain(tmp_path):
+	values = {
+		"high_school": "HS-1", "activity_date": "2026-08-30", "activity_type": "ACT-1",
+		"owner_staff": "STAFF-1", "owning_team": "TEAM-A",
+	}
+	first = importer._activity_import_key(tmp_path / "source.xlsx", {"source_sheet": "Activities", "source_row": 4}, values)
+	second = importer._activity_import_key(tmp_path / "source.xlsx", {"source_sheet": "Activities", "source_row": 5}, values)
+	assert first != second
+
+
+def test_upsert_locks_existing_business_key_before_update(monkeypatch):
+	class _DB:
+		def __init__(self):
+			self.queries = []
+
+		def get_value(self, _doctype, _filters, _field):
+			return "ACT-1"
+
+		def sql(self, query, params):
+			self.queries.append((query, params))
+
+	class _Doc:
+		name = "ACT-1"
+
+		def __init__(self):
+			self.values = {"status": "Planned"}
+
+		def get(self, field, default=None):
+			return self.values.get(field, default)
+
+		def set(self, field, value):
+			self.values[field] = value
+
+		def save(self, **_kwargs):
+			return self
+
+	class _Frappe:
+		def __init__(self):
+			self.db = _DB()
+			self.doc = _Doc()
+
+		def get_doc(self, *_args):
+			return self.doc
+
+	fake = _Frappe()
+	monkeypatch.setattr(importer, "frappe", fake)
+
+	importer._upsert("CRM School Activity", {"import_idempotency_key": "K1"}, {"status": "Completed"})
+
+	assert fake.db.queries == [
+		("select name from `tabCRM School Activity` where name = %s for update", ("ACT-1",))
+	]
 
 
 def test_snapshot_import_maps_history_to_matching_admission_years(monkeypatch, tmp_path):
@@ -328,7 +463,7 @@ def test_khu_vuc_accepts_legacy_school_code_when_name_and_province_are_unique():
 	)
 
 	assert matched[1:4] == (
-		"matched",
+		"review_required",
 		0.88,
 		["normalized_name_and_province", "legacy_school_code_changed"],
 	)
@@ -353,6 +488,8 @@ def test_school_seed_dry_run_never_calls_frappe_api(tmp_path, monkeypatch):
 	assert result["dry_run"] is True
 	assert result["mutations"] == {}
 	assert result["report"]["total_rows"] == 1
+	assert "rows" not in result["report"]
+	assert "_ne_2026_rows" not in result["report"]
 
 
 def test_ts_dry_run_never_calls_frappe_api(tmp_path, monkeypatch):
@@ -375,6 +512,29 @@ def test_ts_dry_run_never_calls_frappe_api(tmp_path, monkeypatch):
 	assert result["dry_run"] is True
 	assert result["mutations"] == {}
 	assert result["report"]["total_rows"] == 1
+	assert "rows" not in result["report"]
+	assert "_ne_2026_rows" not in result["report"]
+
+
+def test_person_rows_expose_explicit_review_key_and_are_not_auto_applied(tmp_path):
+	canonical_path = _write_workbook(
+		tmp_path / "school-seed.xlsx",
+		"Canonical schools",
+		SEED_HEADERS,
+		[["01", "TP.HCM", "011", "Ward", "S001", "THPT Nguyễn Du", "1 Main Street"]],
+	)
+	ts_path = _write_workbook(
+		tmp_path / "ts.xlsx",
+		importer.PRIMARY_TS_SHEET,
+		["Tên tỉnh", "Tên trường", "Người liên hệ"],
+		[["Bình Dương", "THPT Nguyễn Du", "Cô Lan"]],
+	)
+
+	report = importer.reconcile_ts_workbook(ts_path, canonical_path=canonical_path)
+
+	assert report["review_rows"][0]["source_sheet"] == importer.PRIMARY_TS_SHEET
+	assert report["review_rows"][0]["source_row"] == 3
+	assert "person_manual_review_required" in report["review_rows"][0]["reasons"]
 
 
 class _SeedDB:
@@ -422,5 +582,5 @@ def test_non_dry_run_matched_row_has_no_candidate_shape_error(tmp_path, monkeypa
 	result = importer.seed_ts_workbook(ts_path, canonical_path=canonical_path, dry_run=False)
 
 	assert result["errors"] == []
-	assert result["mutations"] == {}
+	assert result["mutations"] == {"review_required": 1}
 	assert fake_frappe.db.commits == 1

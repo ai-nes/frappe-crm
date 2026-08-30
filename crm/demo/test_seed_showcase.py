@@ -8,6 +8,7 @@ builders. They never touch a site or database and run under plain ``pytest``.
 from __future__ import annotations
 
 import unittest
+import re
 
 from crm.demo import seed_showcase
 from crm.demo.seed_showcase import (
@@ -45,8 +46,16 @@ class TestSeedShowcaseData(unittest.TestCase):
 		self.assertEqual(NAMESPACE, "crm-demo-showcase")
 
 	def test_scenarios_use_synthetic_contact_data_only(self):
+		names = [scenario["student_name"] for scenario in SCENARIOS]
+		emails = [scenario["email"] for scenario in SCENARIOS]
+		self.assertEqual(len(names), len(set(names)))
+		self.assertEqual(len(emails), len(set(emails)))
 		for scenario in SCENARIOS:
-			self.assertTrue(scenario["email"].endswith("@example.test"), scenario["key"])
+			self.assertRegex(scenario["email"], r"^[a-z0-9]+(?:\.[a-z0-9]+)*@[a-z0-9.-]+\.[a-z]{2,}$")
+			self.assertNotIn("showcase", scenario["email"])
+			self.assertNotIn("example.test", scenario["email"])
+			self.assertNotIn("Học sinh showcase", scenario["student_name"])
+			self.assertNotIn("Edge", scenario["student_name"])
 			self.assertTrue(scenario["phone"].startswith("090"), scenario["key"])
 			self.assertIn(scenario["gender"], {"Nam", "Nữ"})
 			self.assertIn(scenario["admission_method"], _ADMISSION_METHODS)
@@ -55,10 +64,15 @@ class TestSeedShowcaseData(unittest.TestCase):
 		keys = [scenario["key"] for scenario in SCENARIOS]
 		self.assertEqual(len(keys), len(set(keys)))
 
-	def test_contact_rows_are_synthetic_and_unique(self):
+	def test_contact_rows_have_natural_display_identity(self):
 		keys = [row["key"] for row in CONTACT_ROWS]
 		self.assertEqual(len(keys), len(set(keys)))
-		for row in CONTACT_ROWS:
+		emails = [seed_showcase._contact_email(row) for row in CONTACT_ROWS + BULK_CONTACT_ROWS]
+		self.assertEqual(len(emails), len(set(emails)))
+		for row in CONTACT_ROWS + BULK_CONTACT_ROWS:
+			self.assertNotIn("showcase", row["full_name"])
+			self.assertNotIn("Học sinh showcase", row["full_name"])
+			self.assertRegex(seed_showcase._contact_email(row), r"^[a-z0-9]+(?:\.[a-z0-9]+)*@[a-z0-9.-]+\.[a-z]{2,}$")
 			self.assertIn(row["consent"], _CONSENT_EVENTS)
 
 	def test_volume_is_curated_not_bulk(self):

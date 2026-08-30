@@ -46,6 +46,35 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 		self.assertEqual(payload["major"], "CS")
 		self.assertEqual(payload["source"], "website")
 
+	def test_prd_contact_payload_preserves_current_grade(self):
+		payload = _normalize_contact_payload(
+			{
+				"source_system": "chatwoot",
+				"external_id": "conversation-grade-42",
+				"idempotency_key": "idem-grade-42",
+				"full_name": "Nguyen Test",
+				"current_grade": "11",
+				"consent": {"granted": True},
+			}
+		)
+
+		self.assertEqual(payload["current_grade"], "11")
+
+	def test_prd_contact_payload_preserves_study_stage(self):
+		payload = _normalize_contact_payload(
+			{
+				"source_system": "chatwoot",
+				"external_id": "conversation-stage-42",
+				"idempotency_key": "idem-stage-42",
+				"full_name": "Nguyen Test",
+				"current_grade": "12",
+				"study_stage": "grade_12_h1",
+				"consent": {"granted": True},
+			}
+		)
+
+		self.assertEqual(payload["study_stage"], "grade_12_h1")
+
 	def test_prd_contact_response_is_stable_and_contact_stays_nullable(self):
 		with patch("crm.api.student_intake._contact_for_student", return_value=None):
 			response = _intake_response({"outcome": "created", "student": "STU-1", "receipt": "REC-1"})

@@ -5,6 +5,7 @@ from crm.fcrm.doctype.crm_student.crm_student import (
 	convert_to_contact,
 	create_from_contact,
 )
+from crm.fcrm.student_context import _admissions_context
 
 
 class TestCRMStudent(FrappeTestCase):
@@ -69,6 +70,51 @@ class TestCRMStudent(FrappeTestCase):
 
 		self.assertTrue(student.name)
 		self.assertEqual(student.lifecycle_stage, "Lead")
+
+	def test_current_grade_change_advances_student_context_revision(self):
+		if not frappe.get_meta("CRM Student").has_field("current_grade"):
+			self.skipTest("CRM Student schema has not been migrated with current_grade")
+		student = self._make_student("_Test Grade Context Student")
+		initial_revision = int(student.student_context_revision or 0)
+
+		student.current_grade = "11"
+		student.save(ignore_permissions=True)
+		student.reload()
+
+		self.assertGreater(student.student_context_revision, initial_revision)
+
+	def test_current_grade_is_optional_and_context_visible(self):
+		if not frappe.get_meta("CRM Student").has_field("current_grade"):
+			self.skipTest("CRM Student schema has not been migrated with current_grade")
+		student = self._make_student("_Test Grade Optional Student")
+		self.assertFalse(student.current_grade)
+
+		student.current_grade = "11"
+		student.save(ignore_permissions=True)
+		context = _admissions_context(student.name, student, {})
+		self.assertEqual(context["current_grade"], "11")
+
+		invalid = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"student_name": "_Test Invalid Grade Student",
+				"phone": "0981000022",
+				"current_grade": "13",
+			}
+		)
+		with self.assertRaises(frappe.ValidationError):
+			invalid.insert(ignore_permissions=True)
+
+	def test_study_stage_must_match_current_grade(self):
+		student = self._make_student("_Test Study Stage Student")
+		student.current_grade = "12"
+		student.study_stage = "grade_12_h1"
+		student.save(ignore_permissions=True)
+		self.assertEqual(student.study_stage, "grade_12_h1")
+
+		student.study_stage = "grade_11"
+		with self.assertRaises(frappe.ValidationError):
+			student.save(ignore_permissions=True)
 
 	def test_direct_contact_creation_is_retired(self):
 		# Test the production boundary rather than the test-fixture bypass used

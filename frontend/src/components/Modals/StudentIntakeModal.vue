@@ -52,7 +52,7 @@
 import FieldLayout from '@/components/FieldLayout/FieldLayout.vue'
 import { usersStore } from '@/stores/users'
 import { call, toast } from 'frappe-ui'
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import {
   buildIntakePayload,
   createCommandId,
@@ -61,6 +61,11 @@ import {
   isServerManagedIntakeProfile,
   safeCommandError,
 } from '@/utils/studentOwnership'
+import {
+  getCurrentGradeOptions,
+  getStudyStageOptions,
+  isStudyStageCompatible,
+} from '@/utils/studentStudyStage'
 
 const emit = defineEmits(['completed', 'review-required'])
 const show = defineModel({ type: Boolean })
@@ -82,9 +87,49 @@ const form = reactive({
   ward: '',
   major: '',
   aspiration: '',
+  current_grade: '',
+  study_stage: '',
   admission_year: '',
   id_number: '',
 })
+
+const currentGradeOptions = computed(() => {
+  return getCurrentGradeOptions(form.study_stage)
+})
+
+const studyStageOptions = computed(() => {
+  return getStudyStageOptions(form.current_grade)
+})
+
+// Keep the two optional fields consistent without forcing either one to be filled.
+// When a user changes one field, clear the other only if its existing value is
+// no longer compatible. The server keeps the same invariant for non-UI clients.
+watch(
+  () => form.current_grade,
+  (currentGrade) => {
+    if (
+      currentGrade &&
+      form.study_stage &&
+      !isStudyStageCompatible(currentGrade, form.study_stage)
+    ) {
+      form.study_stage = ''
+    }
+  },
+  { flush: 'sync' },
+)
+watch(
+  () => form.study_stage,
+  (studyStage) => {
+    if (
+      studyStage &&
+      form.current_grade &&
+      !isStudyStageCompatible(form.current_grade, studyStage)
+    ) {
+      form.current_grade = ''
+    }
+  },
+  { flush: 'sync' },
+)
 
 const fieldLayoutContext = reactive({
   fieldPropertyOverrides: {},
@@ -146,6 +191,18 @@ const tabs = computed(() => [
                 label: 'Trường THPT',
                 options: 'CRM High School',
                 no_create: isServerManagedIntakeProfile(currentProfile.value),
+              },
+              {
+                fieldname: 'current_grade',
+                fieldtype: 'Select',
+                label: 'Khối hiện tại (không bắt buộc)',
+                options: currentGradeOptions.value,
+              },
+              {
+                fieldname: 'study_stage',
+                fieldtype: 'Select',
+                label: 'Giai đoạn học tập (không bắt buộc)',
+                options: studyStageOptions.value,
               },
             ],
           },

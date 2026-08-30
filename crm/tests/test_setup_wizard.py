@@ -1,7 +1,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.install import complete_setup, merge_cors_origins
+from crm.install import CRM_CORS_ORIGINS, complete_setup, merge_cors_origins
 
 
 class TestSetupWizardCompletion(FrappeTestCase):
@@ -15,10 +15,18 @@ class TestSetupWizardCompletion(FrappeTestCase):
 
 		self.assertEqual(
 			merge_cors_origins("https://existing.example", required),
-			"https://existing.example,https://app.chatwoot.com,http://54.66.53.9:5173",
+			[
+				"https://existing.example",
+				"https://app.chatwoot.com",
+				"http://54.66.53.9:5173",
+			],
 		)
 		self.assertEqual(
 			merge_cors_origins(["https://existing.example"], required),
 			["https://existing.example", "https://app.chatwoot.com", "http://54.66.53.9:5173"],
 		)
 		self.assertEqual(merge_cors_origins("*", required), "*")
+
+	def test_dashboard_origins_are_allowlisted(self):
+		self.assertIn("http://localhost:3000", CRM_CORS_ORIGINS)
+		self.assertIn("https://faip.pro", CRM_CORS_ORIGINS)

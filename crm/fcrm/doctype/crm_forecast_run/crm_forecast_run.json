@@ -1,0 +1,23 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "model_version", "as_of", "horizon_start", "horizon_end", "planning_scope", "scope_type", "scope", "source_snapshot", "recorded_at", "status", "correlation_id", "schema_version"],
+ "fields": [
+  {"default": "FCST-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "FCST-.YYYY.-"},
+  {"fieldname": "model_version", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Model Version", "options": "CRM Model Version", "reqd": 1},
+  {"fieldname": "as_of", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "As Of", "reqd": 1},
+  {"fieldname": "horizon_start", "fieldtype": "Date", "in_list_view": 1, "label": "Horizon Start", "reqd": 1},
+  {"fieldname": "horizon_end", "fieldtype": "Date", "in_list_view": 1, "label": "Horizon End", "reqd": 1},
+  {"fieldname": "planning_scope", "fieldtype": "Link", "in_list_view": 1, "label": "Planning Scope", "options": "CRM Planning Scope", "reqd": 1},
+  {"fieldname": "scope_type", "fieldtype": "Select", "hidden": 1, "label": "Legacy Scope Type", "options": "National\nRegion\nTerritory\nCampus\nTeam\nMajor", "read_only": 1},
+  {"fieldname": "scope", "fieldtype": "Data", "hidden": 1, "label": "Legacy Scope", "read_only": 1},
+  {"fieldname": "source_snapshot", "fieldtype": "Data", "in_list_view": 1, "label": "Source Snapshot", "reqd": 1},
+  {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Draft\nRunning\nCompleted\nFailed", "reqd": 1},
+  {"fieldname": "correlation_id", "fieldtype": "Data", "in_list_view": 1, "label": "Correlation ID", "reqd": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [{"fields": ["model_version", "as_of", "planning_scope"], "name": "crm_forecast_run_lookup_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Run", "naming_rule": "Naming Series", "naming_series_options": "FCST-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "row_format": "Dynamic", "search_fields": "model_version,planning_scope,as_of", "sort_field": "as_of", "sort_order": "DESC"
+}

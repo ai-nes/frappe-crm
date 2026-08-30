@@ -38,7 +38,7 @@ npm run e2e:install
 npm run test:e2e
 ```
 
-Run `task e2e-playwright` from the repository root for the same guarded command.
+Run the project browser tests through the repository's supported test workflow.
 Always reset the fixture through its site-owned orchestration after the run. Do not
 upload `playwright/.auth`, `test-results`, or reports containing cookies or secrets.
 

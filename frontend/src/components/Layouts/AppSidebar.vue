@@ -105,17 +105,6 @@
         />
       </div>
       <SidebarLink
-        v-if="canConfigureSystem(currentUser) && isDemoDataCreated"
-        class="text-ink-red-3 hover:bg-surface-red-2 focus:bg-surface-red-2"
-        :label="__('Clear Demo Data')"
-        :isCollapsed="isSidebarCollapsed"
-        @click="() => clearDemoData()"
-      >
-        <template #icon>
-          <BrushCleaningIcon class="h-4 w-4" />
-        </template>
-      </SidebarLink>
-      <SidebarLink
         v-if="isOnboardingStepsCompleted"
         :label="__('Help')"
         :isCollapsed="isSidebarCollapsed"
@@ -166,7 +155,6 @@
 </template>
 
 <script setup>
-import BrushCleaningIcon from '~icons/lucide/brush-cleaning'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
@@ -217,7 +205,6 @@ import {
 } from 'frappe-ui/frappe'
 import router from '@/router'
 import { useStorage } from '@vueuse/core'
-import { useDemoData } from '@/composables/demoData'
 import {
   canConfigureSystem,
   canAccessNavigationRoute,
@@ -232,7 +219,6 @@ import { ref, reactive, computed, markRaw, onMounted } from 'vue'
 const { getPinnedViews, getPublicViews } = viewsStore()
 const { toggle: toggleNotificationPanel } = notificationsStore()
 const { capture } = useTelemetry()
-const { clearDemoData, isDemoDataCreated } = useDemoData()
 const badgesStore = useNavigationBadgesStore()
 
 const isSidebarCollapsed = useStorage('isSidebarCollapsed', false)

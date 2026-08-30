@@ -8,6 +8,8 @@
   "team",
   "function",
   "term",
+  "effective_from",
+  "effective_until",
   "column_break_1",
   "is_primary",
   "is_team_lead"
@@ -35,6 +37,18 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Term"
+  },
+  {
+   "fieldname": "effective_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Effective From"
+  },
+  {
+   "fieldname": "effective_until",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Effective Until"
   },
   {
    "fieldname": "column_break_1",
