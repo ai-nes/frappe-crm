@@ -17,6 +17,15 @@ class CRMSchoolStakeholder(Document):
 
 	def validate(self):
 		validate_portfolio_update(self)
+		previous = self.get_doc_before_save()
+		if not previous and self.relationship_status not in (None, "", "New"):
+			frappe.throw("New stakeholder associations must start in New status; use the governed transition command.", frappe.PermissionError)
+		if (
+			previous
+			and previous.get("relationship_status") != self.relationship_status
+			and not getattr(frappe.flags, "school_relationship_transition", False)
+		):
+			frappe.throw("Relationship status must be changed through the governed transition command.", frappe.PermissionError)
 		# A scoped Promoter must not create an association merely to make an
 		# otherwise out-of-scope school visible through the portfolio predicate.
 		# System/governance users still pass Frappe's normal High School permission.
@@ -46,6 +55,8 @@ class CRMSchoolStakeholder(Document):
 				frappe.throw(
 					"A high school may have only one primary stakeholder.", frappe.DuplicateEntryError
 				)
+		if not self.get("relationship_revision"):
+			self.relationship_revision = 1
 
 	@staticmethod
 	def get_permission_query_conditions(user=None, doctype=None):

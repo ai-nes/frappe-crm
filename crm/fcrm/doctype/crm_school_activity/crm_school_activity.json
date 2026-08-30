@@ -30,6 +30,9 @@
   "application_count",
   "next_action",
   "evidence_reference",
+  "relationship_previous_status",
+  "relationship_new_status",
+  "relationship_revision",
   "notes"
  ],
  "fields": [
@@ -55,6 +58,9 @@
   {"fieldname": "next_action", "fieldtype": "Small Text", "label": "Next Action"},
   {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference"},
   {"fieldname": "import_idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Import Idempotency Key"},
+  {"fieldname": "relationship_previous_status", "fieldtype": "Select", "hidden": 1, "label": "Relationship Previous Status", "options": "New\nActive\nDormant\nDo Not Contact", "read_only": 1},
+  {"fieldname": "relationship_new_status", "fieldtype": "Select", "hidden": 1, "label": "Relationship New Status", "options": "New\nActive\nDormant\nDo Not Contact", "read_only": 1},
+  {"fieldname": "relationship_revision", "fieldtype": "Int", "hidden": 1, "label": "Relationship Revision", "read_only": 1},
   {"fieldname": "notes", "fieldtype": "Text", "label": "Notes"}
  ],
  "index_web_pages_for_search": 1,

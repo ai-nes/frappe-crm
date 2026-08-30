@@ -57,9 +57,9 @@ def compute_crm_metrics(high_school, admission_year):
 def _snapshot_for_school(high_school):
 	return frappe.get_all(
 		"CRM High School Annual Snapshot",
-		filters={"high_school": high_school, "verification_status": "Verified"},
-		fields=["name", "admission_year", "key_account_eligible", "snapshot_date"],
-		order_by="admission_year desc, modified desc",
+		filters={"high_school": high_school, "verification_status": "Verified", "period_type": "Annual"},
+		fields=["name", "admission_year", "key_account_eligible", "snapshot_date", "revision"],
+		order_by="admission_year desc, snapshot_date desc, revision desc",
 		limit_page_length=1,
 	)
 
@@ -98,6 +98,7 @@ class CRMHighSchoolAnnualSnapshot(Document):
 		"timezone",
 		"ne_target",
 		"ne_actual",
+		"adjusted_ne_threshold",
 		"ne_actual_semantics",
 		"source_system",
 		"source_run",

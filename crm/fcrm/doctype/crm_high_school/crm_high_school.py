@@ -47,9 +47,9 @@ class CRMHighSchool(Document):
 			return
 		rows = frappe.get_all(
 			"CRM High School Annual Snapshot",
-			filters={"high_school": self.name, "verification_status": "Verified"},
+			filters={"high_school": self.name, "verification_status": "Verified", "period_type": "Annual"},
 			fields=["admission_year", "ne_actual", "adjusted_ne_threshold", "key_account_eligible", "snapshot_date"],
-			order_by="admission_year desc, modified desc",
+			order_by="admission_year desc, snapshot_date desc, revision desc",
 			limit_page_length=1,
 		)
 		if not rows:

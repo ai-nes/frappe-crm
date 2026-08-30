@@ -3,6 +3,13 @@ import frappe
 
 
 SALES_WORKLIST_ROLE_NAMES = ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Team Leader")
+SCHOOL360_READ_ROLE_NAMES = (
+	"Sale", "Lead Sales", "Marketing", "Promoter", "Promoter-PR", "Admissions Director",
+)
+SCHOOL360_CAPABILITY_ID = "school360.overview.read:v1"
+SCHOOL360_ROLLOUT_CONFIG_KEY = "crm_agents_school360_contract"
+SCHOOL360_RECOMMENDATION_CAPABILITY_ID = "school360.recommendation.context.read:v1"
+SCHOOL360_RECOMMENDATION_ROLLOUT_CONFIG_KEY = "crm_agents_school360_recommendation_contract"
 # Retired semantic grants must not remain advertised by Frappe after the
 # corresponding crm-agents tool is removed.  Keep this list explicit so a
 # future capability cannot disappear silently through a broad cleanup query.
@@ -84,6 +91,49 @@ def _grant_sales_worklist_capability() -> None:
 		role.append(
 			"custom_ai_capability_grants",
 			{"grant_type": "semantic_capability", "value": "knowledge_graph.query"},
+		)
+		role.save(ignore_permissions=True)
+		changed = True
+	# Quiescence gate: operators set this site-config marker only after the
+	# matching crm-agents registry/client has been deployed. This prevents a
+	# Frappe-only rollout from advertising a capability the consumer cannot use.
+	consumer_ready = (
+		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(SCHOOL360_ROLLOUT_CONFIG_KEY)
+		== SCHOOL360_CAPABILITY_ID
+	)
+	for role_name in SCHOOL360_READ_ROLE_NAMES if consumer_ready else ():
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == SCHOOL360_CAPABILITY_ID
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": SCHOOL360_CAPABILITY_ID},
+		)
+		role.save(ignore_permissions=True)
+		changed = True
+	# Recommendation context is a separate, later rollout.  It is never implied
+	# by the School 360 facts grant; operators must deploy and opt in explicitly.
+	recommendation_ready = (
+		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(SCHOOL360_RECOMMENDATION_ROLLOUT_CONFIG_KEY)
+		== SCHOOL360_RECOMMENDATION_CAPABILITY_ID
+	)
+	for role_name in ("Admissions Director",) if recommendation_ready else ():
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == SCHOOL360_RECOMMENDATION_CAPABILITY_ID
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": SCHOOL360_RECOMMENDATION_CAPABILITY_ID},
 		)
 		role.save(ignore_permissions=True)
 		changed = True
