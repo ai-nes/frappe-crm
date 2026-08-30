@@ -268,7 +268,14 @@ def _set_supported(doc, values: dict[str, Any]):
 
 
 def _supported_values(doctype: str, values: dict[str, Any]) -> dict[str, Any]:
-	return {key: value for key, value in values.items() if value is not None and _has_field(doctype, key)}
+	# Child-table linkage fields are mandatory even when older metadata snapshots
+	# do not expose them through ``get_meta``.
+	link_fields = {"parent", "parenttype", "parentfield"}
+	return {
+		key: value
+		for key, value in values.items()
+		if value is not None and (key in link_fields or _has_field(doctype, key))
+	}
 
 
 def _get_doc(doctype: str, name: str):

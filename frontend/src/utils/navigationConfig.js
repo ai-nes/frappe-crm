@@ -28,44 +28,9 @@ const rawRoleNavigationTrees = {
     },
     {
       id: 'sales_my_records',
-      label: 'Hồ sơ của tôi',
+      label: 'Lead',
       icon: 'clipboard-list',
-      to: 'CRM Contacts',
-      children: [
-        {
-          id: 'sales_records_new',
-          label: 'Mới nhận',
-          to: { name: 'CRM Contacts', query: { stage: 'intake' } },
-        },
-        {
-          id: 'sales_records_counseling',
-          label: 'Đang tư vấn',
-          to: { name: 'CRM Contacts', query: { stage: 'counseling' } },
-        },
-        {
-          id: 'sales_records_awaiting_docs',
-          label: 'Chờ nộp hồ sơ',
-          to: { name: 'CRM Contacts', query: { stage: 'awaiting_docs' } },
-        },
-        {
-          id: 'sales_records_cold',
-          label: 'Nguội (>7 ngày)',
-          to: { name: 'CRM Contacts', query: { stage: 'cold' } },
-        },
-        {
-          id: 'sales_records_won',
-          label: 'Đã chốt',
-          to: { name: 'CRM Contacts', query: { stage: 'won' } },
-        },
-      ],
-    },
-    {
-      id: 'sales_unassigned_pool',
-      label: 'Hồ sơ chưa nhận',
-      icon: 'inbox',
-      to: { name: 'CRM Contacts', query: { pool: 'unassigned' } },
-      badgeKey: 'poolCount',
-      badgeVariant: 'subtle',
+      to: 'CRM Students',
     },
     {
       id: 'sales_my_tasks',

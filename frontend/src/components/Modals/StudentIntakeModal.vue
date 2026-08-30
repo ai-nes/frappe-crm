@@ -1,16 +1,16 @@
 <template>
-  <Dialog v-model="show" :options="{ title: __('Create Student'), size: 'xl' }">
+  <Dialog v-model="show" :options="{ title: __('Tạo Lead'), size: 'xl' }">
     <template #body-content>
       <p class="mb-4 text-sm text-ink-gray-6">
-        {{ __('Fill in the student information. Provide at least one valid phone number or email address.') }}
+        {{ __('Nhập thông tin Lead. Cần ít nhất một số điện thoại hoặc địa chỉ email hợp lệ.') }}
       </p>
       <div
         class="mb-4 rounded border border-outline-gray-2 bg-surface-gray-1 p-3 text-sm text-ink-gray-6"
         role="status"
       >
-        {{ __(assignmentExpectation.message) }}
+        {{ assignmentMessage }}
         <p v-if="isServerManagedCampus" class="mt-1">
-          {{ __('Campus is set automatically from your staff profile.') }}
+          {{ __('Campus được tự động lấy theo hồ sơ nhân viên của bạn.') }}
         </p>
       </div>
       <FieldLayout
@@ -32,13 +32,13 @@
     <template #actions>
       <div class="flex justify-end gap-2">
         <Button
-          :label="__('Cancel')"
+          :label="__('Hủy')"
           :disabled="loading"
           @click="show = false"
         />
         <Button
           variant="solid"
-          :label="__('Create')"
+          :label="__('Tạo')"
           :loading="loading"
           :disabled="!isValid"
           @click="submit"
@@ -107,38 +107,45 @@ const tabs = computed(() => [
               {
                 fieldname: 'student_name',
                 fieldtype: 'Data',
-                label: 'Student Name',
+                label: 'Họ và tên',
                 reqd: 1,
               },
               {
                 fieldname: 'phone',
                 fieldtype: 'Data',
-                label: 'Phone',
+                label: 'Điện thoại',
                 options: 'Phone',
+                description: phoneError.value,
+                description_is_error: Boolean(phoneError.value),
               },
               {
                 fieldname: 'email',
                 fieldtype: 'Data',
                 label: 'Email',
                 options: 'Email',
+                description: emailError.value,
+                description_is_error: Boolean(emailError.value),
               },
               {
                 fieldname: 'province',
                 fieldtype: 'Link',
-                label: 'Province',
+                label: 'Tỉnh/Thành phố',
                 options: 'CRM Province',
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
                 fieldname: 'ward',
                 fieldtype: 'Link',
-                label: 'Ward',
+                label: 'Phường/Xã',
                 options: 'CRM Ward',
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
-                fieldname: 'aspiration',
+                fieldname: 'high_school',
                 fieldtype: 'Link',
-                label: 'Aspiration',
-                options: 'CRM Term',
+                label: 'Trường THPT',
+                options: 'CRM High School',
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
             ],
           },
@@ -148,14 +155,17 @@ const tabs = computed(() => [
               {
                 fieldname: 'enrollment_status',
                 fieldtype: 'Link',
-                label: 'Enrollment Status',
+                label: 'Trạng thái tuyển sinh',
                 options: 'CRM Term',
+                link_filters: JSON.stringify({ category: 'enrollment_status', is_active: 1 }),
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
                 fieldname: 'source',
                 fieldtype: 'Link',
-                label: 'Source',
+                label: 'Nguồn',
                 options: 'CRM Lead Source',
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
                 fieldname: 'branch',
@@ -163,26 +173,35 @@ const tabs = computed(() => [
                 label: 'Campus',
                 options: 'CRM Campus',
                 reqd: 1,
-                hidden: isServerManagedCampus.value,
-              },
-              {
-                fieldname: 'high_school',
-                fieldtype: 'Link',
-                label: 'High School',
-                options: 'CRM High School',
+                read_only: isServerManagedCampus.value,
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
                 fieldname: 'major',
                 fieldtype: 'Link',
-                label: 'Major',
+                label: 'Ngành quan tâm',
                 options: 'CRM Major',
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
               {
                 fieldname: 'admission_year',
                 fieldtype: 'Link',
-                label: 'Admission Year',
+                label: 'Năm tuyển sinh',
                 options: 'CRM Admission Year',
                 reqd: 1,
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
+              },
+              {
+                fieldname: 'aspiration',
+                fieldtype: 'Link',
+                label: 'Nguyện vọng',
+                options: 'CRM Term',
+                link_filters: JSON.stringify({
+                  category: 'aspiration',
+                  is_active: 1,
+                  term_name: ['in', ['NV1', 'NV2', 'NV3']],
+                }),
+                no_create: isServerManagedIntakeProfile(currentProfile.value),
               },
             ],
           },
@@ -190,7 +209,7 @@ const tabs = computed(() => [
       },
       {
         name: 'phase3-intake-controls',
-        label: __('Identity'),
+        label: __('Giấy tờ tùy thân'),
         collapsible: true,
         opened: false,
         columns: [
@@ -200,7 +219,7 @@ const tabs = computed(() => [
               {
                 fieldname: 'id_number',
                 fieldtype: 'Data',
-                label: 'National ID (optional)',
+                label: 'Số định danh (không bắt buộc)',
               },
             ],
           },
@@ -222,22 +241,48 @@ const assignmentExpectation = computed(() =>
   intakeAssignmentExpectation(currentProfile.value),
 )
 
+const assignmentMessage = computed(() => {
+  if (assignmentExpectation.value.kind === 'self')
+    return __('Lead sẽ tự động được giao cho bạn.')
+  if (assignmentExpectation.value.kind === 'team')
+    return __('Lead sẽ tự động được đưa vào nhóm của bạn.')
+  return __('Việc phân công sẽ được xác định tự động theo quyền truy cập của bạn.')
+})
+
+const phoneError = computed(() => {
+  const value = form.phone.trim()
+  if (!value) return ''
+  return /^[+]?\d[\d\s().-]{7,19}$/.test(value)
+    ? ''
+    : __('Số điện thoại không hợp lệ.')
+})
+
+const emailError = computed(() => {
+  const value = form.email.trim()
+  if (!value) return ''
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
+    ? ''
+    : __('Địa chỉ email không hợp lệ.')
+})
+
 const isValid = computed(() =>
   Boolean(
     form.student_name.trim() &&
     form.admission_year &&
     (isServerManagedCampus.value || form.branch) &&
-    (form.phone.trim() || form.email.trim()),
+    (form.phone.trim() || form.email.trim()) &&
+    !phoneError.value &&
+    !emailError.value,
   ),
 )
 
 const resultMessage = computed(() => {
   const messages = {
-    attached: __('Intake attached to the existing admission case.'),
-    created: __('Student intake created.'),
-    review_required: __('A review is required before this intake can continue.'),
+    attached: __('Lead đã được gắn vào hồ sơ tuyển sinh hiện có.'),
+    created: __('Đã tạo Lead.'),
+    review_required: __('Cần duyệt trước khi tiếp tục Lead này.'),
   }
-  return messages[intakeResultKind(result.value)] || __('Intake completed.')
+  return messages[intakeResultKind(result.value)] || __('Đã hoàn tất.')
 })
 
 async function submit() {
@@ -263,6 +308,17 @@ async function submit() {
     toast.success(resultMessage.value)
     idempotencyKey.value = createCommandId()
   } catch (err) {
+    console.error('[StudentIntake] submit/validation error', {
+      error: err,
+      form: {
+        student_name: form.student_name,
+        has_phone: Boolean(form.phone.trim()),
+        has_email: Boolean(form.email.trim()),
+        enrollment_status: form.enrollment_status,
+        admission_year: form.admission_year,
+        branch: form.branch,
+      },
+    })
     error.value = safeCommandError(err, __('Unable to submit intake.'))
   } finally {
     loading.value = false

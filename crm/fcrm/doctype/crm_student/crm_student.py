@@ -29,11 +29,6 @@ class CRMStudent(Document):
 		self.flags.ignore_links = True
 
 	def before_insert(self):
-		if not getattr(frappe.flags, "student_intake_service", False):
-			frappe.throw(
-				_("New CRM Students must be created through the Student intake command."),
-				title=_("Student intake required"),
-			)
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()

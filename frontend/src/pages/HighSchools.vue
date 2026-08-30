@@ -19,40 +19,43 @@
       </template>
     </template>
   </LayoutHeader>
-  <ViewControls
-    ref="viewControls"
-    v-model="highSchools"
-    v-model:loadMore="loadMore"
-    v-model:resizeColumn="triggerResize"
-    v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM High School"
-  />
-  <HighSchoolsListView
-    v-if="highSchools.data && rows.length"
-    ref="listView"
-    v-model="highSchools.data.page_length_count"
-    v-model:list="highSchools"
-    :rows="rows"
-    :columns="columns"
-    :options="{
-      showTooltip: false,
-      resizeColumn: true,
-      rowCount: highSchools.data.row_count,
-      totalCount: highSchools.data.total_count,
-    }"
-    @loadMore="() => loadMore++"
-    @columnWidthUpdated="() => triggerResize++"
-    @updatePageCount="(count) => (updatedPageCount = count)"
-    @applyFilter="(data) => viewControls.applyFilter(data)"
-    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
-    @likeDoc="(data) => viewControls.likeDoc(data)"
-    @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
-  />
-  <EmptyState
-    v-else-if="highSchools.data && !rows.length"
-    name="High Schools"
-    :icon="SchoolIcon"
-  />
+  <main class="high-schools-content">
+    <ViewControls
+      ref="viewControls"
+      v-model="highSchools"
+      v-model:loadMore="loadMore"
+      v-model:resizeColumn="triggerResize"
+      v-model:updatedPageCount="updatedPageCount"
+      doctype="CRM High School"
+    />
+    <HighSchoolsListView
+      v-if="highSchools.data && rows.length"
+      ref="listView"
+      class="high-schools-table"
+      v-model="highSchools.data.page_length_count"
+      v-model:list="highSchools"
+      :rows="rows"
+      :columns="columns"
+      :options="{
+        showTooltip: false,
+        resizeColumn: true,
+        rowCount: highSchools.data.row_count,
+        totalCount: highSchools.data.total_count,
+      }"
+      @loadMore="() => loadMore++"
+      @columnWidthUpdated="() => triggerResize++"
+      @updatePageCount="(count) => (updatedPageCount = count)"
+      @applyFilter="(data) => viewControls.applyFilter(data)"
+      @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+      @likeDoc="(data) => viewControls.likeDoc(data)"
+      @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
+    />
+    <EmptyState
+      v-else-if="highSchools.data && !rows.length"
+      name="High Schools"
+      :icon="SchoolIcon"
+    />
+  </main>
 </template>
 
 <script setup>
@@ -135,15 +138,20 @@ const rows = computed(() => {
 })
 
 const columns = computed(() => {
-  let _columns = highSchools.value?.data?.columns || []
-  if (_columns.length) {
-    _columns = _columns.map((col, index) => {
-      if (index === _columns.length - 1) {
-        return { ...col, align: 'right' }
-      }
-      return col
-    })
-  }
-  return _columns
+  return highSchools.value?.data?.columns || []
 })
 </script>
+
+<style scoped>
+.high-schools-content {
+  min-height: calc(100vh - 7rem);
+  padding: 0 1rem 1rem;
+  background: #fafafa;
+}
+
+@media (min-width: 640px) {
+  .high-schools-content {
+    padding-inline: 1.25rem;
+  }
+}
+</style>

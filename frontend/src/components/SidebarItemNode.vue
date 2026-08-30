@@ -8,16 +8,23 @@
         depth > 0 ? 'ml-4 pl-1 text-xs' : '',
         isCollapsed ? 'justify-center mx-1 px-1' : 'mx-2 px-2 py-[7px]'
       ]"
+      :title="isCollapsed ? __(item.label) : undefined"
       @click="handleClick"
     >
       <div
         class="flex w-full items-center justify-between overflow-hidden"
         :class="isCollapsed ? 'justify-center' : ''"
       >
-        <div class="flex items-center min-w-0 truncate">
+        <div
+          class="flex items-center min-w-0 truncate"
+          :class="isCollapsed ? 'w-full justify-center' : ''"
+        >
           <!-- Icon -->
           <Tooltip :text="__(item.label)" placement="right" :disabled="!isCollapsed">
-            <div class="flex items-center justify-center shrink-0">
+            <div
+              class="flex items-center justify-center shrink-0"
+              :class="isCollapsed ? 'absolute left-1/2 -translate-x-1/2' : ''"
+            >
               <component
                 :is="resolvedIcon"
                 v-if="resolvedIcon"
@@ -45,7 +52,11 @@
             <span
               class="truncate transition-all duration-300 ease-in-out"
               :class="[
-                depth > 0 ? 'ml-2 text-xs text-ink-gray-7 group-hover:text-ink-gray-9' : 'ml-2.5 text-sm',
+                isCollapsed
+                  ? 'ml-0 w-0 overflow-hidden opacity-0'
+                  : depth > 0
+                    ? 'ml-2 text-xs text-ink-gray-7 group-hover:text-ink-gray-9'
+                    : 'ml-2.5 text-sm',
                 isActive ? 'font-medium text-ink-gray-9' : ''
               ]"
             >
