@@ -24,6 +24,13 @@ _IMMUTABLE_FIELDS = (
 
 
 class CRMContactConsentEvent(Document):
+	def __init__(self, *args, **kwargs):
+		# Keep direct unit/service construction ergonomic while preserving the
+		# normal Frappe document contract for persisted records.
+		if args and isinstance(args[0], dict) and not args[0].get("doctype"):
+			args = ({"doctype": "CRM Contact Consent Event", **args[0]}, *args[1:])
+		super().__init__(*args, **kwargs)
+
 	def before_insert(self):
 		if not self.occurred_at:
 			self.occurred_at = self.granted_at or frappe.utils.now_datetime()
@@ -85,3 +92,31 @@ def sync_contact_consent_flag(doc: "CRMContactConsentEvent", method: str | None 
 		return
 
 	frappe.db.set_value("CRM Contact", doc.contact, flag_field, target_value, update_modified=False)
+
+
+def sync_student_privacy_projection(doc: "CRMContactConsentEvent", method: str | None = None):
+	"""Project the latest Student consent state without mutating the append-only event."""
+	if not doc.student or not frappe.db.exists("CRM Student", doc.student):
+		return
+	latest = frappe.db.get_value(
+		"CRM Contact Consent Event",
+		{"student": doc.student},
+		"name",
+		order_by="occurred_at desc, creation desc",
+	)
+	if latest and latest != doc.name:
+		return
+	status = {
+		"Granted": "granted",
+		"Opted Out": "opted_out",
+		"Re-subscribed": "granted",
+		"Bounced": "expired",
+		"Suppressed": "expired",
+	}.get(doc.event_type, "unknown")
+	values = {
+		"privacy_status": status,
+	}
+	frappe.db.set_value("CRM Student", doc.student, values, update_modified=False)
+	from crm.services.student_context import mark_student_context_changed
+
+	mark_student_context_changed(doc.student, "privacy_consent_changed")

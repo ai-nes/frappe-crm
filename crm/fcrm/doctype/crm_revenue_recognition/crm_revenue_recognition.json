@@ -1,0 +1,32 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "ledger_entry_key", "payment", "application", "student", "gross_amount", "award_amount", "recognized_amount", "currency", "status", "recognized_at", "recognition_period", "timezone", "source_system", "source_run", "recorded_at", "revision", "supersedes", "verification_status", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"default": "REV-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "REV-.YYYY.-"},
+  {"fieldname": "ledger_entry_key", "fieldtype": "Data", "hidden": 1, "label": "Ledger Entry Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "payment", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Payment", "options": "CRM Student Payment", "reqd": 1},
+  {"fieldname": "application", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Application", "options": "CRM Admission Application", "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "gross_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Gross Amount", "reqd": 1},
+  {"fieldname": "award_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Award/Discount Amount"},
+  {"fieldname": "recognized_amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Recognized Amount", "reqd": 1},
+  {"default": "VND", "fieldname": "currency", "fieldtype": "Data", "in_list_view": 1, "label": "Currency", "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nRecognized\nReversed", "reqd": 1},
+  {"fieldname": "recognized_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Recognized At"},
+  {"fieldname": "recognition_period", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Recognition Period", "reqd": 1},
+  {"fieldname": "timezone", "fieldtype": "Data", "label": "Timezone", "default": "Asia/Ho_Chi_Minh", "reqd": 1},
+  {"fieldname": "source_system", "fieldtype": "Data", "label": "Source System", "reqd": 1},
+  {"fieldname": "source_run", "fieldtype": "Data", "label": "Source Run", "reqd": 1},
+  {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "1", "read_only": 1, "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Revenue Recognition", "read_only": 1},
+  {"fieldname": "verification_status", "fieldtype": "Select", "label": "Verification Status", "options": "Pending\nVerified\nRejected", "default": "Pending", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [{"fields": ["payment", "recognition_period", "revision"], "name": "crm_revenue_recognition_payment_period_idx", "unique": 0}, {"fields": ["application", "status", "recognition_period"], "name": "crm_revenue_recognition_reporting_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Revenue Recognition", "naming_rule": "Naming Series", "naming_series_options": "REV-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "row_format": "Dynamic", "search_fields": "payment,application,student,recognition_period,status", "sort_field": "recognition_period", "sort_order": "DESC"
+}

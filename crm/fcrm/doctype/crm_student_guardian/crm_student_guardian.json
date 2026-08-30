@@ -1,0 +1,22 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "contact", "relationship", "decision_role", "involvement", "preferred_channel", "best_contact_time", "consent_summary", "consent_evidence", "is_active", "source_reference"],
+ "fields": [
+  {"default": "GUARD-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "GUARD-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "contact", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Contact", "options": "CRM Contact", "reqd": 1},
+  {"fieldname": "relationship", "fieldtype": "Select", "in_list_view": 1, "label": "Relationship", "options": "Parent\nGuardian\nRelative\nSponsor\nOther", "reqd": 1},
+  {"fieldname": "decision_role", "fieldtype": "Select", "in_list_view": 1, "label": "Decision Role", "options": "Decision Maker\nInfluencer\nPayer\nInformation Only"},
+  {"fieldname": "involvement", "fieldtype": "Select", "in_list_view": 1, "label": "Involvement", "options": "Primary\nShared\nLow"},
+  {"fieldname": "preferred_channel", "fieldtype": "Select", "in_list_view": 1, "label": "Preferred Channel", "options": "Phone\nEmail\nZalo\nSMS\nOther"},
+  {"fieldname": "best_contact_time", "fieldtype": "Data", "label": "Best Contact Time"},
+  {"fieldname": "consent_summary", "fieldtype": "Small Text", "label": "Consent Summary", "read_only": 1},
+  {"fieldname": "consent_evidence", "fieldtype": "JSON", "label": "Consent Evidence", "read_only": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["student", "contact"], "name": "crm_student_guardian_student_contact_uniq", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Guardian", "naming_rule": "Naming Series", "naming_series_options": "GUARD-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Lead Sales"}, {"read": 1, "role": "Sale"}],
+ "row_format": "Dynamic", "search_fields": "student,contact,relationship", "sort_field": "modified", "sort_order": "DESC"
+}

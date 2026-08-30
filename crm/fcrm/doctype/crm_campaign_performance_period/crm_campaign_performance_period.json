@@ -1,0 +1,24 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "campaign", "admission_year", "period_start", "period_end", "spend", "impressions", "clicks", "leads", "applications", "enrolled", "recognized_revenue", "source_reference", "idempotency_fingerprint"],
+ "fields": [
+  {"default": "CPP-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "CPP-.YYYY.-"},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign", "reqd": 1},
+  {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year"},
+  {"fieldname": "period_start", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period Start", "reqd": 1},
+  {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period End", "reqd": 1},
+  {"fieldname": "spend", "fieldtype": "Currency", "in_list_view": 1, "label": "Spend"},
+  {"fieldname": "impressions", "fieldtype": "Int", "in_list_view": 1, "label": "Impressions"},
+  {"fieldname": "clicks", "fieldtype": "Int", "in_list_view": 1, "label": "Clicks"},
+  {"fieldname": "leads", "fieldtype": "Int", "in_list_view": 1, "label": "Leads"},
+  {"fieldname": "applications", "fieldtype": "Int", "in_list_view": 1, "label": "Applications"},
+  {"fieldname": "enrolled", "fieldtype": "Int", "in_list_view": 1, "label": "Enrolled"},
+  {"fieldname": "recognized_revenue", "fieldtype": "Currency", "in_list_view": 1, "label": "Recognized Revenue"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1}
+ ],
+ "indexes": [{"fields": ["campaign", "period_start", "period_end"], "name": "crm_campaign_performance_period_uniq", "unique": 1}, {"fields": ["admission_year", "period_start", "period_end"], "name": "crm_campaign_performance_period_time_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Performance Period", "naming_rule": "Naming Series", "naming_series_options": "CPP-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "campaign,admission_year,period_start,period_end", "sort_field": "period_start", "sort_order": "DESC"
+}

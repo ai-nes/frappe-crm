@@ -1,0 +1,17 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "field:scenario_key", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["scenario_key", "run", "planning_scope", "label", "scenario_type", "assumptions", "status"],
+ "fields": [
+  {"fieldname": "scenario_key", "fieldtype": "Data", "in_list_view": 1, "label": "Scenario Key", "reqd": 1, "unique": 1},
+  {"fieldname": "run", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Forecast Run", "options": "CRM Forecast Run", "reqd": 1},
+  {"fieldname": "planning_scope", "fieldtype": "Link", "in_list_view": 1, "label": "Planning Scope", "options": "CRM Planning Scope", "read_only": 1, "reqd": 1},
+  {"fieldname": "label", "fieldtype": "Data", "in_list_view": 1, "label": "Label", "reqd": 1},
+  {"default": "Baseline", "fieldname": "scenario_type", "fieldtype": "Select", "in_list_view": 1, "label": "Scenario Type", "options": "Baseline\nOptimistic\nConservative\nSimulation", "reqd": 1},
+  {"fieldname": "assumptions", "fieldtype": "JSON", "label": "Assumptions"},
+  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Active\nRetired", "reqd": 1}
+ ],
+ "indexes": [{"fields": ["run", "scenario_type"], "name": "crm_forecast_scenario_run_type_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Scenario", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "row_format": "Dynamic", "search_fields": "scenario_key,run,label", "sort_field": "modified", "sort_order": "DESC"
+}

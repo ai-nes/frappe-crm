@@ -7,9 +7,19 @@ import frappe
 DOCTYPE = "CRM Student SLA Delivery Attempt"
 
 
+def _ensure_child_table_columns():
+	table = f"`tab{DOCTYPE}`"
+	for column in ("parent", "parenttype", "parentfield"):
+		if not frappe.db.has_column(DOCTYPE, column):
+			frappe.db.sql_ddl(f"ALTER TABLE {table} ADD COLUMN `{column}` varchar(140) DEFAULT NULL")
+	if not frappe.db.sql(f"SHOW INDEX FROM {table} WHERE Key_name = 'parent'"):
+		frappe.db.sql_ddl(f"ALTER TABLE {table} ADD INDEX `parent` (`parent`)")
+
+
 def execute():
 	if not frappe.db.table_exists(DOCTYPE):
 		return {"migrated": 0}
+	_ensure_child_table_columns()
 	before_total = frappe.db.count(DOCTYPE)
 	if not frappe.db.has_column(DOCTYPE, "delivery"):
 		remaining = frappe.db.count(DOCTYPE, {"parentfield": "attempts"})

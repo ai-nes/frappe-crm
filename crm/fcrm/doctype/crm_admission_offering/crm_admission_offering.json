@@ -1,0 +1,48 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:offering_key",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["offering_key", "admission_year", "campus", "major", "admission_method", "quota", "effective_from", "effective_until", "status", "policy_version", "approved_by", "approved_at", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"fieldname": "offering_key", "fieldtype": "Data", "hidden": 1, "label": "Offering Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year", "reqd": 1},
+  {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus", "reqd": 1},
+  {"fieldname": "major", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Major", "options": "CRM Major", "reqd": 1},
+  {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Method", "options": "CRM Term", "reqd": 1},
+  {"fieldname": "quota", "fieldtype": "Int", "in_list_view": 1, "label": "Quota", "default": "0", "reqd": 1},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Effective Until", "reqd": 1},
+  {"fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nPending Approval\nActive\nClosed\nRetired", "default": "Draft", "reqd": 1},
+  {"fieldname": "policy_version", "fieldtype": "Data", "in_list_view": 1, "label": "Policy Version", "reqd": 1},
+  {"fieldname": "approved_by", "fieldtype": "Link", "label": "Approved By", "options": "User", "read_only": 1},
+  {"fieldname": "approved_at", "fieldtype": "Datetime", "label": "Approved At", "read_only": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [
+  {"fields": ["admission_year", "campus", "major", "admission_method", "policy_version", "effective_from"], "name": "crm_offering_catalog_uniq", "unique": 1},
+  {"fields": ["admission_year", "status", "effective_from", "effective_until"], "name": "crm_offering_effective_idx", "unique": 0}
+ ],
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Admission Offering",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Marketing"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "offering_key,admission_year,campus,major,admission_method,status",
+ "sort_field": "effective_from",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

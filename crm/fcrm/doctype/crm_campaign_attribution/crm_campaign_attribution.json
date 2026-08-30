@@ -1,0 +1,23 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "application", "campaign", "marketing_engagement", "model_version", "weight", "is_first_touch", "attributed_at", "source_kind", "confidence", "source_reference", "idempotency_fingerprint"],
+ "fields": [
+  {"default": "ATT-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "ATT-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "application", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Application", "options": "CRM Admission Application"},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign", "reqd": 1},
+  {"fieldname": "marketing_engagement", "fieldtype": "Link", "in_list_view": 1, "label": "Marketing Engagement", "options": "CRM Marketing Engagement"},
+  {"fieldname": "model_version", "fieldtype": "Link", "in_list_view": 1, "label": "Model Version", "options": "CRM Model Version"},
+  {"fieldname": "weight", "fieldtype": "Float", "in_list_view": 1, "label": "Weight", "reqd": 1},
+  {"default": "0", "fieldname": "is_first_touch", "fieldtype": "Check", "in_list_view": 1, "label": "First Touch"},
+  {"fieldname": "attributed_at", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Attributed At", "reqd": 1},
+  {"default": "legacy_derived", "fieldname": "source_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Source Kind", "options": "observed\nlegacy_derived\nmodeled", "reqd": 1},
+  {"fieldname": "confidence", "fieldtype": "Percent", "in_list_view": 1, "label": "Confidence"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1}
+ ],
+ "indexes": [{"fields": ["student", "campaign", "attributed_at"], "name": "crm_campaign_attribution_student_campaign_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Attribution", "naming_rule": "Naming Series", "naming_series_options": "ATT-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "row_format": "Dynamic", "search_fields": "student,application,campaign,source_kind", "sort_field": "attributed_at", "sort_order": "DESC"
+}

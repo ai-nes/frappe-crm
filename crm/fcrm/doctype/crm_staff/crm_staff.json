@@ -16,6 +16,7 @@
   "column_break_1",
   "department",
   "campus",
+  "territory",
   "target",
   "last_routed_at",
   "section_team_memberships",
@@ -79,6 +80,14 @@
    "label": "Campus (Deprecated)",
    "options": "CRM Campus",
    "reqd": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Territory",
+   "options": "CRM Territory"
   },
   {
    "fieldname": "target",

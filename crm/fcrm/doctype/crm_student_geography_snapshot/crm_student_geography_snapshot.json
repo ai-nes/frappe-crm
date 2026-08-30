@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:snapshot_id",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["snapshot_id", "student", "captured_at", "province", "ward", "high_school", "source", "change_reason"],
+ "fields": [
+  {"fieldname": "snapshot_id", "fieldtype": "Data", "hidden": 1, "label": "Snapshot ID", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "captured_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Captured At", "read_only": 1, "reqd": 1},
+  {"fieldname": "province", "fieldtype": "Link", "options": "CRM Province", "label": "Province", "read_only": 1},
+  {"fieldname": "ward", "fieldtype": "Link", "options": "CRM Ward", "label": "Ward", "read_only": 1},
+  {"fieldname": "high_school", "fieldtype": "Link", "options": "CRM High School", "label": "High School", "read_only": 1},
+  {"fieldname": "source", "fieldtype": "Data", "label": "Source", "read_only": 1, "reqd": 1},
+  {"fieldname": "change_reason", "fieldtype": "Small Text", "label": "Change Reason", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Student Geography Snapshot",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Sale"},
+  {"create": 1, "read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "captured_at",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
