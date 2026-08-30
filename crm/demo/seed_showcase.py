@@ -31,7 +31,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_demo, seed_staff
+from crm.demo import seed_demo, seed_role_accounts, seed_staff
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "crm-demo-showcase"
@@ -3142,6 +3142,7 @@ def _seed_all() -> dict:
 	marketing = _seed_marketing(context, staff_context)
 	governance = _seed_governance(context)
 	edge = _seed_edge_states(context, staff_context)
+	role_accounts = seed_role_accounts.execute()
 
 	frappe.db.commit()
 	return {
@@ -3168,6 +3169,7 @@ def _seed_all() -> dict:
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,
+		"role_accounts": role_accounts,
 		"known_gaps": list(KNOWN_GAPS),
 	}
 

@@ -109,6 +109,11 @@ tasks:
     cmds:
       - python -X utf8 -m crm.demo.extract_school_domain_json
 
+  seed-roles:
+    desc: 1 tài khoản test cho mỗi canonical role (mật khẩu 12345@) — đã nằm trong `task seed`
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
+
   seed-reset:
     desc: Xoá business rows của bộ demo CRM curated (giữ lại audit/receipt/ledger)
     cmds:
