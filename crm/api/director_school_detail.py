@@ -46,6 +46,8 @@ def _load_supporting_sources(school, admission_year):
 		"ward": None,
 		"snapshot": None,
 		"intelligence": {},
+		"students": [],
+		"contacts": [],
 		"stakeholders": [],
 		"people": {},
 		"roles": {},
@@ -103,6 +105,34 @@ def _load_supporting_sources(school, admission_year):
 		"intelligence",
 		lambda: {"potential": calculate_school_potential(school.get("name"), admission_year)},
 		{},
+	)
+	load(
+		"students",
+		lambda: [
+			dict(row)
+			for row in frappe.get_list(
+				"CRM Student",
+				filters={"high_school": school.get("name"), "admission_year": admission_year},
+				fields=["name", "current_grade", "study_stage", "lifecycle_stage"],
+				order_by="name asc",
+				limit_page_length=0,
+			)
+		],
+		[],
+	)
+	load(
+		"contacts",
+		lambda: [
+			dict(row)
+			for row in frappe.get_list(
+				"CRM Contact",
+				filters={"high_school": school.get("name"), "admission_year": admission_year},
+				fields=["name", "lifecycle_stage", "lead_status"],
+				order_by="name asc",
+				limit_page_length=0,
+			)
+		],
+		[],
 	)
 
 	def stakeholders():
@@ -225,7 +255,34 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	province = sources.get("province") or {}
 	ward = sources.get("ward") or {}
 	snapshot = sources.get("snapshot") or {}
+	students = sources.get("students") or []
+	lead_contacts = sources.get("contacts") or []
 	potential = (sources.get("intelligence") or {}).get("potential") or {}
+	grade12_students = sum(
+		1
+		for row in students
+		if str(row.get("current_grade") or "") == "12"
+		or str(row.get("study_stage") or "").startswith("grade_12")
+	)
+	available_students = sum(
+		1
+		for row in students
+		if (
+			str(row.get("current_grade") or "") == "12"
+			or str(row.get("study_stage") or "").startswith("grade_12")
+		)
+		and row.get("lifecycle_stage") not in {"Enrolled", "Lost"}
+	)
+	student_applications = sum(1 for row in students if row.get("lifecycle_stage") == "Applicant")
+	student_enrollment = sum(1 for row in students if row.get("lifecycle_stage") == "Enrolled")
+	grade12_from_snapshot = None
+	try:
+		enrollment_rate = float(snapshot.get("enrollment_rate"))
+		enrolled_count = int(snapshot.get("enrolled_count") or 0)
+		if enrollment_rate > 0:
+			grade12_from_snapshot = round(enrolled_count / (enrollment_rate / 100))
+	except (TypeError, ValueError, ZeroDivisionError):
+		pass
 	external_id = school.get("canonical_id")
 	if province.get("province_code") and ward.get("ward_code") and school.get("school_code"):
 		external_id = f"{province['province_code']}-{ward['ward_code']}-{school['school_code']}"
@@ -298,11 +355,11 @@ def _build_detail(school, sources, failed, capped, admission_year):
 		},
 		"potentialScore": None,
 		"potentialState": potential.get("value") if potential.get("state") == "current" else None,
-		"grade12Students": None,
-		"availableStudents": None,
-		"prospects": snapshot.get("contact_count"),
-		"applications": snapshot.get("applicant_count"),
-		"enrollment": snapshot.get("enrolled_count"),
+		"grade12Students": grade12_from_snapshot if snapshot else (grade12_students if students else None),
+		"availableStudents": snapshot.get("student_count") if snapshot and snapshot.get("student_count") is not None else (available_students if students else None),
+		"prospects": snapshot.get("contact_count") if snapshot else len(lead_contacts),
+		"applications": snapshot.get("applicant_count") if snapshot else student_applications,
+		"enrollment": snapshot.get("enrolled_count") if snapshot else student_enrollment,
 		"changes": {"prospects": None, "applications": None, "enrollment": None},
 		"performance": {"6m": [], "year": []},
 		"geography": None,
@@ -346,6 +403,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 		"dataSources": {
 			"directory": "CRM High School",
 			"snapshot": "CRM High School Annual Snapshot" if snapshot else None,
+			"students": "CRM Student" if students else None,
+			"contacts": "CRM Contact" if lead_contacts else None,
 			"relationship": "CRM School Stakeholder" if contacts else None,
 			"activities": "CRM School Activity" if activities else None,
 		},
@@ -353,8 +412,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			"sections": sections,
 			"fields": {
 				"potentialScore": "unavailable",
-				"grade12Students": "unavailable",
-				"availableStudents": "unavailable",
+				"grade12Students": "available" if grade12_from_snapshot is not None or students else "unavailable",
+				"availableStudents": "available" if snapshot.get("student_count") is not None or students else "unavailable",
 				"demographics": "unavailable",
 				"subjectMix": "unavailable",
 				"postGraduationChoices": "unavailable",

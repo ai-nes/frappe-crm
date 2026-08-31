@@ -105,7 +105,7 @@ def _load_sources(admission_year: str):
 			fields=[
 				"name", "high_school", "admission_year", "snapshot_date", "recorded_at",
 				"revision", "modified", "applicant_count", "enrolled_count", "student_count",
-				"conversion_rate", "verification_status",
+				"conversion_rate", "enrollment_rate", "forecast_count", "verification_status",
 			],
 			order_by=_SNAPSHOT_ORDER,
 		),
@@ -178,6 +178,16 @@ def _latest_as_of(rows) -> str | None:
 	return max(values) if values else None
 
 
+def _grade12_from_snapshot(snapshot: dict[str, Any]) -> int | None:
+	"""Recover grade-12 population from the annual enrollment-rate source."""
+	try:
+		rate = float(snapshot.get("enrollment_rate"))
+		enrolled = int(snapshot.get("enrolled_count") or 0)
+		return round(enrolled / (rate / 100)) if rate > 0 else None
+	except (TypeError, ValueError, ZeroDivisionError):
+		return None
+
+
 def _build_overview(sources, failed, *, admission_year, region, metric, include_schools, school_limit):
 	province_by_name = {row.get("name"): row for row in sources["provinces"]}
 	ward_by_name = {row.get("name"): row for row in sources["wards"]}
@@ -206,9 +216,15 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 		schools = schools_by_province.get(province_name, [])
 		applicants = sum(int((latest.get(row.get("name")) or {}).get("applicant_count") or 0) for row in schools)
 		enrolled = sum(int((latest.get(row.get("name")) or {}).get("enrolled_count") or 0) for row in schools)
+		grade12_values = [_grade12_from_snapshot(latest.get(school.get("name")) or {}) for school in schools]
+		grade12_values = [value for value in grade12_values if value is not None]
+		grade12_population = sum(grade12_values) if grade12_values else None
+		province_leads = len(student_ids_by_province.get(province_name, set())) if students_available else None
 		highlights = []
 		for school in schools:
 			snapshot = latest.get(school.get("name")) or {}
+			school_grade12 = _grade12_from_snapshot(snapshot)
+			school_leads = len(student_ids_by_school.get(school.get("name"), set())) if students_available else None
 			ward = ward_by_name.get(school.get("ward"), {})
 			external_id = None
 			school_code = str(school.get("school_code") or "").strip()
@@ -221,11 +237,11 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 				"district": ward.get("ward_name"),
 				"tier": school.get("school_tier"),
 				"potentialScore": None,
-				"grade12Students": None,
-			"prospects": len(student_ids_by_school.get(school.get("name"), set())) if students_available else None,
-				"penetrationRate": None,
+				"grade12Students": school_grade12,
+				"prospects": school_leads,
+				"penetrationRate": _ratio(school_leads, school_grade12) if school_leads is not None and school_grade12 else None,
 				"applications": snapshot.get("applicant_count"),
-				"enrollmentForecast": None,
+				"enrollmentForecast": snapshot.get("forecast_count"),
 				"conversionRate": snapshot.get("conversion_rate"),
 				"lastActivity": None,
 				"recommendation": None,
@@ -246,12 +262,12 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			"fullName": province.get("province_name") or province_name,
 			"regionKey": region_key,
 			"opportunity": None,
-			"leads": len(student_ids_by_province.get(province_name, set())) if students_available else None,
+			"leads": province_leads,
 			"conversion": _ratio(enrolled, applicants),
 			"competition": None,
 			"revenue": None,
-			"grade12Population": None,
-			"penetrationRate": None,
+			"grade12Population": grade12_population,
+			"penetrationRate": _ratio(province_leads, grade12_population) if province_leads is not None and grade12_population else None,
 			"trend": None,
 			"recommendation": None,
 			"keyAction": None,
@@ -275,7 +291,7 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			"regionSummary": {
 				"scope": region,
 				"count": len(provinces),
-				"totalGrade12": None,
+				"totalGrade12": sum(row["grade12Population"] for row in provinces if row["grade12Population"] is not None) or None,
 				"totalLeads": sum(row["leads"] for row in provinces) if students_available else None,
 				"avgConversion": round(sum(conversions) / len(conversions), 2) if conversions else None,
 				"hotspotCount": None,
@@ -289,7 +305,7 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 				"opportunity": "unavailable",
 				"competition": "unavailable",
 				"revenue": "unavailable",
-				"grade12Population": "unavailable",
+				"grade12Population": "available" if any(row["grade12Population"] is not None for row in provinces) else "unavailable",
 			},
 		},
 		"dataAvailability": {
