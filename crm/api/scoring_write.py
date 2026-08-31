@@ -15,9 +15,21 @@ from frappe import _
 from frappe.utils import now_datetime
 
 
+def _fixture_score_site_allowed() -> bool:
+	"""The curated demo seed writes fixture scores as Administrator.
+
+	Normally that is crm.localhost only. A demo / staging server opts in the
+	same way the rest of the showcase seed does -- ``bench set-config
+	allow_demo_seed 1`` -- so the deployed demo dataset carries scores too.
+	"""
+	if frappe.session.user != "Administrator":
+		return False
+	return frappe.local.site == "crm.localhost" or bool(frappe.conf.get("allow_demo_seed"))
+
+
 def _require_agent_identity():
 	if getattr(frappe.flags, "crm_local_fixture_score_write", False):
-		if frappe.local.site == "crm.localhost" and frappe.session.user == "Administrator":
+		if _fixture_score_site_allowed():
 			return
 		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
 	if frappe.session.user == "Guest":
@@ -136,7 +148,7 @@ def append_score_if_current(
 
 def append_local_fixture_score(**values) -> dict:
 	"""Write a score for the fixed local seed without impersonating crm-agents."""
-	if frappe.local.site != "crm.localhost" or frappe.session.user != "Administrator":
+	if not _fixture_score_site_allowed():
 		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
 	previous_flag = getattr(frappe.flags, "crm_local_fixture_score_write", False)
 	frappe.flags.crm_local_fixture_score_write = True
