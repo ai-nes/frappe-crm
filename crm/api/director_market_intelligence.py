@@ -211,8 +211,9 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			snapshot = latest.get(school.get("name")) or {}
 			ward = ward_by_name.get(school.get("ward"), {})
 			external_id = None
-			if province.get("province_code") and ward.get("ward_code") and school.get("school_code"):
-				external_id = f"{province['province_code']}-{ward['ward_code']}-{school['school_code']}"
+			school_code = str(school.get("school_code") or "").strip()
+			if province.get("province_code") and ward.get("ward_code") and school_code.isdigit():
+				external_id = f"{province['province_code']}-{ward['ward_code']}-{school_code.zfill(3)}"
 			highlights.append({
 				"id": external_id,
 				"directoryId": external_id,
