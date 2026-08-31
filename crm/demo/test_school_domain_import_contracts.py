@@ -91,6 +91,26 @@ def test_all_canonical_provinces_and_declared_aliases_resolve():
 			assert importer.canonical_province_name(value) == canonical
 
 
+def test_demo_school_selection_is_ten_per_province_and_skips_placeholders():
+	report = importer.reconcile_school_seed(importer.DEFAULT_SCHOOL_SEED_PATH)
+	selected = importer.select_demo_school_rows(report["rows"], schools_per_province=10)
+
+	assert len(selected) == 70
+	assert {
+		row["data"]["province_code"]
+		for row in selected
+	} == {"56", "66", "68", "75", "79", "80", "82"}
+	assert all(
+		len([row for row in selected if row["data"]["province_code"] == province_code]) == 10
+		for province_code in {"56", "66", "68", "75", "79", "80", "82"}
+	)
+	assert all(
+		"khu vuc" not in importer._normalize(row["data"]["school_name"])
+		and "hoc o nuoc ngoai" not in importer._normalize(row["data"]["school_name"])
+		for row in selected
+	)
+
+
 def test_internal_promoter_headers_are_staff_pic_not_person_stakeholder():
 	assert importer._header_key("Promoter") == "pic"
 	assert importer._header_key("Tên Promoter phụ trách") == "pic"

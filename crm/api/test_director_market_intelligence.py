@@ -138,7 +138,7 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		self.assertEqual(province["highSchools"][0]["prospects"], 1)
 		self.assertEqual(province["highSchools"][0]["applications"], 7)
 
-	def test_snapshot_grade12_and_forecast_are_projected(self):
+	def test_unsupported_grade12_fields_remain_unavailable(self):
 		sources = {
 			"provinces": [{"name": "province-1", "province_code": "01", "province_name": "Hà Nội", "region": "Bắc"}],
 			"schools": [{"name": "school-1", "school_code": "062", "school_name": "THPT Test", "province": "province-1", "ward": "ward-1"}],
@@ -157,16 +157,20 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 
 		province = response["data"]["provinces"][0]
 		high_school = province["highSchools"][0]
-		self.assertEqual(high_school["grade12Students"], 40)
+		self.assertIsNone(high_school["grade12Students"])
 		self.assertEqual(high_school["enrollmentForecast"], 12)
-		self.assertEqual(province["grade12Population"], 40)
-		self.assertEqual(province["penetrationRate"], 2.5)
+		self.assertIsNone(province["grade12Population"])
+		self.assertIsNone(province["penetrationRate"])
+		self.assertIsNone(high_school["penetrationRate"])
+		self.assertEqual(response["data"]["dataAvailability"]["opportunity"], "unavailable")
+		self.assertEqual(response["data"]["dataAvailability"]["grade12Population"], "unavailable")
 
-	def test_method_has_no_guest_or_permission_bypass(self):
+	def test_method_allows_guest_without_permission_bypass(self):
 		source = market.__loader__.get_source(market.__name__)
-		self.assertNotIn("allow_guest=True", source)
+		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
+		self.assertNotIn("CRM Geography Market Snapshot", source)
 
 	def test_unexpected_primary_defect_is_not_disguised_as_503(self):
 		with (

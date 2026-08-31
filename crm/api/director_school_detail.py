@@ -430,7 +430,7 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	}
 
 
-@frappe.whitelist(methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_school_detail(school_id: str, admissionYear=None):
 	require_director_access()
 	admission_year = resolve_admission_year(admissionYear)

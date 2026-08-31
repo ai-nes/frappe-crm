@@ -83,7 +83,7 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed duy nhất bộ dữ liệu CRM đầy đủ và in coverage manifest
+    desc: Seed bộ dữ liệu CRM demo và in coverage manifest (chọn 10 trường mỗi tỉnh)
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
@@ -95,8 +95,15 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
 
+  seed-school-domain-demo:
+    desc: Xóa business demo curated rồi giữ 10 trường cho mỗi tỉnh trong 7 tỉnh demo
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.school_domain_import.prune_school_seed --kwargs \"{'dry_run': False, 'schools_per_province': 10}\""
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.school_domain_import.seed_school_seed --kwargs \"{'dry_run': False, 'commit_policy': 'all', 'max_schools_per_province': 10}\""
+
   seed-fresh:
-    desc: Reset site (reinstall) + migrate + seed đầy đủ — dùng khi muốn làm lại từ đầu
+    desc: Reset site (reinstall) + migrate + seed demo — dùng khi muốn làm lại từ đầu
     prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
     cmds:
       - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"

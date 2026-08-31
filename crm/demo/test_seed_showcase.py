@@ -8,10 +8,19 @@ builders. They never touch a site or database and run under plain ``pytest``.
 from __future__ import annotations
 
 import unittest
-import re
 
 from crm.demo import seed_showcase
 from crm.demo.seed_showcase import (
+	_ACTIVITY_STATUS,
+	_ADMISSION_METHODS,
+	_CONSENT_EVENTS,
+	_FEATURED_SCHOOLS_PER_PROVINCE,
+	_KEY_ACCOUNT_SLOTS,
+	_PERSON_INF,
+	_PERSON_REL,
+	_READINESS_LABELS,
+	_SCHOOL_AREAS,
+	_SHOWCASE_KEY_ACCOUNT_COUNT,
 	BULK_CONTACT_ROWS,
 	BULK_SCENARIOS,
 	CONTACT_ROWS,
@@ -19,17 +28,10 @@ from crm.demo.seed_showcase import (
 	KNOWN_GAPS,
 	NAMESPACE,
 	SCENARIOS,
-	_ACTIVITY_STATUS,
-	_ADMISSION_METHODS,
-	_CONSENT_EVENTS,
-	_KEY_ACCOUNT_SLOTS,
-	_PERSON_INF,
-	_PERSON_REL,
-	_READINESS_LABELS,
-	_SCHOOL_AREAS,
-	_SHOWCASE_KEY_ACCOUNT_COUNT,
 	TARGET_SHOWCASE_CONTACTS,
 	TARGET_SHOWCASE_STUDENTS,
+	_dashboard_spotlight_school_rows,
+	_featured_school_rows,
 	_idempotency_key,
 	_rng,
 	_showcase_key_account_schools,
@@ -180,6 +182,31 @@ class TestKeyAccountSlots(unittest.TestCase):
 
 
 class TestKeyAccountSchoolSelection(unittest.TestCase):
+	def test_dashboard_spotlight_follows_the_detail_fixture_order(self):
+		rows = [
+			{"name": f"school-{code}", "province": "Khánh Hoà", "school_code": code}
+			for code in ("17", "15", "28", "20", "22", "16")
+		]
+
+		spotlight = _dashboard_spotlight_school_rows(rows)
+
+		self.assertEqual([row["school_code"] for row in spotlight], ["15", "20", "22", "28", "16", "17"])
+
+	def test_featured_school_slice_is_stable_and_skips_unknown_province(self):
+		rows = [
+			{"name": f"a-{index}", "province": "A Province", "school_code": f"{index:03d}"}
+			for index in range(1, _FEATURED_SCHOOLS_PER_PROVINCE + 2)
+		] + [
+			{"name": f"b-{index}", "province": "B Province", "school_code": f"{index:03d}"}
+			for index in range(1, _FEATURED_SCHOOLS_PER_PROVINCE + 1)
+		] + [{"name": "unknown", "province": None, "school_code": "001"}]
+
+		featured = _featured_school_rows(rows)
+
+		self.assertEqual(len(featured), _FEATURED_SCHOOLS_PER_PROVINCE * 2)
+		self.assertEqual(featured[0]["name"], "a-1")
+		self.assertNotIn("unknown", {row["name"] for row in featured})
+
 	def _patch(self, activity_schools, snapshot_schools):
 		def fake_get_all(doctype, **kwargs):
 			if doctype == "CRM School Activity":

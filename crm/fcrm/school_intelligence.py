@@ -30,6 +30,19 @@ SEGMENT_STATES = frozenset(
 POTENTIAL_SEGMENT_BANDS = {"High": "High Potential", "Low": "Low Potential"}
 
 
+def potential_value_from_metrics(actual: Any, threshold: Any) -> str | None:
+	"""Return the canonical potential band for a snapshot metric pair."""
+	try:
+		ratio = float(actual) / float(threshold)
+	except (TypeError, ValueError, ZeroDivisionError):
+		return None
+	if ratio >= 2:
+		return "High"
+	if ratio >= 1:
+		return "Medium"
+	return "Low"
+
+
 def _scope_state() -> str:
 	roles = set(frappe.get_roles()) if hasattr(frappe, "get_roles") else set()
 	return "complete" if roles & {"Administrator", "System Manager", "Admissions Director", "Lead Sales", "Marketing", "Sale"} else "partial"
@@ -88,16 +101,9 @@ def calculate_school_potential(high_school: str, admission_year: str | None = No
 		return _unknown("verified_snapshot_required")
 	actual = snapshot.get("ne_actual")
 	threshold = snapshot.get("adjusted_ne_threshold")
-	try:
-		ratio = float(actual) / float(threshold)
-	except (TypeError, ValueError, ZeroDivisionError):
+	value = potential_value_from_metrics(actual, threshold)
+	if value is None:
 		return _unknown("school_outcome_input_incomplete")
-	if ratio >= 2:
-		value = "High"
-	elif ratio >= 1:
-		value = "Medium"
-	else:
-		value = "Low"
 	source_revision = stable_fingerprint(
 		"school-potential", snapshot.get("name"), snapshot.get("revision"),
 		actual, threshold, snapshot.get("applicant_count"), snapshot.get("enrolled_count"),
