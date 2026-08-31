@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api import director_school_common as common
 from crm.api import director_school_detail as detail
 
 
@@ -61,6 +62,26 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 
 		self.assertEqual(response["school"]["schoolCode"], "020")
 		self.assertEqual(response["school"]["id"], "01-00123-020")
+
+	def test_school_id_accepts_current_seven_digit_ward_code(self):
+		with patch.object(
+			common,
+			"_unique_visible",
+			side_effect=[
+				{"name": "province-68"},
+				{"name": "ward-2484102", "ward_code": "2484102"},
+				{
+					"name": "school-1",
+					"province": "province-68",
+					"ward": "ward-2484102",
+					"school_code": "10",
+				},
+			],
+		):
+			resolved = detail.resolve_school_id("68-2484102-010")
+
+		self.assertEqual(resolved["canonical_id"], "68-2484102-010")
+		self.assertEqual(resolved["ward_code"], "2484102")
 
 	def test_snapshot_selection_uses_requested_order(self):
 		self.assertEqual(
@@ -250,9 +271,11 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertEqual(response_state["http_status_code"], 503)
 		self.assertEqual(response_state["error"]["code"], "SCHOOL_DATA_UNAVAILABLE")
 
-	def test_method_allows_guest_without_permission_bypass(self):
+	def test_method_requires_authenticated_director_access(self):
 		source = detail.__loader__.get_source(detail.__name__)
-		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
+		self.assertIn('@frappe.whitelist(methods=["GET"])', source)
+		self.assertNotIn("allow_guest=True", source)
+		self.assertIn("require_director_access()", source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
 		for forbidden in ('"source_note"', '"notes"', '"title"', '"next_action"', '"owner_staff"'):
