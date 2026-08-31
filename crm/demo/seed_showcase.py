@@ -2101,6 +2101,130 @@ def _priority_school_rows(schools: list[dict]) -> list[dict]:
 	return priority + [school for school in _featured_school_rows(schools) if school["name"] not in priority_names]
 
 
+def _json_semantically_equal(left: object, right: object) -> bool:
+	"""Compare JSON fields whether MariaDB returns them as text or mappings."""
+	def normalize(value: object) -> object:
+		if isinstance(value, str):
+			try:
+				return json.loads(value)
+			except (TypeError, ValueError):
+				return value
+		return value
+
+	return normalize(left) == normalize(right)
+
+
+def _director_school_detail_context(school: dict, metrics: dict) -> dict | None:
+	"""Return the verified detail fixture for the school-detail walkthrough."""
+	if school.get("province") != "Khánh Hoà" or str(school.get("school_code") or "") != "20":
+		return None
+	student_count = max(1, int(metrics.get("student_count") or 0))
+	band_counts = [0, 0, 0, 0, 0]
+	for index in range(student_count):
+		band_counts[index % len(band_counts)] += 1
+	band_shares = [round(count * 100 / student_count) for count in band_counts]
+	band_shares[-1] += 100 - sum(band_shares)
+	return {
+		"potentialScore": 88,
+		"potentialIndicators": [
+			{"id": "P1", "label": "Quy mô khả dụng", "score": 88, "weight": 30.6, "status": "available"},
+			{"id": "P2", "label": "Mật độ khả dụng", "score": 82, "weight": 15, "status": "available"},
+			{"id": "P3", "label": "Mức khớp ngành", "score": 86, "weight": 24.4, "status": "available"},
+			{"id": "P4", "label": "Khả năng chi trả", "score": 74, "weight": 10, "status": "available"},
+			{"id": "P6", "label": "Lịch sử chuyển đổi", "score": 80, "weight": 20, "status": "available"},
+		],
+		"performance": {
+			"6m": [
+				{"label": "T3", "prospects": 0, "applications": 0, "enrollment": 0},
+				{"label": "T4", "prospects": 0, "applications": 0, "enrollment": 0},
+				{"label": "T5", "prospects": 0, "applications": 0, "enrollment": 0},
+				{"label": "T6", "prospects": 1, "applications": 0, "enrollment": 0},
+				{"label": "T7", "prospects": 1, "applications": 1, "enrollment": 0},
+				{"label": "T8", "prospects": 1, "applications": 1, "enrollment": 1},
+			],
+			"year": [
+				{"label": "2023", "prospects": 0, "applications": 0, "enrollment": 0},
+				{"label": "2024", "prospects": 1, "applications": 0, "enrollment": 0},
+				{"label": "2025", "prospects": 1, "applications": 1, "enrollment": 0},
+				{"label": "2026", "prospects": 1, "applications": 1, "enrollment": 1},
+			],
+		},
+		"geography": {
+			"cluster": "Cụm đô thị dày",
+			"clusterMeaning": "Nhiều trường gần nhau, phù hợp tổ chức sự kiện chung để chia sẻ chi phí.",
+			"travelTime": "45 phút",
+			"distanceTier": "Dưới 1 giờ",
+			"competitionDensity": "Trung bình",
+		},
+		"locality": {
+			"travelTime": "45 phút",
+			"distanceKm": 25,
+			"marketStats": {
+				"schools": 22,
+				"grade12Students": 11520,
+				"outOfProvinceRate": "24%",
+				"fptInterestRate": "14%",
+			},
+		},
+		"demographics": {
+			"occupationProfile": "Công chức, viên chức",
+			"relativeIncome": "Trung bình",
+			"tuitionAffordability": "Nên có học bổng / trả góp",
+			"awayFromHomeRate": "24% học sinh nhập học ngoài tỉnh các mùa trước",
+			"parentInvolvement": "Trung bình",
+		},
+		"subjectMix": {
+			"naturalScienceShare": 56,
+			"socialScienceShare": 36,
+			"recommendedMajorGroup": "Công nghệ và kỹ thuật",
+		},
+		"earlyForecast": {
+			"grade10CutoffScore": 38,
+			"priorCohortResult": "Khoá trước: 3 học sinh khả dụng, kết quả ổn định qua các mùa",
+			"grade11SubjectSignal": "Khối 11 tiếp tục nghiêng khoa học tự nhiên",
+		},
+		"activityStats": [
+			{"label": "Cuộc thi học thuật", "audience": "Khối 10, 11", "conversionRate": 31, "costPerActivity": 42, "recommended": True},
+			{"label": "Ngày hội hướng nghiệp", "audience": "Khối 11, 12", "conversionRate": 18, "costPerActivity": 28, "recommended": True},
+			{"label": "Tư vấn tại lớp", "audience": "Khối 12", "conversionRate": 14, "costPerActivity": 12, "recommended": True},
+			{"label": "Tham quan cơ sở", "audience": "Học sinh và phụ huynh", "conversionRate": 27, "costPerActivity": 55, "recommended": True},
+			{"label": "Tập huấn giáo viên", "audience": "GV hướng nghiệp", "conversionRate": 6, "costPerActivity": 18, "recommended": False},
+			{"label": "Hoạt động trực tuyến", "audience": "Học sinh vùng xa", "conversionRate": 9, "costPerActivity": 5, "recommended": False},
+		],
+		"quadrantPeers": [
+			{"id": "school-020", "name": school.get("school_name"), "potential": 88, "relationship": 60, "availableStudents": student_count, "enrollment": 1, "isCurrent": True},
+			{"id": "school-015", "name": "THPT Hoàng Văn Thụ", "potential": 82, "relationship": 48, "availableStudents": 4, "enrollment": 1},
+			{"id": "school-022", "name": "THPT Nguyễn Văn Trỗi", "potential": 76, "relationship": 72, "availableStudents": 5, "enrollment": 2},
+		],
+		"scoreBands": [
+			{"label": "Ngoài khoảng phù hợp", "students": 0, "share": 0, "available": False},
+			{"label": "Học sinh khả dụng", "students": student_count, "share": 100, "available": True},
+			{"label": "Trên khoảng phù hợp", "students": 0, "share": 0, "available": False},
+		],
+		"examScoreBands": [
+			{"label": "0–2", "students": band_counts[0], "share": band_shares[0]},
+			{"label": "2–4", "students": band_counts[1], "share": band_shares[1]},
+			{"label": "4–6", "students": band_counts[2], "share": band_shares[2]},
+			{"label": "6–8", "students": band_counts[3], "share": band_shares[3]},
+			{"label": "8–10", "students": band_counts[4], "share": band_shares[4]},
+		],
+		"academicGap": {"reportCard": 22.6, "examScore": 20.8},
+		"postGraduationChoices": [
+			{"label": "Đại học công lập địa phương", "students": 1, "share": 33},
+			{"label": "Đại học lớn tại đô thị trung tâm", "students": 1, "share": 33},
+			{"label": "Đại học tư thục khác", "students": 0, "share": 0},
+			{"label": "Cao đẳng và trường nghề", "students": 0, "share": 0},
+			{"label": "Không học tiếp", "students": 0, "share": 0},
+			{"label": "Du học", "students": 1, "share": 34},
+		],
+		"competitionContext": {
+			"leadingChoice": "Đại học công lập địa phương",
+			"lostReason": "Muốn học gần nhà",
+			"externalPresence": "Có 1 đơn vị hoạt động theo mùa",
+		},
+	}
+
+
 def _assign_bulk_placements(context: dict) -> None:
 	"""Give the bulk cohort real school / province / major / lead-source spread.
 
@@ -2807,6 +2931,16 @@ def _seed_dashboard_spotlight_relationships(staff_context: dict) -> dict[str, in
 			{"full_name": contact_names[index], "phone": phone},
 		)
 		persons += person_state in {"created", "updated"}
+		# The detail endpoint projects the primary relationship first. Demote any
+		# imported primary before promoting the deterministic spotlight contact so
+		# the seeded page always has one stable relationship owner.
+		frappe.db.set_value(
+			"CRM School Stakeholder",
+			{"high_school": school["name"], "is_primary": 1},
+			"is_primary",
+			0,
+			update_modified=False,
+		)
 		association, _ = _upsert(
 			"CRM School Stakeholder",
 			{"high_school": school["name"], "person": person},
@@ -2817,7 +2951,7 @@ def _seed_dashboard_spotlight_relationships(staff_context: dict) -> dict[str, in
 				"influence": "High" if index < 4 else "Decision Maker",
 				"owner_staff": promoter,
 				"position_title": "Đầu mối tuyển sinh",
-				"is_primary": 0,
+				"is_primary": 1,
 				"relationship_score": 55 + index * 5,
 				"last_touch_date": now_datetime().date() - timedelta(days=3 + index),
 				"next_touch_date": now_datetime().date() + timedelta(days=5 + index),
@@ -3501,7 +3635,7 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 				"timezone", "ne_target", "ne_actual", "ne_actual_semantics",
 				"adjusted_ne_threshold", "applicant_count", "enrolled_count", "contact_count",
 				"student_count", "conversion_count", "average_score", "conversion_rate",
-				"enrollment_rate", "forecast_count", "snapshot_date", "source_system", "source_run",
+				"enrollment_rate", "forecast_count", "context_raw_counts", "snapshot_date", "source_system", "source_run",
 				"verification_status",
 			],
 			order_by="snapshot_date desc, recorded_at desc, revision desc, name desc",
@@ -3546,9 +3680,16 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 			)
 		}
 		average_score = (showcase_snapshot or {}).get("average_score") or generated_average_score
+		detail_context = _director_school_detail_context(row, metrics)
+		context_raw_counts = (showcase_snapshot or {}).get("context_raw_counts")
+		if detail_context:
+			context_raw_counts = {"director_school_detail": detail_context}
 		if showcase_snapshot and all(
 			showcase_snapshot.get(field) == value
 			for field, value in {**derived, "forecast_count": forecast, "average_score": average_score}.items()
+		) and (
+			not detail_context
+			or _json_semantically_equal(showcase_snapshot.get("context_raw_counts"), context_raw_counts)
 		):
 			refresh_school_key_account(school)
 			skipped += 1
@@ -3577,6 +3718,7 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 					**derived,
 					"average_score": average_score,
 					"forecast_count": forecast,
+					"context_raw_counts": context_raw_counts,
 					"verification_status": "Verified",
 					"is_locked": 1,
 					"source_system": "demo-seed",
