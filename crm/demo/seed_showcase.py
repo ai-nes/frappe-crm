@@ -31,7 +31,14 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_bulk_realistic, seed_demo, seed_role_accounts, seed_staff, school_domain_import
+from crm.demo import (
+	school_domain_import,
+	seed_admission_funnel,
+	seed_bulk_realistic,
+	seed_demo,
+	seed_role_accounts,
+	seed_staff,
+)
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "crm-demo-showcase"
@@ -2140,7 +2147,7 @@ def _json_semantically_equal(left: object, right: object) -> bool:
 	return normalize(left) == normalize(right)
 
 
-def _director_school_detail_context(school: dict, metrics: dict) -> dict | None:
+def _khanh_hoa_school_detail_context(school: dict, metrics: dict) -> dict | None:
 	"""Return the verified detail fixture for the school-detail walkthrough."""
 	if school.get("province") != "Khánh Hoà" or str(school.get("school_code") or "") != "20":
 		return None
@@ -2249,6 +2256,190 @@ def _director_school_detail_context(school: dict, metrics: dict) -> dict | None:
 			"externalPresence": "Có 1 đơn vị hoạt động theo mùa",
 		},
 	}
+
+
+def _split_detail_counts(total: int, ratios: list[float]) -> list[int]:
+	"""Split a cohort deterministically while preserving its total."""
+	if total <= 0:
+		return [0 for _ in ratios]
+	weights = [max(0.0, ratio) for ratio in ratios]
+	weight_total = sum(weights)
+	if not weight_total:
+		return [0 for _ in ratios]
+	counts = [int(total * weight / weight_total) for weight in weights]
+	for index in range(total - sum(counts)):
+		counts[index % len(counts)] += 1
+	return counts
+
+
+def _detail_shares(counts: list[int]) -> list[int]:
+	"""Return rounded percentages whose sum is exactly 100."""
+	total = sum(counts)
+	if total <= 0:
+		return [0 for _ in counts]
+	shares = [round(count * 100 / total) for count in counts]
+	shares[-1] += 100 - sum(shares)
+	return shares
+
+
+def _generic_director_school_detail_context(school: dict, metrics: dict) -> dict:
+	"""Return deterministic, complete demo analytics for every seeded school."""
+	rng = _rng("director-school-detail", school.get("name"))
+	student_count = max(0, int(metrics.get("student_count") or 0))
+	potential_score = 55 + rng.randrange(40)
+	distance = [
+		("Cụm đô thị dày", "Nhiều trường gần nhau, phù hợp tổ chức sự kiện chung để chia sẻ chi phí.", "Dưới 1 giờ", "Thấp", 25, "45 phút"),
+		("Cụm liên tỉnh", "Có thể gom lịch theo cụm để giảm chi phí di chuyển và tăng độ phủ.", "1–3 giờ", "Trung bình", 95, "2 giờ 10 phút"),
+		("Vùng xa campus", "Nên kết hợp online và các chuyến công tác theo cụm để kiểm soát chi phí.", "Trên 3 giờ", "Cao", 240, "4 giờ 30 phút"),
+	][rng.randrange(3)]
+	metric_targets = (
+		int(metrics.get("contact_count") or 0),
+		int(metrics.get("applicant_count") or 0),
+		int(metrics.get("enrolled_count") or 0),
+	)
+
+	def trend(labels: list[str], targets: tuple[int, int, int]) -> list[dict]:
+		return [
+			{
+				"label": label,
+				"prospects": round(targets[0] * (index + 1) / len(labels)),
+				"applications": round(targets[1] * (index + 1) / len(labels)),
+				"enrollment": round(targets[2] * (index + 1) / len(labels)),
+			}
+			for index, label in enumerate(labels)
+		]
+
+	available_ratio = 0.35 + rng.randrange(40) / 100
+	above_ratio = 0.08 + rng.randrange(12) / 100
+	available_count = min(student_count, round(student_count * available_ratio))
+	above_count = min(max(0, student_count - available_count), round(student_count * above_ratio))
+	not_fit_count = max(0, student_count - available_count - above_count)
+	score_counts = [not_fit_count, available_count, above_count]
+	score_shares = _detail_shares(score_counts)
+	exam_counts = _split_detail_counts(student_count, [0.08, 0.18, 0.32, 0.28, 0.14])
+	exam_shares = _detail_shares(exam_counts)
+	natural_science = 40 + rng.randrange(30)
+	social_science = min(45, max(20, 92 - natural_science - rng.randrange(3, 9)))
+	choice_counts = _split_detail_counts(student_count, [0.34, 0.18, 0.15, 0.13, 0.12, 0.08])
+	choice_shares = _detail_shares(choice_counts)
+	within_one_hour = distance[2] == "Dưới 1 giờ"
+	weights = [30.6, 15, 24.4, 10, 0, 20] if within_one_hour else [25, 15, 20, 10, 10, 20]
+	indicator_labels = [
+		("P1", "Quy mô khả dụng"),
+		("P2", "Mật độ khả dụng"),
+		("P3", "Mức khớp ngành"),
+		("P4", "Khả năng chi trả"),
+		("P5", "Xu hướng đi học xa"),
+		("P6", "Lịch sử chuyển đổi"),
+	]
+	potential_indicators = [
+		{"id": indicator_id, "label": label, "score": max(0, min(100, potential_score + rng.randrange(-10, 11))), "weight": weight, "status": "available"}
+		for (indicator_id, label), weight in zip(indicator_labels, weights)
+		if weight > 0
+	]
+	school_name = school.get("school_name") or school.get("name") or "Trường THPT"
+	activity_profiles = [
+		("Cuộc thi học thuật", "Khối 10, 11", 31, 42, True),
+		("Ngày hội hướng nghiệp", "Khối 11, 12", 18, 28, True),
+		("Tư vấn tại lớp", "Khối 12", 14, 12, True),
+		("Tham quan cơ sở", "Học sinh và phụ huynh", 27, 55, True),
+		("Tập huấn giáo viên", "GV hướng nghiệp", 6, 18, False),
+		("Hoạt động trực tuyến", "Học sinh vùng xa", 9, 5, False),
+	]
+	activity_stats = [
+		{
+			"label": label,
+			"audience": audience,
+			"conversionRate": max(3, conversion + rng.randrange(-4, 5)),
+			"costPerActivity": cost,
+			"recommended": recommended,
+		}
+		for label, audience, conversion, cost, recommended in activity_profiles
+	]
+	choice_labels = [
+		"Đại học công lập địa phương",
+		"Đại học lớn tại đô thị trung tâm",
+		"Đại học tư thục khác",
+		"Cao đẳng và trường nghề",
+		"Không học tiếp",
+		"Du học",
+	]
+	choice_breakdown = [
+		{"label": label, "students": count, "share": share}
+		for label, count, share in zip(choice_labels, choice_counts, choice_shares)
+	]
+	return {
+		"potentialScore": potential_score,
+		"potentialIndicators": potential_indicators,
+		"performance": {
+			"6m": trend(["T3", "T4", "T5", "T6", "T7", "T8"], metric_targets),
+			"year": trend(["2023", "2024", "2025", "2026"], metric_targets),
+		},
+		"geography": {
+			"cluster": distance[0],
+			"clusterMeaning": distance[1],
+			"travelTime": distance[5],
+			"distanceTier": distance[2],
+			"competitionDensity": distance[3],
+		},
+		"locality": {
+			"travelTime": distance[5],
+			"distanceKm": distance[4],
+			"marketStats": {
+				"schools": 12 + rng.randrange(25),
+				"grade12Students": max(student_count, 4800 + rng.randrange(7200)),
+				"outOfProvinceRate": f"{18 + rng.randrange(20)}%",
+				"fptInterestRate": f"{10 + rng.randrange(10)}%",
+			},
+		},
+		"demographics": {
+			"occupationProfile": ["Công chức, viên chức", "Kinh doanh tự do, tiểu thương", "Nông nghiệp, lao động phổ thông"][rng.randrange(3)],
+			"relativeIncome": ["Cao", "Trung bình", "Thấp"][rng.randrange(3)],
+			"tuitionAffordability": "Có thể chi trả học phí đầy đủ, ít cần học bổng" if potential_score >= 75 else "Nên có học bổng / trả góp",
+			"awayFromHomeRate": f"{18 + rng.randrange(22)}% học sinh nhập học ngoài tỉnh các mùa trước",
+			"parentInvolvement": ["Cao", "Trung bình", "Thấp"][rng.randrange(3)],
+		},
+		"subjectMix": {
+			"naturalScienceShare": natural_science,
+			"socialScienceShare": social_science,
+			"recommendedMajorGroup": "Công nghệ và kỹ thuật" if natural_science >= social_science else "Kinh doanh, truyền thông và ngôn ngữ",
+		},
+		"earlyForecast": {
+			"grade10CutoffScore": 30 + rng.randrange(16),
+			"priorCohortResult": f"Khoá trước: {available_count} học sinh khả dụng, kết quả {'ổn định' if potential_score >= 70 else 'biến động nhẹ'} qua các mùa",
+			"grade11SubjectSignal": "Khối 11 tiếp tục nghiêng khoa học tự nhiên" if natural_science >= 55 else "Khối 11 có xu hướng cân bằng hơn khối 12",
+		},
+		"activityStats": activity_stats,
+		"quadrantPeers": [
+			{"id": school.get("name"), "name": school_name, "potential": potential_score, "relationship": 40 + rng.randrange(45), "availableStudents": available_count, "enrollment": int(metrics.get("enrolled_count") or 0), "isCurrent": True},
+			{"id": f"{school.get('name')}-peer-1", "name": "Trường trong cụm A", "potential": max(40, potential_score - 6), "relationship": 35 + rng.randrange(50), "availableStudents": 4 + rng.randrange(18), "enrollment": 1 + rng.randrange(8)},
+			{"id": f"{school.get('name')}-peer-2", "name": "Trường trong cụm B", "potential": min(98, potential_score + 4), "relationship": 35 + rng.randrange(50), "availableStudents": 5 + rng.randrange(20), "enrollment": 1 + rng.randrange(8)},
+		],
+		"scoreBands": [
+			{"label": label, "students": count, "share": share, "available": label == "Học sinh khả dụng" and count > 0}
+			for label, count, share in zip(
+				["Ngoài khoảng phù hợp", "Học sinh khả dụng", "Trên khoảng phù hợp"], score_counts, score_shares
+			)
+		],
+		"examScoreBands": [
+			{"label": label, "students": count, "share": share}
+			for label, count, share in zip(["0–2", "2–4", "4–6", "6–8", "8–10"], exam_counts, exam_shares)
+		],
+		"academicGap": {"reportCard": round(18 + rng.random() * 8, 1), "examScore": round(17 + rng.random() * 8, 1)},
+		"postGraduationChoices": choice_breakdown,
+		"competitionContext": {
+			"leadingChoice": choice_labels[0],
+			"lostReason": ["Muốn học gần nhà", "Học phí phù hợp hơn", "Khoảng cách đến campus"][rng.randrange(3)],
+			"externalPresence": ["Có 2 đơn vị hoạt động thường xuyên", "Có 1 đơn vị hoạt động theo mùa", "Chưa ghi nhận đơn vị ngoài trường"][rng.randrange(3)],
+		},
+	}
+
+
+def _director_school_detail_context(school: dict, metrics: dict) -> dict:
+	"""Return the exact walkthrough fixture or a complete fixture for other schools."""
+	if school.get("province") == "Khánh Hoà" and str(school.get("school_code") or "") == "20":
+		return _khanh_hoa_school_detail_context(school, metrics) or _generic_director_school_detail_context(school, metrics)
+	return _generic_director_school_detail_context(school, metrics)
 
 
 def _canonical_school_rows() -> list[dict[str, Any]]:
@@ -3752,7 +3943,10 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 	remaining = [school for school in schools if school["name"] not in featured_names]
 	rng = random.Random(SEED ^ 0x5000)
 	rng.shuffle(remaining)
-	targets = featured + remaining[: max(0, 140 - len(featured))]
+	# The dashboard school directory is backed by the full canonical school
+	# dataset. Keep the featured rows first, then enrich every remaining school
+	# so opening any school from the directory has the same detail contract.
+	targets = featured + remaining
 	created = skipped = 0
 	for row in targets:
 		school = row["name"]
@@ -3785,9 +3979,6 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 			(row for row in existing if row.get("source_run") in _SHOWCASE_SNAPSHOT_SOURCE_RUNS),
 			None,
 		)
-		if external_verified:
-			skipped += 1
-			continue
 		r = _rng("market-snapshot", school)
 		# Always consume the same random draws, whether this is the first run or
 		# a rerun against an existing showcase snapshot.
@@ -3815,6 +4006,9 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 		context_raw_counts = (showcase_snapshot or {}).get("context_raw_counts")
 		if detail_context:
 			context_raw_counts = {"director_school_detail": detail_context}
+		if external_verified and not detail_context:
+			skipped += 1
+			continue
 		if showcase_snapshot and all(
 			showcase_snapshot.get(field) == value
 			for field, value in {**derived, "forecast_count": forecast, "average_score": average_score}.items()
@@ -3898,6 +4092,7 @@ def _seed_all() -> dict:
 	bulk_students, bulk_errors, bulk_metrics = _seed_bulk_students(context, staff_context)
 	students.extend(bulk_students)
 	student_errors.extend(bulk_errors)
+	admission_funnel = seed_admission_funnel.seed(context)
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
 	market_snapshots = _seed_market_snapshots(context)
@@ -3924,6 +4119,7 @@ def _seed_all() -> dict:
 		},
 		"students": students,
 		"student_errors": student_errors,
+		"admission_funnel": admission_funnel,
 		"bulk": bulk_metrics,
 		"contacts": contacts,
 		"school_domain": school,
@@ -3951,10 +4147,12 @@ def execute(strict: bool = True) -> dict:
 		result = _seed_all()
 	print(frappe.as_json(result))
 	bulk_errors = int((result.get("bulk") or {}).get("errors", 0))
-	if strict and (result.get("student_errors") or bulk_errors):
+	funnel_errors = len((result.get("admission_funnel") or {}).get("errors", []))
+	if strict and (result.get("student_errors") or bulk_errors or funnel_errors):
 		raise frappe.ValidationError(
 			f"Seed completed with {len(result.get('student_errors') or [])} scenario error(s) "
-			f"and {bulk_errors} bulk-richness error(s); see the manifest above."
+			f"{bulk_errors} bulk-richness error(s), and {funnel_errors} funnel error(s); "
+			"see the manifest above."
 		)
 	return result
 
@@ -4214,6 +4412,7 @@ _RESET_DOCTYPES = (
 	("CRM Campaign Spend", "notes", f"%{NAMESPACE}%"),
 	("CRM Student Routing Policy", "policy_key", f"%{NAMESPACE}%"),
 	("CRM Student SLA Policy", "policy_key", f"%{NAMESPACE}%"),
+	("CRM Admission Offering", "offering_key", f"{seed_admission_funnel.NAMESPACE}|%"),
 )
 
 # Append-only audit rows purged with a raw delete during reset() (crm.localhost
@@ -4606,7 +4805,7 @@ def reset() -> dict:
 		)
 		students = sorted(set(students) | set(legacy_students))
 		for student in students:
-			for dt in ("CRM Action", "CRM Interaction", "Task"):
+			for dt in ("CRM Admission Application", "CRM Action", "CRM Interaction", "Task"):
 				for name in frappe.get_all(
 					dt, filters={"student": student}, pluck="name", limit_page_length=0
 				):
