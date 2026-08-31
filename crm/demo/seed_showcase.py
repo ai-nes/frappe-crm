@@ -2019,9 +2019,9 @@ def _assign_bulk_placements(context: dict) -> None:
 					"major_code": re.sub(r"[^A-Za-z0-9]+", "", major_name)[:16].upper() or "MAJOR",
 				}
 			).insert(ignore_permissions=True)
-	sources = frappe.get_all("CRM Lead Source", pluck="name", limit_page_length=0) or [
-		context["source"]
-	]
+	sources = frappe.get_all(
+		"CRM Lead Source", filters={"approval_state": "Approved"}, pluck="name", limit_page_length=0
+	) or [context["source"]]
 	rng = random.Random(SEED ^ 0x9911)
 	rng.shuffle(schools)
 	hot = {s["name"] for s in schools[: max(1, len(schools) // 12)]}
