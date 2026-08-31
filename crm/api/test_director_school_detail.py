@@ -41,6 +41,26 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertNotIn("phone", response["contacts"][0])
 		self.assertNotIn("email", response["contacts"][0])
 		self.assertEqual(response["dataAvailability"]["sections"]["snapshot"], "unavailable")
+		self.assertEqual(response["potentialIndicators"], [])
+		self.assertEqual(response["examScoreBands"], [])
+		self.assertEqual(response["dataAvailability"]["fields"]["potentialIndicators"], "unavailable")
+		self.assertEqual(response["dataAvailability"]["fields"]["examScoreBands"], "unavailable")
+
+	def test_school_code_is_projected_as_three_digits(self):
+		school = {
+			"name": "school-1", "province": "province-1", "ward": "ward-1", "school_code": "20",
+			"school_name": "THPT Test", "is_key_account": 0,
+		}
+		sources = {
+			"province": {"province_code": "01"}, "ward": {"ward_code": "00123"},
+			"snapshot": None, "intelligence": {}, "stakeholders": [],
+			"people": {}, "roles": {}, "activities": [], "activity_types": {},
+		}
+
+		response = detail._build_detail(school, sources, set(), set(), "2026")
+
+		self.assertEqual(response["school"]["schoolCode"], "020")
+		self.assertEqual(response["school"]["id"], "01-00123-020")
 
 	def test_snapshot_selection_uses_requested_order(self):
 		self.assertEqual(
@@ -68,6 +88,47 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertEqual(response["applications"], 18)
 		self.assertEqual(response["enrollment"], 10)
 
+	def test_verified_detail_context_projects_rich_dashboard_sections(self):
+		school = {
+			"name": "school-1", "province": "Khánh Hoà", "ward": "ward-1", "school_code": "20",
+			"school_name": "THPT Test", "latitude": 12.2, "longitude": 109.1, "is_key_account": 1,
+		}
+		context = {
+			"potentialScore": 88,
+			"performance": {"6m": [{"label": "T8", "prospects": 1, "applications": 1, "enrollment": 1}], "year": []},
+			"geography": {"cluster": "Cụm đô thị dày", "travelTime": "45 phút", "distanceTier": "Dưới 1 giờ", "competitionDensity": "Trung bình"},
+			"locality": {"travelTime": "45 phút", "distanceKm": 25},
+			"demographics": {"occupationProfile": "Công chức", "relativeIncome": "Trung bình", "tuitionAffordability": "Học bổng", "awayFromHomeRate": "24%", "parentInvolvement": "Trung bình"},
+			"subjectMix": {"naturalScienceShare": 56, "socialScienceShare": 36, "recommendedMajorGroup": "Công nghệ"},
+			"earlyForecast": {"grade10CutoffScore": 38, "priorCohortResult": "Ổn định", "grade11SubjectSignal": "Khoa học tự nhiên"},
+			"activityStats": [{"label": "Cuộc thi học thuật", "audience": "Khối 12", "conversionRate": 31, "costPerActivity": 42, "recommended": True}],
+			"quadrantPeers": [{"id": "school-1", "name": "THPT Test", "potential": 88, "relationship": 60, "availableStudents": 3, "enrollment": 1}],
+			"scoreBands": [{"label": "Học sinh khả dụng", "students": 3, "share": 100, "available": True}],
+			"examScoreBands": [{"label": "8–10", "students": 3, "share": 100}],
+			"potentialIndicators": [{"id": "P1", "label": "Quy mô khả dụng", "score": 88, "weight": 30.6, "status": "available"}],
+			"academicGap": {"reportCard": 22.6, "examScore": 20.8},
+			"postGraduationChoices": [{"label": "Đại học công lập địa phương", "students": 2, "share": 67}],
+			"competitionContext": {"leadingChoice": "Đại học công lập địa phương", "lostReason": "Muốn học gần nhà", "externalPresence": "Có 1 đơn vị"},
+		}
+		sources = {
+			"province": {"province_code": "56", "province_name": "Khánh Hoà"},
+			"ward": {"ward_code": "22333", "ward_name": "Phường Test"},
+			"snapshot": {"snapshot_date": "2026-08-30", "student_count": 3, "context_raw_counts": {"director_school_detail": context}},
+			"intelligence": {}, "students": [], "contacts": [], "stakeholders": [],
+			"people": {}, "roles": {}, "activities": [], "activity_types": {},
+		}
+
+		response = detail._build_detail(school, sources, set(), set(), "2026")
+
+		self.assertEqual(response["potentialScore"], 88)
+		self.assertEqual(response["geography"]["travelTime"], "45 phút")
+		self.assertEqual(response["locality"]["distanceKm"], 25)
+		self.assertEqual(response["subjectMix"]["naturalScienceShare"], 56)
+		self.assertEqual(response["activityStats"][0]["conversionRate"], 31)
+		self.assertEqual(response["examScoreBands"][0]["label"], "8–10")
+		self.assertEqual(response["dataAvailability"]["fields"]["potentialScore"], "available")
+		self.assertEqual(response["dataAvailability"]["sections"]["outcomes"], "available")
+
 	def test_student_and_contact_fallbacks_are_projected_without_snapshot(self):
 		school = {"name": "school-1", "school_code": "062", "school_name": "THPT Test", "is_key_account": 0}
 		sources = {
@@ -90,7 +151,7 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 	def test_activity_projection_excludes_free_text_and_internal_identity(self):
 		row = {
 			"activity_type": "term-1", "activity_date": "2026-08-01", "scheduled_datetime": None,
-			"status": "Completed", "outcome": "Positive", "attendance": 10, "title": "private title",
+			"status": "Completed", "outcome": "Private outcome", "attendance": 10, "title": "private title",
 			"owner_staff": "staff-1", "next_action": "private next action",
 		}
 		school = {"name": "school-1", "province": "province-1", "ward": "ward-1", "school_code": "062", "school_name": "Test", "is_key_account": 0}
@@ -102,6 +163,7 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		item = detail._build_detail(school, sources, set(), set(), "2026")["activities"][0]
 
 		self.assertEqual(item["type"], "Career Talk")
+		self.assertIsNone(item["outcome"])
 		self.assertNotIn("title", item)
 		self.assertNotIn("owner_staff", item)
 		self.assertNotIn("next_action", item)

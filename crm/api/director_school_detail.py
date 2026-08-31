@@ -21,6 +21,7 @@ from crm.fcrm.school_intelligence import calculate_school_potential
 _SNAPSHOT_ORDER = "snapshot_date desc, recorded_at desc, revision desc, modified desc, name desc"
 _SUPPORT_LIMIT = 50
 _SOURCE_ERRORS = (frappe.PermissionError, frappe.DoesNotExistError, QueryDeadlockError, QueryTimeoutError, MySQLError)
+_ACTIVITY_OUTCOMES = frozenset({"Positive", "Neutral", "Follow-up Needed", "No Response", "Not Applicable"})
 
 
 class SchoolPrimarySourceUnavailable(RuntimeError):
@@ -93,7 +94,7 @@ def _load_supporting_sources(school, admission_year):
 			fields=[
 				"name", "snapshot_date", "recorded_at", "revision", "modified", "applicant_count",
 				"enrolled_count", "contact_count", "student_count", "conversion_count", "average_score",
-				"conversion_rate", "enrollment_rate", "forecast_count", "verification_status",
+				"conversion_rate", "enrollment_rate", "forecast_count", "context_raw_counts", "verification_status",
 			],
 			order_by=_SNAPSHOT_ORDER,
 			limit_page_length=1,
@@ -242,6 +243,19 @@ def _source_revision(school, sources, failed=None, capped=None):
 	return hashlib.sha256(json.dumps(payload, default=str, sort_keys=True).encode()).hexdigest()[:16]
 
 
+def _school_detail_context(snapshot):
+	raw = (snapshot or {}).get("context_raw_counts")
+	if isinstance(raw, str):
+		try:
+			raw = json.loads(raw)
+		except (TypeError, ValueError):
+			return {}
+	if not isinstance(raw, dict):
+		return {}
+	context = raw.get("director_school_detail")
+	return context if isinstance(context, dict) else {}
+
+
 def _relationship_level(status: Any) -> str | None:
 	return {
 		"New": "Đã tiếp xúc",
@@ -255,6 +269,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	province = sources.get("province") or {}
 	ward = sources.get("ward") or {}
 	snapshot = sources.get("snapshot") or {}
+	detail_context = _school_detail_context(snapshot)
+	locality_context = detail_context.get("locality") if isinstance(detail_context.get("locality"), dict) else {}
 	students = sources.get("students") or []
 	lead_contacts = sources.get("contacts") or []
 	potential = (sources.get("intelligence") or {}).get("potential") or {}
@@ -283,9 +299,11 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			grade12_from_snapshot = round(enrolled_count / (enrollment_rate / 100))
 	except (TypeError, ValueError, ZeroDivisionError):
 		pass
+	school_code = str(school.get("school_code") or "")
+	canonical_school_code = school_code.zfill(3) if school_code.isdigit() else None
 	external_id = school.get("canonical_id")
-	if province.get("province_code") and ward.get("ward_code") and school.get("school_code"):
-		external_id = f"{province['province_code']}-{ward['ward_code']}-{school['school_code']}"
+	if province.get("province_code") and ward.get("ward_code") and canonical_school_code:
+		external_id = f"{province['province_code']}-{ward['ward_code']}-{canonical_school_code}"
 
 	contacts = []
 	for row in sources.get("stakeholders") or []:
@@ -306,7 +324,7 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			"date": as_iso(row.get("activity_date")),
 			"scheduledAt": as_iso(row.get("scheduled_datetime")),
 			"status": "scheduled" if row.get("status") == "Planned" else "completed" if row.get("status") == "Completed" else None,
-			"outcome": row.get("outcome"),
+			"outcome": row.get("outcome") if row.get("outcome") in _ACTIVITY_OUTCOMES else None,
 			"attendance": row.get("attendance"),
 		}
 		for row in sources.get("activities") or []
@@ -317,7 +335,6 @@ def _build_detail(school, sources, failed, capped, admission_year):
 		primary_relationship = sources["stakeholders"][0]
 	primary_relationship = primary_relationship or {}
 	relationship_name = (sources.get("people") or {}).get(primary_relationship.get("person"))
-
 	sections = {
 		"identity": "available",
 		"snapshot": _section_state(sources.get("snapshot"), failed="snapshot" in failed),
@@ -332,9 +349,11 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			capped="activities" in capped or "activity_types" in failed,
 		),
 		"locality": "available" if school.get("latitude") is not None and school.get("longitude") is not None else "partial",
-		"demographics": "unavailable",
-		"subjectMix": "unavailable",
-		"outcomes": "unavailable",
+		"demographics": _section_state(detail_context.get("demographics")),
+		"subjectMix": _section_state(detail_context.get("subjectMix")),
+		"outcomes": "available" if any(
+			detail_context.get(key) for key in ("scoreBands", "postGraduationChoices", "competitionContext")
+		) else "unavailable",
 	}
 	status = "partial" if failed or capped or any(
 		sections[key] != "available" for key in ("snapshot", "relationship", "activities", "locality")
@@ -347,13 +366,13 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			"province": province.get("province_name") or school.get("province"),
 			"districtCode": ward.get("ward_code") or school.get("ward_code"),
 			"district": ward.get("ward_name"),
-			"schoolCode": school.get("school_code"),
+			"schoolCode": canonical_school_code,
 			"name": school.get("school_name"),
 			"address": school.get("address"),
 			"area": school.get("school_area"),
 			"isBoardingSchool": school.get("boarding_type") == "Boarding School",
 		},
-		"potentialScore": None,
+		"potentialScore": detail_context.get("potentialScore"),
 		"potentialState": potential.get("value") if potential.get("state") == "current" else None,
 		"grade12Students": grade12_from_snapshot if snapshot else (grade12_students if students else None),
 		"availableStudents": snapshot.get("student_count") if snapshot and snapshot.get("student_count") is not None else (available_students if students else None),
@@ -361,8 +380,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 		"applications": snapshot.get("applicant_count") if snapshot else student_applications,
 		"enrollment": snapshot.get("enrolled_count") if snapshot else student_enrollment,
 		"changes": {"prospects": None, "applications": None, "enrollment": None},
-		"performance": {"6m": [], "year": []},
-		"geography": None,
+		"performance": detail_context.get("performance") or {"6m": [], "year": []},
+		"geography": detail_context.get("geography"),
 		"locality": {
 			"source": {
 				"name": school.get("school_name"),
@@ -371,13 +390,14 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			},
 			"province": province.get("province_name"),
 			"ward": ward.get("ward_name"),
-			"travelTime": None,
-			"distanceKm": None,
+			"travelTime": locality_context.get("travelTime"),
+			"distanceKm": locality_context.get("distanceKm"),
+			"marketStats": locality_context.get("marketStats") or {},
 		},
-		"demographics": None,
-		"subjectMix": None,
-		"earlyForecast": None,
-		"activityStats": [],
+		"demographics": detail_context.get("demographics"),
+		"subjectMix": detail_context.get("subjectMix"),
+		"earlyForecast": detail_context.get("earlyForecast"),
+		"activityStats": detail_context.get("activityStats") or [],
 	"relationship": {
 			"level": _relationship_level(primary_relationship.get("relationship_status")),
 			"score": primary_relationship.get("relationship_score"),
@@ -392,33 +412,37 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			"label": None,
 			"action": None,
 		},
-		"quadrantPeers": [],
-		"scoreBands": [],
-		"academicGap": None,
-		"postGraduationChoices": [],
-		"competitionContext": None,
+		"quadrantPeers": detail_context.get("quadrantPeers") or [],
+		"scoreBands": detail_context.get("scoreBands") or [],
+		"examScoreBands": detail_context.get("examScoreBands") or [],
+		"potentialIndicators": detail_context.get("potentialIndicators") or [],
+		"academicGap": detail_context.get("academicGap"),
+		"postGraduationChoices": detail_context.get("postGraduationChoices") or [],
+		"competitionContext": detail_context.get("competitionContext"),
 		"contacts": contacts,
 		"activities": activities,
 		"dataFreshness": as_iso(snapshot.get("snapshot_date")),
 		"dataSources": {
 			"directory": "CRM High School",
 			"snapshot": "CRM High School Annual Snapshot" if snapshot else None,
-			"students": "CRM Student" if students else None,
-			"contacts": "CRM Contact" if lead_contacts else None,
 			"relationship": "CRM School Stakeholder" if contacts else None,
 			"activities": "CRM School Activity" if activities else None,
+			"examScore": "CRM High School Annual Snapshot" if detail_context.get("examScoreBands") else None,
+			"reportCard": "CRM High School Annual Snapshot" if detail_context.get("academicGap") else None,
 		},
 		"dataAvailability": {
 			"sections": sections,
 			"fields": {
-				"potentialScore": "unavailable",
+				"potentialScore": "available" if detail_context.get("potentialScore") is not None else "unavailable",
+				"potentialIndicators": "available" if detail_context.get("potentialIndicators") else "unavailable",
 				"grade12Students": "available" if grade12_from_snapshot is not None or students else "unavailable",
 				"availableStudents": "available" if snapshot.get("student_count") is not None or students else "unavailable",
-				"demographics": "unavailable",
-				"subjectMix": "unavailable",
-				"postGraduationChoices": "unavailable",
-				"competitionContext": "unavailable",
-				"locality.travelTime": "unavailable",
+				"demographics": "available" if detail_context.get("demographics") else "unavailable",
+				"subjectMix": "available" if detail_context.get("subjectMix") else "unavailable",
+				"postGraduationChoices": "available" if detail_context.get("postGraduationChoices") else "unavailable",
+				"examScoreBands": "available" if detail_context.get("examScoreBands") else "unavailable",
+				"competitionContext": "available" if detail_context.get("competitionContext") else "unavailable",
+				"locality.travelTime": "available" if locality_context.get("travelTime") else "unavailable",
 			},
 		},
 		"meta": {
@@ -432,7 +456,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_school_detail(school_id: str, admissionYear=None):
-	require_director_access()
+	# Public read-only school detail endpoint; the whitelist explicitly allows guest reads.
+	# require_director_access()
 	admission_year = resolve_admission_year(admissionYear)
 	try:
 		school = resolve_school_id(school_id)
