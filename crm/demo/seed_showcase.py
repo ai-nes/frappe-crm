@@ -469,7 +469,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 # deterministic contactable cohort for local dashboard/list-volume testing.
 # Five additional edge-state students are created later by _seed_edge_states,
 # so the complete showcase namespace lands on exactly 100 students.
-TARGET_SHOWCASE_STUDENTS = 300
+TARGET_SHOWCASE_STUDENTS = 200
 TARGET_SHOWCASE_CONTACTS = 80
 _EDGE_STUDENT_COUNT = 5
 _BULK_SCENARIO_COUNT = max(0, TARGET_SHOWCASE_STUDENTS - len(SCENARIOS) - _EDGE_STUDENT_COUNT)
@@ -2080,6 +2080,14 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 					"sla": scenario.get("sla_target"),
 				}
 			)
+			# The large volume-fill cohort accumulates document/meta cache and
+			# per-command receipts; drop the in-process caches every so often so
+			# a long run does not grow unbounded.
+			if len(manifest) % 25 == 0:
+				frappe.local.document_cache = {}
+				if hasattr(frappe.local, "meta_cache"):
+					frappe.local.meta_cache = {}
+				frappe.clear_messages()
 		except Exception as exc:
 			# Drop only the failed scenario's uncommitted work; everything through
 			# the previous scenario is already committed.
@@ -3205,7 +3213,7 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 	rng = random.Random(SEED ^ 0x5000)
 	rng.shuffle(schools)
 	created = skipped = 0
-	for row in schools[:220]:
+	for row in schools[:140]:
 		school = row["name"]
 		if frappe.db.exists(
 			"CRM High School Annual Snapshot",
