@@ -31,7 +31,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.demo import seed_demo, seed_role_accounts, seed_staff
+from crm.demo import seed_bulk_realistic, seed_demo, seed_role_accounts, seed_staff, school_domain_import
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "crm-demo-showcase"
@@ -473,11 +473,14 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 # Keep the hand-curated workflow cases above small and readable, then add a
 # deterministic contactable cohort for local dashboard/list-volume testing.
 # Five additional edge-state students are created later by _seed_edge_states,
-# so the complete showcase namespace lands on exactly 100 students.
-TARGET_SHOWCASE_STUDENTS = 200
+# so the complete showcase namespace lands on exactly 3,184 students.
+CURATED_SCENARIOS = SCENARIOS
+TARGET_SHOWCASE_STUDENTS = 3184
 TARGET_SHOWCASE_CONTACTS = 80
 _EDGE_STUDENT_COUNT = 5
-_BULK_SCENARIO_COUNT = max(0, TARGET_SHOWCASE_STUDENTS - len(SCENARIOS) - _EDGE_STUDENT_COUNT)
+_BULK_SCENARIO_COUNT = seed_bulk_realistic.background_student_count(
+	TARGET_SHOWCASE_STUDENTS, len(CURATED_SCENARIOS), _EDGE_STUDENT_COUNT
+)
 _BULK_ADMISSION_METHODS = (
 	"Combined",
 	"Direct Admission",
@@ -509,8 +512,8 @@ _GIVEN_F = (
 def _generate_bulk_profiles(count: int) -> tuple[dict[str, str], ...]:
 	rng = random.Random(SEED ^ 0x42)
 	profiles: list[dict[str, str]] = []
-	seen_name: set[str] = set()
-	seen_email: set[str] = set()
+	seen_name: set[str] = {scenario["student_name"] for scenario in CURATED_SCENARIOS}
+	seen_email: set[str] = {scenario["email"] for scenario in CURATED_SCENARIOS}
 	while len(profiles) < count:
 		female = rng.random() < 0.5
 		full = " ".join(
@@ -580,6 +583,7 @@ def _make_bulk_scenario(index: int) -> dict[str, Any]:
 		"phone": f"090{8_000_000 + sequence:07d}",
 		"target_stage": _weighted_pick(rng, _BULK_FUNNEL),
 		"owner": rng.random() < 0.32,
+		"current_grade": rng.choice(("10", "11", "12", "post_exam")),
 		"summary": "Hồ sơ tuyển sinh nền cho kiểm thử danh sách và tổng hợp CRM.",
 		"notes": "Hồ sơ tuyển sinh nền cho kiểm thử danh sách và tổng hợp CRM.",
 		"score_series": 2 if rng.random() < 0.35 else 1,
@@ -589,7 +593,16 @@ def _make_bulk_scenario(index: int) -> dict[str, Any]:
 BULK_SCENARIOS: tuple[dict[str, Any], ...] = tuple(
 	_make_bulk_scenario(index) for index in range(_BULK_SCENARIO_COUNT)
 )
-SCENARIOS = SCENARIOS + BULK_SCENARIOS
+_BULK_SCENARIO_BY_KEY = {scenario["key"]: scenario for scenario in BULK_SCENARIOS}
+for _scenario in BULK_SCENARIOS:
+	_grade = _scenario["current_grade"]
+	_scenario["study_stage"] = {
+		"10": "grade_10",
+		"11": "grade_11",
+		"12": "grade_12_h1",
+		"post_exam": "post_exam",
+	}[_grade]
+SCENARIOS = CURATED_SCENARIOS + BULK_SCENARIOS
 
 # CRM Contact rows. New Contacts are inserted under the student_conversion_service
 # flag; an idempotent re-run refreshes the frozen case columns with a consolidated
@@ -1384,7 +1397,13 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 				)
 
 	high_school = scenario.get("high_school") or context["high_school"]
-	province = frappe.db.get_value("CRM High School", high_school, "province")
+	school_location = frappe.db.get_value(
+		"CRM High School", high_school, ["province", "ward"], as_dict=True
+	) or {}
+	province = school_location.get("province")
+	ward = school_location.get("ward")
+	if not province or not ward:
+		raise frappe.ValidationError(f"High School {high_school} has incomplete province/ward data.")
 
 	def _do_intake(suffix: str = "") -> dict:
 		return submit_intake(
@@ -1400,6 +1419,9 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 				"enrollment_status": "Mới",
 				"high_school": high_school,
 				"province": province,
+				"ward": ward,
+				"current_grade": scenario.get("current_grade"),
+				"study_stage": scenario.get("study_stage"),
 				"major": scenario.get("major") or context["major"],
 				"source": scenario.get("source") or context["source"],
 			},
@@ -1443,8 +1465,12 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	# high-school link but does not project its province, so the showcase seed
 	# keeps all shared dimensions aligned when a scenario is created or re-run.
 	placement = {
+		"import_source_id": f"{NAMESPACE}:{scenario['key']}",
 		"high_school": high_school,
 		"province": province,
+		"ward": ward,
+		"current_grade": scenario.get("current_grade"),
+		"study_stage": scenario.get("study_stage"),
 		"major": scenario.get("major") or context["major"],
 		"source": scenario.get("source") or context["source"],
 		"admission_method": scenario["admission_method"],
@@ -2225,6 +2251,43 @@ def _director_school_detail_context(school: dict, metrics: dict) -> dict | None:
 	}
 
 
+def _canonical_school_rows() -> list[dict[str, Any]]:
+	"""Return only DB schools represented by a ready canonical source identity."""
+	canonical_report = school_domain_import.reconcile_school_seed(
+		school_domain_import.DEFAULT_SCHOOL_SEED_PATH
+	)
+	canonical_identities = {
+		row["source_identity"]
+		for row in canonical_report.get("rows", [])
+		if row.get("match_status") == "ready"
+	}
+	provinces = frappe.get_all("CRM Province", fields=["name", "province_code"], limit_page_length=0) or []
+	province_codes = {row["name"]: row["province_code"] for row in provinces}
+	wards = frappe.get_all("CRM Ward", fields=["name", "province", "ward_code"], limit_page_length=0) or []
+	ward_codes = {(row["name"], row["province"]): row["ward_code"] for row in wards}
+	schools = frappe.get_all(
+		"CRM High School",
+		fields=["name", "province", "ward", "school_code", "school_name"],
+		order_by="province asc, school_code asc, name asc",
+		limit_page_length=0,
+	) or []
+	canonical_schools = []
+	for school in schools:
+		identity = school_domain_import.source_identity(
+			province_codes.get(school.get("province")),
+			ward_codes.get((school.get("ward"), school.get("province"))),
+			school.get("school_code"),
+		)
+		if identity in canonical_identities:
+			canonical_schools.append(school)
+	if len(canonical_schools) != len(canonical_identities):
+		raise frappe.ValidationError(
+			"Canonical school seed is incomplete in CRM High School: "
+			f"expected {len(canonical_identities)}, found {len(canonical_schools)}."
+		)
+	return canonical_schools
+
+
 def _assign_bulk_placements(context: dict) -> None:
 	"""Give the bulk cohort real school / province / major / lead-source spread.
 
@@ -2234,18 +2297,9 @@ def _assign_bulk_placements(context: dict) -> None:
 	"""
 	if not BULK_SCENARIOS:
 		return
-	schools = frappe.get_all(
-		"CRM High School",
-		fields=["name", "province", "school_code", "school_name"],
-		order_by="province asc, school_code asc, name asc",
-		limit_page_length=0,
-	) or []
-	schools = [school for school in schools if school.get("province")]
+	schools = _canonical_school_rows()
 	if not schools:
-		return
-	# The director map always shows the first six schools in a province. Keep
-	# those cards useful in a fresh site instead of leaving them with zero leads.
-	featured = _priority_school_rows(schools)
+		raise frappe.ValidationError("Bulk student seed requires imported canonical CRM High School rows.")
 	for major_name, _weight in _BULK_MAJORS:
 		if not frappe.db.exists("CRM Major", major_name):
 			frappe.get_doc(
@@ -2255,41 +2309,43 @@ def _assign_bulk_placements(context: dict) -> None:
 					"major_code": re.sub(r"[^A-Za-z0-9]+", "", major_name)[:16].upper() or "MAJOR",
 				}
 			).insert(ignore_permissions=True)
-	sources = frappe.get_all(
+	from crm.fcrm.master_data_governance import assert_reference_effective
+
+	sources = []
+	for source in frappe.get_all(
 		"CRM Lead Source",
 		filters={"approval_state": "Approved"},
-		pluck="name",
+		fields=["name"],
 		limit_page_length=0,
-	) or [
-		context["source"]
-	]
-	rng = random.Random(SEED ^ 0x9911)
-	rng.shuffle(schools)
-	hot = {s["name"] for s in schools[: max(1, len(schools) // 12)]}
-	weighted = []
-	for s in schools:
-		weighted.extend([s] * (5 if s["name"] in hot else 1))
-	for index, scenario in enumerate(BULK_SCENARIOS):
-		if index < len(featured):
-			# One enrolled student per featured school makes the grade-12 KPI
-			# derivable from the verified annual snapshot as well.
-			pick = featured[index]
-			scenario["target_stage"] = "Enrolled"
-		else:
-			pick = rng.choice(weighted)
-		scenario["high_school"] = pick["name"]
-		scenario["province"] = pick.get("province")
-		scenario["major"] = _weighted_pick(rng, _BULK_MAJORS)
-		scenario["source"] = rng.choice(sources)
+	) or []:
+		try:
+			assert_reference_effective("CRM Lead Source", source["name"])
+		except Exception:
+			continue
+		sources.append(source["name"])
+	if not sources:
+		try:
+			assert_reference_effective("CRM Lead Source", context["source"])
+		except Exception as exc:
+			raise frappe.ValidationError("Bulk student seed requires one active CRM Lead Source.") from exc
+		sources = [context["source"]]
+	enriched = seed_bulk_realistic.enrich_bulk_scenarios(
+		BULK_SCENARIOS,
+		schools,
+		_BULK_MAJORS,
+		sources,
+		seed=SEED ^ 0x9911,
+		per_school_cap=seed_bulk_realistic.DEFAULT_PER_SCHOOL_CAP,
+	)
+	for scenario, assigned in zip(BULK_SCENARIOS, enriched, strict=True):
+		scenario.update(assigned)
 
 
 def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list[dict]]:
 	manifest: list[dict] = []
 	errors: list[dict] = []
 	pool = staff_context["pool"]
-	_assign_bulk_placements(context)
-	frappe.db.commit()
-	for scenario in SCENARIOS:
+	for scenario in CURATED_SCENARIOS:
 		try:
 			student_doc = _ensure_student(scenario, context, pool)
 			student = student_doc.name
@@ -2344,6 +2400,91 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 				pass
 			errors.append({"key": scenario["key"], "error": str(exc)})
 	return manifest, errors
+
+
+def _seed_bulk_richness(bulk_manifest: list[dict]) -> dict[str, int]:
+	"""Add a small deterministic assessment/score/interaction sample."""
+	from crm.fcrm.student_assessment import record_student_assessment
+
+	metrics = {"assessments": 0, "scores": 0, "interactions": 0, "errors": 0}
+	for index, item in enumerate(bulk_manifest):
+		scenario = _BULK_SCENARIO_BY_KEY[item["key"]]
+		sp = _savepoint_name("bulk_richness", index)
+		frappe.db.savepoint(sp)
+		try:
+			if index % 5 == 0:
+				_ensure_scores(item["student"], scenario)
+				metrics["scores"] += 1
+			if index % 6 == 0 and not frappe.db.exists(
+				"CRM Student Assessment", {"student": item["student"], "status": "confirmed"}
+			):
+				record_student_assessment(
+					item["student"],
+					{
+						"interest": ("High", "Medium", "Low")[index % 3],
+						"interest_confidence": 72,
+						"fit": ("Medium", "High", "Unknown")[index % 3],
+						"fit_confidence": 68,
+						"primary_barrier": ("Information", "Cost", "None")[index % 3],
+						"barrier_confidence": 61,
+					},
+					source="manual",
+					reason=f"Demo background assessment — {scenario['key']}",
+					evidence_references=[f"demo-bulk:{scenario['key']}"],
+					confirm=True,
+				)
+				metrics["assessments"] += 1
+			if index % 7 == 0:
+				_ensure_manual_interaction(item["student"], scenario)
+				metrics["interactions"] += 1
+		except Exception:
+			metrics["errors"] += 1
+			try:
+				frappe.db.rollback(save_point=sp)
+			except Exception:
+				frappe.db.rollback()
+			continue
+		if (index + 1) % 100 == 0:
+			frappe.db.commit()
+			_clear_seed_caches()
+	if bulk_manifest:
+		frappe.db.commit()
+	return metrics
+
+
+def _clear_seed_caches() -> None:
+	frappe.local.document_cache = {}
+	if hasattr(frappe.local, "meta_cache"):
+		frappe.local.meta_cache = {}
+	frappe.clear_messages()
+
+
+def _seed_bulk_students(context: dict, staff_context: dict) -> tuple[list[dict], list[dict], dict[str, int]]:
+	_assign_bulk_placements(context)
+	status_by_stage = {
+		stage: _enrollment_term(status)
+		for stage, status in (
+			("Lead", "Mới"),
+			("MQL", "Có triển vọng"),
+			("Applicant", "Đã xác nhận"),
+			("Enrolled", "Đã nhập học"),
+			("Lost", "Từ chối"),
+		)
+	}
+	result = seed_bulk_realistic.seed_bulk_students(
+		BULK_SCENARIOS,
+		context,
+		staff_context,
+		status_by_stage=status_by_stage,
+		batch_size=100,
+	)
+	metrics = _seed_bulk_richness(result["manifest"])
+	return result["manifest"], result["errors"], {
+		"requested": result["requested"],
+		"created": result["created"],
+		"updated": result["updated"],
+		**metrics,
+	}
 
 
 def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
@@ -2623,10 +2764,10 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 	The base data (CRM Province / Ward / High School, plus annual snapshots and
 	stakeholders for the TS key-account list) comes straight from
 	``school_domain_import`` -- no synthetic schools. Excel is an extraction source;
-	the seed consumes only the compact JSON projection and keeps 10 schools per
-	canonical province in the local showcase. Unlinked canonical schools from an
-	older full seed are pruned; protected Student/Contact links are retained and
-	reported as a gap. On top of that this seed
+	the seed consumes the complete compact JSON projection and preserves all
+	canonical schools in the local showcase. Unlinked canonical schools from an
+	older partial seed are filled in rather than pruned, so existing Student/Contact
+	links are never orphaned. On top of that this seed
 	guarantees COVERAGE_MATRIX state on ``_KEY_ACCOUNT_SLOTS`` real key-account
 	schools and gives each three CRM School Activity rows (Planned / Completed /
 	Cancelled). Every top-up row is owned by the Promoter staff.
@@ -2657,32 +2798,22 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 				{"stage": "json", "error": f"missing {school_domain_import.DEFAULT_SCHOOL_SEED_PATH.name}"}
 			)
 			return counts
-		prune_plan = school_domain_import.prune_school_seed(
-			dry_run=True,
-			schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
-		)
-		if prune_plan["candidate_schools"] and not prune_plan["protected_links"]:
-			pruned = school_domain_import.prune_school_seed(
-				dry_run=False,
-				schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
-			)
-			counts["school_prune"] = pruned.get("deleted", {})
-		elif prune_plan["protected_links"]:
-			counts["gaps"].append(
-				{
-					"stage": "prune",
-					"error": "unselected canonical schools have protected Student/Contact links",
-					"protected_links": prune_plan["protected_links"],
-				}
-			)
 		base = school_domain_import.seed_school_seed(
 			dry_run=False,
-			max_schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
+			commit_policy="all",
+			max_schools_per_province=None,
 		)
 		counts["base_import"] = base.get("mutations", {})
+		if base.get("errors"):
+			counts["gaps"].append({"stage": "base_import", "errors": base["errors"]})
+			raise frappe.ValidationError(f"canonical school import failed: {base['errors']}")
 		if school_domain_import.DEFAULT_TS_PATH.exists():
-			ts = school_domain_import.seed_ts_workbook(dry_run=False)
+			ts = school_domain_import.seed_ts_workbook(dry_run=False, commit_policy="partial")
 			counts["ts_import"] = ts.get("mutations", {})
+			if ts.get("errors"):
+				# The workbook intentionally contains reviewable rows. Keep valid rows,
+				# but surface importer errors in the seed manifest instead of swallowing them.
+				counts["gaps"].append({"stage": "ts_import", "errors": ts["errors"]})
 		else:
 			counts["gaps"].append(
 				{
@@ -3752,6 +3883,10 @@ def _seed_all() -> dict:
 	_ensure_lifecycle_statuses()
 	_ensure_policies(staff_context["campus"], staff_context["pool"])
 	reference = _seed_reference_coverage(context)
+	# Create the governed source vocabulary before students reference it. Retired
+	# or proposed sources remain in the governance matrix, but the bulk cohort
+	# must only receive currently effective sources.
+	governance = _seed_governance(context)
 	# Commit the shared vocabulary / policy setup before the per-scenario loop:
 	# a failing scenario there issues a bare rollback, which would otherwise
 	# discard this setup and leave later steps unable to resolve lead statuses.
@@ -3760,11 +3895,13 @@ def _seed_all() -> dict:
 	school = _seed_school_domain(context, staff_context)
 	school["dashboard_spotlight"] = _seed_dashboard_spotlight_relationships(staff_context)
 	students, student_errors = _seed_students(context, staff_context)
+	bulk_students, bulk_errors, bulk_metrics = _seed_bulk_students(context, staff_context)
+	students.extend(bulk_students)
+	student_errors.extend(bulk_errors)
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
-	governance = _seed_governance(context)
 	edge = _seed_edge_states(context, staff_context)
 	role_accounts = seed_role_accounts.execute()
 
@@ -3787,6 +3924,7 @@ def _seed_all() -> dict:
 		},
 		"students": students,
 		"student_errors": student_errors,
+		"bulk": bulk_metrics,
 		"contacts": contacts,
 		"school_domain": school,
 		"market_snapshots": market_snapshots,
@@ -3800,9 +3938,9 @@ def _seed_all() -> dict:
 
 
 def execute(strict: bool = True) -> dict:
-	"""Seed the curated CRM demo dataset on ``crm.localhost`` only.
+	"""Seed the full CRM demo dataset on ``crm.localhost`` only.
 
-	With ``strict`` (the default) a non-empty ``student_errors`` raises after the
+	With ``strict`` (the default) student or bulk-richness errors raise after the
 	manifest is printed, so ``task seed`` fails loudly instead of exiting 0 on a
 	partial seed. Pass ``strict=False`` to inspect a partial run.
 	"""
@@ -3812,10 +3950,11 @@ def execute(strict: bool = True) -> dict:
 	with _temporary_local_flags():
 		result = _seed_all()
 	print(frappe.as_json(result))
-	if strict and result.get("student_errors"):
+	bulk_errors = int((result.get("bulk") or {}).get("errors", 0))
+	if strict and (result.get("student_errors") or bulk_errors):
 		raise frappe.ValidationError(
-			f"Seed completed with {len(result['student_errors'])} scenario error(s); "
-			"see student_errors in the manifest above."
+			f"Seed completed with {len(result.get('student_errors') or [])} scenario error(s) "
+			f"and {bulk_errors} bulk-richness error(s); see the manifest above."
 		)
 	return result
 
@@ -3920,6 +4059,92 @@ def _coverage_scope() -> dict[str, dict]:
 	}
 
 
+def _verify_bulk_invariants() -> dict[str, Any]:
+	"""Verify count, school coverage, location derivation and regional spread.
+
+	The ten-student cap applies to the generated bulk cohort. Curated workflow and
+	edge-state students intentionally share a few spotlight schools for demos, so
+	their combined showcase count is reported but is not subject to the bulk cap.
+	"""
+	schools = _canonical_school_rows()
+	school_by_name = {row["name"]: row for row in schools}
+	all_school_count = frappe.db.count("CRM High School")
+	bulk_rows = frappe.get_all(
+		"CRM Student",
+		filters={"import_source_id": ["like", f"{seed_bulk_realistic.BULK_IMPORT_NAMESPACE}:%"]},
+		fields=["name", "email", "high_school", "province", "ward"],
+		limit_page_length=0,
+	) or []
+	by_school: dict[str, int] = {}
+	location_mismatches: list[str] = []
+	for row in bulk_rows:
+		school_name = row.get("high_school")
+		by_school[school_name] = by_school.get(school_name, 0) + 1
+		school = school_by_name.get(school_name)
+		if not school or row.get("province") != school.get("province") or row.get("ward") != school.get("ward"):
+			location_mismatches.append(row["name"])
+	missing_schools = sorted(set(school_by_name) - set(by_school))
+	max_students_per_school = max(by_school.values(), default=0)
+	region_totals: dict[float, int] = {}
+	region_school_counts: dict[float, int] = {}
+	for school_name, school in school_by_name.items():
+		weight = seed_bulk_realistic.province_weight(school.get("province"))
+		region_totals[weight] = region_totals.get(weight, 0) + by_school.get(school_name, 0)
+		region_school_counts[weight] = region_school_counts.get(weight, 0) + 1
+	region_averages = {
+		str(weight): round(region_totals[weight] / region_school_counts[weight], 3)
+		for weight in sorted(region_school_counts, reverse=True)
+		if region_school_counts[weight]
+	}
+	baseline = region_averages.get("1.0", 0)
+	regional_bias_ok = (
+		bool(region_averages.get("2.0"))
+		and bool(region_averages.get("1.5"))
+		and region_averages["2.0"] > baseline
+		and region_averages["1.5"] > baseline
+	)
+	showcase_emails = set(_showcase_student_emails())
+	showcase_rows = frappe.get_all(
+		"CRM Student",
+		filters={"email": ["in", list(showcase_emails)]},
+		fields=["name", "email", "high_school"],
+		limit_page_length=0,
+	) or []
+	seen_emails = {row.get("email") for row in showcase_rows}
+	showcase_by_school: dict[str | None, int] = {}
+	for row in showcase_rows:
+		school_name = row.get("high_school")
+		showcase_by_school[school_name] = showcase_by_school.get(school_name, 0) + 1
+	max_showcase_students_per_school = max(showcase_by_school.values(), default=0)
+	result = {
+		"expected_showcase_students": TARGET_SHOWCASE_STUDENTS,
+		"showcase_student_count": len(showcase_rows),
+		"missing_showcase_emails": sorted(showcase_emails - seen_emails),
+		"duplicate_showcase_emails": len(showcase_rows) - len(seen_emails),
+		"expected_bulk_students": len(BULK_SCENARIOS),
+		"bulk_student_count": len(bulk_rows),
+		"school_count": len(schools),
+		"all_school_count": all_school_count,
+		"schools_without_bulk_student": missing_schools,
+		"location_mismatch_count": len(location_mismatches),
+		"max_bulk_students_per_school": max_students_per_school,
+		"max_showcase_students_per_school": max_showcase_students_per_school,
+		"region_average_students_per_school": region_averages,
+		"regional_bias_ok": regional_bias_ok,
+	}
+	result["ok"] = (
+		result["showcase_student_count"] == TARGET_SHOWCASE_STUDENTS
+		and not result["missing_showcase_emails"]
+		and not result["duplicate_showcase_emails"]
+		and result["bulk_student_count"] == len(BULK_SCENARIOS)
+		and not missing_schools
+		and not location_mismatches
+		and max_students_per_school <= seed_bulk_realistic.DEFAULT_PER_SCHOOL_CAP
+		and regional_bias_ok
+	)
+	return result
+
+
 def verify(strict: bool = True) -> dict:
 	"""Assert every COVERAGE_MATRIX value has >=1 record this seed created.
 
@@ -3956,11 +4181,15 @@ def verify(strict: bool = True) -> dict:
 		"covered_fields": len(covered),
 		"fields_with_gaps": missing,
 		"known_gaps": list(KNOWN_GAPS),
-		"ok": not missing,
+		"bulk_invariants": _verify_bulk_invariants(),
 	}
+	result["ok"] = not missing and result["bulk_invariants"]["ok"]
 	print(frappe.as_json(result))
-	if strict and missing:
-		raise frappe.ValidationError(f"Coverage gaps in {len(missing)} field(s): {sorted(missing)}")
+	if strict and (missing or not result["bulk_invariants"]["ok"]):
+		raise frappe.ValidationError(
+			f"Demo verification failed: coverage_gaps={len(missing)}, "
+			f"bulk_invariants_ok={result['bulk_invariants']['ok']}"
+		)
 	return result
 
 

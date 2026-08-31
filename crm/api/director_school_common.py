@@ -142,9 +142,9 @@ def parse_school_id(school_id: Any) -> tuple[str, str, str, str]:
 	if not match:
 		raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
 	middle = match.group("middle")
-	mode = "canonical" if len(middle) == 5 else "legacy" if len(middle) == 2 else "invalid"
-	if mode == "invalid":
-		raise_api_error("SCHOOL_NOT_FOUND", "Không tìm thấy trường.", frappe.DoesNotExistError, 404)
+	# Legacy links used two-digit district codes. Current canonical datasets may
+	# use five- or seven-digit ward codes after administrative-code updates.
+	mode = "legacy" if len(middle) == 2 else "canonical"
 	return match.group("province"), middle, match.group("school"), mode
 
 

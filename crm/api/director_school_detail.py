@@ -454,10 +454,9 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(methods=["GET"])
 def get_director_school_detail(school_id: str, admissionYear=None):
-	# Public read-only school detail endpoint; the whitelist explicitly allows guest reads.
-	# require_director_access()
+	require_director_access()
 	admission_year = resolve_admission_year(admissionYear)
 	try:
 		school = resolve_school_id(school_id)

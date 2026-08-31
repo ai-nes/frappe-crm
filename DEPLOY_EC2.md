@@ -34,8 +34,9 @@ Frappe during normal deployments.
 
 ## Seeding demo data on a server (manual, opt-in)
 
-Deploys run only `bench migrate` — they never seed. To populate the curated
-demo dataset (schools + coordinates, ~100 students, campaigns, edge cases) on a
+Deploys run only `bench migrate` — they never seed. To populate the full demo
+dataset (all canonical schools + coordinates, exactly 3,184 linked students,
+campaigns, edge cases) on a
 **demo / staging** deployment, from the compose directory on the server:
 
 ```bash

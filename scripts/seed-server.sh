@@ -2,7 +2,7 @@
 # Seed the curated CRM demo dataset on a deployed server (demo / staging).
 #
 # Deploys only run `bench migrate`; this is the manual, deliberate way to
-# populate demo data (schools + coordinates, 100 students, campaigns, ...).
+# populate demo data (all canonical schools + coordinates, 3,184 students, campaigns, ...).
 # It refuses to run without you re-typing the site name, and it never seeds
 # the shared-password test logins on a non-local site.
 #
@@ -42,6 +42,9 @@ EOF
 read -r -p "Type the site name to confirm: " CONFIRM
 [ "$CONFIRM" = "$SITE_NAME" ] || { echo "Mismatch — aborted." >&2; exit 1; }
 
+echo "==> backup database and files"
+bench_exec backup --with-files
+
 echo "==> allow_demo_seed = 1"
 bench_exec set-config allow_demo_seed 1
 
@@ -55,7 +58,7 @@ echo "==> ensure_demo_config"
 bench_exec execute crm.demo.seed_showcase.ensure_demo_config
 echo "==> ensure_local_integrity_keys"
 bench_exec execute crm.demo.seed_showcase.ensure_local_integrity_keys
-echo "==> seed_showcase.execute (this takes a minute)"
+echo "==> seed_showcase.execute (this may take several minutes)"
 bench_exec execute crm.demo.seed_showcase.execute
 
 if [ "$SKIP_VERIFY" -eq 0 ]; then
