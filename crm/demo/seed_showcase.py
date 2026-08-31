@@ -3150,8 +3150,12 @@ def _seed_all() -> dict:
 		)
 	_ensure_lifecycle_statuses()
 	_ensure_policies(staff_context["campus"], staff_context["pool"])
-
 	reference = _seed_reference_coverage(context)
+	# Commit the shared vocabulary / policy setup before the per-scenario loop:
+	# a failing scenario there issues a bare rollback, which would otherwise
+	# discard this setup and leave later steps unable to resolve lead statuses.
+	frappe.db.commit()
+
 	students, student_errors = _seed_students(context, staff_context)
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
