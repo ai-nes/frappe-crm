@@ -237,7 +237,11 @@ def _report_payload(report: dict, snapshot: dict) -> dict:
 		},
 		"after": {
 			"association_count": frappe.db.count("CRM School Stakeholder"),
-			"activity_stakeholder_count": frappe.db.count("CRM School Activity", {"stakeholder": ["is", "set"]}),
+			"activity_stakeholder_count": (
+				frappe.db.count("CRM School Activity", {"stakeholder": ["is", "set"]})
+				if _table_exists("CRM School Activity")
+				else 0
+			),
 		},
 		"details": report,
 		"backup_file": str(_backup_path("backup")),
