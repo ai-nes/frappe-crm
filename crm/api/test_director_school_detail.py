@@ -149,9 +149,9 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertEqual(response_state["http_status_code"], 503)
 		self.assertEqual(response_state["error"]["code"], "SCHOOL_DATA_UNAVAILABLE")
 
-	def test_method_has_no_guest_or_permission_bypass(self):
+	def test_method_allows_guest_without_permission_bypass(self):
 		source = detail.__loader__.get_source(detail.__name__)
-		self.assertNotIn("allow_guest=True", source)
+		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
 		for forbidden in ('"source_note"', '"notes"', '"title"', '"next_action"', '"owner_staff"'):

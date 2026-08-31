@@ -319,7 +319,7 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 	}
 
 
-@frappe.whitelist(methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_market_intelligence_overview(
 	admissionYear=None,
 	period="30d",

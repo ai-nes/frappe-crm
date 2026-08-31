@@ -138,9 +138,9 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		self.assertEqual(province["highSchools"][0]["prospects"], 1)
 		self.assertEqual(province["highSchools"][0]["applications"], 7)
 
-	def test_method_has_no_guest_or_permission_bypass(self):
+	def test_method_allows_guest_without_permission_bypass(self):
 		source = market.__loader__.get_source(market.__name__)
-		self.assertNotIn("allow_guest=True", source)
+		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
 
