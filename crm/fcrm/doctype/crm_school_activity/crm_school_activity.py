@@ -31,6 +31,19 @@ class CRMSchoolActivity(Document):
 		for fieldname in ("attendance", "prospect_count", "contact_count", "application_count"):
 			if self.get(fieldname) not in (None, "") and int(self.get(fieldname)) < 0:
 				frappe.throw(f"{fieldname} cannot be negative.", frappe.ValidationError)
+		if self.activity_cost not in (None, "") and float(self.activity_cost) < 0:
+			frappe.throw("activity_cost cannot be negative.", frappe.ValidationError)
+		for fieldname in ("expected_enrollment_min", "expected_enrollment_max", "forecast_sample_size"):
+			if self.get(fieldname) not in (None, "") and int(self.get(fieldname)) < 0:
+				frappe.throw(f"{fieldname} cannot be negative.", frappe.ValidationError)
+		if (
+			self.expected_enrollment_min not in (None, "")
+			and self.expected_enrollment_max not in (None, "")
+			and int(self.expected_enrollment_min) > int(self.expected_enrollment_max)
+		):
+			frappe.throw("Expected enrollment minimum cannot exceed maximum.", frappe.ValidationError)
+		if self.forecast_confidence not in (None, "") and not 0 <= float(self.forecast_confidence) <= 100:
+			frappe.throw("forecast_confidence must be between 0 and 100.", frappe.ValidationError)
 
 	@staticmethod
 	def default_list_data():

@@ -37,6 +37,7 @@ from crm.demo import (
 	seed_bulk_realistic,
 	seed_demo,
 	seed_role_accounts,
+	seed_school_field_activity,
 	seed_staff,
 )
 
@@ -4092,6 +4093,7 @@ def _seed_all() -> dict:
 	bulk_students, bulk_errors, bulk_metrics = _seed_bulk_students(context, staff_context)
 	students.extend(bulk_students)
 	student_errors.extend(bulk_errors)
+	school_field_activity = seed_school_field_activity.seed(context)
 	admission_funnel = seed_admission_funnel.seed(context)
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
@@ -4123,6 +4125,7 @@ def _seed_all() -> dict:
 		"bulk": bulk_metrics,
 		"contacts": contacts,
 		"school_domain": school,
+		"school_field_activity": school_field_activity,
 		"market_snapshots": market_snapshots,
 		"marketing": marketing,
 		"governance": governance,
