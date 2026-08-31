@@ -469,7 +469,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 # deterministic contactable cohort for local dashboard/list-volume testing.
 # Five additional edge-state students are created later by _seed_edge_states,
 # so the complete showcase namespace lands on exactly 100 students.
-TARGET_SHOWCASE_STUDENTS = 100
+TARGET_SHOWCASE_STUDENTS = 300
 TARGET_SHOWCASE_CONTACTS = 80
 _EDGE_STUDENT_COUNT = 5
 _BULK_SCENARIO_COUNT = max(0, TARGET_SHOWCASE_STUDENTS - len(SCENARIOS) - _EDGE_STUDENT_COUNT)
@@ -480,107 +480,104 @@ _BULK_ADMISSION_METHODS = (
 	"National High School Exam",
 	"Transcript Review",
 )
-_BULK_STUDENT_NAMES = (
-	"Nguyễn Hoàng Nam",
-	"Trần Minh Đức",
-	"Lê Quốc Bảo",
-	"Phạm Khánh Huyền",
-	"Võ Thành Đạt",
-	"Đặng Ngọc Anh",
-	"Bùi Gia Huy",
-	"Hồ Phương Thảo",
-	"Phan Minh Triết",
-	"Dương Thu Hà",
-	"Huỳnh Nhật Tân",
-	"Vũ Ngọc Diệp",
-	"Trịnh Hoàng Long",
-	"Lý Bảo Châu",
-	"Mai Đức Anh",
-	"Cao Minh Khoa",
-	"Đinh Thảo Vy",
-	"Lương Gia Khánh",
-	"Tạ Hoàng Yến",
-	"Đoàn Minh Quân",
-	"Bạch Nguyên Khang",
-	"Vương Khánh Ngân",
-	"Kiều Anh Tú",
-	"Tô Minh Châu",
-	"Hà Quốc Thịnh",
-	"Lâm Gia Linh",
-	"Phùng Hải Nam",
-	"Trương Ngọc Hân",
-	"Chu Minh Nhật",
-	"Nguyễn Phúc An",
-	"Trần Gia Bảo",
-	"Lê Minh Khôi",
-	"Phạm Tuấn Anh",
-	"Võ Quỳnh Anh",
-	"Đặng Minh Thư",
-	"Bùi Quốc Hưng",
-	"Hồ Ngọc Mai",
-	"Phan Gia Hân",
-	"Dương Minh Khang",
-	"Huỳnh Thanh Tùng",
-	"Vũ Khánh Linh",
-	"Trịnh Minh Anh",
-	"Lý Hoàng Phúc",
-	"Mai Thanh Hà",
-	"Cao Nhật Minh",
-	"Đinh Quốc Huy",
-	"Lương Thùy Linh",
-	"Tạ Minh Hoàng",
-	"Đoàn Khánh Toàn",
-	"Bạch Hải Yến",
-	"Vương Minh Tâm",
-	"Kiều Ngọc Lan",
-	"Tô Đức Minh",
-	"Hà Phương Linh",
-	"Lâm Hoàng Anh",
-	"Phùng Minh Thắng",
-	"Trương Gia Minh",
-	"Chu Thảo Nguyên",
-	"Nguyễn Khánh Toàn",
-	"Trần Ngọc Khải",
-	"Lê Hoàng Yến",
-	"Phạm Minh Hiếu",
-	"Võ Nhật Quang",
-	"Đặng Thùy Dương",
-	"Bùi Anh Khoa",
-	"Hồ Gia Bảo",
-	"Phan Ngọc Trâm",
-	"Dương Hoàng Phương",
-	"Huỳnh Quốc Việt",
-	"Vũ Minh Châu",
-	"Trịnh Bảo Nam",
-	"Lý Thanh Vân",
-	"Mai Khánh Toàn",
-	"Cao Hoàng Phúc",
-	"Đinh Minh Ngọc",
-	"Lương Quốc Khánh",
-	"Tạ Ngọc Huy",
-	"Đoàn Gia Phúc",
+# Vietnamese name pools -> a deterministic, de-duplicated cohort sized exactly to
+# _BULK_SCENARIO_COUNT (previously a hand-maintained literal kept in lock-step).
+_SURNAMES = (
+	"Nguyễn", "Trần", "Lê", "Phạm", "Hoàng", "Huỳnh", "Phan", "Vũ", "Võ", "Đặng",
+	"Bùi", "Đỗ", "Hồ", "Ngô", "Dương", "Lý", "Đinh", "Tô", "Lương", "Mai",
+	"Trịnh", "Đoàn", "Lâm", "Cao", "Tạ",
+)
+_MIDDLE_M = ("Minh", "Gia", "Quốc", "Hoàng", "Đức", "Nhật", "Hữu", "Thành", "Anh", "Bá")
+_MIDDLE_F = ("Thị", "Ngọc", "Khánh", "Thu", "Phương", "Hà", "Bảo", "Diệu", "Gia", "Thanh")
+_GIVEN_M = (
+	"An", "Bảo", "Cường", "Dũng", "Đạt", "Huy", "Khoa", "Khôi", "Long", "Nam",
+	"Phúc", "Quân", "Sơn", "Tâm", "Thắng", "Tiến", "Trí", "Trung", "Tuấn", "Việt",
+	"Vinh", "Hưng", "Kiên", "Lâm", "Nghĩa", "Phong", "Sang", "Toàn", "Đăng", "Hiếu",
+)
+_GIVEN_F = (
+	"Anh", "Chi", "Dung", "Giang", "Hà", "Hằng", "Hoa", "Hương", "Lan", "Linh",
+	"Mai", "My", "Nga", "Ngân", "Nhi", "Như", "Oanh", "Phương", "Quỳnh", "Thảo",
+	"Thư", "Trang", "Trâm", "Uyên", "Vy", "Yến", "Diệp", "Hân", "Ngọc", "Thùy",
 )
 
-if len(_BULK_STUDENT_NAMES) != _BULK_SCENARIO_COUNT:
-	raise RuntimeError("The natural student name list must match the bulk cohort size.")
+
+def _generate_bulk_profiles(count: int) -> tuple[dict[str, str], ...]:
+	rng = random.Random(SEED ^ 0x42)
+	profiles: list[dict[str, str]] = []
+	seen_name: set[str] = set()
+	seen_email: set[str] = set()
+	while len(profiles) < count:
+		female = rng.random() < 0.5
+		full = " ".join(
+			(
+				rng.choice(_SURNAMES),
+				rng.choice(_MIDDLE_F if female else _MIDDLE_M),
+				rng.choice(_GIVEN_F if female else _GIVEN_M),
+			)
+		)
+		email = _natural_email(full)
+		if full in seen_name or email in seen_email:
+			continue
+		seen_name.add(full)
+		seen_email.add(email)
+		profiles.append({"name": full, "gender": "Nữ" if female else "Nam"})
+	return tuple(profiles)
+
+
+_BULK_STUDENT_PROFILES = _generate_bulk_profiles(_BULK_SCENARIO_COUNT)
+_BULK_STUDENT_NAMES = tuple(p["name"] for p in _BULK_STUDENT_PROFILES)
+
+# A weighted admissions funnel so the bulk cohort is not a flat wall of "Lead".
+_BULK_FUNNEL = (
+	("Lead", 46),
+	("MQL", 24),
+	("Applicant", 17),
+	("Enrolled", 9),
+	("Lost", 4),
+)
+
+# CRM Major is not a governed reference; a small spread keeps "interest by major"
+# from reading as 100% one programme.
+_BULK_MAJORS = (
+	("Software Engineering", 30),
+	("Artificial Intelligence", 26),
+	("Data Science", 14),
+	("Digital Marketing", 12),
+	("Business Administration", 10),
+	("Graphic Design", 8),
+)
+
+
+def _weighted_pick(rng: random.Random, pairs) -> str:
+	total = sum(weight for _, weight in pairs)
+	marker = rng.uniform(0, total)
+	upto = 0.0
+	for value, weight in pairs:
+		upto += weight
+		if marker <= upto:
+			return value
+	return pairs[-1][0]
 
 
 def _make_bulk_scenario(index: int) -> dict[str, Any]:
 	sequence = index + 1
-	key = f"bulk-student-{sequence:03d}"
-	student_name = _BULK_STUDENT_NAMES[index]
+	profile = _BULK_STUDENT_PROFILES[index]
+	student_name = profile["name"]
+	# Local RNG: this runs at import time, before module-level helpers like _rng.
+	rng = random.Random(SEED ^ (0x7333 + sequence))
 	return {
-		"key": key,
+		"key": f"bulk-student-{sequence:03d}",
 		"student_name": student_name,
-		"gender": "Nữ" if sequence % 2 else "Nam",
-		"admission_method": _BULK_ADMISSION_METHODS[index % len(_BULK_ADMISSION_METHODS)],
+		"gender": profile["gender"],
+		"admission_method": rng.choice(_BULK_ADMISSION_METHODS),
 		"email": _natural_email(student_name),
-		"phone": f"090191{sequence:04d}",
-		"target_stage": "Lead",
-		"owner": sequence % 2 == 0,
-		"summary": "Hồ sơ tuyển sinh dùng để kiểm tra danh sách và liên kết CRM.",
-		"notes": "Hồ sơ tuyển sinh mẫu dùng để kiểm tra danh sách và liên kết CRM.",
-		"score_series": 1,
+		# Deterministic, unique, valid 10-digit VN mobile.
+		"phone": f"09{18_000_000 + sequence}",
+		"target_stage": _weighted_pick(rng, _BULK_FUNNEL),
+		"owner": rng.random() < 0.32,
+		"summary": "Hồ sơ tuyển sinh nền cho kiểm thử danh sách và tổng hợp CRM.",
+		"notes": "Hồ sơ tuyển sinh nền cho kiểm thử danh sách và tổng hợp CRM.",
+		"score_series": 2 if rng.random() < 0.35 else 1,
 	}
 
 
@@ -1393,9 +1390,9 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 				"owning_team": pool,
 				"admission_year": context["admission_year"],
 				"enrollment_status": "Mới",
-				"high_school": context["high_school"],
-				"major": context["major"],
-				"source": context["source"],
+				"high_school": scenario.get("high_school") or context["high_school"],
+				"major": scenario.get("major") or context["major"],
+				"source": scenario.get("source") or context["source"],
 			},
 			source_namespace=NAMESPACE,
 			source_record_id=scenario["key"] + suffix,
@@ -1989,10 +1986,52 @@ def _maybe_convert(student: str, scenario: dict) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _assign_bulk_placements(context: dict) -> None:
+	"""Give the bulk cohort real school / province / major / lead-source spread.
+
+	Runs at seed time (needs the DB): _make_bulk_scenario is import-time and cannot
+	query CRM High School. Mutates the shared BULK_SCENARIOS dicts in place; the
+	assignment is deterministic (seeded RNG) so re-runs are stable.
+	"""
+	if not BULK_SCENARIOS:
+		return
+	schools = frappe.get_all(
+		"CRM High School", fields=["name", "province"], limit_page_length=0
+	) or []
+	if not schools:
+		return
+	for major_name, _weight in _BULK_MAJORS:
+		if not frappe.db.exists("CRM Major", major_name):
+			frappe.get_doc(
+				{
+					"doctype": "CRM Major",
+					"major_name": major_name,
+					"major_code": re.sub(r"[^A-Za-z0-9]+", "", major_name)[:16].upper() or "MAJOR",
+				}
+			).insert(ignore_permissions=True)
+	sources = frappe.get_all("CRM Lead Source", pluck="name", limit_page_length=0) or [
+		context["source"]
+	]
+	rng = random.Random(SEED ^ 0x9911)
+	rng.shuffle(schools)
+	hot = {s["name"] for s in schools[: max(1, len(schools) // 12)]}
+	weighted = []
+	for s in schools:
+		weighted.extend([s] * (5 if s["name"] in hot else 1))
+	for scenario in BULK_SCENARIOS:
+		pick = rng.choice(weighted)
+		scenario["high_school"] = pick["name"]
+		scenario["province"] = pick.get("province")
+		scenario["major"] = _weighted_pick(rng, _BULK_MAJORS)
+		scenario["source"] = rng.choice(sources)
+
+
 def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list[dict]]:
 	manifest: list[dict] = []
 	errors: list[dict] = []
 	pool = staff_context["pool"]
+	_assign_bulk_placements(context)
+	frappe.db.commit()
 	for scenario in SCENARIOS:
 		try:
 			student_doc = _ensure_student(scenario, context, pool)
@@ -3138,6 +3177,76 @@ def _seed_intake_review_coverage(notes: list[str]) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _seed_market_snapshots(context: dict) -> dict[str, int]:
+	"""One realistic CRM High School Annual Snapshot per sampled school.
+
+	The curated seed only snapshots a handful of key-account schools, so the
+	market-intelligence map is almost empty. This adds bounded, seeded-random
+	annual figures for a slice of the imported schools. Idempotent: skips a
+	school that already has a snapshot for the year. Best effort -- a row the
+	governance controller rejects is rolled back and skipped, never fatal.
+	"""
+	year = context["admission_year"]
+	if not frappe.db.exists("CRM Admission Year", year):
+		return {"created": 0, "skipped": 0}
+	schools = frappe.get_all(
+		"CRM High School", fields=["name"], limit_page_length=0
+	) or []
+	rng = random.Random(SEED ^ 0x5000)
+	rng.shuffle(schools)
+	created = skipped = 0
+	for row in schools[:220]:
+		school = row["name"]
+		if frappe.db.exists(
+			"CRM High School Annual Snapshot",
+			{"high_school": school, "admission_year": year},
+		):
+			skipped += 1
+			continue
+		r = _rng("market-snapshot", school)
+		grade12 = r.randint(160, 940)
+		applicants = max(1, int(grade12 * r.uniform(0.04, 0.24)))
+		enrolled = max(0, int(applicants * r.uniform(0.26, 0.74)))
+		students_ctx = max(0, int(grade12 * r.uniform(0.02, 0.13)))
+		try:
+			frappe.get_doc(
+				{
+					"doctype": "CRM High School Annual Snapshot",
+					"high_school": school,
+					"admission_year": year,
+					"measured_on": f"{year}-03-31",
+					"period_type": "Annual",
+					"period": str(year),
+					"ne_target": r.randint(6, 64),
+					"ne_actual": enrolled,
+					"ne_actual_semantics": "Official Achieved New Enter",
+					"adjusted_ne_threshold": r.randint(8, 40),
+					"applicant_count": applicants,
+					"enrolled_count": enrolled,
+					"student_count": students_ctx,
+					"contact_count": max(0, int(students_ctx * r.uniform(0.4, 1.15))),
+					"conversion_count": enrolled,
+					"average_score": round(r.uniform(17.4, 28.1), 2),
+					"conversion_rate": round(enrolled / applicants * 100, 2) if applicants else 0.0,
+					"enrollment_rate": round(enrolled / grade12 * 100, 2) if grade12 else 0.0,
+					"forecast_count": max(0, int(enrolled * r.uniform(0.85, 1.35))),
+					"verification_status": "Verified",
+					"source_system": "demo-seed",
+					"source_run": NAMESPACE,
+					"idempotency_fingerprint": _idempotency_key("market-snapshot", school, year),
+				}
+			).insert(ignore_permissions=True)
+			created += 1
+		except Exception:
+			try:
+				frappe.db.rollback()
+			except Exception:
+				pass
+			skipped += 1
+	frappe.db.commit()
+	return {"created": created, "skipped": skipped}
+
+
 def _seed_all() -> dict:
 	frappe.set_user("Administrator")
 	legacy_cleanup = _cleanup_legacy_seed_data()
@@ -3160,6 +3269,7 @@ def _seed_all() -> dict:
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
 	school = _seed_school_domain(context, staff_context)
+	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
 	governance = _seed_governance(context)
 	edge = _seed_edge_states(context, staff_context)
@@ -3186,6 +3296,7 @@ def _seed_all() -> dict:
 		"student_errors": student_errors,
 		"contacts": contacts,
 		"school_domain": school,
+		"market_snapshots": market_snapshots,
 		"marketing": marketing,
 		"governance": governance,
 		"reference": reference,
