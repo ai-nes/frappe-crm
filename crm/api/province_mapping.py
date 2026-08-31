@@ -1,8 +1,7 @@
 import frappe
 
-# Stub importer for the old->new Vietnam province merger list (2025).
-# Not seeded with data — CRM Province Mapping ships empty until the user supplies
-# the list. Call `import_mapping` once with [(old_province_name, new_province_name), ...].
+# Importer for the old->new Vietnam province merger list (2025).
+# Names are stored as CRM Province.previous_names child rows.
 
 
 @frappe.whitelist()
@@ -29,16 +28,14 @@ def import_mapping(rows):
 		if not frappe.db.exists("CRM Province", old_province):
 			skipped.append(row)
 			continue
-		if frappe.db.exists("CRM Province Mapping", old_province):
-			frappe.db.set_value("CRM Province Mapping", old_province, "new_province", new_province)
-		else:
-			frappe.get_doc(
-				{
-					"doctype": "CRM Province Mapping",
-					"old_province": old_province,
-					"new_province": new_province,
-				}
-			).insert(ignore_permissions=True)
+		new_province_name = new_province if frappe.db.exists("CRM Province", new_province) else frappe.db.get_value("CRM Province", {"province_name": new_province}, "name")
+		if not new_province_name:
+			skipped.append(row)
+			continue
+		if not frappe.db.exists("CRM Province Former Name", {"parent": new_province_name, "parentfield": "previous_names", "former_name": old_province}):
+			province = frappe.get_doc("CRM Province", new_province_name)
+			province.append("previous_names", {"former_name": old_province})
+			province.save(ignore_permissions=True)
 		created.append(old_province)
 
 	frappe.db.commit()

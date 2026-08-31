@@ -39,6 +39,8 @@ _TABLES = ["`tabCRM Student`", "`tabCRM Contact`"]
 
 
 def execute():
+    if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+        return {"status": "taxonomy_pending"}
     # 1. Bulk-migrate English → Vietnamese in one CASE WHEN per table
     when_clauses = " ".join(f"WHEN {frappe.db.escape(eng)} THEN {frappe.db.escape(vie)}" for eng, vie in MIGRATION_MAP.items())
     in_list = ", ".join(frappe.db.escape(eng) for eng in MIGRATION_MAP)

@@ -63,12 +63,14 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		frappe.set_user("Administrator")
 		self._statuses = {}
 		for stage_order, status_name in enumerate(("_Test Status A", "_Test Status B", "_Test Status C"), 1):
-			if not frappe.db.exists("CRM Enrollment Status", status_name):
+			if not frappe.db.exists("CRM Term", status_name):
 				frappe.get_doc(
 					{
-						"doctype": "CRM Enrollment Status",
-						"status_name": status_name,
-						"stage_order": stage_order,
+						"doctype": "CRM Term",
+						"term_name": status_name,
+						"category": "enrollment_status",
+						"sort_order": stage_order,
+						"metadata": {"stage_category": "open"},
 					}
 				).insert(ignore_permissions=True)
 			self._statuses[status_name] = status_name
@@ -77,8 +79,8 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		for name in frappe.db.get_all("CRM Contact", filters={"phone": ["like", "090000%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for status_name in self._statuses:
-			if frappe.db.exists("CRM Enrollment Status", status_name):
-				frappe.delete_doc("CRM Enrollment Status", status_name, force=True)
+			if frappe.db.exists("CRM Term", status_name):
+				frappe.delete_doc("CRM Term", status_name, force=True)
 
 	def _make_contact(self, phone, enrollment_status):
 		doc = frappe.get_doc(

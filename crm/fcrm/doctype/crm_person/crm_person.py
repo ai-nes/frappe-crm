@@ -1,16 +1,31 @@
 from frappe.model.document import Document
 
+from crm.fcrm.school_domain_permissions import (
+	has_person_portfolio_permission,
+	person_portfolio_condition,
+)
+
 
 class CRMPerson(Document):
 	@staticmethod
 	def default_list_data():
 		columns = [
 			{"label": "Full Name", "type": "Data", "key": "full_name", "width": "16rem"},
-			{"label": "Role", "type": "Data", "key": "role", "width": "10rem"},
-			{"label": "High School", "type": "Link", "key": "high_school", "options": "CRM High School", "width": "14rem"},
 			{"label": "Phone", "type": "Data", "key": "phone", "width": "10rem"},
 			{"label": "Email", "type": "Data", "key": "email", "width": "14rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "full_name", "role", "high_school", "phone", "email", "modified"]
+		rows = ["name", "full_name", "phone", "email", "modified"]
 		return {"columns": columns, "rows": rows}
+
+
+# Module-level permission hooks (registered in hooks.py). Kept out of the
+# Document subclass so ``has_permission`` never shadows Document.has_permission.
+def get_permission_query_conditions(user=None, doctype=None):
+	if doctype not in (None, "CRM Person"):
+		return "1=0"
+	return person_portfolio_condition(user)
+
+
+def has_permission(doc, user=None, permission_type=None, ptype=None):
+	return has_person_portfolio_permission(doc, user, permission_type, ptype)

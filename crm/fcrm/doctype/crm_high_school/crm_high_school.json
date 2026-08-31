@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "format:{school_code} - {province_code}",
+ "autoname": "hash",
  "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
@@ -12,17 +12,25 @@
   "school_name",
   "school_code",
   "school_type",
+  "school_area",
+  "school_tier",
+  "boarding_type",
   "column_break_1",
-  "ward_code",
-  "ward_name",
-  "province_code",
-  "province_name",
+  "province",
+  "ward",
+  "latitude",
+  "longitude",
   "section_break_1",
+  "section_key_account",
+  "is_key_account",
+  "key_account_tier",
+  "key_account_owner",
+  "key_account_team",
+  "section_contact",
   "address",
   "column_break_2",
   "phone",
-  "email",
-  "import_source_id"
+  "email"
  ],
  "fields": [
   {
@@ -47,41 +55,111 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "School Type",
-   "options": "CRM School Type"
+   "options": "CRM Term"
+  },
+  {
+   "fieldname": "school_area",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "School Area",
+   "link_filters": "{\"category\":\"school_area\"}",
+   "options": "CRM Term"
+  },
+  {
+   "fieldname": "school_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "School Tier",
+   "options": "\nA\nB\nC\nUnclassified"
+  },
+  {
+   "fieldname": "boarding_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Boarding Type",
+   "options": "\nDay School\nBoarding School\nMixed\nUnknown"
   },
   {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "ward_code",
-   "fieldtype": "Data",
+   "fieldname": "province",
+   "fieldtype": "Link",
+   "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Ward Code"
-  },
-  {
-   "fieldname": "ward_name",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Ward Name"
-  },
-  {
-   "fieldname": "province_code",
-   "fieldtype": "Data",
-   "in_standard_filter": 1,
-   "label": "Province Code",
+   "label": "Province",
+   "options": "CRM Province",
    "reqd": 1
   },
   {
-   "fieldname": "province_name",
-   "fieldtype": "Data",
+   "fieldname": "ward",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Province Name"
+   "label": "Ward",
+   "options": "CRM Ward",
+   "reqd": 1
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
   },
   {
    "fieldname": "section_break_1",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "section_key_account",
+   "fieldtype": "Section Break",
+   "label": "Key Account Governance"
+  },
+  {
+   "fieldname": "is_key_account",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Key Account",
+   "read_only": 1
+  },
+  {
+   "fieldname": "key_account_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Key Account Tier",
+   "options": "\nTier 1\nTier 2\nTier 3",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "key_account_owner",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Key Account Owner",
+   "options": "CRM Staff",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "key_account_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Key Account Team",
+   "options": "CRM Team",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "section_contact",
+   "fieldtype": "Section Break",
+   "label": "Contact"
   },
   {
    "fieldname": "address",
@@ -102,17 +180,14 @@
    "fieldtype": "Data",
    "label": "Email",
    "options": "Email"
-  },
-  {
-   "fieldname": "import_source_id",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Import Source ID"
   }
+ ],
+ "indexes": [
+  {"fields": ["province", "ward", "school_code"], "name": "crm_high_school_location_code_idx", "unique": 1}
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-09 00:00:00.000000",
+ "modified": "2026-08-30 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM High School",
@@ -125,12 +200,26 @@
    "role": "Admissions Director"
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "write": 1,
+   "role": "Admissions Director"
+  },
+  {
    "read": 1,
    "role": "Lead Sales"
   },
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Promoter"
+  },
+  {
+   "read": 1,
+   "role": "Promoter-PR"
   },
   {
    "read": 1,
@@ -143,6 +232,12 @@
    "read": 1,
    "role": "System Manager",
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "write": 1,
+   "role": "System Manager"
   }
  ],
  "quick_entry": 1,

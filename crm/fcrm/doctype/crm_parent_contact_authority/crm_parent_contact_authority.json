@@ -1,12 +1,15 @@
 {
  "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
- "field_order": ["naming_series", "student", "contact", "relationship_verified", "relationship_type", "lawful_basis", "allowed_channels", "effective_at", "expires_at", "proof_reference", "revoked_at", "revocation_evidence"],
+ "field_order": ["naming_series", "student", "contact", "relationship_verified", "relationship_type", "decision_role", "decision_influence", "concerns", "lawful_basis", "allowed_channels", "effective_at", "expires_at", "proof_reference", "revoked_at", "revocation_evidence"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "PCA-.YYYY.-", "options": "PCA-.YYYY.-"},
   {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1},
   {"fieldname": "contact", "fieldtype": "Link", "options": "CRM Contact", "reqd": 1, "read_only": 1},
   {"fieldname": "relationship_verified", "fieldtype": "Check", "reqd": 1, "read_only": 1},
   {"fieldname": "relationship_type", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "decision_role", "fieldtype": "Select", "options": "Unknown\nPrimary decision maker\nInfluencer\nInformation only", "default": "Unknown", "read_only": 1},
+  {"fieldname": "decision_influence", "fieldtype": "Select", "options": "Unknown\nHigh\nMedium\nLow", "default": "Unknown", "read_only": 1},
+  {"fieldname": "concerns", "fieldtype": "Small Text", "read_only": 1, "description": "Parent-specific concerns supplied for admissions support; never use as an unconsented proxy for sensitive finance data."},
   {"fieldname": "lawful_basis", "fieldtype": "Data", "reqd": 1, "read_only": 1},
   {"fieldname": "allowed_channels", "fieldtype": "JSON", "reqd": 1, "read_only": 1},
   {"fieldname": "effective_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1},
@@ -16,5 +19,10 @@
   {"fieldname": "revocation_evidence", "fieldtype": "Small Text", "read_only": 1}
  ],
  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Parent Contact Authority", "owner": "Administrator",
- "permissions": [{"create": 1, "read": 1, "role": "System Manager"}], "sort_field": "creation", "sort_order": "DESC"
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Sale"},
+  {"create": 1, "read": 1, "role": "System Manager"}
+ ], "sort_field": "creation", "sort_order": "DESC"
 }

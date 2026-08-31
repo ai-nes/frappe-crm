@@ -9,7 +9,7 @@ intentional change, keeping both copies in lockstep.
 
 This module answers Channel / Purpose / Disposition and "is this a direct
 admissions touchpoint, or independent evidence?" for the legacy
-`CRM Interaction Type` (Link, open vocabulary) and `outcome` (Select) fields
+`CRM Term` (Link, open vocabulary) and `outcome` (Select) fields
 on CRM Interaction -- it does not change either field or any writer.
 """
 
@@ -149,7 +149,7 @@ OUTCOME_FIELD_MAPPING = {
 }
 
 # crm/fcrm/interaction_log.py's create_interaction_from_*() dispatchers
-# currently write these legacy CRM Interaction Type values. Completeness
+# currently write these legacy CRM Term values. Completeness
 # tests assert every one of them has a mapping entry above.
 KNOWN_WRITER_INTERACTION_TYPES = frozenset(
 	{

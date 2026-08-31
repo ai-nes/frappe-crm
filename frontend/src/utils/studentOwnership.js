@@ -20,6 +20,29 @@ export function intakeResultKind(result) {
   return terminalIntakeStatuses.has(outcome) ? outcome : null
 }
 
+export function intakeAssignmentExpectation(profile) {
+  if (profile === 'sales') {
+    return {
+      kind: 'self',
+      message: 'This student will be assigned to you automatically.',
+    }
+  }
+  if (profile === 'lead_sales') {
+    return {
+      kind: 'team',
+      message: 'This student will be placed in your team pool automatically.',
+    }
+  }
+  return {
+    kind: 'automatic',
+    message: 'Assignment will be determined automatically from your access.',
+  }
+}
+
+export function isServerManagedIntakeProfile(profile) {
+  return profile === 'sales' || profile === 'lead_sales'
+}
+
 export function reviewCandidateOptions(review) {
   const candidates = Array.isArray(review?.candidates) ? review.candidates : []
   const proposedIdentity =
@@ -76,6 +99,8 @@ export function buildIntakePayload(form, identifiers) {
     'ward',
     'major',
     'aspiration',
+    'current_grade',
+    'study_stage',
   ]
   const optionalPayload = Object.fromEntries(
     optionalFields
@@ -87,7 +112,6 @@ export function buildIntakePayload(form, identifiers) {
       student_name: form.student_name?.trim(),
       admission_year: form.admission_year,
       branch: form.branch,
-      owning_team: form.owning_team || undefined,
       phone: form.phone?.trim() || undefined,
       email: form.email?.trim() || undefined,
       id_number:
@@ -127,6 +151,22 @@ export function isStaleOwnershipError(error) {
 }
 
 export function safeCommandError(error, fallback) {
+  const responseData = error?.response?.data || error?.data
+  if (responseData) {
+    const detail = responseData.message || responseData._server_messages || responseData.exc
+    if (detail && detail !== 'Internal Server Error') {
+      if (typeof detail === 'string' && detail.startsWith('[')) {
+        try {
+          const parsed = JSON.parse(detail)
+          const text = parsed.map((item) => item.message || item).filter(Boolean).join('; ')
+          if (text) return text
+        } catch {
+          // Continue with the raw detail.
+        }
+      }
+      return String(detail)
+    }
+  }
   const status = error?.httpStatusCode || error?.status
   if ([401, 403].includes(status))
     return __('You are not permitted to perform this action.')
@@ -134,5 +174,31 @@ export function safeCommandError(error, fallback) {
     return __('This record changed. Reload it and review the current state.')
   if (status === 422)
     return __('Please correct the highlighted information and try again.')
-  return error?.messages?.[0] || error?.message || fallback
+  const serverMessages = error?._server_messages || error?.server_messages
+  if (serverMessages) {
+    try {
+      const parsed = typeof serverMessages === 'string' ? JSON.parse(serverMessages) : serverMessages
+      const messages = Array.isArray(parsed) ? parsed : [parsed]
+      const detail = messages
+        .map((message) => {
+          if (typeof message === 'string') {
+            try {
+              const decoded = JSON.parse(message)
+              return decoded.message || decoded.exc || message
+            } catch {
+              return message
+            }
+          }
+          return message?.message || message?.exc
+        })
+        .filter(Boolean)
+        .join('; ')
+      if (detail) return detail
+    } catch {
+      // Fall through to the other Frappe error fields.
+    }
+  }
+  if (error?.messages?.length) return error.messages.join('; ')
+  if (error?.exc && error.exc !== 'Internal Server Error') return error.exc
+  return error?.message || fallback
 }

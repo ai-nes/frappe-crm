@@ -51,9 +51,9 @@ class TestCRMSegment(FrappeTestCase):
 		test_campaigns = frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name")
 		if test_campaigns:
 			for name in frappe.db.get_all(
-				"CRM Campaign Touchpoint", filters={"crm_campaign": ["in", test_campaigns]}, pluck="name"
+				"CRM Marketing Engagement", filters={"crm_campaign": ["in", test_campaigns]}, pluck="name"
 			):
-				frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
+				frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Segment", filters={"title": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Segment", name, force=True)
 		for name in test_campaigns:
@@ -79,8 +79,8 @@ class TestCRMSegment(FrappeTestCase):
 
 	def _make_campaign(self, title, campus):
 		if frappe.db.exists("CRM Campaign", title):
-			for name in frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": title}, pluck="name"):
-				frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
+			for name in frappe.db.get_all("CRM Marketing Engagement", filters={"crm_campaign": title}, pluck="name"):
+				frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 			frappe.delete_doc("CRM Campaign", title, force=True)
 		doc = frappe.get_doc({"doctype": "CRM Campaign", "title": title, "campus": campus})
 		doc.insert(ignore_permissions=True)
@@ -374,7 +374,7 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertFalse(result["failed"])
 		self.assertEqual(result["created"], 1)
 		touchpoint = frappe.db.get_value(
-			"CRM Campaign Touchpoint",
+			"CRM Marketing Engagement",
 			{"crm_campaign": campaign, "crm_contact": self.contacts[0]},
 			["source", "crm_segment"],
 			as_dict=True,
@@ -415,7 +415,7 @@ class TestCRMSegment(FrappeTestCase):
 
 		attach_segment_to_campaign(segment.name, campaign)
 		before = frappe.get_all(
-			"CRM Campaign Touchpoint",
+			"CRM Marketing Engagement",
 			filters={"crm_campaign": campaign},
 			fields=["name", "crm_contact", "source", "crm_segment"],
 		)
@@ -427,7 +427,7 @@ class TestCRMSegment(FrappeTestCase):
 		segment.save()
 
 		after = frappe.get_all(
-			"CRM Campaign Touchpoint",
+			"CRM Marketing Engagement",
 			filters={"crm_campaign": campaign},
 			fields=["name", "crm_contact", "source", "crm_segment"],
 		)
@@ -438,7 +438,10 @@ class TestCRMSegment(FrappeTestCase):
 		campaign = self._make_campaign("_Test Segment SkipOther Campaign", campus)
 		frappe.get_doc(
 			{
-				"doctype": "CRM Campaign Touchpoint",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "campaign_touch",
+				"reference_doctype": "CRM Campaign",
+				"reference_name": campaign,
 				"crm_campaign": campaign,
 				"crm_contact": self.contacts[0],
 				"student": frappe.db.get_value("CRM Contact", self.contacts[0], "student"),
@@ -523,7 +526,7 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertFalse(result["failed"])
 		self.assertEqual(result["created"], len(expected_matches))
 		touchpoints = frappe.get_all(
-			"CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"
+			"CRM Marketing Engagement", filters={"crm_campaign": campaign}, pluck="crm_contact"
 		)
 		self.assertEqual(len(touchpoints), len(set(touchpoints)))
 		self.assertEqual(set(touchpoints), expected_matches)
@@ -567,7 +570,7 @@ class TestCRMSegment(FrappeTestCase):
 			arg = args[0] if args else kwargs.get("doc")
 			if (
 				isinstance(arg, dict)
-				and arg.get("doctype") == "CRM Campaign Touchpoint"
+				and arg.get("doctype") == "CRM Marketing Engagement"
 				and arg.get("crm_contact") == failing_contact
 			):
 				raise frappe.ValidationError("Simulated batch failure")
@@ -580,7 +583,7 @@ class TestCRMSegment(FrappeTestCase):
 
 		self.assertTrue(result["failed"])
 		touchpoints_after_failure = frappe.get_all(
-			"CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"
+			"CRM Marketing Engagement", filters={"crm_campaign": campaign}, pluck="crm_contact"
 		)
 		self.assertLess(result["created"], len(expected_matches))
 		self.assertEqual(result["created"], len(touchpoints_after_failure))
@@ -598,7 +601,7 @@ class TestCRMSegment(FrappeTestCase):
 		# Re-run without the flakiness: remaining rows complete, nothing duplicated.
 		result2 = attach_segment_to_campaign(segment.name, campaign)
 		touchpoints_final = frappe.get_all(
-			"CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"
+			"CRM Marketing Engagement", filters={"crm_campaign": campaign}, pluck="crm_contact"
 		)
 		self.assertFalse(result2["failed"])
 		self.assertEqual(len(touchpoints_final), len(set(touchpoints_final)))
@@ -674,4 +677,4 @@ class TestCRMSegment(FrappeTestCase):
 				attach_segment_to_campaign(segment.name, campaign)
 		finally:
 			frappe.set_user("Administrator")
-		self.assertEqual(frappe.db.count("CRM Campaign Touchpoint", {"crm_campaign": campaign}), 0)
+		self.assertEqual(frappe.db.count("CRM Marketing Engagement", {"crm_campaign": campaign}), 0)

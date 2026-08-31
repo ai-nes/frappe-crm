@@ -275,25 +275,14 @@ def _source_reference_history(student_name: str) -> str:
 
 
 def _ensure_case_key(student: dict, identity: str, cycle: str) -> str:
-	case_key = f"CK-{identity}-{cycle}"[:140]
-	existing = frappe.db.get_value("CRM Student Case Key", {"case_key": case_key}, "name")
-	if existing:
-		return existing
-	doc = frappe.get_doc(
-		{
-			"doctype": "CRM Student Case Key",
-			"case_key": case_key,
-			"identity": identity,
-			"admission_year": cycle,
-			"canonical_student": student["name"],
-			"source_student": student["name"],
-			"source_reference_history": _source_reference_history(student["name"]),
-			"integrity_state": "resolved",
-			"schema_version": SCHEMA_VERSION,
-		}
-	)
-	doc.insert(ignore_permissions=True)
-	return doc.name
+	from crm.fcrm.admission_case_key import ensure_case_key
+
+	return ensure_case_key(
+		identity=identity,
+		admission_year=cycle,
+		canonical_student=student["name"],
+		source_reference=f"legacy-intake:{student['name']}",
+	)["case_key"]
 
 
 def _set_student(name: str, values: dict) -> None:
@@ -410,7 +399,12 @@ def execute():
 	_add_unique_index(
 		"CRM Student Case Key",
 		("identity", "admission_year"),
-		"crm_student_case_key_identity_cycle_uniq",
+		"crm_student_case_key_identity_year_uniq",
+	)
+	_add_unique_index(
+		"CRM Student Case Key",
+		("canonical_student",),
+		"crm_student_case_key_canonical_student_uniq",
 	)
 	_add_unique_index(
 		"CRM Student Identity Identifier",

@@ -21,6 +21,8 @@ STAGE_ORDER_AND_CATEGORY = {
 
 
 def execute():
+    if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+        return
     # Without this, bench migrate only ALTERs the table when tabDocType.modified
     # is stale relative to the JSON on disk — a forced reload guarantees
     # stage_order/stage_category exist before the set_value calls below run.

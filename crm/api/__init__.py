@@ -6,24 +6,17 @@ from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
 from crm.api.session import get_session_role_flags
-from crm.api.student_dashboard import (
-	get_intent_definitions,
-	get_student_dashboard,
-	get_student_records_by_phone,
-	get_study_majors,
-	get_training_programs,
-)
 from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
 from crm.utils import is_frappe_version
 
 
 @frappe.whitelist(allow_guest=True)
 def get_translations():
+	language = None
 	if frappe.session.user != "Guest":
 		language = frappe.db.get_value("User", frappe.session.user, "language")
-	else:
-		language = frappe.db.get_single_value("System Settings", "language")
 
+	language = language or frappe.db.get_single_value("System Settings", "language") or "vi"
 	return get_all_translations(language)
 
 

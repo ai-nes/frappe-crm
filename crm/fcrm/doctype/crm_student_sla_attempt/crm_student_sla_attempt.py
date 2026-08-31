@@ -14,6 +14,20 @@ class CRMStudentSLAAttempt(Document):
 		"maximum_pause_minutes", "recipient_strategy", "opened_at", "correlation_token",
 	)
 
+	@staticmethod
+	def default_list_data():
+		"""Provide the first-visit columns required by the shared list API."""
+		columns = [
+			{"label": "Student", "type": "Link", "key": "student", "options": "CRM Student", "width": "16rem"},
+			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
+			{"label": "Status", "type": "Select", "key": "status", "width": "10rem"},
+			{"label": "Warning At", "type": "Datetime", "key": "warning_at", "width": "11rem"},
+			{"label": "Breach At", "type": "Datetime", "key": "breach_at", "width": "11rem"},
+			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
+		]
+		rows = ["name", "student", "owner_staff", "status", "warning_at", "breach_at", "modified"]
+		return {"columns": columns, "rows": rows}
+
 	def validate(self):
 		validate_state_transition(
 			self,

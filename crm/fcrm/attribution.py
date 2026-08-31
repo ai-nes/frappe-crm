@@ -31,6 +31,13 @@ def _superseded_names(doctype, rows):
 	return set(frappe.db.get_all(doctype, filters={"supersedes": ["in", names]}, pluck="supersedes"))
 
 
+def _engagement_rows(kind, filters=None, fields=None):
+	"""Read the single canonical marketing evidence table."""
+	query_filters = dict(filters or {})
+	query_filters["engagement_kind"] = kind
+	return frappe.db.get_all("CRM Marketing Engagement", filters=query_filters, fields=fields or ["*"])
+
+
 def _sort_key(touchpoint):
 	# Name makes ordering stable for evidence created at the same instant.
 	return (str(touchpoint.get("touched_at") or ""), str(touchpoint.get("reference_docname") or ""))
@@ -38,25 +45,17 @@ def _sort_key(touchpoint):
 
 def _touchpoints_for_student(student):
 	"""Raw Student evidence, chronologically ordered and including corrections."""
-	campaign_rows = frappe.db.get_all(
-		"CRM Campaign Touchpoint",
-		filters={"student": student},
-		fields=["name", "crm_campaign", "touched_at", "source", "supersedes"],
-	)
-	event_rows = frappe.db.get_all(
-		"CRM Event Participation",
-		filters={"student": student},
-		fields=["name", "crm_event", "registered_at", "status", "supersedes"],
-	)
-	campaign_superseded = _superseded_names("CRM Campaign Touchpoint", campaign_rows)
-	event_superseded = _superseded_names("CRM Event Participation", event_rows)
+	campaign_rows = frappe.db.get_all("CRM Marketing Engagement", filters={"student": student, "engagement_kind": "campaign_touch"}, fields=["name", "crm_campaign", "touched_at", "source", "supersedes"])
+	event_rows = frappe.db.get_all("CRM Marketing Engagement", filters={"student": student, "engagement_kind": "event_participation"}, fields=["name", "crm_event", "registered_at", "status", "supersedes"])
+	campaign_superseded = _superseded_names("CRM Marketing Engagement", campaign_rows)
+	event_superseded = _superseded_names("CRM Marketing Engagement", event_rows)
 	event_campaigns = _event_campaigns(row.crm_event for row in event_rows)
 	touchpoints = [
 		{
 			"touched_at": row.touched_at,
 			"campaign": row.crm_campaign,
 			"source": "Campaign Touchpoint",
-			"reference_doctype": "CRM Campaign Touchpoint",
+			"reference_doctype": "CRM Marketing Engagement",
 			"reference_docname": row.name,
 			"superseded": row.name in campaign_superseded,
 		}
@@ -70,7 +69,7 @@ def _touchpoints_for_student(student):
 			"event": row.crm_event,
 			"status": row.status,
 			"source": "Event Participation",
-			"reference_doctype": "CRM Event Participation",
+			"reference_doctype": "CRM Marketing Engagement",
 			"reference_docname": row.name,
 			"superseded": row.name in event_superseded,
 		}
@@ -141,13 +140,13 @@ def get_last_touch_campaign_by_student(students=None):
 	if students is not None and not students:
 		return {}
 	touchpoints = []
-	campaign_rows = frappe.db.get_all("CRM Campaign Touchpoint", filters=student_filter, fields=["name", "student", "crm_campaign", "touched_at"])
-	campaign_superseded = _superseded_names("CRM Campaign Touchpoint", campaign_rows)
+	campaign_rows = _engagement_rows("campaign_touch", student_filter, ["name", "student", "crm_campaign", "touched_at"])
+	campaign_superseded = _superseded_names("CRM Marketing Engagement", campaign_rows)
 	for row in campaign_rows:
 		if row.student and row.touched_at and row.name not in campaign_superseded:
 			touchpoints.append({"student": row.student, "campaign": row.crm_campaign, "touched_at": row.touched_at, "name": row.name})
-	events = frappe.db.get_all("CRM Event Participation", filters=student_filter, fields=["name", "student", "crm_event", "registered_at"])
-	event_superseded = _superseded_names("CRM Event Participation", events)
+	events = _engagement_rows("event_participation", student_filter, ["name", "student", "crm_event", "registered_at"])
+	event_superseded = _superseded_names("CRM Marketing Engagement", events)
 	campaigns = _event_campaigns(row.crm_event for row in events)
 	for row in events:
 		if row.student and row.registered_at and row.name not in event_superseded:
@@ -166,10 +165,10 @@ def get_equal_credit_by_campaign_for_students(students):
 	students = list(set(students or []))
 	if not students:
 		return {}
-	campaign_rows = frappe.db.get_all("CRM Campaign Touchpoint", filters={"student": ["in", students]}, fields=["name", "student", "crm_campaign", "touched_at"])
-	event_rows = frappe.db.get_all("CRM Event Participation", filters={"student": ["in", students]}, fields=["name", "student", "crm_event", "registered_at"])
-	campaign_superseded = _superseded_names("CRM Campaign Touchpoint", campaign_rows)
-	event_superseded = _superseded_names("CRM Event Participation", event_rows)
+	campaign_rows = _engagement_rows("campaign_touch", {"student": ["in", students]}, ["name", "student", "crm_campaign", "touched_at"])
+	event_rows = _engagement_rows("event_participation", {"student": ["in", students]}, ["name", "student", "crm_event", "registered_at"])
+	campaign_superseded = _superseded_names("CRM Marketing Engagement", campaign_rows)
+	event_superseded = _superseded_names("CRM Marketing Engagement", event_rows)
 	event_campaigns = _event_campaigns(row.crm_event for row in event_rows)
 	by_student = defaultdict(list)
 	for row in campaign_rows:
@@ -230,27 +229,19 @@ def _student_for_contact(contact):
 	return student
 
 
-def _legacy_touchpoints_for_contact(contact):
-	"""Read-only bridge for historical Contact-only evidence during migration."""
-	campaign_rows = frappe.db.get_all(
-		"CRM Campaign Touchpoint",
-		filters={"crm_contact": contact},
-		fields=["name", "crm_campaign", "touched_at", "source", "supersedes"],
-	)
-	event_rows = frappe.db.get_all(
-		"CRM Event Participation",
-		filters={"crm_contact": contact},
-		fields=["name", "crm_event", "registered_at", "status", "supersedes"],
-	)
-	campaign_superseded = _superseded_names("CRM Campaign Touchpoint", campaign_rows)
-	event_superseded = _superseded_names("CRM Event Participation", event_rows)
+def _touchpoints_for_contact(contact):
+	"""Read canonical marketing evidence for a Contact projection."""
+	campaign_rows = _engagement_rows("campaign_touch", {"crm_contact": contact}, ["name", "crm_campaign", "touched_at", "source", "supersedes"])
+	event_rows = _engagement_rows("event_participation", {"crm_contact": contact}, ["name", "crm_event", "registered_at", "status", "supersedes"])
+	campaign_superseded = _superseded_names("CRM Marketing Engagement", campaign_rows)
+	event_superseded = _superseded_names("CRM Marketing Engagement", event_rows)
 	event_campaigns = _event_campaigns(row.crm_event for row in event_rows)
 	touchpoints = [
 		{
 			"touched_at": row.touched_at,
 			"campaign": row.crm_campaign,
 			"source": row.source or "Campaign Touchpoint",
-			"reference_doctype": "CRM Campaign Touchpoint",
+			"reference_doctype": "CRM Marketing Engagement",
 			"reference_docname": row.name,
 			"superseded": row.name in campaign_superseded,
 		}
@@ -264,7 +255,7 @@ def _legacy_touchpoints_for_contact(contact):
 			"event": row.crm_event,
 			"status": row.status,
 			"source": "Event Participation",
-			"reference_doctype": "CRM Event Participation",
+			"reference_doctype": "CRM Marketing Engagement",
 			"reference_docname": row.name,
 			"superseded": row.name in event_superseded,
 		}
@@ -274,8 +265,7 @@ def _legacy_touchpoints_for_contact(contact):
 	return sorted(touchpoints, key=_sort_key)
 
 
-# Contact compatibility adapters: linked Students use the canonical projection;
-# unresolved legacy rows remain readable until reconciliation completes.
+# Contact compatibility adapters: linked Students use the canonical projection.
 def get_contact_touchpoints(crm_contact):
 	students = students_for_contact(crm_contact)
 	if students:
@@ -289,7 +279,7 @@ def get_contact_touchpoints(crm_contact):
 			touchpoints.extend(get_student_touchpoints(student))
 		if touchpoints:
 			return sorted(touchpoints, key=_sort_key)
-	return _legacy_touchpoints_for_contact(crm_contact)
+	return _touchpoints_for_contact(crm_contact)
 
 
 def get_first_touch(crm_contact):
@@ -311,7 +301,7 @@ def get_multi_touch_attribution(crm_contact):
 				credit[campaign] += value
 		if credit:
 			return dict(credit)
-	touchpoints = [row for row in _legacy_touchpoints_for_contact(crm_contact) if not row.get("superseded") and row.get("campaign")]
+	touchpoints = [row for row in _touchpoints_for_contact(crm_contact) if not row.get("superseded") and row.get("campaign")]
 	if not touchpoints:
 		return {}
 	credit = 1.0 / len(touchpoints)
@@ -322,15 +312,14 @@ def get_multi_touch_attribution(crm_contact):
 
 
 def get_last_touch_campaign_by_contact():
-	"""Compatibility map spanning linked Students and unresolved legacy rows."""
+	"""Compatibility map spanning linked Students and canonical evidence."""
 	student_campaigns = get_last_touch_campaign_by_student()
 	result = {}
 	for student, campaign in student_campaigns.items():
 		for contact in contacts_for_student(student):
 			result[contact] = campaign
-	legacy_contacts = set(frappe.db.get_all("CRM Campaign Touchpoint", pluck="crm_contact"))
-	legacy_contacts.update(frappe.db.get_all("CRM Event Participation", pluck="crm_contact"))
-	for contact in legacy_contacts:
+	canonical_contacts = set(frappe.db.get_all("CRM Marketing Engagement", pluck="crm_contact"))
+	for contact in canonical_contacts:
 		if not contact or contact in result:
 			continue
 		last = get_last_touch(contact)

@@ -63,7 +63,7 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 				"doctype": "CRM Score Template",
 				"template_name": name,
 				"status": "Active",
-				"negative_rules": [{"signal": signal_key, "penalty_amount": penalty_amount}],
+				"rules": [{"rule_kind": "negative", "signal": signal_key, "penalty_amount": penalty_amount}],
 			}
 		)
 		doc.insert(ignore_permissions=True)
@@ -83,7 +83,7 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		first_hash = frappe.db.get_value("CRM Score Template", template, "policy_hash")
 
 		doc = frappe.get_doc("CRM Score Template", template)
-		doc.negative_rules[0].penalty_amount = 10
+		doc.rules[0].penalty_amount = 10
 		doc.save(ignore_permissions=True)
 
 		doc.reload()
@@ -125,7 +125,7 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		template = self._make_template("_Test SP Template F", signal, penalty_amount=5)
 
 		doc = frappe.get_doc("CRM Score Template", template)
-		doc.negative_rules[0].penalty_amount = 9
+		doc.rules[0].penalty_amount = 9
 		with patch("crm.api.agent_events.record_agent_event") as mock_record:
 			doc.save(ignore_permissions=True)
 
@@ -156,7 +156,7 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		doc.save(ignore_permissions=True)
 
 		doc.reload()
-		doc.negative_rules[0].penalty_amount = 12
+		doc.rules[0].penalty_amount = 12
 		with patch("crm.api.agent_events.record_agent_event") as mock_record:
 			doc.save(ignore_permissions=True)
 

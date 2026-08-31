@@ -22,14 +22,15 @@
     </template>
   </LayoutHeader>
   <ViewControls
-    :key="funnelStage"
+    :key="JSON.stringify([funnelStage, leadSalesContext])"
     ref="viewControls"
     v-model="students"
     v-model:loadMore="loadMore"
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Student"
-    :filters="funnelFilters"
+    :filters="studentFilters"
+    :defaultGroupByField="leadSalesContext.defaultGroupByField"
     :quickFilterPresets="potentialScoreFilters"
   />
   <CRMStudentsListView
@@ -86,6 +87,7 @@ import { getMeta } from '@/stores/meta'
 import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
 import { getStudentFunnelFilters } from '@/utils/studentFunnel'
+import { getLeadSalesStudentContext } from '@/utils/leadSalesStudentFilters'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
@@ -96,9 +98,13 @@ const route = useRoute()
 const router = useRouter()
 const { getCurrentUser } = usersStore()
 
+const leadSalesContext = computed(() => getLeadSalesStudentContext(route.query))
 const funnelStage = computed(() => route.query.stage || 'intake')
 
 const funnelTitle = computed(() => {
+  if (leadSalesContext.value.bypassFunnel) {
+    return 'Team Students'
+  }
   if (funnelStage.value === 'enrolled') {
     return 'Enrolled Students'
   }
@@ -107,6 +113,13 @@ const funnelTitle = computed(() => {
 
 const funnelFilters = computed(() => {
   return getStudentFunnelFilters(funnelStage.value)
+})
+const studentFilters = computed(() => {
+  const context = leadSalesContext.value
+  return {
+    ...(context.bypassFunnel ? {} : funnelFilters.value),
+    ...(context.filters || {}),
+  }
 })
 
 const potentialScoreFilters = computed(() => [
@@ -155,7 +168,11 @@ function handleReviewRequired(review) {
 
 function handleIntakeCompleted(result) {
   students.value?.reload?.()
-  const student = result?.student || result?.student_name || result?.case_name
+  const student =
+    result?.student ||
+    result?.student_id ||
+    result?.student_name ||
+    result?.case_name
   if (student) {
     showIntakeModal.value = false
     router.push({ name: 'CRM Student', params: { crmStudentId: student } })

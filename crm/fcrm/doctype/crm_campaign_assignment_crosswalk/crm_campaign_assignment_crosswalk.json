@@ -1,0 +1,24 @@
+{
+ "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:crosswalk_key", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["crosswalk_key", "source_doctype", "source_name", "campaign", "channel_assignment", "effective_from", "effective_until", "evidence_reference", "confidence", "reviewer_outcome", "status", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"fieldname": "crosswalk_key", "fieldtype": "Data", "hidden": 1, "label": "Crosswalk Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "source_doctype", "fieldtype": "Link", "in_list_view": 1, "label": "Source DocType", "options": "DocType", "reqd": 1},
+  {"fieldname": "source_name", "fieldtype": "Data", "in_list_view": 1, "label": "Source Name", "reqd": 1},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "label": "Campaign", "options": "CRM Campaign"},
+  {"fieldname": "channel_assignment", "fieldtype": "Link", "in_list_view": 1, "label": "Channel Assignment", "options": "CRM Campaign Channel Assignment"},
+  {"fieldname": "effective_from", "fieldtype": "Date", "label": "Effective From"},
+  {"fieldname": "effective_until", "fieldtype": "Date", "label": "Effective Until"},
+  {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference", "reqd": 1},
+  {"fieldname": "confidence", "fieldtype": "Percent", "label": "Confidence", "reqd": 1},
+  {"fieldname": "reviewer_outcome", "fieldtype": "Select", "in_list_view": 1, "label": "Reviewer Outcome", "options": "Pending\nAccepted\nRejected", "default": "Pending", "reqd": 1},
+  {"fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Pending\nMapped\nQuarantined", "default": "Pending", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [{"fields": ["source_doctype", "source_name"], "name": "crm_campaign_crosswalk_source_uniq", "unique": 1}, {"fields": ["campaign", "channel_assignment", "effective_from", "effective_until"], "name": "crm_campaign_crosswalk_effective_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Assignment Crosswalk", "naming_rule": "By fieldname", "owner": "Administrator",
+ "permissions": [{"create": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "source_doctype,source_name,campaign,channel_assignment,status", "sort_field": "modified", "sort_order": "DESC", "track_changes": 1
+}

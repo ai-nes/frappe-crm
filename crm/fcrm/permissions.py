@@ -38,7 +38,6 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Student SLA Attempt": "student",
 	"CRM Student SLA Event": "student",
 	"CRM Student SLA Delivery": "student",
-	"CRM Student SLA Delivery Attempt": "delivery",
 	# CRM Score History's `student` link is reqd (crm_score_history.json), so
 	# the Student-scope-inheriting condition applies directly. CRM Intent is
 	# NOT listed here even though it also has a `student` field: that field is
@@ -48,6 +47,10 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	# the parent Interaction's own Student/Contact scope instead of requiring
 	# a non-null student.
 	"CRM Score History": "student",
+	"CRM Student Geography Snapshot": "student",
+	"CRM Admission Application": "student",
+	"CRM Student Payment": "student",
+	"CRM Revenue Recognition": "student",
 }
 
 
@@ -61,12 +64,6 @@ def get_operational_record_permission_query_conditions(user=None, doctype=None):
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	if doctype == "CRM Student SLA Delivery Attempt":
-		return (
-			f"`tab{doctype}`.`delivery` in (select `tabCRM Student SLA Delivery`.`name` "
-			"from `tabCRM Student SLA Delivery` where `tabCRM Student SLA Delivery`.`student` in "
-			f"(select `tabCRM Student`.`name` from `tabCRM Student` where ({student_condition})))"
-		)
 	return (
 		f"`tab{doctype}`.`{student_field}` in "
 		f"(select `tabCRM Student`.`name` from `tabCRM Student` "
@@ -93,8 +90,6 @@ def has_operational_record_permission(doc, user=None, permission_type=None, ptyp
 		return True
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
 	student_name = doc.get(student_field) if student_field else None
-	if doc.doctype == "CRM Student SLA Delivery Attempt" and student_name:
-		student_name = frappe.db.get_value("CRM Student SLA Delivery", student_name, "student")
 	if not student_name:
 		return False
 	student = frappe.get_doc("CRM Student", student_name)
@@ -271,7 +266,7 @@ def _has_intent_create_permission(doc, user=None) -> bool:
 	interaction = frappe.db.exists("CRM Interaction", interaction_name)
 	if not interaction:
 		return False
-	return has_permission(frappe.get_doc("CRM Interaction", interaction_name), user=user)
+	return has_interaction_permission(frappe.get_doc("CRM Interaction", interaction_name), user=user)
 
 
 def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
@@ -294,7 +289,72 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 	)
 
 
-def has_permission(doc, user=None, permission_type=None):
+def get_student_projection_permission_query_conditions(user=None, doctype=None):
+	"""Scope Student-linked projections through the canonical Student policy.
+
+	AI Insight and Agent Event are projections, not independent authorization
+	roots.  Their DocType role grants only describe who may use the projection;
+	the linked Student scope remains the source of truth. Events whose aggregate
+	is a Student-bearing operational record are joined back to that Student.
+	Global events (for example scoring-policy changes) remain unavailable through
+	the row-scoped event stream instead of becoming an unscoped side channel.
+	"""
+	if doctype not in {"CRM AI Lead Insight", "CRM Agent Event"}:
+		return "1=0"
+	user = user or frappe.session.user
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	if student_condition == "1=0":
+		return "1=0"
+	student_names = (
+		"select `tabCRM Student`.name from `tabCRM Student` "
+		f"where ({student_condition})"
+	)
+	if doctype == "CRM AI Lead Insight":
+		return f"`tabCRM AI Lead Insight`.student in ({student_names})"
+	return (
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student' and "
+		f"`tabCRM Agent Event`.aggregate_name in ({student_names})) OR "
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Action' and "
+		"`tabCRM Agent Event`.aggregate_name in (select action_scope.name "
+		"from `tabCRM Action` action_scope where action_scope.student in "
+		f"({student_names}))) OR "
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student Decision Event' and "
+		"`tabCRM Agent Event`.aggregate_name in (select decision_scope.name "
+		"from `tabCRM Student Decision Event` decision_scope where decision_scope.student in "
+		f"({student_names})))"
+	)
+
+
+def has_student_projection_permission(doc, user=None, permission_type=None, ptype=None):
+	"""Apply the Student row scope to single projection records as well."""
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		student_name = doc.get("student") if doc.doctype == "CRM AI Lead Insight" else None
+		if doc.doctype == "CRM Agent Event" and doc.get("aggregate_doctype") == "CRM Student":
+			student_name = doc.get("aggregate_name")
+		if not student_name:
+			return False
+		if not frappe.db.exists("CRM Student", student_name):
+			return False
+		return has_permission(frappe.get_doc("CRM Student", student_name), user=user)
+	condition = get_student_projection_permission_query_conditions(
+		user=user, doctype=doc.doctype
+	)
+	if condition is None:
+		return True
+	if condition == "1=0":
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tab{doc.doctype}` where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
+
+
+def has_permission(doc, user=None, permission_type=None, ptype=None):
 	"""Single-document counterpart of get_permission_query_conditions.
 
 	permission_query_conditions only filters list/report-view SQL — Frappe never
@@ -304,6 +364,14 @@ def has_permission(doc, user=None, permission_type=None):
 	"""
 	if not user:
 		user = frappe.session.user
+	# Frappe passes the requested permission as ``ptype`` to hook methods.  A
+	# new document has no database name yet, so applying a name-keyed row-scope
+	# query would both be meaningless and deny otherwise valid create grants.
+	# The regular DocType permission check remains responsible for deciding who
+	# may create; this hook scopes existing rows only.
+	permission_type = permission_type or ptype
+	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)
 	if condition is None:

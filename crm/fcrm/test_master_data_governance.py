@@ -33,16 +33,12 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def _cleanup_test_evidence(self):
 		logs = frappe.db.get_all(
-			"CRM Master Data Change Log",
+			"CRM Master Data Change",
 			filters={"reference_docname": ["like", "_Test Gov%"]},
 			pluck="name",
 		)
-		for name in frappe.db.get_all(
-			"CRM Master Data Change Approval", filters={"change_log": ["in", logs or ["__none__"]]}, pluck="name"
-		):
-			frappe.delete_doc("CRM Master Data Change Approval", name, force=True)
 		for name in logs:
-			frappe.delete_doc("CRM Master Data Change Log", name, force=True)
+			frappe.delete_doc("CRM Master Data Change", name, force=True)
 
 	# ------------------------------------------------------------- set_governance_defaults
 
@@ -56,8 +52,8 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_governance_uses_only_canonical_roles(self):
 		self.assertEqual(GOVERNED_DOCTYPES["CRM Lead Source"]["owner_role"], "Marketing")
-		self.assertEqual(GOVERNED_DOCTYPES["CRM Lost Reason"]["owner_role"], "Lead Sales")
-		self.assertEqual(GOVERNED_DOCTYPES["CRM Lost Reason"]["approver_roles"], {"Lead Sales", "Marketing"})
+		self.assertEqual(GOVERNED_DOCTYPES["CRM Term"]["owner_role"], "Lead Sales")
+		self.assertEqual(GOVERNED_DOCTYPES["CRM Term"]["approver_roles"], {"Lead Sales", "Marketing"})
 		self.assertEqual(GOVERNED_DOCTYPES["CRM Campus"]["owner_role"], "Admissions Director")
 		self.assertNotIn(
 			"CRM Data Steward",
@@ -69,10 +65,10 @@ class TestMasterDataGovernance(FrappeTestCase):
 		)
 
 	def test_registry_is_versioned_and_has_concrete_consumers(self):
-		self.assertEqual(REGISTRY_REVISION, "P9-DEC-001")
-		self.assertIn("CRM Campaign Type", GOVERNED_REFERENCE_REGISTRY)
+		self.assertEqual(REGISTRY_REVISION, "P9-DEC-002")
+		self.assertIn("CRM Term", GOVERNED_REFERENCE_REGISTRY)
 		self.assertEqual(
-			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Campaign Type"]["consumers"]},
+			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Term"]["consumers"]},
 			{("CRM Campaign", "campaign_type")},
 		)
 
@@ -105,11 +101,11 @@ class TestMasterDataGovernance(FrappeTestCase):
 		frappe.delete_doc("CRM Contact", contact, force=True)
 
 	def test_check_impact_empty_for_lost_reason_is_intentional_zero(self):
-		# CRM Lost Reason's usage_checks list is deliberately empty (nothing in
+		# CRM Term's usage_checks list is deliberately empty (nothing in
 		# this fork links to it yet) -- check_impact must return {} rather than
 		# erroring or fabricating a count.
 		lost_reason = self._make_lost_reason("_Test Gov Lost Reason Impact")
-		usage = check_impact("CRM Lost Reason", lost_reason)
+		usage = check_impact("CRM Term", lost_reason)
 		self.assertEqual(usage, {})
 
 	# ------------------------------------------------------------- propose_change
@@ -160,9 +156,9 @@ class TestMasterDataGovernance(FrappeTestCase):
 	def test_propose_change_success_creates_change_log(self):
 		source = self._make_lead_source("_Test Gov Source Propose OK")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated channel")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 
-		change = frappe.get_doc("CRM Master Data Change Log", change_name)
+		change = frappe.get_doc("CRM Master Data Change", change_name)
 		self.assertEqual(change.status, "Proposed")
 		self.assertEqual(change.reference_doctype, "CRM Lead Source")
 		self.assertEqual(change.reference_docname, source)
@@ -178,7 +174,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 	def test_approve_change_rejects_non_proposed_status(self):
 		source = self._make_lead_source("_Test Gov Source Approve Bad Status")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 		approver, _ = self._make_user_with_roles("_test_gov_bad_status_approver", roles=["Marketing"])
 		frappe.set_user(approver)
 		approve_change(change_name)  # single-approver type -> immediately applied
@@ -191,7 +187,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 	def test_approve_change_denied_without_approver_role(self):
 		source = self._make_lead_source("_Test Gov Source Approve Denied")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 
 		user, _ = self._make_user_with_roles("_test_gov_approve_denied", roles=["Sale"])
 		try:
@@ -211,7 +207,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			new_value="_Test Gov Source Rename Dst",
 			reason="rebrand",
 		)
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 		self.addCleanup(
 			lambda: frappe.delete_doc("CRM Lead Source", "_Test Gov Source Rename Dst", force=True)
 		)
@@ -232,8 +228,8 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_approve_change_dual_signoff_requires_both_roles(self):
 		lost_reason = self._make_lost_reason("_Test Gov Lost Reason Dual")
-		change_name = propose_change("CRM Lost Reason", lost_reason, "Retire", reason="no longer used")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		change_name = propose_change("CRM Term", lost_reason, "Retire", reason="no longer used")
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 
 		team_leader, _ = self._make_user_with_roles("_test_gov_lead_sales", roles=["Lead Sales"])
 		marketing_lead, _ = self._make_user_with_roles("_test_gov_dual_marketing", roles=["Marketing"])
@@ -242,10 +238,10 @@ class TestMasterDataGovernance(FrappeTestCase):
 			status_after_first = approve_change(change_name)
 			self.assertEqual(status_after_first, "Proposed")
 
-			change = frappe.get_doc("CRM Master Data Change Log", change_name)
+			change = frappe.get_doc("CRM Master Data Change", change_name)
 			self.assertEqual(change.approved_by_roles, "Lead Sales")
 			self.assertEqual(
-				frappe.db.get_value("CRM Lost Reason", lost_reason, "approval_state"), "Approved"
+				frappe.db.get_value("CRM Term", lost_reason, "approval_state"), "Approved"
 			)
 
 			frappe.set_user(marketing_lead)
@@ -254,7 +250,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 			change.reload()
 			self.assertEqual(set(change.approved_by_roles.split(",")), {"Lead Sales", "Marketing"})
-			self.assertEqual(frappe.db.get_value("CRM Lost Reason", lost_reason, "approval_state"), "Retired")
+			self.assertEqual(frappe.db.get_value("CRM Term", lost_reason, "approval_state"), "Retired")
 		finally:
 			frappe.set_user("Administrator")
 			self._cleanup_user(team_leader)
@@ -265,7 +261,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 	def test_reject_change_sets_status_and_appends_reason(self):
 		source = self._make_lead_source("_Test Gov Source Reject")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated channel")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 
 		user, _ = self._make_user_with_roles("_test_gov_rejector", roles=["Marketing"])
 		try:
@@ -276,14 +272,14 @@ class TestMasterDataGovernance(FrappeTestCase):
 			self._cleanup_user(user)
 
 		self.assertEqual(status, "Rejected")
-		change = frappe.get_doc("CRM Master Data Change Log", change_name)
+		change = frappe.get_doc("CRM Master Data Change", change_name)
 		self.assertEqual(change.status, "Rejected")
 		self.assertIn("not a real duplicate", change.reason)
 
 	def test_reject_change_denied_without_approver_role(self):
 		source = self._make_lead_source("_Test Gov Source Reject Denied")
 		change_name = propose_change("CRM Lead Source", source, "Retire", reason="deprecated")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change Log", change_name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
 
 		user, _ = self._make_user_with_roles("_test_gov_reject_denied", roles=["Sale"])
 		try:
@@ -301,7 +297,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			with _internal_flag("crm_governance_log_insert"):
 				frappe.get_doc(
 					{
-						"doctype": "CRM Master Data Change Log",
+						"doctype": "CRM Master Data Change",
 						"reference_doctype": "User",
 						"reference_docname": "Administrator",
 						"action": "Retire",
@@ -342,14 +338,14 @@ class TestMasterDataGovernance(FrappeTestCase):
 		return doc.name
 
 	def _make_lost_reason(self, name):
-		if frappe.db.exists("CRM Lost Reason", name):
-			frappe.delete_doc("CRM Lost Reason", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Lost Reason", "lost_reason": name})
+		if frappe.db.exists("CRM Term", name):
+			frappe.delete_doc("CRM Term", name, force=True)
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "lost_reason"})
 		doc.insert(ignore_permissions=True)
 		self.addCleanup(
 			lambda: (
-				frappe.delete_doc("CRM Lost Reason", doc.name, force=True)
-				if frappe.db.exists("CRM Lost Reason", doc.name)
+				frappe.delete_doc("CRM Term", doc.name, force=True)
+				if frappe.db.exists("CRM Term", doc.name)
 				else None
 			)
 		)

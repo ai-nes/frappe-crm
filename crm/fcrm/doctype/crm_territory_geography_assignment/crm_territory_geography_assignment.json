@@ -1,0 +1,45 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:business_key",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["business_key", "territory", "geography_type", "geography", "effective_from", "effective_until", "status", "revision", "supersedes", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"fieldname": "business_key", "fieldtype": "Data", "hidden": 1, "label": "Business Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "territory", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Territory", "options": "CRM Territory", "reqd": 1},
+  {"fieldname": "geography_type", "fieldtype": "Select", "in_list_view": 1, "label": "Geography Type", "options": "Region\nProvince\nDistrict\nWard", "reqd": 1},
+  {"fieldname": "geography", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Geography", "reqd": 1},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "label": "Effective Until", "reqd": 1},
+  {"fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Draft\nActive\nRetired", "default": "Draft", "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "1", "read_only": 1, "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Territory Geography Assignment", "read_only": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [
+  {"fields": ["territory", "geography_type", "geography", "effective_from", "revision"], "name": "crm_territory_geography_revision_uniq", "unique": 1},
+  {"fields": ["geography_type", "geography", "effective_from", "effective_until", "status"], "name": "crm_territory_geography_effective_idx", "unique": 0}
+ ],
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Territory Geography Assignment",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "business_key,territory,geography_type,geography,status",
+ "sort_field": "effective_from",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

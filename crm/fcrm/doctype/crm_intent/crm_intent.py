@@ -12,7 +12,14 @@ class CRMIntent(Document):
 		# undefaulted Select field to its first option, so a "not self.importance" guard would
 		# always be false here and must not gate the derivation.
 		if self.intent_type:
-			self.importance = frappe.db.get_value("CRM Intent Type", self.intent_type, "importance")
+			metadata = frappe.db.get_value("CRM Term", {"name": self.intent_type, "category": "intent_type"}, "metadata") or {}
+			if isinstance(metadata, str):
+				import json
+				try:
+					metadata = json.loads(metadata)
+				except ValueError:
+					metadata = {}
+			self.importance = metadata.get("importance")
 
 	def validate(self):
 		if self.intent_role == "Dominant" and self.interaction:
@@ -71,7 +78,7 @@ class CRMIntent(Document):
 				"label": "Intent Type",
 				"type": "Link",
 				"key": "intent_type",
-				"options": "CRM Intent Type",
+				"options": "CRM Term",
 				"width": "14rem",
 			},
 			{"label": "Role", "type": "Select", "key": "intent_role", "width": "8rem"},

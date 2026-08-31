@@ -130,7 +130,7 @@
    "fieldname": "intent_type",
    "fieldtype": "Link",
    "label": "Intent Type",
-   "options": "CRM Intent Type",
+   "options": "CRM Term",
    "depends_on": "eval:doc.signal_type == 'intent'"
   },
   {

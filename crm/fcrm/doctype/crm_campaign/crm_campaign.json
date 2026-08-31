@@ -10,6 +10,7 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "stable_code",
   "campus",
   "campaign_type",
   "event_type",
@@ -23,6 +24,7 @@
   "owning_team",
   "column_break_2",
   "platform",
+  "channel_boundary",
   "utm_source",
   "utm_medium",
   "utm_campaign",
@@ -43,6 +45,14 @@
    "unique": 1
   },
   {
+   "description": "Stable integration key. Uniqueness is enforced after the legacy profile is clean.",
+   "fieldname": "stable_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Stable Campaign Code"
+  },
+  {
    "fieldname": "campus",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -56,8 +66,8 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campaign Type",
-   "options": "CRM Campaign Type"
+   "label": "Campaign Type",
+   "options": "CRM Term"
   },
   {
    "fieldname": "event_type",
@@ -127,6 +137,14 @@
    "fieldtype": "Link",
    "label": "Platform",
    "options": "CRM Platform"
+  },
+  {
+   "fieldname": "channel_boundary",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Channel Boundary",
+   "options": "\nDigital\nField\nPartner\nMixed"
   },
   {
    "fieldname": "utm_source",

@@ -75,7 +75,7 @@ class CRMInteraction(Document):
 				"label": "Interaction Type",
 				"type": "Link",
 				"key": "interaction_type",
-				"options": "CRM Interaction Type",
+				"options": "CRM Term",
 				"width": "12rem",
 			},
 			{

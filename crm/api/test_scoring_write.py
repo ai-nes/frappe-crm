@@ -117,6 +117,8 @@ class TestScoringWrite(FrappeTestCase):
 		)
 
 		self.assertTrue(stale_result["stale"])
+		self.assertEqual(stale_result["current_revision"], 5)
+		self.assertEqual(stale_result["current_policy_revision"], 1)
 		student.reload()
 		self.assertEqual(student.latest_score, 70.0)
 		self.assertEqual(student.applied_score_input_revision, 5)

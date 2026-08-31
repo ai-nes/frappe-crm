@@ -60,7 +60,7 @@ describe('renderFieldLayoutDialog', () => {
   it('passes all core options through to dialog props', () => {
     renderFieldLayoutDialog({
       title: 'My Dialog',
-      doctype: 'CRM Lost Reason',
+      doctype: 'CRM Term',
       size: 'lg',
       defaults: { lead: 'LEAD-001' },
       required: ['lost_reason'],
@@ -69,7 +69,7 @@ describe('renderFieldLayoutDialog', () => {
 
     const props = fieldLayoutDialogs.value[0].props
     expect(props.title).toBe('My Dialog')
-    expect(props.doctype).toBe('CRM Lost Reason')
+    expect(props.doctype).toBe('CRM Term')
     expect(props.size).toBe('lg')
     expect(props.defaults).toEqual({ lead: 'LEAD-001' })
     expect(props.required).toEqual(['lost_reason'])

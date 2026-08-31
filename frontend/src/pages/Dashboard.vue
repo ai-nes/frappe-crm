@@ -173,6 +173,11 @@ import {
   salesDashboardSections,
   type OfflineTeam,
 } from '@/data/admissionsDashboardMock'
+import {
+  buildProjectionFilters,
+  projectionEndpoint,
+  projectionToDashboardItems,
+} from '@/utils/admissionsProjection'
 import { usersStore } from '@/stores/users'
 import { formatRange, formatter, getLastXDays } from '@/utils/dashboard'
 import { useStorage } from '@vueuse/core'
@@ -286,45 +291,37 @@ function parsePeriod(period: string | null) {
 }
 
 const liveSalesData = createResource({
-  url: 'crm.api.admissions_dashboard.get_sales_dashboard',
+  url: projectionEndpoint('sales'),
 })
 
 const liveDigitalData = createResource({
-  url: 'crm.api.admissions_dashboard.get_digital_marketing_dashboard',
+  url: projectionEndpoint('digital'),
 })
 
 const liveOfflineData = createResource({
-  url: 'crm.api.admissions_dashboard.get_offline_marketing_dashboard',
+  url: projectionEndpoint('field'),
 })
 
 function fetchLiveData() {
   if (useMockData.value) return
   const { from_date, to_date } = parsePeriod(filters.period)
+  const projectionFilters = buildProjectionFilters({
+    fromDate: from_date,
+    toDate: to_date,
+    advancedFilters,
+    team: offlineTeamFilter.value,
+  })
   if (isSalesDashboard.value) {
     liveSalesData.fetch({
-      from_date,
-      to_date,
-      user: filters.user || undefined,
-      sales_team: advancedFilters.salesTeam || undefined,
-      campus: advancedFilters.campus || undefined,
-      admission_term: advancedFilters.admissionTerm || undefined,
-      section: activeSalesSection.value,
+      filters: projectionFilters,
     })
   } else if (isOfflineMarketingDashboard.value) {
     liveOfflineData.fetch({
-      team: offlineTeamFilter.value,
-      from_date,
-      to_date,
-      campus: advancedFilters.campus || undefined,
+      filters: projectionFilters,
     })
   } else {
     liveDigitalData.fetch({
-      from_date,
-      to_date,
-      source: advancedFilters.leadSource || undefined,
-      platform: advancedFilters.leadChannel || undefined,
-      campaign: advancedFilters.campaign || undefined,
-      campus: advancedFilters.campus || undefined,
+      filters: projectionFilters,
     })
   }
 }
@@ -353,18 +350,12 @@ const dashboardItems = computed(() => {
   }
 
   if (isSalesDashboard.value) {
-    return liveSalesData.data && Array.isArray(liveSalesData.data)
-      ? liveSalesData.data
-      : []
+    return projectionToDashboardItems(liveSalesData.data)
   }
   if (isOfflineMarketingDashboard.value) {
-    return liveOfflineData.data && Array.isArray(liveOfflineData.data)
-      ? liveOfflineData.data
-      : []
+    return projectionToDashboardItems(liveOfflineData.data)
   }
-  return liveDigitalData.data && Array.isArray(liveDigitalData.data)
-    ? liveDigitalData.data
-    : []
+  return projectionToDashboardItems(liveDigitalData.data)
 })
 
 const breadcrumbRouteName = computed(() => {

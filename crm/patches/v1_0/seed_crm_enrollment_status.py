@@ -13,15 +13,14 @@ STAGE_ORDER_AND_CATEGORY = {
 	"Đã chuyển đổi": (5, "enrolled"),
 	"Từ chối": (6, "lost"),
 }
+LIFECYCLE_STAGE = {"Mới": "Lead", "Có triển vọng": "MQL", "Đã xác nhận": "Applicant", "Đã nhập học": "Enrolled", "Đã chuyển đổi": "Enrolled", "Từ chối": "Lost"}
 
 
 def execute():
 	for name in STATUSES:
-		if not frappe.db.exists("CRM Enrollment Status", name):
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "enrollment_status"}):
 			order, category = STAGE_ORDER_AND_CATEGORY[name]
 			frappe.get_doc({
-				"doctype": "CRM Enrollment Status",
-				"status_name": name,
-				"stage_order": order,
-				"stage_category": category,
+				"doctype": "CRM Term", "term_name": name, "category": "enrollment_status",
+				"sort_order": order, "metadata": {"stage_category": category, "lifecycle_stage": LIFECYCLE_STAGE[name]},
 			}).insert(ignore_permissions=True)

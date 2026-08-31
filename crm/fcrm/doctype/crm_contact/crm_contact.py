@@ -8,7 +8,7 @@ from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_st
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
-# CRM Enrollment Status values that constitute the "application/enrollment" milestone
+# CRM Term values that constitute the "application/enrollment" milestone
 # at which a CRM Student record should be created for a Contact — locked business
 # rule for creating a student at the enrollment milestone.
 MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
@@ -82,7 +82,7 @@ class CRMContact(Document):
 				"label": "Enrollment Status",
 				"type": "Link",
 				"key": "enrollment_status",
-				"options": "CRM Enrollment Status",
+				"options": "CRM Term",
 				"width": "10rem",
 			},
 			{
@@ -324,7 +324,7 @@ def get_permission_query_conditions(user=None):
 	return _scoped("CRM Contact", user=user)
 
 
-def has_permission(doc, user=None, permission_type=None):
+def has_permission(doc, user=None, permission_type=None, ptype=None):
 	from crm.fcrm.permissions import has_permission as _scoped
 
-	return _scoped(doc, user=user, permission_type=permission_type)
+	return _scoped(doc, user=user, permission_type=permission_type, ptype=ptype)

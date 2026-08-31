@@ -1,12 +1,12 @@
 """
-Demo seed — shared master data for local admissions fixtures.
+Internal master-data bootstrap used only by ``seed_showcase``.
 
-Run with:
-  bench --site <site> execute crm.demo.seed_demo.execute
+The repository has one supported seed entrypoint:
+``crm.demo.seed_showcase.execute``. This module must not be run directly.
 
 What this creates (all idempotent):
   Master data
-    CRM Intent Type         — 8 types
+    CRM Term         — 8 types
     CRM Score Signal        — 22 signals (Fit / Engagement / Intent / Negative)
     CRM Score Template      — "Default Scoring 2026" (active)
 
@@ -17,6 +17,7 @@ What this creates (all idempotent):
 
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta
 
 import frappe
@@ -222,175 +223,10 @@ TIME_DECAY_TIERS = [
 
 
 # ---------------------------------------------------------------------------
-# Student profiles
-# Intent spec dict keys: type, importance, desc_vi, confidence, role, polarity, notes
-# ---------------------------------------------------------------------------
-
-STUDENTS = [
-    # -----------------------------------------------------------------------
-    # Student A — Nguyen Thu Ha
-    # Grade 12, GPA 8.5, IELTS 6.5, top high school — strong fit
-    # Activity: Zalo → Consultation → Open Day (5 days ago)
-    # -----------------------------------------------------------------------
-    {
-        "email": "nguyen.thu.ha.fptu2026@example.com",
-        "phone": "0909111001",
-        "student_name": "Nguyen Thu Ha",
-        "transcript_score": 8.5,
-        "english_converted_score": 7.0,
-        "graduation_score": 8.3,
-        "total_score": 26.3,
-        "admission_method": "Combined",
-        "cohort_start_year": datetime.now().year,
-        "cohort_end_year": datetime.now().year + 4,
-        "academic_results": [
-            {"school_year": "2024-2025", "grade": "12", "academic_rank": "Giỏi", "gpa": 8.5},
-        ],
-        "language_certificates": [
-            {
-                "language": "Tiếng Anh", "certificate_name": "IELTS", "score_level": "6.5",
-                "issue_date": frappe.utils.add_months(frappe.utils.today(), -3),
-                "expiry_date": frappe.utils.add_months(frappe.utils.today(), 21),
-            },
-        ],
-        "interactions": [
-            {
-                "type": "Zalo Chat",
-                "summary": "Thu Ha: Initial Zalo inquiry about tuition and scholarships",
-                "days_ago": 12,
-                "outcome": "Captured",
-                "notes": "Student asked about tuition installment options and whether IELTS 6.5 qualifies for scholarship.",
-                "intents": [
-                    {"type": "Tuition",    "importance": "High",   "desc_vi": "Hỏi về học phí",  "confidence": 88, "role": "Dominant", "polarity": "Positive", "notes": "Asked about tuition payment schedule."},
-                    {"type": "Scholarship","importance": "High",   "desc_vi": "Hỏi về học bổng", "confidence": 82, "role": "Support",  "polarity": "Positive", "notes": "Asked if IELTS qualifies for scholarship."},
-                ],
-            },
-            {
-                "type": "Consultation Register",
-                "summary": "Thu Ha: Registered for 1-on-1 consultation session",
-                "days_ago": 8,
-                "outcome": "Captured",
-                "notes": "Booked a consultation slot to discuss Software Engineering curriculum.",
-                "intents": [
-                    {"type": "Major Inquiry", "importance": "Medium", "desc_vi": "Hỏi về ngành học", "confidence": 80, "role": "Dominant", "polarity": "Positive", "notes": "Wanted details on SE curriculum and career paths."},
-                ],
-            },
-            {
-                "type": "Open Day",
-                "summary": "Thu Ha: Attended FPTU HCMC Open Day",
-                "days_ago": 5,
-                "outcome": "Follow Up Needed",
-                "notes": "Attended campus visit, confirmed SE as first choice, expressed enrollment intent.",
-                "intents": [
-                    {"type": "Enrollment Intent", "importance": "Very High", "desc_vi": "Ý định nhập học", "confidence": 94, "role": "Dominant", "polarity": "Positive", "notes": "Confirmed intent to enroll after Open Day."},
-                ],
-            },
-        ],
-    },
-
-    # -----------------------------------------------------------------------
-    # Student B — Tran Quoc Bao
-    # Grade 12, GPA 7.2, no certificates — weak fit, inactive 50 days
-    # -----------------------------------------------------------------------
-    {
-        "email": "tran.quoc.bao.fptu2026@example.com",
-        "phone": "0909222002",
-        "student_name": "Tran Quoc Bao",
-        "transcript_score": 7.2,
-        "english_converted_score": 0.0,
-        "graduation_score": 7.0,
-        "total_score": 21.2,
-        "admission_method": "Transcript Review",
-        "cohort_start_year": datetime.now().year,
-        "cohort_end_year": datetime.now().year + 4,
-        "academic_results": [
-            {"school_year": "2024-2025", "grade": "12", "academic_rank": "Khá", "gpa": 7.2},
-        ],
-        "language_certificates": [],
-        "interactions": [
-            {
-                "type": "Website Visit",
-                "summary": "Bao: Viewed university website and major page",
-                "days_ago": 50,
-                "outcome": "Captured",
-                "notes": "Student browsed the Software Engineering major page. No follow-up action taken.",
-                "intents": [
-                    {"type": "Major Inquiry", "importance": "Medium", "desc_vi": "Hỏi về ngành học", "confidence": 65, "role": "Dominant", "polarity": "Positive", "notes": "Browsed SE major page — passive interest."},
-                ],
-            },
-        ],
-    },
-
-    # -----------------------------------------------------------------------
-    # Student C — Le Phuong Linh
-    # Grade 11, GPA 7.8, no certificates — zero fit score
-    # Activity: Zalo → Webinar → Cancel Event → Application Submit (3 days ago)
-    # -----------------------------------------------------------------------
-    {
-        "email": "le.phuong.linh.fptu2026@example.com",
-        "phone": "0909333003",
-        "student_name": "Le Phuong Linh",
-        "transcript_score": 7.8,
-        "english_converted_score": 0.0,
-        "graduation_score": 7.5,
-        "total_score": 22.8,
-        "admission_method": "Transcript Review",
-        "cohort_start_year": datetime.now().year + 1,
-        "cohort_end_year": datetime.now().year + 5,
-        "academic_results": [
-            {"school_year": "2024-2025", "grade": "11", "academic_rank": "Khá", "gpa": 7.8},
-        ],
-        "language_certificates": [],
-        "interactions": [
-            {
-                "type": "Zalo Chat",
-                "summary": "Linh: Zalo chat about admission requirements",
-                "days_ago": 14,
-                "outcome": "Captured",
-                "notes": "Student asked about admission requirements and whether grade 11 students can apply early.",
-                "intents": [
-                    {"type": "Admission Process", "importance": "High",   "desc_vi": "Hỏi quy trình xét tuyển", "confidence": 85, "role": "Dominant", "polarity": "Positive", "notes": "Asked if grade 11 students can register for early admission."},
-                    {"type": "Major Inquiry",     "importance": "Medium", "desc_vi": "Hỏi về ngành học",        "confidence": 70, "role": "Support",  "polarity": "Positive", "notes": "Also asked about SE vs IT differences."},
-                ],
-            },
-            {
-                "type": "Webinar",
-                "summary": "Linh: Attended online admission information session",
-                "days_ago": 7,
-                "outcome": "Captured",
-                "notes": "Attended webinar, asked about deposit timeline and reservation policy.",
-                "intents": [
-                    {"type": "Deposit Intent", "importance": "Very High", "desc_vi": "Ý định đặt cọc", "confidence": 91, "role": "Dominant", "polarity": "Positive", "notes": "Asked about deposit amount and deadline — strong purchase signal."},
-                ],
-            },
-            {
-                "type": "Cancel Event",
-                "summary": "Linh: Cancelled registered Open Day slot",
-                "days_ago": 5,
-                "outcome": "Captured",
-                "notes": "Student cancelled Open Day registration. Reason: family travel conflict.",
-                "intents": [],
-            },
-            {
-                "type": "Application Submit",
-                "summary": "Linh: Submitted early admission application",
-                "days_ago": 3,
-                "outcome": "Follow Up Needed",
-                "notes": "Submitted application despite being grade 11 — counselor must verify eligibility.",
-                "intents": [
-                    {"type": "Enrollment Intent", "importance": "Very High", "desc_vi": "Ý định nhập học", "confidence": 88, "role": "Dominant", "polarity": "Positive", "notes": "Submitted formal application — highest conversion signal."},
-                ],
-            },
-        ],
-    },
-]
-
-
-# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
-def execute():
+def _bootstrap():
     frappe.db.begin()
 
     print("\n=== Seeding master data ===")
@@ -413,11 +249,12 @@ def execute():
 def _seed_intent_types():
     created = 0
     for it in INTENT_TYPES:
-        if not frappe.db.exists("CRM Intent Type", it["name"]):
+        if not frappe.db.exists("CRM Term", it["name"]):
             _create_governed_additive_value(
-                "CRM Intent Type",
+                "CRM Term",
                 it["name"],
                 reason=f"Local scoring fixture: {it['description_vi']}",
+                category="intent_type",
             )
             created += 1
     print(f"  Intent Types: {created} created, {len(INTENT_TYPES) - created} skipped")
@@ -434,11 +271,11 @@ def _seed_signals():
 
 def _seed_score_template():
     rules = [
-        {"signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
+        {"rule_kind": "positive", "signal": r["signal"], "base_points": r["base_points"], "max_points": r["max_points"], "is_active": 1}
         for r in SCORE_RULES
     ]
     neg_rules = [
-        {"signal": r["signal"], "penalty_amount": r["penalty_amount"],
+        {"rule_kind": "negative", "signal": r["signal"], "penalty_amount": r["penalty_amount"],
          "cooldown_days": r["cooldown_days"], "max_penalties": r["max_penalties"], "is_active": 1}
         for r in NEGATIVE_RULES
     ]
@@ -447,9 +284,7 @@ def _seed_score_template():
     if name:
         doc = frappe.get_doc("CRM Score Template", name)
         doc.update({"status": "Active", "fit_weight": 0.4, "intent_weight": 0.3, "engagement_weight": 0.3})
-        doc.set("rules", rules)
-        doc.set("time_decay_config", TIME_DECAY_TIERS)
-        doc.set("negative_rules", neg_rules)
+        doc.set("rules", rules + [{"rule_kind": "time_decay", **tier} for tier in TIME_DECAY_TIERS] + neg_rules)
         doc.save(ignore_permissions=True)
         print(f"  Score Template: '{TEMPLATE_NAME}' updated")
         return
@@ -461,9 +296,7 @@ def _seed_score_template():
         "fit_weight": 0.4,
         "intent_weight": 0.3,
         "engagement_weight": 0.3,
-        "rules": rules,
-        "time_decay_config": TIME_DECAY_TIERS,
-        "negative_rules": neg_rules,
+        "rules": rules + [{"rule_kind": "time_decay", **tier} for tier in TIME_DECAY_TIERS] + neg_rules,
     }).insert(ignore_permissions=True)
     print(f"  Score Template: '{TEMPLATE_NAME}' created")
 
@@ -489,94 +322,6 @@ def _ensure_shared_context():
         "education_program": _ensure_education_program(),
         "enrollment_status": _ensure_enrollment_status("Mới"),
     }
-
-
-# ---------------------------------------------------------------------------
-# Student seeder
-# ---------------------------------------------------------------------------
-
-def _seed_student(profile, ctx):
-    email = profile["email"]
-
-    existing = frappe.db.exists("CRM Student", {"email": email})
-    if existing:
-        student = frappe.get_doc("CRM Student", existing)
-    else:
-        student = frappe.get_doc({"doctype": "CRM Student"})
-
-    student.update({
-        "student_name":            profile["student_name"],
-        "phone":                   profile["phone"],
-        "email":                   email,
-        "enrollment_status":       ctx["enrollment_status"],
-        "high_school":             ctx["high_school"],
-        "province":                ctx["province"],
-        "ward":                    ctx["ward"],
-        "branch":                  ctx["campus"],
-        "major":                   ctx["major"],
-        "aspiration":              ctx["aspiration"],
-        "source":                  ctx["source"],
-        "admission_year":          ctx["admission_year"],
-        "education_program":       ctx["education_program"],
-        "cohort_start_year":       profile["cohort_start_year"],
-        "cohort_end_year":         profile["cohort_end_year"],
-        "transcript_score":        profile["transcript_score"],
-        "graduation_score":        profile["graduation_score"],
-        "english_converted_score": profile["english_converted_score"],
-        "total_score":             profile["total_score"],
-        "admission_method":        profile["admission_method"],
-    })
-    student.set("academic_results",      profile["academic_results"])
-    student.set("language_certificates", profile["language_certificates"])
-
-    if existing:
-        student.save(ignore_permissions=True)
-    else:
-        student.insert(ignore_permissions=True)
-
-    print(f"  Student '{profile['student_name']}': {student.name}")
-    _seed_interactions(student, profile["interactions"])
-
-
-def _seed_interactions(student, interaction_specs):
-    for spec in interaction_specs:
-        itype = _ensure_interaction_type(spec["type"])
-        existing = frappe.db.exists("CRM Interaction", {
-            "student": student.name,
-            "summary": spec["summary"],
-        })
-        if existing:
-            interaction_name = existing
-        else:
-            interaction = frappe.get_doc({
-                "doctype": "CRM Interaction",
-                "student": student.name,
-                "interaction_type": itype,
-                "interaction_datetime": datetime.now() - timedelta(days=spec["days_ago"]),
-                "outcome": spec["outcome"],
-                "summary": spec["summary"],
-                "notes": spec["notes"],
-            })
-            interaction.insert(ignore_permissions=True)
-            interaction_name = interaction.name
-
-        _seed_intents(interaction_name, spec.get("intents", []))
-
-
-def _seed_intents(interaction_name, intent_specs):
-    for s in intent_specs:
-        itype_name = _ensure_intent_type(s["type"], s["importance"], s["desc_vi"])
-        if frappe.db.exists("CRM Intent", {"interaction": interaction_name, "intent_type": itype_name}):
-            continue
-        frappe.get_doc({
-            "doctype": "CRM Intent",
-            "interaction": interaction_name,
-            "intent_type": itype_name,
-            "confidence": s["confidence"],
-            "intent_role": s["role"],
-            "polarity": s["polarity"],
-            "notes": s["notes"],
-        }).insert(ignore_permissions=True)
 
 
 # ---------------------------------------------------------------------------
@@ -620,17 +365,15 @@ def _ensure_campus(province):
 
 
 def _ensure_high_school(province):
-    existing = frappe.db.exists("CRM High School", {"school_name": HIGH_SCHOOL, "province_code": PROVINCE_CODE})
+    existing = frappe.db.exists("CRM High School", {"school_name": HIGH_SCHOOL, "province": province})
     if existing:
         return existing
     return frappe.get_doc({
         "doctype": "CRM High School",
         "school_name": HIGH_SCHOOL,
         "school_code": "HCM-TDN",
-        "ward_code": WARD_CODE,
-        "ward_name": WARD_NAME,
-        "province_code": PROVINCE_CODE,
-        "province_name": PROVINCE_NAME,
+        "province": province,
+        "ward": _ensure_ward(province),
         "address": "20 Ly Tu Trong, District 1, Ho Chi Minh City",
     }).insert(ignore_permissions=True).name
 
@@ -648,11 +391,12 @@ def _ensure_major():
 
 def _ensure_aspiration():
     name = "NV1"
-    if frappe.db.exists("CRM Aspiration", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return frappe.get_doc({
-        "doctype": "CRM Aspiration",
-        "aspiration_name": name,
+        "doctype": "CRM Term",
+        "term_name": name,
+        "category": "aspiration",
         "description": "First choice admission aspiration.",
     }).insert(ignore_permissions=True).name
 
@@ -708,12 +452,13 @@ def _ensure_campaign(campus=None):
 
 def _ensure_campaign_type():
     name = "Open Day"
-    if frappe.db.exists("CRM Campaign Type", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return _create_governed_additive_value(
-        "CRM Campaign Type",
+        "CRM Term",
         name,
         reason="Campus visit and admission counseling campaign for the local fixture.",
+        category="campaign_type",
     )
 
 
@@ -730,41 +475,51 @@ def _ensure_event():
 
 
 def _ensure_enrollment_status(status_name):
-    if frappe.db.exists("CRM Enrollment Status", status_name):
+    if frappe.db.exists("CRM Term", status_name):
         return status_name
     defaults = {"Mới": (10, "open", "Lead")}
     stage_order, stage_category, lifecycle_stage = defaults.get(status_name, (10, "open", "Lead"))
     doc = frappe.get_doc({
-        "doctype": "CRM Enrollment Status",
-        "status_name": status_name,
-        "stage_order": stage_order,
-        "stage_category": stage_category,
+        "doctype": "CRM Term",
+        "term_name": status_name,
+        "category": "enrollment_status",
+        "sort_order": stage_order,
+        "metadata": {"stage_category": stage_category, "lifecycle_stage": lifecycle_stage},
     }).insert(ignore_permissions=True)
-    if frappe.db.has_column("CRM Enrollment Status", "lifecycle_stage"):
-        frappe.db.set_value("CRM Enrollment Status", doc.name, "lifecycle_stage", lifecycle_stage, update_modified=False)
     return doc.name
 
 
 def _ensure_interaction_type(name):
-    if frappe.db.exists("CRM Interaction Type", name):
+    if frappe.db.exists("CRM Term", name):
         return name
     return frappe.get_doc({
-        "doctype": "CRM Interaction Type",
-        "interaction_type_name": name,
+        "doctype": "CRM Term",
+        "term_name": name,
+        "category": "interaction_type",
     }).insert(ignore_permissions=True).name
 
 
 def _ensure_intent_type(name, importance, description_vi):
-    if frappe.db.exists("CRM Intent Type", name):
-        return name
-    return _create_governed_additive_value(
-        "CRM Intent Type",
-        name,
-        reason=f"Local scoring fixture: {description_vi}",
-    )
+    term = frappe.db.exists("CRM Term", name)
+    if not term:
+        term = _create_governed_additive_value(
+            "CRM Term",
+            name,
+            reason=f"Local scoring fixture: {description_vi}",
+            category="intent_type",
+        )
+    # CRM Intent.importance is read-only and always derived from its
+    # intent_type term's metadata (crm_intent.py before_validate), so the
+    # term must carry the importance level, not the individual intent.
+    # Backfill on every call (not just creation) so terms left over from
+    # earlier fixture runs, seeded before this metadata existed, self-heal.
+    current_metadata = frappe.db.get_value("CRM Term", term, "metadata")
+    if not current_metadata or json.loads(current_metadata).get("importance") != importance:
+        frappe.db.set_value("CRM Term", term, "metadata", frappe.as_json({"importance": importance}))
+    return term
 
 
-def _create_governed_additive_value(doctype, value, *, reason):
+def _create_governed_additive_value(doctype, value, *, reason, category=None):
     """Create an additive lookup through its required governance boundary."""
     from crm.fcrm.master_data_governance import create_additive_value
 
@@ -774,5 +529,6 @@ def _create_governed_additive_value(doctype, value, *, reason):
         reason=reason,
         idempotency_key=f"local-admissions-fixture:{doctype}:{value}",
         correlation_id="local-admissions-fixture",
+        category=category,
     )
     return result["name"]

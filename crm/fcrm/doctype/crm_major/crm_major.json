@@ -11,6 +11,7 @@
  "field_order": [
   "major_name",
   "major_code",
+  "degree_name",
   "major_group",
   "is_active",
   "import_source_id"
@@ -32,12 +33,19 @@
    "label": "Major Code"
   },
   {
+   "fieldname": "degree_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Degree Name"
+  },
+  {
    "fieldname": "major_group",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Major Group",
-   "options": "CRM Major Group"
+   "options": "CRM Term"
   },
   {
    "default": "1",

@@ -59,7 +59,7 @@
    "is_query_report": 0,
    "label": "Regions",
    "link_count": 0,
-   "link_to": "CRM Region",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -124,7 +124,7 @@
    "is_query_report": 0,
    "label": "Major Groups",
    "link_count": 0,
-   "link_to": "CRM Major Group",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -276,7 +276,7 @@
    "is_query_report": 0,
    "label": "School Types",
    "link_count": 0,
-   "link_to": "CRM School Type",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -287,7 +287,7 @@
    "is_query_report": 0,
    "label": "Enrollment Statuses",
    "link_count": 0,
-   "link_to": "CRM Enrollment Status",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -298,7 +298,7 @@
    "is_query_report": 0,
    "label": "Campaign Types",
    "link_count": 0,
-   "link_to": "CRM Campaign Type",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -309,7 +309,7 @@
    "is_query_report": 0,
    "label": "Interaction Types",
    "link_count": 0,
-   "link_to": "CRM Interaction Type",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -320,7 +320,7 @@
    "is_query_report": 0,
    "label": "Intent Types",
    "link_count": 0,
-   "link_to": "CRM Intent Type",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -353,7 +353,7 @@
    "is_query_report": 0,
    "label": "Lead Statuses",
    "link_count": 0,
-   "link_to": "CRM Lead Status",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -364,7 +364,7 @@
    "is_query_report": 0,
    "label": "Lost Reasons",
    "link_count": 0,
-   "link_to": "CRM Lost Reason",
+   "link_to": "CRM Term",
    "link_type": "DocType",
    "onboard": 0,
    "type": "Link"
@@ -390,7 +390,11 @@
  "parent_page": "",
  "public": 1,
  "quick_lists": [],
- "roles": [],
+ "roles": [
+  {
+   "role": "System Manager"
+  }
+ ],
  "sequence_id": 1.0,
  "shortcuts": [],
  "title": "Frappe CRM"

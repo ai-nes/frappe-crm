@@ -15,6 +15,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.permissions import (
+	get_student_projection_permission_query_conditions,
 	get_interaction_permission_query_conditions,
 	has_interaction_permission,
 	has_operational_record_permission,
@@ -25,17 +26,27 @@ from crm.fcrm.test_permissions import TestSharedScopingPermissions
 class TestInteractionFamilyPermissions(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		self._conversion_read_flag = "crm_student_conversion_read_enabled"
+		self._previous_conversion_read = frappe.conf.get(self._conversion_read_flag)
+		frappe.conf[self._conversion_read_flag] = False
 		self._campus = TestSharedScopingPermissions._make_campus(self, "_Test IFP Campus")
 		self._department = TestSharedScopingPermissions._get_or_create_department(
 			self, "_Test IFP Dept", self._campus
 		)
-		if not frappe.db.exists("CRM Interaction Type", "_Test IFP Call"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Call"):
 			frappe.get_doc(
-				{"doctype": "CRM Interaction Type", "interaction_type_name": "_Test IFP Call"}
+				{"doctype": "CRM Term", "term_name": "_Test IFP Call", "category": "interaction_type"}
 			).insert(ignore_permissions=True)
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Interaction", filters={"summary": ["like", "_Test IFP%"]}, pluck="name"):
+		interactions = frappe.db.get_all(
+			"CRM Interaction", filters={"summary": ["like", "_Test IFP%"]}, pluck="name"
+		)
+		for name in frappe.db.get_all(
+			"CRM Intent", filters={"interaction": ["in", interactions or ["__none__"]]}, pluck="name"
+		):
+			frappe.delete_doc("CRM Intent", name, force=True)
+		for name in interactions:
 			frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test IFP%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
@@ -46,6 +57,10 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test IFP%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
 		self._cleanup_campus(self._campus)
+		if self._previous_conversion_read is None:
+			frappe.conf.pop(self._conversion_read_flag, None)
+		else:
+			frappe.conf[self._conversion_read_flag] = self._previous_conversion_read
 
 	# ---------------------------------------------------------------------- helpers
 
@@ -85,6 +100,16 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 	def test_system_manager_has_unrestricted_interaction_access(self):
 		user, _staff = self._make_user_and_staff("_Test IFP Admin", ["System Manager"])
 		self.assertIsNone(get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction"))
+
+	def test_agent_event_scope_follows_student_for_operational_aggregates(self):
+		user, _staff = self._make_user_and_staff("_Test IFP Event Scope", ["Sale"])
+		condition = get_student_projection_permission_query_conditions(
+			doctype="CRM Agent Event", user=user
+		)
+		self.assertIn("aggregate_doctype = 'CRM Student'", condition)
+		self.assertIn("aggregate_doctype = 'CRM Action'", condition)
+		self.assertIn("aggregate_doctype = 'CRM Student Decision Event'", condition)
+		self.assertIn("tabCRM Student", condition)
 
 	def test_marketing_role_has_no_row_scope_despite_channel(self):
 		# Marketing has DocType-level read on CRM Interaction (crm_interaction.json),
@@ -142,37 +167,46 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		self.assertFalse(has_interaction_permission(empty_new, user=user, ptype="create"))
 
 	def test_contact_only_interaction_scoped_via_contact_condition(self):
-		user, staff = self._make_user_and_staff("_Test IFP Contact Sale", ["Sale"])
-		contact = frappe.get_doc(
-			{"doctype": "CRM Contact", "full_name": "_Test IFP Contact", "phone": "0900000099"}
-		)
-		contact.insert(ignore_permissions=True)
-		contact.db_set("owner_staff", staff)
-		interaction = frappe.get_doc(
-			{
-				"doctype": "CRM Interaction",
-				"crm_contact": contact.name,
-				"interaction_type": "_Test IFP Call",
-				"summary": "_Test IFP contact-only",
-			}
-		)
-		interaction.insert(ignore_permissions=True)
+		flag_name = "crm_student_conversion_read_enabled"
+		previous_flag = frappe.conf.get(flag_name)
+		frappe.conf[flag_name] = False
+		try:
+			user, staff = self._make_user_and_staff("_Test IFP Contact Sale", ["Sale"])
+			contact = frappe.get_doc(
+				{"doctype": "CRM Contact", "full_name": "_Test IFP Contact", "phone": "0900000099"}
+			)
+			contact.insert(ignore_permissions=True)
+			contact.db_set("owner_staff", staff)
+			interaction = frappe.get_doc(
+				{
+					"doctype": "CRM Interaction",
+					"crm_contact": contact.name,
+					"interaction_type": "_Test IFP Call",
+					"summary": "_Test IFP contact-only",
+				}
+			)
+			interaction.insert(ignore_permissions=True)
 
-		other_user, _other_staff = self._make_user_and_staff("_Test IFP Contact Sale Other", ["Sale"])
-		self.assertTrue(has_interaction_permission(interaction, user=user))
-		self.assertFalse(has_interaction_permission(interaction, user=other_user))
+			other_user, _other_staff = self._make_user_and_staff("_Test IFP Contact Sale Other", ["Sale"])
+			self.assertTrue(has_interaction_permission(interaction, user=user))
+			self.assertFalse(has_interaction_permission(interaction, user=other_user))
+		finally:
+			if previous_flag is None:
+				frappe.conf.pop(flag_name, None)
+			else:
+				frappe.conf[flag_name] = previous_flag
 
 	# --------------------------------------------------- CRM Intent / Score History
 
 	def test_intent_scoped_to_own_assigned_student(self):
 		from crm.fcrm.permissions import get_intent_permission_query_conditions, has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Intent Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Intent Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Intent Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Intent Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -210,12 +244,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# own Contact condition instead of denying every such Intent outright.
 		from crm.fcrm.permissions import get_intent_permission_query_conditions, has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Contact Intent Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Contact Intent Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Contact Intent Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Contact Intent Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -258,12 +292,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# just on a name this test happens to choose.
 		from crm.fcrm.permissions import has_intent_permission
 
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Create Guard Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Create Guard Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Create Guard Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Create Guard Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 
@@ -292,12 +326,12 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		# with no interaction/student row yet can actually insert a CRM Intent,
 		# going through the real frappe.has_permission -> hooks.py wiring ->
 		# has_intent_permission dispatch.
-		if not frappe.db.exists("CRM Intent Type", "_Test IFP Create Path Type"):
+		if not frappe.db.exists("CRM Term", "_Test IFP Create Path Type"):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": "_Test IFP Create Path Type",
-					"importance": "Medium",
+					"doctype": "CRM Term",
+					"term_name": "_Test IFP Create Path Type", "category": "intent_type",
+					"metadata": {"importance": "Medium"},
 				}
 			).insert(ignore_permissions=True)
 

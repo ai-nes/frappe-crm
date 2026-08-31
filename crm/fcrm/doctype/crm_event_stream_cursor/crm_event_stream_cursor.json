@@ -1,0 +1,9 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "field:stream", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["stream", "counter"],
+ "fields": [
+  {"fieldname": "stream", "fieldtype": "Data", "in_list_view": 1, "label": "Stream", "read_only": 1, "reqd": 1, "unique": 1},
+  {"default": "0", "fieldname": "counter", "fieldtype": "Int", "in_list_view": 1, "label": "Counter", "read_only": 1, "reqd": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Event Stream Cursor", "naming_rule": "By fieldname", "owner": "Administrator", "permissions": [], "sort_field": "stream", "sort_order": "ASC"
+}

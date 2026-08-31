@@ -15,7 +15,7 @@ ALLOWED_SEGMENT_FIELDS = {
 		"fieldtype": "Select",
 		"options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
 	},
-	"lead_status": {"label": "Lead Status", "fieldtype": "Link", "options": "CRM Lead Status"},
+	"lead_status": {"label": "Lead Status", "fieldtype": "Link", "options": "CRM Term"},
 	"source": {"label": "Source", "fieldtype": "Link", "options": "CRM Lead Source"},
 	"platform": {"label": "Platform", "fieldtype": "Link", "options": "CRM Platform"},
 	"branch": {"label": "Branch", "fieldtype": "Link", "options": "CRM Campus"},
@@ -216,11 +216,12 @@ def attach_segment_to_campaign(segment, campaign):
 
 	existing_by_contact = {}
 	if matches:
-		for row in frappe.db.get_all(
-			"CRM Campaign Touchpoint",
-			filters={"crm_campaign": campaign, "crm_contact": ["in", matches]},
+		engagement_rows = frappe.db.get_all(
+			"CRM Marketing Engagement",
+			filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign, "crm_contact": ["in", matches]},
 			fields=["crm_contact", "source", "crm_segment"],
-		):
+		)
+		for row in engagement_rows:
 			existing_by_contact[row.crm_contact] = row
 	contact_students = {
 		contact: next(iter(students_for_contact(contact)), None)

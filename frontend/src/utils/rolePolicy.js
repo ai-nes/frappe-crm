@@ -11,6 +11,11 @@ export const canonicalRoleOptions = [
     description: 'Can access permitted campaign and aggregate CRM information.',
   },
   {
+    value: 'Promoter',
+    label: 'Promoter',
+    description: 'Marketing / Offline Marketing role for school relationship activities.',
+  },
+  {
     value: 'Lead Sales',
     label: 'Lead Sales',
     description:
@@ -62,7 +67,7 @@ export const navigationEntries = [
     label: 'Sales Dashboard',
     icon: 'salesDashboard',
     to: 'Dashboard',
-    anyOf: admissionsManagementCapabilities,
+    anyOf: admissionsWorkspaceCapabilities,
   },
   {
     label: 'Marketing Dashboard',
@@ -95,10 +100,22 @@ export const navigationEntries = [
     anyOf: admissionsWorkspaceCapabilities,
   },
   {
+    label: 'Lookups',
+    icon: 'lookups',
+    to: 'Lookups',
+    anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities],
+  },
+  {
+    label: 'Majors & Programs',
+    icon: 'majors',
+    to: 'CRM Majors',
+    anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities],
+  },
+  {
     label: 'High Schools',
     icon: 'schools',
     to: 'High Schools',
-    anyOf: acquisitionWorkspaceCapabilities,
+    anyOf: [...acquisitionWorkspaceCapabilities, ...admissionsWorkspaceCapabilities],
   },
   {
     label: 'Persons',
@@ -156,6 +173,22 @@ export function hasCapability(user, capability) {
 
 export function hasAnyCapability(user, capabilities) {
   return capabilities.some((capability) => hasCapability(user, capability))
+}
+
+/**
+ * Frontend preflight only. The workspace reader is the authority for role,
+ * team, campus and feature-flag availability; an unavailable response must
+ * render its server-provided status rather than unlock a legacy destination.
+ */
+export function canAccessWorkspace(user, workspaceEntry) {
+  return Boolean(
+    workspaceEntry?.capability &&
+    hasCapability(user, workspaceEntry.capability),
+  )
+}
+
+export function isWorkspaceContractAvailable(response) {
+  return response?.contractStatus === 'ready'
 }
 
 export function canAccessNavigationRoute(user, routeName) {

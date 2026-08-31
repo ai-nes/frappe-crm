@@ -348,7 +348,7 @@ def record_qualifying_response(attempt_name: str, interaction_name: str, *, expe
 		_error("OUTCOME_REQUIRED", "A qualifying interaction outcome is required.")
 	if interaction.actor and interaction.actor != actor and actor != "Administrator":
 		_error("UNAUTHORIZED", "Only the authenticated interaction actor may satisfy the SLA.")
-	if interaction.reference_doctype not in {"Call Log", "Communication", "Task", "CRM Event Participation", "WhatsApp Message"}:
+	if interaction.reference_doctype not in {"Call Log", "Communication", "Task", "CRM Marketing Engagement", "WhatsApp Message"}:
 		_error("INVALID_INTERACTION_SOURCE", "Only an auditable interaction source may satisfy the SLA.")
 	from crm.fcrm.interaction_log import verify_sla_source
 	if not getattr(interaction, "source_verified", False) or not verify_sla_source(
@@ -698,18 +698,17 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 					):
 						published = False
 						break
-					with delivery_service_context():
-						frappe.get_doc({
-							"doctype": "CRM Student SLA Delivery Attempt",
+						with delivery_service_context():
+							delivery.append("attempts", {
 							"delivery_attempt_key": submission_key,
-							"delivery": delivery.name,
 							"recipient": recipient,
 							"attempt_number": delivery.attempt_count,
 							"provider_submission_key": submission_key,
 							"outcome": "submitted",
 							"submitted_at": now_datetime(),
-							"schema_version": "phase4-v1",
-						}).insert(ignore_permissions=True)
+								"schema_version": "phase4-v1",
+							})
+							delivery.save(ignore_permissions=True)
 					frappe.db.commit()
 				# A submitted-but-not-completed reservation is retried with the
 				# same provider key until the provider call returns successfully.
@@ -736,10 +735,13 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 						{"provider_submission_key": submission_key},
 						"name",
 					)
-					attempt_doc = frappe.get_doc("CRM Student SLA Delivery Attempt", attempt_name)
+					attempt_doc = next((row for row in delivery.attempts if row.name == attempt_name), None)
+					if not attempt_doc:
+						frappe.throw("Student SLA delivery attempt reservation disappeared during delivery")
 					attempt_doc.outcome = "delivered"
 					attempt_doc.completed_at = now_datetime()
-					attempt_doc.save(ignore_permissions=True)
+					with delivery_service_context():
+						delivery.save(ignore_permissions=True)
 				frappe.db.commit()
 			finalized = published and _fence_delivery(
 				name,

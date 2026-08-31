@@ -1,5 +1,6 @@
 import frappe
 from frappe.model.document import Document
+
 from crm.fcrm.record_retention import technical_retention_until
 
 

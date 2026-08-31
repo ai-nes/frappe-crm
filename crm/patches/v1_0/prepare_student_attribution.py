@@ -68,6 +68,8 @@ def _rows():
 		raise RuntimeError("The Phase 7 migration requires a Frappe bench")
 	rows = []
 	for doctype in EVIDENCE_DOCTYPES:
+		if not frappe.db.exists("DocType", doctype):
+			continue
 		for row in frappe.db.get_all(doctype, fields=["name", "crm_contact", "student"]):
 			row["doctype"] = doctype
 			rows.append(row)

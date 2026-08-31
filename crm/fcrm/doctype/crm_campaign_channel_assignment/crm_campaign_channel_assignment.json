@@ -1,0 +1,22 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "campaign", "channel", "landing_page", "form", "effective_from", "effective_until", "utm_source", "utm_medium", "utm_campaign", "is_active", "source_reference"],
+ "fields": [
+  {"default": "CCA-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "CCA-.YYYY.-"},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign", "reqd": 1},
+  {"fieldname": "channel", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Channel", "options": "CRM Platform", "reqd": 1},
+  {"fieldname": "landing_page", "fieldtype": "Data", "in_list_view": 1, "label": "Landing Page"},
+  {"fieldname": "form", "fieldtype": "Data", "in_list_view": 1, "label": "Form"},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "label": "Effective Until"},
+  {"fieldname": "utm_source", "fieldtype": "Data", "label": "UTM Source"},
+  {"fieldname": "utm_medium", "fieldtype": "Data", "label": "UTM Medium"},
+  {"fieldname": "utm_campaign", "fieldtype": "Data", "label": "UTM Campaign"},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["campaign", "channel", "effective_from", "effective_until"], "name": "crm_campaign_channel_assignment_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Channel Assignment", "naming_rule": "Naming Series", "naming_series_options": "CCA-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "campaign,channel,landing_page,form", "sort_field": "effective_from", "sort_order": "DESC"
+}

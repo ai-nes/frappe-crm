@@ -11,7 +11,7 @@
       </div>
       <div class="flex items-center space-x-2">
         <Button
-          v-if="!isGovernedDoctype(activeTab.doctype)"
+          v-if="canConfigure && !isGovernedDoctype(activeTab.doctype)"
           :label="__('Add')"
           icon-left="plus"
           variant="solid"
@@ -40,7 +40,7 @@
     <!-- Records list -->
     <div class="flex-1 overflow-y-auto px-2">
       <GovernanceApprovalQueue
-        v-if="activeTab.doctype === 'CRM Lost Reason'"
+        v-if="activeTab.doctype === 'CRM Term'"
         :doctype="activeTab.doctype"
         @decided="activeResource.reload()"
       />
@@ -64,7 +64,7 @@
           </button>
           <span v-else class="text-base text-ink-gray-9">{{ record.name }}</span>
           <div class="flex items-center gap-2">
-            <template v-if="!isGovernedDoctype(activeTab.doctype)">
+            <template v-if="canConfigure && !isGovernedDoctype(activeTab.doctype)">
               <Button variant="ghost" icon="edit-2" @click="editRecord(record.name)" />
               <Button
                 variant="ghost"
@@ -98,15 +98,21 @@ import GovernanceApprovalQueue from '@/components/Governance/GovernanceApprovalQ
 import { isGovernedDoctype } from '@/utils/governanceAudit'
 import { createResource, LoadingIndicator, toast } from 'frappe-ui'
 import { useDoctypeModal } from '@/composables/doctypeModal'
+import { usersStore } from '@/stores/users'
+import { canConfigureSystem } from '@/utils/rolePolicy'
 
 const { showModal } = useDoctypeModal()
+const { getUser } = usersStore()
+
+const user = computed(() => getUser() || {})
+const canConfigure = computed(() => canConfigureSystem(user.value))
 
 const subTabs = [
   { idx: 0, label: __('Province/City'), doctype: 'CRM Province' },
   { idx: 1, label: __('Ward/Commune'), doctype: 'CRM Ward' },
   { idx: 2, label: __('Major'), doctype: 'CRM Major' },
   { idx: 3, label: __('Campus'), doctype: 'CRM Campus' },
-  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Lost Reason' },
+  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Term' },
 ]
 
 const activeIdx = ref(0)

@@ -10,12 +10,17 @@
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
+  "student",
   "contact",
   "event_type",
   "occurred_at",
+  "granted_at",
+  "purpose",
+  "scope",
   "col_break_1",
   "source",
   "created_by",
+  "command_receipt",
   "section_note",
   "note"
  ],
@@ -29,13 +34,20 @@
    "options": "CRMCCE-.YYYY.-"
   },
   {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student"
+  },
+  {
    "fieldname": "contact",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Contact",
-   "options": "CRM Contact",
-   "reqd": 1
+   "options": "CRM Contact"
   },
   {
    "fieldname": "event_type",
@@ -43,7 +55,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Event Type",
-   "options": "Opted Out\nRe-subscribed\nMarked Test\nBounced\nSuppressed",
+   "options": "Granted\nOpted Out\nRe-subscribed\nMarked Test\nBounced\nSuppressed",
    "reqd": 1
   },
   {
@@ -52,6 +64,22 @@
    "in_list_view": 1,
    "label": "Occurred At",
    "reqd": 1
+  },
+  {
+   "fieldname": "granted_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Granted At"
+  },
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Data",
+   "label": "Purpose"
+  },
+  {
+   "fieldname": "scope",
+   "fieldtype": "Data",
+   "label": "Scope"
   },
   {
    "fieldname": "col_break_1",
@@ -68,6 +96,15 @@
    "fieldtype": "Link",
    "label": "Created By",
    "options": "User"
+  },
+  {
+   "fieldname": "command_receipt",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Command Receipt",
+   "options": "CRM Student Command Receipt",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "section_note",

@@ -1,0 +1,73 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "student",
+  "assessment_revision",
+  "status",
+  "assessment_source",
+  "assessed_at",
+  "policy_version",
+  "model_version",
+  "signal_score",
+  "enrollment_probability",
+  "interest",
+  "interest_confidence",
+  "fit",
+  "fit_confidence",
+  "primary_barrier",
+  "barrier_confidence",
+  "reason",
+  "evidence_references",
+  "supersedes",
+  "confirmed_by",
+  "confirmed_at",
+  "override_reason"
+  ,"recommendation"
+  ,"review_state"
+ ],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "S360-.YYYY.-", "options": "S360-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "assessment_revision", "fieldtype": "Int", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "options": "proposed\nconfirmed\nsuperseded\nrejected", "default": "proposed", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "assessment_source", "fieldtype": "Select", "options": "system\nmanual", "reqd": 1, "read_only": 1},
+  {"fieldname": "assessed_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1},
+  {"fieldname": "policy_version", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "model_version", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "signal_score", "fieldtype": "Float", "in_list_view": 1, "label": "Signal Score"},
+  {"fieldname": "enrollment_probability", "fieldtype": "Percent", "in_list_view": 1, "label": "Enrollment Probability"},
+  {"fieldname": "interest", "fieldtype": "Select", "options": "High\nMedium\nLow\nUnknown", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "interest_confidence", "fieldtype": "Percent", "reqd": 1},
+  {"fieldname": "fit", "fieldtype": "Select", "options": "High\nMedium\nLow\nUnknown", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "fit_confidence", "fieldtype": "Percent", "reqd": 1},
+  {"fieldname": "primary_barrier", "fieldtype": "Select", "options": "Cost\nCapability\nFamily\nInformation\nGeography\nCompetition\nNone\nUnknown", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "barrier_confidence", "fieldtype": "Percent", "reqd": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "reqd": 1},
+  {"fieldname": "evidence_references", "fieldtype": "JSON", "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "options": "CRM Student Assessment", "read_only": 1},
+  {"fieldname": "confirmed_by", "fieldtype": "Link", "options": "User", "read_only": 1},
+  {"fieldname": "confirmed_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "override_reason", "fieldtype": "Small Text", "read_only": 1}
+  ,{"fieldname": "recommendation", "fieldtype": "Small Text", "label": "Recommendation"}
+  ,{"default": "Pending Review", "fieldname": "review_state", "fieldtype": "Select", "in_list_view": 1, "label": "Review State", "options": "Pending Review\nReviewed\nRejected"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Student Assessment",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"create": 1, "read": 1, "write": 1, "role": "Lead Sales"},
+  {"create": 1, "read": 1, "write": 1, "role": "Sale"},
+  {"create": 1, "read": 1, "write": 1, "delete": 1, "role": "System Manager"}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

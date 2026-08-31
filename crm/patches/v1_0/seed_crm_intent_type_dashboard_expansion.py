@@ -13,13 +13,11 @@ NEW_INTENT_TYPES = [
 
 def execute():
 	for name, importance, description_vi in NEW_INTENT_TYPES:
-		if not frappe.db.exists("CRM Intent Type", name):
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "intent_type"}):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Intent Type",
-					"intent_type_name": name,
-					"importance": importance,
-					"description_vi": description_vi,
+					"doctype": "CRM Term", "term_name": name, "category": "intent_type",
+					"metadata": {"importance": importance}, "description": description_vi,
 				}
 			).insert(ignore_permissions=True)
 

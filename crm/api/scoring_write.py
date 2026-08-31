@@ -15,9 +15,21 @@ from frappe import _
 from frappe.utils import now_datetime
 
 
+def _fixture_score_site_allowed() -> bool:
+	"""The curated demo seed writes fixture scores as Administrator.
+
+	Normally that is crm.localhost only. A demo / staging server opts in the
+	same way the rest of the showcase seed does -- ``bench set-config
+	allow_demo_seed 1`` -- so the deployed demo dataset carries scores too.
+	"""
+	if frappe.session.user != "Administrator":
+		return False
+	return frappe.local.site == "crm.localhost" or bool(frappe.conf.get("allow_demo_seed"))
+
+
 def _require_agent_identity():
 	if getattr(frappe.flags, "crm_local_fixture_score_write", False):
-		if frappe.local.site == "crm.localhost" and frappe.session.user == "Administrator":
+		if _fixture_score_site_allowed():
 			return
 		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
 	if frappe.session.user == "Guest":
@@ -56,7 +68,9 @@ def append_score_if_current(
 	history row, no new write) and `{"stale": True}` for a tuple that is not
 	newer than what is already applied (silently accepted as settled, per the
 	plan's "stale CAS is non-retryable" rule -- this is not an error, since a
-	newer or concurrent calculation has already won).
+	newer or concurrent calculation has already won). Stale responses also
+	include the applied score-input and policy revisions so the caller can
+	observe which tuple won the CAS comparison.
 	"""
 	_require_agent_identity()
 	if isinstance(details, str):
@@ -87,7 +101,14 @@ def append_score_if_current(
 	)
 	incoming_tuple = (source_score_input_revision, policy_revision)
 	if incoming_tuple <= current_tuple:
-		return {"history": None, "applied": False, "duplicate": False, "stale": True}
+		return {
+			"history": None,
+			"applied": False,
+			"duplicate": False,
+			"stale": True,
+			"current_revision": current_tuple[0],
+			"current_policy_revision": current_tuple[1],
+		}
 
 	payload = {
 		"doctype": "CRM Score History",
@@ -127,7 +148,7 @@ def append_score_if_current(
 
 def append_local_fixture_score(**values) -> dict:
 	"""Write a score for the fixed local seed without impersonating crm-agents."""
-	if frappe.local.site != "crm.localhost" or frappe.session.user != "Administrator":
+	if not _fixture_score_site_allowed():
 		frappe.throw(_("Local fixture scoring is only available to Administrator on crm.localhost."), frappe.PermissionError)
 	previous_flag = getattr(frappe.flags, "crm_local_fixture_score_write", False)
 	frappe.flags.crm_local_fixture_score_write = True

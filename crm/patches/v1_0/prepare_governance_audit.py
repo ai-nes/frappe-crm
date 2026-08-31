@@ -6,10 +6,8 @@ from __future__ import annotations
 GOVERNED_DOCTYPES = (
 	"CRM Lead Source",
 	"CRM Platform",
-	"CRM Intent Type",
-	"CRM Lost Reason",
+	"CRM Term",
 	"CRM Campus",
-	"CRM Campaign Type",
 )
 
 
@@ -19,7 +17,7 @@ def execute():
 	except ImportError as exc:  # pragma: no cover - requires a Frappe bench
 		raise RuntimeError("Phase 9 patch requires a Frappe bench") from exc
 
-	for doctype in (*GOVERNED_DOCTYPES, "CRM Master Data Change Log", "CRM Master Data Change Approval", "CRM Master Data Break Glass"):
+	for doctype in (*GOVERNED_DOCTYPES, "CRM Master Data Change", "CRM Master Data Change Approval"):
 		if frappe.db.exists("DocType", doctype):
 			frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 
@@ -51,9 +49,9 @@ def execute():
 	from crm.patches.v1_0.setup_crm_permissions import apply_managed_docperms
 
 	apply_managed_docperms()
-	for doctype in ("CRM Master Data Change Log", "CRM Master Data Change Approval", "CRM Master Data Break Glass"):
+	for doctype in ("CRM Master Data Change", "CRM Master Data Change Approval"):
 		frappe.db.delete("DocPerm", {"parent": doctype})
-		roles = ("System Manager", "Admissions Director") if doctype == "CRM Master Data Break Glass" else ("System Manager", "Marketing", "Lead Sales", "Admissions Director")
+		roles = ("System Manager", "Marketing", "Lead Sales", "Admissions Director")
 		for role in roles:
 			frappe.get_doc(
 				{

@@ -13,7 +13,7 @@
             @update="updateFilter"
           />
           <GroupBy
-            v-if="route.params.viewType === 'group_by'"
+            v-if="route.params.viewType === 'group_by' && !defaultGroupByField"
             v-model="list"
             :doctype="doctype"
             :hideLabel="isMobileView"
@@ -162,7 +162,7 @@
           @click="reload()"
         />
         <GroupBy
-          v-if="route.params.viewType === 'group_by'"
+          v-if="route.params.viewType === 'group_by' && !defaultGroupByField"
           v-model="list"
           :doctype="doctype"
           @update="updateGroupBy"
@@ -345,6 +345,10 @@ import ImportIcon from '~icons/lucide/import'
 const props = defineProps({
   doctype: { type: String, required: true },
   filters: { type: Object, default: () => ({}) },
+  // A released route may require one exact grouping. It deliberately takes
+  // precedence over saved views so URLs cannot select arbitrary database fields.
+  defaultGroupByField: { type: String, default: '' },
+  cacheResource: { type: Boolean, default: true },
   options: {
     type: Object,
     default: () => ({
@@ -463,7 +467,7 @@ function getParams() {
   const view_type = _view?.type || route.params.viewType || 'list'
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
-  const group_by_field = _view?.group_by_field || 'owner'
+  const group_by_field = props.defaultGroupByField || _view?.group_by_field || 'owner'
   const columns = _view?.columns || ''
   const rows = _view?.rows || ''
   const column_field = _view?.column_field || 'status'
@@ -515,12 +519,14 @@ function getParams() {
 list.value = createResource({
   url: 'crm.api.doc.get_data',
   params: getParams(),
-  cache: [
-    props.doctype,
-    route.query.view,
-    route.params.viewType,
-    JSON.stringify(props.filters || {}),
-  ],
+  cache: props.cacheResource
+    ? [
+        props.doctype,
+        route.query.view,
+        route.params.viewType,
+        JSON.stringify(props.filters || {}),
+      ]
+    : false,
   onSuccess(data) {
     let cv = getView(route.query.view, route.params.viewType, props.doctype)
     let params = list.value.params ? list.value.params : getParams()
@@ -910,6 +916,7 @@ function updateSort(order_by) {
 }
 
 function updateGroupBy(group_by_field) {
+  if (props.defaultGroupByField) return
   viewUpdated.value = true
   if (!defaultParams.value) {
     defaultParams.value = getParams()

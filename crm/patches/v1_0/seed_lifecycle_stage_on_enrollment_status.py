@@ -19,6 +19,8 @@ LIFECYCLE_STAGE_MAP = {
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Enrollment Status"):
+		return
 	frappe.reload_doc("fcrm", "doctype", "crm_enrollment_status", force=True)
 
 	for status_name, lifecycle_stage in LIFECYCLE_STAGE_MAP.items():

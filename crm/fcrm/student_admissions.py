@@ -152,11 +152,11 @@ def _finish_receipt(receipt, result: dict[str, Any], outcome: str = "created", e
 
 
 def _interaction_type(preferred: str = "Outreach") -> str:
-	if frappe.db.exists("CRM Interaction Type", preferred):
+	if frappe.db.exists("CRM Term", {"name": preferred, "category": "interaction_type", "is_active": 1}):
 		return preferred
-	name = frappe.db.get_value("CRM Interaction Type", {}, "name", order_by="creation asc")
+	name = frappe.db.get_value("CRM Term", {"category": "interaction_type", "is_active": 1}, "name", order_by="sort_order asc, name asc")
 	if not name:
-		name = frappe.get_doc({"doctype": "CRM Interaction Type", "interaction_type_name": preferred}).insert(ignore_permissions=True).name
+		name = frappe.get_doc({"doctype": "CRM Term", "term_name": preferred, "category": "interaction_type"}).insert(ignore_permissions=True).name
 	return name
 
 
@@ -280,7 +280,7 @@ def _event_action(student: str, actor: str, action: str, data: dict[str, Any], i
 		status = "Checked-in" if action == "event_checkin" else "Registered"
 		supersedes = None
 		if action == "event_checkin":
-			prior = frappe.get_all("CRM Event Participation", filters={"student": student, "crm_event": event_name}, fields=["name", "supersedes"], order_by="creation desc", limit_page_length=20)
+			prior = frappe.get_all("CRM Marketing Engagement", filters={"student": student, "engagement_kind": "event_participation", "crm_event": event_name}, fields=["name", "supersedes"], order_by="creation desc", limit_page_length=20)
 			active = next((row.name for row in prior if not row.supersedes), None)
 			supersedes = active
 		event = student_attribution.record_event_participation(student=student, crm_event=event_name, status=status, checked_in_at=frappe.utils.now_datetime() if status == "Checked-in" else None, supersedes=supersedes, idempotency_key=f"{idempotency_key}:event", correlation_id=correlation_id)
@@ -334,7 +334,7 @@ def _dispatch(student_doc, actor: str, action: str, data: dict[str, Any], idempo
 	if action == "scholarship_interest":
 		interaction = _insert_interaction(student_doc.name, actor, _("Scholarship interest"), data.get("notes"), interaction_type="Counseling", external_id=f"admissions:{idempotency_key}:interaction")
 		intent_type = data.get("intent_type") or "Scholarship"
-		if not frappe.db.exists("CRM Intent Type", intent_type):
+		if not frappe.db.exists("CRM Term", intent_type):
 			_fail("INVALID_INPUT", _("Scholarship intent type is not configured."))
 		intent = frappe.get_doc({"doctype": "CRM Intent", "interaction": interaction, "intent_type": intent_type, "intent_role": "Dominant", "polarity": "Positive", "confidence": data.get("confidence"), "notes": data.get("target")}).insert(ignore_permissions=True)
 		return {"interaction": interaction, "intent": intent.name}

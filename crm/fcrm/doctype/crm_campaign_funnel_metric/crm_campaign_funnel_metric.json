@@ -1,0 +1,20 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "campaign", "period", "stage_key", "stage_order", "denominator", "numerator", "metric_value", "definition_version", "source_reference"],
+ "fields": [
+  {"default": "FUN-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "FUN-.YYYY.-"},
+  {"fieldname": "campaign", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign", "reqd": 1},
+  {"fieldname": "period", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Performance Period", "options": "CRM Campaign Performance Period", "reqd": 1},
+  {"fieldname": "stage_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Stage Key", "reqd": 1},
+  {"fieldname": "stage_order", "fieldtype": "Int", "in_list_view": 1, "label": "Stage Order", "reqd": 1},
+  {"fieldname": "denominator", "fieldtype": "Int", "in_list_view": 1, "label": "Denominator", "reqd": 1},
+  {"fieldname": "numerator", "fieldtype": "Int", "in_list_view": 1, "label": "Numerator", "reqd": 1},
+  {"fieldname": "metric_value", "fieldtype": "Percent", "in_list_view": 1, "label": "Metric Value"},
+  {"default": "funnel-v1", "fieldname": "definition_version", "fieldtype": "Data", "in_list_view": 1, "label": "Definition Version", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["campaign", "period", "stage_key"], "name": "crm_campaign_funnel_metric_uniq", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Campaign Funnel Metric", "naming_rule": "Naming Series", "naming_series_options": "FUN-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Marketing"}, {"read": 1, "role": "Admissions Director"}],
+ "row_format": "Dynamic", "search_fields": "campaign,period,stage_key", "sort_field": "stage_order", "sort_order": "ASC"
+}

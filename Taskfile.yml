@@ -49,6 +49,7 @@ tasks:
   migrate:
     desc: Schema, patches, workspace sync
     cmds:
+      - python scripts/validate_doctype_json.py
       - "{{.EXEC}} {{.BENCH}} migrate"
 
   workspace:
@@ -82,118 +83,60 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed cohort tuyển sinh local gồm tài khoản và Student nghiệp vụ thực tế
-    aliases: [seed-student, seed-sample-student]
+    desc: Seed duy nhất bộ dữ liệu CRM đầy đủ và in coverage manifest
+    # The seed reads compact JSON extracted from the operational workbooks.
+    # Run `task extract-school-json` after replacing either source workbook.
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      # Keep the local Student Detail workflow enabled after seeding so the
-      # context projection and typed admissions actions are available in CRM.
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
+      # Persist the rollout flags + fixture password so the Student Detail
+      # workflow stays enabled after seeding (list lives in seed_showcase).
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_demo_config"
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.ensure_local_integrity_keys"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_local_admissions.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
 
-  seed-phase345:
-    desc: Seed một Student demo đầy đủ Ownership, SLA, routing và lifecycle (chỉ local demo)
+  seed-fresh:
+    desc: Reset site (reinstall) + migrate + seed đầy đủ — dùng khi muốn làm lại từ đầu
+    prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase2_fixture_password 123456"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_student.execute"
-      - "{{.COMPOSE}} restart frappe"
+      - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
+      - "{{.EXEC}} {{.BENCH}} migrate"
+      - task: seed
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
-  e2e-seed:
-    desc: Seed the disposable Playwright Lead-processing cohort and manifest
+  extract-school-json:
+    desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.execute"
+      - python -X utf8 -m crm.demo.extract_school_domain_json
 
-  e2e-reset:
-    desc: Remove only the disposable Playwright cohort and manifest
+  seed-roles:
+    desc: 1 tài khoản test cho mỗi canonical role (mật khẩu 12345@) — đã nằm trong `task seed`
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.reset"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
 
-  e2e-enable:
-    desc: Enable guarded Playwright writes on local crm.localhost only
+  seed-reset:
+    desc: Xoá business rows của bộ demo CRM curated (giữ lại audit/receipt/ledger)
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_disposable 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_seam_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 1"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 1"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
 
-  e2e-disable:
-    desc: Disable Playwright fixture guard and server-side write flags
+  seed-verify:
+    desc: Kiểm tra mọi state value trong coverage matrix đã có bản ghi
     cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_disposable 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_seam_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_test_clock ''"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_e2e_run_id ''"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_routing_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_sla_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_context_read_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_engagement_write_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_lifecycle_write_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_read_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_student_conversion_write_enabled 0"
-      - "{{.EXEC}} {{.BENCH}} set-config crm_phase9_audit_read_enabled 0"
-
-  e2e-playwright:
-    desc: Run guarded Chromium E2E tests against an explicitly disposable site
-    cmds:
-      - cd frontend && npm run test:e2e
-
-  e2e-playwright-install:
-    desc: Install the Chromium binary required by Playwright
-    cmds:
-      - cd frontend && npm run e2e:install
-
-  e2e-preflight:
-    desc: Claim and validate the run-scoped disposable E2E harness
-    requires:
-      vars: [E2E_RUN_ID]
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} set-config crm_playwright_e2e_run_id {{.E2E_RUN_ID}}"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.acquire_lease"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.preflight"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.execute"
-
-  e2e-release:
-    desc: Release only the current run lease (does not purge immutable audit evidence)
-    requires:
-      vars: [E2E_RUN_ID]
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_playwright.release_lease"
-
-  e2e-full:
-    desc: Guarded E2E supervisor; requires an externally generated E2E_RUN_ID
-    requires:
-      vars: [E2E_RUN_ID]
-    cmds:
-      # Task defers run when a later command fails, so the write flags cannot
-      # survive a failed Playwright process. Lease release is intentionally
-      # separate: a crashed run must remain visible until its TTL expires.
-      - defer:
-          task: e2e-disable
-      - task: e2e-enable
-      - task: e2e-preflight
-      - cmd: cd frontend && $env:PLAYWRIGHT_E2E_ENABLED='1'; $env:PLAYWRIGHT_FIXTURE_MANIFEST=(Resolve-Path "playwright-fixture.{{.E2E_RUN_ID}}.json"); npm run test:e2e
-      - task: e2e-release
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 
   pull:
-    desc: Sau git pull — deps + migrate + clear-cache + restart
+    desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data
+    cmds:
+      - task: deps
+      - task: migrate
+      - task: cache
+      - task: restart
+      # seed_showcase.execute idempotent — chạy lại để data khớp bản vừa pull.
+      # Không đụng site (không reinstall); bỏ qua bước này: task pull-fast.
+      - task: seed
+
+  pull-fast:
+    desc: Như `task pull` nhưng KHÔNG seed lại (chỉ code + schema)
     cmds:
       - task: deps
       - task: migrate

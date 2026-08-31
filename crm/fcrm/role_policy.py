@@ -25,13 +25,11 @@ PROFILE_LABELS = {
 
 # Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
 # retirement and supersession are exposed only through master_data_governance.
-PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({
-	"CRM Lead Source", "CRM Platform", "CRM Intent Type", "CRM Lost Reason", "CRM Campus", "CRM Campaign Type",
-})
+PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CRM Term", "CRM Campus"})
 
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
-	"marketing": frozenset({"Marketing"}),
+	"marketing": frozenset({"Marketing", "Promoter"}),
 	"lead_sales": frozenset({"Lead Sales"}),
 	"admissions_director": frozenset({"Admissions Director"}),
 }
@@ -52,7 +50,9 @@ PROFILE_CAPABILITIES = {
 			"student.sla.respond",
 		}
 	),
-	"marketing": frozenset({"acquisition.manage", "attribution.manage"}),
+	"marketing": frozenset({
+		"acquisition.manage", "attribution.manage", "school.activity.manage", "school.person.manage",
+	}),
 	"lead_sales": frozenset(
 		{
 			"student.execute",
@@ -104,7 +104,7 @@ PROFILE_CAPABILITIES = {
 	),
 }
 
-CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values()})
+CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
 
 _PERMISSION_FLAGS = {
 	"r": "read",
@@ -120,7 +120,7 @@ _PERMISSION_FLAGS = {
 # r=read, w=write, c=create, d=delete, x=export; "-" means no grant.
 CANONICAL_PERMISSION_MATRIX = {
 	"attribution_evidence": {
-		"doctypes": ("CRM Campaign Touchpoint", "CRM Event Participation"),
+		"doctypes": ("CRM Marketing Engagement",),
 		"permissions": {
 			"system_manager": "r",
 			"sales": "-",
@@ -148,15 +148,7 @@ CANONICAL_PERMISSION_MATRIX = {
 	},
 	"reference": {
 		"doctypes": (
-			"CRM Major",
-			"CRM Major Group",
-			"CRM High School",
-			"CRM Province",
-			"CRM Ward",
-			"CRM Region",
-			"CRM School Type",
-			"CRM Aspiration",
-			"CRM Enrollment Status",
+			"CRM Major", "CRM Term", "CRM High School", "CRM Province", "CRM Ward",
 			"CRM Admission Year",
 			"CRM Education Program",
 			"CRM Department",
@@ -184,7 +176,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_owned_record",
 	},
 	"governed_acquisition": {
-		"doctypes": ("CRM Lead Source", "CRM Platform", "CRM Intent Type", "CRM Campaign Type"),
+		"doctypes": ("CRM Lead Source", "CRM Platform", "CRM Term"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -195,7 +187,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_governed_mutation",
 	},
 	"governed_admissions": {
-		"doctypes": ("CRM Lost Reason", "CRM Campus"),
+		"doctypes": ("CRM Term", "CRM Campus"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -204,7 +196,7 @@ CANONICAL_PERMISSION_MATRIX = {
 			"admissions_director": "r",
 		},
 		"per_doctype_permissions": {
-			"CRM Lost Reason": {"lead_sales": "rwc"},
+			"CRM Term": {"lead_sales": "rwc"},
 			"CRM Campus": {"admissions_director": "rwc"},
 		},
 		"row_scope": "campus_is_not_team_scope",

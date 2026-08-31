@@ -18,9 +18,9 @@ class TestSeedPhase2Staff(FrappeTestCase):
 		self.assertEqual(
 			set(seed_staff.CANONICAL_FIXTURE_USERS),
 			{
-				"nguyen-minh-khoi.sale@example.test",
-				"le-thanh-huong.leadsales@example.test",
-				"pham-bao-chau.marketing@example.test",
-				"tran-quoc-duy.director@example.test",
+				"nguyen.minh.khoi@gmail.com",
+				"le.thanh.huong@gmail.com",
+				"pham.bao.chau@gmail.com",
+				"tran.quoc.duy@gmail.com",
 			},
 		)

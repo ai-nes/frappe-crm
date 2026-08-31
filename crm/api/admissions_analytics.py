@@ -14,9 +14,8 @@ from crm.api.session import get_session_role_flags
 _ALLOWED_ROLES = frozenset({
 	"Sale", "Lead Sales", "Marketing", "Admissions Director",
 	"CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader",
-	"Promoter-PR", "Marketing Operator", "Marketing Lead", "Admissions Operations", "Giám đốc Tuyển sinh",
+	"Promoter", "Promoter-PR", "Marketing Operator", "Marketing Lead", "Admissions Operations", "Giám đốc Tuyển sinh",
 })
-_E2E_EMAIL_PREFIX = "e2e-fpt-2026-"
 
 
 def _require_role() -> None:
@@ -37,53 +36,53 @@ def _count(values: list[str | None]) -> dict[str, int]:
 
 @frappe.whitelist()
 def get_pipeline_summary() -> dict:
-	"""Return aggregate admissions metrics for the current E2E/demo cohort.
+	"""Return aggregate admissions metrics for the caller's visible Student rows.
 
-	The production capability is deliberately aggregate-only.  The fixture is
-	selected by its example.test email namespace so this endpoint cannot expose
-	unrelated CRM rows during live acceptance.
+	The endpoint is aggregate-only, but the source Student set is still loaded
+	through Frappe's permission-aware list API. A caller's campus mapping is an
+	additional ceiling, never a replacement for canonical Student row scope.
 	"""
 	_require_role()
 	staff_campus = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "campus")
-	student_filters = {"email": ["like", f"{_E2E_EMAIL_PREFIX}%@example.test"]}
+	student_filters = {}
 	if staff_campus:
 		student_filters["branch"] = staff_campus
-	students = frappe.get_all(
+	students = frappe.get_list(
 		"CRM Student",
 		filters=student_filters,
 		fields=["name", "enrollment_status", "source", "branch"],
 		limit_page_length=500,
-		ignore_permissions=True,
+		order_by="name asc",
 	)
 	student_ids = [row.name for row in students]
 	if not student_ids:
 		return {
-			"cohort": "E2E-FPT-2026", "total_students": 0,
+			"cohort": "CRM-SCOPED", "total_students": 0,
 			"by_enrollment_status": {}, "by_source": {}, "by_campus": {},
 			"intent_count": 0, "interaction_count": 0,
 			"unresolved_interactions": 0, "active_actions": 0,
 			"actions_by_state": {},
 		}
 
-	interactions = frappe.get_all(
+	interactions = frappe.get_list(
 		"CRM Interaction", filters={"student": ["in", student_ids]},
-		fields=["student", "outcome"], limit_page_length=1000, ignore_permissions=True,
+		fields=["student", "outcome"], limit_page_length=1000,
 	)
-	intents = frappe.get_all(
+	intents = frappe.get_list(
 		"CRM Intent", filters={"student": ["in", student_ids]},
-		fields=["student"], limit_page_length=1000, ignore_permissions=True,
+		fields=["student"], limit_page_length=1000,
 	)
-	actions = frappe.get_all(
+	actions = frappe.get_list(
 		"CRM Action",
 		filters={
 			"student": ["in", student_ids],
 			"current_slot": "CURRENT",
 			"state": ["in", ["pending", "accepted", "in-progress", "requires-review", "deferred"]],
 		},
-		fields=["student", "state as status"], limit_page_length=1000, ignore_permissions=True,
+		fields=["student", "state as status"], limit_page_length=1000,
 	)
 	return {
-		"cohort": "E2E-FPT-2026",
+		"cohort": "CRM-SCOPED",
 		"total_students": len(students),
 		"by_enrollment_status": _count([row.enrollment_status for row in students]),
 		"by_source": _count([row.source for row in students]),

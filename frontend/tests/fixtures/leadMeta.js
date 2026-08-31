@@ -46,7 +46,7 @@ export const leadFields = [
     fieldname: 'lost_reason',
     fieldtype: 'Link',
     label: 'Lost Reason',
-    options: 'CRM Lost Reason',
+    options: 'CRM Term',
     hidden: 1,
     parent: 'CRM Lead',
   },

@@ -21,6 +21,7 @@ frontend/coverage
 
 docker/.env
 docker/.env.*
+!docker/.env.example
 docs/*
 plans/*
 crm/migration/id_maps/*.json

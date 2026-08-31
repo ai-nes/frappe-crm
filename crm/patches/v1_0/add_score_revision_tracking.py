@@ -12,6 +12,8 @@ import frappe
 
 
 def execute():
+	if not frappe.db.exists("DocType", "CRM Score Input Change"):
+		return {"status": "revision_journal_pending"}
 	for doctype in ("CRM Student", "CRM Score History", "CRM Score Input Change"):
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 	frappe.db.add_index(

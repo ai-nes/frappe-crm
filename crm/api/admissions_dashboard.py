@@ -1,5 +1,6 @@
+from datetime import timedelta
+
 import frappe
-from frappe import _
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
 from crm.api.admissions_dashboard_auth import check_dashboard_access
@@ -8,6 +9,25 @@ from crm.fcrm.attribution import (
 	get_last_touch_campaign_by_student,
 )
 from crm.fcrm.student_contact_conversion import students_for_contact
+from crm.api._ai_staleness import ai_field_or_unavailable, ai_staleness_threshold_seconds
+
+
+def _insight_scope_sql(scoped_staff):
+	"""Return the same campus scope used by the dashboard's Contact queries."""
+	if scoped_staff is None:
+		return "", ()
+	if not scoped_staff:
+		return "AND 1 = 0", ()
+	placeholders = ", ".join("%s" for _ in scoped_staff)
+	return (
+		"AND ("
+		"insight.student IN (SELECT student_scope.name FROM `tabCRM Student` student_scope "
+		f"WHERE student_scope.owner_staff IN ({placeholders})) OR "
+		"insight.contact IN (SELECT contact_scope.name FROM `tabCRM Contact` contact_scope "
+		f"WHERE contact_scope.assigned_to IN ({placeholders}))"
+		")",
+		tuple(scoped_staff) + tuple(scoped_staff),
+	)
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -240,27 +260,56 @@ def get_sales_dashboard(
 		total_contacts = frappe.db.count("CRM Contact", filters=base_filters) or 1
 		interest_card_items = []
 		funnel_rows = []
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		ai_threshold = ai_staleness_threshold_seconds()
+		if "ai_generated_at" not in insight_fields or ai_threshold is None:
+			interest_freshness_sql = "AND 1 = 0"
+			interest_freshness_params = ()
+		else:
+			interest_cutoff = (
+				now_datetime() - timedelta(seconds=ai_threshold)
+				if ai_threshold != float("inf")
+				else None
+			)
+			interest_freshness_sql = "AND insight.ai_generated_at IS NOT NULL"
+			interest_freshness_params = (interest_cutoff,) if interest_cutoff else ()
+			if interest_cutoff:
+				interest_freshness_sql += " AND insight.ai_generated_at >= %s"
+		insight_scope_sql, insight_scope_params = _insight_scope_sql(scoped_staff)
 
 		for idx, dim in enumerate(core_dimensions):
 			# Count distinct contacts with this interest
 			cnt = frappe.db.sql(
-				"""
-				SELECT COUNT(DISTINCT parent)
-				FROM `tabCRM AI Lead Insight Interest`
-				WHERE dimension_code = %s
+				f"""
+				SELECT COUNT(DISTINCT insight.contact)
+				FROM `tabCRM AI Lead Insight Item` item
+				JOIN `tabCRM AI Lead Insight` insight ON insight.name = item.parent
+				WHERE item.parenttype = 'CRM AI Lead Insight'
+				AND item.parentfield = 'items'
+				AND item.dimension_code = %s
+				AND item.item_kind = 'interest'
+				{interest_freshness_sql}
+				{insight_scope_sql}
 				""",
-				(dim["code"],),
+				(dim["code"], *interest_freshness_params, *insight_scope_params),
 			)[0][0] or 0
 
 			ratio_pct = round((cnt / total_contacts * 100.0), 1)
 			enrolled_with_dim = frappe.db.sql(
-				"""
+				f"""
 				SELECT COUNT(DISTINCT c.name)
 				FROM `tabCRM Contact` c
-				JOIN `tabCRM AI Lead Insight Interest` i ON i.parent = c.name
-				WHERE i.dimension_code = %s AND c.enrollment_status = 'Đã nhập học'
+				JOIN `tabCRM AI Lead Insight` insight ON insight.contact = c.name
+				JOIN `tabCRM AI Lead Insight Item` i ON i.parent = insight.name
+				WHERE i.parenttype = 'CRM AI Lead Insight'
+				AND i.parentfield = 'items'
+				AND i.dimension_code = %s
+				AND i.item_kind = 'interest'
+				{interest_freshness_sql}
+				{insight_scope_sql}
+				AND c.enrollment_status = 'Đã nhập học'
 				""",
-				(dim["code"],),
+				(dim["code"], *interest_freshness_params, *insight_scope_params),
 			)[0][0] or 0
 			conv_rate = f"{round((enrolled_with_dim / cnt * 100.0), 1)}%" if cnt else "0.0%"
 
@@ -367,21 +416,51 @@ def get_sales_dashboard(
 	# -------------------------------------------------------------
 	if section == "actions":
 		# Signal feed: get latest insights from CRM AI Lead Insight
-		insights = frappe.db.get_all(
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		fields = ["name", "contact", "summary", "generated_at"]
+		if "ai_summary" in insight_fields:
+			fields.append("ai_summary")
+		if "ai_generated_at" in insight_fields:
+			fields.append("ai_generated_at")
+		# `get_list` is intentional here: it applies the Student-linked row-scope
+		# hook for CRM AI Lead Insight. `db.get_all` would bypass that boundary.
+		insights = frappe.get_list(
 			"CRM AI Lead Insight",
-			fields=["name", "contact", "summary", "generated_at"],
-			order_by="generated_at desc",
+			fields=fields,
+			order_by=("ai_generated_at desc, generated_at desc" if "ai_generated_at" in insight_fields else "generated_at desc"),
 			limit=10,
 		)
 		signals = []
 		for ins in insights:
 			c_name = frappe.db.get_value("CRM Contact", ins["contact"], "full_name") or ins["contact"]
-			time_str = frappe.utils.format_time(ins["generated_at"], "HH:mm") if ins["generated_at"] else "Vừa xong"
-			signals.append({
+			if "ai_generated_at" not in insight_fields:
+				# Pre-migration schema: preserve the legacy signal feed exactly.
+				generated_at = ins.get("generated_at")
+				message = ins.get("summary") or "Có tương tác mới được AI phân tích."
+				ai_available = None
+				reason = None
+			elif "ai_summary" not in insight_fields:
+				# A partial migration must not expose the legacy value as current AI
+				# analysis merely because the timestamp column arrived first.
+				generated_at = ins.get("generated_at")
+				message = "Phân tích AI tạm không khả dụng."
+				ai_available = False
+				reason = "schema_incomplete"
+			else:
+				ai_summary = ai_field_or_unavailable(ins, "ai_summary")
+				generated_at = ai_summary.get("generated_at")
+				message = ai_summary.get("value") if ai_summary["ai_available"] else "Phân tích AI tạm không khả dụng."
+				ai_available = ai_summary["ai_available"]
+				reason = ai_summary.get("reason")
+			time_str = frappe.utils.format_time(generated_at, "HH:mm") if generated_at else "Vừa xong"
+			signal = {
 				"time": time_str,
 				"lead": c_name,
-				"message": ins["summary"] or "Có tương tác mới được AI phân tích.",
-			})
+				"message": message,
+			}
+			if ai_available is not None:
+				signal.update({"ai_available": ai_available, "reason": reason})
+			signals.append(signal)
 
 		if not signals:
 			signals = [{"time": "--:--", "lead": "Hệ thống", "message": "Chưa có tín hiệu tương tác mới nào."}]
@@ -480,58 +559,21 @@ def get_sales_dashboard(
 
 
 def _contact_names_touched_by_campaign(campaign):
-	"""Union of the deprecated singular crm_campaign field and the Phase 5
-	CRM Campaign Touchpoint many-to-many table, so dashboards read correctly
+	"""Union of the deprecated singular crm_campaign field and the canonical
+	CRM Marketing Engagement table, so dashboards read correctly
 	whether a contact's campaign attribution came from before or after the
 	Phase 5 migration."""
 	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
-	names.update(frappe.db.get_all("CRM Campaign Touchpoint", filters={"crm_campaign": campaign}, pluck="crm_contact"))
+	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
 	return names
 
 
 def _contact_names_with_event_participation():
-	"""Union of the deprecated singular crm_event field and the Phase 5
-	CRM Event Participation many-to-many table."""
+	"""Union of the deprecated singular crm_event field and the canonical
+	CRM Marketing Engagement table."""
 	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
-	names.update(frappe.db.get_all("CRM Event Participation", pluck="crm_contact"))
+	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
 	return names
-
-
-def _legacy_last_touch_campaign_by_contact():
-	"""Temporary internal dual-read fallback; never a Contact public API."""
-	touches = [
-		{"contact": row.crm_contact, "campaign": row.crm_campaign, "at": row.touched_at, "name": row.name}
-		for row in frappe.db.get_all("CRM Campaign Touchpoint", fields=["name", "crm_contact", "crm_campaign", "touched_at"])
-		if row.crm_contact and row.touched_at
-	]
-	superseded_touchpoints = set(
-		frappe.db.get_all(
-			"CRM Campaign Touchpoint",
-			filters={"supersedes": ["in", [row["name"] for row in touches] or ["__none__"]]},
-			pluck="supersedes",
-		)
-	)
-	touches = [row for row in touches if row["name"] not in superseded_touchpoints]
-	events = frappe.db.get_all("CRM Event Participation", fields=["name", "crm_contact", "crm_event", "registered_at"])
-	superseded_events = set(
-		frappe.db.get_all(
-			"CRM Event Participation",
-			filters={"supersedes": ["in", [row.name for row in events] or ["__none__"]]},
-			pluck="supersedes",
-		)
-	)
-	event_campaigns = {
-		row.name: row.crm_campaign
-		for row in frappe.db.get_all("CRM Event", filters={"name": ["in", list({row.crm_event for row in events if row.crm_event}) or ["__none__"]]}, fields=["name", "crm_campaign"])
-	}
-	for row in events:
-		if row.crm_contact and row.registered_at and row.name not in superseded_events:
-			touches.append({"contact": row.crm_contact, "campaign": event_campaigns.get(row.crm_event), "at": row.registered_at, "name": row.name})
-	last = {}
-	for row in touches:
-		if row["campaign"] and (row["contact"] not in last or (str(row["at"]), row["name"]) > (str(last[row["contact"]]["at"]), last[row["contact"]]["name"])):
-			last[row["contact"]] = row
-	return {contact: row["campaign"] for contact, row in last.items()}
 
 
 def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
@@ -554,17 +596,6 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	students_by_campaign = {}
 	for student, campaign in last_touch_by_student.items():
 		students_by_campaign.setdefault(campaign, set()).add(student)
-	# Retain historical Contact evidence only while Student reconciliation is
-	# incomplete. This is an internal read bridge, not an authorization path.
-	legacy_contacts_by_campaign = {}
-	contact_students = {
-		contact: next(iter(students_for_contact(contact)), None)
-		for contact in scoped_contacts
-	}
-	for contact, campaign in _legacy_last_touch_campaign_by_contact().items():
-		if contact in scoped_contacts and last_touch_by_student.get(contact_students.get(contact)) != campaign:
-			legacy_contacts_by_campaign.setdefault(campaign, set()).add(contact)
-
 	cost_data = []
 	for camp in campaign_list:
 		c_name = camp.title or camp.name
@@ -576,15 +607,11 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 		camp_spend = sum(row.amount or 0.0 for row in camp_spend_rows)
 		attributed_students = students_by_campaign.get(camp.name) or set()
 		# Attribution is Student-first. Contact-only filters are intentionally
-		# not applied to this canonical projection; they are legacy dashboard
-		# filters and must not authorize or silently reinterpret Student data.
+		# not applied to this canonical projection.
 		attributed_conversions = frappe.db.count(
 			"CRM Student",
 			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
 		)
-		legacy_contacts = legacy_contacts_by_campaign.get(camp.name) or set()
-		if legacy_contacts:
-			attributed_conversions += frappe.db.count("CRM Contact", filters=base_filters + [["name", "in", list(legacy_contacts)], ["enrollment_status", "=", "Đã nhập học"]])
 		cost_data.append({
 			"campaign": c_name,
 			"spend": camp_spend,
@@ -867,8 +894,11 @@ def get_offline_marketing_dashboard(team="all", from_date=None, to_date=None, ca
 	]
 
 	# Verified Lead by Province
-	# Get all province mappings
-	mappings = frappe.db.get_all("CRM Province Mapping", fields=["old_province", "new_province"])
+	# Canonical province former-name children.
+	mappings = [
+		{"old_province": row.former_name, "new_province": row.parent}
+		for row in frappe.db.get_all("CRM Province Former Name", fields=["former_name", "parent"], filters={"parentfield": "previous_names"})
+	]
 	province_rows = []
 	if mappings:
 		province_groups = {}

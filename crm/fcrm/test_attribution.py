@@ -1,11 +1,7 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-"""Phase 6: coverage for crm/fcrm/attribution.py -- first-touch/last-touch/
-multi-touch attribution computed from the union of CRM Campaign Touchpoint
-and CRM Event Participation (resolved to a campaign via its Event's
-crm_campaign link).
-"""
+"""Coverage for the canonical marketing engagement attribution projection."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -30,15 +26,15 @@ class TestAttribution(FrappeTestCase):
 
 	def tearDown(self):
 		for name in frappe.db.get_all(
-			"CRM Campaign Touchpoint", filters={"crm_campaign": ["in", [self.campaign_a, self.campaign_b]]}, pluck="name"
+			"CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": ["in", [self.campaign_a, self.campaign_b]]}, pluck="name"
 		):
-			frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
+			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all(
-			"CRM Event Participation",
-			filters={"crm_event": ["in", frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name")]},
+			"CRM Marketing Engagement",
+			filters={"engagement_kind": "event_participation", "crm_event": ["in", frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name")]},
 			pluck="name",
 		):
-			frappe.delete_doc("CRM Event Participation", name, force=True)
+			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"):
@@ -111,7 +107,10 @@ class TestAttribution(FrappeTestCase):
 	def _make_touchpoint(self, contact, campaign, touched_at):
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Campaign Touchpoint",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "campaign_touch",
+				"reference_doctype": "CRM Campaign",
+				"reference_name": campaign,
 				"crm_campaign": campaign,
 				"crm_contact": contact,
 				"student": self.contact_students[contact],
@@ -124,7 +123,10 @@ class TestAttribution(FrappeTestCase):
 	def _make_participation(self, contact, event, registered_at):
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Event Participation",
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": event,
 				"crm_event": event,
 				"crm_contact": contact,
 				"student": self.contact_students[contact],

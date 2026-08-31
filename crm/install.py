@@ -1,6 +1,8 @@
 # Copyright (c) 2022, Frappe Technologies Pvt. Ltd. and Contributors
 # MIT License. See license.txt
 import json
+import os
+from urllib.parse import urlsplit
 
 import click
 import frappe
@@ -10,6 +12,17 @@ from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboar
 
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
+# AI CRM is currently exposed directly from the EC2 host while its public
+# domain is not configured yet. Keep this allowlist explicit; never use '*'
+# for the production Frappe site.
+CRM_CORS_ORIGINS = (
+	CHATWOOT_CORS_ORIGIN,
+	"http://54.66.53.9:5173",
+	"http://localhost:5173",
+	"http://127.0.0.1:5173",
+	"http://localhost:3000",
+	"https://faip.pro",
+)
 
 
 def before_install():
@@ -17,15 +30,17 @@ def before_install():
 
 
 def after_install(force=False):
+	set_default_system_language()
 	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
 	add_default_fields_layout(force)
 	add_property_setter()
 	add_email_template_custom_fields()
 	add_email_account_custom_field()
 	add_default_lead_sources()
 	add_default_lost_reasons()
-	add_default_lead_statuses()
 	add_default_enrollment_statuses()
+	add_default_lead_statuses()
 	add_default_interaction_types()
 	add_default_quick_filters()
 	add_standard_dropdown_items()
@@ -34,6 +49,19 @@ def after_install(force=False):
 	add_assignment_rule_property_setters()
 	sync_frappe_crm_workspace()
 	frappe.db.commit()
+
+
+def after_migrate():
+	"""Keep integration CORS origins present on every production migration."""
+	add_chatwoot_cors_origin()
+	add_dashboard_cors_origin()
+
+
+def set_default_system_language():
+	frappe.db.set_single_value("System Settings", "language", "vi")
+	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value("User", "Administrator", "language"):
+		frappe.db.set_value("User", "Administrator", "language", "vi")
+
 
 
 def complete_setup(_args: dict | None = None):
@@ -45,27 +73,18 @@ def complete_setup(_args: dict | None = None):
 	return None
 
 
-def add_chatwoot_cors_origin():
-	"""Allow Chatwoot dashboard requests to reach this site."""
+def _persist_cors_origins(required_origins):
+	"""Merge exact CORS origins into site_config.json, preserving its existing shape."""
+
+	required_origins = tuple(origin for origin in required_origins if origin)
+	if not required_origins:
+		return
 
 	current_allow_cors = frappe.conf.get("allow_cors")
 
-	if current_allow_cors == "*":
+	allow_cors = merge_cors_origins(current_allow_cors, required_origins)
+	if allow_cors == current_allow_cors:
 		return
-
-	if not current_allow_cors:
-		allow_cors = CHATWOOT_CORS_ORIGIN
-	elif isinstance(current_allow_cors, list):
-		if CHATWOOT_CORS_ORIGIN in current_allow_cors:
-			return
-		allow_cors = [*current_allow_cors, CHATWOOT_CORS_ORIGIN]
-	elif isinstance(current_allow_cors, str):
-		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
-		if CHATWOOT_CORS_ORIGIN in origins:
-			return
-		allow_cors = ",".join([*origins, CHATWOOT_CORS_ORIGIN])
-	else:
-		allow_cors = CHATWOOT_CORS_ORIGIN
 
 	site_config_path = frappe.get_site_path("site_config.json")
 	with open(site_config_path) as site_config_file:
@@ -78,7 +97,60 @@ def add_chatwoot_cors_origin():
 		site_config_file.write("\n")
 
 	frappe.conf.allow_cors = allow_cors
-	click.secho(f"* Allowing CORS for {CHATWOOT_CORS_ORIGIN}")
+	click.secho(f"* Allowing CORS for {', '.join(required_origins)}")
+
+
+def add_chatwoot_cors_origin():
+	"""Allow approved integration and AI CRM origins to reach this site."""
+	_persist_cors_origins(CRM_CORS_ORIGINS)
+
+
+def dashboard_cors_origins():
+	"""Origins for the external admissions dashboard, derived from the OAuth config.
+
+	Reuses CRM_GOOGLE_OAUTH_DASHBOARD_URL (the value the login flow allowlists as a
+	post-login redirect target) so the CORS grant and the redirect target never drift.
+	"""
+	raw = os.getenv("CRM_GOOGLE_OAUTH_DASHBOARD_URL") or ""
+	origins = []
+	for entry in raw.split(","):
+		entry = entry.strip()
+		if not entry:
+			continue
+		parts = urlsplit(entry)
+		if parts.scheme and parts.netloc:
+			origins.append(f"{parts.scheme}://{parts.netloc}")
+	return tuple(dict.fromkeys(origins))
+
+
+def add_dashboard_cors_origin():
+	"""Allow the configured admissions dashboard origin to reach this site."""
+	_persist_cors_origins(dashboard_cors_origins())
+
+
+def merge_cors_origins(current_allow_cors, required_origins):
+	"""Merge exact CORS origins using a list whenever multiple origins are present."""
+
+	if current_allow_cors == "*":
+		return "*"
+
+	if isinstance(current_allow_cors, list):
+		origins = [str(origin).strip() for origin in current_allow_cors if str(origin).strip()]
+		as_list = True
+	elif isinstance(current_allow_cors, str):
+		origins = [origin.strip() for origin in current_allow_cors.split(",") if origin.strip()]
+		as_list = len(origins) > 1
+	else:
+		origins = []
+		as_list = False
+
+	for origin in required_origins:
+		if origin not in origins:
+			origins.append(origin)
+
+	if len(origins) > 1:
+		as_list = True
+	return origins if as_list else (origins[0] if origins else None)
 
 
 def sync_frappe_crm_workspace():
@@ -110,7 +182,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Person-Quick Entry": {
 			"doctype": "CRM Person",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","role","phone","email"]},{"name":"col_school","fields":["province","high_school"]}]}]',
+		"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -133,11 +205,11 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
-			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["ward","province_name","region"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+		"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
 		},
 		"CRM Person-Side Panel": {
 			"doctype": "CRM Person",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","role","phone","email"]}]},{"label":"School","name":"school_section","opened":true,"columns":[{"name":"col_school","fields":["province","high_school","notes"]}]}]',
+		"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
 		},
 		"CRM Campaign-Side Panel": {
 			"doctype": "CRM Campaign",
@@ -164,7 +236,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
-			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["ward","province_name","region"]}]}]}]',
+		"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
 		},
 	}
 
@@ -324,12 +396,10 @@ def add_default_lost_reasons():
 	]
 
 	for reason in lost_reasons:
-		if frappe.db.exists("CRM Lost Reason", reason["reason"]):
+		if frappe.db.exists("CRM Term", {"term_name": reason["reason"], "category": "lost_reason"}):
 			continue
 
-		doc = frappe.new_doc("CRM Lost Reason")
-		doc.lost_reason = reason["reason"]
-		doc.description = reason["description"]
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": reason["reason"], "category": "lost_reason", "description": reason["description"]})
 		doc.insert()
 
 
@@ -354,11 +424,10 @@ def add_default_lead_statuses():
 	]
 
 	for status in lead_statuses:
-		if frappe.db.exists("CRM Lead Status", status):
+		if frappe.db.exists("CRM Term", {"term_name": status, "category": "lead_status"}):
 			continue
 
-		doc = frappe.new_doc("CRM Lead Status")
-		doc.status_name = status
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "lead_status"})
 		doc.insert()
 
 
@@ -375,14 +444,12 @@ def add_default_enrollment_statuses():
 		"Từ chối": (6, "lost"),
 	}
 
+	lifecycle_stages = {"Mới": "Lead", "Có triển vọng": "MQL", "Đã xác nhận": "Applicant", "Đã nhập học": "Enrolled", "Đã chuyển đổi": "Enrolled", "Từ chối": "Lost"}
 	for status, (order, category) in enrollment_statuses.items():
-		if frappe.db.exists("CRM Enrollment Status", status):
+		if frappe.db.exists("CRM Term", {"term_name": status, "category": "enrollment_status"}):
 			continue
 
-		doc = frappe.new_doc("CRM Enrollment Status")
-		doc.status_name = status
-		doc.stage_order = order
-		doc.stage_category = category
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "enrollment_status", "sort_order": order, "metadata": {"stage_category": category, "lifecycle_stage": lifecycle_stages[status]}})
 		doc.insert()
 
 
@@ -397,11 +464,10 @@ def add_default_interaction_types():
 	]
 
 	for interaction_type in interaction_types:
-		if frappe.db.exists("CRM Interaction Type", interaction_type):
+		if frappe.db.exists("CRM Term", {"term_name": interaction_type, "category": "interaction_type"}):
 			continue
 
-		doc = frappe.new_doc("CRM Interaction Type")
-		doc.interaction_type_name = interaction_type
+		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": interaction_type, "category": "interaction_type"})
 		doc.insert()
 
 
@@ -409,7 +475,7 @@ def add_default_quick_filters():
 	quick_filters = {
 		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
-		"CRM High School": ["province_name", "ward_name", "school_name"],
+		"CRM High School": ["province", "ward", "school_name"],
 		"Contact": ["status", "email_id", "phone"],
 		"Task": ["title", "priority", "assigned_to", "status", "due_date"],
 		"Call Log": ["telephony_medium", "type", "status", "from", "to"],

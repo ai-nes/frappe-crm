@@ -8,7 +8,7 @@ from frappe import _
 # crm.api.student_ownership. Contact assignment remains a legacy-compatible
 # operation, but it never writes the linked Student as a side effect.
 ASSIGNABLE_DOCTYPES = {"CRM Contact"}
-STAFF_ASSIGN_DENIED_ROLES = {"Sale", "CTV-Sale", "Promoter-PR"}
+STAFF_ASSIGN_DENIED_ROLES = {"Sale", "CTV-Sale", "Promoter", "Promoter-PR"}
 STAFF_ASSIGN_ALLOWED_ROLES = {"System Manager", "Administrator", "Team Leader", "Counseller"}
 
 

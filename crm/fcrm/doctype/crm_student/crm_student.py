@@ -17,6 +17,16 @@ from crm.fcrm.utils.geo_resolver import (
 	resolve_ward,
 )
 
+_CURRENT_GRADES = frozenset({"10", "11", "12", "post_exam"})
+_STUDY_STAGES = frozenset({"grade_10", "grade_11", "grade_12_h1", "grade_12_h2", "post_exam"})
+_STUDY_STAGE_GRADES = {
+	"grade_10": "10",
+	"grade_11": "11",
+	"grade_12_h1": "12",
+	"grade_12_h2": "12",
+	"post_exam": "post_exam",
+}
+
 
 class CRMStudent(Document):
 	def __init__(self, *args, **kwargs):
@@ -29,11 +39,6 @@ class CRMStudent(Document):
 		self.flags.ignore_links = True
 
 	def before_insert(self):
-		if not getattr(frappe.flags, "student_intake_service", False):
-			frappe.throw(
-				_("New CRM Students must be created through the Student intake command."),
-				title=_("Student intake required"),
-			)
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
@@ -62,6 +67,8 @@ class CRMStudent(Document):
 
 	def validate(self):
 		self._validate_phone_format()
+		self._validate_current_grade()
+		self._validate_study_stage()
 		self._resolve_geo()
 		self._validate_high_school_format()
 		if getattr(frappe.flags, "student_intake_service", False) or getattr(frappe.flags, "student_ownership_service", False) or not self.get_doc_before_save():
@@ -119,6 +126,28 @@ class CRMStudent(Document):
 			frappe.throw(
 				f"Số điện thoại <b>{phone}</b> không hợp lệ. Số điện thoại phải gồm đúng 10 số.",
 				title="Số điện thoại không hợp lệ",
+			)
+
+	def _validate_current_grade(self):
+		current_grade = self.get("current_grade")
+		if current_grade and current_grade not in _CURRENT_GRADES:
+			frappe.throw(
+				_("Current grade must be 10, 11, 12, or post_exam."),
+				frappe.ValidationError,
+			)
+
+	def _validate_study_stage(self):
+		study_stage = self.get("study_stage")
+		if study_stage and study_stage not in _STUDY_STAGES:
+			frappe.throw(
+				_("Study stage must be grade_10, grade_11, grade_12_h1, grade_12_h2, or post_exam."),
+				frappe.ValidationError,
+			)
+		current_grade = self.get("current_grade")
+		if study_stage and current_grade and _STUDY_STAGE_GRADES[study_stage] != current_grade:
+			frappe.throw(
+				_("Study stage {0} is inconsistent with current grade {1}.").format(study_stage, current_grade),
+				frappe.ValidationError,
 			)
 
 	def on_update(self):
@@ -206,7 +235,7 @@ class CRMStudent(Document):
 				"label": "Enrollment Status",
 				"type": "Link",
 				"key": "enrollment_status",
-				"options": "CRM Enrollment Status",
+				"options": "CRM Term",
 				"width": "12rem",
 			},
 			{
@@ -280,7 +309,7 @@ def get_permission_query_conditions(user=None):
 	return _scoped("CRM Student", user=user)
 
 
-def has_permission(doc, user=None, permission_type=None):
+def has_permission(doc, user=None, permission_type=None, ptype=None):
 	from crm.fcrm.permissions import has_permission as _scoped
 
-	return _scoped(doc, user=user, permission_type=permission_type)
+	return _scoped(doc, user=user, permission_type=permission_type, ptype=ptype)

@@ -40,6 +40,8 @@ describe('rolePolicy', () => {
 
     expect(marketingNavigation).toEqual([
       'Marketing Dashboard',
+      'Lookups',
+      'Majors & Programs',
       'High Schools',
       'Campaigns',
       'Segments',
@@ -60,10 +62,14 @@ describe('rolePolicy', () => {
         'interaction.record',
       ]),
     ).toEqual([
+      'Sales Dashboard',
       'My Recommendations',
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
+      'Lookups',
+      'Majors & Programs',
+      'High Schools',
       'Notes',
       'Tasks',
       'Call Logs',
@@ -82,6 +88,9 @@ describe('rolePolicy', () => {
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
+      'Lookups',
+      'Majors & Programs',
+      'High Schools',
       'Persons',
       'Notes',
       'Tasks',
@@ -96,6 +105,9 @@ describe('rolePolicy', () => {
       'Prospective Students',
       'Contacts',
       'Enrolled Students',
+      'Lookups',
+      'Majors & Programs',
+      'High Schools',
       'Persons',
       'Notes',
       'Tasks',
@@ -126,7 +138,11 @@ describe('rolePolicy', () => {
     expect(hasAnyCapability(saleUser, admissionsWorkspaceCapabilities)).toBe(
       true,
     )
-    expect(canAccessNavigationRoute(saleUser, 'High Schools')).toBe(false)
+    expect(canAccessNavigationRoute(saleUser, 'Lookups')).toBe(true)
+    expect(canAccessNavigationRoute(saleUser, 'High Schools')).toBe(true)
+    expect(canAccessNavigationRoute(saleUser, 'Dashboard')).toBe(true)
+    expect(canAccessNavigationRoute(saleUser, 'CRM Events')).toBe(false)
+    expect(canAccessNavigationRoute(saleUser, 'CRM Staff')).toBe(false)
   })
 
   it('requires one declared capability for role-scoped affordances', () => {

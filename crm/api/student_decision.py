@@ -28,6 +28,14 @@ def _require_v2_service():
 		)
 
 
+def _throw_revision_conflict(message: str, current_revision: int):
+	"""Raise a backward-compatible 409 with the winning revision in its body."""
+	frappe.local.response["current_revision"] = int(current_revision)
+	error = frappe.ValidationError(message)
+	error.http_status_code = 409
+	frappe.throw(message, error)
+
+
 def _task_result(task, *, idempotent=False):
 	return {
 		"name": task.name,
@@ -104,7 +112,9 @@ def _upsert_crm_action(
 		return _task_result(frappe.get_doc("CRM Action", existing.name), idempotent=True)
 	current_revision = int(row[0].student_context_revision or 0)
 	if current_revision != int(expected_context_revision):
-		frappe.throw(_("Student context changed; retry from the newer projection."), frappe.ValidationError)
+		_throw_revision_conflict(
+			_("Student context changed; retry from the newer projection."), current_revision
+		)
 	current = frappe.db.sql(
 		"SELECT name, state FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
 		(student,),

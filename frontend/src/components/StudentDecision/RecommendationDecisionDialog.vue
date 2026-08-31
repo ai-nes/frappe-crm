@@ -3,28 +3,28 @@
     <template #body-content>
       <div class="space-y-4">
         <p class="text-sm text-ink-gray-6">
-          {{ __('Deciding recommendation for {0}.', [item.studentName]) }}
+          {{ __('Lên lịch tư vấn cho thí sinh {0}.', [item.studentName]) }}
         </p>
         <template v-if="status === 'accepted'">
-          <FormControl v-model="dueAt" type="datetime-local" :label="__('Due time')" required />
+          <FormControl v-model="dueAt" type="datetime-local" :label="__('Thời hạn thực hiện / Lịch hẹn')" required />
           <FormControl
             v-if="executorOptions.length"
             v-model="assignee"
             type="select"
-            :label="__('Executor')"
+            :label="__('Tư vấn viên phụ trách')"
             :options="executorOptions"
-            :description="__('Only executors permitted by the server are shown.')"
+            :description="__('Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm.')"
           />
         </template>
         <template v-else-if="status === 'deferred'">
-          <FormControl v-model="deferKind" type="select" :label="__('Deferral')" :options="deferOptions" required />
-          <FormControl v-if="deferKind === 'revisit'" v-model="revisitAt" type="datetime-local" :label="__('Return to inbox at')" required />
+          <FormControl v-model="deferKind" type="select" :label="__('Hình thức hẹn lại')" :options="deferOptions" required />
+          <FormControl v-if="deferKind === 'revisit'" v-model="revisitAt" type="datetime-local" :label="__('Thời điểm nhắc lại')" required />
         </template>
         <FormControl
           v-if="status === 'rejected' || (status === 'deferred' && deferKind === 'archive')"
           v-model="reason"
           type="textarea"
-          :label="status === 'rejected' ? __('Rejection reason') : __('Archival reason')"
+          :label="status === 'rejected' ? __('Lý do bỏ qua') : __('Lý do đóng đề xuất')"
           required
         />
       </div>
@@ -32,8 +32,8 @@
     </template>
     <template #actions>
       <div class="flex justify-end gap-2">
-        <Button :label="__('Cancel')" :disabled="loading" @click="show = false" />
-        <Button variant="solid" :label="submitLabel" :loading="loading" :disabled="!canSubmit" @click="submit" />
+        <Button :label="__('Hủy')" :disabled="loading" @click="show = false" />
+        <Button variant="solid" theme="blue" :label="submitLabel" :loading="loading" :disabled="!canSubmit" @click="submit" />
       </div>
     </template>
   </Dialog>
@@ -66,18 +66,26 @@ const loading = ref(false)
 const commandKey = ref(createStudentDecisionCommandId())
 
 const title = computed(() => ({
-  accepted: __('Accept recommendation'),
-  deferred: __('Defer recommendation'),
-  rejected: __('Reject recommendation'),
-}[props.status] || __('Decide recommendation')))
-const submitLabel = computed(() => ({ accepted: __('Accept'), deferred: __('Defer'), rejected: __('Reject') }[props.status] || __('Save')))
-const deferOptions = [
-  { label: __('Return to inbox later'), value: 'revisit' },
-  { label: __('Archive with reason'), value: 'archive' },
-]
+  accepted: __('Tiếp nhận & Lên lịch tư vấn'),
+  deferred: __('Hẹn liên hệ lại'),
+  rejected: __('Bỏ qua đề xuất liên hệ'),
+}[props.status] || __('Xử lý đề xuất liên hệ')))
+
+const submitLabel = computed(() => ({
+  accepted: __('Xác nhận lên lịch'),
+  deferred: __('Xác nhận hẹn lại'),
+  rejected: __('Xác nhận bỏ qua'),
+}[props.status] || __('Lưu')))
+
+const deferOptions = computed(() => [
+  { label: __('Nhắc lại sau vào danh sách'), value: 'revisit' },
+  { label: __('Đóng đề xuất kèm lý do'), value: 'archive' },
+])
+
 const executorOptions = computed(() => props.item.permittedExecutors.map((executor) => typeof executor === 'string'
   ? { label: executor, value: executor }
   : { label: executor.label || executor.name || executor.value, value: executor.name || executor.value }))
+
 const validationError = computed(() => validateRecommendationDecision({
   status: props.status, dueAt: dueAt.value, deferKind: deferKind.value, revisitAt: revisitAt.value, reason: reason.value,
 }))
@@ -113,7 +121,7 @@ async function submit() {
     emit('changed', response)
     show.value = false
   } catch (err) {
-    error.value = safeStudentDecisionError(err, __('Unable to save this decision.'))
+    error.value = safeStudentDecisionError(err, __('Không thể lưu quyết định này.'))
     if ([409, 412].includes(err?.httpStatusCode || err?.status)) emit('refresh-required')
   } finally {
     loading.value = false

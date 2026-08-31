@@ -5,8 +5,7 @@ INTERACTION_TYPES = ["Tin nhắn Chatwoot", "Cuộc gọi", "Email", "Gặp tr�
 
 def execute():
 	for name in INTERACTION_TYPES:
-		if not frappe.db.exists("CRM Interaction Type", name):
+		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "interaction_type"}):
 			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"interaction_type_name": name,
+				"doctype": "CRM Term", "term_name": name, "category": "interaction_type",
 			}).insert(ignore_permissions=True)

@@ -34,7 +34,20 @@
                 </template>
               </SidebarLink>
             </div>
-            <div v-for="view in allViews" :key="view.label">
+
+            <!-- Role-based Navigation Tree for Mobile -->
+            <nav class="flex flex-col space-y-[2px] my-2">
+              <SidebarItemNode
+                v-for="item in currentNavItems"
+                :key="item.id || item.label"
+                :item="item"
+                :isCollapsed="false"
+                :isMobile="true"
+              />
+            </nav>
+
+            <!-- Custom Pinned & Public Views -->
+            <div v-for="view in customViews" :key="view.name">
               <Section
                 :label="view.name"
                 :hideLabel="view.hideLabel"
@@ -95,13 +108,8 @@ import PinIcon from '@/components/Icons/PinIcon.vue'
 import UserDropdown from '@/components/UserDropdown.vue'
 import ContactsIcon from '@/components/Icons/ContactsIcon.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
-import TaskIcon from '@/components/Icons/TaskIcon.vue'
 import PhoneIcon from '@/components/Icons/PhoneIcon.vue'
 import NotificationsIcon from '@/components/Icons/NotificationsIcon.vue'
-import SidebarLink from '@/components/SidebarLink.vue'
-import LucideLayoutDashboard from '~icons/lucide/layout-dashboard'
-import LucideBarChart3 from '~icons/lucide/bar-chart-3'
-import ListChecksIcon from '~icons/lucide/list-checks'
 import GraduationCapIcon from '~icons/lucide/graduation-cap'
 import UsersIcon from '~icons/lucide/users'
 import UserIcon from '~icons/lucide/user'
@@ -110,54 +118,32 @@ import MegaphoneIcon from '~icons/lucide/megaphone'
 import CalendarIcon from '~icons/lucide/calendar'
 import BriefcaseIcon from '~icons/lucide/briefcase'
 import FilterIcon from '~icons/lucide/filter'
+import SidebarLink from '@/components/SidebarLink.vue'
+import SidebarItemNode from '@/components/SidebarItemNode.vue'
+import { Badge, FeatherIcon } from 'frappe-ui'
 import { viewsStore } from '@/stores/views'
 import { unreadNotificationsCount } from '@/stores/notifications'
-import { computed, h } from 'vue'
+import { useNavigationBadgesStore } from '@/stores/navigationBadges'
+import { computed, h, onMounted } from 'vue'
 import { mobileSidebarOpened as sidebarOpened } from '@/composables/settings'
 import { sessionStore } from '@/stores/session'
 import { usersStore } from '@/stores/users'
-import {
-  canAccessNavigationRoute,
-  navigationEntries,
-  visibleNavigation,
-} from '@/utils/rolePolicy'
+import { canAccessNavigationRoute } from '@/utils/rolePolicy'
+import { getNavigationForUser } from '@/utils/navigationConfig'
 
 const { getPinnedViews, getPublicViews } = viewsStore()
 const { user } = sessionStore()
-const { getUser } = usersStore()
+const { getUser, users } = usersStore()
+const badgesStore = useNavigationBadgesStore()
 
-const navigationIcons = {
-  salesDashboard: LucideLayoutDashboard,
-  marketingDashboard: LucideBarChart3,
-  recommendations: ListChecksIcon,
-  students: SchoolIcon,
-  contacts: UsersIcon,
-  enrolledStudents: GraduationCapIcon,
-  schools: SchoolIcon,
-  persons: UserIcon,
-  campaigns: MegaphoneIcon,
-  segments: FilterIcon,
-  events: CalendarIcon,
-  staff: BriefcaseIcon,
-  notes: NoteIcon,
-  tasks: TaskIcon,
-  callLogs: PhoneIcon,
-}
+const currentUser = computed(() => getUser(user.value))
 
-const links = navigationEntries.map((link) => ({
-  ...link,
-  icon: navigationIcons[link.icon],
-}))
+const currentNavItems = computed(() => {
+  return getNavigationForUser(currentUser.value)
+})
 
-const allViews = computed(() => {
-  let _views = [
-    {
-      name: 'All Views',
-      hideLabel: true,
-      opened: true,
-      views: visibleNavigation(links, getUser(user.value)),
-    },
-  ]
+const customViews = computed(() => {
+  let _views = []
   if (getPublicViews().length) {
     _views.push({
       name: 'Public Views',
@@ -179,7 +165,7 @@ const allViews = computed(() => {
 function parseView(views) {
   return views
     .filter((view) =>
-      canAccessNavigationRoute(getUser(user.value), view.route_name),
+      canAccessNavigationRoute(currentUser.value, view.route_name),
     )
     .map((view) => {
       return {
@@ -222,4 +208,9 @@ function getIcon(routeName, icon) {
       return PinIcon
   }
 }
+
+onMounted(async () => {
+  await users.promise
+  badgesStore.fetchBadges()
+})
 </script>
