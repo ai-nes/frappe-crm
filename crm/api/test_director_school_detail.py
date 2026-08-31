@@ -48,6 +48,45 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 			"snapshot_date desc, recorded_at desc, revision desc, modified desc, name desc",
 		)
 
+	def test_snapshot_metrics_are_projected_to_detail(self):
+		school = {"name": "school-1", "school_code": "062", "school_name": "THPT Test", "is_key_account": 0}
+		sources = {
+			"province": {}, "ward": {},
+			"snapshot": {
+				"snapshot_date": "2026-08-01", "enrollment_rate": 25,
+				"enrolled_count": 10, "student_count": 30, "contact_count": 12,
+				"applicant_count": 18,
+			},
+			"intelligence": {}, "students": [], "contacts": [], "stakeholders": [],
+			"people": {}, "roles": {}, "activities": [], "activity_types": {},
+		}
+		response = detail._build_detail(school, sources, set(), set(), "2026")
+
+		self.assertEqual(response["grade12Students"], 40)
+		self.assertEqual(response["availableStudents"], 30)
+		self.assertEqual(response["prospects"], 12)
+		self.assertEqual(response["applications"], 18)
+		self.assertEqual(response["enrollment"], 10)
+
+	def test_student_and_contact_fallbacks_are_projected_without_snapshot(self):
+		school = {"name": "school-1", "school_code": "062", "school_name": "THPT Test", "is_key_account": 0}
+		sources = {
+			"province": {}, "ward": {}, "snapshot": None, "intelligence": {},
+			"students": [
+				{"current_grade": "12", "study_stage": "grade_12_h1", "lifecycle_stage": "Applicant"},
+				{"current_grade": "11", "study_stage": "grade_11", "lifecycle_stage": "Enrolled"},
+			],
+			"contacts": [{"name": "contact-1"}], "stakeholders": [],
+			"people": {}, "roles": {}, "activities": [], "activity_types": {},
+		}
+		response = detail._build_detail(school, sources, set(), set(), "2026")
+
+		self.assertEqual(response["grade12Students"], 1)
+		self.assertEqual(response["availableStudents"], 1)
+		self.assertEqual(response["prospects"], 1)
+		self.assertEqual(response["applications"], 1)
+		self.assertEqual(response["enrollment"], 1)
+
 	def test_activity_projection_excludes_free_text_and_internal_identity(self):
 		row = {
 			"activity_type": "term-1", "activity_date": "2026-08-01", "scheduled_datetime": None,

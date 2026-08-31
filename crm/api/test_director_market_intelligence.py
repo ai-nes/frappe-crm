@@ -138,6 +138,30 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		self.assertEqual(province["highSchools"][0]["prospects"], 1)
 		self.assertEqual(province["highSchools"][0]["applications"], 7)
 
+	def test_snapshot_grade12_and_forecast_are_projected(self):
+		sources = {
+			"provinces": [{"name": "province-1", "province_code": "01", "province_name": "Hà Nội", "region": "Bắc"}],
+			"schools": [{"name": "school-1", "school_code": "062", "school_name": "THPT Test", "province": "province-1", "ward": "ward-1"}],
+			"wards": [{"name": "ward-1", "ward_code": "00123", "ward_name": "Phường Test"}],
+			"students": [{"name": "student-1", "high_school": "school-1", "province": "province-1"}],
+			"snapshots": [{
+				"name": "snapshot-1", "high_school": "school-1", "verification_status": "Verified",
+				"snapshot_date": "2026-08-01", "revision": 1, "applicant_count": 7,
+				"enrolled_count": 10, "enrollment_rate": 25, "forecast_count": 12,
+			}],
+		}
+		response = market._build_overview(
+			sources, set(), admission_year="2026", region="all", metric="opportunity",
+			include_schools=True, school_limit=6,
+		)
+
+		province = response["data"]["provinces"][0]
+		high_school = province["highSchools"][0]
+		self.assertEqual(high_school["grade12Students"], 40)
+		self.assertEqual(high_school["enrollmentForecast"], 12)
+		self.assertEqual(province["grade12Population"], 40)
+		self.assertEqual(province["penetrationRate"], 2.5)
+
 	def test_method_has_no_guest_or_permission_bypass(self):
 		source = market.__loader__.get_source(market.__name__)
 		self.assertNotIn("allow_guest=True", source)
