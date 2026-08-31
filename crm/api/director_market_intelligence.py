@@ -13,7 +13,6 @@ from pymysql import MySQLError
 from crm.api.director_school_common import (
 	METRICS,
 	REGIONS,
-	as_iso,
 	parse_boolean,
 	parse_enum,
 	parse_limit,
@@ -21,6 +20,7 @@ from crm.api.director_school_common import (
 	require_director_access,
 	resolve_admission_year,
 )
+
 
 _PAGE_SIZE = 500
 _MAX_ROWS = 20_000
@@ -178,16 +178,6 @@ def _latest_as_of(rows) -> str | None:
 	return max(values) if values else None
 
 
-def _grade12_from_snapshot(snapshot: dict[str, Any]) -> int | None:
-	"""Recover grade-12 population from the annual enrollment-rate source."""
-	try:
-		rate = float(snapshot.get("enrollment_rate"))
-		enrolled = int(snapshot.get("enrolled_count") or 0)
-		return round(enrolled / (rate / 100)) if rate > 0 else None
-	except (TypeError, ValueError, ZeroDivisionError):
-		return None
-
-
 def _build_overview(sources, failed, *, admission_year, region, metric, include_schools, school_limit):
 	province_by_name = {row.get("name"): row for row in sources["provinces"]}
 	ward_by_name = {row.get("name"): row for row in sources["wards"]}
@@ -216,14 +206,10 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 		schools = schools_by_province.get(province_name, [])
 		applicants = sum(int((latest.get(row.get("name")) or {}).get("applicant_count") or 0) for row in schools)
 		enrolled = sum(int((latest.get(row.get("name")) or {}).get("enrolled_count") or 0) for row in schools)
-		grade12_values = [_grade12_from_snapshot(latest.get(school.get("name")) or {}) for school in schools]
-		grade12_values = [value for value in grade12_values if value is not None]
-		grade12_population = sum(grade12_values) if grade12_values else None
 		province_leads = len(student_ids_by_province.get(province_name, set())) if students_available else None
 		highlights = []
 		for school in schools:
 			snapshot = latest.get(school.get("name")) or {}
-			school_grade12 = _grade12_from_snapshot(snapshot)
 			school_leads = len(student_ids_by_school.get(school.get("name"), set())) if students_available else None
 			ward = ward_by_name.get(school.get("ward"), {})
 			external_id = None
@@ -237,9 +223,9 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 				"district": ward.get("ward_name"),
 				"tier": school.get("school_tier"),
 				"potentialScore": None,
-				"grade12Students": school_grade12,
+				"grade12Students": None,
 				"prospects": school_leads,
-				"penetrationRate": _ratio(school_leads, school_grade12) if school_leads is not None and school_grade12 else None,
+				"penetrationRate": None,
 				"applications": snapshot.get("applicant_count"),
 				"enrollmentForecast": snapshot.get("forecast_count"),
 				"conversionRate": snapshot.get("conversion_rate"),
@@ -266,8 +252,8 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			"conversion": _ratio(enrolled, applicants),
 			"competition": None,
 			"revenue": None,
-			"grade12Population": grade12_population,
-			"penetrationRate": _ratio(province_leads, grade12_population) if province_leads is not None and grade12_population else None,
+			"grade12Population": None,
+			"penetrationRate": None,
 			"trend": None,
 			"recommendation": None,
 			"keyAction": None,
@@ -305,7 +291,7 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 				"opportunity": "unavailable",
 				"competition": "unavailable",
 				"revenue": "unavailable",
-				"grade12Population": "available" if any(row["grade12Population"] is not None for row in provinces) else "unavailable",
+				"grade12Population": "unavailable",
 			},
 		},
 		"dataAvailability": {

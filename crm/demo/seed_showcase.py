@@ -2499,7 +2499,10 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 	The base data (CRM Province / Ward / High School, plus annual snapshots and
 	stakeholders for the TS key-account list) comes straight from
 	``school_domain_import`` -- no synthetic schools. Excel is an extraction source;
-	the seed consumes only the compact JSON projection. On top of that this seed
+	the seed consumes only the compact JSON projection and keeps 10 schools per
+	canonical province in the local showcase. Unlinked canonical schools from an
+	older full seed are pruned; protected Student/Contact links are retained and
+	reported as a gap. On top of that this seed
 	guarantees COVERAGE_MATRIX state on ``_KEY_ACCOUNT_SLOTS`` real key-account
 	schools and gives each three CRM School Activity rows (Planned / Completed /
 	Cancelled). Every top-up row is owned by the Promoter staff.
@@ -2530,7 +2533,28 @@ def _seed_school_domain(context: dict, staff_context: dict) -> dict:
 				{"stage": "json", "error": f"missing {school_domain_import.DEFAULT_SCHOOL_SEED_PATH.name}"}
 			)
 			return counts
-		base = school_domain_import.seed_school_seed(dry_run=False)
+		prune_plan = school_domain_import.prune_school_seed(
+			dry_run=True,
+			schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
+		)
+		if prune_plan["candidate_schools"] and not prune_plan["protected_links"]:
+			pruned = school_domain_import.prune_school_seed(
+				dry_run=False,
+				schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
+			)
+			counts["school_prune"] = pruned.get("deleted", {})
+		elif prune_plan["protected_links"]:
+			counts["gaps"].append(
+				{
+					"stage": "prune",
+					"error": "unselected canonical schools have protected Student/Contact links",
+					"protected_links": prune_plan["protected_links"],
+				}
+			)
+		base = school_domain_import.seed_school_seed(
+			dry_run=False,
+			max_schools_per_province=school_domain_import.DEMO_SCHOOLS_PER_PROVINCE,
+		)
 		counts["base_import"] = base.get("mutations", {})
 		if school_domain_import.DEFAULT_TS_PATH.exists():
 			ts = school_domain_import.seed_ts_workbook(dry_run=False)
@@ -3805,6 +3829,9 @@ def verify(strict: bool = True) -> dict:
 # a full re-demo goes through `bench reinstall` (see reset() docstring).
 _RESET_DOCTYPES = (
 	("CRM Marketing Engagement", "correlation_id", f"%{NAMESPACE}%"),
+	# Geography opportunity fixtures are no longer part of the Director market
+	# contract, but remove rows created by older showcase runs during reset.
+	("CRM Geography Market Snapshot", "source", "demo-seed"),
 	("CRM Master Data Change", "correlation_id", f"%{NAMESPACE}%"),
 	("CRM Student Intake Review", "review_key", f"%{NAMESPACE}%"),
 	# CRM Contact Consent Event is append-only (on_trash blocks deletion); its
