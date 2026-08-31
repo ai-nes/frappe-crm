@@ -43,6 +43,21 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		self.assertEqual(item["leads"], 0)
 		self.assertEqual(item["highSchools"][0]["id"], "01-00123-062")
 
+	def test_market_school_id_is_padded_for_detail_lookup(self):
+		sources = {
+			"provinces": [{"name": "province-1", "province_code": "01", "province_name": "Hà Nội", "region": "Bắc"}],
+			"schools": [{"name": "school-1", "school_name": "THPT Test", "school_code": "15", "province": "province-1", "ward": "ward-1"}],
+			"wards": [{"name": "ward-1", "ward_code": "00123", "ward_name": "Phường Test"}],
+			"students": [], "snapshots": [],
+		}
+
+		response = market._build_overview(
+			sources, set(), admission_year="2026", region="all", metric="opportunity",
+			include_schools=True, school_limit=6,
+		)
+
+		self.assertEqual(response["data"]["provinces"][0]["highSchools"][0]["id"], "01-00123-015")
+
 	def test_student_source_failure_keeps_student_aggregates_unavailable(self):
 		sources = {
 			"provinces": [{"name": "province-1", "province_code": "01", "province_name": "Hà Nội", "region": "Bắc"}],

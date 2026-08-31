@@ -166,7 +166,8 @@ def resolve_school_id(school_id: Any) -> dict[str, Any]:
 	province = _unique_visible(
 		"CRM Province", filters={"province_code": province_code}, fields=["name"]
 	)
-	filters = {"province": province["name"], "school_code": school_code}
+	school_code_values = [school_code, school_code.lstrip("0") or "0"]
+	filters = {"province": province["name"], "school_code": ["in", list(dict.fromkeys(school_code_values))]}
 	if mode == "canonical":
 		ward = _unique_visible(
 			"CRM Ward",

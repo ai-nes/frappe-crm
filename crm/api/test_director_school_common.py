@@ -97,6 +97,26 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 		self.assertEqual(resolved["province_code"], "01")
 		self.assertEqual(resolved["ward_code"], "00123")
 
+	def test_resolver_matches_unpadded_school_code_from_directory(self):
+		province = [{"name": "Khánh Hoà"}]
+		ward = [{"name": "ward-1", "ward_code": "22333"}]
+		school = [{"name": "school-1", "school_code": "15", "province": "Khánh Hoà", "ward": "ward-1"}]
+
+		def get_list(doctype, filters, **kwargs):
+			if doctype == "CRM Province":
+				return province
+			if doctype == "CRM Ward":
+				return ward
+			if doctype == "CRM High School":
+				self.assertEqual(filters["school_code"], ["in", ["015", "15"]])
+				return school
+			return []
+
+		with patch.object(common.frappe, "get_list", side_effect=get_list):
+			resolved = common.resolve_school_id("56-22333-015")
+
+		self.assertEqual(resolved["name"], "school-1")
+
 	def test_system_manager_mixed_with_business_role_is_forbidden(self):
 		with (
 			patch.object(common.frappe, "session", SimpleNamespace(user="mixed-manager@example.test")),
