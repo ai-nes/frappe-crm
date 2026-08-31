@@ -1626,6 +1626,16 @@ def _ensure_lifecycle(student: str, scenario: dict, outcome: str | None) -> None
 	target = scenario["target_stage"]
 	doc = frappe.get_doc("CRM Student", student)
 
+	if scenario["key"].startswith("bulk-student-"):
+		# Volume-fill cohort: land the funnel stage with a direct write instead of
+		# replaying the transition service, which requires per-step outcome/intent
+		# evidence these shallow background records intentionally do not carry.
+		if target != "Lead" and doc.lifecycle_stage != target:
+			frappe.db.set_value(
+				"CRM Student", student, "lifecycle_stage", target, update_modified=False
+			)
+		return
+
 	if scenario.get("lost_then_reopen") and not frappe.db.exists(
 		"CRM Student Lifecycle Event", {"student": student, "transition_kind": "reopen"}
 	):
