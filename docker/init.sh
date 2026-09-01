@@ -128,6 +128,7 @@ if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" 
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_demo_config || true
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_local_integrity_keys || true
     if bench --site crm.localhost execute crm.demo.seed_showcase.execute; then
+        bench --site crm.localhost execute crm.demo.seed_next_best_action.execute || true
         touch "sites/crm.localhost/.demo-seeded"
         echo "Demo seed complete."
     else
