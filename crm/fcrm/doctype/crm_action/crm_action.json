@@ -24,6 +24,8 @@
   {"fieldname":"policy_context_version","fieldtype":"Data","read_only":1},
   {"fieldname":"generation_idempotency_key","fieldtype":"Data","reqd":1,"read_only":1},
   {"fieldname":"producer_identity","fieldtype":"Data","reqd":1,"read_only":1},
+  {"fieldname":"writer_epoch","fieldtype":"Int","read_only":1},
+  {"fieldname":"source_stage_key","fieldtype":"Data","read_only":1},
   {"fieldname":"payload_digest","fieldtype":"Data","reqd":1,"read_only":1},
   {"fieldname":"evidence_references","fieldtype":"JSON","read_only":1},
   {"fieldname":"action_revision","fieldtype":"Int","default":"1","read_only":1},
@@ -46,6 +48,7 @@
   {"fieldname":"decision_at","fieldtype":"Datetime","read_only":1},
   {"fieldname":"decision_revision","fieldtype":"Int","default":"0","read_only":1}
  ],
+ "indexes": [{"fields": ["student", "source_context_revision", "source_stage_key"], "name": "crm_action_intelligence_stage_uniq", "unique": 1}],
  "module":"FCRM", "name":"CRM Action", "owner":"Administrator", "permissions":[{"read":1,"write":1,"role":"Lead Sales"},{"read":1,"write":1,"role":"Sale"},{"read":1,"role":"Admissions Director"},{"create":1,"delete":1,"read":1,"write":1,"role":"System Manager"}],
  "sort_field":"creation", "sort_order":"DESC"
 }

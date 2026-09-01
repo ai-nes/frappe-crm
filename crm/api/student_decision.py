@@ -10,10 +10,20 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.student_decision import (
 	StudentDecisionError,
-	decide_recommendation as _decide_recommendation,
-	decide_student_task as _decide_student_task,
+)
+from crm.fcrm.student_decision import (
 	create_manual_action as _create_manual_action,
+)
+from crm.fcrm.student_decision import (
+	decide_recommendation as _decide_recommendation,
+)
+from crm.fcrm.student_decision import (
+	decide_student_task as _decide_student_task,
+)
+from crm.fcrm.student_decision import (
 	reassign_action as _reassign_action,
+)
+from crm.fcrm.student_decision import (
 	transition_action as _transition_action,
 )
 
@@ -65,6 +75,13 @@ def _upsert_crm_action(
 	rollout_epoch: int,
 	candidate: dict | str,
 	origin: str = "ai",
+	writer_epoch: int | None = None,
+	source_stage_key: str | None = None,
+	run_id: str | None = None,
+	stage_kind: str | None = None,
+	stage_generation: int | None = None,
+	lease_token: str | None = None,
+	expected_source_digest: str | None = None,
 ) -> dict:
 	"""Only mutation endpoint for v2 generation; compare-and-swap + idempotency."""
 	_require_v2_service()
@@ -79,6 +96,21 @@ def _upsert_crm_action(
 		frappe.throw(_("Candidate payload digest does not match."), frappe.ValidationError)
 	if int(expected_context_revision) < 0 or int(rollout_epoch) < 0:
 		frappe.throw(_("Invalid revision."), frappe.ValidationError)
+	active_writer_epoch = frappe.conf.get("crm_intelligence_writer_epoch")
+	if active_writer_epoch is not None:
+		if writer_epoch is None or int(writer_epoch) != int(active_writer_epoch):
+			frappe.throw(_("writer_retired"), frappe.PermissionError)
+		if not all((run_id, stage_kind, lease_token, expected_source_digest)) or stage_generation is None:
+			frappe.throw(_("Active Intelligence Run NBA writer requires a fenced run stage."), frappe.PermissionError)
+		if stage_kind != "next_best_action":
+			frappe.throw(_("Invalid Intelligence Run stage kind for Action write."), frappe.ValidationError)
+		from crm.fcrm.intelligence_runs import authorize_next_best_action_write
+		stage_authority = authorize_next_best_action_write(
+			run_id=str(run_id), stage_generation=int(stage_generation), lease_token=str(lease_token),
+			expected_source_revision=str(expected_context_revision), expected_source_digest=str(expected_source_digest),
+		)
+		if stage_authority["student"] != student or stage_authority["stage_key"] != source_stage_key:
+			frappe.throw(_("Intelligence Run stage does not authorize this Student Action write."), frappe.PermissionError)
 	if frappe.conf.get("crm_agents_v2_rollout_epoch") is not None and int(
 		frappe.conf.get("crm_agents_v2_rollout_epoch", 0)
 	) != int(rollout_epoch):
@@ -96,13 +128,11 @@ def _upsert_crm_action(
 	)
 	if not row:
 		frappe.throw(_("Student not found."), frappe.DoesNotExistError)
+	existing_filters = {"student": student, "generation_idempotency_key": generation_idempotency_key}
+	if source_stage_key:
+		existing_filters = {"student": student, "source_stage_key": source_stage_key}
 	existing = frappe.db.get_value(
-		"CRM Action",
-		{
-			"producer_identity": producer_identity,
-			"student": student,
-			"generation_idempotency_key": generation_idempotency_key,
-		},
+		"CRM Action", existing_filters,
 		["name", "payload_digest"],
 		as_dict=True,
 	)
@@ -160,6 +190,8 @@ def _upsert_crm_action(
 			"execution_package_version": 1 if action_type else 0,
 			"generation_idempotency_key": generation_idempotency_key,
 			"producer_identity": producer_identity,
+			"writer_epoch": writer_epoch,
+			"source_stage_key": source_stage_key,
 			"payload_digest": payload_digest,
 			"evidence_references": json.dumps(candidate.get("evidence_refs", []), separators=(",", ":")),
 			"package_seed": json.dumps(candidate.get("package_seed") or {}, separators=(",", ":")),

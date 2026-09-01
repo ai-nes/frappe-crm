@@ -50,6 +50,9 @@ bench use "${SITE_NAME}"
 # install-app is idempotent (no-op if already installed), so this stays safe
 # to run on every deploy rather than only when the site is first created.
 bench --site "${SITE_NAME}" install-app dfp_external_storage
+if [ -n "${CRM_AGENTS_DEMO_FULL_ACCESS:-}" ]; then
+    bench --site "${SITE_NAME}" set-config crm_agents_demo_full_access "${CRM_AGENTS_DEMO_FULL_ACCESS}"
+fi
 bench --site "${SITE_NAME}" migrate
 # Force https:// regardless of what X-Forwarded-Proto the reverse proxy in
 # front of nginx sends - nginx itself only listens on plain HTTP, so

@@ -22,6 +22,44 @@ _DISCOVERY_HIDDEN_TYPES = frozenset({"Password", "Secret"})
 ROLE_MATRIX_EPOCH = "crm-roles-v1"
 AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 
+# Business-facing resources advertised to Copilot. Internal lifecycle,
+# routing, SLA, migration, receipt, journal, and control records remain in the
+# capability manifest for server-owned workflows that need read-back, but are
+# intentionally absent from the discovery catalog and prompt surface.
+_COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
+	{
+		# core admissions and CRM aggregates
+		"CRM Student", "CRM Contact", "CRM Lead", "CRM Company", "CRM Person", "CRM Interaction", "CRM Intent",
+		"CRM Admission Application", "CRM Admission Offering", "CRM Admission Year",
+		"CRM Recommendation", "CRM Action", "CRM Student Assessment", "CRM Student Outcome",
+		"CRM Student Payment", "CRM Revenue Recognition", "CRM Student Fee Award",
+		# admissions reference and organization
+		"CRM Academic Year Config", "CRM Campus", "CRM Department", "CRM Education Program",
+		"CRM Major", "CRM Term", "CRM Province", "CRM Ward", "CRM Lead Source",
+		"CRM Platform", "CRM Territory", "CRM Territory Geography Assignment", "CRM Team",
+		"CRM Staff", "CRM Staff Capacity Period", "CRM Student Pool",
+		# marketing and campaign
+		"CRM Campaign", "CRM Marketing Engagement", "CRM Segment", "CRM Event",
+		"CRM Campaign Attribution", "CRM Campaign Spend", "CRM Campaign Performance Period",
+		"CRM Campaign Performance Dimension", "CRM Campaign Performance Fact",
+		"CRM Campaign Funnel Metric", "CRM Campaign Channel Assignment",
+		"CRM Campaign Assignment Crosswalk",
+		# school operations
+		"CRM High School", "CRM High School Annual Snapshot", "CRM School Stakeholder",
+		"CRM School Contact", "CRM School Relationship", "CRM School Activity",
+		"CRM Geography Market Snapshot",
+		# intelligence and planning
+		"CRM Score Template", "CRM Score Signal", "CRM Score History", "CRM AI Lead Insight",
+		"CRM AI Personal Email Draft", "CRM Fee Policy", "CRM Scholarship Policy",
+		"CRM Planning Scope", "CRM Target", "CRM Forecast Run", "CRM Forecast Scenario",
+		"CRM Forecast Value", "CRM Model Version", "CRM Metric Definition",
+		# supporting identity and relationship records
+		"CRM Contact Consent Event", "CRM Influence", "CRM Parent Contact Authority",
+		"CRM Student Guardian", "CRM Student Identity", "CRM Student Case Key",
+		"CRM Student Geography Snapshot",
+	}
+)
+
 # CRM Student is never broadly PII-exposed beyond what Frappe itself already
 # grants: the manifest is the server-owned projection contract consumed by
 # crm-agents, and it exposes exactly the operational + contact-PII fields the
@@ -219,13 +257,26 @@ def _discovery_view(doctype: str, meta, grant: dict) -> tuple[dict, dict]:
 	return catalog, description
 
 
+def _is_copilot_business_discovery_doctype(doctype: str, meta) -> bool:
+	"""Return whether a DocType is a standalone business discovery resource."""
+	return (
+		doctype in _COPILOT_BUSINESS_DISCOVERY_DOCTYPES
+		and not bool(getattr(meta, "istable", False))
+	)
+
+
 def _build_discovery_contract(views: dict[str, tuple[object, dict]]) -> dict:
 	"""Build catalog, descriptions, and a hash of the exact disclosed policy."""
 	catalog = []
 	descriptions = {}
 	readable_resources = set()
 	for doctype, (_meta, grant) in sorted(views.items()):
-		if grant is _NO_GRANT or grant is _COMPUTE_ERROR or not grant["operations"]["read"]:
+		if (
+			grant is _NO_GRANT
+			or grant is _COMPUTE_ERROR
+			or not grant["operations"]["read"]
+			or not _is_copilot_business_discovery_doctype(doctype, _meta)
+		):
 			continue
 		entry, description = _discovery_view(doctype, _meta, grant)
 		catalog.append(entry)
@@ -436,6 +487,23 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 	the two.
 	"""
 	try:
+		# Explicit demo switch: publish complete CRM CRUD capability to the
+		# canonical Copilot account so the agent can propose any CRM mutation. The named
+		# mutation endpoint remains the only write transport and rechecks the same
+		# authenticated user; control-plane/audit doctypes stay excluded.
+		demo = (
+			doctype.startswith("CRM ")
+			and doctype not in {"CRM AI Capability Grant", "CRM Agent Event", "CRM Copilot Audit Event", "CRM Student Command Receipt", "CRM Student Decision Event"}
+			and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
+			and resolve_copilot_profile(frappe.get_roles()) in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
+		)
+		if demo:
+			fields = _project_ai_fields(doctype, list(columns))
+			return {
+				"operations": {op: True for op in OPERATIONS},
+				"fields": fields,
+				"row_scoped": _row_scoped(doctype),
+			}
 		ops = {op: bool(frappe.has_permission(doctype, op)) for op in OPERATIONS}
 		if not any(ops.values()):
 			return _NO_GRANT
@@ -517,6 +585,7 @@ def _capability_revision_snapshot() -> tuple[list[str], str]:
 			"role_matrix_epoch": ROLE_MATRIX_EPOCH,
 			"roles": fingerprint,
 			"staff_scope": scope_fingerprint,
+			"demo_full_access": frappe.conf.get("crm_agents_demo_full_access"),
 		}
 	)
 
@@ -685,6 +754,14 @@ def get_capability_manifest():
 		)
 
 	semantic_capabilities, data_scopes = _capability_grants(roles)
+	# The demo switch is runtime-configurable, so enabling it must not require
+	# a migration just to make the mutation proposal tool visible. The mutation
+	# endpoint independently rechecks this same flag and the authenticated role.
+	if (
+		frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
+		and resolve_copilot_profile(roles) in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
+	):
+		semantic_capabilities = sorted(set(semantic_capabilities) | {"action.crm_mutation"})
 
 	schema_version = _sha256_hex(sorted(schema_entries))
 	capability_version = _sha256_hex(

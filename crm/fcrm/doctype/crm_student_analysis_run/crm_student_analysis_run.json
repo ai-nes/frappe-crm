@@ -1,0 +1,26 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["student", "source_revision", "source_digest", "automatic_identity", "trigger", "status", "request_fingerprint", "requested_by", "policy_revision", "model_revision", "terminal_reason"],
+ "fields": [
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_revision", "fieldtype": "Data", "label": "Source Revision", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_digest", "fieldtype": "Data", "label": "Source Digest", "read_only": 1},
+  {"fieldname": "automatic_identity", "fieldtype": "Data", "label": "Automatic Identity", "read_only": 1, "unique": 1},
+  {"fieldname": "trigger", "fieldtype": "Select", "label": "Trigger", "options": "automatic\nmanual", "read_only": 1, "reqd": 1},
+  {"default": "queued", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "queued\nrunning\ncompleted\nabstained\nfailed\ndead_lettered", "read_only": 1, "reqd": 1},
+  {"fieldname": "request_fingerprint", "fieldtype": "Data", "label": "Request Fingerprint", "read_only": 1, "reqd": 1},
+  {"fieldname": "requested_by", "fieldtype": "Link", "label": "Requested By", "options": "User", "read_only": 1},
+  {"fieldname": "policy_revision", "fieldtype": "Data", "label": "Policy Revision", "read_only": 1},
+  {"fieldname": "model_revision", "fieldtype": "Data", "label": "Model Revision", "read_only": 1},
+  {"fieldname": "terminal_reason", "fieldtype": "Small Text", "label": "Terminal Reason", "read_only": 1}
+ ],
+ "module": "FCRM",
+ "name": "CRM Student Analysis Run",
+ "naming_rule": "Autoincrement",
+ "permissions": [{"read": 1, "role": "System Manager"}],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}
