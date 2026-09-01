@@ -17,4 +17,4 @@ CRM_GOOGLE_OAUTH_ALLOWED_DOMAINS=
 # Origin of the external admissions dashboard. Used both as the post-login
 # redirect allowlist and to grant it CORS access on install/migrate.
 # Local dev: http://localhost:3000 (Next.js). Production: https://faip.pro
-CRM_GOOGLE_OAUTH_DASHBOARD_URL=http://localhost:5173
+CRM_GOOGLE_OAUTH_DASHBOARD_URL=http://localhost:3000
