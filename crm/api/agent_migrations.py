@@ -94,6 +94,17 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
+	# The generic mutation is intentionally visible only as a named capability;
+	# the endpoint still requires the explicit demo site flag and Director role.
+	if getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)("crm_agents_demo_full_access") in (1, "1", True, "true", "True"):
+		for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+			if not frappe.db.exists("Role", role_name):
+				continue
+			role = frappe.get_doc("Role", role_name)
+			if not any(row.grant_type == "semantic_capability" and row.value == "action.crm_mutation" for row in role.custom_ai_capability_grants):
+				role.append("custom_ai_capability_grants", {"grant_type": "semantic_capability", "value": "action.crm_mutation"})
+				role.save(ignore_permissions=True)
+				changed = True
 	# Quiescence gate: operators set this site-config marker only after the
 	# matching crm-agents registry/client has been deployed. This prevents a
 	# Frappe-only rollout from advertising a capability the consumer cannot use.

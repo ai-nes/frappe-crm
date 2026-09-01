@@ -108,9 +108,17 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 		}
 	).insert(ignore_permissions=True)
 	if enqueue:
-		from crm.api.agent_events import record_student_context_event
+		from crm.fcrm.intelligence_runs import unified_intelligence_enabled
+		if unified_intelligence_enabled():
+			# One-writer cutover: a revision emits exactly one Intelligence Run
+			# instead of also invoking the retired direct NBA path.
+			from crm.fcrm.intelligence_runs import request_automatic_run
 
-		record_student_context_event(student, revision, event_id=event_id)
+			request_automatic_run("student", student)
+		else:
+			from crm.api.agent_events import record_student_context_event
+
+			record_student_context_event(student, revision, event_id=event_id)
 	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
 
 

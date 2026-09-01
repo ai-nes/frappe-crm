@@ -112,6 +112,9 @@ fi
 if [ -n "${CRM_E2E_FIXTURE_RUN_ID:-}" ]; then
     bench --site crm.localhost set-config crm_e2e_fixture_run_id "${CRM_E2E_FIXTURE_RUN_ID}"
 fi
+if [ -n "${CRM_AGENTS_DEMO_FULL_ACCESS:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_demo_full_access "${CRM_AGENTS_DEMO_FULL_ACCESS}"
+fi
 
 bench --site crm.localhost clear-cache
 bench --site crm.localhost migrate

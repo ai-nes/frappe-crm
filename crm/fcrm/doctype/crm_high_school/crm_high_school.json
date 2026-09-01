@@ -27,6 +27,7 @@
   "key_account_owner",
   "key_account_team",
   "section_contact",
+  "intelligence_revision",
   "address",
   "column_break_2",
   "phone",
@@ -161,6 +162,7 @@
    "fieldtype": "Section Break",
    "label": "Contact"
   },
+  {"fieldname": "intelligence_revision", "fieldtype": "Int", "hidden": 1, "read_only": 1, "default": "0"},
   {
    "fieldname": "address",
    "fieldtype": "Small Text",

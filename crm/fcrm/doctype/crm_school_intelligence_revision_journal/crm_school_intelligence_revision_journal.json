@@ -1,0 +1,15 @@
+{
+ "actions": [], "allow_rename": 0, "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["event_id", "high_school", "revision", "reason", "actor", "occurred_at", "idempotency_key"],
+ "fields": [
+  {"fieldname": "event_id", "fieldtype": "Data", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "high_school", "fieldtype": "Link", "options": "CRM High School", "read_only": 1, "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "read_only": 1, "reqd": 1},
+  {"fieldname": "reason", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "actor", "fieldtype": "Link", "options": "User", "read_only": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "read_only": 1, "reqd": 1, "unique": 1}
+ ],
+ "module": "FCRM", "name": "CRM School Intelligence Revision Journal", "naming_rule": "Autoincrement",
+ "permissions": [{"read": 1, "role": "System Manager"}], "sort_field": "creation", "sort_order": "DESC"
+}

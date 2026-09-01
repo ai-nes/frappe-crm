@@ -242,6 +242,21 @@ doc_events = {
 		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
 		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction"],
 	},
+	"CRM High School Annual Snapshot": {
+		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"on_update": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"after_delete": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+	},
+	"CRM School Stakeholder": {
+		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"on_update": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"after_delete": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+	},
+	"CRM School Activity": {
+		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"on_update": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+		"after_delete": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
+	},
 	"File": {
 		"before_insert": ["crm.fcrm.file_permissions.before_insert"],
 	},
@@ -345,6 +360,7 @@ scheduler_events = {
 		"crm.api.agent_events.retry_pending_agent_events",
 		"crm.api.agent_events.reconcile_student_context_v2",
 		"crm.api.agent_events.reconcile_score_input_v1",
+		"crm.api.agent_events.reconcile_intelligence_run_outbox",
 	],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",

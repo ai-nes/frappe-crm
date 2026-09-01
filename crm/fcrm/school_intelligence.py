@@ -48,9 +48,11 @@ def _scope_state() -> str:
 	return "complete" if roles & {"Administrator", "System Manager", "Admissions Director", "Lead Sales", "Marketing", "Sale"} else "partial"
 
 
-def _evidence(source: str, *, observed_at: Any = None, verification: str = "Verified") -> dict[str, Any]:
+def _evidence(source: str, *, source_type: str, observed_at: Any = None, verification: str = "Verified") -> dict[str, Any]:
 	return {
-		"source": stable_fingerprint("school-evidence", source)[:16],
+		# This is an opaque-to-the-model but resolvable provenance identifier.
+		# Frappe rechecks it at render time; hashes cannot be safely re-authorized.
+		"source": f"{source_type}:{source}",
 		"source_class": "official" if verification == "Verified" else "observation",
 		"observed_at": str(observed_at) if observed_at else None,
 		"verification": verification,
@@ -117,7 +119,7 @@ def calculate_school_potential(high_school: str, admission_year: str | None = No
 		"source_data_revision": source_revision,
 		"as_of": str(snapshot.get("snapshot_date") or snapshot.get("recorded_at") or ""),
 		"freshness": "as_of",
-		"evidence": [_evidence(snapshot.get("name"), observed_at=snapshot.get("snapshot_date"))],
+		"evidence": [_evidence(snapshot.get("name"), source_type="snapshot", observed_at=snapshot.get("snapshot_date"))],
 		"scope_state": _scope_state(),
 		"completeness": "caller_scope_only",
 		"inputs": {"ne_actual": actual, "adjusted_ne_threshold": threshold},
@@ -160,10 +162,40 @@ def derive_school_relationship(high_school: str) -> dict[str, Any]:
 		"source_data_revision": stable_fingerprint("school-relationship", *[(row.get("name"), row.get("relationship_revision"), row.get("relationship_status"), row.get("relationship_changed_at") or row.get("creation")) for row in rows]),
 		"as_of": str(rows[0].get("relationship_changed_at") or rows[0].get("creation") or ""),
 		"freshness": "live",
-		"evidence": [_evidence(row.get("name"), observed_at=row.get("relationship_changed_at") or row.get("creation"), verification="Observed") for row in rows],
+		"evidence": [_evidence(row.get("name"), source_type="stakeholder", observed_at=row.get("relationship_changed_at") or row.get("creation"), verification="Observed") for row in rows],
 		"relationship_revisions": [row.get("relationship_revision") for row in rows],
 		"scope_state": _scope_state(),
 		"completeness": "caller_scope_only",
+	}
+
+
+def recent_school_activity_outcomes(high_school: str, admission_year: str | None = None) -> dict[str, Any]:
+	"""Return bounded, resolvable activity/outcome evidence for School AI.
+
+	No notes, attendee identities, or free-text next actions cross this boundary.
+	Each outcome is tied to its owning activity so permission rechecks remain
+	possible after the result has been persisted.
+	"""
+	filters: dict[str, Any] = {"high_school": high_school}
+	if admission_year:
+		filters["admission_year"] = admission_year
+	rows = frappe.get_list(
+		"CRM School Activity", filters=filters,
+		fields=["name", "activity_date", "activity_type", "status", "outcome", "attendance", "prospect_count", "contact_count", "application_count"],
+		order_by="activity_date desc, modified desc", limit_page_length=20,
+	)
+	return {
+		"count": len(rows),
+		"records": [
+			{
+				"activity_date": str(row.get("activity_date") or ""), "activity_type": row.get("activity_type"),
+				"status": row.get("status"), "outcome": row.get("outcome"),
+				"attendance": row.get("attendance"), "prospect_count": row.get("prospect_count"),
+				"contact_count": row.get("contact_count"), "application_count": row.get("application_count"),
+				"provenance_ids": [f"activity:{row.name}", f"outcome:{row.name}"],
+			}
+			for row in rows
+		],
 	}
 
 
@@ -274,6 +306,8 @@ def get_school_intelligence(high_school: str, admission_year: str | None = None)
 		"potential": potential,
 		"relationship": relationship,
 		"segment": derive_school_segment(potential, relationship),
+		"activity_outcomes": recent_school_activity_outcomes(high_school, admission_year),
+		"provenance_ids": [f"school:{high_school}"],
 		"policy_version": POLICY_VERSION,
 		"calculation_revision": CALCULATION_REVISION,
 		"scope": {"high_school": "caller-scoped", "annual_snapshot": "caller-scoped", "stakeholder": "caller-scoped"},

@@ -13,13 +13,14 @@ from datetime import timedelta
 
 import frappe
 import requests
-from frappe.utils import get_datetime, now_datetime as frappe_now_datetime
+from frappe.utils import get_datetime
+from frappe.utils import now_datetime as frappe_now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 
-
 _EVENT_PATHS = {
+	"intelligence.run.requested": "/api/v1/insight/intelligence-run",
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.context_changed.v2": "/api/v1/insight/student-context-v2",
@@ -142,6 +143,45 @@ def record_agent_event(event_type: str, doc) -> str:
 		values["retention_until"] = _retention_until()
 	event = frappe.get_doc(values)
 	event.insert(ignore_permissions=True)
+	_enqueue_delivery(event)
+	return event.name
+
+
+def record_intelligence_run_event(run) -> str:
+	"""Publish an immutable identity-only signal for an already committed run.
+
+	The agent must fetch evidence by run/stage just-in-time; no CRM data is
+	placed in the outbox payload.
+	"""
+	delivery_key = f"intelligence-run:{run.doctype}:{run.name}"
+	existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name") if "delivery_key" in _event_fields() else None
+	if existing:
+		return existing
+	event = frappe.get_doc(
+		{
+			"doctype": "CRM Agent Event",
+			"event_id": str(uuid.uuid4()),
+			"event_type": "intelligence.run.requested",
+			"aggregate_doctype": run.doctype,
+			"aggregate_name": run.name,
+			"source_revision": str(run.source_revision),
+			"contract_version": 1,
+			"occurred_at": now_datetime(),
+			"status": "pending",
+			"next_attempt_at": now_datetime(),
+			"delivery_key": delivery_key,
+			"retention_until": _retention_until(),
+		}
+	)
+	try:
+		event.insert(ignore_permissions=True)
+	except Exception as exc:
+		if "duplicate" not in str(exc).casefold() and "unique" not in str(exc).casefold():
+			raise
+		existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name")
+		if not existing:
+			raise
+		return existing
 	_enqueue_delivery(event)
 	return event.name
 
@@ -366,6 +406,13 @@ def _event_body(event) -> bytes:
 				"rollout_epoch": int(event.rollout_epoch or 0),
 			}
 		)
+	elif event.event_type == "intelligence.run.requested":
+		# Canonical signal is deliberately identity-only.  The agent retrieves
+		# current stage identities/evidence through Frappe service commands.
+		# ``aggregate_name`` is the run identity.  Do not duplicate it as
+		# ``run_id``: crm-agents validates this signed envelope strictly and a
+		# second identity field invites drift between the producer and consumer.
+		pass
 	elif event.event_type == "student.score_input_changed.v1":
 		payload.update(
 			{
@@ -503,7 +550,7 @@ def requeue_quiesced_agent_events(event_names=None) -> dict:
 	if isinstance(event_names, str):
 		try:
 			event_names = frappe.parse_json(event_names)
-		except Exception as exc:
+		except Exception:
 			frappe.throw("event_names must be a JSON array.", frappe.ValidationError)
 	if event_names is not None and (
 		not isinstance(event_names, list)
@@ -697,6 +744,43 @@ def retry_pending_agent_events() -> None:
 		except Exception as exc:
 			frappe.db.rollback()
 			frappe.log_error(title="crm-agents outbox replay failed", message=f"event={name}: {exc}")
+
+
+def reconcile_intelligence_run_outbox(limit: int = 200) -> dict:
+	"""Recover queued work and expired stage leases after an outbox/worker gap.
+
+	A delivered webhook is a signal, not proof that a stage settled. Reopening
+	the same outbox record is safe: stage claim and settlement are fenced by a
+	generation and lease token, so delivery is intentionally at-least-once.
+	"""
+	if frappe.conf.get("crm_intelligence_runs_enabled", 0) in (0, "0", False):
+		return {"requeued": 0, "enabled": False}
+	from crm.fcrm.intelligence_runs import RUN_TYPES
+	now = now_datetime()
+	requeued = 0
+	for run_type in RUN_TYPES.values():
+		for run in frappe.get_all(run_type, filters={"status": ["in", ["queued", "running"]]}, fields=["name"], limit_page_length=min(int(limit), 500)):
+			stages = frappe.get_all(
+				"CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run.name, "status": ["in", ["queued", "running"]]},
+				fields=["status", "lease_expires_at"], limit_page_length=10,
+			)
+			if not any(stage.status == "queued" or not stage.lease_expires_at or stage.lease_expires_at <= now for stage in stages):
+				continue
+			key = f"intelligence-run:{run_type}:{run.name}"
+			event_name = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
+			if not event_name:
+				record_intelligence_run_event(frappe.get_doc(run_type, run.name))
+				requeued += 1
+				continue
+			frappe.db.sql(
+				"UPDATE `tabCRM Agent Event` SET status='pending', next_attempt_at=%s, lease_id=NULL, lease_expires_at=NULL "
+				"WHERE name=%s AND status IN ('delivered', 'dead_letter', 'processing')",
+				(now, event_name),
+			)
+			if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected:
+				_enqueue_delivery(frappe.get_doc("CRM Agent Event", event_name))
+				requeued += 1
+	return {"requeued": requeued, "enabled": True}
 
 
 def reconcile_student_context_v2(limit: int = 500) -> dict:
