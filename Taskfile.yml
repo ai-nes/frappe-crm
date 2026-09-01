@@ -83,7 +83,7 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed duy nhất bộ dữ liệu CRM đầy đủ và in coverage manifest
+    desc: Seed bộ dữ liệu CRM demo — 3.184 học sinh và toàn bộ trường canonical
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
@@ -95,8 +95,14 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
 
+  seed-school-domain-demo:
+    desc: Xóa business demo rồi import toàn bộ trường canonical
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.school_domain_import.seed_school_seed --kwargs \"{'dry_run': False, 'commit_policy': 'all'}\""
+
   seed-fresh:
-    desc: Reset site (reinstall) + migrate + seed đầy đủ — dùng khi muốn làm lại từ đầu
+    desc: Reset site (reinstall) + migrate + seed demo — dùng khi muốn làm lại từ đầu
     prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
     cmds:
       - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
@@ -115,12 +121,12 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
 
   seed-reset:
-    desc: Xoá business rows của bộ demo CRM curated (giữ lại audit/receipt/ledger)
+    desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
 
   seed-verify:
-    desc: Kiểm tra mọi state value trong coverage matrix đã có bản ghi
+    desc: Kiểm tra 3.184 học sinh, liên kết trường và coverage matrix
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
 

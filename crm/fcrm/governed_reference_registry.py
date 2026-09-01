@@ -31,6 +31,7 @@ GOVERNED_REFERENCE_REGISTRY = {
 			("CRM High School", "school_type"), ("CRM High School", "school_area"),
 			("CRM School Stakeholder", "stakeholder_role"),
 			("CRM School Activity", "activity_type"), ("CRM Major", "major_group"), ("CRM Province", "region"),
+			("CRM Admission Offering", "admission_method"), ("CRM Admission Application", "admission_method"),
 		),
 	},
 	"CRM Campus": {

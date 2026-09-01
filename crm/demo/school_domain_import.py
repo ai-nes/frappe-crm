@@ -37,6 +37,33 @@ TS_ACTIVITY_SHEET_MARKERS = ("lịch chương trình", "lịch công tác")
 TS_NON_SCHOOL_SHEET_MARKERS = ("báo cáo", "lịch sự kiện", "tổng hợp", "aggregate")
 ANNUAL_YEARS = (2022, 2023, 2024, 2025, 2026)
 
+# The canonical JSON remains the complete operational directory.  Showcase
+# data uses a small, deterministic slice so a local demo site stays usable.
+DEMO_SCHOOLS_PER_PROVINCE = 10
+DEMO_CANONICAL_PROVINCES = (
+	"Khánh Hoà",
+	"Đắk Lắk",
+	"Lâm Đồng",
+	"TP. Đồng Nai",
+	"Tp. Hồ Chí Minh",
+	"Tây Ninh",
+	"Đồng Tháp",
+)
+_DEMO_EXCLUDED_SCHOOL_MARKERS = ("khu vuc", "hoc o nuoc ngoai")
+_DEMO_PREFERRED_SCHOOL_MARKERS = ("thpt", "thcs", "pho thong")
+_SCHOOL_DOMAIN_CHILD_LINKS = (
+	("CRM High School Annual Snapshot", "high_school"),
+	("CRM School Activity", "high_school"),
+	("CRM School Stakeholder", "high_school"),
+	("CRM School Contact", "high_school"),
+	("CRM School Relationship", "high_school"),
+	("CRM Student Geography Snapshot", "high_school"),
+)
+_SCHOOL_DOMAIN_PROTECTED_LINKS = (
+	("CRM Student", "high_school"),
+	("CRM Contact", "high_school"),
+)
+
 
 def _normalize(value) -> str:
 	value = str(value or "").replace("Đ", "D").replace("đ", "d")
@@ -310,6 +337,64 @@ def _sanitized_row(record):
 		"confidence": record.get("confidence"),
 		"review_required": record.get("review_required", False),
 		"reasons": record.get("reasons", []),
+	}
+
+
+def _demo_school_sort_key(record):
+	name = _normalize(record.get("data", {}).get("school_name"))
+	excluded = any(marker in name for marker in _DEMO_EXCLUDED_SCHOOL_MARKERS)
+	preferred = any(marker in name for marker in _DEMO_PREFERRED_SCHOOL_MARKERS)
+	return (
+		1 if excluded else 0,
+		0 if preferred else 1,
+		_number(record.get("source_row")) or 0,
+		record.get("source_identity") or "",
+	)
+
+
+def select_demo_school_rows(rows, *, schools_per_province=DEMO_SCHOOLS_PER_PROVINCE):
+	"""Return a stable, representative school slice for the local showcase."""
+	if not isinstance(schools_per_province, int) or schools_per_province <= 0:
+		raise ValueError("schools_per_province must be a positive integer")
+
+	allowed_provinces = set(DEMO_CANONICAL_PROVINCES)
+	grouped = defaultdict(list)
+	for record in rows:
+		if record.get("match_status") != "ready":
+			continue
+		province = record.get("canonical_province")
+		if province in allowed_provinces:
+			grouped[province].append(record)
+
+	missing = [
+		province
+		for province in DEMO_CANONICAL_PROVINCES
+		if len(grouped[province]) < schools_per_province
+	]
+	if missing:
+		raise ValueError(
+			f"not enough ready schools for demo provinces: {', '.join(missing)}"
+		)
+
+	selected = []
+	for province in DEMO_CANONICAL_PROVINCES:
+		selected.extend(sorted(grouped[province], key=_demo_school_sort_key)[:schools_per_province])
+	return sorted(selected, key=lambda record: _number(record.get("source_row")) or 0)
+
+
+def _demo_school_seed_report(report, schools_per_province):
+	selected = select_demo_school_rows(report["rows"], schools_per_province=schools_per_province)
+	return {
+		**report,
+		"total_rows": len(selected),
+		"status_counts": dict(Counter(row["match_status"] for row in selected)),
+		"canonical_provinces": list(DEMO_CANONICAL_PROVINCES),
+		"rows": selected,
+		"review_rows": [_sanitized_row(row) for row in selected if row["match_status"] != "ready"],
+		"demo_selection": {
+			"schools_per_province": schools_per_province,
+			"total_schools": len(selected),
+		},
 	}
 
 
@@ -781,12 +866,25 @@ def _resolve_term(category, value):
 	return None
 
 
-def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True, commit_policy="partial"):
+def seed_school_seed(
+	path=DEFAULT_SCHOOL_SEED_PATH,
+	*,
+	dry_run=True,
+	commit_policy="partial",
+	max_schools_per_province=None,
+):
 	if commit_policy not in {"partial", "all"}:
 		frappe.throw("commit_policy must be 'partial' or 'all'.")
 	report = reconcile_school_seed(path)
+	if max_schools_per_province is not None:
+		report = _demo_school_seed_report(report, max_schools_per_province)
 	if dry_run:
-		return {"dry_run": True, "report": _public_reconciliation_report(report), "mutations": {}, "commit_policy": commit_policy}
+		return {
+			"dry_run": True,
+			"report": _public_reconciliation_report(report),
+			"mutations": {},
+			"commit_policy": commit_policy,
+		}
 	frappe.only_for("System Manager", True)
 	counts = Counter()
 	errors = []
@@ -848,6 +946,146 @@ def seed_school_seed(path=DEFAULT_SCHOOL_SEED_PATH, *, dry_run=True, commit_poli
 		return {"dry_run": False, "report": report, "mutations": {}, "errors": errors, "commit_policy": commit_policy}
 	frappe.db.commit()
 	return {"dry_run": False, "report": report, "mutations": dict(counts), "errors": errors, "commit_policy": commit_policy}
+
+
+def prune_school_seed(
+	path=DEFAULT_SCHOOL_SEED_PATH,
+	*,
+	schools_per_province=DEMO_SCHOOLS_PER_PROVINCE,
+	dry_run=True,
+):
+	"""Plan or apply removal of unselected canonical schools from the local demo.
+
+	Only schools represented by the canonical source are candidates. Provinces,
+wards, legacy schools, and schools outside that source remain untouched.
+	Student and Contact links are protected so a prune cannot orphan business data.
+	"""
+	frappe.only_for("System Manager", True)
+	if getattr(frappe.local, "site", None) != "crm.localhost" and not frappe.conf.get("allow_demo_seed"):
+		frappe.throw("School demo pruning is restricted to crm.localhost.", frappe.PermissionError)
+	full_report = reconcile_school_seed(path)
+	selected_report = _demo_school_seed_report(full_report, schools_per_province)
+	canonical_identities = {
+		row["source_identity"]
+		for row in full_report["rows"]
+		if row.get("match_status") == "ready"
+	}
+	selected_identities = {row["source_identity"] for row in selected_report["rows"]}
+
+	provinces = frappe.get_all(
+		"CRM Province",
+		fields=["name", "province_code"],
+		limit_page_length=0,
+	)
+	province_codes = {row.name: row.province_code for row in provinces}
+	wards = frappe.get_all(
+		"CRM Ward",
+		fields=["name", "province", "ward_code"],
+		limit_page_length=0,
+	)
+	ward_codes = {(row.name, row.province): row.ward_code for row in wards}
+	schools = frappe.get_all(
+		"CRM High School",
+		fields=["name", "province", "ward", "school_code"],
+		limit_page_length=0,
+	)
+	candidate_names = []
+	for school in schools:
+		identity = source_identity(
+			province_codes.get(school.province),
+			ward_codes.get((school.ward, school.province)),
+			school.school_code,
+		)
+		if identity in canonical_identities and identity not in selected_identities:
+			candidate_names.append(school.name)
+
+	def linked_names(doctype, field):
+		if not candidate_names or not frappe.db.table_exists(doctype):
+			return []
+		return frappe.get_all(
+			doctype,
+			filters={field: ["in", candidate_names]},
+			pluck="name",
+			limit_page_length=0,
+		)
+
+	protected = {
+		f"{doctype}.{field}": linked_names(doctype, field)
+		for doctype, field in _SCHOOL_DOMAIN_PROTECTED_LINKS
+	}
+	protected = {key: names for key, names in protected.items() if names}
+	child_counts = {
+		f"{doctype}.{field}": len(linked_names(doctype, field))
+		for doctype, field in _SCHOOL_DOMAIN_CHILD_LINKS
+	}
+	result = {
+		"dry_run": dry_run,
+		"source_ready_schools": len(canonical_identities),
+		"selected_schools": len(selected_report["rows"]),
+		"candidate_schools": len(candidate_names),
+		"protected_links": {
+			key: len(names)
+			for key, names in protected.items()
+		},
+		"child_records": child_counts,
+		"deleted": {},
+		"demo_selection": selected_report["demo_selection"],
+	}
+	if dry_run:
+		return result
+	if candidate_names:
+		prune_savepoint = "crm_school_seed_prune"
+		frappe.db.savepoint(prune_savepoint)
+		try:
+			placeholders = ", ".join(["%s"] * len(candidate_names))
+			frappe.db.sql(
+				f"select name from `tabCRM High School` where name in ({placeholders}) for update",
+				tuple(candidate_names),
+			)
+			# Re-check after locking the candidate parent rows. This keeps the
+			# protected-link check and deletion in one transaction for local runs.
+			protected = {
+				f"{doctype}.{field}": linked_names(doctype, field)
+				for doctype, field in _SCHOOL_DOMAIN_PROTECTED_LINKS
+			}
+			protected = {key: names for key, names in protected.items() if names}
+			if protected:
+				frappe.throw(
+					"Cannot prune canonical schools while CRM Student or CRM Contact links remain: "
+					+ ", ".join(f"{key}={len(names)}" for key, names in protected.items())
+				)
+
+			child_counts = {
+				f"{doctype}.{field}": len(linked_names(doctype, field))
+				for doctype, field in _SCHOOL_DOMAIN_CHILD_LINKS
+			}
+			result["child_records"] = child_counts
+			for doctype, field in _SCHOOL_DOMAIN_CHILD_LINKS:
+				if frappe.db.table_exists(doctype):
+					frappe.db.delete(doctype, {field: ["in", candidate_names]})
+
+			# A final guard prevents the parent delete if a protected link appeared
+			# while child rows were being removed; rollback preserves the prior state.
+			protected = {
+				f"{doctype}.{field}": linked_names(doctype, field)
+				for doctype, field in _SCHOOL_DOMAIN_PROTECTED_LINKS
+			}
+			protected = {key: names for key, names in protected.items() if names}
+			if protected:
+				frappe.throw(
+					"Cannot prune canonical schools while CRM Student or CRM Contact links remain: "
+					+ ", ".join(f"{key}={len(names)}" for key, names in protected.items())
+				)
+			frappe.db.delete("CRM High School", {"name": ["in", candidate_names]})
+		except Exception:
+			frappe.db.rollback(save_point=prune_savepoint)
+			raise
+	frappe.db.commit()
+	result["deleted"] = {
+		**child_counts,
+		"CRM High School.name": len(candidate_names),
+	}
+	return result
 
 
 def _import_snapshot(record, path):
