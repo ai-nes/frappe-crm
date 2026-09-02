@@ -12,7 +12,7 @@ class CRMPlanningScope(Document):
 	def _scope_values(self):
 		return {
 			fieldname: self.get(fieldname)
-			for fieldname in ("region", "territory", "team", "campus", "major", "scope_key")
+			for fieldname in ("region", "territory", "province", "team", "campus", "major", "scope_key")
 		}
 
 	def before_validate(self):

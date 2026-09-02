@@ -14,12 +14,13 @@ from typing import Any
 CANONICAL_SCHEMA_VERSION = "admissions-erd-v2"
 OFFERING_STATUSES = frozenset({"Draft", "Pending Approval", "Active", "Closed", "Retired"})
 FUNNEL_GRAINS = frozenset({"Case", "Application"})
-SCOPE_FIELDS = ("region", "territory", "team", "campus", "major")
+SCOPE_FIELDS = ("region", "territory", "province", "team", "campus", "major")
 ALLOWED_SCOPE_COMBINATIONS = frozenset(
 	{
 		(),
 		("region",),
 		("territory",),
+		("province",),
 		("team",),
 		("campus",),
 		("major",),
