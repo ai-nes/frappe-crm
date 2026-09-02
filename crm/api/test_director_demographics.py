@@ -44,6 +44,88 @@ class TestDirectorDemographics(FrappeTestCase):
 		self.assertEqual(response["meta"]["admissionYear"], 2026)
 		self.assertEqual(response["meta"]["minSampleSize"], 30)
 		self.assertEqual(response["data"]["segments"], [])
+		self.assertEqual(
+			set(response["data"]["acquisitionMap"]),
+			{
+				"attributionModel",
+				"platformLeadCost",
+				"leadTrendComparison",
+				"dailySpendLeads",
+				"touchpointPlatformMatrix",
+				"budgetByPlatformRole",
+				"formFunnel",
+				"formCompletion",
+				"formDropoffByField",
+				"captureModeComparison",
+				"leadQualityBySource",
+				"validLeadRateTrend",
+				"handoffDataCompleteness",
+				"identityMatchBreakdown",
+				"firstTouchBySource",
+				"lastTouchBySource",
+				"firstVsLastSource",
+				"attributionFlow",
+				"cohortEnrollmentMatrix",
+				"enrollmentLagHistogram",
+				"cumulativeConversion",
+				"firstContactLatency",
+				"submissionTiming",
+				"handoffSuccessBySource",
+				"costPerEnrolledBySource",
+			},
+		)
+		self.assertEqual(
+			response["data"]["acquisitionMap"]["enrollmentLagHistogram"], {"medianDays": None, "buckets": []}
+		)
+		self.assertEqual(response["meta"]["dataAvailability"]["acquisitionMap"], "unavailable")
+		self.assertEqual(
+			{
+				key: response["meta"][key]
+				for key in ("page", "pageSize", "total", "totalPages", "hasNextPage")
+			},
+			{"page": 1, "pageSize": 5, "total": 0, "totalPages": 1, "hasNextPage": False},
+		)
+
+	def test_pagination_slices_sorted_segments_after_counting_total(self):
+		segments = [{"id": f"segment-{index}"} for index in range(7)]
+
+		page, meta = director_demographics._paginate_segments(segments, page=2, page_size=3)
+
+		self.assertEqual([segment["id"] for segment in page], ["segment-3", "segment-4", "segment-5"])
+		self.assertEqual(meta, {"page": 2, "pageSize": 3, "total": 7, "totalPages": 3, "hasNextPage": True})
+
+	def test_overview_applies_pagination_to_sorted_segments(self):
+		segments = [{"id": f"segment-{index}"} for index in range(7)]
+		with (
+			patch.object(director_demographics, "_resolve_admission_year", return_value="2026"),
+			patch.object(director_demographics, "_load_students", return_value=[]),
+			patch.object(director_demographics, "_build_segments", return_value=segments),
+		):
+			response = director_demographics.get_director_demographics_overview(
+				admissionYear="2026", page="2", pageSize="3"
+			)
+
+		self.assertEqual(
+			[segment["id"] for segment in response["data"]["segments"]],
+			["segment-3", "segment-4", "segment-5"],
+		)
+		self.assertEqual(
+			{
+				key: response["meta"][key]
+				for key in ("page", "pageSize", "total", "totalPages", "hasNextPage")
+			},
+			{"page": 2, "pageSize": 3, "total": 7, "totalPages": 3, "hasNextPage": True},
+		)
+
+	def test_pagination_rejects_invalid_page_and_page_size(self):
+		with self.assertRaises(frappe.ValidationError):
+			director_demographics._normalize_pagination("0", "5")
+		with self.assertRaises(frappe.ValidationError):
+			director_demographics._normalize_pagination("1", "101")
+		with self.assertRaises(frappe.ValidationError):
+			director_demographics._normalize_pagination("9" * 5000, "5")
+		with self.assertRaises(frappe.ValidationError):
+			director_demographics._paginate_segments([], page=2, page_size=5)
 
 	def test_interest_bucket_uses_major_group_keywords(self):
 		bucket = director_demographics._interest_bucket("", "Kỹ thuật phần mềm", "")
