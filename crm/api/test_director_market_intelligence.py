@@ -10,6 +10,21 @@ from crm.api import director_market_intelligence as market
 
 
 class TestDirectorMarketIntelligence(FrappeTestCase):
+	def test_school_limit_defaults_to_five(self):
+		with (
+			patch.object(market, "require_director_access", return_value={}),
+			patch.object(market, "resolve_admission_year", return_value="2026"),
+			patch.object(
+				market,
+				"_load_sources",
+				return_value=({"provinces": [], "schools": [], "wards": [], "students": [], "snapshots": []}, set()),
+			),
+			patch.object(market, "_build_overview", return_value={}) as build_overview,
+		):
+			market.get_director_market_intelligence_overview(admissionYear="2026")
+
+		self.assertEqual(build_overview.call_args.kwargs["school_limit"], 5)
+
 	def test_empty_scope_is_truthful_and_keeps_zero_counts(self):
 		sources = {"provinces": [], "schools": [], "wards": [], "students": [], "snapshots": []}
 		with patch.object(market, "require_director_access", return_value={}), patch.object(
