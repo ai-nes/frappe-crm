@@ -10,9 +10,9 @@ from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.doctype.crm_student_assessment.crm_student_assessment import (
+	ASSESSMENT_SOURCES,
 	BARRIERS,
 	LEVELS,
-	ASSESSMENT_SOURCES,
 	parse_evidence,
 )
 from crm.services.student_context import mark_student_context_changed
@@ -69,12 +69,18 @@ def _validate_values(values: dict[str, Any]) -> dict[str, Any]:
 		"interest_confidence": float(values.get("interest_confidence") or 0),
 		"fit_confidence": float(values.get("fit_confidence") or 0),
 		"barrier_confidence": float(values.get("barrier_confidence") or 0),
+		"enrollment_probability": float(values.get("enrollment_probability") or 0),
 	}
 	if data["interest"] not in LEVELS or data["fit"] not in LEVELS:
 		frappe.throw(_("Interest and Fit must be High, Medium, Low, or Unknown."), frappe.ValidationError)
 	if data["primary_barrier"] not in BARRIERS:
 		frappe.throw(_("Primary Barrier is invalid."), frappe.ValidationError)
-	for key in ("interest_confidence", "fit_confidence", "barrier_confidence"):
+	for key in (
+		"interest_confidence",
+		"fit_confidence",
+		"barrier_confidence",
+		"enrollment_probability",
+	):
 		if not 0 <= data[key] <= 100:
 			frappe.throw(_("{0} must be between 0 and 100.").format(key), frappe.ValidationError)
 	return data
@@ -225,6 +231,7 @@ def serialize_assessment(doc) -> dict[str, Any]:
 		"fit_confidence": doc.fit_confidence,
 		"primary_barrier": doc.primary_barrier,
 		"barrier_confidence": doc.barrier_confidence,
+		"enrollment_probability": doc.enrollment_probability,
 		"reason": doc.reason,
 		"evidence_references": parse_evidence(doc.evidence_references),
 		"supersedes": doc.supersedes,

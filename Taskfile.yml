@@ -83,7 +83,7 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed bộ dữ liệu CRM demo — 3.184 học sinh và toàn bộ trường canonical
+    desc: Seed bộ dữ liệu CRM demo — học sinh, trường canonical và Next Best Action
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
@@ -94,6 +94,7 @@ tasks:
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.execute"
 
   seed-school-domain-demo:
     desc: Xóa business demo rồi import toàn bộ trường canonical
@@ -123,12 +124,14 @@ tasks:
   seed-reset:
     desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
     cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.reset"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
 
   seed-verify:
     desc: Kiểm tra 3.184 học sinh, liên kết trường và coverage matrix
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.verify"
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data

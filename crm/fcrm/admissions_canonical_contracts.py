@@ -14,12 +14,13 @@ from typing import Any
 CANONICAL_SCHEMA_VERSION = "admissions-erd-v2"
 OFFERING_STATUSES = frozenset({"Draft", "Pending Approval", "Active", "Closed", "Retired"})
 FUNNEL_GRAINS = frozenset({"Case", "Application"})
-SCOPE_FIELDS = ("region", "territory", "team", "campus", "major")
+SCOPE_FIELDS = ("region", "territory", "province", "team", "campus", "major")
 ALLOWED_SCOPE_COMBINATIONS = frozenset(
 	{
 		(),
 		("region",),
 		("territory",),
+		("province",),
 		("team",),
 		("campus",),
 		("major",),
@@ -120,12 +121,16 @@ def validate_fact_envelope(values: dict[str, Any]) -> dict[str, Any]:
 	for fieldname in (
 		"timezone",
 		"source_system",
-		"source_run",
 		"recorded_at",
 		"idempotency_fingerprint",
 		"normalized_dimension",
 	):
 		_required_text(values, fieldname)
+	# Older canonical facts use ``source_run`` while campaign facts expose the
+	# equivalent integration lineage as ``ingestion_run``.  Accept either name
+	# without weakening the required lineage contract.
+	if not str(values.get("source_run") or values.get("ingestion_run") or "").strip():
+		raise ValueError("source_run or ingestion_run is required")
 	start = _iso_date(values.get("period_start"), "period_start")
 	end = _iso_date(values.get("period_end"), "period_end")
 	if start > end:

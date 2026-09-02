@@ -6,11 +6,12 @@
  "creation": "2026-08-30 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["scope_key", "region", "territory", "team", "campus", "major", "effective_from", "effective_until", "status", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "field_order": ["scope_key", "region", "territory", "province", "team", "campus", "major", "effective_from", "effective_until", "status", "source_reference", "idempotency_fingerprint", "schema_version"],
  "fields": [
   {"fieldname": "scope_key", "fieldtype": "Data", "hidden": 1, "label": "Scope Key", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "label": "Region", "options": "CRM Term"},
   {"fieldname": "territory", "fieldtype": "Link", "in_list_view": 1, "label": "Territory", "options": "CRM Territory"},
+  {"fieldname": "province", "fieldtype": "Link", "in_list_view": 1, "label": "Province", "options": "CRM Province"},
   {"fieldname": "team", "fieldtype": "Link", "in_list_view": 1, "label": "Team", "options": "CRM Team"},
   {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "label": "Campus", "options": "CRM Campus"},
   {"fieldname": "major", "fieldtype": "Link", "in_list_view": 1, "label": "Major", "options": "CRM Major"},

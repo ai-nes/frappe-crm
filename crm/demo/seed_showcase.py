@@ -35,7 +35,9 @@ from crm.demo import (
 	school_domain_import,
 	seed_admission_funnel,
 	seed_bulk_realistic,
+	seed_director_campaign_intelligence,
 	seed_demo,
+	seed_director_regional_performance,
 	seed_role_accounts,
 	seed_school_field_activity,
 	seed_staff,
@@ -4095,10 +4097,12 @@ def _seed_all() -> dict:
 	student_errors.extend(bulk_errors)
 	school_field_activity = seed_school_field_activity.seed(context)
 	admission_funnel = seed_admission_funnel.seed(context)
+	regional_performance = seed_director_regional_performance.seed(context)
 	_seed_vocab_coverage(context)
 	contacts = _seed_contacts(context, staff_context)
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
+	campaign_intelligence = seed_director_campaign_intelligence.seed(context, marketing)
 	edge = _seed_edge_states(context, staff_context)
 	role_accounts = seed_role_accounts.execute()
 
@@ -4122,12 +4126,14 @@ def _seed_all() -> dict:
 		"students": students,
 		"student_errors": student_errors,
 		"admission_funnel": admission_funnel,
+		"regional_performance": regional_performance,
 		"bulk": bulk_metrics,
 		"contacts": contacts,
 		"school_domain": school,
 		"school_field_activity": school_field_activity,
 		"market_snapshots": market_snapshots,
 		"marketing": marketing,
+		"campaign_intelligence": campaign_intelligence,
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,
