@@ -36,6 +36,7 @@ from crm.demo import (
 	seed_admission_funnel,
 	seed_bulk_realistic,
 	seed_director_campaign_intelligence,
+	seed_director_revenue_forecast,
 	seed_demo,
 	seed_director_regional_performance,
 	seed_role_accounts,
@@ -4103,6 +4104,7 @@ def _seed_all() -> dict:
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
 	campaign_intelligence = seed_director_campaign_intelligence.seed(context, marketing)
+	revenue_forecast = seed_director_revenue_forecast.seed(context)
 	edge = _seed_edge_states(context, staff_context)
 	role_accounts = seed_role_accounts.execute()
 
@@ -4134,6 +4136,7 @@ def _seed_all() -> dict:
 		"market_snapshots": market_snapshots,
 		"marketing": marketing,
 		"campaign_intelligence": campaign_intelligence,
+		"revenue_forecast": revenue_forecast,
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,
