@@ -10,6 +10,43 @@ from crm.api import director_next_best_action as api
 class TestDirectorNextBestAction(FrappeTestCase):
 	AS_OF = datetime(2026, 8, 31, 10, 0, tzinfo=api.LOCAL_TIMEZONE)
 
+	def test_admissions_director_can_read_but_not_write_interactions(self):
+		user = "_test_director_nba_interaction@example.com"
+		previous_user = frappe.session.user
+
+		def delete_test_user():
+			active_user = frappe.session.user
+			frappe.set_user("Administrator")
+			try:
+				if frappe.db.exists("User", user):
+					frappe.delete_doc("User", user, force=True)
+			finally:
+				frappe.set_user(active_user)
+
+		delete_test_user()
+		self.addCleanup(delete_test_user)
+		frappe.set_user("Administrator")
+		frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": user,
+				"first_name": "_Test Director NBA Interaction",
+				"send_welcome_email": 0,
+				"roles": [{"role": "Admissions Director"}],
+			}
+		).insert(ignore_permissions=True)
+		frappe.clear_cache(user=user)
+
+		frappe.set_user(user)
+		try:
+			self.assertTrue(frappe.has_permission("CRM Interaction", "read"))
+			self.assertFalse(frappe.has_permission("CRM Interaction", "create"))
+			self.assertFalse(frappe.has_permission("CRM Interaction", "write"))
+			self.assertFalse(frappe.has_permission("CRM Interaction", "delete"))
+			frappe.get_list("CRM Interaction", fields=["name"], limit_page_length=1)
+		finally:
+			frappe.set_user(previous_user)
+
 	def test_queue_counts_use_all_visible_actions_and_exclude_stale_rows(self):
 		students = [
 			{"name": "STU-1", "student_name": "Mai Thi An", "high_school": "SCH-1", "major": "M-1"},
