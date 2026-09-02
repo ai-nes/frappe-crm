@@ -10,7 +10,13 @@ from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.student_decision_context import _score_projection
+from crm.api.student_decision_context import (
+	_days_to_deadline,
+	_intent_observation_count,
+	_interaction_recency,
+	_recent_actions,
+	_score_projection,
+)
 
 
 class TestScoreProjection(FrappeTestCase):
@@ -80,3 +86,82 @@ class TestScoreProjection(FrappeTestCase):
 		self.assertEqual(result["freshness"], "current")
 		self.assertEqual(result["policy_revision"], 0)
 		self.assertEqual(result["policy_hash"], "")
+
+
+class TestDecisionEvidenceSignals(FrappeTestCase):
+	"""Paired contract: the JSON shape these helpers feed into the projection is
+	asserted on the crm-agents side in
+	``tests/unit/test_student_task_v2_contracts.py``. Keep the two in lockstep."""
+
+	def test_interaction_recency_is_none_without_a_last_interaction(self):
+		self.assertIsNone(_interaction_recency({}))
+		self.assertIsNone(_interaction_recency({"interaction_datetime": None}))
+
+	def test_interaction_recency_is_whole_days_and_never_negative(self):
+		import frappe
+
+		past = frappe.utils.add_to_date(frappe.utils.now_datetime(), days=-6)
+		self.assertEqual(_interaction_recency({"interaction_datetime": past}), 6)
+		future = frappe.utils.add_to_date(frappe.utils.now_datetime(), days=3)
+		self.assertEqual(_interaction_recency({"interaction_datetime": future}), 0)
+
+	def test_intent_observation_count_is_zero_without_an_intent_type(self):
+		self.assertEqual(_intent_observation_count("STU-1", None), 0)
+
+	def test_intent_observation_count_reads_a_bounded_count(self):
+		with patch(
+			"crm.api.student_decision_context.frappe.db.count", return_value=4
+		) as counter:
+			self.assertEqual(_intent_observation_count("STU-1", "tuition"), 4)
+		counter.assert_called_once_with("CRM Intent", {"student": "STU-1", "intent_type": "tuition"})
+
+	def test_days_to_deadline_is_none_without_an_open_dated_application(self):
+		with patch(
+			"crm.api.student_decision_context.frappe.get_all", return_value=[]
+		):
+			self.assertIsNone(_days_to_deadline("STU-1"))
+
+	def test_days_to_deadline_counts_whole_days_to_the_nearest_deadline(self):
+		import frappe
+
+		soon = frappe.utils.add_to_date(frappe.utils.getdate(), days=2)
+		with patch(
+			"crm.api.student_decision_context.frappe.get_all",
+			return_value=[{"deadline": soon}],
+		):
+			self.assertEqual(_days_to_deadline("STU-1"), 2)
+
+	def test_recent_actions_projects_canonical_semantic_fields_only(self):
+		rows = [
+			{
+				"action_type": "CALL",
+				"state": "completed",
+				"execution_status": "done",
+				"disposition": "ACT",
+				"creation": "2026-08-28 09:00:00",
+			},
+			{
+				"action_type": "DOCUMENT_REQUEST",
+				"state": "pending",
+				"execution_status": None,
+				"disposition": None,
+				"creation": None,
+			},
+		]
+		with patch(
+			"crm.api.student_decision_context.frappe.get_all", return_value=rows
+		):
+			projected = _recent_actions("STU-1")
+
+		self.assertEqual(
+			projected[0],
+			{
+				"action_type": "CALL",
+				"state": "completed",
+				"execution_status": "done",
+				"disposition": "ACT",
+				"at": "2026-08-28 09:00:00",
+			},
+		)
+		self.assertIsNone(projected[1]["at"])
+		self.assertNotIn("objective", str(projected))

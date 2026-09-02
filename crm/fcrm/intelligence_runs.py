@@ -328,7 +328,7 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		for key in (
 			"student_id", "returned_revision", "snapshot_hash", "policy_version",
 			"eligibility", "lifecycle", "intent", "score", "interaction",
-			"sla_evidence", "allowed_action_types",
+			"sla_evidence", "allowed_action_types", "recent_actions",
 		)
 	}
 	decision_context["evidence_refs"] = [f"student:{student}"]

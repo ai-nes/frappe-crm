@@ -134,3 +134,50 @@ def upsert_next_best_action_from_analysis_run(
 		stage_kind="next_best_action", stage_generation=int(stage_generation), lease_token=lease_token,
 		expected_source_digest=expected_source_digest,
 	)
+
+
+@frappe.whitelist(methods=["POST"])
+def upsert_next_best_action_bundle_from_analysis_run(
+	run_id: str,
+	stage_generation: int,
+	lease_token: str,
+	expected_source_revision: str,
+	expected_source_digest: str,
+	generation_idempotency_key: str,
+	producer_identity: str,
+	payload_digest: str,
+	rollout_epoch: int,
+	candidates: list | str,
+	writer_epoch: int | None = None,
+	rationales: list | str | None = None,
+):
+	"""Write 1-3 priority-ranked Next Best Action rows for one analysis run.
+
+	Same stage-lease authority as the single-action writer; the bundle lands in
+	one request transaction with a per-rank idempotency key.
+	"""
+	authority = intelligence_runs.authorize_next_best_action_write(
+		run_id=run_id,
+		stage_generation=int(stage_generation),
+		lease_token=lease_token,
+		expected_source_revision=str(expected_source_revision),
+		expected_source_digest=expected_source_digest,
+	)
+	if isinstance(candidates, str):
+		candidates = frappe.parse_json(candidates)
+	if isinstance(rationales, str):
+		rationales = frappe.parse_json(rationales)
+	from crm.api.student_decision import _upsert_crm_action_bundle
+
+	return _upsert_crm_action_bundle(
+		student=authority["student"],
+		expected_context_revision=int(expected_source_revision),
+		base_idempotency_key=generation_idempotency_key,
+		base_stage_key=authority["stage_key"],
+		producer_identity=producer_identity,
+		payload_digest=payload_digest,
+		rollout_epoch=int(rollout_epoch),
+		writer_epoch=writer_epoch,
+		candidates=candidates,
+		rationales=rationales or None,
+	)
