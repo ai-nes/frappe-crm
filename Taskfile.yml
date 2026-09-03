@@ -83,7 +83,7 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed bộ dữ liệu CRM demo — học sinh, trường canonical và Next Best Action
+    desc: Seed bộ dữ liệu CRM golden — 5 học sinh, 2 trường THPT, đủ luồng nghiệp vụ + AI
     # The seed reads compact JSON extracted from the operational workbooks.
     # Run `task extract-school-json` after replacing either source workbook.
     cmds:
@@ -93,8 +93,7 @@ tasks:
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.execute"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.golden_seed"
 
   seed-school-domain-demo:
     desc: Xóa business demo rồi import toàn bộ trường canonical
@@ -109,7 +108,7 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
       - "{{.EXEC}} {{.BENCH}} migrate"
       - task: seed
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.verify"
 
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
@@ -124,14 +123,12 @@ tasks:
   seed-reset:
     desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.reset"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
 
   seed-verify:
-    desc: Kiểm tra 3.184 học sinh, liên kết trường và coverage matrix
+    desc: Kiểm tra 5 học sinh golden, 2 trường THPT và liên kết dữ liệu
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.verify"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_next_best_action.verify"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.verify"
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data

@@ -58,12 +58,12 @@ echo "==> ensure_demo_config"
 bench_exec execute crm.demo.seed_showcase.ensure_demo_config
 echo "==> ensure_local_integrity_keys"
 bench_exec execute crm.demo.seed_showcase.ensure_local_integrity_keys
-echo "==> seed_showcase.execute (this may take several minutes)"
-bench_exec execute crm.demo.seed_showcase.execute
+echo "==> seed_golden.golden_seed"
+bench_exec execute crm.demo.seed_golden.golden_seed
 
 if [ "$SKIP_VERIFY" -eq 0 ]; then
     echo "==> verify"
-    bench_exec execute crm.demo.seed_showcase.verify
+    bench_exec execute crm.demo.seed_golden.verify
 fi
 
 echo "==> done"

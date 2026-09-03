@@ -127,10 +127,10 @@ class TestCareQueue(FrappeTestCase):
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_v2_service"), patch(
+		with patch("crm.api.student_decision._require_action_writer"), patch(
 			"crm.api.student_decision.frappe.conf", conf
 		):
-			return decision_api._upsert_crm_action(
+			return decision_api.write_canonical_action(
 				student=self._student.name,
 				expected_context_revision=revision,
 				generation_idempotency_key=key,
@@ -207,21 +207,6 @@ class TestCareQueue(FrappeTestCase):
 		self._command_save(doc, action_type="APPLICATION_SUPPORT")
 		doc.reload()
 		self.assertEqual(doc.risk_tier, "high")
-
-	def test_generation_failure_routes_a_deferred_current_action_to_review(self):
-		base = self._context_base()
-		action = self._make_action()
-		self._command_save(action, state="deferred")
-		conf = frappe._dict(frappe.conf)
-		with patch("crm.api.student_decision._require_v2_service"), patch(
-			"crm.api.student_decision.frappe.conf", conf
-		):
-			result = decision_api._record_crm_action_generation_failure(
-				student=self._student.name, source_revision=base, reason="regeneration failed"
-			)
-		self.assertEqual(result["status"], "failed")
-		action.reload()
-		self.assertEqual(action.state, "requires-review")
 
 	# ---- claim ------------------------------------------------------
 

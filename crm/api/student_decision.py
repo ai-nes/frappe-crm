@@ -1,4 +1,4 @@
-"""Thin HTTP adapters for Phase 6 decision commands."""
+"""Decision command adapters and the canonical CRM Action storage primitive."""
 from __future__ import annotations
 
 import hashlib
@@ -32,7 +32,7 @@ from crm.fcrm.student_decision import (
 )
 
 
-def _require_v2_service():
+def _require_action_writer():
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	configured = frappe.conf.get("crm_agents_service_user")
@@ -69,8 +69,7 @@ def _task_result(task, *, idempotent=False):
 	}
 
 
-@frappe.whitelist()
-def _upsert_crm_action(
+def write_canonical_action(
 	student: str,
 	expected_context_revision: int,
 	generation_idempotency_key: str,
@@ -87,8 +86,8 @@ def _upsert_crm_action(
 	lease_token: str | None = None,
 	expected_source_digest: str | None = None,
 ) -> dict:
-	"""Only mutation endpoint for v2 generation; compare-and-swap + idempotency."""
-	_require_v2_service()
+	"""Canonical CRM Action storage writer; compare-and-swap plus idempotency."""
+	_require_action_writer()
 	if origin != "ai":
 		frappe.throw(_("AI generation must use origin=ai."), frappe.ValidationError)
 	if isinstance(candidate, str):
@@ -345,7 +344,7 @@ def _insert_bundle_action(*, student, contact, candidate, current_revision, rank
 	return frappe.get_doc(doc).insert(ignore_permissions=True)
 
 
-def _upsert_crm_action_bundle(
+def write_canonical_action_bundle(
 	*,
 	student: str,
 	expected_context_revision: int,
@@ -364,7 +363,7 @@ def _upsert_crm_action_bundle(
 	rank with a per-rank idempotency key. The whole bundle lands in the caller's
 	request transaction.
 	"""
-	_require_v2_service()
+	_require_action_writer()
 	if not isinstance(candidates, list) or not 1 <= len(candidates) <= 3:
 		frappe.throw(_("A Next Best Action bundle needs 1-3 candidates."), frappe.ValidationError)
 	canonical = json.dumps(candidates, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
@@ -466,66 +465,6 @@ def _upsert_crm_action_bundle(
 		)
 		inserted.append({"name": task.name, "plan_rank": rank})
 	return {"status": "completed", "idempotent": False, "actions": inserted}
-
-
-@frappe.whitelist()
-def _record_crm_action_generation_failure(
-	student: str, source_revision: int, reason: str, rollout_epoch: int = 0
-) -> dict:
-	"""Persist an explicit bounded failure for the convergence SLO."""
-	_require_v2_service()
-	row = frappe.db.sql(
-		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
-		(student,),
-		as_dict=True,
-	)
-	if not row or int(row[0].student_context_revision or 0) != int(source_revision):
-		return {"status": "deferred", "reason": "revision_moved"}
-	current = frappe.db.sql(
-		"SELECT name FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
-		(student,),
-		as_dict=True,
-	)
-	if current:
-		action = frappe.get_doc("CRM Action", current[0].name)
-		action.state = "requires-review"
-		action.terminal_reason = str(reason)[:500]
-		previous_flag = getattr(frappe.flags, "crm_action_command", False)
-		frappe.flags.crm_action_command = True
-		try:
-			action.save(ignore_permissions=True)
-		finally:
-			frappe.flags.crm_action_command = previous_flag
-		return {"status": "failed", "action": action.name}
-	task = frappe.get_doc(
-		{
-			"doctype": "CRM Action",
-			"student": student,
-			"current_slot": "CURRENT",
-			"source_context_revision": source_revision,
-			"disposition": "MONITOR",
-			"objective": "Generation failed; reconcile this Student context.",
-			"policy_context_version": "student-next-task-v2:generation-failure",
-			"state": "pending",
-			"generation_idempotency_key": f"failure:{student}:{source_revision}",
-			"producer_identity": "crm-agents:v2",
-			"payload_digest": "0" * 64,
-			"created_at": frappe.utils.now_datetime(),
-		}
-	).insert(ignore_permissions=True)
-	return {"status": "failed", "action": task.name}
-
-
-@frappe.whitelist()
-def upsert_crm_action(**kwargs):
-	"""Canonical idempotent CRM Action generation command."""
-	return _upsert_crm_action(**kwargs)
-
-
-@frappe.whitelist()
-def record_crm_action_generation_failure(**kwargs):
-	"""Canonical name for bounded CRM Action failure recording."""
-	return _record_crm_action_generation_failure(**kwargs)
 
 
 def _call(fn, **kwargs):

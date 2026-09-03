@@ -127,8 +127,11 @@ if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" 
     echo "Seeding curated demo dataset (first run; set CRM_SEED_DEMO=0 to skip)..."
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_demo_config || true
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_local_integrity_keys || true
-    if bench --site crm.localhost execute crm.demo.seed_showcase.execute; then
-        bench --site crm.localhost execute crm.demo.seed_next_best_action.execute || true
+    GOLDEN_KWARGS=""
+    if [ -n "${CRM_AGENTS_SERVICE_API_KEY:-}" ] && [ -n "${CRM_AGENTS_SERVICE_API_SECRET:-}" ]; then
+        GOLDEN_KWARGS="{\"service_api_key\": \"${CRM_AGENTS_SERVICE_API_KEY}\", \"service_api_secret\": \"${CRM_AGENTS_SERVICE_API_SECRET}\"}"
+    fi
+    if bench --site crm.localhost execute crm.demo.seed_golden.golden_seed ${GOLDEN_KWARGS:+--kwargs "${GOLDEN_KWARGS}"}; then
         touch "sites/crm.localhost/.demo-seeded"
         echo "Demo seed complete."
     else
