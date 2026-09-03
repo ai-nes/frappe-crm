@@ -35,18 +35,8 @@ def request_transition(**kwargs):
 
 
 @frappe.whitelist(methods=["POST"])
-def transition_student_lifecycle(**kwargs):
-	return request_transition(**kwargs)
-
-
-@frappe.whitelist(methods=["POST"])
-def reopen_student(student: str, reason: str, expected_revision=None, idempotency_key=None, correlation_id=None):
-	return _read(_reopen, student=student, reason=reason, expected_revision=expected_revision, idempotency_key=idempotency_key, correlation_id=correlation_id)
-
-
-@frappe.whitelist(methods=["POST"])
 def reopen(student: str, reason: str, expected_revision=None, idempotency_key=None, correlation_id=None):
-	return reopen_student(student=student, reason=reason, expected_revision=expected_revision, idempotency_key=idempotency_key, correlation_id=correlation_id)
+	return _read(_reopen, student=student, reason=reason, expected_revision=expected_revision, idempotency_key=idempotency_key, correlation_id=correlation_id)
 
 
 @frappe.whitelist()
