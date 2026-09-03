@@ -7,7 +7,7 @@ from crm.services.sales_action_dispatch import edit_action_package
 def _load_command_action(action, expected_action_revision, expected_package_revision):
 	if not action:
 		frappe.throw("action is required.", frappe.ValidationError)
-	doc = frappe.get_doc("CRM Action", action)
+	doc = frappe.get_doc("CRM Action Item", action)
 	if not doc.has_permission("read"):
 		frappe.throw("Action is outside the actor's scope.", frappe.PermissionError)
 	if doc.state in {"completed", "cancelled", "rejected", "superseded"}:

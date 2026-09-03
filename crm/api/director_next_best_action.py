@@ -93,6 +93,7 @@ _ACTION_FIELDS = [
 	"name",
 	"student",
 	"contact",
+	"action",
 	"action_type",
 	"objective",
 	"state",
@@ -140,7 +141,7 @@ def get_director_next_best_action(
 		if student_ids:
 			base_filters["student"] = ["in", student_ids]
 		all_rows = frappe.get_list(
-			"CRM Action",
+			"CRM Action Item",
 			filters=base_filters,
 			fields=_ACTION_FIELDS,
 			order_by="plan_rank asc, due_at asc, creation desc",
@@ -234,9 +235,9 @@ def apply_action_command(
 	expected_version = int(expectedVersion)
 	correlation_id = f"dnba:{key}"
 
-	if not frappe.db.exists("CRM Action", action_id):
+	if not frappe.db.exists("CRM Action Item", action_id):
 		raise_api_error("ACTION_NOT_FOUND", "Không tìm thấy hành động.", frappe.DoesNotExistError, 404)
-	doc = frappe.get_doc("CRM Action", action_id)
+	doc = frappe.get_doc("CRM Action Item", action_id)
 	if not doc.has_permission("read"):
 		raise_api_error("FORBIDDEN", "Hành động nằm ngoài phạm vi của bạn.", frappe.PermissionError, 403)
 	if int(doc.get("decision_revision") or 0) != expected_version:
@@ -271,7 +272,7 @@ def apply_action_command(
 		status = 409 if exc.code in {"STALE_REVISION", "INVALID_STATE"} else 400
 		raise_api_error(exc.code, str(exc), frappe.ValidationError, status)
 
-	fresh = frappe.get_doc("CRM Action", action_id)
+	fresh = frappe.get_doc("CRM Action Item", action_id)
 	now = frappe.utils.now_datetime()
 	return {
 		"actionId": action_id,
@@ -412,7 +413,7 @@ def _outcomes(student_ids: list[str], period: str, now) -> list[dict[str, Any]]:
 	days = {"7d": 7, "30d": 30, "90d": 90}[period]
 	since = now - timedelta(days=days)
 	rows = frappe.get_list(
-		"CRM Action",
+		"CRM Action Item",
 		filters={
 			"origin": "ai",
 			"student": ["in", student_ids],
@@ -517,6 +518,7 @@ def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, An
 	student_name = student.get("student_name") or row.get("student") or "—"
 	school = lookups["schools"].get(student.get("high_school")) or student.get("high_school") or "—"
 	interest = student.get("interest_level") or None
+	action_code = row.get("action") or ""
 	action_type = row.get("action_type") or ""
 	objective = row.get("objective") or ""
 	status = _status_of(row, now)
@@ -538,8 +540,8 @@ def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, An
 		"schoolId": None,
 		"school": school,
 		"interest": interest,
-		"recommendationCode": _slug(action_type).upper() if action_type else "ACTION",
-		"recommendation": objective or _action_label(action_type),
+		"recommendationCode": _slug(action_code).upper() if action_code else "ACTION",
+		"recommendation": objective or _action_label(action_code),
 		"summary": objective,
 		"dueAt": _as_iso(due) if due else None,
 		"dueLabel": _due_label(status),
@@ -557,6 +559,7 @@ def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, An
 		# A WAIT disposition writes zero CRM Action rows, so a queued row is
 		# always ``ACT``; the field is emitted for the dashboard card contract.
 		"actionType": action_type or None,
+		"actionCode": action_code or None,
 		"disposition": "ACT",
 		"packageSeed": _camelize_keys(safe_package) if safe_package else None,
 		"whyNow": rationale.get("why_now") or None,
@@ -566,7 +569,7 @@ def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, An
 			[str(item) for item in evidence_ref_ids] if isinstance(evidence_ref_ids, list) else []
 		),
 		"recentActivity": [],
-		"controlLevel": _CONTROL_LEVEL_BY_TYPE.get(action_type, "review"),
+		"controlLevel": _CONTROL_LEVEL_BY_TYPE.get(action_code, "review"),
 		"state": _STATE_MAP.get(row.get("state"), "proposed"),
 		"generatedAt": _as_iso(row.get("creation")) or "",
 		"expiresAt": None,

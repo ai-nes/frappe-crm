@@ -20,10 +20,10 @@ def create_or_replay_attempt(action_name, operation, idempotency_key, expected_a
 		frappe.throw("Unsupported execution operation.", frappe.ValidationError)
 	if not idempotency_key or len(idempotency_key) > 180:
 		frappe.throw("A valid idempotency key is required.", frappe.ValidationError)
-	action = frappe.get_doc("CRM Action", action_name)
+	action = frappe.get_doc("CRM Action Item", action_name)
 	if not action.has_permission("read"):
 		frappe.throw("Action is outside the actor's scope.", frappe.PermissionError)
-	if action.action_type == "HANDOFF" and operation == "DISPATCH":
+	if (action.get("action") or action.action_type) == "HANDOFF" and operation == "DISPATCH":
 		frappe.throw("HANDOFF cannot use the dispatch operation.", frappe.PermissionError)
 	if operation == "DISPATCH" and frappe.conf.get("crm_action_pii_controls_enabled", 0) not in (1, "1", True):
 		frappe.throw("Outbound execution is disabled until PII controls are enabled.", frappe.PermissionError, title="PII_CONTROLS_REQUIRED")
@@ -74,7 +74,7 @@ def authorize_attempt_for_send(attempt_id):
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
 	if attempt.status != "queued":
 		frappe.throw("Only queued attempts may be authorized for send.", frappe.ValidationError)
-	action = frappe.get_doc("CRM Action", attempt.action)
+	action = frappe.get_doc("CRM Action Item", attempt.action)
 	try:
 		validate_nba_action_execution(action, actor=attempt.actor, operation=attempt.operation)
 	except frappe.PermissionError:
@@ -103,7 +103,7 @@ def authorize_attempt_for_send(attempt_id):
 def process_queued_attempt(attempt_id, channel=None):
 	"""Worker entry point: authorize immediately, then call only a registered provider."""
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
-	action = frappe.get_doc("CRM Action", attempt.action)
+	action = frappe.get_doc("CRM Action Item", attempt.action)
 	channel = resolve_nba_channel(action, channel)
 	if channel not in {"EMAIL", "MESSAGE", "CALL"}:
 		frappe.throw("Unsupported provider channel.", frappe.ValidationError)
@@ -144,7 +144,7 @@ def transition_attempt(attempt_id, target_status, *, provider_event_id=None):
 	frappe.db.sql("select name from `tabCRM Action Execution Attempt` where name=%s for update", attempt_id)
 	attempt.reload()
 	if target_status == "queued":
-		action = frappe.get_doc("CRM Action", attempt.action)
+		action = frappe.get_doc("CRM Action Item", attempt.action)
 		validate_nba_action_execution(action, actor=attempt.actor, operation=attempt.operation)
 	if target_status not in TRANSITIONS.get(attempt.status, set()):
 		if attempt.status == target_status:

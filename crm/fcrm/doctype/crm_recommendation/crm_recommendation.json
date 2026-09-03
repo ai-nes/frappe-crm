@@ -238,13 +238,12 @@
   },
   {
    "fieldname": "recommended_action",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Recommended Action",
-   "options": "WAIT\nCALL\nEMAIL\nFOLLOW_UP\nEVENT_INVITE\nCOUNSELING\nHANDOFF",
    "read_only": 1,
-   "description": "Sourced from app/agents/decision/action_types.py's ACTION_TYPES — the single canonical vocabulary; blank on rows written before this field existed."
+   "description": "Canonical CRM Action Type code from CRM Action Type; WAIT and FOLLOW_UP remain supported recommendation-only legacy values."
   },
   {
    "fieldname": "recommended_timing",
@@ -313,8 +312,8 @@
   {
    "fieldname": "action",
    "fieldtype": "Link",
-   "label": "Action Definition",
-   "options": "CRM Action Definition",
+   "label": "Action",
+   "options": "CRM Action",
    "read_only": 1
   },
   {

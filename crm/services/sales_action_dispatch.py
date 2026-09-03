@@ -61,7 +61,8 @@ def validate_execution_package(action_type: str, package: dict) -> None:
 def render_initial_package(task) -> dict:
 	"""Render a Frappe-owned package from a bounded generation seed."""
 	seed = _json_object(task.package_seed)
-	if task.action_type == "CALL":
+	action_code = task.get("action") or task.action_type
+	if action_code == "CALL":
 		return {
 			"objective": task.objective,
 			"opening": seed.get("opening") or task.objective,
@@ -71,7 +72,7 @@ def render_initial_package(task) -> dict:
 			"desired_outcome": seed.get("desired_outcome") or task.objective,
 			"next_step": seed.get("next_step") or "Record the governed outcome in Frappe.",
 		}
-	if task.action_type == "EMAIL":
+	if action_code in {"EMAIL", "SEND_EMAIL"}:
 		return {
 			"template_version": seed.get("template_version") or "EmailPackageV1",
 			"recipient_ref": seed.get("recipient_ref") or "Frappe-resolved",
@@ -84,7 +85,8 @@ def render_initial_package(task) -> dict:
 
 def persist_initial_package(task) -> dict:
 	package = render_initial_package(task)
-	validate_execution_package(task.action_type, package)
+	action_code = task.get("action") or task.action_type
+	validate_execution_package("EMAIL" if action_code == "SEND_EMAIL" else action_code, package)
 	revision = int(task.execution_package_version or 0) + 1
 	frappe.get_doc(
 		{
@@ -92,9 +94,9 @@ def persist_initial_package(task) -> dict:
 			"action": task.name,
 			"revision": revision,
 			"package_type": "CallScriptV1"
-			if task.action_type == "CALL"
+			if action_code == "CALL"
 			else "EmailPackageV1"
-			if task.action_type == "EMAIL"
+			if action_code in {"EMAIL", "SEND_EMAIL"}
 			else "Generic",
 			"package": package,
 			"author": frappe.session.user,
@@ -119,12 +121,13 @@ def edit_action_package(
 	"""Atomically apply only server-declared wording changes to CALL/EMAIL."""
 	if not isinstance(changes, dict):
 		frappe.throw("Wording changes must be an object.", frappe.ValidationError)
-	task = frappe.get_doc("CRM Action", task_name)
+	task = frappe.get_doc("CRM Action Item", task_name)
 	if not task.has_permission("write"):
 		frappe.throw("Action is outside the actor's Student scope.", frappe.PermissionError)
-	frappe.db.sql("select name from `tabCRM Action` where name = %s for update", task.name)
+	frappe.db.sql("select name from `tabCRM Action Item` where name = %s for update", task.name)
 	task.reload()
-	if task.action_type not in EDITABLE_WORDING_FIELDS or task.state not in {"accepted", "in-progress"} or task.current_slot != "CURRENT":
+	action_code = task.get("action") or task.action_type
+	if (action_code not in EDITABLE_WORDING_FIELDS and action_code != "SEND_EMAIL") or task.state not in {"accepted", "in-progress"} or task.current_slot != "CURRENT":
 		frappe.throw("This Action is not editable in the current state.", frappe.ValidationError)
 	if int(task.action_revision or 1) != int(expected_action_revision) or int(task.execution_package_version or 0) != int(expected_package_revision):
 		frappe.throw("Action or package changed; refresh before editing.", frappe.ValidationError, title="STALE_REVISION")
@@ -142,8 +145,9 @@ def edit_action_package(
 		if rows:
 			current = _json_object(rows[0].package)
 	package = {**current, **changes}
-	validate_execution_package(task.action_type, package)
-	validate_action_command(task.action_type, student=task.student, inputs={"objective": task.objective, "package": package}, actor_roles=set(frappe.get_roles(frappe.session.user)))
+	policy_code = "EMAIL" if action_code == "SEND_EMAIL" else action_code
+	validate_execution_package(policy_code, package)
+	validate_action_command(policy_code, student=task.student, inputs={"objective": task.objective, "package": package}, actor_roles=set(frappe.get_roles(frappe.session.user)))
 	new_revision = int(expected_package_revision) + 1
 	frappe.get_doc(
 		{
@@ -163,12 +167,12 @@ def edit_action_package(
 	# edit may raise it but never lower it.
 	from crm.fcrm.student_decision import compute_risk_tier, max_risk_tier
 
-	new_tier = max_risk_tier(task.get("risk_tier"), compute_risk_tier(task.action_type, package))
+	new_tier = max_risk_tier(task.get("risk_tier"), compute_risk_tier(action_code, package))
 	previous_flag = getattr(frappe.flags, "crm_action_command", False)
 	frappe.flags.crm_action_command = True
 	try:
 		frappe.db.set_value(
-			"CRM Action",
+			"CRM Action Item",
 			task.name,
 			{
 				"package_seed": package,
@@ -189,15 +193,17 @@ def edit_email_package(task_name: str, expected_revision: int, package: dict, re
 
 def queue_dispatch(action: str, *, package_revision: int, channel: str, inputs: dict) -> dict:
 	"""Re-read Action/policy/authority and create one durable dispatch fence."""
-	action_row = frappe.get_doc("CRM Action", action)
+	action_row = frappe.get_doc("CRM Action Item", action)
 	if action_row.state not in {"accepted", "in-progress"} or action_row.requires_review:
 		frappe.throw("Action is not dispatchable until reviewed/resumed.", frappe.ValidationError)
-	if action_row.action_type == "HANDOFF":
+	action_code = action_row.get("action") or action_row.action_type
+	if action_code == "HANDOFF":
 		frappe.throw("HANDOFF has no dispatch path.", frappe.ValidationError)
 	package = _json_object(action_row.package_seed)
-	validate_execution_package(action_row.action_type, package)
+	policy_code = "EMAIL" if action_code == "SEND_EMAIL" else action_code
+	validate_execution_package(policy_code, package)
 	validate_action_command(
-		action_row.action_type,
+		policy_code,
 		student=action_row.student,
 		inputs={**inputs, "objective": action_row.objective, "package": package},
 		actor_roles=set(frappe.get_roles(frappe.session.user)),

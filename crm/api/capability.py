@@ -33,7 +33,7 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 		# core admissions and CRM aggregates
 		"CRM Student", "CRM Contact", "CRM Person", "CRM Interaction", "CRM Intent",
 		"CRM Admission Application", "CRM Admission Offering", "CRM Admission Year",
-		"CRM Recommendation", "CRM Action",
+		"CRM Recommendation", "CRM Action", "CRM Action Item",
 		"CRM Student Assessment", "CRM Student Outcome", "CRM Student Payment",
 		# admissions reference and organization
 		"CRM Campus", "CRM Department", "CRM Education Program", "CRM Major", "CRM Term",

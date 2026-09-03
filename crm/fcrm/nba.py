@@ -14,25 +14,19 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
+from crm.fcrm.action_type_catalog import (
+	ACTION_TYPE_CODES,
+	LEGACY_ACTION_TYPE_ALIASES,
+	LEGACY_RECOMMENDATION_ONLY,
+	canonicalize_action_type,
+)
+from crm.fcrm.action_type_registry import is_available_action_type
 from crm.fcrm.nba_timing import resolve_scheduled_at
 
-ACTION_TYPES = frozenset(
-	{
-		"CALL",
-		"EMAIL",
-		"MESSAGE",
-		"COUNSELING",
-		"MEETING",
-		"EVENT_INVITE",
-		"CAMPUS_VISIT",
-		"DOCUMENT_REQUEST",
-		"APPLICATION_SUPPORT",
-		"PARENT_CONTACT",
-		"HANDOFF",
-		"WAIT",
-		"FOLLOW_UP",
-	}
-)
+# ACTION_TYPES is the canonical 79-code catalog. Legacy values are kept
+# separate so callers can distinguish catalog rows from compatibility aliases.
+ACTION_TYPES = ACTION_TYPE_CODES
+LEGACY_ACTION_TYPES = LEGACY_ACTION_TYPE_ALIASES | LEGACY_RECOMMENDATION_ONLY
 DEFAULT_CHANNEL_BY_ACTION = {
 	"CALL": "CALL",
 	"EMAIL": "EMAIL",
@@ -45,7 +39,8 @@ SUPPORTED_CHANNELS = frozenset({"NONE", "CALL", "EMAIL", "MESSAGE"})
 FEEDBACK_SOURCES = frozenset({"human", "provider", "system", "analytics"})
 SCORE_MIN = -1.0
 SCORE_MAX = 1.0
-ACTION_DEFINITION_DOCTYPE = "CRM Action Definition"
+ACTION_DEFINITION_DOCTYPE = "CRM Action"
+ACTION_ITEM_DOCTYPE = "CRM Action Item"
 TIMING_POLICY_DOCTYPE = "CRM Timing Policy"
 ACTION_EXECUTION_DOCTYPE = "CRM Action Execution"
 ACTION_OUTCOME_DOCTYPE = "CRM Action Outcome"
@@ -94,8 +89,10 @@ def _bounded_number(value: Any, field: str, *, minimum: float = SCORE_MIN, maxim
 
 
 def get_nba_action_definition(action):
-	"""Return the Action Definition linked to an Action, when available."""
-	definition_name = action.get("nba_action") if action else None
+	"""Return the catalog Action linked to a work item or recommendation."""
+	definition_name = None
+	if action:
+		definition_name = action.get("action") or action.get("nba_action")
 	if not definition_name or not _doctype_exists(ACTION_DEFINITION_DOCTYPE):
 		return None
 	return frappe.get_doc(ACTION_DEFINITION_DOCTYPE, definition_name)
@@ -128,6 +125,15 @@ def validate_nba_action_execution(action, *, actor: str | None = None, operation
 		return None
 	if not definition.get("enabled"):
 		frappe.throw("This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED")
+	if action.get("origin") == "ai" and (
+		definition.get("execution_type") != "AI_ASSISTED"
+		or definition.get("ai_allowed") not in (1, "1", True)
+	):
+		frappe.throw(
+			"AI is not allowed to execute this Action.",
+			frappe.PermissionError,
+			title="ACTION_AI_NOT_ALLOWED",
+		)
 	actor = actor or frappe.session.user
 	actor_roles = set(frappe.get_roles(actor)) if actor and actor != "Administrator" else {"System Manager"}
 	if actor != "Administrator" and "System Manager" not in actor_roles:
@@ -197,25 +203,10 @@ def resolve_nba_schedule(action, scheduled_at: Any = None):
 
 
 def ensure_nba_action(action_type: str | None) -> str | None:
-	"""Return a catalog definition for an allowlisted Action type."""
-	if not action_type or action_type not in ACTION_TYPES or not _doctype_exists(ACTION_DEFINITION_DOCTYPE):
+	"""Return the canonical CRM Action catalog name for an allowlisted code."""
+	if not is_available_action_type(action_type):
 		return None
-	existing = frappe.db.get_value(ACTION_DEFINITION_DOCTYPE, {"code": action_type}, "name")
-	if existing:
-		return existing
-	return _service_insert(
-		{
-			"doctype": ACTION_DEFINITION_DOCTYPE,
-			"code": action_type,
-			"description": f"Canonical CRM action type: {action_type}.",
-			"purpose": f"Execute the {action_type.lower().replace('_', ' ')} action.",
-			"default_channel": DEFAULT_CHANNEL_BY_ACTION.get(action_type, "NONE"),
-			"allowed_actors": _json(ALLOWED_ACTORS),
-			"requires_approval": 1 if action_type in APPROVAL_ACTIONS else 0,
-			"auto_execute": 0,
-			"enabled": 1,
-		}
-	).name
+	return canonicalize_action_type(action_type)
 
 
 def ensure_nba_recommendation(
@@ -243,10 +234,11 @@ def ensure_nba_recommendation(
 	model_version: str | None = None,
 ):
 	"""Create-or-return the CRM Recommendation NBA projection."""
+	action_type = canonicalize_action_type(action_type)
 	if not _doctype_exists("CRM Recommendation"):
 		return None
 	action_name = ensure_nba_action(action_type)
-	definition = get_nba_action_definition({"nba_action": action_name}) if action_name else None
+	definition = get_nba_action_definition({"action": action_name}) if action_name else None
 	if confidence is not None:
 		confidence = _bounded_number(confidence, "confidence", minimum=0.0, maximum=1.0)
 	if expected_impact is not None:
@@ -363,7 +355,7 @@ def ensure_nba_execution_for_attempt(
 	"""Create the Action Execution projection for an AI-backed Action attempt."""
 	if not _doctype_exists(ACTION_EXECUTION_DOCTYPE):
 		return None
-	action = action or frappe.get_doc("CRM Action", attempt.action)
+	action = action or frappe.get_doc(ACTION_ITEM_DOCTYPE, attempt.action)
 	recommendation = action.get("recommendation")
 	if not recommendation:
 		return None

@@ -9,6 +9,7 @@ crm.patches.v1_0.rename_remaining_reference_doctypes_to_crm_prefix
 crm.patches.v1_0.rename_campaign_type_to_crm_campaign_type
 crm.patches.v1_0.rename_non_admission_doctypes_without_crm_prefix
 crm.patches.v1_0.simplify_school_domain_schema
+crm.patches.v1_0.rename_crm_action_to_action_item
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated
@@ -133,4 +134,6 @@ crm.patches.v1_0.crm_action_risk_tier
 crm.patches.v1_0.prepare_admission_event_decision
 crm.patches.v1_0.add_crm_action_plan_rank
 crm.patches.v1_0.prepare_nba_domain
+crm.patches.v1_0.seed_crm_action_type
+crm.patches.v1_0.repair_crm_action_catalog
 crm.patches.v1_0.rename_nba_doctypes_to_crm_domain

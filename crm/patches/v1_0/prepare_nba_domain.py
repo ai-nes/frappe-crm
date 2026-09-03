@@ -1,42 +1,39 @@
-"""Create NBA catalog definitions and backfill deterministic metadata."""
+"""Backfill the CRM recommendation and action-item projections."""
 
 import frappe
 
-from crm.fcrm.nba import (
-	ACTION_DEFINITION_DOCTYPE,
-	ACTION_TYPES,
-	ensure_nba_action,
-	ensure_nba_execution_for_attempt,
-)
+from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+from crm.fcrm.nba import ACTION_ITEM_DOCTYPE, ensure_nba_action, ensure_nba_execution_for_attempt
 
 
 def execute():
 	"""Make the explicit NBA contract available without changing old identity."""
-	if not frappe.db.exists("DocType", ACTION_DEFINITION_DOCTYPE):
+	if not frappe.db.exists("DocType", ACTION_ITEM_DOCTYPE):
 		return
 
-	for action_type in sorted(ACTION_TYPES):
-		ensure_nba_action(action_type)
-
-	_backfill_action_definitions()
+	_backfill_action_items()
 	_backfill_recommendation_metadata()
 	_backfill_execution_links()
 	if not frappe.flags.in_test:
 		frappe.db.commit()
 
 
-def _backfill_action_definitions():
-	if not frappe.db.exists("DocType", "CRM Action"):
+def _backfill_action_items():
+	if not frappe.db.exists("DocType", ACTION_ITEM_DOCTYPE):
 		return
 	for row in frappe.get_all(
-		"CRM Action",
-		filters={"nba_action": ["is", "not set"]},
-		fields=["name", "action_type"],
+		ACTION_ITEM_DOCTYPE,
+		fields=["name", "action", "action_type"],
 		limit_page_length=0,
 	):
-		action_name = ensure_nba_action(row.action_type)
+		action_name = ensure_nba_action(row.action or row.action_type)
 		if action_name:
-			frappe.db.set_value("CRM Action", row.name, "nba_action", action_name, update_modified=False)
+			frappe.db.set_value(
+				ACTION_ITEM_DOCTYPE,
+				row.name,
+				{"action": action_name, "action_type": action_category(action_name)},
+				update_modified=False,
+			)
 
 
 def _backfill_recommendation_metadata():
@@ -70,10 +67,11 @@ def _backfill_recommendation_metadata():
 			"decision_status": row.decision_status or _decision_status(row.status),
 			"execution_status": row.execution_status or "not_started",
 		}
-		if not row.action:
+		action_name = row.action if frappe.db.exists("CRM Action", row.action) else None
+		if not action_name:
 			action_name = ensure_nba_action(row.recommended_action)
-			if action_name:
-				values["action"] = action_name
+		if action_name:
+			values["action"] = action_name
 		frappe.db.set_value("CRM Recommendation", row.name, values, update_modified=False)
 
 
@@ -86,7 +84,7 @@ def _backfill_execution_links():
 		fields=["name", "action"],
 		limit_page_length=0,
 	):
-		action = frappe.get_doc("CRM Action", row.action)
+		action = frappe.get_doc(ACTION_ITEM_DOCTYPE, row.action)
 		if not action.get("recommendation"):
 			continue
 		attempt = frappe.get_doc("CRM Action Execution Attempt", row.name)

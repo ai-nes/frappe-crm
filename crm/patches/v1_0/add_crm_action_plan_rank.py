@@ -19,15 +19,15 @@ Rollback:
 
 import frappe
 
-_TABLE = "tabCRM Action"
+_TABLE = "tabCRM Action Item"
 _COLUMN = "plan_rank"
 
 
 def execute():
-	if not frappe.db.table_exists("CRM Action"):
+	if not frappe.db.table_exists("CRM Action Item"):
 		return
 
-	frappe.reload_doc("fcrm", "doctype", "crm_action")
+	frappe.reload_doc("fcrm", "doctype", "crm_action_item")
 
 	if not _column_exists():
 		frappe.db.sql_ddl(
