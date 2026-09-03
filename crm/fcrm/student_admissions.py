@@ -297,10 +297,12 @@ def _structured_note(student_doc, actor: str, data: dict[str, Any]):
 	if isinstance(content, dict):
 		content = "\n".join(f"<p><strong>{_text(key)}</strong>: {frappe.utils.escape_html(str(value))}</p>" for key, value in content.items())
 	content = _required(content, "content", max_length=10000)
+	title = data.get("title")
+	if title:
+		content = f"<p><strong>{frappe.utils.escape_html(str(title))}</strong></p>{content}"
 	note = frappe.get_doc(
 		{
 			"doctype": "FCRM Note",
-			"title": data.get("title") or _("Admissions insight"),
 			"content": content,
 			"reference_doctype": "CRM Student",
 			"reference_docname": student_doc.name,

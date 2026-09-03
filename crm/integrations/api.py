@@ -61,17 +61,17 @@ def set_default_calling_medium(medium: str):
 @frappe.whitelist()
 def add_note_to_call_log(call_sid: str, note: dict):
 	"""Add/Update note to call log based on call sid."""
+	content = note.get("content") or note.get("title")
 	_note = None
 	if not note.get("name"):
 		_note = frappe.get_doc(
 			{
 				"doctype": "FCRM Note",
-				"title": note.get("title", "Call Note"),
-				"content": note.get("content"),
+				"content": content or "Call Note",
 			}
 		).insert(ignore_permissions=True)
 	else:
-		_note = frappe.set_value("FCRM Note", note.get("name"), "content", note.get("content"))
+		_note = frappe.set_value("FCRM Note", note.get("name"), "content", content)
 
 	call_log = frappe.get_cached_doc("Call Log", call_sid)
 	call_log.link_with_reference_doc("FCRM Note", _note.name)
