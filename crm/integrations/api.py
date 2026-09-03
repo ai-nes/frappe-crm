@@ -16,6 +16,10 @@ def _get_recording_credentials(telephony_medium: str) -> tuple:
 	elif telephony_medium == "Exotel":
 		s = frappe.get_single("Exotel Settings")
 		return s.api_key, s.get_password("api_token")
+	elif telephony_medium == "Manual":
+		# Recording URL already carries its own auth in the query string
+		# (e.g. the Worldfone STT bridge's playback link) — no Basic Auth needed.
+		return None
 	frappe.throw(_("Unknown telephony medium: {0}").format(telephony_medium))
 
 
