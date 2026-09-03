@@ -152,3 +152,24 @@ def test_action_constraints_reject_conflicting_execution_configuration():
 		assert "approval" in str(exc)
 	else:
 		raise AssertionError("conflicting approval and auto-execute flags must be rejected")
+
+
+def test_action_constraints_accept_allowed_time_slots_subset():
+	defaults = defaults_for_action("CALL", "CONTACT")
+
+	validate_action_config(
+		"CALL", "CONTACT", **defaults, enabled=1, allowed_time_slots=["6-12", "12-18", "18-24"]
+	)
+
+
+def test_action_constraints_reject_unknown_time_slot():
+	defaults = defaults_for_action("CALL", "CONTACT")
+
+	try:
+		validate_action_config(
+			"CALL", "CONTACT", **defaults, enabled=1, allowed_time_slots=["0-6", "midnight"]
+		)
+	except ValueError as exc:
+		assert "allowed_time_slots" in str(exc)
+	else:
+		raise AssertionError("an unsupported time slot code must be rejected")

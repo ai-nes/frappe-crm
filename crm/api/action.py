@@ -2,6 +2,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.nba_timing import TIME_SLOTS
 
 FIELDS = [
 	"name",
@@ -12,6 +13,7 @@ FIELDS = [
 	"purpose",
 	"default_channel",
 	"allowed_actors",
+	"allowed_time_slots",
 	"requires_approval",
 	"auto_execute",
 	"execution_type",
@@ -33,6 +35,7 @@ WRITABLE_FIELDS = [
 	"purpose",
 	"default_channel",
 	"allowed_actors",
+	"allowed_time_slots",
 	"requires_approval",
 	"auto_execute",
 	"execution_type",
@@ -49,7 +52,18 @@ def _set_writable_fields(doc, values):
 
 
 @frappe.whitelist()
+def list_time_slots():
+	"""List the daily time-slot codes usable in CRM Action.allowed_time_slots."""
+	return {"time_slots": list(TIME_SLOTS)}
+
+
+@frappe.whitelist()
 def list_actions(action_type=None, enabled=None, search=None, start=0, page_length=20):
+	"""List CRM Action catalog rows.
+
+	Filter by action_type (Link -> CRM Action Type), enabled (0/1), or search
+	(matches code/display_name/purpose). Paginated with start/page_length.
+	"""
 	filters = {}
 	if action_type:
 		filters["action_type"] = action_type
@@ -80,6 +94,7 @@ def list_actions(action_type=None, enabled=None, search=None, start=0, page_leng
 
 @frappe.whitelist()
 def get_action(name):
+	"""Get one CRM Action by name (its "name" is the same as "code")."""
 	doc = frappe.get_doc("CRM Action", name)
 	doc.check_permission("read")
 	return doc.as_dict()
@@ -87,6 +102,9 @@ def get_action(name):
 
 @frappe.whitelist(methods=["POST"])
 def create_action(**values):
+	"""Create a CRM Action. code/action_type must be one of the canonical 79
+	action-catalog entries (crm.fcrm.action_type_catalog); System Manager only.
+	"""
 	doc = frappe.new_doc("CRM Action")
 	_set_writable_fields(doc, values)
 	doc.insert()
@@ -95,6 +113,7 @@ def create_action(**values):
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_action(name, **values):
+	"""Update a CRM Action. code is immutable once created; System Manager only."""
 	doc = frappe.get_doc("CRM Action", name)
 	doc.check_permission("write")
 	if "code" in values and values["code"] != doc.code:
@@ -107,6 +126,7 @@ def update_action(name, **values):
 
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_action(name):
+	"""Delete a CRM Action by name; System Manager only."""
 	doc = frappe.get_doc("CRM Action", name)
 	doc.check_permission("delete")
 	doc.delete()

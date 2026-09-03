@@ -99,6 +99,9 @@ def _get(doctype, name):
 
 @frappe.whitelist()
 def list_recommendations(student=None, status=None, decision_status=None, execution_status=None, start=0, page_length=20):
+	"""List CRM Recommendation rows (NBA advice). Filter by student, status,
+	decision_status, or execution_status; paginated, newest first.
+	"""
 	filters = {}
 	if student:
 		filters["student"] = student
@@ -116,11 +119,15 @@ def list_recommendations(student=None, status=None, decision_status=None, execut
 
 @frappe.whitelist()
 def get_recommendation(name):
+	"""Get one CRM Recommendation by name."""
 	return _get("CRM Recommendation", name)
 
 
 @frappe.whitelist()
 def list_recommendation_feedback(recommendation=None, student=None, start=0, page_length=20):
+	"""List CRM Recommendation Feedback rows (predicted-vs-actual learning
+	signal). Filter by recommendation or student; paginated, newest first.
+	"""
 	filters = {}
 	if recommendation:
 		filters["recommendation"] = recommendation
@@ -134,11 +141,15 @@ def list_recommendation_feedback(recommendation=None, student=None, start=0, pag
 
 @frappe.whitelist()
 def get_recommendation_feedback(name):
+	"""Get one CRM Recommendation Feedback row by name."""
 	return _get("CRM Recommendation Feedback", name)
 
 
 @frappe.whitelist()
 def list_action_executions(recommendation=None, action=None, student=None, status=None, start=0, page_length=20):
+	"""List CRM Action Execution rows (provider execution projection). Filter
+	by recommendation, action, student, or status; paginated, newest first.
+	"""
 	filters = {}
 	if recommendation:
 		filters["recommendation"] = recommendation
@@ -156,11 +167,16 @@ def list_action_executions(recommendation=None, action=None, student=None, statu
 
 @frappe.whitelist()
 def get_action_execution(name):
+	"""Get one CRM Action Execution by name."""
 	return _get("CRM Action Execution", name)
 
 
 @frappe.whitelist()
 def list_action_execution_attempts(action=None, nba_execution=None, status=None, start=0, page_length=20):
+	"""List CRM Action Execution Attempt rows (per-retry identity/state fence).
+	Filter by action, nba_execution, or status; paginated, newest first.
+	System Manager only.
+	"""
 	filters = {}
 	if action:
 		filters["action"] = action
@@ -176,11 +192,15 @@ def list_action_execution_attempts(action=None, nba_execution=None, status=None,
 
 @frappe.whitelist()
 def get_action_execution_attempt(name):
+	"""Get one CRM Action Execution Attempt by name. System Manager only."""
 	return _get("CRM Action Execution Attempt", name)
 
 
 @frappe.whitelist()
 def list_action_outcomes(execution=None, recommendation=None, action=None, student=None, start=0, page_length=20):
+	"""List CRM Action Outcome rows (captured outcome evidence). Filter by
+	execution, recommendation, action, or student; paginated, newest first.
+	"""
 	filters = {}
 	if execution:
 		filters["execution"] = execution
@@ -198,4 +218,5 @@ def list_action_outcomes(execution=None, recommendation=None, action=None, stude
 
 @frappe.whitelist()
 def get_action_outcome(name):
+	"""Get one CRM Action Outcome by name."""
 	return _get("CRM Action Outcome", name)

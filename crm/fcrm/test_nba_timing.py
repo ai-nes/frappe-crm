@@ -1,8 +1,8 @@
-from datetime import datetime
+from datetime import datetime, time
 
 import pytest
 
-from crm.fcrm.nba_timing import TIME_SLOTS, resolve_scheduled_at, slot_bounds
+from crm.fcrm.nba_timing import TIME_SLOTS, is_time_allowed, resolve_scheduled_at, slot_bounds, slot_for_time
 
 
 def test_time_slots_have_four_non_overlapping_daily_ranges():
@@ -137,3 +137,34 @@ def test_business_day_deadline_is_enforced():
 			datetime(2026, 9, 7, 10, 1),
 			now=datetime(2026, 9, 4, 10, 0),
 		)
+
+
+def test_slot_for_time_covers_all_24_hours():
+	assert slot_for_time(time(0, 0)) == "0-6"
+	assert slot_for_time(time(5, 59)) == "0-6"
+	assert slot_for_time(time(6, 0)) == "6-12"
+	assert slot_for_time(time(11, 59)) == "6-12"
+	assert slot_for_time(time(12, 0)) == "12-18"
+	assert slot_for_time(time(17, 59)) == "12-18"
+	assert slot_for_time(time(18, 0)) == "18-24"
+	assert slot_for_time(time(23, 59)) == "18-24"
+
+
+def test_is_time_allowed_without_configured_slots_permits_anything():
+	assert is_time_allowed(datetime(2026, 9, 4, 2, 0), None) is True
+	assert is_time_allowed(datetime(2026, 9, 4, 2, 0), []) is True
+	assert is_time_allowed(datetime(2026, 9, 4, 2, 0), "") is True
+
+
+def test_is_time_allowed_rejects_call_outside_configured_window():
+	call_allowed_slots = ["6-12", "12-18", "18-24"]
+
+	assert is_time_allowed(datetime(2026, 9, 4, 2, 0), call_allowed_slots) is False
+	assert is_time_allowed(datetime(2026, 9, 4, 9, 0), call_allowed_slots) is True
+	assert is_time_allowed("2026-09-04T20:00:00", call_allowed_slots) is True
+
+
+def test_is_time_allowed_accepts_json_string_and_rejects_unknown_slot():
+	assert is_time_allowed(datetime(2026, 9, 4, 9, 0), '["6-12"]') is True
+	with pytest.raises(ValueError, match="unsupported time slots"):
+		is_time_allowed(datetime(2026, 9, 4, 9, 0), ["6-12", "24-30"])

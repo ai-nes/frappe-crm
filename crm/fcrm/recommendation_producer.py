@@ -17,6 +17,7 @@ from crm.fcrm.action_type_catalog import (
 	canonicalize_action_type,
 )
 from crm.fcrm.action_type_registry import is_available_action_type
+from crm.fcrm.nba_timing import is_time_allowed
 
 ALLOWED_ACTIONS = SUPPORTED_RECOMMENDATION_ACTION_TYPES
 PRODUCER_FLAG = "phase6_recommendation_producer"
@@ -98,6 +99,16 @@ def produce_recommendation(
 	action_name = ensure_nba_action(canonical_action_type)
 	definition = get_nba_action_definition({"nba_action": action_name}) if action_name else None
 	now = frappe.utils.now_datetime()
+	if definition and definition.get("allowed_time_slots"):
+		try:
+			if not is_time_allowed(recommended_timing or now, definition.get("allowed_time_slots")):
+				frappe.throw(
+					_("{0} is outside its configured allowed time window.").format(recommended_action),
+					frappe.ValidationError,
+					title="ACTION_TIME_WINDOW",
+				)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Recommendation",

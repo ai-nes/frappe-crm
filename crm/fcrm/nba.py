@@ -21,7 +21,7 @@ from crm.fcrm.action_type_catalog import (
 	canonicalize_action_type,
 )
 from crm.fcrm.action_type_registry import is_available_action_type
-from crm.fcrm.nba_timing import resolve_scheduled_at
+from crm.fcrm.nba_timing import is_time_allowed, resolve_scheduled_at
 
 # ACTION_TYPES is the canonical 79-code catalog. Legacy values are kept
 # separate so callers can distinguish catalog rows from compatibility aliases.
@@ -245,6 +245,16 @@ def ensure_nba_recommendation(
 		expected_impact = _bounded_number(expected_impact, "expected_impact")
 	if timing_policy:
 		get_nba_timing_policy(timing_policy)
+	if definition and definition.get("allowed_time_slots"):
+		try:
+			if not is_time_allowed(due_at or now_datetime(), definition.get("allowed_time_slots")):
+				frappe.throw(
+					f"{action_type} is outside its configured allowed time window.",
+					frappe.ValidationError,
+					title="ACTION_TIME_WINDOW",
+				)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 	source_key = source_stage_key or generation_idempotency_key
 	condition_version = max(int(source_context_revision or 0), 1)
 	context_hash = payload_digest or _digest(

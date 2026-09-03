@@ -7,6 +7,7 @@ service layer.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -75,6 +76,36 @@ def slot_bounds(time_slot: str) -> tuple[time, time]:
 	start = time(hour=start_hour)
 	end = time(hour=end_hour)
 	return start, end
+
+
+def slot_for_time(clock: time) -> str:
+	"""Return which of the four daily TIME_SLOTS a clock time falls in."""
+	for slot in TIME_SLOTS:
+		start, end = slot_bounds(slot)
+		if _in_window(datetime.combine(date.min, clock), start, end, end_exclusive=True):
+			return slot
+	raise ValueError(f"Could not resolve a time_slot for {clock}.")
+
+
+def is_time_allowed(candidate: Any, allowed_slots: Any, *, field: str = "allowed_time_slots") -> bool:
+	"""Return whether a datetime/time falls within a set of allowed TIME_SLOTS.
+
+	An empty/falsy ``allowed_slots`` means no restriction is configured.
+	"""
+	if not allowed_slots:
+		return True
+	if isinstance(allowed_slots, str):
+		try:
+			allowed_slots = json.loads(allowed_slots) if allowed_slots else []
+		except (TypeError, ValueError) as exc:
+			raise ValueError(f"{field} must be a JSON array.") from exc
+	if not allowed_slots:
+		return True
+	invalid = set(allowed_slots) - set(TIME_SLOTS)
+	if invalid:
+		raise ValueError(f"{field} contains unsupported time slots: {sorted(invalid)}.")
+	clock = candidate if isinstance(candidate, time) else _datetime(candidate, "candidate").time()
+	return slot_for_time(clock) in set(allowed_slots)
 
 
 def _add_business_days(start: datetime, days: float) -> datetime:

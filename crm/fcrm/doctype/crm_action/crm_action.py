@@ -34,6 +34,7 @@ class CRMAction(Document):
 				self.enabled,
 				self.execution_type or "MANUAL",
 				self.ai_allowed,
+				self.allowed_time_slots,
 			)
 		except ValueError as exc:
 			frappe.throw(str(exc), frappe.ValidationError)
