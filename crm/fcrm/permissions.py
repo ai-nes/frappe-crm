@@ -51,6 +51,9 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Admission Application": "student",
 	"CRM Student Payment": "student",
 	"CRM Revenue Recognition": "student",
+	"CRM Action Execution": "student",
+	"CRM Action Outcome": "student",
+	"CRM Recommendation Feedback": "student",
 }
 
 

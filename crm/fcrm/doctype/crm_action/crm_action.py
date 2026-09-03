@@ -15,7 +15,7 @@ class CRMAction(Document):
 	}
 
 	_PROTECTED = frozenset({
-		"student", "state", "action_type", "objective", "disposition", "source_context_revision",
+		"student", "state", "action_type", "nba_action", "objective", "disposition", "source_context_revision",
 		"policy_context_version", "generation_idempotency_key", "producer_identity",
 		"payload_digest", "evidence_references", "action_revision", "current_slot",
 		"risk_tier", "package_seed",
@@ -32,6 +32,10 @@ class CRMAction(Document):
 			frappe.throw("ACT actions require an action type.", frappe.ValidationError)
 		if self.disposition != "ACT" and self.action_type:
 			frappe.throw("Non-ACT actions cannot carry an action type.", frappe.ValidationError)
+		if self.action_type and self.get("nba_action"):
+			definition_code = frappe.db.get_value("CRM Action Definition", self.nba_action, "code")
+			if definition_code and definition_code != self.action_type:
+				frappe.throw("Action Definition does not match action_type.", frappe.ValidationError)
 		# Only one non-terminal Action per student may hold the current slot; the
 		# database enforces `UNIQUE (student, current_slot)` and NULL never
 		# collides, so an empty slot must persist as NULL, not an empty string.

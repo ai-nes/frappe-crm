@@ -173,18 +173,46 @@ def write_canonical_action(
 				stale.state = "superseded"
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
+			from crm.fcrm.nba import sync_nba_recommendation_for_action
+			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
+	from crm.fcrm.nba import ensure_nba_recommendation
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
 
 	if action_type and action_type not in V2_ACTION_TYPES:
 		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
 	_validate_package_seed(candidate.get("package_seed"), action_type)
+	owner_staff = _default_action_owner(student)
+	nba_recommendation = ensure_nba_recommendation(
+		student=student,
+		action_type=action_type,
+		objective=str(candidate.get("objective") or "")[:500],
+		evidence=candidate.get("evidence_refs", []),
+		priority=str(candidate.get("priority") or "medium"),
+		due_at=candidate.get("due_at"),
+		expires_at=candidate.get("expires_at"),
+		generation_idempotency_key=generation_idempotency_key,
+		producer_identity=producer_identity,
+		payload_digest=payload_digest,
+		source_context_revision=current_revision,
+		source_stage_key=source_stage_key,
+		policy_version=candidate.get("policy_version"),
+		owner=owner_staff,
+		trigger=candidate.get("trigger") or source_stage_key,
+		timing_policy=candidate.get("timing_policy"),
+		confidence=candidate.get("confidence"),
+		expected_impact=candidate.get("expected_impact"),
+		model=candidate.get("model"),
+		model_version=candidate.get("model_version"),
+	)
 	task = frappe.get_doc(
 		{
 			"doctype": "CRM Action",
 			"student": student,
 			"contact": frappe.db.get_value("CRM Contact", {"student": student}, "name"),
+			"recommendation": nba_recommendation.name if nba_recommendation else None,
+			"nba_action": nba_recommendation.get("action") if nba_recommendation else None,
 			"origin": "ai",
 			"current_slot": "CURRENT",
 			"source_context_revision": current_revision,
@@ -304,7 +332,7 @@ def _validate_package_seed(seed: dict | None, action_type: str | None) -> None:
 		)
 
 
-def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, rationale=None):
+def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, recommendation=None, nba_action=None, rationale=None):
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
 
 	action_type = candidate.get("action_type")
@@ -317,6 +345,8 @@ def _insert_bundle_action(*, student, contact, candidate, current_revision, rank
 		"doctype": "CRM Action",
 		"student": student,
 		"contact": contact,
+		"recommendation": recommendation,
+		"nba_action": nba_action,
 		"origin": "ai",
 		"plan_rank": rank,
 		"source_context_revision": current_revision,
@@ -441,10 +471,37 @@ def write_canonical_action_bundle(
 				stale.state = "superseded"
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
+			from crm.fcrm.nba import sync_nba_recommendation_for_action
+			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
 
 	contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
+	from crm.fcrm.nba import ensure_nba_recommendation
+	nba_recommendations = {}
+	for rank, candidate in enumerate(candidates, start=1):
+		nba_recommendations[rank] = ensure_nba_recommendation(
+			student=student,
+			action_type=candidate.get("action_type"),
+			objective=str(candidate.get("objective") or "")[:500],
+			evidence=candidate.get("evidence_refs", []),
+			priority=str(candidate.get("priority") or _plan_rank_defaults(rank)["priority"]),
+			due_at=candidate.get("due_at"),
+			expires_at=candidate.get("expires_at"),
+			generation_idempotency_key=f"{base_idempotency_key}:r{rank}",
+			producer_identity=producer_identity,
+			payload_digest=payload_digest,
+			source_context_revision=current_revision,
+			source_stage_key=f"{base_stage_key}:r{rank}",
+			policy_version=candidate.get("policy_version"),
+			owner=_default_action_owner(student),
+			trigger=candidate.get("trigger") or base_stage_key,
+			timing_policy=candidate.get("timing_policy"),
+			confidence=candidate.get("confidence"),
+			expected_impact=candidate.get("expected_impact"),
+			model=candidate.get("model"),
+			model_version=candidate.get("model_version"),
+		)
 	rationale_by_type = {
 		r.get("action_type"): r for r in (rationales or []) if isinstance(r, dict) and r.get("action_type")
 	}
@@ -461,6 +518,8 @@ def write_canonical_action_bundle(
 			producer_identity=producer_identity,
 			payload_digest=payload_digest,
 			writer_epoch=writer_epoch,
+			recommendation=nba_recommendations[rank].name if nba_recommendations[rank] else None,
+			nba_action=nba_recommendations[rank].get("action") if nba_recommendations[rank] else None,
 			rationale=rationale_by_type.get(candidate.get("action_type")),
 		)
 		inserted.append({"name": task.name, "plan_rank": rank})

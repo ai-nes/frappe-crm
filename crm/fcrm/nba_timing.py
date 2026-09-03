@@ -1,0 +1,140 @@
+"""Pure scheduling helpers for CRM Timing Policy.
+
+The helpers deliberately do not import Frappe.  This keeps the timing contract
+testable in isolation and leaves persistence/permission concerns to the NBA
+service layer.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from datetime import date, datetime, time, timedelta
+from typing import Any
+
+_UNIT_TO_SECONDS = {
+	"minutes": 60,
+	"hours": 60 * 60,
+	"days": 24 * 60 * 60,
+}
+
+
+def _number(value: Any, field: str) -> float:
+	try:
+		result = float(value or 0)
+	except (TypeError, ValueError) as exc:
+		raise ValueError(f"{field} must be numeric.") from exc
+	if result < 0:
+		raise ValueError(f"{field} cannot be negative.")
+	return result
+
+
+def _duration(value: Any, unit: Any, field: str) -> timedelta:
+	unit_name = str(unit or "hours")
+	if unit_name not in _UNIT_TO_SECONDS:
+		raise ValueError(f"Unsupported {field} unit: {unit_name}.")
+	return timedelta(seconds=_number(value, field) * _UNIT_TO_SECONDS[unit_name])
+
+
+def _datetime(value: Any, field: str) -> datetime:
+	if isinstance(value, datetime):
+		return value.replace(tzinfo=None)
+	if isinstance(value, date):
+		return datetime.combine(value, time.min)
+	try:
+		return datetime.fromisoformat(str(value).replace("Z", "+00:00")).replace(tzinfo=None)
+	except (TypeError, ValueError) as exc:
+		raise ValueError(f"{field} must be a valid datetime.") from exc
+
+
+def _time(value: Any, field: str) -> time | None:
+	if value in (None, ""):
+		return None
+	if isinstance(value, time):
+		return value.replace(tzinfo=None)
+	try:
+		return time.fromisoformat(str(value).split(".", 1)[0])
+	except ValueError as exc:
+		raise ValueError(f"{field} must be a valid time.") from exc
+
+
+def _add_business_days(start: datetime, days: float) -> datetime:
+	whole_days = int(days)
+	if days != whole_days:
+		raise ValueError("business_days deadline_offset must be a whole number.")
+	result = start
+	while whole_days:
+		result += timedelta(days=1)
+		if result.weekday() < 5:
+			whole_days -= 1
+	return result
+
+
+def _window_bounds(policy: Mapping[str, Any]) -> tuple[time | None, time | None]:
+	start = _time(policy.get("allowed_start_time"), "allowed_start_time")
+	end = _time(policy.get("allowed_end_time"), "allowed_end_time")
+	if bool(start) != bool(end):
+		raise ValueError("allowed_start_time and allowed_end_time must be provided together.")
+	return start, end
+
+
+def _in_window(candidate: datetime, start: time, end: time) -> bool:
+	clock = candidate.time()
+	if start <= end:
+		return start <= clock <= end
+	return clock >= start or clock <= end
+
+
+def _next_window_start(candidate: datetime, start: time, end: time) -> datetime:
+	if _in_window(candidate, start, end):
+		return candidate
+	result_date = candidate.date()
+	if start <= end and candidate.time() > end:
+		result_date += timedelta(days=1)
+	elif start > end and candidate.time() > end and candidate.time() < start:
+		result_date = candidate.date()
+	return datetime.combine(result_date, start)
+
+
+def _deadline(anchor: datetime, policy: Mapping[str, Any]) -> datetime | None:
+	deadline_type = str(policy.get("deadline_type") or "none")
+	if deadline_type == "none":
+		return None
+	if deadline_type == "fixed_offset":
+		return anchor + _duration(policy.get("deadline_offset"), policy.get("delay_unit"), "deadline_offset")
+	if deadline_type == "business_days":
+		return _add_business_days(anchor, _number(policy.get("deadline_offset"), "deadline_offset"))
+	raise ValueError(f"Unsupported deadline_type: {deadline_type}.")
+
+
+def resolve_scheduled_at(
+	policy: Mapping[str, Any], requested_at: Any = None, *, now: Any = None
+) -> datetime:
+	"""Resolve and validate one execution time against a CRM Timing Policy.
+
+	An explicit time is never silently moved.  When no time is supplied, the
+	policy's delay and next allowed window are used to calculate one.
+"""
+	anchor = _datetime(now, "now") if now is not None else datetime.now().replace(microsecond=0)
+	trigger_type = str(policy.get("trigger_type") or "relative")
+	if trigger_type == "event" and not policy.get("trigger_event"):
+		raise ValueError("Event timing policies require trigger_event.")
+
+	delay = _duration(policy.get("delay_value"), policy.get("delay_unit"), "delay_value")
+	earliest = anchor + delay
+	explicit = requested_at is not None
+	candidate = _datetime(requested_at, "scheduled_at") if explicit else earliest
+	if candidate < earliest:
+		raise ValueError("scheduled_at violates the NBA timing delay.")
+
+	start, end = _window_bounds(policy)
+	if start and end and not _in_window(candidate, start, end):
+		if explicit:
+			raise ValueError("scheduled_at is outside the NBA allowed time window.")
+		candidate = _next_window_start(candidate, start, end)
+		if candidate < earliest:
+			candidate += timedelta(days=1)
+
+	deadline = _deadline(anchor, policy)
+	if deadline and candidate > deadline:
+		raise ValueError("scheduled_at exceeds the NBA timing deadline.")
+	return candidate

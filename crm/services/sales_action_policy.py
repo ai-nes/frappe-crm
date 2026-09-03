@@ -121,19 +121,33 @@ def allowed_generation_actions(student: str) -> list[str]:
 
 def allowed_operations(action, *, actor_roles: set[str]) -> list[dict]:
 	"""Derive card affordances from the current Frappe action, never its type alone."""
+	from crm.fcrm.nba import get_nba_action_definition, nba_action_allowed_actors
+
 	known = action.action_type in ACTION_POLICIES
 	state = action.state
 	admin = "System Manager" in actor_roles or frappe.session.user == "Administrator"
+	nba_definition = get_nba_action_definition(action)
+	nba_enabled = not nba_definition or bool(nba_definition.get("enabled"))
+	nba_actor_allowed = (
+		nba_definition is None
+		or admin
+		or bool(actor_roles.intersection(nba_action_allowed_actors(nba_definition)))
+	)
+	nba_auto_execute = bool(nba_definition and nba_definition.get("auto_execute"))
 	owner_or_manager = admin or bool(action.action_owner and frappe.db.get_value(
 		"CRM Staff", {"user": frappe.session.user}, "name") == action.action_owner)
 	package_revision = int(action.execution_package_version or 0)
 	action_revision = int(action.action_revision or 1)
 	result = []
 	for operation in ACTION_OPERATIONS:
-		allowed = known and bool(action.has_permission("read"))
+		allowed = known and bool(action.has_permission("read")) and nba_enabled and nba_actor_allowed
 		reason = "OK"
 		requires_approval = False
-		if not known:
+		if not nba_enabled:
+			allowed, reason = False, "NBA_ACTION_DISABLED"
+		elif not nba_actor_allowed:
+			allowed, reason = False, "NBA_ACTOR_NOT_ALLOWED"
+		elif not known:
 			allowed, reason = False, "UNKNOWN_ACTION_TYPE"
 		elif operation == "EDIT":
 			pii_ready = frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True)
@@ -142,7 +156,7 @@ def allowed_operations(action, *, actor_roles: set[str]) -> list[dict]:
 		elif operation == "DISPATCH":
 			pii_ready = frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True)
 			allowed = pii_ready and state in {"accepted", "in-progress"} and owner_or_manager and action.action_type != "HANDOFF"
-			requires_approval = action.risk_tier == "high"
+			requires_approval = bool(action.risk_tier == "high" or (nba_definition and nba_definition.get("requires_approval"))) and not nba_auto_execute
 			reason = "REQUIRES_APPROVAL" if allowed and requires_approval else "OK" if allowed else "DISPATCH_NOT_AVAILABLE"
 		elif operation == "SCHEDULE":
 			allowed = state in {"accepted", "in-progress"} and owner_or_manager
@@ -159,6 +173,7 @@ def allowed_operations(action, *, actor_roles: set[str]) -> list[dict]:
 		result.append({
 			"operation": operation, "state": "allowed" if allowed else "denied",
 			"reason_code": reason, "requires_approval": requires_approval,
+			"auto_execute": nba_auto_execute,
 			"expected_action_revision": action_revision,
 			"expected_package_revision": package_revision,
 		})

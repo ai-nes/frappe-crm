@@ -39,7 +39,24 @@
   "section_reason",
   "reason",
   "evidence",
-  "decision_reason"
+  "decision_reason",
+  "recommendation_id",
+  "target_type",
+  "target_id",
+  "action",
+  "purpose",
+  "channel",
+  "trigger",
+  "confidence",
+  "expected_impact",
+  "timing_policy",
+  "recommended_at",
+  "owner",
+  "lifecycle_status",
+  "decision_status",
+  "execution_status",
+  "model",
+  "model_version"
  ],
  "fields": [
   {
@@ -272,6 +289,120 @@
    "fieldtype": "Text",
    "label": "Decision Reason",
    "description": "Optional — why Sales rejected/deferred this recommendation."
+  },
+  {
+   "fieldname": "recommendation_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Recommendation ID",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "target_type",
+   "fieldtype": "Data",
+   "label": "Target Type",
+   "read_only": 1
+  },
+  {
+   "fieldname": "target_id",
+   "fieldtype": "Data",
+   "label": "Target ID",
+   "read_only": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Link",
+   "label": "Action Definition",
+   "options": "CRM Action Definition",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Small Text",
+   "label": "Purpose",
+   "read_only": 1
+  },
+  {
+   "fieldname": "channel",
+   "fieldtype": "Select",
+   "label": "Channel",
+   "options": "NONE\nCALL\nEMAIL\nMESSAGE",
+   "read_only": 1
+  },
+  {
+   "fieldname": "trigger",
+   "fieldtype": "Data",
+   "label": "Trigger",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Float",
+   "label": "Confidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "expected_impact",
+   "fieldtype": "Float",
+   "label": "Expected Impact",
+   "read_only": 1
+  },
+  {
+   "fieldname": "timing_policy",
+   "fieldtype": "Link",
+   "label": "Timing Policy",
+   "options": "CRM Timing Policy",
+   "read_only": 1
+  },
+  {
+   "fieldname": "recommended_at",
+   "fieldtype": "Datetime",
+   "label": "Recommended At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "owner",
+   "fieldtype": "Link",
+   "label": "Owner",
+   "options": "CRM Staff",
+   "read_only": 1
+  },
+  {
+   "fieldname": "lifecycle_status",
+   "fieldtype": "Select",
+   "label": "Lifecycle Status",
+   "options": "proposed\nactive\ncompleted\ncancelled\nexpired\nsuperseded",
+   "default": "proposed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "decision_status",
+   "fieldtype": "Select",
+   "label": "Decision Status",
+   "options": "pending\naccepted\nrejected\ndeferred",
+   "default": "pending",
+   "read_only": 1
+  },
+  {
+   "fieldname": "execution_status",
+   "fieldtype": "Select",
+   "label": "Execution Status",
+   "options": "not_started\nscheduled\nin_progress\ncompleted\nfailed\ncancelled",
+   "default": "not_started",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model",
+   "fieldtype": "Data",
+   "label": "Model",
+   "read_only": 1
+  },
+  {
+   "fieldname": "model_version",
+   "fieldtype": "Data",
+   "label": "Model Version",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

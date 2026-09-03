@@ -130,3 +130,5 @@ crm.patches.v1_0.analysis_stage_result_digest
 crm.patches.v1_0.crm_action_risk_tier
 crm.patches.v1_0.prepare_admission_event_decision
 crm.patches.v1_0.add_crm_action_plan_rank
+crm.patches.v1_0.prepare_nba_domain
+crm.patches.v1_0.rename_nba_doctypes_to_crm_domain

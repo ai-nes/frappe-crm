@@ -324,9 +324,12 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 			action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
 			if not action:
 				canonical_type = doc.recommended_action if doc.recommended_action in {"CALL", "EMAIL", "MESSAGE", "COUNSELING", "MEETING", "EVENT_INVITE", "CAMPUS_VISIT", "DOCUMENT_REQUEST", "APPLICATION_SUPPORT", "PARENT_CONTACT", "HANDOFF"} else None
+				from crm.fcrm.nba import ensure_nba_action, sync_nba_recommendation_for_action
 				canonical = frappe.get_doc({"doctype": CANONICAL_ACTION, "recommendation": doc.name, "student": doc.student, "contact": frappe.db.get_value("CRM Contact", {"student": doc.student}, "name"), "current_slot": _free_current_slot(doc.student), "origin": "ai" if doc.get("producer_id") else "system", "action_type": canonical_type, "objective": doc.get("rationale") or doc.get("recommended_action") or "Follow up on the recommendation.", "disposition": "ACT" if canonical_type else "MONITOR", "state": "accepted", "source_context_revision": 0, "policy_context_version": POLICY_VERSION, "generation_idempotency_key": key, "producer_identity": "frappe:recommendation", "payload_digest": _fingerprint(payload), "due_at": due_at, "action_owner": assignee_staff, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1})
+				canonical.nba_action = ensure_nba_action(canonical_type)
 				canonical.origin = "ai" if doc.get("producer_id") else "system"
 				canonical.flags.crm_action_command = True; canonical.insert(ignore_permissions=True); action = canonical.name
+				sync_nba_recommendation_for_action(canonical)
 		event = _event(f"recommendation.{status}", doc.student, doc.name, action, actor, scope, receipt, correlation_id, doc.decision_revision, {"status": status, "from_state": previous_status, "reason": decision_reason, "revisit_at": str(revisit_at) if revisit_at else None})
 		_outbox("recommendation.decided.v1", event)
 		result = {"status": status, "recommendation": doc.name, "action": action, "revision": doc.decision_revision, "event": event.name, "receipt": receipt.name}; _finish(receipt, result); return result
@@ -369,6 +372,8 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 			doc.due_at = due_at; doc.action_owner = assignee_staff; doc.accepted_at = now_datetime()
 		doc.decision_revision = int(doc.get("decision_revision") or 0) + 1; doc.decision_actor = actor; doc.decision_at = now_datetime()
 		doc.save(ignore_permissions=True)
+		from crm.fcrm.nba import sync_nba_recommendation_for_action
+		sync_nba_recommendation_for_action(doc)
 		action = doc.name if status == "accepted" else None
 		# V2-native decisions are audited only via CRM Student Decision Event.
 		# They must never be delivered through the legacy recommendation-decision
@@ -531,6 +536,8 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 		action.decision_actor = actor
 		action.decision_at = now_datetime()
 		action.save(ignore_permissions=True)
+		from crm.fcrm.nba import sync_nba_recommendation_for_action
+		sync_nba_recommendation_for_action(action)
 		event = _event(
 			"action.reassigned", student, action.get("recommendation"), action.name, actor, scope,
 			receipt, correlation_id, action.decision_revision,
@@ -578,7 +585,7 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 		frappe.flags.crm_action_command = previous_flag
 
 
-def _transition_canonical_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None):
+def _transition_canonical_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None, impact_score: float | None = None):
 	"""Transition the single CRM Action aggregate and record its outcome."""
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); correlation_id = correlation_id or frappe.generate_hash(length=20)
 	if status not in {"in_progress", "completed", "failed", "cancelled"}:
@@ -598,7 +605,7 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 		if not attempt or attempt.action != name or attempt.status != "confirmed":
 			_fail("ATTEMPT_NOT_CONFIRMED", "The execution attempt is not confirmed for this Action.")
 	if status in {"failed", "cancelled"}: _required(reason, "reason")
-	payload = {"name": name, "expected_revision": expected_revision, "status": status, "outcome_code": outcome_code, "evidence": evidence, "reason": reason, "linked_interaction": linked_interaction}
+	payload = {"name": name, "expected_revision": expected_revision, "status": status, "outcome_code": outcome_code, "evidence": evidence, "reason": reason, "linked_interaction": linked_interaction, "impact_score": impact_score}
 	fingerprint = _fingerprint(payload); command_key = _command_key("canonical_action", actor, key)
 	if replay := _replay(command_key, fingerprint): return replay
 	_lock(CANONICAL_ACTION, name)
@@ -613,6 +620,17 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 			action.completed_at = now_datetime(); action.outcome_code = outcome_code; action.outcome_evidence = str(evidence)[:2000]; action.outcome_notes = evidence if isinstance(evidence, str) else None; action.linked_interaction = linked_interaction
 		if status in {"failed", "cancelled"}: action.terminal_reason = reason
 		action.save(ignore_permissions=True)
+		from crm.fcrm.nba import record_nba_outcome_for_action, sync_nba_recommendation_for_action
+		sync_nba_recommendation_for_action(action)
+		nba_outcome = record_nba_outcome_for_action(
+			action,
+			status=status,
+			outcome_code=outcome_code,
+			attempt_id=attempt_id,
+			notes=reason or (str(evidence)[:2000] if evidence else None),
+			actor=actor,
+			impact_score=impact_score,
+		) if status in {"completed", "failed", "cancelled"} else None
 		progress = "UNKNOWN"
 		context_revision = None
 		if status in {"completed", "failed", "cancelled"}:
@@ -629,21 +647,21 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 			admit_action_outcome(student=action.student, revision=context_revision, source_event=change["change"], source_reference=action.name)
 		event = _event(f"action.{status}", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": status, "from_state": previous, "outcome_code": outcome_code, "progress": progress, "context_revision": context_revision, "reason": reason})
 		_outbox("action.outcome_recorded.v1", action)
-		result = {"status": status, "action": action.name, "student": action.student, "revision": action.action_revision, "event": event.name, "receipt": receipt.name}
+		result = {"status": status, "action": action.name, "student": action.student, "revision": action.action_revision, "event": event.name, "receipt": receipt.name, "nba_outcome": nba_outcome.name if nba_outcome else None}
 		_finish(receipt, result); return result
 	finally:
 		frappe.flags.crm_action_command = previous_flag
 
 
-def transition_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None, _internal_service: bool = False):
+def transition_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None, _internal_service: bool = False, impact_score: float | None = None):
 	if _internal_service:
 		previous_user = frappe.session.user
 		frappe.session.user = "Administrator"
 		try:
-			return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id)
+			return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id, impact_score)
 		finally:
 			frappe.session.user = previous_user
-	return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id)
+	return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id, impact_score)
 
 
 def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idempotency_key: str, reason: str, correlation_id: str | None = None, _internal_service: bool = False):
@@ -679,6 +697,8 @@ def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idem
 		action.action_owner = assignee_staff
 		action.action_revision = int(action.get("action_revision") or 1) + 1
 		action.save(ignore_permissions=True)
+		from crm.fcrm.nba import sync_nba_recommendation_for_action
+		sync_nba_recommendation_for_action(action)
 		event = _event("action.reassigned", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": action.get("execution_status") or action.state, "previous_assignee": previous_assignee, "assignee_staff": assignee_staff, "reason": reason})
 		result = {"status": "reassigned", "action": action.name, "assignee_staff": assignee_staff, "revision": action.action_revision, "event": event.name, "receipt": receipt.name}
 		_finish(receipt, result); return result
@@ -706,7 +726,11 @@ def release_action(name: str, expected_revision: Any, idempotency_key: str, reas
 		_fail("STALE_REVISION", "Action changed; reload before retrying.")
 	receipt = _new_receipt("action_release", actor, action.student, key, fingerprint, _scope(actor), correlation_id)
 	frappe.db.sql("update `tabCRM Action Execution Attempt` set status='cancelled' where action=%s and status in ('pending','queued')", (action.name,))
-	action.action_owner = None; action.action_revision = int(action.get("action_revision") or 1) + 1; action.save(ignore_permissions=True)
+	action.action_owner = None
+	action.action_revision = int(action.get("action_revision") or 1) + 1
+	action.save(ignore_permissions=True)
+	from crm.fcrm.nba import sync_nba_recommendation_for_action
+	sync_nba_recommendation_for_action(action)
 	event = _event("action.released", action.student, action.get("recommendation"), action.name, actor, _scope(actor), receipt, correlation_id, action.action_revision, {"reason": reason})
 	result = {"status": "released", "action": action.name, "revision": action.action_revision, "event": event.name, "receipt": receipt.name}
 	_finish(receipt, result)
