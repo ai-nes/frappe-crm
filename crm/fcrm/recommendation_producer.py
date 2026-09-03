@@ -27,17 +27,74 @@ def _service_identity() -> str:
 	return str(identity)
 
 
-def produce_recommendation(*, student: str, rule_key: str, source_intent_id: str, recommended_action: str, priority: str = "medium", reason: str, evidence: Any = None, recommended_timing: Any = None, condition_version: int = 1, policy_version: str = "phase6-v1", producer_revision: int = 1):
+def produce_recommendation(
+	*,
+	student: str,
+	rule_key: str,
+	source_intent_id: str,
+	recommended_action: str,
+	priority: str = "medium",
+	reason: str,
+	evidence: Any = None,
+	recommended_timing: Any = None,
+	expires_at: Any = None,
+	cta: str | None = None,
+	talking_points: Any = None,
+	condition_version: int = 1,
+	policy_version: str = "phase6-v1",
+	producer_revision: int = 1,
+):
 	"""Create-or-return a deterministic, server-authenticated recommendation."""
 	if recommended_action not in ALLOWED_ACTIONS:
 		frappe.throw(_("Unsupported recommendation action."), frappe.ValidationError)
 	producer_id = _service_identity()
-	payload = {"student": student, "rule_key": rule_key, "source_intent_id": source_intent_id, "recommended_action": recommended_action, "condition_version": int(condition_version), "policy_version": policy_version, "producer_revision": int(producer_revision)}
+	serialized_talking_points = (
+		json.dumps(talking_points, ensure_ascii=False)
+		if isinstance(talking_points, (list, dict))
+		else talking_points
+	)
+	serialized_evidence = (
+		json.dumps(evidence, ensure_ascii=False) if isinstance(evidence, (list, dict)) else evidence
+	)
+	payload = {
+		"student": student,
+		"rule_key": rule_key,
+		"source_intent_id": source_intent_id,
+		"recommended_action": recommended_action,
+		"condition_version": int(condition_version),
+		"policy_version": policy_version,
+		"producer_revision": int(producer_revision),
+		"expires_at": expires_at,
+		"cta": cta,
+		"talking_points": serialized_talking_points,
+	}
 	context_hash = _fingerprint(payload)
 	existing = frappe.db.get_value("CRM Recommendation", {"student": student, "rule_key": rule_key, "source_intent_id": source_intent_id, "condition_version": int(condition_version), "context_hash": context_hash}, "name")
 	if existing:
 		return frappe.get_doc("CRM Recommendation", existing)
-	doc = frappe.get_doc({"doctype": "CRM Recommendation", **payload, "context_hash": context_hash, "producer_id": producer_id, "priority": priority, "status": "new", "created_at": frappe.utils.now_datetime(), "recommended_timing": recommended_timing, "reason": reason, "evidence": evidence})
+	doc = frappe.get_doc(
+		{
+			"doctype": "CRM Recommendation",
+			"student": student,
+			"rule_key": rule_key,
+			"source_intent_id": source_intent_id,
+			"recommended_action": recommended_action,
+			"condition_version": int(condition_version),
+			"policy_version": policy_version,
+			"producer_revision": int(producer_revision),
+			"expires_at": expires_at,
+			"cta": cta,
+			"talking_points": serialized_talking_points,
+			"context_hash": context_hash,
+			"producer_id": producer_id,
+			"priority": priority,
+			"status": "new",
+			"created_at": frappe.utils.now_datetime(),
+			"recommended_timing": recommended_timing,
+			"reason": reason,
+			"evidence": serialized_evidence,
+		}
+	)
 	doc.flags.from_phase6_command = True
 	doc.insert(ignore_permissions=True)
 	return doc

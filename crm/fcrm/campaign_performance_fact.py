@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from hashlib import sha256
 from typing import Any
 
 import frappe
@@ -121,9 +122,12 @@ def record_performance_fact(
 			frappe.throw(
 				_("Correction must supersede the immediately preceding fact grain."), frappe.ValidationError
 			)
+	fact_grain = "|".join(
+		(campaign, channel_assignment, str(period_start), str(period_end), dimension_key, str(int(revision)))
+	)
 	values = {
 		"doctype": "CRM Campaign Performance Fact",
-		"fact_key": "|".join((campaign, channel_assignment, str(period_start), str(period_end), dimension_key, str(revision))),
+		"fact_key": f"CPF-{sha256(fact_grain.encode()).hexdigest()}",
 		"campaign": campaign,
 		"channel_assignment": channel_assignment,
 		"normalized_dimension": dimension_key,

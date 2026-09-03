@@ -358,9 +358,9 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 			limit_page_length=limit, order_by=order_by, ignore_permissions=True)
 
 	score_history = _rows("CRM Score History", [
-		"scoring_date", "scoring_time", "final_score", "score_change", "fit_score",
+		"scoring_time", "scoring_date", "final_score", "score_change", "fit_score",
 		"engagement_score", "intent_score",
-	], 12, "scoring_date desc, creation desc")
+	], 12, "scoring_time desc, creation desc")
 	# Legacy score rows may only have scoring_time.  The agent evidence contract
 	# requires a bounded temporal reference, so normalize at the producer edge.
 	for item in score_history:
@@ -406,7 +406,17 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 			"intent_polarity": (decision.get("intent") or {}).get("polarity"),
 			"latest_interaction_outcome": (decision.get("interaction") or {}).get("outcome"),
 			"sla_state": row.get("sla_evidence_state") or (decision.get("sla_evidence") or {}).get("state"),
-			"score_history": score_history,
+			"score_history": [
+				{
+					"scoring_date": item.get("scoring_date") or item.get("scoring_time"),
+					"final_score": item.get("final_score"),
+					"score_change": item.get("score_change"),
+					"fit_score": item.get("fit_score"),
+					"engagement_score": item.get("engagement_score"),
+					"intent_score": item.get("intent_score"),
+				}
+				for item in score_history
+			],
 			"interaction_history": [
 				{"interaction_date": item.get("interaction_datetime"), "channel": item.get("channel"),
 				 "direction": item.get("direction"), "outcome": item.get("outcome"),

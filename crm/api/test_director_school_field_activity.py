@@ -15,6 +15,26 @@ class TestDirectorSchoolFieldActivity(FrappeTestCase):
 		self.assertEqual(activity._parse_admission_year(" 2026 "), "2026")
 		self.assertEqual(activity._parse_period("6m"), "6m")
 		self.assertEqual(activity._parse_limit("200", field="activityLimit", minimum=1, maximum=200, default=50), 200)
+		self.assertEqual(
+			activity._parse_limit(
+				None,
+				field="activityLimit",
+				minimum=1,
+				maximum=200,
+				default=activity.ACTIVITY_LIMIT_DEFAULT,
+			),
+			5,
+		)
+		self.assertEqual(
+			activity._parse_limit(
+				None,
+				field="upcomingLimit",
+				minimum=1,
+				maximum=50,
+				default=activity.UPCOMING_LIMIT_DEFAULT,
+			),
+			5,
+		)
 		self.assertEqual(activity._parse_boolean("false", default=True), False)
 
 		for value in ("1999", "2101", "26", "202.6"):
@@ -92,6 +112,18 @@ class TestDirectorSchoolFieldActivity(FrappeTestCase):
 		self.assertIsNone(item["qualified"])
 		self.assertIsNone(item["enrolled"])
 		self.assertEqual(item["dataQuality"], "partial")
+
+	def test_completed_activity_selection_uses_only_proven_cost_per_enrollment(self):
+		activities = [
+			{"id": "ACT-1", "costPerEnrollment": {"amount": None, "unit": "million_vnd"}},
+			{"id": "ACT-2", "costPerEnrollment": {"amount": 3, "unit": "million_vnd"}},
+			{"id": "ACT-3", "costPerEnrollment": {"amount": 0, "unit": "million_vnd"}},
+			{"id": "ACT-4", "costPerEnrollment": {"amount": 5, "unit": "million_vnd"}},
+		]
+
+		selected = activity._select_completed_activities_for_cost_chart(activities, limit=2)
+
+		self.assertEqual([item["id"] for item in selected], ["ACT-2", "ACT-3"])
 
 	def test_upcoming_activity_exposes_seeded_forecast_fields(self):
 		item = activity._build_upcoming_activity(

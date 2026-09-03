@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import frappe
 
+from crm.api.director_school_common import resolve_school_id
 from crm.fcrm import intelligence_runs
 
 
@@ -15,6 +16,12 @@ def request_student_analysis_run(student: str, idempotency_key: str | None = Non
 
 @frappe.whitelist(methods=["POST"])
 def request_school_analysis_run(high_school: str, idempotency_key: str | None = None, force_reason: str | None = None, admission_year: int | None = None):
+	# The Director dashboard sends the canonical external school id (for
+	# example, ``01-001-062``), while Intelligence Runs store the Frappe
+	# ``CRM High School`` document name. Accept both forms at this boundary so
+	# the analysis request uses the same identity contract as school detail.
+	if high_school and not frappe.db.exists("CRM High School", high_school):
+		high_school = resolve_school_id(high_school)["name"]
 	return intelligence_runs.request_run(
 		domain="school", target=high_school, idempotency_key=idempotency_key or frappe.get_request_header("Idempotency-Key"), force_reason=force_reason, admission_year=admission_year
 	)

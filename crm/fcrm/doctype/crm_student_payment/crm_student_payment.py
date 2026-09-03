@@ -60,16 +60,12 @@ class CRMStudentPayment(Document):
 		if not self.idempotency_fingerprint:
 			frappe.throw(_("Idempotency Fingerprint is required."), frappe.ValidationError)
 		application = frappe.db.get_value(
-			"CRM Admission Application", self.application, ["student", "currency"], as_dict=True
+			"CRM Admission Application", self.application, ["student"], as_dict=True
 		)
 		if application:
 			if application.student != self.student:
 				frappe.throw(
 					_("Payment Student must match the Admission Application."), frappe.ValidationError
-				)
-			if application.currency and application.currency != self.currency:
-				frappe.throw(
-					_("Payment currency must match the Admission Application."), frappe.ValidationError
 				)
 		if not self.is_new():
 			previous = self.get_doc_before_save()

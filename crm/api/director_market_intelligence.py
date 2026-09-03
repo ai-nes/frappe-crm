@@ -328,7 +328,7 @@ def get_director_market_intelligence_overview(
 	region="all",
 	metric="opportunity",
 	includeSchools=True,
-	schoolLimit=6,
+	schoolLimit=5,
 ):
 	require_director_access()
 	admission_year = resolve_admission_year(admissionYear)
@@ -336,7 +336,7 @@ def get_director_market_intelligence_overview(
 	region = parse_enum(region, field="region", allowed=REGIONS, default="all")
 	metric = parse_enum(metric, field="metric", allowed=METRICS, default="opportunity")
 	include_schools = parse_boolean(includeSchools, field="includeSchools", default=True)
-	school_limit = parse_limit(schoolLimit, field="schoolLimit", minimum=1, maximum=20, default=6)
+	school_limit = parse_limit(schoolLimit, field="schoolLimit", minimum=1, maximum=20, default=5)
 	try:
 		sources, failed = _load_sources(admission_year)
 	except MarketPrimarySourceUnavailable:

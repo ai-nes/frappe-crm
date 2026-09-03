@@ -291,6 +291,9 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 	if replay := _replay(command_key, fingerprint): return replay
 	doc = frappe.get_doc(RECOMMENDATION, name); scope = _can_decide(actor, doc)
 	_lock("CRM Student", doc.student)
+	expires_at = frappe.utils.get_datetime(doc.get("expires_at")) if doc.get("expires_at") else None
+	if expires_at and expires_at <= now_datetime():
+		_fail("ACTION_EXPIRED", "This recommendation has expired and must be regenerated.")
 	if expected_modified and str(doc.modified) != str(expected_modified): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
 	if str(doc.get("decision_revision") or 0) != str(expected_revision): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
 	if doc.status in {"accepted", "rejected", "expired", "superseded", "dismissed", "modified"}: _fail("INVALID_STATE", "This recommendation can no longer be decided.")

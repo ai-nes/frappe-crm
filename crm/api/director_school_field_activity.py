@@ -24,8 +24,8 @@ from crm.api.director_school_common import raise_api_error, require_director_acc
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 QUERY_PAGE_SIZE = 5_000
-ACTIVITY_LIMIT_DEFAULT = 50
-UPCOMING_LIMIT_DEFAULT = 10
+ACTIVITY_LIMIT_DEFAULT = 5
+UPCOMING_LIMIT_DEFAULT = 5
 SUPPORTED_PERIODS = frozenset({"season", "6m", "12m"})
 AMOUNT_UNITS = frozenset({"vnd", "thousand_vnd", "million_vnd"})
 
@@ -121,16 +121,7 @@ def get_director_school_field_activity(
 		)
 		for row in completed_rows
 	]
-	completed = [
-		_build_completed_activity(
-			row,
-			attribution=attribution,
-			schools=schools,
-			staff=staff,
-			activity_types=activity_types,
-		)
-		for row in completed_rows[:activity_limit]
-	]
+	completed = _select_completed_activities_for_cost_chart(all_completed, limit=activity_limit)
 	upcoming = [
 		_build_upcoming_activity(
 			row,
@@ -639,6 +630,17 @@ def _build_completed_activity(
 		"status": "completed",
 		"dataQuality": attr.get("quality") or ("partial" if leads is not None else "unavailable"),
 	}
+
+
+def _select_completed_activities_for_cost_chart(
+	activities: list[dict[str, Any]], *, limit: int
+) -> list[dict[str, Any]]:
+	"""Keep the chart useful by returning recent activities with a proven unit cost."""
+	return [
+		activity
+		for activity in activities
+		if (activity.get("costPerEnrollment") or {}).get("amount") is not None
+	][:limit]
 
 
 def _build_upcoming_activity(

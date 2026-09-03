@@ -21,7 +21,10 @@ class CRMTarget(Document):
 	def validate(self):
 		if not self.planning_scope:
 			frappe.throw(_("Planning Scope is required."), frappe.ValidationError)
-		if self.scope_type or self.scope:
+		# Older sites can retain the former DocField default ``National`` even
+		# after this field became a read-only legacy field.  It carries no
+		# selection without ``scope`` and must not block canonical targets.
+		if self.get("scope") or self.get("scope_type") not in (None, "", "National"):
 			frappe.throw(
 				_("Legacy scope fields are read-only; link a Planning Scope instead."), frappe.ValidationError
 			)
