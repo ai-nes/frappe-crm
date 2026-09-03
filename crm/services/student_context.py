@@ -1,4 +1,4 @@
-"""Frappe-authoritative Student context revision and v2 task primitives."""
+"""Frappe-authoritative Student context revision and NBA trigger metadata."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from datetime import datetime
 
 import frappe
 from frappe.utils import now_datetime
+
+CANONICAL_CONTEXT_POLICY_VERSION = "intelligence-run-nba-v1"
 
 MATERIAL_STUDENT_FIELDS = frozenset(
 	{
@@ -69,7 +71,14 @@ def _next_stream_sequence(stream: str) -> int:
 
 
 def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = True, event_id: str | None = None) -> dict:
-	"""Atomically advance one Student revision and append the global journal."""
+	"""Advance one Student revision and enqueue its canonical analysis run.
+
+	The revision journal remains the source of truth. When unified Intelligence
+	Runs are enabled, the same transaction also creates the idempotent automatic
+	run and its identity-only outbox signal. Callers that are already part of a
+	more specific admission decision flow pass ``enqueue=False`` and let that
+	flow own the run creation, preventing duplicate runs for one business event.
+	"""
 	if not student:
 		raise ValueError("student is required")
 	reason = str(reason or "material_change").strip()[:140] or "material_change"
@@ -107,7 +116,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"actor_scope": {"source": "student_context"},
 			"idempotency_key": event_id,
 			"correlation_id": event_id,
-			"policy_version": "student-context-v2",
+			"policy_version": CANONICAL_CONTEXT_POLICY_VERSION,
 			"schema_version": "revision-journal-v1",
 			"payload": {"revision": revision},
 			"reason": reason,
@@ -115,9 +124,19 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"occurred_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	# Context revision is deliberately data-only.  Automatic admission belongs
-	# to the authoritative business writer, never to this generic helper.
-	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
+	result = {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
+	if enqueue:
+		from crm.fcrm.intelligence_runs import request_automatic_run, unified_intelligence_enabled
+
+		if unified_intelligence_enabled():
+			run = request_automatic_run(
+				"student",
+				student,
+				candidate_revision=revision,
+				policy_revision=CANONICAL_CONTEXT_POLICY_VERSION,
+			)
+			result["analysis_run"] = run.name
+	return result
 
 
 def material_student_changed(doc, before=None) -> bool:

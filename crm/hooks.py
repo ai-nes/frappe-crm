@@ -364,7 +364,6 @@ for _governed_consumer_doctype in (
 scheduler_events = {
 	"hourly": [
 		"crm.api.agent_events.retry_pending_agent_events",
-		"crm.api.agent_events.reconcile_student_context_v2",
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.api.agent_events.reconcile_intelligence_run_outbox",
 	],
