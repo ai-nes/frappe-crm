@@ -12,7 +12,6 @@ import json
 from typing import Any
 
 import frappe
-from frappe import _
 from frappe.utils import now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
@@ -129,8 +128,11 @@ def _can_decide(actor, doc):
 	scope = _scope(actor)
 	if actor != "Administrator" and not ({"student.execute", "recommendation.decide"} & set(scope["capabilities"])):
 		_fail("FORBIDDEN", "You are not permitted to decide recommendations.")
+	student_name = doc.get("student")
+	if doc.doctype == RECOMMENDATION:
+		student_name = doc.target_id if doc.target_type == "CRM Student" else None
 	try:
-		student = frappe.get_doc("CRM Student", doc.student)
+		student = frappe.get_doc("CRM Student", student_name)
 	except Exception:
 		_fail("OUT_OF_SCOPE", "The recommendation is outside your current scope.")
 	if not has_student_permission(student, user=actor, permission_type="read"):
@@ -282,59 +284,113 @@ def _outbox(event_type, doc):
 
 
 def decide_recommendation(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, decision_reason: str | None = None, due_at: Any = None, assignee_staff: str | None = None, revisit_at: Any = None, defer_kind: str | None = None, expected_modified: str | None = None):
-	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); correlation_id = correlation_id or frappe.generate_hash(length=20)
-	if status not in {"accepted", "rejected", "deferred"}: _fail("INVALID_INPUT", "Unsupported recommendation decision.")
-	payload = {"name": name, "expected_revision": expected_revision, "status": status, "decision_reason": decision_reason, "due_at": due_at, "assignee_staff": assignee_staff, "revisit_at": revisit_at, "defer_kind": defer_kind}
-	fingerprint = _fingerprint(payload); command_key = _command_key("recommendation_decision", actor, key)
-	if replay := _replay(command_key, fingerprint): return replay
+	"""Decide a Recommendation using only its public status fields."""
+	actor = _actor()
+	key = _required(idempotency_key, "idempotency_key")
+	correlation_id = correlation_id or frappe.generate_hash(length=20)
+	if status not in {"accepted", "rejected", "deferred"}:
+		_fail("INVALID_INPUT", "Unsupported recommendation decision.")
+	payload = {
+		"name": name,
+		"expected_revision": expected_revision,
+		"status": status,
+		"decision_reason": decision_reason,
+		"due_at": due_at,
+		"assignee_staff": assignee_staff,
+		"revisit_at": revisit_at,
+		"defer_kind": defer_kind,
+	}
+	fingerprint = _fingerprint(payload)
+	command_key = _command_key("recommendation_decision", actor, key)
+	if replay := _replay(command_key, fingerprint):
+		return replay
 	_lock(RECOMMENDATION, name)
-	if replay := _replay(command_key, fingerprint): return replay
-	doc = frappe.get_doc(RECOMMENDATION, name); scope = _can_decide(actor, doc)
-	_lock("CRM Student", doc.student)
-	expires_at = frappe.utils.get_datetime(doc.get("expires_at")) if doc.get("expires_at") else None
+	doc = frappe.get_doc(RECOMMENDATION, name)
+	scope = _can_decide(actor, doc)
+	student_name = doc.target_id if doc.target_type == "CRM Student" else None
+	if not student_name:
+		_fail("INVALID_INPUT", "Only CRM Student recommendations can be decided.")
+	_lock("CRM Student", student_name)
+	expires_at = frappe.utils.get_datetime(doc.expires_at) if doc.expires_at else None
 	if expires_at and expires_at <= now_datetime():
 		_fail("ACTION_EXPIRED", "This recommendation has expired and must be regenerated.")
-	if expected_modified and str(doc.modified) != str(expected_modified): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
-	if str(doc.get("decision_revision") or 0) != str(expected_revision): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
-	if doc.status in {"accepted", "rejected", "expired", "superseded", "dismissed", "modified"}: _fail("INVALID_STATE", "This recommendation can no longer be decided.")
+	if expected_modified and str(doc.modified) != str(expected_modified):
+		_fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
+	if doc.decision_status in {"accepted", "rejected"}:
+		_fail("INVALID_STATE", "This recommendation can no longer be decided.")
 	if status == "accepted":
-		if not due_at: _fail("INVALID_INPUT", "due_at is required when accepting.")
-		assignee_staff = assignee_staff or _staff_for_user(actor)
-		if not assignee_staff: _fail("INVALID_INPUT", "A mapped Sales executor is required.")
-		if assignee_staff != _staff_for_user(actor) and not ({"team.oversee", "admissions.oversee"} & set(scope["capabilities"])) and actor != "Administrator": _fail("FORBIDDEN", "You may only assign yourself.")
-		_valid_executor(
-			doc.student,
-			assignee_staff,
-			allow_global=actor == "Administrator",
-		)
+		if not due_at:
+			due_at = doc.recommended_at or now_datetime()
+		assignee_staff = assignee_staff or doc.owner or _staff_for_user(actor)
+		if not assignee_staff:
+			_fail("INVALID_INPUT", "A mapped Sales executor is required.")
+		if assignee_staff != _staff_for_user(actor) and not ({"team.oversee", "admissions.oversee"} & set(scope["capabilities"])) and actor != "Administrator":
+			_fail("FORBIDDEN", "You may only assign yourself.")
+		_valid_executor(student_name, assignee_staff, allow_global=actor == "Administrator")
 	if status == "rejected":
 		_required(decision_reason, "decision_reason")
 	if status == "deferred" and not revisit_at:
-		_required(decision_reason, "decision_reason")
-	previous_status = doc.status
-	receipt = _new_receipt("recommendation_decision", actor, doc.student, key, fingerprint, scope, correlation_id)
-	previous_flag = getattr(frappe.flags, "phase6_decision_command", False); frappe.flags.phase6_decision_command = True
+		_fail("INVALID_INPUT", "A deferred recommendation needs a revisit time.")
+	previous_status = doc.decision_status
+	receipt = _new_receipt("recommendation_decision", actor, student_name, key, fingerprint, scope, correlation_id)
 	try:
-		doc.flags.from_phase6_command = True
-		doc.status = status; doc.decision_reason = decision_reason; doc.revisit_at = revisit_at if status == "deferred" else None
-		doc.decision_revision = int(doc.get("decision_revision") or 0) + 1; doc.decision_actor = actor; doc.decision_at = now_datetime(); doc.decision_scope = scope; doc.decision_correlation_id = correlation_id; doc.decision_idempotency_key = key
-		doc.save(ignore_permissions=True)
-		action = None
+		doc.decision_status = status
+		doc.lifecycle_status = "active" if status in {"accepted", "deferred"} else "expired"
 		if status == "accepted":
-			action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
-			if not action:
-				canonical_type = doc.recommended_action if doc.recommended_action in {"CALL", "EMAIL", "MESSAGE", "COUNSELING", "MEETING", "EVENT_INVITE", "CAMPUS_VISIT", "DOCUMENT_REQUEST", "APPLICATION_SUPPORT", "PARENT_CONTACT", "HANDOFF"} else None
-				from crm.fcrm.nba import ensure_nba_action, sync_nba_recommendation_for_action
-				canonical = frappe.get_doc({"doctype": CANONICAL_ACTION, "recommendation": doc.name, "student": doc.student, "contact": frappe.db.get_value("CRM Contact", {"student": doc.student}, "name"), "current_slot": _free_current_slot(doc.student), "origin": "ai" if doc.get("producer_id") else "system", "action_type": canonical_type, "objective": doc.get("rationale") or doc.get("recommended_action") or "Follow up on the recommendation.", "disposition": "ACT" if canonical_type else "MONITOR", "state": "accepted", "source_context_revision": 0, "policy_context_version": POLICY_VERSION, "generation_idempotency_key": key, "producer_identity": "frappe:recommendation", "payload_digest": _fingerprint(payload), "due_at": due_at, "action_owner": assignee_staff, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1})
-				canonical.nba_action = ensure_nba_action(canonical_type)
-				canonical.origin = "ai" if doc.get("producer_id") else "system"
-				canonical.flags.crm_action_command = True; canonical.insert(ignore_permissions=True); action = canonical.name
-				sync_nba_recommendation_for_action(canonical)
-		event = _event(f"recommendation.{status}", doc.student, doc.name, action, actor, scope, receipt, correlation_id, doc.decision_revision, {"status": status, "from_state": previous_status, "reason": decision_reason, "revisit_at": str(revisit_at) if revisit_at else None})
+			doc.owner = assignee_staff
+			doc.execution_status = "not_started"
+		doc.save(ignore_permissions=True)
+		action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
+		if status == "accepted" and not action:
+			action_type = frappe.db.get_value("CRM Action Definition", doc.action, "code") if doc.action else None
+			canonical = frappe.get_doc(
+				{
+					"doctype": CANONICAL_ACTION,
+					"recommendation": doc.name,
+					"student": student_name,
+					"contact": frappe.db.get_value("CRM Contact", {"student": student_name}, "name"),
+					"current_slot": _free_current_slot(student_name),
+					"origin": "ai",
+					"action_type": action_type,
+					"objective": doc.purpose or doc.reason,
+					"disposition": "ACT" if action_type else "MONITOR",
+					"state": "accepted",
+					"source_context_revision": 0,
+					"policy_context_version": "nba-v1",
+					"generation_idempotency_key": key,
+					"producer_identity": "frappe:recommendation",
+					"payload_digest": fingerprint,
+					"due_at": due_at,
+					"action_owner": assignee_staff,
+					"accepted_at": now_datetime(),
+					"created_at": now_datetime(),
+					"action_revision": 1,
+					"decision_revision": 1,
+				}
+			)
+			canonical.flags.crm_action_command = True
+			canonical.insert(ignore_permissions=True)
+			action = canonical.name
+			from crm.fcrm.nba import sync_nba_recommendation_for_action
+			sync_nba_recommendation_for_action(canonical)
+		event = _event(
+			f"recommendation.{status}",
+			student_name,
+			doc.name,
+			action,
+			actor,
+			scope,
+			receipt,
+			correlation_id,
+			0,
+			{"status": status, "from_state": previous_status, "reason": decision_reason},
+		)
 		_outbox("recommendation.decided.v1", event)
-		result = {"status": status, "recommendation": doc.name, "action": action, "revision": doc.decision_revision, "event": event.name, "receipt": receipt.name}; _finish(receipt, result); return result
+		result = {"status": status, "recommendation": doc.name, "action": action, "revision": 0, "event": event.name, "receipt": receipt.name}
+		_finish(receipt, result)
+		return result
 	finally:
-		frappe.flags.phase6_decision_command = previous_flag
+		pass
 
 
 def decide_student_task(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, decision_reason: str | None = None, due_at: Any = None, assignee_staff: str | None = None, revisit_at: Any = None, defer_kind: str | None = None, expected_modified: str | None = None):

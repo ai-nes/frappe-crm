@@ -2,15 +2,12 @@
  "actions": [],
  "allow_import": 0,
  "allow_rename": 0,
- "autoname": "field:execution_id",
+ "autoname": "hash",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["execution_id", "recommendation", "action", "student", "actor", "channel", "scheduled_at", "started_at", "completed_at", "status", "input", "output", "error", "attempt", "provider_event_id", "idempotency_key", "created_at"],
+ "field_order": ["recommendation", "actor", "channel", "scheduled_at", "started_at", "completed_at", "status", "input", "output", "error"],
  "fields": [
-  {"fieldname": "execution_id", "fieldtype": "Data", "hidden": 1, "label": "Execution ID", "reqd": 1, "unique": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "label": "Recommendation", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
-  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action", "reqd": 1, "read_only": 1},
-  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "reqd": 1, "read_only": 1},
   {"fieldname": "channel", "fieldtype": "Select", "label": "Channel", "options": "NONE\nCALL\nEMAIL\nMESSAGE", "default": "NONE"},
   {"fieldname": "scheduled_at", "fieldtype": "Datetime", "label": "Scheduled At"},
@@ -19,11 +16,7 @@
   {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "pending\nqueued\nin_progress\ncompleted\nfailed\ncancelled", "default": "pending", "reqd": 1, "in_list_view": 1},
   {"fieldname": "input", "fieldtype": "JSON", "label": "Input", "read_only": 1},
   {"fieldname": "output", "fieldtype": "JSON", "label": "Output", "read_only": 1},
-  {"fieldname": "error", "fieldtype": "Small Text", "label": "Error", "read_only": 1},
-  {"fieldname": "attempt", "fieldtype": "Link", "label": "Execution Attempt", "options": "CRM Action Execution Attempt", "read_only": 1},
-  {"fieldname": "provider_event_id", "fieldtype": "Data", "label": "Provider Event ID", "read_only": 1},
-  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "unique": 1},
-  {"fieldname": "created_at", "fieldtype": "Datetime", "label": "Created At", "reqd": 1, "read_only": 1}
+  {"fieldname": "error", "fieldtype": "Small Text", "label": "Error", "read_only": 1}
  ],
  "index_web_pages_for_search": 0,
  "links": [],
@@ -35,6 +28,6 @@
   {"read": 1, "role": "Admissions Director"},
   {"read": 1, "role": "System Manager"}
  ],
- "sort_field": "created_at",
+ "sort_field": "creation",
  "sort_order": "DESC"
 }

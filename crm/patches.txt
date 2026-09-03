@@ -92,7 +92,6 @@ crm.patches.v1_0.consolidate_admissions_technical_records
 crm.patches.v1_0.add_student_next_task_v2
 crm.patches.v1_0.add_score_policy_versioning
 crm.patches.v1_0.add_score_revision_tracking
-crm.patches.v1_0.backfill_student_task_worklist_fields
 crm.patches.v1_0.restore_desk_management_roles
 crm.patches.v1_0.migrate_student_tasks_to_crm_action
 crm.patches.v1_0.migrate_admissions_tasks_to_crm_action
@@ -130,5 +129,3 @@ crm.patches.v1_0.analysis_stage_result_digest
 crm.patches.v1_0.crm_action_risk_tier
 crm.patches.v1_0.prepare_admission_event_decision
 crm.patches.v1_0.add_crm_action_plan_rank
-crm.patches.v1_0.prepare_nba_domain
-crm.patches.v1_0.rename_nba_doctypes_to_crm_domain

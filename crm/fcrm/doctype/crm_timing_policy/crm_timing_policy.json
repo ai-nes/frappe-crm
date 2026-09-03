@@ -2,12 +2,11 @@
  "actions": [],
  "allow_import": 0,
  "allow_rename": 0,
- "autoname": "field:policy_key",
+ "autoname": "hash",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["policy_key", "trigger_type", "trigger_event", "delay_value", "delay_unit", "allowed_start_time", "allowed_end_time", "deadline_type", "deadline_offset", "recurrence_type", "recurrence_interval", "stop_condition", "optimization_enabled", "optimization_objective"],
+ "field_order": ["trigger_type", "trigger_event", "delay_value", "delay_unit", "allowed_start_time", "allowed_end_time", "deadline_type", "deadline_offset", "recurrence_type", "recurrence_interval", "stop_condition", "optimization_enabled", "optimization_objective"],
  "fields": [
-  {"fieldname": "policy_key", "fieldtype": "Data", "in_list_view": 1, "label": "Policy Key", "reqd": 1, "unique": 1},
   {"fieldname": "trigger_type", "fieldtype": "Select", "label": "Trigger Type", "options": "event\nrelative\ndeadline\nschedule", "reqd": 1},
   {"fieldname": "trigger_event", "fieldtype": "Data", "label": "Trigger Event"},
   {"fieldname": "delay_value", "fieldtype": "Float", "label": "Delay Value", "default": "0"},
@@ -34,6 +33,6 @@
   {"read": 1, "role": "Admissions Director"},
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}
  ],
- "sort_field": "policy_key",
- "sort_order": "ASC"
+ "sort_field": "modified",
+ "sort_order": "DESC"
 }

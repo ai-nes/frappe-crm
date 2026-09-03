@@ -13,9 +13,9 @@ def _fieldnames(doctype):
 	return {field["fieldname"] for field in doctype["fields"]}
 
 
-def test_explicit_nba_doctypes_match_the_contract():
+def test_nba_doctypes_match_the_original_contract_exactly():
 	expected = {
-		"crm_action_definition": {
+		"crm_action_definition": [
 			"code",
 			"description",
 			"purpose",
@@ -24,8 +24,31 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"requires_approval",
 			"auto_execute",
 			"enabled",
-		},
-		"crm_timing_policy": {
+		],
+		"crm_recommendation": [
+			"recommendation_id",
+			"target_type",
+			"target_id",
+			"action",
+			"purpose",
+			"channel",
+			"trigger",
+			"reason",
+			"evidence",
+			"priority",
+			"confidence",
+			"expected_impact",
+			"timing_policy",
+			"recommended_at",
+			"expires_at",
+			"owner",
+			"lifecycle_status",
+			"decision_status",
+			"execution_status",
+			"model",
+			"model_version",
+		],
+		"crm_timing_policy": [
 			"trigger_type",
 			"trigger_event",
 			"delay_value",
@@ -39,8 +62,8 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"stop_condition",
 			"optimization_enabled",
 			"optimization_objective",
-		},
-		"crm_action_execution": {
+		],
+		"crm_action_execution": [
 			"recommendation",
 			"actor",
 			"channel",
@@ -51,8 +74,8 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"input",
 			"output",
 			"error",
-		},
-		"crm_action_outcome": {
+		],
+		"crm_action_outcome": [
 			"execution",
 			"outcome_type",
 			"outcome_value",
@@ -61,8 +84,8 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"captured_by",
 			"captured_at",
 			"notes",
-		},
-		"crm_recommendation_feedback": {
+		],
+		"crm_recommendation_feedback": [
 			"recommendation",
 			"outcome",
 			"predicted_probability",
@@ -71,46 +94,19 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"actual_impact",
 			"feedback_source",
 			"created_at",
-		},
+		],
 	}
-	for directory, fields in expected.items():
+	for directory, field_order in expected.items():
 		doctype = _doctype(directory)
-		assert fields <= _fieldnames(doctype)
-	assert _doctype("crm_action_definition")["name"] == "CRM Action Definition"
-	assert _doctype("crm_timing_policy")["name"] == "CRM Timing Policy"
-	assert _doctype("crm_timing_policy")["autoname"] == "field:policy_key"
+		assert doctype["field_order"] == field_order
+		assert list(doctype["fields"][index]["fieldname"] for index in range(len(field_order))) == field_order
+		assert _fieldnames(doctype) == set(field_order)
 
 
-def test_legacy_aggregates_expose_the_nba_links():
-	action = _doctype("crm_action")
-	attempt = _doctype("crm_action_execution_attempt")
-	recommendation = _doctype("crm_recommendation")
-	assert "nba_action" in _fieldnames(action)
-	assert "nba_execution" in _fieldnames(attempt)
-	assert next(field for field in action["fields"] if field["fieldname"] == "nba_action")["options"] == "CRM Action Definition"
-	assert next(field for field in attempt["fields"] if field["fieldname"] == "nba_execution")["options"] == "CRM Action Execution"
-	assert {
-		"recommendation_id",
-		"target_type",
-		"target_id",
-		"action",
-		"purpose",
-		"channel",
-		"trigger",
-		"reason",
-		"evidence",
-		"priority",
-		"confidence",
-		"expected_impact",
-		"timing_policy",
-		"recommended_at",
-		"expires_at",
-		"owner",
-		"lifecycle_status",
-		"decision_status",
-		"execution_status",
-		"model",
-		"model_version",
-	} <= _fieldnames(recommendation)
-	assert next(field for field in recommendation["fields"] if field["fieldname"] == "action")["options"] == "CRM Action Definition"
-	assert next(field for field in recommendation["fields"] if field["fieldname"] == "timing_policy")["options"] == "CRM Timing Policy"
+def test_name_is_frappe_system_identity():
+	assert _doctype("crm_action_definition")["autoname"] == "field:code"
+	assert _doctype("crm_recommendation")["autoname"] == "field:recommendation_id"
+	assert _doctype("crm_timing_policy")["autoname"] == "hash"
+	assert _doctype("crm_action_execution")["autoname"] == "hash"
+	assert _doctype("crm_action_outcome")["autoname"] == "hash"
+	assert _doctype("crm_recommendation_feedback")["autoname"] == "hash"

@@ -6,20 +6,19 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
 
 from crm.fcrm.doctype.crm_action.crm_action import CRMAction
 from crm.fcrm.student_decision import (
 	StudentDecisionError,
 )
 from crm.fcrm.student_decision import (
+	claim_current_action as _claim_current_action,
+)
+from crm.fcrm.student_decision import (
 	create_manual_action as _create_manual_action,
 )
 from crm.fcrm.student_decision import (
 	decide_recommendation as _decide_recommendation,
-)
-from crm.fcrm.student_decision import (
-	claim_current_action as _claim_current_action,
 )
 from crm.fcrm.student_decision import (
 	decide_student_task as _decide_student_task,
@@ -192,12 +191,6 @@ def write_canonical_action(
 		priority=str(candidate.get("priority") or "medium"),
 		due_at=candidate.get("due_at"),
 		expires_at=candidate.get("expires_at"),
-		generation_idempotency_key=generation_idempotency_key,
-		producer_identity=producer_identity,
-		payload_digest=payload_digest,
-		source_context_revision=current_revision,
-		source_stage_key=source_stage_key,
-		policy_version=candidate.get("policy_version"),
 		owner=owner_staff,
 		trigger=candidate.get("trigger") or source_stage_key,
 		timing_policy=candidate.get("timing_policy"),
@@ -488,12 +481,6 @@ def write_canonical_action_bundle(
 			priority=str(candidate.get("priority") or _plan_rank_defaults(rank)["priority"]),
 			due_at=candidate.get("due_at"),
 			expires_at=candidate.get("expires_at"),
-			generation_idempotency_key=f"{base_idempotency_key}:r{rank}",
-			producer_identity=producer_identity,
-			payload_digest=payload_digest,
-			source_context_revision=current_revision,
-			source_stage_key=f"{base_stage_key}:r{rank}",
-			policy_version=candidate.get("policy_version"),
 			owner=_default_action_owner(student),
 			trigger=candidate.get("trigger") or base_stage_key,
 			timing_policy=candidate.get("timing_policy"),
@@ -535,8 +522,7 @@ def _call(fn, **kwargs):
 
 
 def _decide_by_name(name: str, **kwargs):
-	"""Dispatch to the V2 task-native command when `name` names a CRM Student
-	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
+	"""Dispatch to the command for the named Action or Recommendation."""
 	fn = _decide_student_task if frappe.db.exists("CRM Action", name) else _decide_recommendation
 	result = _call(fn, name=name, **kwargs)
 	result.setdefault("name", result.get("recommendation") or result.get("action"))
@@ -545,43 +531,21 @@ def _decide_by_name(name: str, **kwargs):
 
 @frappe.whitelist(methods=["POST"])
 def transition_recommendation(name: str, expected_revision: str, status: str, decision_reason: str | None = None, **kwargs):
-	"""Compatibility adapter for the pre-Phase-6 Desk/demo call shape.
-
-	New clients must send an idempotency key and the decision revision. This
-	adapter only translates legacy callers; it does not restore direct document
-	writes or bypass the Phase 6 command service.
-	"""
-	if kwargs.get("idempotency_key"):
-		return _decide_by_name(
-			name,
-			expected_revision=expected_revision,
-			status=status,
-			decision_reason=decision_reason,
-			due_at=kwargs.get("due_at"),
-			assignee_staff=kwargs.get("assignee_staff"),
-			revisit_at=kwargs.get("revisit_at"),
-			defer_kind=kwargs.get("defer_kind"),
-			idempotency_key=kwargs["idempotency_key"],
-			correlation_id=kwargs.get("correlation_id"),
-		)
-	doc = frappe.get_doc("CRM Recommendation", name)
-	legacy_modified = str(doc.modified) == str(expected_revision)
+	"""Apply a Recommendation decision through the canonical command service."""
 	result = _call(
 		_decide_recommendation,
 		name=name,
-		expected_revision=(doc.get("decision_revision") or 0) if legacy_modified else expected_revision,
+		expected_revision=expected_revision,
 		status=status,
 		decision_reason=decision_reason,
-		due_at=kwargs.get("due_at") or doc.get("recommended_timing") or now_datetime(),
+		due_at=kwargs.get("due_at"),
+		assignee_staff=kwargs.get("assignee_staff"),
 		revisit_at=kwargs.get("revisit_at"),
 		defer_kind=kwargs.get("defer_kind"),
-		idempotency_key=kwargs.get("idempotency_key") or f"legacy-decision-{name}-{expected_revision}-{status}",
-		correlation_id=kwargs.get("correlation_id") or f"legacy-decision-{name}",
-		expected_modified=str(expected_revision) if legacy_modified else None,
+		idempotency_key=kwargs.get("idempotency_key") or f"recommendation-{name}-{status}",
+		correlation_id=kwargs.get("correlation_id") or f"recommendation-{name}",
+		expected_modified=kwargs.get("expected_modified"),
 	)
-	# Legacy callers receive the recommendation name when the canonical command
-	# provides one.  Do not manufacture a ``name: None`` field for adapters and
-	# contract doubles that intentionally return only status.
 	if result.get("recommendation") is not None:
 		result.setdefault("name", result["recommendation"])
 	return result
