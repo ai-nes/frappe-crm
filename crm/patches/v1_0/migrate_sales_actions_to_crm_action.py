@@ -63,7 +63,12 @@ def _state(status):
 
 def _state_fields(row):
 	status = row.get("execution_status") or "planned"
-	return {"state": _state(status), "execution_status": status}
+	state = _state(status)
+	fields = {"state": state, "execution_status": status}
+	if state in {"completed", "cancelled", "rejected", "superseded"}:
+		# A terminal Action never keeps the student's single current slot.
+		fields["current_slot"] = None
+	return fields
 
 
 def _mapped_fields(row):

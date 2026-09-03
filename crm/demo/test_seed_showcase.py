@@ -44,6 +44,17 @@ _ACTION_STATE_TARGETS = {"accepted", "in-progress", "completed", "cancelled", "r
 
 
 class TestSeedShowcaseData(unittest.TestCase):
+	def test_market_snapshot_values_create_two_non_key_accounts_per_three_schools(self):
+		values = [
+			seed_showcase._market_snapshot_key_account_values(index, threshold=15, ne_actual=30)
+			for index in range(6)
+		]
+
+		self.assertEqual(values, [(15, 30), (31, 30), (31, 30), (15, 30), (31, 30), (31, 30)])
+
+	def test_market_snapshot_school_count_stays_bounded(self):
+		self.assertEqual(seed_showcase._MARKET_SNAPSHOT_SCHOOL_COUNT, 35)
+
 	def test_namespace_is_stable(self):
 		self.assertEqual(NAMESPACE, "crm-demo-showcase")
 

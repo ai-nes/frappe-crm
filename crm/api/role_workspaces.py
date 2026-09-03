@@ -42,7 +42,7 @@ def _workspace_reader_enabled() -> bool:
 			derive_workspace_policy().profile == "admissions_director"
 			and director_analytics_read_enabled()
 		)
-	except frappe.PermissionError:
+	except Exception:
 		return False
 
 

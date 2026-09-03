@@ -142,7 +142,9 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 
 	channel_key = _text(payload.get("channel"))
 	direction_key = _text(payload.get("direction"))
-	channel = INTERACTION_CHANNEL_ALIASES.get((channel_key or "").casefold().replace("-", "_"))
+	channel = INTERACTION_CHANNEL_ALIASES.get(
+		(channel_key or "").casefold().replace("-", "_").replace(" ", "_")
+	)
 	direction = INTERACTION_DIRECTION_ALIASES.get((direction_key or "").casefold().replace("-", "_"))
 	if not channel:
 		_interaction_fail("INVALID_INPUT", "channel is not supported.")

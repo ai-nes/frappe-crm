@@ -10,7 +10,7 @@ from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.scoring_policy import get_active_policy
 from crm.services.sales_action_policy import allowed_generation_actions
 from crm.services.student_context import snapshot_hash
-from crm.services.student_next_task_policy import choose_next_task_policy
+from crm.services.student_next_task_policy import _journey_label, choose_next_task_policy
 
 _STUDENT_FIELDS = [
 	"name",
@@ -84,6 +84,83 @@ def _intent_provenance(intent: dict, student: str) -> dict:
 			"at": source.interaction_datetime,
 		},
 	}
+
+
+def _interaction_recency(interaction: dict) -> int | None:
+	"""Whole days since the most recent interaction, or None when there is none.
+
+	This is a "why now" signal for the decision layer: silence duration is a
+	first-class input to Next Best Action, independent of any 360 analysis.
+	"""
+	at = interaction.get("interaction_datetime")
+	if not at:
+		return None
+	delta = frappe.utils.now_datetime() - frappe.utils.get_datetime(at)
+	return max(delta.days, 0)
+
+
+def _intent_observation_count(student: str, intent_type: str | None) -> int:
+	"""How many times the dominant intent has been observed for this student.
+
+	A repeated intent is a stronger signal than a one-off. Bounded count only,
+	never the intent rows themselves.
+	"""
+	if not intent_type:
+		return 0
+	return frappe.db.count("CRM Intent", {"student": student, "intent_type": intent_type})
+
+
+def _days_to_deadline(student: str) -> int | None:
+	"""Whole days until the nearest open admission-application deadline.
+
+	A hard "why now" signal and the override the WAIT pre-check needs: a looming
+	cut-off outranks "we spoke recently". Only non-terminal applications count;
+	an already Enrolled/Lost/Withdrawn row carries no live obligation. Negative
+	when the deadline is already past.
+	"""
+	rows = frappe.get_all(
+		"CRM Admission Application",
+		filters={
+			"student": student,
+			"status": ["not in", ["Enrolled", "Lost", "Withdrawn"]],
+			"deadline": ["is", "set"],
+		},
+		fields=["deadline"],
+		order_by="deadline asc",
+		limit_page_length=1,
+		ignore_permissions=True,
+	)
+	if not rows or not rows[0].get("deadline"):
+		return None
+	delta = frappe.utils.getdate(rows[0]["deadline"]) - frappe.utils.getdate()
+	return delta.days
+
+
+def _recent_actions(student: str) -> list[dict]:
+	"""The last few CRM Actions for this student — action-history context only.
+
+	Canonical semantic fields (type, state, outcome, timestamp) — no objective
+	text, no package content, no PII. Lets the decision layer see what was
+	already tried and avoid recommending a duplicate move.
+	"""
+	rows = frappe.get_all(
+		"CRM Action",
+		filters={"student": student},
+		fields=["action_type", "state", "execution_status", "disposition", "creation"],
+		order_by="creation desc",
+		limit_page_length=5,
+		ignore_permissions=True,
+	)
+	return [
+		{
+			"action_type": row.get("action_type"),
+			"state": row.get("state"),
+			"execution_status": row.get("execution_status"),
+			"disposition": row.get("disposition"),
+			"at": str(row.get("creation")) if row.get("creation") else None,
+		}
+		for row in rows
+	]
 
 
 def _score_projection(row: dict) -> dict:
@@ -182,6 +259,7 @@ def _projection(student: str, minimum_revision: int) -> dict:
 			"importance": intent.get("importance"),
 			"confidence": intent.get("confidence"),
 			"polarity": intent.get("polarity"),
+			"count": _intent_observation_count(student, intent.get("intent_type")),
 			"provenance": intent_provenance,
 		},
 		"score": _score_projection(row),
@@ -189,12 +267,14 @@ def _projection(student: str, minimum_revision: int) -> dict:
 			"channel": interaction.get("interaction_type"),
 			"outcome": interaction.get("outcome"),
 			"at": interaction.get("interaction_datetime"),
+			"days_since": _interaction_recency(interaction),
 		},
 		"sla_evidence": {
 			"state": sla_state,
 			"observed_at": row.sla_evidence_observed_at,
 		},
 		"allowed_action_types": allowed_generation_actions(student),
+		"recent_actions": _recent_actions(student),
 		"evidence_refs": [],
 	}
 	allowed_actions = context["allowed_action_types"]
@@ -209,7 +289,14 @@ def _projection(student: str, minimum_revision: int) -> dict:
 	)
 	context["eligibility"]["student"] = eligible
 	context["eligibility"]["actionable"] = actionable
-	context["lifecycle"].update({"next_task_action": action, "next_task_objective": objective})
+	context["lifecycle"].update(
+		{
+			"next_task_action": action,
+			"next_task_objective": objective,
+			"stage_label": _journey_label(stage),
+			"days_to_deadline": _days_to_deadline(student),
+		}
+	)
 	context["evidence_refs"] = [
 		f"student-context:revision:{revision}:intent",
 		f"student-context:revision:{revision}:stage",

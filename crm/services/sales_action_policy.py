@@ -22,6 +22,8 @@ V2_ACTION_TYPES = (
 	"HANDOFF",
 )
 
+ACTION_OPERATIONS = ("EDIT", "DISPATCH", "SCHEDULE", "ASSIGN", "RELEASE", "RECORD_OUTCOME")
+
 
 @dataclass(frozen=True)
 class ActionPolicy:
@@ -115,3 +117,49 @@ def allowed_generation_actions(student: str) -> list[str]:
 	if not _parent_authority_is_valid(student):
 		actions.remove("PARENT_CONTACT")
 	return actions
+
+
+def allowed_operations(action, *, actor_roles: set[str]) -> list[dict]:
+	"""Derive card affordances from the current Frappe action, never its type alone."""
+	known = action.action_type in ACTION_POLICIES
+	state = action.state
+	admin = "System Manager" in actor_roles or frappe.session.user == "Administrator"
+	owner_or_manager = admin or bool(action.action_owner and frappe.db.get_value(
+		"CRM Staff", {"user": frappe.session.user}, "name") == action.action_owner)
+	package_revision = int(action.execution_package_version or 0)
+	action_revision = int(action.action_revision or 1)
+	result = []
+	for operation in ACTION_OPERATIONS:
+		allowed = known and bool(action.has_permission("read"))
+		reason = "OK"
+		requires_approval = False
+		if not known:
+			allowed, reason = False, "UNKNOWN_ACTION_TYPE"
+		elif operation == "EDIT":
+			pii_ready = frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True)
+			allowed = pii_ready and action.action_type == "EMAIL" and state in {"accepted", "in-progress"} and owner_or_manager
+			reason = "OK" if allowed else "EDIT_NOT_AVAILABLE"
+		elif operation == "DISPATCH":
+			pii_ready = frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True)
+			allowed = pii_ready and state in {"accepted", "in-progress"} and owner_or_manager and action.action_type != "HANDOFF"
+			requires_approval = action.risk_tier == "high"
+			reason = "REQUIRES_APPROVAL" if allowed and requires_approval else "OK" if allowed else "DISPATCH_NOT_AVAILABLE"
+		elif operation == "SCHEDULE":
+			allowed = state in {"accepted", "in-progress"} and owner_or_manager
+			reason = "OK" if allowed else "SCHEDULE_NOT_AVAILABLE"
+		elif operation == "ASSIGN":
+			allowed = state not in {"completed", "cancelled", "rejected", "superseded"} and (admin or "Lead Sales" in actor_roles)
+			reason = "OK" if allowed else "ASSIGN_NOT_AVAILABLE"
+		elif operation == "RELEASE":
+			allowed = state not in {"completed", "cancelled", "rejected", "superseded"} and owner_or_manager
+			reason = "OK" if allowed else "RELEASE_NOT_AVAILABLE"
+		elif operation == "RECORD_OUTCOME":
+			allowed = state in {"accepted", "in-progress"} and owner_or_manager
+			reason = "OK" if allowed else "OUTCOME_NOT_AVAILABLE"
+		result.append({
+			"operation": operation, "state": "allowed" if allowed else "denied",
+			"reason_code": reason, "requires_approval": requires_approval,
+			"expected_action_revision": action_revision,
+			"expected_package_revision": package_revision,
+		})
+	return result

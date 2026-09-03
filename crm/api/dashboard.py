@@ -6,6 +6,7 @@ from frappe.query_builder import DocType
 from frappe.query_builder.functions import Count, Date, IfNull
 
 from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
+from crm.fcrm.student_feature_flags import role_workspace_read_enabled
 from crm.utils import sales_user_only
 
 
@@ -315,8 +316,6 @@ def get_sidebar_badge_counts():
 	default-off users do not lose existing sidebar indicators while the scoped
 	reader contracts are being released.
 	"""
-	from crm.fcrm.student_feature_flags import role_workspace_read_enabled
-
 	if role_workspace_read_enabled():
 		from crm.api.role_workspaces import get_workspace_badges
 

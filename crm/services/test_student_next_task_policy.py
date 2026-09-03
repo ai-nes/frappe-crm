@@ -2,6 +2,12 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.services.student_next_task_policy import choose_next_task_policy
 
+_VI_DIACRITICS = set("àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ")
+
+
+def _has_vietnamese(text: str) -> bool:
+	return any(character in _VI_DIACRITICS for character in text.casefold())
+
 
 class TestStudentNextTaskPolicy(FrappeTestCase):
 	def test_policy_maps_context_to_governed_action_and_objective(self):
@@ -12,7 +18,8 @@ class TestStudentNextTaskPolicy(FrappeTestCase):
 		self.assertEqual(action, "DOCUMENT_REQUEST")
 		self.assertTrue(actionable)
 		self.assertIn("application documents", objective)
-		self.assertIn("Consulting", objective)
+		self.assertIn("đang tư vấn", objective)
+		self.assertTrue(_has_vietnamese(objective))
 
 	def test_parent_contact_requires_authority_and_never_falls_back_to_contact(self):
 		action, objective, actionable = choose_next_task_policy(
@@ -21,7 +28,17 @@ class TestStudentNextTaskPolicy(FrappeTestCase):
 
 		self.assertIsNone(action)
 		self.assertFalse(actionable)
-		self.assertIn("Do not contact", objective)
+		self.assertIn("Chưa liên hệ phụ huynh", objective)
+		self.assertTrue(_has_vietnamese(objective))
+
+	def test_missing_intent_does_not_double_the_need_noun(self):
+		for eligible in (True, False):
+			_, objective, _ = choose_next_task_policy(
+				None, "Lead", ["CALL"], eligible=eligible
+			)
+			self.assertNotIn("nhu cầu nhu cầu", objective)
+			self.assertNotIn("yêu cầu nhu cầu", objective)
+			self.assertTrue(_has_vietnamese(objective))
 
 	def test_ineligible_lifecycle_is_monitor_only(self):
 		action, objective, actionable = choose_next_task_policy(
@@ -30,4 +47,5 @@ class TestStudentNextTaskPolicy(FrappeTestCase):
 
 		self.assertIsNone(action)
 		self.assertFalse(actionable)
-		self.assertIn("not eligible", objective)
+		self.assertIn("chưa đủ điều kiện", objective)
+		self.assertTrue(_has_vietnamese(objective))

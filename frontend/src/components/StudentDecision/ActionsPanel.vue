@@ -56,6 +56,7 @@
               </div>
               <div v-if="item.outcome" class="mt-4 rounded-md bg-surface-gray-2 px-3 py-2 text-sm text-ink-gray-7"><span class="font-medium text-ink-gray-8">{{ __(item.outcome) }}</span><span v-if="item.outcome_evidence"> · {{ item.outcome_evidence }}</span></div>
             </div>
+            <Button :label="__('Open details')" variant="subtle" @click="$emit('open-action', item.action_id || item.action || item.name)" />
           </div>
         </article>
       </div>
@@ -80,6 +81,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({ doctype: { type: String, required: true }, name: { type: String, required: true }, student: { type: String, default: '' } })
+defineEmits(['open-action'])
 const router = useRouter()
 const showCreate = ref(false)
 const creating = ref(false)

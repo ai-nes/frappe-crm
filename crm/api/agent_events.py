@@ -756,14 +756,18 @@ def reconcile_intelligence_run_outbox(limit: int = 200) -> dict:
 	if frappe.conf.get("crm_intelligence_runs_enabled", 0) in (0, "0", False):
 		return {"requeued": 0, "enabled": False}
 	from crm.fcrm.intelligence_runs import RUN_TYPES
+	from crm.fcrm.intelligence_runs import TERMINAL as STAGE_TERMINAL
 	now = now_datetime()
 	requeued = 0
+	blocked_next_best_action = 0
 	for run_type in RUN_TYPES.values():
-		for run in frappe.get_all(run_type, filters={"status": ["in", ["queued", "running"]]}, fields=["name"], limit_page_length=min(int(limit), 500)):
-			stages = frappe.get_all(
-				"CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run.name, "status": ["in", ["queued", "running"]]},
-				fields=["status", "lease_expires_at"], limit_page_length=10,
+		for run in frappe.get_all(run_type, filters={"status": ["in", ["queued", "running"]]}, fields=["name", "creation"], limit_page_length=min(int(limit), 500)):
+			all_stages = frappe.get_all(
+				"CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run.name},
+				fields=["stage_kind", "status", "lease_expires_at"], limit_page_length=10,
 			)
+			blocked_next_best_action += _surface_blocked_next_best_action(run_type, run, all_stages, now, STAGE_TERMINAL)
+			stages = [s for s in all_stages if s.status in ("queued", "running")]
 			if not any(stage.status == "queued" or not stage.lease_expires_at or stage.lease_expires_at <= now for stage in stages):
 				continue
 			key = f"intelligence-run:{run_type}:{run.name}"
@@ -780,11 +784,49 @@ def reconcile_intelligence_run_outbox(limit: int = 200) -> dict:
 			if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected:
 				_enqueue_delivery(frappe.get_doc("CRM Agent Event", event_name))
 				requeued += 1
-	return {"requeued": requeued, "enabled": True}
+	return {"requeued": requeued, "blocked_next_best_action": blocked_next_best_action, "enabled": True}
+
+
+def _surface_blocked_next_best_action(run_type, run, stages, now, stage_terminal) -> int:
+	"""Flag a Next Best Action stage that can never make progress.
+
+	Its sibling Student 360 stage has ended without completing, or has run far
+	past a reasonable window without completing, so the Next Best Action stage
+	will never see the completed same-revision 360 it requires. The dependency
+	guard keeps deferring its claim, so this would otherwise be a silent stall.
+	"""
+	nba = next((s for s in stages if s.stage_kind == "next_best_action"), None)
+	if not nba or nba.status in stage_terminal:
+		return 0
+	s360 = next((s for s in stages if s.stage_kind == "student_360"), None)
+	if not s360:
+		return 0
+	grace_hours = int(frappe.conf.get("crm_intelligence_stage_block_alert_hours", 6) or 6)
+	aged_out = bool(
+		run.get("creation")
+		and (get_datetime(now) - get_datetime(run.creation)).total_seconds() >= grace_hours * 3600
+	)
+	stalled = (s360.status in stage_terminal and s360.status != "completed") or (
+		s360.status != "completed" and aged_out
+	)
+	if not stalled:
+		return 0
+	# The reaper runs hourly; log this blocked run only once a day.
+	dedupe_key = f"nba-blocked-alert:{run_type}:{run.name}"
+	if frappe.cache().get_value(dedupe_key):
+		return 1
+	frappe.cache().set_value(dedupe_key, "1", expires_in_sec=86400)
+	frappe.log_error(
+		message=f"run_type={run_type} run={run.name} student_360_status={s360.status}",
+		title="Intelligence Run Next Best Action stage blocked on Student 360",
+	)
+	return 1
 
 
 def reconcile_student_context_v2(limit: int = 500) -> dict:
 	"""Replay the immutable global sequence with a durable cursor."""
+	if frappe.conf.get("crm_intelligence_runs_enabled", 0) in (1, "1", True):
+		return {"discovered": 0, "enabled": False, "reason": "unified_intelligence_active"}
 	if frappe.conf.get("crm_agents_v2_reconciliation_enabled", 0) in (0, "0", False):
 		return {"discovered": 0, "enabled": False}
 	cache_key = "crm_agents_v2:context-change-cursor"

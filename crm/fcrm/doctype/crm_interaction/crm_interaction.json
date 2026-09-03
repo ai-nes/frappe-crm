@@ -295,6 +295,10 @@
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 0,

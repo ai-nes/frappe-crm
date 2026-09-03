@@ -36,6 +36,7 @@ from crm.demo import (
 	seed_admission_funnel,
 	seed_bulk_realistic,
 	seed_director_campaign_intelligence,
+	seed_director_revenue_forecast,
 	seed_demo,
 	seed_director_regional_performance,
 	seed_role_accounts,
@@ -2087,6 +2088,7 @@ def _maybe_convert(student: str, scenario: dict) -> None:
 
 
 _FEATURED_SCHOOLS_PER_PROVINCE = 6
+_MARKET_SNAPSHOT_SCHOOL_COUNT = 35
 
 # The director screenshots use this Khánh Hoà slice as the first school-detail
 # walkthrough. Keep it explicit because the imported directory now contains
@@ -2148,6 +2150,19 @@ def _json_semantically_equal(left: object, right: object) -> bool:
 		return value
 
 	return normalize(left) == normalize(right)
+
+
+def _market_snapshot_key_account_values(index: int, threshold: int, ne_actual: int) -> tuple[int, int]:
+	"""Return deterministic account eligibility values for a market fixture.
+
+	One out of every three schools stays eligible for a key-account projection;
+	the other two deliberately sit just below their threshold.  This gives the
+	demo map a meaningful non-key-account population while retaining account
+	fixtures in every seeded run.
+	"""
+	if index % 3 == 0:
+		return min(threshold, ne_actual), ne_actual
+	return max(threshold, ne_actual + 1), ne_actual
 
 
 def _khanh_hoa_school_detail_context(school: dict, metrics: dict) -> dict | None:
@@ -3852,6 +3867,9 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 				else "accepted"
 			)
 			updates: dict[str, Any] = {"state": target_state, "disposition": disposition}
+			if target_state in {"rejected", "superseded", "cancelled", "completed"}:
+				# A terminal Action never keeps the student's single current slot.
+				updates["current_slot"] = None
 			frappe.db.set_value("CRM Action", action_name, updates, update_modified=False)
 			notes.append(
 				f"CRM Action {action_name} state={target_state} disposition={disposition} (no service path)"
@@ -3946,12 +3964,29 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 	remaining = [school for school in schools if school["name"] not in featured_names]
 	rng = random.Random(SEED ^ 0x5000)
 	rng.shuffle(remaining)
-	# The dashboard school directory is backed by the full canonical school
-	# dataset. Keep the featured rows first, then enrich every remaining school
-	# so opening any school from the directory has the same detail contract.
-	targets = featured + remaining
+	# Keep the map fixture deliberately small. This makes the demo legible while
+	# preserving a deterministic mix of key and non-key-account schools.
+	targets = (featured + remaining)[:_MARKET_SNAPSHOT_SCHOOL_COUNT]
+	target_school_names = [row["name"] for row in targets]
+	# A previous full seed may have supplied a dashboard snapshot for every
+	# canonical school. Remove only those showcase-owned rows and clear their
+	# account flag, leaving imported/reference snapshots untouched.
+	frappe.db.delete(
+		"CRM High School Annual Snapshot",
+		{
+			"source_run": _DASHBOARD_SNAPSHOT_SOURCE_RUN,
+			"high_school": ["not in", target_school_names],
+		},
+	)
+	frappe.db.set_value(
+		"CRM High School",
+		{"name": ["not in", target_school_names]},
+		"is_key_account",
+		0,
+		update_modified=False,
+	)
 	created = skipped = 0
-	for row in targets:
+	for index, row in enumerate(targets):
 		school = row["name"]
 		sp = _savepoint_name("showcase_market_snapshot", school)
 		frappe.db.savepoint(sp)
@@ -3989,8 +4024,9 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 		generated_ne_actual = r.randint(18, 48)
 		generated_forecast_factor = r.uniform(1.05, 1.35)
 		generated_average_score = round(r.uniform(18.0, 28.5), 2)
-		threshold = int((showcase_snapshot or {}).get("adjusted_ne_threshold") or generated_threshold)
-		ne_actual = int((showcase_snapshot or {}).get("ne_actual") or generated_ne_actual)
+		threshold, ne_actual = _market_snapshot_key_account_values(
+			index, generated_threshold, generated_ne_actual
+		)
 		forecast = max(ne_actual, int(ne_actual * generated_forecast_factor))
 		try:
 			metrics = compute_crm_metrics(school, year)
@@ -4014,7 +4050,13 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 			continue
 		if showcase_snapshot and all(
 			showcase_snapshot.get(field) == value
-			for field, value in {**derived, "forecast_count": forecast, "average_score": average_score}.items()
+			for field, value in {
+				**derived,
+				"adjusted_ne_threshold": threshold,
+				"ne_actual": ne_actual,
+				"forecast_count": forecast,
+				"average_score": average_score,
+			}.items()
 		) and (
 			not detail_context
 			or _json_semantically_equal(showcase_snapshot.get("context_raw_counts"), context_raw_counts)
@@ -4103,6 +4145,7 @@ def _seed_all() -> dict:
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
 	campaign_intelligence = seed_director_campaign_intelligence.seed(context, marketing)
+	revenue_forecast = seed_director_revenue_forecast.seed(context)
 	edge = _seed_edge_states(context, staff_context)
 	role_accounts = seed_role_accounts.execute()
 
@@ -4134,6 +4177,7 @@ def _seed_all() -> dict:
 		"market_snapshots": market_snapshots,
 		"marketing": marketing,
 		"campaign_intelligence": campaign_intelligence,
+		"revenue_forecast": revenue_forecast,
 		"governance": governance,
 		"reference": reference,
 		"edge_states": edge,

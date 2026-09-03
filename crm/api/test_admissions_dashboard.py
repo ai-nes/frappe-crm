@@ -254,22 +254,18 @@ class TestAdmissionsDashboard(FrappeTestCase):
 	# ------------------------------------------------------------------- helpers (Phase 6)
 
 	def _make_campaign_spend(self, campaign, spend_date, amount):
-		if not frappe.db.exists("CRM Lead Source", "_Test Dash Spend Source"):
-			frappe.get_doc(
-				{"doctype": "CRM Lead Source", "source_name": "_Test Dash Spend Source"}
-			).insert(ignore_permissions=True)
-		doc = frappe.get_doc(
-			{
-				"doctype": "CRM Campaign Spend",
-				"crm_campaign": campaign,
-				"lead_source": "_Test Dash Spend Source",
-				"spend_date": spend_date,
-				"amount": amount,
-			}
-		)
-		doc.insert(ignore_permissions=True)
-		self.addCleanup(lambda: frappe.delete_doc("CRM Campaign Spend", doc.name, force=True))
-		return doc.name
+		from crm.fcrm.campaign_performance_fact import record_performance_fact
+		lead_source = "_Test Dash Spend Source"
+		platform = "_Test Dash Spend Platform"
+		if not frappe.db.exists("CRM Lead Source", lead_source):
+			frappe.get_doc({"doctype": "CRM Lead Source", "source_name": lead_source}).insert(ignore_permissions=True)
+		if not frappe.db.exists("CRM Platform", platform):
+			frappe.get_doc({"doctype": "CRM Platform", "platform_name": platform, "lead_source": lead_source}).insert(ignore_permissions=True)
+		assignment = frappe.get_doc({"doctype": "CRM Campaign Channel Assignment", "campaign": campaign, "channel": platform, "effective_from": "2020-01-01", "is_active": 1}).insert(ignore_permissions=True)
+		result = record_performance_fact(campaign=campaign, channel_assignment=assignment.name, period_start=spend_date, period_end=spend_date, timezone="Asia/Ho_Chi_Minh", source_system="test", ingestion_run=f"dash-{campaign}", source_key=f"{campaign}-{spend_date}", dimension_values={"channel": platform}, measures={"spend": amount})
+		self.addCleanup(lambda: frappe.db.delete("CRM Campaign Performance Fact", result["fact"]))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Campaign Channel Assignment", assignment.name, force=True))
+		return result["fact"]
 
 	def _make_user_and_staff_for_dash(self, prefix, roles=None):
 		email = f"{prefix}@example.com"

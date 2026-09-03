@@ -22,41 +22,26 @@ _DISCOVERY_HIDDEN_TYPES = frozenset({"Password", "Secret"})
 ROLE_MATRIX_EPOCH = "crm-roles-v1"
 AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 
-# Business-facing resources advertised to Copilot. Internal lifecycle,
-# routing, SLA, migration, receipt, journal, and control records remain in the
+# Business-facing resources advertised to Copilot. The catalog stays limited to
+# the day-to-day admissions/CRM entities a sales user reasons about directly.
+# Scoring, forecasting, AI-insight, campaign-warehouse, identity/consent, SLA,
+# routing, migration, receipt, journal, and other control records remain in the
 # capability manifest for server-owned workflows that need read-back, but are
 # intentionally absent from the discovery catalog and prompt surface.
 _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 	{
 		# core admissions and CRM aggregates
-		"CRM Student", "CRM Contact", "CRM Lead", "CRM Company", "CRM Person", "CRM Interaction", "CRM Intent",
+		"CRM Student", "CRM Contact", "CRM Person", "CRM Interaction", "CRM Intent",
 		"CRM Admission Application", "CRM Admission Offering", "CRM Admission Year",
-		"CRM Recommendation", "CRM Action", "CRM Student Assessment", "CRM Student Outcome",
-		"CRM Student Payment", "CRM Revenue Recognition", "CRM Student Fee Award",
+		"CRM Recommendation", "CRM Action",
+		"CRM Student Assessment", "CRM Student Outcome", "CRM Student Payment",
 		# admissions reference and organization
-		"CRM Academic Year Config", "CRM Campus", "CRM Department", "CRM Education Program",
-		"CRM Major", "CRM Term", "CRM Province", "CRM Ward", "CRM Lead Source",
-		"CRM Platform", "CRM Territory", "CRM Territory Geography Assignment", "CRM Team",
-		"CRM Staff", "CRM Staff Capacity Period", "CRM Student Pool",
+		"CRM Campus", "CRM Department", "CRM Education Program", "CRM Major", "CRM Term",
+		"CRM Lead Source", "CRM Staff", "CRM Team",
 		# marketing and campaign
-		"CRM Campaign", "CRM Marketing Engagement", "CRM Segment", "CRM Event",
-		"CRM Campaign Attribution", "CRM Campaign Spend", "CRM Campaign Performance Period",
-		"CRM Campaign Performance Dimension", "CRM Campaign Performance Fact",
-		"CRM Campaign Funnel Metric", "CRM Campaign Channel Assignment",
-		"CRM Campaign Assignment Crosswalk",
+		"CRM Campaign", "CRM Marketing Engagement", "CRM Segment",
 		# school operations
-		"CRM High School", "CRM High School Annual Snapshot", "CRM School Stakeholder",
-		"CRM School Contact", "CRM School Relationship", "CRM School Activity",
-		"CRM Geography Market Snapshot",
-		# intelligence and planning
-		"CRM Score Template", "CRM Score Signal", "CRM Score History", "CRM AI Lead Insight",
-		"CRM AI Personal Email Draft", "CRM Fee Policy", "CRM Scholarship Policy",
-		"CRM Planning Scope", "CRM Target", "CRM Forecast Run", "CRM Forecast Scenario",
-		"CRM Forecast Value", "CRM Model Version", "CRM Metric Definition",
-		# supporting identity and relationship records
-		"CRM Contact Consent Event", "CRM Influence", "CRM Parent Contact Authority",
-		"CRM Student Guardian", "CRM Student Identity", "CRM Student Case Key",
-		"CRM Student Geography Snapshot",
+		"CRM High School", "CRM School Contact",
 	}
 )
 

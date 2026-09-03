@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -96,7 +97,11 @@ def _parent_status(run_type: str, parent_run: str) -> str:
 
 def _receipt(receipt) -> dict[str, Any]:
 	run = frappe.get_doc(receipt.parent_run_type, receipt.parent_run)
-	stages = frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": receipt.parent_run_type, "parent_run": receipt.parent_run}, fields=["name", "stage_kind", "status", "policy_revision", "model_revision", "terminal_reason"])
+	stages = frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": receipt.parent_run_type, "parent_run": receipt.parent_run}, fields=["name", "stage_kind", "status", "claims", "report_json", "policy_revision", "model_revision", "terminal_reason"])
+	for stage in stages:
+		stage["claims"] = visible_claims(stage.get("claims"))
+		stage["report"] = frappe.parse_json(stage["report_json"]) if stage.get("report_json") else None
+		stage.pop("report_json", None)
 	return {"receipt": receipt.name, "run_id": run.name, "run_type": receipt.parent_run_type, "status": run.status, "stages": stages}
 
 
@@ -265,7 +270,7 @@ def request_run(*, domain: str, target: str, idempotency_key: str, force_reason:
 	return _receipt(receipt)
 
 
-def request_automatic_run(domain: str, target: str, admission_year: int | None = None):
+def request_automatic_run(domain: str, target: str, admission_year: int | None = None, admission_decision: str | None = None, admission_event: str | None = None, candidate_revision: int | None = None, policy_revision: str | None = None):
 	"""Create one idempotent automatic parent for an authoritative revision."""
 	require_unified_intelligence_enabled()
 	if domain not in RUN_TYPES:
@@ -279,7 +284,7 @@ def request_automatic_run(domain: str, target: str, admission_year: int | None =
 		return frappe.get_doc(run_type, existing[0])
 	fingerprint = canonical_request_fingerprint({"domain": domain, "target": target, "source_revision": revision, "trigger": "automatic"})
 	try:
-		run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, trigger="automatic")
+		run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, trigger="automatic", admission_decision=admission_decision, admission_event=admission_event, candidate_revision=candidate_revision, policy_revision=policy_revision)
 	except Exception as exc:
 		# A composite identity cannot be represented in old Frappe metadata.  New
 		# sites enforce ``automatic_identity`` uniquely; retain a safe lookup for
@@ -295,7 +300,7 @@ def request_automatic_run(domain: str, target: str, admission_year: int | None =
 	return run
 
 
-def _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, *, trigger="manual"):
+def _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, *, trigger="manual", admission_decision=None, admission_event=None, candidate_revision=None, policy_revision=None):
 	run_type = RUN_TYPES[domain]
 	values = {"doctype": run_type, "source_revision": revision, "source_digest": source_digest, "trigger": trigger, "status": "queued", "request_fingerprint": fingerprint}
 	if trigger == "manual":
@@ -303,6 +308,7 @@ def _insert_run(domain, target, revision, source_digest, fingerprint, admission_
 	values["student" if domain == "student" else "high_school"] = target
 	if trigger == "automatic":
 		values["automatic_identity"] = _automatic_identity(domain, target, revision, source_digest, admission_year)
+		values.update({"admission_decision": admission_decision, "admission_event": admission_event, "candidate_revision": candidate_revision if candidate_revision is not None else revision, "policy_revision": policy_revision})
 	if domain == "school":
 		values["admission_year"] = admission_year
 	run = frappe.get_doc(values).insert(ignore_permissions=True)
@@ -328,7 +334,7 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		for key in (
 			"student_id", "returned_revision", "snapshot_hash", "policy_version",
 			"eligibility", "lifecycle", "intent", "score", "interaction",
-			"sla_evidence", "allowed_action_types",
+			"sla_evidence", "allowed_action_types", "recent_actions",
 		)
 	}
 	decision_context["evidence_refs"] = [f"student:{student}"]
@@ -355,6 +361,11 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		"scoring_time", "scoring_date", "final_score", "score_change", "fit_score",
 		"engagement_score", "intent_score",
 	], 12, "scoring_time desc, creation desc")
+	# Legacy score rows may only have scoring_time.  The agent evidence contract
+	# requires a bounded temporal reference, so normalize at the producer edge.
+	for item in score_history:
+		item["scoring_date"] = str(item.get("scoring_date") or item.get("scoring_time") or "unknown")
+		item.pop("scoring_time", None)
 	interactions = _rows("CRM Interaction", [
 		"interaction_datetime", "channel", "direction", "outcome", "source_verified",
 	], 20, "interaction_datetime desc, creation desc")
@@ -482,6 +493,11 @@ def execution(run_type: str, run_id: str) -> dict[str, Any]:
 		"run_id": run.name,
 		"source_revision": str(run.source_revision),
 		"source_digest": run.source_digest,
+		"trigger": run.trigger,
+		"admission_decision": run.get("admission_decision"),
+		"admission_event": run.get("admission_event"),
+		"candidate_revision": str(run.get("candidate_revision") or run.source_revision),
+		"policy_revision": run.get("policy_revision"),
 		"stages": [
 			{
 				"stage_kind": stage.stage_kind,
@@ -518,6 +534,10 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 	# be claimed before Frappe has created them.
 	if int(stage_generation) > int(stage.stage_generation or 0):
 		frappe.throw("Stage claim references a future generation.", frappe.ValidationError)
+	if stage_kind == "next_best_action":
+		blocked = _next_best_action_blocked_on_360(run_type, run_id, int(stage.stage_generation or 0))
+		if blocked is not None:
+			return blocked
 	now = _lease_now()
 	if stage.status == "running" and stage.get("lease_expires_at") and stage.lease_expires_at > now:
 		return {"claimed": False, "deferred": True, "status": "running", "stage_generation": int(stage.stage_generation or 0), "retry_after": str(stage.lease_expires_at)}
@@ -542,6 +562,37 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 		"stage_kind": stage_kind, "stage_key": stage.stage_key, "stage_generation": generation,
 		"lease_token": token, "lease_expires_at": str(lease_until),
 		"expected_source_revision": str(stage.expected_source_revision), "expected_source_digest": stage.expected_source_digest,
+	}
+
+
+def _next_best_action_blocked_on_360(run_type: str, run_id: str, stage_generation: int) -> dict[str, Any] | None:
+	"""Hold the Next Best Action stage until its sibling Student 360 stage is done.
+
+	The agent worker runs both student stages off one outbox signal. A Next Best
+	Action must reason from a completed same-revision 360, so its claim is
+	deferred while the 360 sibling is still queued or running. Once the 360 stage
+	is terminal -- completed, or died non-completed -- the Next Best Action stage
+	is released (a non-completed 360 lets it settle abstained downstream).
+
+	Every student run materializes a ``student_360`` stage, so a missing sibling
+	means broken materialization: fail closed by deferring, never allow the claim.
+	"""
+	sibling = frappe.db.get_value(
+		"CRM Analysis Run Stage",
+		{"parent_run_type": run_type, "parent_run": run_id, "stage_kind": "student_360"},
+		"status",
+	)
+	if sibling is not None and sibling in TERMINAL:
+		return None
+	wait_minutes = int(frappe.conf.get("crm_intelligence_stage_dependency_wait_minutes", 5) or 5)
+	retry_after = _lease_now() + timedelta(minutes=wait_minutes)
+	return {
+		"claimed": False,
+		"deferred": True,
+		"status": sibling or "missing",
+		"stage_generation": stage_generation,
+		"blocked_on": "student_360",
+		"retry_after": str(retry_after),
 	}
 
 
@@ -573,6 +624,18 @@ def authorize_next_best_action_write(*, run_id: str, stage_generation: int, leas
 		or stage.expected_source_digest != expected_source_digest
 	):
 		frappe.throw("Next Best Action write does not own the current Intelligence Run stage lease.", frappe.PermissionError)
+	# Defense in depth over the claim-time dependency guard: an NBA result may
+	# only be written once its sibling 360 stage has actually completed.
+	sibling_status = frappe.db.get_value(
+		"CRM Analysis Run Stage",
+		{"parent_run_type": run_type, "parent_run": run_id, "stage_kind": "student_360"},
+		"status",
+	)
+	if sibling_status != "completed":
+		frappe.throw(
+			"Next Best Action write requires a completed sibling Student 360 stage.",
+			frappe.PermissionError,
+		)
 	run = frappe.get_doc(run_type, run_id)
 	current_revision, current_digest = _source("student", run.student)
 	if current_revision != str(expected_source_revision) or current_digest != expected_source_digest:
@@ -586,10 +649,12 @@ def authorize_next_best_action_write(*, run_id: str, stage_generation: int, leas
 	}
 
 
-def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str, status: str, claims=None, terminal_reason: str | None = None, policy_revision: str | None = None, model_revision: str | None = None, completed_metadata: dict | None = None) -> dict[str, Any]:
+def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str, status: str, claims=None, terminal_reason: str | None = None, policy_revision: str | None = None, model_revision: str | None = None, result_digest: str | None = None, completed_metadata: dict | None = None, report=None) -> dict[str, Any]:
 	_service_only()
 	if status not in TERMINAL:
 		frappe.throw("Only terminal stage settlement is allowed.", frappe.ValidationError)
+	result_digest = _validated_result_digest(result_digest)
+	report_json = json.dumps(report or {}, ensure_ascii=False, separators=(",", ":")) if report else None
 	terminal_reason = str(terminal_reason).strip() if terminal_reason is not None else None
 	if terminal_reason is not None and len(terminal_reason) > 500:
 		frappe.throw("Analysis Run terminal reason is bounded.", frappe.ValidationError)
@@ -605,8 +670,8 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	# Terminal replay is safe only when it repeats exactly the persisted result.
 	if stage.status in TERMINAL:
 		stored_claims = frappe.parse_json(stage.claims) if stage.claims else []
-		if stage.status == status and stored_claims == (claims or []) and (stage.terminal_reason or None) == (terminal_reason or None) and (stage.policy_revision or None) == (policy_revision or None) and (stage.model_revision or None) == (model_revision or None):
-			return {"run_id": run_id, "stage_kind": stage_kind, "status": stage.status, "parent_status": frappe.db.get_value(run_type, run_id, "status"), "policy_revision": stage.policy_revision, "model_revision": stage.model_revision, "replayed": True}
+		if stage.status == status and stored_claims == (claims or []) and (stage.terminal_reason or None) == (terminal_reason or None) and (stage.policy_revision or None) == (policy_revision or None) and (stage.model_revision or None) == (model_revision or None) and (stage.get("result_digest") or None) == (result_digest or None):
+			return {"run_id": run_id, "stage_kind": stage_kind, "status": stage.status, "parent_status": frappe.db.get_value(run_type, run_id, "status"), "policy_revision": stage.policy_revision, "model_revision": stage.model_revision, "result_digest": stage.get("result_digest"), "replayed": True}
 		frappe.throw("Stage already has a different terminal settlement.", frappe.ValidationError)
 	if (int(stage.stage_generation or 0) != int(stage_generation) or stage.get("lease_token") != str(lease_token or "")
 		or stage.expected_source_revision != str(expected_source_revision) or stage.expected_source_digest != expected_source_digest):
@@ -616,12 +681,12 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	target = run.student if domain == "student" else run.high_school
 	current_revision, current_digest = _source(domain, target, run.get("admission_year"))
 	if current_revision != str(expected_source_revision) or current_digest != expected_source_digest:
-		status, terminal_reason, claims, policy_revision, model_revision = "abstained", "superseded", [], None, None
+		status, terminal_reason, claims, policy_revision, model_revision, result_digest = "abstained", "superseded", [], None, None, None
 	frappe.db.sql(
-		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, lease_token=NULL, lease_expires_at=NULL "
+		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, report_json=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, result_digest=%s, lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND stage_generation=%s "
 		"AND lease_token=%s AND expected_source_revision=%s AND expected_source_digest=%s",
-		(status, json.dumps(claims or []), terminal_reason, policy_revision, model_revision, stage.name, int(stage_generation), str(lease_token or ""), str(expected_source_revision), expected_source_digest),
+		(status, json.dumps(claims or []), report_json, terminal_reason, policy_revision, model_revision, result_digest, stage.name, int(stage_generation), str(lease_token or ""), str(expected_source_revision), expected_source_digest),
 	)
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		frappe.throw("Stage settlement lost its compare-and-swap fence.", frappe.ValidationError)
@@ -629,4 +694,14 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	run.db_set("status", parent_status, update_modified=False)
 	if parent_status in TERMINAL:
 		run.db_set("terminal_reason", terminal_reason if parent_status != "completed" else None, update_modified=False)
-	return {"run_id": run_id, "stage_kind": stage_kind, "status": status, "parent_status": parent_status, "policy_revision": policy_revision, "model_revision": model_revision}
+	return {"run_id": run_id, "stage_kind": stage_kind, "status": status, "parent_status": parent_status, "policy_revision": policy_revision, "model_revision": model_revision, "result_digest": result_digest}
+
+
+def _validated_result_digest(result_digest: str | None) -> str | None:
+	"""Accept an optional lowercase 64-hex content digest for the stage result."""
+	if result_digest in (None, ""):
+		return None
+	result_digest = str(result_digest).strip().lower()
+	if not re.fullmatch(r"[a-f0-9]{64}", result_digest):
+		frappe.throw("Analysis Run result digest must be a 64-character hex string.", frappe.ValidationError)
+	return result_digest

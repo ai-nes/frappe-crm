@@ -40,7 +40,7 @@ def _audit(*, operation: str, doctype: str, name: str | None, values: dict, prop
 		"operation": operation,
 		"target_doctype": doctype,
 		"target_name": name,
-		"changed_fields": sorted(values),
+		"changed_fields": json.dumps(sorted(values)),
 		"requested_values": json.dumps(values, default=str),
 		"actor": frappe.session.user,
 		"proposal_id": proposal_id,
@@ -81,6 +81,18 @@ def apply(operation: str, doctype: str, name: str | None = None, values: dict | 
 			frappe.delete_doc(doctype, name, ignore_permissions=True, force=True)
 		audit_id = _audit(operation=operation, doctype=doctype, name=name, values=values, proposal_id=proposal_id, status="succeeded")
 		return {"status": "succeeded", "operation": operation, "doctype": doctype, "name": name, "audit_id": audit_id, "actor": frappe.session.user}
+	except (frappe.ValidationError, frappe.PermissionError, frappe.DoesNotExistError, frappe.DuplicateEntryError) as exc:
+		# Expected, caller-actionable failures: return a structured result at
+		# HTTP 200 so the agent can surface a reason and let the user
+		# re-propose, instead of a bare HTTP 417. Roll back any partial write
+		# from a failed save/delete FIRST (this function now returns normally,
+		# so the request would otherwise commit), then record the failed audit.
+		frappe.db.rollback()
+		audit_id = _audit(operation=operation, doctype=doctype, name=name, values=values, proposal_id=proposal_id, status="failed", error=type(exc).__name__)
+		return {
+			"status": "failed", "operation": operation, "doctype": doctype, "name": name,
+			"error_code": type(exc).__name__, "message": str(exc), "audit_id": audit_id,
+		}
 	except Exception as exc:
 		_audit(operation=operation, doctype=doctype, name=name, values=values, proposal_id=proposal_id, status="failed", error=type(exc).__name__)
 		raise

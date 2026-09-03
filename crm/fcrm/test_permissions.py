@@ -29,12 +29,22 @@ from crm.fcrm.permissions import (
 class TestSharedScopingPermissions(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		# This module verifies the canonical owner/team scope matrix. Keep the
+		# optional converted-Contact compatibility projection disabled so the
+		# assertions do not depend on demo-site rollout configuration.
+		self._conversion_read_flag = "crm_student_conversion_read_enabled"
+		self._previous_conversion_read = frappe.conf.get(self._conversion_read_flag)
+		frappe.conf[self._conversion_read_flag] = False
 		self._campus = self._make_campus("_Test Scope Campus")
 		self._other_campus = self._make_campus("_Test Scope Other Campus")
 		self._department = self._get_or_create_department("_Test Scope Dept", self._campus)
 		self._team = self._make_team("_Test Scope Team", self._campus)
 
 	def tearDown(self):
+		if self._previous_conversion_read is None:
+			frappe.conf.pop(self._conversion_read_flag, None)
+		else:
+			frappe.conf[self._conversion_read_flag] = self._previous_conversion_read
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):

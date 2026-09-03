@@ -46,10 +46,13 @@ def get_director_demographics_overview(
 	admissionYear: str | int | None = None,
 	period: str = "6m",
 	scope: str = "all",
+	page: str | int | None = 1,
+	pageSize: str | int | None = 5,
 ) -> dict[str, Any]:
 	"""Return aggregate demographics data without exposing student identity."""
 	period = _normalize_period(period)
 	scope = _normalize_scope(scope)
+	page, page_size = _normalize_pagination(page, pageSize)
 	resolved_year = _resolve_admission_year(admissionYear)
 	rows = _load_students(resolved_year)
 	lookups = _load_lookups(rows)
@@ -60,7 +63,8 @@ def get_director_demographics_overview(
 		if row.get("name")
 	]
 	windows = _month_windows(period)
-	segments = _build_segments(records, windows)
+	all_segments = _build_segments(records, windows)
+	segments, pagination = _paginate_segments(all_segments, page, page_size)
 	year_number = _year_number(resolved_year)
 
 	return {
@@ -69,6 +73,7 @@ def get_director_demographics_overview(
 			"demand": _build_demand(records, windows),
 			"audienceComposition": _build_audience_composition(records),
 			"segments": segments,
+			"acquisitionMap": _empty_acquisition_map(),
 			"regionOpportunities": _build_region_opportunities(records),
 			"regionalDemand": _build_regional_demand(records),
 			"dataCoverage": _build_data_coverage(records),
@@ -80,11 +85,13 @@ def get_director_demographics_overview(
 			"asOf": _as_iso(frappe.utils.now_datetime()),
 			"totalProspects": len(records),
 			"minSampleSize": MIN_SAMPLE_SIZE,
+			**pagination,
 			"dataAvailability": {
 				"trend": any(record.get("created_at") for record in records),
 				"tuition": False,
 				"revenue": False,
-				"eligibleSegments": len(segments),
+				"eligibleSegments": len(all_segments),
+				"acquisitionMap": "unavailable",
 			},
 		},
 	}
@@ -150,6 +157,98 @@ def _normalize_scope(value: str | None) -> str:
 	if scope != "all":
 		_raise_api_error("INVALID_SCOPE", "scope hiện chỉ hỗ trợ all.", frappe.ValidationError, 400)
 	return scope
+
+
+def _normalize_pagination(page: str | int | None, page_size: str | int | None) -> tuple[int, int]:
+	"""Validate the one-based page and bounded page size accepted by the API."""
+	page_number = _parse_positive_integer(page, "page")
+	page_size_number = _parse_positive_integer(page_size, "pageSize")
+	if page_size_number > 100:
+		_raise_api_error(
+			"INVALID_PAGINATION",
+			"pageSize phải là số nguyên trong khoảng 1..100.",
+			frappe.ValidationError,
+			400,
+		)
+	return page_number, page_size_number
+
+
+def _parse_positive_integer(value: str | int | None, field_name: str) -> int:
+	normalized_value = str(value or "").strip()
+	if isinstance(value, bool) or not re.fullmatch(r"[1-9]\d*", normalized_value):
+		_raise_api_error(
+			"INVALID_PAGINATION",
+			f"{field_name} phải là số nguyên dương.",
+			frappe.ValidationError,
+			400,
+		)
+	try:
+		return int(normalized_value)
+	except ValueError:
+		_raise_api_error(
+			"INVALID_PAGINATION",
+			f"{field_name} phải là số nguyên dương.",
+			frappe.ValidationError,
+			400,
+		)
+		raise AssertionError("_raise_api_error must raise")
+
+
+def _paginate_segments(segments: list[dict[str, Any]], page: int, page_size: int) -> tuple[list[dict[str, Any]], dict[str, int | bool]]:
+	"""Slice already-sorted segments and return the required pagination metadata."""
+	total = len(segments)
+	total_pages = max(1, (total + page_size - 1) // page_size)
+	if page > total_pages:
+		_raise_api_error(
+			"INVALID_PAGINATION",
+			"page vượt quá số trang hiện có.",
+			frappe.ValidationError,
+			400,
+		)
+	start = (page - 1) * page_size
+	return segments[start : start + page_size], {
+		"page": page,
+		"pageSize": page_size,
+		"total": total,
+		"totalPages": total_pages,
+		"hasNextPage": page < total_pages,
+	}
+
+
+def _empty_acquisition_map() -> dict[str, Any]:
+	"""Return the complete Acquisition Map contract without fabricating unavailable metrics."""
+	return {
+		"attributionModel": {"firstTouch": "first-touch", "lastTouch": "last-touch"},
+		"platformLeadCost": [],
+		"leadTrendComparison": [],
+		"dailySpendLeads": [],
+		"touchpointPlatformMatrix": {"columns": [], "rows": []},
+		"budgetByPlatformRole": [],
+		"formFunnel": [],
+		"formCompletion": [],
+		"formDropoffByField": [],
+		"captureModeComparison": [],
+		"leadQualityBySource": [],
+		"validLeadRateTrend": [],
+		"handoffDataCompleteness": [],
+		"identityMatchBreakdown": [],
+		"firstTouchBySource": [],
+		"lastTouchBySource": [],
+		"firstVsLastSource": [],
+		"attributionFlow": [],
+		"cohortEnrollmentMatrix": [],
+		"enrollmentLagHistogram": {"medianDays": None, "buckets": []},
+		"cumulativeConversion": [],
+		"firstContactLatency": [],
+		"submissionTiming": {
+			"weekdays": [],
+			"hours": [],
+			"values": [],
+			"timezone": "Asia/Ho_Chi_Minh",
+		},
+		"handoffSuccessBySource": [],
+		"costPerEnrolledBySource": [],
+	}
 
 
 def _load_students(admission_year: str) -> list:

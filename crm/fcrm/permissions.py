@@ -102,10 +102,13 @@ def get_permission_query_conditions(doctype, user=None):
 
 	roles = set(frappe.get_roles(user))
 	scope = _effective_case_scope(roles, doctype, user=user)
-	if doctype == "CRM Contact" and enabled("conversion_read"):
-		return _contact_conversion_condition(user, roles, scope)
+	# Full-visibility roles must not be narrowed by the converted-Contact
+	# compatibility projection below. The scope policy is authoritative; the
+	# conversion junction only constrains roles with a narrower Student scope.
 	if scope == "all":
 		return None
+	if doctype == "CRM Contact" and enabled("conversion_read"):
+		return _contact_conversion_condition(user, roles, scope)
 	if scope == "deny":
 		return "1=0"
 
@@ -352,6 +355,24 @@ def has_student_projection_permission(doc, user=None, permission_type=None, ptyp
 			(doc.name,),
 		)
 	)
+
+
+def get_admission_decision_permission_query_conditions(user=None, doctype=None):
+	if doctype != "CRM Admission Event Decision":
+		return "1=0"
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	return f"`tabCRM Admission Event Decision`.student in (select `tabCRM Student`.name from `tabCRM Student` where ({student_condition}))"
+
+
+def has_admission_decision_permission(doc, user=None, permission_type=None, ptype=None):
+	if (permission_type or ptype) == "create":
+		return False
+	condition = get_admission_decision_permission_query_conditions(user=user, doctype=doc.doctype)
+	if condition is None:
+		return True
+	return bool(frappe.db.sql(f"select name from `tabCRM Admission Event Decision` where name=%s and ({condition}) limit 1", (doc.name,)))
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):

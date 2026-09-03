@@ -68,11 +68,19 @@ def _next_stream_sequence(stream: str) -> int:
 	return sequence
 
 
-def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = True) -> dict:
+def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = True, event_id: str | None = None) -> dict:
 	"""Atomically advance one Student revision and append the global journal."""
 	if not student:
 		raise ValueError("student is required")
 	reason = str(reason or "material_change").strip()[:140] or "material_change"
+	prior = frappe.db.get_value(
+		"CRM Student Revision Journal",
+		{"idempotency_key": event_id} if event_id else {},
+		["name", "revision", "stream_sequence"],
+		as_dict=True,
+	) if event_id else None
+	if prior:
+		return {"student": student, "revision": int(prior.revision), "stream_sequence": int(prior.stream_sequence), "change": prior.name}
 	row = frappe.db.sql(
 		"SELECT student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
@@ -86,7 +94,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 		(revision, student),
 	)
 	sequence = _next_stream_sequence("context")
-	event_id = frappe.generate_hash(length=32)
+	event_id = event_id or frappe.generate_hash(length=32)
 	change = frappe.get_doc(
 		{
 			"doctype": "CRM Student Revision Journal",
@@ -107,18 +115,8 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"occurred_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True)
-	if enqueue:
-		from crm.fcrm.intelligence_runs import unified_intelligence_enabled
-		if unified_intelligence_enabled():
-			# One-writer cutover: a revision emits exactly one Intelligence Run
-			# instead of also invoking the retired direct NBA path.
-			from crm.fcrm.intelligence_runs import request_automatic_run
-
-			request_automatic_run("student", student)
-		else:
-			from crm.api.agent_events import record_student_context_event
-
-			record_student_context_event(student, revision, event_id=event_id)
+	# Context revision is deliberately data-only.  Automatic admission belongs
+	# to the authoritative business writer, never to this generic helper.
 	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
 
 

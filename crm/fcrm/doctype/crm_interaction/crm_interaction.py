@@ -31,9 +31,6 @@ class CRMInteraction(Document):
 	def on_update(self):
 		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
 		if student:
-			from crm.services.student_context import mark_student_context_changed
-
-			mark_student_context_changed(student, "interaction_material_change")
 			# Every interaction is a direct Engagement-scorer input (see
 			# app/services/scoring/scorers.py) -- always scoring-relevant,
 			# unlike a generic Student field edit.
@@ -44,9 +41,6 @@ class CRMInteraction(Document):
 	def on_trash(self):
 		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
 		if student:
-			from crm.services.student_context import mark_student_context_changed
-
-			mark_student_context_changed(student, "interaction_deleted")
 			# Deleting an Engagement-scorer input changes the same fact
 			# surface as editing one -- the current score must not be left
 			# marked fresh against evidence that no longer exists.
