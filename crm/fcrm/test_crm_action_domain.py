@@ -25,11 +25,25 @@ def test_explicit_nba_doctypes_match_the_contract():
 			"auto_execute",
 			"enabled",
 		},
+		"crm_action": {
+			"code",
+			"display_name",
+			"action_type",
+			"purpose",
+			"default_channel",
+			"allowed_actors",
+			"requires_approval",
+			"auto_execute",
+			"execution_type",
+			"ai_allowed",
+			"enabled",
+		},
 		"crm_timing_policy": {
 			"trigger_type",
 			"trigger_event",
 			"delay_value",
 			"delay_unit",
+			"time_slot",
 			"allowed_start_time",
 			"allowed_end_time",
 			"deadline_type",
@@ -79,6 +93,8 @@ def test_explicit_nba_doctypes_match_the_contract():
 	assert _doctype("crm_action_definition")["name"] == "CRM Action Definition"
 	assert _doctype("crm_timing_policy")["name"] == "CRM Timing Policy"
 	assert _doctype("crm_timing_policy")["autoname"] == "field:policy_key"
+	timing_fields = {field["fieldname"]: field for field in _doctype("crm_timing_policy")["fields"]}
+	assert timing_fields["time_slot"]["options"] == "0-6\n6-12\n12-18\n18-24"
 
 
 def test_action_master_and_work_item_expose_the_nba_links():

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from crm.fcrm.action_constraints import defaults_for_action, validate_action_config
 from crm.fcrm.action_type_catalog import (
 	ACTION_TYPE_CATALOG,
 	ACTION_TYPE_CODES,
@@ -91,3 +92,63 @@ def test_parent_next_task_policy_uses_canonical_code_when_authorized():
 
 	assert action == "CONTACT_PARENT"
 	assert actionable is True
+
+
+def test_action_defaults_are_compatible_with_action_master_constraints():
+	for code, _display_name, category in ACTION_TYPE_CATALOG:
+		defaults = defaults_for_action(code, category)
+		validate_action_config(code, category, **defaults, enabled=1)
+
+	defaults = defaults_for_action("SEND_EMAIL", "CONTACT")
+
+	assert defaults["default_channel"] == "EMAIL"
+	assert defaults["execution_type"] == "AI_ASSISTED"
+	assert defaults["ai_allowed"] == 1
+
+
+def test_action_constraints_reject_a_fixed_channel_mismatch():
+	defaults = defaults_for_action("SEND_EMAIL", "CONTACT")
+
+	try:
+		validate_action_config(
+			"SEND_EMAIL",
+			"CONTACT",
+			**{**defaults, "default_channel": "CALL"},
+			enabled=1,
+		)
+	except ValueError as exc:
+		assert "channel" in str(exc)
+	else:
+		raise AssertionError("SEND_EMAIL must not be configured with CALL")
+
+
+def test_manager_actions_cannot_be_opened_to_sales_roles():
+	defaults = defaults_for_action("ESCALATE_SUPERVISOR", "CONTACT")
+
+	try:
+		validate_action_config(
+			"ESCALATE_SUPERVISOR",
+			"CONTACT",
+			**{**defaults, "allowed_actors": '["Sale"]'},
+			enabled=1,
+		)
+	except ValueError as exc:
+		assert "manager" in str(exc)
+	else:
+		raise AssertionError("manager-only action must not be executable by Sale")
+
+
+def test_action_constraints_reject_conflicting_execution_configuration():
+	defaults = defaults_for_action("CREATE_TASK", "INTERNAL")
+
+	try:
+		validate_action_config(
+			"CREATE_TASK",
+			"INTERNAL",
+			**{**defaults, "requires_approval": 1, "auto_execute": 1},
+			enabled=1,
+		)
+	except ValueError as exc:
+		assert "approval" in str(exc)
+	else:
+		raise AssertionError("conflicting approval and auto-execute flags must be rejected")

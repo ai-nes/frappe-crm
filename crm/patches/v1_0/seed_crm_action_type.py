@@ -1,11 +1,9 @@
 """Seed the canonical CRM Action Type and CRM Action master data."""
 
-import json
-
 import frappe
 
+from crm.fcrm.action_constraints import defaults_for_action
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CATALOG
-
 
 CATEGORY_LABELS = {
 	"CONTACT": "Contact",
@@ -17,9 +15,6 @@ CATEGORY_LABELS = {
 	"RECOVERY": "Recovery",
 	"INTERNAL": "Internal",
 }
-
-DEFAULT_ACTORS = ["Sale", "Lead Sales", "Admissions Director"]
-
 
 def _insert_if_missing(doctype, name, values):
 	if frappe.db.exists(doctype, name):
@@ -51,10 +46,7 @@ def execute():
 				"action_type": category,
 				"description": f"Canonical CRM action: {display_name}.",
 				"purpose": f"Execute the {display_name.lower()} action.",
-				"default_channel": "NONE",
-				"allowed_actors": json.dumps(DEFAULT_ACTORS),
-				"requires_approval": 0,
-				"auto_execute": 0,
+				**defaults_for_action(code, category),
 				"enabled": 1,
 				"sort_order": sort_order * 10,
 			},

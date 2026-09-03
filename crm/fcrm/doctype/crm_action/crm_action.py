@@ -1,6 +1,7 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.action_constraints import validate_action_config
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, ACTION_TYPE_METADATA
 
 
@@ -22,6 +23,20 @@ class CRMAction(Document):
 			frappe.throw("CRM Action purpose is required.", frappe.ValidationError)
 		if self.sort_order is None:
 			frappe.throw("CRM Action sort order is required.", frappe.ValidationError)
+		try:
+			validate_action_config(
+				self.code,
+				self.action_type,
+				self.default_channel,
+				self.allowed_actors,
+				self.requires_approval,
+				self.auto_execute,
+				self.enabled,
+				self.execution_type or "MANUAL",
+				self.ai_allowed,
+			)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 
 
 def get_permission_query_conditions(user=None):

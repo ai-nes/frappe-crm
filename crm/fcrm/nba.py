@@ -125,6 +125,15 @@ def validate_nba_action_execution(action, *, actor: str | None = None, operation
 		return None
 	if not definition.get("enabled"):
 		frappe.throw("This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED")
+	if action.get("origin") == "ai" and (
+		definition.get("execution_type") != "AI_ASSISTED"
+		or definition.get("ai_allowed") not in (1, "1", True)
+	):
+		frappe.throw(
+			"AI is not allowed to execute this Action.",
+			frappe.PermissionError,
+			title="ACTION_AI_NOT_ALLOWED",
+		)
 	actor = actor or frappe.session.user
 	actor_roles = set(frappe.get_roles(actor)) if actor and actor != "Administrator" else {"System Manager"}
 	if actor != "Administrator" and "System Manager" not in actor_roles:
