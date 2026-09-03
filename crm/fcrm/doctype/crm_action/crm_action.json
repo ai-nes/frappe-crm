@@ -1,6 +1,6 @@
 {
  "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
- "field_order": ["naming_series", "legacy_student_task", "legacy_generic_task", "legacy_sales_action", "recommendation", "student", "contact", "origin", "action_type", "objective", "disposition", "state", "priority", "worklist_priority_rank", "due_at", "revisit_at", "action_owner", "current_slot", "source_context_revision", "policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references", "action_revision", "requires_review", "review_revision", "package_seed", "execution_package_version", "execution_status", "started_at", "outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "terminal_reason", "created_at", "accepted_at", "completed_at", "decision_reason", "decision_actor", "decision_at", "decision_revision"],
+ "field_order": ["naming_series", "legacy_student_task", "legacy_generic_task", "legacy_sales_action", "recommendation", "student", "contact", "origin", "action_type", "objective", "disposition", "state", "priority", "plan_rank", "worklist_priority_rank", "risk_tier", "due_at", "revisit_at", "action_owner", "current_slot", "source_context_revision", "policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references", "action_revision", "requires_review", "review_revision", "package_seed", "execution_package_version", "execution_status", "started_at", "outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "terminal_reason", "created_at", "accepted_at", "completed_at", "decision_reason", "decision_actor", "decision_at", "decision_revision"],
  "fields": [
   {"fieldname":"naming_series","fieldtype":"Select","hidden":1,"default":"ACT-.YYYY.-","options":"ACT-.YYYY.-"},
   {"fieldname":"legacy_student_task","fieldtype":"Data","read_only":1,"label":"Legacy Student Task ID"},
@@ -15,11 +15,13 @@
   {"fieldname":"disposition","fieldtype":"Select","options":"ACT\nMONITOR\nNURTURE","reqd":1,"read_only":1,"in_list_view":1},
   {"fieldname":"state","fieldtype":"Select","options":"pending\naccepted\nin-progress\nrequires-review\ncompleted\ncancelled\nsuperseded\nrejected\ndeferred","default":"pending","reqd":1,"in_list_view":1},
   {"fieldname":"priority","fieldtype":"Select","options":"high\nmedium\nlow","default":"medium","in_list_view":1},
+  {"fieldname":"plan_rank","fieldtype":"Int","hidden":1,"read_only":1,"default":"0","label":"Plan Rank","description":"1 = current Next Best Action; 2-3 = backlog alternatives from the same analysis; 0 = single-action generation."},
   {"fieldname":"worklist_priority_rank","fieldtype":"Int","hidden":1,"read_only":1,"default":"99"},
+  {"fieldname":"risk_tier","fieldtype":"Select","options":"low\nmid\nhigh","default":"high","reqd":1,"read_only":1,"label":"Risk Tier"},
   {"fieldname":"due_at","fieldtype":"Datetime","in_list_view":1},
   {"fieldname":"revisit_at","fieldtype":"Datetime"},
   {"fieldname":"action_owner","fieldtype":"Link","options":"CRM Staff","label":"Owner","in_list_view":1},
-  {"fieldname":"current_slot","fieldtype":"Select","options":"CURRENT","read_only":1},
+  {"fieldname":"current_slot","fieldtype":"Select","options":"\nCURRENT","read_only":1},
   {"fieldname":"source_context_revision","fieldtype":"Int","reqd":1,"read_only":1},
   {"fieldname":"policy_context_version","fieldtype":"Data","read_only":1},
   {"fieldname":"generation_idempotency_key","fieldtype":"Data","reqd":1,"read_only":1},

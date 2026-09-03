@@ -321,6 +321,18 @@ def request_transition(
 		if status:
 			updates["enrollment_status"] = status
 		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
+		from crm.services.student_context import bump_student_context_revision
+		from crm.services.admission_event_policy import admit_lifecycle_transition
+		context_change = bump_student_context_revision(
+			student, "lifecycle_transition", enqueue=False,
+			event_id=f"lifecycle:{event.name}",
+		)
+		admit_lifecycle_transition(
+			student=student,
+			revision=context_change["revision"],
+			source_event=context_change["change"],
+			source_reference=event.name,
+		)
 		result = {"status": "created", "event": event.name, "student": student, "from_stage": transition["from_stage"], "to_stage": transition["to_stage"], "transition_kind": transition["transition_kind"], "revision": new_revision, "receipt": receipt.name}
 		_finish(receipt, result)
 		return result

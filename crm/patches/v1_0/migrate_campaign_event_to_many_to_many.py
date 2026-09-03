@@ -57,3 +57,16 @@ def _migrate_events():
 		})
 		created += 1
 	return created
+
+
+def _backfill_event_start_datetime():
+	"""Backfill the canonical Event start from legacy event_date, idempotently."""
+	if not frappe.db.exists("DocType", "CRM Event"):
+		return 0
+	rows = frappe.db.sql(
+		"select name, event_date from `tabCRM Event` where (start_datetime is null or start_datetime='') and event_date is not null",
+		as_dict=True,
+	)
+	for row in rows:
+		frappe.db.set_value("CRM Event", row.name, "start_datetime", f"{row.event_date} 00:00:00", update_modified=False)
+	return len(rows)

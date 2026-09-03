@@ -558,6 +558,21 @@ def get_sales_dashboard(
 	return []
 
 
+def _campaign_spend_total(campaign, from_date, to_date):
+	"""Read spend from the canonical performance fact, with legacy read fallback."""
+	if frappe.db.table_exists("CRM Campaign Performance Fact"):
+		filters = [["period_start", "<=", to_date], ["period_end", ">=", from_date]]
+		if campaign:
+			filters.append(["campaign", "=", campaign])
+		return sum(row.spend or 0.0 for row in frappe.db.get_all("CRM Campaign Performance Fact", filters=filters, fields=["spend"]))
+	if not frappe.db.table_exists("CRM Campaign Spend"):
+		return 0.0
+	filters = [["spend_date", "between", [from_date, to_date]]]
+	if campaign:
+		filters.append(["crm_campaign", "=", campaign])
+	return sum(row.amount or 0.0 for row in frappe.db.get_all("CRM Campaign Spend", filters=filters, fields=["amount"]))
+
+
 def _contact_names_touched_by_campaign(campaign):
 	"""Union of the deprecated singular crm_campaign field and the canonical
 	CRM Marketing Engagement table, so dashboards read correctly
@@ -599,12 +614,7 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	cost_data = []
 	for camp in campaign_list:
 		c_name = camp.title or camp.name
-		camp_spend_rows = frappe.db.get_all(
-			"CRM Campaign Spend",
-			filters=[["spend_date", "between", [from_date, to_date]], ["crm_campaign", "=", camp.name]],
-			fields=["amount"],
-		)
-		camp_spend = sum(row.amount or 0.0 for row in camp_spend_rows)
+		camp_spend = _campaign_spend_total(camp.name, from_date, to_date)
 		attributed_students = students_by_campaign.get(camp.name) or set()
 		# Attribution is Student-first. Contact-only filters are intentionally
 		# not applied to this canonical projection.
@@ -664,11 +674,7 @@ def get_digital_marketing_dashboard(
 	# is filtered, so CPL/cost-per-enrollment reflect that campaign's own spend
 	# instead of the site-wide total (previously a flat total regardless of
 	# the `campaign` filter, which misrepresented per-campaign cost).
-	spend_filters = [["spend_date", "between", [from_date, to_date]]]
-	if campaign:
-		spend_filters.append(["crm_campaign", "=", campaign])
-	spend_rows = frappe.db.get_all("CRM Campaign Spend", filters=spend_filters, fields=["amount"])
-	total_spend = sum(row.amount or 0.0 for row in spend_rows)
+	total_spend = _campaign_spend_total(campaign, from_date, to_date)
 
 	cpl = round(total_spend / total_digital_leads / 1000, 1) if total_digital_leads and total_spend else 0.0
 	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]])
@@ -1033,12 +1039,7 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 	qualified_rate = round((qualified_leads / total_leads * 100.0), 1) if total_leads else 0.0
 	conversion_rate = round((enrolled_leads / total_leads * 100.0), 1) if total_leads else 0.0
 
-	spend_rows = frappe.db.get_all(
-		"CRM Campaign Spend",
-		filters=[["spend_date", "between", [from_date, to_date]]],
-		fields=["amount"],
-	)
-	total_spend = sum(row.amount or 0.0 for row in spend_rows)
+	total_spend = _campaign_spend_total(None, from_date, to_date)
 	cost_per_enrollment = round(total_spend / enrolled_leads / 1000000, 1) if enrolled_leads and total_spend else 0.0
 
 	# Per-campaign last-touch spend/conversion reconciliation -- same shared

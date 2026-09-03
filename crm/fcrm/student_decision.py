@@ -25,7 +25,61 @@ RECOMMENDATION = "CRM Recommendation"
 CANONICAL_ACTION = "CRM Action"
 POLICY_VERSION = "phase6-v1"
 SCHEMA_VERSION = "phase6-v1"
-OUTCOMES = {"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER", "APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED"}
+OUTCOMES = {"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER", "APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED", "success", "failed", "no_contact", "no_show"}
+ACTION_TRANSITIONS = {
+	"planned": {"in_progress", "cancelled"},
+	"accepted": {"in-progress", "cancelled", "deferred"},
+	"in_progress": {"completed", "requires-review", "cancelled"},
+	"in-progress": {"completed", "requires-review", "cancelled"},
+	"completed": set(), "cancelled": set(), "rejected": set(), "superseded": set(),
+}
+
+
+# Baseline operational risk for each controlled Action type. An unknown or
+# missing type fails closed to "high". "low" means the human performs the
+# outreach directly -- the system only opens the dialer and shows the advisory
+# script -- so it carries the least automation risk; it is still gated like
+# "mid" (no auto-execute) until the low-risk execution guarantees hold
+# end to end.
+RISK_TIER_POLICY = {
+	"CALL": "low",
+	"MESSAGE": "mid",
+	"EMAIL": "mid",
+	"MEETING": "mid",
+	"EVENT_INVITE": "mid",
+	"CAMPUS_VISIT": "mid",
+	"COUNSELING": "mid",
+	"DOCUMENT_REQUEST": "mid",
+	"APPLICATION_SUPPORT": "high",
+	"PARENT_CONTACT": "high",
+	"HANDOFF": "high",
+}
+
+_RISK_TIER_RANK = {"low": 0, "mid": 1, "high": 2}
+
+
+def max_risk_tier(*tiers: str | None) -> str:
+	"""Highest tier on the ``low < mid < high`` ordering; unknown/None -> ``high``."""
+	return max((t for t in tiers), key=lambda t: _RISK_TIER_RANK.get(t or "", 2), default="high") or "high"
+
+
+def sensitive_content_flags(action_type: str | None, package_seed=None) -> list[str]:
+	"""Return the sensitive-content categories that apply to this Action.
+
+	The current policy has no Frappe-owned content signals on CRM Action. Do not
+	trust producer-supplied package flags: ``package_seed`` is agent-rendered
+	content, even though later edits are protected. A future signal must be
+	derived from a Frappe-owned record before it can raise the tier.
+	"""
+	return ["direct_to_applicant_or_parent"] if action_type == "PARENT_CONTACT" else []
+
+
+def compute_risk_tier(action_type: str | None, package_seed=None) -> str:
+	"""Fail-closed Frappe policy tier; package content cannot affect the result."""
+	base = RISK_TIER_POLICY.get(action_type or "", "high")
+	if sensitive_content_flags(action_type, package_seed):
+		return "high"
+	return base
 
 
 class StudentDecisionError(frappe.ValidationError):
@@ -145,13 +199,24 @@ def _replay(command_key, fingerprint):
 	return {"status": receipt.get("outcome") or "applied", "receipt": receipt.name, "replayed": True}
 
 
+_RECEIPT_KIND_BUCKET = {
+	"action_decision": "action_decision",
+	"action_reassign": "action_reassign",
+	"recommendation_decision": "recommendation_decision",
+	# A claim assigns Action ownership; it belongs in the action-decision bucket
+	# but keeps its own command_key namespace so a claim retry never collides
+	# with a decide/transition/reassign receipt for the same idempotency key.
+	"action_claim": "action_decision",
+}
+
+
 def _new_receipt(kind, actor, student, key, fingerprint, scope, correlation_id):
 	command_key = _command_key(kind, actor, key)
 	return frappe.get_doc({"doctype": RECEIPT, "receipt_key": command_key, "command_key": command_key,
 		# The receipt DocType predates CRM Action and has no Action enum yet;
 		# reuse its governed student-decision bucket without exposing a legacy
 		# writer or creating a second receipt schema.
-		"command_kind": kind if kind in {"action_decision", "action_reassign", "recommendation_decision"} else "interaction_outcome",
+		"command_kind": _RECEIPT_KIND_BUCKET.get(kind, "interaction_outcome"),
 		"request_fingerprint": fingerprint, "outcome": "pending", "target_student": student,
 		"actor": actor, "scope_snapshot": scope, "policy_version": POLICY_VERSION,
 		"schema_version": SCHEMA_VERSION, "correlation_token": correlation_id, "request_received_at": now_datetime()}).insert(ignore_permissions=True)
@@ -166,6 +231,21 @@ def _finish(receipt, result):
 
 def _lock(doctype, name):
 	frappe.db.sql(f"select name from `tab{doctype}` where name = %s for update", (name,))
+
+
+def _free_current_slot(student):
+	"""Return ``"CURRENT"`` when the student's single Action slot is unoccupied.
+
+	A newly created executor Action -- a manual one, or one materialized from an
+	accepted recommendation -- takes the current slot only when no non-terminal
+	Action already holds it. The database enforces one current Action per
+	student, so callers must run this under a lock on the Student row.
+	"""
+	occupied = frappe.db.sql(
+		"select name from `tabCRM Action` where student = %s and current_slot = 'CURRENT' for update",
+		(student,),
+	)
+	return None if occupied else "CURRENT"
 
 
 def _event(kind, student, recommendation, action, actor, scope, receipt, correlation_id, revision, payload, student_task=None):
@@ -210,6 +290,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 	_lock(RECOMMENDATION, name)
 	if replay := _replay(command_key, fingerprint): return replay
 	doc = frappe.get_doc(RECOMMENDATION, name); scope = _can_decide(actor, doc)
+	_lock("CRM Student", doc.student)
 	if expected_modified and str(doc.modified) != str(expected_modified): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
 	if str(doc.get("decision_revision") or 0) != str(expected_revision): _fail("STALE_REVISION", "Recommendation changed; reload before retrying.")
 	if doc.status in {"accepted", "rejected", "expired", "superseded", "dismissed", "modified"}: _fail("INVALID_STATE", "This recommendation can no longer be decided.")
@@ -240,7 +321,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 			action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
 			if not action:
 				canonical_type = doc.recommended_action if doc.recommended_action in {"CALL", "EMAIL", "MESSAGE", "COUNSELING", "MEETING", "EVENT_INVITE", "CAMPUS_VISIT", "DOCUMENT_REQUEST", "APPLICATION_SUPPORT", "PARENT_CONTACT", "HANDOFF"} else None
-				canonical = frappe.get_doc({"doctype": CANONICAL_ACTION, "recommendation": doc.name, "student": doc.student, "contact": frappe.db.get_value("CRM Contact", {"student": doc.student}, "name"), "origin": "ai" if doc.get("producer_id") else "system", "action_type": canonical_type, "objective": doc.get("rationale") or doc.get("recommended_action") or "Follow up on the recommendation.", "disposition": "ACT" if canonical_type else "MONITOR", "state": "accepted", "source_context_revision": 0, "policy_context_version": POLICY_VERSION, "generation_idempotency_key": key, "producer_identity": "frappe:recommendation", "payload_digest": _fingerprint(payload), "due_at": due_at, "action_owner": assignee_staff, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1})
+				canonical = frappe.get_doc({"doctype": CANONICAL_ACTION, "recommendation": doc.name, "student": doc.student, "contact": frappe.db.get_value("CRM Contact", {"student": doc.student}, "name"), "current_slot": _free_current_slot(doc.student), "origin": "ai" if doc.get("producer_id") else "system", "action_type": canonical_type, "objective": doc.get("rationale") or doc.get("recommended_action") or "Follow up on the recommendation.", "disposition": "ACT" if canonical_type else "MONITOR", "state": "accepted", "source_context_revision": 0, "policy_context_version": POLICY_VERSION, "generation_idempotency_key": key, "producer_identity": "frappe:recommendation", "payload_digest": _fingerprint(payload), "due_at": due_at, "action_owner": assignee_staff, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1})
 				canonical.origin = "ai" if doc.get("producer_id") else "system"
 				canonical.flags.crm_action_command = True; canonical.insert(ignore_permissions=True); action = canonical.name
 		event = _event(f"recommendation.{status}", doc.student, doc.name, action, actor, scope, receipt, correlation_id, doc.decision_revision, {"status": status, "from_state": previous_status, "reason": decision_reason, "revisit_at": str(revisit_at) if revisit_at else None})
@@ -297,6 +378,173 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 		frappe.flags.crm_action_command = previous_action_flag
 
 
+_CLAIMABLE_STATES = {"pending", "requires-review", "accepted", "deferred"}
+
+
+def _claim_would_grant_execute(student: str, staff: str | None, owner_staff, assigned_to) -> bool:
+	"""True when a claim actually gives the caller execute rights on the Student.
+
+	Either the Student is unassigned (the claim widens ``assigned_to`` to the
+	caller), or the caller already passes ``_valid_executor`` (owner, or on the
+	owning team). A claim on a Student already assigned to someone else, by a
+	caller outside the owning team, would leave ``assigned_to`` untouched and the
+	caller still unable to execute -- so it is not offered and not permitted.
+	"""
+	if not owner_staff and not assigned_to:
+		return True
+	if not staff:
+		return False
+	try:
+		_valid_executor(student, staff)
+		return True
+	except StudentDecisionError:
+		return False
+
+
+def claim_grants_execute(student: str, user: str) -> bool:
+	"""``can_claim`` for the care-queue read-model: capability + row visibility +
+	the real ``_valid_executor`` rule (see ``_claim_would_grant_execute``)."""
+	if user == "Administrator":
+		return True
+	if not ({"student.execute", "action.execute"} & set(_scope(user)["capabilities"])):
+		return False
+	staff = _staff_for_user(user)
+	if not staff:
+		return False
+	row = frappe.db.get_value(
+		"CRM Student", student, ["owner_staff", "assigned_to"], as_dict=True
+	)
+	if not row:
+		return False
+	if not has_student_permission(frappe.get_doc("CRM Student", student), user=user, permission_type="read"):
+		return False
+	return _claim_would_grant_execute(student, staff, row.owner_staff, row.assigned_to)
+
+
+def _current_action_payload(student: str) -> dict | None:
+	name = frappe.db.get_value("CRM Action", {"student": student, "current_slot": "CURRENT"}, "name")
+	if not name:
+		return None
+	doc = frappe.get_doc(CANONICAL_ACTION, name)
+	return {
+		"name": doc.name, "action": doc.name, "student": doc.student, "state": doc.state,
+		"action_type": doc.action_type, "action_owner": doc.get("action_owner"),
+		"risk_tier": doc.get("risk_tier"), "revision": int(doc.get("decision_revision") or 0),
+		"action_revision": int(doc.get("action_revision") or 1),
+	}
+
+
+def claim_current_action(student: str, expected_revision: Any, idempotency_key: str, expected_action: str, correlation_id: str | None = None):
+	"""Claim the Student's current queue Action for the caller.
+
+	``expected_action`` is required: the caller must send the Action name it saw
+	in the queue row. The command locks the CRM Student row -- the same domain
+	generation and supersede race on, not the Action row -- and re-verifies that
+	the current slot still holds that exact Action. A slot that rotated under the
+	caller (superseded, completed, regenerated -- a replacement can even carry the
+	same ``decision_revision``) returns ``STALE_REVISION`` with the fresh
+	``current_action`` so the client re-renders. Concurrent claims of the same
+	Action resolve to exactly one success; the loser gets ``STALE_REVISION`` (CAS
+	on ``decision_revision``) or ``ALREADY_CLAIMED`` if the winner got there first.
+
+	Takeover is not allowed: an Action already owned by another Sale returns
+	``ALREADY_CLAIMED``. The claim widens the Student's care scope to the caller
+	only when the Student is entirely unassigned (``assigned_to`` set, an existing
+	assignee never displaced); ``owner_staff`` / ``owning_team`` stay untouched
+	and ``_valid_executor`` is unchanged. A caller who would not gain execute
+	rights from the claim -- outside the owning team on an already-assigned
+	Student -- is rejected, never added.
+	"""
+	actor = _actor()
+	key = _required(idempotency_key, "idempotency_key")
+	student = _required(student, "student")
+	expected_action = _required(expected_action, "expected_action")
+	correlation_id = correlation_id or frappe.generate_hash(length=20)
+	if not frappe.db.exists("CRM Student", student):
+		_fail("INVALID_INPUT", "Student not found.")
+	scope = _scope(actor)
+	if actor != "Administrator" and not ({"student.execute", "action.execute"} & set(scope["capabilities"])):
+		_fail("FORBIDDEN", "You are not permitted to claim Actions.")
+	staff = _staff_for_user(actor)
+	if not staff and actor != "Administrator":
+		_fail("INVALID_INPUT", "A mapped Sales executor is required to claim work.")
+	if actor != "Administrator" and not has_student_permission(
+		frappe.get_doc("CRM Student", student), user=actor, permission_type="read"
+	):
+		_fail("OUT_OF_SCOPE", "The Student is outside your current care scope.")
+
+	payload = {"student": student, "expected_revision": expected_revision, "expected_action": expected_action, "staff": staff}
+	fingerprint = _fingerprint(payload)
+	command_key = _command_key("action_claim", actor, key)
+	if replay := _replay(command_key, fingerprint):
+		return replay
+	_lock("CRM Student", student)
+	if replay := _replay(command_key, fingerprint):
+		return replay
+
+	current = frappe.db.sql(
+		"select name from `tabCRM Action` where student = %s and current_slot = 'CURRENT' for update",
+		(student,), as_dict=True,
+	)
+	stale = {
+		"status": "stale_revision", "code": "STALE_REVISION",
+		"current_action": _current_action_payload(student),
+	}
+	if not current or current[0].name != expected_action:
+		# No current Action, or the slot rotated to a different Action.
+		return stale
+	action = frappe.get_doc(CANONICAL_ACTION, current[0].name)
+	if str(action.get("decision_revision") or 0) != str(expected_revision):
+		return stale
+	if action.state not in _CLAIMABLE_STATES:
+		return stale
+
+	current_owner = action.get("action_owner")
+	if current_owner and current_owner != staff:
+		# Takeover is not allowed.
+		return {
+			"status": "already_claimed", "code": "ALREADY_CLAIMED",
+			"assignee_ref": current_owner, "current_action": _current_action_payload(student),
+		}
+
+	owner_staff, assigned_to = frappe.db.get_value(
+		"CRM Student", student, ["owner_staff", "assigned_to"]
+	) or (None, None)
+	if not _claim_would_grant_execute(student, staff, owner_staff, assigned_to):
+		_fail("OUT_OF_SCOPE", "Claiming would not grant execute rights on this Student.")
+
+	receipt = _new_receipt("action_claim", actor, student, key, fingerprint, scope, correlation_id)
+	previous_owner = current_owner
+	previous_flag = getattr(frappe.flags, "crm_action_command", False)
+	frappe.flags.crm_action_command = True
+	try:
+		if staff and not owner_staff and not assigned_to:
+			frappe.db.set_value("CRM Student", student, "assigned_to", staff, update_modified=False)
+		action.action_owner = staff or previous_owner
+		action.decision_revision = int(action.get("decision_revision") or 0) + 1
+		# Bump the execution revision too: a client holding a pre-claim revision
+		# must refetch before it can transition the Action.
+		action.action_revision = int(action.get("action_revision") or 1) + 1
+		action.decision_actor = actor
+		action.decision_at = now_datetime()
+		action.save(ignore_permissions=True)
+		event = _event(
+			"action.reassigned", student, action.get("recommendation"), action.name, actor, scope,
+			receipt, correlation_id, action.decision_revision,
+			{"status": action.state, "previous_assignee": previous_owner, "assignee_staff": staff, "reason": "claimed"},
+		)
+	finally:
+		frappe.flags.crm_action_command = previous_flag
+	result = {
+		"status": "claimed", "action": action.name, "student": student,
+		"revision": action.decision_revision, "action_revision": action.action_revision,
+		"previous_owner": previous_owner, "event": event.name, "receipt": receipt.name,
+		"current_action": _current_action_payload(student),
+	}
+	_finish(receipt, result)
+	return result
+
+
 def create_manual_action(student: str, action_type: str, objective: str, idempotency_key: str, due_at: Any = None, priority: str = "medium", assignee_staff: str | None = None, contact: str | None = None):
 	"""Create a user-authored Action through the governed aggregate."""
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); objective = _required(objective, "objective")[:500]
@@ -320,14 +568,14 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 	receipt = _new_receipt("action_decision", actor, student, key, fingerprint, scope, frappe.generate_hash(length=20))
 	previous_flag = getattr(frappe.flags, "crm_action_command", False); frappe.flags.crm_action_command = True
 	try:
-		action = frappe.get_doc({"doctype": CANONICAL_ACTION, "student": student, "contact": contact, "origin": "manual", "action_type": action_type, "objective": objective, "disposition": "ACT", "state": "accepted", "execution_status": "planned", "priority": priority, "due_at": due_at, "action_owner": assignee_staff, "source_context_revision": int(student_doc.get("student_context_revision") or 0), "policy_context_version": POLICY_VERSION, "generation_idempotency_key": command_key, "producer_identity": f"user:{actor}", "payload_digest": fingerprint, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1}).insert(ignore_permissions=True)
+		action = frappe.get_doc({"doctype": CANONICAL_ACTION, "student": student, "contact": contact, "current_slot": _free_current_slot(student), "origin": "manual", "action_type": action_type, "objective": objective, "disposition": "ACT", "state": "accepted", "execution_status": "planned", "priority": priority, "due_at": due_at, "action_owner": assignee_staff, "source_context_revision": int(student_doc.get("student_context_revision") or 0), "policy_context_version": POLICY_VERSION, "generation_idempotency_key": command_key, "producer_identity": f"user:{actor}", "payload_digest": fingerprint, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1}).insert(ignore_permissions=True)
 		result = {"status": "accepted", "action": action.name, "student": student, "revision": action.action_revision, "receipt": receipt.name}
 		_finish(receipt, result); return result
 	finally:
 		frappe.flags.crm_action_command = previous_flag
 
 
-def _transition_canonical_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None):
+def _transition_canonical_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None):
 	"""Transition the single CRM Action aggregate and record its outcome."""
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); correlation_id = correlation_id or frappe.generate_hash(length=20)
 	if status not in {"in_progress", "completed", "failed", "cancelled"}:
@@ -336,12 +584,16 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 	if expected_modified and str(action.modified) != str(expected_modified): _fail("STALE_REVISION", "Action changed; reload before retrying.")
 	if str(action.get("action_revision") or 1) != str(expected_revision): _fail("STALE_REVISION", "Action changed; reload before retrying.")
 	previous = action.state
-	canonical_states = {"accepted": {"in-progress", "cancelled", "deferred"}, "in-progress": {"completed", "requires-review", "cancelled"}}
 	target_state = {"in_progress": "in-progress", "completed": "completed", "failed": "requires-review", "cancelled": "cancelled"}[status]
-	if target_state not in canonical_states.get(previous, set()): _fail("INVALID_STATE", "Illegal Action transition.")
+	if target_state not in ACTION_TRANSITIONS.get(previous, set()): _fail("INVALID_STATE", "Illegal Action transition.")
 	if status == "completed":
 		if outcome_code not in OUTCOMES: _fail("INVALID_INPUT", "A valid outcome_code is required when completing.")
 		_required(evidence, "evidence")
+		if not attempt_id:
+			_fail("ATTEMPT_REQUIRED", "A confirmed execution attempt is required before completion.")
+		attempt = frappe.db.get_value("CRM Action Execution Attempt", attempt_id, ["action", "status"], as_dict=True)
+		if not attempt or attempt.action != name or attempt.status != "confirmed":
+			_fail("ATTEMPT_NOT_CONFIRMED", "The execution attempt is not confirmed for this Action.")
 	if status in {"failed", "cancelled"}: _required(reason, "reason")
 	payload = {"name": name, "expected_revision": expected_revision, "status": status, "outcome_code": outcome_code, "evidence": evidence, "reason": reason, "linked_interaction": linked_interaction}
 	fingerprint = _fingerprint(payload); command_key = _command_key("canonical_action", actor, key)
@@ -358,7 +610,21 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 			action.completed_at = now_datetime(); action.outcome_code = outcome_code; action.outcome_evidence = str(evidence)[:2000]; action.outcome_notes = evidence if isinstance(evidence, str) else None; action.linked_interaction = linked_interaction
 		if status in {"failed", "cancelled"}: action.terminal_reason = reason
 		action.save(ignore_permissions=True)
-		event = _event(f"action.{status}", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": status, "from_state": previous, "outcome_code": outcome_code, "reason": reason})
+		progress = "UNKNOWN"
+		context_revision = None
+		if status in {"completed", "failed", "cancelled"}:
+			from crm.services.action_outcome import derive_progress
+			from crm.services.student_context import bump_student_context_revision
+			progress = derive_progress(action.action_type, outcome_code) if status == "completed" else "NO_PROGRESS"
+			attempt_identity = attempt_id or "manual"
+			business_event_id = _fingerprint({"action": action.name, "revision": action.action_revision, "attempt": attempt_identity, "outcome": outcome_code, "progress": progress})[:32]
+			# This path records a bounded fact only. It deliberately disables the
+			# context helper's automatic Intelligence Run admission.
+			change = bump_student_context_revision(action.student, "action_outcome", enqueue=False, event_id=business_event_id)
+			context_revision = change["revision"]
+			from crm.services.admission_event_policy import admit_action_outcome
+			admit_action_outcome(student=action.student, revision=context_revision, source_event=change["change"], source_reference=action.name)
+		event = _event(f"action.{status}", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": status, "from_state": previous, "outcome_code": outcome_code, "progress": progress, "context_revision": context_revision, "reason": reason})
 		_outbox("action.outcome_recorded.v1", action)
 		result = {"status": status, "action": action.name, "student": action.student, "revision": action.action_revision, "event": event.name, "receipt": receipt.name}
 		_finish(receipt, result); return result
@@ -366,15 +632,15 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 		frappe.flags.crm_action_command = previous_flag
 
 
-def transition_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, _internal_service: bool = False):
+def transition_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None, _internal_service: bool = False):
 	if _internal_service:
 		previous_user = frappe.session.user
 		frappe.session.user = "Administrator"
 		try:
-			return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified)
+			return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id)
 		finally:
 			frappe.session.user = previous_user
-	return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified)
+	return _transition_canonical_action(name, expected_revision, status, idempotency_key, correlation_id, outcome_code, evidence, reason, linked_interaction, expected_modified, attempt_id)
 
 
 def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idempotency_key: str, reason: str, correlation_id: str | None = None, _internal_service: bool = False):
@@ -397,12 +663,16 @@ def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idem
 	payload = {"name": name, "expected_revision": expected_revision, "assignee_staff": assignee_staff, "reason": reason}
 	fingerprint = _fingerprint(payload); command_key = _command_key("action_reassign", actor, key)
 	if replay := _replay(command_key, fingerprint): return replay
+	# Claim/reassign and generation share the Student lock domain. Cancel
+	# unsent attempts before changing ownership so workers cannot send stale work.
+	_lock("CRM Student", action.student)
 	_lock(CANONICAL_ACTION, name)
 	if replay := _replay(command_key, fingerprint): return replay
 	receipt = _new_receipt("action_reassign", actor, action.student, key, fingerprint, scope, correlation_id)
 	previous_flag = getattr(frappe.flags, "crm_action_command", False); frappe.flags.crm_action_command = True
 	try:
 		previous_assignee = action.action_owner
+		frappe.db.sql("update `tabCRM Action Execution Attempt` set status='cancelled' where action=%s and status in ('pending','queued')", (action.name,))
 		action.action_owner = assignee_staff
 		action.action_revision = int(action.get("action_revision") or 1) + 1
 		action.save(ignore_permissions=True)
@@ -411,6 +681,33 @@ def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idem
 		_finish(receipt, result); return result
 	finally:
 		frappe.flags.crm_action_command = previous_flag
+
+
+def release_action(name: str, expected_revision: Any, idempotency_key: str, reason: str, correlation_id: str | None = None):
+	"""Release only the active claimant; never reopen or reassign a terminal Action."""
+	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); reason = _required(reason, "reason"); correlation_id = correlation_id or frappe.generate_hash(length=20)
+	action = frappe.get_doc(CANONICAL_ACTION, name)
+	staff = _staff_for_user(actor)
+	if not staff or action.get("action_owner") != staff:
+		_fail("FORBIDDEN", "Only the active claimant may release this Action.")
+	if action.get("execution_status") not in {"planned", "in_progress"}:
+		_fail("INVALID_STATE", "Only active Actions may be released.")
+	if str(action.get("action_revision") or 1) != str(expected_revision):
+		_fail("STALE_REVISION", "Action changed; reload before retrying.")
+	payload = {"name": name, "expected_revision": expected_revision, "reason": reason}
+	fingerprint = _fingerprint(payload); command_key = _command_key("action_release", actor, key)
+	if replay := _replay(command_key, fingerprint): return replay
+	_lock("CRM Student", action.student); _lock(CANONICAL_ACTION, name)
+	action.reload()
+	if str(action.get("action_revision") or 1) != str(expected_revision):
+		_fail("STALE_REVISION", "Action changed; reload before retrying.")
+	receipt = _new_receipt("action_release", actor, action.student, key, fingerprint, _scope(actor), correlation_id)
+	frappe.db.sql("update `tabCRM Action Execution Attempt` set status='cancelled' where action=%s and status in ('pending','queued')", (action.name,))
+	action.action_owner = None; action.action_revision = int(action.get("action_revision") or 1) + 1; action.save(ignore_permissions=True)
+	event = _event("action.released", action.student, action.get("recommendation"), action.name, actor, _scope(actor), receipt, correlation_id, action.action_revision, {"reason": reason})
+	result = {"status": "released", "action": action.name, "revision": action.action_revision, "event": event.name, "receipt": receipt.name}
+	_finish(receipt, result)
+	return result
 
 
 def reconcile_student_actions(student: str, next_owner_staff: str | None, next_owning_team: str | None, correlation_id: str):

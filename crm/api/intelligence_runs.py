@@ -28,9 +28,11 @@ def get_analysis_run(run_type: str, run_id: str):
 	target_type, target = ("CRM Student", run.student) if run_type == "CRM Student Analysis Run" else ("CRM High School", run.high_school)
 	if not frappe.has_permission(target_type, "read", target):
 		frappe.throw("Intelligence Run target is outside current scope.", frappe.PermissionError)
-	stages = frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run_id}, fields=["name", "stage_kind", "status", "claims", "terminal_reason", "policy_revision", "model_revision"])
+	stages = frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run_id}, fields=["name", "stage_kind", "status", "claims", "report_json", "terminal_reason", "policy_revision", "model_revision"])
 	for stage in stages:
 		stage["claims"] = intelligence_runs.visible_claims(stage.get("claims"))
+		stage["report"] = frappe.parse_json(stage["report_json"]) if stage.get("report_json") else None
+		stage.pop("report_json", None)
 	return {"run_id": run.name, "run_type": run_type, "status": run.status, "stages": stages}
 
 
@@ -74,6 +76,8 @@ def settle_analysis_stage(
 	terminal_reason: str | None = None,
 	policy_revision: str | None = None,
 	model_revision: str | None = None,
+	result_digest: str | None = None,
+	report=None,
 ):
 	"""Terminal-only, fenced worker settlement.
 
@@ -95,6 +99,8 @@ def settle_analysis_stage(
 		terminal_reason=terminal_reason,
 		policy_revision=policy_revision,
 		model_revision=model_revision,
+		result_digest=result_digest,
+		report=report,
 	)
 
 

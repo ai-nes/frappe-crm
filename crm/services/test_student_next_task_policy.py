@@ -31,6 +31,15 @@ class TestStudentNextTaskPolicy(FrappeTestCase):
 		self.assertIn("Chưa liên hệ phụ huynh", objective)
 		self.assertTrue(_has_vietnamese(objective))
 
+	def test_missing_intent_does_not_double_the_need_noun(self):
+		for eligible in (True, False):
+			_, objective, _ = choose_next_task_policy(
+				None, "Lead", ["CALL"], eligible=eligible
+			)
+			self.assertNotIn("nhu cầu nhu cầu", objective)
+			self.assertNotIn("yêu cầu nhu cầu", objective)
+			self.assertTrue(_has_vietnamese(objective))
+
 	def test_ineligible_lifecycle_is_monitor_only(self):
 		action, objective, actionable = choose_next_task_policy(
 			"program information", "Lost", ["CALL", "EMAIL"], eligible=False

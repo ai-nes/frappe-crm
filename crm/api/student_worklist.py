@@ -57,9 +57,231 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
 	# `get_list` applies CRM Action's permission query conditions; `get_all`
 	# would allow a caller to probe another student's objective/evidence by name.
-	rows = frappe.get_list("CRM Action", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "contact", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "outcome_code", "outcome_evidence", "action_revision"], order_by="creation desc", limit_page_length=page_size)
+	rows = frappe.get_list("CRM Action", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
 	now = frappe.utils.now_datetime()
-	return {"items": [{"name": row.name, "student": row.student, "contact": row.contact, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "outcome": row.outcome_code, "outcome_evidence": row.outcome_evidence, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
+	return {"items": [{"name": row.name, "student": row.student, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
+
+
+_ACTION_QUEUE_CONTRACT = "action-queue-row-v1"
+
+
+@frappe.whitelist()
+def list_action_queue(page_size: int | str = 20, student: str | None = None) -> dict:
+	"""Permission-aware care-queue read-model (``ActionQueueRowV1``).
+
+	Returns one page of current-slot canonical Actions the session may see, with
+	a derived ``queue_status`` and the ``can_*`` action hints. Out-of-scope
+	students never appear -- ``get_list`` applies CRM Action's permission query.
+
+	The ``can_*`` flags are **display hints only**. Every dispatch
+	(claim / decide / transition / reassign) independently re-checks the caller's
+	permission and the Action's current ``action_revision`` / ``decision_revision``
+	server-side, regardless of what a row here reported.
+	"""
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if frappe.conf.get("crm_student_action_queue_enabled", 1) in (0, "0", False):
+		frappe.throw(_("Action queue is disabled by rollout policy."), frappe.PermissionError)
+	page_size = _parse_page_size(page_size)
+	if student is not None and (not isinstance(student, str) or not student.strip()):
+		frappe.throw(_("student must be a Student name."), frappe.ValidationError)
+	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+
+	from crm.fcrm.role_policy import capabilities_for_roles
+	from crm.fcrm.student_decision import claim_grants_execute
+
+	actor = frappe.session.user
+	caps = set(
+		capabilities_for_roles(frappe.get_roles(actor), administrator=actor == "Administrator")
+	)
+	is_admin = actor == "Administrator"
+	my_staff = frappe.db.get_value("CRM Staff", {"user": actor}, "name")
+
+	filters = {"current_slot": "CURRENT"}
+	if student:
+		filters["student"] = student
+	rows = frappe.get_list(
+		"CRM Action",
+		filters=filters,
+		fields=[
+			"name", "student", "action_type", "state", "execution_status", "action_owner",
+			"risk_tier", "action_revision", "decision_revision", "source_context_revision",
+			"revisit_at", "modified",
+		],
+		order_by="worklist_priority_rank asc, modified desc",
+		limit_page_length=page_size,
+	)
+	student_names = {row.student for row in rows}
+	context_revisions = {
+		r.name: int(r.student_context_revision or 0)
+		for r in frappe.get_all(
+			"CRM Student",
+			filters={"name": ["in", list(student_names)]} if student_names else {"name": ["in", [""]]},
+			fields=["name", "student_context_revision"],
+		)
+	}
+	# `can_claim` is the real _valid_executor rule; resolve it once per Student.
+	claimable = {name: claim_grants_execute(name, actor) for name in student_names}
+	now = frappe.utils.now_datetime()
+	items = [
+		_action_queue_row(row, caps, is_admin, my_staff, now, context_revisions, claimable)
+		for row in rows
+	]
+	return {"items": items, "contract_version": _ACTION_QUEUE_CONTRACT, "policy_version": _POLICY_VERSION}
+
+
+_ACTION_VIEW_MODEL_CONTRACT = "actionviewmodel:v1"
+_SAFE_PACKAGE_KEYS = {
+	"CALL": {"objective", "opening", "talking_points", "questions", "objections", "desired_outcome", "next_step"},
+	"EMAIL": {"template_version", "cta"},
+}
+
+
+@frappe.whitelist()
+def get_action_workbench(action: str, expected_action_revision: int | str | None = None) -> dict:
+	"""Return one permission-scoped, Frappe-owned ActionViewModelV1 card.
+
+	The queue identity is the only client-selected lookup.  Package and outcome
+	fields are projected here, never through generic Action/Revision reads.
+	"""
+	if frappe.session.user == "Guest":
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if not isinstance(action, str) or not action.strip():
+		frappe.throw(_("A valid Action is required."), frappe.ValidationError)
+	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+	try:
+		doc = frappe.get_doc("CRM Action", action.strip())
+	except Exception:
+		frappe.throw(_("Action is not available."), frappe.PermissionError)
+	if not doc.has_permission("read") or doc.current_slot != "CURRENT":
+		frappe.throw(_("Action is not available."), frappe.PermissionError)
+	action_revision = int(doc.action_revision or 1)
+	if expected_action_revision is not None and int(expected_action_revision) != action_revision:
+		frappe.throw(_("Action changed; refresh before opening."), frappe.ValidationError)
+
+	from crm.services.sales_action_policy import allowed_operations
+
+	roles = set(frappe.get_roles(frappe.session.user))
+	package_revision = int(doc.execution_package_version or 0)
+	package = _latest_safe_package(doc, package_revision) if frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True) else {}
+	action_type = doc.action_type if doc.action_type in _SAFE_PACKAGE_KEYS else "UNKNOWN"
+	return {
+		"contract_version": _ACTION_VIEW_MODEL_CONTRACT,
+		"action_id": doc.name,
+		"student": doc.student,
+		"action_revision": action_revision,
+		"package_revision": package_revision,
+		"freshness": _action_freshness(doc),
+		"what": {"title": doc.action_type or "Action", "body": doc.objective},
+		"why": {"title": "Why this action", "body": doc.objective},
+		"how": {"title": "How", "body": "Use the Frappe-approved action workflow."},
+		"goal": {"title": "Goal", "body": doc.objective},
+		"action": {"title": "Action", "body": "Review the current action and choose an allowed operation."},
+		"allowed_operations": allowed_operations(doc, actor_roles=roles),
+		"package": {"schema": _package_schema(action_type), "revision": package_revision, "data": package},
+	}
+
+
+def _latest_safe_package(doc, revision: int) -> dict:
+	if not revision or doc.action_type not in _SAFE_PACKAGE_KEYS:
+		return {}
+	rows = frappe.get_all(
+		"CRM Action Revision", filters={"action": doc.name, "revision": revision},
+		fields=["package"], limit_page_length=1,
+	)
+	value = rows[0].package if rows else doc.package_seed
+	if isinstance(value, str):
+		value = frappe.parse_json(value) if value else {}
+	if not isinstance(value, dict):
+		return {}
+	return {key: value[key] for key in _SAFE_PACKAGE_KEYS[doc.action_type] if key in value}
+
+
+def _package_schema(action_type: str) -> str | None:
+	return {"CALL": "call-package:v1", "EMAIL": "email-package:v1"}.get(action_type)
+
+
+def _action_freshness(doc) -> dict:
+	modified = getattr(doc, "modified", None)
+	if not modified:
+		return {"label": "unknown", "as_of": None, "age_seconds": None, "context_current": None}
+	age = max(0, int((frappe.utils.now_datetime() - modified).total_seconds()))
+	return {"label": "fresh" if age < 86400 else "aging" if age < 259200 else "stale", "as_of": str(modified), "age_seconds": age, "context_current": True}
+
+
+def _queue_status(state: str, action_owner: str | None, execution_status: str | None) -> str:
+	if state == "in-progress" or execution_status == "in_progress":
+		return "in_progress"
+	if action_owner:
+		return "claimed"
+	return "unassigned"
+
+
+def _primary_command(queue_status: str, state: str) -> str:
+	if queue_status == "unassigned":
+		return "claim"
+	if queue_status == "in_progress":
+		return "complete"
+	if state in {"pending", "requires-review"}:
+		return "accept"
+	if state == "accepted":
+		return "start"
+	return "view"
+
+
+def _action_queue_row(
+	row, caps: set, is_admin: bool, my_staff: str | None, now, context_revisions: dict, claimable: dict
+) -> dict:
+	queue_status = _queue_status(row.state, row.action_owner, row.execution_status)
+	mine = bool(my_staff and row.action_owner == my_staff)
+	context_current = int(row.source_context_revision or 0) >= context_revisions.get(row.student, 0)
+	age_seconds = int((now - row.modified).total_seconds()) if row.modified else None
+	freshness = {
+		"as_of": str(row.modified) if row.modified else None,
+		"age_seconds": age_seconds,
+		"context_current": context_current,
+		"label": _freshness_label(age_seconds, context_current),
+	}
+	# Real _valid_executor rule (unowned or already in the caller's execute
+	# scope), not just "unassigned". A Student already assigned to someone else,
+	# with the caller outside the owning team, is not claimable -- the claim
+	# would not widen assigned_to and the caller still could not execute.
+	can_claim = bool(queue_status == "unassigned" and claimable.get(row.student, False))
+	can_approve = bool(is_admin or ({"student.execute", "recommendation.decide"} & caps))
+	can_execute = bool((is_admin or ({"student.execute", "action.execute"} & caps)) and (mine or is_admin))
+	can_reassign = bool(
+		is_admin or ({"action.reassign", "team.oversee", "admissions.oversee"} & caps)
+	)
+	return {
+		"name": row.name,
+		"action": row.name,
+		"student": row.student,
+		"action_type": row.action_type,
+		"state": row.state,
+		"queue_status": queue_status,
+		"assignee_ref": row.action_owner,
+		"risk_tier": row.risk_tier or "high",
+		"revision": int(row.decision_revision or 0),
+		"action_revision": int(row.action_revision or 1),
+		"can_claim": can_claim,
+		"can_approve": can_approve,
+		"can_execute": can_execute,
+		"can_reassign": can_reassign,
+		"primary_command": _primary_command(queue_status, row.state),
+		"freshness": freshness,
+	}
+
+
+def _freshness_label(age_seconds: int | None, context_current: bool) -> str:
+	if not context_current:
+		return "context_moved"
+	if age_seconds is None:
+		return "unknown"
+	if age_seconds < 86400:
+		return "fresh"
+	if age_seconds < 259200:
+		return "aging"
+	return "stale"
 
 
 @frappe.whitelist()

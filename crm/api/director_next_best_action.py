@@ -1,0 +1,707 @@
+"""Director Next Best Action queue projection.
+
+Read-only envelope consumed by ``/director/ai/next-best-action``. The canonical
+work item is ``CRM Action`` (``origin='ai'``); this module only projects rows
+that Frappe permissions already expose to the caller. It never fabricates
+probability or SLA percentages — absent data is returned as ``null`` / ``[]``
+per ``docs/action-ui-contract.md``.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import timedelta
+from typing import Any
+from zoneinfo import ZoneInfo
+
+import frappe
+
+from crm.api.director_school_common import (
+	parse_enum,
+	parse_limit,
+	raise_api_error,
+	require_director_access,
+	resolve_admission_year,
+)
+
+LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
+POLICY_VERSION = "action-policy-2026.08"
+RESPONSE_WINDOW_HOURS = 8
+DEFAULT_CONFIDENCE = 70
+
+# Rows still awaiting or in a sales decision. ``plan_rank`` 2-3 land as
+# ``deferred`` (backlog) from the bundle writer and stay visible but de-ranked.
+QUEUE_STATES = ("pending", "requires-review", "accepted", "in-progress", "deferred")
+
+_CONTROL_LEVEL_BY_TYPE: dict[str, str] = {
+	"DOCUMENT_REQUEST": "automatic",
+	"APPLICATION_SUPPORT": "automatic",
+	"CALL": "review",
+	"COUNSELING": "review",
+	"MEETING": "review",
+	"EVENT_INVITE": "review",
+	"CAMPUS_VISIT": "review",
+	"EMAIL": "approval",
+	"MESSAGE": "approval",
+	"PARENT_CONTACT": "approval",
+	"HANDOFF": "approval",
+}
+
+STATIC_CONTROL_POLICY: dict[str, Any] = {
+	"version": POLICY_VERSION,
+	"rows": [
+		{
+			"level": "automatic",
+			"label": "Tự động chuẩn bị",
+			"actionTypes": ["DOCUMENT_REQUEST", "APPLICATION_SUPPORT"],
+			"detail": "Hệ thống chuẩn bị nội dung hồ sơ, chuyên viên chỉ rà soát.",
+			"execution": "system",
+		},
+		{
+			"level": "review",
+			"label": "Cần kiểm tra",
+			"actionTypes": ["CALL", "COUNSELING", "MEETING", "EVENT_INVITE", "CAMPUS_VISIT"],
+			"detail": "Chuyên viên xác nhận nội dung trước khi thực hiện.",
+			"execution": "business-rule",
+		},
+		{
+			"level": "approval",
+			"label": "Cần phê duyệt",
+			"actionTypes": ["EMAIL", "MESSAGE", "PARENT_CONTACT", "HANDOFF"],
+			"detail": "Cần người có thẩm quyền phê duyệt trước khi gửi ra ngoài.",
+			"execution": "human-confirmation",
+		},
+	],
+}
+
+_STATE_MAP = {
+	"pending": "proposed",
+	"requires-review": "proposed",
+	"accepted": "assigned",
+	"in-progress": "assigned",
+	"deferred": "deferred",
+	"superseded": "dismissed",
+	"cancelled": "dismissed",
+	"rejected": "dismissed",
+	"completed": "expired",
+}
+
+_SCOPE_LABELS = {"all": "Toàn bộ cơ sở"}
+
+_ACTION_FIELDS = [
+	"name",
+	"student",
+	"contact",
+	"action_type",
+	"objective",
+	"state",
+	"priority",
+	"plan_rank",
+	"due_at",
+	"action_owner",
+	"source_context_revision",
+	"policy_context_version",
+	"evidence_references",
+	"package_seed",
+	"action_revision",
+	"decision_revision",
+	"creation",
+	"modified",
+]
+
+
+@frappe.whitelist(methods=["GET"])
+def get_director_next_best_action(
+	admissionYear: str | int | None = None,
+	scope: str = "all",
+	queueFilter: str = "all",
+	page: str | int = 1,
+	pageSize: str | int = 8,
+	outcomePeriod: str = "30d",
+) -> dict[str, Any]:
+	require_director_access()
+	scope_value = parse_enum(scope, field="scope", allowed=_SCOPE_LABELS.keys(), default="all")
+	queue_filter = parse_enum(queueFilter, field="queueFilter", allowed=("all", "urgent"), default="all")
+	page_number = parse_limit(page, field="page", minimum=1, maximum=10_000, default=1)
+	page_size = parse_limit(pageSize, field="pageSize", minimum=1, maximum=100, default=8)
+	period = parse_enum(outcomePeriod, field="outcomePeriod", allowed=("7d", "30d", "90d"), default="30d")
+	year = resolve_admission_year(admissionYear)
+
+	now = frappe.utils.now_datetime()
+	student_ids = _students_for_year(year)
+	warnings: list[str] = []
+	rows: list[Any] = []
+	filtered: list[Any] = []
+	total = 0
+
+	if student_ids is not None:
+		base_filters: dict[str, Any] = {"origin": "ai", "state": ["in", list(QUEUE_STATES)]}
+		if student_ids:
+			base_filters["student"] = ["in", student_ids]
+		all_rows = frappe.get_list(
+			"CRM Action",
+			filters=base_filters,
+			fields=_ACTION_FIELDS,
+			order_by="plan_rank asc, due_at asc, creation desc",
+			limit_page_length=0,
+		) if student_ids else []
+		if queue_filter == "urgent":
+			filtered = [row for row in all_rows if _is_urgent(row, now)]
+		else:
+			filtered = all_rows
+		total = len(filtered)
+		start = (page_number - 1) * page_size
+		rows = filtered[start : start + page_size]
+
+	lookups = _load_lookups(rows)
+	actions = [_map_item(row, lookups, now) for row in rows]
+	warnings.append("Độ tin cậy và xác suất chuyển đổi chưa có nguồn dữ liệu định lượng.")
+
+	counts = _counts(filtered, now)
+	outcome_rows = _outcomes(student_ids, period, now) if student_ids else []
+
+	return {
+		"meta": {
+			"admissionYear": int(year),
+			"scope": scope_value,
+			"scopeLabel": _SCOPE_LABELS[scope_value],
+			"asOf": _as_iso(now),
+			"timezone": "Asia/Ho_Chi_Minh",
+			"status": "available" if actions else "partial",
+			"aiStatus": "available",
+			"modelVersion": None,
+			"policyVersion": POLICY_VERSION,
+			"warnings": warnings or None,
+		},
+		"queue": {
+			"actions": actions,
+			"counts": counts,
+			"pagination": {
+				"page": page_number,
+				"pageSize": page_size,
+				"total": total,
+				"hasNext": (page_number * page_size) < total,
+			},
+		},
+		"sla": {
+			"responseWindowHours": RESPONSE_WINDOW_HOURS,
+			"onTimeRate": None,
+			"onTimeDetail": f"Mốc phản hồi {RESPONSE_WINDOW_HOURS} giờ làm việc",
+			"statusBuckets": _status_buckets(counts),
+			"riskCases": [],
+			"riskReasons": [],
+		},
+		"outcomes": {"period": period, "rows": outcome_rows},
+		"controlPolicy": STATIC_CONTROL_POLICY,
+	}
+
+
+_COMMAND_STATE = {"assign": "assigned", "defer": "deferred", "dismiss": "dismissed"}
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_action_command(
+	actionId: str | None = None,
+	command: str | None = None,
+	assigneeId: str | None = None,
+	deferUntil: str | None = None,
+	reason: str | None = None,
+	expectedVersion: str | int | None = None,
+	idempotencyKey: str | None = None,
+) -> dict[str, Any]:
+	"""Director NBA queue command: assign / defer / dismiss one CRM Action.
+
+	Thin adapter over the governed ``crm.fcrm.student_decision`` primitives. It
+	does not write the Action directly and it does not widen authorization — the
+	primitive re-checks capability, scope and CAS. ``expectedVersion`` guards the
+	client against the queue ``version`` (``decision_revision``) it last saw; the
+	primitive still applies its own revision CAS internally.
+	"""
+	from crm.fcrm.student_decision import (
+		DECISION_EVENT,
+		StudentDecisionError,
+		decide_student_task,
+		reassign_action,
+	)
+
+	require_director_access()
+	action_id = _require(actionId, "actionId")
+	command_value = parse_enum(command, field="command", allowed=_COMMAND_STATE.keys())
+	key = _require(idempotencyKey, "idempotencyKey")
+	if expectedVersion in (None, ""):
+		raise_api_error("INVALID_QUERY", "expectedVersion là bắt buộc.", frappe.ValidationError, 400)
+	expected_version = int(expectedVersion)
+	correlation_id = f"dnba:{key}"
+
+	if not frappe.db.exists("CRM Action", action_id):
+		raise_api_error("ACTION_NOT_FOUND", "Không tìm thấy hành động.", frappe.DoesNotExistError, 404)
+	doc = frappe.get_doc("CRM Action", action_id)
+	if not doc.has_permission("read"):
+		raise_api_error("FORBIDDEN", "Hành động nằm ngoài phạm vi của bạn.", frappe.PermissionError, 403)
+	if int(doc.get("decision_revision") or 0) != expected_version:
+		raise_api_error("STALE_VERSION", "Hành động đã thay đổi; tải lại trước khi thử lại.", frappe.ValidationError, 409)
+
+	replayed = bool(_safe_exists(DECISION_EVENT, {"correlation_id": correlation_id}))
+
+	try:
+		if command_value == "assign":
+			assignee = _require(assigneeId, "assigneeId")
+			reassign_action(
+				name=action_id,
+				expected_revision=doc.get("action_revision") or 1,
+				assignee_staff=assignee,
+				idempotency_key=key,
+				reason=reason or "Giao việc từ hàng đợi Director NBA.",
+				correlation_id=correlation_id,
+			)
+		else:
+			decide_student_task(
+				name=action_id,
+				expected_revision=doc.get("decision_revision") or 0,
+				status="deferred" if command_value == "defer" else "rejected",
+				idempotency_key=key,
+				correlation_id=correlation_id,
+				decision_reason=reason or ("Bỏ qua từ hàng đợi Director NBA." if command_value == "dismiss" else None),
+				revisit_at=deferUntil or None,
+			)
+	except StudentDecisionError as exc:
+		if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE"}:
+			raise_api_error(exc.code, str(exc), frappe.PermissionError, 403)
+		status = 409 if exc.code in {"STALE_REVISION", "INVALID_STATE"} else 400
+		raise_api_error(exc.code, str(exc), frappe.ValidationError, status)
+
+	fresh = frappe.get_doc("CRM Action", action_id)
+	now = frappe.utils.now_datetime()
+	return {
+		"actionId": action_id,
+		"command": command_value,
+		"state": _COMMAND_STATE[command_value],
+		"version": int(fresh.get("decision_revision") or 0),
+		"appliedAt": _as_iso(now),
+		"deferUntil": _as_iso(deferUntil) if deferUntil else None,
+		"replayed": replayed,
+		"audit": {
+			"eventId": _latest_event_id(DECISION_EVENT, correlation_id),
+			"actorId": frappe.session.user,
+			"occurredAt": _as_iso(now),
+		},
+	}
+
+
+def _require(value: Any, label: str) -> str:
+	if value in (None, "") or not str(value).strip():
+		raise_api_error("INVALID_QUERY", f"{label} là bắt buộc.", frappe.ValidationError, 400)
+	return str(value).strip()
+
+
+def _safe_exists(doctype: str, filters: dict[str, Any]) -> bool:
+	try:
+		return bool(frappe.db.exists(doctype, filters))
+	except Exception:
+		return False
+
+
+def _latest_event_id(doctype: str, correlation_id: str) -> str | None:
+	try:
+		rows = frappe.get_all(
+			doctype,
+			filters={"correlation_id": correlation_id},
+			fields=["name"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)
+	except Exception:
+		return None
+	return rows[0]["name"] if rows else None
+
+
+def _students_for_year(year: str) -> list[str] | None:
+	"""All in-scope student ids for the admission year, or ``None`` when the
+	Student doctype is unavailable (keeps the endpoint 200 with an empty queue)."""
+	try:
+		rows = frappe.get_list(
+			"CRM Student",
+			filters={"admission_year": year},
+			fields=["name"],
+			limit_page_length=0,
+		)
+	except frappe.DoesNotExistError:
+		return None
+	return [row["name"] for row in rows if row.get("name")]
+
+
+def _is_urgent(row: Any, now) -> bool:
+	if _priority_of(row) == "high":
+		return True
+	due = _due_datetime(row)
+	return bool(due and due <= now)
+
+
+def _priority_of(row: Any) -> str:
+	rank = row.get("plan_rank") or 0
+	if rank == 1:
+		return "high"
+	if rank == 2:
+		return "medium"
+	if rank >= 3:
+		return "low"
+	value = str(row.get("priority") or "medium").lower()
+	return value if value in {"high", "medium", "low"} else "medium"
+
+
+def _due_datetime(row: Any):
+	value = row.get("due_at")
+	if not value:
+		return None
+	try:
+		return frappe.utils.get_datetime(value)
+	except (TypeError, ValueError):
+		return None
+
+
+def _status_of(row: Any, now) -> str:
+	due = _due_datetime(row)
+	if due is None:
+		return "soon"
+	if due < now:
+		return "overdue"
+	end_of_day = now.replace(hour=23, minute=59, second=59, microsecond=0)
+	return "today" if due <= end_of_day else "soon"
+
+
+def _counts(rows: list[Any], now) -> dict[str, int]:
+	buckets = {"today": 0, "soon": 0, "overdue": 0}
+	urgent = 0
+	for row in rows:
+		buckets[_status_of(row, now)] += 1
+		if _is_urgent(row, now):
+			urgent += 1
+	return {
+		"all": len(rows),
+		"urgent": urgent,
+		"today": buckets["today"],
+		"overdue": buckets["overdue"],
+		"soon": buckets["soon"],
+	}
+
+
+def _status_buckets(counts: dict[str, int]) -> list[dict[str, Any]]:
+	total = max(counts["all"], 1)
+	definition = [
+		("within-sla", "Còn trong hạn", counts["today"] + counts["soon"], "Có thể xử lý theo lịch hiện tại", "success"),
+		("due-soon", "Sắp đến hạn", counts["soon"], "Còn dưới mốc phản hồi", "warning"),
+		("overdue", "Đã quá hạn", counts["overdue"], "Cần điều phối ngay", "error"),
+	]
+	return [
+		{
+			"id": bucket_id,
+			"label": label,
+			"count": count,
+			"share": round(100 * count / total, 1),
+			"detail": detail,
+			"tone": tone,
+		}
+		for bucket_id, label, count, detail, tone in definition
+	]
+
+
+def _outcomes(student_ids: list[str], period: str, now) -> list[dict[str, Any]]:
+	if not student_ids:
+		return []
+	days = {"7d": 7, "30d": 30, "90d": 90}[period]
+	since = now - timedelta(days=days)
+	rows = frappe.get_list(
+		"CRM Action",
+		filters={
+			"origin": "ai",
+			"student": ["in", student_ids],
+			"plan_rank": ["in", [0, 1]],
+			"creation": [">=", since],
+		},
+		fields=["action_type", "state"],
+		limit_page_length=0,
+	)
+	grouped: dict[str, dict[str, int]] = {}
+	for row in rows:
+		action_type = row.get("action_type") or "UNKNOWN"
+		entry = grouped.setdefault(
+			action_type, {"submitted": 0, "accepted": 0, "executed": 0, "progressed": 0}
+		)
+		entry["submitted"] += 1
+		state = row.get("state")
+		if state in {"accepted", "in-progress", "completed"}:
+			entry["accepted"] += 1
+		if state == "completed":
+			entry["executed"] += 1
+			entry["progressed"] += 1
+	result = []
+	for action_type, entry in sorted(grouped.items()):
+		submitted = entry["submitted"]
+		result.append(
+			{
+				"id": _slug(action_type),
+				"label": _action_label(action_type),
+				"submitted": submitted,
+				"accepted": entry["accepted"],
+				"executed": entry["executed"],
+				"progressed": entry["progressed"],
+				"transitionRate": round(100 * entry["progressed"] / submitted, 1) if submitted else None,
+			}
+		)
+	return result
+
+
+def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
+	student_ids = [row["student"] for row in rows if row.get("student")]
+	owner_ids = [row["action_owner"] for row in rows if row.get("action_owner")]
+	students = (
+		{
+			row["name"]: row
+			for row in frappe.get_list(
+				"CRM Student",
+				filters={"name": ["in", student_ids]},
+				fields=["name", "student_name", "high_school", "major", "interest_level"],
+				limit_page_length=0,
+			)
+		}
+		if student_ids
+		else {}
+	)
+	school_ids = [row.get("high_school") for row in students.values() if row.get("high_school")]
+	schools = (
+		{
+			row["name"]: row.get("school_name") or row["name"]
+			for row in frappe.get_list(
+				"CRM High School",
+				filters={"name": ["in", school_ids]},
+				fields=["name", "school_name"],
+				limit_page_length=0,
+			)
+		}
+		if school_ids
+		else {}
+	)
+	majors_ids = [row.get("major") for row in students.values() if row.get("major")]
+	majors = (
+		{
+			row["name"]: row.get("major_name") or row["name"]
+			for row in frappe.get_list(
+				"CRM Major",
+				filters={"name": ["in", majors_ids]},
+				fields=["name", "major_name"],
+				limit_page_length=0,
+			)
+		}
+		if majors_ids
+		else {}
+	)
+	owners = (
+		{
+			row["name"]: row.get("full_name") or row["name"]
+			for row in frappe.get_list(
+				"CRM Staff",
+				filters={"name": ["in", owner_ids]},
+				fields=["name", "full_name"],
+				limit_page_length=0,
+			)
+		}
+		if owner_ids
+		else {}
+	)
+	return {"students": students, "schools": schools, "majors": majors, "owners": owners}
+
+
+def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, Any]:
+	student = lookups["students"].get(row.get("student"), {})
+	student_name = student.get("student_name") or row.get("student") or "—"
+	school = lookups["schools"].get(student.get("high_school")) or student.get("high_school") or "—"
+	interest = student.get("interest_level") or None
+	action_type = row.get("action_type") or ""
+	objective = row.get("objective") or ""
+	status = _status_of(row, now)
+	due = _due_datetime(row)
+	package = _parse_json(row.get("package_seed"))
+	if not isinstance(package, dict):
+		package = {}
+	talking_points = package.get("talking_points") if isinstance(package.get("talking_points"), list) else []
+	evidence = _parse_evidence(row.get("evidence_references"))
+	rationale = package.get("rationale") if isinstance(package.get("rationale"), dict) else {}
+	evidence_ref_ids = rationale.get("evidence_ref_ids")
+	safe_package = {key: value for key, value in package.items() if key in _PACKAGE_ALLOWED_KEYS}
+
+	return {
+		"id": row["name"],
+		"studentId": row.get("student") or "",
+		"studentName": student_name,
+		"initials": _initials(student_name),
+		"schoolId": None,
+		"school": school,
+		"interest": interest,
+		"recommendationCode": _slug(action_type).upper() if action_type else "ACTION",
+		"recommendation": objective or _action_label(action_type),
+		"summary": objective,
+		"dueAt": _as_iso(due) if due else None,
+		"dueLabel": _due_label(status),
+		"status": status,
+		"priority": _priority_of(row),
+		"impact": "Đưa hồ sơ sang bước tiếp theo trong hành trình tuyển sinh.",
+		"currentProbability": None,
+		"projectedProbability": None,
+		"confidence": DEFAULT_CONFIDENCE,
+		"suggestedAssigneeId": row.get("action_owner") or None,
+		"suggestedAssignee": lookups["owners"].get(row.get("action_owner")) or None,
+		"evidence": [str(item) for item in evidence][:8],
+		"talkingPoints": [str(item) for item in talking_points][:8],
+		# Additive per-type card fields (all optional; old clients ignore them).
+		# A WAIT disposition writes zero CRM Action rows, so a queued row is
+		# always ``ACT``; the field is emitted for the dashboard card contract.
+		"actionType": action_type or None,
+		"disposition": "ACT",
+		"packageSeed": _camelize_keys(safe_package) if safe_package else None,
+		"whyNow": rationale.get("why_now") or None,
+		"approach": rationale.get("approach") or None,
+		"expectedOutcome": rationale.get("expected_outcome") or None,
+		"evidenceRefIds": (
+			[str(item) for item in evidence_ref_ids] if isinstance(evidence_ref_ids, list) else []
+		),
+		"recentActivity": [],
+		"controlLevel": _CONTROL_LEVEL_BY_TYPE.get(action_type, "review"),
+		"state": _STATE_MAP.get(row.get("state"), "proposed"),
+		"generatedAt": _as_iso(row.get("creation")) or "",
+		"expiresAt": None,
+		# CAS field for the sales decision (accept/defer/dismiss), not execution.
+		"version": int(row.get("decision_revision") or 0),
+	}
+
+
+def _due_label(status: str) -> str:
+	return {
+		"overdue": "Đã quá hạn",
+		"today": "Xử lý hôm nay",
+		"soon": "Theo lịch",
+	}.get(status, "Chưa đặt hạn")
+
+
+def _action_label(action_type: str) -> str:
+	return {
+		"CALL": "Gọi điện",
+		"EMAIL": "Gửi email",
+		"MESSAGE": "Nhắn tin",
+		"COUNSELING": "Tư vấn",
+		"MEETING": "Gặp trực tiếp",
+		"EVENT_INVITE": "Mời sự kiện",
+		"CAMPUS_VISIT": "Tham quan cơ sở",
+		"DOCUMENT_REQUEST": "Yêu cầu hồ sơ",
+		"APPLICATION_SUPPORT": "Hỗ trợ nộp hồ sơ",
+		"PARENT_CONTACT": "Liên hệ phụ huynh",
+		"HANDOFF": "Chuyển tiếp",
+	}.get(action_type, action_type or "Hành động")
+
+
+# End-user package fields the director card may render, per
+# ``docs/action-ui-contract.md`` v2 (union across the 11 types). Pointer /
+# identifier fields (``recipient_ref``, ``parent_ref``, ``event_ref``,
+# ``template_version``) are deliberately excluded — a generic Action reader does
+# not expose recipient or routing identifiers.
+_PACKAGE_ALLOWED_KEYS = frozenset(
+	{
+		"package_version",
+		"objective",
+		"opening",
+		"talking_points",
+		"questions",
+		"objections",
+		"desired_outcome",
+		"next_step",
+		"subject",
+		"body",
+		"cta",
+		"channel",
+		"key_points",
+		"topic",
+		"agenda",
+		"guidance_points",
+		"concerns_to_address",
+		"purpose",
+		"attendees_hint",
+		"prep_checklist",
+		"why_relevant",
+		"invite_message",
+		"follow_up_step",
+		"visit_goal",
+		"itinerary_points",
+		"logistics_notes",
+		"who_to_involve",
+		"missing_documents",
+		"deadline",
+		"request_message",
+		"consequence_if_missing",
+		"blocking_steps",
+		"support_actions",
+		"reason",
+		"sensitivities",
+		"to_role",
+		"context_summary",
+		"open_items",
+		"expected_response_time",
+	}
+)
+
+
+def _camelize_keys(value: dict[str, Any]) -> dict[str, Any]:
+	"""snake_case → camelCase for the top-level keys of a package seed.
+
+	Only the keys are transformed; values (including nested lists/dicts) pass
+	through untouched. The dashboard ``NbaPackageSeed`` type is the camelCase
+	mirror of ``docs/action-ui-contract.md`` v2.
+	"""
+	out: dict[str, Any] = {}
+	for key, item in value.items():
+		parts = str(key).split("_")
+		out[parts[0] + "".join(word[:1].upper() + word[1:] for word in parts[1:])] = item
+	return out
+
+
+def _parse_json(value: Any) -> Any:
+	if value in (None, ""):
+		return None
+	if isinstance(value, (dict, list)):
+		return value
+	try:
+		return json.loads(value)
+	except (TypeError, ValueError):
+		return None
+
+
+def _parse_evidence(value: Any) -> list[Any]:
+	parsed = _parse_json(value)
+	if isinstance(parsed, list):
+		return parsed
+	if isinstance(parsed, dict):
+		refs = parsed.get("references") or parsed.get("evidence") or []
+		return refs if isinstance(refs, list) else []
+	return []
+
+
+def _initials(name: str | None) -> str:
+	words = [word for word in re.split(r"\s+", str(name or "").strip()) if word]
+	return ("".join(word[0] for word in words[-2:]).upper()) or "—"
+
+
+def _slug(value: Any) -> str:
+	return re.sub(r"[^a-z0-9]+", "-", str(value or "").lower()).strip("-") or "action"
+
+
+def _as_iso(value: Any) -> str | None:
+	if not value:
+		return None
+	try:
+		parsed = frappe.utils.get_datetime(value)
+	except (TypeError, ValueError):
+		return str(value)
+	if parsed.tzinfo is None:
+		parsed = parsed.replace(tzinfo=LOCAL_TIMEZONE)
+	else:
+		parsed = parsed.astimezone(LOCAL_TIMEZONE)
+	return parsed.isoformat(timespec="seconds")

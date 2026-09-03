@@ -18,25 +18,44 @@ def _json_object(value) -> dict:
 	return value if isinstance(value, dict) else {}
 
 
+CALL_PACKAGE_FIELDS = {
+	"objective", "opening", "questions", "talking_points", "objections", "desired_outcome", "next_step"
+}
+EMAIL_PACKAGE_FIELDS = {"template_version", "recipient_ref", "subject", "body", "cta"}
+EDITABLE_WORDING_FIELDS = {
+	"CALL": CALL_PACKAGE_FIELDS - {"objective"},
+	"EMAIL": {"subject", "body", "cta"},
+}
+
+
+def _validate_text(value, field: str, *, max_length: int = 4000) -> None:
+	if not isinstance(value, str) or not value.strip() or len(value) > max_length:
+		raise ValueError(f"{field} must be a non-empty string of at most {max_length} characters")
+
+
+def _validate_text_list(value, field: str) -> None:
+	if not isinstance(value, list) or len(value) > 50 or any(not isinstance(item, str) or not item.strip() for item in value):
+		raise ValueError(f"{field} must be a list of non-empty strings")
+
+
 def validate_execution_package(action_type: str, package: dict) -> None:
-	if action_type == "CALL":
-		required = {
-			"objective",
-			"opening",
-			"questions",
-			"talking_points",
-			"objections",
-			"desired_outcome",
-			"next_step",
-		}
-		missing = sorted(required.difference(package))
-		if missing:
-			raise ValueError(f"Call Script is missing: {', '.join(missing)}")
-	if action_type == "EMAIL":
-		required = {"template_version", "recipient_ref", "subject", "body", "cta"}
-		missing = sorted(required.difference(package))
-		if missing:
-			raise ValueError(f"Email Package is missing: {', '.join(missing)}")
+	"""Validate a discriminated, versioned package; unknown types fail closed."""
+	if action_type not in {"CALL", "EMAIL"}:
+		raise ValueError(f"No execution package is available for {action_type or 'unknown'}")
+	if not isinstance(package, dict):
+		raise ValueError("Execution package must be an object")
+	fields = CALL_PACKAGE_FIELDS if action_type == "CALL" else EMAIL_PACKAGE_FIELDS
+	extra = sorted(set(package) - fields)
+	missing = sorted(fields - set(package))
+	if extra:
+		raise ValueError(f"{action_type} package contains unsupported fields: {', '.join(extra)}")
+	if missing:
+		raise ValueError(f"{action_type} package is missing: {', '.join(missing)}")
+	for field, value in package.items():
+		if field in {"questions", "talking_points", "objections"}:
+			_validate_text_list(value, field)
+		else:
+			_validate_text(value, field, max_length=12000 if field == "body" else 4000)
 
 
 def render_initial_package(task) -> dict:
@@ -86,18 +105,46 @@ def persist_initial_package(task) -> dict:
 	return package
 
 
-def edit_email_package(task_name: str, expected_revision: int, package: dict, reason: str) -> dict:
+def _current_consent_is_valid(task) -> bool:
+	if task.get("student") and frappe.db.get_value("CRM Student", task.student, "privacy_status") == "opted_out":
+		return False
+	if task.get("contact") and frappe.db.get_value("CRM Contact", task.contact, "is_opted_out"):
+		return False
+	return True
+
+
+def edit_action_package(
+	task_name: str, expected_action_revision: int, expected_package_revision: int, changes: dict, reason: str
+) -> dict:
+	"""Atomically apply only server-declared wording changes to CALL/EMAIL."""
+	if not isinstance(changes, dict):
+		frappe.throw("Wording changes must be an object.", frappe.ValidationError)
 	task = frappe.get_doc("CRM Action", task_name)
 	if not task.has_permission("write"):
 		frappe.throw("Action is outside the actor's Student scope.", frappe.PermissionError)
-	if task.action_type != "EMAIL" or task.state not in {"accepted", "in-progress"}:
-		frappe.throw("Only an accepted/in-progress EMAIL Action can be edited.", frappe.ValidationError)
-	if int(task.execution_package_version or 0) != int(expected_revision):
-		frappe.throw("Email package changed; refresh before editing.", frappe.ValidationError)
+	frappe.db.sql("select name from `tabCRM Action` where name = %s for update", task.name)
+	task.reload()
+	if task.action_type not in EDITABLE_WORDING_FIELDS or task.state not in {"accepted", "in-progress"} or task.current_slot != "CURRENT":
+		frappe.throw("This Action is not editable in the current state.", frappe.ValidationError)
+	if int(task.action_revision or 1) != int(expected_action_revision) or int(task.execution_package_version or 0) != int(expected_package_revision):
+		frappe.throw("Action or package changed; refresh before editing.", frappe.ValidationError, title="STALE_REVISION")
 	if not reason or len(reason) > 500:
 		frappe.throw("An edit reason is required.", frappe.ValidationError)
-	validate_execution_package("EMAIL", package)
-	new_revision = int(expected_revision) + 1
+	if not _current_consent_is_valid(task):
+		frappe.throw("Current consent no longer permits this action.", frappe.PermissionError, title="CONSENT_REQUIRED")
+	from crm.services.sales_action_policy import allowed_operations, validate_action_command
+	edit_operation = next(item for item in allowed_operations(task, actor_roles=set(frappe.get_roles(frappe.session.user))) if item["operation"] == "EDIT")
+	if edit_operation["state"] != "allowed":
+		frappe.throw("Action edit is not currently permitted.", frappe.PermissionError)
+	current = _json_object(task.package_seed)
+	if task.execution_package_version:
+		rows = frappe.get_all("CRM Action Revision", filters={"action": task.name, "revision": int(task.execution_package_version)}, fields=["package"], limit_page_length=1)
+		if rows:
+			current = _json_object(rows[0].package)
+	package = {**current, **changes}
+	validate_execution_package(task.action_type, package)
+	validate_action_command(task.action_type, student=task.student, inputs={"objective": task.objective, "package": package}, actor_roles=set(frappe.get_roles(frappe.session.user)))
+	new_revision = int(expected_package_revision) + 1
 	frappe.get_doc(
 		{
 			"doctype": "CRM Action Revision",
@@ -110,15 +157,34 @@ def edit_email_package(task_name: str, expected_revision: int, package: dict, re
 			"created_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True)
+	# `db.set_value` bypasses the controller, so the Frappe-owned risk tier is
+	# re-derived here in the same write -- a package edit must never leave a
+	# stale tier the client could have influenced. The tier is monotonic: an
+	# edit may raise it but never lower it.
+	from crm.fcrm.student_decision import compute_risk_tier, max_risk_tier
+
+	new_tier = max_risk_tier(task.get("risk_tier"), compute_risk_tier(task.action_type, package))
+	previous_flag = getattr(frappe.flags, "crm_action_command", False)
 	frappe.flags.crm_action_command = True
-	frappe.db.set_value(
-		"CRM Action",
-		task.name,
-		{"package_seed": package, "execution_package_version": new_revision},
-		update_modified=False,
-	)
-	frappe.flags.crm_action_command = False
-	return {"action": task.name, "package_revision": new_revision, "package": package}
+	try:
+		frappe.db.set_value(
+			"CRM Action",
+			task.name,
+			{
+				"package_seed": package,
+				"execution_package_version": new_revision,
+				"risk_tier": new_tier,
+			},
+			update_modified=False,
+		)
+	finally:
+		frappe.flags.crm_action_command = previous_flag
+	return {"action": task.name, "action_revision": int(task.action_revision or 1), "package_revision": new_revision, "package": package}
+
+
+def edit_email_package(task_name: str, expected_revision: int, package: dict, reason: str) -> dict:
+	"""Compatibility wrapper; legacy callers are constrained to wording fields."""
+	return edit_action_package(task_name, expected_action_revision=int(expected_revision), expected_package_revision=int(expected_revision), changes=package, reason=reason)
 
 
 def queue_dispatch(action: str, *, package_revision: int, channel: str, inputs: dict) -> dict:
@@ -126,7 +192,9 @@ def queue_dispatch(action: str, *, package_revision: int, channel: str, inputs: 
 	action_row = frappe.get_doc("CRM Action", action)
 	if action_row.state not in {"accepted", "in-progress"} or action_row.requires_review:
 		frappe.throw("Action is not dispatchable until reviewed/resumed.", frappe.ValidationError)
-	package = _json_object(inputs.get("package") or action_row.package_seed)
+	if action_row.action_type == "HANDOFF":
+		frappe.throw("HANDOFF has no dispatch path.", frappe.ValidationError)
+	package = _json_object(action_row.package_seed)
 	validate_execution_package(action_row.action_type, package)
 	validate_action_command(
 		action_row.action_type,

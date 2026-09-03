@@ -3850,6 +3850,9 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 				else "accepted"
 			)
 			updates: dict[str, Any] = {"state": target_state, "disposition": disposition}
+			if target_state in {"rejected", "superseded", "cancelled", "completed"}:
+				# A terminal Action never keeps the student's single current slot.
+				updates["current_slot"] = None
 			frappe.db.set_value("CRM Action", action_name, updates, update_modified=False)
 			notes.append(
 				f"CRM Action {action_name} state={target_state} disposition={disposition} (no service path)"

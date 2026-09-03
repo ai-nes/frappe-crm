@@ -55,7 +55,9 @@ def choose_next_task_policy(
 	CALL only when the policy registry permits it. Parent contact is never a
 	fallback and is only selected when authority is already present.
 	"""
-	intent = _label(intent_type, "nhu cầu tuyển sinh hiện tại")
+	# Bare noun phrase: every template below prepends its own noun ("nhu cầu
+	# {intent}" / "yêu cầu {intent}"), so the fallback must not repeat it.
+	intent = _label(intent_type, "tuyển sinh hiện tại")
 	journey = _journey_label(stage)
 	if not eligible:
 		return None, (

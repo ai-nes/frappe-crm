@@ -120,12 +120,16 @@ def validate_fact_envelope(values: dict[str, Any]) -> dict[str, Any]:
 	for fieldname in (
 		"timezone",
 		"source_system",
-		"source_run",
 		"recorded_at",
 		"idempotency_fingerprint",
 		"normalized_dimension",
 	):
 		_required_text(values, fieldname)
+	# The persisted DocType calls this lineage field ``ingestion_run`` while
+	# older dry-run contracts called it ``source_run``. Accept both names at
+	# the validation boundary without adding a second database column.
+	if not str(values.get("source_run") or values.get("ingestion_run") or "").strip():
+		raise ValueError("source_run is required")
 	start = _iso_date(values.get("period_start"), "period_start")
 	end = _iso_date(values.get("period_end"), "period_end")
 	if start > end:

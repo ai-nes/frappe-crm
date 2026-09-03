@@ -67,18 +67,31 @@ def persist_private_artifact(*, filename: str, content: str) -> str:
 	return doc.name
 
 
-def technical_retention_until(kind: str):
-	"""Resolve server-owned technical-record retention, never client input."""
+def _retention_days(kind: str) -> int:
 	import frappe
-	from frappe.utils import add_to_date, now_datetime
 
 	days = {
 		"receipt": int(frappe.conf.get("crm_student_command_receipt_retention_days", 365)),
 		"outbox": int(frappe.conf.get("crm_agent_event_retention_days", 90)),
+		"analysis_run": int(frappe.conf.get("crm_analysis_run_retention_days", 400)),
 	}.get(kind)
 	if not days or days < 1:
 		raise ValueError(f"Unsupported retention kind: {kind}")
-	return add_to_date(now_datetime(), days=days)
+	return days
+
+
+def technical_retention_until(kind: str):
+	"""Resolve server-owned technical-record retention, never client input."""
+	from frappe.utils import add_to_date, now_datetime
+
+	return add_to_date(now_datetime(), days=_retention_days(kind))
+
+
+def technical_retention_cutoff(kind: str):
+	"""Return the timestamp before which a record of ``kind`` is retention-expired."""
+	from frappe.utils import add_to_date, now_datetime
+
+	return add_to_date(now_datetime(), days=-_retention_days(kind))
 
 
 def purge_expired_technical_records(*, approval_token: str, limit: int = 100) -> dict[str, int]:

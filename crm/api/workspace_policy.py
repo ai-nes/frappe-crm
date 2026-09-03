@@ -110,7 +110,9 @@ def derive_workspace_policy() -> frappe._dict:
 				)
 			)
 		)
-	campuses = tuple(sorted({value for value in [staff.get("campus")] if value}))
+	# System-manager policies have no CRM Staff row; keep the scope empty
+	# instead of dereferencing ``None`` while building the policy snapshot.
+	campuses = tuple(sorted({value for value in [staff.get("campus") if staff else None] if value}))
 	scope_material = {
 		"staff": staff.get("name") if staff else None,
 		"teams": teams,

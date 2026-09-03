@@ -123,6 +123,7 @@ def record_performance_fact(
 			)
 	values = {
 		"doctype": "CRM Campaign Performance Fact",
+		"fact_key": "|".join((campaign, channel_assignment, str(period_start), str(period_end), dimension_key, str(revision))),
 		"campaign": campaign,
 		"channel_assignment": channel_assignment,
 		"normalized_dimension": dimension_key,

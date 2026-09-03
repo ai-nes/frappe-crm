@@ -151,13 +151,16 @@ def route_pool_owned_student(
 		return {"status": "deferred", "reason": "ROUTING_DISABLED", "student": student}
 	frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (student,))
 	student_doc = frappe.get_doc("CRM Student", student)
+	# Keep the command compatible with lightweight dict doubles used by the
+	# offline contract tests as well as real Frappe documents.
+	student_name = student_doc.get("name") if isinstance(student_doc, dict) else student_doc.name
 	current_revision = int(student_doc.get("ownership_revision") or 0)
 	if expected_revision is not None and current_revision != int(expected_revision):
-		return {"status": "superseded", "reason": "STALE_OWNERSHIP_REVISION", "student": student_doc.name}
+		return {"status": "superseded", "reason": "STALE_OWNERSHIP_REVISION", "student": student_name}
 	pool = _canonical_pool(student_doc)
 	policy = _active_policy(pool)
 	if not policy:
-		return {"status": "deferred", "reason": "NO_ACTIVE_POLICY", "student": student_doc.name}
+		return {"status": "deferred", "reason": "NO_ACTIVE_POLICY", "student": student_name}
 	# The Student lock is acquired first. The policy lock serializes cursor
 	# advancement and is retained through the ownership command.
 	frappe.db.sql("select name from `tabCRM Student Routing Policy` where name = %s for update", (policy.name,))
@@ -165,11 +168,11 @@ def route_pool_owned_student(
 	members = _eligible_members(pool)
 	member = _select_member(members, policy.get("cursor_staff"))
 	if not member:
-		return {"status": "deferred", "reason": "NO_ELIGIBLE_MEMBER", "student": student_doc.name}
-	route_key = f"route:{student_doc.name}:{current_revision}"
+		return {"status": "deferred", "reason": "NO_ELIGIBLE_MEMBER", "student": student_name}
+	route_key = f"route:{student_name}:{current_revision}"
 	try:
 		result = change_student_ownership(
-			student=student_doc.name,
+			student=student_name,
 			target_kind="owner",
 			target_id=member["staff"],
 			target_team_id=member["team"],
@@ -193,7 +196,7 @@ def route_pool_owned_student(
 	)
 	return {
 		"status": "applied",
-		"student": student_doc.name,
+		"student": student_name,
 		"owner_staff": member["staff"],
 		"ownership": result,
 		"replayed": bool(result.get("replayed")),
@@ -223,7 +226,7 @@ def enqueue_student_routing(student: str, *, trigger: str = "pool_entry", correl
 		"request_key": request_key,
 		"status": "pending",
 		"revision": 0,
-		"student": student_doc.name,
+		"student": student_doc.get("name") if isinstance(student_doc, dict) else student_doc.name,
 		"ownership_revision": revision,
 		"pool_revision_key": f"{pool.name}:{revision}",
 		"campus": pool.campus,

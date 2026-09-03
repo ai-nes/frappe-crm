@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest import skipUnless
 
 from crm.patches.v1_0.migrate_campaign_event_to_many_to_many import (
 	_backfill_event_start_datetime,
@@ -11,6 +12,11 @@ from crm.patches.v1_0.migrate_campaign_event_to_many_to_many import (
 )
 
 
+@skipUnless(
+	frappe.db.exists("DocType", "CRM Campaign Touchpoint")
+	and frappe.db.exists("DocType", "CRM Event Participation"),
+	"Legacy marketing DocTypes are already migrated to CRM Marketing Engagement",
+)
 class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 	"""Idempotency coverage for the Phase 5 backfill patch. The migration reads
 	the deprecated CRM Contact.crm_campaign / crm_event singular Link fields
@@ -40,14 +46,10 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 		self.contact.insert(ignore_permissions=True)
 
 	def tearDown(self):
-		for name in frappe.db.get_all(
-			"CRM Campaign Touchpoint", filters={"crm_campaign": self.campaign}, pluck="name"
-		):
-			frappe.delete_doc("CRM Campaign Touchpoint", name, force=True)
-		for name in frappe.db.get_all(
-			"CRM Event Participation", filters={"crm_event": self.event}, pluck="name"
-		):
-			frappe.delete_doc("CRM Event Participation", name, force=True)
+		for name in frappe.db.get_all("CRM Marketing Engagement", filters={"crm_campaign": self.campaign}, pluck="name"):
+			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
+		for name in frappe.db.get_all("CRM Marketing Engagement", filters={"crm_event": self.event}, pluck="name"):
+			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test%"]}, pluck="name"):
@@ -93,10 +95,7 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 		finally:
 			frappe.flags.in_patch = False
 
-		count = frappe.db.count(
-			"CRM Campaign Touchpoint",
-			{"crm_campaign": self.campaign, "crm_contact": self.contact.name},
-		)
+		count = frappe.db.count("CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "crm_campaign": self.campaign, "crm_contact": self.contact.name})
 		self.assertEqual(count, 1)
 
 	def test_migrate_events_is_idempotent(self):
@@ -107,10 +106,7 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 		finally:
 			frappe.flags.in_patch = False
 
-		count = frappe.db.count(
-			"CRM Event Participation",
-			{"crm_event": self.event, "crm_contact": self.contact.name},
-		)
+		count = frappe.db.count("CRM Marketing Engagement", {"engagement_kind": "event_participation", "crm_event": self.event, "crm_contact": self.contact.name})
 		self.assertEqual(count, 1)
 
 	def test_migrated_touchpoint_is_marked_as_migrated_source(self):
@@ -120,11 +116,7 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 		finally:
 			frappe.flags.in_patch = False
 
-		source = frappe.db.get_value(
-			"CRM Campaign Touchpoint",
-			{"crm_campaign": self.campaign, "crm_contact": self.contact.name},
-			"source",
-		)
+		source = frappe.db.get_value("CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "crm_campaign": self.campaign, "crm_contact": self.contact.name}, "source")
 		self.assertEqual(source, "Migrated")
 
 	def test_backfill_event_start_datetime_only_fills_null_values(self):

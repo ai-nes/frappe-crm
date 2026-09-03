@@ -105,6 +105,15 @@
           v-else-if="tabs[tabIndex]?.name === 'Actions'"
           doctype="CRM Student"
           :name="crmStudentId"
+          @open-action="openActionCard"
+        />
+        <ActionCard
+          v-if="tabs[tabIndex]?.name === 'Actions' && selectedActionId"
+          class="mx-5 mb-5"
+          :model="actionCardModel"
+          :state="actionCardState"
+          @refresh="loadActionCard"
+          @operation="submitActionOperation"
         />
         <StudentAnalysisPanel
           v-else
@@ -279,6 +288,7 @@ import StudentOverview from '@/components/StudentOverview.vue'
 import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStudentLifecycleModal.vue'
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
 import ActionOutcomeDialog from '@/components/StudentDecision/ActionOutcomeDialog.vue'
+import ActionCard from '@/components/StudentDecision/ActionCard.vue'
 import StudentAnalysisPanel from '@/components/StudentAnalysisPanel.vue'
 import StudentAdmissionsActionDialog from '@/components/StudentAdmissionsActionDialog.vue'
 import StudentDetailLoadingState from '@/components/StudentDetailLoadingState.vue'
@@ -288,6 +298,7 @@ import {
   studentEngagementApi,
 } from '@/utils/studentEngagement'
 import { actionItem } from '@/utils/studentDecision'
+import { actionWorkbenchApi, normalizeActionViewModel, unavailableAction } from '@/utils/actionWorkbench'
 import { normalizeStudentAdmissionsContext } from '@/utils/studentAdmissionsContext'
 import { formatStudentSLADate, slaStatusPresentation } from '@/utils/studentSLA'
 import { copyToClipboard } from '@/utils'
@@ -328,12 +339,57 @@ const showOutcomeModal = ref(false)
 const showAdmissionsAction = ref(false)
 const interactionRefreshKey = ref(0)
 const selectedSalesAction = ref(null)
+const selectedActionId = ref('')
+const actionCardModel = ref(null)
+const actionCardState = ref('unavailable')
 const showSalesActionModal = computed({
   get: () => Boolean(selectedSalesAction.value),
   set: (value) => {
     if (!value) selectedSalesAction.value = null
   },
 })
+
+async function loadActionCard() {
+  if (!selectedActionId.value) return
+  actionCardState.value = 'loading'
+  try {
+    const response = await call(actionWorkbenchApi(selectedActionId.value).url, actionWorkbenchApi(selectedActionId.value).params)
+    actionCardModel.value = normalizeActionViewModel(response)
+    actionCardState.value = actionCardModel.value.state
+  } catch (error) {
+    actionCardModel.value = unavailableAction(error?.httpStatusCode === 403 ? 'forbidden' : 'load-failed')
+    actionCardState.value = 'unavailable'
+  }
+}
+
+async function submitActionOperation(operation) {
+  if (!operation?.operationId || !actionCardModel.value) return
+  if (operation.requiresApproval || operation.blocked || !operation.available) return
+  const command = {
+    action: actionCardModel.value.actionId,
+    idempotency_key: globalThis.crypto?.randomUUID?.() || `${actionCardModel.value.actionId}-${Date.now()}`,
+    expected_action_revision: actionCardModel.value.actionRevision,
+    expected_package_revision: actionCardModel.value.packageRevision,
+  }
+  const endpoint = {
+    DISPATCH: 'crm.api.action_workbench.request_dispatch',
+  }[operation.operationId]
+  if (!endpoint) return
+  actionCardState.value = 'loading'
+  try {
+    await call(endpoint, command)
+    await loadActionCard()
+  } catch (error) {
+    actionCardState.value = 'unavailable'
+    toast.error(error?.messages?.[0] || __('Unable to submit the action operation.'))
+  }
+}
+
+function openActionCard(actionId) {
+  selectedActionId.value = typeof actionId === 'string' ? actionId : ''
+  actionCardModel.value = null
+  if (selectedActionId.value) loadActionCard()
+}
 const canChangeOwnership = computed(() =>
   hasAnyCapability(getCurrentUser(), [
     'student.ownership.manage',

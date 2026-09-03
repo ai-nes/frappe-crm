@@ -19,6 +19,9 @@ from crm.fcrm.student_decision import (
 	decide_recommendation as _decide_recommendation,
 )
 from crm.fcrm.student_decision import (
+	claim_current_action as _claim_current_action,
+)
+from crm.fcrm.student_decision import (
 	decide_student_task as _decide_student_task,
 )
 from crm.fcrm.student_decision import (
@@ -152,27 +155,32 @@ def _upsert_crm_action(
 		as_dict=True,
 	)
 	if current:
-		if str(current[0].state) in {"accepted", "in-progress", "requires-review", "completed"}:
-			task = frappe.get_doc("CRM Action", current[0].name)
-			task.requires_review = 1
-			task.review_revision = current_revision
-			task.state = "requires-review"
-			frappe.flags.crm_action_command = True
-			try:
-				task.save(ignore_permissions=True)
-			finally:
-				frappe.flags.crm_action_command = False
-			return _task_result(task)
-		frappe.db.set_value(
-			"CRM Action",
-			current[0].name,
-			{"current_slot": None, "state": "superseded"},
-			update_modified=False,
-		)
+		stale = frappe.get_doc("CRM Action", current[0].name)
+		previous_flag = getattr(frappe.flags, "crm_action_command", False)
+		frappe.flags.crm_action_command = True
+		try:
+			if str(stale.state) in {"accepted", "in-progress", "requires-review"}:
+				# Live work in flight: a newer context forces a human review, it does
+				# not silently overwrite the executor's Action.
+				stale.requires_review = 1
+				stale.review_revision = current_revision
+				stale.state = "requires-review"
+				stale.save(ignore_permissions=True)
+				return _task_result(stale)
+			# A completed (or otherwise closed) Action is never reopened. Vacate the
+			# slot so this new recommendation opens a fresh Action; supersede it
+			# only when that is a legal transition from its current state.
+			if str(stale.state) not in CRMAction.TERMINAL:
+				stale.state = "superseded"
+			stale.current_slot = None
+			stale.save(ignore_permissions=True)
+		finally:
+			frappe.flags.crm_action_command = previous_flag
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
 
 	if action_type and action_type not in V2_ACTION_TYPES:
 		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+	_validate_package_seed(candidate.get("package_seed"), action_type)
 	task = frappe.get_doc(
 		{
 			"doctype": "CRM Action",
@@ -183,6 +191,7 @@ def _upsert_crm_action(
 			"source_context_revision": current_revision,
 			"disposition": disposition,
 			"action_type": action_type,
+			"action_owner": _default_action_owner(student),
 			"objective": str(candidate.get("objective") or "")[:500],
 			"policy_context_version": candidate.get("policy_version"),
 			"state": "pending",
@@ -255,6 +264,47 @@ def _merge_rationale(package_seed: dict | None, rationale: dict | None) -> dict:
 	return seed
 
 
+# Top-level package_seed keys each action type legitimately carries. Mirrors
+# crm-agents `app.services.decision.action_packages.PACKAGE_FIELD_SETS`; kept in
+# lockstep by a paired test on each side. Shape only — the writer never edits
+# package content, this just logs drift.
+_PACKAGE_ENVELOPE_KEYS = frozenset({"package_version", "objective", "rationale"})
+_PACKAGE_FIELD_SETS: dict[str, frozenset[str]] = {
+	"CALL": frozenset({"opening", "talking_points", "questions", "objections", "desired_outcome", "next_step"}),
+	"EMAIL": frozenset(
+		{"template_version", "recipient_ref", "subject", "body", "talking_points", "questions", "cta", "next_step"}
+	),
+	"MESSAGE": frozenset({"channel", "opening", "key_points", "cta", "next_step"}),
+	"COUNSELING": frozenset({"topic", "agenda", "guidance_points", "concerns_to_address", "desired_outcome"}),
+	"MEETING": frozenset({"purpose", "agenda", "attendees_hint", "prep_checklist", "desired_outcome"}),
+	"EVENT_INVITE": frozenset({"event_ref", "why_relevant", "invite_message", "follow_up_step"}),
+	"CAMPUS_VISIT": frozenset({"visit_goal", "itinerary_points", "logistics_notes", "who_to_involve", "desired_outcome"}),
+	"DOCUMENT_REQUEST": frozenset(
+		{"missing_documents", "deadline", "request_message", "consequence_if_missing", "follow_up_step"}
+	),
+	"APPLICATION_SUPPORT": frozenset({"blocking_steps", "support_actions", "deadline", "desired_outcome"}),
+	"PARENT_CONTACT": frozenset({"parent_ref", "reason", "talking_points", "sensitivities", "desired_outcome", "next_step"}),
+	"HANDOFF": frozenset({"to_role", "reason", "context_summary", "open_items", "expected_response_time"}),
+}
+
+
+def _validate_package_seed(seed: dict | None, action_type: str | None) -> None:
+	"""Log — never reject — a package_seed whose keys drift from its type.
+
+	The Action writer treats package content as opaque; this only surfaces a
+	crm-agents / Frappe contract drift in the logs so it is caught before the
+	dashboard renders a half-populated card.
+	"""
+	if not isinstance(seed, dict) or not seed or not action_type:
+		return
+	allowed = _PACKAGE_ENVELOPE_KEYS | _PACKAGE_FIELD_SETS.get(action_type, frozenset())
+	unknown = sorted(k for k in seed if k not in allowed)
+	if unknown:
+		frappe.logger("crm.decision").warning(
+			f"package_seed keys not in the {action_type} contract: {unknown}"
+		)
+
+
 def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, rationale=None):
 	from crm.services.sales_action_policy import V2_ACTION_TYPES
 
@@ -290,6 +340,7 @@ def _insert_bundle_action(*, student, contact, candidate, current_revision, rank
 		),
 		"created_at": frappe.utils.now_datetime(),
 	}
+	_validate_package_seed(candidate.get("package_seed"), action_type)
 	doc.update(_plan_rank_defaults(rank))
 	return frappe.get_doc(doc).insert(ignore_permissions=True)
 
@@ -430,18 +481,22 @@ def _record_crm_action_generation_failure(
 	)
 	if not row or int(row[0].student_context_revision or 0) != int(source_revision):
 		return {"status": "deferred", "reason": "revision_moved"}
-	current = frappe.db.get_value("CRM Action", {"student": student, "current_slot": "CURRENT"}, "name")
+	current = frappe.db.sql(
+		"SELECT name FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
+		(student,),
+		as_dict=True,
+	)
 	if current:
-		frappe.db.set_value(
-			"CRM Action",
-			current,
-			{
-				"state": "requires-review",
-				"terminal_reason": str(reason)[:500],
-			},
-			update_modified=False,
-		)
-		return {"status": "failed", "action": current}
+		action = frappe.get_doc("CRM Action", current[0].name)
+		action.state = "requires-review"
+		action.terminal_reason = str(reason)[:500]
+		previous_flag = getattr(frappe.flags, "crm_action_command", False)
+		frappe.flags.crm_action_command = True
+		try:
+			action.save(ignore_permissions=True)
+		finally:
+			frappe.flags.crm_action_command = previous_flag
+		return {"status": "failed", "action": action.name}
 	task = frappe.get_doc(
 		{
 			"doctype": "CRM Action",
@@ -526,7 +581,11 @@ def transition_recommendation(name: str, expected_revision: str, status: str, de
 		correlation_id=kwargs.get("correlation_id") or f"legacy-decision-{name}",
 		expected_modified=str(expected_revision) if legacy_modified else None,
 	)
-	result.setdefault("name", result.get("recommendation"))
+	# Legacy callers receive the recommendation name when the canonical command
+	# provides one.  Do not manufacture a ``name: None`` field for adapters and
+	# contract doubles that intentionally return only status.
+	if result.get("recommendation") is not None:
+		result.setdefault("name", result["recommendation"])
 	return result
 
 
@@ -551,6 +610,17 @@ def transition_action(**kwargs):
 	"""Canonical Action lifecycle endpoint."""
 	kwargs.pop("_internal_service", None)
 	return _call(_transition_action, **kwargs)
+
+
+@frappe.whitelist(methods=["POST"])
+def claim_current_action(**kwargs):
+	"""Claim the Student's current queue Action for the calling Sale.
+
+	Not a wrapper over the decision command: it locks the Student row, widens
+	care scope to the caller, and re-verifies the current slot under that lock.
+	"""
+	kwargs.pop("_internal_service", None)
+	return _call(_claim_current_action, **kwargs)
 
 
 @frappe.whitelist(methods=["POST"])

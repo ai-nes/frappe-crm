@@ -123,3 +123,10 @@ crm.patches.v1_0.enforce_frappe_crm_workspace_access
 crm.patches.v1_0.set_sales_default_crm_app
 crm.patches.v1_0.admissions_erd_baseline
 crm.patches.v1_0.backfill_admission_applications
+crm.patches.v1_0.crm_action_current_slot_unique
+crm.patches.v1_0.crm_action_revision_unique
+crm.patches.v1_0.crm_action_execution_attempt_indexes
+crm.patches.v1_0.analysis_stage_result_digest
+crm.patches.v1_0.crm_action_risk_tier
+crm.patches.v1_0.prepare_admission_event_decision
+crm.patches.v1_0.add_crm_action_plan_rank

@@ -115,6 +115,10 @@ def _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor,
 			"schema_version": "enrollment-transition-v1",
 		}
 	).insert(ignore_permissions=True)
+	from crm.services.student_context import bump_student_context_revision
+	change = bump_student_context_revision(student, "lifecycle_transition", enqueue=False, event_id=f"lifecycle:{key}")
+	from crm.services.admission_event_policy import admit_lifecycle_transition
+	admit_lifecycle_transition(student=student, revision=change["revision"], source_event=change["change"], source_reference=receipt)
 
 
 def _run_in_savepoint(fn):
