@@ -11,7 +11,7 @@ from crm.fcrm.permissions import (
 
 
 class CRMRecommendation(Document):
-	"""A recommendation addressed to one typed target and one action definition."""
+	"""A recommendation addressed to one typed target and one action catalog row."""
 
 	def validate(self):
 		if not self.recommendation_id:

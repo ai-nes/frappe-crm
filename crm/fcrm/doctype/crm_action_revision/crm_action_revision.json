@@ -3,7 +3,7 @@
  "field_order": ["naming_series", "action", "revision", "package_type", "package", "author", "reason", "created_at"],
  "fields": [
   {"fieldname":"naming_series","fieldtype":"Select","hidden":1,"default":"PKG-.YYYY.-","options":"PKG-.YYYY.-"},
-  {"fieldname":"action","fieldtype":"Link","options":"CRM Action","reqd":1,"read_only":1},
+  {"fieldname":"action","fieldtype":"Link","options":"CRM Action Item","reqd":1,"read_only":1},
   {"fieldname":"revision","fieldtype":"Int","reqd":1,"read_only":1},
   {"fieldname":"package_type","fieldtype":"Select","options":"CallScriptV1\nEmailPackageV1\nGeneric","reqd":1,"read_only":1},
   {"fieldname":"package","fieldtype":"JSON","reqd":1,"read_only":1},

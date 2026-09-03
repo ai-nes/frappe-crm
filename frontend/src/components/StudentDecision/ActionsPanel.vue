@@ -44,7 +44,7 @@
           <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs font-semibold tracking-[0.06em] text-ink-gray-5">{{ item.action_type || __('Monitor') }}</span>
+                <span class="text-xs font-semibold tracking-[0.06em] text-ink-gray-5">{{ item.action || item.action_type || __('Monitor') }}</span>
                 <Badge :label="stateLabel(item)" :theme="stateTheme(item)" variant="subtle" />
                 <Badge :label="item.origin" theme="gray" variant="subtle" />
               </div>
@@ -66,12 +66,13 @@
   <Dialog v-model="showCreate" :options="{ title: __('Add Action') }">
     <template #body-content>
       <div class="space-y-4 p-4">
+        <ErrorMessage v-if="actionTypeCatalog.error || (!actionTypeCatalog.loading && !actionTypes.length)" :message="__('CRM Action catalog is unavailable. Ask an administrator to migrate the CRM Action catalog.')" />
         <div class="grid gap-3 sm:grid-cols-2"><Select v-model="form.action_type" :options="actionTypes" :label="__('Action type')" /><Select v-model="form.priority" :options="priorities" :label="__('Priority')" /></div>
         <FormControl v-model="form.objective" :label="__('Objective')" :placeholder="__('What needs to be done?')" />
         <FormControl v-model="form.due_at" type="datetime-local" :label="__('Due date')" :description="__('Optional. Add a deadline when this action needs a clear finish time.')" />
       </div>
     </template>
-    <template #actions><Button variant="solid" :loading="creating" :disabled="!form.objective.trim()" :label="__('Create')" @click="createAction" /></template>
+    <template #actions><Button variant="solid" :loading="creating" :disabled="!form.objective.trim() || !actionTypes.length" :label="__('Create')" @click="createAction" /></template>
   </Dialog>
 </template>
 
@@ -86,11 +87,25 @@ const router = useRouter()
 const showCreate = ref(false)
 const creating = ref(false)
 const activeFilter = ref('all')
-const actionTypes = ['CALL', 'EMAIL', 'MESSAGE', 'COUNSELING', 'MEETING', 'DOCUMENT_REQUEST'].map((value) => ({ label: value, value }))
 const priorities = ['high', 'medium', 'low'].map((value) => ({ label: __(value.charAt(0).toUpperCase() + value.slice(1)), value }))
 const form = ref({ action_type: 'CALL', objective: '', due_at: '', priority: 'medium' })
 const idempotencyKey = ref('')
 const actions = createResource({ url: 'crm.api.student_worklist.list_actions_for_record', params: { doctype: props.doctype, name: props.name, page_size: 50 }, auto: true })
+const actionTypeCatalog = createResource({
+  url: 'frappe.client.get_list',
+  params: {
+    doctype: 'CRM Action',
+    fields: ['code', 'display_name', 'action_type'],
+    filters: { enabled: 1 },
+    order_by: 'sort_order asc',
+    limit_page_length: 0,
+  },
+  auto: true,
+})
+const actionTypes = computed(() => {
+  const rows = Array.isArray(actionTypeCatalog.data) ? actionTypeCatalog.data : []
+  return rows.map((row) => ({ label: `${row.display_name} (${row.code})`, value: row.code }))
+})
 const allItems = computed(() => actions.data?.items || [])
 const filters = computed(() => [
   { label: __('All'), value: 'all', count: allItems.value.length },

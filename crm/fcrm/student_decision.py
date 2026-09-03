@@ -21,7 +21,7 @@ from crm.fcrm.role_policy import capabilities_for_roles
 RECEIPT = "CRM Student Command Receipt"
 DECISION_EVENT = "CRM Student Decision Event"
 RECOMMENDATION = "CRM Recommendation"
-CANONICAL_ACTION = "CRM Action"
+CANONICAL_ACTION = "CRM Action Item"
 POLICY_VERSION = "phase6-v1"
 SCHEMA_VERSION = "phase6-v1"
 OUTCOMES = {"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER", "APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED", "success", "failed", "no_contact", "no_show"}
@@ -244,7 +244,7 @@ def _free_current_slot(student):
 	student, so callers must run this under a lock on the Student row.
 	"""
 	occupied = frappe.db.sql(
-		"select name from `tabCRM Action` where student = %s and current_slot = 'CURRENT' for update",
+		"select name from `tabCRM Action Item` where student = %s and current_slot = 'CURRENT' for update",
 		(student,),
 	)
 	return None if occupied else "CURRENT"
@@ -336,13 +336,29 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 	try:
 		doc.decision_status = status
 		doc.lifecycle_status = "active" if status in {"accepted", "deferred"} else "expired"
+		action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
 		if status == "accepted":
 			doc.owner = assignee_staff
 			doc.execution_status = "not_started"
 		doc.save(ignore_permissions=True)
-		action = frappe.db.get_value(CANONICAL_ACTION, {"recommendation": doc.name}, "name")
 		if status == "accepted" and not action:
-			action_type = frappe.db.get_value("CRM Action Definition", doc.action, "code") if doc.action else None
+			from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+			from crm.fcrm.action_type_registry import is_available_action_type
+
+			action_type = None
+			if doc.action:
+				action_type = frappe.db.get_value("CRM Action", doc.action, "code")
+				action_type = action_type or frappe.db.get_value(
+					"CRM Action Definition", doc.action, "code"
+				)
+			canonical_type = canonicalize_action_type(action_type)
+			canonical_type = (
+				canonical_type if is_available_action_type(canonical_type) else None
+			)
+			if canonical_type:
+				from crm.services.sales_action_policy import require_parent_contact_authority
+
+				require_parent_contact_authority(canonical_type, student_name)
 			canonical = frappe.get_doc(
 				{
 					"doctype": CANONICAL_ACTION,
@@ -351,9 +367,10 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 					"contact": frappe.db.get_value("CRM Contact", {"student": student_name}, "name"),
 					"current_slot": _free_current_slot(student_name),
 					"origin": "ai",
-					"action_type": action_type,
+					"action": canonical_type,
+					"action_type": action_category(canonical_type),
 					"objective": doc.purpose or doc.reason,
-					"disposition": "ACT" if action_type else "MONITOR",
+					"disposition": "ACT" if canonical_type else "MONITOR",
 					"state": "accepted",
 					"source_context_revision": 0,
 					"policy_context_version": "nba-v1",
@@ -372,6 +389,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 			canonical.insert(ignore_permissions=True)
 			action = canonical.name
 			from crm.fcrm.nba import sync_nba_recommendation_for_action
+
 			sync_nba_recommendation_for_action(canonical)
 		event = _event(
 			f"recommendation.{status}",
@@ -383,7 +401,12 @@ def decide_recommendation(name: str, expected_revision: Any, status: str, idempo
 			receipt,
 			correlation_id,
 			0,
-			{"status": status, "from_state": previous_status, "reason": decision_reason},
+			{
+				"status": status,
+				"from_state": previous_status,
+				"reason": decision_reason,
+				"revisit_at": str(revisit_at) if revisit_at else None,
+			},
 		)
 		_outbox("recommendation.decided.v1", event)
 		result = {"status": status, "recommendation": doc.name, "action": action, "revision": 0, "event": event.name, "receipt": receipt.name}
@@ -486,7 +509,7 @@ def claim_grants_execute(student: str, user: str) -> bool:
 
 
 def _current_action_payload(student: str) -> dict | None:
-	name = frappe.db.get_value("CRM Action", {"student": student, "current_slot": "CURRENT"}, "name")
+	name = frappe.db.get_value(CANONICAL_ACTION, {"student": student, "current_slot": "CURRENT"}, "name")
 	if not name:
 		return None
 	doc = frappe.get_doc(CANONICAL_ACTION, name)
@@ -547,7 +570,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 		return replay
 
 	current = frappe.db.sql(
-		"select name from `tabCRM Action` where student = %s and current_slot = 'CURRENT' for update",
+		"select name from `tabCRM Action Item` where student = %s and current_slot = 'CURRENT' for update",
 		(student,), as_dict=True,
 	)
 	stale = {
@@ -614,8 +637,17 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 def create_manual_action(student: str, action_type: str, objective: str, idempotency_key: str, due_at: Any = None, priority: str = "medium", assignee_staff: str | None = None, contact: str | None = None):
 	"""Create a user-authored Action through the governed aggregate."""
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); objective = _required(objective, "objective")[:500]
-	if action_type not in {"CALL", "EMAIL", "MESSAGE", "COUNSELING", "MEETING", "EVENT_INVITE", "CAMPUS_VISIT", "DOCUMENT_REQUEST", "APPLICATION_SUPPORT", "PARENT_CONTACT", "HANDOFF"}:
+	from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+	from crm.fcrm.action_type_registry import is_available_action_type
+	from crm.services.sales_action_policy import require_parent_contact_authority
+
+	action_type = canonicalize_action_type(action_type)
+	if not is_available_action_type(action_type):
 		_fail("INVALID_INPUT", "Unsupported Action type.")
+	try:
+		require_parent_contact_authority(action_type, student)
+	except frappe.PermissionError as exc:
+		_fail("FORBIDDEN", str(exc))
 	if priority not in {"high", "medium", "low"}: _fail("INVALID_INPUT", "Unsupported Action priority.")
 	if contact:
 		linked_student = frappe.db.get_value("CRM Contact", contact, "student")
@@ -634,7 +666,7 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 	receipt = _new_receipt("action_decision", actor, student, key, fingerprint, scope, frappe.generate_hash(length=20))
 	previous_flag = getattr(frappe.flags, "crm_action_command", False); frappe.flags.crm_action_command = True
 	try:
-		action = frappe.get_doc({"doctype": CANONICAL_ACTION, "student": student, "contact": contact, "current_slot": _free_current_slot(student), "origin": "manual", "action_type": action_type, "objective": objective, "disposition": "ACT", "state": "accepted", "execution_status": "planned", "priority": priority, "due_at": due_at, "action_owner": assignee_staff, "source_context_revision": int(student_doc.get("student_context_revision") or 0), "policy_context_version": POLICY_VERSION, "generation_idempotency_key": command_key, "producer_identity": f"user:{actor}", "payload_digest": fingerprint, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1}).insert(ignore_permissions=True)
+		action = frappe.get_doc({"doctype": CANONICAL_ACTION, "student": student, "contact": contact, "current_slot": _free_current_slot(student), "origin": "manual", "action": action_type, "action_type": action_category(action_type), "objective": objective, "disposition": "ACT", "state": "accepted", "execution_status": "planned", "priority": priority, "due_at": due_at, "action_owner": assignee_staff, "source_context_revision": int(student_doc.get("student_context_revision") or 0), "policy_context_version": POLICY_VERSION, "generation_idempotency_key": command_key, "producer_identity": f"user:{actor}", "payload_digest": fingerprint, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1}).insert(ignore_permissions=True)
 		result = {"status": "accepted", "action": action.name, "student": student, "revision": action.action_revision, "receipt": receipt.name}
 		_finish(receipt, result); return result
 	finally:
@@ -692,7 +724,7 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 		if status in {"completed", "failed", "cancelled"}:
 			from crm.services.action_outcome import derive_progress
 			from crm.services.student_context import bump_student_context_revision
-			progress = derive_progress(action.action_type, outcome_code) if status == "completed" else "NO_PROGRESS"
+			progress = derive_progress(action.get("action") or action.action_type, outcome_code) if status == "completed" else "NO_PROGRESS"
 			attempt_identity = attempt_id or "manual"
 			business_event_id = _fingerprint({"action": action.name, "revision": action.action_revision, "attempt": attempt_identity, "outcome": outcome_code, "progress": progress})[:32]
 			# This path records a bounded fact only. It deliberately disables the

@@ -2,17 +2,16 @@
 
 from __future__ import annotations
 
-
 _KEYWORD_ACTIONS = (
-	(("parent", "phụ huynh", "guardian"), "PARENT_CONTACT"),
-	(("document", "documents", "hồ sơ", "giấy tờ"), "DOCUMENT_REQUEST"),
-	(("application", "apply", "nộp đơn", "đăng ký"), "APPLICATION_SUPPORT"),
-	(("campus", "visit", "tham quan"), "CAMPUS_VISIT"),
-	(("open day", "event", "sự kiện", "ngày hội"), "EVENT_INVITE"),
-	(("counsel", "tư vấn"), "COUNSELING"),
-	(("meeting", "hẹn", "appointment"), "MEETING"),
-	(("message", "zalo", "whatsapp"), "MESSAGE"),
-	(("email", "mail"), "EMAIL"),
+	(("parent", "phụ huynh", "guardian"), ("PARENT_CONTACT", "CONTACT_PARENT")),
+	(("document", "documents", "hồ sơ", "giấy tờ"), ("DOCUMENT_REQUEST", "REQUEST_MISSING_DOCUMENT")),
+	(("application", "apply", "nộp đơn", "đăng ký"), ("APPLICATION_SUPPORT", "GUIDE_NEXT_STEP")),
+	(("campus", "visit", "tham quan"), ("CAMPUS_VISIT", "INVITE_CAMPUS_VISIT")),
+	(("open day", "event", "sự kiện", "ngày hội"), ("EVENT_INVITE", "INVITE_OPEN_DAY")),
+	(("counsel", "tư vấn"), ("COUNSELING", "ADVISE_MAJOR")),
+	(("meeting", "hẹn", "appointment"), ("MEETING", "BOOK_1ON1_CONSULTATION")),
+	(("message", "zalo", "whatsapp"), ("MESSAGE", "SEND_ZALO")),
+	(("email", "mail"), ("EMAIL", "SEND_EMAIL")),
 )
 
 
@@ -65,12 +64,14 @@ def choose_next_task_policy(
 		), False
 
 	requested = None
+	requested_legacy = None
 	lower_intent = intent.casefold()
-	for keywords, action in _KEYWORD_ACTIONS:
+	for keywords, action_candidates in _KEYWORD_ACTIONS:
 		if any(keyword in lower_intent for keyword in keywords):
-			requested = action
+			requested_legacy = action_candidates[0]
+			requested = next((action for action in action_candidates if action in allowed_actions), None)
 			break
-	if requested == "PARENT_CONTACT" and not parent_authorized:
+	if requested_legacy == "PARENT_CONTACT" and not parent_authorized:
 		return None, (
 			f"Chưa liên hệ phụ huynh cho yêu cầu {intent} của học sinh cho đến khi có Thẩm quyền Liên hệ Phụ huynh đã được xác minh."
 		), False

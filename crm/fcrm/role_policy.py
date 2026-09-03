@@ -202,7 +202,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "campus_is_not_team_scope",
 	},
 	"decision_action": {
-		"doctypes": ("CRM Recommendation", "CRM Action", "CRM Student Decision Event"),
+		"doctypes": ("CRM Recommendation", "CRM Action", "CRM Action Item", "CRM Student Decision Event"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",

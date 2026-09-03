@@ -10,7 +10,7 @@
   {"fieldname": "recommendation_id", "fieldtype": "Data", "hidden": 1, "label": "Recommendation ID", "reqd": 1, "read_only": 1, "unique": 1},
   {"fieldname": "target_type", "fieldtype": "Data", "label": "Target Type", "reqd": 1, "read_only": 1},
   {"fieldname": "target_id", "fieldtype": "Data", "label": "Target ID", "reqd": 1, "read_only": 1},
-  {"fieldname": "action", "fieldtype": "Link", "label": "Action Definition", "options": "CRM Action Definition", "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action", "read_only": 1},
   {"fieldname": "purpose", "fieldtype": "Small Text", "label": "Purpose", "read_only": 1},
   {"fieldname": "channel", "fieldtype": "Select", "label": "Channel", "options": "NONE\nCALL\nEMAIL\nMESSAGE", "read_only": 1},
   {"fieldname": "trigger", "fieldtype": "Data", "label": "Trigger", "read_only": 1},
