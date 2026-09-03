@@ -1,9 +1,11 @@
 """Backfill the canonical CRM Action from every legacy Student Task."""
 import frappe
 
+from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+
 
 def execute():
-	frappe.reload_doc("fcrm", "doctype", "crm_action")
+	frappe.reload_doc("fcrm", "doctype", "crm_action_item")
 	if not frappe.db.table_exists("CRM Student Task"):
 		return
 	logger = frappe.logger("crm.migrations")
@@ -13,15 +15,15 @@ def execute():
 		"decision_actor": "User",
 	}
 	for row in frappe.get_all("CRM Student Task", fields="*"):
-		if frappe.db.exists("CRM Action", {"legacy_student_task": row.name}):
+		if frappe.db.exists("CRM Action Item", {"legacy_student_task": row.name}):
 			continue
 		student = row.get("student")
 		if not student or not frappe.db.exists("CRM Student", student):
 			logger.warning("Skipped legacy CRM Student Task %s: missing CRM Student", row.name)
 			continue
-		values = {"doctype": "CRM Action", "legacy_student_task": row.name}
+		values = {"doctype": "CRM Action Item", "legacy_student_task": row.name}
 		for target, source in {
-			"student":"student", "recommendation":"recommendation", "action_type":"action_type", "objective":"objective", "disposition":"disposition",
+			"student":"student", "recommendation":"recommendation", "objective":"objective", "disposition":"disposition",
 			"source_context_revision":"source_context_revision", "policy_context_version":"context_version",
 			"generation_idempotency_key":"generation_idempotency_key", "producer_identity":"producer_identity",
 			"payload_digest":"payload_digest", "evidence_references":"evidence_references", "package_seed":"package_seed",
@@ -37,5 +39,9 @@ def execute():
 				continue
 			if value is not None:
 				values[target] = row.get(source)
+		action_code = canonicalize_action_type(row.get("action_type"))
+		if action_category(action_code):
+			values["action"] = action_code
+			values["action_type"] = action_category(action_code)
 		values["state"] = {"PENDING":"pending", "ACCEPTED":"accepted", "IN_PROGRESS":"in-progress", "REQUIRES_REVIEW":"requires-review", "COMPLETED":"completed", "CANCELLED":"cancelled", "SUPERSEDED":"superseded", "REJECTED":"rejected", "DEFERRED":"deferred"}.get(row.state, "pending")
 		frappe.get_doc(values).insert(ignore_permissions=True)

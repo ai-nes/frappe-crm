@@ -221,7 +221,7 @@ def _outcome(row: Any, student: str | None = None) -> dict[str, Any]:
 	interaction = _get(row, "interaction")
 	interaction_visible = not interaction or _visible_linked_record("CRM Interaction", interaction, student)
 	next_action = _get(row, "next_action")
-	next_action_visible = not next_action or _visible_linked_record("CRM Action", next_action, student)
+	next_action_visible = not next_action or _visible_linked_record("CRM Action Item", next_action, student)
 	reason_visible = _may_read_audit_reason()
 	source_refs = []
 	if source_doctype and source_name:
@@ -306,14 +306,14 @@ def _interaction(row: Any) -> dict[str, Any]:
 
 
 def _next_action(student: str, interaction: str | None = None) -> dict[str, Any] | None:
-	if not _exists("CRM Action"):
+	if not _exists("CRM Action Item"):
 		return None
 	try:
-		rows = frappe.get_all("CRM Action", filters={"student": student, "state": ["in", ["pending", "accepted", "in-progress", "requires-review", "deferred"]]}, fields=["name", "student", "objective", "action_owner", "due_at", "state", "action_type"], order_by="due_at asc, name asc", limit_page_length=100)
+		rows = frappe.get_all("CRM Action Item", filters={"student": student, "state": ["in", ["pending", "accepted", "in-progress", "requires-review", "deferred"]]}, fields=["name", "student", "action", "objective", "action_owner", "due_at", "state", "action_type"], order_by="due_at asc, name asc", limit_page_length=100)
 	except Exception:
 		return None
 	for row in rows:
-		if not _can_read_record("CRM Action", _get(row, "name")) or _linked_student(row) != student:
+		if not _can_read_record("CRM Action Item", _get(row, "name")) or _linked_student(row) != student:
 			continue
 		status = str(_get(row, "state", default="")).casefold()
 		if status in {"completed", "cancelled", "rejected", "superseded"}:
@@ -326,20 +326,20 @@ def _next_action(student: str, interaction: str | None = None) -> dict[str, Any]
 				overdue = due.date() < now.date() if isinstance(due, datetime) else due < now.date()
 			except (AttributeError, TypeError):
 				overdue = False
-		return {"name": _get(row, "name"), "title": _text(_get(row, "objective")), "assigned_to": _get(row, "action_owner"), "due_date": _iso(due), "status": _get(row, "state"), "action_type": _get(row, "action_type"), "linked_interaction": None, "overdue": overdue}
+		return {"name": _get(row, "name"), "title": _text(_get(row, "objective")), "assigned_to": _get(row, "action_owner"), "due_date": _iso(due), "status": _get(row, "state"), "action": _get(row, "action"), "action_type": _get(row, "action_type"), "linked_interaction": None, "overdue": overdue}
 	return None
 
 
 def _decision_context(student: str) -> dict[str, Any]:
 	"""Bounded Phase 6 projection; it is not a lifecycle input."""
 	empty = {"pending_decision": None, "active_action": None, "latest_terminal_action": None, "events": []}
-	if not _exists("CRM Action"):
+	if not _exists("CRM Action Item"):
 		return empty
 	try:
-		recommendations = frappe.get_all("CRM Action", filters={"student": student, "current_slot": "CURRENT", "state": ["in", ["pending", "requires-review"]]}, fields=["name", "state", "action_type", "objective", "due_at", "decision_revision"], order_by="creation desc", limit_page_length=1)
-		actions = frappe.get_all("CRM Action", filters={"student": student}, fields=["name", "recommendation", "action_type", "state", "execution_status", "due_at", "action_owner", "action_revision", "outcome_code", "objective"], order_by="creation desc", limit_page_length=20)
+		recommendations = frappe.get_all("CRM Action Item", filters={"student": student, "current_slot": "CURRENT", "state": ["in", ["pending", "requires-review"]]}, fields=["name", "state", "action", "action_type", "objective", "due_at", "decision_revision"], order_by="creation desc", limit_page_length=1)
+		actions = frappe.get_all("CRM Action Item", filters={"student": student}, fields=["name", "recommendation", "action", "action_type", "state", "execution_status", "due_at", "action_owner", "action_revision", "outcome_code", "objective"], order_by="creation desc", limit_page_length=20)
 		def project(row):
-			return {"name": _get(row, "name"), "recommendation": _get(row, "recommendation"), "action_type": _get(row, "action_type"), "status": _get(row, "execution_status", "state"), "due_at": _iso(_get(row, "due_at")), "assignee_staff": _get(row, "action_owner"), "revision": _get(row, "action_revision", "decision_revision"), "outcome_code": _get(row, "outcome_code"), "objective": _text(_get(row, "objective"))}
+			return {"name": _get(row, "name"), "recommendation": _get(row, "recommendation"), "action": _get(row, "action"), "action_type": _get(row, "action_type"), "status": _get(row, "execution_status", "state"), "due_at": _iso(_get(row, "due_at")), "assignee_staff": _get(row, "action_owner"), "revision": _get(row, "action_revision", "decision_revision"), "outcome_code": _get(row, "outcome_code"), "objective": _text(_get(row, "objective"))}
 		active = next((project(row) for row in actions if _get(row, "state") in {"accepted", "in-progress"}), None)
 		terminal = next((project(row) for row in actions if _get(row, "state") in {"completed", "cancelled", "rejected", "superseded"}), None)
 		events = []

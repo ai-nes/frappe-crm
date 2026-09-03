@@ -9,7 +9,7 @@
  "fields": [
   {"fieldname": "execution_id", "fieldtype": "Data", "hidden": 1, "label": "Execution ID", "reqd": 1, "unique": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "label": "Recommendation", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
-  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action", "reqd": 1, "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action Item", "reqd": 1, "read_only": 1},
   {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "reqd": 1, "read_only": 1},
   {"fieldname": "channel", "fieldtype": "Select", "label": "Channel", "options": "NONE\nCALL\nEMAIL\nMESSAGE", "default": "NONE"},

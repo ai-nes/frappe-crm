@@ -169,12 +169,12 @@ def get_member_performance(period: str | None = "30d") -> dict:
 		if staff:
 			members[staff]["staff"] = staff
 			members[staff]["students"] = int(row.get("count", 0))
-	for row in _grouped_count("CRM Action", "action_owner", {"state": ["in", list(_OPEN_ACTION_STATES)]}):
+	for row in _grouped_count("CRM Action Item", "action_owner", {"state": ["in", list(_OPEN_ACTION_STATES)]}):
 		staff = row.get("action_owner")
 		if staff:
 			members[staff]["staff"] = staff
 			members[staff]["current_actions"] = int(row.get("count", 0))
-	for row in _grouped_count("CRM Action", "action_owner", _completed_action_date_filters(period) + [["state", "=", "completed"]]):
+	for row in _grouped_count("CRM Action Item", "action_owner", _completed_action_date_filters(period) + [["state", "=", "completed"]]):
 		staff = row.get("action_owner")
 		if staff:
 			members[staff]["staff"] = staff
@@ -202,9 +202,9 @@ def list_team_actions(status: str = "open", cursor: str | None = None, page_size
 	filters = _action_filters(status)
 	start = _decode_cursor(cursor, actor, status) if cursor else 0
 	rows = frappe.get_list(
-		"CRM Action",
+		"CRM Action Item",
 		filters=filters,
-		fields=["name", "student", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner"],
+		fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner"],
 		order_by="due_at asc, creation asc, name asc",
 		start=start,
 		limit_page_length=page_size + 1,
@@ -235,7 +235,7 @@ def get_team_reports(period: str | None = "30d") -> dict:
 		"generated_at": _generated(),
 		"cards": [
 			{"key": "new_students", "label": _("New students"), "value": _count("CRM Student", period_filters), "description": _("Students created in the selected period within your current team scope.")},
-			{"key": "completed_actions", "label": _("Completed actions"), "value": _count("CRM Action", _completed_action_date_filters(period) + [["state", "=", "completed"]]), "description": _("CRM Actions completed in the selected period within your current team scope.")},
+			{"key": "completed_actions", "label": _("Completed actions"), "value": _count("CRM Action Item", _completed_action_date_filters(period) + [["state", "=", "completed"]]), "description": _("CRM Actions completed in the selected period within your current team scope.")},
 			{"key": "breached_sla", "label": _("Breached SLA"), "value": _count("CRM Student SLA Attempt", period_filters + [["status", "in", ["breached", "escalated"]]]), "description": _("SLA attempts created in the selected period within your current Student scope.")},
 		],
 	}

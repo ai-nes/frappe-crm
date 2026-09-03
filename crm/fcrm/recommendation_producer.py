@@ -12,7 +12,13 @@ from typing import Any
 import frappe
 from frappe import _
 
-ALLOWED_ACTIONS = {"WAIT", "CALL", "EMAIL", "FOLLOW_UP", "EVENT_INVITE", "COUNSELING", "HANDOFF"}
+from crm.fcrm.action_type_catalog import (
+	SUPPORTED_RECOMMENDATION_ACTION_TYPES,
+	canonicalize_action_type,
+)
+from crm.fcrm.action_type_registry import is_available_action_type
+
+ALLOWED_ACTIONS = SUPPORTED_RECOMMENDATION_ACTION_TYPES
 PRODUCER_FLAG = "phase6_recommendation_producer"
 
 
@@ -47,8 +53,11 @@ def produce_recommendation(
 	producer_revision: int = 1,
 ):
 	"""Create-or-return a deterministic, server-authenticated recommendation."""
+	recommended_action = canonicalize_action_type(recommended_action)
 	if recommended_action not in ALLOWED_ACTIONS:
 		frappe.throw(_("Unsupported recommendation action."), frappe.ValidationError)
+	if recommended_action not in {"WAIT", "FOLLOW_UP"} and not is_available_action_type(recommended_action):
+		frappe.throw(_("CRM Action Type is disabled or unavailable."), frappe.ValidationError)
 	producer_id = _service_identity()
 	serialized_talking_points = (
 		json.dumps(talking_points, ensure_ascii=False)
@@ -77,13 +86,12 @@ def produce_recommendation(
 	if existing:
 		return frappe.get_doc("CRM Recommendation", existing)
 	from crm.fcrm.nba import (
-		ACTION_TYPES,
 		TIMING_POLICY_DOCTYPE,
 		ensure_nba_action,
 		get_nba_action_definition,
 		resolve_nba_channel,
 	)
-	canonical_action_type = recommended_action if recommended_action in ACTION_TYPES else None
+	canonical_action_type = recommended_action if is_available_action_type(recommended_action) else None
 	if timing_policy:
 		if not frappe.db.exists(TIMING_POLICY_DOCTYPE, timing_policy):
 			frappe.throw(_("CRM Timing Policy does not exist."), frappe.ValidationError)

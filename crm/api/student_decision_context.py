@@ -8,7 +8,7 @@ import frappe
 
 from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.scoring_policy import get_active_policy
-from crm.services.sales_action_policy import allowed_generation_actions
+from crm.services.sales_action_policy import allowed_generation_actions, parent_authority_is_valid
 from crm.services.student_context import snapshot_hash
 from crm.services.student_next_task_policy import _journey_label, choose_next_task_policy
 
@@ -144,15 +144,16 @@ def _recent_actions(student: str) -> list[dict]:
 	already tried and avoid recommending a duplicate move.
 	"""
 	rows = frappe.get_all(
-		"CRM Action",
+		"CRM Action Item",
 		filters={"student": student},
-		fields=["action_type", "state", "execution_status", "disposition", "creation"],
+		fields=["action", "action_type", "state", "execution_status", "disposition", "creation"],
 		order_by="creation desc",
 		limit_page_length=5,
 		ignore_permissions=True,
 	)
 	return [
 		{
+			"action": row.get("action"),
 			"action_type": row.get("action_type"),
 			"state": row.get("state"),
 			"execution_status": row.get("execution_status"),
@@ -278,6 +279,7 @@ def _projection(student: str, minimum_revision: int) -> dict:
 		"evidence_refs": [],
 	}
 	allowed_actions = context["allowed_action_types"]
+	parent_authorized = parent_authority_is_valid(student)
 	stage = context["lifecycle"]["stage"]
 	eligible = str(stage or "").casefold() not in {"lost", "enrolled", "đã xác nhận", "closed"}
 	action, objective, actionable = choose_next_task_policy(
@@ -285,7 +287,7 @@ def _projection(student: str, minimum_revision: int) -> dict:
 		stage,
 		allowed_actions,
 		eligible=eligible,
-		parent_authorized="PARENT_CONTACT" in allowed_actions,
+		parent_authorized=parent_authorized,
 	)
 	context["eligibility"]["student"] = eligible
 	context["eligibility"]["actionable"] = actionable
@@ -302,7 +304,7 @@ def _projection(student: str, minimum_revision: int) -> dict:
 		f"student-context:revision:{revision}:stage",
 		f"score-input:revision:{context['score']['current_revision']}:score",
 	]
-	if action == "PARENT_CONTACT":
+	if action in {"PARENT_CONTACT", "CONTACT_PARENT"}:
 		context["evidence_refs"].append(f"student-context:revision:{revision}:parent-authority")
 	hash_input = {key: value for key, value in context.items() if key not in {"student_id"}}
 	context["snapshot_hash"] = snapshot_hash(hash_input)
@@ -321,9 +323,9 @@ def get_execution_personalization_context(task: str, action: str | None = None) 
 	if frappe.session.user == "Guest":
 		frappe.throw("Authentication is required.", frappe.PermissionError)
 	task_row = frappe.db.get_value(
-		"CRM Action",
+		"CRM Action Item",
 		task,
-		["name", "student", "state", "action_type", "action_revision", "execution_package_version"],
+		["name", "student", "state", "action", "action_type", "action_revision", "execution_package_version"],
 		as_dict=True,
 	)
 	if not task_row or task_row.state not in {"accepted", "in-progress", "requires-review"}:
@@ -333,6 +335,7 @@ def get_execution_personalization_context(task: str, action: str | None = None) 
 	return {
 		"task": task_row.name,
 		"student": task_row.student,
+		"action": task_row.action,
 		"action_type": task_row.action_type,
 		"action_revision": task_row.action_revision,
 		"package_revision": task_row.execution_package_version,

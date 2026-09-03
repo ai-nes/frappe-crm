@@ -322,9 +322,9 @@ def get_student_projection_permission_query_conditions(user=None, doctype=None):
 	return (
 		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student' and "
 		f"`tabCRM Agent Event`.aggregate_name in ({student_names})) OR "
-		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Action' and "
+		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Action Item' and "
 		"`tabCRM Agent Event`.aggregate_name in (select action_scope.name "
-		"from `tabCRM Action` action_scope where action_scope.student in "
+		"from `tabCRM Action Item` action_scope where action_scope.student in "
 		f"({student_names}))) OR "
 		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student Decision Event' and "
 		"`tabCRM Agent Event`.aggregate_name in (select decision_scope.name "

@@ -6,15 +6,17 @@ such table and safely skip this patch.  Re-running is idempotent.
 
 import frappe
 
+from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+
 
 def execute():
 	if not frappe.db.table_exists("CRM Sales Action"):
 		return {"migrated": 0, "skipped": 0}
-	frappe.reload_doc("fcrm", "doctype", "crm_action")
+	frappe.reload_doc("fcrm", "doctype", "crm_action_item")
 	logger = frappe.logger("crm.migrations")
 	migrated = skipped = 0
 	for row in frappe.get_all("CRM Sales Action", fields="*"):
-		if frappe.db.exists("CRM Action", {"legacy_sales_action": row.name}):
+		if frappe.db.exists("CRM Action Item", {"legacy_sales_action": row.name}):
 			continue
 		student = row.get("student")
 		if not student or not frappe.db.exists("CRM Student", student):
@@ -23,20 +25,21 @@ def execute():
 			continue
 		canonical = None
 		if row.get("student_task"):
-			canonical = frappe.db.get_value("CRM Action", {"legacy_student_task": row.student_task}, "name")
+			canonical = frappe.db.get_value("CRM Action Item", {"legacy_student_task": row.student_task}, "name")
 		if not canonical and row.get("recommendation"):
-			canonical = frappe.db.get_value("CRM Action", {"recommendation": row.recommendation}, "name")
+			canonical = frappe.db.get_value("CRM Action Item", {"recommendation": row.recommendation}, "name")
 		if canonical:
-			frappe.db.set_value("CRM Action", canonical, {**_mapped_fields(row), **_state_fields(row)}, update_modified=False)
-			frappe.db.set_value("CRM Action", canonical, "legacy_sales_action", row.name, update_modified=False)
+			frappe.db.set_value("CRM Action Item", canonical, {**_mapped_fields(row), **_state_fields(row)}, update_modified=False)
+			frappe.db.set_value("CRM Action Item", canonical, "legacy_sales_action", row.name, update_modified=False)
 			migrated += 1
 			continue
 		values = {
-			"doctype": "CRM Action",
+			"doctype": "CRM Action Item",
 			"legacy_sales_action": row.name,
 			"student": student,
 			"recommendation": row.get("recommendation"),
-			"action_type": row.get("action_type") if row.get("action_type") not in {"WAIT", "FOLLOW_UP"} else None,
+			"action": canonicalize_action_type(row.get("action_type")) if row.get("action_type") not in {"WAIT", "FOLLOW_UP"} else None,
+			"action_type": action_category(canonicalize_action_type(row.get("action_type"))) if row.get("action_type") not in {"WAIT", "FOLLOW_UP"} else None,
 			"objective": f"Migrated historical Sales Action ({row.get('action_type') or 'unknown'})",
 			"disposition": "ACT" if row.get("action_type") not in {"WAIT", "FOLLOW_UP"} else "MONITOR",
 			"origin": "system",

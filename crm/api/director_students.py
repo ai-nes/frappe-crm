@@ -357,7 +357,7 @@ def _fetch_computed_sort_rows(
 	related = {}
 	if query["sort"] == "priority":
 		related = _latest_by_student(
-			"CRM Action",
+			"CRM Action Item",
 			student_ids,
 			["student", "priority"],
 			"worklist_priority_rank asc, due_at asc, creation asc, name asc",
@@ -372,7 +372,7 @@ def _fetch_computed_sort_rows(
 		)
 	elif query["sort"] == "nextActionDueAt":
 		related = _latest_by_student(
-			"CRM Action",
+			"CRM Action Item",
 			student_ids,
 			["student", "due_at"],
 			"due_at asc, worklist_priority_rank asc, creation asc, name asc",
@@ -419,9 +419,9 @@ def _hydrate_rows(rows: list, sort_field: str | None = None) -> list[dict[str, A
 		"interaction_datetime desc, creation desc, name desc",
 	)
 	actions = _latest_by_student(
-		"CRM Action",
+		"CRM Action Item",
 		student_ids,
-		["name", "student", "objective", "priority", "due_at", "action_owner", "action_type"],
+		["name", "student", "action", "objective", "priority", "due_at", "action_owner", "action_type"],
 		"due_at asc, worklist_priority_rank asc, creation asc, name asc"
 		if sort_field == "nextActionDueAt"
 		else "worklist_priority_rank asc, due_at asc, creation asc, name asc",
@@ -509,6 +509,8 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"lastActivity": _relative_time(activity_at),
 		"lastActivityAt": _as_iso(activity_at) if activity_at else None,
 		"nextAction": next_action,
+		"nextActionCode": action.get("action") if action else None,
+		"nextActionType": action.get("action_type") if action else None,
 		"nextActionDueAt": _as_iso(action.get("due_at")) if action and action.get("due_at") else None,
 		"owner": owner,
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source"),
@@ -607,13 +609,13 @@ def _confirmed_probabilities(student_ids: list[str]) -> list[float]:
 
 
 def _count_due_actions(student_ids: list[str]) -> int:
-	if not student_ids or not _table_exists("CRM Action"):
+	if not student_ids or not _table_exists("CRM Action Item"):
 		return 0
 	now = frappe.utils.now_datetime()
 	start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 	end = start + timedelta(days=1)
 	rows = frappe.get_all(
-		"CRM Action",
+		"CRM Action Item",
 		filters={
 			"student": ["in", student_ids],
 			"state": ["in", list(ACTIVE_ACTION_STATES)],

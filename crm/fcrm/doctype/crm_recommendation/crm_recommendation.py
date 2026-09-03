@@ -48,11 +48,18 @@ class CRMRecommendation(Document):
 
 	def validate(self):
 		"""Keep legacy rows readable while rejecting illegal lifecycle rewrites."""
+		before = self.get_doc_before_save()
+		if self.recommended_action:
+			from crm.fcrm.action_type_registry import is_available_recommendation_action
+
+			if not is_available_recommendation_action(self.recommended_action) and (
+				not before or before.get("recommended_action") != self.recommended_action
+			):
+				frappe.throw(_("Unsupported CRM Recommendation action."), frappe.ValidationError)
 		self.worklist_priority_rank = {"high": 0, "medium": 1, "low": 2}.get(self.priority, 99)
 		# A null recommendation time means no fabricated urgency. Its sortable
 		# projection deliberately lands after scheduled work of the same rank.
 		self.worklist_timing_sort = self.recommended_timing or "9999-12-31 23:59:59.999999"
-		before = self.get_doc_before_save()
 		if self.is_new():
 			if not self._from_command():
 				frappe.throw(_("CRM Recommendations may only be created by the approved server-side producer."))

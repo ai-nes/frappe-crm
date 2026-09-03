@@ -10,7 +10,7 @@
   {"fieldname": "outcome_id", "fieldtype": "Data", "hidden": 1, "label": "Outcome ID", "reqd": 1, "unique": 1},
   {"fieldname": "execution", "fieldtype": "Link", "label": "Execution", "options": "CRM Action Execution", "reqd": 1, "read_only": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "label": "Recommendation", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
-  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action", "reqd": 1, "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Link", "label": "Action", "options": "CRM Action Item", "reqd": 1, "read_only": 1},
   {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "attempt", "fieldtype": "Link", "label": "Execution Attempt", "options": "CRM Action Execution Attempt", "read_only": 1},
   {"fieldname": "outcome_type", "fieldtype": "Data", "label": "Outcome Type", "reqd": 1, "read_only": 1},

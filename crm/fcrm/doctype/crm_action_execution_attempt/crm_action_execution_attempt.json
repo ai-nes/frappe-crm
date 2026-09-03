@@ -2,7 +2,7 @@
  "actions": [], "autoname": "hash", "doctype": "DocType", "engine": "InnoDB", "name": "CRM Action Execution Attempt",
  "field_order": ["action", "nba_execution", "actor", "operation", "idempotency_key", "request_fingerprint", "status", "action_revision", "package_revision", "ownership_revision", "consent_revision", "policy_revision", "attempt_generation", "lease_count", "provider_idempotency_key", "provider_event_id", "created_at"],
  "fields": [
-  {"fieldname":"action","fieldtype":"Link","options":"CRM Action","reqd":1,"read_only":1},
+  {"fieldname":"action","fieldtype":"Link","options":"CRM Action Item","reqd":1,"read_only":1},
   {"fieldname":"nba_execution","fieldtype":"Link","options":"CRM Action Execution","label":"Action Execution","read_only":1},
   {"fieldname":"actor","fieldtype":"Link","options":"User","reqd":1,"read_only":1},
   {"fieldname":"operation","fieldtype":"Data","reqd":1,"read_only":1},

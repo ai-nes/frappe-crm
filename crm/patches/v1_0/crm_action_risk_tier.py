@@ -19,15 +19,15 @@ import frappe
 
 from crm.fcrm.student_decision import compute_risk_tier
 
-_TABLE = "tabCRM Action"
+_TABLE = "tabCRM Action Item"
 _COLUMN = "risk_tier"
 
 
 def execute():
-	if not frappe.db.table_exists("CRM Action"):
+	if not frappe.db.table_exists("CRM Action Item"):
 		return
 
-	frappe.reload_doc("fcrm", "doctype", "crm_action")
+	frappe.reload_doc("fcrm", "doctype", "crm_action_item")
 
 	if not _column_exists():
 		frappe.db.sql_ddl(

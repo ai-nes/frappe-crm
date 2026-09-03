@@ -21,42 +21,42 @@ Rollback:
 
 import frappe
 
-from crm.fcrm.doctype.crm_action.crm_action import CRMAction
+from crm.fcrm.doctype.crm_action_item.crm_action_item import CRMActionItem
 from crm.patches.v1_0.add_student_next_task_v2 import _ensure_unique_index
 
 _INDEX = "crm_action_student_current_slot_uniq"
 
 
 def execute():
-	if not frappe.db.table_exists("CRM Action"):
+	if not frappe.db.table_exists("CRM Action Item"):
 		return
 	touched = _normalize_current_slots()
 	if touched:
 		print(f"crm_action_current_slot_unique: normalized {touched} conflicting current-slot rows")
-	_ensure_unique_index("CRM Action", _INDEX, ["student", "current_slot"])
+	_ensure_unique_index("CRM Action Item", _INDEX, ["student", "current_slot"])
 
 
 def _normalize_current_slots() -> int:
-	terminal = tuple(sorted(CRMAction.TERMINAL))
+	terminal = tuple(sorted(CRMActionItem.TERMINAL))
 	touched = 0
 
 	# An empty-string slot is not "current" but would collide under the key.
 	frappe.db.sql(
-		"UPDATE `tabCRM Action` SET current_slot = NULL "
+		"UPDATE `tabCRM Action Item` SET current_slot = NULL "
 		"WHERE current_slot IS NOT NULL AND current_slot != 'CURRENT'"
 	)
 	touched += frappe.db.sql("SELECT ROW_COUNT() AS n", as_dict=True)[0].n or 0
 
 	# A terminal Action must never keep the current slot.
 	frappe.db.sql(
-		"UPDATE `tabCRM Action` SET current_slot = NULL WHERE current_slot = 'CURRENT' AND state IN %(terminal)s",
+		"UPDATE `tabCRM Action Item` SET current_slot = NULL WHERE current_slot = 'CURRENT' AND state IN %(terminal)s",
 		{"terminal": terminal},
 	)
 	touched += frappe.db.sql("SELECT ROW_COUNT() AS n", as_dict=True)[0].n or 0
 
 	duplicate_students = frappe.db.sql(
 		"""
-		SELECT student FROM `tabCRM Action`
+		SELECT student FROM `tabCRM Action Item`
 		WHERE current_slot = 'CURRENT'
 		GROUP BY student
 		HAVING COUNT(*) > 1
@@ -66,7 +66,7 @@ def _normalize_current_slots() -> int:
 	for row in duplicate_students:
 		names = frappe.db.sql(
 			"""
-			SELECT name FROM `tabCRM Action`
+			SELECT name FROM `tabCRM Action Item`
 			WHERE student = %(student)s AND current_slot = 'CURRENT'
 			ORDER BY modified DESC, creation DESC
 			""",
@@ -75,7 +75,7 @@ def _normalize_current_slots() -> int:
 		)
 		# Keep the most recently touched Action as the current one; vacate the rest.
 		for stale in names[1:]:
-			frappe.db.set_value("CRM Action", stale, "current_slot", None, update_modified=False)
+			frappe.db.set_value("CRM Action Item", stale, "current_slot", None, update_modified=False)
 			touched += 1
 
 	if not frappe.flags.in_test:
