@@ -1,0 +1,82 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "field:role",
+ "creation": "2026-09-03 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "role",
+  "row_scope",
+  "delete_requires_ownership",
+  "is_system_managed",
+  "applicable_doctypes"
+ ],
+ "fields": [
+  {
+   "fieldname": "role",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Role",
+   "options": "Role",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "row_scope",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Row Scope",
+   "options": "assigned\nown_assigned\ncampus_assigned\ncampus_assigned_contact\nteam_and_team_pool\nteam_members_and_own_team_pool\nno_case_scope\nall\ndeny",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "delete_requires_ownership",
+   "fieldtype": "Check",
+   "label": "Delete Requires Ownership"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_system_managed",
+   "fieldtype": "Check",
+   "label": "System Managed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "applicable_doctypes",
+   "fieldtype": "Table",
+   "label": "Applicable DocTypes",
+   "options": "CRM Permission Profile Doctype"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-03 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Permission Profile",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "role",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "role",
+ "translated_doctype": 0
+}
