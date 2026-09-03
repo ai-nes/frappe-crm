@@ -9,13 +9,16 @@ import time
 
 import frappe
 from frappe import _
+from frappe.exceptions import QueryDeadlockError, QueryTimeoutError
 from frappe.utils.password import get_encryption_key
-
+from pymysql import MySQLError
 
 _ACTIVE_STATES = ("pending", "requires-review")
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
 _POLICY_VERSION = "worklist-v1"
+_NBA_TERMINAL_STATES = ("completed", "cancelled", "rejected", "superseded")
+_NBA_SOURCE_ERRORS = (QueryDeadlockError, QueryTimeoutError, MySQLError)
 
 
 @frappe.whitelist()
@@ -60,6 +63,80 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 	rows = frappe.get_list("CRM Action", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
 	now = frappe.utils.now_datetime()
 	return {"items": [{"name": row.name, "student": row.student, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
+
+
+@frappe.whitelist(methods=["GET"])
+def get_next_best_action_for_student(student_id: str | None = None) -> dict:
+	"""Return the newest active CRM Action for one permission-visible Student.
+
+	This is a read-only Student detail projection. The Student lookup deliberately
+	uses ``get_list`` so an out-of-scope Student is indistinguishable from a
+	non-existent one, while the Action lookup applies CRM Action row permissions.
+	"""
+	if frappe.session.user == "Guest":
+		_raise_api_error("UNAUTHENTICATED", "Authentication is required.", frappe.AuthenticationError, 401)
+	if not isinstance(student_id, str) or not student_id.strip():
+		_raise_api_error("INVALID_STUDENT_ID", "Mã học sinh không hợp lệ.", frappe.ValidationError, 400)
+
+	student_id = student_id.strip()
+	try:
+		frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+		frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+		student_rows = frappe.get_list(
+			"CRM Student",
+			filters={"name": student_id},
+			fields=["name"],
+			limit_page_length=1,
+		)
+		if not student_rows:
+			_raise_api_error(
+				"STUDENT_NOT_FOUND",
+				"Không tìm thấy hồ sơ học sinh.",
+				frappe.DoesNotExistError,
+				404,
+			)
+		rows = frappe.get_list(
+			"CRM Action",
+			filters={
+				"student": student_id,
+				"state": ["not in", list(_NBA_TERMINAL_STATES)],
+			},
+			fields=[
+				"name",
+				"student",
+				"action_type",
+				"objective",
+				"state",
+				"execution_status",
+				"priority",
+				"due_at",
+				"action_owner",
+				"origin",
+				"action_revision",
+			],
+			order_by="creation desc, modified desc",
+			limit_page_length=1,
+		)
+	except frappe.PermissionError:
+		_raise_api_error(
+			"FORBIDDEN",
+			"Bạn không có quyền đọc dữ liệu học sinh hoặc action.",
+			frappe.PermissionError,
+			403,
+		)
+	except _NBA_SOURCE_ERRORS:
+		_raise_api_error(
+			"STUDENT_NBA_UNAVAILABLE",
+			"Không thể tải NBA của học sinh.",
+			frappe.ValidationError,
+			503,
+		)
+
+	return {
+		"student_id": student_id,
+		"nba": _serialize_nba(rows[0] if rows else None),
+		"policy_version": _POLICY_VERSION,
+	}
 
 
 _ACTION_QUEUE_CONTRACT = "action-queue-row-v1"
@@ -336,6 +413,41 @@ def _action_transitions(status):
 	return {"planned": {"in_progress", "cancelled"}, "in_progress": {"completed", "failed", "cancelled"}}.get(status, set())
 
 
+def _serialize_nba(row, now=None) -> dict | None:
+	"""Project only the fields required by the Student detail NBA contract."""
+	if not row:
+		return None
+
+	now = now or frappe.utils.now_datetime()
+	due_at = _coerce_nba_datetime(row.get("due_at"))
+	return {
+		"name": row.get("name"),
+		"student": row.get("student"),
+		"action_type": row.get("action_type") or None,
+		"objective": str(row.get("objective") or ""),
+		"state": row.get("state"),
+		"execution_status": row.get("execution_status") or None,
+		"priority": row.get("priority") or "medium",
+		"due_at": due_at.strftime("%Y-%m-%d %H:%M:%S") if due_at else None,
+		"action_owner": row.get("action_owner") or None,
+		"origin": row.get("origin") or None,
+		"revision": int(row.get("action_revision") or 1),
+		"is_today": bool(due_at and due_at.date() == now.date()),
+		"is_overdue": bool(
+			due_at and due_at < now and row.get("state") not in _NBA_TERMINAL_STATES
+		),
+	}
+
+
+def _coerce_nba_datetime(value):
+	if not value:
+		return None
+	try:
+		return frappe.utils.get_datetime(value)
+	except (AttributeError, TypeError, ValueError, OverflowError):
+		return None
+
+
 def _encode_action_cursor(row, principal):
 	payload = {"principal": principal, "policy": "phase6-worklist-v1", "due": str(row.due_sort), "creation": str(row.creation), "name": row.name}
 	body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
@@ -366,6 +478,16 @@ def _parse_page_size(value: int | str) -> int:
 	if page_size < 1 or page_size > _MAX_PAGE_SIZE:
 		frappe.throw(_("page_size must be between 1 and {0}.").format(_MAX_PAGE_SIZE), frappe.ValidationError)
 	return page_size
+
+
+def _raise_api_error(code: str, message: str, exception, status: int) -> None:
+	try:
+		if getattr(frappe, "local", None) and isinstance(getattr(frappe.local, "response", None), dict):
+			frappe.local.response["error"] = {"code": code, "message": message}
+			frappe.local.response["http_status_code"] = status
+	except (AttributeError, TypeError):
+		pass
+	frappe.throw(_(message), exception)
 
 
 def _sort_key(row) -> tuple[int, str, str, str]:
@@ -431,7 +553,7 @@ def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
 				OR (`tabCRM Action`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action`.creation = %(creation)s AND `tabCRM Action`.name > %(name)s)
 			)"""
 		)
-		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key)))
+		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key, strict=True)))
 	return frappe.db.sql(
 		"""SELECT `tabCRM Action`.name, `tabCRM Action`.student, `tabCRM Student`.student_name,
 		`tabCRM Action`.priority, `tabCRM Action`.worklist_priority_rank, `tabCRM Action`.action_type,

@@ -1,11 +1,31 @@
 """Focused contract tests for the session-scoped worklist helpers."""
 
-from unittest.mock import patch
+from contextlib import contextmanager
+from datetime import datetime
+from unittest.mock import call, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.student_worklist import _decode_cursor, _encode_cursor, _fetch_page, _parse_page_size, _sort_key
+from crm.api.student_worklist import (
+	_decode_cursor,
+	_encode_cursor,
+	_fetch_page,
+	_parse_page_size,
+	_serialize_nba,
+	_sort_key,
+	get_next_best_action_for_student,
+)
+
+
+@contextmanager
+def _as_user(user):
+	previous_user = getattr(getattr(frappe, "session", None), "user", "Guest")
+	frappe.set_user(user)
+	try:
+		yield
+	finally:
+		frappe.set_user(previous_user)
 
 
 class TestStudentWorklist(FrappeTestCase):
@@ -58,3 +78,114 @@ class TestStudentWorklist(FrappeTestCase):
 		):
 			query.return_value.build_match_conditions.return_value = None
 			self.assertEqual(_fetch_page("Administrator", None, 1), [])
+
+
+class TestStudentNextBestAction(FrappeTestCase):
+	def test_serializer_returns_contract_fields_and_server_derived_flags(self):
+		now = datetime(2026, 9, 3, 10, 0, 0)
+		row = frappe._dict(
+			name="ACT-2026-00128",
+			student="STU-2026-00042",
+			action_type="CALL",
+			objective="Resolve the student's Tuition need.",
+			state="pending",
+			execution_status="planned",
+			priority="medium",
+			due_at="2026-09-03 16:00:00",
+			action_owner=None,
+			origin="ai",
+			action_revision=1,
+			phone="must-not-be-exposed",
+			email="must-not-be-exposed@example.com",
+		)
+
+		result = _serialize_nba(row, now=now)
+
+		self.assertEqual(result["name"], "ACT-2026-00128")
+		self.assertEqual(result["student"], "STU-2026-00042")
+		self.assertEqual(result["due_at"], "2026-09-03 16:00:00")
+		self.assertTrue(result["is_today"])
+		self.assertFalse(result["is_overdue"])
+		self.assertNotIn("phone", result)
+		self.assertNotIn("email", result)
+
+	def test_endpoint_selects_one_active_action_with_permission_scoped_reads(self):
+		action = frappe._dict(
+			name="ACT-2026-00128",
+			student="STU-2026-00042",
+			action_type="CALL",
+			objective="Resolve the student's Tuition need.",
+			state="pending",
+			execution_status="planned",
+			priority="medium",
+			due_at=None,
+			action_owner=None,
+			origin="ai",
+			action_revision=1,
+		)
+		calls = []
+
+		def fake_get_list(doctype, **kwargs):
+			calls.append((doctype, kwargs))
+			return [{"name": "STU-2026-00042"}] if doctype == "CRM Student" else [action]
+
+		with (
+			_as_user("staff@example.com"),
+			patch("frappe.has_permission") as has_permission,
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
+			result = get_next_best_action_for_student(" STU-2026-00042 ")
+
+		has_permission.assert_has_calls(
+			[
+				call("CRM Student", "read", user="staff@example.com", throw=True),
+				call("CRM Action", "read", user="staff@example.com", throw=True),
+			]
+		)
+		self.assertEqual(result["student_id"], "STU-2026-00042")
+		self.assertEqual(result["nba"]["name"], "ACT-2026-00128")
+		self.assertEqual(result["policy_version"], "worklist-v1")
+		self.assertEqual(calls[1][1]["order_by"], "creation desc, modified desc")
+		self.assertEqual(set(calls[1][1]["filters"]["state"][1]), {"completed", "cancelled", "rejected", "superseded"})
+		self.assertEqual(calls[1][1]["limit_page_length"], 1)
+
+	def test_endpoint_returns_null_when_student_has_no_active_action(self):
+		def fake_get_list(doctype, **kwargs):
+			return [{"name": "STU-2026-00042"}] if doctype == "CRM Student" else []
+
+		with (
+			_as_user("staff@example.com"),
+			patch("frappe.has_permission"),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
+			result = get_next_best_action_for_student("STU-2026-00042")
+
+		self.assertIsNone(result["nba"])
+
+	def test_endpoint_hides_missing_or_out_of_scope_student_as_not_found(self):
+		with (
+			_as_user("staff@example.com"),
+			patch("frappe.has_permission"),
+			patch("frappe.get_list", return_value=[]),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				get_next_best_action_for_student("STU-2026-00042")
+
+	def test_endpoint_rejects_guest_and_invalid_student_id(self):
+		with _as_user("Guest"):
+			with self.assertRaises(frappe.AuthenticationError):
+				get_next_best_action_for_student("STU-2026-00042")
+
+		with _as_user("staff@example.com"):
+			with self.assertRaises(frappe.ValidationError):
+				get_next_best_action_for_student("   ")
+			with self.assertRaises(frappe.ValidationError):
+				get_next_best_action_for_student()
+
+	def test_endpoint_translates_doctype_permission_failure_to_forbidden(self):
+		with (
+			_as_user("staff@example.com"),
+			patch("frappe.has_permission", side_effect=frappe.PermissionError),
+		):
+			with self.assertRaises(frappe.PermissionError):
+				get_next_best_action_for_student("STU-2026-00042")
