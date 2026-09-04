@@ -489,13 +489,21 @@ if FrappeTestCase is not None:
 
 		def _explanation(self, **overrides):
 			base = {
+				"action": {"code": "ACT-CALL", "title": "ACT-CALL"},
 				"summary": "Học viên đang ở giai đoạn cân nhắc học phí.",
 				"why_action": "Hành động này phù hợp vì học viên đã hỏi về học phí.",
 				"why_now": "Học viên im lặng 9 ngày sau khi hỏi về học phí, nên gọi ngay.",
-				"timing_reason": "Thời điểm đề xuất nằm trong khung giờ khả thi.",
-				"evidence_summary": ["Học viên đã hỏi về học phí trước khi im lặng."],
+				"evidence": [
+					{
+						"summary": "Học viên đã hỏi về học phí trước khi im lặng.",
+						"evidence_ref": "interaction:CRMI-1001",
+					}
+				],
 				"uncertainty": "Độ tin cậy ở mức trung bình vì dữ liệu tương tác còn ít.",
-				"execution_guidance": ["Gọi điện xác nhận vướng mắc học phí."],
+				"timing": {
+					"recommended_at": "2026-09-10T00:00:00+00:00",
+					"reason": "Thời điểm đề xuất nằm trong khung giờ khả thi.",
+				},
 			}
 			base.update(overrides)
 			return base
@@ -511,7 +519,7 @@ if FrappeTestCase is not None:
 			self.assertEqual(result["status"], "set")
 			stored = frappe.parse_json(frappe.db.get_value("CRM Recommendation", rec.name, "explanation"))
 			self.assertEqual(stored["summary"], explanation["summary"])
-			self.assertEqual(stored["evidence_summary"], explanation["evidence_summary"])
+			self.assertEqual(stored["evidence"], explanation["evidence"])
 			self.assertEqual(frappe.db.get_value("CRM Recommendation", rec.name, "rationale_source"), "model")
 
 		def test_same_value_replay_is_idempotent(self):

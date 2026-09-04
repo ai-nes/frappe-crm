@@ -1,9 +1,14 @@
 """Additive structured-explanation column on ``CRM Recommendation``.
 
 Adds ``explanation`` (a JSON object carrying the grounded, structured
-explanation: ``summary``, ``why_action``, ``why_now``, ``timing_reason``,
-``evidence_summary``, ``uncertainty``, ``execution_guidance``). This
-supersedes the plain-string ``rationale_vi`` shipped previously; ``rationale_vi``
+explanation on the NBA boundary -- WHAT + WHY + WHY NOW + EVIDENCE +
+UNCERTAINTY + WHEN: ``action`` (``code``, ``title``), ``summary``,
+``why_action``, ``why_now``, ``evidence`` (a list of ``summary`` +
+``evidence_ref`` objects), ``uncertainty``, and ``timing`` (``recommended_at``,
+``reason``). It carries no execution-content field -- message copy, CTAs,
+retry/channel-switch guidance belong to a Template / Sales Playbook / a
+future NBA Evaluation, not this Recommendation. This supersedes the
+plain-string ``rationale_vi`` shipped previously; ``rationale_vi``
 and ``rationale_source`` are left in place, unused, since dropping columns is
 out of scope for an additive-only pass -- ``rationale_source`` is reused for
 provenance of the new ``explanation`` field. The new column is introduced

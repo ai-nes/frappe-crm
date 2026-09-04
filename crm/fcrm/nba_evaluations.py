@@ -806,12 +806,37 @@ def commit_nba_evaluation_result(
 # Post-commit explanation (best effort, outside the commit fence)
 # --------------------------------------------------------------------------- #
 _RATIONALE_SOURCES = frozenset({"model", "fallback_absent"})
-_EXPLANATION_STR_FIELDS = ("summary", "why_action", "why_now", "timing_reason", "uncertainty")
-_EXPLANATION_LIST_FIELDS = ("evidence_summary", "execution_guidance")
-_EXPLANATION_FIELDS = frozenset(_EXPLANATION_STR_FIELDS) | frozenset(_EXPLANATION_LIST_FIELDS)
+# WHAT + WHY + WHY NOW + EVIDENCE + UNCERTAINTY + WHEN -- the NBA boundary.
+# ``action``/``timing`` are kernel-owned nested objects (echoed, not chosen,
+# by the narration pass); the remaining top-level strings and ``evidence``
+# are the model's bounded prose. No execution-content field (message copy,
+# CTAs, retry/channel-switch guidance) belongs here -- that is a Template /
+# Sales Playbook / future NBA Evaluation concern, not this Recommendation.
+_EXPLANATION_STR_FIELDS = ("summary", "why_action", "why_now", "uncertainty")
+_EXPLANATION_TOP_FIELDS = frozenset(_EXPLANATION_STR_FIELDS) | {"action", "evidence", "timing"}
 _EXPLANATION_STR_MAX_CHARS = 500
 _EXPLANATION_LIST_MAX_ITEMS = 8
 _EXPLANATION_ITEM_MAX_CHARS = 400
+_ACTION_FIELDS = frozenset({"code", "title"})
+_TIMING_FIELDS = frozenset({"recommended_at", "reason"})
+_EVIDENCE_ITEM_FIELDS = frozenset({"summary", "evidence_ref"})
+
+
+def _validated_str(value: object, *, field: str, max_chars: int = _EXPLANATION_STR_MAX_CHARS) -> str:
+	text = str(value or "").strip()
+	if not text or len(text) > max_chars:
+		frappe.throw(f"Explanation field '{field}' is invalid.", frappe.ValidationError)
+	return text
+
+
+def _validated_object(value: object, *, field: str, allowed: frozenset[str]) -> dict[str, Any]:
+	if not isinstance(value, dict):
+		frappe.throw(f"Explanation field '{field}' is invalid.", frappe.ValidationError)
+	unexpected = set(value) - allowed
+	missing = allowed - set(value)
+	if unexpected or missing:
+		frappe.throw(f"Explanation field '{field}' is invalid.", frappe.ValidationError)
+	return value
 
 
 def _validated_explanation(explanation: object) -> dict[str, Any]:
@@ -830,30 +855,48 @@ def _validated_explanation(explanation: object) -> dict[str, Any]:
 	if not isinstance(explanation, dict):
 		frappe.throw("Explanation must be a JSON object.", frappe.ValidationError)
 
-	unexpected = set(explanation) - _EXPLANATION_FIELDS
+	unexpected = set(explanation) - _EXPLANATION_TOP_FIELDS
 	if unexpected:
 		frappe.throw("Explanation carries unrecognised fields.", frappe.ValidationError)
-	missing = _EXPLANATION_FIELDS - set(explanation)
+	missing = _EXPLANATION_TOP_FIELDS - set(explanation)
 	if missing:
 		frappe.throw("Explanation is missing required fields.", frappe.ValidationError)
 
 	validated: dict[str, Any] = {}
 	for field in _EXPLANATION_STR_FIELDS:
-		value = str(explanation.get(field) or "").strip()
-		if not value or len(value) > _EXPLANATION_STR_MAX_CHARS:
-			frappe.throw(f"Explanation field '{field}' is invalid.", frappe.ValidationError)
-		validated[field] = value
-	for field in _EXPLANATION_LIST_FIELDS:
-		items = explanation.get(field)
-		if not isinstance(items, list) or len(items) > _EXPLANATION_LIST_MAX_ITEMS:
-			frappe.throw(f"Explanation field '{field}' is invalid.", frappe.ValidationError)
-		cleaned = []
-		for item in items:
-			text = str(item or "").strip()
-			if not text or len(text) > _EXPLANATION_ITEM_MAX_CHARS:
-				frappe.throw(f"Explanation field '{field}' has an invalid item.", frappe.ValidationError)
-			cleaned.append(text)
-		validated[field] = cleaned
+		validated[field] = _validated_str(explanation.get(field), field=field)
+
+	action = _validated_object(explanation.get("action"), field="action", allowed=_ACTION_FIELDS)
+	validated["action"] = {
+		"code": _validated_str(action.get("code"), field="action.code"),
+		"title": _validated_str(action.get("title"), field="action.title"),
+	}
+
+	timing = _validated_object(explanation.get("timing"), field="timing", allowed=_TIMING_FIELDS)
+	validated["timing"] = {
+		"recommended_at": _validated_str(timing.get("recommended_at"), field="timing.recommended_at"),
+		"reason": _validated_str(timing.get("reason"), field="timing.reason"),
+	}
+
+	evidence = explanation.get("evidence")
+	if not isinstance(evidence, list) or len(evidence) > _EXPLANATION_LIST_MAX_ITEMS:
+		frappe.throw("Explanation field 'evidence' is invalid.", frappe.ValidationError)
+	cleaned_evidence = []
+	for item in evidence:
+		validated_item = _validated_object(item, field="evidence[]", allowed=_EVIDENCE_ITEM_FIELDS)
+		cleaned_evidence.append(
+			{
+				"summary": _validated_str(
+					validated_item.get("summary"), field="evidence[].summary", max_chars=_EXPLANATION_ITEM_MAX_CHARS
+				),
+				"evidence_ref": _validated_str(
+					validated_item.get("evidence_ref"),
+					field="evidence[].evidence_ref",
+					max_chars=_EXPLANATION_ITEM_MAX_CHARS,
+				),
+			}
+		)
+	validated["evidence"] = cleaned_evidence
 	return validated
 
 
