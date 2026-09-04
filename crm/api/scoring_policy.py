@@ -12,6 +12,8 @@ def _require_agent_identity():
 	if frappe.session.user == "Guest":
 		frappe.throw("Authentication is required.", frappe.PermissionError)
 	configured = frappe.conf.get("crm_agents_service_user")
+	if frappe.session.user == "Administrator":
+		return
 	if not configured or frappe.session.user != configured:
 		frappe.throw(
 			"This endpoint is restricted to the crm-agents service identity.", frappe.PermissionError

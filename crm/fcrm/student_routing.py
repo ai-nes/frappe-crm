@@ -7,6 +7,7 @@ fields directly.
 
 from __future__ import annotations
 
+import json
 import uuid
 from contextlib import contextmanager
 from typing import Any
@@ -16,9 +17,19 @@ from frappe.utils import add_to_date, now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles, resolve_crm_profile
-from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+from crm.fcrm.student_assignment import (
+	ENRICHMENT_QUEUE,
+	MANUAL_QUEUE,
+	capacity_eligible,
+	frozen_mapping_is_current,
+	resolve_student_zone,
+	score_member,
+	zone_team_pool,
+)
 from crm.fcrm.student_feature_flags import enabled
-
+from crm.fcrm.student_lead_operations import deliver_ctv_student
+from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+from crm.fcrm.utils.effective import is_effective
 
 REQUEST_DOCTYPE = "CRM Student Routing Request"
 SERVICE_FLAG = "student_routing_service"
@@ -60,7 +71,8 @@ def _canonical_pool(student) -> dict[str, Any]:
 	else:
 		_error("NOT_POOL_OWNED", "Student is not currently owned by a pool.")
 	rows = frappe.get_all(
-		"CRM Student Pool", filters=filters,
+		"CRM Student Pool",
+		filters=filters,
 		fields=["name", "pool_name", "team", "campus", "is_active"],
 		limit_page_length=2,
 	)
@@ -95,32 +107,81 @@ def _active_policy(pool: dict[str, Any], at=None):
 	return rows[0] if rows else None
 
 
-def _eligible_members(pool: dict[str, Any]) -> list[dict[str, Any]]:
+def _eligible_team_members(
+	team_name: str,
+	campus: str,
+	*,
+	staff_ids: set[str] | None = None,
+	prefer_sale: bool = True,
+) -> list[dict[str, Any]]:
 	team = frappe.db.get_value(
-		"CRM Team", pool.team, ["name", "campus", "is_active", "team_type"], as_dict=True
+		"CRM Team", team_name, ["name", "campus", "is_active", "team_type"], as_dict=True
 	)
-	if not team or not team.is_active or team.team_type != "Sales" or team.campus != pool.campus:
+	if not team or not team.is_active or team.team_type != "Sales" or team.campus != campus:
 		_error("INVALID_TOPOLOGY", "Student Pool Team is not an active Sales Team at the Campus.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
 		filters={"team": team.name, "parenttype": "CRM Staff"},
-		fields=["parent", "team", "function", "name"],
+		fields=["parent", "team", "function", "name", "effective_from", "effective_until"],
 	)
-	staff_ids = sorted({row.parent for row in memberships if row.get("parent") and (not row.get("function") or row.function == "Sale")})
+	memberships = [row for row in memberships if is_effective(row)]
+	if staff_ids is not None:
+		memberships = [row for row in memberships if row.get("parent") in staff_ids]
+	sale_rows = [row for row in memberships if row.get("parent") and row.get("function") in (None, "", "Sale")]
+	ctv_rows = [row for row in memberships if row.get("parent") and row.get("function") == "CTV-Sale"]
+	selected_rows = sale_rows or ctv_rows if prefer_sale else sale_rows + ctv_rows
+	staff_ids = sorted({row.parent for row in selected_rows})
 	if not staff_ids:
 		return []
 	staff_rows = frappe.get_all(
-		"CRM Staff", filters={"name": ["in", staff_ids], "is_active": 1},
+		"CRM Staff",
+		filters={"name": ["in", staff_ids], "is_active": 1},
 		fields=["name", "user", "campus"],
 	)
 	result = []
 	for staff in staff_rows:
-		if staff.get("campus") and staff.campus != pool.campus:
+		if staff.get("campus") and staff.campus != campus:
 			continue
-		if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales":
+		if (
+			not staff.get("user")
+			or not frappe.db.get_value("User", staff.user, "enabled")
+			or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales"
+		):
 			continue
-		result.append({"staff": staff.name, "team": team.name, "user": staff.user})
+		function = next(
+			(row.get("function") for row in selected_rows if row.get("parent") == staff.name), "Sale"
+		)
+		result.append({"staff": staff.name, "team": team.name, "user": staff.user, "function": function})
 	return sorted(result, key=lambda row: row["staff"])
+
+
+def _eligible_members(pool: dict[str, Any]) -> list[dict[str, Any]]:
+	return _eligible_team_members(pool.team, pool.campus)
+
+
+def _routing_context(student, pool):
+	geo = resolve_student_zone(student)
+	if geo.get("tier") in {3, 4}:
+		mapped_team = pool.get("team") and frappe.db.exists(
+			"CRM Team Zone Assignment", {"team": pool["team"], "status": "Active"}
+		)
+		if not mapped_team:
+			return {"tier": 0, "legacy": True}
+	if geo.get("tier") == 1:
+		return {
+			"tier": 1,
+			"school_owner": geo["school_owner"],
+			"school_owners": geo.get("school_owners") or [geo["school_owner"]],
+			"school_owner_team": geo.get("school_owner_team"),
+			"zone": geo.get("zone"),
+		}
+	if geo.get("tier") == 2:
+		mapping = zone_team_pool(geo["zone"], pool["campus"])
+		if mapping:
+			return {"tier": 2, "zone": geo["zone"], "mapping": mapping}
+	if geo.get("tier") == 3:
+		return {"tier": 3, "queue": MANUAL_QUEUE}
+	return {"tier": 4, "queue": ENRICHMENT_QUEUE}
 
 
 def _select_member(members: list[dict[str, Any]], cursor_staff: str | None):
@@ -132,6 +193,23 @@ def _select_member(members: list[dict[str, Any]], cursor_staff: str | None):
 		if member["staff"] == cursor_staff:
 			return members[(index + 1) % len(members)]
 	return members[0]
+
+
+def _select_routing_member(members, student, policy, cursor_staff, context):
+	eligible = []
+	for member in members:
+		ok, capacity = capacity_eligible(member, student, direct=context.get("tier") == 1)
+		if ok:
+			member = dict(member)
+			member["capacity"] = capacity
+			eligible.append(member)
+	if not eligible:
+		return None, []
+	if policy.get("strategy") == "weighted_score":
+		scored = [score_member(member, student, policy) for member in eligible]
+		winner = max(scored, key=lambda row: (row["score"], row["staff"]))
+		return next(member for member in eligible if member["staff"] == winner["staff"]), scored
+	return _select_member(eligible, cursor_staff), []
 
 
 def route_pool_owned_student(
@@ -158,17 +236,117 @@ def route_pool_owned_student(
 	if expected_revision is not None and current_revision != int(expected_revision):
 		return {"status": "superseded", "reason": "STALE_OWNERSHIP_REVISION", "student": student_name}
 	pool = _canonical_pool(student_doc)
+	context = _routing_context(student_doc, pool)
+	if context.get("tier") in {3, 4}:
+		return {
+			"status": "queued",
+			"tier": context["tier"],
+			"queue": context["queue"],
+			"student": student_name,
+		}
+	if context.get("tier") == 1:
+		team = context.get("school_owner_team")
+		if not team:
+			return {
+				"status": "queued",
+				"tier": 4,
+				"queue": ENRICHMENT_QUEUE,
+				"student": student_name,
+			}
+		school_owners = set(context.get("school_owners") or [context["school_owner"]])
+		members = _eligible_team_members(team, pool["campus"], staff_ids=school_owners, prefer_sale=False)
+		if not members:
+			return {
+				"status": "queued",
+				"tier": 3,
+				"queue": MANUAL_QUEUE,
+				"student": student_name,
+			}
+		policy = _active_policy(pool)
+		member, scored = _select_routing_member(members, student_doc, policy or {}, None, {"tier": 1})
+		if not member:
+			return {
+				"status": "deferred",
+				"reason": "CAPACITY_BLOCKED",
+				"student": student_name,
+				"tier": 1,
+			}
+		ok, snapshot = capacity_eligible(member, student_doc, direct=True)
+		if not ok:
+			return {
+				"status": "deferred",
+				"reason": "CAPACITY_BLOCKED",
+				"student": student_name,
+				"capacity": snapshot,
+			}
+		policy = _active_policy(pool)
+		result = change_student_ownership(
+			student=student_name,
+			target_kind="owner",
+			target_id=member["staff"],
+			target_team_id=team,
+			reason="Automatic school-owner routing",
+			idempotency_key=f"route:{student_name}:{current_revision}",
+			expected_revision=current_revision,
+			correlation_id=correlation_id or str(uuid.uuid4()),
+			_internal_service=True,
+			_commit=False,
+			_route_trigger=trigger,
+			_routing_policy_version=policy.policy_version if policy else None,
+		)
+		return {
+			"status": "applied",
+			"tier": 1,
+			"student": student_name,
+			"owner_staff": member["staff"],
+			"scoring": scored,
+			"ownership": result,
+		}
+	if context.get("tier") == 2 and context.get("mapping", {}).get("pool") != pool.get("name"):
+		# Move the pool projection through the canonical ownership command before
+		# selecting a member.  This is idempotent under the Student lock.
+		change_student_ownership(
+			student=student_name,
+			target_kind="pool",
+			target_id=context["mapping"]["pool"],
+			target_team_id=None,
+			reason="Zone pool migration",
+			idempotency_key=f"zone-pool:{student_name}:{current_revision}",
+			expected_revision=current_revision,
+			correlation_id=correlation_id or str(uuid.uuid4()),
+			_internal_service=True,
+			_commit=False,
+			_route_trigger=trigger,
+		)
+		student_doc.reload()
+		current_revision = int(student_doc.get("ownership_revision") or 0)
+		pool = _canonical_pool(student_doc)
 	policy = _active_policy(pool)
 	if not policy:
 		return {"status": "deferred", "reason": "NO_ACTIVE_POLICY", "student": student_name}
 	# The Student lock is acquired first. The policy lock serializes cursor
 	# advancement and is retained through the ownership command.
-	frappe.db.sql("select name from `tabCRM Student Routing Policy` where name = %s for update", (policy.name,))
+	frappe.db.sql(
+		"select name from `tabCRM Student Routing Policy` where name = %s for update", (policy.name,)
+	)
 	policy = frappe.get_doc("CRM Student Routing Policy", policy.name)
 	members = _eligible_members(pool)
-	member = _select_member(members, policy.get("cursor_staff"))
+	member, scored = _select_routing_member(members, student_doc, policy, policy.get("cursor_staff"), context)
 	if not member:
-		return {"status": "deferred", "reason": "NO_ELIGIBLE_MEMBER", "student": student_name}
+		return {
+			"status": "deferred",
+			"reason": "CAPACITY_BLOCKED",
+			"student": student_name,
+			"tier": context.get("tier"),
+		}
+	if member.get("function") == "CTV-Sale":
+		batch = deliver_ctv_student(student_doc, member, policy=policy)
+		if not batch:
+			return {
+				"status": "deferred",
+				"reason": "CTV_BATCH_UNAVAILABLE_OR_LEAD_COMPLEX",
+				"student": student_name,
+			}
 	route_key = f"route:{student_name}:{current_revision}"
 	try:
 		result = change_student_ownership(
@@ -176,7 +354,7 @@ def route_pool_owned_student(
 			target_kind="owner",
 			target_id=member["staff"],
 			target_team_id=member["team"],
-			reason="Automatic round-robin routing",
+			reason=f"Automatic {policy.get('strategy') or 'round_robin'} routing; tier={context.get('tier')}; scoring={scored}; mechanism={'ctv_batch' if member.get('function') == 'CTV-Sale' else 'individual'}",
 			idempotency_key=route_key,
 			expected_revision=current_revision,
 			correlation_id=correlation_id or str(uuid.uuid4()),
@@ -198,6 +376,8 @@ def route_pool_owned_student(
 		"status": "applied",
 		"student": student_name,
 		"owner_staff": member["staff"],
+		"tier": context.get("tier"),
+		"scoring": scored,
 		"ownership": result,
 		"replayed": bool(result.get("replayed")),
 	}
@@ -216,6 +396,7 @@ def enqueue_student_routing(student: str, *, trigger: str = "pool_entry", correl
 	"""Create one idempotent request for the Student's current pool revision."""
 	student_doc = frappe.get_doc("CRM Student", student)
 	pool = _canonical_pool(student_doc)
+	context = _routing_context(student_doc, pool)
 	revision = int(student_doc.get("ownership_revision") or 0)
 	request_key = f"route:{student}:{revision}"
 	existing = frappe.db.get_value(REQUEST_DOCTYPE, {"request_key": request_key}, "name")
@@ -231,6 +412,11 @@ def enqueue_student_routing(student: str, *, trigger: str = "pool_entry", correl
 		"pool_revision_key": f"{pool.name}:{revision}",
 		"campus": pool.campus,
 		"student_pool": pool.name,
+		"tier": context.get("tier"),
+		"queue": context.get("queue"),
+		"zone": context.get("zone"),
+		"zone_team": context.get("mapping", {}).get("team"),
+		"frozen_mapping": context.get("mapping"),
 		"route_trigger": trigger,
 		"correlation_token": correlation_id or str(uuid.uuid4()),
 		"idempotency_key": request_key,
@@ -283,52 +469,43 @@ def process_routing_request(request_name: str, *, lease_token: str | None = None
 		student.reload()
 		current_revision = int(student.get("ownership_revision") or 0)
 		if current_revision != int(request.ownership_revision or 0):
-			_save_request(request, status="superseded", last_error_code="STALE_OWNERSHIP_REVISION", completed_at=now_datetime())
+			_save_request(
+				request,
+				status="superseded",
+				last_error_code="STALE_OWNERSHIP_REVISION",
+				completed_at=now_datetime(),
+			)
 			frappe.db.commit()
 			return {"status": "superseded", "request": request.name, "replayed": False}
 		pool = _canonical_pool(student)
-		policy = _active_policy(pool)
-		if not policy:
-			_save_request(request, status="deferred", last_error_code="NO_ACTIVE_POLICY", completed_at=None)
+		frozen = request.get("frozen_mapping")
+		if isinstance(frozen, str):
+			try:
+				frozen = json.loads(frozen)
+			except (TypeError, ValueError):
+				frozen = None
+		if frozen and not frozen_mapping_is_current(frozen, pool["campus"]):
+			_save_request(request, status="deferred", last_error_code="STALE_ZONE_MAPPING", completed_at=None)
 			frappe.db.commit()
-			return {"status": "deferred", "request": request.name, "reason": "NO_ACTIVE_POLICY"}
-		# Serialize all candidates and cursor advancement for one pool on the
-		# immutable policy row.  The lock is held until ownership + request commit.
-		frappe.db.sql("select name from `tabCRM Student Routing Policy` where name = %s for update", (policy.name,))
-		policy = frappe.get_doc("CRM Student Routing Policy", policy.name)
-		members = _eligible_members(pool)
-		member = _select_member(members, policy.get("cursor_staff"))
-		if not member:
-			_save_request(request, status="deferred", last_error_code="NO_ELIGIBLE_MEMBER", completed_at=None)
-			frappe.db.commit()
-			return {"status": "deferred", "request": request.name, "reason": "NO_ELIGIBLE_MEMBER"}
-		try:
-			result = change_student_ownership(
-				student=student.name,
-				target_kind="owner",
-				target_id=member["staff"],
-				target_team_id=member["team"],
-				reason=f"Automatic round-robin routing ({request.name})",
-				idempotency_key=request.idempotency_key or request.request_key,
-				expected_revision=current_revision,
-				correlation_id=request.correlation_token,
-				_internal_service=True,
-				_commit=False,
-				_route_trigger=request.route_trigger or "pool_entry",
-				_routing_policy_version=policy.policy_version,
-			)
-		except StudentOwnershipError:
-			_save_request(request, status="failed", last_error_code="OWNERSHIP_TRANSITION_FAILED", completed_at=now_datetime())
-			raise
-		cursor_revision = int(policy.get("cursor_revision") or 0)
-		frappe.db.set_value(
-			"CRM Student Routing Policy", policy.name,
-			{"cursor_staff": member["staff"], "cursor_revision": cursor_revision + 1},
-			update_modified=False,
+			return {"status": "deferred", "request": request.name, "reason": "STALE_ZONE_MAPPING"}
+		result = route_pool_owned_student(
+			student.name,
+			trigger=request.route_trigger or "pool_entry",
+			correlation_id=request.correlation_token,
+			expected_revision=current_revision,
 		)
+		if result.get("status") in {"deferred", "queued"}:
+			_save_request(
+				request,
+				status="deferred",
+				last_error_code=result.get("reason") or result.get("queue"),
+				completed_at=None,
+			)
+			frappe.db.commit()
+			return dict(result, request=request.name)
 		_save_request(request, status="applied", completed_at=now_datetime(), last_error_code=None)
 		frappe.db.commit()
-		return {"status": "applied", "request": request.name, "student": student.name, "owner_staff": member["staff"], "ownership": result}
+		return dict(result, request=request.name)
 
 
 def retry_student_routing(request_name: str) -> dict[str, Any]:
@@ -338,7 +515,14 @@ def retry_student_routing(request_name: str) -> dict[str, Any]:
 		_error("OUT_OF_SCOPE", "Routing request is outside the current Student scope.")
 	if request.status in {"deferred", "failed"}:
 		with service_context():
-			_save_request(request, status="pending", last_error_code=None, completed_at=None, lease_token=None, lease_expires_at=None)
+			_save_request(
+				request,
+				status="pending",
+				last_error_code=None,
+				completed_at=None,
+				lease_token=None,
+				lease_expires_at=None,
+			)
 		frappe.db.commit()
 	return process_routing_request(request_name)
 
@@ -351,8 +535,11 @@ def process_pending_routing_requests(limit: int = 50) -> dict[str, int]:
 	page_limit = min(max(int(limit), 1), 100)
 	rows = list(
 		frappe.get_all(
-			REQUEST_DOCTYPE, filters={"status": "pending"}, pluck="name",
-			order_by="creation asc", limit_page_length=page_limit,
+			REQUEST_DOCTYPE,
+			filters={"status": "pending"},
+			pluck="name",
+			order_by="creation asc",
+			limit_page_length=page_limit,
 		)
 	)
 	rows.extend(
@@ -360,7 +547,9 @@ def process_pending_routing_requests(limit: int = 50) -> dict[str, int]:
 		for row in frappe.get_all(
 			REQUEST_DOCTYPE,
 			filters={"status": "leased", "lease_expires_at": ["<", now]},
-			pluck="name", order_by="creation asc", limit_page_length=page_limit,
+			pluck="name",
+			order_by="creation asc",
+			limit_page_length=page_limit,
 		)
 		if row not in rows
 	)

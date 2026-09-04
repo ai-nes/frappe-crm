@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest'
-import { ACTION_VIEW_MODEL_CONTRACT, actionWorkbenchApi, normalizeActionViewModel } from '../../src/utils/actionWorkbench'
+import {
+  ACTION_VIEW_MODEL_CONTRACT,
+  actionWorkbenchApi,
+  normalizeActionViewModel,
+  NBA_TASK_LABEL,
+  nbaTaskNoun,
+  operationCreatesTask,
+  nbaTaskFromDecision,
+  recommendationArtifacts,
+} from '../../src/utils/actionWorkbench'
 
 const raw = (overrides = {}) => ({
   contract_version: ACTION_VIEW_MODEL_CONTRACT, action_id: 'ACT-1', action_revision: 3,
@@ -25,5 +34,44 @@ describe('action workbench adapter', () => {
     const model = normalizeActionViewModel(raw({ freshness: { label: 'stale' } }))
     expect(model.state).toBe('stale')
     expect(actionWorkbenchApi('ACT-1', 3)).toEqual({ url: 'crm.api.student_worklist.get_action_workbench', params: { action: 'ACT-1', expected_action_revision: 3 } })
+  })
+})
+
+describe('NBA Task semantics', () => {
+  const aiPayload = Object.freeze({ actionId: 'ACT-1', channel: 'phone', timing: 't0', objective: 'Call' })
+
+  it('presents the CRM Action Item consistently as an NBA Task', () => {
+    expect(NBA_TASK_LABEL).toBe('NBA Task')
+    expect(nbaTaskNoun('CRM Action Item')).toBe('NBA Task')
+    expect(nbaTaskNoun('CRM Action')).toBe('NBA Task')
+    expect(nbaTaskNoun('')).toBe('NBA Task')
+  })
+
+  it('creates a Task only for accepting operations', () => {
+    expect(operationCreatesTask('ACCEPT')).toBe(true)
+    expect(operationCreatesTask('ACCEPT_WITH_CHANGES')).toBe(true)
+    for (const operation of ['REJECT', 'DEFER', 'DISMISS']) {
+      expect(operationCreatesTask(operation)).toBe(false)
+      expect(nbaTaskFromDecision({ operation, aiPayload })).toBeNull()
+    }
+  })
+
+  it('builds Task values from human overrides without mutating the AI proposal', () => {
+    const delta = { channel: 'zalo' }
+    const task = nbaTaskFromDecision({ operation: 'ACCEPT_WITH_CHANGES', aiPayload, delta })
+    expect(task).toMatchObject({ actionId: 'ACT-1', channel: 'zalo', timing: 't0' })
+    expect(aiPayload.channel).toBe('phone')
+  })
+
+  it('keeps the AI proposal and the human Task draft as separate artifacts', () => {
+    const artifacts = recommendationArtifacts({
+      operation: 'ACCEPT_WITH_CHANGES',
+      aiPayload,
+      delta: { timing: 't1' },
+    })
+    expect(artifacts.proposal.timing).toBe('t0')
+    expect(artifacts.task.timing).toBe('t1')
+    expect(artifacts.changedKeys).toEqual(['timing'])
+    expect(artifacts.proposal).not.toBe(aiPayload)
   })
 })

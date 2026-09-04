@@ -58,6 +58,11 @@ PROFILE_ROLE_ALIASES = {
 	"ceo": frozenset({"CEO"}),
 }
 
+# Both canonical Sales profiles can own Student cases. Team membership keeps
+# the legacy hyphenated spelling because it is the persisted Select value.
+STUDENT_OWNER_PROFILES = frozenset({"sales", "ctv_sale"})
+STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV-Sale"})
+
 PROFILE_CAPABILITIES = {
 	"sales": frozenset(
 		{
@@ -127,6 +132,59 @@ PROFILE_CAPABILITIES = {
 		}
 	),
 }
+
+# Human-readable metadata is published alongside the stable capability keys so
+# API consumers can render permission explanations without maintaining a second
+# copy of the policy vocabulary.
+CAPABILITY_METADATA = {
+	"action.execute": ("Thực hiện hành động", "Thực hiện các hành động tư vấn đã được phép."),
+	"action.reassign": ("Phân công lại hành động", "Chuyển hành động cho nhân sự khác trong phạm vi được phép."),
+	"acquisition.manage": ("Quản lý thu hút", "Quản lý dữ liệu và hoạt động thu hút tuyển sinh."),
+	"admissions.oversee": ("Giám sát tuyển sinh", "Xem và giám sát tổng quan hoạt động tuyển sinh."),
+	"attribution.manage": ("Quản lý attribution", "Quản lý dữ liệu nguồn và hiệu quả attribution."),
+	"conversion.execute": ("Thực hiện chuyển đổi", "Chuyển hồ sơ sang Contact khi đủ điều kiện."),
+	"interaction.record": ("Ghi nhận tương tác", "Ghi nhận cuộc gọi, tin nhắn và các tương tác với thí sinh."),
+	"lifecycle.exception": ("Xử lý ngoại lệ vòng đời", "Xử lý các chuyển đổi vòng đời ngoài luồng thông thường."),
+	"lifecycle.lost": ("Đánh dấu thất bại", "Đánh dấu hồ sơ không tiếp tục tuyển sinh."),
+	"lifecycle.reopen": ("Mở lại vòng đời", "Mở lại hồ sơ đã đóng khi có căn cứ phù hợp."),
+	"lifecycle.transition": ("Chuyển giai đoạn", "Cập nhật giai đoạn tuyển sinh của hồ sơ."),
+	"outcome.record": ("Ghi nhận kết quả", "Ghi nhận kết quả của hành động hoặc phiên tư vấn."),
+	"recommendation.decide": ("Xử lý đề xuất", "Chấp nhận, từ chối hoặc quyết định trên đề xuất liên hệ."),
+	"roles.manage": ("Quản lý vai trò", "Quản lý vai trò và quyền truy cập người dùng."),
+	"school.activity.manage": ("Quản lý hoạt động trường", "Tạo và quản lý hoạt động làm việc với trường học."),
+	"school.person.manage": ("Quản lý liên hệ trường", "Quản lý người liên hệ thuộc các trường học."),
+	"student.audit.reason.read": ("Xem lý do kiểm toán", "Xem lý do và bằng chứng của các thay đổi quan trọng."),
+	"student.execute": ("Xử lý hồ sơ", "Tạo và thực hiện các nghiệp vụ trên hồ sơ thí sinh."),
+	"student.ownership.manage": ("Quản lý chủ sở hữu", "Phân công và điều chỉnh người hoặc nhóm phụ trách hồ sơ."),
+	"student.policy.approve": ("Phê duyệt chính sách hồ sơ", "Phê duyệt các chính sách vận hành hồ sơ tuyển sinh."),
+	"student.policy.manage": ("Quản lý chính sách hồ sơ", "Cấu hình chính sách hệ thống liên quan đến hồ sơ."),
+	"student.routing.operate": ("Vận hành phân tuyến", "Chạy và điều chỉnh quy tắc phân tuyến hồ sơ."),
+	"student.routing.read": ("Xem phân tuyến", "Xem thông tin phân tuyến và kết quả phân công hồ sơ."),
+	"student.routing.retry": ("Chạy lại phân tuyến", "Thử lại các yêu cầu phân tuyến bị lỗi."),
+	"student.sla.escalation.read": ("Xem leo thang SLA", "Xem thông tin leo thang và vi phạm SLA."),
+	"student.sla.operate": ("Vận hành SLA", "Theo dõi và vận hành các phiên SLA của hồ sơ."),
+	"student.sla.pause": ("Tạm dừng SLA", "Tạm dừng đồng hồ SLA khi có lý do hợp lệ."),
+	"student.sla.read": ("Xem SLA", "Xem trạng thái và thời hạn SLA của hồ sơ."),
+	"student.sla.reset.approve": ("Duyệt reset SLA", "Phê duyệt yêu cầu đặt lại đồng hồ SLA."),
+	"student.sla.reset.request": ("Yêu cầu reset SLA", "Gửi yêu cầu đặt lại đồng hồ SLA."),
+	"student.sla.respond": ("Phản hồi SLA", "Phản hồi hoặc cập nhật xử lý trong phiên SLA."),
+	"system.configure": ("Cấu hình hệ thống", "Thay đổi cấu hình và thiết lập quản trị CRM."),
+	"system.recover": ("Khôi phục hệ thống", "Thực hiện các thao tác khôi phục được bảo vệ."),
+	"team.oversee": ("Giám sát nhóm", "Xem và điều phối hoạt động của nhóm phụ trách."),
+	"team.pool.read": ("Xem pool của nhóm", "Xem các hồ sơ đang nằm trong pool chung của nhóm."),
+}
+
+
+def capability_details(capabilities):
+	"""Return stable capability keys with labels and descriptions for API clients."""
+	return [
+		{
+			"key": capability,
+			"label": CAPABILITY_METADATA.get(capability, (capability, ""))[0],
+			"description": CAPABILITY_METADATA.get(capability, (capability, ""))[1],
+		}
+		for capability in sorted(capabilities)
+	]
 
 CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
 

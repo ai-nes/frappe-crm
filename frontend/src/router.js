@@ -143,6 +143,12 @@ const routes = [
     meta: { anyOf: ['team.oversee'] },
   },
   {
+    path: '/assignment-overview',
+    name: 'Assignment Overview',
+    component: () => import('@/pages/AssignmentOverview.vue'),
+    meta: { anyOf: ['team.oversee', 'admissions.oversee', 'system.configure'] },
+  },
+  {
     path: '/crm-students/:crmStudentId',
     name: 'CRM Student',
     component: () => import('@/pages/CRMStudent.vue'),

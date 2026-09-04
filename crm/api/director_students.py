@@ -1,4 +1,4 @@
-"""Public read-only API projections for the Director student dashboard."""
+"""Session-scoped read-only API projections for the student dashboard."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 
+from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -110,12 +111,13 @@ def get_director_students(
 	sort: str = "score",
 	order: str = "desc",
 ) -> dict[str, Any]:
-	"""Return the list/KPI envelope consumed by ``/director/students``.
+	"""Return the session-scoped list/KPI envelope consumed by ``/director/students``.
 
 	The dotted Frappe method is the canonical backend route. A gateway can map
 	``GET /api/students`` to this method without changing the response contract.
+	Student row visibility is enforced by the current session's CRM permissions.
 	"""
-	access_scope = _require_access()
+	_require_access()
 	query = _parse_query(
 		admissionYear=admissionYear,
 		page=page,
@@ -128,12 +130,10 @@ def get_director_students(
 	)
 	query["admission_year"] = _resolve_admission_year(query["admission_year"])
 	resolved_province = _resolve_province(query["province"]) if query["province"] else None
-	student_filters, or_filters = _student_filters(query, resolved_province, access_scope)
+	student_filters, or_filters = _student_filters(query, resolved_province)
 
 	total = _count_students(student_filters, or_filters)
 	total_all_filters = {"admission_year": query["admission_year"]}
-	if access_scope:
-		total_all_filters["owner_staff"] = ["in", access_scope]
 	total_all = _count_students(total_all_filters)
 	rows = _fetch_student_rows(query, student_filters, or_filters)
 	snapshot = _as_iso(frappe.utils.now_datetime())
@@ -164,7 +164,7 @@ def get_director_students(
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_student(student_id: str) -> dict[str, Any]:
 	"""Return one permission-checked Student 360 projection."""
-	access_scope = _require_access()
+	_require_access()
 	if not str(student_id or "").strip():
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
@@ -173,7 +173,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	if access_scope and doc.get("owner_staff") not in access_scope:
+	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
@@ -184,7 +184,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and call logs) for a student."""
-	access_scope = _require_access()
+	_require_access()
 	if not str(student_id or "").strip():
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
@@ -193,7 +193,7 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	if access_scope and doc.get("owner_staff") not in access_scope:
+	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
@@ -210,6 +210,87 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 		"zalo_messages": zalo_messages,
 		"calls": calls,
 		"total_interactions": len(interactions),
+	}
+
+
+CHATWOOT_INTERACTION_FIELDS = [
+	"name",
+	"student",
+	"crm_contact",
+	"interaction_type",
+	"interaction_datetime",
+	"summary",
+	"notes",
+	"channel",
+	"direction",
+	"conversation_id",
+	"agent_id",
+	"outcome",
+	"actor",
+	"source_namespace",
+	"source_record_id",
+	"creation",
+]
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_student_chatwoot_interactions(
+	student_id: str,
+	page: str | int = 1,
+	page_size: str | int = 50,
+) -> dict[str, Any]:
+	"""Return permission-aware Chatwoot interactions for one Student."""
+	_require_access()
+	student_id = str(student_id or "").strip()
+	if not student_id:
+		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+
+	try:
+		doc = frappe.get_doc("CRM Student", student_id)
+	except frappe.DoesNotExistError:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	if not doc.has_permission("read"):
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	page_number = _parse_int(page, "page", 1, minimum=1)
+	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
+	filters = {
+		"student": student_id,
+		"interaction_type": CHATWOOT_INTERACTION_TYPE,
+	}
+	rows = frappe.get_list(
+		"CRM Interaction",
+		filters=filters,
+		fields=CHATWOOT_INTERACTION_FIELDS,
+		order_by="interaction_datetime desc, creation desc, name desc",
+		limit_start=(page_number - 1) * page_length,
+		limit_page_length=page_length,
+	)
+	all_visible_names = frappe.get_list(
+		"CRM Interaction",
+		filters=filters,
+		fields=["name"],
+		limit_page_length=0,
+		pluck="name",
+	)
+	guardian = _student_guardian(student_id)
+	student_row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	if not guardian.get("name") and student_row.get("alt_name"):
+		guardian.update(
+			{"name": student_row.get("alt_name"), "preferredChannel": None, "consentStatus": None}
+		)
+
+	return {
+		"student_id": student_id,
+		"data": rows,
+		"zalo_messages": _student_zalo_messages(student_id, rows, student_row, guardian),
+		"meta": {
+			"page": page_number,
+			"page_size": page_length,
+			"total": len(all_visible_names),
+			"has_next_page": page_number * page_length < len(all_visible_names),
+		},
 	}
 
 
@@ -334,11 +415,9 @@ def _resolve_province(value: str | None) -> str | None:
 
 
 def _student_filters(
-	query: dict[str, Any], province: str | None, access_scope: list[str] | None = None
+	query: dict[str, Any], province: str | None
 ) -> tuple[dict[str, Any], list[list[str]]]:
 	filters: dict[str, Any] = {"admission_year": query["admission_year"]}
-	if access_scope:
-		filters["owner_staff"] = ["in", access_scope]
 	if province:
 		filters["province"] = province
 	if query["stage"]:
@@ -366,7 +445,7 @@ def _student_filters(
 
 
 def _count_students(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
-	rows = frappe.get_all(
+	rows = frappe.get_list(
 		"CRM Student",
 		filters=filters,
 		or_filters=or_filters or [],
@@ -381,7 +460,7 @@ def _fetch_student_rows(query: dict[str, Any], filters: dict[str, Any], or_filte
 		return _fetch_computed_sort_rows(query, filters, or_filters)
 
 	field = SORT_FIELDS[query["sort"]]
-	return frappe.get_all(
+	return frappe.get_list(
 		"CRM Student",
 		filters=filters,
 		or_filters=or_filters,
@@ -396,7 +475,7 @@ def _fetch_computed_sort_rows(
 	query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]
 ) -> list:
 	"""Sort fields that live on related read models, then apply the page window."""
-	rows = frappe.get_all(
+	rows = frappe.get_list(
 		"CRM Student",
 		filters=filters,
 		or_filters=or_filters,
@@ -596,7 +675,7 @@ def _priority_descriptor(action) -> dict[str, Any] | None:
 
 
 def _build_summary(admission_year: str) -> dict[str, Any]:
-	rows = frappe.get_all(
+	rows = frappe.get_list(
 		"CRM Student",
 		filters={"admission_year": admission_year},
 		fields=["name", "latest_score", "interest_level", "assessment_status"],
@@ -605,7 +684,7 @@ def _build_summary(admission_year: str) -> dict[str, Any]:
 	student_ids = [row.get("name") for row in rows if row.get("name")]
 	high_intent = [row for row in rows if _is_confirmed_high_intent(row)]
 	probabilities = _confirmed_probabilities(student_ids)
-	previous_rows = frappe.get_all(
+	previous_rows = frappe.get_list(
 		"CRM Student",
 		filters={"admission_year": str(int(admission_year) - 1)},
 		fields=["name"],
@@ -625,7 +704,7 @@ def _build_summary(admission_year: str) -> dict[str, Any]:
 def _build_action_summary(admission_year: str) -> dict[str, Any]:
 	student_ids = [
 		row.get("name")
-		for row in frappe.get_all(
+		for row in frappe.get_list(
 			"CRM Student",
 			filters={"admission_year": admission_year},
 			fields=["name"],
@@ -900,8 +979,11 @@ def _student_zalo_messages(
 	parent_name = guardian.get("name") if guardian else None
 	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
 	staff_name = _user_name(
-		student_row.get("assigned_to") if student_row else None
-		or student_row.get("owner_staff") if student_row else None,
+		student_row.get("assigned_to")
+		if student_row
+		else None or student_row.get("owner_staff")
+		if student_row
+		else None,
 		fallback="Tư vấn viên",
 	)
 
@@ -909,7 +991,8 @@ def _student_zalo_messages(
 	for ix in interactions:
 		channel = _fold(ix.get("channel") or "")
 		interaction_type = _fold(ix.get("interaction_type") or "")
-		if "zalo" not in channel and "zalo" not in interaction_type:
+		is_chatwoot_message = interaction_type == _fold(CHATWOOT_INTERACTION_TYPE)
+		if "zalo" not in channel and "zalo" not in interaction_type and not is_chatwoot_message:
 			continue
 
 		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
@@ -983,8 +1066,11 @@ def _student_call_records(
 	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
 	student_phone = (student_row.get("phone") if student_row else None) or ""
 	staff_name = _user_name(
-		student_row.get("assigned_to") if student_row else None
-		or student_row.get("owner_staff") if student_row else None,
+		student_row.get("assigned_to")
+		if student_row
+		else None or student_row.get("owner_staff")
+		if student_row
+		else None,
 		fallback="Tư vấn viên",
 	)
 
@@ -1075,7 +1161,12 @@ def _student_call_records(
 	for ix in interactions:
 		channel = _fold(ix.get("channel") or "")
 		ix_type = _fold(ix.get("interaction_type") or "")
-		is_call = "call" in channel or "phone" in channel or "goi" in channel or ix_type in {"connected", "outreach"}
+		is_call = (
+			"call" in channel
+			or "phone" in channel
+			or "goi" in channel
+			or ix_type in {"connected", "outreach"}
+		)
 		if not is_call:
 			continue
 
@@ -1643,8 +1734,32 @@ def _exists(doctype: str, value) -> bool:
 
 
 def _require_access():
-	"""Return no staff scope because these read-only projections are public."""
-	return None
+	"""Require an authenticated session with Student read permission.
+
+	The Student list/detail queries deliberately use Frappe's permission-aware
+	``get_list``/``has_permission`` APIs. The CRM Student permission query hook
+	then applies the role scope from the current session: Sale and CTV Sale are
+	limited to their own ``owner_staff`` rows, while Lead Sales also sees its
+	team members and the team's unassigned pool.
+	"""
+	user = getattr(frappe.session, "user", None)
+	if not user or user == "Guest":
+		_raise_api_error(
+			"UNAUTHENTICATED",
+			"Bạn cần đăng nhập để truy cập dữ liệu học sinh.",
+			frappe.AuthenticationError,
+			401,
+		)
+
+	try:
+		frappe.has_permission("CRM Student", "read", user=user, throw=True)
+	except frappe.PermissionError:
+		_raise_api_error(
+			"FORBIDDEN",
+			"Bạn không có quyền đọc dữ liệu học sinh.",
+			frappe.PermissionError,
+			403,
+		)
 
 
 def _raise_api_error(code: str, message: str, exception, status: int):

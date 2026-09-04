@@ -24,6 +24,7 @@ class CRMActionItem(Document):
 		"policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references",
 		"action_revision", "current_slot", "risk_tier", "package_seed", "due_at", "revisit_at", "action_owner", "origin",
 		"contact", "legacy_student_task", "legacy_generic_task", "legacy_sales_action", "execution_status", "started_at",
+		"source_decision_event", "action_definition_digest",
 		"outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "accepted_at", "completed_at",
 		"terminal_reason", "decision_reason", "decision_actor", "decision_at", "decision_revision",
 	})

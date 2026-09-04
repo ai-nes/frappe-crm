@@ -1,0 +1,50 @@
+{
+  "advisory_signals": [
+    {
+      "type": "interest",
+      "title": "Mức quan tâm đang rõ hơn",
+      "summary": "Các tín hiệu gần đây cho thấy học sinh vẫn duy trì quan tâm đến hồ sơ.",
+      "confidence": "HIGH",
+      "evidence_refs": ["interaction:INT-1"]
+    },
+    {
+      "type": "fit",
+      "title": "Mức phù hợp đã có căn cứ",
+      "summary": "Mức phù hợp hiện tại được hỗ trợ bởi kết quả điểm và lựa chọn hồ sơ.",
+      "confidence": "MEDIUM",
+      "evidence_refs": ["score:SCORE-1", "application:APP-1"]
+    },
+    {
+      "type": "readiness",
+      "title": "Mức sẵn sàng còn cần theo dõi",
+      "summary": "Hồ sơ đã có tiến triển nhưng mức hoàn tất bước kế tiếp chưa được xác nhận.",
+      "confidence": "MEDIUM",
+      "evidence_refs": ["lifecycle:LIFE-1", "application:APP-1"]
+    }
+  ],
+  "risks": [
+    {
+      "code": "application_completion",
+      "severity": "MEDIUM",
+      "title": "Hồ sơ chưa hoàn tất",
+      "summary": "Một số tài liệu trong hồ sơ vẫn chưa được ghi nhận là hoàn tất.",
+      "evidence_refs": ["application:APP-1"]
+    }
+  ],
+  "opportunity_signals": [
+    {
+      "code": "verified_interest",
+      "strength": "HIGH",
+      "title": "Quan tâm đã được xác minh",
+      "summary": "Tương tác có kết quả tích cực và intent liên quan đang cùng chiều.",
+      "evidence_refs": ["interaction:INT-1"]
+    }
+  ],
+  "recent_changes": [
+    {
+      "type": "lifecycle",
+      "summary": "Hồ sơ vừa chuyển sang giai đoạn mới trong hành trình tuyển sinh.",
+      "evidence_refs": ["lifecycle:LIFE-1"]
+    }
+  ]
+}

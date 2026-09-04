@@ -359,3 +359,65 @@ def get_conversation(session_id: str):
 	if not isinstance(session_id, str) or not session_id or len(session_id) > 128:
 		frappe.throw("A valid conversation ID is required.", frappe.ValidationError)
 	return _agent_json("/api/v1/chat", params={"sessionId": session_id})
+
+
+@frappe.whitelist(methods=["POST"])
+def run_student_nba_evaluation(
+	student_id: str,
+	force_rerun_reason: str | None = None,
+):
+	"""Run the caller-scoped NBA evaluation without exposing agent credentials."""
+	_require_copilot_user()
+	student = str(student_id or "").strip()
+	if not student or len(student) > 140:
+		frappe.throw("A valid student ID is required.", frappe.ValidationError)
+	if force_rerun_reason is not None:
+		force_rerun_reason = str(force_rerun_reason).strip()
+		if len(force_rerun_reason) < 10 or len(force_rerun_reason) > 500:
+			frappe.throw("The rerun reason must be between 10 and 500 characters.", frappe.ValidationError)
+
+	idempotency_key = frappe.get_request_header("Idempotency-Key")
+	if not isinstance(idempotency_key, str) or not (8 <= len(idempotency_key) <= 140):
+		frappe.throw("A valid Idempotency-Key is required.", frappe.ValidationError)
+
+	base_url, api_key = _agent_config()
+	credential = mint_delegated_credential()
+	body = {"student_id": student}
+	if force_rerun_reason:
+		body["force_rerun_reason"] = force_rerun_reason
+
+	try:
+		upstream = requests.post(
+			f"{base_url}/api/v1/nba-evaluations/student/run",
+			json=body,
+			headers={
+				"X-API-Key": api_key,
+				"Authorization": f"Bearer {credential['bearer']}",
+				"X-Frappe-Delegation": credential["proof"],
+				"Idempotency-Key": idempotency_key,
+				"Accept": "application/json",
+			},
+			timeout=_AGENT_TIMEOUT,
+		)
+	except requests.RequestException:
+		return _safe_error_response(503, "NBA evaluation is temporarily unavailable.")
+
+	if upstream.status_code >= 400:
+		if upstream.status_code in {401, 403}:
+			message = "The NBA evaluation target is not permitted."
+		elif upstream.status_code in {409, 422}:
+			message = "The NBA evaluation request was not accepted."
+		else:
+			message = "NBA evaluation is temporarily unavailable."
+		return _safe_error_response(
+			upstream.status_code if upstream.status_code in {401, 403, 409, 422} else 503,
+			message,
+		)
+
+	try:
+		payload = upstream.json()
+	except ValueError:
+		return _safe_error_response(502, "NBA evaluation returned an invalid response.")
+	if not isinstance(payload, dict):
+		return _safe_error_response(502, "NBA evaluation returned an invalid response.")
+	return payload

@@ -30,14 +30,38 @@ const rawRoleNavigationTrees = {
       id: 'sales_my_records',
       label: 'Lead',
       icon: 'clipboard-list',
-      to: 'CRM Students',
+      to: { name: 'CRM Students', params: { viewType: 'list' } },
       children: [
-        { id: 'sales_records_new', label: 'Mới' },
-        { id: 'sales_records_counseling', label: 'Đang tư vấn' },
-        { id: 'sales_records_awaiting_docs', label: 'Chờ hồ sơ' },
-        { id: 'sales_records_cold', label: 'Chưa chăm sóc' },
-        { id: 'sales_records_won', label: 'Đã chuyển đổi' },
-        { id: 'sales_unassigned_pool', label: 'Chưa phân công' },
+        {
+          id: 'sales_records_new',
+          label: 'Mới',
+          to: { name: 'CRM Students', query: { sales_view: 'new' } },
+        },
+        {
+          id: 'sales_records_counseling',
+          label: 'Đang tư vấn',
+          to: { name: 'CRM Students', query: { sales_view: 'counseling' } },
+        },
+        {
+          id: 'sales_records_awaiting_docs',
+          label: 'Chờ hồ sơ',
+          to: { name: 'CRM Students', query: { sales_view: 'awaiting_docs' } },
+        },
+        {
+          id: 'sales_records_cold',
+          label: 'Chưa chăm sóc',
+          to: { name: 'CRM Students', query: { sales_view: 'cold' } },
+        },
+        {
+          id: 'sales_records_won',
+          label: 'Đã chuyển đổi',
+          to: { name: 'CRM Students', query: { sales_view: 'won' } },
+        },
+        {
+          id: 'sales_unassigned_pool',
+          label: 'Chưa phân công',
+          to: { name: 'CRM Students', query: { sales_view: 'unassigned' } },
+        },
       ],
     },
     {
@@ -163,6 +187,13 @@ const rawRoleNavigationTrees = {
         name: 'CRM Students',
         query: { owner: 'unassigned', lead_view: 'unassigned' },
       },
+    },
+    {
+      id: 'lead_assignment_overview',
+      label: 'Cơ chế phân bổ',
+      icon: 'settings-2',
+      direct: true,
+      to: 'Assignment Overview',
     },
     {
       id: 'lead_member_performance',
@@ -468,10 +499,8 @@ const rawRoleNavigationTrees = {
         {
           id: 'mgr_cfg_distribution',
           label: 'Chính sách phân phối',
-          action: () => {
-            showSettings.value = true
-            activeSettingsPage.value = 'Assignment Rules'
-          },
+          direct: true,
+          to: 'Assignment Overview',
         },
         {
           id: 'mgr_cfg_scoring',
@@ -551,6 +580,12 @@ const rawRoleNavigationTrees = {
           id: 'adm_staff',
           label: 'Nhân sự (Staff)',
           to: 'CRM Staff',
+        },
+        {
+          id: 'adm_assignment_overview',
+          label: 'Cơ chế phân bổ',
+          direct: true,
+          to: 'Assignment Overview',
         },
       ],
     },
@@ -678,11 +713,15 @@ const rawRoleNavigationTrees = {
 }
 
 function bindWorkspaceDestinations(items) {
-  return items.map(({ action: _action, children, ...item }) => ({
-    ...item,
-    to: getWorkspaceRoute(item.id),
-    ...(children && { children: bindWorkspaceDestinations(children) }),
-  }))
+  return items.map((source) => {
+    const { children, ...item } = source
+    delete item.action
+    return {
+      ...item,
+      to: item.direct ? item.to : getWorkspaceRoute(item.id),
+      ...(children && { children: bindWorkspaceDestinations(children) }),
+    }
+  })
 }
 
 const directorWorkspaceMenuIds = new Set([

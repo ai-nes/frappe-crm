@@ -239,6 +239,8 @@ class TestDirectorStudents(FrappeTestCase):
 				"application",
 				"probabilityTrend",
 				"channelPerformance",
+				"zaloMessages",
+				"calls",
 			},
 		)
 
@@ -329,18 +331,34 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(response, {"student": {"name": "An"}})
 
-	def test_detail_endpoint_is_public_without_student_permission(self):
+	def test_detail_endpoint_hides_student_without_permission(self):
 		doc = frappe._dict(name="ENR-1", owner_staff="STAFF-2")
 		doc.has_permission = lambda permission_type: False
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
-			patch.object(director_students, "_hydrate_rows", return_value=[{"id": "ENR-1"}]),
-			patch.object(director_students, "_build_student_360", return_value={"student": {"name": "An"}}),
+			self.assertRaises(frappe.DoesNotExistError),
 		):
-			response = director_students.get_director_student("ENR-1")
+			director_students.get_director_student("ENR-1")
 
-		self.assertEqual(response, {"student": {"name": "An"}})
+	def test_student_count_uses_permission_aware_list_query(self):
+		with patch.object(
+			director_students.frappe,
+			"get_list",
+			return_value=[frappe._dict(total=3)],
+		) as get_list:
+			self.assertEqual(
+				director_students._count_students({"admission_year": "2026"}),
+				3,
+			)
+
+		get_list.assert_called_once_with(
+			"CRM Student",
+			filters={"admission_year": "2026"},
+			or_filters=[],
+			fields=["count(name) as total"],
+			limit_page_length=1,
+		)
 
 	def test_student_zalo_messages_mapping(self):
 		interactions = [
@@ -443,6 +461,7 @@ class TestDirectorStudents(FrappeTestCase):
 
 	def test_get_student_interactions_endpoint(self):
 		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
@@ -455,3 +474,75 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["zalo_messages"], [])
 		self.assertEqual(result["calls"], [])
 		self.assertEqual(result["total_interactions"], 0)
+
+	def test_student_zalo_messages_include_chatwoot_interactions(self):
+		messages = director_students._student_zalo_messages(
+			"ENR-1",
+			[
+				frappe._dict(
+					name="INTX-CHATWOOT-1",
+					interaction_type="Tin nhắn Chatwoot",
+					interaction_datetime="2026-09-04 12:47:31",
+					direction="inbound",
+					notes="Em muốn hỏi học phí.",
+					channel="webchat",
+				)
+			],
+			frappe._dict(student_name="Nguyễn Minh An"),
+			{},
+		)
+
+		self.assertEqual(len(messages), 1)
+		self.assertEqual(messages[0]["id"], "INTX-CHATWOOT-1")
+		self.assertEqual(messages[0]["content"], "Em muốn hỏi học phí.")
+
+	def test_get_student_chatwoot_interactions_filters_type_and_paginates(self):
+		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
+		rows = [
+			frappe._dict(
+				name="INTX-CHATWOOT-2",
+				student="ENR-1",
+				interaction_type="Tin nhắn Chatwoot",
+				interaction_datetime="2026-09-04 12:47:31",
+				direction="inbound",
+				notes="Tin nhắn mới",
+			),
+		]
+		calls = []
+
+		def get_list(doctype, **kwargs):
+			calls.append((doctype, kwargs))
+			if kwargs.get("pluck") == "name":
+				return ["INTX-CHATWOOT-1", "INTX-CHATWOOT-2", "INTX-CHATWOOT-3"]
+			return rows
+
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students.frappe, "get_list", side_effect=get_list),
+			patch.object(director_students, "_student_guardian", return_value={}),
+			patch.object(
+				director_students, "_student_zalo_messages", return_value=[{"id": "INTX-CHATWOOT-2"}]
+			),
+		):
+			result = director_students.get_student_chatwoot_interactions("ENR-1", page="2", page_size="1")
+
+		self.assertEqual(result["student_id"], "ENR-1")
+		self.assertEqual(result["data"], rows)
+		self.assertEqual(result["zalo_messages"], [{"id": "INTX-CHATWOOT-2"}])
+		self.assertEqual(result["meta"], {"page": 2, "page_size": 1, "total": 3, "has_next_page": True})
+		self.assertEqual(len(calls), 2)
+		self.assertEqual(calls[0][0], "CRM Interaction")
+		self.assertEqual(
+			calls[0][1]["filters"],
+			{"student": "ENR-1", "interaction_type": "Tin nhắn Chatwoot"},
+		)
+		self.assertEqual(calls[0][1]["limit_start"], 1)
+		self.assertEqual(calls[0][1]["limit_page_length"], 1)
+		self.assertEqual(calls[1][1]["limit_page_length"], 0)
+
+	def test_get_student_chatwoot_interactions_rejects_missing_student(self):
+		with patch.object(director_students, "_require_access", return_value=None):
+			with self.assertRaises(frappe.ValidationError):
+				director_students.get_student_chatwoot_interactions("")

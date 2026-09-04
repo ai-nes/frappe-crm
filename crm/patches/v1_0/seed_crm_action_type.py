@@ -16,6 +16,7 @@ CATEGORY_LABELS = {
 	"INTERNAL": "Internal",
 }
 
+
 def _insert_if_missing(doctype, name, values):
 	if frappe.db.exists(doctype, name):
 		return

@@ -8,12 +8,13 @@ from contextlib import contextmanager
 from typing import Any
 
 import frappe
-from frappe.utils import add_to_date, get_datetime, now_datetime as frappe_now_datetime, time_diff_in_seconds
+from frappe.utils import add_to_date, get_datetime, time_diff_in_seconds
+from frappe.utils import now_datetime as frappe_now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.student_assignment import next_working_start, priority_minutes, recall_due
 from crm.fcrm.student_feature_flags import enabled
-
 
 ATTEMPT_DOCTYPE = "CRM Student SLA Attempt"
 EVENT_DOCTYPE = "CRM Student SLA Event"
@@ -92,8 +93,11 @@ def _policy(campus: str, pool: str | None = None, at=None):
 	if pool:
 		filters["student_pool"] = pool
 	rows = frappe.get_all(
-		"CRM Student SLA Policy", filters=filters, fields="*",
-		order_by="policy_version desc", limit_page_length=2,
+		"CRM Student SLA Policy",
+		filters=filters,
+		fields="*",
+		order_by="policy_version desc",
+		limit_page_length=2,
 	)
 	rows = [row for row in rows if not row.get("effective_until") or row.effective_until > at]
 	if len(rows) > 1:
@@ -117,7 +121,6 @@ def _insert_event(attempt, event_type: str, *, actor: str, payload: dict[str, An
 	existing = frappe.db.get_value(EVENT_DOCTYPE, {"idempotency_key": key}, "name")
 	if existing:
 		return frappe.get_doc(EVENT_DOCTYPE, existing)
-	roles = frappe.get_roles(actor) if actor not in {"Administrator", "Guest"} else []
 	scope = {"actor_user": actor, "campus_scope": [], "team_scope": [], "student_scope": [attempt.student]}
 	values = {
 		"doctype": EVENT_DOCTYPE,
@@ -177,7 +180,11 @@ def _authorized_recipients(student, recipient_role: str) -> list[str]:
 	else:
 		role = {"lead_sales": "Lead Sales", "admissions_director": "Admissions Director"}.get(recipient_role)
 		candidates = frappe.get_all("Has Role", filters={"role": role}, pluck="parent") if role else []
-	return [user for user in candidates if user and has_student_permission(student, user=user, permission_type="read")]
+	return [
+		user
+		for user in candidates
+		if user and has_student_permission(student, user=user, permission_type="read")
+	]
 
 
 def _schedule_delivery(attempt, event, recipient_role: str, due_at=None):
@@ -216,7 +223,8 @@ def open_sla_for_assignment(
 	existing = frappe.get_all(
 		ATTEMPT_DOCTYPE,
 		filters={"student": student, "status": ["not in", list(TERMINAL)]},
-		fields=["name"], limit_page_length=1,
+		fields=["name"],
+		limit_page_length=1,
 	)
 	if existing:
 		return frappe.get_doc(ATTEMPT_DOCTYPE, existing[0].name)
@@ -224,8 +232,11 @@ def open_sla_for_assignment(
 	policy = _policy(student_doc.branch, student_pool)
 	if not policy:
 		_error("NO_ACTIVE_POLICY", "An approved active SLA policy is required before assignment.")
-	opened_at = now_datetime()
-	warning_at = add_to_date(opened_at, minutes=int(policy.warning_minutes))
+	opened_at = next_working_start(now_datetime(), policy)
+	priority = student_doc.get("assignment_priority") or "normal"
+	priority_override = priority_minutes(policy, priority)
+	first_response_minutes = priority_override or int(policy.warning_minutes)
+	warning_at = add_to_date(opened_at, minutes=first_response_minutes)
 	breach_at = add_to_date(opened_at, minutes=int(policy.breach_minutes))
 	escalation_at = add_to_date(opened_at, minutes=int(policy.escalation_minutes))
 	values = {
@@ -256,10 +267,24 @@ def open_sla_for_assignment(
 		"correlation_token": correlation_token,
 		"schema_version": "phase4-v1",
 	}
+	# These fields are additive and only included after their DocType migration.
+	try:
+		fields = {field.fieldname for field in frappe.get_meta(ATTEMPT_DOCTYPE).fields}
+		if "priority" in fields:
+			values["priority"] = priority
+		if "first_response_deadline" in fields:
+			values["first_response_deadline"] = warning_at
+	except Exception:
+		pass
 	with service_context():
 		attempt = frappe.get_doc(values)
 		attempt.insert(ignore_permissions=True)
-		_insert_event(attempt, "opened", actor=actor, payload={"owner_staff": owner_staff, "owning_team": owning_team, "student_pool": student_pool})
+		_insert_event(
+			attempt,
+			"opened",
+			actor=actor,
+			payload={"owner_staff": owner_staff, "owning_team": owning_team, "student_pool": student_pool},
+		)
 	return attempt
 
 
@@ -292,7 +317,10 @@ def pause_sla(attempt_name: str, reason_code: str, *, expected_revision: int):
 	attempt.revision = int(attempt.revision or 0) + 1
 	attempt.status = "paused"
 	attempt.paused_at = now_datetime()
-	attempt.pause_deadline = add_to_date(attempt.paused_at, minutes=int(attempt.maximum_pause_minutes or 0) - int(attempt.total_paused_minutes or 0))
+	attempt.pause_deadline = add_to_date(
+		attempt.paused_at,
+		minutes=int(attempt.maximum_pause_minutes or 0) - int(attempt.total_paused_minutes or 0),
+	)
 	with service_context():
 		attempt.save(ignore_permissions=True)
 		_insert_event(attempt, "paused", actor=actor, payload={"reason_code": reason_code})
@@ -348,13 +376,23 @@ def record_qualifying_response(attempt_name: str, interaction_name: str, *, expe
 		_error("OUTCOME_REQUIRED", "A qualifying interaction outcome is required.")
 	if interaction.actor and interaction.actor != actor and actor != "Administrator":
 		_error("UNAUTHORIZED", "Only the authenticated interaction actor may satisfy the SLA.")
-	if interaction.reference_doctype not in {"Call Log", "Communication", "Task", "CRM Marketing Engagement", "WhatsApp Message"}:
+	if interaction.reference_doctype not in {
+		"Call Log",
+		"Communication",
+		"Task",
+		"CRM Marketing Engagement",
+		"WhatsApp Message",
+	}:
 		_error("INVALID_INTERACTION_SOURCE", "Only an auditable interaction source may satisfy the SLA.")
 	from crm.fcrm.interaction_log import verify_sla_source
+
 	if not getattr(interaction, "source_verified", False) or not verify_sla_source(
 		interaction.reference_doctype, interaction.reference_docname, attempt.student
 	):
-		_error("UNVERIFIED_INTERACTION_SOURCE", "The interaction source must be backend-verified for this Student.")
+		_error(
+			"UNVERIFIED_INTERACTION_SOURCE",
+			"The interaction source must be backend-verified for this Student.",
+		)
 	if getattr(interaction, "sla_response_sealed", False):
 		_error("DUPLICATE_RESPONSE", "This interaction has already satisfied an SLA.")
 	attempt.response_interaction = interaction.name
@@ -397,7 +435,12 @@ def request_sla_reset(attempt_name: str, reason: str, evidence_reference: str, *
 	attempt.revision = int(attempt.revision or 0) + 1
 	with service_context():
 		attempt.save(ignore_permissions=True)
-		_insert_event(attempt, "reset_requested", actor=actor, payload={"reason_code": "manual_reset", "evidence_reference": attempt.reset_evidence_reference})
+		_insert_event(
+			attempt,
+			"reset_requested",
+			actor=actor,
+			payload={"reason_code": "manual_reset", "evidence_reference": attempt.reset_evidence_reference},
+		)
 	frappe.db.commit()
 	return _attempt_projection(attempt)
 
@@ -435,7 +478,11 @@ def approve_sla_reset(attempt_name: str, *, expected_revision: int):
 			attempt,
 			"reset_approved",
 			actor=actor,
-			payload={"prior_attempt": attempt.name, "approver": actor, "replacement_attempt": replacement.name},
+			payload={
+				"prior_attempt": attempt.name,
+				"approver": actor,
+				"replacement_attempt": replacement.name,
+			},
 		)
 	frappe.db.commit()
 	return _attempt_projection(replacement)
@@ -474,7 +521,9 @@ def _attempt_projection(attempt) -> dict[str, Any]:
 		"maximum_pause_minutes": attempt.maximum_pause_minutes,
 		"pause_deadline": attempt.pause_deadline,
 		"sla_policy_version": attempt.sla_policy_version,
-		"last_event": frappe.db.get_value(EVENT_DOCTYPE, {"sla_attempt": attempt.name}, "name", order_by="event_at desc"),
+		"last_event": frappe.db.get_value(
+			EVENT_DOCTYPE, {"sla_attempt": attempt.name}, "name", order_by="event_at desc"
+		),
 	}
 
 
@@ -482,12 +531,20 @@ def get_student_sla_status(student: str) -> dict[str, Any]:
 	student_doc = frappe.get_doc("CRM Student", student)
 	if not has_student_permission(student_doc, user=frappe.session.user, permission_type="read"):
 		_error("OUT_OF_SCOPE", "SLA is outside the current Student scope.")
-	attempts = frappe.get_all(ATTEMPT_DOCTYPE, filters={"student": student}, fields=["name"], order_by="creation desc", limit_page_length=1)
+	attempts = frappe.get_all(
+		ATTEMPT_DOCTYPE,
+		filters={"student": student},
+		fields=["name"],
+		order_by="creation desc",
+		limit_page_length=1,
+	)
 	roles = frappe.get_roles(frappe.session.user)
 	caps = capabilities_for_roles(roles, administrator=frappe.session.user == "Administrator")
 	return {
 		"student": student,
-		"attempt": _attempt_projection(frappe.get_doc(ATTEMPT_DOCTYPE, attempts[0].name)) if attempts else None,
+		"attempt": _attempt_projection(frappe.get_doc(ATTEMPT_DOCTYPE, attempts[0].name))
+		if attempts
+		else None,
 		"capabilities": {"pause": "student.sla.pause" in caps, "respond": "student.sla.respond" in caps},
 	}
 
@@ -502,24 +559,96 @@ def process_due_sla_attempts(limit: int = 50) -> dict[str, int]:
 			"status": ["in", ["open", "warned", "breached"]],
 			"next_transition_at": ["<=", now],
 		},
-		pluck="name", order_by="next_transition_at asc", limit_page_length=min(max(int(limit), 1), 100),
+		pluck="name",
+		order_by="next_transition_at asc",
+		limit_page_length=min(max(int(limit), 1), 100),
 	)
 	rows.extend(
-		row for row in frappe.get_all(
+		row
+		for row in frappe.get_all(
 			ATTEMPT_DOCTYPE,
 			filters={"status": "paused", "pause_deadline": ["<=", now]},
-			pluck="name", order_by="pause_deadline asc", limit_page_length=min(max(int(limit), 1), 100),
-		) if row not in rows
+			pluck="name",
+			order_by="pause_deadline asc",
+			limit_page_length=min(max(int(limit), 1), 100),
+		)
+		if row not in rows
+	)
+	# Auto-recall has its own deadline (2x the breach interval), which may be
+	# earlier than the next notification transition.
+	rows.extend(
+		row
+		for row in frappe.get_all(
+			ATTEMPT_DOCTYPE,
+			filters={"status": ["in", ["open", "warned", "breached"]], "breach_at": ["<=", now]},
+			pluck="name",
+			order_by="breach_at asc",
+			limit_page_length=min(max(int(limit), 1), 100),
+		)
+		if row not in rows
 	)
 	processed = failed = 0
 	for name in rows:
 		try:
+			if _auto_recall_if_due(name, now):
+				processed += 1
+				continue
 			_process_due_attempt(name, now)
 			processed += 1
 		except Exception:
 			frappe.db.rollback()
 			failed += 1
 	return {"processed": processed, "failed": failed}
+
+
+def _auto_recall_if_due(name: str, now) -> bool:
+	"""Release a genuinely stale owner assignment at 2x its breach deadline."""
+	attempt = _lock_attempt(name)
+	if not recall_due(attempt, now):
+		return False
+	student = frappe.get_doc("CRM Student", attempt.student)
+	pool = student.get("owning_pool")
+	if not pool and student.get("owner_staff"):
+		team = frappe.db.get_value(
+			"CRM Team Membership",
+			{
+				"parent": student.owner_staff,
+				"parenttype": "CRM Staff",
+				"function": ["in", ["Sale", "CTV-Sale"]],
+			},
+			"team",
+		)
+		pool = (
+			frappe.db.get_value(
+				"CRM Student Pool", {"team": team, "campus": student.branch, "is_active": 1}, "name"
+			)
+			if team
+			else None
+		)
+	if not pool or not student.get("owner_staff"):
+		return False
+	from crm.fcrm.student_ownership import change_student_ownership
+
+	change_student_ownership(
+		student=student.name,
+		target_kind="pool",
+		target_id=pool,
+		target_team_id=None,
+		reason="Automatic SLA auto-recall after 2x overdue",
+		idempotency_key=f"sla-recall:{attempt.name}:{attempt.revision}",
+		expected_revision=int(student.get("ownership_revision") or 0),
+		correlation_id=attempt.correlation_token,
+		_internal_service=True,
+		_commit=False,
+		_route_trigger="sla_auto_recall",
+	)
+	attempt.status = "superseded"
+	attempt.next_transition_at = None
+	attempt.revision = int(attempt.revision or 0) + 1
+	with service_context():
+		attempt.save(ignore_permissions=True)
+	frappe.db.commit()
+	return True
 
 
 def _process_due_attempt(name: str, now):
@@ -543,7 +672,9 @@ def _process_due_attempt(name: str, now):
 		attempt.revision = int(attempt.revision or 0) + 1
 		with service_context():
 			attempt.save(ignore_permissions=True)
-			_insert_event(attempt, "pause_expired", actor="Administrator", payload={"pause_minutes": paused_minutes})
+			_insert_event(
+				attempt, "pause_expired", actor="Administrator", payload={"pause_minutes": paused_minutes}
+			)
 		frappe.db.commit()
 		return
 	if not attempt.next_transition_at or attempt.next_transition_at > now:
@@ -570,7 +701,10 @@ def _process_due_attempt(name: str, now):
 		event = _insert_event(attempt, event_type, actor=actor, payload=payload)
 		# Daily-digest policy keeps the immutable per-lead escalation event but
 		# defers Director notification to the scheduled aggregate sender.
-		if not (event_type == "escalated" and attempt.recipient_strategy == "owner_warning_lead_breach_director_daily_digest"):
+		if not (
+			event_type == "escalated"
+			and attempt.recipient_strategy == "owner_warning_lead_breach_director_daily_digest"
+		):
 			_schedule_delivery(attempt, event, recipient)
 	frappe.db.commit()
 
@@ -580,7 +714,16 @@ def _delivery_recipients(delivery) -> list[str]:
 	return _authorized_recipients(student, delivery.recipient_role)
 
 
-def _fence_delivery(name: str, *, from_status: str, to_status: str, lease_token: str, revision: int, values: dict[str, Any] | None = None, require_live: bool = True) -> bool:
+def _fence_delivery(
+	name: str,
+	*,
+	from_status: str,
+	to_status: str,
+	lease_token: str,
+	revision: int,
+	values: dict[str, Any] | None = None,
+	require_live: bool = True,
+) -> bool:
 	"""Compare-and-swap a delivery transition so an expired worker cannot mutate it."""
 	values = values or {}
 	assignments = ["status = %s", "revision = revision + 1"]
@@ -595,7 +738,7 @@ def _fence_delivery(name: str, *, from_status: str, to_status: str, lease_token:
 		params.append(now_datetime())
 	result = frappe.db.sql(
 		f"""update `tab{DELIVERY_DOCTYPE}`
-		set {', '.join(assignments)}
+		set {", ".join(assignments)}
 		where {where}""",
 		params,
 	)
@@ -612,14 +755,20 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 	rows = frappe.get_all(
 		DELIVERY_DOCTYPE,
 		filters={"status": "pending", "due_at": ["<=", now]},
-		pluck="name", order_by="due_at asc", limit_page_length=min(max(int(limit), 1), 100),
+		pluck="name",
+		order_by="due_at asc",
+		limit_page_length=min(max(int(limit), 1), 100),
 	)
 	rows.extend(
-		row for row in frappe.get_all(
+		row
+		for row in frappe.get_all(
 			DELIVERY_DOCTYPE,
 			filters={"status": ["in", ["leased", "delivering"]], "lease_expires_at": ["<", now]},
-			pluck="name", order_by="lease_expires_at asc", limit_page_length=min(max(int(limit), 1), 100),
-		) if row not in rows
+			pluck="name",
+			order_by="lease_expires_at asc",
+			limit_page_length=min(max(int(limit), 1), 100),
+		)
+		if row not in rows
 	)
 	processed = failed = 0
 	for name in rows:
@@ -699,15 +848,18 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 						published = False
 						break
 						with delivery_service_context():
-							delivery.append("attempts", {
-							"delivery_attempt_key": submission_key,
-							"recipient": recipient,
-							"attempt_number": delivery.attempt_count,
-							"provider_submission_key": submission_key,
-							"outcome": "submitted",
-							"submitted_at": now_datetime(),
-								"schema_version": "phase4-v1",
-							})
+							delivery.append(
+								"attempts",
+								{
+									"delivery_attempt_key": submission_key,
+									"recipient": recipient,
+									"attempt_number": delivery.attempt_count,
+									"provider_submission_key": submission_key,
+									"outcome": "submitted",
+									"submitted_at": now_datetime(),
+									"schema_version": "phase4-v1",
+								},
+							)
 							delivery.save(ignore_permissions=True)
 					frappe.db.commit()
 				# A submitted-but-not-completed reservation is retried with the
@@ -720,7 +872,11 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 					break
 				frappe.publish_realtime(
 					"student_sla_alert",
-					{"status": delivery.recipient_role, "delivery": delivery.name, "submission_key": submission_key},
+					{
+						"status": delivery.recipient_role,
+						"delivery": delivery.name,
+						"submission_key": submission_key,
+					},
 					user=recipient,
 				)
 				if not frappe.db.sql(

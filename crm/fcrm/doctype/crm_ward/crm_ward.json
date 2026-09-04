@@ -11,6 +11,7 @@
  "field_order": [
   "ward_code",
   "ward_name",
+  "zone",
   "province",
   "province_name",
   "ward_type",
@@ -32,11 +33,22 @@
    "reqd": 1
   },
   {
+   "fieldname": "zone",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Zone",
+   "options": "CRM Zone",
+   "reqd": 1
+  },
+  {
+   "description": "Derived from Zone → Cluster → Province. Not directly editable.",
    "fieldname": "province",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province",
+   "read_only": 1,
    "reqd": 1
   },
   {

@@ -88,6 +88,7 @@ import { usersStore } from '@/stores/users'
 import { hasAnyCapability } from '@/utils/rolePolicy'
 import { getStudentFunnelFilters } from '@/utils/studentFunnel'
 import { getLeadSalesStudentContext } from '@/utils/leadSalesStudentFilters'
+import { getSalesStudentFilters } from '@/utils/salesStudentFilters'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
@@ -100,6 +101,7 @@ const { getCurrentUser } = usersStore()
 
 const leadSalesContext = computed(() => getLeadSalesStudentContext(route.query))
 const funnelStage = computed(() => route.query.stage || 'intake')
+const salesView = computed(() => route.query.sales_view || '')
 
 const funnelTitle = computed(() => {
   if (leadSalesContext.value.bypassFunnel) {
@@ -118,6 +120,7 @@ const studentFilters = computed(() => {
   const context = leadSalesContext.value
   return {
     ...(context.bypassFunnel ? {} : funnelFilters.value),
+    ...getSalesStudentFilters(salesView.value),
     ...(context.filters || {}),
   }
 })

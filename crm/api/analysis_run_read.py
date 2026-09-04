@@ -1,144 +1,119 @@
-"""Permission-aware reader for completed Student 360 analysis stages.
-
-Next Best Action generation reasons from a completed, same-revision Student 360.
-This module is the only read path for that stage's shareable claims and result
-digest. It mirrors the Student row scope the framework enforces for
-``student_worklist`` and the Intelligence Run reader, and the claim-suppression
-rule from ``intelligence_runs.visible_claims``: a caller who cannot see the
-Student, or cannot resolve every source a claim cites, gets nothing.
-"""
-
+"""Student 360 Sales dashboard: durable AI snapshot, live CRM journal/score."""
 from __future__ import annotations
+
+import hashlib
+from datetime import timezone
+from typing import Any
 
 import frappe
 from frappe import _
-from frappe.utils import get_datetime
+from frappe.utils import get_datetime, now_datetime
 
-from crm.fcrm.intelligence_runs import RUN_TYPES, visible_claims
-from crm.fcrm.record_retention import technical_retention_cutoff
+from crm.fcrm.intelligence_runs import (
+	RUN_TYPES,
+	STUDENT_360_POLICY_REVISION,
+	STUDENT_360_SNAPSHOT_SCHEMA_VERSION,
+	_public_stage,
+	_source,
+	request_run,
+)
+from crm.fcrm.scoring_projection import score_band, score_trend
 
-CONTRACT_VERSION = "student-360-read-v1"
-_STUDENT_RUN_TYPE = RUN_TYPES["student"]
-_OUT_OF_SCOPE = _("The requested Student 360 analysis is not available.")
+CONTRACT_VERSION = "student360.dashboard.read:v1"
+_RUN = RUN_TYPES["student"]
 
 
-def _require_authenticated() -> None:
+def _iso(value: Any) -> str | None:
+	if not value:
+		return None
+	try:
+		return get_datetime(value).replace(tzinfo=timezone.utc).isoformat()
+	except Exception:
+		return str(value)
+
+
+def _student_scope(student: str | None) -> str:
+	student = str(student or "").strip()
 	if frappe.session.user == "Guest":
-		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+		frappe.throw(_("Vui lòng đăng nhập để xem toàn cảnh hồ sơ."), frappe.PermissionError)
+	if not student or not frappe.has_permission("CRM Student", "read", student, user=frappe.session.user):
+		frappe.throw(_("Bạn không có quyền xem toàn cảnh hồ sơ này."), frappe.PermissionError)
+	return student
 
 
-def _require_student_scope(student: str | None) -> None:
-	# The framework check covers a missing DocType read grant, a User Permission,
-	# permlevel, and share scope -- not just the row-scope query condition.
-	if not student or not frappe.has_permission(
-		"CRM Student", "read", student, user=frappe.session.user
-	):
-		frappe.throw(_OUT_OF_SCOPE, frappe.PermissionError)
+def _stages(student: str, digest: str | None = None) -> list[dict]:
+	runs = frappe.get_all(_RUN, filters={"student": student, "policy_revision": STUDENT_360_POLICY_REVISION, **({"source_digest": digest} if digest else {})}, pluck="name")
+	if not runs:
+		return []
+	return frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": _RUN, "parent_run": ["in", runs], "stage_kind": "student_360"}, fields=["name", "stage_kind", "status", "expected_source_digest", "report_json", "claims", "terminal_reason", "policy_revision", "model_revision", "analyzed_at", "modified"], order_by="modified desc, creation desc", limit_page_length=20)
 
 
-def _retention_expired(run_creation) -> bool:
-	if not run_creation:
-		return False
-	return get_datetime(run_creation) < get_datetime(technical_retention_cutoff("analysis_run"))
-
-
-def _completed_student_360_stage(extra_filters: dict) -> dict | None:
-	rows = frappe.get_all(
-		"CRM Analysis Run Stage",
-		filters={
-			"parent_run_type": _STUDENT_RUN_TYPE,
-			"stage_kind": "student_360",
-			"status": "completed",
-			**extra_filters,
-		},
-		fields=[
-			"name",
-			"parent_run",
-			"expected_source_revision",
-			"expected_source_digest",
-			"result_digest",
-			"policy_revision",
-			"model_revision",
-			"claims",
-			"modified",
-		],
-		order_by="modified desc",
-		limit_page_length=1,
-	)
-	return rows[0] if rows else None
-
-
-def _stage_payload(stage: dict, run: dict) -> dict:
-	retention_expired = _retention_expired(run.get("creation"))
+def _snapshot(stage: dict | None) -> dict | None:
+	if not stage or stage.get("status") != "completed":
+		return None
+	report = (_public_stage(stage, student=True).get("report") or {})
+	if not report:
+		return None
 	return {
-		"contract_version": CONTRACT_VERSION,
-		"run_id": run["name"],
-		"run_type": _STUDENT_RUN_TYPE,
-		"student": run["student"],
-		"source_revision": str(stage.get("expected_source_revision")),
-		"source_digest": stage.get("expected_source_digest"),
-		"result_digest": stage.get("result_digest"),
-		"status": "completed",
-		"policy_revision": stage.get("policy_revision"),
-		"model_revision": stage.get("model_revision"),
-		"retention_expired": retention_expired,
-		"claims": [] if retention_expired else visible_claims(stage.get("claims")),
-		"settled_at": str(stage.get("modified")) if stage.get("modified") else None,
+		"id": stage["name"],
+		"analysis_input_digest": stage.get("expected_source_digest"),
+		"generated_at": _iso(stage.get("analyzed_at")),
+		**report,
 	}
 
 
-def _not_available(student: str | None) -> dict:
-	return {
-		"contract_version": CONTRACT_VERSION,
-		"run_type": _STUDENT_RUN_TYPE,
-		"student": student,
-		"status": "not_available",
-		"claims": [],
-	}
+def _journal(student: str) -> dict:
+	groups = {"inbound": [], "outbound": []}
+	rows = frappe.get_all("CRM Interaction", filters={"student": student}, fields=["name", "interaction_datetime", "channel", "direction", "actor", "summary", "outcome"], order_by="interaction_datetime desc, creation desc", limit_page_length=20)
+	for row in rows:
+		direction = str(row.get("direction") or "").lower()
+		if direction in groups:
+			groups[direction].append({"id": row["name"], "occurred_at": _iso(row.get("interaction_datetime")), "channel": row.get("channel"), "actor": {"label": row.get("actor") or "Hệ thống", "kind": "staff" if row.get("actor") else "system"}, "summary": row.get("summary") or "", "outcome": row.get("outcome") or None, "evidence_refs": [f"interaction:{row['name']}"]})
+	return {"as_of": _iso(now_datetime()), **groups, "next_cursor": None}
+
+
+def _score(student: str) -> dict:
+	rows = frappe.get_all("CRM Score History", filters={"student": student}, fields=["name", "scoring_time", "fit_score", "engagement_score", "intent_score", "final_score", "score_change"], order_by="scoring_time desc, creation desc", limit_page_length=6)
+	latest = rows[0] if rows else None
+	values = {"fit": latest.get("fit_score") if latest else None, "interaction": latest.get("engagement_score") if latest else None, "intent": latest.get("intent_score") if latest else None, "total": latest.get("final_score") if latest else None}
+	score_change = latest.get("score_change") if latest else None
+	contributors = []
+	if latest:
+		for detail in frappe.get_doc("CRM Score History", latest["name"]).get("details") or []:
+			contributors.append({"category": detail.category, "signal": detail.signal, "score": detail.score})
+	contributors = contributors[:4]
+	return {"as_of": _iso(latest.get("scoring_time")) if latest else _iso(now_datetime()), "items": [{"key": key, "label": label, "value": values[key], "score_change": score_change, "contributors": contributors} for key, label in (("fit", "Fit"), ("interaction", "Interaction"), ("intent", "Intent"), ("total", "Total"))], "band": score_band(values["total"]), "trend": score_trend(score_change), "explanation": {"text": "Điểm do CRM tính; bản tóm tắt chỉ trình bày.", "evidence_refs": [f"score:{latest['name']}"] if latest else []}}
 
 
 @frappe.whitelist()
-def get_student_360(
-	run_id: str | None = None,
-	student: str | None = None,
-	source_revision: str | int | None = None,
-) -> dict:
-	"""Return the completed Student 360 stage for a run, or for a student revision.
-
-	Provide exactly one of: ``run_id``; or both ``student`` and
-	``source_revision``. The response shape is versioned by ``contract_version``.
-	An out-of-scope caller and an unknown run are indistinguishable.
-	"""
-	_require_authenticated()
-	by_run = bool(run_id)
-	by_revision = bool(student) and source_revision is not None
-	if by_run == by_revision:
-		frappe.throw(
-			_("Provide either run_id, or both student and source_revision."),
-			frappe.ValidationError,
-		)
-
-	if by_run:
-		run = frappe.db.get_value(
-			_STUDENT_RUN_TYPE, run_id, ["name", "student", "creation"], as_dict=True
-		)
-		# Resolve scope before revealing whether the run exists.
-		_require_student_scope(run.student if run else None)
-		if not run:
-			frappe.throw(_OUT_OF_SCOPE, frappe.PermissionError)
-		stage = _completed_student_360_stage({"parent_run": run["name"]})
-		return _stage_payload(stage, run) if stage else _not_available(run["student"])
-
-	_require_student_scope(student)
-	run_names = frappe.get_all(
-		_STUDENT_RUN_TYPE,
-		filters={"student": student, "source_revision": str(source_revision)},
-		pluck="name",
-	)
-	stage = _completed_student_360_stage({"parent_run": ["in", run_names]}) if run_names else None
-	if not stage:
-		return _not_available(student)
-	run = frappe.db.get_value(
-		_STUDENT_RUN_TYPE, stage["parent_run"], ["name", "student", "creation"], as_dict=True
-	)
-	return _stage_payload(stage, run)
+def get_student_360(student: str, request: bool = False, refresh: bool = False) -> dict:
+	"""Return live Sales blocks and optionally request the current snapshot."""
+	student = _student_scope(student)
+	_revision, digest = _source("student", student)
+	current = _stages(student, digest)
+	all_stages = _stages(student)
+	latest_success = next((x for x in all_stages if x.get("status") == "completed"), None)
+	active = next((x for x in current if x.get("status") in {"queued", "running"}), None)
+	failed = next((x for x in current if x.get("status") in {"failed", "dead_lettered"}), None)
+	request_error = False
+	if request or refresh:
+		try:
+			retry_seed = str(now_datetime()) if refresh else ""
+			request_key = hashlib.sha256(f"{frappe.session.user}:{student}:{digest}:{retry_seed}".encode()).hexdigest()[:32]
+			request_run(domain="student", target=student, idempotency_key=f"student360:{request_key}")
+		except Exception:
+			# A dashboard refresh never removes the last successful analysis.
+			# Details remain in server logs; the client receives a safe retry state.
+			request_error = True
+		current = _stages(student, digest)
+		all_stages = _stages(student)
+		latest_success = next((x for x in all_stages if x.get("status") == "completed"), None)
+		active = next((x for x in current if x.get("status") in {"queued", "running"}), active)
+		failed = next((x for x in current if x.get("status") in {"failed", "dead_lettered"}), failed)
+	displayed = _snapshot(latest_success)
+	snapshot_status = "NONE" if not displayed else "FRESH" if latest_success and latest_success.get("expected_source_digest") == digest else "STALE"
+	analysis_status = "FAILED" if (failed or request_error) else "ANALYZING" if active else "IDLE"
+	displayed = displayed or {}
+	score = _score(student)
+	items = {item["key"]: item for item in score["items"]}
+	return {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}

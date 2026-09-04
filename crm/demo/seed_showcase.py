@@ -35,10 +35,10 @@ from crm.demo import (
 	school_domain_import,
 	seed_admission_funnel,
 	seed_bulk_realistic,
-	seed_director_campaign_intelligence,
-	seed_director_revenue_forecast,
 	seed_demo,
+	seed_director_campaign_intelligence,
 	seed_director_regional_performance,
+	seed_director_revenue_forecast,
 	seed_role_accounts,
 	seed_school_field_activity,
 	seed_staff,
@@ -4607,7 +4607,11 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 	)
 	legacy_contacts = [row.contact for row in legacy_conversions if row.contact]
 	legacy_recommendations = (
-		frappe.get_all("CRM Recommendation", filters={"student": ["in", legacy_student_list]}, pluck="name")
+		frappe.get_all(
+			"CRM Recommendation",
+			filters={"target_type": "CRM Student", "target_id": ["in", legacy_student_list]},
+			pluck="name",
+		)
 		if legacy_student_list and frappe.db.table_exists("CRM Recommendation")
 		else []
 	)
@@ -4711,7 +4715,6 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 
 	# Remove all normal child records before their legacy Student parent.
 	for doctype, field in (
-		("CRM Recommendation", "student"),
 		("CRM Student SLA Attempt", "student"),
 		("CRM Student Routing Request", "student"),
 		("CRM Action", "student"),
@@ -4724,6 +4727,15 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 			continue
 		delete_docs(
 			doctype, frappe.get_all(doctype, filters={field: ["in", legacy_student_list]}, pluck="name")
+		)
+	if legacy_student_list and frappe.db.table_exists("CRM Recommendation"):
+		delete_docs(
+			"CRM Recommendation",
+			frappe.get_all(
+				"CRM Recommendation",
+				filters={"target_type": "CRM Student", "target_id": ["in", legacy_student_list]},
+				pluck="name",
+			),
 		)
 	if legacy_student_list and frappe.db.table_exists("File"):
 		delete_docs(

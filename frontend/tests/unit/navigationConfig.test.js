@@ -24,7 +24,10 @@ describe('navigationConfig', () => {
 
   it('keeps legacy destinations until the server enables workspace navigation', () => {
     const legacy = getNavigationForUser({ crm_profile: 'sales' })
-    expect(legacy.find((item) => item.id === 'sales_my_records').to).toBe('CRM Students')
+    expect(legacy.find((item) => item.id === 'sales_my_records').to).toEqual({
+      name: 'CRM Students',
+      params: { viewType: 'list' },
+    })
     expect(isRoleWorkspaceNavigationEnabled({ crm_profile: 'sales' })).toBe(false)
     const workspace = getNavigationForUser({
       crm_profile: 'sales',
@@ -155,6 +158,10 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Tra cứu')
 
     const leads = salesTree.find((item) => item.label === 'Lead')
+    expect(leads.to).toEqual({
+      name: 'CRM Students',
+      params: { viewType: 'list' },
+    })
     expect(leads.children.map((item) => item.id)).toEqual([
       'sales_records_new',
       'sales_records_counseling',

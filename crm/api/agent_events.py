@@ -20,7 +20,7 @@ from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 
 _EVENT_PATHS = {
-	"intelligence.run.requested": "/api/v1/insight/intelligence-run",
+	"nba.evaluation.requested": "/api/v1/insight/nba-evaluation",
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
@@ -145,24 +145,31 @@ def record_agent_event(event_type: str, doc) -> str:
 	return event.name
 
 
-def record_intelligence_run_event(run) -> str:
-	"""Publish an immutable identity-only signal for an already committed run.
+def record_nba_evaluation_event(evaluation) -> str:
+	"""Publish an identity-only signal for a durable NBA Evaluation run.
 
-	The agent must fetch evidence by run/stage just-in-time; no CRM data is
-	placed in the outbox payload.
+	The payload carries no CRM data. The agent claims the run by name and reads
+	the authoritative evaluation input through a fenced Frappe service command.
+	Dedup is by ``delivery_key`` so a burst of requests for one evaluation
+	identity collapses into a single pending outbox row.
 	"""
-	delivery_key = f"intelligence-run:{run.doctype}:{run.name}"
-	existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name") if "delivery_key" in _event_fields() else None
+	delivery_key = f"nba-evaluation:{evaluation.name}"
+	fields = _event_fields()
+	existing = (
+		frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name")
+		if "delivery_key" in fields
+		else None
+	)
 	if existing:
 		return existing
 	event = frappe.get_doc(
 		{
 			"doctype": "CRM Agent Event",
 			"event_id": str(uuid.uuid4()),
-			"event_type": "intelligence.run.requested",
-			"aggregate_doctype": run.doctype,
-			"aggregate_name": run.name,
-			"source_revision": str(run.source_revision),
+			"event_type": "nba.evaluation.requested",
+			"aggregate_doctype": "CRM NBA Evaluation",
+			"aggregate_name": evaluation.name,
+			"source_revision": str(evaluation.evaluation_key),
 			"contract_version": 1,
 			"occurred_at": now_datetime(),
 			"status": "pending",
@@ -182,6 +189,71 @@ def record_intelligence_run_event(run) -> str:
 		return existing
 	_enqueue_delivery(event)
 	return event.name
+
+
+def record_domain_reevaluation_trigger(student: str, *, trigger: str) -> dict:
+	"""Admit a Frappe-side domain event (student state change, new
+	interaction, ...) as an NBA re-evaluation trigger.
+
+	This is the domain-event counterpart of the WAIT ``revisit_at`` time
+	trigger handled by the scheduled ``reconcile_due_reevaluations``: a burst
+	of domain events for one student/identity never creates more than one
+	active ``CRM NBA Evaluation``. Coalescing itself is delegated to
+	``crm.fcrm.nba_evaluations.request_domain_reevaluation``, which reuses the
+	Student-row-locked, single-active-run-per-identity primitive already used
+	by every other NBA Evaluation entry point -- a domain event for a student
+	that already has a queued/running (or identity-unchanged terminal)
+	Evaluation is a no-op merge into that run, not a duplicate concurrent one.
+
+	Feature-gated and off by default; a caller with the flag disabled always
+	gets a safe no-op receipt instead of a failure.
+	"""
+	if frappe.conf.get("crm_nba_domain_reevaluation_enabled", 0) in (0, "0", False):
+		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
+	if not isinstance(student, str) or not student.strip():
+		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+	trigger_name = str(trigger or "").strip()
+	if not trigger_name:
+		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+
+	from crm.fcrm.nba_evaluations import request_domain_reevaluation
+
+	return request_domain_reevaluation(student.strip(), trigger_reason=trigger_name)
+
+
+def dispatch_interaction_domain_reevaluation(doc, method=None) -> None:
+	"""``doc_events`` hook: a new/updated ``CRM Interaction`` is a domain event
+	for NBA re-evaluation, the counterpart of ``admit_interaction`` in
+	``crm.services.admission_event_policy`` for scoring admission.
+
+	Best-effort and feature-gated (``record_domain_reevaluation_trigger`` is a
+	safe no-op while ``crm_nba_domain_reevaluation_enabled`` is unset): a
+	failure here must never abort the Interaction write it hangs off.
+	"""
+	student = doc.get("student")
+	if not student:
+		return
+	try:
+		record_domain_reevaluation_trigger(student, trigger="interaction")
+	except Exception:
+		frappe.log_error(title="NBA domain re-evaluation dispatch failed", message=f"interaction={doc.name}")
+
+
+def dispatch_intent_domain_reevaluation(doc, method=None) -> None:
+	"""``doc_events`` hook: a new/updated ``CRM Intent`` is a domain event for
+	NBA re-evaluation, the counterpart of ``admit_intent`` in
+	``crm.services.admission_event_policy`` for scoring admission.
+
+	Best-effort and feature-gated; a failure here must never abort the Intent
+	write it hangs off.
+	"""
+	student = doc.get("student")
+	if not student:
+		return
+	try:
+		record_domain_reevaluation_trigger(student, trigger="intent")
+	except Exception:
+		frappe.log_error(title="NBA domain re-evaluation dispatch failed", message=f"intent={doc.name}")
 
 
 def record_score_input_event(student: str, revision: int, *, event_id: str | None = None) -> str:
@@ -356,14 +428,7 @@ def _event_body(event) -> bytes:
 			"contract_version": event.contract_version,
 			"occurred_at": str(event.occurred_at),
 		}
-	if event.event_type == "intelligence.run.requested":
-		# Canonical signal is deliberately identity-only.  The agent retrieves
-		# current stage identities/evidence through Frappe service commands.
-		# ``aggregate_name`` is the run identity.  Do not duplicate it as
-		# ``run_id``: crm-agents validates this signed envelope strictly and a
-		# second identity field invites drift between the producer and consumer.
-		pass
-	elif event.event_type == "student.score_input_changed.v1":
+	if event.event_type == "student.score_input_changed.v1":
 		payload.update(
 			{
 				"source_revision": int(event.source_revision_bigint or event.source_revision),
@@ -704,83 +769,6 @@ def retry_pending_agent_events() -> None:
 		except Exception as exc:
 			frappe.db.rollback()
 			frappe.log_error(title="crm-agents outbox replay failed", message=f"event={name}: {exc}")
-
-
-def reconcile_intelligence_run_outbox(limit: int = 200) -> dict:
-	"""Recover queued work and expired stage leases after an outbox/worker gap.
-
-	A delivered webhook is a signal, not proof that a stage settled. Reopening
-	the same outbox record is safe: stage claim and settlement are fenced by a
-	generation and lease token, so delivery is intentionally at-least-once.
-	"""
-	if frappe.conf.get("crm_intelligence_runs_enabled", 0) in (0, "0", False):
-		return {"requeued": 0, "enabled": False}
-	from crm.fcrm.intelligence_runs import RUN_TYPES
-	from crm.fcrm.intelligence_runs import TERMINAL as STAGE_TERMINAL
-	now = now_datetime()
-	requeued = 0
-	blocked_next_best_action = 0
-	for run_type in RUN_TYPES.values():
-		for run in frappe.get_all(run_type, filters={"status": ["in", ["queued", "running"]]}, fields=["name", "creation"], limit_page_length=min(int(limit), 500)):
-			all_stages = frappe.get_all(
-				"CRM Analysis Run Stage", filters={"parent_run_type": run_type, "parent_run": run.name},
-				fields=["stage_kind", "status", "lease_expires_at"], limit_page_length=10,
-			)
-			blocked_next_best_action += _surface_blocked_next_best_action(run_type, run, all_stages, now, STAGE_TERMINAL)
-			stages = [s for s in all_stages if s.status in ("queued", "running")]
-			if not any(stage.status == "queued" or not stage.lease_expires_at or stage.lease_expires_at <= now for stage in stages):
-				continue
-			key = f"intelligence-run:{run_type}:{run.name}"
-			event_name = frappe.db.get_value("CRM Agent Event", {"delivery_key": key}, "name")
-			if not event_name:
-				record_intelligence_run_event(frappe.get_doc(run_type, run.name))
-				requeued += 1
-				continue
-			frappe.db.sql(
-				"UPDATE `tabCRM Agent Event` SET status='pending', next_attempt_at=%s, lease_id=NULL, lease_expires_at=NULL "
-				"WHERE name=%s AND status IN ('delivered', 'dead_letter', 'processing')",
-				(now, event_name),
-			)
-			if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected:
-				_enqueue_delivery(frappe.get_doc("CRM Agent Event", event_name))
-				requeued += 1
-	return {"requeued": requeued, "blocked_next_best_action": blocked_next_best_action, "enabled": True}
-
-
-def _surface_blocked_next_best_action(run_type, run, stages, now, stage_terminal) -> int:
-	"""Flag a Next Best Action stage that can never make progress.
-
-	Its sibling Student 360 stage has ended without completing, or has run far
-	past a reasonable window without completing, so the Next Best Action stage
-	will never see the completed same-revision 360 it requires. The dependency
-	guard keeps deferring its claim, so this would otherwise be a silent stall.
-	"""
-	nba = next((s for s in stages if s.stage_kind == "next_best_action"), None)
-	if not nba or nba.status in stage_terminal:
-		return 0
-	s360 = next((s for s in stages if s.stage_kind == "student_360"), None)
-	if not s360:
-		return 0
-	grace_hours = int(frappe.conf.get("crm_intelligence_stage_block_alert_hours", 6) or 6)
-	aged_out = bool(
-		run.get("creation")
-		and (get_datetime(now) - get_datetime(run.creation)).total_seconds() >= grace_hours * 3600
-	)
-	stalled = (s360.status in stage_terminal and s360.status != "completed") or (
-		s360.status != "completed" and aged_out
-	)
-	if not stalled:
-		return 0
-	# The reaper runs hourly; log this blocked run only once a day.
-	dedupe_key = f"nba-blocked-alert:{run_type}:{run.name}"
-	if frappe.cache().get_value(dedupe_key):
-		return 1
-	frappe.cache().set_value(dedupe_key, "1", expires_in_sec=86400)
-	frappe.log_error(
-		message=f"run_type={run_type} run={run.name} student_360_status={s360.status}",
-		title="Intelligence Run Next Best Action stage blocked on Student 360",
-	)
-	return 1
 
 
 def reconcile_score_input_v1(limit: int = 500) -> dict:

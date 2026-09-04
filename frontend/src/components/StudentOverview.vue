@@ -167,29 +167,56 @@
       />
 
       <section
-        v-if="hasSalesDecision"
+        v-if="pendingRecommendationCount"
         class="rounded-lg border border-outline-gray-2 bg-surface-white p-4"
-        aria-labelledby="student-overview-sales-actions"
+        aria-labelledby="student-overview-recommendations"
       >
-        <h2
-          id="student-overview-sales-actions"
-          class="text-base font-semibold text-ink-gray-9"
-        >
-          {{ __('Sales decisions and actions') }}
-        </h2>
-        <div class="mt-3 space-y-3 text-sm">
-          <p
-            v-if="studentDecisionContext.pendingDecision"
-            class="text-ink-gray-6"
+        <div class="flex items-center justify-between gap-3">
+          <h2
+            id="student-overview-recommendations"
+            class="text-base font-semibold text-ink-gray-9"
           >
-            {{
-              __('Pending decision: {0}', [
-                studentDecisionContext.pendingDecision.action ||
-                  studentDecisionContext.pendingDecision.recommended_action ||
-                  studentDecisionContext.pendingDecision.name,
-              ])
-            }}
-          </p>
+            {{ __('Đề xuất NBA đang chờ') }}
+          </h2>
+          <Badge
+            :label="String(pendingRecommendationCount)"
+            theme="blue"
+            variant="subtle"
+          />
+        </div>
+        <p class="mt-1 text-sm text-ink-gray-5">
+          {{ __('Đề xuất của AI, chưa được tiếp nhận. Xem xét trong hàng đợi đề xuất.') }}
+        </p>
+        <p class="mt-3 text-sm text-ink-gray-6">
+          {{
+            __('Đề xuất: {0}', [
+              studentDecisionContext.pendingDecision.action ||
+                studentDecisionContext.pendingDecision.recommended_action ||
+                studentDecisionContext.pendingDecision.name,
+            ])
+          }}
+        </p>
+      </section>
+
+      <section
+        v-if="taskProjectionCount"
+        class="rounded-lg border border-outline-gray-2 bg-surface-white p-4"
+        aria-labelledby="student-overview-nba-tasks"
+      >
+        <div class="flex items-center justify-between gap-3">
+          <h2
+            id="student-overview-nba-tasks"
+            class="text-base font-semibold text-ink-gray-9"
+          >
+            {{ __('NBA Task') }}
+          </h2>
+          <Badge
+            :label="String(taskProjectionCount)"
+            theme="gray"
+            variant="subtle"
+          />
+        </div>
+        <div class="mt-3 space-y-3 text-sm">
           <div
             v-if="studentDecisionContext.activeAction"
             class="rounded bg-surface-gray-1 p-3"
@@ -337,13 +364,15 @@ const emit = defineEmits([
   'converted',
 ])
 
-const hasSalesDecision = computed(() => {
+// Recommendation projection and Task projection are counted and rendered
+// separately: a pending recommendation is an immutable AI proposal, never a
+// "pending task". Only an accepted decision or a manual-origin item is a Task.
+const pendingRecommendationCount = computed(() =>
+  props.studentDecisionContext?.pendingDecision ? 1 : 0,
+)
+const taskProjectionCount = computed(() => {
   const decision = props.studentDecisionContext
-  return Boolean(
-    decision?.pendingDecision ||
-    decision?.activeAction ||
-    decision?.latestTerminalAction,
-  )
+  return (decision?.activeAction ? 1 : 0) + (decision?.latestTerminalAction ? 1 : 0)
 })
 
 const showConversion = computed(() => {

@@ -1,6 +1,8 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.utils.effective import periods_overlap
+
 
 class CRMStaff(Document):
 	@staticmethod
@@ -17,7 +19,26 @@ class CRMStaff(Document):
 
 	def validate(self):
 		self._derive_team_lead_flags()
+		self._validate_no_overlapping_team_memberships()
 		self._validate_one_primary_membership_per_context()
+
+	def _validate_no_overlapping_team_memberships(self):
+		"""BR-MEMBER-03: one employee has one active membership per Team.
+
+		Memberships are effective-dated, so a historical row may coexist with a
+		future row.  Two rows for the same Team are only invalid when their
+		inclusive effective periods overlap.
+		"""
+		seen = []
+		for row in self.get("team_memberships") or []:
+			if row.team and any(previous.team == row.team and periods_overlap(previous, row) for previous in seen):
+				frappe.throw(
+					f"Nhân sự <b>{self.full_name}</b> không thể có hai membership đang hiệu lực "
+					f"trong cùng Team <b>{row.team}</b>. Hãy kết thúc membership cũ trước khi thêm "
+					"membership mới.",
+					title="Trùng Team Membership",
+				)
+			seen.append(row)
 
 	def _derive_team_lead_flags(self):
 		for row in self.get("team_memberships") or []:

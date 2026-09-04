@@ -31,21 +31,26 @@ class TestIntelligenceRunSecurity(unittest.TestCase):
 			revision, _digest = intelligence_runs._source("school", "SCH-1")
 		self.assertEqual(revision, "17")
 
+	def test_student_source_digest_binds_bounded_analysis_input(self):
+		first = {"signals": {"score": 70, "interaction_history": []}, "provenance_ids": ["student:STU-1"]}
+		second = {"signals": {"score": 71, "interaction_history": []}, "provenance_ids": ["student:STU-1"]}
+		with patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=9), patch(
+			"crm.fcrm.intelligence_runs._student_stage_evidence", side_effect=[{"student_360": first}, {"student_360": second}]
+		):
+			revision_a, digest_a = intelligence_runs._source("student", "STU-1")
+			revision_b, digest_b = intelligence_runs._source("student", "STU-1")
+		self.assertEqual((revision_a, revision_b), ("9", "9"))
+		self.assertNotEqual(digest_a, digest_b)
+
 	def test_student_stage_evidence_is_minimized_and_uses_resolvable_provenance(self):
-		projection = {
-			"student_id": "STU-1", "returned_revision": 9, "snapshot_hash": "a" * 64,
-			"policy_version": "policy", "eligibility": {"student": True},
-			"lifecycle": {"stage": "Qualified"}, "intent": {"type": "fees"},
-			"score": {"freshness": "current"}, "interaction": {"outcome": "Interested"},
-			"sla_evidence": {"state": "known"}, "allowed_action_types": ["CALL"],
-			"student_name": "must-not-cross-boundary", "phone": "must-not-cross-boundary",
-		}
-		row = {"lifecycle_stage": "Qualified", "interest_level": "High", "fit_level": "High"}
-		with patch("crm.api.student_decision_context._projection", return_value=projection), patch(
+		row = {"lifecycle_stage": "Qualified", "interest_level": "High", "fit_level": "High", "score_input_revision": 9, "applied_score_input_revision": 9}
+		with patch(
 			"crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row
+		), patch("crm.fcrm.intelligence_runs.frappe.get_all", return_value=[]), patch(
+			"crm.fcrm.intelligence_runs.frappe.db.table_exists", return_value=True
 		):
 			evidence = intelligence_runs._student_stage_evidence("STU-1", "9")
-		self.assertEqual(evidence["decision_context"]["evidence_refs"], ["student:STU-1"])
+		self.assertEqual(set(evidence), {"student_360"})
 		self.assertEqual(evidence["student_360"]["provenance_ids"], ["student:STU-1"])
 		self.assertNotIn("student_name", str(evidence))
 		self.assertNotIn("phone", str(evidence))

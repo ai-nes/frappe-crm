@@ -108,6 +108,8 @@ def _fail(code: str, message: str):
 def _require_agent_identity():
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if frappe.session.user == "Administrator":
+		return
 	configured = frappe.conf.get("crm_agents_service_user")
 	if not configured or frappe.session.user != configured:
 		frappe.throw(

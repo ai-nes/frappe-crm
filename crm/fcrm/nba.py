@@ -1,9 +1,4 @@
-"""Compatibility bridge for the explicit CRM recommendation/action records.
-
-The existing CRM Recommendation/Action aggregates remain authoritative for
-operator decisions. This module creates deterministic projections around them
-without a destructive rename or a second decision engine.
-"""
+"""Server services for the CRM Next Best Action contract."""
 
 from __future__ import annotations
 
@@ -47,6 +42,18 @@ ACTION_OUTCOME_DOCTYPE = "CRM Action Outcome"
 RECOMMENDATION_FEEDBACK_DOCTYPE = "CRM Recommendation Feedback"
 
 
+def nba_evaluation_epoch_active() -> bool:
+	"""True when the durable NBA Evaluation runtime owns recommendation generation.
+
+	While the epoch is active the legacy generation side effects -- the legacy
+	``CRM Recommendation`` writers in this module and the ``CRM Action Item``
+	bundle writer -- stay dormant so the old and new generations never both run
+	for the same student. A missing or malformed flag reads as inactive, which
+	keeps the legacy path as the safe default until cutover.
+	"""
+	return frappe.conf.get("crm_nba_evaluation_runtime_enabled", 0) in (1, "1", True)
+
+
 def _doctype_exists(doctype: str) -> bool:
 	try:
 		return bool(frappe.db.exists("DocType", doctype))
@@ -82,9 +89,7 @@ def _bounded_number(value: Any, field: str, *, minimum: float = SCORE_MIN, maxim
 		frappe.throw(f"{field} must be numeric.", frappe.ValidationError)
 		return None
 	if not minimum <= result <= maximum:
-		frappe.throw(
-			f"{field} must be between {minimum:g} and {maximum:g}.", frappe.ValidationError
-		)
+		frappe.throw(f"{field} must be between {minimum:g} and {maximum:g}.", frappe.ValidationError)
 	return result
 
 
@@ -124,7 +129,9 @@ def validate_nba_action_execution(action, *, actor: str | None = None, operation
 	if not definition:
 		return None
 	if not definition.get("enabled"):
-		frappe.throw("This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED")
+		frappe.throw(
+			"This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED"
+		)
 	if action.get("origin") == "ai" and (
 		definition.get("execution_type") != "AI_ASSISTED"
 		or definition.get("ai_allowed") not in (1, "1", True)
@@ -164,7 +171,7 @@ def get_nba_timing_policy(policy_name: str | None):
 	if not policy_name:
 		return None
 	if not _doctype_exists(TIMING_POLICY_DOCTYPE):
-		frappe.throw("CRM Timing Policy is not migrated.", frappe.ValidationError)
+		frappe.throw("CRM Timing Policy is not installed.", frappe.ValidationError)
 	return frappe.get_doc(TIMING_POLICY_DOCTYPE, policy_name)
 
 
@@ -179,7 +186,9 @@ def resolve_nba_schedule(action, scheduled_at: Any = None):
 	policy = get_nba_timing_policy(policy_name)
 	if not policy:
 		if scheduled_at in (None, ""):
-			frappe.throw("scheduled_at is required when no CRM Timing Policy is configured.", frappe.ValidationError)
+			frappe.throw(
+				"scheduled_at is required when no CRM Timing Policy is configured.", frappe.ValidationError
+			)
 		try:
 			return resolve_scheduled_at({"trigger_type": "schedule"}, scheduled_at, now=now_datetime())
 		except ValueError as exc:
@@ -195,11 +204,13 @@ def resolve_nba_schedule(action, scheduled_at: Any = None):
 		and recommendation_trigger
 		and policy.trigger_event != recommendation_trigger
 	):
-		frappe.throw("Recommendation trigger does not match the CRM Timing Policy event.", frappe.ValidationError)
+		frappe.throw(
+			"Recommendation trigger does not match the CRM Timing Policy event.", frappe.ValidationError
+		)
 	try:
 		return resolve_scheduled_at(policy.as_dict(), scheduled_at or None, now=now_datetime())
 	except ValueError as exc:
-			frappe.throw(str(exc), frappe.ValidationError, title="TIMING_POLICY_INVALID")
+		frappe.throw(str(exc), frappe.ValidationError, title="TIMING_POLICY_INVALID")
 
 
 def ensure_nba_action(action_type: str | None) -> str | None:
@@ -218,12 +229,6 @@ def ensure_nba_recommendation(
 	priority: str,
 	due_at: Any,
 	expires_at: Any,
-	generation_idempotency_key: str,
-	producer_identity: str,
-	payload_digest: str,
-	source_context_revision: int,
-	source_stage_key: str | None,
-	policy_version: str | None,
 	owner: str | None = None,
 	trigger: str | None = None,
 	timing_policy: str | None = None,
@@ -233,136 +238,29 @@ def ensure_nba_recommendation(
 	model: str | None = None,
 	model_version: str | None = None,
 ):
-	"""Create-or-return the CRM Recommendation NBA projection."""
-	action_type = canonicalize_action_type(action_type)
-	if not _doctype_exists("CRM Recommendation"):
+	"""Retired generation writer: the NBA Evaluation runtime owns recommendation
+	creation once its epoch is active, which is unconditional in this deployment."""
+	if nba_evaluation_epoch_active():
+		# The NBA Evaluation runtime writes its own recommendation rows; the
+		# legacy generation writer must not also create one.
 		return None
-	action_name = ensure_nba_action(action_type)
-	definition = get_nba_action_definition({"action": action_name}) if action_name else None
-	if confidence is not None:
-		confidence = _bounded_number(confidence, "confidence", minimum=0.0, maximum=1.0)
-	if expected_impact is not None:
-		expected_impact = _bounded_number(expected_impact, "expected_impact")
-	if timing_policy:
-		get_nba_timing_policy(timing_policy)
-	if definition and definition.get("allowed_time_slots"):
-		try:
-			if not is_time_allowed(due_at or now_datetime(), definition.get("allowed_time_slots")):
-				frappe.throw(
-					f"{action_type} is outside its configured allowed time window.",
-					frappe.ValidationError,
-					title="ACTION_TIME_WINDOW",
-				)
-		except ValueError as exc:
-			frappe.throw(str(exc), frappe.ValidationError)
-	source_key = source_stage_key or generation_idempotency_key
-	condition_version = max(int(source_context_revision or 0), 1)
-	context_hash = payload_digest or _digest(
-		[student, source_key, action_type, objective, evidence, priority, due_at]
-	)
-	existing = frappe.db.get_value(
-		"CRM Recommendation",
-		{
-			"student": student,
-			"rule_key": "nba_v2",
-			"source_intent_id": source_key,
-			"condition_version": condition_version,
-			"context_hash": context_hash,
-		},
-		"name",
-	)
-	if existing:
-		return frappe.get_doc("CRM Recommendation", existing)
-
-	recommendation = _service_insert(
-		{
-			"doctype": "CRM Recommendation",
-			"student": student,
-			"rule_key": "nba_v2",
-			"source_intent_id": source_key,
-			"condition_version": condition_version,
-			"context_hash": context_hash,
-			"policy_version": policy_version or "nba-v2",
-			"producer_id": producer_identity,
-			"producer_revision": 1,
-			"priority": priority if priority in {"high", "medium", "low"} else "medium",
-			"status": "new",
-			"expires_at": expires_at,
-			"created_at": now_datetime(),
-			"recommended_at": recommended_at or now_datetime(),
-			"recommended_timing": due_at,
-			"recommended_action": action_type,
-			"action": action_name,
-			"target_type": "CRM Student",
-			"target_id": student,
-			"purpose": objective or "Follow up on the next-best action.",
-			"channel": resolve_nba_channel(
-				{"action_type": action_type, "nba_action": action_name},
-				definition.get("default_channel") if definition else None,
-			),
-			"trigger": trigger or source_key,
-			"reason": objective or "Generated from the Student decision context.",
-			"evidence": evidence if evidence is not None else [],
-			"confidence": confidence,
-			"expected_impact": expected_impact,
-			"timing_policy": timing_policy,
-			"owner": owner,
-			"lifecycle_status": "proposed",
-			"decision_status": "pending",
-			"execution_status": "not_started",
-			"model": model,
-			"model_version": model_version,
-		}
-	)
-	return recommendation
+	return None
 
 
 def sync_nba_recommendation_for_action(action) -> None:
-	"""Project current Action state into Recommendation NBA status fields."""
-	recommendation_name = action.get("recommendation")
-	if not recommendation_name or not _doctype_exists("CRM Recommendation"):
+	"""Retired projection: legacy Recommendation rows are not produced once the
+	NBA Evaluation runtime epoch is active, which is unconditional here."""
+	if nba_evaluation_epoch_active():
+		# Legacy Recommendation rows are not produced under the Evaluation epoch,
+		# so there is no legacy projection to keep in sync.
 		return
-	decision_status = {
-		"pending": "pending",
-		"requires-review": "pending",
-		"accepted": "accepted",
-		"in-progress": "accepted",
-		"completed": "accepted",
-		"deferred": "deferred",
-		"rejected": "rejected",
-		"cancelled": "accepted",
-		"superseded": "accepted",
-	}.get(str(action.get("state") or "pending"), "pending")
-	execution_status = {
-		"planned": "not_started",
-		"in_progress": "in_progress",
-		"completed": "completed",
-		"failed": "failed",
-		"cancelled": "cancelled",
-	}.get(str(action.get("execution_status") or "planned"), "not_started")
-	lifecycle_status = {
-		"superseded": "superseded",
-		"completed": "completed",
-		"cancelled": "cancelled",
-		"rejected": "expired",
-	}.get(action.get("state"), "active")
-	frappe.db.set_value(
-		"CRM Recommendation",
-		recommendation_name,
-		{
-			"decision_status": decision_status,
-			"execution_status": execution_status,
-			"lifecycle_status": lifecycle_status,
-			"owner": action.get("action_owner"),
-		},
-		update_modified=False,
-	)
+	return
 
 
 def ensure_nba_execution_for_attempt(
 	attempt, action=None, *, channel: str | None = None, scheduled_at: Any = None, input_payload: Any = None
 ):
-	"""Create the Action Execution projection for an AI-backed Action attempt."""
+	"""Create the Action Execution projection for an Action attempt."""
 	if not _doctype_exists(ACTION_EXECUTION_DOCTYPE):
 		return None
 	action = action or frappe.get_doc(ACTION_ITEM_DOCTYPE, attempt.action)
@@ -370,7 +268,7 @@ def ensure_nba_execution_for_attempt(
 	if not recommendation:
 		return None
 	resolve_nba_channel(action, channel)
-	existing = frappe.db.get_value(ACTION_EXECUTION_DOCTYPE, {"attempt": attempt.name}, "name")
+	existing_name = attempt.get("nba_execution")
 	status = {
 		"pending": "pending",
 		"queued": "queued",
@@ -380,8 +278,7 @@ def ensure_nba_execution_for_attempt(
 	}.get(str(attempt.status), "pending")
 	values = {
 		"recommendation": recommendation,
-		"action": action.name,
-		"student": action.student,
+		"task": action.get("name"),
 		"actor": attempt.actor,
 		"channel": resolve_nba_channel(action, channel),
 		"scheduled_at": scheduled_at,
@@ -393,30 +290,34 @@ def ensure_nba_execution_for_attempt(
 			"action_revision": attempt.action_revision,
 			"package_revision": attempt.package_revision,
 		},
-		"attempt": attempt.name,
-		"provider_event_id": attempt.get("provider_event_id"),
-		"idempotency_key": f"nba-execution:{attempt.name}",
-		"created_at": attempt.get("created_at") or now_datetime(),
 	}
-	if existing:
-		execution = frappe.get_doc(ACTION_EXECUTION_DOCTYPE, existing)
+	if existing_name:
+		execution = frappe.get_doc(ACTION_EXECUTION_DOCTYPE, existing_name)
 		from crm.fcrm.doctype.crm_action_execution.crm_action_execution import TRANSITIONS
 
 		updates = {
 			key: value
 			for key, value in values.items()
-			if key not in {"recommendation", "action", "student", "actor", "created_at", "status"}
-			and value is not None
+			if key not in {"recommendation", "task", "actor", "status"} and value is not None
 		}
-		desired_status = values["status"]
-		if desired_status == execution.status or desired_status in TRANSITIONS.get(execution.status, set()):
-			updates["status"] = desired_status
+		if values.get("task") and not execution.get("task"):
+			updates["task"] = values["task"]
+		if status == execution.status or status in TRANSITIONS.get(execution.status, set()):
+			updates["status"] = status
 		if updates:
-			frappe.db.set_value(ACTION_EXECUTION_DOCTYPE, existing, updates, update_modified=False)
+			frappe.db.set_value(ACTION_EXECUTION_DOCTYPE, existing_name, updates, update_modified=False)
 		execution.reload()
 		return execution
-	values["execution_id"] = "NBA-EXE-" + hashlib.sha256(attempt.name.encode()).hexdigest()[:24]
-	return _service_insert({"doctype": ACTION_EXECUTION_DOCTYPE, **values})
+	execution = _service_insert({"doctype": ACTION_EXECUTION_DOCTYPE, **values})
+	if attempt.get("name"):
+		frappe.db.set_value(
+			"CRM Action Execution Attempt",
+			attempt.name,
+			"nba_execution",
+			execution.name,
+			update_modified=False,
+		)
+	return execution
 
 
 def update_nba_execution(
@@ -430,9 +331,8 @@ def update_nba_execution(
 	input_payload: Any = None,
 	output: Any = None,
 	error: str | None = None,
-	provider_event_id: str | None = None,
 ):
-	"""Update only the server-owned execution projection fields."""
+	"""Update the server-owned execution projection fields."""
 	if not _doctype_exists(ACTION_EXECUTION_DOCTYPE):
 		return None
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
@@ -458,8 +358,6 @@ def update_nba_execution(
 		values["output"] = output
 	if error is not None:
 		values["error"] = str(error)[:2000]
-	if provider_event_id:
-		values["provider_event_id"] = provider_event_id
 	if values:
 		from crm.fcrm.doctype.crm_action_execution.crm_action_execution import TRANSITIONS
 
@@ -490,24 +388,31 @@ def record_nba_outcome_for_action(
 	if not _doctype_exists(ACTION_OUTCOME_DOCTYPE):
 		return None
 	impact_score = _bounded_number(impact_score, "impact_score")
-	execution_filters = {"attempt": attempt_id} if attempt_id else {"action": action.name}
-	execution_name = frappe.db.get_value(ACTION_EXECUTION_DOCTYPE, execution_filters, "name")
+	execution_name = None
+	if attempt_id:
+		execution_name = frappe.db.get_value("CRM Action Execution Attempt", attempt_id, "nba_execution")
+	if not execution_name and action.get("recommendation"):
+		rows = frappe.get_all(
+			ACTION_EXECUTION_DOCTYPE,
+			filters={"recommendation": action.recommendation},
+			fields=["name"],
+			order_by="creation desc",
+			limit_page_length=1,
+		)
+		execution_name = rows[0].name if rows else None
 	if not execution_name:
 		return None
-	execution = frappe.get_doc(ACTION_EXECUTION_DOCTYPE, execution_name)
-	source_key = f"{execution.name}:{action.get('action_revision') or 0}:{status}:{impact_score}"
-	existing = frappe.db.get_value(ACTION_OUTCOME_DOCTYPE, {"source_key": source_key}, "name")
+	existing = frappe.db.get_value(
+		ACTION_OUTCOME_DOCTYPE,
+		{"execution": execution_name, "outcome_type": "action_execution"},
+		"name",
+	)
 	if existing:
 		return frappe.get_doc(ACTION_OUTCOME_DOCTYPE, existing)
 	outcome = _service_insert(
 		{
 			"doctype": ACTION_OUTCOME_DOCTYPE,
-			"outcome_id": "NBA-OUT-" + hashlib.sha256(source_key.encode()).hexdigest()[:24],
-			"execution": execution.name,
-			"recommendation": execution.recommendation,
-			"action": action.name,
-			"student": action.student,
-			"attempt": attempt_id,
+			"execution": execution_name,
 			"outcome_type": "action_execution",
 			"outcome_value": outcome_code or status,
 			"success": 1 if status == "completed" else 0,
@@ -515,22 +420,37 @@ def record_nba_outcome_for_action(
 			"captured_by": actor or frappe.session.user,
 			"captured_at": now_datetime(),
 			"notes": notes,
-			"source_key": source_key,
 		}
 	)
-	update_nba_execution(
-		execution.attempt,
-		status={"completed": "completed", "failed": "failed", "cancelled": "cancelled"}.get(
-			status, "in_progress"
-		),
-		completed_at=outcome.captured_at if status in {"completed", "failed", "cancelled"} else None,
-		output={"outcome": outcome_code} if outcome_code else None,
-	)
+	if attempt_id:
+		update_nba_execution(
+			attempt_id,
+			status={"completed": "completed", "failed": "failed", "cancelled": "cancelled"}.get(
+				status, "in_progress"
+			),
+			completed_at=outcome.captured_at if status in {"completed", "failed", "cancelled"} else None,
+			output={"outcome": outcome_code} if outcome_code else None,
+		)
+	else:
+		frappe.db.set_value(
+			ACTION_EXECUTION_DOCTYPE,
+			execution_name,
+			{
+				"status": {"completed": "completed", "failed": "failed", "cancelled": "cancelled"}.get(
+					status, "in_progress"
+				),
+				"completed_at": outcome.captured_at
+				if status in {"completed", "failed", "cancelled"}
+				else None,
+				"output": {"outcome": outcome_code} if outcome_code else None,
+			},
+			update_modified=False,
+		)
 	return outcome
 
 
 def _sync_nba_recommendation_execution(execution, *, scheduled_at: Any = None):
-	"""Keep the Recommendation execution projection monotonic and explicit."""
+	"""Keep the Recommendation execution status projection current."""
 	if not execution.recommendation or not _doctype_exists("CRM Recommendation"):
 		return
 	if scheduled_at is not None:
@@ -553,103 +473,65 @@ def _sync_nba_recommendation_execution(execution, *, scheduled_at: Any = None):
 	)
 
 
+def _feedback_task_for_outcome(outcome_name: str) -> str | None:
+	"""Resolve the accepted Task behind an Outcome via its Execution link."""
+	execution_name = frappe.db.get_value(ACTION_OUTCOME_DOCTYPE, outcome_name, "execution")
+	if not execution_name:
+		return None
+	return frappe.db.get_value(ACTION_EXECUTION_DOCTYPE, execution_name, "task")
+
+
 def record_nba_feedback(
 	*,
 	recommendation: str,
 	outcome: str,
-	student: str,
 	predicted_probability: float,
 	actual_result: str,
 	reward: float | None,
 	actual_impact: float | None,
 	feedback_source: str,
-	created_by: str,
-	idempotency_key: str | None = None,
+	task: str | None = None,
+	effectiveness_index: float | None = None,
+	ai_confidence: float | None = None,
 ):
-	"""Create immutable feedback after API-side scope and link validation."""
+	"""Create one immutable feedback row using only the public contract fields.
+
+	``predicted_probability`` stays a required compatibility-only history value.
+	New callers additionally pass ``effectiveness_index`` (observed signal, in
+	[-1, 1]) and ``ai_confidence`` (model confidence carried on the immutable
+	recommendation, in [0, 1]); the AI, human and actual signals are kept in
+	distinct columns. ``task`` links the accepted Task and is resolved from the
+	Outcome's Execution when not supplied.
+	"""
 	if not _doctype_exists(RECOMMENDATION_FEEDBACK_DOCTYPE):
-		frappe.throw("CRM Recommendation Feedback is not migrated.", frappe.ValidationError)
+		frappe.throw("CRM Recommendation Feedback is not installed.", frappe.ValidationError)
 	if predicted_probability in (None, ""):
 		frappe.throw("predicted_probability is required.", frappe.ValidationError)
 	if actual_result in (None, ""):
 		frappe.throw("actual_result is required.", frappe.ValidationError)
+	if feedback_source not in FEEDBACK_SOURCES:
+		frappe.throw("Invalid feedback source.", frappe.ValidationError)
 	predicted_probability = _bounded_number(
 		predicted_probability, "predicted_probability", minimum=0.0, maximum=1.0
 	)
 	reward = _bounded_number(reward, "reward")
 	actual_impact = _bounded_number(actual_impact, "actual_impact")
-	if feedback_source not in FEEDBACK_SOURCES:
-		frappe.throw("Invalid feedback source.", frappe.ValidationError)
-	actual_result = str(actual_result)[:500]
-	payload = [
-		recommendation,
-		outcome,
-		student,
-		predicted_probability,
-		actual_result,
-		reward,
-		actual_impact,
-		feedback_source,
-		created_by,
-	]
-	payload_digest = _digest(payload)
-	key = idempotency_key or f"nba-feedback:{payload_digest}"
-	if len(key) > 180:
-		frappe.throw("idempotency_key must not exceed 180 characters.", frappe.ValidationError)
-	existing = (
-		frappe.db.get_value(
-			RECOMMENDATION_FEEDBACK_DOCTYPE,
-			{"idempotency_key": key},
-			[
-				"name",
-				"recommendation",
-				"outcome",
-				"student",
-				"predicted_probability",
-				"actual_result",
-				"reward",
-				"actual_impact",
-				"feedback_source",
-				"created_by",
-			],
-			as_dict=True,
-		)
-		if _doctype_exists(RECOMMENDATION_FEEDBACK_DOCTYPE)
-		else None
-	)
-	if existing:
-		existing_payload = [
-			existing.recommendation,
-			existing.outcome,
-			existing.student,
-			_bounded_number(existing.predicted_probability, "predicted_probability", minimum=0.0, maximum=1.0),
-			str(existing.actual_result or "")[:500],
-			_bounded_number(existing.reward, "reward"),
-			_bounded_number(existing.actual_impact, "actual_impact"),
-			existing.feedback_source,
-			existing.created_by,
-		]
-		if _digest(existing_payload) != payload_digest:
-			frappe.throw(
-				"Idempotency key was already used for another feedback payload.",
-				frappe.ValidationError,
-				title="IDEMPOTENCY_MISMATCH",
-			)
-		return frappe.get_doc(RECOMMENDATION_FEEDBACK_DOCTYPE, existing.name)
+	effectiveness_index = _bounded_number(effectiveness_index, "effectiveness_index")
+	ai_confidence = _bounded_number(ai_confidence, "ai_confidence", minimum=0.0, maximum=1.0)
+	task = task or _feedback_task_for_outcome(outcome)
 	return _service_insert(
 		{
 			"doctype": RECOMMENDATION_FEEDBACK_DOCTYPE,
-			"feedback_id": "NBA-FB-" + hashlib.sha256(key.encode()).hexdigest()[:24],
 			"recommendation": recommendation,
+			"task": task,
 			"outcome": outcome,
-			"student": student,
 			"predicted_probability": predicted_probability,
-			"actual_result": actual_result,
+			"effectiveness_index": effectiveness_index,
+			"ai_confidence": ai_confidence,
+			"actual_result": str(actual_result)[:500],
 			"reward": reward,
 			"actual_impact": actual_impact,
 			"feedback_source": feedback_source,
-			"created_by": created_by,
 			"created_at": now_datetime(),
-			"idempotency_key": key,
 		}
 	)

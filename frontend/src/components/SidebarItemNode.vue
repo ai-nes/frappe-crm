@@ -270,11 +270,6 @@ watch(
 )
 
 function handleClick() {
-  if (hasChildren.value && !props.isCollapsed) {
-    toggleExpand()
-    return
-  }
-
   if (props.item.action) {
     props.item.action()
     if (props.isMobile) {
@@ -292,6 +287,18 @@ function handleClick() {
     if (props.isMobile) {
       mobileSidebarOpened.value = false
     }
+
+    // A parent item with a destination should navigate when its label is
+    // clicked. The chevron has its own stop-propagating click handler for
+    // expanding/collapsing the submenu.
+    if (hasChildren.value && !props.isCollapsed) {
+      isExpanded.value = true
+    }
+    return
+  }
+
+  if (hasChildren.value && !props.isCollapsed) {
+    toggleExpand()
   }
 }
 </script>

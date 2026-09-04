@@ -93,7 +93,14 @@
                   <!-- Header row: badges & timing -->
                   <div class="flex items-center justify-between gap-2">
                     <div class="flex flex-wrap items-center gap-2">
-                      <span class="text-xs font-medium text-ink-gray-5">#{{ index + 1 }}</span>
+                      <span class="text-xs font-medium text-ink-gray-5">#{{ item.rank || index + 1 }}</span>
+                      <Badge
+                        v-if="queue === 'recommendations'"
+                        :label="__('Đề xuất AI')"
+                        theme="blue"
+                        variant="subtle"
+                        size="sm"
+                      />
                       <Badge
                         v-if="queue === 'recommendations'"
                         :label="priorityLabel(item.priority)"
@@ -189,9 +196,18 @@
                         size="sm"
                         variant="ghost"
                         theme="red"
-                        :label="__('Bỏ qua')"
+                        :label="__('Từ chối')"
                         iconLeft="x"
                         @click="openDecision(item, 'rejected')"
+                      />
+                      <Button
+                        v-if="item.permittedDecisions.includes('dismissed')"
+                        size="sm"
+                        variant="ghost"
+                        theme="gray"
+                        :label="__('Bỏ qua')"
+                        iconLeft="slash"
+                        @click="openDecision(item, 'dismissed')"
                       />
                     </div>
 

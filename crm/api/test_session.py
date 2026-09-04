@@ -33,8 +33,21 @@ class TestSessionRoleContract(FrappeTestCase):
 		finally:
 			frappe.set_user(previous_user)
 
+	def test_session_flags_expose_capability_details_without_changing_keys(self):
+		flags = _session_role_flags({"Sale"})
+		self.assertEqual(
+			[detail["key"] for detail in flags["crm_capability_details"]],
+			flags["crm_capabilities"],
+		)
+		student_execute = next(
+			detail for detail in flags["crm_capability_details"] if detail["key"] == "student.execute"
+		)
+		self.assertEqual(student_execute["label"], "Xử lý hồ sơ")
+		self.assertTrue(student_execute["description"])
+
 	def test_canonical_role_names_resolve_without_legacy_aliases(self):
 		self.assertEqual(resolve_crm_profile({"Sale"}), "sales")
+		self.assertEqual(resolve_crm_profile({"CTV Sale"}), "ctv_sale")
 		self.assertEqual(resolve_crm_profile({"Lead Sales"}), "lead_sales")
 		self.assertEqual(resolve_crm_profile({"Marketing"}), "marketing")
 		self.assertEqual(resolve_crm_profile({"Admissions Director"}), "admissions_director")
