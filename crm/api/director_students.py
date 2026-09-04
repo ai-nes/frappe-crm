@@ -179,6 +179,38 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	return _build_student_360(row, item)
 
 
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_student_interactions(student_id: str) -> dict[str, Any]:
+	"""Return interaction history (Zalo messages and call logs) for a student."""
+	access_scope = _require_access()
+	if not str(student_id or "").strip():
+		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+
+	try:
+		doc = frappe.get_doc("CRM Student", student_id)
+	except frappe.DoesNotExistError:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	if access_scope and doc.get("owner_staff") not in access_scope:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	interactions = _student_interactions(student_id)
+	guardian = _student_guardian(student_id)
+	if not guardian.get("name") and row.get("alt_name"):
+		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
+
+	zalo_messages = _student_zalo_messages(student_id, interactions, row, guardian)
+	calls = _student_call_records(student_id, interactions, row, guardian)
+
+	return {
+		"student_id": student_id,
+		"zalo_messages": zalo_messages,
+		"calls": calls,
+		"total_interactions": len(interactions),
+	}
+
+
 def _parse_query(
 	*,
 	admissionYear: str | int | None = None,
@@ -729,6 +761,8 @@ def _build_student_360(row, item) -> dict[str, Any]:
 		"application": _application_items(applications),
 		"probabilityTrend": probability_trend,
 		"channelPerformance": channel_performance,
+		"zaloMessages": _student_zalo_messages(student_id, interactions, row, guardian),
+		"calls": _student_call_records(student_id, interactions, row, guardian),
 	}
 
 
@@ -822,10 +856,274 @@ def _student_interactions(student_id: str | None) -> list:
 			"direction",
 			"outcome",
 			"next_follow_up_action",
+			"actor",
+			"crm_contact",
+			"conversation_id",
+			"reference_doctype",
+			"reference_docname",
 		],
 		order_by="interaction_datetime desc, creation desc",
 		limit_page_length=50,
 	)
+
+
+def _user_name(user_id: str | None, fallback: str = "Tư vấn viên") -> str:
+	if not user_id:
+		return fallback
+	try:
+		return frappe.get_cached_value("User", user_id, "full_name") or user_id
+	except Exception:
+		return user_id
+
+
+def _format_activity_time(value) -> str:
+	if not value:
+		return ""
+	local_dt = _local_datetime(value)
+	if local_dt:
+		return local_dt.strftime("%d/%m/%Y · %H:%M")
+	return str(value)
+
+
+def _student_zalo_messages(
+	student_id: str | None,
+	interactions: list,
+	student_row=None,
+	guardian=None,
+) -> list[dict[str, Any]]:
+	if not student_id:
+		return []
+
+	student_name = (student_row.get("student_name") if student_row else None) or "Học sinh"
+	parent_name = guardian.get("name") if guardian else None
+	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
+	staff_name = _user_name(
+		student_row.get("assigned_to") if student_row else None
+		or student_row.get("owner_staff") if student_row else None,
+		fallback="Tư vấn viên",
+	)
+
+	messages: list[dict[str, Any]] = []
+	for ix in interactions:
+		channel = _fold(ix.get("channel") or "")
+		interaction_type = _fold(ix.get("interaction_type") or "")
+		if "zalo" not in channel and "zalo" not in interaction_type:
+			continue
+
+		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
+		actor_name = _user_name(ix.get("actor"), fallback=staff_name)
+
+		contact_name = parent_name if parent_name else student_name
+		contact_role = parent_role if parent_name else "Học sinh"
+
+		if direction == "inbound":
+			sender_name = contact_name
+			sender_role = contact_role
+			recipient_name = actor_name
+			recipient_role = "Tư vấn viên"
+		else:
+			sender_name = actor_name
+			sender_role = "Tư vấn viên"
+			recipient_name = contact_name
+			recipient_role = contact_role
+
+		raw_outcome = ix.get("outcome") or ""
+		outcome_fold = _fold(raw_outcome)
+		if outcome_fold in {"resolved", "captured", "converted"}:
+			status = "read"
+		elif outcome_fold in {"follow up needed", "connected"}:
+			status = "delivered"
+		elif outcome_fold in {"data error", "uncontactable", "no response"}:
+			status = "failed"
+		else:
+			status = "delivered" if direction == "outbound" else "read"
+
+		content = ix.get("notes") or ix.get("summary") or "Tin nhắn Zalo"
+		summary = ix.get("summary") or "Trao đổi qua Zalo"
+
+		attachment_name = None
+		notes_text = str(ix.get("notes") or "")
+		if any(ext in notes_text.lower() for ext in (".pdf", ".docx", ".xlsx", ".png", ".jpg", ".jpeg")):
+			match = re.search(r"([\w\d_.-]+\.(?:pdf|docx|xlsx|png|jpg|jpeg))", notes_text, re.IGNORECASE)
+			if match:
+				attachment_name = match.group(1)
+
+		messages.append(
+			{
+				"id": str(ix.get("name")),
+				"time": _format_activity_time(ix.get("interaction_datetime")),
+				"senderName": sender_name,
+				"senderRole": sender_role,
+				"recipientName": recipient_name,
+				"recipientRole": recipient_role,
+				"content": content,
+				"direction": direction,
+				"status": status,
+				"conversationTitle": summary,
+				"attachmentName": attachment_name,
+			}
+		)
+
+	return messages
+
+
+def _student_call_records(
+	student_id: str | None,
+	interactions: list,
+	student_row=None,
+	guardian=None,
+) -> list[dict[str, Any]]:
+	if not student_id:
+		return []
+
+	student_name = (student_row.get("student_name") if student_row else None) or "Học sinh"
+	parent_name = guardian.get("name") if guardian else None
+	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
+	student_phone = (student_row.get("phone") if student_row else None) or ""
+	staff_name = _user_name(
+		student_row.get("assigned_to") if student_row else None
+		or student_row.get("owner_staff") if student_row else None,
+		fallback="Tư vấn viên",
+	)
+
+	contact_name = parent_name if parent_name else student_name
+	contact_role = parent_role if parent_name else "Học sinh"
+
+	calls: list[dict[str, Any]] = []
+	seen_call_ids: set[str] = set()
+
+	if _table_exists("Call Log"):
+		call_logs = frappe.get_all(
+			"Call Log",
+			filters={"reference_doctype": "CRM Student", "reference_docname": student_id},
+			fields=[
+				"name",
+				"caller",
+				"receiver",
+				"from",
+				"to",
+				"duration",
+				"start_time",
+				"status",
+				"type",
+				"recording_url",
+				"creation",
+				"note",
+			],
+			order_by="start_time desc, creation desc",
+			limit_page_length=50,
+		)
+		for cl in call_logs:
+			seen_call_ids.add(cl.get("name"))
+			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
+			duration_secs = int(cl.get("duration") or 0)
+			status_fold = _fold(cl.get("status") or "")
+			if status_fold in {"completed", "connected"}:
+				outcome = "connected"
+			elif status_fold in {"no answer", "busy", "canceled"}:
+				outcome = "no-answer"
+			elif status_fold in {"missed", "failed"}:
+				outcome = "missed"
+			else:
+				outcome = "connected" if duration_secs > 0 else "no-answer"
+
+			if is_inbound:
+				direction = "inbound"
+				caller_name = _user_name(cl.get("caller"), fallback=contact_name)
+				caller_role = contact_role
+				receiver_name = _user_name(cl.get("receiver"), fallback=staff_name)
+				receiver_role = "Tư vấn viên"
+				phone_number = cl.get("from") or student_phone
+			else:
+				direction = "outbound"
+				caller_name = _user_name(cl.get("caller"), fallback=staff_name)
+				caller_role = "Tư vấn viên"
+				receiver_name = _user_name(cl.get("receiver"), fallback=contact_name)
+				receiver_role = contact_role
+				phone_number = cl.get("to") or student_phone
+
+			topic = cl.get("note") or "Cuộc gọi tư vấn"
+			summary = cl.get("note") or f"Cuộc gọi {cl.get('status') or ''}"
+
+			calls.append(
+				{
+					"id": str(cl.get("name")),
+					"time": _format_activity_time(cl.get("start_time") or cl.get("creation")),
+					"direction": direction,
+					"outcome": outcome,
+					"callerName": caller_name,
+					"receiverName": receiver_name,
+					"callerRole": caller_role,
+					"receiverRole": receiver_role,
+					"phoneNumber": phone_number,
+					"durationSeconds": duration_secs,
+					"topic": topic,
+					"summary": summary,
+					"recordingUrl": cl.get("recording_url") or None,
+				}
+			)
+
+	for ix in interactions:
+		channel = _fold(ix.get("channel") or "")
+		ix_type = _fold(ix.get("interaction_type") or "")
+		is_call = "call" in channel or "phone" in channel or "goi" in channel or ix_type in {"connected", "outreach"}
+		if not is_call:
+			continue
+
+		ref_doc = ix.get("reference_docname")
+		if ix.get("reference_doctype") == "Call Log" and ref_doc in seen_call_ids:
+			continue
+		if ix.get("name") in seen_call_ids:
+			continue
+
+		seen_call_ids.add(ix.get("name"))
+		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
+		actor_name = _user_name(ix.get("actor"), fallback=staff_name)
+
+		if direction == "inbound":
+			caller_name = contact_name
+			caller_role = contact_role
+			receiver_name = actor_name
+			receiver_role = "Tư vấn viên"
+		else:
+			caller_name = actor_name
+			caller_role = "Tư vấn viên"
+			receiver_name = contact_name
+			receiver_role = contact_role
+
+		raw_outcome = ix.get("outcome") or ""
+		outcome_fold = _fold(raw_outcome)
+		if outcome_fold in {"resolved", "captured", "converted", "connected"}:
+			outcome = "connected"
+		elif outcome_fold in {"no response", "uncontactable", "no answer"}:
+			outcome = "no-answer"
+		elif outcome_fold == "follow up needed":
+			outcome = "callback"
+		else:
+			outcome = "connected"
+
+		topic = ix.get("summary") or "Cuộc gọi tư vấn"
+		summary = ix.get("notes") or ix.get("summary") or "Trao đổi qua cuộc gọi."
+
+		calls.append(
+			{
+				"id": str(ix.get("name")),
+				"time": _format_activity_time(ix.get("interaction_datetime")),
+				"direction": direction,
+				"outcome": outcome,
+				"callerName": caller_name,
+				"receiverName": receiver_name,
+				"callerRole": caller_role,
+				"receiverRole": receiver_role,
+				"phoneNumber": student_phone,
+				"durationSeconds": 0,
+				"topic": topic,
+				"summary": summary,
+				"recordingUrl": None,
+			}
+		)
+
+	return calls
 
 
 def _channel_performance(interactions: list) -> list[dict[str, Any]]:
