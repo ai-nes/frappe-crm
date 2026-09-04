@@ -12,6 +12,8 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 
+from crm.integrations.api import get_recording_url_path
+
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 ACTIVE_ACTION_STATES = ("pending", "accepted", "in-progress", "requires-review")
 
@@ -1007,6 +1009,8 @@ def _student_call_records(
 				"status",
 				"type",
 				"recording_url",
+				"telephony_medium",
+				"medium",
 				"creation",
 				"note",
 			],
@@ -1059,7 +1063,12 @@ def _student_call_records(
 					"durationSeconds": duration_secs,
 					"topic": topic,
 					"summary": summary,
-					"recordingUrl": cl.get("recording_url") or None,
+					"recordingUrl": get_recording_url_path(
+						cl.get("name"),
+						cl.get("recording_url"),
+						cl.get("telephony_medium"),
+						cl.get("medium"),
+					),
 				}
 			)
 

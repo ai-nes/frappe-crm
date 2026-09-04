@@ -1,3 +1,7 @@
+import os
+import re
+from urllib.parse import quote, urlencode, urljoin
+
 import frappe
 import requests
 from frappe import _
@@ -8,6 +12,74 @@ from werkzeug.wrappers import Response
 from crm.utils import are_same_phone_number, parse_phone_number
 
 INTEGRATION_TYPES = frozenset({"call", "zalo"})
+_WORLDFONE_CALLUUID_RE = re.compile(r"^\d+\.\d+$")
+_WORLDFONE_BASE_URL = "https://apps.worldfone.cloud/externalcrm"
+
+
+def _worldfone_config(name: str, default: str = "") -> str:
+	"""Read Worldfone settings without ever exposing them in API payloads."""
+	config_key = f"crm_worldfone_{name}"
+	env_key = f"WORLDFONE_{name.upper()}"
+	return str(frappe.conf.get(config_key) or os.getenv(env_key) or default).strip()
+
+
+def build_worldfone_recording_url(calluuid: str | None) -> str | None:
+	"""Build a Worldfone playback URL from a canonical call UUID.
+
+	The secret is required from site config/environment and is only used by the
+	server-side proxy; callers should return :func:`get_recording_url_path`
+	instead of this URL.
+	"""
+	calluuid = str(calluuid or "").strip()
+	secret = _worldfone_config("secret")
+	if not calluuid or not secret or not _WORLDFONE_CALLUUID_RE.fullmatch(calluuid):
+		return None
+
+	base_url = _worldfone_config("base_url", _WORLDFONE_BASE_URL)
+	playback_path = _worldfone_config("playback_path", "/playback2.php")
+	secret_param = _worldfone_config("secret_param", "secrect")
+	api_version = _worldfone_config("api_version", "3")
+	base = urljoin(f"{base_url.rstrip('/')}/", playback_path.lstrip('/'))
+	query = urlencode(
+		{
+			"calluuid": calluuid,
+			secret_param: secret,
+			"version": api_version,
+		}
+	)
+	return f"{base}?{query}"
+
+
+def _is_worldfone_call(call_log_name: str | None, telephony_medium: str | None, medium: str | None) -> bool:
+	return bool(
+		_WORLDFONE_CALLUUID_RE.fullmatch(str(call_log_name or "").strip())
+		and (telephony_medium == "Manual" or medium == "Worldfone")
+	)
+
+
+def get_recording_url_path(
+	call_log_name: str | None,
+	recording_url: str | None = None,
+	telephony_medium: str | None = None,
+	medium: str | None = None,
+) -> str | None:
+	"""Return the same-origin audio proxy path for a Call Log.
+
+	For imported Worldfone rows the URL may be absent because only the UUID was
+	seeded. In that case the proxy will build the provider URL lazily.
+	"""
+	call_log_name = str(call_log_name or "").strip()
+	if not call_log_name:
+		return None
+	if not str(recording_url or "").strip() and not (
+		_is_worldfone_call(call_log_name, telephony_medium, medium)
+		and build_worldfone_recording_url(call_log_name)
+	):
+		return None
+	return (
+		"/api/method/crm.integrations.api.get_recording_url?call_log_name="
+		f"{quote(call_log_name, safe='')}"
+	)
 
 
 def _integration_status(enabled: bool, configured: bool = True) -> str:
@@ -255,12 +327,21 @@ def get_recording_url(call_log_name: str):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 
 	log = frappe.get_doc("Call Log", call_log_name)
+	recording_url = str(log.recording_url or "").strip()
+	is_worldfone_call = _is_worldfone_call(
+		log.name,
+		log.telephony_medium,
+		log.medium,
+	)
+	if not recording_url and is_worldfone_call:
+		recording_url = build_worldfone_recording_url(log.name) or ""
 
-	if not log.recording_url:
+	if not recording_url:
 		frappe.throw(_("Recording URL not found"), frappe.DoesNotExistError)
 
-	auth = _get_recording_credentials(log.telephony_medium)
-	with requests.get(log.recording_url, auth=auth, stream=True, timeout=10) as r:
+	telephony_medium = log.telephony_medium or ("Manual" if is_worldfone_call else "")
+	auth = _get_recording_credentials(telephony_medium)
+	with requests.get(recording_url, auth=auth, stream=True, timeout=10) as r:
 		r.raise_for_status()
 		response = Response()
 		response.data = r.content
