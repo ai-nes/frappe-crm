@@ -28,9 +28,9 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 			"snapshot": None, "intelligence": {}, "stakeholders": stakeholders,
 			"people": {"person-1": "Người phụ trách"}, "roles": {"role-1": "Ban giám hiệu"}, "activities": [], "activity_types": {},
 		}
-		with patch.object(detail, "require_director_access", return_value={"roleState": "canonical_profile"}), patch.object(
-			detail, "resolve_admission_year", return_value="2026"
-		), patch.object(detail, "resolve_school_id", return_value=school), patch.object(
+		with patch.object(detail, "resolve_admission_year", return_value="2026"), patch.object(
+			detail, "resolve_school_id", return_value=school
+		), patch.object(
 			detail, "_load_supporting_sources", return_value=(sources, set(), set())
 		):
 			response = detail.get_director_school_detail("01-00123-062", 2026)
@@ -250,7 +250,6 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 			"people": {}, "roles": {}, "activities": [], "activity_types": {},
 		}
 		with (
-			patch.object(detail, "require_director_access", return_value={}),
 			patch.object(detail, "resolve_admission_year", return_value="2026"),
 			patch.object(detail, "resolve_school_id", return_value=school),
 			patch.object(detail, "_load_supporting_sources", return_value=(sources, {"snapshot"}, set())),
@@ -261,7 +260,6 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 
 		response_state = {}
 		with (
-			patch.object(detail, "require_director_access", return_value={}),
 			patch.object(detail, "resolve_admission_year", return_value="2026"),
 			patch.object(detail, "resolve_school_id", side_effect=detail.SchoolPrimarySourceUnavailable("school")),
 			patch.object(detail.frappe.local, "response", response_state),
@@ -271,11 +269,10 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		self.assertEqual(response_state["http_status_code"], 503)
 		self.assertEqual(response_state["error"]["code"], "SCHOOL_DATA_UNAVAILABLE")
 
-	def test_method_requires_authenticated_director_access(self):
+	def test_method_allows_guest_without_permission_bypass(self):
 		source = detail.__loader__.get_source(detail.__name__)
-		self.assertIn('@frappe.whitelist(methods=["GET"])', source)
-		self.assertNotIn("allow_guest=True", source)
-		self.assertIn("require_director_access()", source)
+		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
+		self.assertNotIn("require_director_access()", source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
 		for forbidden in ('"source_note"', '"notes"', '"title"', '"next_action"', '"owner_staff"'):
@@ -283,7 +280,6 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 
 	def test_unexpected_resolver_defect_is_not_disguised_as_503(self):
 		with (
-			patch.object(detail, "require_director_access", return_value={}),
 			patch.object(detail, "resolve_admission_year", return_value="2026"),
 			patch.object(detail, "resolve_school_id", side_effect=RuntimeError("programming defect")),
 			self.assertRaisesRegex(RuntimeError, "programming defect"),

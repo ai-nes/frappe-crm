@@ -17,10 +17,8 @@ from crm.api.director_school_common import (
 	parse_enum,
 	parse_limit,
 	raise_api_error,
-	require_director_access,
 	resolve_admission_year,
 )
-
 
 _PAGE_SIZE = 500
 _MAX_ROWS = 20_000
@@ -330,7 +328,6 @@ def get_director_market_intelligence_overview(
 	includeSchools=True,
 	schoolLimit=5,
 ):
-	require_director_access()
 	admission_year = resolve_admission_year(admissionYear)
 	period = parse_enum(period, field="period", allowed={"30d"}, default="30d")
 	region = parse_enum(region, field="region", allowed=REGIONS, default="all")

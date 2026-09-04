@@ -12,7 +12,6 @@ from crm.api import director_market_intelligence as market
 class TestDirectorMarketIntelligence(FrappeTestCase):
 	def test_school_limit_defaults_to_five(self):
 		with (
-			patch.object(market, "require_director_access", return_value={}),
 			patch.object(market, "resolve_admission_year", return_value="2026"),
 			patch.object(
 				market,
@@ -27,9 +26,9 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 
 	def test_empty_scope_is_truthful_and_keeps_zero_counts(self):
 		sources = {"provinces": [], "schools": [], "wards": [], "students": [], "snapshots": []}
-		with patch.object(market, "require_director_access", return_value={}), patch.object(
-			market, "resolve_admission_year", return_value="2026"
-		), patch.object(market, "_load_sources", return_value=(sources, set())):
+		with patch.object(market, "resolve_admission_year", return_value="2026"), patch.object(
+			market, "_load_sources", return_value=(sources, set())
+		):
 			response = market.get_director_market_intelligence_overview(
 				admissionYear="2026", includeSchools="false", schoolLimit="1"
 			)
@@ -47,9 +46,9 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 			"latitude": None, "longitude": None, "address": None, "is_key_account": 0,
 		}]
 		sources = {"provinces": province, "schools": school, "wards": [{"name": "ward-1", "ward_code": "00123", "ward_name": "Phường Test"}], "students": [], "snapshots": []}
-		with patch.object(market, "require_director_access", return_value={}), patch.object(
-			market, "resolve_admission_year", return_value="2026"
-		), patch.object(market, "_load_sources", return_value=(sources, {"snapshots"})):
+		with patch.object(market, "resolve_admission_year", return_value="2026"), patch.object(
+			market, "_load_sources", return_value=(sources, {"snapshots"})
+		):
 			response = market.get_director_market_intelligence_overview(admissionYear=2026)
 
 		item = response["data"]["provinces"][0]
@@ -89,9 +88,7 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		self.assertIsNone(response["data"]["regionSummary"]["totalLeads"])
 
 	def test_query_contract_rejects_unknown_period(self):
-		with patch.object(market, "require_director_access", return_value={}), patch.object(
-			market, "resolve_admission_year", return_value="2026"
-		):
+		with patch.object(market, "resolve_admission_year", return_value="2026"):
 			with self.assertRaises(market.frappe.ValidationError):
 				market.get_director_market_intelligence_overview(period="7d")
 
@@ -103,7 +100,6 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 			"students": [], "snapshots": [],
 		}
 		with (
-			patch.object(market, "require_director_access", return_value={}),
 			patch.object(market, "resolve_admission_year", return_value="2026"),
 			patch.object(market, "_load_sources", return_value=(sources, set())),
 		):
@@ -117,7 +113,6 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 	def test_primary_source_failure_is_structured_503(self):
 		response_state = {}
 		with (
-			patch.object(market, "require_director_access", return_value={}),
 			patch.object(market, "resolve_admission_year", return_value="2026"),
 			patch.object(market, "_load_sources", side_effect=market.MarketPrimarySourceUnavailable("schools")),
 			patch.object(market.frappe.local, "response", response_state),
@@ -183,13 +178,13 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 	def test_method_allows_guest_without_permission_bypass(self):
 		source = market.__loader__.get_source(market.__name__)
 		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
+		self.assertNotIn("require_director_access()", source)
 		self.assertNotIn("get_all(", source)
 		self.assertNotIn("ignore_permissions", source)
 		self.assertNotIn("CRM Geography Market Snapshot", source)
 
 	def test_unexpected_primary_defect_is_not_disguised_as_503(self):
 		with (
-			patch.object(market, "require_director_access", return_value={}),
 			patch.object(market, "resolve_admission_year", return_value="2026"),
 			patch.object(market, "_load_sources", side_effect=RuntimeError("programming defect")),
 			self.assertRaisesRegex(RuntimeError, "programming defect"),

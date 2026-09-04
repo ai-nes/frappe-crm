@@ -12,7 +12,6 @@ from pymysql import MySQLError
 from crm.api.director_school_common import (
 	as_iso,
 	raise_api_error,
-	require_director_access,
 	resolve_admission_year,
 	resolve_school_id,
 )
@@ -454,9 +453,8 @@ def _build_detail(school, sources, failed, capped, admission_year):
 	}
 
 
-@frappe.whitelist(methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_school_detail(school_id: str, admissionYear=None):
-	require_director_access()
 	admission_year = resolve_admission_year(admissionYear)
 	try:
 		school = resolve_school_id(school_id)
