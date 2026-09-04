@@ -15,10 +15,14 @@ import frappe
 from frappe.utils import add_to_date, now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
-from crm.fcrm.role_policy import capabilities_for_roles, resolve_crm_profile
-from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+from crm.fcrm.role_policy import (
+	STUDENT_OWNER_PROFILES,
+	STUDENT_OWNER_TEAM_FUNCTIONS,
+	capabilities_for_roles,
+	resolve_crm_profile,
+)
 from crm.fcrm.student_feature_flags import enabled
-
+from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
 
 REQUEST_DOCTYPE = "CRM Student Routing Request"
 SERVICE_FLAG = "student_routing_service"
@@ -106,7 +110,14 @@ def _eligible_members(pool: dict[str, Any]) -> list[dict[str, Any]]:
 		filters={"team": team.name, "parenttype": "CRM Staff"},
 		fields=["parent", "team", "function", "name"],
 	)
-	staff_ids = sorted({row.parent for row in memberships if row.get("parent") and (not row.get("function") or row.function == "Sale")})
+	staff_ids = sorted(
+		{
+			row.parent
+			for row in memberships
+			if row.get("parent")
+			and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
+		}
+	)
 	if not staff_ids:
 		return []
 	staff_rows = frappe.get_all(
@@ -117,7 +128,7 @@ def _eligible_members(pool: dict[str, Any]) -> list[dict[str, Any]]:
 	for staff in staff_rows:
 		if staff.get("campus") and staff.campus != pool.campus:
 			continue
-		if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales":
+		if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES:
 			continue
 		result.append({"staff": staff.name, "team": team.name, "user": staff.user})
 	return sorted(result, key=lambda row: row["staff"])

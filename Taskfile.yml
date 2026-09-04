@@ -120,6 +120,21 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
 
+  seed-ctv-sale:
+    desc: Tạo tài khoản CTV Sale ctvsale@gmail.com (123456) + 3 học sinh được phân công sẵn
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_ctv_sale.execute"
+
+  seed-sale:
+    desc: Tạo tài khoản Sale sale@gmail.com (123456) + 3 học sinh được phân công sẵn
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_sale.execute"
+
+  seed-lead-sales:
+    desc: Tạo tài khoản Lead Sales leadsale@gmail.com (123456) + 3 học sinh trong pool team
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.execute"
+
   seed-reset:
     desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
     cmds:
