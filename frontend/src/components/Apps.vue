@@ -59,7 +59,7 @@ const apps = createResource({
         name: 'frappe',
         logo: '/assets/frappe/images/framework.png',
         title: __('Desk'),
-        route: '/app',
+        route: '/app/frappe-crm',
       },
     ]
     data.map((app) => {
