@@ -32,6 +32,9 @@ import {
   formatActionStatusLabel,
 } from '@/utils/studentDecision'
 
+// Outcome is recorded against an accepted NBA Task (`action.name` is the
+// CRM Action Item), never against an unaccepted recommendation. The immutable
+// recommendation is only ever evaluated later as a decision-quality signal.
 const props = defineProps({ action: { type: Object, required: true } })
 const emit = defineEmits(['changed', 'refresh-required'])
 const show = defineModel({ type: Boolean })

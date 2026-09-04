@@ -116,7 +116,7 @@ def process_queued_attempt(attempt_id, channel=None):
 		transition_attempt(attempt_id, "failed")
 		update_nba_execution(attempt_id, status="failed", error=str(exc)[:2000], completed_at=now_datetime())
 		return {"status": "failed", "attempt_id": attempt_id, "code": "PROVIDER_UNAVAILABLE", "detail": str(exc)[:200]}
-	update_nba_execution(attempt_id, output={"provider_event_id": provider_event_id}, provider_event_id=provider_event_id)
+	update_nba_execution(attempt_id, output={"provider_event_id": provider_event_id})
 	return {"status": "submitted", "attempt_id": attempt_id, "provider_event_id": provider_event_id}
 
 
@@ -158,7 +158,6 @@ def transition_attempt(attempt_id, target_status, *, provider_event_id=None):
 	update_nba_execution(
 		attempt.name,
 		status={"pending": "pending", "queued": "queued", "confirmed": "in_progress", "failed": "failed", "cancelled": "cancelled"}[attempt.status],
-		provider_event_id=provider_event_id,
 		completed_at=now_datetime() if attempt.status in {"failed", "cancelled"} else None,
 	)
 	return {"status": attempt.status, "attempt_id": attempt.name, "replayed": False}

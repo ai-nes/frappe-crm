@@ -250,12 +250,26 @@ doc_events = {
 		"on_update": ["crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography"],
 	},
 	"CRM Interaction": {
-		"after_insert": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction", "crm.services.admission_event_policy.admit_interaction"],
-		"on_update": ["crm.fcrm.interaction_log.satisfy_student_sla_from_interaction", "crm.services.admission_event_policy.admit_interaction"],
+		"after_insert": [
+			"crm.fcrm.interaction_log.satisfy_student_sla_from_interaction",
+			"crm.services.admission_event_policy.admit_interaction",
+			"crm.api.agent_events.dispatch_interaction_domain_reevaluation",
+		],
+		"on_update": [
+			"crm.fcrm.interaction_log.satisfy_student_sla_from_interaction",
+			"crm.services.admission_event_policy.admit_interaction",
+			"crm.api.agent_events.dispatch_interaction_domain_reevaluation",
+		],
 	},
 	"CRM Intent": {
-		"after_insert": ["crm.services.admission_event_policy.admit_intent"],
-		"on_update": ["crm.services.admission_event_policy.admit_intent"],
+		"after_insert": [
+			"crm.services.admission_event_policy.admit_intent",
+			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
+		],
+		"on_update": [
+			"crm.services.admission_event_policy.admit_intent",
+			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
+		],
 	},
 	"CRM High School Annual Snapshot": {
 		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
@@ -375,6 +389,8 @@ scheduler_events = {
 		"crm.api.agent_events.retry_pending_agent_events",
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.api.agent_events.reconcile_intelligence_run_outbox",
+		"crm.fcrm.nba_evaluations.reconcile",
+		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
 	],
 	"daily": [
 		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",

@@ -67,6 +67,57 @@ export function normalizeActionViewModel(raw) {
   }
 }
 
+// The canonical admissions work item is `CRM Action Item`; every operator
+// surface presents it under one name so the review queue and the executed
+// worklist read as the same object.
+export const NBA_TASK_LABEL = 'NBA Task'
+export const NBA_TASK_DOCTYPE = 'CRM Action Item'
+
+export function nbaTaskNoun(value) {
+  const label = typeof value === 'string' ? value.trim() : ''
+  if (!label || label === NBA_TASK_DOCTYPE || label === 'CRM Action' || label === 'Action') return NBA_TASK_LABEL
+  return label
+}
+
+const TASK_CREATING_OPERATIONS = new Set(['ACCEPT', 'ACCEPT_WITH_CHANGES'])
+
+// Does this recommendation operation materialise an NBA Task? ACCEPT and
+// ACCEPT_WITH_CHANGES do (exactly one); REJECT / DEFER / DISMISS never do.
+export function operationCreatesTask(operation) {
+  return TASK_CREATING_OPERATIONS.has(operation)
+}
+
+/**
+ * The NBA Task values that an accepted recommendation produces: the AI proposal
+ * is the base, the reviewer delta wins for the allowlisted execution params.
+ * The AI payload is treated as immutable — a shallow copy is returned and the
+ * input object is never written to.
+ */
+export function nbaTaskFromDecision({ operation, aiPayload = {}, delta = {} } = {}) {
+  if (!operationCreatesTask(operation)) return null
+  const base = aiPayload && typeof aiPayload === 'object' ? aiPayload : {}
+  const overrides = delta && typeof delta === 'object' ? delta : {}
+  const task = { ...base }
+  for (const [key, value] of Object.entries(overrides)) {
+    if (value !== undefined) task[key] = value
+  }
+  return task
+}
+
+/**
+ * Present the AI proposal and the human/Task draft as two separate artifacts so
+ * the immutable proposal is never visually overwritten by the editable values.
+ */
+export function recommendationArtifacts({ aiPayload = {}, delta = {}, operation } = {}) {
+  const proposal = aiPayload && typeof aiPayload === 'object' ? { ...aiPayload } : {}
+  const task = nbaTaskFromDecision({ operation, aiPayload, delta })
+  return {
+    proposal,
+    task,
+    changedKeys: task ? Object.keys(delta || {}).filter((key) => delta[key] !== undefined) : [],
+  }
+}
+
 export function actionWorkbenchApi(actionId, expectedRevision) {
   return {
     url: 'crm.api.student_worklist.get_action_workbench',

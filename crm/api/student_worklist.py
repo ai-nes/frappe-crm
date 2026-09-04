@@ -13,21 +13,24 @@ from frappe.exceptions import QueryDeadlockError, QueryTimeoutError
 from frappe.utils.password import get_encryption_key
 from pymysql import MySQLError
 
-_ACTIVE_STATES = ("pending", "requires-review")
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
 _POLICY_VERSION = "worklist-v1"
+_RECOMMENDATION_WORKLIST_POLICY_VERSION = "recommendation-worklist-v1"
 _NBA_TERMINAL_STATES = ("completed", "cancelled", "rejected", "superseded")
 _NBA_SOURCE_ERRORS = (QueryDeadlockError, QueryTimeoutError, MySQLError)
 
 
 @frappe.whitelist()
 def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) -> dict:
-	"""Return one deterministic page of canonical CRM Action items visible to
-	this session. The recommendation key is retained as a stable UI identifier.
+	"""Return one deterministic page of the session's pending ``CRM Recommendation``
+	review queue -- the immutable AI proposal awaiting a Sales decision, not a
+	pending Action Item. Legacy rows with no ``evaluation`` link never appear.
 
 	This endpoint intentionally has no user, campus, or role arguments. Frappe's
-	permission-aware list API applies the delegated session user's row scope.
+	permission-aware list API (``CRM Recommendation``'s own permission query,
+	which scopes through the target Student) applies the delegated session
+	user's row scope.
 	"""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
@@ -37,15 +40,29 @@ def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) 
 	page_size = _parse_page_size(page_size)
 	principal = frappe.session.user
 	roles = sorted(frappe.get_roles(principal))
-	last_sort_key = _decode_cursor(cursor, principal, roles) if cursor else None
+	last_sort_key = (
+		_decode_cursor(cursor, principal, roles, policy_version=_RECOMMENDATION_WORKLIST_POLICY_VERSION)
+		if cursor
+		else None
+	)
 
-	candidates = _fetch_page(principal, last_sort_key, page_size + 1)
+	candidates = _fetch_recommendation_page(principal, last_sort_key, page_size + 1)
 	page = candidates[:page_size]
 	has_more = len(candidates) > len(page)
+	evaluations = _recommendation_evaluation_lookup(page)
 	return {
-		"items": [_minimal_dto(row) for row in page],
-		"next_cursor": _encode_cursor(_sort_key(page[-1]), principal, roles) if page and has_more else None,
-		"policy_version": _POLICY_VERSION,
+		"items": [_recommendation_dto(row, evaluations) for row in page],
+		"next_cursor": (
+			_encode_cursor(
+				_recommendation_sort_key(page[-1]),
+				principal,
+				roles,
+				policy_version=_RECOMMENDATION_WORKLIST_POLICY_VERSION,
+			)
+			if page and has_more
+			else None
+		),
+		"policy_version": _RECOMMENDATION_WORKLIST_POLICY_VERSION,
 	}
 
 
@@ -496,38 +513,97 @@ def _raise_api_error(code: str, message: str, exception, status: int) -> None:
 	frappe.throw(_(message), exception)
 
 
-def _sort_key(row) -> tuple[int, str, str, str]:
-	"""Explicit ordering: priority rank, revisit timing, creation, then stable ID.
+_RECOMMENDATION_SORT_DEFAULT_RANK = 999
+_RECOMMENDATION_TIMING_SENTINEL = "9999-12-31 23:59:59.999999"
 
-	Must read the same `worklist_priority_rank` column the SQL ORDER BY/keyset
-	predicate in `_fetch_page` uses (default 99, see CRMStudentTask.validate) --
-	recomputing rank here from the raw `priority` string with a different
-	default (previously 3) desynced the cursor from the SQL comparison and
-	could repeat or skip rows across pages.
+
+def _recommendation_sort_key(row) -> tuple[int, str, str, str]:
+	"""Explicit ordering: kernel rank, recommended-at timing, creation, then id.
+
+	Must read the same ``rank``/``recommended_at`` columns the SQL ORDER
+	BY/keyset predicate in `_fetch_recommendation_page` uses, with the same
+	defaults, or the cursor desyncs from the SQL comparison across pages.
 	"""
-	priority = int(row.worklist_priority_rank if row.worklist_priority_rank is not None else 99)
-	# A task with no revisit timing is not fabricated as urgency; it sorts after
-	# scheduled work at the same priority, then creation provides a stable tie.
-	timing = str(row.revisit_at or "9999-12-31 23:59:59.999999")
-	return priority, timing, str(row.creation), str(row.name)
+	rank = int(row.rank if row.rank is not None else _RECOMMENDATION_SORT_DEFAULT_RANK)
+	timing = str(row.recommended_at or _RECOMMENDATION_TIMING_SENTINEL)
+	return rank, timing, str(row.creation), str(row.name)
 
 
-def _minimal_dto(row) -> dict:
+def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict:
+	"""Project one pending, evaluation-epoch ``CRM Recommendation`` for review.
+
+	The immutable ``ai_payload`` kernel object is surfaced verbatim, matching
+	the director read model. ``expected_revision`` carries ``modified`` so the
+	client can guard the append-only decision command.
+	"""
+	payload = _parse_worklist_json(row.get("ai_payload"))
+	if not isinstance(payload, dict):
+		payload = {}
+	evaluation = (evaluations or {}).get(row.get("evaluation")) or {}
 	return {
-		"action": row.name,
-		"action_code": row.get("action"),
-		# Stable wire compatibility for older readers; both keys identify the
-		# same canonical Action and no recommendation row is created.
+		"id": row.name,
+		# Stable wire compatibility: both keys identify the same recommendation.
 		"recommendation": row.name,
+		"rank": int(row.rank) if row.rank is not None else None,
+		"recommendationKey": row.get("recommendation_key") or None,
+		"studentId": row.student,
 		"student": row.student,
-		"student_name": row.student_name,
-		"priority": row.priority,
-		"action_type": row.action_type,
-		"timing": str(row.revisit_at) if row.revisit_at else None,
-		"reason": row.objective,
-		"revision": int(row.decision_revision or 0),
-		"permitted_decisions": ["accepted", "deferred", "rejected"],
+		"studentName": row.student_name or row.student,
+		"actionId": row.get("action") or None,
+		"priority": row.priority or "medium",
+		"channel": row.get("channel") or None,
+		"reason": row.get("reason") or "",
+		"aiPayload": payload,
+		"evaluation": {
+			"id": row.get("evaluation") or None,
+			"disposition": evaluation.get("disposition") or None,
+			"status": evaluation.get("status") or None,
+		},
+		"generatedAt": str(row.recommended_at) if row.recommended_at else str(row.creation),
+		# CAS guard for `decide_recommendation`'s `expected_modified` check.
+		"expected_revision": str(row.modified) if row.modified else None,
+		"revision": str(row.modified) if row.modified else "",
+		"permitted_decisions": ["accepted", "deferred", "rejected", "dismissed"],
 	}
+
+
+def _recommendation_evaluation_lookup(rows: list) -> dict[str, dict]:
+	"""Parent evaluation disposition/status keyed by evaluation id.
+
+	``CRM NBA Evaluation`` grants row ``read`` to System Manager only, so a real
+	Sale / Lead Sales / Director caller has no doctype permission on it at all.
+	This is a deliberate service-internal enrichment read, not a fresh access
+	grant: every ``evaluation_id`` here was sourced from a ``CRM Recommendation``
+	row the caller already passed permission on in ``_fetch_recommendation_page``,
+	and only the non-sensitive ``disposition``/``status`` pair is projected. Use
+	``get_all`` with ``ignore_permissions`` rather than gating on the caller's
+	(absent) doctype permission.
+	"""
+	evaluation_ids = sorted({row.get("evaluation") for row in rows if row.get("evaluation")})
+	if not evaluation_ids:
+		return {}
+	try:
+		found = frappe.get_all(
+			"CRM NBA Evaluation",
+			filters={"name": ["in", evaluation_ids]},
+			fields=["name", "disposition", "status"],
+			limit_page_length=0,
+			ignore_permissions=True,
+		)
+	except frappe.DoesNotExistError:
+		return {}
+	return {row["name"]: row for row in found}
+
+
+def _parse_worklist_json(value) -> object:
+	if value in (None, ""):
+		return None
+	if isinstance(value, (dict, list)):
+		return value
+	try:
+		return json.loads(value)
+	except (TypeError, ValueError):
+		return None
 
 
 def _cursor_secret() -> bytes:
@@ -535,53 +611,68 @@ def _cursor_secret() -> bytes:
 	return f"crm-worklist-cursor:{get_encryption_key()}".encode()
 
 
-def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
-	"""Keyset query with Frappe's own permission condition, never an offset scan."""
+def _fetch_recommendation_page(principal: str, last_sort_key: list | None, limit: int) -> list:
+	"""Keyset query with Frappe's own permission condition, never an offset scan.
+
+	Only evaluation-epoch, undecided, unexpired recommendations addressed to a
+	Student are returned; legacy pre-cutover rows (no ``evaluation`` link) are
+	excluded. ``CRM Recommendation``'s own permission query condition scopes
+	rows through the target Student's row-level permissions.
+	"""
 	from frappe.model.db_query import DatabaseQuery
 
-	frappe.has_permission("CRM Action Item", "read", user=principal, throw=True)
-	permission_query = DatabaseQuery("CRM Student", user=principal).build_match_conditions(as_condition=True)
-	values = {"states": _ACTIVE_STATES, "limit": limit, "now": frappe.utils.now_datetime()}
+	frappe.has_permission("CRM Recommendation", "read", user=principal, throw=True)
+	permission_query = DatabaseQuery("CRM Recommendation", user=principal).build_match_conditions(
+		as_condition=True
+	)
+	values = {"limit": limit, "now": frappe.utils.now_datetime()}
 	conditions = [
-		"`tabCRM Action Item`.current_slot = 'CURRENT'",
-		"(`tabCRM Action Item`.state IN %(states)s OR ("
-		"`tabCRM Action Item`.state = 'deferred' AND "
-		"`tabCRM Action Item`.revisit_at IS NOT NULL AND "
-		"`tabCRM Action Item`.revisit_at <= %(now)s))",
+		"`tabCRM Recommendation`.target_type = 'CRM Student'",
+		"`tabCRM Recommendation`.decision_status = 'pending'",
+		"`tabCRM Recommendation`.evaluation IS NOT NULL AND `tabCRM Recommendation`.evaluation != ''",
+		"(`tabCRM Recommendation`.expires_at IS NULL OR `tabCRM Recommendation`.expires_at > %(now)s)",
 	]
 	if permission_query:
 		conditions.append(f"({permission_query})")
 	if last_sort_key:
 		conditions.append(
 			"""(
-				`tabCRM Action Item`.worklist_priority_rank > %(rank)s
-				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
-				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action Item`.creation > %(creation)s)
-				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action Item`.creation = %(creation)s AND `tabCRM Action Item`.name > %(name)s)
+				COALESCE(`tabCRM Recommendation`.rank, 999) > %(rank)s
+				OR (COALESCE(`tabCRM Recommendation`.rank, 999) = %(rank)s AND COALESCE(`tabCRM Recommendation`.recommended_at, '9999-12-31 23:59:59.999999') > %(timing)s)
+				OR (COALESCE(`tabCRM Recommendation`.rank, 999) = %(rank)s AND COALESCE(`tabCRM Recommendation`.recommended_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Recommendation`.creation > %(creation)s)
+				OR (COALESCE(`tabCRM Recommendation`.rank, 999) = %(rank)s AND COALESCE(`tabCRM Recommendation`.recommended_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Recommendation`.creation = %(creation)s AND `tabCRM Recommendation`.name > %(name)s)
 			)"""
 		)
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key, strict=True)))
 	return frappe.db.sql(
-		"""SELECT `tabCRM Action Item`.name, `tabCRM Action Item`.student, `tabCRM Student`.student_name,
-		`tabCRM Action Item`.priority, `tabCRM Action Item`.worklist_priority_rank, `tabCRM Action Item`.action,
-		`tabCRM Action Item`.action_type, `tabCRM Action Item`.revisit_at, `tabCRM Action Item`.objective,
-		`tabCRM Action Item`.modified, `tabCRM Action Item`.decision_revision, `tabCRM Action Item`.creation
-		FROM `tabCRM Action Item`
-		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Action Item`.student
+		"""SELECT `tabCRM Recommendation`.name, `tabCRM Recommendation`.target_id AS student,
+		`tabCRM Student`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
+		`tabCRM Recommendation`.channel, `tabCRM Recommendation`.reason, `tabCRM Recommendation`.action,
+		`tabCRM Recommendation`.recommendation_key, `tabCRM Recommendation`.ai_payload,
+		`tabCRM Recommendation`.evaluation, `tabCRM Recommendation`.recommended_at,
+		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
+		FROM `tabCRM Recommendation`
+		LEFT JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Recommendation`.target_id
 		WHERE {conditions}
-		ORDER BY `tabCRM Action Item`.worklist_priority_rank ASC, COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
-		`tabCRM Action Item`.creation ASC, `tabCRM Action Item`.name ASC
+		ORDER BY COALESCE(`tabCRM Recommendation`.rank, 999) ASC,
+		COALESCE(`tabCRM Recommendation`.recommended_at, '9999-12-31 23:59:59.999999') ASC,
+		`tabCRM Recommendation`.creation ASC, `tabCRM Recommendation`.name ASC
 		LIMIT %(limit)s""".format(conditions=" AND ".join(conditions)),
 		values,
 		as_dict=True,
 	)
 
 
-def _encode_cursor(sort_key: tuple[int, str, str, str], principal: str, roles: list[str]) -> str:
+def _encode_cursor(
+	sort_key: tuple[int, str, str, str],
+	principal: str,
+	roles: list[str],
+	policy_version: str = _POLICY_VERSION,
+) -> str:
 	payload = {
 		"expires_at": int(time.time()) + _CURSOR_TTL_SECONDS,
 		"last_sort_key": list(sort_key),
-		"policy_version": _POLICY_VERSION,
+		"policy_version": policy_version,
 		"principal": principal,
 		"roles": roles,
 	}
@@ -590,7 +681,9 @@ def _encode_cursor(sort_key: tuple[int, str, str, str], principal: str, roles: l
 	return f"{_urlsafe_encode(body)}.{_urlsafe_encode(signature)}"
 
 
-def _decode_cursor(cursor: str, principal: str, roles: list[str]) -> list:
+def _decode_cursor(
+	cursor: str, principal: str, roles: list[str], policy_version: str = _POLICY_VERSION
+) -> list:
 	try:
 		encoded_body, encoded_signature = cursor.split(".", 1)
 		body = _urlsafe_decode(encoded_body)
@@ -606,7 +699,7 @@ def _decode_cursor(cursor: str, principal: str, roles: list[str]) -> list:
 		if (
 			payload.get("principal") != principal
 			or payload.get("roles") != roles
-			or payload.get("policy_version") != _POLICY_VERSION
+			or payload.get("policy_version") != policy_version
 			or payload.get("expires_at", 0) < time.time()
 			or not _is_sort_key(payload.get("last_sort_key"))
 		):

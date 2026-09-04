@@ -20,7 +20,7 @@ from crm.fcrm.school_intelligence import get_school_intelligence
 
 SERVICE_USER_KEY = "crm_agents_service_user"
 RUN_TYPES = {"student": "CRM Student Analysis Run", "school": "CRM School Analysis Run"}
-STAGES = {"student": ("student_360", "next_best_action"), "school": ("school_360",)}
+STAGES = {"student": ("student_360",), "school": ("school_360",)}
 TERMINAL = {"completed", "abstained", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
 PROVENANCE_DOCTYPES = {
@@ -534,10 +534,6 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 	# be claimed before Frappe has created them.
 	if int(stage_generation) > int(stage.stage_generation or 0):
 		frappe.throw("Stage claim references a future generation.", frappe.ValidationError)
-	if stage_kind == "next_best_action":
-		blocked = _next_best_action_blocked_on_360(run_type, run_id, int(stage.stage_generation or 0))
-		if blocked is not None:
-			return blocked
 	now = _lease_now()
 	if stage.status == "running" and stage.get("lease_expires_at") and stage.lease_expires_at > now:
 		return {"claimed": False, "deferred": True, "status": "running", "stage_generation": int(stage.stage_generation or 0), "retry_after": str(stage.lease_expires_at)}
@@ -562,37 +558,6 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 		"stage_kind": stage_kind, "stage_key": stage.stage_key, "stage_generation": generation,
 		"lease_token": token, "lease_expires_at": str(lease_until),
 		"expected_source_revision": str(stage.expected_source_revision), "expected_source_digest": stage.expected_source_digest,
-	}
-
-
-def _next_best_action_blocked_on_360(run_type: str, run_id: str, stage_generation: int) -> dict[str, Any] | None:
-	"""Hold the Next Best Action stage until its sibling Student 360 stage is done.
-
-	The agent worker runs both student stages off one outbox signal. A Next Best
-	Action must reason from a completed same-revision 360, so its claim is
-	deferred while the 360 sibling is still queued or running. Once the 360 stage
-	is terminal -- completed, or died non-completed -- the Next Best Action stage
-	is released (a non-completed 360 lets it settle abstained downstream).
-
-	Every student run materializes a ``student_360`` stage, so a missing sibling
-	means broken materialization: fail closed by deferring, never allow the claim.
-	"""
-	sibling = frappe.db.get_value(
-		"CRM Analysis Run Stage",
-		{"parent_run_type": run_type, "parent_run": run_id, "stage_kind": "student_360"},
-		"status",
-	)
-	if sibling is not None and sibling in TERMINAL:
-		return None
-	wait_minutes = int(frappe.conf.get("crm_intelligence_stage_dependency_wait_minutes", 5) or 5)
-	retry_after = _lease_now() + timedelta(minutes=wait_minutes)
-	return {
-		"claimed": False,
-		"deferred": True,
-		"status": sibling or "missing",
-		"stage_generation": stage_generation,
-		"blocked_on": "student_360",
-		"retry_after": str(retry_after),
 	}
 
 

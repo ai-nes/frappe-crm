@@ -197,6 +197,10 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		self.assertEqual(result["outcomes"]["rows"][0]["executed"], 1)
 		self.assertEqual(result["outcomes"]["rows"][0]["transitionRate"], 50.0)
 		self.assertEqual(result["controlPolicy"]["version"], nba.POLICY_VERSION)
+		# Metrics are descriptive, never a causal or predictive claim.
+		self.assertEqual(result["meta"]["metricKind"], nba.METRIC_KIND_OBSERVATIONAL)
+		self.assertTrue(result["meta"]["metricDisclaimer"])
+		self.assertEqual(result["outcomes"]["metricKind"], nba.METRIC_KIND_OBSERVATIONAL)
 
 	def test_urgent_filter_keeps_only_high_or_overdue(self):
 		rows = [
@@ -363,3 +367,192 @@ class TestDirectorNextBestActionCommand(FrappeTestCase):
 						expectedVersion=2,
 						idempotencyKey="dnba:test-forbidden",
 					)
+
+
+def _recommendation_row(**overrides):
+	rank = overrides.get("rank", 1)
+	base = {
+		"name": f"NBA-EVAL-1-{rank}",
+		"target_type": "CRM Student",
+		"target_id": "STU-1",
+		"action": f"ACT-2026-000{rank}",
+		"evaluation": "NBA-EVAL-1",
+		"ai_payload": {
+			"recommendation_key": f"key-{rank}",
+			"rank": rank,
+			"action_ref": {"action_type": "CALL"},
+			"rationale": {"why_now": "Hạn nộp gần"},
+		},
+		"recommendation_key": f"key-{rank}",
+		"rank": rank,
+		"recommended_at": "2026-09-03 09:00:00",
+		"creation": "2026-09-03 09:00:00",
+	}
+	base.update(overrides)
+	return frappe._dict(base)
+
+
+class TestDirectorRecommendationsMapper(FrappeTestCase):
+	def test_maps_the_review_queue_shape_without_work_item_semantics(self):
+		item = nba._map_recommendation(
+			_recommendation_row(rank=2),
+			{"NBA-EVAL-1": {"name": "NBA-EVAL-1", "disposition": "RECOMMEND", "status": "completed"}},
+		)
+
+		self.assertEqual(
+			set(item),
+			{
+				"id",
+				"rank",
+				"recommendationKey",
+				"studentId",
+				"actionId",
+				"aiPayload",
+				"evaluation",
+				"generatedAt",
+			},
+		)
+		self.assertEqual(item["rank"], 2)
+		self.assertEqual(item["recommendationKey"], "key-2")
+		self.assertEqual(item["studentId"], "STU-1")
+		self.assertEqual(item["actionId"], "ACT-2026-0002")
+		self.assertEqual(
+			item["evaluation"], {"id": "NBA-EVAL-1", "disposition": "RECOMMEND", "status": "completed"}
+		)
+		for forbidden in (
+			"state",
+			"status",
+			"dueAt",
+			"dueLabel",
+			"assignee",
+			"assigneeId",
+			"priority",
+			"version",
+		):
+			self.assertNotIn(forbidden, item)
+
+	def test_ai_payload_is_surfaced_verbatim_with_no_key_rewriting(self):
+		payload = {
+			"recommendation_key": "key-1",
+			"rank": 1,
+			"talking_points": ["Chốt lịch"],
+			"rationale": {"why_now": "Hạn nộp", "evidence_ref_ids": ["EV-1"]},
+		}
+		item = nba._map_recommendation(_recommendation_row(ai_payload=payload), {})
+
+		self.assertEqual(item["aiPayload"], payload)
+		self.assertIn("talking_points", item["aiPayload"])
+		self.assertEqual(item["aiPayload"]["rationale"], {"why_now": "Hạn nộp", "evidence_ref_ids": ["EV-1"]})
+
+	def test_missing_parent_evaluation_degrades_to_null_disposition(self):
+		item = nba._map_recommendation(_recommendation_row(), {})
+		self.assertEqual(item["evaluation"], {"id": "NBA-EVAL-1", "disposition": None, "status": None})
+
+	def test_tolerates_a_stringified_or_non_dict_payload(self):
+		self.assertEqual(
+			nba._map_recommendation(_recommendation_row(ai_payload='{"rank": 1}'), {})["aiPayload"],
+			{"rank": 1},
+		)
+		self.assertEqual(nba._map_recommendation(_recommendation_row(ai_payload=["x"]), {})["aiPayload"], {})
+
+
+class TestDirectorRecommendationsReadModel(FrappeTestCase):
+	def _run(self, queue_rows, *, admission_year="2026", **kwargs):
+		seen: dict[str, dict] = {}
+
+		def fake_get_list(doctype, **call):
+			seen[doctype] = call
+			if doctype == "CRM Student":
+				return [{"name": "STU-1"}]
+			if doctype == "CRM Recommendation":
+				return list(queue_rows)
+			if doctype == "CRM NBA Evaluation":
+				return [{"name": "NBA-EVAL-1", "disposition": "RECOMMEND", "status": "completed"}]
+			return []
+
+		with patch.object(nba, "require_director_access", return_value={}), patch.object(
+			nba, "resolve_admission_year", return_value=admission_year
+		), patch("frappe.get_list", side_effect=fake_get_list):
+			result = nba.get_director_recommendations(**kwargs)
+		return result, seen
+
+	def test_orders_by_rank_ascending_and_projects_each_row(self):
+		rows = [_recommendation_row(rank=1), _recommendation_row(rank=2), _recommendation_row(rank=3)]
+		result, seen = self._run(rows)
+
+		self.assertEqual(
+			seen["CRM Recommendation"]["order_by"], "`rank` asc, recommended_at desc, creation asc"
+		)
+		self.assertEqual([item["rank"] for item in result["recommendations"]], [1, 2, 3])
+		self.assertEqual(result["meta"]["status"], "available")
+		self.assertEqual(result["meta"]["count"], 3)
+		self.assertEqual(result["meta"]["admissionYear"], 2026)
+
+	def test_only_epoch_rows_are_requested_legacy_rows_are_excluded(self):
+		result, seen = self._run([_recommendation_row()])
+		self.assertEqual(seen["CRM Recommendation"]["filters"]["evaluation"], ["is", "set"])
+		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_type"], "CRM Student")
+		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_id"], ["in", ["STU-1"]])
+		self.assertEqual(len(result["recommendations"]), 1)
+
+	def test_ai_payload_surfaced_immutable_end_to_end(self):
+		payload = {"recommendation_key": "key-1", "rank": 1, "missing_documents": ["CCCD"]}
+		result, _ = self._run([_recommendation_row(ai_payload=payload)])
+		self.assertEqual(result["recommendations"][0]["aiPayload"], payload)
+
+	def test_no_task_semantics_fields_in_the_envelope(self):
+		result, _ = self._run([_recommendation_row()])
+		self.assertEqual(set(result), {"meta", "recommendations"})
+		self.assertEqual(
+			set(result["meta"]),
+			{
+				"admissionYear",
+				"asOf",
+				"timezone",
+				"status",
+				"count",
+				"limit",
+				"metricKind",
+				"metricDisclaimer",
+			},
+		)
+		self.assertEqual(result["meta"]["metricKind"], nba.METRIC_KIND_OBSERVATIONAL)
+		item = result["recommendations"][0]
+		self.assertNotIn("queue", result)
+		for forbidden in (
+			"state",
+			"dueAt",
+			"priority",
+			"assigneeId",
+			"suggestedAssigneeId",
+			"version",
+			"controlLevel",
+		):
+			self.assertNotIn(forbidden, item)
+
+	def test_empty_when_no_epoch_rows_exist(self):
+		result, _ = self._run([])
+		self.assertEqual(result["recommendations"], [])
+		self.assertEqual(result["meta"]["status"], "empty")
+		self.assertEqual(result["meta"]["count"], 0)
+
+	def test_permission_failure_is_fail_closed_and_never_reads_rows(self):
+		calls: list[str] = []
+
+		def fake_get_list(doctype, **_call):
+			calls.append(doctype)
+			return []
+
+		with patch.object(
+			nba, "require_director_access", side_effect=frappe.PermissionError("nope")
+		), patch("frappe.get_list", side_effect=fake_get_list):
+			with self.assertRaises(frappe.PermissionError):
+				nba.get_director_recommendations(admissionYear="2026")
+		self.assertEqual(calls, [])
+
+	def test_limit_is_bounded_and_passed_through(self):
+		with self.assertRaises(frappe.ValidationError):
+			self._run([_recommendation_row()], limit="999")
+		result, seen = self._run([_recommendation_row()], limit="5")
+		self.assertEqual(seen["CRM Recommendation"]["limit_page_length"], 5)
+		self.assertEqual(result["meta"]["limit"], 5)

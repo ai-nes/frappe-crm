@@ -21,6 +21,7 @@ from crm.fcrm.record_retention import technical_retention_until
 
 _EVENT_PATHS = {
 	"intelligence.run.requested": "/api/v1/insight/intelligence-run",
+	"nba.evaluation.requested": "/api/v1/insight/nba-evaluation",
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
@@ -182,6 +183,117 @@ def record_intelligence_run_event(run) -> str:
 		return existing
 	_enqueue_delivery(event)
 	return event.name
+
+
+def record_nba_evaluation_event(evaluation) -> str:
+	"""Publish an identity-only signal for a durable NBA Evaluation run.
+
+	The payload carries no CRM data. The agent claims the run by name and reads
+	the authoritative evaluation input through a fenced Frappe service command.
+	Dedup is by ``delivery_key`` so a burst of requests for one evaluation
+	identity collapses into a single pending outbox row.
+	"""
+	delivery_key = f"nba-evaluation:{evaluation.name}"
+	fields = _event_fields()
+	existing = (
+		frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name")
+		if "delivery_key" in fields
+		else None
+	)
+	if existing:
+		return existing
+	event = frappe.get_doc(
+		{
+			"doctype": "CRM Agent Event",
+			"event_id": str(uuid.uuid4()),
+			"event_type": "nba.evaluation.requested",
+			"aggregate_doctype": "CRM NBA Evaluation",
+			"aggregate_name": evaluation.name,
+			"source_revision": str(evaluation.evaluation_key),
+			"contract_version": 1,
+			"occurred_at": now_datetime(),
+			"status": "pending",
+			"next_attempt_at": now_datetime(),
+			"delivery_key": delivery_key,
+			"retention_until": _retention_until(),
+		}
+	)
+	try:
+		event.insert(ignore_permissions=True)
+	except Exception as exc:
+		if "duplicate" not in str(exc).casefold() and "unique" not in str(exc).casefold():
+			raise
+		existing = frappe.db.get_value("CRM Agent Event", {"delivery_key": delivery_key}, "name")
+		if not existing:
+			raise
+		return existing
+	_enqueue_delivery(event)
+	return event.name
+
+
+def record_domain_reevaluation_trigger(student: str, *, trigger: str) -> dict:
+	"""Admit a Frappe-side domain event (student state change, new
+	interaction, ...) as an NBA re-evaluation trigger.
+
+	This is the domain-event counterpart of the WAIT ``revisit_at`` time
+	trigger handled by the scheduled ``reconcile_due_reevaluations``: a burst
+	of domain events for one student/identity never creates more than one
+	active ``CRM NBA Evaluation``. Coalescing itself is delegated to
+	``crm.fcrm.nba_evaluations.request_domain_reevaluation``, which reuses the
+	Student-row-locked, single-active-run-per-identity primitive already used
+	by every other NBA Evaluation entry point -- a domain event for a student
+	that already has a queued/running (or identity-unchanged terminal)
+	Evaluation is a no-op merge into that run, not a duplicate concurrent one.
+
+	Feature-gated and off by default; a caller with the flag disabled always
+	gets a safe no-op receipt instead of a failure.
+	"""
+	if frappe.conf.get("crm_nba_domain_reevaluation_enabled", 0) in (0, "0", False):
+		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
+	if not isinstance(student, str) or not student.strip():
+		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+	trigger_name = str(trigger or "").strip()
+	if not trigger_name:
+		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+
+	from crm.fcrm.nba_evaluations import request_domain_reevaluation
+
+	return request_domain_reevaluation(student.strip(), trigger_reason=trigger_name)
+
+
+def dispatch_interaction_domain_reevaluation(doc, method=None) -> None:
+	"""``doc_events`` hook: a new/updated ``CRM Interaction`` is a domain event
+	for NBA re-evaluation, the counterpart of ``admit_interaction`` in
+	``crm.services.admission_event_policy`` for scoring admission.
+
+	Best-effort and feature-gated (``record_domain_reevaluation_trigger`` is a
+	safe no-op while ``crm_nba_domain_reevaluation_enabled`` is unset): a
+	failure here must never abort the Interaction write it hangs off.
+	"""
+	student = doc.get("student")
+	if not student:
+		return
+	try:
+		record_domain_reevaluation_trigger(student, trigger="interaction")
+	except Exception:
+		frappe.log_error(title="NBA domain re-evaluation dispatch failed", message=f"interaction={doc.name}")
+
+
+def dispatch_intent_domain_reevaluation(doc, method=None) -> None:
+	"""``doc_events`` hook: a new/updated ``CRM Intent`` is a domain event for
+	NBA re-evaluation, the counterpart of ``admit_intent`` in
+	``crm.services.admission_event_policy`` for scoring admission.
+
+	Best-effort and feature-gated; a failure here must never abort the Intent
+	write it hangs off.
+	"""
+	student = doc.get("student")
+	if not student:
+		return
+	try:
+		record_domain_reevaluation_trigger(student, trigger="intent")
+	except Exception:
+		frappe.log_error(title="NBA domain re-evaluation dispatch failed", message=f"intent={doc.name}")
 
 
 def record_score_input_event(student: str, revision: int, *, event_id: str | None = None) -> str:

@@ -52,14 +52,13 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Admission Application": "student",
 	"CRM Student Payment": "student",
 	"CRM Revenue Recognition": "student",
-	"CRM Action Execution": "student",
-	"CRM Action Outcome": "student",
-	"CRM Recommendation Feedback": "student",
 }
 
 
 def get_operational_record_permission_query_conditions(user=None, doctype=None):
 	"""Scope operational records through their linked Student aggregate."""
+	if doctype in {"CRM Action Execution", "CRM Action Outcome", "CRM Recommendation Feedback"}:
+		return _nba_operational_permission_query_conditions(user=user, doctype=doctype)
 	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doctype)
 	if not student_field:
 		return "1=0"
@@ -92,12 +91,58 @@ def has_operational_record_permission(doc, user=None, permission_type=None, ptyp
 		# applies to every subsequent read/write once the row exists; only the
 		# DocType-level create grant governs who may create one at all.
 		return True
-	student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
-	student_name = doc.get(student_field) if student_field else None
+	student_name = _nba_operational_student(doc) if doc.doctype in {
+		"CRM Action Execution", "CRM Action Outcome", "CRM Recommendation Feedback"
+	} else None
+	if student_name is None:
+		student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
+		student_name = doc.get(student_field) if student_field else None
 	if not student_name:
 		return False
 	student = frappe.get_doc("CRM Student", student_name)
 	return has_permission(student, user=user, permission_type=permission_type)
+
+
+def _nba_operational_permission_query_conditions(*, user=None, doctype):
+	student_condition = get_permission_query_conditions("CRM Student", user=user)
+	if student_condition is None:
+		return None
+	if student_condition == "1=0":
+		return "1=0"
+	rec_table = f"{chr(96)}tabCRM Recommendation{chr(96)}"
+	student_names = (
+		f"select {rec_table}.name from {rec_table} "
+		f"where {rec_table}.target_type = 'CRM Student' and {rec_table}.target_id in ("
+		f"select {chr(96)}tabCRM Student{chr(96)}.name from {chr(96)}tabCRM Student{chr(96)} "
+		f"where ({student_condition}))"
+	)
+	table = f"{chr(96)}tab{doctype}{chr(96)}"
+	if doctype == "CRM Action Execution":
+		return f"{table}.recommendation in ({student_names})"
+	if doctype == "CRM Action Outcome":
+		execution_table = f"{chr(96)}tabCRM Action Execution{chr(96)}"
+		return f"{table}.execution in (select {execution_table}.name from {execution_table} where {execution_table}.recommendation in ({student_names}))"
+	if doctype == "CRM Recommendation Feedback":
+		return f"{table}.recommendation in ({student_names})"
+	return "1=0"
+
+
+def _nba_operational_student(doc):
+	if doc.doctype == "CRM Action Execution":
+		recommendation = doc.get("recommendation")
+	elif doc.doctype == "CRM Action Outcome":
+		execution = doc.get("execution")
+		recommendation = (
+			frappe.db.get_value("CRM Action Execution", execution, "recommendation") if execution else None
+		)
+	else:
+		recommendation = doc.get("recommendation")
+	if not recommendation:
+		return None
+	target_type, target_id = frappe.db.get_value(
+		"CRM Recommendation", recommendation, ["target_type", "target_id"]
+	) or (None, None)
+	return target_id if target_type == "CRM Student" else None
 
 
 def get_permission_query_conditions(doctype, user=None):

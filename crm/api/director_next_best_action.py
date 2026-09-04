@@ -30,6 +30,16 @@ POLICY_VERSION = "action-policy-2026.08"
 RESPONSE_WINDOW_HOURS = 8
 DEFAULT_CONFIDENCE = 70
 
+# Every count, rate and outcome projection here describes what already
+# happened in the CRM (submitted/accepted/executed Actions); none of it is a
+# causal claim that a recommendation caused an outcome or a prediction of a
+# future one. Analytics consumers must render this as descriptive telemetry.
+METRIC_KIND_OBSERVATIONAL = "observational"
+OBSERVATIONAL_METRIC_DISCLAIMER = (
+	"Số liệu mô tả trạng thái lịch sử của các Action, không phải xác nhận quan hệ "
+	"nhân quả hay dự đoán hiệu quả của đề xuất."
+)
+
 # Rows still awaiting or in a sales decision. ``plan_rank`` 2-3 land as
 # ``deferred`` (backlog) from the bundle writer and stay visible but de-ranked.
 QUEUE_STATES = ("pending", "requires-review", "accepted", "in-progress", "deferred")
@@ -174,6 +184,8 @@ def get_director_next_best_action(
 			"modelVersion": None,
 			"policyVersion": POLICY_VERSION,
 			"warnings": warnings or None,
+			"metricKind": METRIC_KIND_OBSERVATIONAL,
+			"metricDisclaimer": OBSERVATIONAL_METRIC_DISCLAIMER,
 		},
 		"queue": {
 			"actions": actions,
@@ -193,8 +205,147 @@ def get_director_next_best_action(
 			"riskCases": [],
 			"riskReasons": [],
 		},
-		"outcomes": {"period": period, "rows": outcome_rows},
+		"outcomes": {
+			"period": period,
+			"rows": outcome_rows,
+			# Descriptive counts from historical Action state transitions, not a
+			# causal or predictive claim about any recommendation's effect.
+			"metricKind": METRIC_KIND_OBSERVATIONAL,
+		},
 		"controlPolicy": STATIC_CONTROL_POLICY,
+	}
+
+
+# --------------------------------------------------------------------------- #
+# Evaluation-epoch recommendation read model
+# --------------------------------------------------------------------------- #
+# Rows written by an ``CRM NBA Evaluation`` commit carry a non-empty
+# ``evaluation`` link. They are a review queue of ranked recommendations, not a
+# work list: nothing here says a recommendation is assigned, in progress, or
+# scheduled. The immutable ``ai_payload`` kernel object is surfaced verbatim.
+_RECOMMENDATION_FIELDS = [
+	"name",
+	"target_id",
+	"action",
+	"evaluation",
+	"ai_payload",
+	"recommendation_key",
+	"rank",
+	"recommended_at",
+	"creation",
+	"explanation",
+	"rationale_source",
+]
+
+_RECOMMENDATION_LIMIT_MAX = 200
+_RECOMMENDATION_LIMIT_DEFAULT = 50
+
+
+@frappe.whitelist(methods=["GET"])
+def get_director_recommendations(
+	admissionYear: str | int | None = None,
+	limit: str | int = _RECOMMENDATION_LIMIT_DEFAULT,
+) -> dict[str, Any]:
+	"""Top-N evaluation-epoch recommendations for the admission year, rank-ascending.
+
+	Read-only projection of ``CRM Recommendation`` rows produced by a settled
+	``CRM NBA Evaluation``. Legacy rows (no ``evaluation`` link) are never
+	returned by this path. Visibility matches the existing Director endpoint:
+	director identity is required and ``frappe.get_list`` applies row permissions
+	and the admission-year student scope — access is never widened here.
+	"""
+	require_director_access()
+	year = resolve_admission_year(admissionYear)
+	limit_value = parse_limit(
+		limit,
+		field="limit",
+		minimum=1,
+		maximum=_RECOMMENDATION_LIMIT_MAX,
+		default=_RECOMMENDATION_LIMIT_DEFAULT,
+	)
+	now = frappe.utils.now_datetime()
+	student_ids = _students_for_year(year)
+
+	items: list[dict[str, Any]] = []
+	if student_ids:
+		rows = frappe.get_list(
+			"CRM Recommendation",
+			filters={
+				"evaluation": ["is", "set"],
+				"target_type": "CRM Student",
+				"target_id": ["in", student_ids],
+			},
+			fields=_RECOMMENDATION_FIELDS,
+			order_by="`rank` asc, recommended_at desc, creation asc",
+			limit_page_length=limit_value,
+		)
+		evaluations = _recommendation_evaluations(rows)
+		items = [_map_recommendation(row, evaluations) for row in rows]
+
+	return {
+		"meta": {
+			"admissionYear": int(year),
+			"asOf": _as_iso(now),
+			"timezone": "Asia/Ho_Chi_Minh",
+			"status": "available" if items else "empty",
+			"count": len(items),
+			"limit": limit_value,
+			"metricKind": METRIC_KIND_OBSERVATIONAL,
+			"metricDisclaimer": OBSERVATIONAL_METRIC_DISCLAIMER,
+		},
+		"recommendations": items,
+	}
+
+
+def _recommendation_evaluations(rows: list[Any]) -> dict[str, dict[str, Any]]:
+	"""Parent evaluation disposition/status keyed by evaluation id.
+
+	Permission-scoped: an identity that cannot read ``CRM NBA Evaluation`` gets
+	an empty map and the projection degrades to ``null`` disposition/status
+	rather than leaking the parent row.
+	"""
+	evaluation_ids = sorted({row.get("evaluation") for row in rows if row.get("evaluation")})
+	if not evaluation_ids:
+		return {}
+	try:
+		found = frappe.get_list(
+			"CRM NBA Evaluation",
+			filters={"name": ["in", evaluation_ids]},
+			fields=["name", "disposition", "status"],
+			limit_page_length=0,
+		)
+	except (frappe.DoesNotExistError, frappe.PermissionError):
+		return {}
+	return {row["name"]: row for row in found}
+
+
+def _map_recommendation(row: Any, evaluations: dict[str, dict[str, Any]]) -> dict[str, Any]:
+	payload = _parse_json(row.get("ai_payload"))
+	if not isinstance(payload, dict):
+		payload = {}
+	explanation = _parse_json(row.get("explanation"))
+	if not isinstance(explanation, dict):
+		explanation = None
+	parent = evaluations.get(row.get("evaluation")) or {}
+	return {
+		"id": row["name"],
+		"rank": int(row.get("rank") or 0),
+		"recommendationKey": row.get("recommendation_key") or None,
+		"studentId": row.get("target_id") or None,
+		"actionId": row.get("action") or None,
+		# Immutable kernel recommendation object, surfaced verbatim (no key
+		# rewriting) so the review queue shows exactly what the epoch committed.
+		"aiPayload": payload,
+		# Grounded, structured explanation (post-decision render); null until
+		# the best-effort explanation pass has run for this recommendation.
+		"explanation": explanation,
+		"explanationSource": row.get("rationale_source") or None,
+		"evaluation": {
+			"id": row.get("evaluation") or None,
+			"disposition": parent.get("disposition") or None,
+			"status": parent.get("status") or None,
+		},
+		"generatedAt": _as_iso(row.get("recommended_at")) or _as_iso(row.get("creation")),
 	}
 
 
@@ -327,7 +478,7 @@ def _students_for_year(year: str) -> list[str] | None:
 			fields=["name"],
 			limit_page_length=0,
 		)
-	except frappe.DoesNotExistError:
+	except (frappe.DoesNotExistError, frappe.PermissionError):
 		return None
 	return [row["name"] for row in rows if row.get("name")]
 

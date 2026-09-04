@@ -891,7 +891,12 @@ def _ensure_lifecycle(student: str, outcome: str, intent: str, evidence_file: st
 	for stage in _LIFECYCLE_ORDER[1 : _LIFECYCLE_ORDER.index(forward_target) + 1]:
 		doc = frappe.get_doc("CRM Student", student)
 		current = doc.lifecycle_stage or "Lead"
-		if current == stage or _LIFECYCLE_ORDER.index(current) >= _LIFECYCLE_ORDER.index(stage):
+		if current == stage:
+			continue
+		if current not in _LIFECYCLE_ORDER:
+			# Terminal stage from a prior seed run (e.g. "Lost") — already past the forward funnel.
+			continue
+		if _LIFECYCLE_ORDER.index(current) >= _LIFECYCLE_ORDER.index(stage):
 			continue
 		request_transition(
 			student,
@@ -1111,7 +1116,7 @@ def _ensure_action(student: str, owner_staff: str) -> str | None:
 
 	idempotency_key = _key("action", "manual")
 	command_key = _command_key("manual_action", "Administrator", idempotency_key)
-	existing = frappe.db.get_value("CRM Action", {"generation_idempotency_key": command_key}, "name")
+	existing = frappe.db.get_value("CRM Action Item", {"generation_idempotency_key": command_key}, "name")
 	if existing:
 		return existing
 	return create_manual_action(
@@ -1227,7 +1232,7 @@ def _run_student(
 			"consent_events": frappe.db.count("CRM Contact Consent Event", {"student": student}),
 			"geography_snapshots": frappe.db.count("CRM Student Geography Snapshot", {"student": student}),
 			"applications": frappe.db.count("CRM Admission Application", {"student": student}),
-			"actions": frappe.db.count("CRM Action", {"student": student}),
+			"actions": frappe.db.count("CRM Action Item", {"student": student}),
 			"scores": frappe.db.count("CRM Score History", {"student": student}),
 		},
 	}

@@ -68,6 +68,27 @@ describe('navigation badges', () => {
     expect(store.getBadge('urgentSlaCount')).toBeNull()
   })
 
+  it('keeps the recommendation review count and the task count as independent badges', async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + 300
+    call.mockResolvedValue({
+      contractStatus: 'ready',
+      badges: {
+        sales_immediate_contact: { contractStatus: 'ready', count: 5, snapshot: snapshot(expiresAt) },
+        sales_my_tasks: { contractStatus: 'ready', count: 2, snapshot: snapshot(expiresAt) },
+      },
+    })
+    const store = useNavigationBadgesStore()
+
+    await store.fetchBadges()
+
+    // The review queue badge reflects recommendations awaiting a decision; the
+    // task badge reflects accepted / manual NBA Tasks. They never alias.
+    expect(store.getBadge('urgentSlaCount')).toBe(5)
+    expect(store.getBadge('myTaskCount')).toBe(2)
+    expect(store.badgeSnapshots.urgentSlaCount.workspace).toBe('sales_immediate_contact')
+    expect(store.badgeSnapshots.myTaskCount.workspace).toBe('sales_my_tasks')
+  })
+
   it('keeps legacy counters during the default-off workspace dark launch', async () => {
     call.mockResolvedValue({ urgentSlaCount: 2, poolCount: 1 })
     const store = useNavigationBadgesStore()
