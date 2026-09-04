@@ -5,6 +5,12 @@ import { call } from 'frappe-ui'
 // These are the only facade workspaces that may supply a sidebar badge. They
 // deliberately map to navigationConfig's display keys instead of accepting
 // arbitrary workspace names returned by the server.
+//
+// The recommendation review queue (`sales_immediate_contact` -> `urgentSlaCount`)
+// and the Task workbench (`sales_my_tasks` -> `myTaskCount`) are separate
+// counts from separate workspaces: one counts immutable AI recommendations
+// awaiting a human decision, the other counts accepted / manual-origin NBA
+// Tasks. Neither badge ever aggregates the other's rows.
 export const workspaceBadgeKeys = {
   sales_immediate_contact: 'urgentSlaCount',
   sales_unassigned_pool: 'poolCount',

@@ -3,9 +3,9 @@
     <header class="actions-hero border-b border-outline-gray-2 px-5 pb-5 pt-5 sm:px-6">
       <div class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div class="min-w-0">
-          <div class="text-xs font-semibold tracking-[0.08em] text-ink-gray-5">{{ __('WORK QUEUE') }}</div>
-          <h3 class="mt-2 text-2xl font-semibold tracking-tight text-ink-gray-9">{{ __('Action workspace') }}</h3>
-          <p class="mt-1 max-w-2xl text-sm leading-6 text-ink-gray-6">{{ __('See what needs attention, what is due today, and what has been completed.') }}</p>
+          <div class="text-xs font-semibold tracking-[0.08em] text-ink-gray-5">{{ __('NBA TASK QUEUE') }}</div>
+          <h3 class="mt-2 text-2xl font-semibold tracking-tight text-ink-gray-9">{{ __('NBA Task workspace') }}</h3>
+          <p class="mt-1 max-w-2xl text-sm leading-6 text-ink-gray-6">{{ __('Recommendations accepted into NBA Tasks, in rank order. Review only — no manual priority, due dates or assignment here.') }}</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <Button :label="__('Refresh')" icon-left="refresh-cw" :loading="actions.loading" @click="actions.reload()" />
@@ -27,7 +27,7 @@
           {{ filter.label }} <span class="ml-1 tabular-nums text-xs">{{ filter.count }}</span>
         </button>
       </div>
-      <span class="text-xs text-ink-gray-5">{{ __('Sorted by due date') }}</span>
+      <span class="text-xs text-ink-gray-5">{{ __('Review queue · recommendation rank order') }}</span>
     </div>
 
     <main class="min-h-0 flex-1 px-5 py-5 sm:px-6">
@@ -90,6 +90,11 @@ const activeFilter = ref('all')
 const priorities = ['high', 'medium', 'low'].map((value) => ({ label: __(value.charAt(0).toUpperCase() + value.slice(1)), value }))
 const form = ref({ action_type: 'CALL', objective: '', due_at: '', priority: 'medium' })
 const idempotencyKey = ref('')
+// Task workbench for this record: accepted-decision and manual-origin NBA Tasks
+// only. The immutable per-student recommendation review queue is a separate
+// surface. TODO(student_worklist): consume the per-student recommendation read
+// model once `crm.api.student_worklist` exposes it (today only the director
+// endpoint `get_director_recommendations` projects ranked recommendations).
 const actions = createResource({ url: 'crm.api.student_worklist.list_actions_for_record', params: { doctype: props.doctype, name: props.name, page_size: 50 }, auto: true })
 const actionTypeCatalog = createResource({
   url: 'frappe.client.get_list',
