@@ -51,6 +51,10 @@ def _time(value: Any, field: str) -> time | None:
 		return None
 	if isinstance(value, time):
 		return value.replace(tzinfo=None)
+	if isinstance(value, timedelta):
+		# MariaDB `time` columns surface as timedelta through the Frappe ORM.
+		total = int(value.total_seconds()) % 86400
+		return time(total // 3600, (total % 3600) // 60, total % 60)
 	try:
 		return time.fromisoformat(str(value).split(".", 1)[0])
 	except ValueError as exc:
@@ -106,14 +110,58 @@ def _deadline(anchor: datetime, policy: Mapping[str, Any]) -> datetime | None:
 	raise ValueError(f"Unsupported deadline_type: {deadline_type}.")
 
 
-def resolve_scheduled_at(
-	policy: Mapping[str, Any], requested_at: Any = None, *, now: Any = None
-) -> datetime:
+def _iso(value: datetime | None) -> str | None:
+	return value.isoformat() if value is not None else None
+
+
+def feasible_timing_domain(policy: Mapping[str, Any], *, now: Any) -> dict:
+	"""Normalise a Timing Policy into a boundary-safe feasible domain.
+
+	The result carries resolved boundaries -- not the raw DSL -- so a downstream
+	scheduler never has to re-interpret trigger semantics: an ``earliest`` no
+	sooner than ``now + delay``, the allowed clock window as plain strings, a
+	cooldown in seconds, an optional hard ``deadline`` and the recurrence shape.
+	Raises ``ValueError`` on malformed input, consistent with this module.
+	"""
+	anchor = _datetime(now, "now")
+	trigger_type = str(policy.get("trigger_type") or "relative")
+	if trigger_type == "event" and not policy.get("trigger_event"):
+		raise ValueError("Event timing policies require trigger_event.")
+
+	delay = _duration(policy.get("delay_value"), policy.get("delay_unit"), "delay_value")
+	start, end = _window_bounds(policy)
+	deadline = _deadline(anchor, policy)
+	duration = _duration(policy.get("duration_value"), policy.get("delay_unit"), "duration_value")
+	recurrence_type = str(policy.get("recurrence_type") or "none")
+	recurrence_interval = int(policy.get("recurrence_interval") or 1)
+	if recurrence_interval < 1:
+		raise ValueError("recurrence_interval must be at least one.")
+
+	# `earliest` is clamped into the allowed clock window so a downstream scheduler
+	# can take the value as-is without re-deriving window semantics.
+	earliest = anchor + delay
+	if start and end:
+		earliest = _next_window_start(earliest, start, end)
+
+	return {
+		"earliest": _iso(earliest),
+		"window_start": start.isoformat() if start else None,
+		"window_end": end.isoformat() if end else None,
+		"window_wraps_midnight": bool(start and end and start > end),
+		"timezone": str(policy.get("timezone") or "") or None,
+		"cooldown_seconds": int(delay.total_seconds()) if trigger_type == "relative" else 0,
+		"deadline": _iso(deadline),
+		"duration_seconds": int(duration.total_seconds()) if policy.get("duration_value") else None,
+		"recurrence": {"type": recurrence_type, "interval": recurrence_interval},
+	}
+
+
+def resolve_scheduled_at(policy: Mapping[str, Any], requested_at: Any = None, *, now: Any = None) -> datetime:
 	"""Resolve and validate one execution time against a CRM Timing Policy.
 
 	An explicit time is never silently moved.  When no time is supplied, the
 	policy's delay and next allowed window are used to calculate one.
-"""
+	"""
 	anchor = _datetime(now, "now") if now is not None else datetime.now().replace(microsecond=0)
 	trigger_type = str(policy.get("trigger_type") or "relative")
 	if trigger_type == "event" and not policy.get("trigger_event"):

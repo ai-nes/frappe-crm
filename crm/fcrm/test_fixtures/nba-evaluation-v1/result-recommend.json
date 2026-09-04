@@ -1,0 +1,114 @@
+{
+  "contract_version": "nba-evaluation-v1",
+  "evaluation_id": "NBAEVAL-0001",
+  "evaluation_key": "3d6dd720a9b29997690599d7063a4d4b9f97c6fb93f3a30cc2149275c30761a5",
+  "input_digest": "e0442c00b495f7fb8e5b9fb60ec53da29faff73a7ef6d9cca5136aafa5e99b13",
+  "engine_revision": "nba-engine-r1",
+  "run_status": "completed",
+  "disposition": "RECOMMEND",
+  "reason_codes": [
+    "feasible_actions_present",
+    "score_threshold_met"
+  ],
+  "revisit_at": null,
+  "reevaluation_trigger": null,
+  "trace_ref": "nba-trace:NBAEVAL-0001",
+  "result_digest": "c7ebe74fb0adfe08cc8c9713b905d35cc7bbfe2364beed5ef771c50cdf791591",
+  "recommendations": [
+    {
+      "recommendation_key": "NBAEVAL-0001:ACT-CALL:3",
+      "rank": 1,
+      "action_ref": {
+        "action_id": "ACT-CALL",
+        "action_revision": 3,
+        "action_digest": "3333333333333333333333333333333333333333333333333333333333333333"
+      },
+      "opportunity_refs": [
+        "PROGRESS_APPLICATION"
+      ],
+      "recommended_execution_params": {
+        "call_window": "business_hours",
+        "script_ref": "script:tuition-followup"
+      },
+      "recommended_timing": {
+        "earliest_at": "2026-09-04T02:00:00+00:00",
+        "latest_at": "2026-09-19T10:00:00+00:00",
+        "scheduled_at": "2026-09-04T03:00:00+00:00",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "score": {
+        "total": 0.82,
+        "components": {
+          "opportunity_fit": 0.3,
+          "urgency": 0.28,
+          "effectiveness_index": 0.24
+        },
+        "penalties": {
+          "contact_pressure": 0.0
+        }
+      },
+      "confidence": 0.71,
+      "reason_codes": [
+        "deadline_pressure",
+        "cooling_engagement"
+      ],
+      "evidence_refs": [
+        "interaction:CRMI-1001"
+      ],
+      "explanation_facts": [
+        "Family asked about total tuition twice with no full answer."
+      ],
+      "conflict_keys": [
+        "contact:voice"
+      ],
+      "expires_at": "2026-09-11T02:00:00+00:00"
+    },
+    {
+      "recommendation_key": "NBAEVAL-0001:ACT-REQUEST-DOCUMENT:2",
+      "rank": 2,
+      "action_ref": {
+        "action_id": "ACT-REQUEST-DOCUMENT",
+        "action_revision": 2,
+        "action_digest": "4444444444444444444444444444444444444444444444444444444444444444"
+      },
+      "opportunity_refs": [
+        "COMPLETE_REQUIREMENT"
+      ],
+      "recommended_execution_params": {
+        "document": "transcript",
+        "deadline": "2026-09-18"
+      },
+      "recommended_timing": {
+        "earliest_at": "2026-09-04T02:00:00+00:00",
+        "latest_at": "2026-09-18T10:00:00+00:00",
+        "scheduled_at": "2026-09-04T04:00:00+00:00",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "score": {
+        "total": 0.64,
+        "components": {
+          "opportunity_fit": 0.26,
+          "urgency": 0.2,
+          "effectiveness_index": 0.18
+        },
+        "penalties": {
+          "redundancy": 0.0
+        }
+      },
+      "confidence": 0.6,
+      "reason_codes": [
+        "missing_document"
+      ],
+      "evidence_refs": [
+        "student:ENR-2026-00001"
+      ],
+      "explanation_facts": [
+        "Transcript is still outstanding on a partial application."
+      ],
+      "conflict_keys": [
+        "contact:async"
+      ],
+      "expires_at": "2026-09-11T02:00:00+00:00"
+    }
+  ]
+}

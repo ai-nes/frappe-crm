@@ -5,7 +5,7 @@
  "autoname": "hash",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["trigger_type", "trigger_event", "delay_value", "delay_unit", "allowed_start_time", "allowed_end_time", "deadline_type", "deadline_offset", "recurrence_type", "recurrence_interval", "stop_condition", "optimization_enabled", "optimization_objective"],
+ "field_order": ["trigger_type", "trigger_event", "delay_value", "delay_unit", "allowed_start_time", "allowed_end_time", "deadline_type", "deadline_offset", "recurrence_type", "recurrence_interval", "stop_condition", "optimization_enabled", "optimization_objective", "policy_revision", "policy_digest", "effective_from", "effective_to"],
  "fields": [
   {"fieldname": "trigger_type", "fieldtype": "Select", "label": "Trigger Type", "options": "event\nrelative\ndeadline\nschedule", "reqd": 1},
   {"fieldname": "trigger_event", "fieldtype": "Data", "label": "Trigger Event"},
@@ -19,7 +19,11 @@
   {"fieldname": "recurrence_interval", "fieldtype": "Int", "label": "Recurrence Interval", "default": "1"},
   {"fieldname": "stop_condition", "fieldtype": "Small Text", "label": "Stop Condition"},
   {"fieldname": "optimization_enabled", "fieldtype": "Check", "label": "Optimization Enabled", "default": "0"},
-  {"fieldname": "optimization_objective", "fieldtype": "Small Text", "label": "Optimization Objective"}
+  {"fieldname": "optimization_objective", "fieldtype": "Small Text", "label": "Optimization Objective"},
+  {"fieldname": "policy_revision", "fieldtype": "Int", "label": "Policy Revision", "default": "1", "read_only": 1, "non_negative": 1},
+  {"fieldname": "policy_digest", "fieldtype": "Data", "label": "Policy Digest", "read_only": 1},
+  {"fieldname": "effective_from", "fieldtype": "Datetime", "label": "Effective From"},
+  {"fieldname": "effective_to", "fieldtype": "Datetime", "label": "Effective To"}
  ],
  "index_web_pages_for_search": 0,
  "links": [],
