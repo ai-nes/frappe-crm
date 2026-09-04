@@ -1,4 +1,4 @@
-"""Shared validation and defaults for the canonical CRM Action catalog.
+"""Shared validation and defaults for built-in and custom CRM Actions.
 
 This module is deliberately independent from Frappe so seed data and unit
 tests use the same contract as the DocType controller.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA
+from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA, is_valid_configuration_code
 from crm.fcrm.nba_timing import TIME_SLOTS
 
 CHANNELS = frozenset({"NONE", "CALL", "EMAIL", "MESSAGE"})
@@ -125,16 +125,19 @@ def validate_action_config(
 	execution_type: str = "MANUAL",
 	ai_allowed: Any = False,
 	allowed_time_slots: Any = None,
+	allow_custom: bool = False,
 ) -> list[str]:
 	"""Validate the mutable configuration of a CRM Action master row.
 
 	Returns the normalized actor list so callers can reuse the parsed value.
 	"""
 	_normalise_time_slots(allowed_time_slots)
+	if not is_valid_configuration_code(code):
+		raise ValueError("CRM Action code must contain only uppercase letters, numbers, and underscores.")
 	metadata = ACTION_TYPE_METADATA.get(code)
-	if not metadata:
+	if not metadata and not allow_custom:
 		raise ValueError("CRM Action code must be one of the canonical 79 codes.")
-	if metadata["category"] != category:
+	if metadata and metadata["category"] != category:
 		raise ValueError(f"CRM Action {code} must use Action Type {metadata['category']}.")
 	if default_channel not in CHANNELS:
 		raise ValueError("CRM Action default channel is unsupported.")

@@ -55,7 +55,7 @@ def produce_recommendation(
 ):
 	"""Create-or-return a deterministic, server-authenticated recommendation."""
 	recommended_action = canonicalize_action_type(recommended_action)
-	if recommended_action not in ALLOWED_ACTIONS:
+	if recommended_action not in ALLOWED_ACTIONS and not is_available_action_type(recommended_action):
 		frappe.throw(_("Unsupported recommendation action."), frappe.ValidationError)
 	if recommended_action not in {"WAIT", "FOLLOW_UP"} and not is_available_action_type(recommended_action):
 		frappe.throw(_("CRM Action Type is disabled or unavailable."), frappe.ValidationError)

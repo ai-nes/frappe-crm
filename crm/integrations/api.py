@@ -7,6 +7,108 @@ from werkzeug.wrappers import Response
 
 from crm.utils import are_same_phone_number, parse_phone_number
 
+INTEGRATION_TYPES = frozenset({"call", "zalo"})
+
+
+def _integration_status(enabled: bool, configured: bool = True) -> str:
+	if not configured:
+		return "not_configured"
+	return "enabled" if enabled else "disabled"
+
+
+def _call_integration(provider: str, label: str, enabled: bool) -> dict:
+	return {
+		"type": "call",
+		"provider": provider,
+		"label": label,
+		"enabled": enabled,
+		"status": _integration_status(enabled),
+	}
+
+
+def _zalo_integration() -> dict:
+	"""Return Zalo OA status without exposing any provider credentials.
+
+	The core CRM does not ship a Zalo Settings DocType yet. Sites that install
+	one can opt in by exposing an ``enabled`` field on that single DocType.
+	"""
+	if not frappe.db.exists("DocType", "Zalo Settings"):
+		return {
+			"type": "zalo",
+			"provider": "zalo_oa",
+			"label": "Zalo OA",
+			"enabled": False,
+			"status": "not_configured",
+		}
+
+	meta = frappe.get_meta("Zalo Settings")
+	if not meta.has_field("enabled"):
+		enabled = False
+		configured = False
+	else:
+		enabled = bool(frappe.db.get_single_value("Zalo Settings", "enabled"))
+		configured = True
+
+	return {
+		"type": "zalo",
+		"provider": "zalo_oa",
+		"label": "Zalo OA",
+		"enabled": enabled,
+		"status": _integration_status(enabled, configured),
+	}
+
+
+def _normalize_integration_type(integration_type: str | None) -> str | None:
+	if integration_type is None or not str(integration_type).strip():
+		return None
+
+	normalized = str(integration_type).strip().lower()
+	if normalized not in INTEGRATION_TYPES:
+		frappe.throw(
+			_("Unsupported integration type: {0}. Use 'call' or 'zalo'.").format(normalized),
+			frappe.ValidationError,
+		)
+	return normalized
+
+
+@frappe.whitelist(methods=["GET"])
+def get_integrations(type: str | None = None):
+	"""Return configured integration providers filtered by type.
+
+	Supported types are ``call`` and ``zalo``. The response only contains
+	provider metadata and connection state; secrets are never returned.
+	"""
+	requested_type = _normalize_integration_type(type)
+	integrations = []
+
+	if requested_type in (None, "call"):
+		integrations.extend(
+			[
+				_call_integration(
+					"twilio",
+					"Twilio",
+					bool(frappe.db.get_single_value("Twilio Settings", "enabled")),
+				),
+				_call_integration(
+					"exotel",
+					"Exotel",
+					bool(frappe.db.get_single_value("Exotel Settings", "enabled")),
+				),
+			]
+		)
+
+	if requested_type in (None, "zalo"):
+		integrations.append(_zalo_integration())
+
+	return {
+		"data": integrations,
+		"meta": {
+			"requested_type": requested_type,
+			"returned_types": sorted({item["type"] for item in integrations}),
+			"total": len(integrations),
+		},
+	}
+
 
 def _get_recording_credentials(telephony_medium: str) -> tuple:
 	"""Return (api_key, secret) for the given telephony medium."""
@@ -226,8 +328,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	# both paths so telephony lookup works across migrated sites.
 	ContactPhone = frappe.qb.DocType("Contact Phone")
 	normalized_phone_child = Replace(
-		Replace(
-			Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
+		Replace(Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
 	phone_query = (
 		frappe.qb.from_(Contact)

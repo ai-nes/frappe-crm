@@ -1,3 +1,5 @@
+from typing import ClassVar
+
 import frappe
 from frappe.model.document import Document
 
@@ -8,8 +10,8 @@ from crm.fcrm.action_type_registry import is_available_action_type
 class CRMActionItem(Document):
 	"""Student-scoped work item created from a CRM Action catalog row."""
 
-	TERMINAL = {"completed", "cancelled", "superseded", "rejected"}
-	TRANSITIONS = {
+	TERMINAL: ClassVar = {"completed", "cancelled", "superseded", "rejected"}
+	TRANSITIONS: ClassVar = {
 		"pending": {"accepted", "rejected", "deferred", "superseded", "requires-review"},
 		"accepted": {"in-progress", "requires-review", "cancelled", "deferred"},
 		"in-progress": {"completed", "requires-review", "cancelled"},
@@ -34,7 +36,9 @@ class CRMActionItem(Document):
 			if not is_available_action_type(selected_action):
 				frappe.throw("Unsupported CRM Action.", frappe.ValidationError)
 			self.action = selected_action
-			self.action_type = ACTION_TYPE_METADATA[selected_action]["category"]
+			self.action_type = frappe.db.get_value(
+				"CRM Action", selected_action, "action_type"
+			) or ACTION_TYPE_METADATA.get(selected_action, {}).get("category")
 		elif legacy_action in ACTION_TYPE_CODES and not is_available_action_type(legacy_action):
 			if not before or before.get("action_type") != legacy_action:
 				frappe.throw("Unsupported legacy CRM Action.", frappe.ValidationError)

@@ -11,6 +11,7 @@ from crm.integrations.api import (
 	add_task_to_call_log,
 	get_contact_by_phone_number,
 	get_contact_reference_from_number,
+	get_integrations,
 	get_user_default_calling_medium,
 	is_call_integration_enabled,
 	set_default_calling_medium,
@@ -47,6 +48,34 @@ class TestIntegrations(FrappeTestCase):
 
 		self.assertFalse(result["integrations"]["twilio"])
 		self.assertTrue(result["integrations"]["exotel"])
+
+	def test_get_integrations_returns_call_and_zalo_types(self):
+		frappe.db.set_single_value("Twilio Settings", "enabled", 1)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
+
+		result = get_integrations()
+
+		self.assertEqual(result["meta"]["requested_type"], None)
+		self.assertEqual(result["meta"]["returned_types"], ["call", "zalo"])
+		self.assertEqual(result["meta"]["total"], 3)
+		self.assertEqual(
+			[(item["type"], item["provider"], item["enabled"]) for item in result["data"]],
+			[("call", "twilio", True), ("call", "exotel", False), ("zalo", "zalo_oa", False)],
+		)
+		self.assertEqual(result["data"][2]["status"], "not_configured")
+
+	def test_get_integrations_filters_by_type(self):
+		call_result = get_integrations("call")
+		zalo_result = get_integrations("zalo")
+
+		self.assertEqual(call_result["meta"]["requested_type"], "call")
+		self.assertEqual({item["provider"] for item in call_result["data"]}, {"twilio", "exotel"})
+		self.assertEqual(zalo_result["meta"]["requested_type"], "zalo")
+		self.assertEqual([item["provider"] for item in zalo_result["data"]], ["zalo_oa"])
+
+	def test_get_integrations_rejects_unsupported_type(self):
+		with self.assertRaises(frappe.ValidationError):
+			get_integrations("email")
 
 	def test_get_user_default_calling_medium_no_agent(self):
 		if frappe.db.exists("Telephony Agent", frappe.session.user):
