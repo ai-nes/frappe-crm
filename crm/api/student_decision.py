@@ -42,6 +42,22 @@ def _require_action_writer():
 		)
 
 
+def _require_legacy_generation_epoch():
+	"""Block legacy AI generation writes while the NBA Evaluation epoch is active.
+
+	The Evaluation runtime and the legacy generation path must never both write:
+	when the epoch is on, generation produces its own recommendation rows and no
+	``CRM Action Item``. A missing or malformed flag keeps the legacy path live.
+	"""
+	from crm.fcrm.nba import nba_evaluation_epoch_active
+
+	if nba_evaluation_epoch_active():
+		frappe.throw(
+			_("The NBA Evaluation runtime owns recommendation generation; the legacy Action writer is disabled."),
+			frappe.ValidationError,
+		)
+
+
 def _throw_revision_conflict(message: str, current_revision: int):
 	"""Raise a backward-compatible 409 with the winning revision in its body."""
 	frappe.local.response["current_revision"] = int(current_revision)
@@ -89,6 +105,7 @@ def write_canonical_action(
 ) -> dict:
 	"""Canonical CRM Action storage writer; compare-and-swap plus idempotency."""
 	_require_action_writer()
+	_require_legacy_generation_epoch()
 	if origin != "ai":
 		frappe.throw(_("AI generation must use origin=ai."), frappe.ValidationError)
 	if isinstance(candidate, str):
@@ -399,6 +416,7 @@ def write_canonical_action_bundle(
 	request transaction.
 	"""
 	_require_action_writer()
+	_require_legacy_generation_epoch()
 	if not isinstance(candidates, list) or not 1 <= len(candidates) <= 3:
 		frappe.throw(_("A Next Best Action bundle needs 1-3 candidates."), frappe.ValidationError)
 	canonical = json.dumps(candidates, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
@@ -536,20 +554,27 @@ def _call(fn, **kwargs):
 def _decide_by_name(name: str, **kwargs):
 	"""Dispatch to the V2 task-native command when `name` names a CRM Student
 	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
-	fn = _decide_student_task if frappe.db.exists("CRM Action Item", name) else _decide_recommendation
+	if frappe.db.exists("CRM Action Item", name):
+		fn = _decide_student_task
+		kwargs.pop("operation", None)
+		kwargs.pop("delta", None)
+	else:
+		fn = _decide_recommendation
 	result = _call(fn, name=name, **kwargs)
 	result.setdefault("name", result.get("recommendation") or result.get("action"))
 	return result
 
 
 @frappe.whitelist(methods=["POST"])
-def transition_recommendation(name: str, expected_revision: str, status: str, decision_reason: str | None = None, **kwargs):
+def transition_recommendation(name: str, expected_revision: str, status: str | None = None, decision_reason: str | None = None, **kwargs):
 	"""Apply a Recommendation decision through the canonical command service."""
 	result = _call(
 		_decide_recommendation,
 		name=name,
 		expected_revision=expected_revision,
 		status=status,
+		operation=kwargs.get("operation"),
+		delta=kwargs.get("delta"),
 		decision_reason=decision_reason,
 		due_at=kwargs.get("due_at"),
 		assignee_staff=kwargs.get("assignee_staff"),

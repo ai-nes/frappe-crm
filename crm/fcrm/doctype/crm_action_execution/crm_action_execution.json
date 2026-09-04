@@ -5,9 +5,10 @@
  "autoname": "hash",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["recommendation", "actor", "channel", "scheduled_at", "started_at", "completed_at", "status", "input", "output", "error"],
+ "field_order": ["recommendation", "task", "actor", "channel", "scheduled_at", "started_at", "completed_at", "status", "input", "output", "error"],
  "fields": [
   {"fieldname": "recommendation", "fieldtype": "Link", "label": "Recommendation", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
+  {"fieldname": "task", "fieldtype": "Link", "label": "Task", "options": "CRM Action Item", "read_only": 1, "description": "The accepted Task (CRM Action Item) this execution belongs to."},
   {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "reqd": 1, "read_only": 1},
   {"fieldname": "channel", "fieldtype": "Select", "label": "Channel", "options": "NONE\nCALL\nEMAIL\nMESSAGE", "default": "NONE"},
   {"fieldname": "scheduled_at", "fieldtype": "Datetime", "label": "Scheduled At"},
