@@ -20,6 +20,14 @@ class CRMHighSchool(Document):
 		self._validate_key_account_governance()
 		self._sync_derived_key_account()
 
+	def on_trash(self):
+		if frappe.db.exists("CRM High School Assignment", {"high_school": self.name, "status": "Active"}):
+			frappe.throw(
+				"Cannot delete this High School: it still has active High School Assignments. "
+				"Deactivate it instead.",
+				frappe.ValidationError,
+			)
+
 	def _sync_canonical_geography(self):
 		if self.ward and frappe.db.exists("CRM Ward", self.ward):
 			ward_province = frappe.db.get_value("CRM Ward", self.ward, "province")

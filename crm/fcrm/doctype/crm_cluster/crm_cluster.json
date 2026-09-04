@@ -2,82 +2,71 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "format:{ward_code} - {province}",
- "creation": "2026-05-30 00:00:00.000000",
+ "autoname": "field:cluster_name",
+ "creation": "2026-09-04 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "ward_code",
-  "ward_name",
-  "zone",
+  "cluster_name",
+  "cluster_code",
   "province",
-  "province_name",
-  "ward_type",
-  "import_source_id"
+  "column_break_1",
+  "is_placeholder",
+  "is_active"
  ],
  "fields": [
   {
-   "fieldname": "ward_code",
+   "fieldname": "cluster_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Ward Code",
-   "reqd": 1
+   "label": "Cluster Name",
+   "reqd": 1,
+   "unique": 1
   },
   {
-   "fieldname": "ward_name",
+   "fieldname": "cluster_code",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Ward Name",
-   "reqd": 1
+   "label": "Cluster Code"
   },
   {
-   "fieldname": "zone",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Zone",
-   "options": "CRM Zone",
-   "reqd": 1
-  },
-  {
-   "description": "Derived from Zone → Cluster → Province. Not directly editable.",
    "fieldname": "province",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province",
-   "read_only": 1,
    "reqd": 1
   },
   {
-   "fieldname": "province_name",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Province Name"
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
   },
   {
-   "fieldname": "ward_type",
-   "fieldtype": "Select",
+   "default": "0",
+   "description": "Set by the geography backfill patch for auto-generated placeholder clusters. Use to find rows that still need manual re-clustering.",
+   "fieldname": "is_placeholder",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Placeholder"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Type",
-   "options": "Ward\nCommune\nTownship"
-  },
-  {
-   "fieldname": "import_source_id",
-   "fieldtype": "Int",
-   "hidden": 1,
-   "label": "Import Source ID"
+   "label": "Is Active"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-05-30 00:00:00.000000",
+ "modified": "2026-09-04 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
- "name": "CRM Ward",
+ "name": "CRM Cluster",
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
@@ -108,6 +97,12 @@
   },
   {
    "create": 1,
+   "read": 1,
+   "role": "Admissions Operations",
+   "write": 1
+  },
+  {
+   "create": 1,
    "delete": 1,
    "export": 1,
    "read": 1,
@@ -117,10 +112,10 @@
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
- "sort_field": "ward_name",
+ "search_fields": "cluster_name,cluster_code",
+ "sort_field": "cluster_name",
  "sort_order": "ASC",
  "states": [],
- "search_fields": "ward_name,ward_code",
- "title_field": "ward_name",
+ "title_field": "cluster_name",
  "translated_doctype": 1
 }
