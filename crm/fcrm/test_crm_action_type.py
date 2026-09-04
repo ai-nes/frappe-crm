@@ -7,6 +7,7 @@ from crm.fcrm.action_type_catalog import (
 	ACTION_TYPE_CODES,
 	LEGACY_ACTION_TYPE_ALIASES,
 	canonicalize_action_type,
+	is_valid_configuration_code,
 	metadata_for_action_type,
 )
 from crm.services.student_next_task_policy import choose_next_task_policy
@@ -159,6 +160,21 @@ def test_action_constraints_accept_allowed_time_slots_subset():
 
 	validate_action_config(
 		"CALL", "CONTACT", **defaults, enabled=1, allowed_time_slots=["6-12", "12-18", "18-24"]
+	)
+
+
+def test_custom_action_codes_use_the_same_safe_configuration_contract():
+	assert is_valid_configuration_code("CUSTOM_FOLLOW_UP") is True
+	assert is_valid_configuration_code("custom-follow-up") is False
+	validate_action_config(
+		"CUSTOM_FOLLOW_UP",
+		"CUSTOM_SALES",
+		"NONE",
+		'["Sale"]',
+		0,
+		0,
+		1,
+		allow_custom=True,
 	)
 
 

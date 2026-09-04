@@ -2,9 +2,12 @@
 
 import frappe
 
-from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category, canonicalize_action_type
-from crm.patches.v1_0.seed_crm_action_type import CATEGORY_LABELS, execute as seed_action_catalog
-
+from crm.fcrm.action_type_catalog import (
+	ACTION_TYPE_CODES,
+	action_category,
+	canonicalize_action_type,
+)
+from crm.patches.v1_0.seed_crm_action_type import execute as seed_action_catalog
 
 ACTION_ITEM_DOCTYPE = "CRM Action Item"
 ACTION_REFERENCE_DOCTYPES = (
@@ -27,7 +30,6 @@ def execute():
 	_update_action_references(legacy_actions)
 	_backfill_recommendation_actions(legacy_actions, action_codes)
 	_delete_legacy_action_rows(legacy_actions)
-	_delete_legacy_action_type_rows()
 
 	if not getattr(frappe.flags, "in_test", False):
 		frappe.db.commit()
@@ -103,10 +105,3 @@ def _backfill_recommendation_actions(legacy_actions, action_codes):
 def _delete_legacy_action_rows(legacy_actions):
 	for legacy_name in legacy_actions:
 		frappe.db.delete("CRM Action", legacy_name)
-
-
-def _delete_legacy_action_type_rows():
-	category_names = set(CATEGORY_LABELS)
-	for row in frappe.get_all("CRM Action Type", fields=["name"], limit_page_length=0):
-		if row.name not in category_names:
-			frappe.db.delete("CRM Action Type", row.name)

@@ -7,6 +7,7 @@ codes are the source supplied by the admissions action taxonomy.
 
 from __future__ import annotations
 
+import re
 from typing import Final
 
 ACTION_TYPE_CATALOG: Final[tuple[tuple[str, str, str], ...]] = (
@@ -93,6 +94,7 @@ ACTION_TYPE_CATALOG: Final[tuple[tuple[str, str, str], ...]] = (
 
 ACTION_TYPE_CODES: Final[frozenset[str]] = frozenset(row[0] for row in ACTION_TYPE_CATALOG)
 ACTION_TYPE_CATEGORIES: Final[frozenset[str]] = frozenset(row[2] for row in ACTION_TYPE_CATALOG)
+CONFIGURATION_CODE_PATTERN: Final = re.compile(r"^[A-Z][A-Z0-9_]{1,49}$")
 ACTION_TYPE_METADATA: Final[dict[str, dict[str, str]]] = {
 	code: {"action_type": code, "display_name": display_name, "category": category}
 	for code, display_name, category in ACTION_TYPE_CATALOG
@@ -129,6 +131,11 @@ LEGACY_ACTION_TYPE_CANONICAL: Final[dict[str, str]] = {
 	"PARENT_CONTACT": "CONTACT_PARENT",
 	"HANDOFF": "ESCALATE_TO_SENIOR",
 }
+
+
+def is_valid_configuration_code(value: str | None) -> bool:
+	"""Return whether a custom catalog code is safe for a DocType name/key."""
+	return bool(value and CONFIGURATION_CODE_PATTERN.fullmatch(value))
 SUPPORTED_ACTION_TYPES: Final[frozenset[str]] = ACTION_TYPE_CODES | LEGACY_ACTION_TYPE_ALIASES
 SUPPORTED_RECOMMENDATION_ACTION_TYPES: Final[frozenset[str]] = (
 	SUPPORTED_ACTION_TYPES | LEGACY_RECOMMENDATION_ONLY

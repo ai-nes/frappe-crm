@@ -53,7 +53,7 @@ def get_action_type(name):
 
 @frappe.whitelist(methods=["POST"])
 def create_action_type(**values):
-	"""Create a CRM Action Type category. System Manager only."""
+	"""Create a built-in or custom CRM Action Type category. System Manager only."""
 	doc = frappe.new_doc("CRM Action Type")
 	_set_writable_fields(doc, values)
 	doc.insert()
