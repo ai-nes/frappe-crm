@@ -38,10 +38,8 @@ def _decision(*, student: str, source_event: str, event_type: str, revision: int
 		if "duplicate" not in str(exc).casefold() and "unique" not in str(exc).casefold():
 			raise
 		return frappe.db.get_value("CRM Admission Event Decision", {"decision_key": key}, "name") or ""
-	if outcome == "admitted" and _mode() == "unified":
-		from crm.fcrm.intelligence_runs import request_automatic_run
-		run = request_automatic_run("student", student, admission_decision=doc.name, admission_event=source_event, candidate_revision=revision, policy_revision=POLICY_VERSION)
-		doc.db_set("run", run.name, update_modified=False)
+	# Admission remains an auditable factual decision.  It must not enqueue a
+	# Student 360 LLM run: Sales explicitly refreshes the analytical snapshot.
 	return doc.name
 
 

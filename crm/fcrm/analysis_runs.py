@@ -14,7 +14,7 @@ from typing import Any
 import frappe
 
 RUN_STATUSES = frozenset({"queued", "running", "completed", "abstained", "failed", "dead_lettered"})
-STAGE_KINDS = frozenset({"student_360", "next_best_action", "school_360"})
+STAGE_KINDS = frozenset({"student_360", "school_360"})
 TRIGGERS = frozenset({"automatic", "manual"})
 CLAIM_KINDS = frozenset({"fact", "inference", "uncertainty", "recommendation"})
 VISIBILITY_LABELS = frozenset({"shareable", "restricted", "service_only"})
@@ -28,7 +28,7 @@ def canonical_request_fingerprint(payload: dict[str, Any]) -> str:
 	"""Return a stable digest for an allow-listed request payload only."""
 	if not isinstance(payload, dict):
 		raise ValueError("Analysis Run request must be an object.")
-	allowed = {"domain", "target", "source_revision", "trigger", "force_reason"}
+	allowed = {"domain", "target", "source_revision", "trigger", "force_reason", "policy_revision"}
 	unknown = set(payload) - allowed
 	if unknown:
 		raise ValueError("Analysis Run request has unsupported fields.")
@@ -63,7 +63,7 @@ def validate_stage_fields(doc) -> None:
 		"CRM School Analysis Run",
 	}:
 		frappe.throw("Analysis Run stage parent is invalid.", frappe.ValidationError)
-	if (doc.parent_run_type == "CRM Student Analysis Run") != (doc.stage_kind in {"student_360", "next_best_action"}):
+	if (doc.parent_run_type == "CRM Student Analysis Run") != (doc.stage_kind == "student_360"):
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
 	if (doc.parent_run_type == "CRM School Analysis Run") != (doc.stage_kind == "school_360"):
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
@@ -77,7 +77,7 @@ def validate_claim_set(value: str | list[dict[str, Any]] | None) -> None:
 	if not isinstance(claims, list) or len(claims) > 100:
 		frappe.throw("Analysis Run claims must be a bounded array.", frappe.ValidationError)
 	for claim in claims:
-		if not isinstance(claim, dict) or set(claim) - {"kind", "text", "provenance_ids", "visibility"}:
+		if not isinstance(claim, dict) or set(claim) - {"kind", "text", "provenance_ids", "visibility", "confidence"}:
 			frappe.throw("Analysis Run claim has unsupported fields.", frappe.ValidationError)
 		if claim.get("kind") not in CLAIM_KINDS or claim.get("visibility") not in VISIBILITY_LABELS:
 			frappe.throw("Analysis Run claim kind or visibility is invalid.", frappe.ValidationError)
@@ -88,6 +88,9 @@ def validate_claim_set(value: str | list[dict[str, Any]] | None) -> None:
 			frappe.throw("Analysis Run claims require bounded provenance.", frappe.ValidationError)
 		if any(not isinstance(item, str) or not item.strip() or len(item) > 160 for item in provenance_ids):
 			frappe.throw("Analysis Run claim provenance is invalid.", frappe.ValidationError)
+		confidence = claim.get("confidence")
+		if confidence is not None and (not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not 0 <= confidence <= 1):
+			frappe.throw("Analysis Run claim confidence is invalid.", frappe.ValidationError)
 
 
 def validate_execution_revisions(policy_revision: str | None, model_revision: str | None, *, required: bool) -> None:

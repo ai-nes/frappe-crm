@@ -119,19 +119,10 @@ def write_canonical_action(
 		frappe.throw(_("Invalid revision."), frappe.ValidationError)
 	active_writer_epoch = frappe.conf.get("crm_intelligence_writer_epoch")
 	if active_writer_epoch is not None:
-		if writer_epoch is None or int(writer_epoch) != int(active_writer_epoch):
-			frappe.throw(_("writer_retired"), frappe.PermissionError)
-		if not all((run_id, stage_kind, lease_token, expected_source_digest)) or stage_generation is None:
-			frappe.throw(_("Active Intelligence Run NBA writer requires a fenced run stage."), frappe.PermissionError)
-		if stage_kind != "next_best_action":
-			frappe.throw(_("Invalid Intelligence Run stage kind for Action write."), frappe.ValidationError)
-		from crm.fcrm.intelligence_runs import authorize_next_best_action_write
-		stage_authority = authorize_next_best_action_write(
-			run_id=str(run_id), stage_generation=int(stage_generation), lease_token=str(lease_token),
-			expected_source_revision=str(expected_context_revision), expected_source_digest=str(expected_source_digest),
-		)
-		if stage_authority["student"] != student or stage_authority["stage_key"] != source_stage_key:
-			frappe.throw(_("Intelligence Run stage does not authorize this Student Action write."), frappe.PermissionError)
+		# The fenced child-stage NBA writer was retired when NBA Evaluation became
+		# an independent runtime.  Never resurrect that dependency through this
+		# legacy Action command.
+		frappe.throw(_("writer_retired"), frappe.PermissionError)
 	if frappe.conf.get("crm_agents_v2_rollout_epoch") is not None and int(
 		frappe.conf.get("crm_agents_v2_rollout_epoch", 0)
 	) != int(rollout_epoch):

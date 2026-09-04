@@ -1305,10 +1305,16 @@ def _ensure_admission_method(name: str) -> None:
 
 
 def _bootstrap() -> tuple[dict[str, Any], dict[str, Any]]:
+	# A freshly reinstalled local site may not yet have executed the historical
+	# migration that seeds the Action catalog.  Golden scenarios create manual
+	# actions, so establish that idempotent master-data dependency here rather
+	# than letting a clean fixture fail on a missing Action link.
 	from crm.demo import seed_showcase
+	from crm.patches.v1_0.seed_crm_action_type import execute as seed_action_catalog
 
 	seed_showcase.ensure_local_integrity_keys()
 	seed_showcase.ensure_demo_config()
+	seed_action_catalog()
 	seed_role_accounts.execute()
 	context = seed_demo._bootstrap()
 	staff_context = seed_staff._bootstrap()

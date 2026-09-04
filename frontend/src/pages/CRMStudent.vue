@@ -115,11 +115,9 @@
           @refresh="loadActionCard"
           @operation="submitActionOperation"
         />
-        <StudentAnalysisPanel
+        <Student360Dashboard
           v-else
           :student="crmStudentId"
-          :context-revision="doc.modified"
-          @open-actions="openActionsTab"
         />
       </template>
     </Tabs>
@@ -289,7 +287,7 @@ import TransitionStudentLifecycleModal from '@/components/Modals/TransitionStude
 import RecordStudentOutcomeModal from '@/components/Modals/RecordStudentOutcomeModal.vue'
 import ActionOutcomeDialog from '@/components/StudentDecision/ActionOutcomeDialog.vue'
 import ActionCard from '@/components/StudentDecision/ActionCard.vue'
-import StudentAnalysisPanel from '@/components/StudentAnalysisPanel.vue'
+import Student360Dashboard from '@/components/Student360Dashboard.vue'
 import StudentAdmissionsActionDialog from '@/components/StudentAdmissionsActionDialog.vue'
 import StudentDetailLoadingState from '@/components/StudentDetailLoadingState.vue'
 import {

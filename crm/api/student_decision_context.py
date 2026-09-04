@@ -196,11 +196,18 @@ def _score_projection(row: dict) -> dict:
 	}
 
 
-def _projection(student: str, minimum_revision: int) -> dict:
+def _projection(student: str, minimum_revision: int, *, service_authorized: bool = False) -> dict:
+	"""Build the bounded decision DTO.
+
+	``service_authorized`` is deliberately private and is only used by Frappe's
+	service-only Intelligence Run authority after it has checked its caller.
+	Reader-facing calls must continue to pass the normal Student permission
+	check below.
+	"""
 	row = frappe.db.get_value("CRM Student", student, _STUDENT_FIELDS, as_dict=True)
 	if not row:
 		frappe.throw("Student not found.", frappe.DoesNotExistError)
-	if not frappe.has_permission("CRM Student", "read", student, throw=False):
+	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
 		frappe.throw("Student projection is not authorized.", frappe.PermissionError)
 	revision = int(row.student_context_revision or 0)
 	if revision < int(minimum_revision):

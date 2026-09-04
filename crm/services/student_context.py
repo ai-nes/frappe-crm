@@ -71,13 +71,12 @@ def _next_stream_sequence(stream: str) -> int:
 
 
 def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = True, event_id: str | None = None) -> dict:
-	"""Advance one Student revision and enqueue its canonical analysis run.
+	"""Advance one Student revision without automatically analysing it.
 
-	The revision journal remains the source of truth. When unified Intelligence
-	Runs are enabled, the same transaction also creates the idempotent automatic
-	run and its identity-only outbox signal. Callers that are already part of a
-	more specific admission decision flow pass ``enqueue=False`` and let that
-	flow own the run creation, preventing duplicate runs for one business event.
+	The revision journal remains the source of truth.  Student 360 is explicit
+	refresh only: factual changes make a prior snapshot derived-stale but never
+	create an Analysis Run or call an LLM.  ``enqueue`` remains an accepted
+	legacy argument so existing producers do not fail during the cutover.
 	"""
 	if not student:
 		raise ValueError("student is required")
@@ -125,17 +124,6 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 		}
 	).insert(ignore_permissions=True)
 	result = {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
-	if enqueue:
-		from crm.fcrm.intelligence_runs import request_automatic_run, unified_intelligence_enabled
-
-		if unified_intelligence_enabled():
-			run = request_automatic_run(
-				"student",
-				student,
-				candidate_revision=revision,
-				policy_revision=CANONICAL_CONTEXT_POLICY_VERSION,
-			)
-			result["analysis_run"] = run.name
 	return result
 
 
