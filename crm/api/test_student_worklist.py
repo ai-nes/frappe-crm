@@ -10,12 +10,15 @@ from frappe.tests.utils import FrappeTestCase
 from crm.api.student_worklist import (
 	_decode_cursor,
 	_encode_cursor,
-	_fetch_page,
+	_fetch_recommendation_page,
 	_parse_page_size,
+	_recommendation_dto,
+	_recommendation_sort_key,
 	_serialize_nba,
-	_sort_key,
 	get_next_best_action_for_student,
+	list_student_worklist,
 )
+from crm.fcrm.test_permissions import TestSharedScopingPermissions
 
 
 @contextmanager
@@ -29,30 +32,55 @@ def _as_user(user):
 
 
 class TestStudentWorklist(FrappeTestCase):
-	def test_sort_key_is_priority_rank_then_timing_creation_and_id(self):
-		"""`_sort_key` must read `worklist_priority_rank` -- the same column the
-		SQL ORDER BY/keyset predicate in `_fetch_page` uses -- not recompute a
-		rank from the raw `priority` string with its own default. A mismatched
-		default previously desynced pagination (see `_sort_key`'s docstring)."""
-		high = frappe._dict(worklist_priority_rank=0, revisit_at=None, creation="2026-01-02", name="REC-2")
-		medium = frappe._dict(
-			worklist_priority_rank=1, revisit_at="2025-01-01", creation="2026-01-01", name="REC-1"
-		)
-		earlier = frappe._dict(
-			worklist_priority_rank=0, revisit_at="2026-01-01", creation="2026-01-03", name="REC-3"
-		)
+	def test_sort_key_is_rank_then_timing_creation_and_id(self):
+		"""`_recommendation_sort_key` must read `rank`/`recommended_at` -- the same
+		columns the SQL ORDER BY/keyset predicate in `_fetch_recommendation_page`
+		uses -- with matching defaults, or pagination desyncs across pages."""
+		high = frappe._dict(rank=1, recommended_at=None, creation="2026-01-02", name="REC-2")
+		medium = frappe._dict(rank=2, recommended_at="2025-01-01", creation="2026-01-01", name="REC-1")
+		earlier = frappe._dict(rank=1, recommended_at="2026-01-01", creation="2026-01-03", name="REC-3")
 
 		self.assertEqual(
-			[row.name for row in sorted([high, medium, earlier], key=_sort_key)], ["REC-3", "REC-2", "REC-1"]
+			[row.name for row in sorted([high, medium, earlier], key=_recommendation_sort_key)],
+			["REC-3", "REC-2", "REC-1"],
 		)
-		self.assertEqual(_sort_key(high)[1], "9999-12-31 23:59:59.999999")
+		self.assertEqual(_recommendation_sort_key(high)[1], "9999-12-31 23:59:59.999999")
 
 	def test_sort_key_defaults_missing_rank_to_the_sql_column_default(self):
-		"""The SQL column's own default is 99 (see CRMStudentTask.validate), not
-		some independently chosen sentinel -- they must agree or a row missing
+		"""The SQL column's own default is 999 -- they must agree or a row missing
 		its rank sorts inconsistently between the cursor and the next query."""
-		row = frappe._dict(worklist_priority_rank=None, revisit_at=None, creation="2026-01-01", name="REC-1")
-		self.assertEqual(_sort_key(row)[0], 99)
+		row = frappe._dict(rank=None, recommended_at=None, creation="2026-01-01", name="REC-1")
+		self.assertEqual(_recommendation_sort_key(row)[0], 999)
+
+	def test_recommendation_dto_surfaces_ai_payload_verbatim_and_cas_field(self):
+		row = frappe._dict(
+			name="REC-1",
+			student="STU-1",
+			student_name="Nguyen Van A",
+			rank=1,
+			priority="high",
+			channel="CALL",
+			reason="Follow up on interest",
+			action="ACT-CALL",
+			recommendation_key="k1",
+			ai_payload='{"action_ref": {"action_id": "ACT-CALL"}}',
+			evaluation="NBAEVAL-1",
+			recommended_at="2026-01-01 10:00:00",
+			modified="2026-01-01 10:05:00",
+			creation="2026-01-01 09:00:00",
+		)
+
+		dto = _recommendation_dto(row, {"NBAEVAL-1": {"disposition": "RECOMMEND", "status": "completed"}})
+
+		self.assertEqual(dto["id"], "REC-1")
+		self.assertEqual(dto["rank"], 1)
+		self.assertEqual(dto["studentId"], "STU-1")
+		self.assertEqual(dto["aiPayload"], {"action_ref": {"action_id": "ACT-CALL"}})
+		self.assertEqual(
+			dto["evaluation"], {"id": "NBAEVAL-1", "disposition": "RECOMMEND", "status": "completed"}
+		)
+		self.assertEqual(dto["expected_revision"], "2026-01-01 10:05:00")
+		self.assertIn("dismissed", dto["permitted_decisions"])
 
 	def test_cursor_is_bound_to_principal_and_roles(self):
 		cursor = _encode_cursor((0, "2026-01-01", "2026-01-01", "REC-1"), "user@example.com", ["Sale"])
@@ -77,7 +105,95 @@ class TestStudentWorklist(FrappeTestCase):
 			patch("frappe.db.sql", return_value=[]),
 		):
 			query.return_value.build_match_conditions.return_value = None
-			self.assertEqual(_fetch_page("Administrator", None, 1), [])
+			self.assertEqual(_fetch_recommendation_page("Administrator", None, 1), [])
+
+
+class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
+	"""``CRM NBA Evaluation`` grants doctype ``read`` to System Manager only, so
+	a real Sale-role session has no permission on it at all. The worklist's
+	evaluation-disposition enrichment must not turn that into a hard failure
+	for a page that actually has data -- reproduced end-to-end against a real
+	DB session and role, not mocked `frappe.db.sql`/`DatabaseQuery`."""
+
+	def setUp(self):
+		frappe.set_user("Administrator")
+		self._campus = TestSharedScopingPermissions._make_campus(self, "_Test Worklist Perm Campus")
+		self._department = TestSharedScopingPermissions._get_or_create_department(
+			self, "_Test Worklist Perm Dept", self._campus
+		)
+		self._sale_user, self._sale_staff = TestSharedScopingPermissions._make_user_and_staff(
+			self, "_Test Worklist Perm Sale", roles=["Sale"]
+		)
+		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
+		student = frappe.get_doc(
+			{"doctype": "CRM Student", "student_name": "_Test Worklist Perm Student", "phone": phone}
+		)
+		previous = getattr(frappe.flags, "student_intake_service", False)
+		frappe.flags.student_intake_service = True
+		try:
+			student.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = previous
+		frappe.db.set_value(
+			"CRM Student", student.name, "owner_staff", self._sale_staff, update_modified=False
+		)
+		self._student = student
+
+		self._evaluation = frappe.get_doc(
+			{
+				"doctype": "CRM NBA Evaluation",
+				"student": self._student.name,
+				"trigger": "automatic",
+				"status": "completed",
+				"disposition": "RECOMMEND",
+				"engine_revision": "nba-engine-test",
+				"evaluation_key": frappe.generate_hash(length=64),
+				"run_generation": 1,
+			}
+		).insert(ignore_permissions=True)
+
+		self._recommendation = frappe.get_doc(
+			{
+				"doctype": "CRM Recommendation",
+				"recommendation_id": "REC-" + frappe.generate_hash(length=18),
+				"target_type": "CRM Student",
+				"target_id": self._student.name,
+				"action": "CALL",
+				"reason": "Silent for nine days after a tuition question.",
+				"priority": "high",
+				"channel": "CALL",
+				"recommended_at": frappe.utils.now_datetime(),
+				"evaluation": self._evaluation.name,
+				"recommendation_key": "k1",
+				"rank": 1,
+				"decision_status": "pending",
+			}
+		)
+		self._recommendation.flags.ignore_links = True
+		self._recommendation.insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.delete_doc("CRM Recommendation", self._recommendation.name, force=True)
+		frappe.delete_doc("CRM NBA Evaluation", self._evaluation.name, force=True)
+		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
+		frappe.delete_doc("User", self._sale_user, force=True)
+		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Department", self._department, force=True)
+		frappe.delete_doc("CRM Campus", self._campus, force=True)
+
+	def test_sale_session_lists_the_worklist_without_a_permission_error(self):
+		with _as_user(self._sale_user):
+			result = list_student_worklist()
+
+		names = [item["id"] for item in result["items"]]
+		self.assertIn(self._recommendation.name, names)
+		row = next(item for item in result["items"] if item["id"] == self._recommendation.name)
+		# The evaluation enrichment degrades safely rather than raising: the
+		# Sale session has no doctype permission on `CRM NBA Evaluation` at
+		# all, yet the disposition/status still project through.
+		self.assertEqual(row["evaluation"]["disposition"], "RECOMMEND")
+		self.assertEqual(row["evaluation"]["status"], "completed")
 
 
 class TestStudentNextBestAction(FrappeTestCase):
@@ -139,7 +255,7 @@ class TestStudentNextBestAction(FrappeTestCase):
 		has_permission.assert_has_calls(
 			[
 				call("CRM Student", "read", user="staff@example.com", throw=True),
-				call("CRM Action", "read", user="staff@example.com", throw=True),
+				call("CRM Action Item", "read", user="staff@example.com", throw=True),
 			]
 		)
 		self.assertEqual(result["student_id"], "STU-2026-00042")
