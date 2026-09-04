@@ -239,6 +239,8 @@ class TestDirectorStudents(FrappeTestCase):
 				"application",
 				"probabilityTrend",
 				"channelPerformance",
+				"zaloMessages",
+				"calls",
 			},
 		)
 
@@ -329,18 +331,34 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(response, {"student": {"name": "An"}})
 
-	def test_detail_endpoint_is_public_without_student_permission(self):
+	def test_detail_endpoint_hides_student_without_permission(self):
 		doc = frappe._dict(name="ENR-1", owner_staff="STAFF-2")
 		doc.has_permission = lambda permission_type: False
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
-			patch.object(director_students, "_hydrate_rows", return_value=[{"id": "ENR-1"}]),
-			patch.object(director_students, "_build_student_360", return_value={"student": {"name": "An"}}),
+			self.assertRaises(frappe.DoesNotExistError),
 		):
-			response = director_students.get_director_student("ENR-1")
+			director_students.get_director_student("ENR-1")
 
-		self.assertEqual(response, {"student": {"name": "An"}})
+	def test_student_count_uses_permission_aware_list_query(self):
+		with patch.object(
+			director_students.frappe,
+			"get_list",
+			return_value=[frappe._dict(total=3)],
+		) as get_list:
+			self.assertEqual(
+				director_students._count_students({"admission_year": "2026"}),
+				3,
+			)
+
+		get_list.assert_called_once_with(
+			"CRM Student",
+			filters={"admission_year": "2026"},
+			or_filters=[],
+			fields=["count(name) as total"],
+			limit_page_length=1,
+		)
 
 	def test_student_zalo_messages_mapping(self):
 		interactions = [
@@ -443,6 +461,7 @@ class TestDirectorStudents(FrappeTestCase):
 
 	def test_get_student_interactions_endpoint(self):
 		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),

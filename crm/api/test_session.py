@@ -47,6 +47,7 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_canonical_role_names_resolve_without_legacy_aliases(self):
 		self.assertEqual(resolve_crm_profile({"Sale"}), "sales")
+		self.assertEqual(resolve_crm_profile({"CTV Sale"}), "ctv_sale")
 		self.assertEqual(resolve_crm_profile({"Lead Sales"}), "lead_sales")
 		self.assertEqual(resolve_crm_profile({"Marketing"}), "marketing")
 		self.assertEqual(resolve_crm_profile({"Admissions Director"}), "admissions_director")

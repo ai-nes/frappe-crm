@@ -26,10 +26,11 @@ from frappe.utils import now_datetime
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import (
 	POLICY_VERSION,
+	STUDENT_OWNER_PROFILES,
+	STUDENT_OWNER_TEAM_FUNCTIONS,
 	capabilities_for_roles,
 	resolve_crm_profile,
 )
-
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 OWNERSHIP_EVENT_DOCTYPE = "CRM Student Ownership Event"
@@ -452,16 +453,22 @@ def resolve_student_operational_target(
 		_error("INVALID_TARGET", "Target Staff must be active.")
 	if staff.get("campus") and staff.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target Staff Campus must match the Student Campus.")
-	if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales":
-		_error("INVALID_TARGET", "Target Staff must have exactly the canonical Sale profile.")
+	if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES:
+		_error("INVALID_TARGET", "Target Staff must have exactly a canonical Sale or CTV Sale profile.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
 		filters={"parent": staff.name, "parenttype": "CRM Staff", "team": team.name},
 		fields=["name", "team", "function"],
 	)
-	active_memberships = [row for row in memberships if not row.get("function") or row.function == "Sale"]
+	active_memberships = [
+		row for row in memberships
+		if not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS
+	]
 	if len(active_memberships) != 1:
-		_error("INVALID_TARGET", "Target Staff must have exactly one active Sale membership in target Team.")
+		_error(
+			"INVALID_TARGET",
+			"Target Staff must have exactly one active Sale or CTV Sale membership in target Team.",
+		)
 	if actor and profile:
 		_assert_actor_target_scope(actor, profile, team.name)
 	return {

@@ -58,6 +58,11 @@ PROFILE_ROLE_ALIASES = {
 	"ceo": frozenset({"CEO"}),
 }
 
+# Both canonical Sales profiles can own Student cases. Team membership keeps
+# the legacy hyphenated spelling because it is the persisted Select value.
+STUDENT_OWNER_PROFILES = frozenset({"sales", "ctv_sale"})
+STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV-Sale"})
+
 PROFILE_CAPABILITIES = {
 	"sales": frozenset(
 		{
