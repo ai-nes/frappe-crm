@@ -551,6 +551,9 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 	payload = _parse_worklist_json(row.get("ai_payload"))
 	if not isinstance(payload, dict):
 		payload = {}
+	explanation = _parse_worklist_json(row.get("explanation"))
+	if not isinstance(explanation, dict):
+		explanation = None
 	evaluation = (evaluations or {}).get(row.get("evaluation")) or {}
 	return {
 		"id": row.name,
@@ -566,6 +569,7 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 		"channel": row.get("channel") or None,
 		"reason": row.get("reason") or "",
 		"aiPayload": payload,
+		"explanation": explanation,
 		"evaluation": {
 			"id": row.get("evaluation") or None,
 			"disposition": evaluation.get("disposition") or None,
@@ -669,6 +673,7 @@ def _fetch_recommendation_page(
 		`tabCRM Student`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
 		`tabCRM Recommendation`.channel, `tabCRM Recommendation`.reason, `tabCRM Recommendation`.action,
 		`tabCRM Recommendation`.recommendation_key, `tabCRM Recommendation`.ai_payload,
+		`tabCRM Recommendation`.explanation,
 		`tabCRM Recommendation`.evaluation, `tabCRM Recommendation`.recommended_at,
 		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
 		FROM `tabCRM Recommendation`

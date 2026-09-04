@@ -64,6 +64,7 @@ class TestStudentWorklist(FrappeTestCase):
 			action="ACT-CALL",
 			recommendation_key="k1",
 			ai_payload='{"action_ref": {"action_id": "ACT-CALL"}}',
+			explanation='{"summary": "Student has been silent after asking about tuition."}',
 			evaluation="NBAEVAL-1",
 			recommended_at="2026-01-01 10:00:00",
 			modified="2026-01-01 10:05:00",
@@ -76,6 +77,7 @@ class TestStudentWorklist(FrappeTestCase):
 		self.assertEqual(dto["rank"], 1)
 		self.assertEqual(dto["studentId"], "STU-1")
 		self.assertEqual(dto["aiPayload"], {"action_ref": {"action_id": "ACT-CALL"}})
+		self.assertEqual(dto["explanation"], {"summary": "Student has been silent after asking about tuition."})
 		self.assertEqual(
 			dto["evaluation"], {"id": "NBAEVAL-1", "disposition": "RECOMMEND", "status": "completed"}
 		)
