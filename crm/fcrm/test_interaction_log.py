@@ -93,6 +93,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.assertEqual(first, result)
 		self.assertEqual(second, result)
 		create.assert_called_once()
+		self.assertEqual(create.call_args.kwargs["interaction_type"], "Tin nhắn Chatwoot")
 
 	def setUp(self):
 		frappe.set_user("Administrator")

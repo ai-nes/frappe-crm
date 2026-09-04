@@ -15,7 +15,10 @@ class TestStudentDecisionAPI(FrappeTestCase):
 			"decision_reason": "Not relevant", "idempotency_key": "decision-1", "correlation_id": "corr-1",
 		}
 		with patch("crm.api.student_decision._decide_recommendation", return_value={"status": "rejected"}) as command:
-			self.assertEqual(student_decision.decide_recommendation(**payload), {"status": "rejected"})
+			result = student_decision.decide_recommendation(
+				cmd="crm.api.student_decision.decide_recommendation", **payload
+			)
+		self.assertEqual(result["status"], "rejected")
 		command.assert_called_once_with(**payload)
 
 	def test_action_adapter_removes_internal_service_bypass(self):

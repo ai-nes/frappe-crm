@@ -22,20 +22,27 @@ _NBA_SOURCE_ERRORS = (QueryDeadlockError, QueryTimeoutError, MySQLError)
 
 
 @frappe.whitelist()
-def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) -> dict:
+def list_student_worklist(
+	cursor: str | None = None,
+	page_size: int | str = 20,
+	student_id: str | None = None,
+) -> dict:
 	"""Return one deterministic page of the session's pending ``CRM Recommendation``
 	review queue -- the immutable AI proposal awaiting a Sales decision, not a
 	pending Action Item. Legacy rows with no ``evaluation`` link never appear.
 
-	This endpoint intentionally has no user, campus, or role arguments. Frappe's
-	permission-aware list API (``CRM Recommendation``'s own permission query,
-	which scopes through the target Student) applies the delegated session
-	user's row scope.
+	The optional ``student_id`` narrows the same permission-aware queue to one
+	Student. It never widens scope: ``CRM Recommendation``'s own permission
+	condition still applies through the target Student.
 	"""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	if frappe.conf.get("crm_student_worklist_enabled", 1) in (0, "0", False):
 		frappe.throw(_("Student worklist is disabled by rollout policy."), frappe.PermissionError)
+	if student_id is not None:
+		if not isinstance(student_id, str) or not student_id.strip() or len(student_id.strip()) > 140:
+			frappe.throw(_("Mã học sinh không hợp lệ."), frappe.ValidationError)
+		student_id = student_id.strip()
 
 	page_size = _parse_page_size(page_size)
 	principal = frappe.session.user
@@ -46,7 +53,12 @@ def list_student_worklist(cursor: str | None = None, page_size: int | str = 20) 
 		else None
 	)
 
-	candidates = _fetch_recommendation_page(principal, last_sort_key, page_size + 1)
+	candidates = _fetch_recommendation_page(
+		principal,
+		last_sort_key,
+		page_size + 1,
+		student_id=student_id,
+	)
 	page = candidates[:page_size]
 	has_more = len(candidates) > len(page)
 	evaluations = _recommendation_evaluation_lookup(page)
@@ -539,6 +551,9 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 	payload = _parse_worklist_json(row.get("ai_payload"))
 	if not isinstance(payload, dict):
 		payload = {}
+	explanation = _parse_worklist_json(row.get("explanation"))
+	if not isinstance(explanation, dict):
+		explanation = None
 	evaluation = (evaluations or {}).get(row.get("evaluation")) or {}
 	return {
 		"id": row.name,
@@ -554,6 +569,7 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 		"channel": row.get("channel") or None,
 		"reason": row.get("reason") or "",
 		"aiPayload": payload,
+		"explanation": explanation,
 		"evaluation": {
 			"id": row.get("evaluation") or None,
 			"disposition": evaluation.get("disposition") or None,
@@ -611,7 +627,12 @@ def _cursor_secret() -> bytes:
 	return f"crm-worklist-cursor:{get_encryption_key()}".encode()
 
 
-def _fetch_recommendation_page(principal: str, last_sort_key: list | None, limit: int) -> list:
+def _fetch_recommendation_page(
+	principal: str,
+	last_sort_key: list | None,
+	limit: int,
+	student_id: str | None = None,
+) -> list:
 	"""Keyset query with Frappe's own permission condition, never an offset scan.
 
 	Only evaluation-epoch, undecided, unexpired recommendations addressed to a
@@ -632,6 +653,9 @@ def _fetch_recommendation_page(principal: str, last_sort_key: list | None, limit
 		"`tabCRM Recommendation`.evaluation IS NOT NULL AND `tabCRM Recommendation`.evaluation != ''",
 		"(`tabCRM Recommendation`.expires_at IS NULL OR `tabCRM Recommendation`.expires_at > %(now)s)",
 	]
+	if student_id:
+		conditions.append("`tabCRM Recommendation`.target_id = %(student_id)s")
+		values["student_id"] = student_id
 	if permission_query:
 		conditions.append(f"({permission_query})")
 	if last_sort_key:
@@ -649,6 +673,7 @@ def _fetch_recommendation_page(principal: str, last_sort_key: list | None, limit
 		`tabCRM Student`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
 		`tabCRM Recommendation`.channel, `tabCRM Recommendation`.reason, `tabCRM Recommendation`.action,
 		`tabCRM Recommendation`.recommendation_key, `tabCRM Recommendation`.ai_payload,
+		`tabCRM Recommendation`.explanation,
 		`tabCRM Recommendation`.evaluation, `tabCRM Recommendation`.recommended_at,
 		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
 		FROM `tabCRM Recommendation`

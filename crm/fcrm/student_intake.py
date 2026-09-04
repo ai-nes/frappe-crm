@@ -318,6 +318,7 @@ def _resolve_authority(capability: str, *, signed_context: dict[str, Any] | None
 			"profile": "signed_ingress",
 			"campus_scope": list(signed_context.get("campus_scope") or []),
 			"team_scope": list(signed_context.get("team_scope") or []),
+			"scope_all": bool(signed_context.get("scope_all")),
 			"capability": capability,
 			"signed": True,
 		}
@@ -742,7 +743,7 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 			_fail("UNAUTHORIZED", "The replay target is no longer available in the current scope.")
 		campuses = set(authority.get("campus_scope") or [])
 		teams = set(authority.get("team_scope") or [])
-		if authority.get("profile") not in {"platform_superuser", "admissions_director"}:
+		if authority.get("profile") not in {"platform_superuser", "admissions_director"} and not authority.get("scope_all"):
 			if campuses and student.branch not in campuses:
 				_fail("UNAUTHORIZED", "The replay target is outside the current Campus scope.")
 			if authority.get("signed"):
@@ -758,7 +759,7 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 			_fail("UNAUTHORIZED", "The replay review is no longer available in the current scope.")
 		campuses = set(authority.get("campus_scope") or [])
 		teams = set(authority.get("team_scope") or [])
-		if authority.get("profile") not in {"platform_superuser", "admissions_director"}:
+		if authority.get("profile") not in {"platform_superuser", "admissions_director"} and not authority.get("scope_all"):
 			proposed_campus = _text(_safe_get(review, "proposed_campus", "campus"))
 			anchor = _text(_safe_get(review, "scope_anchor"))
 			if campuses and proposed_campus not in campuses:
