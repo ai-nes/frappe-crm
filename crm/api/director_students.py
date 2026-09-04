@@ -33,6 +33,22 @@ PRIORITIES = {
 	"medium": {"label": "Trung bình", "rank": 2},
 	"low": {"label": "Thấp", "rank": 3},
 }
+PRIORITY_THRESHOLD = 70
+ASSESSMENT_FIELDS = [
+	"status",
+	"assessment_source",
+	"assessed_at",
+	"signal_score",
+	"enrollment_probability",
+	"interest",
+	"interest_confidence",
+	"fit",
+	"fit_confidence",
+	"primary_barrier",
+	"barrier_confidence",
+	"reason",
+	"recommendation",
+]
 SORT_FIELDS = {
 	"score": "latest_score",
 	"priority": "modified",
@@ -77,6 +93,7 @@ STUDENT_FIELDS = [
 	"assigned_to",
 	"admission_year",
 	"modified",
+	"privacy_status",
 ]
 
 
@@ -632,6 +649,8 @@ def _build_student_360(row, item) -> dict[str, Any]:
 	student_id = row.get("name")
 	assessment = _latest_assessment(student_id)
 	interactions = _student_interactions(student_id)
+	probability_trend = _student_probability_trend(student_id, interactions)
+	channel_performance = _channel_performance(interactions)
 	guardian = _student_guardian(student_id)
 	if not guardian.get("name") and row.get("alt_name"):
 		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
@@ -641,6 +660,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 	stage = _stage_descriptor(row) or {"code": "", "label": ""}
 	score = item.get("score")
 	probability = _number(assessment.get("enrollment_probability")) if assessment else None
+	baseline = probability_trend[0]["score"] if probability_trend else None
 
 	return {
 		"student": {
@@ -654,6 +674,10 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"email": row.get("email"),
 			"province": item.get("province"),
 			"counselor": item.get("owner"),
+			"priority": item.get("priority"),
+			"verificationStatus": _verification_status(row, assessment),
+			"contactConsent": _contact_consent(student_id, row.get("privacy_status")),
+			"lastUpdatedAt": _as_iso(row.get("modified")),
 		},
 		"readiness": _readiness(row, item, guardian, applications, interactions),
 		"profile": _key_values(
@@ -690,8 +714,10 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"summary": _insight_summary(stage["label"], score),
 			"signalScore": score,
 			"probability": probability,
+			"potentialLabel": _potential_label(probability),
+			"priorityThreshold": PRIORITY_THRESHOLD,
 			"scoreDelta": item.get("scoreDelta"),
-			"baseline": None,
+			"baseline": baseline,
 			"confidence": _assessment_confidence(assessment),
 			"concern": row.get("primary_barrier"),
 			"decisionMaker": guardian.get("name"),
@@ -701,34 +727,83 @@ def _build_student_360(row, item) -> dict[str, Any]:
 		"journey": _journey(interactions, item),
 		"engagement": _engagement(interactions),
 		"application": _application_items(applications),
+		"probabilityTrend": probability_trend,
+		"channelPerformance": channel_performance,
 	}
 
 
 def _latest_assessment(student_id: str | None):
-	if not student_id or not _table_exists("CRM Student Assessment"):
-		return frappe._dict()
-	rows = frappe.get_all(
-		"CRM Student Assessment",
-		filters={"student": student_id},
-		fields=[
-			"status",
-			"assessment_source",
-			"assessed_at",
-			"signal_score",
-			"enrollment_probability",
-			"interest",
-			"interest_confidence",
-			"fit",
-			"fit_confidence",
-			"primary_barrier",
-			"barrier_confidence",
-			"reason",
-			"recommendation",
-		],
+	rows = _assessment_history(
+		student_id,
 		order_by="assessed_at desc, creation desc",
+		exclude_rejected=True,
 		limit_page_length=1,
 	)
 	return rows[0] if rows else frappe._dict()
+
+
+def _assessment_history(
+	student_id: str | None,
+	*,
+	order_by: str,
+	exclude_rejected: bool = False,
+	limit_page_length: int = 0,
+) -> list:
+	if not student_id or not _table_exists("CRM Student Assessment"):
+		return []
+	filters: dict[str, Any] = {"student": student_id}
+	if exclude_rejected:
+		filters["status"] = ["!=", "rejected"]
+	return frappe.get_all(
+		"CRM Student Assessment",
+		filters=filters,
+		fields=ASSESSMENT_FIELDS,
+		order_by=order_by,
+		limit_page_length=limit_page_length,
+	)
+
+
+def _student_probability_trend(student_id: str | None, interactions: list) -> list[dict[str, Any]]:
+	return _build_probability_trend(
+		_assessment_history(student_id, order_by="assessed_at asc, creation asc, name asc"), interactions
+	)
+
+
+def _build_probability_trend(assessments: list, interactions: list) -> list[dict[str, Any]]:
+	chart_interactions = _prepared_chart_interactions(interactions)
+	trend = []
+	for assessment in assessments:
+		if assessment.get("status") == "rejected":
+			continue
+		score = _number(assessment.get("enrollment_probability"))
+		assessed_at = _local_datetime(assessment.get("assessed_at"))
+		if score is None or assessed_at is None:
+			continue
+
+		point = {
+			"date": assessed_at.isoformat(timespec="seconds"),
+			"score": max(0, min(100, score)),
+			"touches": sum(when <= assessed_at for when, _, _ in chart_interactions),
+		}
+		related = next(
+			(
+				(interaction, channel)
+				for when, interaction, channel in reversed(chart_interactions)
+				if when <= assessed_at
+			),
+			None,
+		)
+		if related:
+			interaction, channel = related
+			point.update(
+				{
+					"eventTitle": interaction.get("summary") or interaction.get("interaction_type"),
+					"eventDetail": interaction.get("notes") or interaction.get("next_follow_up_action"),
+					"channel": channel,
+				}
+			)
+		trend.append(point)
+	return trend
 
 
 def _student_interactions(student_id: str | None) -> list:
@@ -740,7 +815,9 @@ def _student_interactions(student_id: str | None) -> list:
 		fields=[
 			"name",
 			"interaction_datetime",
+			"interaction_type",
 			"summary",
+			"notes",
 			"channel",
 			"direction",
 			"outcome",
@@ -749,6 +826,130 @@ def _student_interactions(student_id: str | None) -> list:
 		order_by="interaction_datetime desc, creation desc",
 		limit_page_length=50,
 	)
+
+
+def _channel_performance(interactions: list) -> list[dict[str, Any]]:
+	channels: dict[str, dict[str, Any]] = {}
+	for prepared in _prepared_chart_interactions(interactions):
+		interaction, channel = prepared[1], prepared[2]
+		item = channels.setdefault(
+			channel, {"channel": channel, "touches": 0, "responsive": 0, "activities": []}
+		)
+		item["touches"] += 1
+		if interaction.get("outcome") in {"Captured", "Follow Up Needed", "Resolved", "Converted"}:
+			item["responsive"] += 1
+		if len(item["activities"]) < 20:
+			item["activities"].append(
+				{
+					"title": interaction.get("summary") or interaction.get("interaction_type") or "Hoạt động",
+					"time": _as_iso(interaction.get("interaction_datetime")),
+					"description": interaction.get("notes")
+					or interaction.get("next_follow_up_action")
+					or interaction.get("outcome"),
+				}
+			)
+
+	return [
+		{
+			"channel": item["channel"],
+			"touches": item["touches"],
+			"response": _rate(item["responsive"], item["touches"]),
+			"activities": item["activities"],
+		}
+		for item in channels.values()
+	]
+
+
+def _prepared_chart_interactions(interactions: list) -> list[tuple[Any, Any, str]]:
+	prepared = []
+	for interaction in interactions:
+		when = _local_datetime(interaction.get("interaction_datetime"))
+		channel = _chart_channel(interaction)
+		if when is not None and channel:
+			prepared.append((when, interaction, channel))
+	return sorted(prepared, key=lambda item: item[0])
+
+
+def _chart_channel(interaction) -> str | None:
+	value = _fold(interaction.get("channel") or interaction.get("interaction_type"))
+	if not value or any(token in value for token in ("zalo", "phone", "call", "goi")):
+		return None
+	if any(token in value for token in ("event", "su kien")):
+		return "Sự kiện"
+	if any(token in value for token in ("application", "ho so", "form")):
+		return "Hồ sơ"
+	if any(token in value for token in ("web", "website", "landing")):
+		return "Website"
+	return None
+
+
+def _verification_status(row, assessment) -> str:
+	status = str(assessment.get("status") or row.get("assessment_status") or "").strip().lower()
+	return {
+		"confirmed": "Đã xác thực",
+		"proposed": "Cần xác minh",
+		"superseded": "Cần xác minh",
+		"rejected": "Chưa xác thực",
+	}.get(status, "Chưa xác thực")
+
+
+def _contact_consent(student_id: str | None, privacy_status: str | None) -> dict[str, Any]:
+	result = {"status": _privacy_status_label(privacy_status), "channels": [], "updatedAt": None}
+	if not student_id or not _table_exists("CRM Contact Consent Event"):
+		return result
+	rows = frappe.get_all(
+		"CRM Contact Consent Event",
+		filters={"student": student_id},
+		fields=["event_type", "occurred_at", "scope"],
+		order_by="occurred_at desc, creation desc",
+		limit_page_length=1,
+	)
+	if not rows:
+		return result
+	event = rows[0]
+	result.update(
+		{
+			"status": {
+				"Granted": "Đã đồng ý",
+				"Re-subscribed": "Đã đồng ý",
+				"Opted Out": "Đã rút lại",
+				"Bounced": "Đã rút lại",
+				"Suppressed": "Đã rút lại",
+			}.get(event.get("event_type"), "Chưa xác định"),
+			"channels": _consent_channels(event.get("scope")),
+			"updatedAt": _as_iso(event.get("occurred_at")),
+		}
+	)
+	return result
+
+
+def _privacy_status_label(value: str | None) -> str:
+	return {
+		"granted": "Đã đồng ý",
+		"opted_out": "Đã rút lại",
+		"withdrawn": "Đã rút lại",
+		"expired": "Đã rút lại",
+	}.get(str(value or "").strip().lower(), "Chưa xác định")
+
+
+def _consent_channels(scope: str | None) -> list[str]:
+	value = _fold(scope)
+	channels = []
+	if "email" in value:
+		channels.append("Email")
+	if any(token in value for token in ("phone", "telephone", "dien thoai")):
+		channels.append("Điện thoại")
+	return channels
+
+
+def _potential_label(probability: float | int | None) -> str | None:
+	if probability is None:
+		return None
+	if probability >= PRIORITY_THRESHOLD:
+		return "Tiềm năng cao"
+	if probability >= 40:
+		return "Tiềm năng vừa"
+	return "Cần chú ý"
 
 
 def _student_guardian(student_id: str | None) -> dict[str, Any]:
@@ -1085,18 +1286,21 @@ def _relative_time(value) -> str | None:
 		return _as_iso(value)
 
 
-def _as_iso(value) -> str | None:
+def _local_datetime(value):
 	if not value:
 		return None
 	try:
 		parsed = frappe.utils.get_datetime(value)
 		if parsed.tzinfo is None:
-			parsed = parsed.replace(tzinfo=LOCAL_TIMEZONE)
-		else:
-			parsed = parsed.astimezone(LOCAL_TIMEZONE)
-		return parsed.isoformat(timespec="seconds")
+			return parsed.replace(tzinfo=LOCAL_TIMEZONE)
+		return parsed.astimezone(LOCAL_TIMEZONE)
 	except (TypeError, ValueError, AttributeError):
-		return str(value)
+		return None
+
+
+def _as_iso(value) -> str | None:
+	parsed = _local_datetime(value)
+	return parsed.isoformat(timespec="seconds") if parsed else str(value) if value else None
 
 
 def _province_label(value: str | None) -> str | None:
