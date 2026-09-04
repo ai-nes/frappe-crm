@@ -42,6 +42,18 @@ ACTION_OUTCOME_DOCTYPE = "CRM Action Outcome"
 RECOMMENDATION_FEEDBACK_DOCTYPE = "CRM Recommendation Feedback"
 
 
+def nba_evaluation_epoch_active() -> bool:
+	"""True when the durable NBA Evaluation runtime owns recommendation generation.
+
+	While the epoch is active the legacy generation side effects -- the legacy
+	``CRM Recommendation`` writers in this module and the ``CRM Action Item``
+	bundle writer -- stay dormant so the old and new generations never both run
+	for the same student. A missing or malformed flag reads as inactive, which
+	keeps the legacy path as the safe default until cutover.
+	"""
+	return frappe.conf.get("crm_nba_evaluation_runtime_enabled", 0) in (1, "1", True)
+
+
 def _doctype_exists(doctype: str) -> bool:
 	try:
 		return bool(frappe.db.exists("DocType", doctype))
@@ -213,114 +225,23 @@ def ensure_nba_recommendation(
 	model: str | None = None,
 	model_version: str | None = None,
 ):
-	"""Create-or-return one recommendation using only the public contract fields."""
-	action_type = canonicalize_action_type(action_type)
-	if not _doctype_exists("CRM Recommendation"):
+	"""Retired generation writer: the NBA Evaluation runtime owns recommendation
+	creation once its epoch is active, which is unconditional in this deployment."""
+	if nba_evaluation_epoch_active():
+		# The NBA Evaluation runtime writes its own recommendation rows; the
+		# legacy generation writer must not also create one.
 		return None
-	action_name = ensure_nba_action(action_type)
-	definition = get_nba_action_definition({"action": action_name}) if action_name else None
-	if confidence is not None:
-		confidence = _bounded_number(confidence, "confidence", minimum=0.0, maximum=1.0)
-	if expected_impact is not None:
-		expected_impact = _bounded_number(expected_impact, "expected_impact")
-	if timing_policy:
-		get_nba_timing_policy(timing_policy)
-	recommended_at = recommended_at or now_datetime()
-	payload = [
-		"CRM Student",
-		student,
-		action_name,
-		objective,
-		evidence,
-		priority,
-		due_at,
-		expires_at,
-		owner,
-		trigger,
-		timing_policy,
-		recommended_at,
-		confidence,
-		expected_impact,
-		model,
-		model_version,
-	]
-	recommendation_id = "REC-" + _digest(payload)[:24]
-	existing = frappe.db.get_value(
-		"CRM Recommendation", {"recommendation_id": recommendation_id}, "name"
-	)
-	if existing:
-		return frappe.get_doc("CRM Recommendation", existing)
-	return _service_insert(
-		{
-			"doctype": "CRM Recommendation",
-			"recommendation_id": recommendation_id,
-			"target_type": "CRM Student",
-			"target_id": student,
-			"action": action_name,
-			"purpose": objective or "Follow up on the next-best action.",
-			"channel": resolve_nba_channel(
-				{"action_type": action_type, "nba_action": action_name},
-				definition.get("default_channel") if definition else None,
-			),
-			"trigger": trigger or action_type or "recommendation",
-			"reason": objective or "Generated from the Student decision context.",
-			"evidence": evidence if evidence is not None else [],
-			"priority": priority if priority in {"high", "medium", "low"} else "medium",
-			"confidence": confidence,
-			"expected_impact": expected_impact,
-			"timing_policy": timing_policy,
-			"recommended_at": recommended_at,
-			"expires_at": expires_at,
-			"owner": owner,
-			"lifecycle_status": "proposed",
-			"decision_status": "pending",
-			"execution_status": "not_started",
-			"model": model,
-			"model_version": model_version,
-		}
-	)
+	return None
 
 
 def sync_nba_recommendation_for_action(action) -> None:
-	"""Project current Action state into the Recommendation contract statuses."""
-	recommendation_name = action.get("recommendation")
-	if not recommendation_name or not _doctype_exists("CRM Recommendation"):
+	"""Retired projection: legacy Recommendation rows are not produced once the
+	NBA Evaluation runtime epoch is active, which is unconditional here."""
+	if nba_evaluation_epoch_active():
+		# Legacy Recommendation rows are not produced under the Evaluation epoch,
+		# so there is no legacy projection to keep in sync.
 		return
-	decision_status = {
-		"pending": "pending",
-		"requires-review": "pending",
-		"accepted": "accepted",
-		"in-progress": "accepted",
-		"completed": "accepted",
-		"deferred": "deferred",
-		"rejected": "rejected",
-		"cancelled": "accepted",
-		"superseded": "accepted",
-	}.get(str(action.get("state") or "pending"), "pending")
-	execution_status = {
-		"planned": "not_started",
-		"in_progress": "in_progress",
-		"completed": "completed",
-		"failed": "failed",
-		"cancelled": "cancelled",
-	}.get(str(action.get("execution_status") or "planned"), "not_started")
-	lifecycle_status = {
-		"superseded": "superseded",
-		"completed": "completed",
-		"cancelled": "cancelled",
-		"rejected": "expired",
-	}.get(action.get("state"), "active")
-	frappe.db.set_value(
-		"CRM Recommendation",
-		recommendation_name,
-		{
-			"decision_status": decision_status,
-			"execution_status": execution_status,
-			"lifecycle_status": lifecycle_status,
-			"owner": action.get("action_owner"),
-		},
-		update_modified=False,
-	)
+	return
 
 
 def ensure_nba_execution_for_attempt(
@@ -344,6 +265,7 @@ def ensure_nba_execution_for_attempt(
 	}.get(str(attempt.status), "pending")
 	values = {
 		"recommendation": recommendation,
+		"task": action.get("name"),
 		"actor": attempt.actor,
 		"channel": resolve_nba_channel(action, channel),
 		"scheduled_at": scheduled_at,
@@ -363,8 +285,10 @@ def ensure_nba_execution_for_attempt(
 		updates = {
 			key: value
 			for key, value in values.items()
-			if key not in {"recommendation", "actor", "status"} and value is not None
+			if key not in {"recommendation", "task", "actor", "status"} and value is not None
 		}
+		if values.get("task") and not execution.get("task"):
+			updates["task"] = values["task"]
 		if status == execution.status or status in TRANSITIONS.get(execution.status, set()):
 			updates["status"] = status
 		if updates:
@@ -532,6 +456,14 @@ def _sync_nba_recommendation_execution(execution, *, scheduled_at: Any = None):
 	)
 
 
+def _feedback_task_for_outcome(outcome_name: str) -> str | None:
+	"""Resolve the accepted Task behind an Outcome via its Execution link."""
+	execution_name = frappe.db.get_value(ACTION_OUTCOME_DOCTYPE, outcome_name, "execution")
+	if not execution_name:
+		return None
+	return frappe.db.get_value(ACTION_EXECUTION_DOCTYPE, execution_name, "task")
+
+
 def record_nba_feedback(
 	*,
 	recommendation: str,
@@ -541,8 +473,19 @@ def record_nba_feedback(
 	reward: float | None,
 	actual_impact: float | None,
 	feedback_source: str,
+	task: str | None = None,
+	effectiveness_index: float | None = None,
+	ai_confidence: float | None = None,
 ):
-	"""Create one immutable feedback row using only the public contract fields."""
+	"""Create one immutable feedback row using only the public contract fields.
+
+	``predicted_probability`` stays a required compatibility-only history value.
+	New callers additionally pass ``effectiveness_index`` (observed signal, in
+	[-1, 1]) and ``ai_confidence`` (model confidence carried on the immutable
+	recommendation, in [0, 1]); the AI, human and actual signals are kept in
+	distinct columns. ``task`` links the accepted Task and is resolved from the
+	Outcome's Execution when not supplied.
+	"""
 	if not _doctype_exists(RECOMMENDATION_FEEDBACK_DOCTYPE):
 		frappe.throw("CRM Recommendation Feedback is not installed.", frappe.ValidationError)
 	if predicted_probability in (None, ""):
@@ -556,12 +499,18 @@ def record_nba_feedback(
 	)
 	reward = _bounded_number(reward, "reward")
 	actual_impact = _bounded_number(actual_impact, "actual_impact")
+	effectiveness_index = _bounded_number(effectiveness_index, "effectiveness_index")
+	ai_confidence = _bounded_number(ai_confidence, "ai_confidence", minimum=0.0, maximum=1.0)
+	task = task or _feedback_task_for_outcome(outcome)
 	return _service_insert(
 		{
 			"doctype": RECOMMENDATION_FEEDBACK_DOCTYPE,
 			"recommendation": recommendation,
+			"task": task,
 			"outcome": outcome,
 			"predicted_probability": predicted_probability,
+			"effectiveness_index": effectiveness_index,
+			"ai_confidence": ai_confidence,
 			"actual_result": str(actual_result)[:500],
 			"reward": reward,
 			"actual_impact": actual_impact,

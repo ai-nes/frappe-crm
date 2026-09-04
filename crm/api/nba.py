@@ -23,8 +23,15 @@ def record_feedback(
 	reward: float | None = None,
 	actual_impact: float | None = None,
 	feedback_source: str = "human",
+	effectiveness_index: float | None = None,
+	ai_confidence: float | None = None,
 ):
-	"""Record one scoped, immutable Recommendation Feedback row."""
+	"""Record one scoped, immutable Recommendation Feedback row.
+
+	``predicted_probability`` remains a required compatibility-only history
+	value; ``effectiveness_index`` and ``ai_confidence`` are the forward-looking
+	quality signals and are optional so older clients keep working.
+	"""
 	_require_authenticated_user()
 	recommendation_doc = frappe.get_doc("CRM Recommendation", recommendation)
 	outcome_doc = frappe.get_doc("CRM Action Outcome", outcome)
@@ -45,4 +52,7 @@ def record_feedback(
 		reward=reward,
 		actual_impact=actual_impact,
 		feedback_source=feedback_source,
+		task=execution_doc.get("task"),
+		effectiveness_index=effectiveness_index,
+		ai_confidence=ai_confidence,
 	)
