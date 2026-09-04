@@ -142,3 +142,4 @@ crm.patches.v1_0.add_nba_evaluation_reevaluation_triggers
 crm.patches.v1_0.backfill_action_execution_task
 crm.patches.v1_0.add_recommendation_rationale
 crm.patches.v1_0.restructure_recommendation_explanation
+crm.patches.v1_0.backfill_placeholder_clusters_zones

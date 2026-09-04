@@ -8,14 +8,15 @@ from crm.fcrm.role_policy import (
 	PROFILE_LABELS,
 	PROFILE_ROLE_ALIASES,
 	capabilities_for_roles,
+	capability_details,
 	classify_role_set,
 	is_crm_user,
 	resolve_compatibility_overlay,
 )
-from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role_workspace_read_enabled
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
 )
+from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role_workspace_read_enabled
 
 # Compatibility exports for existing API consumers. New consumers import the
 # canonical policy module rather than adding role literals here.
@@ -88,6 +89,7 @@ def _session_role_flags(roles):
 		frappe.throw(_("Your CRM business roles are ambiguous or unsupported."), frappe.PermissionError)
 	if not is_crm_user(role_names):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	capabilities = sorted(capabilities_for_roles(role_names))
 
 	# Keep the legacy booleans stable for older SPA callers, while mapping them
 	# to the canonical Sale / Lead Sales profiles.
@@ -100,7 +102,8 @@ def _session_role_flags(roles):
 		# Compatibility field consumed by the local crm-agents gateway.
 		"crm_role": CRM_PROFILE_LABELS.get(profile, profile),
 		"crm_role_state": role_state,
-		"crm_capabilities": sorted(capabilities_for_roles(role_names)),
+		"crm_capabilities": capabilities,
+		"crm_capability_details": capability_details(capabilities),
 		"crm_policy_version": POLICY_VERSION,
 		"crm_feature_flags": _crm_feature_flags(profile),
 	}
@@ -121,6 +124,9 @@ def get_session_role_flags():
 			"crm_role": None,
 			"crm_role_state": "platform_superuser",
 			"crm_capabilities": sorted(capabilities_for_roles(set(), administrator=True)),
+			"crm_capability_details": capability_details(
+				capabilities_for_roles(set(), administrator=True)
+			),
 			"crm_policy_version": POLICY_VERSION,
 			"crm_feature_flags": _crm_feature_flags(None),
 		}
@@ -147,6 +153,7 @@ def get_my_roles():
 		"crm_role": flags["crm_role"],
 		"crm_role_state": flags["crm_role_state"],
 		"crm_capabilities": flags["crm_capabilities"],
+		"crm_capability_details": flags["crm_capability_details"],
 		"crm_policy_version": flags["crm_policy_version"],
 		"crm_feature_flags": flags["crm_feature_flags"],
 	}
@@ -179,7 +186,9 @@ def me():
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_capabilities": flags["crm_capabilities"],
+		"crm_capability_details": flags["crm_capability_details"],
 		"permission": flags["crm_capabilities"],
+		"permission_details": flags["crm_capability_details"],
 		# The cross-origin SPA has no server-rendered page to read frappe.boot
 		# from, so hand it the CSRF token it must send as `X-Frappe-CSRF-Token`
 		# on write requests (production enforces CSRF; dev sets ignore_csrf).
