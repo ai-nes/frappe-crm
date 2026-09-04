@@ -403,6 +403,7 @@ scheduler_events = {
 			"crm.fcrm.student_routing.process_pending_routing_requests",
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",
+			"crm.fcrm.student_lead_operations.recall_expired_ctv_batches",
 		],
 	},
 }

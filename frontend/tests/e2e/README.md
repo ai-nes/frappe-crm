@@ -13,6 +13,11 @@ $env:PLAYWRIGHT_EXPECTED_SITE = 'crm.localhost'
 $env:PLAYWRIGHT_E2E_USER = 'sale@gmail.com'
 $env:PLAYWRIGHT_E2E_PASSWORD = '<site-scoped-fixture-secret>'
 $env:PLAYWRIGHT_FIXTURE_MANIFEST = 'E:\path\to\playwright-fixture.json'
+$env:PLAYWRIGHT_ASSIGNMENT_MANAGER_USER = 'system-manager@example.com'
+$env:PLAYWRIGHT_ASSIGNMENT_MANAGER_PASSWORD = '<site-scoped-fixture-secret>'
+$env:PLAYWRIGHT_ASSIGNMENT_SALE_USER = 'auto.sale.a@example.com'
+$env:PLAYWRIGHT_ASSIGNMENT_SALE_PASSWORD = '<assignment-demo-site-secret>'
+$env:E2E_RUN_ID = 'assignment-local-20260905'
 ```
 
 The manifest is produced by the site-owned fixture orchestration and must contain
@@ -53,3 +58,10 @@ The full mutation run has passed 7/7 on the provisioned disposable cohort with
 the required server-side flags enabled. The flags were disabled after the run;
 immutable audit-row cleanup remains a separate fixture teardown concern. See
 `flow-traceability.md` for the branch-by-branch evidence boundary.
+
+`assignment-overview.spec.ts` is an additional guarded manager-to-Sale journey.
+It does not seed or reset data from the browser. Seed the local demo first, then
+provide the manager and assignment-Sale credentials above and run only that spec
+when checking the setup workspace. The test covers batch school mapping, direct
+Staff context setup and CRM Student intake-to-routing, with Campus derived from
+the Sale user's Staff context.

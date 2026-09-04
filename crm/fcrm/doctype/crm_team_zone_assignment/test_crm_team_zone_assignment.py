@@ -3,7 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import add_days, today
+from frappe.utils import add_days, getdate, today
 
 
 class TestCRMTeamZoneAssignment(FrappeTestCase):
@@ -26,12 +26,28 @@ class TestCRMTeamZoneAssignment(FrappeTestCase):
 		for team in (self._team_a, self._team_b):
 			if frappe.db.exists("CRM Team", team):
 				frappe.delete_doc("CRM Team", team, force=True)
+		for email in frappe.db.get_all("User", filters={"first_name": ["like", "_Test TZA%"]}, pluck="name"):
+			if frappe.db.exists("User", email):
+				frappe.delete_doc("User", email, force=True)
 		frappe.delete_doc("CRM Zone", self._zone, force=True)
 		frappe.delete_doc("CRM Cluster", self._cluster, force=True)
 		frappe.delete_doc("CRM Province", self._province, force=True)
 		frappe.delete_doc("CRM Campus", self._campus, force=True)
 
 	def test_cannot_activate_without_active_member(self):
+		with self.assertRaises(frappe.ValidationError):
+			frappe.get_doc(
+				{
+					"doctype": "CRM Team Zone Assignment",
+					"team": self._team_a,
+					"zone": self._zone,
+					"status": "Active",
+					"effective_from": today(),
+				}
+			).insert(ignore_permissions=True)
+
+	def test_cannot_activate_with_only_expired_membership(self):
+		self._add_active_member(self._team_a, "_Test TZA Expired Staff", effective_until=add_days(today(), -1))
 		with self.assertRaises(frappe.ValidationError):
 			frappe.get_doc(
 				{
@@ -72,10 +88,11 @@ class TestCRMTeamZoneAssignment(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 		row_a.reload()
-		self.assertEqual(row_a.status, "Retired")
+		self.assertEqual(row_a.status, "Active")
+		self.assertEqual(row_a.effective_until, getdate(today()))
 
 		zone.reload()
-		self.assertEqual(zone.current_team, self._team_b)
+		self.assertEqual(zone.current_team, self._team_a)
 
 	def test_cannot_deactivate_team_with_active_zone(self):
 		self._add_active_member(self._team_a, "_Test TZA Staff C")
@@ -131,7 +148,7 @@ class TestCRMTeamZoneAssignment(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True).name
 
-	def _add_active_member(self, team, staff_name):
+	def _add_active_member(self, team, staff_name, effective_until=None):
 		if frappe.db.exists("CRM Staff", staff_name):
 			frappe.delete_doc("CRM Staff", staff_name, force=True)
 		department_name = "_Test TZA Dept"
@@ -143,11 +160,29 @@ class TestCRMTeamZoneAssignment(FrappeTestCase):
 			{
 				"doctype": "CRM Staff",
 				"full_name": staff_name,
+				"user": f"{frappe.scrub(staff_name)}@example.com",
 				"department": department_name,
 				"campus": self._campus,
 				"is_active": 1,
 			}
 		)
-		staff.append("team_memberships", {"team": team, "function": "Sale", "is_primary": 1})
+		if not frappe.db.exists("User", staff.user):
+			frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": staff.user,
+					"first_name": staff_name,
+					"send_welcome_email": 0,
+				}
+			).insert(ignore_permissions=True)
+		staff.append(
+			"team_memberships",
+			{
+				"team": team,
+				"function": "Sale",
+				"is_primary": 1,
+				"effective_until": effective_until,
+			},
+		)
 		staff.insert(ignore_permissions=True)
 		return staff.name

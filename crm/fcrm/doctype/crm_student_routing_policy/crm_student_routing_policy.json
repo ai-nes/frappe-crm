@@ -1,13 +1,14 @@
 {
  "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:policy_key", "doctype": "DocType", "engine": "InnoDB",
- "field_order": ["policy_key", "policy_version", "status", "campus", "student_pool", "strategy", "effective_from", "effective_until", "recipient_scope", "cursor_staff", "cursor_revision", "authored_by", "approved_by", "approved_at", "break_glass_reason", "schema_version"],
+ "field_order": ["policy_key", "policy_version", "status", "campus", "student_pool", "strategy", "scoring_weights", "effective_from", "effective_until", "recipient_scope", "cursor_staff", "cursor_revision", "authored_by", "approved_by", "approved_at", "break_glass_reason", "schema_version"],
  "fields": [
   {"fieldname":"policy_key","fieldtype":"Data","label":"Policy Key","read_only":1,"reqd":1,"unique":1},
   {"fieldname":"policy_version","fieldtype":"Int","label":"Policy Version","read_only":1,"reqd":1},
   {"default":"draft","fieldname":"status","fieldtype":"Select","label":"Status","options":"draft\nactive\nretired","read_only":1,"reqd":1},
   {"fieldname":"campus","fieldtype":"Link","label":"Campus","options":"CRM Campus","read_only":1,"reqd":1},
   {"fieldname":"student_pool","fieldtype":"Link","label":"Student Pool","options":"CRM Student Pool","read_only":1,"reqd":1},
-  {"default":"round_robin","fieldname":"strategy","fieldtype":"Select","label":"Strategy","options":"round_robin","read_only":1,"reqd":1},
+  {"default":"round_robin","fieldname":"strategy","fieldtype":"Select","label":"Strategy","options":"round_robin\nweighted_score","read_only":1,"reqd":1},
+  {"fieldname":"scoring_weights","fieldtype":"JSON","label":"Scoring Weights","read_only":1},
   {"fieldname":"effective_from","fieldtype":"Datetime","label":"Effective From","read_only":1,"reqd":1},
   {"fieldname":"effective_until","fieldtype":"Datetime","label":"Effective Until","read_only":1},
   {"fieldname":"recipient_scope","fieldtype":"JSON","label":"Recipient Scope","read_only":1},

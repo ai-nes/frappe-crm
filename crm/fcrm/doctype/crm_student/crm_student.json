@@ -75,6 +75,7 @@
   "identity",
   "case_key",
   "ownership_revision",
+  "assignment_priority",
   "engagement_revision",
   "lifecycle_revision",
   "student_context_revision",
@@ -91,7 +92,14 @@
   "import_source_id"
  ],
  "fields": [
-  {
+ {
+  "default": "normal",
+  "fieldname": "assignment_priority",
+  "fieldtype": "Select",
+  "label": "Assignment Priority",
+  "options": "low\nnormal\nhigh\nurgent"
+ },
+ {
    "default": "ENR-.YYYY.-",
    "fieldname": "naming_series",
    "fieldtype": "Select",

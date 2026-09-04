@@ -2,6 +2,8 @@ import frappe
 from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.utils.effective import is_effective
+
 
 class CRMTeam(Document):
 	def validate(self):
@@ -13,7 +15,12 @@ class CRMTeam(Document):
 		previous = self.get_doc_before_save()
 		if not previous or not previous.is_active:
 			return
-		if frappe.db.exists("CRM Team Zone Assignment", {"team": self.name, "status": "Active"}):
+		assignments = frappe.get_all(
+			"CRM Team Zone Assignment",
+			filters={"team": self.name, "status": "Active"},
+			fields=["effective_from", "effective_until"],
+		)
+		if any(is_effective(row) for row in assignments):
 			frappe.throw(
 				_(
 					"Không thể ngừng hoạt động team <b>{0}</b> vì vẫn còn Zone đang được phụ trách. "

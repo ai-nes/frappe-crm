@@ -31,6 +31,9 @@ class TestCRMHighSchoolAssignment(FrappeTestCase):
 				frappe.delete_doc("CRM Staff", name, force=True)
 		for team in (self._team, self._other_team):
 			frappe.delete_doc("CRM Team", team, force=True)
+		for email in frappe.db.get_all("User", filters={"first_name": ["like", "_Test HSA%"]}, pluck="name"):
+			if frappe.db.exists("User", email):
+				frappe.delete_doc("User", email, force=True)
 		frappe.delete_doc("CRM Zone", self._zone, force=True)
 		frappe.delete_doc("CRM Cluster", self._cluster, force=True)
 		frappe.delete_doc("CRM Province", self._province, force=True)
@@ -42,6 +45,21 @@ class TestCRMHighSchoolAssignment(FrappeTestCase):
 				{
 					"doctype": "CRM High School Assignment",
 					"staff": self._staff,
+					"team": self._team,
+					"high_school": self._school,
+				}
+			).insert(ignore_permissions=True)
+
+	def test_rejects_assignment_for_staff_with_expired_membership(self):
+		expired_staff = self._add_active_member(
+			self._team, "_Test HSA Expired Staff", effective_until=add_days(today(), -1)
+		)
+		self._activate_zone(self._team)
+		with self.assertRaises(frappe.ValidationError):
+			frappe.get_doc(
+				{
+					"doctype": "CRM High School Assignment",
+					"staff": expired_staff,
 					"team": self._team,
 					"high_school": self._school,
 				}
@@ -121,7 +139,7 @@ class TestCRMHighSchoolAssignment(FrappeTestCase):
 			}
 		).insert(ignore_permissions=True).name
 
-	def _add_active_member(self, team, staff_name):
+	def _add_active_member(self, team, staff_name, effective_until=None):
 		if frappe.db.exists("CRM Staff", staff_name):
 			frappe.delete_doc("CRM Staff", staff_name, force=True)
 		department_name = "_Test HSA Dept"
@@ -133,12 +151,30 @@ class TestCRMHighSchoolAssignment(FrappeTestCase):
 			{
 				"doctype": "CRM Staff",
 				"full_name": staff_name,
+				"user": f"{frappe.scrub(staff_name)}@example.com",
 				"department": department_name,
 				"campus": self._campus,
 				"is_active": 1,
 			}
 		)
-		staff.append("team_memberships", {"team": team, "function": "Sale", "is_primary": 1})
+		if not frappe.db.exists("User", staff.user):
+			frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": staff.user,
+					"first_name": staff_name,
+					"send_welcome_email": 0,
+				}
+			).insert(ignore_permissions=True)
+		staff.append(
+			"team_memberships",
+			{
+				"team": team,
+				"function": "Sale",
+				"is_primary": 1,
+				"effective_until": effective_until,
+			},
+		)
 		staff.insert(ignore_permissions=True)
 		return staff.name
 

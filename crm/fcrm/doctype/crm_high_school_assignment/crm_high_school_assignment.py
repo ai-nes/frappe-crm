@@ -4,6 +4,9 @@
 import frappe
 from frappe import _
 from frappe.model.document import Document
+from frappe.utils import today
+
+from crm.fcrm.utils.effective import is_effective
 
 
 class CRMHighSchoolAssignment(Document):
@@ -35,12 +38,18 @@ class CRMHighSchoolAssignment(Document):
 		self.zone = frappe.db.get_value("CRM Ward", info.ward, "zone")
 
 	def _validate_staff_team_membership(self):
-		is_member = frappe.db.exists(
-			"CRM Team Membership", {"parent": self.staff, "parenttype": "CRM Staff", "team": self.team}
+		staff = frappe.db.get_value("CRM Staff", self.staff, "is_active")
+		memberships = frappe.get_all(
+			"CRM Team Membership",
+			filters={"parent": self.staff, "parenttype": "CRM Staff", "team": self.team},
+			fields=["effective_from", "effective_until"],
 		)
+		is_member = bool(staff and memberships and any(
+			is_effective(row, today()) for row in memberships
+		))
 		if not is_member:
 			frappe.throw(
-				_("Team Member {0} does not have an active membership in Team {1}.").format(
+				_("Team Member {0} does not have an active CRM Staff record and membership in Team {1}.").format(
 					self.staff, self.team
 				),
 				frappe.ValidationError,
@@ -62,9 +71,12 @@ class CRMHighSchoolAssignment(Document):
 				),
 				frappe.ValidationError,
 			)
-		owns_zone = frappe.db.exists(
-			"CRM Team Zone Assignment", {"zone": self.zone, "team": self.team, "status": "Active"}
+		zone_assignments = frappe.get_all(
+			"CRM Team Zone Assignment",
+			filters={"zone": self.zone, "team": self.team, "status": "Active"},
+			fields=["effective_from", "effective_until"],
 		)
+		owns_zone = any(is_effective(row, today()) for row in zone_assignments)
 		if not owns_zone:
 			frappe.throw(
 				_(

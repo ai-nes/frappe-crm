@@ -84,6 +84,7 @@ crm.patches.v1_0.prepare_student_intake_data
 crm.patches.v1_0.seed_master_data_governance
 crm.patches.v1_0.seed_student_pools
 crm.patches.v1_0.prepare_student_routing_sla
+crm.patches.v1_0.migrate_zone_owned_student_pools
 crm.patches.v1_0.backfill_and_reconcile_routing_sla
 crm.patches.v1_0.prepare_student_engagement
 crm.patches.v1_0.backfill_student_engagement

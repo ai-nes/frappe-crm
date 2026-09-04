@@ -11,6 +11,20 @@ from crm.fcrm.school_domain_permissions import (
 
 
 class CRMHighSchool(Document):
+	_DEPENDENT_DOCTYPES = (
+		"CRM Contact",
+		"CRM High School Annual Snapshot",
+		"CRM High School Assignment",
+		"CRM School Activity",
+		"CRM School Analysis Run",
+		"CRM School Contact",
+		"CRM School Intelligence Revision Journal",
+		"CRM School Relationship",
+		"CRM School Stakeholder",
+		"CRM Student",
+		"CRM Student Geography Snapshot",
+	)
+
 	def before_validate(self):
 		self._sync_canonical_geography()
 
@@ -21,12 +35,15 @@ class CRMHighSchool(Document):
 		self._sync_derived_key_account()
 
 	def on_trash(self):
-		if frappe.db.exists("CRM High School Assignment", {"high_school": self.name, "status": "Active"}):
-			frappe.throw(
-				"Cannot delete this High School: it still has active High School Assignments. "
-				"Deactivate it instead.",
-				frappe.ValidationError,
-			)
+		for doctype in self._DEPENDENT_DOCTYPES:
+			if not frappe.db.exists("DocType", doctype):
+				continue
+			if frappe.db.exists(doctype, {"high_school": self.name}):
+				frappe.throw(
+					"Cannot delete this High School: it is referenced by {0}. "
+					"Deactivate or re-point the dependent records first.".format(doctype),
+					frappe.ValidationError,
+				)
 
 	def _sync_canonical_geography(self):
 		if self.ward and frappe.db.exists("CRM Ward", self.ward):

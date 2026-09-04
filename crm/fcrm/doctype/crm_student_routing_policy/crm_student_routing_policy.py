@@ -14,7 +14,7 @@ class CRMStudentRoutingPolicy(Document):
 	)
 
 	def validate(self):
-		if self.strategy and self.strategy != "round_robin":
+		if self.strategy and self.strategy not in {"round_robin", "weighted_score"}:
 			frappe.throw("Unsupported Student routing strategy")
 		validate_policy_publication(self, self._LOCKED_FIELDS)
 

@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from frappe.utils import add_days, today
 
 
 class TestCRMStaff(FrappeTestCase):
@@ -135,6 +136,27 @@ class TestCRMStaff(FrappeTestCase):
 		staff.save(ignore_permissions=True)
 		staff.reload()
 		self.assertEqual(len(staff.team_memberships), 2)
+
+	def test_overlapping_memberships_in_same_team_rejected(self):
+		staff = self._make_staff("_Test Staff Same Team Memberships")
+		staff.append(
+			"team_memberships",
+			{
+				"team": self._team_a,
+				"function": "Sale",
+				"effective_from": today(),
+			},
+		)
+		staff.append(
+			"team_memberships",
+			{
+				"team": self._team_a,
+				"function": "Lead Sales",
+				"effective_from": add_days(today(), 1),
+			}
+		)
+		with self.assertRaises(frappe.ValidationError):
+			staff.save(ignore_permissions=True)
 
 	# ---------------------------------------------------------------- helpers
 

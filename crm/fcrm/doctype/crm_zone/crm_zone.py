@@ -20,3 +20,19 @@ class CRMZone(Document):
 				self.zone_name
 			),
 		)
+		block_delete_if_has_children(
+			self,
+			"CRM Team Zone Assignment",
+			"zone",
+			_("Cannot delete Zone {0}: it still has Team assignments. Retire them first.").format(
+				self.zone_name
+			),
+		)
+		block_delete_if_has_children(
+			self,
+			"CRM High School Assignment",
+			"zone",
+			_("Cannot delete Zone {0}: it still has High School assignments. Re-point them first.").format(
+				self.zone_name
+			),
+		)

@@ -17,6 +17,7 @@ from frappe.utils import now_datetime
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.utils.effective import is_effective
 
 RECEIPT = "CRM Student Command Receipt"
 DECISION_EVENT = "CRM Student Decision Event"
@@ -164,14 +165,27 @@ def _valid_executor(student, staff, *, allow_global=False):
 	if allow_global:
 		return
 	student_row = frappe.db.get_value(
-		"CRM Student", student, ["owner_staff", "assigned_to", "owning_team"], as_dict=True
+		"CRM Student", student, ["owner_staff", "assigned_to", "owning_team", "high_school"], as_dict=True
 	) or {}
 	owner = student_row.get("owner_staff") or student_row.get("assigned_to")
 	team = student_row.get("owning_team")
 	if staff == owner:
 		return
-	if team and frappe.db.exists(
-		"CRM Team Membership", {"parent": staff, "parenttype": "CRM Staff", "team": team}
+	if team:
+		memberships = frappe.get_all(
+			"CRM Team Membership",
+			filters={"parent": staff, "parenttype": "CRM Staff", "team": team},
+			fields=["effective_from", "effective_until"],
+		)
+		if any(is_effective(row) for row in memberships):
+			return
+	# A school-specific assignment is a valid executor scope even when the
+	# Student is still waiting in a different pool projection.  It must still
+	# be a current, reviewed assignment; a Zone transfer flags stale rows and
+	# therefore cannot silently grant NBA execution access.
+	if frappe.db.exists(
+		"CRM High School Assignment",
+		{"high_school": student_row.get("high_school"), "staff": staff, "status": "Active", "needs_review": 0},
 	):
 		return
 	_fail("OUT_OF_SCOPE", "The executor is outside the Student's current owner/team scope.")

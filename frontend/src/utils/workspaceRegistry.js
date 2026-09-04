@@ -226,6 +226,13 @@ export const workspaceRegistry = [
     'assignment-queue',
   ),
   entry(
+    'lead_assignment_overview',
+    'lead_sales',
+    'assignment-overview',
+    'setup',
+    'assignment-overview',
+  ),
+  entry(
     'lead_member_performance',
     'lead_sales',
     'team-performance',
@@ -620,6 +627,13 @@ export const workspaceRegistry = [
     'system-organization',
     'staff',
     'system-organization',
+  ),
+  entry(
+    'adm_assignment_overview',
+    'system_manager',
+    'assignment-overview',
+    'setup',
+    'assignment-overview',
   ),
   entry(
     'adm_integrations',

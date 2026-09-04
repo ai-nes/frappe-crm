@@ -461,7 +461,8 @@ def resolve_student_operational_target(
 		fields=["name", "team", "function"],
 	)
 	active_memberships = [
-		row for row in memberships
+		row
+		for row in memberships
 		if not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS
 	]
 	if len(active_memberships) != 1:
@@ -673,16 +674,16 @@ def change_student_ownership(
 		# ``_internal_actor`` is private-only; request data can never choose it.
 		actor = _internal_actor or "Administrator"
 		if actor == "Administrator":
-			profile, actor_policy = _authorize(actor)
+			profile, _actor_policy = _authorize(actor)
 		else:
 			roles = set(frappe.get_roles(actor))
 			profile = resolve_crm_profile(roles)
 			if not profile:
 				_error("UNAUTHORIZED", "The internal ownership actor has no CRM profile.")
-			actor_policy = {"roles": sorted(roles), "profile": profile}
+			_actor_policy = {"roles": sorted(roles), "profile": profile}
 	else:
 		actor = _current_actor()
-		profile, actor_policy = _authorize(actor)
+		profile, _actor_policy = _authorize(actor)
 	_ensure_schema()
 
 	request = {
@@ -911,7 +912,7 @@ def _label(doctype: str, name: str | None, fieldname: str) -> str | None:
 def get_student_ownership(student: str) -> dict[str, Any]:
 	"""Return the current ownership projection and scoped append-only history."""
 
-	student_doc, actor, profile, capabilities = _student_for_read(student)
+	student_doc, _actor, _profile, capabilities = _student_for_read(student)
 	result = {
 		"student": student_doc.name,
 		"owner_staff": student_doc.get("owner_staff"),
@@ -1037,7 +1038,8 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 		eligible = [
 			row
 			for row in memberships
-			if row.get("team") in team_by_name and (not row.get("function") or row.function == "Sale")
+			if row.get("team") in team_by_name
+			and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
 		]
 		if len(eligible) != 1:
 			continue
