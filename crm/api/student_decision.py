@@ -544,9 +544,23 @@ def write_canonical_action_bundle(
 
 
 def _call(fn, **kwargs):
+	# Frappe may include the routed RPC command in adapters that accept
+	# ``**kwargs``. It is transport metadata, not part of the decision payload.
+	kwargs.pop("cmd", None)
 	try:
 		return fn(**kwargs)
 	except StudentDecisionError as exc:
+		# Keep the stable domain code available to API clients. Frappe still
+		# serializes the exception for backwards compatibility, but clients
+		# should not need to parse that human-oriented string.
+		try:
+			if isinstance(getattr(frappe.local, "response", None), dict):
+				frappe.local.response["error"] = {
+					"code": exc.code,
+					"message": str(exc),
+				}
+		except (AttributeError, TypeError):
+			pass
 		exc_type = frappe.PermissionError if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE", "CONTRACT_UNAVAILABLE", "OUTBOX_DISABLED"} else frappe.ValidationError
 		frappe.throw(str(exc), exc_type)
 
