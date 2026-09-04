@@ -341,3 +341,79 @@ class TestDirectorStudents(FrappeTestCase):
 			response = director_students.get_director_student("ENR-1")
 
 		self.assertEqual(response, {"student": {"name": "An"}})
+
+	def test_student_zalo_messages_mapping(self):
+		interactions = [
+			frappe._dict(
+				name="INTX-ZALO-1",
+				interaction_datetime="2026-06-06 16:42:00",
+				channel="Zalo",
+				direction="inbound",
+				summary="Hỏi học phí & học bổng",
+				notes="Em gửi giúp anh bảng học phí theo từng học kỳ.",
+				outcome="Resolved",
+			),
+			frappe._dict(
+				name="INTX-ZALO-2",
+				interaction_datetime="2026-06-06 16:49:00",
+				channel="Zalo",
+				direction="outbound",
+				summary="Hỏi học phí & học bổng",
+				notes="Dạ được anh. Đính kèm: Bang-hoc-phi-2026.pdf",
+				outcome="Follow Up Needed",
+			),
+		]
+		row = frappe._dict(student_name="Nguyễn Minh An", phone="0901234412", assigned_to="Trần Quốc Bảo")
+		guardian = {"name": "Nguyễn Văn Minh", "relation": "Bố của học sinh"}
+
+		messages = director_students._student_zalo_messages("ENR-1", interactions, row, guardian)
+
+		self.assertEqual(len(messages), 2)
+		self.assertEqual(messages[0]["id"], "INTX-ZALO-1")
+		self.assertEqual(messages[0]["direction"], "inbound")
+		self.assertEqual(messages[0]["senderName"], "Nguyễn Văn Minh")
+		self.assertEqual(messages[0]["status"], "read")
+		self.assertEqual(messages[1]["id"], "INTX-ZALO-2")
+		self.assertEqual(messages[1]["direction"], "outbound")
+		self.assertEqual(messages[1]["attachmentName"], "Bang-hoc-phi-2026.pdf")
+		self.assertEqual(messages[1]["status"], "delivered")
+
+	def test_student_call_records_mapping(self):
+		interactions = [
+			frappe._dict(
+				name="INTX-CALL-1",
+				interaction_datetime="2026-06-06 16:42:00",
+				channel="Phone",
+				direction="outbound",
+				summary="Tư vấn lần 2",
+				notes="Đã xác nhận ngành phù hợp.",
+				outcome="Connected",
+			)
+		]
+		row = frappe._dict(student_name="Nguyễn Minh An", phone="0901234412", assigned_to="Trần Quốc Bảo")
+		guardian = {"name": "Nguyễn Văn Minh", "relation": "Bố của học sinh"}
+
+		with patch.object(director_students, "_table_exists", return_value=False):
+			calls = director_students._student_call_records("ENR-1", interactions, row, guardian)
+
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0]["id"], "INTX-CALL-1")
+		self.assertEqual(calls[0]["direction"], "outbound")
+		self.assertEqual(calls[0]["outcome"], "connected")
+		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
+		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
+
+	def test_get_student_interactions_endpoint(self):
+		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_guardian", return_value={}),
+		):
+			result = director_students.get_student_interactions("ENR-1")
+
+		self.assertEqual(result["student_id"], "ENR-1")
+		self.assertEqual(result["zalo_messages"], [])
+		self.assertEqual(result["calls"], [])
+		self.assertEqual(result["total_interactions"], 0)
