@@ -388,7 +388,6 @@ scheduler_events = {
 	"hourly": [
 		"crm.api.agent_events.retry_pending_agent_events",
 		"crm.api.agent_events.reconcile_score_input_v1",
-		"crm.api.agent_events.reconcile_intelligence_run_outbox",
 		"crm.fcrm.nba_evaluations.reconcile",
 		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
 	],

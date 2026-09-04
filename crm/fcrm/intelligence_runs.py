@@ -15,7 +15,11 @@ from typing import Any
 import frappe
 from frappe.utils import add_to_date, now_datetime
 
-from crm.fcrm.analysis_runs import canonical_request_fingerprint, validate_claim_set, validate_execution_revisions
+from crm.fcrm.analysis_runs import (
+	canonical_request_fingerprint,
+	validate_claim_set,
+	validate_execution_revisions,
+)
 from crm.fcrm.school_intelligence import get_school_intelligence
 
 SERVICE_USER_KEY = "crm_agents_service_user"
@@ -23,12 +27,37 @@ RUN_TYPES = {"student": "CRM Student Analysis Run", "school": "CRM School Analys
 STAGES = {"student": ("student_360",), "school": ("school_360",)}
 TERMINAL = {"completed", "abstained", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
+STUDENT_360_POLICY_REVISION = "student-360-analysis-r2"
+STUDENT_360_SNAPSHOT_SCHEMA_VERSION = "student-360-snapshot-v1"
+_STUDENT_ACTION_ADVICE = re.compile(
+	r"(?:\b(?:nên|hãy|ưu tiên|đề xuất|khuyến nghị)\b[^.\n]{0,80}"
+	 r"\b(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|theo dõi|thực hiện)\b"
+	 r"|\b(?:cần)\b[^.\n]{0,40}\b(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|thực hiện)\b"
+	 r"|(?:^|[.;:]\s*)(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|theo dõi)\b[^.\n]{0,100})",
+	re.IGNORECASE | re.MULTILINE,
+)
+_STUDENT_UNSAFE_ANALYSIS_LANGUAGE = (
+	"qua phân tích toàn diện",
+	"có thể suy ra rằng",
+	"khả năng nhập học",
+	"khả năng chuyển đổi",
+	"xác suất nhập học",
+	"student",
+	"application momentum",
+	"scholarship interest",
+)
 PROVENANCE_DOCTYPES = {
 	"student": "CRM Student",
 	"school": "CRM High School",
 	"snapshot": "CRM High School Annual Snapshot",
 	"stakeholder": "CRM School Stakeholder",
 	"activity": "CRM School Activity",
+	"recommendation": "CRM Recommendation",
+	"score": "CRM Score History",
+	"interaction": "CRM Interaction",
+	"application": "CRM Admission Application",
+	"guardian": "CRM Student Guardian",
+	"lifecycle": "CRM Student Lifecycle Event",
 	# School activities own their outcome fields.  ``outcome:<activity>`` is a
 	# resolvable provenance alias, not a fictional outcome DocType.
 	"outcome": "CRM School Activity",
@@ -66,7 +95,10 @@ def _target(domain: str, target: str):
 def _source(domain: str, target: str, admission_year: int | None = None) -> tuple[str, str]:
 	if domain == "student":
 		revision = str(int(frappe.db.get_value("CRM Student", target, "student_context_revision") or 0))
-		return revision, _digest({"student": target, "revision": revision})
+		evidence = _student_stage_evidence(target, revision).get("student_360")
+		if not isinstance(evidence, dict):
+			frappe.throw("Student 360 source evidence is unavailable.", frappe.ValidationError)
+		return revision, _digest(_student_360_analysis_input(evidence))
 	# Never hash ``get_school_intelligence`` here.  That is a reader projection
 	# and deliberately changes with the caller's permissions.  A run identity is
 	# service-owned: the school aggregate's monotonic journal revision is the
@@ -74,6 +106,28 @@ def _source(domain: str, target: str, admission_year: int | None = None) -> tupl
 	# a persisted claim is rendered to a reader.
 	journal_revision = str(int(frappe.db.get_value("CRM High School", target, "intelligence_revision") or 0))
 	return journal_revision, _digest({"domain": "school", "high_school": target, "revision": journal_revision, "admission_year": admission_year or None})
+
+
+def _student_360_analysis_input(evidence: dict[str, Any]) -> dict[str, Any]:
+	"""The only fields that invalidate a Student 360 AI snapshot.
+
+	Live journal presentation (actor, summary, task) and score presentation
+	(band, trend, contributors) are deliberately excluded: they never enter the
+	model snapshot.  Policy revision is included because it can alter meaning.
+	"""
+	signals = evidence.get("signals") if isinstance(evidence.get("signals"), dict) else {}
+	return {
+		"policy_revision": STUDENT_360_POLICY_REVISION,
+		"student_state": {key: signals.get(key) for key in (
+			"lifecycle_stage", "study_stage", "assessment_status", "interest", "fit",
+			"primary_barrier", "intent_type", "intent_polarity", "sla_state", "score",
+		)},
+		"score_history": signals.get("score_history") or [],
+		"verified_interactions": signals.get("interaction_history") or [],
+		"applications": signals.get("applications") or [],
+		"guardian_signals": signals.get("guardian_signals") or [],
+		"lifecycle_history": signals.get("lifecycle_history") or [],
+	}
 
 
 def _lock_target(domain: str, target: str) -> None:
@@ -95,14 +149,197 @@ def _parent_status(run_type: str, parent_run: str) -> str:
 	return "running" if "running" in statuses else "queued"
 
 
-def _receipt(receipt) -> dict[str, Any]:
+def _parse_mapping(value: Any) -> dict[str, Any] | None:
+	if isinstance(value, dict):
+		return value
+	if not value:
+		return None
+	try:
+		parsed = frappe.parse_json(value)
+	except Exception:
+		return None
+	return parsed if isinstance(parsed, dict) else None
+
+
+def _public_report(value: Any, *, claims_visible: bool) -> dict[str, Any] | None:
+	"""Project the legacy School 360 report shape for School consumers only."""
+	report = _parse_mapping(value)
+	if report is None:
+		return None
+
+	def items(raw: Any, *, allowed_kinds: set[str]) -> list[dict[str, Any]]:
+		result: list[dict[str, Any]] = []
+		for item in raw if isinstance(raw, list) else []:
+			if not isinstance(item, dict) or item.get("kind") not in allowed_kinds:
+				continue
+			refs = item.get("provenance_ids") or item.get("evidence_refs") or []
+			if not isinstance(refs, list) or not refs or not _claim_visible(refs):
+				continue
+			headline = str(item.get("headline") or item.get("title") or "").strip()
+			detail = str(item.get("detail") or item.get("summary") or "").strip()
+			if not headline or not detail:
+				continue
+			entry = {
+				"kind": item["kind"], "headline": headline[:240], "detail": detail[:900],
+				"provenance_ids": refs[:8],
+			}
+			if isinstance(item.get("confidence"), (int, float)) and not isinstance(item.get("confidence"), bool):
+				entry["confidence"] = float(item["confidence"])
+			else:
+				entry["confidence"] = None
+			# These are presentation bands authored by the validated snapshot, not
+			# scores computed by this reader.
+			for key in ("severity", "strength"):
+				if item.get(key) in {"LOW", "MEDIUM", "HIGH"}:
+					entry[key] = item[key]
+			result.append(entry)
+		return result[:6]
+
+	return {
+		"title": report.get("title") if claims_visible and isinstance(report.get("title"), str) else None,
+		# A summary has no independently addressable reference in legacy rows;
+		# suppress it if no visible claim survives the same permission boundary.
+		"summary": report.get("summary") if claims_visible and isinstance(report.get("summary"), str) else None,
+		"risks": items(report.get("risks"), allowed_kinds={"risk"}),
+		"recommendations": items(report.get("recommendations"), allowed_kinds={"recommendation", "opportunity"}),
+		"missing_evidence": [str(item)[:240] for item in report.get("missing_evidence", []) if isinstance(item, str) and item.strip()][:12] if claims_visible else [],
+		"advisory_signals": [],
+		"opportunity_signals": [],
+		"recent_changes": [],
+	}
+
+
+def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, Any] | None:
+	"""Project only the canonical Student 360 snapshot shape.
+
+	Student 360 never falls back to the legacy ``kind/headline/detail`` report
+	shape. A malformed or mixed-era report is hidden until a new snapshot is
+	settled under the v1 contract.
+	"""
+	report = _parse_mapping(value)
+	allowed_keys = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
+	if not report or set(report) != allowed_keys or not claims_visible:
+		return None
+	try:
+		_validate_student_awareness_report(report)
+	except Exception:
+		# Historical or hand-written rows must never bypass the settlement
+		# validator merely because they happen to contain the four section names.
+		return None
+
+	def refs(item: dict[str, Any]) -> list[str] | None:
+		value = item.get("evidence_refs")
+		if not isinstance(value, list) or not value or len(value) > 8:
+			return None
+		return [str(ref) for ref in value]
+
+	def text(item: dict[str, Any], key: str, limit: int) -> str | None:
+		value = item.get(key)
+		return value.strip()[:limit] if isinstance(value, str) and value.strip() else None
+
+	def advisory(raw: Any) -> list[dict[str, Any]]:
+		result = []
+		for item in raw if isinstance(raw, list) else []:
+			if not isinstance(item, dict):
+				continue
+			evidence = refs(item)
+			type_value = text(item, "type", 80)
+			title = text(item, "title", 240)
+			summary = text(item, "summary", 900)
+			if not evidence or not type_value or not title or not summary or not _claim_visible(evidence):
+				continue
+			if item.get("confidence") not in {"LOW", "MEDIUM", "HIGH"}:
+				continue
+			result.append({"type": type_value, "title": title, "summary": summary, "confidence": item["confidence"], "evidence_refs": evidence})
+		return result[:5]
+
+	def findings(raw: Any, band: str, code_key: str) -> list[dict[str, Any]]:
+		result = []
+		for item in raw if isinstance(raw, list) else []:
+			if not isinstance(item, dict):
+				continue
+			evidence = refs(item)
+			code = text(item, code_key, 80)
+			title = text(item, "title", 240)
+			summary = text(item, "summary", 900)
+			if not evidence or not code or not title or not summary or not _claim_visible(evidence):
+				continue
+			if item.get(band) not in {"LOW", "MEDIUM", "HIGH"}:
+				continue
+			result.append({code_key: code, band: item[band], "title": title, "summary": summary, "evidence_refs": evidence})
+		return result[:3]
+
+	def changes(raw: Any) -> list[dict[str, Any]]:
+		result = []
+		for item in raw if isinstance(raw, list) else []:
+			if not isinstance(item, dict):
+				continue
+			evidence = refs(item)
+			type_value = text(item, "type", 80)
+			summary = text(item, "summary", 400)
+			if evidence and type_value and summary and _claim_visible(evidence):
+				result.append({"type": type_value, "summary": summary, "evidence_refs": evidence})
+		return result[:3]
+
+	return {
+		"advisory_signals": advisory(report.get("advisory_signals")),
+		"risks": findings(report.get("risks"), "severity", "code"),
+		"opportunity_signals": findings(report.get("opportunity_signals"), "strength", "code"),
+		"recent_changes": changes(report.get("recent_changes")),
+	}
+
+
+def _public_stage(stage: dict[str, Any], *, student: bool) -> dict[str, Any]:
+	claims = visible_claims(stage.get("claims"))
+	if student:
+		# Old Student reports mixed awareness with action advice.  They remain in
+		# storage for audit, but are not a public renderable 360 snapshot.
+		# A fresh stage intentionally has no settlement policy yet.  Rendering it
+		# as policy-superseded made a real queued/running run look terminal to the
+		# FE although its worker still owned a lease.
+		if stage.get("status") in TERMINAL and stage.get("status") == "completed" and stage.get("policy_revision") != STUDENT_360_POLICY_REVISION:
+			return {
+				"name": stage.get("name"), "stage_kind": stage.get("stage_kind"), "status": "abstained",
+				"claims": [], "report": None, "terminal_reason": "policy_superseded",
+				"policy_revision": stage.get("policy_revision") or None, "model_revision": stage.get("model_revision") or None,
+			}
+		claims = [claim for claim in claims if claim.get("kind") != "recommendation"]
+	return {
+		"name": stage.get("name"),
+		"stage_kind": stage.get("stage_kind"),
+		"status": stage.get("status"),
+		"claims": claims,
+		"report": _public_student_snapshot(stage.get("report_json"), claims_visible=bool(claims)) if student else _public_report(stage.get("report_json"), claims_visible=bool(claims)),
+		"terminal_reason": stage.get("terminal_reason") or None,
+		"policy_revision": stage.get("policy_revision") or None,
+		"model_revision": stage.get("model_revision") or None,
+	}
+
+
+def public_run_payload(run, *, receipt: Any | None = None, reused_existing_run: bool = False) -> dict[str, Any]:
+	"""Return the FE-compatible presentation of one real Analysis Run."""
+	is_student = run.doctype == RUN_TYPES["student"]
+	stages = frappe.get_all(
+		"CRM Analysis Run Stage", filters={"parent_run_type": run.doctype, "parent_run": run.name},
+		fields=["name", "stage_kind", "status", "claims", "report_json", "policy_revision", "model_revision", "terminal_reason"],
+		order_by="creation asc",
+	)
+	public_stages = [_public_stage(stage, student=is_student) for stage in stages if stage.get("stage_kind") in _stage_kinds_for(run.doctype)]
+	if is_student:
+		public_stages = [stage for stage in public_stages if stage.get("stage_kind") == "student_360"]
+	return {
+		"run_id": run.name, "run_type": run.doctype, "status": run.status,
+		"receipt": receipt.name if receipt else None,
+		"source_revision": int(run.source_revision) if str(run.source_revision).isdigit() else None,
+		"source_digest": run.get("source_digest") or None,
+		"expires_at": str(receipt.expires_at) if receipt and receipt.get("expires_at") else None,
+		"reused_existing_run": bool(reused_existing_run), "stages": public_stages,
+	}
+
+
+def _receipt(receipt, *, reused_existing_run: bool = False) -> dict[str, Any]:
 	run = frappe.get_doc(receipt.parent_run_type, receipt.parent_run)
-	stages = frappe.get_all("CRM Analysis Run Stage", filters={"parent_run_type": receipt.parent_run_type, "parent_run": receipt.parent_run}, fields=["name", "stage_kind", "status", "claims", "report_json", "policy_revision", "model_revision", "terminal_reason"])
-	for stage in stages:
-		stage["claims"] = visible_claims(stage.get("claims"))
-		stage["report"] = frappe.parse_json(stage["report_json"]) if stage.get("report_json") else None
-		stage.pop("report_json", None)
-	return {"receipt": receipt.name, "run_id": run.name, "run_type": receipt.parent_run_type, "status": run.status, "stages": stages}
+	return public_run_payload(run, receipt=receipt, reused_existing_run=reused_existing_run)
 
 
 def unified_intelligence_enabled() -> bool:
@@ -121,6 +358,15 @@ def unified_intelligence_enabled() -> bool:
 def require_unified_intelligence_enabled() -> None:
 	if not unified_intelligence_enabled():
 		frappe.throw("Unified Intelligence Run cutover is not enabled.", frappe.ValidationError)
+
+
+def require_analysis_run_enabled(domain: str) -> None:
+	"""Gate Student 360 independently from the retired NBA child writer."""
+	if domain == "student":
+		if frappe.conf.get("crm_intelligence_runs_enabled", 0) not in (1, "1", True):
+			frappe.throw("Student Intelligence Run cutover is not enabled.", frappe.ValidationError)
+		return
+	require_unified_intelligence_enabled()
 
 
 def read_receipt(request_id: str) -> dict[str, Any]:
@@ -210,9 +456,25 @@ def _active_run(domain: str, target: str):
 	return frappe.get_doc(run_type, runs[0]) if runs else None
 
 
+def _analysis_policy_revision(domain: str) -> str | None:
+	return STUDENT_360_POLICY_REVISION if domain == "student" else None
+
+
+def _supersede_active_student_run(run) -> None:
+	"""Fence a mismatched Student refresh before a new current run is created."""
+	frappe.db.sql(
+		"UPDATE `tabCRM Analysis Run Stage` SET status='abstained', claims='[]', report_json=NULL, "
+		"terminal_reason='superseded', lease_token=NULL, lease_expires_at=NULL "
+		"WHERE parent_run_type=%s AND parent_run=%s AND status IN ('queued', 'running')",
+		(RUN_TYPES["student"], run.name),
+	)
+	run.db_set("status", "abstained", update_modified=False)
+	run.db_set("terminal_reason", "superseded", update_modified=False)
+
+
 def request_run(*, domain: str, target: str, idempotency_key: str, force_reason: str | None = None, admission_year: int | None = None) -> dict[str, Any]:
 	"""Create/reuse a scoped manual run; no caller credential is persisted."""
-	require_unified_intelligence_enabled()
+	require_analysis_run_enabled(domain)
 	_target(domain, target)
 	# The aggregate row is the mutex for button-click races.  This covers the
 	# interval before the unique automatic identity below is available on sites
@@ -223,7 +485,10 @@ def request_run(*, domain: str, target: str, idempotency_key: str, force_reason:
 		frappe.throw("Idempotency-Key is required and bounded.", frappe.ValidationError)
 	force_reason = _require_force_rerun_permission(force_reason)
 	revision, source_digest = _source(domain, target, admission_year)
+	policy_revision = _analysis_policy_revision(domain)
 	payload = {"domain": domain, "target": target, "source_revision": revision, "trigger": "manual"}
+	if policy_revision:
+		payload["policy_revision"] = policy_revision
 	if force_reason:
 		payload["force_reason"] = str(force_reason).strip()
 	fingerprint = canonical_request_fingerprint(payload)
@@ -234,14 +499,23 @@ def request_run(*, domain: str, target: str, idempotency_key: str, force_reason:
 			frappe.throw("Idempotency-Key belongs to another requester.", frappe.PermissionError)
 		if receipt.request_fingerprint != fingerprint:
 			frappe.throw("Idempotency-Key was already used for a different request.", frappe.ValidationError)
-		return _receipt(receipt)
+		return _receipt(receipt, reused_existing_run=True)
 	run_type = RUN_TYPES[domain]
+	reused_existing_run = False
 	active_run = _active_run(domain, target)
 	if active_run:
 		# A force flag never bypasses the single-active-run fence.  It is for a
 		# completed/abstained revision whose analyst needs an auditable rerun.
-		run = active_run
-	elif not force_reason:
+		if domain == "student" and (
+			active_run.source_digest != source_digest
+			or (active_run.get("policy_revision") or None) != policy_revision
+		):
+			_supersede_active_student_run(active_run)
+			active_run = None
+		else:
+			run = active_run
+			reused_existing_run = True
+	if not active_run and not force_reason:
 		# A normal button press is a request for the current analysis, not an
 		# instruction to spend another model call.  Reuse any terminal result for
 		# precisely this authoritative revision; an explicit privileged force is
@@ -249,25 +523,21 @@ def request_run(*, domain: str, target: str, idempotency_key: str, force_reason:
 		field = "student" if domain == "student" else "high_school"
 		matching_terminal = frappe.get_all(
 			run_type,
-			filters={field: target, "source_revision": revision, "source_digest": source_digest, "status": ["in", sorted(TERMINAL)]},
+			filters={field: target, "source_digest": source_digest, "status": "completed", "policy_revision": policy_revision},
 			pluck="name",
 			order_by="creation desc",
 			limit_page_length=1,
 		)
 		run = frappe.get_doc(run_type, matching_terminal[0]) if matching_terminal else None
+		reused_existing_run = run is not None
 		if not run:
 			_enforce_manual_quota(domain, target)
-			run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year)
-	else:
+			run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, policy_revision=policy_revision)
+	elif not active_run:
 		_enforce_manual_quota(domain, target)
-		run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year)
+		run = _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, policy_revision=policy_revision)
 	receipt = frappe.get_doc({"doctype": "CRM Analysis Request Receipt", "requester": frappe.session.user, "idempotency_key": key, "request_fingerprint": fingerprint, "parent_run_type": run_type, "parent_run": run.name, "expires_at": add_to_date(now_datetime(), hours=24)}).insert(ignore_permissions=True)
-	# An existing active run already has durable work.  Re-emitting its event is
-	# safe but unnecessary and would amplify a click storm.
-	if not active_run and run.status == "queued":
-		from crm.api.agent_events import record_intelligence_run_event
-		record_intelligence_run_event(run)
-	return _receipt(receipt)
+	return _receipt(receipt, reused_existing_run=reused_existing_run)
 
 
 def request_automatic_run(domain: str, target: str, admission_year: int | None = None, admission_decision: str | None = None, admission_event: str | None = None, candidate_revision: int | None = None, policy_revision: str | None = None):
@@ -275,6 +545,10 @@ def request_automatic_run(domain: str, target: str, admission_year: int | None =
 	require_unified_intelligence_enabled()
 	if domain not in RUN_TYPES:
 		raise ValueError("invalid Intelligence Run domain")
+	if domain == "student":
+		# Student 360 is request-driven.  Keep the helper for School 360 and for
+		# backward-compatible callers, but never silently create Student work.
+		return None
 	_lock_target(domain, target)
 	revision, source_digest = _source(domain, target, admission_year)
 	run_type = RUN_TYPES[domain]
@@ -295,16 +569,16 @@ def request_automatic_run(domain: str, target: str, admission_year: int | None =
 		if not existing:
 			raise
 		return frappe.get_doc(run_type, existing)
-	from crm.api.agent_events import record_intelligence_run_event
-	record_intelligence_run_event(run)
 	return run
 
 
 def _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, *, trigger="manual", admission_decision=None, admission_event=None, candidate_revision=None, policy_revision=None):
 	run_type = RUN_TYPES[domain]
-	values = {"doctype": run_type, "source_revision": revision, "source_digest": source_digest, "trigger": trigger, "status": "queued", "request_fingerprint": fingerprint}
+	values = {"doctype": run_type, "source_revision": revision, "source_digest": source_digest, "analysis_input_digest": source_digest, "trigger": trigger, "status": "queued", "request_fingerprint": fingerprint}
 	if trigger == "manual":
 		values["requested_by"] = frappe.session.user
+	if policy_revision:
+		values["policy_revision"] = policy_revision
 	values["student" if domain == "student" else "high_school"] = target
 	if trigger == "automatic":
 		values["automatic_identity"] = _automatic_identity(domain, target, revision, source_digest, admission_year)
@@ -323,27 +597,13 @@ def _automatic_identity(domain: str, target: str, revision: str, source_digest: 
 
 
 def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
-	"""Return the bounded, no-PII evidence surface used by both Student stages."""
-	from crm.api.student_decision_context import _projection
-
-	decision = _projection(student, int(revision))
-	# The NBA handler uses the strict V2 projection.  Do not let display-only
-	# fields grow this service contract or leak through an accidental model dump.
-	decision_context = {
-		key: decision.get(key)
-		for key in (
-			"student_id", "returned_revision", "snapshot_hash", "policy_version",
-			"eligibility", "lifecycle", "intent", "score", "interaction",
-			"sla_evidence", "allowed_action_types", "recent_actions",
-		)
-	}
-	decision_context["evidence_refs"] = [f"student:{student}"]
+	"""Return only the bounded, no-PII evidence surface for Student 360."""
 	row = frappe.db.get_value(
 		"CRM Student", student,
 		[
 			"lifecycle_stage", "enrollment_status", "current_grade", "study_stage",
 			"assessment_status", "interest_level", "fit_level", "primary_barrier",
-			"latest_score", "sla_evidence_state",
+			"latest_score", "sla_evidence_state", "score_input_revision", "applied_score_input_revision",
 		],
 		as_dict=True,
 	) or {}
@@ -351,34 +611,63 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	# notes, summaries and linked document identifiers.  They provide the model
 	# the temporal/decision context needed for a useful 360 analysis while
 	# preserving the service-only permission boundary.
-	def _rows(doctype, fields, limit, order_by="modified desc"):
+	def _rows(doctype, fields, limit, order_by="creation desc, name desc", extra_filters=None):
 		if not frappe.db.table_exists(doctype):
 			return []
-		return frappe.get_all(doctype, filters={"student": student}, fields=fields,
+		filters = {"student": student, **(extra_filters or {})}
+		return frappe.get_all(doctype, filters=filters, fields=["name", *fields],
 			limit_page_length=limit, order_by=order_by, ignore_permissions=True)
+
+	def _ref(prefix, item):
+		name = item.get("name")
+		return [f"{prefix}:{name}"] if name else []
 
 	score_history = _rows("CRM Score History", [
 		"scoring_time", "scoring_date", "final_score", "score_change", "fit_score",
 		"engagement_score", "intent_score",
-	], 12, "scoring_time desc, creation desc")
+	], 12, "scoring_time desc, creation desc, name desc")
 	# Legacy score rows may only have scoring_time.  The agent evidence contract
 	# requires a bounded temporal reference, so normalize at the producer edge.
 	for item in score_history:
 		item["scoring_date"] = str(item.get("scoring_date") or item.get("scoring_time") or "unknown")
 		item.pop("scoring_time", None)
+		contributors = []
+		try:
+			for detail in frappe.get_doc("CRM Score History", item.get("name")).get("details") or []:
+				if detail.get("category") or detail.get("signal"):
+					contributors.append(
+						{
+							"category": detail.get("category"),
+							"signal": detail.get("signal"),
+							"score": detail.get("score"),
+						}
+					)
+		except Exception:
+			contributors = []
+		item["contributors"] = contributors[:6]
 	interactions = _rows("CRM Interaction", [
-		"interaction_datetime", "channel", "direction", "outcome", "source_verified",
-	], 20, "interaction_datetime desc, creation desc")
+		"interaction_datetime", "interaction_type", "channel", "direction", "outcome", "source_verified",
+	], 20, "interaction_datetime desc, creation desc, name desc", {"source_verified": 1})
+	intents = _rows("CRM Intent", ["interaction", "intent_type", "polarity"], 20, "creation desc, name desc")
+	intents_by_interaction = {
+		item.get("interaction"): item
+		for item in intents
+		if item.get("interaction")
+	}
+	latest_interaction = interactions[0] if interactions else {}
+	latest_intent = intents_by_interaction.get(latest_interaction.get("name")) or {}
+	input_revision = int(row.get("score_input_revision") or 0)
+	applied_score_revision = int(row.get("applied_score_input_revision") or 0)
 	applications = _rows("CRM Admission Application", [
 		"status", "preference", "preference_order", "document_total",
 		"document_completed", "scholarship_percentage", "deadline",
-	], 8, "modified desc")
+	], 8, "creation desc, name desc")
 	guardians = _rows("CRM Student Guardian", [
 		"relationship", "decision_role", "involvement", "preferred_channel", "is_active",
-	], 8, "modified desc")
+	], 8, "creation desc, name desc")
 	lifecycle = _rows("CRM Student Lifecycle Event", [
 		"from_stage", "to_stage", "transition_kind", "occurred_at",
-	], 20, "occurred_at desc, creation desc")
+	], 20, "occurred_at desc, creation desc, name desc")
 	# This is evidence, not a conclusion: the AI handler must derive and label
 	# any inference/uncertainty it publishes.  No name, phone, email, notes,
 	# free-form interaction text, or recipient data crosses this boundary.
@@ -394,18 +683,11 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		# The decision projection uses ``pending`` while a score is being
 		# calculated; the analysis evidence contract intentionally exposes only
 		# its bounded freshness vocabulary.
-		"score_freshness": {
-			"current": "fresh",
-			"fresh": "fresh",
-			"stale": "stale",
-			"pending": "unknown",
-			"unknown": "unknown",
-			"unavailable": "unavailable",
-		}.get((decision.get("score") or {}).get("freshness"), "unknown"),
-			"intent_type": (decision.get("intent") or {}).get("type"),
-			"intent_polarity": (decision.get("intent") or {}).get("polarity"),
-			"latest_interaction_outcome": (decision.get("interaction") or {}).get("outcome"),
-			"sla_state": row.get("sla_evidence_state") or (decision.get("sla_evidence") or {}).get("state"),
+			"score_freshness": "pending" if input_revision > applied_score_revision else "fresh",
+			"intent_type": latest_intent.get("intent_type"),
+			"intent_polarity": latest_intent.get("polarity"),
+			"latest_interaction_outcome": latest_interaction.get("outcome"),
+			"sla_state": row.get("sla_evidence_state"),
 			"score_history": [
 				{
 					"scoring_date": item.get("scoring_date") or item.get("scoring_time"),
@@ -414,18 +696,43 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 					"fit_score": item.get("fit_score"),
 					"engagement_score": item.get("engagement_score"),
 					"intent_score": item.get("intent_score"),
+					"contributors": item.get("contributors") or [],
+					"provenance_ids": _ref("score", item),
 				}
 				for item in score_history
 			],
 			"interaction_history": [
-				{"interaction_date": item.get("interaction_datetime"), "channel": item.get("channel"),
-				 "direction": item.get("direction"), "outcome": item.get("outcome"),
-				 "source_verified": item.get("source_verified")}
+				{
+					"interaction_date": item.get("interaction_datetime"),
+					"channel": item.get("channel"),
+					"topics": [item.get("interaction_type")] if item.get("interaction_type") else [],
+					"intent_type": (intents_by_interaction.get(item.get("name")) or {}).get("intent_type"),
+					"intent_polarity": (intents_by_interaction.get(item.get("name")) or {}).get("polarity"),
+					"barriers": [row.get("primary_barrier")] if row.get("primary_barrier") else [],
+					"direction": item.get("direction"),
+					"outcome": item.get("outcome"),
+					"source_verified": item.get("source_verified"),
+					"provenance_ids": _ref("interaction", item),
+				}
 				for item in interactions
 			],
-			"applications": applications,
-			"guardian_signals": guardians,
-			"lifecycle_history": lifecycle,
+			"applications": [
+				{"status": item.get("status"), "preference": item.get("preference"), "preference_order": item.get("preference_order"),
+				 "document_total": item.get("document_total"), "document_completed": item.get("document_completed"),
+				 "scholarship_percentage": item.get("scholarship_percentage"), "deadline": item.get("deadline"),
+				 "provenance_ids": _ref("application", item)}
+				for item in applications
+			],
+			"guardian_signals": [
+				{"relationship": item.get("relationship"), "decision_role": item.get("decision_role"), "involvement": item.get("involvement"),
+				 "preferred_channel": item.get("preferred_channel"), "is_active": item.get("is_active"), "provenance_ids": _ref("guardian", item)}
+				for item in guardians
+			],
+			"lifecycle_history": [
+				{"from_stage": item.get("from_stage"), "to_stage": item.get("to_stage"), "transition_kind": item.get("transition_kind"),
+				 "occurred_at": item.get("occurred_at"), "provenance_ids": _ref("lifecycle", item)}
+				for item in lifecycle
+			],
 		},
 		"unknowns": [
 			key for key, value in row.items()
@@ -434,7 +741,7 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		],
 		"provenance_ids": [f"student:{student}"],
 	}
-	return {"student_360": student_360, "signals": student_360, "decision_context": decision_context}
+	return {"student_360": student_360}
 
 
 def service_evidence(run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str) -> dict[str, Any]:
@@ -511,6 +818,22 @@ def execution(run_type: str, run_id: str) -> dict[str, Any]:
 	}
 
 
+def _stage_lease_seconds() -> int:
+	"""Return a bounded lease that permits retry shortly after the worker deadline.
+
+	The former ten-minute implicit default left a timed-out 360 stage visibly
+	"running" long after its local worker had released it.  Deployments may set
+	seconds explicitly; the legacy minutes setting remains supported.
+	"""
+	configured_seconds = frappe.conf.get("crm_intelligence_stage_lease_seconds")
+	if configured_seconds not in (None, ""):
+		return min(max(int(configured_seconds), 45), 3600)
+	configured_minutes = frappe.conf.get("crm_intelligence_stage_lease_minutes")
+	if configured_minutes not in (None, ""):
+		return min(max(int(configured_minutes) * 60, 45), 3600)
+	return 60
+
+
 def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int) -> dict[str, Any]:
 	"""Acquire the sole execution lease for a stage.
 
@@ -543,7 +866,7 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 	token = frappe.generate_hash(length=48)
 	# Do not use Frappe's add_to_date here: it applies the site timezone to a
 	# naive value and shifts a UTC database lease by the local offset.
-	lease_until = now + timedelta(minutes=int(frappe.conf.get("crm_intelligence_stage_lease_minutes", 10) or 10))
+	lease_until = now + timedelta(seconds=_stage_lease_seconds())
 	frappe.db.sql(
 		"UPDATE `tabCRM Analysis Run Stage` SET status='running', stage_generation=%s, lease_token=%s, lease_expires_at=%s "
 		"WHERE name=%s AND stage_generation=%s AND (status='queued' OR (status='running' AND (lease_expires_at IS NULL OR lease_expires_at <= %s)))",
@@ -565,60 +888,17 @@ def _stage_kinds_for(run_type: str) -> set[str]:
 	return set(STAGES["student" if run_type == RUN_TYPES["student"] else "school"])
 
 
-def authorize_next_best_action_write(*, run_id: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str) -> dict[str, str]:
-	"""Fence the sole NBA writer against an actively leased Student Run stage.
-
-	This command is intentionally called by the CRM Action command immediately
-	before its Student row CAS.  A stage key alone is never authority: an old
-	worker must present the parent run, current lease generation/token and the
-	authoritative source identity it analysed.
-	"""
-	_service_only()
-	run_type = RUN_TYPES["student"]
-	stage = frappe.get_doc("CRM Analysis Run Stage", {
-		"parent_run_type": run_type, "parent_run": run_id, "stage_kind": "next_best_action",
-	})
-	frappe.db.sql("SELECT name FROM `tabCRM Analysis Run Stage` WHERE name=%s FOR UPDATE", (stage.name,))
-	stage = frappe.get_doc("CRM Analysis Run Stage", stage.name)
-	if (
-		stage.status != "running"
-		or int(stage.stage_generation or 0) != int(stage_generation)
-		or stage.get("lease_token") != str(lease_token or "")
-		or not stage.get("lease_expires_at") or stage.lease_expires_at <= _lease_now()
-		or str(stage.expected_source_revision) != str(expected_source_revision)
-		or stage.expected_source_digest != expected_source_digest
-	):
-		frappe.throw("Next Best Action write does not own the current Intelligence Run stage lease.", frappe.PermissionError)
-	# Defense in depth over the claim-time dependency guard: an NBA result may
-	# only be written once its sibling 360 stage has actually completed.
-	sibling_status = frappe.db.get_value(
-		"CRM Analysis Run Stage",
-		{"parent_run_type": run_type, "parent_run": run_id, "stage_kind": "student_360"},
-		"status",
-	)
-	if sibling_status != "completed":
-		frappe.throw(
-			"Next Best Action write requires a completed sibling Student 360 stage.",
-			frappe.PermissionError,
-		)
-	run = frappe.get_doc(run_type, run_id)
-	current_revision, current_digest = _source("student", run.student)
-	if current_revision != str(expected_source_revision) or current_digest != expected_source_digest:
-		frappe.throw("Next Best Action source is superseded.", frappe.ValidationError)
-	return {
-		"student": run.student,
-		"source_revision": current_revision,
-		"source_digest": current_digest,
-		"stage_key": stage.stage_key,
-		"run_id": run.name,
-	}
-
-
 def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str, status: str, claims=None, terminal_reason: str | None = None, policy_revision: str | None = None, model_revision: str | None = None, result_digest: str | None = None, completed_metadata: dict | None = None, report=None) -> dict[str, Any]:
 	_service_only()
 	if status not in TERMINAL:
 		frappe.throw("Only terminal stage settlement is allowed.", frappe.ValidationError)
 	result_digest = _validated_result_digest(result_digest)
+	if status == "completed" and not result_digest:
+		frappe.throw("Completed Analysis Run stages require a result digest.", frappe.ValidationError)
+	if status == "completed" and run_type == RUN_TYPES["student"]:
+		_validate_student_awareness_report(report)
+		if any(claim.get("kind") == "recommendation" for claim in (claims or [])):
+			frappe.throw("Student 360 claims cannot contain recommendations.", frappe.ValidationError)
 	report_json = json.dumps(report or {}, ensure_ascii=False, separators=(",", ":")) if report else None
 	terminal_reason = str(terminal_reason).strip() if terminal_reason is not None else None
 	if terminal_reason is not None and len(terminal_reason) > 500:
@@ -626,6 +906,8 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	if status in {"failed", "dead_lettered"} and not terminal_reason:
 		frappe.throw("Failed or dead-lettered stages require a terminal reason.", frappe.ValidationError)
 	validate_claim_set(claims)
+	if status == "completed" and run_type == RUN_TYPES["student"]:
+		_validate_student_awareness_claims(claims or [])
 	if completed_metadata not in (None, {}):
 		frappe.throw("Completion metadata is not part of the Intelligence Run contract.", frappe.ValidationError)
 	validate_execution_revisions(policy_revision, model_revision, required=status == "completed")
@@ -642,16 +924,23 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 		or stage.expected_source_revision != str(expected_source_revision) or stage.expected_source_digest != expected_source_digest):
 		frappe.throw("Stage fence mismatch.", frappe.ValidationError)
 	run = frappe.get_doc(run_type, run_id)
+	if status == "completed" and run_type == RUN_TYPES["student"] and (run.get("policy_revision") or None) != (policy_revision or None):
+		# A queued worker from the old recommendation-bearing policy must never
+		# publish into the new awareness-only surface.  Fence it terminal rather
+		# than retrying forever on a policy mismatch.
+		status, terminal_reason, claims = "abstained", "policy_superseded", []
+		policy_revision = model_revision = result_digest = None
+		report_json = None
 	domain = "student" if run_type == RUN_TYPES["student"] else "school"
 	target = run.student if domain == "student" else run.high_school
 	current_revision, current_digest = _source(domain, target, run.get("admission_year"))
 	if current_revision != str(expected_source_revision) or current_digest != expected_source_digest:
 		status, terminal_reason, claims, policy_revision, model_revision, result_digest = "abstained", "superseded", [], None, None, None
 	frappe.db.sql(
-		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, report_json=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, result_digest=%s, lease_token=NULL, lease_expires_at=NULL "
+		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, report_json=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, result_digest=%s, analyzed_at=%s, lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND stage_generation=%s "
 		"AND lease_token=%s AND expected_source_revision=%s AND expected_source_digest=%s",
-		(status, json.dumps(claims or []), report_json, terminal_reason, policy_revision, model_revision, result_digest, stage.name, int(stage_generation), str(lease_token or ""), str(expected_source_revision), expected_source_digest),
+		(status, json.dumps(claims or []), report_json, terminal_reason, policy_revision, model_revision, result_digest, now_datetime() if status == "completed" else None, stage.name, int(stage_generation), str(lease_token or ""), str(expected_source_revision), expected_source_digest),
 	)
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		frappe.throw("Stage settlement lost its compare-and-swap fence.", frappe.ValidationError)
@@ -670,3 +959,105 @@ def _validated_result_digest(result_digest: str | None) -> str | None:
 	if not re.fullmatch(r"[a-f0-9]{64}", result_digest):
 		frappe.throw("Analysis Run result digest must be a 64-character hex string.", frappe.ValidationError)
 	return result_digest
+
+
+def _validate_student_awareness_report(report: Any) -> None:
+	if not isinstance(report, dict):
+		frappe.throw("Completed Student 360 requires a structured report.", frappe.ValidationError)
+	allowed_sections = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
+	if set(report) != allowed_sections:
+		frappe.throw("Student 360 report must use the v1 snapshot shape.", frappe.ValidationError)
+
+	def _refs(item: dict[str, Any]) -> list[str]:
+		refs = item.get("evidence_refs")
+		if not isinstance(refs, list) or not 1 <= len(refs) <= 8 or len(set(refs)) != len(refs):
+			frappe.throw("Student 360 snapshot evidence is invalid.", frappe.ValidationError)
+		for ref in refs:
+			prefix, separator, name = str(ref).partition(":")
+			if not separator or prefix not in PROVENANCE_DOCTYPES or not name or len(str(ref)) > 140:
+				frappe.throw("Student 360 snapshot evidence reference is invalid.", frappe.ValidationError)
+		return refs
+
+	def _summary(item: dict[str, Any], limit: int) -> str:
+		value = item.get("summary")
+		if not isinstance(value, str) or not 1 <= len(value.strip()) <= limit:
+			frappe.throw("Student 360 snapshot item text is invalid.", frappe.ValidationError)
+		if len([part for part in re.split(r"[.!?]+", value) if part.strip()]) not in {1, 2}:
+			frappe.throw("Student 360 snapshot item must contain one or two sentences.", frappe.ValidationError)
+		return value.strip()
+
+	def _text(item: dict[str, Any], key: str, limit: int) -> str:
+		value = item.get(key)
+		if not isinstance(value, str) or not 1 <= len(value.strip()) <= limit:
+			frappe.throw("Student 360 snapshot item text is invalid.", frappe.ValidationError)
+		return value.strip()
+
+	def _items(key: str, limit: int, required: set[str], band: str | None = None, code: str | None = None) -> list[dict[str, Any]]:
+		items = report.get(key)
+		minimum = 3 if key == "advisory_signals" else 0
+		if not isinstance(items, list) or not minimum <= len(items) <= limit:
+			frappe.throw("Student 360 snapshot section is invalid.", frappe.ValidationError)
+		for item in items:
+			if not isinstance(item, dict) or set(item) != required:
+				frappe.throw("Student 360 snapshot item shape is invalid.", frappe.ValidationError)
+			if code:
+				_text(item, code, 80)
+			if band and item.get(band) not in {"LOW", "MEDIUM", "HIGH"}:
+				frappe.throw("Student 360 snapshot band is invalid.", frappe.ValidationError)
+			if key == "advisory_signals":
+				_text(item, "type", 80)
+				_text(item, "title", 240)
+			else:
+				_text(item, "title", 240)
+			_summary(item, 900)
+			_refs(item)
+		return items
+
+	advisory = _items(
+		"advisory_signals", 5,
+		{"type", "title", "summary", "confidence", "evidence_refs"},
+		band="confidence",
+	)
+	risks = _items(
+		"risks", 3,
+		{"code", "severity", "title", "summary", "evidence_refs"},
+		band="severity",
+		code="code",
+	)
+	opportunities = _items(
+		"opportunity_signals", 3,
+		{"code", "strength", "title", "summary", "evidence_refs"},
+		band="strength",
+		code="code",
+	)
+	changes = report.get("recent_changes")
+	if not isinstance(changes, list) or len(changes) > 3:
+		frappe.throw("Student 360 recent changes are invalid.", frappe.ValidationError)
+	for item in changes:
+		if not isinstance(item, dict) or set(item) != {"type", "summary", "evidence_refs"}:
+			frappe.throw("Student 360 recent change shape is invalid.", frappe.ValidationError)
+		_text(item, "type", 80)
+		_summary(item, 400)
+		_refs(item)
+
+	visible_text = " ".join(
+		_text(item, "title", 240) + " " + _summary(item, 900)
+		for item in (*advisory, *risks, *opportunities)
+	)
+	visible_text += " " + " ".join(_summary(item, 400) for item in changes)
+	if _STUDENT_ACTION_ADVICE.search(visible_text):
+		frappe.throw("Student 360 report contains action advice.", frappe.ValidationError)
+	normalized = visible_text.casefold()
+	if any(phrase in normalized for phrase in _STUDENT_UNSAFE_ANALYSIS_LANGUAGE):
+		frappe.throw("Student 360 report must stay compact, grounded, and awareness-only.", frappe.ValidationError)
+
+
+def _validate_student_awareness_claims(claims: list[dict[str, Any]]) -> None:
+	"""Keep the persisted Student claim compatibility layer awareness-only too."""
+	visible_text = " ".join(
+		str(claim.get("text", ""))
+		for claim in claims
+		if isinstance(claim, dict)
+	)
+	if _STUDENT_ACTION_ADVICE.search(visible_text):
+		frappe.throw("Student 360 claims cannot contain action advice.", frappe.ValidationError)
