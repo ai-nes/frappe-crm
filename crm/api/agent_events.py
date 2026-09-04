@@ -23,14 +23,12 @@ _EVENT_PATHS = {
 	"intelligence.run.requested": "/api/v1/insight/intelligence-run",
 	"recommendation.decided.v1": "/api/v1/insight/recommendation-decision",
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
-	"student.context_changed.v2": "/api/v1/insight/student-context-v2",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
 	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
 }
 _EXPECTED_CONTRACT_VERSIONS = {
 	"recommendation.decided.v1": 1,
 	"action.outcome_recorded.v1": 1,
-	"student.context_changed.v2": 2,
 	"student.score_input_changed.v1": 1,
 	"scoring.policy_changed.v1": 1,
 }
@@ -186,54 +184,14 @@ def record_intelligence_run_event(run) -> str:
 	return event.name
 
 
-def record_student_context_event(student: str, revision: int, *, event_id: str | None = None) -> str:
-	"""Coalesce only an undispatched v2 Student event; never rewrite a claim."""
-	rollout_epoch = int(frappe.conf.get("crm_agents_v2_rollout_epoch", 0) or 0)
-	pending = frappe.db.sql(
-		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
-		"AND event_type = %s AND status = 'pending' ORDER BY creation DESC LIMIT 1 FOR UPDATE",
-		("CRM Student", student, "student.context_changed.v2"),
-		as_dict=True,
-	)
-	if pending:
-		event_name = pending[0].name
-		frappe.db.sql(
-			"UPDATE `tabCRM Agent Event` SET source_revision = %s, source_revision_bigint = %s, "
-			"occurred_at = %s, rollout_epoch = %s WHERE name = %s AND status = 'pending'",
-			(str(revision), revision, now_datetime(), rollout_epoch, event_name),
-		)
-	else:
-		event = frappe.get_doc(
-			{
-				"doctype": "CRM Agent Event",
-				"event_id": event_id or str(uuid.uuid4()),
-				"event_type": "student.context_changed.v2",
-				"aggregate_doctype": "CRM Student",
-				"aggregate_name": student,
-				"source_revision": str(revision),
-				"source_revision_bigint": revision,
-				"contract_version": 2,
-				"rollout_epoch": rollout_epoch,
-				"occurred_at": now_datetime(),
-				"status": "pending",
-				"next_attempt_at": now_datetime(),
-			}
-		).insert(ignore_permissions=True)
-		event_name = event.name
-	_enqueue_delivery(frappe.get_doc("CRM Agent Event", event_name))
-	return event_name
-
-
 def record_score_input_event(student: str, revision: int, *, event_id: str | None = None) -> str:
 	"""Coalesce only an undispatched scoring event; never rewrite a claim.
 
-	Uses the same shared `CRM Agent Event` outbox as `record_student_context_event`
-	but its own `event_type`/`source_revision_bigint` lineage, so a burst of
+	Uses the shared `CRM Agent Event` outbox with its own
+	`event_type`/`source_revision_bigint` lineage, so a burst of
 	Interaction/Intent/Student writes for one student collapses into a single
-	pending scoring event exactly like student-context-v2 does for its own
-	stream -- the two streams never coalesce into each other because the
-	`event_type` filter partitions them into an independent scoring
-	namespace.
+	pending scoring event. The `event_type` filter partitions it into an
+	independent scoring namespace.
 	"""
 	if frappe.conf.get("crm_agents_scoring_events_enabled", 0) in (0, "0", False):
 		return ""
@@ -398,15 +356,7 @@ def _event_body(event) -> bytes:
 			"contract_version": event.contract_version,
 			"occurred_at": str(event.occurred_at),
 		}
-	if event.event_type == "student.context_changed.v2":
-		payload.update(
-			{
-				"source_revision": int(event.source_revision_bigint or event.source_revision),
-				"contract_version": 2,
-				"rollout_epoch": int(event.rollout_epoch or 0),
-			}
-		)
-	elif event.event_type == "intelligence.run.requested":
+	if event.event_type == "intelligence.run.requested":
 		# Canonical signal is deliberately identity-only.  The agent retrieves
 		# current stage identities/evidence through Frappe service commands.
 		# ``aggregate_name`` is the run identity.  Do not duplicate it as
@@ -644,6 +594,16 @@ def deliver_agent_event(event_name: str) -> None:
 			frappe.throw("CRM Agent Event lease fields are required for fenced delivery.")
 	if event.status not in {"pending", "processing"}:
 		return
+	if event.event_type not in _EVENT_PATHS and (event.get("channel") or "agent_webhook") != "realtime":
+		# Events from retired producers are never retried or sent to a new
+		# consumer. Keep the outbox row for audit, but make the retirement
+		# terminal and explicit.
+		frappe.db.sql(
+			"UPDATE `tabCRM Agent Event` SET status = 'cancelled', last_error = %(error)s "
+			"WHERE name = %(name)s AND status IN ('pending', 'processing')",
+			{"name": event.name, "error": "EVENT_TYPE_RETIRED"},
+		)
+		return
 	if (
 		(event.get("channel") or "agent_webhook") != "realtime"
 		and not _check_agent_contract_version(event)
@@ -821,28 +781,6 @@ def _surface_blocked_next_best_action(run_type, run, stages, now, stage_terminal
 		title="Intelligence Run Next Best Action stage blocked on Student 360",
 	)
 	return 1
-
-
-def reconcile_student_context_v2(limit: int = 500) -> dict:
-	"""Replay the immutable global sequence with a durable cursor."""
-	if frappe.conf.get("crm_intelligence_runs_enabled", 0) in (1, "1", True):
-		return {"discovered": 0, "enabled": False, "reason": "unified_intelligence_active"}
-	if frappe.conf.get("crm_agents_v2_reconciliation_enabled", 0) in (0, "0", False):
-		return {"discovered": 0, "enabled": False}
-	cache_key = "crm_agents_v2:context-change-cursor"
-	last = int(frappe.cache().get_value(cache_key) or 0)
-	rows = frappe.get_all(
-		"CRM Student Revision Journal",
-		filters={"stream": "context", "event_type": "context_changed", "stream_sequence": [">", last]},
-		fields=["name", "student", "revision", "stream_sequence", "event_id"],
-		order_by="stream_sequence asc",
-		limit_page_length=min(int(limit), 1000),
-	)
-	for row in rows:
-		record_student_context_event(row.student, int(row.revision), event_id=row.event_id)
-	if rows:
-		frappe.cache().set_value(cache_key, int(rows[-1].stream_sequence))
-	return {"discovered": len(rows), "oldest_unchecked": rows[0].stream_sequence if rows else None}
 
 
 def reconcile_score_input_v1(limit: int = 500) -> dict:

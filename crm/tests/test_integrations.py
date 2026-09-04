@@ -97,11 +97,10 @@ class TestIntegrations(FrappeTestCase):
 
 		result = add_note_to_call_log(
 			call_log.name,
-			{"title": "Call Summary", "content": "Discussed application next steps"},
+			{"content": "Discussed application next steps"},
 		)
 
 		self.assertTrue(frappe.db.exists("FCRM Note", result.name))
-		self.assertEqual(result.title, "Call Summary")
 		self.assertEqual(result.content, "Discussed application next steps")
 
 		call_log.reload()
@@ -113,14 +112,13 @@ class TestIntegrations(FrappeTestCase):
 		note = frappe.get_doc(
 			{
 				"doctype": "FCRM Note",
-				"title": "Initial Note",
 				"content": "Initial content",
 			}
 		).insert()
 
 		add_note_to_call_log(
 			call_log.name,
-			{"name": note.name, "title": note.title, "content": "Updated content"},
+			{"name": note.name, "content": "Updated content"},
 		)
 
 		note.reload()
@@ -244,7 +242,7 @@ class TestIntegrations(FrappeTestCase):
 		call_log = create_test_call_log()
 		note = add_note_to_call_log(
 			call_log.name,
-			{"title": "Call Notes", "content": "Student interested in admission counseling"},
+			{"content": "Student interested in admission counseling"},
 		)
 		task = add_task_to_call_log(
 			call_log.name,

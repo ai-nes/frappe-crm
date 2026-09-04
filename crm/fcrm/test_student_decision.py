@@ -96,10 +96,10 @@ class TestDecideStudentTask(FrappeTestCase):
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_v2_service"), patch(
+		with patch("crm.api.student_decision._require_action_writer"), patch(
 			"crm.api.student_decision.frappe.conf", conf
 		):
-			return api._upsert_crm_action(
+			return api.write_canonical_action(
 				student=self._student.name,
 				expected_context_revision=revision,
 				generation_idempotency_key=key,
@@ -286,10 +286,10 @@ class TestDecideStudentTask(FrappeTestCase):
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_v2_service"), patch(
+		with patch("crm.api.student_decision._require_action_writer"), patch(
 			"crm.api.student_decision.frappe.conf", conf
 		):
-			return api._upsert_crm_action_bundle(
+			return api.write_canonical_action_bundle(
 				student=self._student.name,
 				expected_context_revision=revision,
 				base_idempotency_key=base_key,

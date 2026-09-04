@@ -195,6 +195,7 @@ class TestDirectorStudents(FrappeTestCase):
 		with (
 			patch.object(director_students, "_latest_assessment", return_value=frappe._dict()),
 			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_probability_trend", return_value=[]),
 			patch.object(
 				director_students,
 				"_student_guardian",
@@ -217,6 +218,9 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["student"]["phone"], "0900000000")
 		self.assertEqual(response["student"]["email"], "an@example.com")
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
+		self.assertEqual(response["student"]["priority"], "Cao")
+		self.assertEqual(response["student"]["verificationStatus"], "Đã xác thực")
+		self.assertEqual(response["insight"]["priorityThreshold"], 70)
 		self.assertEqual(
 			set(response),
 			{
@@ -233,8 +237,51 @@ class TestDirectorStudents(FrappeTestCase):
 				"journey",
 				"engagement",
 				"application",
+				"probabilityTrend",
+				"channelPerformance",
 			},
 		)
+
+	def test_chart_projections_use_real_supported_interactions(self):
+		assessments = [
+			frappe._dict(status="confirmed", assessed_at="2026-06-01 09:00:00", enrollment_probability=41),
+			frappe._dict(status="confirmed", assessed_at="2026-06-03 09:00:00", enrollment_probability=76),
+		]
+		interactions = [
+			frappe._dict(
+				interaction_datetime="2026-05-28 09:00:00",
+				channel="Website",
+				summary="Đăng ký tư vấn",
+				outcome="Captured",
+			),
+			frappe._dict(
+				interaction_datetime="2026-05-30 09:00:00",
+				channel="Phone",
+				summary="Gọi tư vấn",
+				outcome="Resolved",
+			),
+			frappe._dict(
+				interaction_datetime="2026-06-02 09:00:00",
+				channel="Event",
+				summary="Ngày hội tuyển sinh",
+				outcome="No Response",
+			),
+			frappe._dict(
+				interaction_datetime="2026-06-02 10:00:00",
+				channel="Zalo",
+				summary="Tin nhắn tư vấn",
+				outcome="Captured",
+			),
+		]
+
+		trend = director_students._build_probability_trend(assessments, interactions)
+		channels = director_students._channel_performance(interactions)
+
+		self.assertEqual([point["score"] for point in trend], [41, 76])
+		self.assertEqual([point["touches"] for point in trend], [1, 2])
+		self.assertEqual([item["channel"] for item in channels], ["Website", "Sự kiện"])
+		self.assertEqual(channels[0]["response"], 100.0)
+		self.assertEqual(channels[1]["response"], 0.0)
 
 	def test_guardian_projection_reads_contact_as_a_permission_aware_row(self):
 		with (

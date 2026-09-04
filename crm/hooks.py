@@ -146,6 +146,10 @@ permission_query_conditions = {
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.get_permission_query_conditions",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.get_permission_query_conditions",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.get_permission_query_conditions",
+	"CRM Action Item": "crm.fcrm.doctype.crm_action_item.crm_action_item.get_permission_query_conditions",
+	"CRM Action Execution": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Action Outcome": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Recommendation Feedback": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Marketing Engagement": "crm.fcrm.student_attribution.get_permission_query_conditions",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.get_permission_query_conditions",
 	"CRM Admission Application": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
@@ -162,6 +166,7 @@ permission_query_conditions = {
 	"CRM AI Lead Insight": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Agent Event": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Admission Event Decision": "crm.fcrm.permissions.get_admission_decision_permission_query_conditions",
+	"CRM Permission Profile": "crm.fcrm.doctype.crm_permission_profile.crm_permission_profile.get_permission_query_conditions",
 }
 
 has_permission = {
@@ -183,6 +188,10 @@ has_permission = {
 	"CRM Segment": "crm.fcrm.doctype.crm_segment.crm_segment.has_permission",
 	"CRM Recommendation": "crm.fcrm.doctype.crm_recommendation.crm_recommendation.has_permission",
 	"CRM Action": "crm.fcrm.doctype.crm_action.crm_action.has_permission",
+	"CRM Action Item": "crm.fcrm.doctype.crm_action_item.crm_action_item.has_permission",
+	"CRM Action Execution": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Action Outcome": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Recommendation Feedback": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Marketing Engagement": "crm.fcrm.student_attribution.has_permission",
 	"CRM Student Contact Conversion": "crm.fcrm.doctype.crm_student_contact_conversion.crm_student_contact_conversion.has_permission",
 	"CRM Admission Application": "crm.fcrm.permissions.has_operational_record_permission",
@@ -364,7 +373,6 @@ for _governed_consumer_doctype in (
 scheduler_events = {
 	"hourly": [
 		"crm.api.agent_events.retry_pending_agent_events",
-		"crm.api.agent_events.reconcile_student_context_v2",
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.api.agent_events.reconcile_intelligence_run_outbox",
 	],

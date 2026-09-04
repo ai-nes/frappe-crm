@@ -12,7 +12,7 @@
   {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "label": "Event Type", "options": "recommendation_decided\ntask_decided\naction_started\naction_completed\naction_failed\naction_cancelled\naction_reassigned\naction_superseded", "read_only": 1, "reqd": 1},
   {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "in_list_view": 1, "label": "Recommendation", "options": "CRM Recommendation", "read_only": 1},
-  {"fieldname": "action", "fieldtype": "Link", "in_list_view": 1, "label": "Action", "options": "CRM Action", "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Link", "in_list_view": 1, "label": "Action", "options": "CRM Action Item", "read_only": 1},
   {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1, "reqd": 1},
   {"fieldname": "aggregate_revision", "fieldtype": "Int", "label": "Aggregate Revision", "read_only": 1, "reqd": 1},
   {"fieldname": "from_state", "fieldtype": "Data", "label": "From State", "read_only": 1},

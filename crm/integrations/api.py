@@ -16,6 +16,10 @@ def _get_recording_credentials(telephony_medium: str) -> tuple:
 	elif telephony_medium == "Exotel":
 		s = frappe.get_single("Exotel Settings")
 		return s.api_key, s.get_password("api_token")
+	elif telephony_medium == "Manual":
+		# Recording URL already carries its own auth in the query string
+		# (e.g. the Worldfone STT bridge's playback link) — no Basic Auth needed.
+		return None
 	frappe.throw(_("Unknown telephony medium: {0}").format(telephony_medium))
 
 
@@ -61,17 +65,17 @@ def set_default_calling_medium(medium: str):
 @frappe.whitelist()
 def add_note_to_call_log(call_sid: str, note: dict):
 	"""Add/Update note to call log based on call sid."""
+	content = note.get("content") or note.get("title")
 	_note = None
 	if not note.get("name"):
 		_note = frappe.get_doc(
 			{
 				"doctype": "FCRM Note",
-				"title": note.get("title", "Call Note"),
-				"content": note.get("content"),
+				"content": content or "Call Note",
 			}
 		).insert(ignore_permissions=True)
 	else:
-		_note = frappe.set_value("FCRM Note", note.get("name"), "content", note.get("content"))
+		_note = frappe.set_value("FCRM Note", note.get("name"), "content", content)
 
 	call_log = frappe.get_cached_doc("Call Log", call_sid)
 	call_log.link_with_reference_doc("FCRM Note", _note.name)

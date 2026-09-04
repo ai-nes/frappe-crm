@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:feedback_id",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["feedback_id", "recommendation", "outcome", "student", "predicted_probability", "actual_result", "reward", "actual_impact", "feedback_source", "created_by", "created_at", "idempotency_key"],
+ "fields": [
+  {"fieldname": "feedback_id", "fieldtype": "Data", "hidden": 1, "label": "Feedback ID", "reqd": 1, "unique": 1},
+  {"fieldname": "recommendation", "fieldtype": "Link", "label": "Recommendation", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
+  {"fieldname": "outcome", "fieldtype": "Link", "label": "Outcome", "options": "CRM Action Outcome", "reqd": 1, "read_only": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "predicted_probability", "fieldtype": "Float", "label": "Predicted Probability", "reqd": 1, "read_only": 1},
+  {"fieldname": "actual_result", "fieldtype": "Small Text", "label": "Actual Result", "reqd": 1, "read_only": 1},
+  {"fieldname": "reward", "fieldtype": "Float", "label": "Reward", "read_only": 1},
+  {"fieldname": "actual_impact", "fieldtype": "Float", "label": "Actual Impact", "read_only": 1},
+  {"fieldname": "feedback_source", "fieldtype": "Select", "label": "Feedback Source", "options": "human\nprovider\nsystem\nanalytics", "reqd": 1, "read_only": 1},
+  {"fieldname": "created_by", "fieldtype": "Link", "label": "Created By", "options": "User", "reqd": 1, "read_only": 1},
+  {"fieldname": "created_at", "fieldtype": "Datetime", "label": "Created At", "reqd": 1, "read_only": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Key", "reqd": 1, "read_only": 1, "unique": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Recommendation Feedback",
+ "permissions": [
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "created_at",
+ "sort_order": "DESC"
+}

@@ -1,9 +1,10 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.role_policy import CRM_POLICY_ROLE_NAMES
+from crm.fcrm.role_policy import PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, CRM_POLICY_ROLE_NAMES
 from crm.patches.v1_0 import apply_role_policy, setup_crm_permissions
 from crm.patches.v1_0.setup_crm_permissions import MANAGED_DOCPERM_ROLE_NAMES
 
@@ -42,16 +43,33 @@ class TestApplyPhase2RolePolicy(FrappeTestCase):
 		rollback.assert_called_once_with(save_point="phase2_role_policy")
 
 	def test_permission_adapter_never_touches_legacy_untouched_doctypes(self):
-		with (
-			patch.object(setup_crm_permissions.frappe.db, "delete") as delete,
-			patch.object(setup_crm_permissions.frappe, "get_doc") as get_doc,
-		):
-			get_doc.return_value.insert.return_value = None
-			setup_crm_permissions.apply_managed_docperms()
+		# Force the hardcoded matrix: `get_doctype_perms()` otherwise reads live
+		# `CRM Permission Profile` records via `frappe.get_doc`, which this test
+		# also mocks below -- letting the loader hit that mock would try to
+		# cache a MagicMock and blow up in `frappe.cache().set_value`.
+		#
+		# `_permission_matches` is also forced to `False` so every managed pair
+		# is treated as a first-run write regardless of whatever DocPerm rows
+		# already exist on the test site -- the idempotent sync (Phase 6) would
+		# otherwise skip writes for pairs already in sync, leaving nothing for
+		# this test to observe.
+		frappe.conf[PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY] = 1
+		try:
+			with (
+				patch.object(setup_crm_permissions, "_permission_matches", return_value=False),
+				patch.object(setup_crm_permissions, "_load_previously_synced_pairs", return_value=set()),
+				patch.object(setup_crm_permissions, "_save_synced_pairs"),
+				patch.object(setup_crm_permissions.frappe.db, "delete") as delete,
+				patch.object(setup_crm_permissions.frappe, "get_doc") as get_doc,
+			):
+				get_doc.return_value.insert.return_value = None
+				setup_crm_permissions.apply_managed_docperms()
+		finally:
+			frappe.conf.pop(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, None)
 
 		managed_doctypes = {call.args[1]["parent"] for call in delete.call_args_list}
 		self.assertIn("CRM Student", managed_doctypes)
 		self.assertNotIn("CRM Staff", managed_doctypes)
 		self.assertIn("CRM Recommendation", managed_doctypes)
 		for call in delete.call_args_list:
-			self.assertEqual(set(call.args[1]["role"][1]), set(MANAGED_DOCPERM_ROLE_NAMES))
+			self.assertIn(call.args[1]["role"], MANAGED_DOCPERM_ROLE_NAMES)

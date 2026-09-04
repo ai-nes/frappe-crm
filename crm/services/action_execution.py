@@ -1,13 +1,18 @@
 """Durable, provider-independent execution-attempt state machine."""
 
-import hmac
 import hashlib
+import hmac
 
 import frappe
-from frappe.utils import now_datetime
+from frappe.utils import get_datetime, now_datetime
+
+from crm.fcrm.nba import (
+	ensure_nba_execution_for_attempt,
+	resolve_nba_channel,
+	update_nba_execution,
+	validate_nba_action_execution,
+)
 from crm.services.action_execution_contract import TERMINAL, TRANSITIONS, fingerprint
-
-
 
 
 def create_or_replay_attempt(action_name, operation, idempotency_key, expected_action_revision, expected_package_revision):
@@ -15,10 +20,10 @@ def create_or_replay_attempt(action_name, operation, idempotency_key, expected_a
 		frappe.throw("Unsupported execution operation.", frappe.ValidationError)
 	if not idempotency_key or len(idempotency_key) > 180:
 		frappe.throw("A valid idempotency key is required.", frappe.ValidationError)
-	action = frappe.get_doc("CRM Action", action_name)
+	action = frappe.get_doc("CRM Action Item", action_name)
 	if not action.has_permission("read"):
 		frappe.throw("Action is outside the actor's scope.", frappe.PermissionError)
-	if action.action_type == "HANDOFF" and operation == "DISPATCH":
+	if (action.get("action") or action.action_type) == "HANDOFF" and operation == "DISPATCH":
 		frappe.throw("HANDOFF cannot use the dispatch operation.", frappe.PermissionError)
 	if operation == "DISPATCH" and frappe.conf.get("crm_action_pii_controls_enabled", 0) not in (1, "1", True):
 		frappe.throw("Outbound execution is disabled until PII controls are enabled.", frappe.PermissionError, title="PII_CONTROLS_REQUIRED")
@@ -30,6 +35,7 @@ def create_or_replay_attempt(action_name, operation, idempotency_key, expected_a
 	if package_revision != int(expected_package_revision):
 		frappe.throw("Package changed; refresh before retrying.", frappe.ValidationError, title="STALE_REVISION")
 	actor = frappe.session.user
+	nba_definition = validate_nba_action_execution(action, actor=actor, operation=operation)
 	request_fingerprint = fingerprint(action.name, operation, actor, expected_action_revision, expected_package_revision)
 	rows = frappe.get_all("CRM Action Execution Attempt", filters={"action": action.name, "idempotency_key": idempotency_key}, fields=["*"])
 	if rows:
@@ -48,6 +54,12 @@ def create_or_replay_attempt(action_name, operation, idempotency_key, expected_a
 		"policy_revision": str(action.get("policy_context_version") or "unknown"),
 		"created_at": now_datetime(),
 	}).insert(ignore_permissions=True)
+	execution = ensure_nba_execution_for_attempt(attempt, action=action)
+	if execution:
+		frappe.db.set_value("CRM Action Execution Attempt", attempt.name, "nba_execution", execution.name, update_modified=False)
+	if nba_definition and nba_definition.get("auto_execute") and operation == "DISPATCH":
+		queued = transition_attempt(attempt.name, "queued")
+		return {**queued, "replayed": False, "auto_executed": True, "action": action.name}
 	return {"status": "pending", "attempt_id": attempt.name, "replayed": False, "action": action.name}
 
 
@@ -62,7 +74,16 @@ def authorize_attempt_for_send(attempt_id):
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
 	if attempt.status != "queued":
 		frappe.throw("Only queued attempts may be authorized for send.", frappe.ValidationError)
-	action = frappe.get_doc("CRM Action", attempt.action)
+	action = frappe.get_doc("CRM Action Item", attempt.action)
+	try:
+		validate_nba_action_execution(action, actor=attempt.actor, operation=attempt.operation)
+	except frappe.PermissionError:
+		transition_attempt(attempt_id, "cancelled")
+		raise
+	if attempt.get("nba_execution"):
+		scheduled_at = frappe.db.get_value("CRM Action Execution", attempt.nba_execution, "scheduled_at")
+		if scheduled_at and get_datetime(scheduled_at) > now_datetime():
+			frappe.throw("The Action Execution is not due yet.", frappe.ValidationError, title="ACTION_EXECUTION_NOT_DUE")
 	if not action.has_permission("read") or action.state in {"completed", "cancelled", "rejected", "superseded"}:
 		transition_attempt(attempt_id, "cancelled")
 		frappe.throw("Action is no longer executable.", frappe.PermissionError)
@@ -79,17 +100,23 @@ def authorize_attempt_for_send(attempt_id):
 	return {"status": "authorized", "attempt_id": attempt.name, "provider_idempotency_key": attempt.provider_idempotency_key}
 
 
-def process_queued_attempt(attempt_id, channel):
+def process_queued_attempt(attempt_id, channel=None):
 	"""Worker entry point: authorize immediately, then call only a registered provider."""
+	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
+	action = frappe.get_doc("CRM Action Item", attempt.action)
+	channel = resolve_nba_channel(action, channel)
 	if channel not in {"EMAIL", "MESSAGE", "CALL"}:
 		frappe.throw("Unsupported provider channel.", frappe.ValidationError)
 	result = authorize_attempt_for_send(attempt_id)
+	update_nba_execution(attempt_id, status="in_progress", channel=channel, started_at=now_datetime())
 	from crm.services.action_provider import send
 	try:
 		provider_event_id = send(channel, result["provider_idempotency_key"], attempt_id)
 	except Exception as exc:
 		transition_attempt(attempt_id, "failed")
+		update_nba_execution(attempt_id, status="failed", error=str(exc)[:2000], completed_at=now_datetime())
 		return {"status": "failed", "attempt_id": attempt_id, "code": "PROVIDER_UNAVAILABLE", "detail": str(exc)[:200]}
+	update_nba_execution(attempt_id, output={"provider_event_id": provider_event_id}, provider_event_id=provider_event_id)
 	return {"status": "submitted", "attempt_id": attempt_id, "provider_event_id": provider_event_id}
 
 
@@ -116,6 +143,9 @@ def transition_attempt(attempt_id, target_status, *, provider_event_id=None):
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
 	frappe.db.sql("select name from `tabCRM Action Execution Attempt` where name=%s for update", attempt_id)
 	attempt.reload()
+	if target_status == "queued":
+		action = frappe.get_doc("CRM Action Item", attempt.action)
+		validate_nba_action_execution(action, actor=attempt.actor, operation=attempt.operation)
 	if target_status not in TRANSITIONS.get(attempt.status, set()):
 		if attempt.status == target_status:
 			return {"status": attempt.status, "attempt_id": attempt.name, "replayed": True}
@@ -125,6 +155,12 @@ def transition_attempt(attempt_id, target_status, *, provider_event_id=None):
 		attempt.provider_event_id = provider_event_id
 	attempt.lease_count = int(attempt.lease_count or 0) + (1 if target_status == "queued" else 0)
 	attempt.save(ignore_permissions=True)
+	update_nba_execution(
+		attempt.name,
+		status={"pending": "pending", "queued": "queued", "confirmed": "in_progress", "failed": "failed", "cancelled": "cancelled"}[attempt.status],
+		provider_event_id=provider_event_id,
+		completed_at=now_datetime() if attempt.status in {"failed", "cancelled"} else None,
+	)
 	return {"status": attempt.status, "attempt_id": attempt.name, "replayed": False}
 
 

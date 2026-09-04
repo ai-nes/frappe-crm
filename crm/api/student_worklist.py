@@ -57,12 +57,12 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 	if doctype not in {"CRM Student", "CRM Contact"} or not isinstance(name, str) or not name.strip():
 		frappe.throw(_("A valid Student or Contact is required."), frappe.ValidationError)
 	page_size = _parse_page_size(page_size)
-	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	# `get_list` applies CRM Action's permission query conditions; `get_all`
 	# would allow a caller to probe another student's objective/evidence by name.
-	rows = frappe.get_list("CRM Action", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
+	rows = frappe.get_list("CRM Action Item", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
 	now = frappe.utils.now_datetime()
-	return {"items": [{"name": row.name, "student": row.student, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
+	return {"items": [{"name": row.name, "student": row.student, "action": row.action, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -81,7 +81,7 @@ def get_next_best_action_for_student(student_id: str | None = None) -> dict:
 	student_id = student_id.strip()
 	try:
 		frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
-		frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+		frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 		student_rows = frappe.get_list(
 			"CRM Student",
 			filters={"name": student_id},
@@ -96,7 +96,7 @@ def get_next_best_action_for_student(student_id: str | None = None) -> dict:
 				404,
 			)
 		rows = frappe.get_list(
-			"CRM Action",
+			"CRM Action Item",
 			filters={
 				"student": student_id,
 				"state": ["not in", list(_NBA_TERMINAL_STATES)],
@@ -104,6 +104,7 @@ def get_next_best_action_for_student(student_id: str | None = None) -> dict:
 			fields=[
 				"name",
 				"student",
+				"action",
 				"action_type",
 				"objective",
 				"state",
@@ -162,7 +163,7 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	page_size = _parse_page_size(page_size)
 	if student is not None and (not isinstance(student, str) or not student.strip()):
 		frappe.throw(_("student must be a Student name."), frappe.ValidationError)
-	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 
 	from crm.fcrm.role_policy import capabilities_for_roles
 	from crm.fcrm.student_decision import claim_grants_execute
@@ -178,10 +179,10 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	if student:
 		filters["student"] = student
 	rows = frappe.get_list(
-		"CRM Action",
+		"CRM Action Item",
 		filters=filters,
 		fields=[
-			"name", "student", "action_type", "state", "execution_status", "action_owner",
+			"name", "student", "action", "action_type", "state", "execution_status", "action_owner",
 			"risk_tier", "action_revision", "decision_revision", "source_context_revision",
 			"revisit_at", "modified",
 		],
@@ -225,9 +226,9 @@ def get_action_workbench(action: str, expected_action_revision: int | str | None
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	if not isinstance(action, str) or not action.strip():
 		frappe.throw(_("A valid Action is required."), frappe.ValidationError)
-	frappe.has_permission("CRM Action", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	try:
-		doc = frappe.get_doc("CRM Action", action.strip())
+		doc = frappe.get_doc("CRM Action Item", action.strip())
 	except Exception:
 		frappe.throw(_("Action is not available."), frappe.PermissionError)
 	if not doc.has_permission("read") or doc.current_slot != "CURRENT":
@@ -241,7 +242,8 @@ def get_action_workbench(action: str, expected_action_revision: int | str | None
 	roles = set(frappe.get_roles(frappe.session.user))
 	package_revision = int(doc.execution_package_version or 0)
 	package = _latest_safe_package(doc, package_revision) if frappe.conf.get("crm_action_pii_controls_enabled", 0) in (1, "1", True) else {}
-	action_type = doc.action_type if doc.action_type in _SAFE_PACKAGE_KEYS else "UNKNOWN"
+	action_code = doc.get("action") or doc.action_type
+	action_type = action_code if action_code in _SAFE_PACKAGE_KEYS else "UNKNOWN"
 	return {
 		"contract_version": _ACTION_VIEW_MODEL_CONTRACT,
 		"action_id": doc.name,
@@ -249,7 +251,7 @@ def get_action_workbench(action: str, expected_action_revision: int | str | None
 		"action_revision": action_revision,
 		"package_revision": package_revision,
 		"freshness": _action_freshness(doc),
-		"what": {"title": doc.action_type or "Action", "body": doc.objective},
+		"what": {"title": action_code or "Action", "body": doc.objective},
 		"why": {"title": "Why this action", "body": doc.objective},
 		"how": {"title": "How", "body": "Use the Frappe-approved action workflow."},
 		"goal": {"title": "Goal", "body": doc.objective},
@@ -260,7 +262,8 @@ def get_action_workbench(action: str, expected_action_revision: int | str | None
 
 
 def _latest_safe_package(doc, revision: int) -> dict:
-	if not revision or doc.action_type not in _SAFE_PACKAGE_KEYS:
+	action_code = doc.get("action") or doc.action_type
+	if not revision or action_code not in _SAFE_PACKAGE_KEYS:
 		return {}
 	rows = frappe.get_all(
 		"CRM Action Revision", filters={"action": doc.name, "revision": revision},
@@ -271,7 +274,7 @@ def _latest_safe_package(doc, revision: int) -> dict:
 		value = frappe.parse_json(value) if value else {}
 	if not isinstance(value, dict):
 		return {}
-	return {key: value[key] for key in _SAFE_PACKAGE_KEYS[doc.action_type] if key in value}
+	return {key: value[key] for key in _SAFE_PACKAGE_KEYS[action_code] if key in value}
 
 
 def _package_schema(action_type: str) -> str | None:
@@ -329,9 +332,11 @@ def _action_queue_row(
 	can_reassign = bool(
 		is_admin or ({"action.reassign", "team.oversee", "admissions.oversee"} & caps)
 	)
+	action_code = row.get("action") or row.action_type
 	return {
 		"name": row.name,
 		"action": row.name,
+		"action_code": action_code,
 		"student": row.student,
 		"action_type": row.action_type,
 		"state": row.state,
@@ -371,18 +376,18 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 	if not staff:
 		return {"items": [], "next_cursor": None, "policy_version": _POLICY_VERSION}
 	from frappe.model.db_query import DatabaseQuery
-	permission_query = DatabaseQuery("CRM Action", user=frappe.session.user).build_match_conditions(as_condition=True)
+	permission_query = DatabaseQuery("CRM Action Item", user=frappe.session.user).build_match_conditions(as_condition=True)
 	conditions = ["a.action_owner = %(staff)s", "a.state in ('accepted', 'in-progress')"]
 	if permission_query:
-		conditions.append("(" + permission_query.replace("`tabCRM Action`", "a") + ")")
+		conditions.append("(" + permission_query.replace("`tabCRM Action Item`", "a") + ")")
 	last_action = _decode_action_cursor(cursor, frappe.session.user) if cursor else None
 	due_expr = "COALESCE(a.due_at, '9999-12-31 23:59:59.999999')"
 	conditions.append(f"({due_expr} > %(after_due)s OR ({due_expr} = %(after_due)s AND a.creation > %(after_creation)s) OR ({due_expr} = %(after_due)s AND a.creation = %(after_creation)s AND a.name > %(after_name)s))") if last_action else None
 	values = {"staff": staff, "limit": page_size + 1, "after_due": last_action[0] if last_action else "0001-01-01 00:00:00", "after_creation": last_action[1] if last_action else "0001-01-01 00:00:00", "after_name": last_action[2] if last_action else ""}
 	rows = frappe.db.sql(
-		"""select a.name, a.student, s.student_name, a.action_type, a.execution_status,
+		"""select a.name, a.student, s.student_name, a.action, a.action_type, a.execution_status,
 		a.due_at, {due_expr} as due_sort, a.action_owner as assignee_staff, a.action_revision, a.linked_interaction, a.creation,
-		a.outcome_code from `tabCRM Action` a
+		a.outcome_code from `tabCRM Action Item` a
 		left join `tabCRM Student` s on s.name = a.student where {where}
 		order by due_sort asc, a.creation asc, a.name asc limit %(limit)s""".format(where=" and ".join(conditions), due_expr=due_expr),
 		values, as_dict=True,
@@ -392,7 +397,7 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 	now = frappe.utils.now_datetime()
 	items = []
 	for row in rows:
-		items.append({"name": row.name, "action": row.name, "student": row.student, "student_name": row.student_name,
+		items.append({"name": row.name, "action": row.name, "action_code": row.action, "student": row.student, "student_name": row.student_name,
 			"action_type": row.action_type, "execution_status": row.execution_status, "due_at": str(row.due_at) if row.due_at else None,
 			"assignee_staff": row.assignee_staff, "revision": int(row.action_revision or 1),
 			"overdue": bool(row.due_at and row.due_at < now), "linked_interaction": row.linked_interaction,
@@ -423,6 +428,7 @@ def _serialize_nba(row, now=None) -> dict | None:
 	return {
 		"name": row.get("name"),
 		"student": row.get("student"),
+		"action": row.get("action") or None,
 		"action_type": row.get("action_type") or None,
 		"objective": str(row.get("objective") or ""),
 		"state": row.get("state"),
@@ -509,6 +515,7 @@ def _sort_key(row) -> tuple[int, str, str, str]:
 def _minimal_dto(row) -> dict:
 	return {
 		"action": row.name,
+		"action_code": row.get("action"),
 		# Stable wire compatibility for older readers; both keys identify the
 		# same canonical Action and no recommendation row is created.
 		"recommendation": row.name,
@@ -532,38 +539,38 @@ def _fetch_page(principal: str, last_sort_key: list | None, limit: int) -> list:
 	"""Keyset query with Frappe's own permission condition, never an offset scan."""
 	from frappe.model.db_query import DatabaseQuery
 
-	frappe.has_permission("CRM Action", "read", user=principal, throw=True)
+	frappe.has_permission("CRM Action Item", "read", user=principal, throw=True)
 	permission_query = DatabaseQuery("CRM Student", user=principal).build_match_conditions(as_condition=True)
 	values = {"states": _ACTIVE_STATES, "limit": limit, "now": frappe.utils.now_datetime()}
 	conditions = [
-		"`tabCRM Action`.current_slot = 'CURRENT'",
-		"(`tabCRM Action`.state IN %(states)s OR ("
-		"`tabCRM Action`.state = 'deferred' AND "
-		"`tabCRM Action`.revisit_at IS NOT NULL AND "
-		"`tabCRM Action`.revisit_at <= %(now)s))",
+		"`tabCRM Action Item`.current_slot = 'CURRENT'",
+		"(`tabCRM Action Item`.state IN %(states)s OR ("
+		"`tabCRM Action Item`.state = 'deferred' AND "
+		"`tabCRM Action Item`.revisit_at IS NOT NULL AND "
+		"`tabCRM Action Item`.revisit_at <= %(now)s))",
 	]
 	if permission_query:
 		conditions.append(f"({permission_query})")
 	if last_sort_key:
 		conditions.append(
 			"""(
-				`tabCRM Action`.worklist_priority_rank > %(rank)s
-				OR (`tabCRM Action`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
-				OR (`tabCRM Action`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action`.creation > %(creation)s)
-				OR (`tabCRM Action`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action`.creation = %(creation)s AND `tabCRM Action`.name > %(name)s)
+				`tabCRM Action Item`.worklist_priority_rank > %(rank)s
+				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') > %(timing)s)
+				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action Item`.creation > %(creation)s)
+				OR (`tabCRM Action Item`.worklist_priority_rank = %(rank)s AND COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') = %(timing)s AND `tabCRM Action Item`.creation = %(creation)s AND `tabCRM Action Item`.name > %(name)s)
 			)"""
 		)
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key, strict=True)))
 	return frappe.db.sql(
-		"""SELECT `tabCRM Action`.name, `tabCRM Action`.student, `tabCRM Student`.student_name,
-		`tabCRM Action`.priority, `tabCRM Action`.worklist_priority_rank, `tabCRM Action`.action_type,
-		`tabCRM Action`.revisit_at, `tabCRM Action`.objective,
-		`tabCRM Action`.modified, `tabCRM Action`.decision_revision, `tabCRM Action`.creation
-		FROM `tabCRM Action`
-		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Action`.student
+		"""SELECT `tabCRM Action Item`.name, `tabCRM Action Item`.student, `tabCRM Student`.student_name,
+		`tabCRM Action Item`.priority, `tabCRM Action Item`.worklist_priority_rank, `tabCRM Action Item`.action,
+		`tabCRM Action Item`.action_type, `tabCRM Action Item`.revisit_at, `tabCRM Action Item`.objective,
+		`tabCRM Action Item`.modified, `tabCRM Action Item`.decision_revision, `tabCRM Action Item`.creation
+		FROM `tabCRM Action Item`
+		INNER JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Action Item`.student
 		WHERE {conditions}
-		ORDER BY `tabCRM Action`.worklist_priority_rank ASC, COALESCE(`tabCRM Action`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
-		`tabCRM Action`.creation ASC, `tabCRM Action`.name ASC
+		ORDER BY `tabCRM Action Item`.worklist_priority_rank ASC, COALESCE(`tabCRM Action Item`.revisit_at, '9999-12-31 23:59:59.999999') ASC,
+		`tabCRM Action Item`.creation ASC, `tabCRM Action Item`.name ASC
 		LIMIT %(limit)s""".format(conditions=" AND ".join(conditions)),
 		values,
 		as_dict=True,

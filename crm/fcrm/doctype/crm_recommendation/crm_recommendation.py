@@ -25,12 +25,16 @@ class CRMRecommendation(Document):
 		"student", "rule_key", "source_intent_id", "condition_version", "context_hash",
 		"policy_version", "producer_id", "producer_revision", "priority",
 		"expires_at", "recommended_action", "recommended_timing", "cta",
-		"talking_points", "reason", "evidence",
+		"talking_points", "reason", "evidence", "recommendation_id", "target_type",
+		"target_id", "action", "purpose", "channel", "trigger", "confidence",
+		"expected_impact", "timing_policy", "recommended_at", "owner", "lifecycle_status",
+		"model", "model_version",
 	)
 	_DECISION_FIELDS = (
 		"status", "decision_reason", "revisit_at", "decision_revision",
 		"decision_actor", "decision_at", "decision_scope", "decision_correlation_id",
-		"decision_idempotency_key", "supersedes_decision_event",
+		"decision_idempotency_key", "supersedes_decision_event", "decision_status",
+		"execution_status",
 	)
 	_ALLOWED_TRANSITIONS: ClassVar = {
 		"new": {"acknowledged", "accepted", "rejected", "deferred", "expired", "superseded"},
@@ -44,19 +48,41 @@ class CRMRecommendation(Document):
 
 	def validate(self):
 		"""Keep legacy rows readable while rejecting illegal lifecycle rewrites."""
+		before = self.get_doc_before_save()
+		if self.recommended_action:
+			from crm.fcrm.action_type_registry import is_available_recommendation_action
+
+			if not is_available_recommendation_action(self.recommended_action) and (
+				not before or before.get("recommended_action") != self.recommended_action
+			):
+				frappe.throw(_("Unsupported CRM Recommendation action."), frappe.ValidationError)
 		self.worklist_priority_rank = {"high": 0, "medium": 1, "low": 2}.get(self.priority, 99)
 		# A null recommendation time means no fabricated urgency. Its sortable
 		# projection deliberately lands after scheduled work of the same rank.
 		self.worklist_timing_sort = self.recommended_timing or "9999-12-31 23:59:59.999999"
-		before = self.get_doc_before_save()
 		if self.is_new():
 			if not self._from_command():
 				frappe.throw(_("CRM Recommendations may only be created by the approved server-side producer."))
 			if self.status in self._LEGACY_ONLY_STATUSES:
 				frappe.throw(_("Legacy CRM Recommendation status {0} cannot be created.").format(self.status))
+			self.recommendation_id = self.name
+			self.target_type = self.target_type or "CRM Student"
+			if self.target_type != "CRM Student":
+				frappe.throw(_("NBA Recommendation target_type must be CRM Student."), frappe.ValidationError)
+			if self.target_id and self.target_id != self.student:
+				frappe.throw(_("NBA Recommendation target_id must match student."), frappe.ValidationError)
+			self.target_id = self.student
+			self.recommended_at = self.recommended_at or self.created_at or frappe.utils.now_datetime()
+			self.lifecycle_status = self.lifecycle_status or "proposed"
+			self.decision_status = self.decision_status or "pending"
+			self.execution_status = self.execution_status or "not_started"
 			return
 		if not before:
 			return
+		if self.target_type and self.target_type != "CRM Student":
+			frappe.throw(_("NBA Recommendation target_type must be CRM Student."), frappe.ValidationError)
+		if self.target_id and self.target_id != self.student:
+			frappe.throw(_("NBA Recommendation target_id must match student."), frappe.ValidationError)
 		changed_fields = {field for field in self._PRODUCER_FIELDS + self._DECISION_FIELDS if self.get(field) != before.get(field)}
 		if changed_fields and not self._from_command():
 			frappe.throw(_("CRM Recommendation decisions and producer data must use a Phase 6 server command."))
@@ -67,6 +93,10 @@ class CRMRecommendation(Document):
 			frappe.throw(_("Legacy CRM Recommendation status {0} is read-only pending migration.").format(before.status))
 		if before.status == self.status:
 			return
+		self.decision_status = {
+			"new": "pending", "acknowledged": "pending", "accepted": "accepted",
+			"rejected": "rejected", "deferred": "deferred", "expired": "rejected",
+		}.get(self.status, self.decision_status or "pending")
 		allowed = self._ALLOWED_TRANSITIONS.get(before.status, set())
 		if self.status not in allowed:
 			frappe.throw(_("Illegal CRM Recommendation transition: {0} -> {1}").format(before.status, self.status))

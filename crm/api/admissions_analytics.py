@@ -73,7 +73,7 @@ def get_pipeline_summary() -> dict:
 		fields=["student"], limit_page_length=1000,
 	)
 	actions = frappe.get_list(
-		"CRM Action",
+		"CRM Action Item",
 		filters={
 			"student": ["in", student_ids],
 			"current_slot": "CURRENT",

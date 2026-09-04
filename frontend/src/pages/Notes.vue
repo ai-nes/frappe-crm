@@ -34,10 +34,7 @@
         class="group flex h-56 cursor-pointer flex-col justify-between gap-2 rounded-lg border px-5 py-4 shadow-sm hover:bg-surface-menu-bar"
         @click="editNote(note.name)"
       >
-        <div class="flex items-center justify-between">
-          <div class="truncate text-lg font-medium text-ink-gray-9">
-            {{ note.title }}
-          </div>
+        <div class="flex items-center justify-end">
           <Dropdown
             :options="[
               {

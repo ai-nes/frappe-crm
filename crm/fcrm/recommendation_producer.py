@@ -12,7 +12,14 @@ from typing import Any
 import frappe
 from frappe import _
 
-ALLOWED_ACTIONS = {"WAIT", "CALL", "EMAIL", "FOLLOW_UP", "EVENT_INVITE", "COUNSELING", "HANDOFF"}
+from crm.fcrm.action_type_catalog import (
+	SUPPORTED_RECOMMENDATION_ACTION_TYPES,
+	canonicalize_action_type,
+)
+from crm.fcrm.action_type_registry import is_available_action_type
+from crm.fcrm.nba_timing import is_time_allowed
+
+ALLOWED_ACTIONS = SUPPORTED_RECOMMENDATION_ACTION_TYPES
 PRODUCER_FLAG = "phase6_recommendation_producer"
 
 
@@ -37,6 +44,8 @@ def produce_recommendation(
 	reason: str,
 	evidence: Any = None,
 	recommended_timing: Any = None,
+	timing_policy: str | None = None,
+	trigger: str | None = None,
 	expires_at: Any = None,
 	cta: str | None = None,
 	talking_points: Any = None,
@@ -45,8 +54,11 @@ def produce_recommendation(
 	producer_revision: int = 1,
 ):
 	"""Create-or-return a deterministic, server-authenticated recommendation."""
+	recommended_action = canonicalize_action_type(recommended_action)
 	if recommended_action not in ALLOWED_ACTIONS:
 		frappe.throw(_("Unsupported recommendation action."), frappe.ValidationError)
+	if recommended_action not in {"WAIT", "FOLLOW_UP"} and not is_available_action_type(recommended_action):
+		frappe.throw(_("CRM Action Type is disabled or unavailable."), frappe.ValidationError)
 	producer_id = _service_identity()
 	serialized_talking_points = (
 		json.dumps(talking_points, ensure_ascii=False)
@@ -65,6 +77,8 @@ def produce_recommendation(
 		"policy_version": policy_version,
 		"producer_revision": int(producer_revision),
 		"expires_at": expires_at,
+		"timing_policy": timing_policy,
+		"trigger": trigger,
 		"cta": cta,
 		"talking_points": serialized_talking_points,
 	}
@@ -72,6 +86,29 @@ def produce_recommendation(
 	existing = frappe.db.get_value("CRM Recommendation", {"student": student, "rule_key": rule_key, "source_intent_id": source_intent_id, "condition_version": int(condition_version), "context_hash": context_hash}, "name")
 	if existing:
 		return frappe.get_doc("CRM Recommendation", existing)
+	from crm.fcrm.nba import (
+		TIMING_POLICY_DOCTYPE,
+		ensure_nba_action,
+		get_nba_action_definition,
+		resolve_nba_channel,
+	)
+	canonical_action_type = recommended_action if is_available_action_type(recommended_action) else None
+	if timing_policy:
+		if not frappe.db.exists(TIMING_POLICY_DOCTYPE, timing_policy):
+			frappe.throw(_("CRM Timing Policy does not exist."), frappe.ValidationError)
+	action_name = ensure_nba_action(canonical_action_type)
+	definition = get_nba_action_definition({"nba_action": action_name}) if action_name else None
+	now = frappe.utils.now_datetime()
+	if definition and definition.get("allowed_time_slots"):
+		try:
+			if not is_time_allowed(recommended_timing or now, definition.get("allowed_time_slots")):
+				frappe.throw(
+					_("{0} is outside its configured allowed time window.").format(recommended_action),
+					frappe.ValidationError,
+					title="ACTION_TIME_WINDOW",
+				)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Recommendation",
@@ -89,8 +126,23 @@ def produce_recommendation(
 			"producer_id": producer_id,
 			"priority": priority,
 			"status": "new",
-			"created_at": frappe.utils.now_datetime(),
+			"created_at": now,
 			"recommended_timing": recommended_timing,
+			"recommended_at": now,
+			"target_type": "CRM Student",
+			"target_id": student,
+			"action": action_name,
+			"purpose": reason,
+			"channel": resolve_nba_channel(
+				{"action_type": canonical_action_type, "nba_action": action_name},
+				definition.get("default_channel") if definition else None,
+			),
+			"trigger": trigger or rule_key,
+			"timing_policy": timing_policy,
+			"owner": frappe.db.get_value("CRM Student", student, "owner_staff"),
+			"lifecycle_status": "proposed",
+			"decision_status": "pending",
+			"execution_status": "not_started",
 			"reason": reason,
 			"evidence": serialized_evidence,
 		}

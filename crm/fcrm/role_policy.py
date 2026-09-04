@@ -21,6 +21,23 @@ PROFILE_LABELS = {
 	"marketing": "Marketing",
 	"lead_sales": "Lead Sales",
 	"admissions_director": "Admissions Director",
+	# PRD-phan-quyen-lead.md roles (2026-09-04). Unlike the profiles above,
+	# these are not derived from `CANONICAL_PERMISSION_MATRIX` -- their
+	# `CRM Permission Profile` rows are hand-transcribed from the PRD by
+	# `crm.patches.v1_0.seed_new_lead_role_profiles`, and they carry no
+	# `PROFILE_CAPABILITIES` (the PRD scopes them to plain Lead CRUD, none of
+	# the recommendation/lifecycle actions the other profiles gate).
+	# "PR (nhân viên)" reuses the pre-existing "Promoter" role name rather
+	# than introducing a new "PR" role (explicit product decision, 2026-09-04)
+	# -- `Promoter` is therefore split out of `marketing`'s aliases below into
+	# its own profile with the PRD's distinct CRUD.
+	# Department-head roles use the "Lead <Department>" naming already
+	# established by "Lead Sales" (explicit product decision, 2026-09-04).
+	"ctv_sale": "CTV Sale",
+	"pr": "Promoter",
+	"pr_manager": "Lead Promoter",
+	"lead_marketing": "Lead Marketing",
+	"ceo": "CEO",
 }
 
 # Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
@@ -29,9 +46,16 @@ PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CR
 
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
-	"marketing": frozenset({"Marketing", "Promoter"}),
+	# "Promoter" moved out to its own "pr" profile below (2026-09-04) -- it no
+	# longer shares Marketing's permissions, it gets the PRD's PR CRUD.
+	"marketing": frozenset({"Marketing"}),
 	"lead_sales": frozenset({"Lead Sales"}),
 	"admissions_director": frozenset({"Admissions Director"}),
+	"ctv_sale": frozenset({"CTV Sale"}),
+	"pr": frozenset({"Promoter"}),
+	"pr_manager": frozenset({"Lead Promoter"}),
+	"lead_marketing": frozenset({"Lead Marketing"}),
+	"ceo": frozenset({"CEO"}),
 }
 
 PROFILE_CAPABILITIES = {
@@ -135,14 +159,21 @@ CANONICAL_PERMISSION_MATRIX = {
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "rwc",
-			"lead_sales": "rwc",
-			"marketing": "-",
+			# PRD-phan-quyen-lead.md P0-1 (2026-09-04): Trưởng phòng Sale (Lead
+			# Sales) gets conditional delete, gated by this profile's existing
+			# `delete_requires_ownership=1` -- no unconditional bulk delete.
+			"lead_sales": "rwcd",
+			# PRD-phan-quyen-lead.md P0-1 (2026-09-04): Marketing/Trưởng phòng
+			# Marketing need read-only visibility for channel-performance
+			# analysis; still campus-scoped per P0-2, see row_scope below.
+			"marketing": "r",
 			"admissions_director": "rx",
 		},
 		"row_scope": {
 			"sales": "assigned",
 			"lead_sales": "team_and_team_pool",
 			"admissions_director": "all",
+			"marketing": "campus_assigned",
 			"default": "deny",
 		},
 	},
@@ -202,7 +233,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "campus_is_not_team_scope",
 	},
 	"decision_action": {
-		"doctypes": ("CRM Recommendation", "CRM Action", "CRM Student Decision Event"),
+		"doctypes": ("CRM Recommendation", "CRM Action", "CRM Action Item", "CRM Student Decision Event"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -529,9 +560,57 @@ def is_crm_user(roles, *, administrator=False) -> bool:
 
 
 def case_scope_for_roles(roles, doctype, *, administrator=False):
-	"""Resolve the sole Student/Contact scope from the canonical policy data."""
+	"""Resolve the sole Student/Contact scope.
+
+	Reads from the DB-backed `CRM Permission Profile` catalog by default.
+	Set site_config `crm_permission_profile_use_hardcoded_matrix` truthy to
+	force the pre-cutover hardcoded-matrix behavior back on without a code
+	deploy -- a same-second rollback path for this phase's cutover.
+	"""
 	if administrator:
 		return "all"
+	if _use_hardcoded_permission_matrix():
+		return _hardcoded_case_scope_for_roles(roles, doctype)
+
+	role = _profile_role_for_role_set(roles)
+	if role is None:
+		return "deny"
+	profile = _cached_permission_profile(role)
+	if profile is None:
+		# `role` resolved to a canonical profile or compatibility overlay
+		# identity, so a matching seeded record is expected. Its absence is a
+		# real data gap (e.g. a role added after Phase 2's seed ran) and must
+		# be surfaced, not silently treated as an ordinary deny.
+		_warn_missing_permission_profile(role)
+		return "deny"
+	scope = profile["row_scope"]
+	if scope == "campus_assigned_contact" and doctype != "CRM Contact":
+		return "deny"
+	return scope
+
+
+def delete_requires_ownership_for_roles(roles, *, administrator=False):
+	"""Whether the resolved profile gates delete on owner-or-assigned (PRD P0-3).
+
+	This is genuinely new behavior with no pre-cutover matrix to fall back to,
+	so the kill-switch restores the old no-ownership-check delete behavior
+	exactly, same as it restores the old row-scope behavior.
+	"""
+	if administrator:
+		return False
+	if _use_hardcoded_permission_matrix():
+		return False
+	role = _profile_role_for_role_set(roles)
+	if role is None:
+		return False
+	profile = _cached_permission_profile(role)
+	if profile is None:
+		return False
+	return profile["delete_requires_ownership"]
+
+
+def _hardcoded_case_scope_for_roles(roles, doctype):
+	"""Pre-cutover implementation, retained only for the kill-switch above."""
 	role_names = frozenset(roles)
 	role_state = classify_role_set(role_names)
 	if role_state == "system_manager":
@@ -554,12 +633,36 @@ def case_scope_for_roles(roles, doctype, *, administrator=False):
 
 
 def managed_docperm_rows():
-	"""Translate the versioned policy matrix into managed Frappe DocPerm rows.
+	"""Translate the managed permission catalog into managed Frappe DocPerm rows.
 
-	The result deliberately excludes `legacy_untouched` surfaces. Callers must
-	leave those existing rows alone rather than allowing a future fall-through
-	grant to regenerate them.
+	Reads from the DB-backed `CRM Permission Profile` catalog by default; see
+	`case_scope_for_roles` for the kill-switch. Deliberately excludes
+	`legacy_untouched` surfaces -- callers must leave those existing rows
+	alone rather than allowing a future fall-through grant to regenerate them.
+	This function only touches the database when actually called, never at
+	module import time -- callers must not bind its result to a module-level
+	constant.
 	"""
+	if _use_hardcoded_permission_matrix():
+		return _hardcoded_managed_docperm_rows()
+
+	rows_by_doctype = {}
+	for role in (SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values()):
+		profile = _cached_permission_profile(role)
+		if profile is None:
+			_warn_missing_permission_profile(role)
+			continue
+		for doctype, flags in profile["doctypes"].items():
+			row = _docperm_row_from_flags(role, flags)
+			if row:
+				rows_by_doctype.setdefault(doctype, []).append(row)
+	for doctype, rows in rows_by_doctype.items():
+		rows_by_doctype[doctype] = sorted(rows, key=lambda row: row["role"])
+	return rows_by_doctype
+
+
+def _hardcoded_managed_docperm_rows():
+	"""Pre-cutover implementation, retained only for the kill-switch above."""
 	rows_by_doctype = {}
 	for surface, definition in CANONICAL_PERMISSION_MATRIX.items():
 		if surface == "legacy_untouched":
@@ -605,3 +708,116 @@ def _docperm_row(role, permission_set):
 	if permission_set == "same":
 		raise ValueError("Canonical aliases must resolve through a canonical profile")
 	return {"role": role, **{field: 1 for verb, field in _PERMISSION_FLAGS.items() if verb in permission_set}}
+
+
+# ---------------------------------------------------------------------------
+# Lazy, cached `CRM Permission Profile` reader.
+#
+# `case_scope_for_roles()` and `managed_docperm_rows()` above call into this
+# section by default; the hardcoded matrices earlier in this module are kept
+# only as the `crm_permission_profile_use_hardcoded_matrix` kill-switch's
+# fallback. Every DB touch is a local `import frappe` inside a function body,
+# never at module import time, so importing this module stays pure Python.
+# ---------------------------------------------------------------------------
+
+PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY = "crm_permission_profile_use_hardcoded_matrix"
+
+_PERMISSION_PROFILE_CACHE_TTL_SEC = 300
+
+
+def _use_hardcoded_permission_matrix():
+	import frappe
+
+	return bool(frappe.conf.get(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY))
+
+
+def _warn_missing_permission_profile(role):
+	import frappe
+
+	frappe.log_error(
+		title="CRM Permission Profile missing",
+		message=(
+			f"Role {role!r} resolved to a canonical profile or compatibility overlay "
+			"identity via role_policy.classify_role_set, but no matching CRM Permission "
+			"Profile record exists. Falling back to deny for this role until a profile "
+			"is seeded/created for it."
+		),
+	)
+
+
+def _permission_profile_cache_key(role):
+	return f"crm_permission_profile::{role}"
+
+
+def clear_permission_profile_cache(role):
+	"""Invalidate one role's cached profile. Called by the doctype's `on_update`.
+
+	`role` is immutable after a profile is created, so a single key is enough.
+	"""
+	import frappe
+
+	frappe.cache().delete_value(_permission_profile_cache_key(role))
+
+
+def _load_permission_profile(role):
+	import frappe
+
+	name = frappe.db.get_value("CRM Permission Profile", {"role": role}, "name")
+	if not name:
+		return None
+	doc = frappe.get_doc("CRM Permission Profile", name)
+	return {
+		"row_scope": doc.row_scope,
+		"delete_requires_ownership": bool(doc.delete_requires_ownership),
+		"doctypes": {
+			row.document_type: {
+				"read": bool(row.read),
+				"write": bool(row.write),
+				"create": bool(row.create),
+				"delete": bool(row.delete),
+				"export": bool(row.export),
+			}
+			for row in doc.applicable_doctypes
+		},
+	}
+
+
+def _cached_permission_profile(role):
+	import frappe
+
+	cache_key = _permission_profile_cache_key(role)
+	cached = frappe.cache().get_value(cache_key)
+	if cached is not None:
+		return cached
+	value = _load_permission_profile(role)
+	frappe.cache().set_value(cache_key, value, expires_in_sec=_PERMISSION_PROFILE_CACHE_TTL_SEC)
+	return value
+
+
+def _profile_role_for_role_set(roles):
+	"""Return the single literal Role name identity resolution would key on.
+
+	Mirrors `classify_role_set`'s own classification so the DB read queries
+	the exact seeded record the pure-Python identity resolution points at.
+	Returns ``None`` when no profile or overlay applies (administrator is
+	handled by callers before this is reached).
+	"""
+	role_names = frozenset(roles)
+	state = classify_role_set(role_names)
+	if state == "system_manager":
+		return SYSTEM_MANAGER_ROLE
+	if state == "canonical_profile":
+		profile = resolve_crm_profile(role_names)
+		return PROFILE_LABELS.get(profile)
+	if state == "compatibility_overlay":
+		overlay = resolve_compatibility_overlay(role_names)
+		if not overlay:
+			return None
+		matched = role_names & LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"]
+		return next(iter(matched), None)
+	return None
+
+
+def _docperm_row_from_flags(role, flags):
+	row = {"role": role, **{verb: 1 for verb, present in flags.items() if present}}
+	return row if len(row) > 1 else None

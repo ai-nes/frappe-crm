@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:policy_key",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["policy_key", "trigger_type", "trigger_event", "delay_value", "delay_unit", "time_slot", "allowed_start_time", "allowed_end_time", "deadline_type", "deadline_offset", "recurrence_type", "recurrence_interval", "stop_condition", "optimization_enabled", "optimization_objective"],
+ "fields": [
+  {"fieldname": "policy_key", "fieldtype": "Data", "in_list_view": 1, "label": "Policy Key", "reqd": 1, "unique": 1},
+  {"fieldname": "trigger_type", "fieldtype": "Select", "label": "Trigger Type", "options": "event\nrelative\ndeadline\nschedule", "reqd": 1},
+  {"fieldname": "trigger_event", "fieldtype": "Data", "label": "Trigger Event"},
+  {"fieldname": "delay_value", "fieldtype": "Float", "label": "Delay Value", "default": "0"},
+  {"fieldname": "delay_unit", "fieldtype": "Select", "label": "Delay Unit", "options": "minutes\nhours\ndays", "default": "hours"},
+  {"fieldname": "time_slot", "fieldtype": "Select", "label": "Time Slot", "options": "0-6\n6-12\n12-18\n18-24", "description": "Daily execution window. 18-24 represents 18:00 through 24:00."},
+  {"fieldname": "allowed_start_time", "fieldtype": "Time", "label": "Allowed Start Time"},
+  {"fieldname": "allowed_end_time", "fieldtype": "Time", "label": "Allowed End Time"},
+  {"fieldname": "deadline_type", "fieldtype": "Select", "label": "Deadline Type", "options": "none\nfixed_offset\nbusiness_days", "default": "none"},
+  {"fieldname": "deadline_offset", "fieldtype": "Float", "label": "Deadline Offset", "default": "0"},
+  {"fieldname": "recurrence_type", "fieldtype": "Select", "label": "Recurrence Type", "options": "none\ndaily\nweekly\nmonthly", "default": "none"},
+  {"fieldname": "recurrence_interval", "fieldtype": "Int", "label": "Recurrence Interval", "default": "1"},
+  {"fieldname": "stop_condition", "fieldtype": "Small Text", "label": "Stop Condition"},
+  {"fieldname": "optimization_enabled", "fieldtype": "Check", "label": "Optimization Enabled", "default": "0"},
+  {"fieldname": "optimization_objective", "fieldtype": "Small Text", "label": "Optimization Objective"}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Timing Policy",
+ "permissions": [
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Marketing"},
+  {"read": 1, "role": "Promoter"},
+  {"read": 1, "role": "Admissions Director"},
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}
+ ],
+ "sort_field": "policy_key",
+ "sort_order": "ASC"
+}

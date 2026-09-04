@@ -112,44 +112,6 @@ def settle_analysis_stage(
 
 
 @frappe.whitelist(methods=["POST"])
-def upsert_next_best_action_from_analysis_run(
-	run_id: str,
-	stage_generation: int,
-	lease_token: str,
-	expected_source_revision: str,
-	expected_source_digest: str,
-	generation_idempotency_key: str,
-	producer_identity: str,
-	payload_digest: str,
-	rollout_epoch: int,
-	candidate: dict | str,
-	writer_epoch: int | None = None,
-):
-	"""The only new NBA write shape: parent run + live stage lease, never a key.
-
-	The legacy Student Decision endpoint remains an adapter during cutover, but
-	when the Intelligence writer epoch is enabled it delegates through exactly
-	the same Frappe authority checks.
-	"""
-	authority = intelligence_runs.authorize_next_best_action_write(
-		run_id=run_id,
-		stage_generation=int(stage_generation),
-		lease_token=lease_token,
-		expected_source_revision=str(expected_source_revision),
-		expected_source_digest=expected_source_digest,
-	)
-	from crm.api.student_decision import _upsert_crm_action
-	return _upsert_crm_action(
-		student=authority["student"], expected_context_revision=int(expected_source_revision),
-		generation_idempotency_key=generation_idempotency_key, producer_identity=producer_identity,
-		payload_digest=payload_digest, rollout_epoch=int(rollout_epoch), candidate=candidate,
-		writer_epoch=writer_epoch, source_stage_key=authority["stage_key"], run_id=run_id,
-		stage_kind="next_best_action", stage_generation=int(stage_generation), lease_token=lease_token,
-		expected_source_digest=expected_source_digest,
-	)
-
-
-@frappe.whitelist(methods=["POST"])
 def upsert_next_best_action_bundle_from_analysis_run(
 	run_id: str,
 	stage_generation: int,
@@ -180,9 +142,9 @@ def upsert_next_best_action_bundle_from_analysis_run(
 		candidates = frappe.parse_json(candidates)
 	if isinstance(rationales, str):
 		rationales = frappe.parse_json(rationales)
-	from crm.api.student_decision import _upsert_crm_action_bundle
+	from crm.api.student_decision import write_canonical_action_bundle
 
-	return _upsert_crm_action_bundle(
+	return write_canonical_action_bundle(
 		student=authority["student"],
 		expected_context_revision=int(expected_source_revision),
 		base_idempotency_key=generation_idempotency_key,

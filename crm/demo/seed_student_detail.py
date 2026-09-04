@@ -1,83 +1,159 @@
-"""Seed one complete Student 360 fixture for the local admissions API.
+"""Seed one complete, local-only Student 360 fixture for the Director dashboard.
 
 Run with::
 
-    bench --site crm.localhost execute crm.demo.seed_student_detail.execute
+    bench --site crm.localhost execute crm.demo.seed_student_detail.seed
 
-The fixture is intentionally separate from the large showcase cohort.  It uses
-stable source/idempotency keys and the same service commands as production API
-flows, so re-running it is safe and useful for local API development.
+The fixture is intentionally limited to Website, Event, Form, and Email data.
+It does not create calls, Zalo records, or tasks.
 """
 
 from __future__ import annotations
 
-from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 import frappe
 
-from crm.demo import seed_demo, seed_staff
-
 LOCAL_SITE = "crm.localhost"
-NAMESPACE = "crm-demo-student-detail"
-STUDENT_EMAIL = "minh.anh.student360@example.test"
-STUDENT_PHONE = "0901999123"
-PARENT_EMAIL = "thu.ha.parent360@example.test"
-PARENT_PHONE = "0908999765"
-SEED_NOW = datetime(2026, 9, 1, 10, 0, 0)
+STUDENT_ID = "ENR-2026-04561"
+STUDENT_NAME = "Lê Gia Uyên"
+STUDENT_EMAIL = "le.gia.uyen@gmail.com"
+SEED_NAMESPACE = "crm-demo-student-detail:gia-uyen"
+SEED_NOW = datetime(2026, 9, 3, 16, 11, 5)
+
+REFERENCE_DOCTYPES = {
+	"high_school": "CRM High School",
+	"province": "CRM Province",
+	"major": "CRM Major",
+	"source": "CRM Lead Source",
+	"admission_year": "CRM Admission Year",
+}
+
+INTERACTIONS: tuple[dict[str, Any], ...] = (
+	{
+		"key": "major-page",
+		"when": datetime(2026, 8, 18, 9, 10),
+		"channel": "Website",
+		"direction": "inbound",
+		"summary": "Xem trang ngành Trí tuệ nhân tạo",
+		"notes": "Đọc thông tin chương trình và đầu ra ngành AI.",
+		"outcome": "Captured",
+	},
+	{
+		"key": "event-registration",
+		"when": datetime(2026, 8, 21, 18, 20),
+		"channel": "Sự kiện",
+		"direction": "inbound",
+		"summary": "Đăng ký ngày hội AI",
+		"notes": "Đăng ký tham dự buổi tư vấn ngành và học bổng.",
+		"outcome": "Captured",
+	},
+	{
+		"key": "consultation-form",
+		"when": datetime(2026, 8, 24, 10, 5),
+		"channel": "Hồ sơ",
+		"direction": "inbound",
+		"summary": "Hoàn tất biểu mẫu tư vấn",
+		"notes": "Cung cấp nguyện vọng Artificial Intelligence và thông tin học tập.",
+		"outcome": "Resolved",
+	},
+	{
+		"key": "tuition-page",
+		"when": datetime(2026, 8, 27, 20, 15),
+		"channel": "Website",
+		"direction": "inbound",
+		"summary": "Xem học phí và học bổng",
+		"notes": "Quan tâm mức học phí, học bổng và lộ trình xét tuyển.",
+		"outcome": "Follow Up Needed",
+	},
+	{
+		"key": "event-attendance",
+		"when": datetime(2026, 8, 30, 8, 40),
+		"channel": "Sự kiện",
+		"direction": "inbound",
+		"summary": "Tham gia ngày hội tư vấn AI",
+		"notes": "Đã tham dự và trao đổi về chương trình đào tạo.",
+		"outcome": "Captured",
+	},
+	{
+		"key": "need-confirmed",
+		"when": SEED_NOW,
+		"channel": "Website",
+		"direction": "inbound",
+		"summary": "Xác nhận nhu cầu ngành AI",
+		"notes": "Nhu cầu ngành học đã rõ, cần tiếp tục hoàn thiện hồ sơ.",
+		"outcome": "Follow Up Needed",
+		"next_follow_up_action": "Gửi checklist hồ sơ và thông tin học bổng.",
+	},
+)
+
+ASSESSMENTS: tuple[dict[str, Any], ...] = (
+	{
+		"key": "initial",
+		"when": datetime(2026, 8, 18, 9, 20),
+		"probability": 42,
+		"signal_score": 48,
+		"interest": "Medium",
+		"fit": "Medium",
+		"barrier": "Information",
+		"reason": "Học sinh mới để lại thông tin và cần thêm tư vấn về ngành học.",
+		"recommendation": "Gửi thông tin tổng quan về ngành Artificial Intelligence.",
+	},
+	{
+		"key": "event-interest",
+		"when": datetime(2026, 8, 21, 18, 30),
+		"probability": 55,
+		"signal_score": 62,
+		"interest": "Medium",
+		"fit": "High",
+		"barrier": "Information",
+		"reason": "Đăng ký ngày hội và thể hiện mức quan tâm rõ hơn tới ngành AI.",
+		"recommendation": "Mời tham gia buổi tư vấn chuyên sâu về ngành.",
+	},
+	{
+		"key": "form-completed",
+		"when": datetime(2026, 8, 24, 10, 15),
+		"probability": 64,
+		"signal_score": 72,
+		"interest": "High",
+		"fit": "High",
+		"barrier": "Information",
+		"reason": "Đã hoàn tất biểu mẫu và cung cấp nguyện vọng cụ thể.",
+		"recommendation": "Đối chiếu hồ sơ học tập và phương thức xét tuyển.",
+	},
+	{
+		"key": "tuition-concern",
+		"when": datetime(2026, 8, 27, 20, 25),
+		"probability": 76,
+		"signal_score": 82,
+		"interest": "High",
+		"fit": "High",
+		"barrier": "Cost",
+		"reason": "Tương tác lặp lại với nội dung học phí và học bổng cho thấy ý định cao.",
+		"recommendation": "Chuẩn bị phương án học phí và học bổng phù hợp.",
+	},
+	{
+		"key": "current",
+		"when": datetime(2026, 9, 3, 16, 20),
+		"probability": 90,
+		"signal_score": 90,
+		"interest": "High",
+		"fit": "High",
+		"barrier": "Cost",
+		"reason": "Học sinh đã xác nhận ngành quan tâm; rào cản còn lại là phương án tài chính.",
+		"recommendation": "Gửi checklist hồ sơ cùng phương án học bổng trong ngày.",
+	},
+)
 
 
 def _assert_local_site() -> None:
 	if getattr(frappe.local, "site", None) == LOCAL_SITE or frappe.conf.get("allow_demo_seed"):
 		return
 	frappe.throw(
-		"The Student detail seed only runs on crm.localhost. Set allow_demo_seed=1 "
-		"to opt in a demo/staging site.",
+		"seed_student_detail chỉ chạy trên crm.localhost. Có thể bật allow_demo_seed=1 cho site demo.",
 		frappe.PermissionError,
 	)
-
-
-@contextmanager
-def _seed_flags():
-	keys = {
-		"crm_student_routing_enabled": 1,
-		"crm_student_context_read_enabled": 1,
-		"crm_student_engagement_write_enabled": 1,
-		"crm_student_lifecycle_write_enabled": 1,
-		"crm_student_conversion_read_enabled": 1,
-		"crm_student_conversion_write_enabled": 1,
-		"crm_phase9_governance_write_enabled": 1,
-		"crm_phase9_audit_read_enabled": 1,
-	}
-	previous_config = {key: frappe.conf.get(key) for key in keys}
-	previous_flags = {
-		"crm_governance_additive": frappe.flags.get("crm_governance_additive"),
-		"crm_governance_change": frappe.flags.get("crm_governance_change"),
-		"legacy_fact_migration": frappe.flags.get("legacy_fact_migration"),
-	}
-	try:
-		for key, value in keys.items():
-			frappe.conf[key] = value
-		frappe.flags.crm_governance_additive = True
-		frappe.flags.crm_governance_change = True
-		frappe.flags.legacy_fact_migration = True
-		yield
-	finally:
-		for key, value in previous_flags.items():
-			if value is None:
-				frappe.flags.pop(key, None)
-			else:
-				frappe.flags[key] = value
-		for key, value in previous_config.items():
-			if value is None:
-				frappe.conf.pop(key, None)
-			else:
-				frappe.conf[key] = value
-
-
-def _key(*parts: Any) -> str:
-	return ":".join((NAMESPACE, *(str(part) for part in parts)))
 
 
 def _ensure_interaction_type(name: str) -> str:
@@ -91,98 +167,65 @@ def _ensure_interaction_type(name: str) -> str:
 	)
 
 
-def _ensure_intent_type(name: str, importance: str) -> str:
-	term = frappe.db.get_value("CRM Term", {"term_name": name, "category": "intent_type"}, "name")
-	if term:
-		return term
-	return seed_demo._ensure_intent_type(name, importance, f"Student detail fixture: {name}")
+def _resolve_student() -> str:
+	student = frappe.db.exists("CRM Student", STUDENT_ID)
+	if student:
+		return student
+	student = frappe.db.get_value("CRM Student", {"email": STUDENT_EMAIL}, "name")
+	if student:
+		return student
+	student = frappe.db.get_value("CRM Student", {"student_name": STUDENT_NAME}, "name")
+	if student:
+		return student
+
+	doc = frappe.get_doc(
+		{
+			"doctype": "CRM Student",
+			"student_name": STUDENT_NAME,
+			"phone": "0908000176",
+			"email": STUDENT_EMAIL,
+			"gender": "Nữ",
+			"date_of_birth": "2009-04-16",
+		}
+	).insert(ignore_permissions=True)
+	return doc.name
 
 
-def _submit_student(context: dict[str, Any], pool: str) -> str:
-	from crm.fcrm.student_intake import submit_intake
-
-	payload = {
-		"student_name": "Nguyễn Minh Anh",
-		"email": STUDENT_EMAIL,
-		"phone": STUDENT_PHONE,
-		"id_number": "079208012345",
-		"gender": "Nữ",
-		"date_of_birth": "2008-04-15",
-		"admission_method": "Transcript Review",
-		"campus": context["campus"],
-		"owning_team": pool,
-		"admission_year": context["admission_year"],
-		"enrollment_status": context["enrollment_status"],
-		"high_school": context["high_school"],
-		"province": context["province"],
-		"ward": context["ward"],
-		"current_grade": "12",
-		"study_stage": "grade_12_h2",
-		"major": context["major"],
-		"aspiration": context["aspiration"],
-		"source": context["source"],
-		"advertising_channel": "Facebook Ads - Scholarship 2026",
-		"alt_name": "Trần Thị Thu Hà",
-		"alt_phone": PARENT_PHONE,
-		"consent": {
-			"granted": True,
-			"granted_at": str(SEED_NOW - timedelta(days=9)),
-			"purpose": "admissions_counseling",
-			"scope": "student_profile_and_parent_follow_up",
-			"source": NAMESPACE,
-		},
-	}
-	existing = frappe.db.get_value("CRM Student", {"email": STUDENT_EMAIL}, "name")
-	if existing:
-		if not frappe.db.exists("CRM Contact Consent Event", {"student": existing, "event_type": "Granted"}):
-			submit_intake(
-				payload,
-				source_namespace=NAMESPACE,
-				source_record_id="student:consent-repair",
-				idempotency_key=_key("intake", "consent-repair"),
-				correlation_id=_key("student", "consent-repair"),
-			)
-		return existing
-
-	result = submit_intake(
-		payload,
-		source_namespace=NAMESPACE,
-		source_record_id="student:minh-anh",
-		idempotency_key=_key("intake", "student:minh-anh"),
-		correlation_id=_key("student", "minh-anh"),
-	)
-	if result.get("outcome") not in {"created", "attached"} or not result.get("student"):
-		frappe.throw(f"Student intake did not resolve: {result}", frappe.ValidationError)
-	return result["student"]
-
-
-def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
+def _set_student_profile(student: str) -> None:
 	doc = frappe.get_doc("CRM Student", student)
-	values = {
-		"admission_method": "Transcript Review",
-		"branch": context["campus"],
-		"major": context["major"],
-		"aspiration": context["aspiration"],
-		"source": context["source"],
-		"advertising_channel": "Facebook Ads - Scholarship 2026",
-		"admission_year": context["admission_year"],
-		"cohort_start_year": 2023,
-		"cohort_end_year": 2026,
-		"education_program": context["education_program"],
-		"graduation_score": 8.8,
-		"transcript_score": 8.9,
-		"english_converted_score": 7.5,
-		"total_score": 25.2,
+	values: dict[str, Any] = {
+		"student_name": STUDENT_NAME,
+		"phone": "0908000176",
+		"email": STUDENT_EMAIL,
+		"gender": "Nữ",
+		"date_of_birth": "2009-04-16",
+		"current_grade": "10",
+		"study_stage": "grade_10",
+		"graduation_score": 8.6,
+		"transcript_score": 8.8,
+		"english_converted_score": 7.0,
+		"total_score": 24.4,
 		"step": 3,
-		"alt_name": "Trần Thị Thu Hà",
-		"alt_phone": PARENT_PHONE,
-		"alt_address": "Quận Bình Thạnh, Thành phố Hồ Chí Minh",
-		"id_number": "079208012345",
-		"id_issued_date": "2024-05-18",
+		"alt_name": "Nguyễn Thị Hương",
+		"alt_phone": "0908000177",
+		"alt_address": "Thành phố Cao Lãnh, Đồng Tháp",
+		"advertising_channel": "Website tuyển sinh",
+		"notes": "Hồ sơ demo đầy đủ cho màn hình Director Student 360.",
+		"id_number": "082309041612",
+		"id_issued_date": "2025-05-20",
 		"id_issued_place": "Cục Cảnh sát QLHC về TTXH",
-		"import_source_id": f"{NAMESPACE}:student:minh-anh",
-		"notes": "Demo Student 360 đầy đủ cho kiểm thử API detail và admissions workspace.",
+		"import_source_id": f"{SEED_NAMESPACE}:student",
 	}
+	for field, value in {
+		"high_school": "THPT Rạch Gầm-Xoài Mút",
+		"province": "Đồng Tháp",
+		"major": "Artificial Intelligence",
+		"source": "Reference",
+		"admission_year": "2026",
+	}.items():
+		if frappe.db.exists(REFERENCE_DOCTYPES[field], value):
+			values[field] = value
+
 	changed = False
 	for field, value in values.items():
 		if doc.get(field) != value:
@@ -191,13 +234,7 @@ def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
 	if not any(row.school_year == "2025-2026" for row in doc.get("academic_results")):
 		doc.append(
 			"academic_results",
-			{"school_year": "2025-2026", "grade": "12", "academic_rank": "Giỏi", "gpa": 8.9},
-		)
-		changed = True
-	if not any(row.school_year == "2024-2025" for row in doc.get("academic_results")):
-		doc.append(
-			"academic_results",
-			{"school_year": "2024-2025", "grade": "11", "academic_rank": "Giỏi", "gpa": 8.7},
+			{"school_year": "2025-2026", "grade": "10", "academic_rank": "Khá", "gpa": 8.8},
 		)
 		changed = True
 	if not any(row.certificate_name == "IELTS Academic" for row in doc.get("language_certificates")):
@@ -206,9 +243,9 @@ def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
 			{
 				"language": "Tiếng Anh",
 				"certificate_name": "IELTS Academic",
-				"score_level": "7.5",
-				"issue_date": "2025-08-20",
-				"expiry_date": "2027-08-20",
+				"score_level": "7.0",
+				"issue_date": "2026-03-15",
+				"expiry_date": "2028-03-15",
 			},
 		)
 		changed = True
@@ -216,16 +253,8 @@ def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
 		doc.save(ignore_permissions=True)
 
 
-def _ensure_interaction(
-	student: str,
-	key: str,
-	interaction_type: str,
-	when: datetime,
-	channel: str,
-	direction: str,
-	summary: str,
-) -> str:
-	external_id = _key("interaction", key)
+def _ensure_interaction(student: str, spec: dict[str, Any]) -> str:
+	external_id = f"{SEED_NAMESPACE}:interaction:{spec['key']}"
 	existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
 	if existing:
 		return existing
@@ -234,16 +263,18 @@ def _ensure_interaction(
 			{
 				"doctype": "CRM Interaction",
 				"student": student,
-				"interaction_type": _ensure_interaction_type(interaction_type),
-				"interaction_datetime": when,
+				"interaction_type": _ensure_interaction_type("Student 360 Demo"),
+				"interaction_datetime": spec["when"],
 				"external_id": external_id,
-				"source_namespace": NAMESPACE,
-				"source_record_id": key,
-				"channel": channel,
-				"direction": direction,
-				"actor": "nguyen.minh.khoi@gmail.com",
-				"summary": summary,
-				"notes": "Nguồn dữ liệu demo, không gửi thông báo ra ngoài.",
+				"source_namespace": SEED_NAMESPACE,
+				"source_record_id": spec["key"],
+				"channel": spec["channel"],
+				"direction": spec["direction"],
+				"actor": "Administrator",
+				"summary": spec["summary"],
+				"notes": spec["notes"],
+				"outcome": spec["outcome"],
+				"next_follow_up_action": spec.get("next_follow_up_action"),
 			}
 		)
 		.insert(ignore_permissions=True)
@@ -251,130 +282,52 @@ def _ensure_interaction(
 	)
 
 
-def _ensure_intent(student: str, interaction: str, intent_type: str, role: str, confidence: int) -> str:
-	intent = _ensure_intent_type(
-		intent_type, "High" if intent_type in {"Scholarship", "Tuition"} else "Medium"
-	)
+def _ensure_assessment(student: str, interaction: str, spec: dict[str, Any]) -> str:
+	model_version = f"{SEED_NAMESPACE}:{spec['key']}"
 	existing = frappe.db.get_value(
-		"CRM Intent", {"interaction": interaction, "intent_type": intent, "intent_role": role}, "name"
+		"CRM Student Assessment", {"student": student, "model_version": model_version}, "name"
 	)
 	if existing:
 		return existing
-	return (
-		frappe.get_doc(
-			{
-				"doctype": "CRM Intent",
-				"interaction": interaction,
-				"student": student,
-				"intent_type": intent,
-				"intent_role": role,
-				"polarity": "Positive",
-				"confidence": confidence,
-				"notes": "Học sinh chủ động hỏi và xác nhận nhu cầu trong buổi tư vấn.",
-			}
-		)
-		.insert(ignore_permissions=True)
-		.name
+
+	from crm.fcrm.student_assessment import record_student_assessment
+
+	result = record_student_assessment(
+		student,
+		{
+			"interest": spec["interest"],
+			"interest_confidence": 88,
+			"fit": spec["fit"],
+			"fit_confidence": 84,
+			"primary_barrier": spec["barrier"],
+			"barrier_confidence": 78,
+			"enrollment_probability": spec["probability"],
+		},
+		source="manual",
+		reason=spec["reason"],
+		evidence_references=[f"CRM Interaction:{interaction}"],
+		model_version=model_version,
+		confirm=True,
 	)
-
-
-def _ensure_outcome(student: str, interaction: str, evidence_file: str) -> str:
-	from crm.fcrm.student_engagement import record_outcome
-
-	source_key = _key("outcome", "qualified")
-	existing = frappe.db.get_value("CRM Student Outcome", {"source_key": source_key}, "name")
-	if existing:
-		return existing
-	result = record_outcome(
-		student=student,
-		interaction=interaction,
-		outcome_code="qualified",
-		continuity_kind="task",
-		next_action={"title": "Gọi phụ huynh xác nhận điều kiện học bổng và hồ sơ"},
-		next_action_assignee="nguyen.minh.khoi@gmail.com",
-		next_action_due_at=SEED_NOW + timedelta(days=1),
-		qualification_evidence=[{"category": "document", "doctype": "File", "name": evidence_file}],
-		source_key=source_key,
-		expected_revision=int(frappe.db.get_value("CRM Student", student, "engagement_revision") or 0),
-		idempotency_key=_key("outcome", "qualified"),
-		correlation_id=_key("student", "minh-anh"),
+	assessment = result["name"]
+	frappe.db.set_value(
+		"CRM Student Assessment",
+		assessment,
+		{
+			"assessed_at": spec["when"],
+			"confirmed_at": spec["when"],
+			"signal_score": spec["signal_score"],
+			"recommendation": spec["recommendation"],
+		},
+		update_modified=False,
 	)
-	return result["event"]
+	return assessment
 
 
-def _ensure_file(student: str) -> str:
-	file_name = f"{NAMESPACE}-phieu-tiep-nhan-ho-so.txt"
-	existing = frappe.db.get_value(
-		"File",
-		{"attached_to_doctype": "CRM Student", "attached_to_name": student, "file_name": file_name},
-		"name",
-	)
-	if existing:
-		return existing
-	return (
-		frappe.get_doc(
-			{
-				"doctype": "File",
-				"file_name": file_name,
-				"is_private": 1,
-				"content": "Phiếu tiếp nhận hồ sơ tuyển sinh demo\\nHọc sinh: Nguyễn Minh Anh\\n",
-				"attached_to_doctype": "CRM Student",
-				"attached_to_name": student,
-			}
-		)
-		.insert(ignore_permissions=True)
-		.name
-	)
-
-
-def _ensure_lifecycle(student: str, outcome: str, intent: str, evidence_file: str) -> None:
-	from crm.fcrm.student_lifecycle import request_transition
-
-	for target, evidence in (
-		(
-			"MQL",
-			[
-				{"category": "outcome", "doctype": "CRM Student Outcome", "name": outcome},
-				{"category": "intent", "doctype": "CRM Intent", "name": intent},
-			],
-		),
-		(
-			"Applicant",
-			[
-				{"category": "outcome", "doctype": "CRM Student Outcome", "name": outcome},
-				{"category": "document", "doctype": "File", "name": evidence_file},
-			],
-		),
-	):
-		doc = frappe.get_doc("CRM Student", student)
-		if doc.lifecycle_stage == target:
-			continue
-		if doc.lifecycle_stage not in {"Lead", "MQL"}:
-			if doc.lifecycle_stage == "Applicant" and target == "MQL":
-				continue
-			frappe.throw(
-				f"Unexpected lifecycle stage {doc.lifecycle_stage} before {target}.", frappe.ValidationError
-			)
-		if target == "MQL" and doc.lifecycle_stage != "Lead":
-			continue
-		if target == "Applicant" and doc.lifecycle_stage != "MQL":
-			continue
-		request_transition(
-			student,
-			target,
-			reason=f"Đủ bằng chứng nghiệp vụ để chuyển sang {target} trong fixture Student 360.",
-			evidence_refs=evidence,
-			outcome_code="qualified",
-			expected_revision=int(doc.lifecycle_revision or 0),
-			idempotency_key=_key("lifecycle", target),
-			correlation_id=_key("student", "minh-anh"),
-		)
-
-
-def _ensure_parent(student: str, context: dict[str, Any], team: str) -> dict[str, str]:
-	from crm.fcrm.student_parent_context import record_parent_contact_authority
-
-	contact = frappe.db.get_value("CRM Contact", {"email": PARENT_EMAIL}, "name")
+def _ensure_consent_and_parent(student: str) -> dict[str, str | None]:
+	student_doc = frappe.get_doc("CRM Student", student)
+	contact_email = "phu.huynh.giauyen@example.test"
+	contact = frappe.db.get_value("CRM Contact", {"email": contact_email}, "name")
 	if not contact:
 		previous = frappe.flags.get("student_conversion_service")
 		frappe.flags.student_conversion_service = True
@@ -383,23 +336,20 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str) -> dict[str
 				frappe.get_doc(
 					{
 						"doctype": "CRM Contact",
-						"full_name": "Trần Thị Thu Hà",
-						"phone": PARENT_PHONE,
-						"email": PARENT_EMAIL,
-						"enrollment_status": context["enrollment_status"],
+						"full_name": "Nguyễn Thị Hương",
+						"phone": "0908000177",
+						"email": contact_email,
+						"enrollment_status": student_doc.enrollment_status or "Mới",
 						"lead_status": "Mới",
 						"readiness_level": "Level 2 - Đang so sánh",
 						"quality_bucket": "Warm",
 						"is_verified_lead": 1,
 						"decision_maker": "Parent",
-						"preferred_contact_channel": "Phone",
-						"owning_team": team,
-						"branch": context["campus"],
-						"major": context["major"],
-						"high_school": context["high_school"],
-						"province": context["province"],
-						"source": context["source"],
-						"admission_year": context["admission_year"],
+						"preferred_contact_channel": "Email",
+						"high_school": student_doc.high_school,
+						"province": student_doc.province,
+						"source": student_doc.source,
+						"admission_year": student_doc.admission_year,
 					}
 				)
 				.insert(ignore_permissions=True)
@@ -407,6 +357,9 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str) -> dict[str
 			)
 		finally:
 			frappe.flags.student_conversion_service = previous
+
+	from crm.fcrm.student_parent_context import record_parent_contact_authority
+
 	authority = frappe.db.get_value(
 		"CRM Parent Contact Authority", {"student": student, "contact": contact}, "name"
 	)
@@ -417,13 +370,13 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str) -> dict[str
 			relationship_type="Mẹ",
 			decision_role="Primary decision maker",
 			decision_influence="High",
-			concerns="Quan tâm học phí, học bổng và thời hạn hoàn tất hồ sơ.",
+			concerns="Quan tâm học phí và điều kiện học bổng.",
 			lawful_basis="consent",
-			allowed_channels=["Phone", "Email", "Zalo"],
-			proof_reference=f"{NAMESPACE}:parent-consent",
-			effective_at=SEED_NOW - timedelta(days=8),
+			allowed_channels=["Email"],
+			proof_reference=f"{SEED_NAMESPACE}:parent-consent",
+			effective_at=datetime(2026, 8, 21, 18, 30),
 		)
-		authority = authority["name"]
+
 	guardian = frappe.db.get_value("CRM Student Guardian", {"student": student, "contact": contact}, "name")
 	if not guardian:
 		guardian = (
@@ -435,320 +388,58 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str) -> dict[str
 					"relationship": "Parent",
 					"decision_role": "Decision Maker",
 					"involvement": "Primary",
-					"preferred_channel": "Phone",
-					"best_contact_time": "18:00-20:00",
-					"consent_summary": "Đã xác nhận là đầu mối phụ huynh cho tư vấn tuyển sinh.",
-					"consent_evidence": {"source": NAMESPACE, "authority": authority},
+					"preferred_channel": "Email",
+					"best_contact_time": "19:00-20:30",
+					"consent_summary": "Đã đồng ý nhận tư vấn tuyển sinh qua Email.",
+					"consent_evidence": {"source": SEED_NAMESPACE, "authority": authority},
 					"is_active": 1,
-					"source_reference": _key("parent", "guardian"),
+					"source_reference": f"{SEED_NAMESPACE}:guardian",
 				}
 			)
 			.insert(ignore_permissions=True)
 			.name
 		)
+
+	consent_source = f"{SEED_NAMESPACE}:consent"
+	if not frappe.db.exists("CRM Contact Consent Event", {"student": student, "source": consent_source}):
+		frappe.get_doc(
+			{
+				"doctype": "CRM Contact Consent Event",
+				"student": student,
+				"event_type": "Granted",
+				"occurred_at": datetime(2026, 8, 21, 18, 30),
+				"granted_at": datetime(2026, 8, 21, 18, 30),
+				"purpose": "admissions_processing",
+				"scope": "email",
+				"source": consent_source,
+				"note": "Dữ liệu demo local; chỉ cho phép Email.",
+			}
+		).insert(ignore_permissions=True)
+
 	return {"contact": contact, "authority": authority, "guardian": guardian}
 
 
-def _ensure_attribution(student: str, context: dict[str, Any]) -> dict[str, Any]:
-	from crm.fcrm.student_attribution import record_campaign_touchpoint, record_event_participation
-
-	campaign_key = _key("campaign", "open-day")
-	if not frappe.db.exists("CRM Marketing Engagement", {"idempotency_key": campaign_key}):
-		record_campaign_touchpoint(
-			student,
-			context["campaign"],
-			touched_at=SEED_NOW - timedelta(days=7),
-			source="Manual",
-			notes="Đăng ký từ landing page học bổng và ngày hội Open Day.",
-			idempotency_key=campaign_key,
-			correlation_id=_key("attribution", "open-day"),
-		)
-	event_key = _key("event", "campus-visit")
-	if not frappe.db.exists("CRM Marketing Engagement", {"idempotency_key": event_key}):
-		record_event_participation(
-			student,
-			context["event"],
-			status="Checked-in",
-			registered_at=SEED_NOW - timedelta(days=5),
-			checked_in_at=SEED_NOW - timedelta(days=5, hours=-1),
-			feedback_rating=5,
-			feedback_notes="Đã tham quan campus và trao đổi với chuyên viên tuyển sinh.",
-			idempotency_key=event_key,
-			correlation_id=_key("attribution", "campus-visit"),
-		)
-	return {"campaign": context["campaign"], "event": context["event"]}
-
-
-def _ensure_assessment(student: str, interaction: str, intent: str, application: str | None) -> str:
-	from crm.fcrm.student_assessment import record_student_assessment
-
-	existing = frappe.db.get_value(
-		"CRM Student Assessment", {"student": student, "status": "confirmed"}, "name"
-	)
-	if existing:
-		return existing
-	evidence = [f"CRM Interaction:{interaction}", f"CRM Intent:{intent}"]
-	if application:
-		evidence.append(f"CRM Admission Application:{application}")
-	result = record_student_assessment(
-		student,
-		{
-			"interest": "High",
-			"interest_confidence": 91,
-			"fit": "High",
-			"fit_confidence": 86,
-			"primary_barrier": "Cost",
-			"barrier_confidence": 74,
-			"enrollment_probability": 78,
-		},
-		source="manual",
-		reason="Học sinh có GPA tốt, IELTS 7.5, đã tham dự campus visit và chủ động hỏi về học bổng; rào cản chính là ngân sách gia đình.",
-		evidence_references=evidence,
-		model_version="student-detail-demo-2026.09",
-		confirm=True,
-	)
-	return result["name"]
-
-
-def _ensure_action(student: str, owner_staff: str) -> str:
-	from crm.fcrm.student_decision import _command_key, create_manual_action
-
-	idempotency_key = _key("action", "parent-scholarship-call")
-	command_key = _command_key("manual_action", "Administrator", idempotency_key)
-	existing = frappe.db.get_value("CRM Action", {"generation_idempotency_key": command_key}, "name")
-	if existing:
-		return existing
-	return create_manual_action(
-		student,
-		"PARENT_CONTACT",
-		"Gọi phụ huynh xác nhận điều kiện học bổng và hồ sơ còn thiếu",
-		idempotency_key=idempotency_key,
-		due_at=SEED_NOW + timedelta(days=1),
-		priority="high",
-		assignee_staff=owner_staff,
-	)["action"]
-
-
-def _ensure_application(student: str, context: dict[str, Any]) -> str:
-	from crm.demo import seed_admission_funnel
-	from crm.fcrm.admission_application import create_application
-
-	method = "Transcript Review"
-	offering = frappe.db.get_value(
-		"CRM Admission Offering",
-		{
-			"admission_year": context["admission_year"],
-			"campus": context["campus"],
-			"major": context["major"],
-			"admission_method": method,
-			"status": "Active",
-		},
-		"name",
-	)
-	if not offering:
-		offering, _ = seed_admission_funnel._ensure_offering(
-			{"branch": context["campus"], "major": context["major"], "admission_method": method},
-			context,
-		)
-	source_reference = _key("application", "transcript-review")
-	existing = frappe.db.get_value(
-		"CRM Admission Application", {"source_reference": source_reference}, "name"
-	)
-	if existing:
-		return existing
-	result = create_application(
-		student=student,
-		values={
-			"offering": offering,
-			"status": "Under Review",
-			"preference_order": 1,
-			"preference": "Primary",
-			"document_total": 8,
-			"document_completed": 6,
-			"scholarship_percentage": 25,
-			"deadline": "2026-09-30",
-			"submitted_at": SEED_NOW - timedelta(days=2),
-			"source_reference": source_reference,
-		},
-		expected_revision=int(frappe.db.get_value("CRM Student", student, "engagement_revision") or 0),
-		idempotency_key=_key("application", "transcript-review"),
-	)
-	return result["application"]
-
-
-def _ensure_score(student: str) -> str:
-	from crm.api.scoring_write import append_local_fixture_score
-	from crm.fcrm.scoring_policy import get_active_policy
-
-	existing = frappe.db.get_value(
-		"CRM Score History", {"student": student}, "name", order_by="creation desc"
-	)
-	if existing:
-		return existing
-	policy = get_active_policy()
-	if not policy:
-		frappe.throw("No active CRM scoring policy is available.", frappe.ValidationError)
-	doc = frappe.get_doc("CRM Student", student)
-	result = append_local_fixture_score(
-		student=student,
-		source_score_input_revision=int(doc.score_input_revision or 0),
-		policy_revision=policy["policy_revision"],
-		policy_hash=policy["policy_hash"],
-		score_template=policy["template_id"],
-		scoring_time=str(SEED_NOW),
-		fit_score=34,
-		engagement_score=27,
-		intent_score=30,
-		time_decay_score=0,
-		negative_score=-4,
-		final_score=87,
-		score_change=87 - float(doc.latest_score or 0),
-		details=[
-			{"category": "Fit", "signal": "Grade 12 + academic results", "score": 34},
-			{"category": "Engagement", "signal": "Campus visit + counseling", "score": 27},
-			{"category": "Intent", "signal": "Scholarship and major inquiry", "score": 30},
-			{"category": "Negative", "signal": "Budget concern", "score": -4},
-		],
-	)
-	return result.get("history") or ""
-
-
-def execute() -> dict[str, Any]:
+def seed() -> dict[str, Any]:
+	"""Create or enrich the selected local student and return seed metrics."""
 	_assert_local_site()
-	frappe.set_user("Administrator")
 	from crm.demo import seed_showcase
 
-	seed_showcase.ensure_local_integrity_keys()
-	seed_showcase.ensure_demo_config()
-	with _seed_flags():
-		context = seed_demo._bootstrap()
-		staff_context = seed_staff._bootstrap()
-		seed_showcase._ensure_lifecycle_statuses()
-		seed_showcase._ensure_policies(staff_context["campus"], staff_context["pool"])
+	with seed_showcase._temporary_local_flags():
+		student = _resolve_student()
+		_set_student_profile(student)
+		interaction_names = [_ensure_interaction(student, spec) for spec in INTERACTIONS]
+		assessment_names = [
+			_ensure_assessment(student, interaction_names[index], spec)
+			for index, spec in enumerate(ASSESSMENTS)
+		]
+		parent = _ensure_consent_and_parent(student)
 		frappe.db.commit()
-
-		student = _submit_student(context, staff_context["pool"])
-		_complete_student_profile(student, context)
-		owner_staff = frappe.db.get_value("CRM Student", student, "owner_staff")
-		if not owner_staff:
-			owner_staff = seed_showcase._ensure_assigned(student)
-		frappe.db.commit()
-
-		_ensure_interaction(
-			student,
-			"website-form",
-			"Website Visit",
-			SEED_NOW - timedelta(days=8),
-			"Website form",
-			"inbound",
-			"Đăng ký nhận thông tin ngành Software Engineering và học bổng.",
-		)
-		interaction_counseling = _ensure_interaction(
-			student,
-			"initial-counseling",
-			"Counseling",
-			SEED_NOW - timedelta(days=6),
-			"Phone",
-			"outbound",
-			"Tư vấn lộ trình xét học bạ, học phí và điều kiện học bổng.",
-		)
-		interaction_latest = _ensure_interaction(
-			student,
-			"campus-follow-up",
-			"Connected",
-			SEED_NOW - timedelta(days=2),
-			"Phone",
-			"inbound",
-			"Học sinh xác nhận muốn nộp hồ sơ và cần gọi phụ huynh chốt ngân sách.",
-		)
-		intent_major = _ensure_intent(student, interaction_counseling, "Major Inquiry", "Support", 89)
-		intent_scholarship = _ensure_intent(student, interaction_latest, "Scholarship", "Dominant", 96)
-		intent_tuition = _ensure_intent(student, interaction_latest, "Tuition", "Support", 88)
-		evidence_file = _ensure_file(student)
-		outcome = _ensure_outcome(student, interaction_latest, evidence_file)
-		_ensure_lifecycle(student, outcome, intent_scholarship, evidence_file)
-		application = _ensure_application(student, context)
-		parent = _ensure_parent(student, context, staff_context["team"])
-		attribution = _ensure_attribution(student, context)
-		assessment = _ensure_assessment(student, interaction_latest, intent_scholarship, application)
-		action = _ensure_action(student, owner_staff)
-		score = _ensure_score(student)
-		frappe.db.commit()
-
-		counts = {
-			"interactions": frappe.db.count("CRM Interaction", {"student": student}),
-			"intents": frappe.db.count("CRM Intent", {"student": student}),
-			"outcomes": frappe.db.count("CRM Student Outcome", {"student": student}),
-			"lifecycle_events": frappe.db.count("CRM Student Lifecycle Event", {"student": student}),
-			"assessments": frappe.db.count("CRM Student Assessment", {"student": student}),
-			"parent_authorities": frappe.db.count("CRM Parent Contact Authority", {"student": student}),
-			"consent_events": frappe.db.count("CRM Contact Consent Event", {"student": student}),
-			"geography_snapshots": frappe.db.count("CRM Student Geography Snapshot", {"student": student}),
-			"applications": frappe.db.count("CRM Admission Application", {"student": student}),
-			"actions": frappe.db.count("CRM Action", {"student": student}),
-			"scores": frappe.db.count("CRM Score History", {"student": student}),
-		}
-		result = {
-			"student": student,
-			"student_name": frappe.db.get_value("CRM Student", student, "student_name"),
-			"lifecycle_stage": frappe.db.get_value("CRM Student", student, "lifecycle_stage"),
-			"owner_staff": owner_staff,
-			"application": application,
-			"parent": parent,
-			"assessment": assessment,
-			"action": action,
-			"score_history": score,
-			"attribution": attribution,
-			"intent_ids": {
-				"major": intent_major,
-				"scholarship": intent_scholarship,
-				"tuition": intent_tuition,
-			},
-			"outcome": outcome,
-			"counts": counts,
-		}
-	print(frappe.as_json(result))
-	return result
-
-
-def verify() -> dict[str, Any]:
-	student = frappe.db.get_value("CRM Student", {"email": STUDENT_EMAIL}, "name")
-	if not student:
-		frappe.throw("Student detail fixture has not been seeded.", frappe.DoesNotExistError)
-	from crm.api.student_context import get_student_context
-
-	context = get_student_context(student, history_limit=50)
-	result = {
+	return {
 		"student": student,
-		"student_name": context["student"]["student_name"],
-		"stage": context["lifecycle"]["stage"],
-		"latest_interaction": bool(context["latest_interaction"]),
-		"latest_outcome": bool(context["latest_outcome"]),
-		"next_action": bool(context["next_action"]),
-		"assessment": bool(context["assessment"].get("current")),
-		"parent_context": len(context["parent_context"]),
-		"privacy_status": context["privacy"].get("status"),
-		"campaign": bool(context["admissions_context"].get("campaign")),
-		"event": bool(context["admissions_context"].get("event")),
-		"scholarship": bool(context["admissions_context"].get("scholarship")),
-		"score_state": context["admissions_context"]["score"].get("state"),
-		"history_count": len(context["history"]),
-		"active_actions": [
-			{
-				"name": row.name,
-				"generation_idempotency_key": row.generation_idempotency_key,
-				"due_at": row.due_at,
-			}
-			for row in frappe.get_all(
-				"CRM Action",
-				filters={
-					"student": student,
-					"state": ["in", ["pending", "accepted", "in-progress", "requires-review", "deferred"]],
-				},
-				fields=["name", "generation_idempotency_key", "due_at"],
-				order_by="due_at asc, name asc",
-			)
-		],
+		"student_name": STUDENT_NAME,
+		"interactions": len(interaction_names),
+		"assessments": len(assessment_names),
+		"parent": parent,
+		"channels": ["Website", "Sự kiện", "Hồ sơ"],
+		"excluded": ["Zalo", "calls", "tasks"],
 	}
-	print(frappe.as_json(result))
-	return result

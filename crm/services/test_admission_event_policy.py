@@ -11,6 +11,7 @@ fail-closed invalid-mode guard were all unverified.
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
+from unittest.mock import patch
 
 from crm.services.admission_event_policy import (
 	POLICY_VERSION,
@@ -18,6 +19,7 @@ from crm.services.admission_event_policy import (
 	admit_interaction,
 	evaluate_admission_event,
 )
+from crm.services.student_context import bump_student_context_revision
 
 
 class _StubDoc(frappe._dict):
@@ -44,6 +46,8 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 	def tearDown(self):
 		frappe.set_user("Administrator")
 		frappe.conf.pop("crm_admission_event_policy_mode", None)
+		frappe.conf.pop("crm_intelligence_runs_enabled", None)
+		frappe.conf.pop("crm_intelligence_writer_epoch", None)
 		frappe.db.delete("CRM Admission Event Decision", {"student": self.student.name})
 		frappe.db.delete("CRM Student Revision Journal", {"student": self.student.name})
 		frappe.delete_doc("CRM Student", self.student.name, force=True)
@@ -151,6 +155,27 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		self.assertEqual(kwargs["candidate_revision"], self._revision())
 		self.assertEqual(kwargs["policy_revision"], POLICY_VERSION)
 		self.assertEqual(frappe.db.get_value("CRM Admission Event Decision", name, "run"), "RUN-TEST-1")
+
+	def test_context_revision_enqueues_the_canonical_run_when_unified(self):
+		frappe.conf["crm_intelligence_runs_enabled"] = 1
+		frappe.conf["crm_intelligence_writer_epoch"] = 0
+		with patch(
+			"crm.fcrm.intelligence_runs.request_automatic_run",
+			return_value=frappe._dict(name="RUN-CONTEXT-1"),
+		) as request_run:
+			result = bump_student_context_revision(
+				self.student.name,
+				"student_material_change",
+				event_id="context-run-1",
+			)
+
+		self.assertEqual(result["analysis_run"], "RUN-CONTEXT-1")
+		request_run.assert_called_once_with(
+			"student",
+			self.student.name,
+			candidate_revision=result["revision"],
+			policy_revision="intelligence-run-nba-v1",
+		)
 
 	def test_invalid_policy_mode_fails_closed(self):
 		frappe.conf["crm_admission_event_policy_mode"] = "bogus"

@@ -1,4 +1,4 @@
-"""Thin HTTP adapters for Phase 6 decision commands."""
+"""Decision command adapters and the canonical CRM Action storage primitive."""
 from __future__ import annotations
 
 import hashlib
@@ -8,7 +8,8 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
-from crm.fcrm.doctype.crm_action.crm_action import CRMAction
+from crm.fcrm.action_type_catalog import action_category
+from crm.fcrm.doctype.crm_action_item.crm_action_item import CRMActionItem
 from crm.fcrm.student_decision import (
 	StudentDecisionError,
 )
@@ -32,7 +33,7 @@ from crm.fcrm.student_decision import (
 )
 
 
-def _require_v2_service():
+def _require_action_writer():
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	configured = frappe.conf.get("crm_agents_service_user")
@@ -58,6 +59,7 @@ def _task_result(task, *, idempotent=False):
 		"state": task.state,
 		"disposition": task.disposition,
 		"action_type": task.action_type,
+		"action_code": task.get("action"),
 		"generation_status": task.get("generation_status") or "succeeded",
 		"generation_failed_at": str(task.get("generation_failed_at")) if task.get("generation_failed_at") else None,
 		"source_context_revision": task.source_context_revision,
@@ -69,8 +71,7 @@ def _task_result(task, *, idempotent=False):
 	}
 
 
-@frappe.whitelist()
-def _upsert_crm_action(
+def write_canonical_action(
 	student: str,
 	expected_context_revision: int,
 	generation_idempotency_key: str,
@@ -87,8 +88,8 @@ def _upsert_crm_action(
 	lease_token: str | None = None,
 	expected_source_digest: str | None = None,
 ) -> dict:
-	"""Only mutation endpoint for v2 generation; compare-and-swap + idempotency."""
-	_require_v2_service()
+	"""Canonical CRM Action storage writer; compare-and-swap plus idempotency."""
+	_require_action_writer()
 	if origin != "ai":
 		frappe.throw(_("AI generation must use origin=ai."), frappe.ValidationError)
 	if isinstance(candidate, str):
@@ -119,12 +120,20 @@ def _upsert_crm_action(
 		frappe.conf.get("crm_agents_v2_rollout_epoch", 0)
 	) != int(rollout_epoch):
 		frappe.throw(_("Stale rollout epoch."), frappe.ValidationError)
-	action_type = candidate.get("action_type")
+	from crm.fcrm.action_type_catalog import canonicalize_action_type
+
+	action_type = canonicalize_action_type(candidate.get("action_type"))
 	disposition = candidate.get("disposition")
+	from crm.fcrm.action_type_registry import is_available_action_type
+	from crm.services.sales_action_policy import require_parent_contact_authority
+
 	if int(candidate.get("context_revision", -1)) != int(expected_context_revision):
 		frappe.throw(_("Candidate revision does not match expected context revision."), frappe.ValidationError)
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
 		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
+	if action_type and not is_available_action_type(action_type):
+		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+	require_parent_contact_authority(action_type, student)
 	row = frappe.db.sql(
 		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
@@ -136,26 +145,26 @@ def _upsert_crm_action(
 	if source_stage_key:
 		existing_filters = {"student": student, "source_stage_key": source_stage_key}
 	existing = frappe.db.get_value(
-		"CRM Action", existing_filters,
+		"CRM Action Item", existing_filters,
 		["name", "payload_digest"],
 		as_dict=True,
 	)
 	if existing:
 		if existing.payload_digest != payload_digest:
 			frappe.throw(_("Generation idempotency key was reused with a different payload."), frappe.ValidationError)
-		return _task_result(frappe.get_doc("CRM Action", existing.name), idempotent=True)
+		return _task_result(frappe.get_doc("CRM Action Item", existing.name), idempotent=True)
 	current_revision = int(row[0].student_context_revision or 0)
 	if current_revision != int(expected_context_revision):
 		_throw_revision_conflict(
 			_("Student context changed; retry from the newer projection."), current_revision
 		)
 	current = frappe.db.sql(
-		"SELECT name, state FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
+		"SELECT name, state FROM `tabCRM Action Item` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if current:
-		stale = frappe.get_doc("CRM Action", current[0].name)
+		stale = frappe.get_doc("CRM Action Item", current[0].name)
 		previous_flag = getattr(frappe.flags, "crm_action_command", False)
 		frappe.flags.crm_action_command = True
 		try:
@@ -170,27 +179,51 @@ def _upsert_crm_action(
 			# A completed (or otherwise closed) Action is never reopened. Vacate the
 			# slot so this new recommendation opens a fresh Action; supersede it
 			# only when that is a legal transition from its current state.
-			if str(stale.state) not in CRMAction.TERMINAL:
+			if str(stale.state) not in CRMActionItem.TERMINAL:
 				stale.state = "superseded"
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
+			from crm.fcrm.nba import sync_nba_recommendation_for_action
+			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
-	from crm.services.sales_action_policy import V2_ACTION_TYPES
-
-	if action_type and action_type not in V2_ACTION_TYPES:
-		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+	from crm.fcrm.nba import ensure_nba_recommendation
 	_validate_package_seed(candidate.get("package_seed"), action_type)
+	owner_staff = _default_action_owner(student)
+	nba_recommendation = ensure_nba_recommendation(
+		student=student,
+		action_type=action_type,
+		objective=str(candidate.get("objective") or "")[:500],
+		evidence=candidate.get("evidence_refs", []),
+		priority=str(candidate.get("priority") or "medium"),
+		due_at=candidate.get("due_at"),
+		expires_at=candidate.get("expires_at"),
+		generation_idempotency_key=generation_idempotency_key,
+		producer_identity=producer_identity,
+		payload_digest=payload_digest,
+		source_context_revision=current_revision,
+		source_stage_key=source_stage_key,
+		policy_version=candidate.get("policy_version"),
+		owner=owner_staff,
+		trigger=candidate.get("trigger") or source_stage_key,
+		timing_policy=candidate.get("timing_policy"),
+		confidence=candidate.get("confidence"),
+		expected_impact=candidate.get("expected_impact"),
+		model=candidate.get("model"),
+		model_version=candidate.get("model_version"),
+	)
 	task = frappe.get_doc(
 		{
-			"doctype": "CRM Action",
+			"doctype": "CRM Action Item",
 			"student": student,
 			"contact": frappe.db.get_value("CRM Contact", {"student": student}, "name"),
+			"recommendation": nba_recommendation.name if nba_recommendation else None,
+			"action": nba_recommendation.get("action") if nba_recommendation else action_type,
 			"origin": "ai",
 			"current_slot": "CURRENT",
 			"source_context_revision": current_revision,
 			"disposition": disposition,
-			"action_type": action_type,
+			"action_type": action_category(action_type),
 			"action_owner": _default_action_owner(student),
 			"objective": str(candidate.get("objective") or "")[:500],
 			"policy_context_version": candidate.get("policy_version"),
@@ -305,24 +338,32 @@ def _validate_package_seed(seed: dict | None, action_type: str | None) -> None:
 		)
 
 
-def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, rationale=None):
-	from crm.services.sales_action_policy import V2_ACTION_TYPES
+def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, recommendation=None, nba_action=None, rationale=None):
+	from crm.fcrm.action_type_catalog import canonicalize_action_type
+	from crm.fcrm.action_type_registry import is_available_action_type
+	from crm.services.sales_action_policy import require_parent_contact_authority
 
-	action_type = candidate.get("action_type")
+	action_type = canonicalize_action_type(candidate.get("action_type"))
 	disposition = candidate.get("disposition")
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
 		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
-	if action_type and action_type not in V2_ACTION_TYPES:
+	if action_type and not is_available_action_type(action_type):
 		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+	require_parent_contact_authority(action_type, student)
 	doc = {
-		"doctype": "CRM Action",
+		"doctype": "CRM Action Item",
 		"student": student,
 		"contact": contact,
+		"recommendation": recommendation,
+		# Legacy Action Definition links are no longer populated; the canonical
+		# master selection lives in `action`.
+		"nba_action": None,
 		"origin": "ai",
 		"plan_rank": rank,
 		"source_context_revision": current_revision,
 		"disposition": disposition,
-		"action_type": action_type,
+		"action": nba_action or action_type,
+		"action_type": action_category(action_type),
 		"action_owner": _default_action_owner(student),
 		"objective": str(candidate.get("objective") or "")[:500],
 		"policy_context_version": candidate.get("policy_version"),
@@ -345,7 +386,7 @@ def _insert_bundle_action(*, student, contact, candidate, current_revision, rank
 	return frappe.get_doc(doc).insert(ignore_permissions=True)
 
 
-def _upsert_crm_action_bundle(
+def write_canonical_action_bundle(
 	*,
 	student: str,
 	expected_context_revision: int,
@@ -364,7 +405,7 @@ def _upsert_crm_action_bundle(
 	rank with a per-rank idempotency key. The whole bundle lands in the caller's
 	request transaction.
 	"""
-	_require_v2_service()
+	_require_action_writer()
 	if not isinstance(candidates, list) or not 1 <= len(candidates) <= 3:
 		frappe.throw(_("A Next Best Action bundle needs 1-3 candidates."), frappe.ValidationError)
 	canonical = json.dumps(candidates, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str)
@@ -396,7 +437,7 @@ def _upsert_crm_action_bundle(
 		frappe.throw(_("Student not found."), frappe.DoesNotExistError)
 
 	existing = frappe.db.get_value(
-		"CRM Action",
+		"CRM Action Item",
 		{"student": student, "source_stage_key": f"{base_stage_key}:r1"},
 		["name", "payload_digest"],
 		as_dict=True,
@@ -405,7 +446,7 @@ def _upsert_crm_action_bundle(
 		if existing.payload_digest != payload_digest:
 			frappe.throw(_("Bundle idempotency key was reused with a different payload."), frappe.ValidationError)
 		rows = frappe.get_all(
-			"CRM Action",
+			"CRM Action Item",
 			filters={"student": student, "source_stage_key": ["like", f"{base_stage_key}:r%"]},
 			fields=["name", "plan_rank"],
 			order_by="plan_rank asc",
@@ -423,12 +464,12 @@ def _upsert_crm_action_bundle(
 		)
 
 	current = frappe.db.sql(
-		"SELECT name, state FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
+		"SELECT name, state FROM `tabCRM Action Item` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if current:
-		stale = frappe.get_doc("CRM Action", current[0].name)
+		stale = frappe.get_doc("CRM Action Item", current[0].name)
 		previous_flag = getattr(frappe.flags, "crm_action_command", False)
 		frappe.flags.crm_action_command = True
 		try:
@@ -438,14 +479,41 @@ def _upsert_crm_action_bundle(
 				stale.state = "requires-review"
 				stale.save(ignore_permissions=True)
 				return {"status": "requires_review", "action": stale.name}
-			if str(stale.state) not in CRMAction.TERMINAL:
+			if str(stale.state) not in CRMActionItem.TERMINAL:
 				stale.state = "superseded"
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
+			from crm.fcrm.nba import sync_nba_recommendation_for_action
+			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
 
 	contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
+	from crm.fcrm.nba import ensure_nba_recommendation
+	nba_recommendations = {}
+	for rank, candidate in enumerate(candidates, start=1):
+		nba_recommendations[rank] = ensure_nba_recommendation(
+			student=student,
+			action_type=candidate.get("action_type"),
+			objective=str(candidate.get("objective") or "")[:500],
+			evidence=candidate.get("evidence_refs", []),
+			priority=str(candidate.get("priority") or _plan_rank_defaults(rank)["priority"]),
+			due_at=candidate.get("due_at"),
+			expires_at=candidate.get("expires_at"),
+			generation_idempotency_key=f"{base_idempotency_key}:r{rank}",
+			producer_identity=producer_identity,
+			payload_digest=payload_digest,
+			source_context_revision=current_revision,
+			source_stage_key=f"{base_stage_key}:r{rank}",
+			policy_version=candidate.get("policy_version"),
+			owner=_default_action_owner(student),
+			trigger=candidate.get("trigger") or base_stage_key,
+			timing_policy=candidate.get("timing_policy"),
+			confidence=candidate.get("confidence"),
+			expected_impact=candidate.get("expected_impact"),
+			model=candidate.get("model"),
+			model_version=candidate.get("model_version"),
+		)
 	rationale_by_type = {
 		r.get("action_type"): r for r in (rationales or []) if isinstance(r, dict) and r.get("action_type")
 	}
@@ -462,70 +530,12 @@ def _upsert_crm_action_bundle(
 			producer_identity=producer_identity,
 			payload_digest=payload_digest,
 			writer_epoch=writer_epoch,
+			recommendation=nba_recommendations[rank].name if nba_recommendations[rank] else None,
+			nba_action=nba_recommendations[rank].get("action") if nba_recommendations[rank] else None,
 			rationale=rationale_by_type.get(candidate.get("action_type")),
 		)
 		inserted.append({"name": task.name, "plan_rank": rank})
 	return {"status": "completed", "idempotent": False, "actions": inserted}
-
-
-@frappe.whitelist()
-def _record_crm_action_generation_failure(
-	student: str, source_revision: int, reason: str, rollout_epoch: int = 0
-) -> dict:
-	"""Persist an explicit bounded failure for the convergence SLO."""
-	_require_v2_service()
-	row = frappe.db.sql(
-		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
-		(student,),
-		as_dict=True,
-	)
-	if not row or int(row[0].student_context_revision or 0) != int(source_revision):
-		return {"status": "deferred", "reason": "revision_moved"}
-	current = frappe.db.sql(
-		"SELECT name FROM `tabCRM Action` WHERE student = %s AND current_slot = 'CURRENT' FOR UPDATE",
-		(student,),
-		as_dict=True,
-	)
-	if current:
-		action = frappe.get_doc("CRM Action", current[0].name)
-		action.state = "requires-review"
-		action.terminal_reason = str(reason)[:500]
-		previous_flag = getattr(frappe.flags, "crm_action_command", False)
-		frappe.flags.crm_action_command = True
-		try:
-			action.save(ignore_permissions=True)
-		finally:
-			frappe.flags.crm_action_command = previous_flag
-		return {"status": "failed", "action": action.name}
-	task = frappe.get_doc(
-		{
-			"doctype": "CRM Action",
-			"student": student,
-			"current_slot": "CURRENT",
-			"source_context_revision": source_revision,
-			"disposition": "MONITOR",
-			"objective": "Generation failed; reconcile this Student context.",
-			"policy_context_version": "student-next-task-v2:generation-failure",
-			"state": "pending",
-			"generation_idempotency_key": f"failure:{student}:{source_revision}",
-			"producer_identity": "crm-agents:v2",
-			"payload_digest": "0" * 64,
-			"created_at": frappe.utils.now_datetime(),
-		}
-	).insert(ignore_permissions=True)
-	return {"status": "failed", "action": task.name}
-
-
-@frappe.whitelist()
-def upsert_crm_action(**kwargs):
-	"""Canonical idempotent CRM Action generation command."""
-	return _upsert_crm_action(**kwargs)
-
-
-@frappe.whitelist()
-def record_crm_action_generation_failure(**kwargs):
-	"""Canonical name for bounded CRM Action failure recording."""
-	return _record_crm_action_generation_failure(**kwargs)
 
 
 def _call(fn, **kwargs):
@@ -539,7 +549,7 @@ def _call(fn, **kwargs):
 def _decide_by_name(name: str, **kwargs):
 	"""Dispatch to the V2 task-native command when `name` names a CRM Student
 	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
-	fn = _decide_student_task if frappe.db.exists("CRM Action", name) else _decide_recommendation
+	fn = _decide_student_task if frappe.db.exists("CRM Action Item", name) else _decide_recommendation
 	result = _call(fn, name=name, **kwargs)
 	result.setdefault("name", result.get("recommendation") or result.get("action"))
 	return result
@@ -633,7 +643,7 @@ def reassign_action(**kwargs):
 def get_action(name: str) -> dict:
 	if frappe.session.user == "Guest":
 		frappe.throw("Authentication is required.", frappe.PermissionError)
-	doc = frappe.get_doc("CRM Action", name)
+	doc = frappe.get_doc("CRM Action Item", name)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Action.", frappe.PermissionError)
-	return {"name": doc.name, "student": doc.student, "contact": doc.get("contact"), "action_type": doc.action_type, "status": doc.get("execution_status") or doc.state, "revision": doc.get("action_revision") or 1}
+	return {"name": doc.name, "student": doc.student, "contact": doc.get("contact"), "action": doc.get("action"), "action_type": doc.action_type, "status": doc.get("execution_status") or doc.state, "revision": doc.get("action_revision") or 1}

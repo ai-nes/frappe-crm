@@ -37,9 +37,9 @@ class TestStudentLifecycleV2API(FrappeTestCase):
 		self.assertEqual(result, {"status": "created"})
 		command.assert_called_once_with(**payload)
 
-	def test_reopen_adapter_forwards_revision_and_idempotency(self):
+	def test_reopen_forwards_revision_and_idempotency(self):
 		with patch("crm.api.student_lifecycle._reopen", return_value={"status": "created"}) as command:
-			result = student_lifecycle.reopen_student("STU-1", "Candidate returned", 4, "reopen-1", "corr-1")
+			result = student_lifecycle.reopen("STU-1", "Candidate returned", 4, "reopen-1", "corr-1")
 		self.assertEqual(result, {"status": "created"})
 		command.assert_called_once_with(
 			student="STU-1", reason="Candidate returned", expected_revision=4, idempotency_key="reopen-1", correlation_id="corr-1"
