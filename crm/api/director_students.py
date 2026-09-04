@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 import frappe
 from frappe import _
 
+from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -210,6 +211,87 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 		"zalo_messages": zalo_messages,
 		"calls": calls,
 		"total_interactions": len(interactions),
+	}
+
+
+CHATWOOT_INTERACTION_FIELDS = [
+	"name",
+	"student",
+	"crm_contact",
+	"interaction_type",
+	"interaction_datetime",
+	"summary",
+	"notes",
+	"channel",
+	"direction",
+	"conversation_id",
+	"agent_id",
+	"outcome",
+	"actor",
+	"source_namespace",
+	"source_record_id",
+	"creation",
+]
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_student_chatwoot_interactions(
+	student_id: str,
+	page: str | int = 1,
+	page_size: str | int = 50,
+) -> dict[str, Any]:
+	"""Return permission-aware Chatwoot interactions for one Student."""
+	_require_access()
+	student_id = str(student_id or "").strip()
+	if not student_id:
+		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+
+	try:
+		doc = frappe.get_doc("CRM Student", student_id)
+	except frappe.DoesNotExistError:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	if not doc.has_permission("read"):
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+
+	page_number = _parse_int(page, "page", 1, minimum=1)
+	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
+	filters = {
+		"student": student_id,
+		"interaction_type": CHATWOOT_INTERACTION_TYPE,
+	}
+	rows = frappe.get_list(
+		"CRM Interaction",
+		filters=filters,
+		fields=CHATWOOT_INTERACTION_FIELDS,
+		order_by="interaction_datetime desc, creation desc, name desc",
+		limit_start=(page_number - 1) * page_length,
+		limit_page_length=page_length,
+	)
+	all_visible_names = frappe.get_list(
+		"CRM Interaction",
+		filters=filters,
+		fields=["name"],
+		limit_page_length=0,
+		pluck="name",
+	)
+	guardian = _student_guardian(student_id)
+	student_row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	if not guardian.get("name") and student_row.get("alt_name"):
+		guardian.update(
+			{"name": student_row.get("alt_name"), "preferredChannel": None, "consentStatus": None}
+		)
+
+	return {
+		"student_id": student_id,
+		"data": rows,
+		"zalo_messages": _student_zalo_messages(student_id, rows, student_row, guardian),
+		"meta": {
+			"page": page_number,
+			"page_size": page_length,
+			"total": len(all_visible_names),
+			"has_next_page": page_number * page_length < len(all_visible_names),
+		},
 	}
 
 
@@ -900,8 +982,11 @@ def _student_zalo_messages(
 	parent_name = guardian.get("name") if guardian else None
 	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
 	staff_name = _user_name(
-		student_row.get("assigned_to") if student_row else None
-		or student_row.get("owner_staff") if student_row else None,
+		student_row.get("assigned_to")
+		if student_row
+		else None or student_row.get("owner_staff")
+		if student_row
+		else None,
 		fallback="Tư vấn viên",
 	)
 
@@ -909,7 +994,8 @@ def _student_zalo_messages(
 	for ix in interactions:
 		channel = _fold(ix.get("channel") or "")
 		interaction_type = _fold(ix.get("interaction_type") or "")
-		if "zalo" not in channel and "zalo" not in interaction_type:
+		is_chatwoot_message = interaction_type == _fold(CHATWOOT_INTERACTION_TYPE)
+		if "zalo" not in channel and "zalo" not in interaction_type and not is_chatwoot_message:
 			continue
 
 		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
@@ -983,8 +1069,11 @@ def _student_call_records(
 	parent_role = (guardian.get("relation") if guardian else None) or "Phụ huynh"
 	student_phone = (student_row.get("phone") if student_row else None) or ""
 	staff_name = _user_name(
-		student_row.get("assigned_to") if student_row else None
-		or student_row.get("owner_staff") if student_row else None,
+		student_row.get("assigned_to")
+		if student_row
+		else None or student_row.get("owner_staff")
+		if student_row
+		else None,
 		fallback="Tư vấn viên",
 	)
 
@@ -1075,7 +1164,12 @@ def _student_call_records(
 	for ix in interactions:
 		channel = _fold(ix.get("channel") or "")
 		ix_type = _fold(ix.get("interaction_type") or "")
-		is_call = "call" in channel or "phone" in channel or "goi" in channel or ix_type in {"connected", "outreach"}
+		is_call = (
+			"call" in channel
+			or "phone" in channel
+			or "goi" in channel
+			or ix_type in {"connected", "outreach"}
+		)
 		if not is_call:
 			continue
 

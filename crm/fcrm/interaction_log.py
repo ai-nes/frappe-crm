@@ -28,7 +28,11 @@ INTERACTION_CHANNEL_ALIASES = {
 	"facebook_messenger": "facebook",
 	"facebook": "facebook",
 	"instagram": "instagram",
+	"line": "line",
+	"sms": "sms",
+	"telegram": "telegram",
 	"tiktok": "tiktok",
+	"twitter": "twitter",
 	"whatsapp": "whatsapp",
 	"zalo": "zalo",
 	"email": "email",
@@ -87,6 +91,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
 MAX_EXTERNAL_INTERACTION_INTENTS = 20
+CHATWOOT_INTERACTION_TYPE = "Tin nhắn Chatwoot"
 
 
 def external_id_for(reference_doctype, reference_docname, interaction_type):
@@ -399,7 +404,7 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 
 
 def _assert_interaction_scope(target: dict, authority: dict):
-	if authority.get("profile") in {"platform_superuser", "admissions_director"}:
+	if authority.get("profile") in {"platform_superuser", "admissions_director"} or authority.get("scope_all"):
 		return
 	if target.get("student"):
 		row = frappe.db.get_value(
@@ -419,7 +424,7 @@ def _assert_interaction_scope(target: dict, authority: dict):
 		_interaction_fail("UNAUTHORIZED", "The interaction target is outside the current Team scope.")
 
 
-def ingest_external_interaction(payload: dict) -> dict:
+def ingest_external_interaction(payload: dict, *, signed_context: dict | None = None) -> dict:
 	"""Create one scoped, idempotent interaction from an external message."""
 	from crm.fcrm.student_intake import (
 		INTERACTION_CAPABILITY,
@@ -432,10 +437,16 @@ def ingest_external_interaction(payload: dict) -> dict:
 	)
 
 	payload = normalize_external_interaction_payload(payload)
-	authority = _resolve_authority(INTERACTION_CAPABILITY)
+	authority = _resolve_authority(INTERACTION_CAPABILITY, signed_context=signed_context)
 	target = _resolve_external_interaction_target(payload)
 	_assert_interaction_scope(target, authority)
-	interaction_type = "Connected" if payload["direction"] == "inbound" else "Outreach"
+	interaction_type = (
+		CHATWOOT_INTERACTION_TYPE
+		if payload["source_namespace"] == "chatwoot"
+		else "Connected"
+		if payload["direction"] == "inbound"
+		else "Outreach"
+	)
 	if not frappe.db.exists(
 		"CRM Term", {"name": interaction_type, "category": "interaction_type", "is_active": 1}
 	):

@@ -13,6 +13,7 @@
   "full_name",
   "phone",
   "email",
+  "chatwoot_contact_id",
   "col_break_1",
   "enrollment_status",
   "lifecycle_stage",
@@ -92,6 +93,15 @@
    "label": "Email",
    "options": "Email",
    "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
+  },
+  {
+   "description": "Server-managed Chatwoot contact identifier used by the signed message webhook.",
+   "fieldname": "chatwoot_contact_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Chatwoot Contact ID",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "col_break_1",
