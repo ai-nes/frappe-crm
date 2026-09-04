@@ -403,6 +403,44 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
 
+	def test_student_call_records_build_worldfone_proxy_from_calluuid(self):
+		call_log = frappe._dict(
+			name="1788077950.625384",
+			type="Incoming",
+			status="Completed",
+			from_number="0901234412",
+			to="1200",
+			duration=28,
+			start_time="2026-08-30 16:20:58",
+			creation="2026-08-30 16:20:58",
+			recording_url=None,
+			telephony_medium="Manual",
+			medium="Worldfone",
+			caller=None,
+			receiver=None,
+			note=None,
+		)
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students.frappe, "get_all", return_value=[call_log]),
+			patch.dict(
+				director_students.frappe.conf,
+				{"crm_worldfone_secret": "test-secret"},
+				clear=False,
+			),
+		):
+			calls = director_students._student_call_records(
+				"ENR-1",
+				[],
+				frappe._dict(student_name="Student Demo", phone="0901234412"),
+				{},
+			)
+
+		self.assertEqual(
+			calls[0]["recordingUrl"],
+			"/api/method/crm.integrations.api.get_recording_url?call_log_name=1788077950.625384",
+		)
+
 	def test_get_student_interactions_endpoint(self):
 		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
 		with (
