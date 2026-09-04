@@ -186,7 +186,7 @@ def add_default_fields_layout(force=False):
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
-			"layout": '[{"name":"details_section","columns":[{"name":"column_o2s9","fields":["title", "content"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"column_o2s9","fields":["content"]}]}]',
 		},
 		"Task-Quick Entry": {
 			"doctype": "Task",

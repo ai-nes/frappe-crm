@@ -166,6 +166,7 @@ permission_query_conditions = {
 	"CRM AI Lead Insight": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Agent Event": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Admission Event Decision": "crm.fcrm.permissions.get_admission_decision_permission_query_conditions",
+	"CRM Permission Profile": "crm.fcrm.doctype.crm_permission_profile.crm_permission_profile.get_permission_query_conditions",
 }
 
 has_permission = {

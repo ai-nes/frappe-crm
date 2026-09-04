@@ -644,9 +644,42 @@
   },
   {
    "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "CEO",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "CTV Sale",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Lead Marketing"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Lead Promoter",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
    "read": 1,
    "role": "Lead Sales",
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "Promoter"
   },
   {
    "create": 1,

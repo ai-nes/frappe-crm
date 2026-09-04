@@ -309,8 +309,10 @@ def get_linked_calls(doctype: str, name: str):
 		notes = frappe.db.get_all(
 			"FCRM Note",
 			filters={"name": ("in", notes)},
-			fields=["name", "title", "content", "owner", "modified"],
+			fields=["name", "content", "owner", "modified"],
 		)
+		for note in notes:
+			note["owner_full_name"] = frappe.get_cached_value("User", note.owner, "full_name")
 
 	if tasks:
 		tasks = frappe.db.get_all(
@@ -334,14 +336,14 @@ def get_linked_calls(doctype: str, name: str):
 
 
 def get_linked_notes(doctype: str, name: str):
-	return (
-		frappe.db.get_all(
-			"FCRM Note",
-			filters={"reference_doctype": doctype, "reference_docname": name},
-			fields=["name", "title", "content", "owner", "modified", "creation"],
-		)
-		or []
+	notes = frappe.db.get_all(
+		"FCRM Note",
+		filters={"reference_doctype": doctype, "reference_docname": name},
+		fields=["name", "content", "owner", "modified", "creation"],
 	)
+	for note in notes:
+		note["owner_full_name"] = frappe.get_cached_value("User", note.owner, "full_name")
+	return notes or []
 
 
 def get_linked_tasks(doctype: str, name: str):

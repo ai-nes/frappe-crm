@@ -16,7 +16,7 @@ from crm.fcrm.action_type_catalog import (
 	canonicalize_action_type,
 )
 from crm.fcrm.action_type_registry import is_available_action_type
-from crm.fcrm.nba_timing import resolve_scheduled_at
+from crm.fcrm.nba_timing import is_time_allowed, resolve_scheduled_at
 
 # ACTION_TYPES is the canonical 79-code catalog. Legacy values are kept
 # separate so callers can distinguish catalog rows from compatibility aliases.
@@ -89,9 +89,7 @@ def _bounded_number(value: Any, field: str, *, minimum: float = SCORE_MIN, maxim
 		frappe.throw(f"{field} must be numeric.", frappe.ValidationError)
 		return None
 	if not minimum <= result <= maximum:
-		frappe.throw(
-			f"{field} must be between {minimum:g} and {maximum:g}.", frappe.ValidationError
-		)
+		frappe.throw(f"{field} must be between {minimum:g} and {maximum:g}.", frappe.ValidationError)
 	return result
 
 
@@ -131,7 +129,18 @@ def validate_nba_action_execution(action, *, actor: str | None = None, operation
 	if not definition:
 		return None
 	if not definition.get("enabled"):
-		frappe.throw("This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED")
+		frappe.throw(
+			"This Action Definition is disabled.", frappe.PermissionError, title="ACTION_DEFINITION_DISABLED"
+		)
+	if action.get("origin") == "ai" and (
+		definition.get("execution_type") != "AI_ASSISTED"
+		or definition.get("ai_allowed") not in (1, "1", True)
+	):
+		frappe.throw(
+			"AI is not allowed to execute this Action.",
+			frappe.PermissionError,
+			title="ACTION_AI_NOT_ALLOWED",
+		)
 	actor = actor or frappe.session.user
 	actor_roles = set(frappe.get_roles(actor)) if actor and actor != "Administrator" else {"System Manager"}
 	if actor != "Administrator" and "System Manager" not in actor_roles:
@@ -177,7 +186,9 @@ def resolve_nba_schedule(action, scheduled_at: Any = None):
 	policy = get_nba_timing_policy(policy_name)
 	if not policy:
 		if scheduled_at in (None, ""):
-			frappe.throw("scheduled_at is required when no CRM Timing Policy is configured.", frappe.ValidationError)
+			frappe.throw(
+				"scheduled_at is required when no CRM Timing Policy is configured.", frappe.ValidationError
+			)
 		try:
 			return resolve_scheduled_at({"trigger_type": "schedule"}, scheduled_at, now=now_datetime())
 		except ValueError as exc:
@@ -193,7 +204,9 @@ def resolve_nba_schedule(action, scheduled_at: Any = None):
 		and recommendation_trigger
 		and policy.trigger_event != recommendation_trigger
 	):
-		frappe.throw("Recommendation trigger does not match the CRM Timing Policy event.", frappe.ValidationError)
+		frappe.throw(
+			"Recommendation trigger does not match the CRM Timing Policy event.", frappe.ValidationError
+		)
 	try:
 		return resolve_scheduled_at(policy.as_dict(), scheduled_at or None, now=now_datetime())
 	except ValueError as exc:
@@ -298,7 +311,11 @@ def ensure_nba_execution_for_attempt(
 	execution = _service_insert({"doctype": ACTION_EXECUTION_DOCTYPE, **values})
 	if attempt.get("name"):
 		frappe.db.set_value(
-			"CRM Action Execution Attempt", attempt.name, "nba_execution", execution.name, update_modified=False
+			"CRM Action Execution Attempt",
+			attempt.name,
+			"nba_execution",
+			execution.name,
+			update_modified=False,
 		)
 	return execution
 

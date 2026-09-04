@@ -149,17 +149,23 @@
    "write": 1
   },
   {
+   "create": 1,
+   "delete": 1,
    "read": 1,
-   "role": "Sale"
+   "role": "Sale",
+   "write": 1
   },
   {
    "read": 1,
    "role": "Marketing"
   },
   {
+   "create": 1,
+   "delete": 1,
    "read": 1,
    "report": 1,
-   "role": "Admissions Director"
+   "role": "Admissions Director",
+   "write": 1
   }
  ],
  "row_format": "Dynamic",

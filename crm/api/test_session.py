@@ -3,7 +3,12 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.api.agent_migrations import SALES_WORKLIST_ROLE_NAMES
 from crm.api.capability import _is_capability_gateway_user
-from crm.api.session import _session_role_flags, get_crm_user_role, resolve_crm_profile
+from crm.api.session import (
+	_session_role_flags,
+	get_crm_user_role,
+	me,
+	resolve_crm_profile,
+)
 from crm.api.user import _can_manage_target, _can_remove_target
 from crm.fcrm.role_policy import (
 	CANONICAL_PERMISSION_MATRIX,
@@ -19,6 +24,15 @@ from crm.fcrm.role_policy import (
 
 
 class TestSessionRoleContract(FrappeTestCase):
+	def test_session_me_exposes_dashboard_permission_list(self):
+		previous_user = frappe.session.user
+		frappe.set_user("Administrator")
+		try:
+			response = me()
+			self.assertEqual(response["permission"], response["crm_capabilities"])
+		finally:
+			frappe.set_user(previous_user)
+
 	def test_canonical_role_names_resolve_without_legacy_aliases(self):
 		self.assertEqual(resolve_crm_profile({"Sale"}), "sales")
 		self.assertEqual(resolve_crm_profile({"Lead Sales"}), "lead_sales")

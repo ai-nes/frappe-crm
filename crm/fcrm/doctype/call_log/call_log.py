@@ -5,7 +5,7 @@ import frappe
 from frappe import _, generate_hash
 from frappe.model.document import Document
 
-from crm.integrations.api import get_contact_by_phone_number
+from crm.integrations.api import get_contact_by_phone_number, get_recording_url_path
 from crm.utils import seconds_to_duration
 
 
@@ -140,10 +140,14 @@ class CallLog(Document):
 
 	def as_dict(self, *args, **kwargs):
 		d = super().as_dict(*args, **kwargs)
-		if d.get("recording_url"):
-			d["recording_url_path"] = (
-				f"/api/method/crm.integrations.api.get_recording_url?call_log_name={d.get('name')}"
-			)
+		recording_url_path = get_recording_url_path(
+			d.get("name"),
+			d.get("recording_url"),
+			d.get("telephony_medium"),
+			d.get("medium"),
+		)
+		if recording_url_path:
+			d["recording_url_path"] = recording_url_path
 		return d
 
 
@@ -203,6 +207,8 @@ def get_call_log(name: str):
 			"note",
 			"recording_url",
 			"recording_url_path",
+			"telephony_medium",
+			"medium",
 			"reference_doctype",
 			"reference_docname",
 			"creation",

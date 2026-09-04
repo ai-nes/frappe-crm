@@ -2,7 +2,11 @@
 
 import frappe
 
-from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category, canonicalize_action_type
+from crm.fcrm.action_type_catalog import (
+	ACTION_TYPE_CODES,
+	action_category,
+	canonicalize_action_type,
+)
 from crm.patches.v1_0.seed_crm_action_type import CATEGORY_LABELS
 from crm.patches.v1_0.seed_crm_action_type import execute as seed_action_catalog
 
@@ -45,7 +49,11 @@ def _migrate_legacy_action_rows():
 	for row in rows:
 		legacy_name = row.name
 		legacy_code = row.get("action_type")
-		if not legacy_code and row.get("nba_action") and frappe.db.exists("CRM Action Definition", row.nba_action):
+		if (
+			not legacy_code
+			and row.get("nba_action")
+			and frappe.db.exists("CRM Action Definition", row.nba_action)
+		):
 			legacy_code = frappe.db.get_value("CRM Action Definition", row.nba_action, "code")
 		canonical_code = canonicalize_action_type(legacy_code)
 		if canonical_code not in ACTION_TYPE_CODES:
@@ -91,12 +99,18 @@ def _update_action_references(legacy_actions):
 def _backfill_recommendation_actions(legacy_actions, action_codes):
 	if not frappe.db.exists("DocType", "CRM Recommendation"):
 		return
+	recommendation_fields = {field.fieldname for field in frappe.get_meta("CRM Recommendation").fields}
+	select_fields = ["name", "action"]
+	if "recommended_action" in recommendation_fields:
+		select_fields.append("recommended_action")
 	for row in frappe.get_all(
 		"CRM Recommendation",
-		fields=["name", "action"],
+		fields=select_fields,
 		limit_page_length=0,
 	):
 		candidate = action_codes.get(row.action) or canonicalize_action_type(row.action)
+		if candidate not in ACTION_TYPE_CODES and row.get("recommended_action"):
+			candidate = canonicalize_action_type(row.recommended_action)
 		if candidate in ACTION_TYPE_CODES and frappe.db.exists("CRM Action", candidate):
 			frappe.db.set_value("CRM Recommendation", row.name, "action", candidate, update_modified=False)
 

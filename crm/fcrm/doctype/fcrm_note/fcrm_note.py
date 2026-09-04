@@ -17,14 +17,12 @@ class FCRMNote(Document):
 		content: DF.TextEditor | None
 		reference_docname: DF.DynamicLink | None
 		reference_doctype: DF.Link | None
-		title: DF.Data
 	# end: auto-generated types
 
 	@staticmethod
 	def default_list_data():
 		rows = [
 			"name",
-			"title",
 			"content",
 			"reference_doctype",
 			"reference_docname",

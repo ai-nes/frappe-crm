@@ -1,0 +1,222 @@
+"""Read-only listing/detail APIs for the NBA execution lifecycle.
+
+CRM Recommendation, CRM Recommendation Feedback, CRM Action Execution,
+CRM Action Execution Attempt and CRM Action Outcome are immutable,
+service-managed aggregates (see their controllers) — they are created and
+mutated only through the Phase 6 command service / crm.fcrm.nba, never
+through a generic create/update/delete API. This module only exposes
+list/get so callers can inspect them; write CRUD for CRM Action Type lives
+in crm.api.action_type, and for CRM Action in crm.api.action.
+"""
+
+import frappe
+
+from crm.api._pagination import paged_list
+
+RECOMMENDATION_LIST_FIELDS = [
+	"name",
+	"student",
+	"rule_key",
+	"priority",
+	"status",
+	"decision_status",
+	"execution_status",
+	"lifecycle_status",
+	"recommended_action",
+	"channel",
+	"confidence",
+	"expected_impact",
+	"expires_at",
+	"revisit_at",
+	"created_at",
+	"modified",
+]
+
+FEEDBACK_LIST_FIELDS = [
+	"name",
+	"feedback_id",
+	"recommendation",
+	"outcome",
+	"student",
+	"predicted_probability",
+	"actual_result",
+	"reward",
+	"actual_impact",
+	"feedback_source",
+	"created_by",
+	"created_at",
+]
+
+EXECUTION_LIST_FIELDS = [
+	"name",
+	"execution_id",
+	"recommendation",
+	"action",
+	"student",
+	"actor",
+	"channel",
+	"status",
+	"scheduled_at",
+	"started_at",
+	"completed_at",
+	"created_at",
+]
+
+EXECUTION_ATTEMPT_LIST_FIELDS = [
+	"name",
+	"action",
+	"nba_execution",
+	"actor",
+	"operation",
+	"status",
+	"attempt_generation",
+	"lease_count",
+	"created_at",
+]
+
+OUTCOME_LIST_FIELDS = [
+	"name",
+	"outcome_id",
+	"execution",
+	"recommendation",
+	"action",
+	"student",
+	"attempt",
+	"outcome_type",
+	"outcome_value",
+	"success",
+	"impact_score",
+	"captured_by",
+	"captured_at",
+]
+
+
+def _get(doctype, name):
+	doc = frappe.get_doc(doctype, name)
+	doc.check_permission("read")
+	return doc.as_dict()
+
+
+@frappe.whitelist()
+def list_recommendations(student=None, status=None, decision_status=None, execution_status=None, start=0, page_length=20):
+	"""List CRM Recommendation rows (NBA advice). Filter by student, status,
+	decision_status, or execution_status; paginated, newest first.
+	"""
+	filters = {}
+	if student:
+		filters["student"] = student
+	if status:
+		filters["status"] = status
+	if decision_status:
+		filters["decision_status"] = decision_status
+	if execution_status:
+		filters["execution_status"] = execution_status
+	return paged_list(
+		"CRM Recommendation", RECOMMENDATION_LIST_FIELDS,
+		filters=filters, start=start, page_length=page_length, order_by="created_at desc",
+	)
+
+
+@frappe.whitelist()
+def get_recommendation(name):
+	"""Get one CRM Recommendation by name."""
+	return _get("CRM Recommendation", name)
+
+
+@frappe.whitelist()
+def list_recommendation_feedback(recommendation=None, student=None, start=0, page_length=20):
+	"""List CRM Recommendation Feedback rows (predicted-vs-actual learning
+	signal). Filter by recommendation or student; paginated, newest first.
+	"""
+	filters = {}
+	if recommendation:
+		filters["recommendation"] = recommendation
+	if student:
+		filters["student"] = student
+	return paged_list(
+		"CRM Recommendation Feedback", FEEDBACK_LIST_FIELDS,
+		filters=filters, start=start, page_length=page_length, order_by="created_at desc",
+	)
+
+
+@frappe.whitelist()
+def get_recommendation_feedback(name):
+	"""Get one CRM Recommendation Feedback row by name."""
+	return _get("CRM Recommendation Feedback", name)
+
+
+@frappe.whitelist()
+def list_action_executions(recommendation=None, action=None, student=None, status=None, start=0, page_length=20):
+	"""List CRM Action Execution rows (provider execution projection). Filter
+	by recommendation, action, student, or status; paginated, newest first.
+	"""
+	filters = {}
+	if recommendation:
+		filters["recommendation"] = recommendation
+	if action:
+		filters["action"] = action
+	if student:
+		filters["student"] = student
+	if status:
+		filters["status"] = status
+	return paged_list(
+		"CRM Action Execution", EXECUTION_LIST_FIELDS,
+		filters=filters, start=start, page_length=page_length, order_by="created_at desc",
+	)
+
+
+@frappe.whitelist()
+def get_action_execution(name):
+	"""Get one CRM Action Execution by name."""
+	return _get("CRM Action Execution", name)
+
+
+@frappe.whitelist()
+def list_action_execution_attempts(action=None, nba_execution=None, status=None, start=0, page_length=20):
+	"""List CRM Action Execution Attempt rows (per-retry identity/state fence).
+	Filter by action, nba_execution, or status; paginated, newest first.
+	System Manager only.
+	"""
+	filters = {}
+	if action:
+		filters["action"] = action
+	if nba_execution:
+		filters["nba_execution"] = nba_execution
+	if status:
+		filters["status"] = status
+	return paged_list(
+		"CRM Action Execution Attempt", EXECUTION_ATTEMPT_LIST_FIELDS,
+		filters=filters, start=start, page_length=page_length, order_by="created_at desc",
+	)
+
+
+@frappe.whitelist()
+def get_action_execution_attempt(name):
+	"""Get one CRM Action Execution Attempt by name. System Manager only."""
+	return _get("CRM Action Execution Attempt", name)
+
+
+@frappe.whitelist()
+def list_action_outcomes(execution=None, recommendation=None, action=None, student=None, start=0, page_length=20):
+	"""List CRM Action Outcome rows (captured outcome evidence). Filter by
+	execution, recommendation, action, or student; paginated, newest first.
+	"""
+	filters = {}
+	if execution:
+		filters["execution"] = execution
+	if recommendation:
+		filters["recommendation"] = recommendation
+	if action:
+		filters["action"] = action
+	if student:
+		filters["student"] = student
+	return paged_list(
+		"CRM Action Outcome", OUTCOME_LIST_FIELDS,
+		filters=filters, start=start, page_length=page_length, order_by="captured_at desc",
+	)
+
+
+@frappe.whitelist()
+def get_action_outcome(name):
+	"""Get one CRM Action Outcome by name."""
+	return _get("CRM Action Outcome", name)

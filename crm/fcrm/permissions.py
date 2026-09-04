@@ -17,6 +17,7 @@ import frappe
 
 from crm.fcrm.role_policy import (
 	case_scope_for_roles,
+	delete_requires_ownership_for_roles,
 )
 from crm.fcrm.student_feature_flags import enabled
 
@@ -443,23 +444,45 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)
-	if condition is None:
-		return True
 	if condition == "1=0":
 		return False
-
-	table = f"`tab{doc.doctype}`"
-	return bool(
-		frappe.db.sql(
-			f"select name from {table} where name = %s and ({condition}) limit 1",
-			(doc.name,),
+	if condition is not None:
+		table = f"`tab{doc.doctype}`"
+		in_scope = bool(
+			frappe.db.sql(
+				f"select name from {table} where name = %s and ({condition}) limit 1",
+				(doc.name,),
+			)
 		)
-	)
+		if not in_scope:
+			return False
+
+	if permission_type == "delete" and _delete_requires_ownership(user):
+		return _user_owns_or_is_assigned_to(doc, user)
+	return True
 
 
 def _effective_case_scope(roles, doctype, *, user):
 	"""Delegate policy selection; this module only turns a scope into SQL."""
 	return case_scope_for_roles(roles, doctype, administrator=user == "Administrator")
+
+
+def _delete_requires_ownership(user):
+	roles = set(frappe.get_roles(user))
+	return delete_requires_ownership_for_roles(roles, administrator=user == "Administrator")
+
+
+def _user_owns_or_is_assigned_to(doc, user):
+	"""PRD P0-3: delete only if owner (creator) OR assigned_to, checked in
+	addition to -- never instead of -- the row-scope check already passed by
+	the caller. `assigned_to` is a CRM Staff link (kept equal to `owner_staff`
+	by derive_owner_fields), so it is compared against the acting user's own
+	CRM Staff record, not their User name.
+	"""
+	if doc.get("owner") == user:
+		return True
+	crm_staff_name = _get_crm_staff_name(user)
+	return bool(crm_staff_name) and doc.get("assigned_to") == crm_staff_name
 
 
 def _contact_conversion_condition(user, roles, scope):

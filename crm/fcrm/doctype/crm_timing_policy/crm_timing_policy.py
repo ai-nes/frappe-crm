@@ -3,14 +3,26 @@ from frappe.model.document import Document
 from frappe.utils import get_datetime
 
 from crm.fcrm.nba_canonical import canonical_digest, timing_policy_snapshot
+from crm.fcrm.nba_timing import TIME_SLOTS, slot_bounds
 
 
 class CRMTimingPolicy(Document):
 	"""Reusable timing rules for action scheduling; distinct from Student SLA."""
 
 	def validate(self):
+		if self.time_slot and self.time_slot not in TIME_SLOTS:
+			frappe.throw("Time slot must be one of: 0-6, 6-12, 12-18, 18-24.", frappe.ValidationError)
 		if bool(self.allowed_start_time) != bool(self.allowed_end_time):
 			frappe.throw("Allowed start and end times must be provided together.", frappe.ValidationError)
+		if self.time_slot and self.allowed_start_time and self.allowed_end_time:
+			start, end = slot_bounds(self.time_slot)
+			start_matches = str(self.allowed_start_time)[:8] == str(start)[:8]
+			end_text = str(self.allowed_end_time)[:8]
+			end_matches = end_text == str(end)[:8]
+			if not start_matches or not end_matches:
+				frappe.throw(
+					"Time slot must match the configured allowed start/end time.", frappe.ValidationError
+				)
 		if self.delay_value is not None and float(self.delay_value) < 0:
 			frappe.throw("Delay value cannot be negative.", frappe.ValidationError)
 		if self.deadline_offset is not None and float(self.deadline_offset) < 0:

@@ -1,0 +1,40 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:rule_key",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["rule_key", "display_name", "description", "status", "enabled", "version", "action", "priority", "trigger_type", "trigger_event", "conditions", "timing_policy", "cooldown_value", "cooldown_unit", "max_occurrences", "expires_after_hours", "stop_conditions", "published_at", "published_by", "archive_reason"],
+ "fields": [
+  {"fieldname":"rule_key","fieldtype":"Data","label":"Rule Key","reqd":1,"unique":1,"in_list_view":1},
+  {"fieldname":"display_name","fieldtype":"Data","label":"Rule Name","reqd":1,"in_list_view":1},
+  {"fieldname":"description","fieldtype":"Small Text","label":"Description"},
+  {"fieldname":"status","fieldtype":"Select","label":"Status","options":"draft\npublished\narchived","default":"draft","reqd":1,"in_list_view":1},
+  {"fieldname":"enabled","fieldtype":"Check","label":"Enabled","default":"0","in_list_view":1},
+  {"fieldname":"version","fieldtype":"Int","label":"Version","default":"1","reqd":1,"read_only":1},
+  {"fieldname":"action","fieldtype":"Link","label":"Action","options":"CRM Action","reqd":1,"in_list_view":1},
+  {"fieldname":"priority","fieldtype":"Select","label":"Priority","options":"high\nmedium\nlow","default":"medium","reqd":1},
+  {"fieldname":"trigger_type","fieldtype":"Select","label":"Trigger Type","options":"event\nstate\ninactivity\ndeadline\nmanual","default":"event","reqd":1},
+  {"fieldname":"trigger_event","fieldtype":"Data","label":"Trigger Event"},
+  {"fieldname":"conditions","fieldtype":"JSON","label":"Conditions","reqd":1},
+  {"fieldname":"timing_policy","fieldtype":"Link","label":"Timing Policy","options":"CRM Timing Policy"},
+  {"fieldname":"cooldown_value","fieldtype":"Float","label":"Cooldown Value","default":"0"},
+  {"fieldname":"cooldown_unit","fieldtype":"Select","label":"Cooldown Unit","options":"minutes\nhours\ndays","default":"days"},
+  {"fieldname":"max_occurrences","fieldtype":"Int","label":"Max Occurrences","default":"1"},
+  {"fieldname":"expires_after_hours","fieldtype":"Float","label":"Expires After Hours"},
+  {"fieldname":"stop_conditions","fieldtype":"JSON","label":"Stop Conditions"},
+  {"fieldname":"published_at","fieldtype":"Datetime","label":"Published At","read_only":1},
+  {"fieldname":"published_by","fieldtype":"Link","label":"Published By","options":"User","read_only":1},
+  {"fieldname":"archive_reason","fieldtype":"Small Text","label":"Archive Reason","read_only":1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Recommendation Rule",
+ "permissions": [
+  {"create":1,"delete":1,"export":1,"read":1,"role":"System Manager","write":1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

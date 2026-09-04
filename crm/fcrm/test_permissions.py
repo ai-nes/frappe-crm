@@ -24,6 +24,7 @@ from crm.fcrm.permissions import (
 from crm.fcrm.permissions import (
 	has_permission as shared_has_permission,
 )
+from crm.fcrm.role_policy import PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY
 
 
 class TestSharedScopingPermissions(FrappeTestCase):
@@ -264,9 +265,13 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		)
 		self.assertEqual(shared_conditions("CRM Contact", user=user), "1=0")
 
-	def test_marketing_has_no_case_scope(self):
-		user, _staff = self._make_user_and_staff("_Test Scope Marketing Student", roles=["Marketing"])
-		self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
+	def test_marketing_scoped_to_own_campus(self):
+		# PRD-phan-quyen-lead.md P0-1/P0-2 (2026-09-04): Marketing gets
+		# read-only, campus-scoped visibility instead of the old full deny.
+		user, staff = self._make_user_and_staff("_Test Scope Marketing Student", roles=["Marketing"])
+		condition = shared_conditions("CRM Student", user=user)
+		self.assertNotEqual(condition, "1=0")
+		self.assertIn(staff, condition)
 
 	def test_unrecognized_role_denied(self):
 		with patch("crm.fcrm.permissions.frappe.get_roles", return_value=["Unknown Legacy Role"]):
@@ -281,6 +286,128 @@ class TestSharedScopingPermissions(FrappeTestCase):
 	def test_crm_student_delegates_to_shared_module(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Delegate Student", roles=["Sale"])
 		self.assertEqual(student_conditions(user=user), shared_conditions("CRM Student", user=user))
+
+	# ---------------------------------------------------------- ownership-gated delete
+
+	def test_delete_allowed_when_creator_owns_even_if_assigned_to_a_teammate(self):
+		# Owner (creator) OR assigned_to -- covers the "differ" case explicitly
+		# called out by Phase 5 step 1: the acting user authored the record but
+		# it is currently assigned to a teammate, not to themselves.
+		leader_user, _leader_staff = self._make_user_and_staff(
+			"_Test Ownership Leader Creator", roles=["Lead Sales"], team=self._team, function="Team Leader"
+		)
+		_teammate_user, teammate_staff = self._make_user_and_staff(
+			"_Test Ownership Teammate", roles=["Sale"], team=self._team, function="Sale"
+		)
+		frappe.set_user(leader_user)
+		try:
+			contact = frappe.get_doc(
+				{
+					"doctype": "CRM Contact",
+					"full_name": "_Test Ownership Creator Contact",
+					"phone": "0933000222",
+					"assigned_to": teammate_staff,
+				}
+			)
+			contact.insert(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+		try:
+			self.assertEqual(contact.owner, leader_user)
+			self.assertEqual(contact.assigned_to, teammate_staff)
+			self.assertTrue(shared_has_permission(contact, user=leader_user, ptype="delete"))
+		finally:
+			frappe.delete_doc("CRM Contact", contact.name, force=True)
+
+	def test_delete_denied_when_in_scope_but_neither_owner_nor_assigned(self):
+		# AND-not-OR: being inside the acting user's row-scope must not be
+		# enough on its own -- a teammate's record the actor did not create and
+		# is not assigned to must stay undeletable even though it is visible.
+		_teammate_user, teammate_staff = self._make_user_and_staff(
+			"_Test Ownership Other Teammate", roles=["Sale"], team=self._team, function="Sale"
+		)
+		bystander_user, bystander_staff = self._make_user_and_staff(
+			"_Test Ownership Bystander", roles=["Lead Sales"], team=self._team, function="Team Leader"
+		)
+		contact = frappe.get_doc(
+			{
+				"doctype": "CRM Contact",
+				"full_name": "_Test Ownership Bystander Contact",
+				"phone": "0933000333",
+				"assigned_to": teammate_staff,
+			}
+		)
+		contact.insert(ignore_permissions=True)
+		try:
+			self.assertNotEqual(contact.owner, bystander_user)
+			self.assertNotEqual(contact.assigned_to, bystander_staff)
+			# Visible via team scope ...
+			condition = shared_conditions("CRM Contact", user=bystander_user)
+			self.assertTrue(
+				frappe.db.sql(
+					f"select name from `tabCRM Contact` where name = %s and ({condition})",
+					(contact.name,),
+				)
+			)
+			# ... but not deletable: bystander is neither creator nor assignee.
+			self.assertFalse(shared_has_permission(contact, user=bystander_user, ptype="delete"))
+		finally:
+			frappe.delete_doc("CRM Contact", contact.name, force=True)
+
+	def test_kill_switch_restores_delete_without_ownership_gate(self):
+		_teammate_user, teammate_staff = self._make_user_and_staff(
+			"_Test Ownership KillSwitch Teammate", roles=["Sale"], team=self._team, function="Sale"
+		)
+		bystander_user, _bystander_staff = self._make_user_and_staff(
+			"_Test Ownership KillSwitch Bystander", roles=["Lead Sales"], team=self._team, function="Team Leader"
+		)
+		contact = frappe.get_doc(
+			{
+				"doctype": "CRM Contact",
+				"full_name": "_Test Ownership KillSwitch Contact",
+				"phone": "0933000444",
+				"assigned_to": teammate_staff,
+			}
+		)
+		contact.insert(ignore_permissions=True)
+		frappe.conf[PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY] = 1
+		try:
+			# Without the switch this exact setup is denied (see the previous
+			# test) -- the switch restores pre-Phase-5 behavior where row-scope
+			# alone governs delete, with no additional ownership gate.
+			self.assertTrue(shared_has_permission(contact, user=bystander_user, ptype="delete"))
+		finally:
+			frappe.conf.pop(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, None)
+			frappe.delete_doc("CRM Contact", contact.name, force=True)
+
+	def test_delete_still_denied_outside_row_scope_even_if_owner(self):
+		# Ownership must never act as an alternate grant path around row-scope:
+		# a Sale user who owns/created a record that has since been assigned
+		# away to someone else, outside their own-assigned-only scope, must
+		# still be denied.
+		sale_user, sale_staff = self._make_user_and_staff("_Test Ownership Sale Creator", roles=["Sale"])
+		_other_user, other_staff = self._make_user_and_staff("_Test Ownership Sale Other", roles=["Sale"])
+		frappe.set_user(sale_user)
+		try:
+			contact = frappe.get_doc(
+				{
+					"doctype": "CRM Contact",
+					"full_name": "_Test Ownership Sale Reassigned Contact",
+					"phone": "0933000555",
+					"assigned_to": sale_staff,
+				}
+			)
+			contact.insert(ignore_permissions=True)
+		finally:
+			frappe.set_user("Administrator")
+		contact.assigned_to = other_staff
+		contact.save(ignore_permissions=True)
+		try:
+			self.assertEqual(contact.owner, sale_user)
+			self.assertEqual(shared_conditions("CRM Contact", user=sale_user), f"`tabCRM Contact`.owner_staff = {frappe.db.escape(sale_staff)}")
+			self.assertFalse(shared_has_permission(contact, user=sale_user, ptype="delete"))
+		finally:
+			frappe.delete_doc("CRM Contact", contact.name, force=True)
 
 	# ---------------------------------------------------------------------- helpers
 

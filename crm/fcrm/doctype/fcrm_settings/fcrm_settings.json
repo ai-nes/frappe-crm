@@ -21,13 +21,21 @@
   "brand_logo",
   "favicon",
   "dropdown_items_tab",
-  "dropdown_items"
+  "dropdown_items",
+  "managed_docperm_sync_state"
  ],
  "fields": [
   {
    "fieldname": "restore_defaults",
    "fieldtype": "Button",
    "label": "Restore Defaults"
+  },
+  {
+   "description": "Internal bookkeeping for crm.patches.v1_0.setup_crm_permissions: JSON list of [doctype, role] pairs this patch synced on its last run, so a pair removed from a CRM Permission Profile can be cleaned up without touching any DocPerm row this patch never managed. Not user-facing.",
+   "fieldname": "managed_docperm_sync_state",
+   "fieldtype": "Long Text",
+   "hidden": 1,
+   "label": "Managed DocPerm Sync State"
   },
   {
    "fieldname": "dropdown_items",

@@ -1,3 +1,7 @@
+import os
+import re
+from urllib.parse import quote, urlencode, urljoin
+
 import frappe
 import requests
 from frappe import _
@@ -6,6 +10,176 @@ from pypika.functions import Replace
 from werkzeug.wrappers import Response
 
 from crm.utils import are_same_phone_number, parse_phone_number
+
+INTEGRATION_TYPES = frozenset({"call", "zalo"})
+_WORLDFONE_CALLUUID_RE = re.compile(r"^\d+\.\d+$")
+_WORLDFONE_BASE_URL = "https://apps.worldfone.cloud/externalcrm"
+
+
+def _worldfone_config(name: str, default: str = "") -> str:
+	"""Read Worldfone settings without ever exposing them in API payloads."""
+	config_key = f"crm_worldfone_{name}"
+	env_key = f"WORLDFONE_{name.upper()}"
+	return str(frappe.conf.get(config_key) or os.getenv(env_key) or default).strip()
+
+
+def build_worldfone_recording_url(calluuid: str | None) -> str | None:
+	"""Build a Worldfone playback URL from a canonical call UUID.
+
+	The secret is required from site config/environment and is only used by the
+	server-side proxy; callers should return :func:`get_recording_url_path`
+	instead of this URL.
+	"""
+	calluuid = str(calluuid or "").strip()
+	secret = _worldfone_config("secret")
+	if not calluuid or not secret or not _WORLDFONE_CALLUUID_RE.fullmatch(calluuid):
+		return None
+
+	base_url = _worldfone_config("base_url", _WORLDFONE_BASE_URL)
+	playback_path = _worldfone_config("playback_path", "/playback2.php")
+	secret_param = _worldfone_config("secret_param", "secrect")
+	api_version = _worldfone_config("api_version", "3")
+	base = urljoin(f"{base_url.rstrip('/')}/", playback_path.lstrip('/'))
+	query = urlencode(
+		{
+			"calluuid": calluuid,
+			secret_param: secret,
+			"version": api_version,
+		}
+	)
+	return f"{base}?{query}"
+
+
+def _is_worldfone_call(call_log_name: str | None, telephony_medium: str | None, medium: str | None) -> bool:
+	return bool(
+		_WORLDFONE_CALLUUID_RE.fullmatch(str(call_log_name or "").strip())
+		and (telephony_medium == "Manual" or medium == "Worldfone")
+	)
+
+
+def get_recording_url_path(
+	call_log_name: str | None,
+	recording_url: str | None = None,
+	telephony_medium: str | None = None,
+	medium: str | None = None,
+) -> str | None:
+	"""Return the same-origin audio proxy path for a Call Log.
+
+	For imported Worldfone rows the URL may be absent because only the UUID was
+	seeded. In that case the proxy will build the provider URL lazily.
+	"""
+	call_log_name = str(call_log_name or "").strip()
+	if not call_log_name:
+		return None
+	if not str(recording_url or "").strip() and not (
+		_is_worldfone_call(call_log_name, telephony_medium, medium)
+		and build_worldfone_recording_url(call_log_name)
+	):
+		return None
+	return (
+		"/api/method/crm.integrations.api.get_recording_url?call_log_name="
+		f"{quote(call_log_name, safe='')}"
+	)
+
+
+def _integration_status(enabled: bool, configured: bool = True) -> str:
+	if not configured:
+		return "not_configured"
+	return "enabled" if enabled else "disabled"
+
+
+def _call_integration(provider: str, label: str, enabled: bool) -> dict:
+	return {
+		"type": "call",
+		"provider": provider,
+		"label": label,
+		"enabled": enabled,
+		"status": _integration_status(enabled),
+	}
+
+
+def _zalo_integration() -> dict:
+	"""Return Zalo OA status without exposing any provider credentials.
+
+	The core CRM does not ship a Zalo Settings DocType yet. Sites that install
+	one can opt in by exposing an ``enabled`` field on that single DocType.
+	"""
+	if not frappe.db.exists("DocType", "Zalo Settings"):
+		return {
+			"type": "zalo",
+			"provider": "zalo_oa",
+			"label": "Zalo OA",
+			"enabled": False,
+			"status": "not_configured",
+		}
+
+	meta = frappe.get_meta("Zalo Settings")
+	if not meta.has_field("enabled"):
+		enabled = False
+		configured = False
+	else:
+		enabled = bool(frappe.db.get_single_value("Zalo Settings", "enabled"))
+		configured = True
+
+	return {
+		"type": "zalo",
+		"provider": "zalo_oa",
+		"label": "Zalo OA",
+		"enabled": enabled,
+		"status": _integration_status(enabled, configured),
+	}
+
+
+def _normalize_integration_type(integration_type: str | None) -> str | None:
+	if integration_type is None or not str(integration_type).strip():
+		return None
+
+	normalized = str(integration_type).strip().lower()
+	if normalized not in INTEGRATION_TYPES:
+		frappe.throw(
+			_("Unsupported integration type: {0}. Use 'call' or 'zalo'.").format(normalized),
+			frappe.ValidationError,
+		)
+	return normalized
+
+
+@frappe.whitelist(methods=["GET"])
+def get_integrations(type: str | None = None):
+	"""Return configured integration providers filtered by type.
+
+	Supported types are ``call`` and ``zalo``. The response only contains
+	provider metadata and connection state; secrets are never returned.
+	"""
+	requested_type = _normalize_integration_type(type)
+	integrations = []
+
+	if requested_type in (None, "call"):
+		integrations.extend(
+			[
+				_call_integration(
+					"twilio",
+					"Twilio",
+					bool(frappe.db.get_single_value("Twilio Settings", "enabled")),
+				),
+				_call_integration(
+					"exotel",
+					"Exotel",
+					bool(frappe.db.get_single_value("Exotel Settings", "enabled")),
+				),
+			]
+		)
+
+	if requested_type in (None, "zalo"):
+		integrations.append(_zalo_integration())
+
+	return {
+		"data": integrations,
+		"meta": {
+			"requested_type": requested_type,
+			"returned_types": sorted({item["type"] for item in integrations}),
+			"total": len(integrations),
+		},
+	}
 
 
 def _get_recording_credentials(telephony_medium: str) -> tuple:
@@ -16,6 +190,10 @@ def _get_recording_credentials(telephony_medium: str) -> tuple:
 	elif telephony_medium == "Exotel":
 		s = frappe.get_single("Exotel Settings")
 		return s.api_key, s.get_password("api_token")
+	elif telephony_medium == "Manual":
+		# Recording URL already carries its own auth in the query string
+		# (e.g. the Worldfone STT bridge's playback link) — no Basic Auth needed.
+		return None
 	frappe.throw(_("Unknown telephony medium: {0}").format(telephony_medium))
 
 
@@ -61,17 +239,17 @@ def set_default_calling_medium(medium: str):
 @frappe.whitelist()
 def add_note_to_call_log(call_sid: str, note: dict):
 	"""Add/Update note to call log based on call sid."""
+	content = note.get("content") or note.get("title")
 	_note = None
 	if not note.get("name"):
 		_note = frappe.get_doc(
 			{
 				"doctype": "FCRM Note",
-				"title": note.get("title", "Call Note"),
-				"content": note.get("content"),
+				"content": content or "Call Note",
 			}
 		).insert(ignore_permissions=True)
 	else:
-		_note = frappe.set_value("FCRM Note", note.get("name"), "content", note.get("content"))
+		_note = frappe.set_value("FCRM Note", note.get("name"), "content", content)
 
 	call_log = frappe.get_cached_doc("Call Log", call_sid)
 	call_log.link_with_reference_doc("FCRM Note", _note.name)
@@ -149,12 +327,21 @@ def get_recording_url(call_log_name: str):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 
 	log = frappe.get_doc("Call Log", call_log_name)
+	recording_url = str(log.recording_url or "").strip()
+	is_worldfone_call = _is_worldfone_call(
+		log.name,
+		log.telephony_medium,
+		log.medium,
+	)
+	if not recording_url and is_worldfone_call:
+		recording_url = build_worldfone_recording_url(log.name) or ""
 
-	if not log.recording_url:
+	if not recording_url:
 		frappe.throw(_("Recording URL not found"), frappe.DoesNotExistError)
 
-	auth = _get_recording_credentials(log.telephony_medium)
-	with requests.get(log.recording_url, auth=auth, stream=True, timeout=10) as r:
+	telephony_medium = log.telephony_medium or ("Manual" if is_worldfone_call else "")
+	auth = _get_recording_credentials(telephony_medium)
+	with requests.get(recording_url, auth=auth, stream=True, timeout=10) as r:
 		r.raise_for_status()
 		response = Response()
 		response.data = r.content
@@ -222,8 +409,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	# both paths so telephony lookup works across migrated sites.
 	ContactPhone = frappe.qb.DocType("Contact Phone")
 	normalized_phone_child = Replace(
-		Replace(
-			Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
+		Replace(Replace(Replace(Replace(ContactPhone.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
 	phone_query = (
 		frappe.qb.from_(Contact)

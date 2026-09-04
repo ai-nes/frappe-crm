@@ -7,6 +7,7 @@ service layer.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -15,6 +16,15 @@ _UNIT_TO_SECONDS = {
 	"minutes": 60,
 	"hours": 60 * 60,
 	"days": 24 * 60 * 60,
+}
+
+TIME_SLOTS = ("0-6", "6-12", "12-18", "18-24")
+_TIME_SLOT_HOURS = {
+	"0-6": (0, 6),
+	"6-12": (6, 12),
+	"12-18": (12, 18),
+	# 24:00 is represented by the next midnight; selected slots are end-exclusive.
+	"18-24": (18, 0),
 }
 
 
@@ -61,6 +71,47 @@ def _time(value: Any, field: str) -> time | None:
 		raise ValueError(f"{field} must be a valid time.") from exc
 
 
+def slot_bounds(time_slot: str) -> tuple[time, time]:
+	"""Return the concrete daily bounds for a configured time slot."""
+	try:
+		start_hour, end_hour = _TIME_SLOT_HOURS[time_slot]
+	except KeyError as exc:
+		raise ValueError(f"Unsupported time_slot: {time_slot}.") from exc
+	start = time(hour=start_hour)
+	end = time(hour=end_hour)
+	return start, end
+
+
+def slot_for_time(clock: time) -> str:
+	"""Return which of the four daily TIME_SLOTS a clock time falls in."""
+	for slot in TIME_SLOTS:
+		start, end = slot_bounds(slot)
+		if _in_window(datetime.combine(date.min, clock), start, end, end_exclusive=True):
+			return slot
+	raise ValueError(f"Could not resolve a time_slot for {clock}.")
+
+
+def is_time_allowed(candidate: Any, allowed_slots: Any, *, field: str = "allowed_time_slots") -> bool:
+	"""Return whether a datetime/time falls within a set of allowed TIME_SLOTS.
+
+	An empty/falsy ``allowed_slots`` means no restriction is configured.
+	"""
+	if not allowed_slots:
+		return True
+	if isinstance(allowed_slots, str):
+		try:
+			allowed_slots = json.loads(allowed_slots) if allowed_slots else []
+		except (TypeError, ValueError) as exc:
+			raise ValueError(f"{field} must be a JSON array.") from exc
+	if not allowed_slots:
+		return True
+	invalid = set(allowed_slots) - set(TIME_SLOTS)
+	if invalid:
+		raise ValueError(f"{field} contains unsupported time slots: {sorted(invalid)}.")
+	clock = candidate if isinstance(candidate, time) else _datetime(candidate, "candidate").time()
+	return slot_for_time(clock) in set(allowed_slots)
+
+
 def _add_business_days(start: datetime, days: float) -> datetime:
 	whole_days = int(days)
 	if days != whole_days:
@@ -78,18 +129,28 @@ def _window_bounds(policy: Mapping[str, Any]) -> tuple[time | None, time | None]
 	end = _time(policy.get("allowed_end_time"), "allowed_end_time")
 	if bool(start) != bool(end):
 		raise ValueError("allowed_start_time and allowed_end_time must be provided together.")
+	time_slot = policy.get("time_slot")
+	if time_slot:
+		slot_start, slot_end = slot_bounds(str(time_slot))
+		if start and end:
+			end_matches = end == slot_end
+			if start != slot_start or not end_matches:
+				raise ValueError("time_slot must match allowed_start_time and allowed_end_time.")
+		return slot_start, slot_end
 	return start, end
 
 
-def _in_window(candidate: datetime, start: time, end: time) -> bool:
+def _in_window(candidate: datetime, start: time, end: time, *, end_exclusive: bool = False) -> bool:
 	clock = candidate.time()
 	if start <= end:
-		return start <= clock <= end
-	return clock >= start or clock <= end
+		return start <= clock < end if end_exclusive else start <= clock <= end
+	return clock >= start or (clock < end if end_exclusive else clock <= end)
 
 
-def _next_window_start(candidate: datetime, start: time, end: time) -> datetime:
-	if _in_window(candidate, start, end):
+def _next_window_start(
+	candidate: datetime, start: time, end: time, *, end_exclusive: bool = False
+) -> datetime:
+	if _in_window(candidate, start, end, end_exclusive=end_exclusive):
 		return candidate
 	result_date = candidate.date()
 	if start <= end and candidate.time() > end:
@@ -175,10 +236,11 @@ def resolve_scheduled_at(policy: Mapping[str, Any], requested_at: Any = None, *,
 		raise ValueError("scheduled_at violates the NBA timing delay.")
 
 	start, end = _window_bounds(policy)
-	if start and end and not _in_window(candidate, start, end):
+	end_exclusive = bool(policy.get("time_slot"))
+	if start and end and not _in_window(candidate, start, end, end_exclusive=end_exclusive):
 		if explicit:
 			raise ValueError("scheduled_at is outside the NBA allowed time window.")
-		candidate = _next_window_start(candidate, start, end)
+		candidate = _next_window_start(candidate, start, end, end_exclusive=end_exclusive)
 		if candidate < earliest:
 			candidate += timedelta(days=1)
 

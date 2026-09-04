@@ -16,6 +16,7 @@ def execute():
 	notes = frappe.db.sql("SELECT * FROM `tabCRM Note`", as_dict=True)
 	if notes:
 		for note in notes:
+			content = note.get("content") or note.get("title")
 			doc = frappe.get_doc(
 				{
 					"doctype": "FCRM Note",
@@ -23,8 +24,7 @@ def execute():
 					"modified": note.get("modified"),
 					"modified_by": note.get("modified_by"),
 					"owner": note.get("owner"),
-					"title": note.get("title"),
-					"content": note.get("content"),
+					"content": content,
 					"reference_doctype": note.get("reference_doctype"),
 					"reference_docname": note.get("reference_docname"),
 				}

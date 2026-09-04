@@ -161,7 +161,7 @@ def me():
 	An authenticated non-CRM user still fails closed via ``get_session_role_flags``.
 	"""
 	if frappe.session.user == "Guest":
-		return {"user": None}
+		return {"user": None, "permission": []}
 
 	flags = get_session_role_flags()
 	user = frappe.db.get_value(
@@ -179,6 +179,7 @@ def me():
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_capabilities": flags["crm_capabilities"],
+		"permission": flags["crm_capabilities"],
 		# The cross-origin SPA has no server-rendered page to read frappe.boot
 		# from, so hand it the CSRF token it must send as `X-Frappe-CSRF-Token`
 		# on write requests (production enforces CSRF; dev sets ignore_csrf).
