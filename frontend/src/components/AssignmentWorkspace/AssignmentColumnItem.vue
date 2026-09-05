@@ -1,6 +1,6 @@
 <template>
   <div
-    class="flex items-center gap-2 rounded-md border-l-2 px-2 py-2 hover:bg-surface-gray-2"
+    class="flex items-center gap-2 rounded-md border-l-2 px-2 py-2 transition-colors duration-150 hover:bg-surface-gray-2"
     :class="active ? 'border-l-orange-500 bg-orange-50' : 'border-l-transparent'"
   >
     <slot name="prefix" />
@@ -17,9 +17,14 @@
       <span class="flex size-6 shrink-0 items-center justify-center rounded" :class="levelDotClass">
         <FeatherIcon :name="levelIcon" class="size-3.5" />
       </span>
-      <span class="min-w-0 flex-1 truncate text-xs font-medium text-ink-gray-9">{{ row.label }}</span>
+      <span class="min-w-0 flex-1 truncate text-xs font-medium text-ink-gray-9" :title="row.label">{{ row.label }}</span>
       <span class="shrink-0 text-[11px] text-ink-gray-5">{{ metaText }}</span>
-      <span class="size-2 shrink-0 rounded-full" :class="statusDotClass" />
+      <span
+        class="size-2 shrink-0 rounded-full"
+        :class="statusDotClass"
+        :title="statusLabel"
+        :aria-label="statusLabel"
+      />
     </div>
     <button
       v-if="hasChildren"
@@ -55,7 +60,7 @@ const levelLabels = {
   cluster: 'Cụm tuyển sinh',
   zone: 'Địa bàn',
   high_school: 'Trường THPT',
-  team: 'Nhóm phụ trách',
+  team: 'Team',
   staff: 'Nhân sự',
 }
 const levelIcons = {
@@ -82,9 +87,17 @@ const toneDotClasses = {
   caution: 'bg-yellow-500',
   neutral: 'bg-gray-300',
 }
+const statusLabels = {
+  healthy: 'Đã cấu hình',
+  unassigned: 'Chưa cấu hình',
+  needs_review: 'Cần rà soát',
+  placeholder_zone: 'Zone tạm',
+  capacity_warning: 'Tải cao',
+}
 
 const levelLabel = computed(() => levelLabels[props.row.level] || props.row.level)
 const levelIcon = computed(() => levelIcons[props.row.level] || 'circle')
 const levelDotClass = computed(() => levelDotClasses[props.row.level] || 'bg-surface-gray-3 text-ink-gray-7')
 const statusDotClass = computed(() => toneDotClasses[assignmentWorkspaceStatusTone(props.row.status)])
+const statusLabel = computed(() => statusLabels[props.row.status] || 'Chưa xác định')
 </script>

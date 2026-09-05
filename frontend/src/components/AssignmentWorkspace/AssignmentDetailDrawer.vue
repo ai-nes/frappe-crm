@@ -105,7 +105,7 @@ const levelLabels = {
   cluster: 'Cụm tuyển sinh',
   zone: 'Địa bàn',
   high_school: 'Trường THPT',
-  team: 'Nhóm phụ trách',
+  team: 'Team',
   staff: 'Nhân sự',
 }
 
@@ -113,7 +113,7 @@ const levelLabel = (value) => levelLabels[value] || value
 const displayValue = (value) => (value === null || value === undefined || value === '' ? '—' : value)
 const assignmentSourceLabel = (value) => ({
   school_override: __('Gán riêng tại trường'),
-  zone_inherited: __('Kế thừa từ địa bàn'),
+  zone_inherited: __('Kế thừa từ Zone'),
   unresolved: __('Chưa xác định'),
 }[value] || value)
 const canEditRow = computed(() => props.canEdit && ['zone', 'high_school'].includes(props.row?.level))
@@ -127,14 +127,14 @@ const details = computed(() => {
     { label: __('Địa bàn'), value: row.zone_name || row.zone_id },
     { label: __('Phường/Xã'), value: row.ward_count },
     { label: __('Trường THPT'), value: row.school_count },
-    { label: __('Nhóm phụ trách'), value: row.team_names?.join(', ') || row.team_name },
-    { label: __('Nhân viên'), value: row.staff_names?.join(', ') || row.staff_name },
-    { label: __('Hàng chờ Lead'), value: row.pool_names?.join(', ') },
+    { label: __('Team phụ trách'), value: row.team_names?.join(', ') || row.team_name },
+    { label: __('Thành viên Team'), value: row.staff_names?.join(', ') || row.staff_name },
+    { label: __('Pool tiếp nhận'), value: row.pool_names?.join(', ') },
     ...(row.level === 'high_school'
       ? [{
           label: __('Nguồn cấu hình'),
           value: row.has_stale_school_override
-            ? __('Kế thừa từ địa bàn · mapping trường cần rà soát')
+            ? __('Kế thừa từ Zone · mapping trường cần rà soát')
             : assignmentSourceLabel(row.assignment_source),
         }]
       : []),

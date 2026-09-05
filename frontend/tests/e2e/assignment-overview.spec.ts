@@ -31,7 +31,7 @@ test.describe('Assignment setup and routing journey', () => {
 
     // The overview opens at the first useful level. Expand one địa bàn before
     // selecting a school so the journey follows the same progressive-disclosure UX.
-    await page.getByRole('button', { name: /mở tới địa bàn/i }).click()
+    await page.getByRole('button', { name: /mở đến zone/i }).click()
     const firstZoneToggle = page.locator('[data-testid="expand-assignment-node"][data-level="zone"]').first()
     await expect(firstZoneToggle).toBeVisible()
     await firstZoneToggle.click()

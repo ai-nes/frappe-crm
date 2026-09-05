@@ -1,9 +1,14 @@
 <template>
   <section class="assignment-overview-table overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-white shadow-sm" data-testid="assignment-overview-table">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-1 px-4 py-3">
-      <h2 class="font-semibold text-ink-gray-9">{{ __('2. Cây phân bổ hiện tại') }}</h2>
+      <div class="flex min-w-0 flex-wrap items-center gap-2">
+        <h2 class="font-semibold text-ink-gray-9">{{ __('2. Cây phân bổ hiện tại') }}</h2>
+        <span v-if="activeFilterCount" class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+          {{ activeFilterCount }} {{ __('bộ lọc đang áp dụng') }}
+        </span>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
-        <Button size="sm" variant="subtle" :label="__('Mở tới địa bàn')" iconLeft="chevrons-down" @click="expandToLocations" />
+        <Button size="sm" variant="subtle" :label="__('Mở đến Zone')" iconLeft="chevrons-down" @click="expandToLocations" />
         <Button size="sm" variant="subtle" :label="__('Thu gọn')" iconLeft="chevrons-up" @click="collapseAll" />
       </div>
     </div>
@@ -31,6 +36,14 @@
           </button>
           <span v-else class="px-1.5 py-0.5 text-xs font-medium text-ink-gray-5">{{ crumb.label }}</span>
         </template>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-outline-gray-1 px-4 py-2 text-[11px] text-ink-gray-5" aria-label="Chú thích trạng thái">
+        <span class="font-medium text-ink-gray-6">{{ __('Trạng thái') }}</span>
+        <span v-for="item in statusLegend" :key="item.status" class="inline-flex items-center gap-1.5">
+          <span class="size-2 rounded-full" :class="item.dotClass" aria-hidden="true" />
+          {{ item.label }}
+        </span>
       </div>
 
       <div class="grid grid-cols-1 divide-y divide-outline-gray-1 lg:grid-cols-[1fr_1fr_1.15fr_1.3fr] lg:divide-x lg:divide-y-0">
@@ -70,7 +83,7 @@
         <!-- Column 3: facet (schools / team & staff) -->
         <div class="max-h-[520px] overflow-y-auto p-2">
           <p class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">
-            {{ __('Phạm vi & Nhân lực') }}<span class="font-medium normal-case text-ink-gray-5">{{ schools.length + teams.length }}</span>
+            {{ __('Trường & đội phụ trách') }}<span class="font-medium normal-case text-ink-gray-5">{{ schools.length + teams.length }}</span>
           </p>
           <p v-if="!selectedZoneId" class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Chọn một địa bàn để xem trường và nhóm.') }}</p>
           <template v-else-if="!schools.length && !teams.length">
@@ -92,7 +105,7 @@
                 :class="facet === 'team' ? 'border-orange-500 bg-orange-50 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
                 @click="selectFacet('team')"
               >
-                {{ __('Đội & nhân sự') }} ({{ teams.length }})
+                {{ __('Team & thành viên') }} ({{ teams.length }})
               </button>
             </div>
             <div v-if="facet === 'school'">
@@ -166,15 +179,31 @@
             </div>
 
             <div class="mt-3 border-t border-outline-gray-1 pt-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Phụ trách') }}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Team phụ trách') }}</p>
               <p class="mt-1.5 font-medium text-ink-gray-8">{{ ownerTitle(detailNode) }}</p>
               <p v-if="ownerMeta(detailNode)" class="mt-0.5 break-words text-xs leading-5 text-ink-gray-5">{{ ownerMeta(detailNode) }}</p>
             </div>
 
             <div class="mt-3 border-t border-outline-gray-1 pt-3">
-              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Điều phối') }}</p>
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Hàng chờ tiếp nhận') }}</p>
               <p class="mt-1.5 break-words font-medium leading-5 text-ink-gray-8">{{ routingTitle(detailNode) }}</p>
               <p class="mt-0.5 break-words text-xs leading-5 text-ink-gray-5">{{ routingMeta(detailNode) }}</p>
+            </div>
+
+            <div class="mt-3 rounded-md border border-blue-100 bg-blue-50/60 p-3">
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-blue-700">{{ __('Luồng phân công Lead') }}</p>
+                <span v-if="detailNode.level === 'high_school'" class="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-blue-700">
+                  {{ sourceLabel(detailNode) }}
+                </span>
+              </div>
+              <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-blue-900">
+                <template v-for="(node, index) in routingPath(detailNode)" :key="`${node.label}-${index}`">
+                  <FeatherIcon v-if="index > 0" name="chevron-right" class="size-3 shrink-0 text-blue-400" aria-hidden="true" />
+                  <span class="max-w-full break-words rounded bg-white/80 px-2 py-1 font-medium" :title="node.label">{{ node.label }}</span>
+                </template>
+              </div>
+              <p class="mt-2 text-[11px] leading-4 text-blue-800">{{ routingExplanation(detailNode) }}</p>
             </div>
 
             <div v-if="detailNode.level === 'team' && staffOfDetail.length" class="mt-3 border-t border-outline-gray-1 pt-3">
@@ -197,7 +226,7 @@
               class="mt-4 w-full rounded-md border border-outline-gray-3 bg-surface-white py-2 text-xs font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
               @click="select(detailNode)"
             >
-              {{ __('Xem chi tiết đầy đủ') }}
+              {{ __('Mở cấu hình') }}
             </button>
           </template>
         </div>
@@ -220,6 +249,7 @@ const props = defineProps({
   rows: { type: Array, default: () => [] },
   loading: Boolean,
   nextCursor: { type: [String, Number], default: null },
+  activeFilterCount: { type: Number, default: 0 },
   selectable: Boolean,
   selectedSchoolIds: { type: Array, default: () => [] },
 })
@@ -232,7 +262,7 @@ const levelLabels = {
   cluster: 'Cụm tuyển sinh',
   zone: 'Địa bàn',
   high_school: 'Trường THPT',
-  team: 'Nhóm phụ trách',
+  team: 'Team',
   staff: 'Nhân sự',
 }
 const levelIcons = {
@@ -253,6 +283,12 @@ const levelDotClasses = {
   team: 'bg-green-50 text-green-700',
   staff: 'bg-amber-50 text-amber-700',
 }
+const statusLegend = [
+  { status: 'healthy', label: 'Đã cấu hình', dotClass: 'bg-green-500' },
+  { status: 'unassigned', label: 'Chưa cấu hình', dotClass: 'bg-orange-400' },
+  { status: 'needs_review', label: 'Cần rà soát', dotClass: 'bg-orange-400' },
+  { status: 'capacity_warning', label: 'Tải cao', dotClass: 'bg-yellow-500' },
+]
 
 function levelLabel(level) {
   return levelLabels[level] || level
@@ -388,7 +424,7 @@ function ownerTitle(row) {
   if (row.level === 'high_school') {
     if (row.staff_names?.length) return row.staff_names.join(', ')
     if (row.team_names?.length) return row.team_names.join(', ')
-    return __('Theo Team của địa bàn')
+    return __('Kế thừa Team của địa bàn')
   }
   if (row.team_names?.length) return row.team_names.join(', ')
   return __('Theo cấp bên dưới')
@@ -423,6 +459,66 @@ function routingTitle(row) {
 function routingMeta(row) {
   if (row.level === 'staff') return row.capacity ? `${row.active_students || 0}/${row.capacity} ${__('Lead đang giữ')}` : __('Chưa đặt capacity')
   return row.active_students ? `${formatNumber(row.active_students)} ${__('Lead hoạt động')}` : __('Chưa có Lead hoạt động')
+}
+
+function sourceLabel(row) {
+  if (row.assignment_source === 'school_override') return __('Gán riêng tại trường')
+  if (row.assignment_source === 'zone_inherited') return __('Kế thừa từ Zone')
+  return __('Chưa xác định')
+}
+
+function routingPath(row) {
+  const nodes = []
+  const teamLabels = row.team_names?.length ? row.team_names : row.team_name ? [row.team_name] : []
+  const teamLabel = teamLabels.join(' · ')
+  const poolLabel = row.pool_names?.join(' · ')
+  if (row.level === 'high_school') {
+    nodes.push({ label: row.label })
+    if (row.ward_name) nodes.push({ label: row.ward_name })
+    if (row.zone_name) nodes.push({ label: row.zone_name })
+  } else if (row.level === 'zone' || row.level === 'team') {
+    nodes.push({ label: row.label })
+  } else if (row.level === 'staff') {
+    if (row.team_name) nodes.push({ label: row.team_name })
+    nodes.push({ label: row.label })
+  } else {
+    nodes.push({ label: row.label })
+  }
+
+  if (teamLabel && row.level !== 'team' && !nodes.some((node) => node.label === teamLabel)) {
+    nodes.push({ label: teamLabel })
+  }
+  if (poolLabel) nodes.push({ label: poolLabel })
+  if (row.level === 'team') {
+    nodes.push({ label: row.member_count ? `${formatNumber(row.member_count)} ${__('thành viên trong Team')}` : __('Chưa có thành viên') })
+  } else if (row.staff_names?.length) {
+    nodes.push({ label: row.staff_names.join(', ') })
+  } else if (['high_school', 'zone'].includes(row.level) && teamLabel) {
+    nodes.push({ label: __('Nhân sự trong Team') })
+  }
+
+  return nodes.filter((node) => node.label)
+}
+
+function routingExplanation(row) {
+  const teamCount = row.team_names?.length || (row.team_name ? 1 : 0)
+  const poolCount = row.pool_names?.length || 0
+  if (row.level === 'high_school' && (teamCount > 1 || poolCount > 1)) {
+    return __('Trường đang có nhiều Team hoặc Pool mapping; cần rà soát trước khi xác định tuyến duy nhất cho Lead.')
+  }
+  if (row.level === 'high_school' && row.assignment_source === 'school_override') {
+    return __('Lead từ trường này đi theo người được gán riêng tại trường.')
+  }
+  if (row.level === 'high_school' && row.assignment_source === 'zone_inherited') {
+    return __('Lead kế thừa Team và Pool của Zone; Sale cụ thể được chọn theo policy và tải hiện tại.')
+  }
+  if (row.level === 'zone') {
+    return row.team_name
+      ? __('Các trường trong Zone kế thừa Team và Pool này nếu không có mapping riêng.')
+      : __('Zone chưa có Team nên Lead chưa thể tự chọn Sale.')
+  }
+  if (row.level === 'team') return __('Lead vào Pool sẽ được phân cho thành viên đủ điều kiện của Team.')
+  return __('Kiểm tra từng cấp để xác định nơi Lead sẽ được tiếp nhận.')
 }
 
 const visibleSchools = computed(() => schools.value.filter((row) => row.high_school_id))
