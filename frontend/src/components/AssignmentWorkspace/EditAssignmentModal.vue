@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model="show" :options="{ title: dialogTitle, size: 'xl' }" @close="reset">
+  <Dialog v-model="show" :options="{ title: dialogTitle, size: '4xl' }" @close="reset">
     <template #body-content>
       <div v-if="row" class="space-y-5" data-testid="assignment-edit-modal">
         <div class="rounded-md border border-blue-100 bg-blue-50/70 p-3 text-sm text-blue-900">
@@ -21,7 +21,7 @@
             v-if="row.level === 'high_school'"
             v-model="staffId"
             type="select"
-            :label="__('CRM Staff đích')"
+            :label="__('Nhân sự nhận Lead')"
             :options="staffOptions"
             :disabled="!staffOptions.length || submitting"
             required
@@ -76,7 +76,7 @@
           {{ __('Chưa có Team active đủ điều kiện. Hãy hoàn tất Team Membership trước.') }}
         </p>
         <p v-if="row.level === 'high_school' && teamId && !staffOptions.length" class="rounded-md bg-orange-50 p-3 text-sm text-orange-900" role="alert">
-          {{ __('Team này chưa có CRM Staff active để nhận trường.') }}
+          {{ __('Team này chưa có Staff đang hoạt động để nhận trường.') }}
         </p>
         <p v-if="error" class="rounded-md bg-red-50 p-3 text-sm text-red-900" role="alert">{{ error }}</p>
       </div>

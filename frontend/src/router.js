@@ -7,6 +7,7 @@ import {
   admissionsWorkspaceCapabilities,
   canAccessWorkspace,
   hasAnyCapability,
+  canAccessSalesTaskWorkbench,
 } from '@/utils/rolePolicy'
 import {
   getWorkspaceRoute,
@@ -64,6 +65,11 @@ const routes = [
     name: 'Notes',
     component: () => import('@/pages/Notes.vue'),
     meta: { anyOf: admissionsWorkspaceCapabilities },
+  },
+  {
+    path: '/ctv-sale/tasks',
+    name: 'CTV Sale Tasks',
+    component: () => import('@/pages/CtvSaleTasks.vue'),
   },
   {
     alias: '/tasks',
@@ -372,6 +378,15 @@ router.beforeEach(async (to, from, next) => {
   const navigationRole = isLoggedIn
     ? resolveUserNavigationRole(getCurrentUser())
     : null
+  if (
+    isLoggedIn &&
+    to.name === 'CTV Sale Tasks' &&
+    !canAccessSalesTaskWorkbench(getCurrentUser())
+  ) {
+    next({ name: 'Not Permitted' })
+    return
+  }
+
   if (
     isLoggedIn &&
     [

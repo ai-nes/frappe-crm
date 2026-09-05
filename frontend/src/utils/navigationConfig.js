@@ -68,7 +68,7 @@ const rawRoleNavigationTrees = {
       id: 'sales_my_tasks',
       label: 'Việc của tôi',
       icon: 'list-checks',
-      to: 'Tasks',
+      to: 'CTV Sale Tasks',
       badgeKey: 'myTaskCount',
     },
     {
@@ -718,7 +718,11 @@ function bindWorkspaceDestinations(items) {
     delete item.action
     return {
       ...item,
-      to: item.direct ? item.to : getWorkspaceRoute(item.id),
+      // The aggregate task workbench is a named route shared by Sale and CTV Sale.
+      to:
+        item.direct || item.id === 'sales_my_tasks'
+          ? item.to
+          : getWorkspaceRoute(item.id),
       ...(children && { children: bindWorkspaceDestinations(children) }),
     }
   })

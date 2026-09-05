@@ -291,7 +291,7 @@ def _identity_row(user, staff_by_user, memberships_by_staff, team_labels=None):
 	}:
 		if not staff:
 			issues.append(
-				{"code": "crm_staff_missing", "label": _("Chưa có CRM Staff"), "next_action": "create_staff"}
+				{"code": "crm_staff_missing", "label": _("Chưa có profile Staff"), "next_action": "create_staff"}
 			)
 		elif not staff.is_active:
 			issues.append(
@@ -483,7 +483,7 @@ def _overview_sources(context):
 	)
 	zones = _safe_get_all(
 		"CRM Zone",
-		["name", "zone_name", "cluster", "is_placeholder", "current_team", "assignment_status"],
+		["name", "zone_name", "zone_code", "cluster", "is_placeholder", "current_team", "assignment_status"],
 		order_by="zone_name asc, name asc",
 	)
 	wards = _safe_get_all(
@@ -872,6 +872,21 @@ def _overview_rows(sources, context):
 	for row in sources["staff"]:
 		active_staff_count[row.name] = student_by["owner_staff"].get(row.name, 0)
 
+	# Keep the hierarchy readable without making the frontend infer scope from
+	# all descendant rows. These aggregates are read-only projections; the
+	# source of truth remains Ward -> Zone and High School -> Ward.
+	ward_count_by_zone = defaultdict(int)
+	school_count_by_zone = defaultdict(int)
+	active_students_by_zone = defaultdict(int)
+	for ward in sources["wards"]:
+		if ward.get("zone"):
+			ward_count_by_zone[ward.zone] += 1
+	for school in sources["schools"]:
+		ward = ward_map.get(school.get("ward"))
+		if ward and ward.get("zone"):
+			school_count_by_zone[ward.zone] += 1
+			active_students_by_zone[ward.zone] += student_by["high_school"].get(school.name, 0)
+
 	def campus_for_team(team_name):
 		team = team_map.get(team_name)
 		return team.campus if team else None
@@ -932,6 +947,12 @@ def _overview_rows(sources, context):
 			campus = next((c for c in sources["campuses"] if c.get("province") is None), None)
 		if not campus:
 			continue
+		province_clusters = [row for row in sources["clusters"] if row.get("province") == province.name]
+		province_zones = [
+			row
+			for row in sources["zones"]
+			if row.get("cluster") in {cluster.name for cluster in province_clusters}
+		]
 		row_id = f"province:{province.name}"
 		province_parent[province.name] = row_id
 		rows.append(
@@ -943,6 +964,11 @@ def _overview_rows(sources, context):
 				{"campus": {campus.name}, "province": {province.name}},
 				campus_name=_label(campus, "campus_name"),
 				province_id=province.name,
+				cluster_count=len(province_clusters),
+				zone_count=len(province_zones),
+				ward_count=sum(ward_count_by_zone.get(zone.name, 0) for zone in province_zones),
+				school_count=sum(school_count_by_zone.get(zone.name, 0) for zone in province_zones),
+				active_students=sum(active_students_by_zone.get(zone.name, 0) for zone in province_zones),
 				path=f"campus:{campus.name}/{row_id}",
 			)
 		)
@@ -954,6 +980,12 @@ def _overview_rows(sources, context):
 			continue
 		row_id = f"cluster:{cluster.name}"
 		cluster_parent[cluster.name] = row_id
+		cluster_zones = [row for row in sources["zones"] if row.get("cluster") == cluster.name]
+		cluster_team_ids = {
+			assignment.team
+			for assignment in sources["zone_assignments"]
+			if assignment.get("zone") in {zone.name for zone in cluster_zones}
+		}
 		rows.append(
 			row_base(
 				row_id,
@@ -964,6 +996,15 @@ def _overview_rows(sources, context):
 				status="needs_review" if cluster.get("is_placeholder") else "healthy",
 				province_name=_label(province_map.get(cluster.province), "province_name"),
 				cluster_id=cluster.name,
+				zone_count=len(cluster_zones),
+				ward_count=sum(ward_count_by_zone.get(zone.name, 0) for zone in cluster_zones),
+				school_count=sum(school_count_by_zone.get(zone.name, 0) for zone in cluster_zones),
+				active_students=sum(active_students_by_zone.get(zone.name, 0) for zone in cluster_zones),
+				team_names=sorted(
+					_label(team_map.get(team_id), "team_name")
+					for team_id in cluster_team_ids
+					if team_map.get(team_id)
+				),
 				path=f"{parent}/{row_id}",
 			)
 		)
@@ -981,6 +1022,8 @@ def _overview_rows(sources, context):
 			assigned=bool(zone_team),
 			placeholder=bool(zone.get("is_placeholder")),
 		)
+		zone_pool_list = pool_by_team.get(zone_team.name, []) if zone_team else []
+		zone_members = members_by_team.get(zone_team.name, []) if zone_team else []
 		rows.append(
 			row_base(
 				row_id,
@@ -1008,6 +1051,16 @@ def _overview_rows(sources, context):
 				zone_id=zone.name,
 				team_id=zone_team.name if zone_team else None,
 				team_name=_label(zone_team, "team_name") if zone_team else None,
+				ward_count=ward_count_by_zone.get(zone.name, 0),
+				school_count=school_count_by_zone.get(zone.name, 0),
+				active_students=active_students_by_zone.get(zone.name, 0),
+				member_count=len(zone_members),
+				member_names=sorted(
+					_label(staff_map.get(member.staff), "full_name")
+					for member in zone_members
+					if staff_map.get(member.staff)
+				),
+				pool_names=[_label(pool, "pool_name") for pool in zone_pool_list],
 				effective_from=zone_assignment.effective_from if zone_assignment else None,
 				revision=zone_assignment.revision if zone_assignment else None,
 				path=f"{parent}/{row_id}",
@@ -1067,6 +1120,7 @@ def _overview_rows(sources, context):
 				cluster_name=_label(cluster, "cluster_name") if cluster else None,
 				zone_name=_label(zone, "zone_name") if zone else None,
 				ward_id=ward.name if ward else None,
+				ward_name=_label(ward, "ward_name") if ward else None,
 				zone_id=zone.name if zone else None,
 				province_id=province_id,
 				team_ids=sorted(team_ids),
@@ -1135,6 +1189,17 @@ def _overview_rows(sources, context):
 					pool_ids=[pool.name for pool in pool_list],
 					pool_names=[_label(pool, "pool_name") for pool in pool_list],
 					member_count=len(members_by_team.get(team.name, [])),
+					member_names=sorted(
+						_label(staff_map.get(member.staff), "full_name")
+						for member in members_by_team.get(team.name, [])
+						if staff_map.get(member.staff)
+					),
+					zone_count=len(team_zones),
+					ward_count=sum(ward_count_by_zone.get(zone_name, 0) for zone_name in team_zones),
+					school_count=sum(school_count_by_zone.get(zone_name, 0) for zone_name in team_zones),
+					active_students=sum(
+						active_students_by_zone.get(zone_name, 0) for zone_name in team_zones
+					),
 					path=f"{parent}/{row_id}" if parent else row_id,
 				)
 			)
@@ -1275,7 +1340,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 	page_size = _limit(limit)
 	page = rows[offset : offset + page_size]
 	children = defaultdict(list)
-	for row in page:
+	for row in rows:
 		if row.get("parent_id"):
 			children[row["parent_id"]].append(row["id"])
 	page = [_clean_row(row, children) for row in page]
@@ -1325,7 +1390,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 				},
 				{
 					"key": "cluster",
-					"label": _("Cluster"),
+					"label": _("Cụm tuyển sinh"),
 					"options": [
 						{"label": _label(row, "cluster_name"), "value": row.name}
 						for row in sources["clusters"]
@@ -1333,7 +1398,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 				},
 				{
 					"key": "zone",
-					"label": _("Zone"),
+					"label": _("Địa bàn"),
 					"options": [
 						{"label": _label(row, "zone_name"), "value": row.name} for row in sources["zones"]
 					],
@@ -1589,7 +1654,7 @@ def _validate_topology_target(action, target_id, team_id=None, staff_id=None):
 	if not frappe.db.get_value("CRM Team", team_id, "is_active"):
 		_command_error("TEAM_INACTIVE", "Team đích đã tắt.")
 	if not frappe.db.get_value("CRM Staff", staff_id, "is_active"):
-		_command_error("STAFF_INACTIVE", "CRM Staff đích đã tắt.")
+		_command_error("STAFF_INACTIVE", "Nhân sự nhận Lead đã tắt.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
 		filters={"parent": staff_id, "parenttype": "CRM Staff", "team": team_id},
@@ -1798,7 +1863,7 @@ def get_assignment_batch_impact(high_school_ids, team_id=None, staff_id=None):
 	team_id = _required_command_text(team_id, "team_id") if team_id else None
 	staff_id = _required_command_text(staff_id, "staff_id") if staff_id else None
 	if not team_id or not staff_id:
-		_command_error("INVALID_INPUT", "Batch mapping cần Team và CRM Staff đích.")
+		_command_error("INVALID_INPUT", "Batch mapping cần Team và Nhân sự nhận Lead.")
 	rows = [_batch_validation_row(school_id, team_id, staff_id) for school_id in school_ids]
 	return {
 		"action": "school_assignment_batch",
@@ -1854,7 +1919,7 @@ def apply_assignment_batch_command(
 		correlation_id or str(uuid.uuid4()), "correlation_id", maximum=140
 	)
 	if not team_id or not staff_id:
-		_command_error("INVALID_INPUT", "Batch mapping cần Team và CRM Staff đích.")
+		_command_error("INVALID_INPUT", "Batch mapping cần Team và Nhân sự nhận Lead.")
 	if not _command_bool(replace_existing):
 		_command_error("BATCH_CONFIRMATION_REQUIRED", "Batch mapping cần xác nhận thay thế mapping hiện tại.")
 	if expected_revisions in (None, ""):

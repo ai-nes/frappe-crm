@@ -254,6 +254,45 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		self.assertEqual(len(result["queue"]["actions"]), 8)
 
 
+class TestDirectorNextBestActionScope(FrappeTestCase):
+	def test_sale_and_ctv_scope_students_to_the_current_staff_owner(self):
+		for profile in ("sales", "ctv_sale"):
+			with self.subTest(profile=profile):
+				seen = {}
+
+				def fake_get_list(doctype, **kwargs):
+					seen[doctype] = kwargs
+					return [{"name": "STU-1"}]
+
+				with patch.object(nba.frappe.db, "get_value", return_value="STAFF-1"), patch(
+					"frappe.get_list", side_effect=fake_get_list
+				):
+					student_ids = nba._students_for_year(
+						"2026", {"user": "sales@example.com", "profile": profile}
+					)
+
+				self.assertEqual(student_ids, ["STU-1"])
+				self.assertEqual(
+					seen["CRM Student"]["filters"],
+					{"admission_year": "2026", "owner_staff": "STAFF-1"},
+				)
+
+	def test_lead_sales_keeps_the_existing_team_and_pool_permission_scope(self):
+		seen = {}
+
+		def fake_get_list(doctype, **kwargs):
+			seen[doctype] = kwargs
+			return [{"name": "STU-1"}]
+
+		with patch("frappe.get_list", side_effect=fake_get_list):
+			student_ids = nba._students_for_year(
+				"2026", {"user": "lead@example.com", "profile": "lead_sales"}
+			)
+
+		self.assertEqual(student_ids, ["STU-1"])
+		self.assertEqual(seen["CRM Student"]["filters"], {"admission_year": "2026"})
+
+
 class _FakeAction:
 	def __init__(self, decision_revision, action_revision):
 		self.name = "ACT-2026-0001"
@@ -556,3 +595,30 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 		result, seen = self._run([_recommendation_row()], limit="5")
 		self.assertEqual(seen["CRM Recommendation"]["limit_page_length"], 5)
 		self.assertEqual(result["meta"]["limit"], 5)
+
+	def test_sale_recommendations_are_scoped_to_the_current_staff_owner(self):
+		seen = {}
+
+		def fake_get_list(doctype, **call):
+			seen[doctype] = call
+			if doctype == "CRM Student":
+				return [{"name": "STU-1"}]
+			if doctype == "CRM Recommendation":
+				return [_recommendation_row()]
+			return []
+
+		with patch.object(
+			nba,
+			"require_director_access",
+			return_value={"user": "sale@example.com", "profile": "sales"},
+		) as access, patch.object(nba, "resolve_admission_year", return_value="2026"), patch.object(
+			nba.frappe.db, "get_value", return_value="STAFF-1"
+		), patch("frappe.get_list", side_effect=fake_get_list):
+			result = nba.get_director_recommendations(admissionYear="2026")
+
+		access.assert_called_once_with(allow_sales=True)
+		self.assertEqual(result["meta"]["count"], 1)
+		self.assertEqual(
+			seen["CRM Student"]["filters"],
+			{"admission_year": "2026", "owner_staff": "STAFF-1"},
+		)

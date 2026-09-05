@@ -1,5 +1,5 @@
 <template>
-  <Dialog v-model="show" :options="{ title: row?.crm_staff?.name ? __('Chỉnh thông tin phụ trách') : __('Tạo thông tin phụ trách'), size: 'xl' }" @close="reset">
+  <Dialog v-model="show" :options="{ title: row?.crm_staff?.name ? __('Chỉnh thông tin phụ trách') : __('Tạo thông tin phụ trách'), size: '4xl' }" @close="reset">
     <template #body-content>
       <div class="space-y-5" data-testid="staff-context-modal">
         <div class="rounded-md border border-blue-100 bg-blue-50/70 p-3 text-sm text-blue-900">

@@ -12,7 +12,7 @@ import frappe
 ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director", "Admissions Operations"}
 
 DASHBOARD_ROLE_GATES = {
-	"sale": {"Sale", "Lead Sales", "CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader", *ADMIN_ROLES},
+	"sale": {"Sale", "CTV Sale", "Lead Sales", "CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader", *ADMIN_ROLES},
 	"digital_marketing": {"Marketing", "Marketing Operator", "Marketing Lead", "Team Leader", *ADMIN_ROLES},
 	"offline_marketing": {"Marketing", "Promoter", "Promoter-PR", "Marketing Operator", "Marketing Lead", "Team Leader", *ADMIN_ROLES},
 	"admissions_director": {"Admissions Director", "Admissions Operations", *ADMIN_ROLES},

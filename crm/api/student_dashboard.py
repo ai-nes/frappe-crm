@@ -7,11 +7,15 @@ from crm.fcrm.student_contact_conversion import contacts_for_student, students_f
 from crm.utils import get_docs_by_phone, get_phone_lookup_terms
 
 
-@frappe.whitelist()
-def get_student_records_by_phone(phone: str | None = None):
+def _require_authenticated() -> None:
 	actor = getattr(getattr(frappe, "session", None), "user", None)
 	if not actor or actor in {"Guest", "None"}:
 		frappe.throw("Authentication is required.", frappe.PermissionError)
+
+
+@frappe.whitelist()
+def get_student_records_by_phone(phone: str | None = None):
+	_require_authenticated()
 	if not phone:
 		return {
 			"students": [],
@@ -81,11 +85,11 @@ def get_student_records_by_phone(phone: str | None = None):
 	# 4. Query CRM Score History
 	score_histories = []
 	if student_names:
-		score_histories_list = frappe.get_all(
+		score_histories_list = _scoped_list(
 			"CRM Score History",
 			filters={"student": ["in", student_names]},
 			fields=["name"],
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for sh in score_histories_list:
 			try:
@@ -103,11 +107,11 @@ def get_student_records_by_phone(phone: str | None = None):
 		or_filters.append(["crm_contact", "in", contact_names])
 
 	if or_filters:
-		interactions_list = frappe.get_all(
+		interactions_list = _scoped_list(
 			"CRM Interaction",
 			or_filters=or_filters,
 			fields=["name"],
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for ix in interactions_list:
 			try:
@@ -119,11 +123,11 @@ def get_student_records_by_phone(phone: str | None = None):
 	# 6. Query CRM Intent
 	intents = []
 	if student_names:
-		intents_list = frappe.get_all(
+		intents_list = _scoped_list(
 			"CRM Intent",
 			filters={"student": ["in", student_names]},
 			fields=["name"],
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for it in intents_list:
 			try:
@@ -135,11 +139,11 @@ def get_student_records_by_phone(phone: str | None = None):
 	# 7. Query CRM Influence
 	influences = []
 	if contact_names:
-		influences_list = frappe.get_all(
+		influences_list = _scoped_list(
 			"CRM Influence",
 			filters={"crm_contact": ["in", contact_names]},
 			fields=["name"],
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for inf in influences_list:
 			try:
@@ -190,6 +194,32 @@ def _can_read_doc(doctype: str, name: str | None) -> bool:
 	return doc.has_permission("read")
 
 
+def _scoped_list(doctype: str, **kwargs):
+	"""Read related rows without requiring every role to have every projection DocPerm."""
+	try:
+		return frappe.get_list(doctype, **kwargs)
+	except frappe.PermissionError:
+		return []
+
+
+def _visible_students_for_contact(contact: str | None) -> list[str]:
+	"""Return only Student links visible in the current session."""
+	return [
+		student
+		for student in dict.fromkeys(students_for_contact(contact) if contact else [])
+		if _can_read_doc("CRM Student", student)
+	]
+
+
+def _visible_contacts_for_student(student: str | None) -> list[str]:
+	"""Return only Contact links visible in the current session."""
+	return [
+		contact
+		for contact in dict.fromkeys(contacts_for_student(student) if student else [])
+		if _can_read_doc("CRM Contact", contact)
+	]
+
+
 def _score_history_payload(history):
 	details = []
 	for detail in history.get("details") or []:
@@ -226,7 +256,7 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 	if not student and contact:
 		if not _can_read_doc("CRM Contact", contact):
 			frappe.throw("Not permitted", frappe.PermissionError)
-		students = students_for_contact(contact)
+		students = _visible_students_for_contact(contact)
 		if len(students) != 1:
 			frappe.throw("A Contact is linked to multiple Student cases; select a Student.", frappe.ValidationError)
 		student = students[0]
@@ -243,13 +273,12 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 	if not _can_read_doc("CRM Student", student):
 		frappe.throw("Not permitted", frappe.PermissionError)
 
-	score_names = frappe.get_all(
+	score_names = _scoped_list(
 		"CRM Score History",
 		filters={"student": student},
 		fields=["name"],
 		order_by="scoring_time desc, creation desc",
 		limit_page_length=int(limit or 20),
-		ignore_permissions=True,
 	)
 	histories = []
 	for row in score_names:
@@ -258,7 +287,7 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 		except frappe.DoesNotExistError:
 			continue
 
-	intents = frappe.get_all(
+	intents = _scoped_list(
 		"CRM Intent",
 		filters={"student": student},
 		fields=[
@@ -273,7 +302,6 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 		],
 		order_by="modified desc",
 		limit_page_length=100,
-		ignore_permissions=True,
 	)
 
 	template = None
@@ -300,8 +328,9 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist()
 def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, suggestedEventLimit: int = 10, eventStatus: str | None = None):
+	_require_authenticated()
 	if not phone:
 		return {
 			"isSuccess": False,
@@ -322,6 +351,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	student_doc = None
 	for s in students_list:
+		if not _can_read_doc("CRM Student", s.name):
+			continue
 		try:
 			student_doc = frappe.get_doc("CRM Student", s.name)
 			break
@@ -333,6 +364,8 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	contacts_list = get_docs_by_phone("CRM Contact", phone)
 
 	for c in contacts_list:
+		if not _can_read_doc("CRM Contact", c.name):
+			continue
 		try:
 			contact_doc = frappe.get_doc("CRM Contact", c.name)
 			break
@@ -341,7 +374,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	# Try to link if only one is found
 	if student_doc and not contact_doc:
-		linked = contacts_for_student(student_doc.name)
+		linked = _visible_contacts_for_student(student_doc.name)
 		if linked:
 			try:
 				contact_doc = frappe.get_doc("CRM Contact", linked[0])
@@ -349,7 +382,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 				pass
 
 	if contact_doc and not student_doc:
-		students = students_for_contact(contact_doc.name)
+		students = _visible_students_for_contact(contact_doc.name)
 		if len(students) == 1:
 			try:
 				student_doc = frappe.get_doc("CRM Student", students[0])
@@ -364,18 +397,19 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"data": None
 		}
 
-	student_name = student_doc.name if student_doc else (students_for_contact(contact_doc.name)[0] if contact_doc and len(students_for_contact(contact_doc.name)) == 1 else None)
+	linked_students = _visible_students_for_contact(contact_doc.name) if contact_doc and not student_doc else []
+	student_name = student_doc.name if student_doc else (linked_students[0] if len(linked_students) == 1 else None)
 	contact_name = contact_doc.name if contact_doc else None
 
 	# 3. Fetch related documents
 	score_histories = []
 	if student_name:
-		score_histories_list = frappe.get_all(
+		score_histories_list = _scoped_list(
 			"CRM Score History",
 			filters={"student": student_name},
 			fields=["name"],
 			order_by="scoring_time desc",
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for sh in score_histories_list:
 			try:
@@ -391,12 +425,12 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		or_filters.append(["crm_contact", "=", contact_name])
 
 	if or_filters:
-		interactions_list = frappe.get_all(
+		interactions_list = _scoped_list(
 			"CRM Interaction",
 			or_filters=or_filters,
 			fields=["name"],
 			order_by="interaction_datetime desc",
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for ix in interactions_list:
 			try:
@@ -406,12 +440,12 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	intents = []
 	if student_name:
-		intents_list = frappe.get_all(
+		intents_list = _scoped_list(
 			"CRM Intent",
 			filters={"student": student_name},
 			fields=["name"],
 			order_by="modified desc",
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for it in intents_list:
 			try:
@@ -421,11 +455,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	influences = []
 	if contact_name:
-		influences_list = frappe.get_all(
+		influences_list = _scoped_list(
 			"CRM Influence",
 			filters={"crm_contact": contact_name},
 			fields=["name"],
-			ignore_permissions=True
+			limit_page_length=0,
 		)
 		for inf in influences_list:
 			try:
@@ -437,7 +471,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	full_name = student_doc.student_name if student_doc else (contact_doc.full_name if contact_doc else "")
 	email = student_doc.email if student_doc else (contact_doc.email if contact_doc else "")
 	phone_val = student_doc.phone if student_doc else (contact_doc.phone if contact_doc else "")
-	
+
 	cohort = ""
 	contact_cohort_start = getattr(contact_doc, "cohort_start_year", None) if contact_doc else None
 	cohort_source = contact_doc if contact_cohort_start else student_doc
@@ -460,7 +494,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	high_school = None
 	hs_link = student_doc.high_school if student_doc else (contact_doc.high_school if contact_doc else None)
 	prov_link = student_doc.province if student_doc else (contact_doc.province if contact_doc else None)
-	
+
 	if hs_link or prov_link:
 		high_school = {
 			"province": prov_link or "",
@@ -606,7 +640,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"Payment": "payment"
 		}
 		ix_type = type_map.get(ix.get("interaction_type"), "conversation")
-		
+
 		ix_intents = []
 		ix_dominant_intent = None
 		for intent in intents:
@@ -637,7 +671,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	intent_items = []
 	for intent in intents:
 		key = intent_key_map.get(intent.get("intent_type"), "admission_inquiry")
-		
+
 		intent_type = intent_type_map.get(key, "admission")
 
 		importance_map = {
@@ -676,12 +710,12 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	}
 
 	if contact_doc:
-		participations = list(frappe.get_all(
+		participations = list(_scoped_list(
 			"CRM Marketing Engagement",
 			filters={"crm_contact": contact_doc.name, "engagement_kind": "event_participation"},
 			fields=["name", "crm_event", "status", "registered_at", "checked_in_at"],
 			order_by="registered_at desc",
-			ignore_permissions=True,
+			limit_page_length=0,
 		))
 		participations.sort(key=lambda row: str(row.registered_at or ""), reverse=True)
 		for participation in participations:
@@ -718,10 +752,10 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	# --- Suggested Events Mapping ---
 	suggested_event_items = []
-	upcoming_evts = frappe.get_all(
+	upcoming_evts = _scoped_list(
 		"CRM Event",
 		fields=["name", "title", "event_date", "start_datetime", "notes"],
-		ignore_permissions=True
+		limit_page_length=0,
 	)
 
 	for ue in upcoming_evts:
@@ -734,7 +768,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 				"matchScore": 90,
 				"matchReason": "Phù hợp ngành học CNTT"
 			})
-			
+
 	suggested_event_items = suggested_event_items[:int(suggestedEventLimit)]
 
 	# --- Lead Score Mapping ---
@@ -748,7 +782,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			tier = "warm"
 		else:
 			tier = "cold"
-			
+
 		breakdown = []
 		details_list = latest_score_history.get("details") or []
 		for det in details_list:

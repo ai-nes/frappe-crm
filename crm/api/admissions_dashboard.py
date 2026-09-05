@@ -1,33 +1,26 @@
 from datetime import timedelta
 
 import frappe
+from frappe.model.db_query import DatabaseQuery
 from frappe.utils import add_days, get_first_day, get_last_day, now_datetime, nowdate
 
+from crm.api._ai_staleness import ai_field_or_unavailable, ai_staleness_threshold_seconds
 from crm.api.admissions_dashboard_auth import check_dashboard_access
 from crm.fcrm.attribution import (
 	get_equal_credit_by_campaign_for_students,
 	get_last_touch_campaign_by_student,
 )
 from crm.fcrm.student_contact_conversion import students_for_contact
-from crm.api._ai_staleness import ai_field_or_unavailable, ai_staleness_threshold_seconds
 
 
-def _insight_scope_sql(scoped_staff):
-	"""Return the same campus scope used by the dashboard's Contact queries."""
-	if scoped_staff is None:
-		return "", ()
-	if not scoped_staff:
-		return "AND 1 = 0", ()
-	placeholders = ", ".join("%s" for _ in scoped_staff)
-	return (
-		"AND ("
-		"insight.student IN (SELECT student_scope.name FROM `tabCRM Student` student_scope "
-		f"WHERE student_scope.owner_staff IN ({placeholders})) OR "
-		"insight.contact IN (SELECT contact_scope.name FROM `tabCRM Contact` contact_scope "
-		f"WHERE contact_scope.assigned_to IN ({placeholders}))"
-		")",
-		tuple(scoped_staff) + tuple(scoped_staff),
+def _insight_scope_sql():
+	"""Apply the current session's row scope to the AI insight aggregate."""
+	condition = DatabaseQuery("CRM AI Lead Insight", user=frappe.session.user).build_match_conditions(
+		as_condition=True
 	)
+	if not condition:
+		return "", ()
+	return f"AND ({condition.replace('`tabCRM AI Lead Insight`', 'insight')})", ()
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -64,7 +57,7 @@ def get_sales_dashboard(
 ):
 	# The public API is always authorized and scoped as the authenticated session
 	# user. A caller-supplied ``user`` must never select a different role/campus.
-	scoped_staff = check_dashboard_access("sale")
+	check_dashboard_access("sale")
 	from_date, to_date = _normalize_date_range(from_date, to_date)
 	diff = frappe.utils.date_diff(to_date, from_date) or 1
 	prev_from_date = str(add_days(from_date, -diff))
@@ -82,9 +75,6 @@ def get_sales_dashboard(
 		["is_test_record", "=", 0],
 	]
 
-	if scoped_staff:
-		base_filters.append(["assigned_to", "in", scoped_staff])
-		prev_filters.append(["assigned_to", "in", scoped_staff])
 	if sales_team:
 		staff_in_team = _staff_names_in_sales_team(sales_team)
 		base_filters.append(["assigned_to", "in", staff_in_team])
@@ -275,7 +265,7 @@ def get_sales_dashboard(
 			interest_freshness_params = (interest_cutoff,) if interest_cutoff else ()
 			if interest_cutoff:
 				interest_freshness_sql += " AND insight.ai_generated_at >= %s"
-		insight_scope_sql, insight_scope_params = _insight_scope_sql(scoped_staff)
+		insight_scope_sql, insight_scope_params = _insight_scope_sql()
 
 		for idx, dim in enumerate(core_dimensions):
 			# Count distinct contacts with this interest
@@ -601,7 +591,7 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 	# Existing dashboard filters are Contact-scoped. Resolve the bounded Student
 	# cohort once, then run the canonical Student-first attribution projection
 	# against that cohort so campus/date/source filters are not dropped.
-	scoped_contacts = set(frappe.db.get_all("CRM Contact", filters=base_filters, pluck="name"))
+	scoped_contacts = set(frappe.get_list("CRM Contact", filters=base_filters, pluck="name", limit_page_length=0))
 	scoped_students = {
 		student
 		for contact in scoped_contacts
@@ -618,10 +608,13 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 		attributed_students = students_by_campaign.get(camp.name) or set()
 		# Attribution is Student-first. Contact-only filters are intentionally
 		# not applied to this canonical projection.
-		attributed_conversions = frappe.db.count(
+		count_rows = frappe.get_list(
 			"CRM Student",
 			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
+			fields=["count(name) as count"],
+			limit_page_length=1,
 		)
+		attributed_conversions = int(count_rows[0].get("count") or 0) if count_rows else 0
 		cost_data.append({
 			"campaign": c_name,
 			"spend": camp_spend,
@@ -1051,20 +1044,20 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 
 	# One bounded Student query + batched evidence reads; this avoids the former
 	# per-Contact attribution call (and does not depend on Contact permission).
-	scoped_contacts = set(frappe.db.get_all("CRM Contact", filters=base_filters, pluck="name"))
+	scoped_contacts = set(frappe.get_list("CRM Contact", filters=base_filters, pluck="name", limit_page_length=0))
 	scoped_student_names = {
 		student
 		for contact in scoped_contacts
 		for student in students_for_contact(contact)
 	}
-	enrolled_students = frappe.db.get_all(
+	enrolled_students = frappe.get_list(
 		"CRM Student",
 		filters={
 			"name": ["in", list(scoped_student_names) or ["__none__"]],
 			"enrollment_status": "Đã nhập học",
 		},
 		pluck="name",
-		limit=200,
+		limit_page_length=200,
 	)
 	multi_touch_credit_by_campaign = get_equal_credit_by_campaign_for_students(enrolled_students)
 	multi_touch_data = [

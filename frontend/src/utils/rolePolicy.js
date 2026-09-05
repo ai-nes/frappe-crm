@@ -175,6 +175,27 @@ export function hasAnyCapability(user, capabilities) {
   return capabilities.some((capability) => hasCapability(user, capability))
 }
 
+// The aggregate task endpoint has its own server-side profile gate. CTV Sale
+// is intentionally not granted the broader student.execute capability, so
+// this route must preflight against the profile/legacy role instead.
+export function canAccessSalesTaskWorkbench(user) {
+  const allowedProfiles = ['sales', 'ctv_sale', 'lead_sales']
+  const allowedRoles = [
+    'Sale',
+    'CTV Sale',
+    'Lead Sales',
+    'CTV-Sale',
+    'Sales User',
+    'Sales Manager',
+    'Team Leader',
+  ]
+  return Boolean(
+    allowedProfiles.includes(user?.crm_profile) ||
+    allowedRoles.includes(user?.role) ||
+    hasCapability(user, 'system.configure'),
+  )
+}
+
 /**
  * Frontend preflight only. The workspace reader is the authority for role,
  * team, campus and feature-flag availability; an unavailable response must
