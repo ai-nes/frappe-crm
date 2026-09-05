@@ -32,6 +32,9 @@
             <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.teams || 0 }}</strong> {{ __('nhóm') }}</span>
             <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.staff || 0 }}</strong> {{ __('nhân sự') }}</span>
             <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.active_students || 0 }}</strong> {{ __('Lead hoạt động') }}</span>
+            <span v-if="summary.direct_school_mappings" class="text-blue-700"><strong class="tabular-nums font-semibold">{{ summary.direct_school_mappings }}</strong> {{ __('trường gán riêng') }}</span>
+            <span v-if="summary.zone_inherited_school_mappings" class="text-blue-700"><strong class="tabular-nums font-semibold">{{ summary.zone_inherited_school_mappings }}</strong> {{ __('trường theo địa bàn') }}</span>
+            <span v-if="summary.unresolved_school_mappings" class="text-orange-700"><strong class="tabular-nums font-semibold">{{ summary.unresolved_school_mappings }}</strong> {{ __('trường cần setup') }}</span>
             <span v-if="summary.unassigned_rows" class="text-orange-700"><strong class="tabular-nums font-semibold">{{ summary.unassigned_rows }}</strong> {{ __('dòng cần setup') }}</span>
           </div>
         </div>

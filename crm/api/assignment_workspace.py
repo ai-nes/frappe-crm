@@ -291,7 +291,11 @@ def _identity_row(user, staff_by_user, memberships_by_staff, team_labels=None):
 	}:
 		if not staff:
 			issues.append(
-				{"code": "crm_staff_missing", "label": _("Chưa có profile Staff"), "next_action": "create_staff"}
+				{
+					"code": "crm_staff_missing",
+					"label": _("Chưa có profile Staff"),
+					"next_action": "create_staff",
+				}
 			)
 		elif not staff.is_active:
 			issues.append(
@@ -841,6 +845,38 @@ def _row_status(
 	return "healthy"
 
 
+def _inherited_zone_mapping(zone_name, campus_id, team_map, team_zone_by_zone, pool_by_team):
+	"""Resolve the effective Zone -> Team -> Pool mapping for a school row.
+
+	A school-level assignment is an optional override.  When it is absent, the
+	student routing pipeline uses the active Zone mapping and the single active
+	Pool for the student's Campus.  Keep the overview projection aligned with
+	that runtime rule without creating one assignment row per school.
+	"""
+	if not zone_name:
+		return None
+
+	zone_assignments = team_zone_by_zone.get(zone_name, [])
+	if len(zone_assignments) != 1:
+		return None
+	zone_assignment = zone_assignments[0]
+	team_id = zone_assignment.get("team") if zone_assignment else None
+	team = team_map.get(team_id)
+	if not team or not team.get("is_active") or team.get("team_type") != "Sales":
+		return None
+
+	pools = [pool for pool in pool_by_team.get(team_id, []) if pool.get("campus") == campus_id]
+	if len(pools) != 1:
+		return None
+
+	return {
+		"team": team_id,
+		"pool": pools[0].get("name"),
+		"assignment": zone_assignment.get("name"),
+		"revision": zone_assignment.get("revision"),
+	}
+
+
 def _overview_rows(sources, context):
 	province_map = {row.name: row for row in sources["provinces"]}
 	cluster_map = {row.name: row for row in sources["clusters"]}
@@ -856,7 +892,9 @@ def _overview_rows(sources, context):
 	assignment_by_school = defaultdict(list)
 	for assignment in sources["school_assignments"]:
 		assignment_by_school[assignment.high_school].append(assignment)
-	team_zone_by_zone = {row.zone: row for row in sources["zone_assignments"]}
+	team_zone_rows_by_zone = defaultdict(list)
+	for assignment in sources["zone_assignments"]:
+		team_zone_rows_by_zone[assignment.zone].append(assignment)
 	team_zone_by_team = defaultdict(list)
 	for assignment in sources["zone_assignments"]:
 		team_zone_by_team[assignment.team].append(assignment)
@@ -1016,8 +1054,15 @@ def _overview_rows(sources, context):
 			continue
 		row_id = f"zone:{zone.name}"
 		zone_parent[zone.name] = row_id
-		zone_assignment = team_zone_by_zone.get(zone.name)
-		zone_team = team_map.get(zone_assignment.team) if zone_assignment else team_map.get(zone.current_team)
+		zone_assignments = team_zone_rows_by_zone.get(zone.name, [])
+		zone_assignment = zone_assignments[0] if len(zone_assignments) == 1 else None
+		zone_team = (
+			team_map.get(zone_assignment.team)
+			if zone_assignment
+			else team_map.get(zone.current_team)
+			if not zone_assignments
+			else None
+		)
 		zone_status = _row_status(
 			assigned=bool(zone_team),
 			placeholder=bool(zone.get("is_placeholder")),
@@ -1074,20 +1119,46 @@ def _overview_rows(sources, context):
 			campus = next((c for c in sources["campuses"] if c.get("province") == province_id), None)
 			parent = f"campus:{campus.name}" if campus else None
 		assignments = assignment_by_school.get(school.name, [])
-		team_ids = {assignment.team for assignment in assignments if assignment.team in team_map}
-		staff_ids = {assignment.staff for assignment in assignments if assignment.staff in staff_map}
+		effective_assignments = [
+			assignment for assignment in assignments if not assignment.get("needs_review")
+		]
+		team_ids = {assignment.team for assignment in effective_assignments if assignment.team in team_map}
+		staff_ids = {
+			assignment.staff for assignment in effective_assignments if assignment.staff in staff_map
+		}
 		pools_for_school = {pool.name for team in team_ids for pool in pool_by_team.get(team, [])}
+		campus = next((c for c in sources["campuses"] if c.get("province") == province_id), None)
+		if not campus and len(sources["campuses"]) == 1:
+			# A campus can operate across multiple provinces.  When there is one
+			# canonical campus, use it as the runtime routing context instead of
+			# treating every non-matching province as an unconfigured school.
+			campus = sources["campuses"][0]
+		campus_id = campus.name if campus else None
+		assignment_source = "school_override" if effective_assignments else "unresolved"
+		inherited_mapping = None
+		if not effective_assignments and zone:
+			inherited_mapping = _inherited_zone_mapping(
+				zone.name,
+				campus_id,
+				team_map,
+				team_zone_rows_by_zone,
+				pool_by_team,
+			)
+			if inherited_mapping:
+				team_ids = {inherited_mapping["team"]}
+				pools_for_school = {inherited_mapping["pool"]}
+				assignment_source = "zone_inherited"
 		capacity_warning = any(
 			_workload_status(active_staff_count.get(staff_id, 0), capacity.get(staff_id))
 			in {"near_capacity", "over_capacity"}
 			for staff_id in staff_ids
 		)
 		status = _row_status(
-			assigned=bool(assignments),
+			assigned=bool(effective_assignments) or bool(inherited_mapping),
 			needs_review=any(bool(assignment.needs_review) for assignment in assignments),
 			placeholder=bool(zone and zone.get("is_placeholder")),
 			capacity_warning=capacity_warning,
-			missing_pool=bool(assignments) and not pools_for_school,
+			missing_pool=bool(effective_assignments) and not pools_for_school,
 		)
 		parent_values = {
 			"campus": {campus_for_team(team_id) for team_id in team_ids if campus_for_team(team_id)} or set(),
@@ -1098,7 +1169,6 @@ def _overview_rows(sources, context):
 			"team": team_ids,
 			"staff": staff_ids,
 		}
-		campus = next((c for c in sources["campuses"] if c.get("province") == province_id), None)
 		campus_name = _label(campus, "campus_name") if campus else None
 		if not campus_name:
 			campus_name = _label(team_map.get(next(iter(team_ids), None)), "campus") if team_ids else None
@@ -1132,6 +1202,10 @@ def _overview_rows(sources, context):
 					_label(next(pool for pool in sources["pools"] if pool.name == pool_id), "pool_name")
 					for pool_id in pools_for_school
 				),
+				assignment_source=assignment_source,
+				inherited_from_zone=assignment_source == "zone_inherited",
+				has_stale_school_override=bool(assignments) and not effective_assignments,
+				mapping_revision=inherited_mapping.get("revision") if inherited_mapping else None,
 				revision=_school_assignment_revision(assignments),
 				active_students=student_by["high_school"].get(school.name, 0),
 				needs_review=any(bool(assignment.needs_review) for assignment in assignments),
@@ -1348,6 +1422,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 	status_counts = defaultdict(int)
 	for row in rows:
 		status_counts[row.get("status", "healthy")] += 1
+	school_rows = [row for row in rows if row.get("level") == "high_school"]
 	missing_sources = [doctype for doctype in REQUIRED_DOCTYPES if not _doctype_exists(doctype)]
 	policies = sources.get("policies", [])
 	return {
@@ -1369,6 +1444,15 @@ def get_overview(filters=None, cursor=None, limit=50):
 			"capacity_warning_rows": status_counts["capacity_warning"],
 			"active_students": active_students,
 			"active_policies": len(policies),
+			"direct_school_mappings": sum(
+				row.get("assignment_source") == "school_override" for row in school_rows
+			),
+			"zone_inherited_school_mappings": sum(
+				row.get("assignment_source") == "zone_inherited" for row in school_rows
+			),
+			"unresolved_school_mappings": sum(
+				row.get("assignment_source") == "unresolved" for row in school_rows
+			),
 		},
 		"filter_schema": {
 			"fields": [
