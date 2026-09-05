@@ -29,6 +29,12 @@ test.describe('Assignment setup and routing journey', () => {
     await expect(page.getByRole('heading', { name: /Cơ chế phân bổ lead|assignment setup.*overview/i })).toBeVisible()
     await expect(page.getByTestId('assignment-overview-table')).toContainText('FPTU Ho Chi Minh Campus')
 
+    // The overview opens at the first useful level. Expand one địa bàn before
+    // selecting a school so the journey follows the same progressive-disclosure UX.
+    await page.getByRole('button', { name: /mở tới địa bàn/i }).click()
+    const firstZoneToggle = page.locator('[data-testid="expand-assignment-node"][data-level="zone"]').first()
+    await expect(firstZoneToggle).toBeVisible()
+    await firstZoneToggle.click()
     const schoolCheckbox = page.getByTestId(/select-school-/).first()
     await expect(schoolCheckbox).toBeVisible()
     await schoolCheckbox.check()
@@ -44,6 +50,7 @@ test.describe('Assignment setup and routing journey', () => {
     await page.getByTestId('save-assignment-batch').click()
     await expect(batch).toBeHidden()
 
+    await page.getByTestId('toggle-readiness-accounts').click()
     const staffActions = page.getByTestId('assignment-actions-auto.sale.a@example.com')
     await expect(staffActions).toBeVisible()
     await staffActions.getByRole('button', { name: /thao tác/i }).click()

@@ -2,6 +2,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.assignment_workspace import (
+	_clean_row,
 	_expected_revision_map,
 	_filter_rows,
 	_normalize_filters,
@@ -65,6 +66,14 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 		self.assertEqual(_workload_status(5, {"max_active_students": 5}), "over_capacity")
 		self.assertEqual(_workload_status(9, {"max_active_students": 10}), "near_capacity")
 		self.assertEqual(_workload_status(2, {"max_active_students": 5}), "healthy")
+
+	def test_clean_row_keeps_expand_affordance_when_children_are_outside_page(self):
+		children = {"cluster:1": ["zone:1"]}
+		cleaned = _clean_row(
+			{"id": "cluster:1", "label": "Cụm 1", "has_children": False, "filter_values": {}},
+			children,
+		)
+		self.assertTrue(cleaned["has_children"])
 
 	def test_school_revision_is_stable_for_same_active_mapping(self):
 		rows = [
