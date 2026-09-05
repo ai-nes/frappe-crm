@@ -39,7 +39,7 @@
         <strong class="tabular-nums font-semibold">{{ summary.permission_profile_missing }}</strong>
       </span>
       <span v-if="summary.crm_staff_missing" class="text-orange-700">
-        {{ __('Thiếu CRM Staff') }}:
+        {{ __('Thiếu profile Staff') }}:
         <strong class="tabular-nums font-semibold">{{ summary.crm_staff_missing }}</strong>
       </span>
       <span v-if="summary.team_membership_missing" class="text-orange-700">
@@ -52,9 +52,25 @@
       </span>
     </div>
 
-    <div v-if="visibleRows.length" class="mt-4 overflow-x-auto rounded-md border border-outline-gray-1">
-      <table class="w-full min-w-[980px] table-fixed text-sm">
-        <thead class="bg-surface-gray-2 text-left text-xs text-ink-gray-6">
+    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+      <p class="text-xs text-ink-gray-5">
+        {{ showAccounts ? __('Đang hiển thị danh sách tài khoản để xử lý.') : __('Chỉ mở danh sách khi cần chỉnh từng tài khoản.') }}
+      </p>
+      <button
+        type="button"
+        class="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-outline-gray-2 px-3 py-2 text-sm font-medium text-ink-gray-7 hover:bg-surface-gray-2 focus:outline-none focus:ring-2 focus:ring-outline-gray-4"
+        :aria-expanded="showAccounts"
+        data-testid="toggle-readiness-accounts"
+        @click="showAccounts = !showAccounts"
+      >
+        <FeatherIcon :name="showAccounts ? 'chevron-up' : 'chevron-down'" class="size-4" aria-hidden="true" />
+        {{ showAccounts ? __('Ẩn danh sách tài khoản') : __('Xem danh sách tài khoản') }}
+      </button>
+    </div>
+
+    <div v-if="showAccounts && visibleRows.length" class="mt-3 max-h-[650px] overflow-auto rounded-md border border-outline-gray-1">
+      <table class="w-full min-w-[1180px] table-fixed text-sm">
+        <thead class="sticky top-0 z-10 bg-surface-gray-2 text-left text-xs text-ink-gray-6">
           <tr>
             <th class="w-[21%] px-3 py-2">{{ __('Tài khoản') }}</th>
             <th class="w-[18%] px-3 py-2">{{ __('Role') }}</th>
@@ -95,7 +111,7 @@
                   {{ row.crm_staff.campus || __('Chưa có Campus') }}
                 </p>
               </template>
-              <span v-else class="text-orange-700">{{ __('Chưa có CRM Staff') }}</span>
+              <span v-else class="text-orange-700">{{ __('Chưa có profile Staff') }}</span>
             </td>
             <td class="px-3 py-3 text-right">
               <IdentityProfileStatus :row="row" />
@@ -125,10 +141,10 @@
         </tbody>
       </table>
     </div>
-    <p v-else class="mt-4 rounded-md bg-surface-gray-2 p-4 text-sm text-ink-gray-5">
+    <p v-else-if="showAccounts" class="mt-4 rounded-md bg-surface-gray-2 p-4 text-sm text-ink-gray-5">
       {{ __('Không có tài khoản cần hiển thị.') }}
     </p>
-    <p v-if="rows.length > maxRows" class="mt-3 text-xs text-ink-gray-5">
+    <p v-if="showAccounts && rows.length > maxRows" class="mt-3 text-xs text-ink-gray-5">
       {{ __('Đang hiển thị {0} tài khoản đầu tiên. Dùng bộ lọc hoặc mở Users để xử lý tiếp.', [maxRows]) }}
     </p>
     <StaffContextModal
@@ -160,6 +176,7 @@ const summary = computed(() => props.data?.summary || {})
 const canEditIdentity = computed(() => Boolean(props.data?.capabilities?.can_edit_identity))
 const staffContextOpen = ref(false)
 const staffContextRow = ref(null)
+const showAccounts = ref(false)
 
 function primaryRole(row) {
   if (row.role_state === 'platform_superuser') return __('Admin')
@@ -197,7 +214,7 @@ function actionOptions(row) {
       onClick: () => openExternal(`/app/user/${encodeURIComponent(row.user)}`),
     },
     {
-      label: row.crm_staff.name ? __('Mở CRM Staff') : __('Mở danh sách Staff'),
+      label: row.crm_staff.name ? __('Mở hồ sơ Staff') : __('Mở danh sách Staff'),
       icon: 'users',
       onClick: () => openExternal(crmStaffHref(row)),
     },

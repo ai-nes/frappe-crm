@@ -27,18 +27,12 @@
             class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-ink-gray-6"
             :aria-label="__('Tóm tắt phân bổ')"
           >
-            <span>
-              <strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.assigned_rows || 0 }}</strong>
-              {{ __('dòng đã mapping') }}
-            </span>
-            <span>
-              <strong class="tabular-nums font-semibold text-orange-700">{{ summary.unassigned_rows || 0 }}</strong>
-              {{ __('dòng cần setup') }}
-            </span>
-            <span>
-              <strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.active_students || 0 }}</strong>
-              {{ __('Lead hoạt động') }}
-            </span>
+            <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.zones || 0 }}</strong> {{ __('địa bàn') }}</span>
+            <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.schools || 0 }}</strong> {{ __('trường') }}</span>
+            <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.teams || 0 }}</strong> {{ __('nhóm') }}</span>
+            <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.staff || 0 }}</strong> {{ __('nhân sự') }}</span>
+            <span><strong class="tabular-nums font-semibold text-ink-gray-9">{{ summary.active_students || 0 }}</strong> {{ __('Lead hoạt động') }}</span>
+            <span v-if="summary.unassigned_rows" class="text-orange-700"><strong class="tabular-nums font-semibold">{{ summary.unassigned_rows }}</strong> {{ __('dòng cần setup') }}</span>
           </div>
         </div>
         <span v-if="data?.contractStatus === 'partial'" class="rounded-full bg-orange-50 px-3 py-1 text-xs font-medium text-orange-800">
