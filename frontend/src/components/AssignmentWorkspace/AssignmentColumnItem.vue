@@ -1,7 +1,7 @@
 <template>
   <div
     class="flex items-center gap-2 rounded-md border-l-2 px-2 py-2 hover:bg-surface-gray-2"
-    :class="active ? 'border-l-blue-500 bg-surface-blue-1' : 'border-l-transparent'"
+    :class="active ? 'border-l-orange-500 bg-orange-50' : 'border-l-transparent'"
   >
     <slot name="prefix" />
     <div
