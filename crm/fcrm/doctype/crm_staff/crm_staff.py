@@ -42,7 +42,7 @@ class CRMStaff(Document):
 
 	def _derive_team_lead_flags(self):
 		for row in self.get("team_memberships") or []:
-			row.is_team_lead = row.function == "Lead Sales"
+			row.is_team_lead = row.function == "Lead Sale"
 
 	def _validate_one_primary_membership_per_context(self):
 		"""One staff member may hold only one *primary* membership per

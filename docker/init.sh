@@ -118,6 +118,10 @@ fi
 
 bench --site crm.localhost clear-cache
 bench --site crm.localhost migrate
+
+# Keep the disposable local site on the canonical CRM role catalog. This is an
+# operational seed step, not a migration patch.
+bench --site crm.localhost execute crm.operations_cutover_canonical_roles.execute || true
 bench use crm.localhost
 
 # Seed the curated demo dataset once, on first site creation. Set
@@ -132,6 +136,8 @@ if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" 
         GOLDEN_KWARGS="{\"service_api_key\": \"${CRM_AGENTS_SERVICE_API_KEY}\", \"service_api_secret\": \"${CRM_AGENTS_SERVICE_API_SECRET}\"}"
     fi
     if bench --site crm.localhost execute crm.demo.seed_golden.golden_seed ${GOLDEN_KWARGS:+--kwargs "${GOLDEN_KWARGS}"}; then
+        bench --site crm.localhost execute crm.operations_cutover_canonical_roles.execute || true
+        bench --site crm.localhost execute crm.operations_reconcile_account_roles.apply || true
         touch "sites/crm.localhost/.demo-seeded"
         echo "Demo seed complete."
     else

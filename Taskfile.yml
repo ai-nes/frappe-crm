@@ -94,6 +94,10 @@ tasks:
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.golden_seed"
+      # Keep fresh/local sites on the same canonical role catalog and account
+      # assignment policy as production after demo accounts are created.
+      - "{{.EXEC}} {{.BENCH}} execute crm.operations_cutover_canonical_roles.execute"
+      - "{{.EXEC}} {{.BENCH}} execute crm.operations_reconcile_account_roles.apply"
 
   seed-school-domain-demo:
     desc: Xóa business demo rồi import toàn bộ trường canonical

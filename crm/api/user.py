@@ -9,6 +9,22 @@ from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES, CRM_BUSINESS_ROLES,
 CRM_MANAGED_ROLES = CANONICAL_SELECTABLE_ROLES
 
 
+@frappe.whitelist()
+def get_all_roles():
+	"""Expose the CRM Administrator profile in the User role selector.
+
+	Frappe normally hides ``Administrator`` as an automatic role and exposes
+	``System Manager``.  CRM uses Administrator as the visible control profile,
+	so keep the technical role out of this business-facing selector.
+	"""
+	from frappe.core.doctype.user.user import get_all_roles as frappe_get_all_roles
+
+	roles = set(frappe_get_all_roles())
+	roles.discard("System Manager")
+	roles.add("Administrator")
+	return sorted(roles)
+
+
 def _require_crm_role_manager():
 	"""Allow role mutations only through the canonical session authority."""
 	from crm.api.session import get_session_role_flags

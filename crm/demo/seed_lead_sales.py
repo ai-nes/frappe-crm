@@ -4,7 +4,7 @@ Run with::
 
     bench --site crm.localhost execute crm.demo.seed_lead_sales.execute
 
-Lead Sales is scoped to its team's cases and unassigned pool, so these cases
+Lead Sale is scoped to its team's cases and unassigned pool, so these cases
 remain pool-owned instead of being assigned as an individual owner.
 """
 
@@ -19,10 +19,10 @@ from crm.demo.seed_ctv_sale import SalesAccountSeed, execute_seed
 
 NAMESPACE = "crm-demo-lead-sales"
 ACCOUNT_EMAIL = "leadsale@gmail.com"
-ACCOUNT_FULL_NAME = "Lead Sales Demo"
-ACCOUNT_ROLE = "Lead Sales"
+ACCOUNT_FULL_NAME = "Lead Sale Demo"
+ACCOUNT_ROLE = "Lead Sale"
 PASSWORD = "123456"
-TEAM_MEMBERSHIP_FUNCTION = "Lead Sales"
+TEAM_MEMBERSHIP_FUNCTION = "Lead Sale"
 
 STUDENT_SCENARIOS: tuple[dict[str, Any], ...] = (
 	{
