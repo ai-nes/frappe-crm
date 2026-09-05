@@ -135,6 +135,11 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.execute"
 
+  seed-lead-sales-reset:
+    desc: Reset 3 học sinh Lead Sales về pool và tạo routing request mới để chạy lại pipeline
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.reset"
+
   seed-reset:
     desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
     cmds:

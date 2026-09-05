@@ -108,6 +108,7 @@ def get_director_students(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
 ) -> dict[str, Any]:
@@ -125,6 +126,7 @@ def get_director_students(
 		q=q,
 		stage=stage,
 		province=province,
+		ownerId=ownerId,
 		sort=sort,
 		order=order,
 	)
@@ -302,6 +304,7 @@ def _parse_query(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
 ) -> dict[str, Any]:
@@ -314,6 +317,9 @@ def _parse_query(
 	normalized_order = str(order or "").strip().lower()
 	if normalized_order not in {"asc", "desc"}:
 		frappe.throw(_("order must be asc or desc."), frappe.ValidationError)
+	owner_id = str(ownerId or "").strip() or None
+	if owner_id and len(owner_id) > 140:
+		frappe.throw(_("ownerId is invalid."), frappe.ValidationError)
 
 	return {
 		"admission_year": admission_year,
@@ -322,6 +328,7 @@ def _parse_query(
 		"query": str(q or "").strip(),
 		"stage": normalized_stage,
 		"province": str(province or "").strip() or None,
+		"owner_id": owner_id,
 		"sort": normalized_sort,
 		"order": normalized_order,
 	}
@@ -418,6 +425,8 @@ def _student_filters(
 	query: dict[str, Any], province: str | None
 ) -> tuple[dict[str, Any], list[list[str]]]:
 	filters: dict[str, Any] = {"admission_year": query["admission_year"]}
+	if query.get("owner_id"):
+		filters["owner_staff"] = query["owner_id"]
 	if province:
 		filters["province"] = province
 	if query["stage"]:

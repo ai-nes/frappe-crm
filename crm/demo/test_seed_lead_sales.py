@@ -8,6 +8,16 @@ from crm.demo import seed_lead_sales
 
 
 class TestSeedLeadSalesData(unittest.TestCase):
+	def test_fixture_source_ids_are_namespaced_and_stable(self):
+		self.assertEqual(
+			seed_lead_sales._fixture_source_ids(),
+			(
+				"crm-demo-lead-sales:student-01",
+				"crm-demo-lead-sales:student-02",
+				"crm-demo-lead-sales:student-03",
+			),
+		)
+
 	def test_account_uses_the_lead_sales_role(self):
 		self.assertEqual(seed_lead_sales.ACCOUNT_EMAIL, "leadsale@gmail.com")
 		self.assertEqual(seed_lead_sales.ACCOUNT_ROLE, "Lead Sales")
