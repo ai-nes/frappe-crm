@@ -2855,6 +2855,57 @@ def _ensure_consent_event(contact: str, consent: str) -> None:
 		frappe.db.set_value("CRM Contact", contact, column, value, update_modified=False)
 
 
+def _ensure_marketing_engagement(student: str, contact: str, campaign: str | None, event: str | None) -> None:
+	"""Record campaign/event attribution as canonical Marketing Engagement rows.
+
+	CRM Contact no longer carries direct crm_campaign/crm_event shortcuts
+	(retired -- see CRM Marketing Engagement); this is the fixture-side
+	equivalent of student_attribution.record_campaign_touchpoint /
+	record_event_participation, inserted directly since seed fixtures run
+	without an authenticated actor/session for the idempotency-keyed RPC.
+	"""
+	if not frappe.db.table_exists("CRM Marketing Engagement"):
+		return
+	previous = frappe.flags.get("student_attribution_migration")
+	frappe.flags.student_attribution_migration = True
+	try:
+		if campaign and not frappe.db.exists(
+			"CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "student": student, "crm_campaign": campaign}
+		):
+			frappe.get_doc({
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "campaign_touch",
+				"reference_doctype": "CRM Campaign",
+				"reference_name": campaign,
+				"crm_campaign": campaign,
+				"crm_contact": contact,
+				"student": student,
+				"touched_at": now_datetime(),
+				"source": "Migrated",
+				"notes": f"{NAMESPACE} recorded touchpoint",
+			}).insert(ignore_permissions=True)
+		if event and not frappe.db.exists(
+			"CRM Marketing Engagement", {"engagement_kind": "event_participation", "student": student, "crm_event": event}
+		):
+			frappe.get_doc({
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": event,
+				"crm_event": event,
+				"crm_contact": contact,
+				"student": student,
+				"status": "Registered",
+				"registered_at": now_datetime(),
+				"notes": f"{NAMESPACE} recorded participation",
+			}).insert(ignore_permissions=True)
+	finally:
+		if previous is None:
+			frappe.flags.pop("student_attribution_migration", None)
+		else:
+			frappe.flags.student_attribution_migration = previous
+
+
 # ---------------------------------------------------------------------------
 # School domain
 # ---------------------------------------------------------------------------

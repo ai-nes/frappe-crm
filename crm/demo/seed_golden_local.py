@@ -866,8 +866,6 @@ def _ensure_student_contact(
 		"aspiration": context["aspiration"],
 		"source": context["source"],
 		"platform": context["platform"],
-		"crm_campaign": context["campaign"],
-		"crm_event": context["event"],
 		"decision_maker": "Student",
 		"preferred_contact_channel": "Phone",
 		"notes": profile["notes"],
@@ -889,6 +887,7 @@ def _ensure_student_contact(
 		else:
 			frappe.flags.student_conversion_service = previous
 	seed_showcase._ensure_consent_event(contact, "Granted")
+	seed_showcase._ensure_marketing_engagement(student, contact, context.get("campaign"), context.get("event"))
 	return contact
 
 

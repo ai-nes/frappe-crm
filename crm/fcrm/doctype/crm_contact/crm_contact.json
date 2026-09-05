@@ -40,8 +40,6 @@
   "section_enrollment",
   "source",
   "platform",
-  "crm_campaign",
-  "crm_event",
   "col_break_enrollment",
   "branch",
   "first_contact_time",
@@ -288,21 +286,6 @@
    "in_standard_filter": 1,
    "label": "Platform",
    "options": "CRM Platform"
-  },
-  {
-   "description": "Deprecated singular campaign shortcut. Use CRM Marketing Engagement for attribution evidence.",
-   "fieldname": "crm_campaign",
-   "fieldtype": "Link",
-   "in_standard_filter": 1,
-   "label": "CRM Campaign (Deprecated)",
-   "options": "CRM Campaign"
-  },
-  {
-   "description": "Deprecated singular event shortcut. Use CRM Marketing Engagement for participation evidence.",
-   "fieldname": "crm_event",
-   "fieldtype": "Link",
-   "label": "CRM Event (Deprecated)",
-   "options": "CRM Event"
   },
   {
    "fieldname": "col_break_enrollment",

@@ -33,8 +33,6 @@ PROTECTED_CASE_FIELDS = frozenset(
 		"next_follow_up",
 		"source",
 		"platform",
-		"crm_campaign",
-		"crm_event",
 		"status_change_reason",
 		"status_change_log",
 		"assignment_log",

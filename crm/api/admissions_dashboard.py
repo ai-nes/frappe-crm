@@ -564,21 +564,17 @@ def _campaign_spend_total(campaign, from_date, to_date):
 
 
 def _contact_names_touched_by_campaign(campaign):
-	"""Union of the deprecated singular crm_campaign field and the canonical
-	CRM Marketing Engagement table, so dashboards read correctly
-	whether a contact's campaign attribution came from before or after the
-	Phase 5 migration."""
-	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
-	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
-	return names
+	"""Contacts with campaign attribution, read from the canonical
+	CRM Marketing Engagement table (CRM Contact.crm_campaign was migrated into
+	it and retired)."""
+	return set(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
 
 
 def _contact_names_with_event_participation():
-	"""Union of the deprecated singular crm_event field and the canonical
-	CRM Marketing Engagement table."""
-	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
-	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
-	return names
+	"""Contacts with event participation, read from the canonical
+	CRM Marketing Engagement table (CRM Contact.crm_event was migrated into
+	it and retired)."""
+	return set(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
 
 
 def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
