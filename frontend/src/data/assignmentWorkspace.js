@@ -36,6 +36,14 @@ export const assignmentWorkspaceWorkloadLabels = Object.freeze({
   over_capacity: 'Vượt tải',
 })
 
+export function assignmentWorkspaceStatusTone(status) {
+  if (status === 'healthy') return 'success'
+  if (status === 'unassigned' || status === 'needs_review') return 'warning'
+  if (status === 'capacity_warning') return 'caution'
+  if (status === 'placeholder_zone') return 'neutral'
+  return 'neutral'
+}
+
 export function cleanAssignmentWorkspaceParams(params = {}) {
   return Object.fromEntries(
     Object.entries(params).filter(

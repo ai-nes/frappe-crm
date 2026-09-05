@@ -6,11 +6,12 @@
         <p class="mt-0.5 text-xs text-ink-gray-5">{{ __('Cụm → Địa bàn → Trường → Nhóm → Nhân sự') }}</p>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-ink-gray-5">{{ visibleRows.length }}/{{ rows.length }} {{ __('dòng đang xem') }}</span>
+        <span class="text-xs text-ink-gray-5">{{ columnCountLabel }}</span>
         <Button size="sm" variant="subtle" :label="__('Mở tới địa bàn')" iconLeft="chevrons-down" @click="expandToLocations" />
         <Button size="sm" variant="subtle" :label="__('Thu gọn')" iconLeft="chevrons-up" @click="collapseAll" />
       </div>
     </div>
+
     <div v-if="loading && !rows.length" class="flex min-h-56 items-center justify-center" role="status">
       <LoadingIndicator class="size-6" />
       <span class="sr-only">{{ __('Đang tải cây phân bổ') }}</span>
@@ -18,100 +19,195 @@
     <div v-else-if="!rows.length" class="p-10 text-center text-sm text-ink-gray-5">
       {{ __('Không có dữ liệu phù hợp với bộ lọc.') }}
     </div>
-    <div v-else class="overflow-x-auto">
-      <table class="w-full min-w-[1320px] table-fixed text-sm">
-        <colgroup>
-          <col v-if="selectable" class="w-12" />
-          <col class="w-[30%]" />
-          <col class="w-[16%]" />
-          <col class="w-[23%]" />
-          <col class="w-[19%]" />
-          <col class="w-[8%]" />
-          <col class="w-[110px]" />
-        </colgroup>
-        <thead class="bg-surface-gray-2 text-left text-xs text-ink-gray-6">
-          <tr>
-            <th v-if="selectable" class="w-10 px-3 py-3">
-              <input
-                type="checkbox"
-                :checked="allVisibleSchoolsSelected"
-                :indeterminate="someVisibleSchoolsSelected && !allVisibleSchoolsSelected"
-                :aria-label="__('Chọn tất cả trường đang hiển thị')"
-                @click.stop="toggleAllVisibleSchools"
-              />
-            </th>
-            <th class="px-4 py-3">{{ __('Cây phân bổ') }}</th>
-            <th class="px-4 py-3">{{ __('Phạm vi') }}</th>
-            <th class="px-4 py-3">{{ __('Phụ trách') }}</th>
-            <th class="px-4 py-3">{{ __('Điều phối') }}</th>
-            <th class="px-4 py-3">{{ __('Trạng thái') }}</th>
-            <th class="px-4 py-3 text-right">{{ __('Thao tác') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="row in visibleRows"
-            :key="row.id"
-            class="cursor-pointer border-t border-outline-gray-1 align-top hover:bg-surface-gray-2/60 focus-within:bg-surface-gray-2/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-400"
-            tabindex="0"
-            :aria-label="`${levelLabel(row.level)}: ${row.label}`"
-            @click="select(row)"
-            @keydown.enter.self.prevent="select(row)"
-            @keydown.space.self.prevent="select(row)"
+
+    <template v-else>
+      <div class="flex flex-wrap items-center gap-1 border-b border-outline-gray-1 bg-surface-gray-1 px-4 py-2.5">
+        <template v-for="(crumb, index) in breadcrumbChain" :key="crumb.id">
+          <FeatherIcon v-if="index > 0" name="chevron-right" class="size-3 shrink-0 text-ink-gray-4" aria-hidden="true" />
+          <button
+            v-if="isCrumbNavigable(crumb)"
+            type="button"
+            class="rounded px-1.5 py-0.5 text-xs font-medium text-ink-gray-6 hover:bg-surface-gray-3 hover:text-ink-gray-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            :class="index === breadcrumbChain.length - 1 ? 'text-ink-gray-9' : ''"
+            @click="goToCrumb(crumb)"
           >
-            <td v-if="selectable" class="px-3 py-3" @click.stop>
-              <input
-                v-if="row.level === 'high_school'"
-                type="checkbox"
-                :checked="selectedSchoolIds.includes(row.high_school_id)"
-                :aria-label="__('Chọn trường {0}', [row.label])"
-                :data-testid="`select-school-${row.high_school_id}`"
-                @change="toggleSchool(row.high_school_id)"
-              />
-            </td>
-            <td class="px-4 py-3" :class="rowTone(row)">
-              <div class="flex items-start gap-1.5" :style="{ paddingLeft: `${indent(row)}px` }">
-                <button
-                  v-if="row.has_children"
-                  type="button"
-                  data-testid="expand-assignment-node"
-                  :data-level="row.level"
-                  class="mt-0.5 inline-flex min-h-11 min-w-11 items-center justify-center rounded text-ink-gray-5 hover:bg-surface-gray-3 hover:text-ink-gray-8 focus:outline-none focus:ring-2 focus:ring-outline-gray-4"
-                  :aria-label="expanded.has(row.id) ? __('Thu gọn') : __('Mở rộng')"
-                  :aria-expanded="expanded.has(row.id)"
-                  @click.stop="toggle(row.id)"
-                >
-                  <FeatherIcon :name="expanded.has(row.id) ? 'chevron-down' : 'chevron-right'" class="size-4" aria-hidden="true" />
-                </button>
-                <span v-else class="inline-block w-5" aria-hidden="true" />
-                <div>
-                  <p class="font-medium text-ink-gray-9">{{ row.label }}</p>
-                  <p class="mt-0.5 text-[11px] uppercase tracking-wide text-ink-gray-5">{{ levelLabel(row.level) }}<span v-if="row.zone_code" class="ml-1 normal-case tracking-normal text-ink-gray-4">· {{ row.zone_code }}</span></p>
-                </div>
-              </div>
-            </td>
-            <td class="px-4 py-3 align-top">
-              <p class="font-medium text-ink-gray-8">{{ scopeTitle(row) }}</p>
-              <p class="mt-0.5 text-xs text-ink-gray-5">{{ scopeMeta(row) }}</p>
-            </td>
-            <td class="px-4 py-3 align-top">
-              <p class="font-medium text-ink-gray-8">{{ ownerTitle(row) }}</p>
-              <p v-if="ownerMeta(row)" class="mt-0.5 max-w-[360px] break-words text-xs leading-5 text-ink-gray-5" :title="ownerMeta(row)">{{ ownerMeta(row) }}</p>
-            </td>
-            <td class="px-4 py-3 align-top">
-              <p class="max-w-[300px] break-words font-medium leading-5 text-ink-gray-8">{{ routingTitle(row) }}</p>
-              <p class="mt-0.5 break-words text-xs leading-5 text-ink-gray-5">{{ routingMeta(row) }}</p>
-            </td>
-            <td class="px-4 py-3"><StatusChip :status="row.status" /></td>
-            <td class="px-4 py-3 text-right">
-              <button type="button" class="text-xs font-medium text-blue-600 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400" @click.stop="select(row)">
-                {{ __('Xem chi tiết') }}
+            {{ crumb.label }}
+          </button>
+          <span v-else class="px-1.5 py-0.5 text-xs font-medium text-ink-gray-5">{{ crumb.label }}</span>
+        </template>
+      </div>
+
+      <div class="grid grid-cols-1 divide-y divide-outline-gray-1 lg:grid-cols-[1fr_1fr_1.15fr_1.3fr] lg:divide-x lg:divide-y-0">
+        <!-- Column 1: clusters -->
+        <div class="max-h-[520px] overflow-y-auto p-2">
+          <p class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">
+            {{ __('Cụm tuyển sinh') }}<span class="font-medium normal-case text-ink-gray-5">{{ clusters.length }}</span>
+          </p>
+          <ColumnItem
+            v-for="row in clusters"
+            :key="row.id"
+            :row="row"
+            :active="row.id === selectedClusterId"
+            :has-children="Boolean(row.children?.length)"
+            :meta-text="scopeTitle(row)"
+            @select="selectCluster(row)"
+          />
+        </div>
+
+        <!-- Column 2: zones -->
+        <div class="max-h-[520px] overflow-y-auto p-2">
+          <p class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">
+            {{ __('Địa bàn') }}<span class="font-medium normal-case text-ink-gray-5">{{ zones.length }}</span>
+          </p>
+          <p v-if="!zones.length" class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Chọn một cụm để xem địa bàn.') }}</p>
+          <ColumnItem
+            v-for="row in zones"
+            :key="row.id"
+            :row="row"
+            :active="row.id === selectedZoneId"
+            :has-children="Boolean(row.children?.length)"
+            :meta-text="scopeTitle(row)"
+            @select="selectZone(row)"
+          />
+        </div>
+
+        <!-- Column 3: facet (schools / team & staff) -->
+        <div class="max-h-[520px] overflow-y-auto p-2">
+          <p class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">
+            {{ __('Phạm vi & Nhân lực') }}<span class="font-medium normal-case text-ink-gray-5">{{ schools.length + teams.length }}</span>
+          </p>
+          <p v-if="!selectedZoneId" class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Chọn một địa bàn để xem trường và nhóm.') }}</p>
+          <template v-else-if="!schools.length && !teams.length">
+            <p class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Địa bàn này chưa gán trường hay nhóm nào.') }}</p>
+          </template>
+          <template v-else>
+            <div class="mb-2 flex gap-1 px-1">
+              <button
+                type="button"
+                class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
+                :class="facet === 'school' ? 'border-outline-gray-4 bg-surface-gray-2 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
+                @click="selectFacet('school')"
+              >
+                {{ __('Trường phụ trách') }} ({{ schools.length }})
               </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              <button
+                type="button"
+                class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
+                :class="facet === 'team' ? 'border-outline-gray-4 bg-surface-gray-2 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
+                @click="selectFacet('team')"
+              >
+                {{ __('Đội & nhân sự') }} ({{ teams.length }})
+              </button>
+            </div>
+            <div v-if="facet === 'school'">
+              <p v-if="!schools.length" class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Chưa có trường nào được gán cho địa bàn này.') }}</p>
+              <div v-else-if="selectable" class="flex items-center gap-2 px-2 pb-1.5 text-xs text-ink-gray-5">
+                <input
+                  type="checkbox"
+                  :checked="allVisibleSchoolsSelected"
+                  :indeterminate="someVisibleSchoolsSelected && !allVisibleSchoolsSelected"
+                  :aria-label="__('Chọn tất cả trường đang hiển thị')"
+                  @click.stop="toggleAllVisibleSchools"
+                />
+                {{ __('Chọn tất cả') }}
+              </div>
+              <ColumnItem
+                v-for="row in schools"
+                :key="row.id"
+                :row="row"
+                :active="row.id === selectedLeafId"
+                :meta-text="row.ward_name || __('Chưa có phường/xã')"
+                @select="selectLeaf(row)"
+              >
+                <template v-if="selectable" #prefix>
+                  <input
+                    type="checkbox"
+                    :checked="selectedSchoolIds.includes(row.high_school_id)"
+                    :aria-label="__('Chọn trường {0}', [row.label])"
+                    :data-testid="`select-school-${row.high_school_id}`"
+                    @click.stop="toggleSchool(row.high_school_id)"
+                  />
+                </template>
+              </ColumnItem>
+            </div>
+            <div v-else>
+              <p v-if="!teams.length" class="px-2 py-6 text-center text-xs text-ink-gray-4">{{ __('Địa bàn này chưa có nhóm phụ trách nào.') }}</p>
+              <ColumnItem
+                v-for="row in teams"
+                :key="row.id"
+                :row="row"
+                :active="row.id === selectedLeafId"
+                :has-children="Boolean(row.children?.length)"
+                :meta-text="`${formatNumber(row.member_count)} ${__('thành viên')}`"
+                @select="selectLeaf(row)"
+              />
+            </div>
+          </template>
+        </div>
+
+        <!-- Column 4: detail -->
+        <div class="max-h-[520px] overflow-y-auto p-4">
+          <div v-if="!detailNode" class="flex flex-col items-center gap-2 py-10 text-center text-xs text-ink-gray-4">
+            <FeatherIcon name="mouse-pointer-click" class="size-5" aria-hidden="true" />
+            {{ __('Chọn một dòng bên trái để xem chi tiết.') }}
+          </div>
+          <template v-else>
+            <div class="flex items-start gap-2.5">
+              <span class="flex size-8 shrink-0 items-center justify-center rounded-lg" :class="levelDotClass(detailNode.level)">
+                <FeatherIcon :name="levelIcon(detailNode.level)" class="size-4" aria-hidden="true" />
+              </span>
+              <div class="min-w-0">
+                <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ levelLabel(detailNode.level) }}</p>
+                <p class="break-words font-semibold text-ink-gray-9">{{ detailNode.label }}</p>
+                <StatusChip class="mt-1" :status="detailNode.status" />
+              </div>
+            </div>
+
+            <div class="mt-4 border-t border-outline-gray-1 pt-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Phạm vi') }}</p>
+              <p class="mt-1.5 font-medium text-ink-gray-8">{{ scopeTitle(detailNode) }}</p>
+              <p class="mt-0.5 text-xs text-ink-gray-5">{{ scopeMeta(detailNode) }}</p>
+            </div>
+
+            <div class="mt-3 border-t border-outline-gray-1 pt-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Phụ trách') }}</p>
+              <p class="mt-1.5 font-medium text-ink-gray-8">{{ ownerTitle(detailNode) }}</p>
+              <p v-if="ownerMeta(detailNode)" class="mt-0.5 break-words text-xs leading-5 text-ink-gray-5">{{ ownerMeta(detailNode) }}</p>
+            </div>
+
+            <div class="mt-3 border-t border-outline-gray-1 pt-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Điều phối') }}</p>
+              <p class="mt-1.5 break-words font-medium leading-5 text-ink-gray-8">{{ routingTitle(detailNode) }}</p>
+              <p class="mt-0.5 break-words text-xs leading-5 text-ink-gray-5">{{ routingMeta(detailNode) }}</p>
+            </div>
+
+            <div v-if="detailNode.level === 'team' && staffOfDetail.length" class="mt-3 border-t border-outline-gray-1 pt-3">
+              <p class="text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4">{{ __('Nhân sự trong đội') }} ({{ staffOfDetail.length }})</p>
+              <div v-for="staff in staffOfDetail" :key="staff.id" class="mt-2 flex items-center gap-2">
+                <span class="flex size-5 shrink-0 items-center justify-center rounded" :class="levelDotClass('staff')">
+                  <FeatherIcon name="user" class="size-3" aria-hidden="true" />
+                </span>
+                <span class="flex-1 truncate text-xs font-medium text-ink-gray-8">{{ staff.label }}</span>
+                <span v-if="staff.load_percent !== null && staff.load_percent !== undefined" class="w-14 shrink-0">
+                  <span class="block h-1.5 overflow-hidden rounded-full bg-surface-gray-2">
+                    <span class="block h-full rounded-full" :class="staff.load_percent >= 70 ? 'bg-orange-400' : 'bg-blue-500'" :style="{ width: `${staff.load_percent}%` }" />
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              class="mt-4 w-full rounded-md border border-outline-gray-3 bg-surface-white py-2 text-xs font-medium text-ink-gray-8 hover:bg-surface-gray-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+              @click="select(detailNode)"
+            >
+              {{ __('Xem chi tiết đầy đủ') }}
+            </button>
+          </template>
+        </div>
+      </div>
+    </template>
+
     <div v-if="nextCursor" class="flex justify-center border-t border-outline-gray-1 p-3">
       <Button :label="__('Tải thêm')" :loading="loading" @click="loadMore" />
     </div>
@@ -122,7 +218,7 @@
 import { Button, FeatherIcon, LoadingIndicator } from 'frappe-ui'
 import { computed, ref, watch } from 'vue'
 import StatusChip from './StatusChip.vue'
-import { assignmentWorkspaceLevels } from '@/data/assignmentWorkspace'
+import ColumnItem from './AssignmentColumnItem.vue'
 
 const props = defineProps({
   rows: { type: Array, default: () => [] },
@@ -133,7 +229,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['select', 'load-more', 'toggle-school', 'toggle-all-schools'])
-const expanded = ref(new Set())
+
 const levelLabels = {
   campus: 'Campus',
   province: 'Tỉnh/TP',
@@ -143,51 +239,132 @@ const levelLabels = {
   team: 'Nhóm phụ trách',
   staff: 'Nhân sự',
 }
-
-const rowMap = computed(() => new Map(props.rows.map((row) => [row.id, row])))
-
-const visibleRows = computed(() =>
-  props.rows.filter((row) => {
-    let parent = row.parent_id
-    while (parent) {
-      if (!expanded.value.has(parent)) return false
-      parent = rowMap.value.get(parent)?.parent_id
-    }
-    return true
-  }),
-)
-
-const visibleSchools = computed(() =>
-  visibleRows.value.filter((row) => row.level === 'high_school' && row.high_school_id),
-)
-const allVisibleSchoolsSelected = computed(
-  () => Boolean(visibleSchools.value.length) && visibleSchools.value.every((row) => props.selectedSchoolIds.includes(row.high_school_id)),
-)
-const someVisibleSchoolsSelected = computed(
-  () => visibleSchools.value.some((row) => props.selectedSchoolIds.includes(row.high_school_id)),
-)
-
-watch(
-  () => props.rows,
-  (rows) => {
-    const available = new Set(rows.map((row) => row.id))
-    const next = new Set([...expanded.value].filter((id) => available.has(id)))
-    if (!next.size) {
-      for (const row of rows) {
-        if (['campus', 'province', 'cluster'].includes(row.level)) next.add(row.id)
-      }
-    }
-    expanded.value = next
-  },
-  { immediate: true },
-)
-
-function indent(row) {
-  return Math.max(0, assignmentWorkspaceLevels.indexOf(row.level)) * 18
+const levelIcons = {
+  campus: 'server',
+  province: 'map',
+  cluster: 'layers',
+  zone: 'map-pin',
+  high_school: 'book-open',
+  team: 'users',
+  staff: 'user',
+}
+const levelDotClasses = {
+  campus: 'bg-violet-50 text-violet-600',
+  province: 'bg-blue-50 text-blue-600',
+  cluster: 'bg-blue-50 text-blue-600',
+  zone: 'bg-cyan-50 text-cyan-700',
+  high_school: 'bg-surface-gray-3 text-ink-gray-7',
+  team: 'bg-green-50 text-green-700',
+  staff: 'bg-amber-50 text-amber-700',
 }
 
 function levelLabel(level) {
   return levelLabels[level] || level
+}
+function levelIcon(level) {
+  return levelIcons[level] || 'circle'
+}
+function levelDotClass(level) {
+  return levelDotClasses[level] || 'bg-surface-gray-3 text-ink-gray-7'
+}
+
+const rowMap = computed(() => new Map(props.rows.map((row) => [row.id, row])))
+
+function childrenRows(parentId) {
+  if (!parentId) return []
+  const parent = rowMap.value.get(parentId)
+  return (parent?.children || []).map((id) => rowMap.value.get(id)).filter(Boolean)
+}
+
+const clusters = computed(() => props.rows.filter((row) => row.level === 'cluster'))
+const selectedClusterId = ref(null)
+const selectedZoneId = ref(null)
+const selectedLeafId = ref(null)
+const facet = ref('school')
+
+const zones = computed(() => childrenRows(selectedClusterId.value))
+const zoneLeafChildren = computed(() => childrenRows(selectedZoneId.value))
+const schools = computed(() => zoneLeafChildren.value.filter((row) => row.level === 'high_school'))
+const teams = computed(() => zoneLeafChildren.value.filter((row) => row.level === 'team'))
+const detailNode = computed(() => rowMap.value.get(selectedLeafId.value) || rowMap.value.get(selectedZoneId.value) || null)
+const staffOfDetail = computed(() => (detailNode.value ? childrenRows(detailNode.value.id).filter((row) => row.level === 'staff') : []))
+
+const columnCountLabel = computed(() => {
+  const inZone = schools.value.length + teams.value.length
+  return `${inZone}/${props.rows.length} ${__('dòng đang xem')}`
+})
+
+function pickDefaults() {
+  const clusterList = clusters.value
+  if (!clusterList.some((row) => row.id === selectedClusterId.value)) {
+    selectedClusterId.value = clusterList[0]?.id || null
+  }
+  const zoneList = childrenRows(selectedClusterId.value)
+  if (!zoneList.some((row) => row.id === selectedZoneId.value)) {
+    selectedZoneId.value = zoneList[0]?.id || null
+  }
+  const leafList = childrenRows(selectedZoneId.value)
+  if (!leafList.some((row) => row.id === selectedLeafId.value)) {
+    selectedLeafId.value = null
+  }
+}
+
+watch(() => props.rows, pickDefaults, { immediate: true })
+
+function selectCluster(row) {
+  selectedClusterId.value = row.id
+  selectedZoneId.value = childrenRows(row.id)[0]?.id || null
+  selectedLeafId.value = null
+  facet.value = 'school'
+}
+
+function selectZone(row) {
+  selectedZoneId.value = row.id
+  selectedLeafId.value = null
+  facet.value = 'school'
+}
+
+function selectFacet(next) {
+  facet.value = next
+  const list = next === 'school' ? schools.value : teams.value
+  selectedLeafId.value = list[0]?.id || null
+}
+
+function selectLeaf(row) {
+  selectedLeafId.value = row.id
+}
+
+const breadcrumbChain = computed(() => {
+  const anchorId = selectedLeafId.value || selectedZoneId.value || selectedClusterId.value
+  const chain = []
+  let current = anchorId ? rowMap.value.get(anchorId) : null
+  while (current) {
+    chain.unshift(current)
+    current = current.parent_id ? rowMap.value.get(current.parent_id) : null
+  }
+  return chain
+})
+
+function isCrumbNavigable(row) {
+  return ['cluster', 'zone', 'high_school', 'team'].includes(row.level)
+}
+
+function goToCrumb(row) {
+  if (row.level === 'cluster') selectCluster(row)
+  else if (row.level === 'zone') selectZone(row)
+  else selectLeaf(row)
+}
+
+function expandToLocations() {
+  selectedClusterId.value = null
+  selectedZoneId.value = null
+  selectedLeafId.value = null
+  pickDefaults()
+}
+
+function collapseAll() {
+  selectedZoneId.value = null
+  selectedLeafId.value = null
 }
 
 function formatNumber(value) {
@@ -257,27 +434,13 @@ function routingMeta(row) {
   return row.active_students ? `${formatNumber(row.active_students)} ${__('Lead hoạt động')}` : __('Chưa có Lead hoạt động')
 }
 
-function rowTone(row) {
-  return {
-    'bg-blue-50/30': row.level === 'zone',
-    'bg-surface-gray-1/40': row.level === 'team',
-  }
-}
-
-function toggle(id) {
-  const next = new Set(expanded.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  expanded.value = next
-}
-
-function expandToLocations() {
-  expanded.value = new Set(props.rows.filter((row) => ['campus', 'province', 'cluster'].includes(row.level)).map((row) => row.id))
-}
-
-function collapseAll() {
-  expanded.value = new Set()
-}
+const visibleSchools = computed(() => schools.value.filter((row) => row.high_school_id))
+const allVisibleSchoolsSelected = computed(
+  () => Boolean(visibleSchools.value.length) && visibleSchools.value.every((row) => props.selectedSchoolIds.includes(row.high_school_id)),
+)
+const someVisibleSchoolsSelected = computed(
+  () => visibleSchools.value.some((row) => props.selectedSchoolIds.includes(row.high_school_id)),
+)
 
 function select(row) {
   emit('select', row)

@@ -6,13 +6,14 @@
 
 <script setup>
 import { computed } from 'vue'
-import { assignmentWorkspaceStatusLabel } from '@/data/assignmentWorkspace'
+import { assignmentWorkspaceStatusLabel, assignmentWorkspaceStatusTone } from '@/data/assignmentWorkspace'
 
 const props = defineProps({ status: { type: String, default: '' } })
-const classes = computed(() => ({
-  'bg-green-50 text-green-700': props.status === 'healthy',
-  'bg-orange-50 text-orange-700': props.status === 'unassigned' || props.status === 'needs_review',
-  'bg-yellow-50 text-yellow-800': props.status === 'capacity_warning',
-  'bg-gray-100 text-gray-700': props.status === 'placeholder_zone',
-}))
+const toneClasses = {
+  success: 'bg-green-50 text-green-700',
+  warning: 'bg-orange-50 text-orange-700',
+  caution: 'bg-yellow-50 text-yellow-800',
+  neutral: 'bg-gray-100 text-gray-700',
+}
+const classes = computed(() => toneClasses[assignmentWorkspaceStatusTone(props.status)])
 </script>
