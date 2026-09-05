@@ -83,9 +83,8 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed bộ dữ liệu CRM golden — 5 học sinh, 2 trường THPT, đủ luồng nghiệp vụ + AI
-    # The seed reads compact JSON extracted from the operational workbooks.
-    # Run `task extract-school-json` after replacing either source workbook.
+    desc: Seed bộ dữ liệu CRM golden local — 4 học sinh, assignment, SLA, AI và NBA
+    # The local fixture is deterministic and uses the current Student contracts.
     cmds:
       # Persist the rollout flags + fixture password so the Student Detail
       # workflow stays enabled after seeding (list lives in seed_showcase).
@@ -93,7 +92,7 @@ tasks:
       # The Student intake and command-receipt services require durable local
       # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.golden_seed"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden_local.seed"
       # Keep fresh/local sites on the same canonical role catalog and account
       # assignment policy as production after demo accounts are created.
       - "{{.EXEC}} {{.BENCH}} execute crm.operations_cutover_canonical_roles.execute"
