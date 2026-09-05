@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import calendar
 import re
+import unicodedata
 from collections import defaultdict
 from datetime import date, datetime, timedelta
+from functools import cmp_to_key
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -32,6 +34,83 @@ STUDENT_STATUS_LABELS = {
 }
 INTERVENTION_ORDER = ("unassigned", "not-contacted", "at-risk", "blocked")
 TERMINAL_TASK_STATUSES = {"Done", "Canceled"}
+
+ASSIGNMENT_POLICY_VERSION = "student-assignment-r1"
+ASSIGNMENT_FILTERS = {"all", "assigned", "review", "no_match", "missing_data", "error"}
+ASSIGNMENT_SORTS = {"receivedAt", "name", "status", "owner", "matchScore"}
+ASSIGNMENT_ORDERS = {"asc", "desc"}
+ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV-Sale"}
+ASSIGNMENT_STUDENT_FIELDS = [
+	"name",
+	"student_name",
+	"high_school",
+	"province",
+	"major",
+	"aspiration",
+	"source",
+	"creation",
+	"owner_staff",
+	"assigned_to",
+	"owning_team",
+	"owning_pool",
+	"latest_score",
+	"ownership_revision",
+	"admission_year",
+	"lifecycle_stage",
+]
+ASSIGNMENT_WORKFLOW_CONNECTIONS = (
+	{"source": "input", "target": "validation", "label": None},
+	{"source": "validation", "target": "classification", "label": "Pool hợp lệ"},
+	{"source": "classification", "target": "matching", "label": "Xác định Tier"},
+	{"source": "classification", "target": "review", "label": "Tier 3/4 hoặc lỗi địa bàn"},
+	{"source": "matching", "target": "assignment", "label": "Tier 1/2 · áp dụng"},
+	{"source": "matching", "target": "review", "label": "Deferred / queue"},
+	{"source": "review", "target": "assignment", "label": "Resolve thủ công"},
+)
+ASSIGNMENT_WORKFLOW_DEFINITIONS = (
+	(
+		"input",
+		"Lead vào hệ thống",
+		"Tạo CRM Student · pool theo Campus",
+		"Tiếp nhận lead, chống trùng và tạo CRM Student thuộc pool mặc định theo Campus.",
+		("Kiểm tra trùng qua CRM Student Case Key.", "Kích hoạt routing đồng bộ hoặc qua CRM Student Routing Request."),
+	),
+	(
+		"validation",
+		"Xác định pool chuẩn",
+		"Campus · Team · Student Pool",
+		"Resolve đúng một Student Pool active khớp Campus và ownership topology của CRM Student.",
+		("Pool phải active và thuộc đúng Campus.", "Topology sai hoặc ambiguous: dừng routing với lỗi canonical."),
+	),
+	(
+		"classification",
+		"Xác định Zone và Tier",
+		"High School → Zone → Province",
+		"Xác định địa bàn theo thứ tự ưu tiên của trường học, Zone, Province và trạng thái chưa xác định.",
+		("Trường có owner active: Tier 1.", "Chỉ biết Province: Tier 3; không có địa bàn: Tier 4."),
+	),
+	(
+		"matching",
+		"Điều phối theo 4 tầng",
+		"School owner · Zone team · Queue",
+		"Áp policy, capacity và chiến lược chọn người; deferred không tự động rơi xuống tầng khác.",
+		("Tier 1 ưu tiên school owner và kiểm tra capacity direct.", "Tier 2 route vào Zone Team Pool rồi chọn member."),
+	),
+	(
+		"review",
+		"Hàng đợi xử lý",
+		"MANUAL_QUEUE · ENRICHMENT_QUEUE · Deferred",
+		"Các lead chưa thể tự động gán được giữ trong hàng đợi tương ứng để bổ sung dữ liệu, retry hoặc xử lý thủ công.",
+		("Tier 3 chờ Manager phân công thủ công.", "Tier 4 cần làm giàu dữ liệu; deferred không tự đổi tier."),
+	),
+	(
+		"assignment",
+		"Ownership và SLA",
+		"Owner cá nhân · Receipt · Audit · SLA",
+		"Ghi ownership qua command canonical, append audit event và mở SLA khi lead có owner cá nhân.",
+		("Chỉ change_student_ownership được ghi owner_staff.", "Tier 1/2 gán owner thì mở SLA; Tier 3/4 không mở SLA."),
+	),
+)
 
 STUDENT_FIELDS = [
 	"name",
@@ -543,6 +622,15 @@ def _date_of(value: Any) -> date | None:
 	return parsed.date() if parsed else None
 
 
+def _assignment_date_active(row: dict[str, Any], today: date | None = None) -> bool:
+	today = today or frappe.utils.getdate()
+	start = row.get("effective_from")
+	end = row.get("effective_until")
+	return (not start or frappe.utils.getdate(start) <= today) and (
+		not end or frappe.utils.getdate(end) >= today
+	)
+
+
 def _add_months(value: date, months: int) -> date:
 	month_index = value.month - 1 + months
 	year = value.year + month_index // 12
@@ -559,3 +647,950 @@ def _year_number(value: Any) -> int:
 
 def _has_warning(warnings: list[str], key: str) -> bool:
 	return any(item.startswith(f"{key}.") for item in warnings)
+
+
+# Student assignment workspace -------------------------------------------------
+#
+# This projection intentionally lives beside the existing Lead Sales overview
+# methods. It is a read model over the canonical Student ownership fields and
+# routing/ownership evidence; it does not create a parallel assignment table.
+
+
+def _require_assignment_access() -> dict[str, str]:
+	return _require_access()
+
+
+def _parse_assignment_page(value: Any) -> int:
+	if isinstance(value, bool) or not re.fullmatch(r"\d+", str(value or "").strip()):
+		raise_api_error("INVALID_QUERY", "Tham số page không hợp lệ.", frappe.ValidationError, 400)
+	page = int(value)
+	if page < 1:
+		raise_api_error("INVALID_QUERY", "Tham số page không hợp lệ.", frappe.ValidationError, 400)
+	return page
+
+
+def _parse_assignment_query(
+	filter: str = "all",
+	q: str = "",
+	page: str | int = 1,
+	pageSize: str | int = 20,
+	sort: str = "receivedAt",
+	order: str = "desc",
+) -> dict[str, Any]:
+	filter_value = str(filter or "all").strip().lower()
+	if filter_value not in ASSIGNMENT_FILTERS:
+		raise_api_error("INVALID_QUERY", "Tham số filter không hợp lệ.", frappe.ValidationError, 400)
+	search = str(q or "").strip()
+	if len(search) > 140:
+		raise_api_error("INVALID_QUERY", "Tham số q không hợp lệ.", frappe.ValidationError, 400)
+	page_value = _parse_assignment_page(page)
+	page_size = parse_limit(pageSize, field="pageSize", minimum=1, maximum=100, default=20)
+	sort_value = str(sort or "receivedAt").strip()
+	if sort_value not in ASSIGNMENT_SORTS:
+		raise_api_error("INVALID_QUERY", "Tham số sort không hợp lệ.", frappe.ValidationError, 400)
+	order_value = str(order or "desc").strip().lower()
+	if order_value not in ASSIGNMENT_ORDERS:
+		raise_api_error("INVALID_QUERY", "Tham số order không hợp lệ.", frappe.ValidationError, 400)
+	return {
+		"filter": filter_value,
+		"q": search,
+		"page": page_value,
+		"page_size": page_size,
+		"sort": sort_value,
+		"order": order_value,
+	}
+
+
+def _assignment_scope(user: str, warnings: list[str]) -> dict[str, Any]:
+	teams = _resolve_teams(user, warnings)
+	team_ids = sorted({str(team.get("name")) for team in teams if team.get("name")})
+	if not team_ids:
+		warnings.append("team.scope_empty")
+		return {"teams": teams, "team_ids": [], "staff_ids": [], "memberships": []}
+	memberships = _get_list(
+		"CRM Team Membership",
+		filters={"team": ["in", team_ids], "parenttype": "CRM Staff"},
+		fields=["parent as staff", "team", "function", "effective_from", "effective_until"],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="team",
+	)
+	memberships = [row for row in memberships if _assignment_date_active(row)]
+	staff_ids = sorted({str(row.get("staff")) for row in memberships if row.get("staff")})
+	return {
+		"teams": teams,
+		"team_ids": team_ids,
+		"staff_ids": staff_ids,
+		"memberships": memberships,
+	}
+
+
+def _assignment_load_students(
+	scope: dict[str, Any], admission_year: str | None, warnings: list[str]
+) -> list[dict[str, Any]]:
+	team_ids = scope.get("team_ids") or []
+	staff_ids = scope.get("staff_ids") or []
+	if not team_ids and not staff_ids:
+		return []
+	try:
+		if not frappe.db.table_exists("CRM Student"):
+			warnings.append("students.source_unavailable")
+			return []
+		filters = {"lifecycle_stage": ["!=", "Lost"]}
+		if admission_year:
+			filters["admission_year"] = admission_year
+		return [
+			dict(row)
+			for row in frappe.get_list(
+				"CRM Student",
+				filters=filters,
+				or_filters=[
+					["owner_staff", "in", staff_ids or ["__no_staff__"]],
+					["owning_team", "in", team_ids or ["__no_team__"]],
+				],
+				fields=ASSIGNMENT_STUDENT_FIELDS,
+				order_by="name asc",
+				limit_page_length=0,
+			)
+		]
+	except Exception:
+		warnings.append("students.source_unavailable")
+		return []
+
+
+def _assignment_lookup(
+	doctype: str, names: set[str], label_field: str, warnings: list[str]
+) -> dict[str, str]:
+	keys = sorted({str(name) for name in names if name})
+	if not keys:
+		return {}
+	rows = _get_list(
+		doctype,
+		filters={"name": ["in", keys]},
+		fields=["name", label_field],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key=f"lookup.{doctype.lower().replace(' ', '_')}",
+	)
+	return {str(row.get("name")): str(row.get(label_field) or row.get("name")) for row in rows if row.get("name")}
+
+
+def _assignment_metadata(student_ids: list[str], warnings: list[str]) -> dict[str, Any]:
+	if not student_ids:
+		return {"events": {}, "routing": {}}
+	events = _get_list(
+		"CRM Student Ownership Event",
+		filters={"student": ["in", student_ids]},
+		fields=[
+			"name",
+			"event_id",
+			"event_type",
+			"student",
+			"actor",
+			"prior_owner_staff",
+			"next_owner_staff",
+			"reason",
+			"route_trigger",
+			"event_at",
+			"occurred_at",
+		],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="assignment_events",
+		order_by="event_at asc, creation asc, name asc",
+	)
+	routing_rows = _get_list(
+		"CRM Student Routing Request",
+		filters={"student": ["in", student_ids]},
+		fields=[
+			"name",
+			"student",
+			"status",
+			"last_error_code",
+			"creation",
+			"completed_at",
+			"revision",
+		],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="routing",
+		order_by="creation asc, name asc",
+	)
+	events_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for row in events:
+		if row.get("student"):
+			events_by_student[str(row["student"])].append(dict(row))
+	routing_by_student: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for row in routing_rows:
+		if row.get("student"):
+			routing_by_student[str(row["student"])].append(dict(row))
+	return {
+		"events": events_by_student,
+		"routing": routing_by_student,
+	}
+
+
+def _assignment_latest_event(metadata: dict[str, Any], student_id: str) -> dict[str, Any] | None:
+	rows = metadata.get("events", {}).get(student_id) or []
+	return rows[-1] if rows else None
+
+
+def _assignment_latest_routing(metadata: dict[str, Any], student_id: str) -> dict[str, Any] | None:
+	rows = metadata.get("routing", {}).get(student_id) or []
+	return rows[-1] if rows else None
+
+
+def _assignment_status(row: dict[str, Any], metadata: dict[str, Any]) -> str:
+	if row.get("owner_staff") or row.get("assigned_to"):
+		return "assigned"
+	routing = _assignment_latest_routing(metadata, str(row.get("name") or ""))
+	if routing and (routing.get("status") == "failed" or routing.get("last_error_code")):
+		return "error"
+	if not row.get("province"):
+		return "missing_data"
+	return "no_match"
+
+
+def _assignment_method(row: dict[str, Any], event: dict[str, Any] | None, actor: str) -> str:
+	if not event:
+		return "automatic"
+	if event.get("route_trigger"):
+		return "automatic"
+	return "manual" if str(event.get("actor") or "") == actor else "automatic"
+
+
+def _assignment_revision(row: dict[str, Any]) -> int:
+	try:
+		return max(0, int(row.get("ownership_revision") or 0))
+	except (TypeError, ValueError):
+		return 0
+
+
+def _assignment_reason(
+	row: dict[str, Any], status: str, event: dict[str, Any] | None, routing: dict[str, Any] | None
+) -> str | None:
+	if event and event.get("reason"):
+		return str(event["reason"])
+	if status == "missing_data":
+		return "Thiếu khu vực để xác định người phụ trách."
+	if status == "error":
+		return str(routing.get("last_error_code") or "Không thể hoàn tất phân công tự động.") if routing else "Không thể hoàn tất phân công tự động."
+	if status == "no_match":
+		return "Không có Sale đạt ngưỡng phù hợp tối thiểu."
+	return None
+
+
+def _assignment_item(
+	row: dict[str, Any],
+	lookups: dict[str, dict[str, str]],
+	metadata: dict[str, Any],
+	actor: str,
+	timezone: ZoneInfo,
+	as_of: datetime,
+	warnings: list[str],
+) -> dict[str, Any]:
+	student_id = str(row.get("name") or "")
+	status = _assignment_status(row, metadata)
+	event = _assignment_latest_event(metadata, student_id)
+	routing = _assignment_latest_routing(metadata, student_id)
+	received_at = sale_overview._as_timezone(sale_overview._coerce_datetime(row.get("creation")), timezone)
+	if not received_at:
+		warnings.append("students.received_at_missing")
+		received_at = as_of
+	owner_id = row.get("owner_staff") or row.get("assigned_to")
+	owner_id = str(owner_id) if owner_id else None
+	owner = (
+		{"id": owner_id, "displayName": lookups.get("owners", {}).get(owner_id, owner_id)}
+		if owner_id
+		else None
+	)
+	match_score = row.get("latest_score")
+	try:
+		match_score = max(0, min(100, round(float(match_score)))) if match_score is not None else None
+	except (TypeError, ValueError):
+		match_score = None
+	return {
+		"studentId": student_id,
+		"name": str(row.get("student_name") or student_id),
+		"school": lookups.get("schools", {}).get(str(row.get("high_school") or ""), row.get("high_school") or ""),
+		"region": lookups.get("provinces", {}).get(str(row.get("province") or ""), row.get("province")) or None,
+		"interest": lookups.get("majors", {}).get(str(row.get("major") or ""), row.get("major") or row.get("aspiration")) or None,
+		"source": lookups.get("sources", {}).get(str(row.get("source") or ""), row.get("source")) or None,
+		"receivedAt": received_at.isoformat(timespec="seconds"),
+		"status": status,
+		"owner": owner,
+		"matchScore": match_score,
+		"method": _assignment_method(row, event, actor),
+		"reason": _assignment_reason(row, status, event, routing),
+		"revision": _assignment_revision(row),
+		"executionId": (
+			str(routing.get("name"))
+			if routing and routing.get("name")
+			else (str(event.get("event_id") or event.get("name")) if event else None)
+		),
+	}
+
+
+def _assignment_fold(value: Any) -> str:
+	text = unicodedata.normalize("NFKD", str(value or "").casefold())
+	return "".join(char for char in text if not unicodedata.combining(char)).replace("đ", "d")
+
+
+def _assignment_matches(item: dict[str, Any], query: str) -> bool:
+	if not query:
+		return True
+	needle = _assignment_fold(query)
+	owner = item.get("owner") or {}
+	return needle in _assignment_fold(
+		" ".join(
+			str(item.get(field) or "")
+			for field in ("studentId", "name", "school")
+		)
+		+ " "
+		+ str(owner.get("displayName") or "")
+	)
+
+
+def _assignment_filter_matches(item: dict[str, Any], filter_value: str) -> bool:
+	if filter_value == "all":
+		return True
+	if filter_value == "assigned":
+		return item["status"] == "assigned" and bool(item.get("owner"))
+	if filter_value == "review":
+		return not item.get("owner")
+	return item["status"] == filter_value
+
+
+def _assignment_compare(left: dict[str, Any], right: dict[str, Any], sort: str, order: str) -> int:
+	if sort == "receivedAt":
+		left_value, right_value = left.get("receivedAt"), right.get("receivedAt")
+	elif sort == "name":
+		left_value, right_value = _assignment_fold(left.get("name")), _assignment_fold(right.get("name"))
+	elif sort == "status":
+		left_value, right_value = left.get("status"), right.get("status")
+	elif sort == "owner":
+		left_value = _assignment_fold((left.get("owner") or {}).get("displayName"))
+		right_value = _assignment_fold((right.get("owner") or {}).get("displayName"))
+	else:
+		left_value, right_value = left.get("matchScore"), right.get("matchScore")
+	if left_value is None and right_value is not None:
+		return 1
+	if left_value is not None and right_value is None:
+		return -1
+	if left_value != right_value:
+		if order == "desc":
+			return -1 if left_value > right_value else 1
+		return -1 if left_value < right_value else 1
+	left_id, right_id = str(left.get("studentId") or ""), str(right.get("studentId") or "")
+	return -1 if left_id < right_id else 1 if left_id > right_id else 0
+
+
+def _assignment_workflow(summary: dict[str, Any], health: dict[str, Any]) -> dict[str, Any]:
+	received = int(summary["received"])
+	assigned = int(summary["assigned"])
+	pending = int(summary["pending"])
+	missing = int(summary["byStatus"]["missing_data"])
+	error = int(summary["byStatus"]["error"])
+	metrics = {
+		"input": (received, received, 0, 0),
+		"validation": (received, max(0, received - missing), missing, 0),
+		"classification": (max(0, received - missing), max(0, received - missing), 0, 0),
+		"matching": (max(0, received - missing), assigned, max(0, pending - error), error),
+		"review": (pending, 0, pending, 0),
+		"assignment": (received, assigned, max(0, pending - error), error),
+	}
+	statuses = {
+		"input": "success",
+		"validation": "warning" if missing else "success",
+		"classification": "success",
+		"matching": "error" if error else "warning" if pending else "success",
+		"review": "warning" if pending else "success",
+		"assignment": "error" if error else "warning" if pending else "success",
+	}
+	steps = []
+	for order, (step_id, title, description, detail, rules) in enumerate(ASSIGNMENT_WORKFLOW_DEFINITIONS, start=1):
+		processed, success, warning, step_error = metrics[step_id]
+		steps.append(
+			{
+				"id": step_id,
+				"order": order,
+				"title": title,
+				"description": description,
+				"detail": detail,
+				"rules": list(rules),
+				"status": statuses[step_id],
+				"metrics": {
+					"processedCount": max(0, processed),
+					"successCount": max(0, success),
+					"warningCount": max(0, warning),
+					"errorCount": max(0, step_error),
+				},
+			}
+		)
+	return {
+		"mode": "read-only",
+		"version": ASSIGNMENT_POLICY_VERSION,
+		"steps": steps,
+		"connections": [dict(connection) for connection in ASSIGNMENT_WORKFLOW_CONNECTIONS],
+	}
+
+
+def _assignment_summary(items: list[dict[str, Any]]) -> dict[str, Any]:
+	by_status = {status: 0 for status in ("assigned", "no_match", "missing_data", "error")}
+	for item in items:
+		if item["status"] in by_status:
+			by_status[item["status"]] += 1
+	assigned = by_status["assigned"]
+	pending = len(items) - assigned
+	return {"received": len(items), "assigned": assigned, "pending": pending, "byStatus": by_status}
+
+
+def _assignment_health(summary: dict[str, Any], items: list[dict[str, Any]]) -> dict[str, Any]:
+	received = summary["received"]
+	automatic_assigned = sum(item["status"] == "assigned" and item["method"] == "automatic" for item in items)
+	return {
+		"automationEnabled": True,
+		"automationRate": round(automatic_assigned / received * 100, 1) if received else None,
+		"successRate": round(summary["assigned"] / received * 100, 1) if received else None,
+		"reviewCount": summary["pending"],
+		"errorCount": summary["byStatus"]["error"],
+		"averageProcessingMs": None,
+		"policyVersion": ASSIGNMENT_POLICY_VERSION,
+	}
+
+
+def _assignment_team_meta(teams: list[dict[str, Any]]) -> dict[str, str]:
+	if not teams:
+		return {"id": "", "name": "Đội Sale hiện tại"}
+	if len(teams) == 1:
+		return {
+			"id": str(teams[0].get("name") or ""),
+			"name": str(teams[0].get("team_name") or teams[0].get("name") or ""),
+		}
+	return {
+		"id": ",".join(str(team.get("name")) for team in teams),
+		"name": "Các đội Sale hiện tại",
+	}
+
+
+def _assignment_base_response(
+	access: dict[str, str],
+	scope: dict[str, Any],
+	admission_year: str,
+	report_date: date,
+	timezone: ZoneInfo,
+	as_of: datetime,
+	warnings: list[str],
+	items: list[dict[str, Any]],
+) -> dict[str, Any]:
+	summary = _assignment_summary(items)
+	health = _assignment_health(summary, items)
+	return {
+		"meta": {
+			"viewer": _viewer(access["user"]),
+			"team": _assignment_team_meta(scope.get("teams") or []),
+			"admissionYear": _year_number(admission_year),
+			"date": report_date.isoformat(),
+			"asOf": as_of.isoformat(timespec="seconds"),
+			"timezone": getattr(timezone, "key", str(timezone)),
+			"status": "unavailable" if _has_warning(warnings, "students") else "partial" if warnings else "available",
+			"warnings": sorted(set(warnings)),
+		},
+		"summary": summary,
+		"health": health,
+		"workflow": _assignment_workflow(summary, health),
+		"items": items,
+	}
+
+
+@frappe.whitelist(methods=["GET"])
+def get_student_assignment_workspace(
+	admissionYear: str | int | None = None,
+	date: str | None = None,
+	timezone: str = DEFAULT_TIMEZONE,
+	filter: str = "all",
+	q: str = "",
+	page: str | int = 1,
+	pageSize: str | int = 20,
+	sort: str = "receivedAt",
+	order: str = "desc",
+) -> dict[str, Any]:
+	"""Return one permission-scoped Student assignment snapshot."""
+	access = _require_assignment_access()
+	report_timezone = _parse_timezone(timezone)
+	report_date = _parse_report_date(date, report_timezone)
+	admission_year = _resolve_admission_year(admissionYear)
+	query = _parse_assignment_query(filter, q, page, pageSize, sort, order)
+	warnings: list[str] = []
+	as_of = _now(report_timezone)
+	scope = _assignment_scope(access["user"], warnings)
+	students = _assignment_load_students(scope, admission_year, warnings)
+	student_ids = [str(row.get("name")) for row in students if row.get("name")]
+	lookups = {
+		"schools": _assignment_lookup("CRM High School", {str(row.get("high_school")) for row in students}, "school_name", warnings),
+		"provinces": _assignment_lookup("CRM Province", {str(row.get("province")) for row in students}, "province_name", warnings),
+		"majors": _assignment_lookup("CRM Major", {str(row.get("major")) for row in students}, "major_name", warnings),
+		"sources": _assignment_lookup("CRM Lead Source", {str(row.get("source")) for row in students}, "source_name", warnings),
+		"owners": _assignment_lookup("CRM Staff", {str(row.get("owner_staff") or row.get("assigned_to")) for row in students}, "full_name", warnings),
+	}
+	metadata = _assignment_metadata(student_ids, warnings)
+	all_items = [
+		_assignment_item(row, lookups, metadata, access["user"], report_timezone, as_of, warnings)
+		for row in students
+	]
+	filtered = [
+		item
+		for item in all_items
+		if _assignment_filter_matches(item, query["filter"]) and _assignment_matches(item, query["q"])
+	]
+	filtered.sort(key=cmp_to_key(lambda left, right: _assignment_compare(left, right, query["sort"], query["order"])))
+	start = (query["page"] - 1) * query["page_size"]
+	page_items = filtered[start : start + query["page_size"]]
+	response = _assignment_base_response(
+		access,
+		scope,
+		admission_year,
+		report_date,
+		report_timezone,
+		as_of,
+		warnings,
+		all_items,
+	)
+	total = len(filtered)
+	response["items"] = page_items
+	response["pagination"] = {
+		"page": query["page"],
+		"pageSize": query["page_size"],
+		"total": total,
+		"totalPages": (total + query["page_size"] - 1) // query["page_size"] if total else 0,
+		"hasNextPage": start + len(page_items) < total,
+	}
+	return response
+
+
+def _assignment_find_student(
+	student_id: str, admission_year: str | None, scope: dict[str, Any], warnings: list[str]
+) -> dict[str, Any]:
+	students = _assignment_load_students(scope, admission_year, warnings)
+	row = next((row for row in students if str(row.get("name")) == student_id), None)
+	if not row:
+		raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+	return row
+
+
+def _assignment_issue(item: dict[str, Any]) -> dict[str, Any] | None:
+	if item["status"] == "assigned":
+		return None
+	if item["status"] == "missing_data":
+		return {
+			"code": "MISSING_DATA",
+			"message": "Thiếu khu vực của học sinh nên chưa thể tìm người phù hợp.",
+			"missingFields": ["region"],
+		}
+	if item["status"] == "error":
+		return {
+			"code": "ASSIGNMENT_ERROR",
+			"message": item.get("reason") or "Không thể hoàn tất phân công tự động.",
+			"missingFields": [],
+		}
+	return {
+		"code": "NO_MATCH",
+		"message": "Chưa có nhân sự đạt điều kiện phụ trách khu vực này.",
+		"missingFields": [],
+	}
+
+
+def _assignment_owner_candidates(
+	student: dict[str, Any], scope: dict[str, Any], all_students: list[dict[str, Any]], warnings: list[str]
+) -> list[dict[str, Any]]:
+	team_ids = set(scope.get("team_ids") or [])
+	if not team_ids:
+		return []
+	staff_rows = _get_list(
+		"CRM Staff",
+		filters={"is_active": 1},
+		fields=["name", "full_name", "user", "is_active", "campus"],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="candidates",
+	)
+	memberships = [
+		row
+		for row in (scope.get("memberships") or [])
+		if row.get("team") in team_ids and row.get("function") in ASSIGNMENT_OWNER_FUNCTIONS
+	]
+	memberships_by_staff: dict[str, list[dict[str, Any]]] = defaultdict(list)
+	for row in memberships:
+		if row.get("staff"):
+			memberships_by_staff[str(row["staff"])].append(row)
+	active_counts = defaultdict(int)
+	for row in all_students:
+		if row.get("owner_staff") or row.get("assigned_to"):
+			active_counts[str(row.get("owner_staff") or row.get("assigned_to"))] += 1
+	capacity_rows = _get_list(
+		"CRM Staff Capacity Period",
+		filters={"staff": ["in", sorted(memberships_by_staff)]},
+		fields=["staff", "max_active_students", "approved", "period_start", "period_end"],
+		limit_page_length=0,
+		warnings=warnings,
+		warning_key="capacity",
+	)
+	capacity_by_staff: dict[str, dict[str, Any]] = {}
+	for row in capacity_rows:
+		if not row.get("staff") or not row.get("approved") or not _assignment_date_active(
+			{"effective_from": row.get("period_start"), "effective_until": row.get("period_end")}
+		):
+			continue
+		if row.get("max_active_students") is None:
+			continue
+		staff_key = str(row["staff"])
+		previous = capacity_by_staff.get(staff_key)
+		if not previous or str(row.get("period_start") or "") > str(previous.get("period_start") or ""):
+			capacity_by_staff[staff_key] = dict(row)
+	staff_by_id = {str(row.get("name")): row for row in staff_rows if row.get("name")}
+	region_present = bool(student.get("province"))
+	result = []
+	for staff_id in sorted(memberships_by_staff):
+		staff = staff_by_id.get(staff_id)
+		if not staff or not staff.get("is_active"):
+			continue
+		user = staff.get("user")
+		if not user or frappe.db.get_value("User", user, "enabled") not in (1, True, "1"):
+			continue
+		profile = resolve_crm_profile(frappe.get_roles(user))
+		if profile not in {"sales", "ctv_sale"}:
+			continue
+		active = max(0, int(active_counts.get(staff_id, 0)))
+		capacity = capacity_by_staff.get(staff_id, {}).get("max_active_students")
+		try:
+			capacity = max(0, int(capacity)) if capacity is not None else 0
+		except (TypeError, ValueError):
+			capacity = 0
+		remaining = max(0, capacity - active)
+		eligible = bool(region_present and capacity > active)
+		reasons = []
+		if not region_present:
+			reasons.append("Thiếu khu vực để đánh giá phạm vi phụ trách.")
+		if capacity <= active:
+			reasons.append("Đã đạt sức chứa hiện tại của nhân sự.")
+		result.append(
+			{
+				"id": staff_id,
+				"displayName": str(staff.get("full_name") or staff_id),
+				"activeStudents": active,
+				"capacity": capacity,
+				"remainingCapacity": remaining,
+				"matchScore": 70 if region_present else 0,
+				"eligible": eligible,
+				"reasons": reasons,
+			}
+		)
+	result.sort(key=lambda row: (-int(row["matchScore"]), -int(row["remainingCapacity"]), row["id"]))
+	return result[:3]
+
+
+def _assignment_detail_events(
+	metadata: dict[str, Any], student_id: str, owner_lookup: dict[str, str]
+) -> list[dict[str, Any]]:
+	rows = []
+	for event in metadata.get("events", {}).get(student_id) or []:
+		actor_id = str(event.get("actor") or "") or None
+		from_owner = str(event.get("prior_owner_staff") or "") or None
+		to_owner = str(event.get("next_owner_staff") or "") or None
+		rows.append(
+			{
+				"eventId": str(event.get("event_id") or event.get("name") or ""),
+				"type": str(event.get("event_type") or "assignment"),
+				"actor": {"id": actor_id, "displayName": actor_id} if actor_id else None,
+				"fromOwner": {"id": from_owner, "displayName": owner_lookup.get(from_owner, from_owner)} if from_owner else None,
+				"toOwner": {"id": to_owner, "displayName": owner_lookup.get(to_owner, to_owner)} if to_owner else None,
+				"reason": event.get("reason"),
+				"occurredAt": str(event.get("occurred_at") or event.get("event_at") or ""),
+			}
+		)
+	return rows
+
+
+@frappe.whitelist(methods=["GET"])
+def get_student_assignment_detail(
+	studentId: str | None = None, admissionYear: str | int | None = None
+) -> dict[str, Any]:
+	"""Return one scoped assignment record with candidates and rule evidence."""
+	access = _require_assignment_access()
+	student_id = str(studentId or "").strip()
+	if not student_id or len(student_id) > 140:
+		raise_api_error("INVALID_QUERY", "studentId là bắt buộc.", frappe.ValidationError, 400)
+	admission_year = _resolve_admission_year(admissionYear)
+	warnings: list[str] = []
+	scope = _assignment_scope(access["user"], warnings)
+	student = _assignment_find_student(student_id, admission_year, scope, warnings)
+	report_timezone = ZoneInfo(DEFAULT_TIMEZONE)
+	as_of = _now(report_timezone)
+	metadata = _assignment_metadata([student_id], warnings)
+	owner_ids = {str(student.get("owner_staff") or student.get("assigned_to"))}
+	for event in metadata.get("events", {}).get(student_id) or []:
+		owner_ids.update(str(event.get(field)) for field in ("prior_owner_staff", "next_owner_staff") if event.get(field))
+	lookups = {
+		"schools": _assignment_lookup("CRM High School", {str(student.get("high_school"))}, "school_name", warnings),
+		"provinces": _assignment_lookup("CRM Province", {str(student.get("province"))}, "province_name", warnings),
+		"majors": _assignment_lookup("CRM Major", {str(student.get("major"))}, "major_name", warnings),
+		"sources": _assignment_lookup("CRM Lead Source", {str(student.get("source"))}, "source_name", warnings),
+		"owners": _assignment_lookup("CRM Staff", owner_ids, "full_name", warnings),
+	}
+	item = _assignment_item(student, lookups, metadata, access["user"], report_timezone, as_of, warnings)
+	all_students = _assignment_load_students(scope, admission_year, warnings)
+	candidates = _assignment_owner_candidates(student, scope, all_students, warnings)
+	explainability_reason = item.get("reason") or "Không có nhân sự đạt điểm phù hợp tối thiểu 70/100."
+	criteria = [
+		{
+			"code": "region",
+			"label": "Khu vực",
+			"result": "matched" if student.get("province") else "missing_data",
+			"detail": "Đã xác định khu vực canonical." if student.get("province") else "Chưa tìm thấy khu vực canonical.",
+		}
+	]
+	if item["status"] != "missing_data":
+		criteria.append(
+			{
+				"code": "capacity",
+				"label": "Khả năng tiếp nhận",
+				"result": "matched" if any(candidate["eligible"] for candidate in candidates) else "no_match",
+				"detail": "Có nhân sự còn khả năng tiếp nhận." if any(candidate["eligible"] for candidate in candidates) else "Chưa có nhân sự đạt điều kiện.",
+			}
+		)
+	return {
+		"item": item,
+		"issue": _assignment_issue(item),
+		"candidates": candidates,
+		"explainability": {
+			"policyVersion": ASSIGNMENT_POLICY_VERSION,
+			"matchScore": item.get("matchScore"),
+			"reasons": [explainability_reason],
+			"criteria": criteria,
+		},
+		"events": _assignment_detail_events(metadata, student_id, lookups.get("owners", {})),
+		"permissions": {
+			"canResolve": item["status"] != "assigned",
+			"canReassign": False,
+		},
+	}
+
+
+def _assignment_required_payload_text(value: Any, field: str, *, minimum: int = 1, maximum: int = 500) -> str:
+	if not isinstance(value, str):
+		raise_api_error("INVALID_PAYLOAD", f"{field} là bắt buộc.", frappe.ValidationError, 400)
+	value = value.strip()
+	if not minimum <= len(value) <= maximum:
+		raise_api_error("INVALID_PAYLOAD", f"{field} không hợp lệ.", frappe.ValidationError, 400)
+	return value
+
+
+def _assignment_expected_revision(value: Any) -> int:
+	if isinstance(value, bool) or not re.fullmatch(r"\d+", str(value or "").strip()):
+		raise_api_error("INVALID_PAYLOAD", "expectedRevision không hợp lệ.", frappe.ValidationError, 400)
+	return int(value)
+
+
+def _assignment_idempotency_key(value: Any) -> str:
+	header_key = frappe.get_request_header("Idempotency-Key")
+	key = str(header_key or "").strip()
+	if value not in (None, "") and str(value).strip() != key:
+		raise_api_error("INVALID_PAYLOAD", "Idempotency-Key phải được truyền qua header.", frappe.ValidationError, 400)
+	if not 8 <= len(key) <= 140 or not re.fullmatch(r"[A-Za-z0-9._:-]+", key):
+		raise_api_error("INVALID_PAYLOAD", "Idempotency-Key không hợp lệ.", frappe.ValidationError, 400)
+	return key
+
+
+def _assignment_region_name(value: str) -> str:
+	filters = [{"name": value}, {"province_name": value}, {"province_code": value}]
+	matches: set[str] = set()
+	for candidate in filters:
+		rows = _get_list(
+			"CRM Province",
+			filters=candidate,
+			fields=["name"],
+			limit_page_length=2,
+			warnings=None,
+		)
+		matches.update(str(row.get("name")) for row in rows if row.get("name"))
+	if len(matches) != 1:
+		raise_api_error("INVALID_ASSIGNMENT", "Region không phải địa bàn hợp lệ.", frappe.ValidationError, 422)
+	return next(iter(matches))
+
+
+def _assignment_owner_team(owner_id: str, scope: dict[str, Any]) -> str | None:
+	rows = [
+		row
+		for row in scope.get("memberships") or []
+		if str(row.get("staff") or "") == owner_id and row.get("function") in ASSIGNMENT_OWNER_FUNCTIONS
+	]
+	team_ids = {str(row.get("team")) for row in rows if row.get("team")}
+	return sorted(team_ids)[0] if len(team_ids) == 1 else None
+
+
+def _assignment_receipt_exists(actor: str, idempotency_key: str) -> bool:
+	try:
+		from crm.fcrm.student_ownership import ownership_command_keys
+
+		keys = ownership_command_keys(actor, idempotency_key)
+		return bool(
+			frappe.db.exists(
+				"CRM Student Command Receipt", {"command_key": ["in", keys]}
+			)
+		)
+	except Exception:
+		return False
+
+
+def _assignment_command_result(result: dict[str, Any], student_id: str, owner_id: str, reason: str) -> dict[str, Any]:
+	event_name = result.get("event")
+	event_id = str(event_name or "")
+	applied_at = str(result.get("applied_at") or "")
+	if event_name and frappe.db.exists("CRM Student Ownership Event", event_name):
+		event = frappe.db.get_value(
+			"CRM Student Ownership Event", event_name, ["event_id", "event_at", "reason"], as_dict=True
+		)
+		if event:
+			event_id = str(event.get("event_id") or event_id)
+			applied_at = str(event.get("event_at") or applied_at)
+			reason = str(event.get("reason") or reason)
+	if not applied_at:
+		applied_at = _now(ZoneInfo(DEFAULT_TIMEZONE)).isoformat(timespec="seconds")
+	owner_name = frappe.db.get_value("CRM Staff", owner_id, "full_name") or owner_id
+	return {
+		"studentId": student_id,
+		"command": "resolve",
+		"assignment": {
+			"owner": {"id": owner_id, "displayName": str(owner_name)},
+			"status": "assigned",
+			"method": "manual",
+			"reason": reason,
+			"appliedAt": applied_at,
+		},
+		"revision": _assignment_revision({"ownership_revision": result.get("revision")}),
+		"audit": {
+			"eventId": event_id,
+			"actorId": str(frappe.session.user),
+			"occurredAt": applied_at,
+		},
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def resolve_student_assignment(
+	studentId: str | None = None,
+	ownerId: str | None = None,
+	region: str | None = None,
+	reason: str | None = None,
+	expectedRevision: str | int | None = None,
+	idempotency_key: str | None = None,
+) -> dict[str, Any]:
+	"""Resolve one unassigned Student through the canonical ownership command."""
+	access = _require_assignment_access()
+	student_id = _assignment_required_payload_text(studentId, "studentId", maximum=140)
+	owner_id = _assignment_required_payload_text(ownerId, "ownerId", maximum=140)
+	manual_reason = _assignment_required_payload_text(reason, "reason", minimum=10, maximum=500)
+	expected_revision = _assignment_expected_revision(expectedRevision)
+	idempotency_key = _assignment_idempotency_key(idempotency_key)
+	region_value = str(region or "").strip()
+	if len(region_value) > 140:
+		raise_api_error("INVALID_PAYLOAD", "region không hợp lệ.", frappe.ValidationError, 400)
+	warnings: list[str] = []
+	scope = _assignment_scope(access["user"], warnings)
+	student = _assignment_find_student(student_id, None, scope, warnings)
+	current_revision = _assignment_revision(student)
+	# A retry must reach the ownership receipt before the already-assigned guard;
+	# the canonical command then either replays the original result or rejects a
+	# reused key with a different fingerprint.
+	team_id = _assignment_owner_team(owner_id, scope)
+	if not team_id:
+		raise_api_error("ASSIGNMENT_OWNER_NOT_FOUND", "ownerId không thuộc team Sale hiện tại.", frappe.DoesNotExistError, 404)
+	if student.get("owner_staff") or student.get("assigned_to"):
+		if _assignment_receipt_exists(access["user"], idempotency_key):
+			from crm.fcrm.student_ownership import change_student_ownership
+
+			try:
+				result = change_student_ownership(
+					student=student_id,
+					target_kind="owner",
+					target_id=owner_id,
+					target_team_id=team_id,
+					reason=manual_reason,
+					idempotency_key=idempotency_key,
+					expected_revision=expected_revision,
+					correlation_id=f"student-assignment:{idempotency_key}",
+				)
+			except Exception as exc:
+				_code = getattr(exc, "code", None)
+				if _code == "IDEMPOTENCY_KEY_REUSED":
+					raise_api_error(_code, str(exc), frappe.ValidationError, 409)
+				raise
+			return _assignment_command_result(result, student_id, owner_id, manual_reason)
+		raise_api_error("ALREADY_ASSIGNED", "Hồ sơ đã có người phụ trách; không thể ghi đè.", frappe.ValidationError, 409)
+	if current_revision != expected_revision:
+		raise_api_error("STALE_REVISION", "Hồ sơ đã được cập nhật bởi người dùng khác. Vui lòng tải lại.", frappe.ValidationError, 409)
+	if not region_value and not student.get("province"):
+		raise_api_error("INVALID_ASSIGNMENT", "Region là bắt buộc với hồ sơ thiếu khu vực.", frappe.ValidationError, 422)
+	if region_value:
+		province = _assignment_region_name(region_value)
+	if region_value and not student.get("province"):
+		# Keep the region update in the same transaction as the ownership command.
+		# CRM Student's save hook records the material context revision while the
+		# ownership command remains the only writer of owner fields.
+		locked = frappe.get_doc("CRM Student", student_id)
+		locked.province = province
+		locked.save(ignore_permissions=True)
+	from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+	try:
+		result = change_student_ownership(
+			student=student_id,
+			target_kind="owner",
+			target_id=owner_id,
+			target_team_id=team_id,
+			reason=manual_reason,
+			idempotency_key=idempotency_key,
+			expected_revision=expected_revision,
+			correlation_id=f"student-assignment:{idempotency_key}",
+		)
+	except StudentOwnershipError as exc:
+		if exc.code in {"UNAUTHORIZED", "OUT_OF_SCOPE"}:
+			raise_api_error("FORBIDDEN", str(exc), frappe.PermissionError, 403)
+		if exc.code in {"STALE_OWNERSHIP_REVISION", "STALE_REVISION"}:
+			raise_api_error("STALE_REVISION", str(exc), frappe.ValidationError, 409)
+		if exc.code == "IDEMPOTENCY_KEY_REUSED":
+			raise_api_error(exc.code, str(exc), frappe.ValidationError, 409)
+		if exc.code == "INVALID_TARGET":
+			raise_api_error("ASSIGNMENT_OWNER_NOT_FOUND", str(exc), frappe.DoesNotExistError, 404)
+		raise_api_error("INVALID_ASSIGNMENT", str(exc), frappe.ValidationError, 422)
+	return _assignment_command_result(result, student_id, owner_id, manual_reason)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_sales_team_workspace(
+	admissionYear: str | int | None = None,
+	date: str | None = None,
+	timezone: str = DEFAULT_TIMEZONE,
+	availability: str = "all",
+	q: str = "",
+	page: str | int = 1,
+	pageSize: str | int = 50,
+	sort: str = "support",
+	order: str | None = None,
+) -> dict[str, Any]:
+	"""Return the current Lead Sales team's member workspace projection."""
+	from crm.api.lead_sales_team import get_sales_team_workspace as implementation
+
+	return implementation(admissionYear, date, timezone, availability, q, page, pageSize, sort, order)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_sales_team_member_detail(
+	memberId: str,
+	admissionYear: str | int | None = None,
+	date: str | None = None,
+	timezone: str = DEFAULT_TIMEZONE,
+) -> dict[str, Any]:
+	"""Return a re-scoped aggregate detail for one Lead Sales member."""
+	from crm.api.lead_sales_team import get_sales_team_member_detail as implementation
+
+	return implementation(memberId, admissionYear, date, timezone)
