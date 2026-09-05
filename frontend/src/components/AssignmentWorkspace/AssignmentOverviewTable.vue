@@ -81,7 +81,7 @@
               <button
                 type="button"
                 class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
-                :class="facet === 'school' ? 'border-outline-gray-4 bg-surface-gray-2 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
+                :class="facet === 'school' ? 'border-blue-500 bg-surface-blue-1 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
                 @click="selectFacet('school')"
               >
                 {{ __('Trường phụ trách') }} ({{ schools.length }})
@@ -89,7 +89,7 @@
               <button
                 type="button"
                 class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
-                :class="facet === 'team' ? 'border-outline-gray-4 bg-surface-gray-2 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
+                :class="facet === 'team' ? 'border-blue-500 bg-surface-blue-1 text-ink-gray-9' : 'border-transparent bg-surface-gray-1 text-ink-gray-5'"
                 @click="selectFacet('team')"
               >
                 {{ __('Đội & nhân sự') }} ({{ teams.length }})
