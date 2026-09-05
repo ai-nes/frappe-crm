@@ -1401,6 +1401,24 @@ def _clean_row(row, children):
 	} | {"has_children": bool(children.get(row["id"]))}
 
 
+def _paginate_overview_rows(rows, offset, page_size):
+	"""Keep topology nodes available while paginating only high-school rows.
+
+	The frontend uses the topology rows to build the Miller-columns tree. If the
+	flat projection is paginated as one list, a Zone with many schools can push
+	its Team and Staff rows outside the first page even though the Zone aggregate
+	still reports them. Keep topology stable on the first page and use the cursor
+	only for the high-school collection.
+	"""
+	topology_rows = [row for row in rows if row.get("level") != "high_school"]
+	school_rows = [row for row in rows if row.get("level") == "high_school"]
+	school_page = school_rows[offset : offset + page_size]
+	page = ([*topology_rows] if offset == 0 else []) + school_page
+	next_offset = offset + len(school_page)
+	next_cursor = str(next_offset) if next_offset < len(school_rows) else None
+	return page, next_cursor
+
+
 @frappe.whitelist()
 def get_overview(filters=None, cursor=None, limit=50):
 	"""Return the bounded, permission-scoped assignment setup projection."""
@@ -1412,7 +1430,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 	rows.sort(key=lambda row: (row.get("path", ""), row["id"]))
 	offset = _offset(cursor)
 	page_size = _limit(limit)
-	page = rows[offset : offset + page_size]
+	page, next_cursor = _paginate_overview_rows(rows, offset, page_size)
 	children = defaultdict(list)
 	for row in rows:
 		if row.get("parent_id"):
@@ -1429,7 +1447,7 @@ def get_overview(filters=None, cursor=None, limit=50):
 		"contractStatus": "partial" if missing_sources else "ready",
 		"schemaVersion": "assignment-overview-v1",
 		"as_of": str(now_datetime()),
-		"next_cursor": str(offset + len(page)) if offset + len(page) < len(rows) else None,
+		"next_cursor": next_cursor,
 		"summary": {
 			"campuses": len(sources["campuses"]),
 			"zones": len(sources["zones"]),

@@ -7,6 +7,7 @@ from crm.api.assignment_workspace import (
 	_filter_rows,
 	_inherited_zone_mapping,
 	_normalize_filters,
+	_paginate_overview_rows,
 	_parse_string_list,
 	_school_assignment_revision,
 	_workload_status,
@@ -115,6 +116,26 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 			children,
 		)
 		self.assertTrue(cleaned["has_children"])
+
+	def test_overview_paginates_schools_without_hiding_team_topology(self):
+		rows = [
+			{"id": "cluster:1", "level": "cluster", "path": "cluster:1"},
+			{"id": "zone:1", "level": "zone", "path": "cluster:1/zone:1"},
+			{"id": "school:1", "level": "high_school", "path": "cluster:1/zone:1/school:1"},
+			{"id": "team:1", "level": "team", "path": "cluster:1/zone:1/team:1"},
+			{"id": "staff:1", "level": "staff", "path": "cluster:1/zone:1/team:1/staff:1"},
+			{"id": "school:2", "level": "high_school", "path": "cluster:1/zone:1/school:2"},
+		]
+
+		first_page, next_cursor = _paginate_overview_rows(rows, 0, 1)
+		self.assertEqual(
+			[row["id"] for row in first_page], ["cluster:1", "zone:1", "team:1", "staff:1", "school:1"]
+		)
+		self.assertEqual(next_cursor, "1")
+
+		second_page, next_cursor = _paginate_overview_rows(rows, int(next_cursor), 1)
+		self.assertEqual([row["id"] for row in second_page], ["school:2"])
+		self.assertIsNone(next_cursor)
 
 	def test_school_revision_is_stable_for_same_active_mapping(self):
 		rows = [
