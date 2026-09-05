@@ -22,6 +22,20 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 
 		self.assertEqual(access["roleState"], "canonical_profile")
 
+	def test_sales_profiles_are_allowed_only_for_opt_in_readers(self):
+		for role, profile in (("Sale", "sales"), ("CTV Sale", "ctv_sale"), ("Lead Sales", "lead_sales")):
+			with self.subTest(role=role):
+				with patch.object(common.frappe, "session", SimpleNamespace(user="sales@example.com")), patch.object(
+					common.frappe.db, "get_value", return_value=1
+				), patch.object(common.frappe, "get_roles", return_value=[role]), patch.object(
+					common, "classify_role_set", return_value="canonical_profile"
+				), patch.object(common, "resolve_crm_profile", return_value=profile):
+					with self.assertRaises(frappe.PermissionError):
+						common.require_director_access()
+					access = common.require_director_access(allow_sales=True)
+
+				self.assertEqual(access["profile"], profile)
+
 	def test_mixed_role_set_is_forbidden_even_if_one_role_is_allowed(self):
 		with patch.object(common.frappe, "session", SimpleNamespace(user="mixed@example.com")), patch.object(
 			common.frappe.db, "get_value", return_value=1

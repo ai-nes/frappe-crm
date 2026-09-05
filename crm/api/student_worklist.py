@@ -46,6 +46,10 @@ def list_student_worklist(
 
 	page_size = _parse_page_size(page_size)
 	principal = frappe.session.user
+	# The recommendation hook also scopes through CRM Student, but keep the
+	# aggregate permission explicit so this endpoint cannot become a side door
+	# if recommendation storage or its hook changes later.
+	frappe.has_permission("CRM Student", "read", user=principal, throw=True)
 	roles = sorted(frappe.get_roles(principal))
 	last_sort_key = (
 		_decode_cursor(cursor, principal, roles, policy_version=_RECOMMENDATION_WORKLIST_POLICY_VERSION)
@@ -85,7 +89,10 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	if doctype not in {"CRM Student", "CRM Contact"} or not isinstance(name, str) or not name.strip():
 		frappe.throw(_("A valid Student or Contact is required."), frappe.ValidationError)
+	name = name.strip()
 	page_size = _parse_page_size(page_size)
+	if doctype == "CRM Student":
+		_ensure_visible_student(name)
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	# `get_list` applies CRM Action's permission query conditions; `get_all`
 	# would allow a caller to probe another student's objective/evidence by name.
@@ -109,21 +116,8 @@ def get_next_best_action_for_student(student_id: str | None = None) -> dict:
 
 	student_id = student_id.strip()
 	try:
-		frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+		_ensure_visible_student(student_id)
 		frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
-		student_rows = frappe.get_list(
-			"CRM Student",
-			filters={"name": student_id},
-			fields=["name"],
-			limit_page_length=1,
-		)
-		if not student_rows:
-			_raise_api_error(
-				"STUDENT_NOT_FOUND",
-				"Không tìm thấy hồ sơ học sinh.",
-				frappe.DoesNotExistError,
-				404,
-			)
 		rows = frappe.get_list(
 			"CRM Action Item",
 			filters={
@@ -192,6 +186,7 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	page_size = _parse_page_size(page_size)
 	if student is not None and (not isinstance(student, str) or not student.strip()):
 		frappe.throw(_("student must be a Student name."), frappe.ValidationError)
+	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 
 	from crm.fcrm.role_policy import capabilities_for_roles
@@ -221,10 +216,11 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	student_names = {row.student for row in rows}
 	context_revisions = {
 		r.name: int(r.student_context_revision or 0)
-		for r in frappe.get_all(
+		for r in frappe.get_list(
 			"CRM Student",
 			filters={"name": ["in", list(student_names)]} if student_names else {"name": ["in", [""]]},
 			fields=["name", "student_context_revision"],
+			limit_page_length=0,
 		)
 	}
 	# `can_claim` is the real _valid_executor rule; resolve it once per Student.
@@ -401,6 +397,8 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	page_size = _parse_page_size(page_size)
+	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	staff = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 	if not staff:
 		return {"items": [], "next_cursor": None, "policy_version": _POLICY_VERSION}
@@ -445,6 +443,23 @@ def list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> dic
 
 def _action_transitions(status):
 	return {"planned": {"in_progress", "cancelled"}, "in_progress": {"completed", "failed", "cancelled"}}.get(status, set())
+
+
+def _ensure_visible_student(student_id: str) -> None:
+	"""Make a named Student lookup obey the current session's row scope."""
+	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+	if not frappe.get_list(
+		"CRM Student",
+		filters={"name": student_id},
+		fields=["name"],
+		limit_page_length=1,
+	):
+		_raise_api_error(
+			"STUDENT_NOT_FOUND",
+			"Không tìm thấy hồ sơ học sinh.",
+			frappe.DoesNotExistError,
+			404,
+		)
 
 
 def _serialize_nba(row, now=None) -> dict | None:

@@ -54,8 +54,13 @@ def raise_api_error(code: str, message: str, exception: type[Exception], status:
 	frappe.throw(_(message), exception)
 
 
-def require_director_access() -> dict[str, Any]:
-	"""Authorize one active, canonical Director endpoint identity."""
+def require_director_access(*, allow_sales: bool = False) -> dict[str, Any]:
+	"""Authorize one active, canonical Director endpoint identity.
+
+	When ``allow_sales`` is enabled, the shared read-only NBA queue may also be
+	used by the canonical Sales profiles. The flag is intentionally opt-in so
+	Director-only APIs and mutation commands keep their existing boundary.
+	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":
 		raise_api_error("UNAUTHENTICATED", "Bạn cần đăng nhập để truy cập dữ liệu này.", frappe.AuthenticationError, 401)
@@ -71,13 +76,23 @@ def require_director_access() -> dict[str, Any]:
 	classification = classify_role_set(roles)
 	profile = resolve_crm_profile(roles)
 	approved_director = classification == "canonical_profile" and profile == "admissions_director"
+	approved_sales_reader = allow_sales and classification == "canonical_profile" and profile in {
+		"sales",
+		"ctv_sale",
+		"lead_sales",
+	}
 	allowed_system_roles = FRAMEWORK_ROLE_NAMES | frozenset(DESK_MANAGEMENT_ROLE_NAMES) | {"System Manager"}
 	approved_system_manager = classification == "system_manager" and not (roles - allowed_system_roles)
 	forbidden_business_roles = CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | LEGACY_UNMAPPED_ROLES | ROLE_BACKFILL_SOURCES
 	if classification == "system_manager" and roles & (forbidden_business_roles - {"System Manager"}):
 		approved_system_manager = False
-	if not (approved_director or approved_system_manager):
-		raise_api_error("FORBIDDEN", "Bạn không có quyền truy cập dữ liệu Director.", frappe.PermissionError, 403)
+	if not (approved_director or approved_sales_reader or approved_system_manager):
+		message = (
+			"Bạn không có quyền truy cập hàng đợi NBA."
+			if allow_sales
+			else "Bạn không có quyền truy cập dữ liệu Director."
+		)
+		raise_api_error("FORBIDDEN", message, frappe.PermissionError, 403)
 	return {"user": user, "profile": profile or "system_manager", "roleState": classification}
 
 

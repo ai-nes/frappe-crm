@@ -95,6 +95,10 @@
    "role": "Marketing"
   },
   {
+   "read": 1,
+   "role": "CTV Sale"
+  },
+  {
    "create": 1,
    "delete": 1,
    "read": 1,

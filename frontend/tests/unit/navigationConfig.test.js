@@ -162,6 +162,7 @@ describe('navigationConfig', () => {
       name: 'CRM Students',
       params: { viewType: 'list' },
     })
+    expect(salesTree.find((item) => item.id === 'sales_my_tasks').to).toBe('CTV Sale Tasks')
     expect(leads.children.map((item) => item.id)).toEqual([
       'sales_records_new',
       'sales_records_counseling',

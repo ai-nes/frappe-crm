@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   admissionsWorkspaceCapabilities,
   canConfigureSystem,
+  canAccessSalesTaskWorkbench,
   canManageAttribution,
   canAccessNavigationRoute,
   canManageRoles,
@@ -13,6 +14,14 @@ import {
 } from '../../src/utils/rolePolicy'
 
 describe('rolePolicy', () => {
+  it('allows the aggregate task workbench for Sale, CTV Sale and Lead Sales only', () => {
+    expect(canAccessSalesTaskWorkbench({ crm_profile: 'sales' })).toBe(true)
+    expect(canAccessSalesTaskWorkbench({ crm_profile: 'ctv_sale' })).toBe(true)
+    expect(canAccessSalesTaskWorkbench({ crm_profile: 'lead_sales' })).toBe(true)
+    expect(canAccessSalesTaskWorkbench({ crm_profile: 'marketing' })).toBe(false)
+    expect(canAccessSalesTaskWorkbench({})).toBe(false)
+  })
+
   it('denies capability affordances when server data is absent', () => {
     expect(canConfigureSystem()).toBe(false)
     expect(

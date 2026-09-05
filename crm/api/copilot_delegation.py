@@ -8,11 +8,13 @@ and signed proof.
 from __future__ import annotations
 
 import base64
-from collections import Counter
 import hashlib
 import hmac
 import json
+import re
+from collections import Counter
 from datetime import datetime, timedelta, timezone
+from urllib.parse import quote
 
 import frappe
 import requests
@@ -23,6 +25,7 @@ _AUDIENCE = "crm-agents"
 _CLIENT_NAME = "CRM Agents BFF"
 _TOKEN_TTL_SECONDS = 120
 _AGENT_TIMEOUT = (5, 190)
+_IDEMPOTENCY_KEY_PATTERN = re.compile(r"^[A-Za-z0-9._:-]{8,140}$")
 
 
 def _utc_epoch_seconds() -> int:
@@ -421,3 +424,123 @@ def run_student_nba_evaluation(
 	if not isinstance(payload, dict):
 		return _safe_error_response(502, "NBA evaluation returned an invalid response.")
 	return payload
+
+
+def _validate_analysis_target(value: str, label: str) -> str:
+	target = str(value or "").strip()
+	if not target or len(target) > 140:
+		frappe.throw(f"A valid {label} is required.", frappe.ValidationError)
+	return target
+
+
+def _validate_analysis_force_reason(value: str | None) -> str | None:
+	if value is None:
+		return None
+	reason = str(value).strip()
+	if len(reason) < 10 or len(reason) > 500:
+		frappe.throw("The rerun reason must be between 10 and 500 characters.", frappe.ValidationError)
+	return reason
+
+
+def _validate_analysis_idempotency_key() -> str:
+	key = frappe.get_request_header("Idempotency-Key")
+	if not isinstance(key, str) or not _IDEMPOTENCY_KEY_PATTERN.fullmatch(key.strip()):
+		frappe.throw("A valid Idempotency-Key is required.", frappe.ValidationError)
+	return key.strip()
+
+
+def _run_analysis_agent(path: str, body: dict, idempotency_key: str) -> Response:
+	"""Relay a synchronous 360 analysis without exposing agent credentials."""
+	_require_copilot_user()
+	base_url, api_key = _agent_config()
+	credential = mint_delegated_credential()
+	try:
+		upstream = requests.post(
+			f"{base_url}{path}",
+			json=body,
+			headers={
+				"X-API-Key": api_key,
+				"Authorization": f"Bearer {credential['bearer']}",
+				"X-Frappe-Delegation": credential["proof"],
+				"Idempotency-Key": idempotency_key,
+				"Accept": "application/json",
+			},
+			timeout=_AGENT_TIMEOUT,
+		)
+	except requests.RequestException:
+		return _safe_error_response(503, "360 analysis is temporarily unavailable.")
+
+	if upstream.status_code >= 400:
+		if upstream.status_code in {401, 403}:
+			message = "The 360 analysis target is not permitted."
+		elif upstream.status_code in {409, 422}:
+			message = "The 360 analysis request was not accepted."
+		else:
+			message = "360 analysis is temporarily unavailable."
+		return _safe_error_response(
+			upstream.status_code if upstream.status_code in {401, 403, 409, 422} else 503,
+			message,
+		)
+
+	try:
+		payload = upstream.json()
+	except ValueError:
+		return _safe_error_response(502, "360 analysis returned an invalid response.")
+	if not isinstance(payload, dict):
+		return _safe_error_response(502, "360 analysis returned an invalid response.")
+	return Response(
+		json.dumps(payload, default=str),
+		status=upstream.status_code,
+		content_type="application/json",
+		headers={"Cache-Control": "no-store"},
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def run_student_analysis(
+	student_id: str,
+	force_rerun_reason: str | None = None,
+):
+	student = _validate_analysis_target(student_id, "student ID")
+	reason = _validate_analysis_force_reason(force_rerun_reason)
+	body = {"student_id": student}
+	if reason:
+		body["force_rerun_reason"] = reason
+	return _run_analysis_agent(
+		"/api/v1/analysis-runs/student/run",
+		body,
+		_validate_analysis_idempotency_key(),
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def run_school_analysis(
+	high_school: str,
+	force_rerun_reason: str | None = None,
+	admission_year: int | None = None,
+):
+	school = _validate_analysis_target(high_school, "high school ID")
+	reason = _validate_analysis_force_reason(force_rerun_reason)
+	if admission_year is not None and not 2000 <= int(admission_year) <= 2099:
+		frappe.throw("A valid admission year is required.", frappe.ValidationError)
+	body = {"high_school": school}
+	if reason:
+		body["force_rerun_reason"] = reason
+	if admission_year is not None:
+		body["admission_year"] = int(admission_year)
+	return _run_analysis_agent(
+		"/api/v1/analysis-runs/school/run",
+		body,
+		_validate_analysis_idempotency_key(),
+	)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_analysis_run(run_id: str, run_kind: str):
+	if run_kind not in {"student", "school"}:
+		frappe.throw("A valid analysis run kind is required.", frappe.ValidationError)
+	identifier = _validate_analysis_target(run_id, "analysis run ID")
+	return _agent_json(
+		f"/api/v1/analysis-runs/{quote(identifier, safe='')}",
+		params={"run_kind": run_kind},
+	)

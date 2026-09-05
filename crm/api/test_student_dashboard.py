@@ -88,6 +88,14 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
+	def test_dashboard_requires_an_authenticated_session(self):
+		frappe.set_user("Guest")
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				get_student_dashboard(phone="0987000099")
+		finally:
+			frappe.set_user("Administrator")
+
 	def test_events_mapping_reads_canonical_participation(self):
 		event_name = self._make_event("_Test SD Legacy Event", event_date="2026-09-10")
 		student = self._make_student("_Test SD Canonical Student", "0987000001")
@@ -96,6 +104,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			"doctype": "CRM Marketing Engagement", "engagement_kind": "event_participation",
 			"reference_doctype": "CRM Event", "reference_name": event_name,
 			"crm_event": event_name, "crm_contact": contact_name, "student": student,
+			"status": "Checked-in",
 		})
 		participation.insert(ignore_permissions=True)
 

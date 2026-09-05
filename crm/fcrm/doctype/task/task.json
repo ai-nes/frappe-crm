@@ -156,6 +156,18 @@
    "write": 1
   },
   {
+   "create": 1,
+   "read": 1,
+   "role": "CTV Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "read": 1,
+   "role": "CTV-Sale",
+   "write": 1
+  },
+  {
    "read": 1,
    "role": "Marketing"
   },

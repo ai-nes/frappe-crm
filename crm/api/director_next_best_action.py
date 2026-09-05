@@ -1,7 +1,7 @@
-"""Director Next Best Action queue projection.
+"""Director and Sales Next Best Action queue projection.
 
 Read-only envelope consumed by ``/director/ai/next-best-action``. The canonical
-work item is ``CRM Action`` (``origin='ai'``); this module only projects rows
+work item is ``CRM Action Item`` (``origin='ai'``); this module only projects rows
 that Frappe permissions already expose to the caller. It never fabricates
 probability or SLA percentages — absent data is returned as ``null`` / ``[]``
 per ``docs/action-ui-contract.md``.
@@ -131,16 +131,23 @@ def get_director_next_best_action(
 	pageSize: str | int = 8,
 	outcomePeriod: str = "30d",
 ) -> dict[str, Any]:
-	require_director_access()
+	"""Return the NBA queue within the caller's Student ownership scope.
+
+	Admissions Director/System Manager see the requested admission-year scope;
+	Sale and CTV Sale see their own assigned Students; Lead Sales sees the
+	team-and-team-pool scope enforced by the shared Student permission policy.
+	"""
+	access = require_director_access(allow_sales=True)
 	scope_value = parse_enum(scope, field="scope", allowed=_SCOPE_LABELS.keys(), default="all")
 	queue_filter = parse_enum(queueFilter, field="queueFilter", allowed=("all", "urgent"), default="all")
 	page_number = parse_limit(page, field="page", minimum=1, maximum=10_000, default=1)
 	page_size = parse_limit(pageSize, field="pageSize", minimum=1, maximum=100, default=8)
 	period = parse_enum(outcomePeriod, field="outcomePeriod", allowed=("7d", "30d", "90d"), default="30d")
 	year = resolve_admission_year(admissionYear)
+	scope_label = _scope_label_for_access(scope_value, access)
 
 	now = frappe.utils.now_datetime()
-	student_ids = _students_for_year(year)
+	student_ids = _students_for_year(year, access)
 	warnings: list[str] = []
 	rows: list[Any] = []
 	filtered: list[Any] = []
@@ -176,7 +183,7 @@ def get_director_next_best_action(
 		"meta": {
 			"admissionYear": int(year),
 			"scope": scope_value,
-			"scopeLabel": _SCOPE_LABELS[scope_value],
+			"scopeLabel": scope_label,
 			"asOf": _as_iso(now),
 			"timezone": "Asia/Ho_Chi_Minh",
 			"status": "available" if actions else "partial",
@@ -250,11 +257,11 @@ def get_director_recommendations(
 
 	Read-only projection of ``CRM Recommendation`` rows produced by a settled
 	``CRM NBA Evaluation``. Legacy rows (no ``evaluation`` link) are never
-	returned by this path. Visibility matches the existing Director endpoint:
-	director identity is required and ``frappe.get_list`` applies row permissions
-	and the admission-year student scope — access is never widened here.
+	returned by this path. Director and the three Sales profiles are allowed;
+	``frappe.get_list`` still applies row permissions and the admission-year
+	Student scope — access is never widened here.
 	"""
-	require_director_access()
+	access = require_director_access(allow_sales=True)
 	year = resolve_admission_year(admissionYear)
 	limit_value = parse_limit(
 		limit,
@@ -264,7 +271,7 @@ def get_director_recommendations(
 		default=_RECOMMENDATION_LIMIT_DEFAULT,
 	)
 	now = frappe.utils.now_datetime()
-	student_ids = _students_for_year(year)
+	student_ids = _students_for_year(year, access)
 
 	items: list[dict[str, Any]] = []
 	if student_ids:
@@ -468,19 +475,43 @@ def _latest_event_id(doctype: str, correlation_id: str) -> str | None:
 	return rows[0]["name"] if rows else None
 
 
-def _students_for_year(year: str) -> list[str] | None:
+def _students_for_year(year: str, access: dict[str, Any] | None = None) -> list[str] | None:
 	"""All in-scope student ids for the admission year, or ``None`` when the
-	Student doctype is unavailable (keeps the endpoint 200 with an empty queue)."""
+	Student doctype is unavailable (keeps the endpoint 200 with an empty queue).
+
+	The Student permission query remains the authoritative scope for every role.
+	The explicit owner filter for Sale/CTV Sale makes their personal portfolio
+	boundary visible in the query as well; Lead Sales intentionally keeps the
+	team-and-team-pool scope supplied by the Student permission policy.
+	"""
+	filters: dict[str, Any] = {"admission_year": year}
+	if access and access.get("profile") in {"sales", "ctv_sale"}:
+		user = access.get("user")
+		if not user:
+			return []
+		staff = frappe.db.get_value("CRM Staff", {"user": user}, "name")
+		if not staff:
+			return []
+		filters["owner_staff"] = staff
 	try:
 		rows = frappe.get_list(
 			"CRM Student",
-			filters={"admission_year": year},
+			filters=filters,
 			fields=["name"],
 			limit_page_length=0,
 		)
 	except (frappe.DoesNotExistError, frappe.PermissionError):
 		return None
 	return [row["name"] for row in rows if row.get("name")]
+
+
+def _scope_label_for_access(scope: str, access: dict[str, Any]) -> str:
+	"""Describe the effective scope without changing the response contract."""
+	return {
+		"sales": "Hồ sơ được phân công",
+		"ctv_sale": "Hồ sơ được phân công",
+		"lead_sales": "Team và pool được phân công",
+	}.get(access.get("profile"), _SCOPE_LABELS[scope])
 
 
 def _is_urgent(row: Any, now) -> bool:
@@ -610,11 +641,10 @@ def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
 	students = (
 		{
 			row["name"]: row
-			for row in frappe.get_list(
+			for row in _get_lookup_rows(
 				"CRM Student",
 				filters={"name": ["in", student_ids]},
 				fields=["name", "student_name", "high_school", "major", "interest_level"],
-				limit_page_length=0,
 			)
 		}
 		if student_ids
@@ -624,11 +654,10 @@ def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
 	schools = (
 		{
 			row["name"]: row.get("school_name") or row["name"]
-			for row in frappe.get_list(
+			for row in _get_lookup_rows(
 				"CRM High School",
 				filters={"name": ["in", school_ids]},
 				fields=["name", "school_name"],
-				limit_page_length=0,
 			)
 		}
 		if school_ids
@@ -638,11 +667,10 @@ def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
 	majors = (
 		{
 			row["name"]: row.get("major_name") or row["name"]
-			for row in frappe.get_list(
+			for row in _get_lookup_rows(
 				"CRM Major",
 				filters={"name": ["in", majors_ids]},
 				fields=["name", "major_name"],
-				limit_page_length=0,
 			)
 		}
 		if majors_ids
@@ -651,17 +679,35 @@ def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
 	owners = (
 		{
 			row["name"]: row.get("full_name") or row["name"]
-			for row in frappe.get_list(
+			for row in _get_lookup_rows(
 				"CRM Staff",
 				filters={"name": ["in", owner_ids]},
 				fields=["name", "full_name"],
-				limit_page_length=0,
 			)
 		}
 		if owner_ids
 		else {}
 	)
 	return {"students": students, "schools": schools, "majors": majors, "owners": owners}
+
+
+def _get_lookup_rows(doctype: str, *, filters: dict[str, Any], fields: list[str]) -> list[Any]:
+	"""Load optional labels without widening the caller's read permissions.
+
+	Some Sales profiles can read the Student/Action rows but not every linked
+	master-data DocType. The NBA row is still useful in that case; its mapper
+	falls back to the stored link id instead of turning a permitted queue read
+	into a permission error.
+	"""
+	try:
+		return frappe.get_list(
+			doctype,
+			filters=filters,
+			fields=fields,
+			limit_page_length=0,
+		)
+	except (frappe.DoesNotExistError, frappe.PermissionError):
+		return []
 
 
 def _map_item(row: Any, lookups: dict[str, dict[str, Any]], now) -> dict[str, Any]:
