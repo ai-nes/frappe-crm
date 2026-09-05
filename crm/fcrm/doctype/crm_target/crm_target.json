@@ -5,7 +5,7 @@
  "creation": "2026-08-30 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["naming_series", "admission_year", "period_type", "period_start", "period_end", "metric_key", "planning_scope", "scope_type", "scope", "target_value", "status", "version", "effective_from", "effective_until", "source_reference", "idempotency_fingerprint"],
+ "field_order": ["naming_series", "admission_year", "period_type", "period_start", "period_end", "metric_key", "planning_scope", "target_value", "status", "version", "effective_from", "effective_until", "source_reference", "idempotency_fingerprint"],
  "fields": [
   {"default": "TGT-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "TGT-.YYYY.-"},
   {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year", "reqd": 1},
@@ -14,8 +14,6 @@
   {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period End", "reqd": 1},
   {"fieldname": "metric_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Metric Key", "reqd": 1},
   {"fieldname": "planning_scope", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Planning Scope", "options": "CRM Planning Scope", "reqd": 1},
-  {"fieldname": "scope_type", "fieldtype": "Select", "hidden": 1, "label": "Legacy Scope Type", "options": "National\nRegion\nTerritory\nCampus\nTeam\nMajor", "read_only": 1},
-  {"fieldname": "scope", "fieldtype": "Data", "hidden": 1, "label": "Legacy Scope", "read_only": 1},
   {"fieldname": "target_value", "fieldtype": "Float", "in_list_view": 1, "label": "Target Value", "reqd": 1},
   {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nApproved\nRetired", "reqd": 1},
   {"default": "1", "fieldname": "version", "fieldtype": "Int", "in_list_view": 1, "label": "Version", "reqd": 1},
@@ -38,7 +36,7 @@
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
-  {"export": 1, "read": 1, "role": "Lead Sales"},
+  {"export": 1, "read": 1, "role": "Lead Sale"},
   {"export": 1, "read": 1, "role": "Marketing"}
  ],
  "row_format": "Dynamic",

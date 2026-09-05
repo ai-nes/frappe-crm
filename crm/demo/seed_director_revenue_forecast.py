@@ -143,8 +143,6 @@ def _ensure_target(scope: str, year: str, metric: str, value: float) -> None:
 		"period_end": f"{year}-12-31",
 		"metric_key": metric,
 		"planning_scope": scope,
-		"scope_type": None,
-		"scope": None,
 		"target_value": value,
 		"status": "Approved",
 		"version": 1,

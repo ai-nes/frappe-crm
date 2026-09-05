@@ -57,8 +57,6 @@ def test_phase1_facts_have_period_and_idempotency_keys():
 		index["fields"][:4] == ["admission_year", "period_start", "period_end", "metric_key"]
 		for index in target["indexes"]
 	)
-	assert _fields(target)["scope_type"]["read_only"] == 1
-	assert _fields(target)["scope"]["read_only"] == 1
 
 
 def test_canonical_admission_and_dashboard_facts_have_declared_grain():

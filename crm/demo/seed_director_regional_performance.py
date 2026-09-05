@@ -181,8 +181,6 @@ def _ensure_target(scope: str, province: str, year: str, target_value: int) -> s
 		"period_end": f"{year}-12-31",
 		"metric_key": "enrollment",
 		"planning_scope": scope,
-		"scope_type": None,
-		"scope": None,
 		"target_value": target_value,
 		"status": "Approved",
 		"version": 1,
