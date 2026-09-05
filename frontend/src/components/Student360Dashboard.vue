@@ -16,7 +16,7 @@
           {{ __('Tóm tắt tình hình để Sales nắm bối cảnh; nhật ký tương tác và điểm số luôn đọc trực tiếp từ CRM.') }}
         </p>
         <p v-if="dashboard.analyzed_at" class="mt-1 text-xs text-ink-gray-5">
-          {{ __('Bản tóm tắt gần nhất: {0}', [formatDate(dashboard.analyzed_at)]) }}
+          {{ __('Bản tóm tắt gần nhất:') }} {{ formatDate(dashboard.analyzed_at) }}
         </p>
       </div>
       <Button
@@ -117,7 +117,11 @@
                     <p v-if="item.outcome" class="mt-1 text-xs text-ink-gray-5">{{ __('Kết quả') }}: {{ outcomeLabel(item.outcome) }}</p>
                   </article>
                 </div>
-                <EmptyState v-else :text="__('Chưa có tương tác {0}.', [column.label])" compact />
+                <EmptyState
+                  v-else
+                  :text="column.key === 'inbound' ? __('Chưa có tương tác vào.') : __('Chưa có tương tác ra.')"
+                  compact
+                />
               </div>
             </div>
           </section>
