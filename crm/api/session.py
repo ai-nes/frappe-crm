@@ -36,9 +36,17 @@ def resolve_crm_profile(roles):
 
 
 def resolve_copilot_profile(roles):
-	"""Return a Copilot profile while keeping System Manager control-plane-only."""
+	"""Return a Copilot profile while keeping System Manager control-plane-only.
+
+	The demo full-access switch (`crm_agents_demo_full_access` site_config,
+	shared with the mutation/discovery demo paths) also assigns a fixed demo
+	profile to System Manager/Administrator, so one bare Administrator login
+	can drive Copilot without seeding a canonical operating-role account.
+	"""
 	role_names = frozenset(roles)
 	if "System Manager" in role_names:
+		if frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True"):
+			return "Admissions Director"
 		return None
 	profile = resolve_crm_profile(role_names)
 	label = CRM_PROFILE_LABELS.get(profile, profile)

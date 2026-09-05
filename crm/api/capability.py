@@ -73,8 +73,16 @@ _MANIFEST_CACHE_PREFIX = "crm:capability-manifest:v1:"
 
 
 def _is_capability_gateway_user(session_flags: dict) -> bool:
-	"""Copilot serves canonical operating roles, never System Manager."""
-	return bool(session_flags.get("is_crm_user")) and not session_flags.get("is_system_manager", False)
+	"""Copilot serves canonical operating roles, never System Manager.
+
+	The demo full-access switch (`crm_agents_demo_full_access` site_config,
+	same flag as the mutation/discovery demo paths) also lifts the System
+	Manager exclusion, so a bare Administrator/System Manager demo login
+	can drive Copilot without seeding a canonical operating-role account.
+	"""
+	if session_flags.get("is_system_manager", False):
+		return frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
+	return bool(session_flags.get("is_crm_user"))
 
 
 def _session_rate_limit(*, limit: int, seconds: int):
@@ -666,8 +674,22 @@ def get_capability_manifest():
 	"""
 	get_session_role_flags()
 	roles, capability_revision = _capability_revision_snapshot()
-	if resolve_copilot_profile(roles) is None:
+	copilot_profile = resolve_copilot_profile(roles)
+	if copilot_profile is None:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
+	# crm-agents' CapabilityManifest refuses to pair a role_profile with a
+	# "System Manager" entry in `roles` -- a real control-plane boundary, kept
+	# intact for anyone actually holding that role. Administrator (a platform
+	# superuser distinct from a staff System Manager) is the sole account this
+	# demo switch assigns a profile to, so drop the one label from the
+	# *published* roles here rather than weakening that boundary for real
+	# System Manager accounts. `copilot_profile` was already resolved above
+	# against the unfiltered roles, so this filtering cannot blank it out.
+	if (
+		"System Manager" in roles
+		and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
+	):
+		roles = [r for r in roles if r != "System Manager"]
 	cache_key = frappe.cache.make_key(
 		f"{_MANIFEST_CACHE_PREFIX}{frappe.session.user}:{capability_revision}"
 	)
@@ -744,7 +766,7 @@ def get_capability_manifest():
 	# endpoint independently rechecks this same flag and the authenticated role.
 	if (
 		frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-		and resolve_copilot_profile(roles) in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
+		and copilot_profile in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
 	):
 		semantic_capabilities = sorted(set(semantic_capabilities) | {"action.crm_mutation"})
 
@@ -763,8 +785,8 @@ def get_capability_manifest():
 	result = {
 		"contract_version": CAPABILITY_CONTRACT_VERSION,
 		"roles": roles,
-		"crm_role": resolve_copilot_profile(roles),
-		"role_profile": resolve_copilot_profile(roles),
+		"crm_role": copilot_profile,
+		"role_profile": copilot_profile,
 		"role_matrix_epoch": ROLE_MATRIX_EPOCH,
 		"resources": resources,
 		"semantic_capabilities": semantic_capabilities,
