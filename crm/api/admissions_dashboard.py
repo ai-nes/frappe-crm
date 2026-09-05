@@ -36,12 +36,16 @@ def _get_delta(current, previous):
 	return round(((current - previous) / previous) * 100.0, 1)
 
 
-def _staff_names_in_sales_team(sales_team):
-	"""CRM Staff names belonging to a sales_team, or the sentinel "__none__"
-	(never a real doc name) when the team has no staff -- shared by every
-	dashboard that scopes CRM Contact.assigned_to by team, so the scoping
+def _staff_names_in_sales_team(team):
+	"""CRM Staff names with a CRM Team Membership for `team`, or the sentinel
+	"__none__" (never a real doc name) when the team has no staff -- shared by
+	every dashboard that scopes CRM Contact.assigned_to by team, so the scoping
 	logic can't silently diverge between them."""
-	staff_names = frappe.db.get_all("CRM Staff", filters={"sales_team": sales_team}, pluck="name")
+	staff_names = frappe.db.get_all(
+		"CRM Team Membership",
+		filters={"parenttype": "CRM Staff", "team": team},
+		pluck="parent",
+	)
 	return staff_names or ["__none__"]
 
 

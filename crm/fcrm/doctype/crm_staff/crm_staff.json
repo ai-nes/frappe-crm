@@ -11,7 +11,6 @@
  "field_order": [
   "full_name",
   "user",
-  "sales_team",
   "is_active",
   "column_break_1",
   "department",
@@ -39,15 +38,6 @@
    "options": "User",
    "reqd": 1,
    "unique": 1
-  },
-  {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility until admissions readers move to CRM Team membership.",
-   "fieldname": "sales_team",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Sales Team (Deprecated)",
-   "options": "\nTeam North\nTeam Central\nTeam South"
   },
   {
    "default": "1",
