@@ -111,6 +111,11 @@ const levelLabels = {
 
 const levelLabel = (value) => levelLabels[value] || value
 const displayValue = (value) => (value === null || value === undefined || value === '' ? '—' : value)
+const assignmentSourceLabel = (value) => ({
+  school_override: __('Gán riêng tại trường'),
+  zone_inherited: __('Kế thừa từ địa bàn'),
+  unresolved: __('Chưa xác định'),
+}[value] || value)
 const canEditRow = computed(() => props.canEdit && ['zone', 'high_school'].includes(props.row?.level))
 const memberNames = computed(() => props.row?.member_names || [])
 const details = computed(() => {
@@ -125,6 +130,14 @@ const details = computed(() => {
     { label: __('Nhóm phụ trách'), value: row.team_names?.join(', ') || row.team_name },
     { label: __('Nhân viên'), value: row.staff_names?.join(', ') || row.staff_name },
     { label: __('Hàng chờ Lead'), value: row.pool_names?.join(', ') },
+    ...(row.level === 'high_school'
+      ? [{
+          label: __('Nguồn cấu hình'),
+          value: row.has_stale_school_override
+            ? __('Kế thừa từ địa bàn · mapping trường cần rà soát')
+            : assignmentSourceLabel(row.assignment_source),
+        }]
+      : []),
     { label: __('Lead hoạt động'), value: row.active_students },
     { label: __('Vai trò'), value: row.function },
     { label: __('Capacity'), value: row.capacity },

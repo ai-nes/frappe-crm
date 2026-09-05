@@ -5,6 +5,7 @@ from crm.api.assignment_workspace import (
 	_clean_row,
 	_expected_revision_map,
 	_filter_rows,
+	_inherited_zone_mapping,
 	_normalize_filters,
 	_parse_string_list,
 	_school_assignment_revision,
@@ -66,6 +67,46 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 		self.assertEqual(_workload_status(5, {"max_active_students": 5}), "over_capacity")
 		self.assertEqual(_workload_status(9, {"max_active_students": 10}), "near_capacity")
 		self.assertEqual(_workload_status(2, {"max_active_students": 5}), "healthy")
+
+	def test_school_can_inherit_one_effective_zone_team_pool_mapping(self):
+		teams = {"team-a": {"name": "team-a", "is_active": 1, "team_type": "Sales"}}
+		zone_assignments = {"zone-a": [{"name": "map-a", "team": "team-a", "revision": 3}]}
+		pools = {
+			"team-a": [{"name": "pool-a", "campus": "campus-a"}],
+		}
+
+		self.assertEqual(
+			_inherited_zone_mapping("zone-a", "campus-a", teams, zone_assignments, pools),
+			{"team": "team-a", "pool": "pool-a", "assignment": "map-a", "revision": 3},
+		)
+		self.assertIsNone(_inherited_zone_mapping("zone-a", "campus-b", teams, zone_assignments, pools))
+		self.assertIsNone(
+			_inherited_zone_mapping(
+				"zone-a",
+				"campus-a",
+				teams,
+				{"zone-a": [*zone_assignments["zone-a"], {"name": "map-b", "team": "team-a"}]},
+				pools,
+			)
+		)
+		self.assertIsNone(
+			_inherited_zone_mapping(
+				"zone-a",
+				"campus-a",
+				teams,
+				zone_assignments,
+				{"team-a": [*pools["team-a"], {"name": "pool-b", "campus": "campus-a"}]},
+			)
+		)
+		self.assertIsNone(
+			_inherited_zone_mapping(
+				"zone-a",
+				"campus-a",
+				{"team-a": {"name": "team-a", "is_active": 1, "team_type": "Marketing"}},
+				zone_assignments,
+				pools,
+			)
+		)
 
 	def test_clean_row_keeps_expand_affordance_when_children_are_outside_page(self):
 		children = {"cluster:1": ["zone:1"]}

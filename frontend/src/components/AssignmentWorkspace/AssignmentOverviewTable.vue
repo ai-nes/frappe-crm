@@ -217,14 +217,26 @@ function ownerTitle(row) {
   if (row.level === 'zone') return row.team_name || __('Chưa có Team')
   if (row.level === 'team') return `${formatNumber(row.member_count)} ${__('thành viên Team')}`
   if (row.level === 'staff') return row.team_name || __('Chưa thuộc Team')
-  if (row.level === 'high_school') return row.staff_names?.length ? row.staff_names.join(', ') : __('Theo Team của địa bàn')
+  if (row.level === 'high_school') {
+    if (row.staff_names?.length) return row.staff_names.join(', ')
+    if (row.team_names?.length) return row.team_names.join(', ')
+    return __('Theo Team của địa bàn')
+  }
   if (row.team_names?.length) return row.team_names.join(', ')
   return __('Theo cấp bên dưới')
 }
 
 function ownerMeta(row) {
   if (['team', 'zone'].includes(row.level)) return memberSummary(row.member_names)
-  if (row.level === 'high_school') return row.ward_name ? `${__('Phường/xã')}: ${row.ward_name}` : ''
+  if (row.level === 'high_school') {
+    const ward = row.ward_name ? `${__('Phường/xã')}: ${row.ward_name}` : ''
+    if (row.inherited_from_zone) {
+      return [ward, __('Kế thừa từ địa bàn'), row.has_stale_school_override ? __('Có mapping trường cần rà soát') : '']
+        .filter(Boolean)
+        .join(' · ')
+    }
+    return ward
+  }
   return ''
 }
 

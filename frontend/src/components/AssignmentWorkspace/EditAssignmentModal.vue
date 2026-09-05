@@ -139,10 +139,14 @@ const staffOptions = computed(() =>
     .filter((item) => !teamId.value || item.team_ids?.includes(teamId.value))
     .map((item) => ({ label: item.label || item.value, value: item.value })),
 )
-const hasExistingAssignment = computed(() => Boolean(props.row?.staff_ids?.length || props.row?.team_ids?.length))
+const hasExistingAssignment = computed(() =>
+  props.row?.assignment_source === 'school_override' || Boolean(props.row?.has_stale_school_override),
+)
 const currentAssignmentLabel = computed(() => {
   if (props.row?.level === 'zone') return props.row?.team_name || __('Chưa có')
-  return props.row?.staff_names?.join(', ') || __('Chưa có')
+  if (props.row?.staff_names?.length) return props.row.staff_names.join(', ')
+  if (props.row?.team_names?.length) return `${__('Theo Team')}: ${props.row.team_names.join(', ')}`
+  return __('Chưa có')
 })
 const canPreview = computed(() => Boolean(props.row && teamId.value && (props.row.level !== 'high_school' || staffId.value)))
 const canSubmit = computed(() => Boolean(canPreview.value && impact.value && confirmed.value && reason.value.trim().length >= 5 && !submitting.value))
