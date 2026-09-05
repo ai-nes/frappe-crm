@@ -1,12 +1,8 @@
 <template>
   <section class="assignment-overview-table overflow-hidden rounded-lg border border-outline-gray-2 bg-surface-white shadow-sm" data-testid="assignment-overview-table">
     <div class="flex flex-wrap items-center justify-between gap-3 border-b border-outline-gray-1 px-4 py-3">
-      <div>
-        <h2 class="font-semibold text-ink-gray-9">{{ __('2. Cây phân bổ hiện tại') }}</h2>
-        <p class="mt-0.5 text-xs text-ink-gray-5">{{ __('Cụm → Địa bàn → Trường → Nhóm → Nhân sự') }}</p>
-      </div>
+      <h2 class="font-semibold text-ink-gray-9">{{ __('2. Cây phân bổ hiện tại') }}</h2>
       <div class="flex flex-wrap items-center gap-2">
-        <span class="text-xs text-ink-gray-5">{{ columnCountLabel }}</span>
         <Button size="sm" variant="subtle" :label="__('Mở tới địa bàn')" iconLeft="chevrons-down" @click="expandToLocations" />
         <Button size="sm" variant="subtle" :label="__('Thu gọn')" iconLeft="chevrons-up" @click="collapseAll" />
       </div>
@@ -116,7 +112,7 @@
                 :key="row.id"
                 :row="row"
                 :active="row.id === selectedLeafId"
-                :meta-text="row.ward_name || __('Chưa có phường/xã')"
+                :meta-text="row.active_students ? `${formatNumber(row.active_students)} Lead` : __('Chưa có Lead')"
                 @select="selectLeaf(row)"
               >
                 <template v-if="selectable" #prefix>
@@ -288,11 +284,6 @@ const schools = computed(() => zoneLeafChildren.value.filter((row) => row.level 
 const teams = computed(() => zoneLeafChildren.value.filter((row) => row.level === 'team'))
 const detailNode = computed(() => rowMap.value.get(selectedLeafId.value) || rowMap.value.get(selectedZoneId.value) || null)
 const staffOfDetail = computed(() => (detailNode.value ? childrenRows(detailNode.value.id).filter((row) => row.level === 'staff') : []))
-
-const columnCountLabel = computed(() => {
-  const inZone = schools.value.length + teams.value.length
-  return `${inZone}/${props.rows.length} ${__('dòng đang xem')}`
-})
 
 function pickDefaults() {
   const clusterList = clusters.value
