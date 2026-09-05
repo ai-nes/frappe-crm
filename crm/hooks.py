@@ -420,6 +420,7 @@ before_tests = "crm.tests.before_tests"
 #
 override_whitelisted_methods = {
 	"frappe.desk.desktop.get_desktop_page": "crm.api.desk.get_desktop_page",
+	"frappe.core.doctype.user.user.get_all_roles": "crm.api.user.get_all_roles",
 }
 #
 # each overriding function accepts a `data` argument;

@@ -8,7 +8,7 @@ from crm.api.user import set_canonical_crm_profile
 from crm.fcrm.master_data_governance import create_additive_value
 CANONICAL_FIXTURE_USERS = {
 	"nguyen.minh.khoi@gmail.com": {"full_name": "Nguyễn Minh Khôi", "role": "Sale"},
-	"le.thanh.huong@gmail.com": {"full_name": "Lê Thanh Hương", "role": "Lead Sales"},
+	"le.thanh.huong@gmail.com": {"full_name": "Lê Thanh Hương", "role": "Lead Sale"},
 	"pham.bao.chau@gmail.com": {"full_name": "Phạm Bảo Châu", "role": "Marketing"},
 	"tran.quoc.duy@gmail.com": {"full_name": "Trần Quốc Duy", "role": "Admissions Director"},
 }
@@ -178,7 +178,7 @@ def _ensure_fixture_student_pool(team):
 def _ensure_fixture_team_memberships(team):
 	for email, function, is_team_lead in (
 		("nguyen.minh.khoi@gmail.com", "Sale", 0),
-		("le.thanh.huong@gmail.com", "Lead Sales", 1),
+		("le.thanh.huong@gmail.com", "Lead Sale", 1),
 	):
 		staff_name = frappe.db.get_value("CRM Staff", {"user": email}, "name")
 		if not staff_name:

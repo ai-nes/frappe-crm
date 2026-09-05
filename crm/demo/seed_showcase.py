@@ -1297,10 +1297,11 @@ def _ensure_policies(campus: str, pool: str) -> None:
 
 	now = now_datetime() - timedelta(minutes=1)
 	base = {"campus": campus, "student_pool": pool, "authored_by": "Administrator"}
+	pool_key = re.sub(r"[^a-z0-9]+", "-", pool.lower()).strip("-")
 	specs = (
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v1",
 			"policy_version": 1,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1308,7 +1309,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v2",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v2",
 			"policy_version": 2,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1316,7 +1317,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v0",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v0",
 			"policy_version": 3,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1324,7 +1325,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v1",
 			"policy_version": 1,
 			"warning_minutes": 15,
 			"breach_minutes": 30,
@@ -1337,7 +1338,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v2",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v2",
 			"policy_version": 2,
 			"warning_minutes": 10,
 			"breach_minutes": 25,
@@ -1350,7 +1351,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v0",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v0",
 			"policy_version": 3,
 			"warning_minutes": 20,
 			"breach_minutes": 40,

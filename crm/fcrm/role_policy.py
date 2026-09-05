@@ -10,6 +10,7 @@ from __future__ import annotations
 
 POLICY_VERSION = "phase2-v1"
 SYSTEM_MANAGER_ROLE = "System Manager"
+ADMINISTRATOR_ROLE = "Administrator"
 DESK_MANAGEMENT_ROLE_NAMES = (
 	"Workspace Manager",
 	"Dashboard Manager",
@@ -19,7 +20,7 @@ DESK_MANAGEMENT_ROLE_NAMES = (
 PROFILE_LABELS = {
 	"sales": "Sale",
 	"marketing": "Marketing",
-	"lead_sales": "Lead Sales",
+	"lead_sales": "Lead Sale",
 	"admissions_director": "Admissions Director",
 	# PRD-phan-quyen-lead.md roles (2026-09-04). Unlike the profiles above,
 	# these are not derived from `CANONICAL_PERMISSION_MATRIX` -- their
@@ -37,7 +38,7 @@ PROFILE_LABELS = {
 	"pr": "Promoter",
 	"pr_manager": "Lead Promoter",
 	"lead_marketing": "Lead Marketing",
-	"ceo": "CEO",
+	"ceo": "Administrator",
 }
 
 # Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
@@ -49,19 +50,19 @@ PROFILE_ROLE_ALIASES = {
 	# "Promoter" moved out to its own "pr" profile below (2026-09-04) -- it no
 	# longer shares Marketing's permissions, it gets the PRD's PR CRUD.
 	"marketing": frozenset({"Marketing"}),
-	"lead_sales": frozenset({"Lead Sales"}),
+	"lead_sales": frozenset({"Lead Sale"}),
 	"admissions_director": frozenset({"Admissions Director"}),
 	"ctv_sale": frozenset({"CTV Sale"}),
 	"pr": frozenset({"Promoter"}),
 	"pr_manager": frozenset({"Lead Promoter"}),
 	"lead_marketing": frozenset({"Lead Marketing"}),
-	"ceo": frozenset({"CEO"}),
+	"ceo": frozenset({"Administrator"}),
 }
 
 # Both canonical Sales profiles can own Student cases. Team membership keeps
 # the legacy hyphenated spelling because it is the persisted Select value.
 STUDENT_OWNER_PROFILES = frozenset({"sales", "ctv_sale"})
-STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV-Sale"})
+STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV Sale"})
 
 PROFILE_CAPABILITIES = {
 	"sales": frozenset(
@@ -186,7 +187,7 @@ def capability_details(capabilities):
 		for capability in sorted(capabilities)
 	]
 
-CANONICAL_SELECTABLE_ROLES = frozenset({SYSTEM_MANAGER_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
+CANONICAL_SELECTABLE_ROLES = frozenset({ADMINISTRATOR_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
 
 _PERMISSION_FLAGS = {
 	"r": "read",
@@ -225,7 +226,7 @@ CANONICAL_PERMISSION_MATRIX = {
 			# Marketing need read-only visibility for channel-performance
 			# analysis; still campus-scoped per P0-2, see row_scope below.
 			"marketing": "r",
-			"admissions_director": "rx",
+			"admissions_director": "rwcd",
 		},
 		"row_scope": {
 			"sales": "assigned",
@@ -601,6 +602,8 @@ def capabilities_for_roles(roles, *, administrator=False) -> frozenset[str]:
 	"""Return policy capabilities without treating legacy data roles as authority."""
 	role_names = frozenset(roles)
 	if administrator:
+		return SYSTEM_MANAGER_CAPABILITIES
+	if ADMINISTRATOR_ROLE in role_names:
 		return SYSTEM_MANAGER_CAPABILITIES
 	classification = classify_role_set(role_names)
 	if classification in {"legacy_migration_required", "mixed_or_unmapped", "unmapped"}:

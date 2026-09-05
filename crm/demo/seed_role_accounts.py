@@ -13,12 +13,15 @@ from crm.api.user import set_canonical_crm_profile
 
 # (role, email, full name). Roles are the canonical CANONICAL_SELECTABLE_ROLES.
 ROLE_ACCOUNTS = (
-	("Admissions Director", "admin@gmail.com", "Giám đốc Tuyển sinh"),
-	("System Manager", "system@gmail.com", "Quản trị Hệ thống"),
+	("Administrator", "admin@gmail.com", "Quản trị Hệ thống"),
+	("Admissions Director", "admissionsdirector@gmail.com", "Giám đốc Tuyển sinh"),
+	("CTV Sale", "ctvsale@gmail.com", "Cộng tác viên Sale"),
 	("Sale", "sale@gmail.com", "Nhân viên Tư vấn"),
-	("Lead Sales", "leadsales@gmail.com", "Trưởng nhóm Tư vấn"),
-	("Marketing", "marketing@gmail.com", "Nhân viên Marketing"),
+	("Lead Sale", "leadsale@gmail.com", "Trưởng nhóm Tư vấn"),
 	("Promoter", "promoter@gmail.com", "Promoter Thực địa"),
+	("Lead Promoter", "leadpromoter@gmail.com", "Trưởng nhóm Promoter"),
+	("Marketing", "marketing@gmail.com", "Nhân viên Marketing"),
+	("Lead Marketing", "leadmarketing@gmail.com", "Trưởng nhóm Marketing"),
 )
 PASSWORD = "12345@"
 

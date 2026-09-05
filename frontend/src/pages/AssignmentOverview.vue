@@ -92,6 +92,7 @@
         :rows="normalizedRows"
         :loading="overview.loading"
         :next-cursor="nextCursor"
+        :active-filter-count="activeFilterCount"
         :selectable="canEditTopology"
         :selected-school-ids="selectedSchoolIds"
         @select="selectRow"
@@ -185,6 +186,9 @@ const filters = reactive({
   workload: route.query.workload || undefined,
   search: route.query.search || undefined,
 })
+const activeFilterCount = computed(
+  () => Object.values(filters).filter((value) => value !== undefined && value !== null && value !== '' && value !== 'all').length,
+)
 
 function requestParams(cursor) {
   return {
