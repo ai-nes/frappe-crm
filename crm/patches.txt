@@ -97,9 +97,6 @@ crm.patches.v1_0.add_student_next_task_v2
 crm.patches.v1_0.add_score_policy_versioning
 crm.patches.v1_0.add_score_revision_tracking
 crm.patches.v1_0.restore_desk_management_roles
-crm.patches.v1_0.migrate_student_tasks_to_crm_action
-crm.patches.v1_0.migrate_admissions_tasks_to_crm_action
-crm.patches.v1_0.migrate_sales_actions_to_crm_action
 crm.patches.v1_0.merge_marketing_engagement
 crm.patches.v1_0.nest_sla_delivery_attempt
 crm.patches.v1_0.nest_change_approval
@@ -137,10 +134,9 @@ crm.patches.v1_0.seed_crm_action_type
 crm.patches.v1_0.repair_crm_action_catalog
 crm.patches.v1_0.add_nba_control_plane
 crm.patches.v1_0.add_nba_evaluation
+crm.patches.v1_0.seed_default_nba_decision_policy
 crm.patches.v1_0.add_recommendation_first_fields
 crm.patches.v1_0.enforce_recommendation_task_boundary
 crm.patches.v1_0.add_nba_evaluation_reevaluation_triggers
 crm.patches.v1_0.backfill_action_execution_task
-crm.patches.v1_0.add_recommendation_rationale
-crm.patches.v1_0.restructure_recommendation_explanation
 crm.patches.v1_0.backfill_placeholder_clusters_zones

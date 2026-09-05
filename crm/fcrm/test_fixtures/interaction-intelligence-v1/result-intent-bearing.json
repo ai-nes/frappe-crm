@@ -1,0 +1,14 @@
+{
+  "contract_version": "interaction-intelligence-v1",
+  "analysis_run_id": "RUN-0001",
+  "episode_id": "EP-0001",
+  "source_revision": 1,
+  "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state": "intent_bearing",
+  "model_revision": "intent-model-v1",
+  "policy_revision": "intent-policy-v1",
+  "intent": {
+    "semantic_key": "tuition_inquiry",
+    "evidence_refs": [{"doctype": "CRM Message Evidence", "name": "EVID-0001", "actor_role": "student"}]
+  }
+}

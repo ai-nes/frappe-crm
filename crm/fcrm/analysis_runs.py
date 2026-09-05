@@ -14,7 +14,7 @@ from typing import Any
 import frappe
 
 RUN_STATUSES = frozenset({"queued", "running", "completed", "abstained", "failed", "dead_lettered"})
-STAGE_KINDS = frozenset({"student_360", "school_360"})
+STAGE_KINDS = frozenset({"student_360", "school_360", "interaction_analysis"})
 TRIGGERS = frozenset({"automatic", "manual"})
 CLAIM_KINDS = frozenset({"fact", "inference", "uncertainty", "recommendation"})
 VISIBILITY_LABELS = frozenset({"shareable", "restricted", "service_only"})
@@ -61,11 +61,14 @@ def validate_stage_fields(doc) -> None:
 	if not str(doc.parent_run or "").strip() or doc.parent_run_type not in {
 		"CRM Student Analysis Run",
 		"CRM School Analysis Run",
+		"CRM Interaction Analysis Run",
 	}:
 		frappe.throw("Analysis Run stage parent is invalid.", frappe.ValidationError)
 	if (doc.parent_run_type == "CRM Student Analysis Run") != (doc.stage_kind == "student_360"):
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
 	if (doc.parent_run_type == "CRM School Analysis Run") != (doc.stage_kind == "school_360"):
+		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
+	if (doc.parent_run_type == "CRM Interaction Analysis Run") != (doc.stage_kind == "interaction_analysis"):
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
 
 

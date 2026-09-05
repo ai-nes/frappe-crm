@@ -21,9 +21,13 @@
   "condition_operator",
   "condition_value",
   "section_interaction",
-  "interaction_type",
+  "interaction_term",
   "section_intent",
   "intent_type",
+  "intent_role",
+  "intent_polarity",
+  "min_confidence",
+  "intent_max_age_days",
   "section_inactivity",
   "inactivity_days"
  ],
@@ -113,10 +117,10 @@
    "label": "Interaction Configuration"
   },
   {
-   "fieldname": "interaction_type",
-   "fieldtype": "Select",
-   "label": "Interaction Type",
-   "options": "\nWebsite Visit\nMajor View\nZalo Chat\nConsultation Register\nWebinar\nOpen Day\nApplication Submit\nRefuse Consultation\nCancel Event\nTransfer School",
+   "fieldname": "interaction_term",
+   "fieldtype": "Link",
+   "label": "Interaction Term",
+   "options": "CRM Term",
    "depends_on": "eval:doc.signal_type == 'interaction'"
   },
   {
@@ -131,6 +135,32 @@
    "fieldtype": "Link",
    "label": "Intent Type",
    "options": "CRM Term",
+   "depends_on": "eval:doc.signal_type == 'intent'"
+  },
+  {
+   "fieldname": "intent_role",
+   "fieldtype": "Select",
+   "label": "Intent Role",
+   "options": "\nDominant\nSupport",
+   "depends_on": "eval:doc.signal_type == 'intent'"
+  },
+  {
+   "fieldname": "intent_polarity",
+   "fieldtype": "Select",
+   "label": "Intent Polarity",
+   "options": "\nPositive\nNegative",
+   "depends_on": "eval:doc.signal_type == 'intent'"
+  },
+  {
+   "fieldname": "min_confidence",
+   "fieldtype": "Percent",
+   "label": "Minimum Intent Confidence",
+   "depends_on": "eval:doc.signal_type == 'intent'"
+  },
+  {
+   "fieldname": "intent_max_age_days",
+   "fieldtype": "Int",
+   "label": "Maximum Intent Age (Days)",
    "depends_on": "eval:doc.signal_type == 'intent'"
   },
   {

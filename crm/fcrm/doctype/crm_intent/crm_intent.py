@@ -35,6 +35,8 @@ class CRMIntent(Document):
 				)
 
 	def on_update(self):
+		if getattr(frappe.flags, "interaction_analysis_result_service", False):
+			return
 		if self.student:
 			# Every intent is a direct Intent-scorer input -- always
 			# scoring-relevant, unlike a generic Student field edit.

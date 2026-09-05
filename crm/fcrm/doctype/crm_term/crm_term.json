@@ -1,8 +1,9 @@
 {
  "actions": [], "allow_import": 1, "allow_rename": 1, "doctype": "DocType", "engine": "InnoDB",
- "field_order": ["term_name", "category", "owner_role", "is_active", "sort_order", "metadata", "description"],
+ "field_order": ["term_name", "semantic_key", "category", "owner_role", "is_active", "sort_order", "metadata", "description"],
  "fields": [
   {"fieldname": "term_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Term", "reqd": 1},
+  {"fieldname": "semantic_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Semantic Key", "unique": 1},
   {"fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Category", "options": "lead_status\nlost_reason\ncampaign_type\nintent_type\ninteraction_type\nschool_type\nschool_area\nstakeholder_role\nactivity_type\nmajor_group\naspiration\nregion\nenrollment_status\nadmission_method", "reqd": 1},
   {"fieldname": "owner_role", "fieldtype": "Link", "label": "Owner Role", "options": "Role"},
   {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active"},

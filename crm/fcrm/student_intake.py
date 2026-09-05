@@ -569,18 +569,20 @@ def receipt_keys(
 	principal: str,
 	nonce: str | None = None,
 	command_kind: str = "intake",
+	source_revision: int | None = None,
 ):
 	keys = []
 	for version, secret in _secret_versions():
+		source_parts = [source_namespace, source_record_id]
+		if source_revision is not None:
+			source_parts.append(str(source_revision))
 		keys.append(
 			{
 				"version": version,
 				"command_key": keyed_digest(
 					secret, f"crm.receipt.command.{version}", command_kind, principal, idempotency_key
 				),
-				"source_key": keyed_digest(
-					secret, f"crm.receipt.source.{version}", source_namespace, source_record_id
-				),
+				"source_key": keyed_digest(secret, f"crm.receipt.source.{version}", *source_parts),
 				"nonce_key": keyed_digest(secret, f"crm.receipt.nonce.{version}", source_namespace, nonce)
 				if nonce
 				else None,

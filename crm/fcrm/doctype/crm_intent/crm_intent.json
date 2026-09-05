@@ -18,6 +18,7 @@
   "polarity",
   "importance",
   "confidence",
+  "analysis_result",
   "notes"
  ],
  "fields": [
@@ -94,6 +95,14 @@
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Confidence"
+  },
+  {
+   "fieldname": "analysis_result",
+   "fieldtype": "Link",
+   "label": "Analysis Result",
+   "options": "CRM Interaction Analysis Result",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "notes",

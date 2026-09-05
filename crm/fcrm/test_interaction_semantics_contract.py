@@ -3,6 +3,8 @@ mirrors app/contracts/test_interaction_semantics_contract.py in the
 crm-agents repo. See that module and this one's docstring for why parity is
 enforced via a frozen content hash rather than a cross-repo import."""
 
+import json
+import pathlib
 import unittest
 
 from crm.fcrm.interaction_semantics import (
@@ -12,10 +14,18 @@ from crm.fcrm.interaction_semantics import (
 	INTERACTION_TYPE_MAPPING,
 	KNOWN_WRITER_INTERACTION_TYPES,
 	OUTCOME_FIELD_MAPPING,
+	INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+	INTERACTION_INTELLIGENCE_POLICY,
+	InteractionContractError,
+	SILENCE_WINDOW_SECONDS,
 	is_business_outcome_like,
 	resolve_interaction_type,
 	resolve_outcome,
+	validate_analysis_result,
+	validate_interaction_intake,
 )
+
+_FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "interaction-intelligence-v1"
 
 
 class TestInteractionSemanticsContract(unittest.TestCase):
@@ -81,3 +91,54 @@ class TestInteractionSemanticsContract(unittest.TestCase):
 			"Uncontactable",
 		}
 		self.assertEqual(legacy_options, set(OUTCOME_FIELD_MAPPING))
+
+	def test_phase_one_policy_is_explicit_and_minimal(self):
+		self.assertEqual(INTERACTION_INTELLIGENCE_CONTRACT_VERSION, "interaction-intelligence-v1")
+		self.assertEqual(SILENCE_WINDOW_SECONDS, 15 * 60)
+		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["episode"]["late_event"], "new_source_revision_and_reanalysis")
+		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["evidence"]["raw_content_destinations"], "evidence_only")
+		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["service_auth"]["writer_boundary"], "existing_frappe_authenticated_api")
+		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["term"]["semantic_key"], "immutable")
+
+	def test_shared_fixtures_are_accepted(self):
+		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
+		intent_bearing = json.loads((_FIXTURES / "result-intent-bearing.json").read_text(encoding="utf-8"))
+		no_intent = json.loads((_FIXTURES / "result-no-intent.json").read_text(encoding="utf-8"))
+		validate_interaction_intake(intake)
+		validate_analysis_result(intent_bearing)
+		validate_analysis_result(no_intent)
+
+	def test_only_calls_may_be_drafts_and_only_students_substantiate_intent(self):
+		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
+		intake["source"]["state"] = "draft"
+		intake["source"]["kind"] = "call"
+		with self.assertRaises(InteractionContractError):
+			validate_interaction_intake(intake)
+		result = json.loads((_FIXTURES / "result-intent-bearing.json").read_text(encoding="utf-8"))
+		result["intent"]["evidence_refs"][0]["actor_role"] = "advisor"
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(result)
+
+	def test_raw_content_boolean_revisions_and_unknown_versions_fail_closed(self):
+		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
+		intake["raw_content"] = "sensitive transcript"
+		with self.assertRaises(InteractionContractError):
+			validate_interaction_intake(intake)
+		intake.pop("raw_content")
+		intake["sequence"] = True
+		with self.assertRaises(InteractionContractError):
+			validate_interaction_intake(intake)
+		intake["sequence"] = 1
+		intake["contract_version"] = "interaction-intelligence-v2"
+		with self.assertRaises(InteractionContractError):
+			validate_interaction_intake(intake)
+
+	def test_unknown_fields_and_incomplete_intent_evidence_fail_closed(self):
+		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))
+		intake["body"] = "sensitive transcript"
+		with self.assertRaises(InteractionContractError):
+			validate_interaction_intake(intake)
+		result = json.loads((_FIXTURES / "result-intent-bearing.json").read_text(encoding="utf-8"))
+		result["intent"]["evidence_refs"] = [{"actor_role": "student"}]
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(result)

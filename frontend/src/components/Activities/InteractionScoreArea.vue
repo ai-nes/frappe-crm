@@ -47,9 +47,9 @@
             />
           </div>
         </div>
-        <div v-if="interactions.data?.length" class="flex flex-col divide-y">
+        <div v-if="interactionItems.length" class="flex flex-col divide-y">
           <div
-            v-for="interaction in interactions.data"
+            v-for="interaction in interactionItems"
             :key="interaction.name"
             class="flex gap-4 py-4"
           >
@@ -59,11 +59,15 @@
               <ActivityIcon class="size-4 text-ink-gray-7" />
             </div>
             <div class="min-w-0 flex-1">
-              <div class="flex flex-wrap items-center gap-2">
+              <button
+                class="flex min-h-11 w-full flex-wrap items-center gap-2 text-left outline-none transition-colors duration-200 hover:text-ink-gray-6 focus-visible:ring-2 focus-visible:ring-ink-gray-7 focus-visible:ring-offset-2 active:translate-y-px"
+                type="button"
+                @click="selectInteraction(interaction.id)"
+              >
                 <span class="font-medium text-ink-gray-9">
                   {{
                     displayInteractionSummary(
-                      interaction.summary || interaction.name,
+                      interaction.summary || interaction.id,
                     )
                   }}
                 </span>
@@ -78,17 +82,81 @@
                   theme="gray"
                   variant="subtle"
                 />
-              </div>
+                <Badge
+                  v-if="interaction.has_evidence"
+                  :label="__('Evidence available')"
+                  theme="gray"
+                  variant="subtle"
+                />
+              </button>
               <div class="mt-1 text-sm text-ink-gray-5">
-                {{ formatScoreDate(interaction.interaction_datetime) }}
+                {{ formatScoreDate(interaction.occurred_at) }}
               </div>
-              <p
-                v-if="interaction.notes"
-                class="mt-2 whitespace-pre-wrap text-base text-ink-gray-7"
-              >
-                {{ interaction.notes }}
+            </div>
+          </div>
+        </div>
+        <div v-if="interactions.data?.next_cursor" class="pt-2">
+          <Button :label="__('Load more')" :loading="loadingMoreInteractions" :disabled="loadingMoreInteractions" @click="loadMoreInteractions" />
+        </div>
+        <div
+          v-if="selectedInteraction"
+          class="rounded border bg-surface-white p-4"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 class="text-base font-semibold text-ink-gray-9">
+                {{ __('Interaction detail') }}
+              </h3>
+              <p class="mt-1 text-sm text-ink-gray-5">
+                {{ displayInteractionSummary(selectedInteraction.interaction?.summary) }}
               </p>
             </div>
+            <Badge
+              v-if="selectedInteraction.analysis?.state"
+              :label="selectedInteraction.analysis.state"
+              variant="subtle"
+            />
+          </div>
+          <div class="mt-4 grid gap-4 md:grid-cols-2">
+            <div class="rounded bg-surface-gray-1 p-3">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Detected intents') }}
+              </div>
+              <div v-if="selectedInteraction.intents?.length" class="mt-2 flex flex-col gap-2">
+                <div v-for="intent in selectedInteraction.intents" :key="intent.id" class="text-sm text-ink-gray-8">
+                  {{ displayIntentType(intent.term_id) }}
+                  <span class="text-ink-gray-5">{{ intent.role }}</span>
+                </div>
+              </div>
+              <p v-else class="mt-2 text-sm text-ink-gray-5">{{ __('No scored intent was recorded.') }}</p>
+            </div>
+            <div class="rounded bg-surface-gray-1 p-3">
+              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+                {{ __('Score effects') }}
+              </div>
+              <div v-if="selectedInteraction.score_effects?.length" class="mt-2 flex flex-col gap-2">
+                <div v-for="effect in selectedInteraction.score_effects" :key="effect.id" class="flex items-center justify-between text-sm text-ink-gray-8">
+                  <span>{{ __('Policy') }} {{ effect.policy_revision }}</span>
+                  <span class="font-medium">{{ formatSignedNumber(effect.score_change) }}</span>
+                </div>
+              </div>
+              <p v-else class="mt-2 text-sm text-ink-gray-5">{{ __('No score change was recorded.') }}</p>
+            </div>
+          </div>
+          <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-gray-5">
+            <span>{{ __('Source revision') }} {{ selectedInteraction.revision?.source_revision || 0 }}</span>
+            <Button
+              v-if="selectedInteraction.evidence_refs?.length"
+              :label="__('View evidence')"
+              size="sm"
+              variant="subtle"
+              @click="loadEvidence(selectedInteraction.evidence_refs[0].id)"
+            />
+          </div>
+          <div v-if="evidenceDetails.data" class="mt-3 rounded bg-surface-gray-1 p-3 text-sm text-ink-gray-7">
+            <div class="mb-1 font-medium">{{ __('Evidence') }} · {{ evidenceDetails.data.speaker_role || __('Unknown speaker') }}</div>
+            <p v-if="evidenceDetails.data.content" class="whitespace-pre-wrap">{{ evidenceDetails.data.content }}</p>
+            <p v-else>{{ evidenceDetails.data.content_redacted ? __('You do not have permission to view raw evidence.') : __('No raw evidence is available.') }}</p>
           </div>
         </div>
         <EmptyState
@@ -498,7 +566,8 @@ import FadedScrollableDiv from '@/components/FadedScrollableDiv.vue'
 import { admissionsSummaryTranslation } from '@/utils/studentAdmissionsActions'
 import { getResourceViewState } from '@/utils/resourceLoading'
 import { Badge, Button, LoadingIndicator, createResource } from 'frappe-ui'
-import { computed, h, watch } from 'vue'
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue'
+import { globalStore } from '@/stores/global'
 
 const props = defineProps({
   contact: { type: Object, default: null },
@@ -512,9 +581,22 @@ const emit = defineEmits(['record-outcome', 'admissions-action'])
 const emptyIcon = h(ActivityIcon, { class: 'text-ink-gray-4' })
 
 const interactions = createResource({
-  url: 'frappe.client.get_list',
+  url: 'crm.api.interaction_read.list_interactions',
   auto: false,
 })
+
+const interactionDetails = createResource({
+  url: 'crm.api.interaction_read.get_interaction_detail',
+  auto: false,
+})
+const evidenceDetails = createResource({
+  url: 'crm.api.interaction_read.get_interaction_evidence',
+  auto: false,
+})
+const interactionItems = computed(() => interactions.data?.items || [])
+const selectedInteraction = computed(() => interactionDetails.data || null)
+const loadingMoreInteractions = ref(false)
+const { $socket } = globalStore()
 
 const scores = createResource({
   url: 'crm.api.student_dashboard.get_student_score_context',
@@ -813,27 +895,15 @@ function loadData() {
   const contactName = props.contact?.name
 
   if (studentName || contactName) {
-    let filters = studentName
-      ? { student: studentName }
-      : { crm_contact: contactName }
-
     interactions.submit({
-      doctype: 'CRM Interaction',
-      fields: [
-        'name',
-        'interaction_type',
-        'interaction_datetime',
-        'outcome',
-        'summary',
-        'notes',
-      ],
-      filters,
-      order_by: 'interaction_datetime desc',
-      limit_page_length: 50,
+      student: studentName || undefined,
+      contact: studentName ? undefined : contactName,
+      limit: 20,
     })
   } else {
-    interactions.data = []
+    interactions.data = { items: [], next_cursor: null }
   }
+  interactionDetails.data = null
 
   if (props.type === 'scores' && (studentName || contactName)) {
     scores.submit({
@@ -843,6 +913,46 @@ function loadData() {
     })
   } else {
     scores.data = null
+  }
+}
+
+function selectInteraction(interaction) {
+  evidenceDetails.data = null
+  interactionDetails.submit({ interaction })
+}
+
+function loadEvidence(evidence) {
+  evidenceDetails.submit({ evidence, include_content: true })
+}
+
+function onInteractionInvalidated() {
+  if (props.type === 'interactions') loadData()
+}
+
+onMounted(() => $socket?.on('crm_interaction_invalidated', onInteractionInvalidated))
+onUnmounted(() => $socket?.off('crm_interaction_invalidated', onInteractionInvalidated))
+
+async function loadMoreInteractions() {
+  if (loadingMoreInteractions.value || !interactions.data?.next_cursor) return
+  loadingMoreInteractions.value = true
+  const studentName = props.student?.name || props.contact?.student
+  const contactName = props.contact?.name
+  const existingItems = [...interactionItems.value]
+  try {
+    const response = await interactions.submit({
+      student: studentName || undefined,
+      contact: studentName ? undefined : contactName,
+      cursor: interactions.data?.next_cursor,
+      limit: 20,
+    })
+    const payload = response || interactions.data
+    const merged = [...existingItems, ...(payload?.items || [])]
+    interactions.data = {
+      ...payload,
+      items: Array.from(new Map(merged.map((item) => [item.id, item])).values()),
+    }
+  } finally {
+    loadingMoreInteractions.value = false
   }
 }
 

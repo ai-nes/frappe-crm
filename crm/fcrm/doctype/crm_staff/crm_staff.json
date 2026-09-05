@@ -41,7 +41,7 @@
    "unique": 1
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility until admissions readers move to CRM Team membership.",
    "fieldname": "sales_team",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -62,22 +62,22 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "description": "Primary organizational department. Its campus must match the staff primary campus.",
    "fieldname": "department",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Department (Deprecated)",
+   "label": "CRM Department",
    "options": "CRM Department",
    "reqd": 1
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "description": "Primary campus for staff tenancy and User Permission scope. Kept aligned with the selected department.",
    "fieldname": "campus",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Campus (Deprecated)",
+   "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
   },

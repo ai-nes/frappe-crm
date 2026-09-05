@@ -270,12 +270,22 @@ def _actor_roles(actor: str | None) -> set[str] | None:
 
 
 def eligible_action_set_for_student(
-	student: str, *, actor: str | None = None, now: datetime | None = None
+	student: str,
+	*,
+	actor: str | None = None,
+	now: datetime | None = None,
+	service_authorized: bool = False,
 ) -> dict:
-	"""Resolve the eligible action set for one student, failing closed on scope."""
+	"""Resolve the eligible action set for one student, failing closed on scope.
+
+	``service_authorized=True`` must only be passed by a caller that already
+	verified the current request is the crm-agents service identity (see
+	``_projection``'s docstring in ``student_decision_context.py`` for the
+	same pattern) -- it is never inferred from ``actor``.
+	"""
 	import frappe
 
-	if not frappe.has_permission("CRM Student", "read", student, throw=False):
+	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
 		frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
 
 	evaluated_at = now or frappe.utils.now_datetime()
@@ -343,3 +353,33 @@ def get_active_decision_policy() -> dict:
 		"conflict_key_fields": json_string_list(row.get("conflict_key_fields")),
 		"diversity_rule": row.get("diversity_rule") or "none",
 	}
+
+
+def ensure_default_decision_policy() -> bool:
+	"""Create or activate the canonical default policy for a fresh local site."""
+	import frappe
+
+	if frappe.db.exists("CRM NBA Decision Policy", {"policy_key": "default", "is_active": 1}):
+		return False
+
+	frappe.db.set_value("CRM NBA Decision Policy", {"is_active": 1}, "is_active", 0)
+	policy = frappe.db.get_value("CRM NBA Decision Policy", {"policy_key": "default"}, "name")
+	if policy:
+		frappe.db.set_value("CRM NBA Decision Policy", policy, "is_active", 1)
+		return True
+
+	frappe.get_doc(
+		{
+			"doctype": "CRM NBA Decision Policy",
+			"policy_key": "default",
+			"policy_revision": 1,
+			"is_active": 1,
+			"top_n": 3,
+			"max_recommendations": 10,
+			"min_score_threshold": 0,
+			"score_weights": json.dumps({"confidence": 0.5, "impact": 0.5}, sort_keys=True),
+			"conflict_key_fields": json.dumps(["student", "action"]),
+			"diversity_rule": "none",
+		}
+	).insert(ignore_permissions=True)
+	return True

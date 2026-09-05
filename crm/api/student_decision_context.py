@@ -323,7 +323,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 @frappe.whitelist()
 def get_student_decision_context(student: str, minimum_revision: int = 0, rollout_epoch: int = 0) -> dict:
 	_require_agent_identity()
-	return _projection(student, int(minimum_revision))
+	return _projection(student, int(minimum_revision), service_authorized=True)
 
 
 @frappe.whitelist()

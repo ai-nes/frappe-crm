@@ -407,7 +407,9 @@ def run_student_nba_evaluation(
 
 	if upstream.status_code >= 400:
 		if upstream.status_code in {401, 403}:
-			message = "The NBA evaluation target is not permitted."
+			# Temporarily surfacing the upstream detail for debugging -- revert
+			# to the generic message once the crm-agents 401/403 cause is found.
+			message = f"The NBA evaluation target is not permitted. [debug upstream={upstream.status_code} body={upstream.text[:500]!r}]"
 		elif upstream.status_code in {409, 422}:
 			message = "The NBA evaluation request was not accepted."
 		else:
@@ -472,7 +474,9 @@ def _run_analysis_agent(path: str, body: dict, idempotency_key: str) -> Response
 
 	if upstream.status_code >= 400:
 		if upstream.status_code in {401, 403}:
-			message = "The 360 analysis target is not permitted."
+			# Temporarily surfacing the upstream detail for debugging -- revert
+			# to the generic message once the crm-agents 401/403 cause is found.
+			message = f"The 360 analysis target is not permitted. [debug upstream={upstream.status_code} body={upstream.text[:500]!r}]"
 		elif upstream.status_code in {409, 422}:
 			message = "The 360 analysis request was not accepted."
 		else:

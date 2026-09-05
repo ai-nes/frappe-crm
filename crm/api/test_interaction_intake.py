@@ -1,24 +1,22 @@
 from unittest.mock import patch
 
-import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.interaction_intake import _interaction_response, _normalize_interaction_payload
 from crm.api.interaction_intake import _normalize_interaction_payload
 from crm.fcrm.student_intake import StudentIntakeError
 
 
 class TestInteractionIntakeContract(FrappeTestCase):
-	def test_prd_interaction_payload_maps_external_id_when_target_is_explicit(self):
+	def test_interaction_payload_requires_canonical_identity_and_labelled_turns(self):
 		payload = _normalize_interaction_payload(
 			{
-				"source_system": "chatwoot",
-				"external_id": "message-42",
+				"source_namespace": "chatwoot",
+				"source_record_id": "message-42",
 				"idempotency_key": "idem-42",
 				"student_id": "STU-1",
 				"channel": "Facebook Messenger",
 				"direction": "incoming",
-				"content": "Need tuition details",
+				"turns": [{"speaker_role": "student", "content": "Need tuition details"}],
 				"occurred_at": "2026-08-29 09:00:00",
 				"agent_id": "agent-1",
 				"conversation_id": "conversation-1",
@@ -40,7 +38,7 @@ class TestInteractionIntakeContract(FrappeTestCase):
 				"student_id": "STU-1",
 				"channel": "carrier-pigeon",
 				"direction": "inbound",
-				"content": "Hello",
+				"turns": [{"speaker_role": "student", "content": "Hello"}],
 				"occurred_at": "2026-08-29 09:00:00",
 			},
 			{
@@ -50,7 +48,7 @@ class TestInteractionIntakeContract(FrappeTestCase):
 				"student_id": "STU-1",
 				"channel": "facebook",
 				"direction": "inbound",
-				"content": "Hello",
+				"turns": [{"speaker_role": "student", "content": "Hello"}],
 				"occurred_at": "2026-08-29 09:00:00",
 				"actor": "Administrator",
 			},
@@ -80,7 +78,7 @@ class TestInteractionIntakeContract(FrappeTestCase):
 					"student_id": "STU-1",
 					"channel": "facebook",
 					"direction": "inbound",
-					"content": "Hello",
+					"turns": [{"speaker_role": "student", "content": "Hello"}],
 					"occurred_at": "2026-08-29 09:00:00",
 				}
 			)

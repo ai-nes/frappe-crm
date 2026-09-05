@@ -15,8 +15,57 @@ on CRM Interaction -- it does not change either field or any writer.
 
 import hashlib
 import json
+from collections.abc import Mapping
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
+
+INTERACTION_INTELLIGENCE_CONTRACT_VERSION = "interaction-intelligence-v1"
+SILENCE_WINDOW_SECONDS = 15 * 60
+SUPPORTED_ANALYSIS_RESULT_STATES = frozenset({"no_intent", "intent_bearing", "unknown", "failed"})
+
+# Mirrored with crm-agents' app/contracts/interaction_semantics.py.  Phase 01
+# is intentionally data-only: Frappe remains the evidence owner and existing
+# permission checks guard references; no separate evidence service is created.
+INTERACTION_INTELLIGENCE_POLICY = {
+	"contract_version": INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+	"episode": {
+		"silence_window_seconds": SILENCE_WINDOW_SECONDS,
+		"late_event": "new_source_revision_and_reanalysis",
+		"call": {
+			"draft": "evidence_only",
+			"final": "seal_and_analyze",
+			"correction": "new_source_revision_and_reanalysis",
+		},
+	},
+	"evidence": {
+		"owner": "frappe",
+		"access": "protected_permission_scoped_reference",
+		"raw_content_destinations": "evidence_only",
+		"retention": "existing_frappe_lifecycle_no_new_phase_one_mechanism",
+	},
+	"service_auth": {
+		"writer_boundary": "existing_frappe_authenticated_api",
+		"scope": "frappe_permission_checks",
+		"new_signature_scheme": "not_introduced_in_phase_one",
+	},
+	"intent": {
+		"no_intent": "no_crm_intent",
+		"unknown": "needs_review",
+		"intent_bearing": "create_crm_intent",
+		"eligible_actor_roles": ("student",),
+	},
+	"term": {
+		"semantic_key": "immutable",
+		"label": "mutable_display_only",
+		"retirement": "retire_without_rewriting_history",
+		"enforcement": "phase_two_frappe_schema_migration",
+	},
+	"compatibility": {
+		"supported_versions": (INTERACTION_INTELLIGENCE_CONTRACT_VERSION,),
+		"unknown_version": "reject",
+		"same_version_additive_fields": "reject_at_boundary",
+	},
+}
 
 # Non-negotiable: Assignment, consent, campaign attribution, event
 # participation, and internal tasks are independent evidence, not
@@ -186,12 +235,13 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "bb828d77092d57d43e008ca6b2903e4293903007d353ea910afe30785a359479"
+FROZEN_CONTENT_HASH = "609b5973410db06f277a2621d9da3080a7984552385f768fb2777e024f7194ea"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(
 		{
 			"contract_version": CONTRACT_VERSION,
+			"interaction_intelligence_policy": INTERACTION_INTELLIGENCE_POLICY,
 			"interaction_type_mapping": INTERACTION_TYPE_MAPPING,
 			"outcome_field_mapping": OUTCOME_FIELD_MAPPING,
 		}
@@ -221,3 +271,166 @@ def resolve_outcome(outcome):
 def is_business_outcome_like(outcome):
 	resolved = resolve_outcome(outcome)
 	return bool(resolved and resolved["is_business_outcome_like"])
+
+
+class InteractionContractError(ValueError):
+	"""A producer or consumer sent an unsupported interaction contract shape."""
+
+
+def canonical_digest(value):
+	"""Return the stable digest used to bind immutable evidence and results."""
+	return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def _require(mapping, fields, where):
+	missing = [field for field in fields if field not in mapping]
+	if missing:
+		raise InteractionContractError(f"{where} missing required fields: {', '.join(missing)}")
+
+
+def _reject_unknown_fields(mapping, allowed, where):
+	unknown = set(mapping) - allowed
+	if unknown:
+		raise InteractionContractError(f"{where} has unsupported fields: {', '.join(sorted(unknown))}")
+
+
+def _is_digest(value):
+	return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
+
+
+def _require_non_empty_strings(mapping, fields, where):
+	for field in fields:
+		if not isinstance(mapping[field], str) or not mapping[field].strip():
+			raise InteractionContractError(f"{where}.{field} must be a non-empty string")
+
+
+def _require_positive_int(value, field):
+	if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+		raise InteractionContractError(f"{field} must be a positive integer")
+
+
+def _reject_raw_content(value):
+	"""Keep transcripts and other raw evidence out of contract envelopes."""
+	prohibited = {"content", "raw_content", "transcript", "quoted_text"}
+	if isinstance(value, Mapping):
+		if prohibited.intersection(value):
+			raise InteractionContractError("raw evidence content is not allowed in this envelope")
+		for child in value.values():
+			_reject_raw_content(child)
+	elif isinstance(value, (list, tuple)):
+		for child in value:
+			_reject_raw_content(child)
+
+
+def _require_contract_version(payload):
+	if payload.get("contract_version") != INTERACTION_INTELLIGENCE_CONTRACT_VERSION:
+		raise InteractionContractError("unsupported interaction intelligence contract version")
+
+
+def validate_interaction_intake(payload):
+	"""Validate the minimal Frappe-owned evidence reference sent for analysis."""
+	if not isinstance(payload, Mapping):
+		raise InteractionContractError("interaction intake must be an object")
+	_require_contract_version(payload)
+	_reject_raw_content(payload)
+	_reject_unknown_fields(
+		payload,
+		{
+			"contract_version", "event_ledger_id", "source", "evidence_ref", "evidence_digest", "sequence",
+			"target", "actor", "correlation_id", "idempotency_key", "occurred_at",
+		},
+		"interaction intake",
+	)
+	_require(
+		payload,
+		(
+			"event_ledger_id", "source", "evidence_ref", "evidence_digest", "sequence", "target",
+			"actor", "correlation_id", "idempotency_key", "occurred_at",
+		),
+		"interaction intake",
+	)
+	if not _is_digest(payload["evidence_digest"]):
+		raise InteractionContractError("evidence_digest must be a lowercase SHA-256 digest")
+	_require_non_empty_strings(payload, ("event_ledger_id", "correlation_id", "idempotency_key", "occurred_at"), "interaction intake")
+	_require_positive_int(payload["sequence"], "sequence")
+	source = payload["source"]
+	evidence_ref = payload["evidence_ref"]
+	target = payload["target"]
+	actor = payload["actor"]
+	if not all(isinstance(item, Mapping) for item in (source, evidence_ref, target, actor)):
+		raise InteractionContractError("source, evidence_ref, target, and actor must be objects")
+	_require(source, ("provider", "channel", "event_id", "revision", "kind", "state"), "source")
+	_require(evidence_ref, ("doctype", "name"), "evidence_ref")
+	_require(target, ("doctype", "name"), "target")
+	_require(actor, ("id", "role"), "actor")
+	_reject_unknown_fields(source, {"provider", "channel", "event_id", "revision", "kind", "state"}, "source")
+	_reject_unknown_fields(evidence_ref, {"doctype", "name"}, "evidence_ref")
+	_reject_unknown_fields(target, {"doctype", "name"}, "target")
+	_reject_unknown_fields(actor, {"id", "role"}, "actor")
+	_require_non_empty_strings(source, ("provider", "channel", "event_id", "kind", "state"), "source")
+	_require_non_empty_strings(evidence_ref, ("doctype", "name"), "evidence_ref")
+	_require_non_empty_strings(target, ("doctype", "name"), "target")
+	_require_non_empty_strings(actor, ("id", "role"), "actor")
+	if source["kind"] not in {"message", "call"}:
+		raise InteractionContractError("source.kind must be message or call")
+	if source["state"] not in {"draft", "final", "correction"}:
+		raise InteractionContractError("source.state must be draft, final, or correction")
+	_require_positive_int(source["revision"], "source.revision")
+	if source["state"] == "draft":
+		raise InteractionContractError("draft call evidence must not enter analysis")
+	if actor["role"] not in {"student", "advisor", "system"}:
+		raise InteractionContractError("actor.role is unsupported")
+
+
+def validate_analysis_result(payload):
+	"""Validate a bounded result that can reference, but never copy, evidence."""
+	if not isinstance(payload, Mapping):
+		raise InteractionContractError("analysis result must be an object")
+	_require_contract_version(payload)
+	_reject_raw_content(payload)
+	_reject_unknown_fields(
+		payload,
+		{
+			"contract_version", "analysis_run_id", "episode_id", "source_revision", "source_digest", "state",
+			"model_revision", "policy_revision", "intent",
+		},
+		"analysis result",
+	)
+	_require(
+		payload,
+		(
+			"analysis_run_id", "episode_id", "source_revision", "source_digest", "state",
+			"model_revision", "policy_revision",
+		),
+		"analysis result",
+	)
+	if payload["state"] not in SUPPORTED_ANALYSIS_RESULT_STATES:
+		raise InteractionContractError("unsupported analysis result state")
+	if not _is_digest(payload["source_digest"]):
+		raise InteractionContractError("source_digest must be a lowercase SHA-256 digest")
+	_require_non_empty_strings(
+		payload,
+		("analysis_run_id", "episode_id", "model_revision", "policy_revision"),
+		"analysis result",
+	)
+	_require_positive_int(payload["source_revision"], "source_revision")
+	intent = payload.get("intent")
+	if payload["state"] == "intent_bearing":
+		if not isinstance(intent, Mapping):
+			raise InteractionContractError("intent_bearing results require an intent reference")
+		_require(intent, ("semantic_key", "evidence_refs"), "intent")
+		_reject_unknown_fields(intent, {"semantic_key", "evidence_refs"}, "intent")
+		_require_non_empty_strings(intent, ("semantic_key",), "intent")
+		evidence_refs = intent["evidence_refs"]
+		if not isinstance(evidence_refs, (list, tuple)) or not evidence_refs:
+			raise InteractionContractError("intent requires at least one evidence reference")
+		for ref in evidence_refs:
+			if not isinstance(ref, Mapping):
+				raise InteractionContractError("intent evidence references must be objects")
+			_reject_unknown_fields(ref, {"doctype", "name", "actor_role"}, "intent evidence reference")
+			_require(ref, ("doctype", "name", "actor_role"), "intent evidence reference")
+			_require_non_empty_strings(ref, ("doctype", "name", "actor_role"), "intent evidence reference")
+			if ref["actor_role"] != "student":
+				raise InteractionContractError("only student evidence can substantiate an intent")
+	elif intent is not None:
+		raise InteractionContractError("only intent_bearing results may carry an intent")

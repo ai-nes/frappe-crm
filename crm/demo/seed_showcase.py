@@ -175,7 +175,10 @@ def ensure_demo_config() -> dict:
 		if frappe.conf.get(key) != value:
 			update_site_config(key, value, validate=False)
 			changed.append(key)
-	return {"changed": changed}
+
+	from crm.fcrm.nba_policy import ensure_default_decision_policy
+
+	return {"changed": changed, "default_nba_policy_created": ensure_default_decision_policy()}
 
 
 def ensure_local_integrity_keys() -> dict:

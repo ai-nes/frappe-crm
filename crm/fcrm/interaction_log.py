@@ -15,6 +15,9 @@ CRM Contact campaign/event fields into CRM Marketing Engagement rows) don't floo
 present-dated interactions for years-old activity.
 """
 
+import hashlib
+import json
+
 import frappe
 
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
@@ -90,7 +93,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 # destroying that history. Doctypes here never get an external_id.
 NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
-MAX_EXTERNAL_INTERACTION_INTENTS = 20
+MAX_EXTERNAL_INTERACTION_TURNS = 200
 CHATWOOT_INTERACTION_TYPE = "Tin nhắn Chatwoot"
 
 
@@ -122,16 +125,16 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 	for fieldname in INTERACTION_AUTHORITY_FIELDS:
 		if fieldname in payload:
 			_interaction_fail("INVALID_INPUT", f"{fieldname} is server-owned.")
+	for fieldname in ("content", "raw_content", "transcript", "quoted_text"):
+		if fieldname in payload:
+			_interaction_fail("INVALID_INPUT", f"{fieldname} is retired; submit labelled turns instead.")
 
-	source_namespace = _text(payload.get("source_namespace") or payload.get("source_system"))
-	source_record_id = _text(payload.get("source_record_id") or payload.get("message_id"))
+	source_namespace = _text(payload.get("source_namespace"))
+	source_record_id = _text(payload.get("source_record_id"))
 	idempotency_key = _text(payload.get("idempotency_key"))
-	student_id = _text(payload.get("student_id") or payload.get("student"))
+	student_id = _text(payload.get("student_id"))
 	contact_id = _text(payload.get("contact_id"))
 	external_target_id = _text(payload.get("target_external_id"))
-	external_id = _text(payload.get("external_id"))
-	if (student_id or contact_id) and not source_record_id and external_id:
-		source_record_id = external_id
 	if not source_namespace or not source_record_id or not idempotency_key:
 		_interaction_fail(
 			"INVALID_INPUT",
@@ -139,8 +142,20 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		)
 	if len(source_namespace) > 64 or len(source_record_id) > 120 or len(idempotency_key) > 140:
 		_interaction_fail("INVALID_INPUT", "Interaction source identifiers exceed their size limits.")
-	agent_id = _text(payload.get("agent_id") or payload.get("agent"))
+	agent_id = _text(payload.get("agent_id"))
 	conversation_id = _text(payload.get("conversation_id"))
+	evidence_kind = _text(payload.get("evidence_kind")) or "message"
+	evidence_state = _text(payload.get("evidence_state")) or "final"
+	try:
+		source_revision = int(payload.get("source_revision") or 1)
+	except (TypeError, ValueError):
+		_interaction_fail("INVALID_INPUT", "source_revision must be a positive integer.")
+	if source_revision < 1 or isinstance(payload.get("source_revision"), bool):
+		_interaction_fail("INVALID_INPUT", "source_revision must be a positive integer.")
+	if evidence_kind not in {"message", "call"} or evidence_state not in {"draft", "final", "correction"}:
+		_interaction_fail("INVALID_INPUT", "Evidence kind or state is invalid.")
+	if evidence_state == "draft" and evidence_kind != "call":
+		_interaction_fail("INVALID_INPUT", "Only calls may be draft evidence.")
 	for fieldname, field_value in (("agent_id", agent_id), ("conversation_id", conversation_id)):
 		if field_value and len(field_value) > 140:
 			_interaction_fail("INVALID_INPUT", f"{fieldname} exceeds its size limit.")
@@ -156,11 +171,7 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 	if not direction:
 		_interaction_fail("INVALID_INPUT", "direction must be inbound or outbound.")
 
-	content = payload.get("content")
-	if not isinstance(content, str) or not content.strip():
-		_interaction_fail("INVALID_INPUT", "content is required.")
-	if len(content.encode("utf-8")) > MAX_EXTERNAL_INTERACTION_CONTENT_BYTES:
-		_interaction_fail("INVALID_INPUT", "content exceeds the interaction size limit.")
+	turns = _normalize_external_turns(payload.get("turns"))
 	occurred_at = payload.get("occurred_at")
 	if not occurred_at:
 		_interaction_fail("INVALID_INPUT", "occurred_at is required.")
@@ -172,14 +183,10 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		_interaction_fail("INVALID_INPUT", "occurred_at must be a valid datetime.")
 	occurred_at = str(parsed_occurred_at)
 
-	if not (student_id or contact_id or external_target_id):
-		external_target_id = external_id
 	if not student_id and not contact_id and not external_target_id:
 		_interaction_fail("INVALID_INPUT", "A Student, Contact or external target is required.")
 	if student_id and contact_id and student_id == contact_id:
 		_interaction_fail("INVALID_INPUT", "Student and Contact targets are ambiguous.")
-	intents = _normalize_external_intents(payload.get("intents"))
-
 	return {
 		"source_namespace": source_namespace,
 		"source_record_id": source_record_id,
@@ -189,87 +196,14 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		"target_external_id": external_target_id,
 		"channel": channel,
 		"direction": direction,
-		"content": content,
+		"turns": turns,
 		"occurred_at": occurred_at,
 		"agent_id": agent_id,
 		"conversation_id": conversation_id,
-		"intents": intents,
+		"evidence_kind": evidence_kind,
+		"evidence_state": evidence_state,
+		"source_revision": source_revision,
 	}
-
-
-def _normalize_external_intents(value) -> list[dict]:
-	"""Normalize optional derived intents for one atomic interaction command."""
-	if value in (None, ""):
-		return []
-	if not isinstance(value, list) or len(value) > MAX_EXTERNAL_INTERACTION_INTENTS:
-		_interaction_fail("INVALID_INPUT", "intents must be a bounded list.")
-	result = []
-	for index, item in enumerate(value):
-		if not isinstance(item, dict):
-			_interaction_fail("INVALID_INPUT", f"intents[{index}] must be an object.")
-		intent_type = _text(item.get("intent_type_frappe_name") or item.get("intent_type"))
-		role = _text(item.get("intent_role")) or "Support"
-		if not intent_type or role not in {"Dominant", "Support"}:
-			_interaction_fail("INVALID_INPUT", f"intents[{index}] has invalid identity.")
-		try:
-			confidence = float(item.get("confidence"))
-		except (TypeError, ValueError):
-			_interaction_fail("INVALID_INPUT", f"intents[{index}].confidence must be numeric.")
-		if 0 <= confidence <= 1:
-			confidence *= 100
-		if not 0 <= confidence <= 100:
-			_interaction_fail("INVALID_INPUT", f"intents[{index}].confidence is out of range.")
-		if not frappe.db.exists(
-			"CRM Term", {"name": intent_type, "category": "intent_type", "is_active": 1}
-		):
-			_interaction_fail("INVALID_INPUT", f"intents[{index}].intent_type is not active.")
-		result.append(
-			{
-				"intent_type": intent_type,
-				"intent_role": role,
-				"confidence": round(confidence),
-				"notes": _text(item.get("reasoning") or item.get("notes")) or "",
-			}
-		)
-	return result
-
-
-def _ensure_external_interaction_intents(interaction_name: str, student: str | None, intents: list[dict]) -> list[str]:
-	"""Create only missing derived children inside the interaction command transaction."""
-	# The external interaction receipt is idempotent, but CRM Intent has no
-	# natural unique key. Serialize repairs for one parent before checking the
-	# child set; otherwise two concurrent retries can both observe a missing
-	# child and insert duplicates.
-	if not frappe.db.exists("CRM Interaction", interaction_name):
-		_interaction_fail("INVALID_TARGET", "The interaction target is no longer available.")
-	frappe.db.sql(
-		"SELECT name FROM `tabCRM Interaction` WHERE name = %s FOR UPDATE",
-		(interaction_name,),
-	)
-	names = []
-	for item in intents:
-		filters = {
-			"interaction": interaction_name,
-			"intent_type": item["intent_type"],
-			"intent_role": item["intent_role"],
-		}
-		name = frappe.db.get_value("CRM Intent", filters, "name")
-		if name:
-			names.append(name)
-			continue
-		doc = frappe.get_doc(
-			{
-				"doctype": "CRM Intent",
-				"interaction": interaction_name,
-				"student": student,
-				"intent_type": item["intent_type"],
-				"intent_role": item["intent_role"],
-				"confidence": item["confidence"],
-				"notes": item["notes"],
-			}
-		).insert(ignore_permissions=True)
-		names.append(doc.name)
-	return names
 
 
 def _source_matches_student(doctype, name, student, seen=None):
@@ -338,13 +272,178 @@ def _external_interaction_matches(record, target: dict, payload: dict) -> bool:
 	value = record.get
 	return (
 		_interaction_target_matches(target, value("student"), value("crm_contact"))
-		and value("notes") == payload["content"]
 		and _text(value("channel")) == payload["channel"]
 		and _text(value("direction")) == payload["direction"]
 		and _text(value("interaction_datetime")) == payload["occurred_at"]
 		and _text(value("conversation_id")) == payload.get("conversation_id")
 		and _text(value("agent_id")) == payload.get("agent_id")
 	)
+
+
+def _evidence_digest(content: str) -> str:
+	return hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _source_digest(turns: list[dict]) -> str:
+	return hashlib.sha256(
+		json.dumps(turns, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+	).hexdigest()
+
+
+def _ensure_interaction_evidence(payload: dict, target: dict) -> list[str]:
+	"""Persist one protected Evidence record for each labelled source turn."""
+	base_key = f"{payload['source_namespace']}:{payload['source_record_id']}:{payload['source_revision']}"
+	evidence_names = []
+	for index, turn in enumerate(payload["turns"], start=1):
+		key = base_key if len(payload["turns"]) == 1 else f"{base_key}:turn:{index}"
+		digest = _evidence_digest(turn["content"])
+		existing = frappe.db.get_value("CRM Interaction Evidence", {"external_event_key": key}, "name")
+		if existing:
+			stored = frappe.db.get_value("CRM Interaction Evidence", existing, "evidence_digest")
+			if stored != digest:
+				_interaction_fail(
+					"IDEMPOTENCY_KEY_REUSED", "The evidence revision was reused with another body."
+				)
+			evidence_names.append(existing)
+			continue
+		evidence = frappe.get_doc(
+			{
+				"doctype": "CRM Interaction Evidence",
+				"student": target.get("student"),
+				"crm_contact": target.get("contact"),
+				"external_event_key": key,
+				"source_namespace": payload["source_namespace"],
+				"source_record_id": payload["source_record_id"],
+				"source_revision": payload["source_revision"],
+				"evidence_digest": digest,
+				"evidence_kind": payload["evidence_kind"],
+				"evidence_state": payload["evidence_state"],
+				"channel": payload["channel"],
+				"direction": payload["direction"],
+				"actor_role": turn["speaker_role"],
+				"occurred_at": turn.get("occurred_at") or payload["occurred_at"],
+				"content": turn["content"],
+			}
+		).insert(ignore_permissions=True)
+		evidence_names.append(evidence.name)
+	return evidence_names
+
+
+def _ensure_interaction_analysis_run(
+	interaction: str, episode_key: str, source_revision: int, source_digest: str
+) -> str:
+	"""Create the dedicated, revision-fenced run identity for a sealed episode."""
+	run_key = hashlib.sha256(
+		f"{interaction}:{episode_key}:{source_revision}:{source_digest}".encode()
+	).hexdigest()
+	existing = frappe.db.get_value("CRM Interaction Analysis Run", {"run_key": run_key}, "name")
+	if not existing:
+		existing = (
+			frappe.get_doc(
+				{
+					"doctype": "CRM Interaction Analysis Run",
+					"interaction": interaction,
+					"episode_key": episode_key,
+					"run_key": run_key,
+					"source_revision": source_revision,
+					"source_digest": source_digest,
+					"status": "queued",
+				}
+			)
+			.insert(ignore_permissions=True)
+			.name
+		)
+	stage_key = f"interaction-analysis:{run_key}"
+	if not frappe.db.exists("CRM Analysis Run Stage", {"stage_key": stage_key}):
+		frappe.get_doc(
+			{
+				"doctype": "CRM Analysis Run Stage",
+				"parent_run_type": "CRM Interaction Analysis Run",
+				"parent_run": existing,
+				"stage_kind": "interaction_analysis",
+				"stage_key": stage_key,
+				"status": "queued",
+				"stage_generation": 0,
+				"expected_source_revision": str(source_revision),
+				"expected_source_digest": source_digest,
+			}
+		).insert(ignore_permissions=True)
+		if frappe.conf.get("crm_agents_interaction_analysis_events_enabled", 0) not in (0, "0", False):
+			from crm.api.agent_events import record_agent_event
+
+			run_doc = frappe.get_doc("CRM Interaction Analysis Run", existing)
+			record_agent_event("interaction.analysis.requested.v1", run_doc)
+	return existing
+
+
+def read_interaction_evidence(interaction: str, *, expected_revision: int, expected_digest: str) -> dict:
+	"""Return a revision's labelled raw turns only to the service identity."""
+	service_user = frappe.conf.get("crm_agents_service_user")
+	if not service_user or frappe.session.user != service_user:
+		_interaction_fail("UNAUTHORIZED", "Evidence is restricted to the CRM-Agents capability.")
+	parent = frappe.db.get_value(
+		"CRM Interaction", interaction, ["source_revision", "evidence_digest"], as_dict=True
+	)
+	if (
+		not parent
+		or int(parent.source_revision or 0) != int(expected_revision)
+		or parent.evidence_digest != expected_digest
+	):
+		_interaction_fail(
+			"STALE_SOURCE_REVISION", "Evidence digest no longer matches the requested revision."
+		)
+	evidence_rows = frappe.get_all(
+		"CRM Interaction Evidence",
+		filters={"interaction": interaction, "source_revision": expected_revision},
+		fields=["name", "actor_role", "content", "evidence_digest", "occurred_at"],
+		order_by="occurred_at asc, creation asc, name asc",
+	)
+	if not evidence_rows:
+		_interaction_fail("STALE_SOURCE_REVISION", "Evidence for the requested revision is unavailable.")
+	return {
+		"evidence_digest": expected_digest,
+		"source_revision": expected_revision,
+		"turns": [
+			{
+				"evidence_ref": {"doctype": "CRM Interaction Evidence", "name": row.name},
+				"actor_role": row.actor_role,
+				"content": row.content,
+			}
+			for row in evidence_rows
+		],
+	}
+
+
+def _normalize_external_turns(value) -> list[dict]:
+	"""Return bounded, speaker-labelled evidence turns.
+
+	Every producer must label each turn. The source boundary never infers a
+	speaker from interaction direction or accepts a legacy raw ``content`` body.
+	"""
+	if not isinstance(value, list) or not value or len(value) > MAX_EXTERNAL_INTERACTION_TURNS:
+		_interaction_fail("INVALID_INPUT", "turns must be a bounded non-empty list.")
+	turns = []
+	for index, turn in enumerate(value):
+		if not isinstance(turn, dict) or set(turn) - {"speaker_role", "content", "occurred_at"}:
+			_interaction_fail("INVALID_INPUT", f"turns[{index}] has an unsupported shape.")
+		role = _text(turn.get("speaker_role"))
+		body = turn.get("content")
+		if role not in {"student", "advisor", "system"}:
+			_interaction_fail("INVALID_INPUT", f"turns[{index}].speaker_role is invalid.")
+		if not isinstance(body, str) or not body.strip():
+			_interaction_fail("INVALID_INPUT", f"turns[{index}].content is required.")
+		if len(body.encode("utf-8")) > MAX_EXTERNAL_INTERACTION_CONTENT_BYTES:
+			_interaction_fail("INVALID_INPUT", f"turns[{index}].content exceeds the interaction size limit.")
+		occurred_at = _text(turn.get("occurred_at"))
+		if occurred_at:
+			try:
+				occurred_at = str(frappe.utils.get_datetime(occurred_at))
+			except (TypeError, ValueError):
+				_interaction_fail("INVALID_INPUT", f"turns[{index}].occurred_at must be a valid datetime.")
+		turns.append({"speaker_role": role, "content": body.strip(), "occurred_at": occurred_at})
+	if len(json.dumps(turns, ensure_ascii=False).encode("utf-8")) > MAX_EXTERNAL_INTERACTION_CONTENT_BYTES:
+		_interaction_fail("INVALID_INPUT", "turns exceed the interaction size limit.")
+	return turns
 
 
 def _external_target_matches(external_id: str) -> list[dict]:
@@ -404,7 +503,9 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 
 
 def _assert_interaction_scope(target: dict, authority: dict):
-	if authority.get("profile") in {"platform_superuser", "admissions_director"} or authority.get("scope_all"):
+	if authority.get("profile") in {"platform_superuser", "admissions_director"} or authority.get(
+		"scope_all"
+	):
 		return
 	if target.get("student"):
 		row = frappe.db.get_value(
@@ -460,6 +561,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 		payload["idempotency_key"],
 		authority.get("actor_user") or payload["source_namespace"],
 		command_kind="interaction",
+		source_revision=payload["source_revision"],
 	)
 	fingerprint = body_fingerprint(payload)
 	replay = _receipt_replay(
@@ -471,6 +573,13 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 	if replay:
 		_assert_replay_scope(replay, authority)
 		return replay
+	evidence_names = _ensure_interaction_evidence(payload, target)
+	evidence_name = evidence_names[0]
+	evidence_digest = _source_digest(payload["turns"])
+	episode_key = (
+		payload.get("conversation_id") or f"{payload['source_namespace']}:{payload['source_record_id']}"
+	)
+	episode_state = "open" if payload["evidence_state"] == "draft" else "sealed"
 
 	existing = frappe.db.get_value(
 		"CRM Interaction",
@@ -479,12 +588,12 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 			"name",
 			"student",
 			"crm_contact",
-			"notes",
 			"channel",
 			"direction",
 			"interaction_datetime",
 			"conversation_id",
 			"agent_id",
+			"source_revision",
 		],
 		as_dict=True,
 	)
@@ -495,6 +604,24 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 				"The external interaction key was already used with another message.",
 			)
 		interaction_name = existing.get("name")
+		stored_revision = int(existing.get("source_revision") or 1)
+		if payload["source_revision"] < stored_revision:
+			_interaction_fail(
+				"STALE_SOURCE_REVISION", "The interaction already has a newer evidence revision."
+			)
+		if payload["source_revision"] > stored_revision:
+			frappe.db.set_value(
+				"CRM Interaction",
+				interaction_name,
+				{
+					"source_revision": payload["source_revision"],
+					"evidence_digest": evidence_digest,
+					"evidence": evidence_name,
+					"episode_key": episode_key,
+					"episode_state": episode_state,
+				},
+				update_modified=False,
+			)
 	else:
 		interaction_name = create_interaction(
 			interaction_type=interaction_type,
@@ -502,7 +629,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 			crm_contact=target.get("contact"),
 			actor=authority.get("actor_user"),
 			summary=f"{payload['channel']} {payload['direction']}",
-			notes=payload["content"],
+			notes=None,
 			interaction_datetime=payload["occurred_at"],
 			channel=payload["channel"],
 			direction=payload["direction"],
@@ -511,6 +638,11 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 			source_namespace=payload["source_namespace"],
 			source_record_id=payload["source_record_id"],
 			external_id=external_id,
+			source_revision=payload["source_revision"],
+			evidence_digest=evidence_digest,
+			evidence=evidence_name,
+			episode_key=episode_key,
+			episode_state=episode_state,
 		)
 		if not interaction_name:
 			_interaction_fail("CONFIGURATION_ERROR", "The interaction could not be created.")
@@ -521,12 +653,12 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 				"name",
 				"student",
 				"crm_contact",
-				"notes",
 				"channel",
 				"direction",
 				"interaction_datetime",
 				"conversation_id",
 				"agent_id",
+				"source_revision",
 			],
 			as_dict=True,
 		)
@@ -535,18 +667,41 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 				"IDEMPOTENCY_KEY_REUSED",
 				"The external interaction key was already used with another message.",
 			)
-	intent_names = _ensure_external_interaction_intents(
-		interaction_name,
-		target.get("student"),
-		payload.get("intents") or [],
-	)
-
+	for evidence_name in evidence_names:
+		frappe.db.set_value(
+			"CRM Interaction Evidence", evidence_name, "interaction", interaction_name, update_modified=False
+		)
+	analysis_run = None
+	if payload["evidence_state"] != "draft":
+		analysis_run = _ensure_interaction_analysis_run(
+			interaction_name, episode_key, payload["source_revision"], evidence_digest
+		)
 	result = {
 		"outcome": "created",
 		"interaction": interaction_name,
 		"student": target.get("student"),
 		"contact": target.get("contact"),
-		"intents": intent_names,
+		"analysis_run": analysis_run,
+	}
+	# Command receipts remain auditable but never copy the raw evidence body.
+	receipt_provenance = {
+		key: payload.get(key)
+		for key in (
+			"source_namespace",
+			"source_record_id",
+			"idempotency_key",
+			"student_id",
+			"contact_id",
+			"target_external_id",
+			"channel",
+			"direction",
+			"occurred_at",
+			"agent_id",
+			"conversation_id",
+			"evidence_kind",
+			"evidence_state",
+			"source_revision",
+		)
 	}
 	return _persist_receipt(
 		keys,
@@ -558,7 +713,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 		idempotency_key=payload["idempotency_key"],
 		correlation_id=payload.get("conversation_id") or payload["source_record_id"],
 		kind="interaction",
-		provenance_payload=payload,
+		provenance_payload=receipt_provenance,
 	)
 
 
@@ -581,6 +736,11 @@ def create_interaction(
 	source_namespace=None,
 	source_record_id=None,
 	external_id=None,
+	source_revision=None,
+	evidence_digest=None,
+	evidence=None,
+	episode_key=None,
+	episode_state=None,
 ):
 	if not student and crm_contact:
 		students = students_for_contact(crm_contact)
@@ -626,6 +786,11 @@ def create_interaction(
 	interaction.agent_id = agent_id
 	interaction.source_namespace = source_namespace
 	interaction.source_record_id = source_record_id
+	interaction.source_revision = source_revision
+	interaction.evidence_digest = evidence_digest
+	interaction.evidence = evidence
+	interaction.episode_key = episode_key
+	interaction.episode_state = episode_state
 	if student and verify_sla_source(reference_doctype, reference_docname, student):
 		interaction.source_verified = 1
 	previous_flag = getattr(frappe.flags, "student_sla_source_service", False)

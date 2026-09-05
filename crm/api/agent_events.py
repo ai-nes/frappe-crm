@@ -25,12 +25,14 @@ _EVENT_PATHS = {
 	"action.outcome_recorded.v1": "/api/v1/insight/action-outcome",
 	"student.score_input_changed.v1": "/api/v1/insight/score-input-v1",
 	"scoring.policy_changed.v1": "/api/v1/insight/scoring-policy-changed",
+	"interaction.analysis.requested.v1": "/api/v1/interaction-analysis/run",
 }
 _EXPECTED_CONTRACT_VERSIONS = {
 	"recommendation.decided.v1": 1,
 	"action.outcome_recorded.v1": 1,
 	"student.score_input_changed.v1": 1,
 	"scoring.policy_changed.v1": 1,
+	"interaction.analysis.requested.v1": 1,
 }
 _MAX_DELIVERY_ATTEMPTS = 10
 _LEASE_SECONDS = 120

@@ -167,13 +167,22 @@ def build_nba_evaluation_input(
 	minimum_revision: int = 0,
 	actor: str | None = None,
 	now: datetime | None = None,
+	service_authorized: bool = False,
 ) -> dict:
-	"""Assemble the NBA Evaluation v1 input for one student from live data."""
+	"""Assemble the NBA Evaluation v1 input for one student from live data.
+
+	``service_authorized`` must only be set by a caller that has already run
+	``_require_agent_identity()``/``_service_only()`` on the current request --
+	see ``_projection``'s own docstring for why this bypasses the per-user
+	Student read check.
+	"""
 	moment = now or frappe.utils.now_datetime()
 	timezone = frappe.db.get_single_value("System Settings", "time_zone") or _DEFAULT_TIMEZONE
 
-	projection = _projection(student, int(minimum_revision))
-	eligible = nba_policy.eligible_action_set_for_student(student, actor=actor, now=moment)
+	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized)
+	eligible = nba_policy.eligible_action_set_for_student(
+		student, actor=actor, now=moment, service_authorized=service_authorized
+	)
 	decision = nba_policy.get_active_decision_policy()
 	timing = feasible_timing_domain({"trigger_type": "relative", "delay_value": 0}, now=moment)
 
@@ -195,7 +204,7 @@ def get_nba_evaluation_input(student: str, minimum_revision: int = 0) -> dict:
 	state) -- not a per-rollout gate -- so there is no rollout-epoch parameter.
 	"""
 	_require_agent_identity()
-	return build_nba_evaluation_input(student, minimum_revision=int(minimum_revision))
+	return build_nba_evaluation_input(student, minimum_revision=int(minimum_revision), service_authorized=True)
 
 
 # --------------------------------------------------------------------------- #
