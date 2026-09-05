@@ -10,6 +10,7 @@ from __future__ import annotations
 import calendar
 import re
 import unicodedata
+import uuid
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from functools import cmp_to_key
@@ -39,6 +40,7 @@ ASSIGNMENT_POLICY_VERSION = "student-assignment-r1"
 ASSIGNMENT_FILTERS = {"all", "assigned", "review", "no_match", "missing_data", "error"}
 ASSIGNMENT_SORTS = {"receivedAt", "name", "status", "owner", "matchScore"}
 ASSIGNMENT_ORDERS = {"asc", "desc"}
+ASSIGNMENT_PIPELINE_REQUEST_STATUSES = {"pending", "deferred"}
 ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV-Sale"}
 ASSIGNMENT_STUDENT_FIELDS = [
 	"name",
@@ -309,7 +311,7 @@ def _resolve_teams(user: str, warnings: list[str]) -> list[dict[str, Any]]:
 		warnings.append("team.staff_not_found")
 		return []
 	staff_name = staff_rows[0].get("name")
-	memberships = _get_list(
+	memberships = _get_all(
 		"CRM Team Membership",
 		filters={"parent": staff_name, "parenttype": "CRM Staff"},
 		fields=["team", "function", "is_primary"],
@@ -371,6 +373,36 @@ def _get_list(
 		if order_by:
 			kwargs["order_by"] = order_by
 		return list(frappe.get_list(doctype, **kwargs))
+	except Exception:
+		if warnings is not None and warning_key:
+			warnings.append(f"{warning_key}.source_unavailable")
+		return []
+
+
+def _get_all(
+	doctype: str,
+	*,
+	filters: dict[str, Any],
+	fields: list[str],
+	limit_page_length: int,
+	warnings: list[str] | None,
+	warning_key: str | None = None,
+	order_by: str | None = None,
+) -> list[Any]:
+	"""Read child-table projections without standalone DocType permissions."""
+	try:
+		if not frappe.db.table_exists(doctype):
+			if warnings is not None and warning_key:
+				warnings.append(f"{warning_key}.source_unavailable")
+			return []
+		kwargs: dict[str, Any] = {
+			"filters": filters,
+			"fields": fields,
+			"limit_page_length": limit_page_length,
+		}
+		if order_by:
+			kwargs["order_by"] = order_by
+		return list(frappe.get_all(doctype, **kwargs))
 	except Exception:
 		if warnings is not None and warning_key:
 			warnings.append(f"{warning_key}.source_unavailable")
@@ -482,7 +514,7 @@ def _build_team_performance(
 		staff_id = str(staff.get("name") or "")
 		if not staff_id:
 			continue
-		memberships = _get_list(
+		memberships = _get_all(
 			"CRM Team Membership",
 			filters={"parent": staff_id, "parenttype": "CRM Staff", "team": ["in", list(team_ids)]},
 			fields=["team", "function"],
@@ -707,7 +739,7 @@ def _assignment_scope(user: str, warnings: list[str]) -> dict[str, Any]:
 	if not team_ids:
 		warnings.append("team.scope_empty")
 		return {"teams": teams, "team_ids": [], "staff_ids": [], "memberships": []}
-	memberships = _get_list(
+	memberships = _get_all(
 		"CRM Team Membership",
 		filters={"team": ["in", team_ids], "parenttype": "CRM Staff"},
 		fields=["parent as staff", "team", "function", "effective_from", "effective_until"],
@@ -799,7 +831,7 @@ def _assignment_metadata(student_ids: list[str], warnings: list[str]) -> dict[st
 		warning_key="assignment_events",
 		order_by="event_at asc, creation asc, name asc",
 	)
-	routing_rows = _get_list(
+	routing_rows = _get_all(
 		"CRM Student Routing Request",
 		filters={"student": ["in", student_ids]},
 		fields=[
@@ -1028,10 +1060,176 @@ def _assignment_workflow(summary: dict[str, Any], health: dict[str, Any]) -> dic
 			}
 		)
 	return {
-		"mode": "read-only",
+		"mode": "live",
 		"version": ASSIGNMENT_POLICY_VERSION,
 		"steps": steps,
 		"connections": [dict(connection) for connection in ASSIGNMENT_WORKFLOW_CONNECTIONS],
+	}
+
+
+def _assignment_pipeline_candidates(
+	students: list[dict[str, Any]], routing_rows: list[dict[str, Any]], limit: int
+) -> list[dict[str, Any]]:
+	"""Select unassigned pool-owned Students without broadening the caller scope."""
+	latest_request_by_student: dict[str, dict[str, Any]] = {}
+	request_rank_by_student: dict[str, int] = {}
+	for index, row in enumerate(routing_rows):
+		student_id = str(row.get("student") or "")
+		if student_id and student_id not in latest_request_by_student:
+			latest_request_by_student[student_id] = row
+			request_rank_by_student[student_id] = index
+
+	candidates = []
+	for student in students:
+		student_id = str(student.get("name") or "")
+		if not student_id or student.get("owner_staff") or student.get("assigned_to") or not student.get("owning_pool"):
+			continue
+		request = latest_request_by_student.get(student_id)
+		if request and request.get("status") not in ASSIGNMENT_PIPELINE_REQUEST_STATUSES:
+			continue
+		candidates.append({"student": student, "request": request})
+	candidates.sort(
+		key=lambda row: (
+			0 if row["request"] else 1,
+			request_rank_by_student.get(str(row["student"].get("name") or ""), len(routing_rows)),
+			str(row["student"].get("name") or ""),
+		)
+	)
+	return candidates[:limit]
+
+
+def _assignment_pipeline_run_result(
+	student: dict[str, Any], request_name: str | None, result: dict[str, Any]
+) -> dict[str, Any]:
+	return {
+		"student": str(student.get("name") or ""),
+		"request": request_name or result.get("request"),
+		"status": result.get("status") or "failed",
+		"tier": result.get("tier"),
+		"queue": result.get("queue"),
+		"ownerStaff": result.get("owner_staff"),
+		"reason": result.get("reason"),
+		"errorCode": result.get("error_code"),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def run_student_assignment_pipeline(
+	admissionYear: str | int | None = None,
+	timezone: str = DEFAULT_TIMEZONE,
+	limit: str | int = 50,
+) -> dict[str, Any]:
+	"""Run eligible pool-owned Students through the canonical routing worker.
+
+	The endpoint is deliberately scoped to the current Lead Sales team and never
+	passes an already-owned Student to the routing service. Deferred requests are
+	retried, pending requests are processed, and pool-owned Students without a
+	request receive one before processing.
+	"""
+	access = _require_assignment_access()
+	report_timezone = _parse_timezone(timezone)
+	year = _resolve_admission_year(admissionYear)
+	page_limit = parse_limit(limit, field="limit", minimum=1, maximum=100, default=50)
+	warnings: list[str] = []
+	started_at = _now(report_timezone)
+	run_id = f"assignment-pipeline-{uuid.uuid4().hex}"
+
+	if not frappe.db.table_exists("CRM Student Routing Request"):
+		raise_api_error(
+			"ROUTING_UNAVAILABLE",
+			"CRM Student Routing Request chưa được cài đặt.",
+			frappe.ValidationError,
+			503,
+		)
+
+	scope = _assignment_scope(access["user"], warnings)
+	students = _assignment_load_students(scope, year, warnings)
+	student_ids = [str(row.get("name")) for row in students if row.get("name")]
+	routing_rows = (
+		[
+			dict(row)
+			for row in frappe.get_all(
+				"CRM Student Routing Request",
+				filters={"student": ["in", student_ids or ["__no_student__"]]},
+				fields=["name", "student", "status", "last_error_code", "creation"],
+				order_by="creation desc, name desc",
+				limit_page_length=0,
+			)
+		]
+		if student_ids
+		else []
+	)
+	candidates = _assignment_pipeline_candidates(students, routing_rows, page_limit)
+
+	from crm.fcrm.student_routing import (
+		enqueue_student_routing,
+		process_routing_request,
+		retry_student_routing,
+	)
+
+	results: list[dict[str, Any]] = []
+	for candidate in candidates:
+		student = candidate["student"]
+		request = candidate.get("request")
+		request_name = str(request.get("name")) if request and request.get("name") else None
+		try:
+			if not request_name:
+				request = enqueue_student_routing(
+					str(student["name"]),
+					trigger="pool_entry",
+					correlation_id=f"{run_id}:{student['name']}",
+				)
+				request_name = str(request.name)
+			if request and request.get("status") == "deferred":
+				result = retry_student_routing(request_name)
+			else:
+				result = process_routing_request(request_name)
+			results.append(_assignment_pipeline_run_result(student, request_name, result))
+		except Exception as exc:
+			frappe.db.rollback()
+			results.append(
+				_assignment_pipeline_run_result(
+					student,
+					request_name,
+					{
+						"status": "failed",
+						"error_code": getattr(exc, "code", None) or getattr(exc, "error_code", None),
+						"reason": str(exc),
+					},
+				)
+			)
+
+	completed_at = _now(report_timezone)
+	assigned = sum(row["status"] == "applied" for row in results)
+	deferred = sum(row["status"] in {"deferred", "queued"} for row in results)
+	failed = sum(row["status"] == "failed" for row in results)
+	run = {
+		"id": run_id,
+		"status": "completed" if not failed else "completed_with_errors",
+		"startedAt": started_at.isoformat(timespec="seconds"),
+		"completedAt": completed_at.isoformat(timespec="seconds"),
+		"checked": len(candidates),
+		"assigned": assigned,
+		"deferred": deferred,
+		"failed": failed,
+		"skipped": max(0, len(students) - len(candidates)),
+	}
+
+	snapshot = get_student_assignment_workspace(
+		admissionYear=year,
+		timezone=timezone,
+		page=1,
+		pageSize=1,
+	)
+	workflow = dict(snapshot["workflow"])
+	workflow["lastRun"] = run
+	return {
+		"meta": snapshot["meta"],
+		"summary": snapshot["summary"],
+		"health": snapshot["health"],
+		"workflow": workflow,
+		"run": run,
+		"results": results,
 	}
 
 

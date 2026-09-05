@@ -260,7 +260,7 @@ def _team_scope(user: str, report_date: date, warnings: list[str]) -> dict[str, 
 		)
 
 	lead_staff = str(lead_rows[0].get("name") or "")
-	lead_memberships = _read_list(
+	lead_memberships = _read_all(
 		"CRM Team Membership",
 		filters={"parent": lead_staff, "parenttype": "CRM Staff"},
 		fields=["team", "function", "is_primary", "effective_from", "effective_until"],
@@ -293,7 +293,7 @@ def _team_scope(user: str, report_date: date, warnings: list[str]) -> dict[str, 
 		)
 	team_ids = sorted({str(team["name"]) for team in teams})
 
-	membership_rows = _read_list(
+	membership_rows = _read_all(
 		"CRM Team Membership",
 		filters={"team": ["in", team_ids], "parenttype": "CRM Staff"},
 		fields=["parent as staff", "team", "function", "effective_from", "effective_until"],
@@ -840,6 +840,35 @@ def _read_list(
 			order_by=order_by,
 		)
 	]
+
+
+def _read_all(
+	doctype: str,
+	*,
+	filters: dict[str, Any],
+	fields: list[str],
+	warnings: list[str] | None,
+	warning_key: str | None = None,
+	order_by: str | None = None,
+) -> list[dict[str, Any]]:
+	"""Read child-table projections that have no standalone DocType permissions."""
+	try:
+		if not frappe.db.table_exists(doctype):
+			if warnings is not None and warning_key:
+				warnings.append(f"{warning_key}.source_unavailable")
+			return []
+		kwargs: dict[str, Any] = {
+			"filters": filters,
+			"fields": fields,
+			"limit_page_length": 0,
+		}
+		if order_by:
+			kwargs["order_by"] = order_by
+		return [dict(row) for row in frappe.get_all(doctype, **kwargs)]
+	except Exception:
+		if warnings is not None and warning_key:
+			warnings.append(f"{warning_key}.source_unavailable")
+		return []
 
 
 def _table_exists(doctype: str) -> bool:

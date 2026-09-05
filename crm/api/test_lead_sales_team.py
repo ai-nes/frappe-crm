@@ -73,7 +73,27 @@ class TestLeadSalesTeam(FrappeTestCase):
 			["STAFF-1", "STAFF-3", "STAFF-2"],
 		)
 
-	@patch.object(lead_sales_team.lead_sale_api, "_require_access", return_value={"user": "lead@example.test"})
+	@patch.object(lead_sales_team.frappe.db, "table_exists", return_value=True)
+	@patch.object(
+		lead_sales_team.frappe,
+		"get_all",
+		return_value=[{"parent": "STAFF-1", "team": "TEAM-1", "function": "Sale"}],
+	)
+	def test_team_membership_projection_uses_child_table_read(self, get_all, _table_exists):
+		rows = lead_sales_team._read_all(
+			"CRM Team Membership",
+			filters={"parent": "STAFF-1", "parenttype": "CRM Staff"},
+			fields=["parent", "team", "function"],
+			warnings=[],
+			warning_key="team",
+		)
+
+		self.assertEqual(rows[0]["team"], "TEAM-1")
+		get_all.assert_called_once()
+
+	@patch.object(
+		lead_sales_team.lead_sale_api, "_require_access", return_value={"user": "lead@example.test"}
+	)
 	def test_detail_requires_member_id(self, _require_access):
 		with self.assertRaises(frappe.ValidationError):
 			lead_sales_team.get_sales_team_member_detail("")

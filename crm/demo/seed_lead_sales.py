@@ -12,6 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
+import frappe
+
+from crm.demo import seed_demo, seed_showcase, seed_staff
 from crm.demo.seed_ctv_sale import SalesAccountSeed, execute_seed
 
 NAMESPACE = "crm-demo-lead-sales"
@@ -95,6 +98,85 @@ SEED_SPEC = SalesAccountSeed(
 	assign_students_to_account=False,
 	is_team_lead=True,
 )
+
+
+def _source_id(key: str) -> str:
+	return f"{NAMESPACE}:{key}"
+
+
+def _fixture_source_ids() -> tuple[str, ...]:
+	return tuple(_source_id(scenario["key"]) for scenario in STUDENT_SCENARIOS)
+
+
+def reset() -> dict[str, Any]:
+	"""Return only this fixture's students to pool ownership for another run.
+
+	The reset intentionally uses the canonical ownership command. This keeps
+	ownership events and command receipts append-only while creating a fresh
+	ownership revision and routing request for every test cycle.
+	"""
+	seed_showcase._assert_local_site()
+	seed_showcase.ensure_local_integrity_keys()
+	seed_showcase.ensure_demo_config()
+	frappe.set_user("Administrator")
+
+	with seed_showcase._temporary_local_flags():
+		context = seed_demo._bootstrap()
+		team = seed_staff._ensure_fixture_sales_team(context["campus"])
+		pool = seed_staff._ensure_fixture_student_pool(team)
+		students = frappe.get_all(
+			"CRM Student",
+			filters={"import_source_id": ["in", list(_fixture_source_ids())]},
+			fields=["name", "import_source_id", "branch", "ownership_revision"],
+			limit_page_length=0,
+		)
+		students_by_source = {row.import_source_id: row for row in students}
+		missing = [source_id for source_id in _fixture_source_ids() if source_id not in students_by_source]
+		reset_rows: list[dict[str, Any]] = []
+
+		from crm.fcrm.student_ownership import change_student_ownership
+
+		for scenario in STUDENT_SCENARIOS:
+			source_id = _source_id(scenario["key"])
+			row = students_by_source.get(source_id)
+			if not row:
+				continue
+			current_revision = int(row.ownership_revision or 0)
+			result = change_student_ownership(
+				student=row.name,
+				target_kind="pool",
+				target_id=pool,
+				target_team_id=team,
+				reason="Reset Lead Sales assignment pipeline fixture for another test run.",
+				idempotency_key=f"{NAMESPACE}:reset:{scenario['key']}:r{current_revision}",
+				expected_revision=current_revision,
+				correlation_id=f"{NAMESPACE}:reset:{scenario['key']}:r{current_revision}",
+				_internal_service=True,
+				_internal_actor="Administrator",
+				_commit=False,
+				_route_trigger="pool_return",
+			)
+			frappe.db.commit()
+			reset_rows.append(
+				{
+					"student": row.name,
+					"source_id": source_id,
+					"revision": result.get("revision"),
+					"request": frappe.db.get_value(
+						"CRM Student Routing Request",
+						{"student": row.name, "ownership_revision": result.get("revision")},
+						"name",
+					),
+				}
+			)
+
+	return {
+		"pool": pool,
+		"team": team,
+		"reset": reset_rows,
+		"missing": missing,
+		"count": len(reset_rows),
+	}
 
 
 def execute() -> dict[str, Any]:

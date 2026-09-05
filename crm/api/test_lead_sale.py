@@ -9,6 +9,70 @@ from crm.api import lead_sale
 
 
 class TestLeadSaleOverview(FrappeTestCase):
+	def test_pipeline_candidates_are_pool_owned_and_request_scoped(self):
+		students = [
+			{"name": "STU-POOL", "owning_pool": "POOL-1", "owner_staff": None, "assigned_to": None},
+			{"name": "STU-OWNER", "owning_pool": None, "owner_staff": "STAFF-1", "assigned_to": "STAFF-1"},
+			{"name": "STU-APPLIED", "owning_pool": "POOL-1", "owner_staff": None, "assigned_to": None},
+			{"name": "STU-NO-POOL", "owning_pool": None, "owner_staff": None, "assigned_to": None},
+		]
+		requests = [
+			{"student": "STU-POOL", "status": "pending"},
+			{"student": "STU-APPLIED", "status": "applied"},
+		]
+
+		candidates = lead_sale._assignment_pipeline_candidates(students, requests, limit=10)
+
+		self.assertEqual([row["student"]["name"] for row in candidates], ["STU-POOL"])
+		self.assertEqual(candidates[0]["request"]["status"], "pending")
+
+	@patch("crm.fcrm.student_routing.process_routing_request")
+	@patch.object(lead_sale, "get_student_assignment_workspace")
+	@patch.object(lead_sale.frappe, "get_all")
+	@patch.object(lead_sale.frappe.db, "table_exists", return_value=True)
+	def test_pipeline_endpoint_processes_only_current_pool_scope(
+		self, _table_exists, get_all, get_workspace, _process
+	):
+		students = [
+			{
+				"name": "STU-POOL",
+				"owning_pool": "POOL-1",
+				"owning_team": "TEAM-1",
+				"owner_staff": None,
+				"assigned_to": None,
+			},
+			{
+				"name": "STU-OWNER",
+				"owning_pool": None,
+				"owning_team": None,
+				"owner_staff": "STAFF-1",
+				"assigned_to": "STAFF-1",
+			},
+		]
+		get_all.return_value = [{"name": "REQ-1", "student": "STU-POOL", "status": "pending"}]
+		_process.return_value = {"status": "applied", "request": "REQ-1", "owner_staff": "STAFF-2", "tier": 1}
+		get_workspace.return_value = {
+			"meta": {},
+			"summary": {"received": 2, "assigned": 1},
+			"health": {},
+			"workflow": {"steps": []},
+		}
+
+		with (
+			patch.object(lead_sale, "_require_assignment_access", return_value={"user": "lead@example.com"}),
+			patch.object(lead_sale, "_parse_timezone", return_value=ZoneInfo("Asia/Ho_Chi_Minh")),
+			patch.object(lead_sale, "_resolve_admission_year", return_value="2026"),
+			patch.object(lead_sale, "_assignment_scope", return_value={"team_ids": ["TEAM-1"]}),
+			patch.object(lead_sale, "_assignment_load_students", return_value=students),
+			patch.object(lead_sale, "_now", return_value=datetime(2026, 9, 5, 10, 0, tzinfo=ZoneInfo("Asia/Ho_Chi_Minh"))),
+		):
+			response = lead_sale.run_student_assignment_pipeline(admissionYear="2026", limit=10)
+
+		self.assertEqual(response["run"]["checked"], 1)
+		self.assertEqual(response["run"]["assigned"], 1)
+		self.assertEqual(response["results"][0]["student"], "STU-POOL")
+		_process.assert_called_once_with("REQ-1")
+
 	def test_student_status_is_exhaustive_and_matches_active_kpi(self):
 		status = lead_sale._build_student_status(
 			[
