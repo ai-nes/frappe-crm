@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import get_datetime
 
 from crm.fcrm.student_contact_conversion import contacts_for_student, students_for_contact
@@ -179,7 +180,7 @@ def to_display_date(dt):
 			dt = get_datetime(dt)
 		except Exception:
 			return dt
-	if isinstance(dt, (date, datetime)):
+	if isinstance(dt, date | datetime):
 		return dt.strftime("%d/%m/%Y")
 	return str(dt)
 
@@ -261,7 +262,7 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 		students = _visible_students_for_contact(contact)
 		if len(students) != 1:
 			frappe.throw(
-				"A Contact is linked to multiple Student cases; select a Student.", frappe.ValidationError
+				_("A Contact is linked to multiple Student cases; select a Student."), frappe.ValidationError
 			)
 		student = students[0]
 
@@ -855,7 +856,7 @@ def get_student_dashboard(
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_training_programs():
 	return {
 		"isSuccess": True,
@@ -874,7 +875,7 @@ def get_training_programs():
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_study_majors():
 	return {
 		"isSuccess": True,
@@ -898,7 +899,7 @@ def get_study_majors():
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_intent_definitions():
 	return {
 		"isSuccess": True,

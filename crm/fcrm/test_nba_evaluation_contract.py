@@ -253,7 +253,7 @@ def assert_result_shape(payload):
 		if not isinstance(rec["score"], dict) or "total" not in rec["score"]:
 			raise ContractShapeError(f"{where}.score must be an object with a total")
 		confidence = rec["confidence"]
-		if not isinstance(confidence, (int, float)) or not 0.0 <= float(confidence) <= 1.0:
+		if not isinstance(confidence, int | float) or not 0.0 <= float(confidence) <= 1.0:
 			raise ContractShapeError(f"{where}.confidence must be within [0, 1]")
 		facts = rec["explanation_facts"]
 		if not isinstance(facts, list) or len(facts) > _MAX_EXPLANATION_FACTS:

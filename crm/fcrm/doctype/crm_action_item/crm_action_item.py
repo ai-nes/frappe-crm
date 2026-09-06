@@ -1,6 +1,7 @@
 from typing import ClassVar
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, ACTION_TYPE_METADATA, canonicalize_action_type
@@ -113,7 +114,7 @@ class CRMActionItem(Document):
 					continue
 				if before.get(field) != self.get(field):
 					frappe.throw(
-						"CRM Action Item fields require a controlled command.", frappe.PermissionError
+						_("CRM Action Item fields require a controlled command."), frappe.PermissionError
 					)
 		if (
 			before
