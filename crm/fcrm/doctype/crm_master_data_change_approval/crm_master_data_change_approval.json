@@ -1,6 +1,6 @@
 {
  "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "hash", "creation": "2026-08-25 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB", "module": "FCRM", "name": "CRM Master Data Change Approval", "naming_rule": "Random", "permissions": [
-  {"read": 1, "role": "System Manager"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Lead Sales"}, {"read": 1, "role": "Admissions Director"}
+  {"read": 1, "role": "System Manager"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Lead Sale"}, {"read": 1, "role": "Admissions Director"}
  ], "field_order": ["approval_role", "approval_key", "decision", "approved_by", "approved_at", "reason"], "fields": [
   {"fieldname": "approval_role", "fieldtype": "Link", "label": "Approval Role", "options": "Role", "reqd": 1, "read_only": 1},
   {"fieldname": "approval_key", "fieldtype": "Data", "label": "Approval Key", "unique": 1, "read_only": 1},

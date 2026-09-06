@@ -127,7 +127,7 @@ class TestLeadSaleOverview(FrappeTestCase):
 			patch.object(lead_sale, "_resolve_admission_year", return_value="2026"),
 			patch.object(lead_sale, "_resolve_teams", return_value=[{"name": "TEAM-1", "team_name": "Đội Sale"}]),
 			patch.object(lead_sale, "_now", return_value=datetime(2026, 9, 5, 10, 0, tzinfo=timezone)),
-			patch.object(lead_sale, "_viewer", return_value={"id": "lead@example.com", "displayName": "Lead Sales"}),
+			patch.object(lead_sale, "_viewer", return_value={"id": "lead@example.com", "displayName": "Lead Sale"}),
 			patch.object(lead_sale, "_load_students", return_value=students),
 			patch.object(lead_sale.sale_overview, "_load_contacts", return_value=[]),
 			patch.object(lead_sale.sale_overview, "_load_applications", return_value=[]),

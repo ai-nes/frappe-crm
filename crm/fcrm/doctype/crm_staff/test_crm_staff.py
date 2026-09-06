@@ -104,7 +104,7 @@ class TestCRMStaff(FrappeTestCase):
 			"team_memberships",
 			{
 				"team": self._team_b,
-				"function": "Lead Sales",
+				"function": "Lead Sale",
 				"term": "2026-1",
 				"is_primary": 1,
 			},
@@ -151,7 +151,7 @@ class TestCRMStaff(FrappeTestCase):
 			"team_memberships",
 			{
 				"team": self._team_a,
-				"function": "Lead Sales",
+				"function": "Lead Sale",
 				"effective_from": add_days(today(), 1),
 			}
 		)

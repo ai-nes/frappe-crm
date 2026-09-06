@@ -18,7 +18,7 @@
  "name": "CRM Action Type",
  "permissions": [
   {"read": 1, "role": "Sale"},
-  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Marketing"},
   {"read": 1, "role": "Promoter"},
   {"read": 1, "role": "Admissions Director"},

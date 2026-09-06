@@ -102,10 +102,10 @@
   {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
   {"create": 1, "read": 1, "write": 1, "permlevel": 1, "role": "System Manager"},
   {"create": 1, "read": 1, "write": 1, "permlevel": 1, "role": "Admissions Director"},
-  {"export": 1, "read": 1, "role": "Lead Sales"},
+  {"export": 1, "read": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Marketing"},
   {"read": 1, "role": "Promoter"},
-  {"read": 1, "role": "Promoter-PR"},
+{"read": 1, "role": "Promoter"},
   {"read": 1, "role": "Sale"}
  ],
  "quick_entry": 1,

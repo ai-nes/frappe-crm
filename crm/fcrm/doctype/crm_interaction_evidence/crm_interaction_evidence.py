@@ -31,4 +31,5 @@ class CRMInteractionEvidence(Document):
 		Target permissions continue to govern the surrounding CRM Interaction, but
 		they intentionally do not grant a generic DocType read for its raw body.
 		"""
-		return False
+		service_user = frappe.conf.get("crm_agents_service_user")
+		return bool(service_user and (user or frappe.session.user) == service_user)

@@ -104,21 +104,21 @@ _TIMING_REQUIRED = ("earliest_at", "latest_at", "scheduled_at", "timezone")
 
 # Canonical digest (SHA-256 of canonical JSON of the parsed envelope).
 _EXPECTED_DIGESTS = {
-	"input-recommend.json": "e0442c00b495f7fb8e5b9fb60ec53da29faff73a7ef6d9cca5136aafa5e99b13",
-	"result-recommend.json": "3c737749e6d41c403fccb6380afba83ab414643a4b331984ffb711e2c991ada5",
+	"input-recommend.json": "c4561f1b6ccbf2a7b1383e19cceaf14f1d3b97c8799438ba63b148c27c281d9b",
+	"result-recommend.json": "5b7f64146cc8c894d9efa9343d7b0c69e4302b758f520484d7df8704c61449e8",
 	"result-wait.json": "470e6935d164bb6f6f3ddd24d72f44bab1445d2295e3d030add4658ff2b343eb",
 	"result-unknown-major.json": "1d1b40dcb0da911dc8eea6d2baf1efb692c1899e83ee280ebcf8d3eb49023a9c",
-	"result-action-outside-eligible-set.json": "e62e018a51c7187eb894955ed54065ffd696f5b841eb333e57164f330326ac5f",
-	"result-duplicate-recommendation-key.json": "cde4406bc2de97bbb79428f9c2cc52dd1dd947e44900f55c7e7018328b4bfe10",
+	"result-action-outside-eligible-set.json": "0eb513b83c6bf1b9d0b149394e797b9e58ff6a5ee8db871705c26c2697ac71f5",
+	"result-duplicate-recommendation-key.json": "12e638fd036dd653254dc3f309ef19eee6a9b93e90af1db7d82a7612e7804def",
 }
 # Raw file bytes.
 _EXPECTED_RAW_SHA256 = {
-	"input-recommend.json": "b4d2cc5f7886096e429f03f288f58cae8a7cb93903fb25ba56e875c2a0dace9d",
-	"result-recommend.json": "1bc1b5f9b6a0a3badf631795a1e74733fdacac45d23aac08356fb601d07facbf",
+	"input-recommend.json": "c76e9296ab2990f354b5c0101ba26cea5cc72a65e8fca526596df43d93d3ce0a",
+	"result-recommend.json": "81db8d68e2bb29fc0f78763a51fad7a5b74797548020ae3b59229c96807cb385",
 	"result-wait.json": "5af53bbfcc8950d38d9540cedcd1b0f9781869ef53ffaa6ffced8acb957e7fc6",
 	"result-unknown-major.json": "9d6cadf88f2cf071e876644e4a3346993dbc2168971d17142027bc68df0c49d9",
-	"result-action-outside-eligible-set.json": "b7f3d00ff1174da68535dd369370fbe0e5ad54c7478b479bf107bb5154b48abc",
-	"result-duplicate-recommendation-key.json": "12721836ab26445fb80e9d8e7aacc50e8b3aca7b9917794abba3f33628abbb2c",
+	"result-action-outside-eligible-set.json": "0a8153411a957ad9070c74aecb4d2084bd3526f9f0db1a55d0172a7dcfe1dcec",
+	"result-duplicate-recommendation-key.json": "b1d8aade831b97d404d64c5c51f7a26432e462cb7de58dfd2b4c8bb3ec12561b",
 }
 
 

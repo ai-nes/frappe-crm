@@ -1,14 +1,12 @@
 {
  "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
- "field_order": ["naming_series", "legacy_generic_task", "recommendation", "source_decision_event", "action", "action_definition_digest", "nba_action", "student", "contact", "origin", "action_type", "objective", "disposition", "state", "priority", "plan_rank", "worklist_priority_rank", "risk_tier", "due_at", "revisit_at", "action_owner", "current_slot", "source_context_revision", "policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references", "action_revision", "requires_review", "review_revision", "package_seed", "execution_package_version", "execution_status", "started_at", "outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "terminal_reason", "created_at", "accepted_at", "completed_at", "decision_reason", "decision_actor", "decision_at", "decision_revision"],
+ "field_order": ["naming_series", "recommendation", "source_decision_event", "action", "action_definition_digest", "student", "contact", "origin", "action_type", "objective", "disposition", "state", "priority", "plan_rank", "worklist_priority_rank", "risk_tier", "due_at", "revisit_at", "action_owner", "current_slot", "source_context_revision", "policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references", "action_revision", "requires_review", "review_revision", "package_seed", "execution_package_version", "execution_status", "started_at", "outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "terminal_reason", "created_at", "accepted_at", "completed_at", "decision_reason", "decision_actor", "decision_at", "decision_revision"],
  "fields": [
   {"fieldname":"naming_series","fieldtype":"Select","hidden":1,"default":"ACT-.YYYY.-","options":"ACT-.YYYY.-"},
-  {"fieldname":"legacy_generic_task","fieldtype":"Data","read_only":1,"label":"Legacy Generic Task ID"},
   {"fieldname":"recommendation","fieldtype":"Link","options":"CRM Recommendation","read_only":1},
   {"fieldname":"source_decision_event","fieldtype":"Link","options":"CRM Student Decision Event","read_only":1,"label":"Source Decision Event"},
   {"fieldname":"action","fieldtype":"Link","options":"CRM Action","read_only":1,"in_list_view":1,"label":"Action"},
   {"fieldname":"action_definition_digest","fieldtype":"Data","read_only":1,"label":"Action Definition Digest"},
-  {"fieldname":"nba_action","fieldtype":"Link","options":"CRM Action Definition","label":"Legacy Action Definition","read_only":1},
   {"fieldname":"student","fieldtype":"Link","options":"CRM Student","reqd":1,"read_only":1,"in_list_view":1},
   {"fieldname":"contact","fieldtype":"Link","options":"CRM Contact","read_only":1},
   {"fieldname":"origin","fieldtype":"Select","options":"manual\nai\nsystem","default":"system","reqd":1,"read_only":1,"in_list_view":1},
@@ -53,6 +51,6 @@
   {"fieldname":"decision_revision","fieldtype":"Int","default":"0","read_only":1}
  ],
  "indexes": [{"fields": ["student", "source_context_revision", "source_stage_key"], "name": "crm_action_item_intelligence_stage_uniq", "unique": 1}],
- "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[{"read":1,"write":1,"role":"Lead Sales"},{"read":1,"write":1,"role":"Sale"},{"read":1,"role":"CTV Sale"},{"read":1,"role":"Admissions Director"},{"create":1,"delete":1,"read":1,"write":1,"role":"System Manager"}],
+ "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[{"read":1,"write":1,"role":"Lead Sale"},{"read":1,"write":1,"role":"Sale"},{"read":1,"role":"CTV Sale"},{"read":1,"role":"Admissions Director"},{"create":1,"delete":1,"read":1,"write":1,"role":"System Manager"}],
  "sort_field":"creation", "sort_order":"DESC"
 }

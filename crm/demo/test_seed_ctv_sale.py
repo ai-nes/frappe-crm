@@ -12,7 +12,7 @@ class TestSeedCtvSaleData(unittest.TestCase):
 		self.assertEqual(seed_ctv_sale.ACCOUNT_EMAIL, "ctvsale@gmail.com")
 		self.assertEqual(seed_ctv_sale.ACCOUNT_ROLE, "CTV Sale")
 		self.assertEqual(seed_ctv_sale.ACCOUNT_FULL_NAME, "CTV Sale")
-		self.assertEqual(seed_ctv_sale.TEAM_MEMBERSHIP_FUNCTION, "CTV-Sale")
+		self.assertEqual(seed_ctv_sale.TEAM_MEMBERSHIP_FUNCTION, "CTV Sale")
 
 	def test_fixture_contains_three_unique_students(self):
 		self.assertEqual(len(seed_ctv_sale.STUDENT_SCENARIOS), 3)

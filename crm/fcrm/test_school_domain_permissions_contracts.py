@@ -129,7 +129,7 @@ def test_marketing_and_governance_roles_keep_explicit_full_row_contract(monkeypa
 	fake_frappe = _Frappe()
 	monkeypatch.setattr(permissions, "frappe", fake_frappe)
 
-	for role in ("Marketing", "Sale", "Lead Sales", "Admissions Director"):
+	for role in ("Marketing", "Sale", "Lead Sale", "Admissions Director"):
 		fake_frappe.roles = [role]
 		assert permissions.person_portfolio_condition("other@example.com") is None
 		assert permissions.school_portfolio_condition("CRM High School", "other@example.com") is None

@@ -9,6 +9,7 @@ Frappe wrappers gather the rows and fail closed on an out-of-scope student.
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Iterable, Mapping
 from datetime import datetime
 
@@ -30,8 +31,56 @@ EXCLUSION_REASONS: frozenset[str] = frozenset(
 		"CONSENT_MISSING",
 		"OUT_OF_SCOPE",
 		"UNKNOWN_CODE",
+		"NO_OPPORTUNITY_MAPPING",
+		"LIFECYCLE_TERMINAL",
+		"CHANNEL_NOT_ALLOWED",
+		"RECIPIENT_AMBIGUOUS",
+		"PARENT_AUTHORITY_MISSING",
 	}
 )
+
+# Frappe is the owner of the action taxonomy.  This deliberately maps action
+# *codes*, never categories: a new, internal, or destructive catalog action
+# has no NBA opportunity until its business owner explicitly approves one.
+_ACTION_OPPORTUNITIES: dict[str, tuple[str, ...]] = {
+	**{
+		code: ("ENGAGE_OR_REENGAGE",)
+		for code in (
+			"CALL", "SEND_ZALO", "SEND_EMAIL", "SEND_SMS", "VIDEO_CALL", "CALL_BACK",
+			"SEND_MAJOR_INFO", "SEND_PROGRAM_INFO", "SEND_TUITION_INFO", "SEND_SCHOLARSHIP_INFO",
+			"SEND_PROMOTION_INFO", "SEND_ADMISSION_INFO", "SEND_DORM_INFO", "SEND_CAREER_INFO",
+			"SEND_BROCHURE", "SEND_MAJOR_VIDEO", "SEND_RELEVANT_FAQ", "INVITE_OPEN_DAY",
+			"INVITE_CAMPUS_TOUR", "INVITE_WEBINAR", "INVITE_WORKSHOP", "INVITE_CLASS_EXPERIENCE",
+			"INVITE_STEM_EVENT", "INVITE_MOCK_TEST", "BOOK_1ON1_CONSULTATION",
+			"SEND_PERSONALIZED_CONTENT", "SEND_TESTIMONIAL", "FOLLOW_UP_SILENT_LEAD",
+			"REENGAGE_LEAD", "ASK_DECISION_REASON", "SEND_OBJECTION_CONTENT", "SCHEDULE_LATER_FOLLOWUP",
+		)
+	},
+	**{
+		code: ("PROGRESS_APPLICATION",)
+		for code in (
+			"REMIND_APPLICATION", "GUIDE_NEXT_STEP", "ASSIST_APPLICATION_FEE",
+			"CONFIRM_APPLICATION_RECEIVED", "ADVISE_MAJOR", "ADVISE_TUITION", "ADVISE_SCHOLARSHIP",
+			"ADVISE_CAREER", "ADVISE_PARENT", "COMPARE_MAJORS", "COMPARE_CAMPUSES", "SEND_OFFER",
+			"REMIND_ENROLLMENT_DEADLINE", "INVITE_CAMPUS_VISIT", "CONTACT_PARENT",
+			"SEND_PARENT_TUITION", "SEND_PARENT_SCHOLARSHIP", "SEND_TRAINING_ROADMAP",
+			"SEND_PARENT_CAREER_INFO", "INVITE_PARENT_EVENT", "BOOK_PARENT_CONSULTATION",
+			"SEND_FINANCIAL_PLAN",
+		)
+	},
+	**{
+		code: ("COMPLETE_REQUIREMENT", "PROGRESS_APPLICATION")
+		for code in (
+			"REMIND_COMPLETE_APPLICATION", "REQUEST_MISSING_DOCUMENT", "CHECK_APPLICATION",
+			"SEND_APPLICATION_CHECKLIST", "REMIND_APPLICATION_DEADLINE",
+		)
+	},
+}
+
+
+def action_opportunities(code: str | None, category: str | None = None) -> tuple[str, ...]:
+	"""Return an explicitly governed opportunity mapping for one action code."""
+	return _ACTION_OPPORTUNITIES.get(str(code or ""), ())
 
 _ACTIVE_POLICY_FIELDS = (
 	"name",
@@ -44,6 +93,22 @@ _ACTIVE_POLICY_FIELDS = (
 	"score_weights",
 	"conflict_key_fields",
 	"diversity_rule",
+	"kernel_policy",
+)
+
+_KERNEL_POLICY_REQUIRED = (
+	"revision",
+	"score_threshold",
+	"confidence_floor",
+	"top_n_cap",
+	"recommendation_ttl_seconds",
+	"component_weights",
+	"recent_contact_days",
+	"cooling_contact_days",
+	"contact_pressure_penalty",
+	"redundancy_penalty",
+	"diversity_group_penalty",
+	"deadline_horizon_days",
 )
 
 
@@ -88,6 +153,8 @@ def filter_eligible_actions(
 	actor_roles: set[str] | None = None,
 	recent_action_codes: Mapping[str, int] | None = None,
 	cooldown_by_code: Mapping[str, int] | None = None,
+	decision_context: Mapping[str, object] | None = None,
+	parent_authority_channels: set[str] | None = None,
 ) -> dict:
 	"""Split catalog rows into the eligible set and an explained exclusion list.
 
@@ -99,6 +166,18 @@ def filter_eligible_actions(
 	actions: list[dict] = []
 	exclusions: list[dict] = []
 	roles = {str(r) for r in actor_roles} if actor_roles is not None else None
+	decision_context = decision_context if isinstance(decision_context, Mapping) else None
+	lifecycle = (decision_context or {}).get("lifecycle") or {}
+	stage = str(lifecycle.get("stage") or "").casefold()
+	terminal_lifecycle = stage in {"lost", "enrolled", "đã xác nhận", "closed", "withdrawn"}
+	contactability = (decision_context or {}).get("contactability") or {}
+	consent = contactability.get("consent") if isinstance(contactability, Mapping) else None
+	channels = {
+		str(channel).upper()
+		for channel in (contactability.get("channels") or [])
+		if isinstance(contactability, Mapping)
+	}
+	parent_channels = {str(channel).upper() for channel in (parent_authority_channels or set())}
 
 	for row in catalog_rows:
 		code = row.get("code")
@@ -132,15 +211,50 @@ def filter_eligible_actions(
 			if cap is not None and seen >= cap:
 				exclusions.append({"action": code, "reason": "FREQUENCY_CAP"})
 				continue
+		category = snapshot["category"] or action_category(code)
+		opportunities = action_opportunities(code, category)
+		if not opportunities:
+			exclusions.append({"action": code, "reason": "NO_OPPORTUNITY_MAPPING"})
+			continue
+		if decision_context is not None and terminal_lifecycle:
+			exclusions.append({"action": code, "reason": "LIFECYCLE_TERMINAL"})
+			continue
+		channel = str(snapshot["default_channel"] or "NONE").upper()
+		# Parent outreach needs recipient-specific consent as well as authority.
+		# That contactability model is introduced in Phase 04; until then exclude
+		# every parent action rather than borrowing the student's consent.
+		if decision_context is not None and category == "PARENT":
+			exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
+			continue
+		if decision_context is not None and channel != "NONE":
+			if isinstance(contactability, Mapping) and contactability.get("recipient_bound") is False:
+				exclusions.append({"action": code, "reason": "RECIPIENT_AMBIGUOUS"})
+				continue
+			if consent is not True:
+				exclusions.append({"action": code, "reason": "CONSENT_MISSING"})
+				continue
+			if channels and channel not in channels:
+				exclusions.append({"action": code, "reason": "CHANNEL_NOT_ALLOWED"})
+				continue
+			if not channels:
+				exclusions.append({"action": code, "reason": "CHANNEL_NOT_ALLOWED"})
+				continue
+		if decision_context is not None and bool(row.get("requires_parent_authority")):
+			if channel == "NONE" or channel not in parent_channels:
+				exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
+				continue
 		actions.append(
 			{
 				"code": code,
 				"revision": _row_revision(row),
 				"digest": _row_digest(row),
-				"category": snapshot["category"] or action_category(code),
+				"category": category,
 				"default_channel": snapshot["default_channel"],
+				"requires_parent_authority": bool(row.get("requires_parent_authority")),
+				"academic_constraint": snapshot.get("academic_constraint") or {},
 				"allowed_actors": allowed_actors,
 				"purpose": snapshot["purpose"],
+				"addresses_opportunities": list(opportunities),
 			}
 		)
 
@@ -212,6 +326,49 @@ def decision_policy_digest_payload(row: Mapping[str, object]) -> dict:
 	}
 
 
+def kernel_policy_snapshot(row: Mapping[str, object]) -> dict:
+	"""Parse the complete producer-owned kernel policy snapshot.
+
+	The legacy ``score_weights`` field remains available for historical rows, but
+	NBA evaluation refuses to use it as a hidden fallback.  A live policy must
+	carry every kernel knob in ``kernel_policy`` and the caller binds its digest.
+	"""
+	raw = row.get("kernel_policy")
+	if isinstance(raw, str):
+		try:
+			raw = json.loads(raw)
+		except json.JSONDecodeError as exc:
+			raise ValueError("kernel_policy must be valid JSON.") from exc
+	if not isinstance(raw, Mapping):
+		raise ValueError("kernel_policy is required for NBA evaluation.")
+	missing = [key for key in _KERNEL_POLICY_REQUIRED if key not in raw]
+	if missing:
+		raise ValueError(f"kernel_policy is missing: {sorted(missing)}")
+	weights = raw["component_weights"]
+	if not isinstance(weights, Mapping) or set(weights) != {"opportunity_fit", "urgency", "effectiveness_index"}:
+		raise ValueError("kernel_policy.component_weights must contain the three kernel weights.")
+	try:
+		weights = {key: float(weights[key]) for key in sorted(weights)}
+		if any(not math.isfinite(value) or value < 0 for value in weights.values()) or abs(sum(weights.values()) - 1.0) > 1e-9:
+			raise ValueError
+		return {
+			"revision": str(raw["revision"]),
+			"score_threshold": float(raw["score_threshold"]),
+			"confidence_floor": float(raw["confidence_floor"]),
+			"top_n_cap": int(raw["top_n_cap"]),
+			"recommendation_ttl_seconds": int(raw["recommendation_ttl_seconds"]),
+			"component_weights": weights,
+			"recent_contact_days": int(raw["recent_contact_days"]),
+			"cooling_contact_days": int(raw["cooling_contact_days"]),
+			"contact_pressure_penalty": float(raw["contact_pressure_penalty"]),
+			"redundancy_penalty": float(raw["redundancy_penalty"]),
+			"diversity_group_penalty": float(raw["diversity_group_penalty"]),
+			"deadline_horizon_days": int(raw["deadline_horizon_days"]),
+		}
+	except (TypeError, ValueError, OverflowError) as exc:
+		raise ValueError("kernel_policy contains invalid numeric values.") from exc
+
+
 def wire_action_id(code: str | None) -> str:
 	"""The ``action_id`` a code takes on the NBA Evaluation v1 wire (``ACT-<CODE>``)."""
 	return f"ACT-{code}" if code else ""
@@ -269,12 +426,61 @@ def _actor_roles(actor: str | None) -> set[str] | None:
 	return set(frappe.get_roles(actor))
 
 
+def _parent_authority_wire_channels(student: str, at: datetime) -> set[str]:
+	"""Resolve verified parent authority to the NBA channel vocabulary."""
+	import frappe
+
+	rows = frappe.get_all(
+		"CRM Parent Contact Authority",
+		filters={
+			"student": student,
+			"relationship_verified": 1,
+			"revoked_at": ["is", "not set"],
+			"effective_at": ["<=", at],
+		},
+		fields=["contact", "allowed_channels", "expires_at", "lawful_basis"],
+		limit_page_length=50,
+		ignore_permissions=True,
+	)
+	valid_rows = []
+	result: set[str] = set()
+	aliases = {
+		"call": "CALL",
+		"phone": "CALL",
+		"voice": "CALL",
+		"email": "EMAIL",
+		"e-mail": "EMAIL",
+		"zalo": "MESSAGE",
+		"message": "MESSAGE",
+		"sms": "MESSAGE",
+	}
+	for row in rows:
+		if row.get("expires_at") and row["expires_at"] < at:
+			continue
+		if not row.get("lawful_basis"):
+			continue
+		valid_rows.append(row)
+	# A channel union across different parent contacts is not an executable
+	# recipient binding.  Fail closed unless one unique authority recipient is
+	# available; the dispatch path can then resolve the same contact again.
+	if not valid_rows or len({str(row.get("contact") or "") for row in valid_rows}) != 1:
+		return set()
+	for row in valid_rows:
+		values = row.get("allowed_channels") or []
+		values = frappe.parse_json(values) if isinstance(values, str) else values
+		if not isinstance(values, (list, tuple)):
+			continue
+		result.update(aliases.get(str(value).strip().casefold(), str(value).upper()) for value in values)
+	return {value for value in result if value in {"CALL", "EMAIL", "MESSAGE"}}
+
+
 def eligible_action_set_for_student(
 	student: str,
 	*,
 	actor: str | None = None,
 	now: datetime | None = None,
 	service_authorized: bool = False,
+	decision_context: Mapping[str, object] | None = None,
 ) -> dict:
 	"""Resolve the eligible action set for one student, failing closed on scope.
 
@@ -299,6 +505,8 @@ def eligible_action_set_for_student(
 			"default_channel",
 			"allowed_actors",
 			"requires_approval",
+			"requires_parent_authority",
+			"academic_constraint",
 			"auto_execute",
 			"enabled",
 			"definition_revision",
@@ -319,6 +527,12 @@ def eligible_action_set_for_student(
 		catalog_rows,
 		now=evaluated_at,
 		actor_roles=_actor_roles(actor),
+		decision_context=decision_context,
+		parent_authority_channels=(
+			_parent_authority_wire_channels(student, evaluated_at)
+			if decision_context is not None
+			else None
+		),
 	)
 	revision = max((action["revision"] for action in result["actions"]), default=0)
 	return {
@@ -343,6 +557,13 @@ def get_active_decision_policy() -> dict:
 	if not rows:
 		frappe.throw("No active NBA Decision Policy.", frappe.ValidationError)
 	row = rows[0]
+	try:
+		kernel = kernel_policy_snapshot(row)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	kernel_digest = canonical_digest(kernel)
+	if str(row.get("policy_digest") or "") != kernel_digest:
+		frappe.throw("Active NBA Decision Policy digest does not bind kernel_policy.", frappe.ValidationError)
 	return {
 		"policy_revision": int(row.get("policy_revision") or 1),
 		"policy_digest": row.get("policy_digest"),
@@ -352,6 +573,8 @@ def get_active_decision_policy() -> dict:
 		"score_weights": validate_score_weights(row.get("score_weights")),
 		"conflict_key_fields": json_string_list(row.get("conflict_key_fields")),
 		"diversity_rule": row.get("diversity_rule") or "none",
+		"decision_policy": kernel,
+		"policy_digest": kernel_digest,
 	}
 
 
@@ -378,6 +601,27 @@ def ensure_default_decision_policy() -> bool:
 			"max_recommendations": 10,
 			"min_score_threshold": 0,
 			"score_weights": json.dumps({"confidence": 0.5, "impact": 0.5}, sort_keys=True),
+			"kernel_policy": json.dumps(
+				{
+					"revision": "nba-decision-policy-r1",
+					"score_threshold": 0.35,
+					"confidence_floor": 0.45,
+					"top_n_cap": 3,
+					"recommendation_ttl_seconds": 604800,
+					"component_weights": {
+						"opportunity_fit": 0.45,
+						"urgency": 0.25,
+						"effectiveness_index": 0.30,
+					},
+					"recent_contact_days": 2,
+					"cooling_contact_days": 5,
+					"contact_pressure_penalty": 0.15,
+					"redundancy_penalty": 0.10,
+					"diversity_group_penalty": 0.05,
+					"deadline_horizon_days": 30,
+				},
+				sort_keys=True,
+			),
 			"conflict_key_fields": json.dumps(["student", "action"]),
 			"diversity_rule": "none",
 		}

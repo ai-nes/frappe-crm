@@ -24,7 +24,7 @@ CONTRACT_VERSION = "interaction.read:v1"
 DEFAULT_PAGE_SIZE = 20
 MAX_PAGE_SIZE = 100
 _EVIDENCE_CONTENT_ROLES = frozenset(
-	{"Administrator", "System Manager", "CRM Manager", "Admissions Director", "Admissions Operations"}
+	{"Administrator", "System Manager", "CRM Manager", "Admissions Director"}
 )
 
 

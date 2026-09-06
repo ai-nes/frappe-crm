@@ -53,17 +53,13 @@ TOPOLOGY_ACTIONS = {"zone_team", "school_assignment"}
 TOPOLOGY_RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 TEAM_MEMBER_FUNCTIONS = {
 	"Sale",
-	"Lead Sales",
+	"Lead Sale",
+	"CTV Sale",
 	"Marketing",
 	"Promoter",
-	"Promoter-PR",
 	"Admissions Director",
-	"Team Leader",
-	"Counseller",
-	"CTV-Sale",
-	"Marketing Operator",
-	"Marketing Lead",
-	"Admissions Operations",
+	"Lead Promoter",
+	"Lead Marketing",
 }
 MAX_BATCH_SCHOOLS = 100
 REQUIRED_DOCTYPES = (

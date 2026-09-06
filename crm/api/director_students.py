@@ -668,11 +668,11 @@ def _stage_descriptor(row) -> dict[str, str] | None:
 		return STAGE_BY_LIFECYCLE[lifecycle]
 	status = str(row.get("enrollment_status") or "").strip()
 	status_map = {
-		"Mới": STAGE_BY_LIFECYCLE["Lead"],
-		"Có triển vọng": STAGE_BY_LIFECYCLE["MQL"],
-		"Đã xác nhận": STAGE_BY_LIFECYCLE["Applicant"],
-		"Đã nhập học": STAGE_BY_LIFECYCLE["Enrolled"],
-		"Đã chuyển đổi": STAGE_BY_LIFECYCLE["Enrolled"],
+		"NEW": STAGE_BY_LIFECYCLE["Lead"],
+		"PROSPECT": STAGE_BY_LIFECYCLE["MQL"],
+		"CONFIRMED": STAGE_BY_LIFECYCLE["Applicant"],
+		"ENROLLED": STAGE_BY_LIFECYCLE["Enrolled"],
+		"CONVERTED": STAGE_BY_LIFECYCLE["Enrolled"],
 	}
 	return status_map.get(status)
 
@@ -1748,7 +1748,7 @@ def _require_access():
 	The Student list/detail queries deliberately use Frappe's permission-aware
 	``get_list``/``has_permission`` APIs. The CRM Student permission query hook
 	then applies the role scope from the current session: Sale and CTV Sale are
-	limited to their own ``owner_staff`` rows, while Lead Sales also sees its
+	limited to their own ``owner_staff`` rows, while Lead Sale also sees its
 	team members and the team's unassigned pool.
 	"""
 	user = getattr(frappe.session, "user", None)

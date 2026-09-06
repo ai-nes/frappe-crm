@@ -7,8 +7,8 @@ repository.  This module exposes pure reconciliation functions plus explicit
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import re
 import unicodedata
 from collections import Counter, defaultdict
@@ -856,13 +856,22 @@ def _school_db_filters(candidate):
 	}
 
 
+_TERM_DOCTYPE = {
+	"school_type": "CRM School Type",
+	"school_area": "CRM School Area",
+	"stakeholder_role": "CRM Stakeholder Role",
+	"activity_type": "CRM School Activity Type",
+}
+
+
 def _resolve_term(category, value):
 	value = _text(value)
-	if not value:
+	doctype = _TERM_DOCTYPE.get(category)
+	if not value or not doctype:
 		return None
-	for term in frappe.get_all("CRM Term", filters={"category": category}, fields=["name", "term_name"], limit_page_length=0):
-		if _normalize(term.term_name) == _normalize(value) or _normalize(term.name) == _normalize(value):
-			return term.name
+	for row in frappe.get_all(doctype, fields=["name", "display_name"], limit_page_length=0):
+		if _normalize(row.display_name) == _normalize(value) or _normalize(row.name) == _normalize(value):
+			return row.name
 	return None
 
 

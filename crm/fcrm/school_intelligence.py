@@ -45,7 +45,7 @@ def potential_value_from_metrics(actual: Any, threshold: Any) -> str | None:
 
 def _scope_state() -> str:
 	roles = set(frappe.get_roles()) if hasattr(frappe, "get_roles") else set()
-	return "complete" if roles & {"Administrator", "System Manager", "Admissions Director", "Lead Sales", "Marketing", "Sale"} else "partial"
+	return "complete" if roles & {"Administrator", "System Manager", "Admissions Director", "Lead Sale", "Marketing", "Sale"} else "partial"
 
 
 def _evidence(source: str, *, source_type: str, observed_at: Any = None, verification: str = "Verified") -> dict[str, Any]:
@@ -217,7 +217,7 @@ def transition_school_relationship(
 		return {"status": "duplicate", "association": association, "revision": int(doc.get("relationship_revision") or 1)}
 	transition_key = stable_fingerprint("relationship-transition", association, idempotency_key)
 	activity_type = frappe.db.get_value(
-		"CRM Term", {"term_name": "Relationship Touch", "category": "activity_type"}, "name"
+		"CRM School Activity Type", {"name": "RELATIONSHIP_TOUCH"}, "name"
 	)
 	if not activity_type:
 		raise ValueError("Relationship Touch activity type is not configured")

@@ -182,7 +182,7 @@ def is_sales_user(user: str | None = None) -> bool:
 	"""
 	user = user or frappe.session.user
 	roles = set(frappe.get_roles(user))
-	return is_admin() or bool(roles.intersection({"Sale", "CTV Sale", "Lead Sales", "Sales Manager", "Sales User"}))
+	return is_admin() or bool(roles.intersection({"Sale", "CTV Sale", "Lead Sale"}))
 
 
 def sales_user_only(fn: callable) -> callable:

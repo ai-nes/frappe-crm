@@ -20,10 +20,10 @@ class CRMActionItem(Document):
 	}
 
 	_PROTECTED = frozenset({
-		"student", "state", "action", "action_type", "nba_action", "objective", "disposition", "source_context_revision",
+		"student", "state", "action", "action_type", "objective", "disposition", "source_context_revision",
 		"policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references",
 		"action_revision", "current_slot", "risk_tier", "package_seed", "due_at", "revisit_at", "action_owner", "origin",
-		"contact", "legacy_generic_task", "execution_status", "started_at",
+		"contact", "execution_status", "started_at",
 		"source_decision_event", "action_definition_digest",
 		"outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "accepted_at", "completed_at",
 		"terminal_reason", "decision_reason", "decision_actor", "decision_at", "decision_revision",

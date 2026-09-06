@@ -22,6 +22,6 @@
  ],
  "indexes": [{"fields": ["scenario", "planning_scope", "metric_key", "period_start", "period_end", "revision"], "name": "crm_forecast_value_lookup_idx", "unique": 1}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Value", "naming_rule": "Naming Series", "naming_series_options": "FCV-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
  "row_format": "Dynamic", "search_fields": "scenario,planning_scope,metric_key,period_start,period_end", "sort_field": "period_start", "sort_order": "DESC"
 }

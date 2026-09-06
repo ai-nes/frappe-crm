@@ -1,4 +1,4 @@
-"""Admissions permission contract coverage for Sale and Lead Sales screens.
+"""Admissions permission contract coverage for Sale and Lead Sale screens.
 
 These checks complement the browser role journeys: the backend remains the
 authority even when a control is hidden in the SPA.
@@ -23,7 +23,7 @@ class TestLeadProcessingPermissionContracts(FrappeTestCase):
 		self.assertNotIn("student.ownership.manage", capabilities)
 
 	def test_lead_sales_can_read_scope_but_assignment_is_not_a_phase_two_capability(self):
-		capabilities = capabilities_for_roles({"Lead Sales"})
+		capabilities = capabilities_for_roles({"Lead Sale"})
 		self.assertIn("student.context.read", capabilities)
 		self.assertNotIn("student.ownership.manage", capabilities)
 

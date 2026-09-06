@@ -23,7 +23,7 @@ class TestDirectorSchoolCommon(FrappeTestCase):
 		self.assertEqual(access["roleState"], "canonical_profile")
 
 	def test_sales_profiles_are_allowed_only_for_opt_in_readers(self):
-		for role, profile in (("Sale", "sales"), ("CTV Sale", "ctv_sale"), ("Lead Sales", "lead_sales")):
+		for role, profile in (("Sale", "sales"), ("CTV Sale", "ctv_sale"), ("Lead Sale", "lead_sales")):
 			with self.subTest(role=role):
 				with patch.object(common.frappe, "session", SimpleNamespace(user="sales@example.com")), patch.object(
 					common.frappe.db, "get_value", return_value=1

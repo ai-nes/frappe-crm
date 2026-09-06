@@ -54,7 +54,7 @@ def _can_assign_role(is_system_manager: bool, new_role: str) -> bool:
 
 
 def _can_manage_target(is_system_manager: bool, target_roles) -> bool:
-	"""Prevent a legacy Sales Manager from demoting another business profile."""
+	"""Prevent a non-administrator from demoting another business profile."""
 	if is_system_manager:
 		return True
 	business_roles = set(target_roles) & CRM_BUSINESS_ROLES
@@ -62,7 +62,7 @@ def _can_manage_target(is_system_manager: bool, target_roles) -> bool:
 
 
 def _can_remove_target(is_system_manager: bool, target_roles) -> bool:
-	"""A legacy Sales Manager may never remove an administrator's CRM access."""
+	"""A non-administrator may never remove an administrator's CRM access."""
 	roles = set(target_roles)
 	return _can_manage_target(is_system_manager, roles) and (
 		is_system_manager or "System Manager" not in roles

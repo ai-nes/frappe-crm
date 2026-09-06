@@ -33,7 +33,7 @@
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
-  {"export": 1, "read": 1, "role": "Lead Sales"}
+  {"export": 1, "read": 1, "role": "Lead Sale"}
  ],
  "row_format": "Dynamic",
  "search_fields": "staff,team,period_start,period_end",

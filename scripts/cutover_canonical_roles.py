@@ -69,6 +69,11 @@ def _replace_user_roles():
 		limit_page_length=0,
 	):
 		target = LEGACY_ROLE_MAP[row.role]
+		# Canonical names remain in the migration map so the operation can
+		# describe the complete source vocabulary. They are already correct,
+		# however, and must not be re-added then deleted below.
+		if target == row.role:
+			continue
 		_ensure_user_role(row.parent, target)
 		frappe.db.delete("Has Role", {"name": row.name})
 		changed.append({"user": row.parent, "from": row.role, "to": target})

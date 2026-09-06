@@ -31,13 +31,16 @@ def _normalize_interaction_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _interaction_response(result: dict[str, Any]) -> dict[str, Any]:
-	return {
+	response = {
 		"interaction_id": result.get("interaction"),
 		"student_id": result.get("student"),
 		"contact_id": result.get("contact"),
 		"status": result.get("outcome"),
 		"receipt_id": result.get("receipt"),
 	}
+	if result.get("analysis_run"):
+		response["analysis_run"] = result["analysis_run"]
+	return response
 
 
 @frappe.whitelist(methods=["POST"])

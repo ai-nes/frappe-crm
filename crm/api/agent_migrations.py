@@ -1,9 +1,9 @@
 """Idempotent expand/backfill work for the local agent integration."""
 import frappe
 
-SALES_WORKLIST_ROLE_NAMES = ("Sale", "Lead Sales", "CTV-Sale", "Counseller", "Team Leader")
+SALES_WORKLIST_ROLE_NAMES = ("Sale", "CTV Sale", "Lead Sale")
 SCHOOL360_READ_ROLE_NAMES = (
-	"Sale", "Lead Sales", "Marketing", "Promoter", "Promoter-PR", "Admissions Director",
+	"Sale", "CTV Sale", "Lead Sale", "Marketing", "Promoter", "Lead Promoter", "Admissions Director",
 )
 SCHOOL360_CAPABILITY_ID = "school360.overview.read:v1"
 SCHOOL360_ROLLOUT_CONFIG_KEY = "crm_agents_school360_contract"
@@ -46,7 +46,7 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
-	for role_name in ("Promoter-PR", "Team Leader", "Admissions Director"):
+	for role_name in ("Promoter", "Lead Promoter", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -63,7 +63,7 @@ def _grant_sales_worklist_capability() -> None:
 		changed = True
 	# crm-agents uses the shared advisory graph for every business Copilot
 	# persona. Keep this grant additive to the remote phase capabilities.
-	for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+	for role_name in ("Sale", "Marketing", "Lead Sale", "Admissions Director"):
 		if not frappe.db.exists("Role", role_name):
 			continue
 		role = frappe.get_doc("Role", role_name)
@@ -81,7 +81,7 @@ def _grant_sales_worklist_capability() -> None:
 	# The generic mutation is intentionally visible only as a named capability;
 	# the endpoint still requires the explicit demo site flag and Director role.
 	if getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)("crm_agents_demo_full_access") in (1, "1", True, "true", "True"):
-		for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+		for role_name in ("Sale", "Marketing", "Lead Sale", "Admissions Director"):
 			if not frappe.db.exists("Role", role_name):
 				continue
 			role = frappe.get_doc("Role", role_name)

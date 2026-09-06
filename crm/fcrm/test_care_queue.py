@@ -44,7 +44,7 @@ class TestCareQueue(FrappeTestCase):
 			self, "_Test Queue Sale", roles=["Sale"], team=self._team
 		)
 		self._lead_user, self._lead_staff = _perm.TestSharedScopingPermissions._make_user_and_staff(
-			self, "_Test Queue Lead", roles=["Lead Sales"], team=self._team, function="Team Leader"
+			self, "_Test Queue Lead", roles=["Lead Sale"], team=self._team, function="Team Leader"
 		)
 		self._outsider_user, self._outsider_staff = _perm.TestSharedScopingPermissions._make_user_and_staff(
 			self, "_Test Queue Outsider", roles=["Sale"]

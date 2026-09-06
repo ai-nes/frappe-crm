@@ -1,4 +1,4 @@
-"""Offline contract tests for the local Lead Sales fixture."""
+"""Offline contract tests for the local Lead Sale fixture."""
 
 from __future__ import annotations
 
@@ -20,8 +20,8 @@ class TestSeedLeadSalesData(unittest.TestCase):
 
 	def test_account_uses_the_lead_sales_role(self):
 		self.assertEqual(seed_lead_sales.ACCOUNT_EMAIL, "leadsale@gmail.com")
-		self.assertEqual(seed_lead_sales.ACCOUNT_ROLE, "Lead Sales")
-		self.assertEqual(seed_lead_sales.TEAM_MEMBERSHIP_FUNCTION, "Lead Sales")
+		self.assertEqual(seed_lead_sales.ACCOUNT_ROLE, "Lead Sale")
+		self.assertEqual(seed_lead_sales.TEAM_MEMBERSHIP_FUNCTION, "Lead Sale")
 		self.assertEqual(seed_lead_sales.PASSWORD, "123456")
 		self.assertFalse(seed_lead_sales.SEED_SPEC.assign_students_to_account)
 		self.assertTrue(seed_lead_sales.SEED_SPEC.is_team_lead)

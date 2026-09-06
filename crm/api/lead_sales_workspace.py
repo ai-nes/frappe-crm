@@ -1,4 +1,4 @@
-"""Read-only, current-scope data contracts for Lead Sales workspaces.
+"""Read-only, current-scope data contracts for Lead Sale workspaces.
 
 The browser never chooses a team or staff scope here.  Every reader uses
 ``frappe.get_list`` so the same CRM Student permission conditions that protect
@@ -39,7 +39,7 @@ def _require_team_oversee():
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	caps = capabilities_for_roles(frappe.get_roles(actor), administrator=actor == "Administrator")
 	if "team.oversee" not in caps:
-		frappe.throw(_("Lead Sales access is required."), frappe.PermissionError)
+		frappe.throw(_("Lead Sale access is required."), frappe.PermissionError)
 	return actor
 
 
@@ -134,7 +134,7 @@ def _action_filters(status: str):
 
 @frappe.whitelist()
 def get_team_dashboard() -> dict:
-	"""Return current-scope workload and SLA aggregates for Lead Sales."""
+	"""Return current-scope workload and SLA aggregates for Lead Sale."""
 	_require_team_oversee()
 	definition = _snapshot_definition()
 	workload = [
@@ -245,7 +245,7 @@ def get_team_reports(period: str | None = "30d") -> dict:
 def get_readonly_sla_policies() -> dict:
 	"""Return a deliberately safe projection; no approver or mutation controls."""
 	_require_team_oversee()
-	# SLA Policy is a control-plane DocType, so Lead Sales intentionally has no
+	# SLA Policy is a control-plane DocType, so Lead Sale intentionally has no
 	# raw DocPerm read grant.  This narrowly selected service projection is the
 	# authorized read path; it exposes neither approver nor mutation fields.
 	visible_scopes = {

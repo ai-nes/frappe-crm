@@ -107,11 +107,18 @@ def persist_initial_package(task) -> dict:
 	return package
 
 
-def _current_consent_is_valid(task) -> bool:
+def _current_consent_is_valid(task, channel: str | None = None) -> bool:
 	if task.get("student") and frappe.db.get_value("CRM Student", task.student, "privacy_status") == "opted_out":
 		return False
 	if task.get("contact") and frappe.db.get_value("CRM Contact", task.contact, "is_opted_out"):
 		return False
+	if channel:
+		from crm.services.outreach_consent import current_outreach_consent_allows
+
+		if not current_outreach_consent_allows(
+			student=task.get("student"), action_contact=task.get("contact"), channel=channel
+		):
+			return False
 	return True
 
 
@@ -205,9 +212,11 @@ def queue_dispatch(action: str, *, package_revision: int, channel: str, inputs: 
 	validate_action_command(
 		policy_code,
 		student=action_row.student,
-		inputs={**inputs, "objective": action_row.objective, "package": package},
+		inputs={**inputs, "objective": action_row.objective, "package": package, "contact": action_row.get("contact"), "channel": channel},
 		actor_roles=set(frappe.get_roles(frappe.session.user)),
 	)
+	if not _current_consent_is_valid(action_row, channel):
+		frappe.throw("Current consent no longer permits this channel or recipient.", frappe.PermissionError, title="CONSENT_REQUIRED")
 	provider_key = hashlib.sha256(f"{action_row.name}:{package_revision}:{channel}".encode()).hexdigest()
 	existing = frappe.db.get_value("CRM Student Dispatch Receipt", {"provider_key": provider_key}, "name")
 	if existing:

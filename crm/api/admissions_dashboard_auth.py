@@ -6,16 +6,15 @@ import frappe
 #
 # Deliberately NOT a copy of crm/api/dashboard.py's @sales_user_only: that gate checks
 # for the pre-migration Sales roles. The canonical operating roles are Sale,
-# Lead Sales, Marketing, and Admissions Director; legacy source roles remain
-# only while the backfill migration is pending.
+# Lead Sale, Marketing, and Admissions Director.
 
-ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director", "Admissions Operations"}
+ADMIN_ROLES = {"Administrator", "System Manager", "Admissions Director"}
 
 DASHBOARD_ROLE_GATES = {
-	"sale": {"Sale", "CTV Sale", "Lead Sales", "CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader", *ADMIN_ROLES},
-	"digital_marketing": {"Marketing", "Marketing Operator", "Marketing Lead", "Team Leader", *ADMIN_ROLES},
-	"offline_marketing": {"Marketing", "Promoter", "Promoter-PR", "Marketing Operator", "Marketing Lead", "Team Leader", *ADMIN_ROLES},
-	"admissions_director": {"Admissions Director", "Admissions Operations", *ADMIN_ROLES},
+	"sale": {"Sale", "CTV Sale", "Lead Sale", *ADMIN_ROLES},
+	"digital_marketing": {"Marketing", "Lead Marketing", *ADMIN_ROLES},
+	"offline_marketing": {"Marketing", "Promoter", "Lead Promoter", *ADMIN_ROLES},
+	"admissions_director": {"Admissions Director", *ADMIN_ROLES},
 }
 
 

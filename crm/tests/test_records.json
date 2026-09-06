@@ -5,13 +5,13 @@
 		"enabled": 1,
 		"first_name": "Lead",
 		"last_name": "Sales",
-		"full_name": "Lead Sales",
+		"full_name": "Lead Sale",
 		"new_password": "123456",
 		"roles": [
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Lead Sales"
+				"role": "Lead Sale"
 			}
 		],
 		"user_type": "System User"

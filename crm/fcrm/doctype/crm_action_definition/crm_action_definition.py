@@ -4,7 +4,7 @@ import frappe
 from frappe.model.document import Document
 
 CHANNELS = {"NONE", "CALL", "EMAIL", "MESSAGE"}
-ACTOR_ROLES = {"Sale", "Lead Sales", "Marketing", "Promoter", "Admissions Director", "System Manager"}
+ACTOR_ROLES = {"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director", "System Manager"}
 
 
 class CRMActionDefinition(Document):

@@ -14,7 +14,7 @@ from crm.fcrm.nba_timing import TIME_SLOTS
 
 CHANNELS = frozenset({"NONE", "CALL", "EMAIL", "MESSAGE"})
 ACTOR_ROLES = frozenset(
-	{"Sale", "Lead Sales", "Marketing", "Promoter", "Admissions Director", "System Manager"}
+	{"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director", "System Manager"}
 )
 EXECUTION_TYPES = frozenset({"MANUAL", "AI_ASSISTED"})
 
@@ -57,8 +57,8 @@ APPROVAL_ACTIONS = frozenset(
 
 def _actors_for(code: str) -> list[str]:
 	if code in MANAGER_ONLY_ACTIONS:
-		return ["Lead Sales", "Admissions Director"]
-	return ["Sale", "Lead Sales", "Admissions Director"]
+		return ["Lead Sale", "Admissions Director"]
+	return ["Sale", "Lead Sale", "Admissions Director"]
 
 
 def _checked(value: Any) -> bool:
@@ -146,7 +146,7 @@ def validate_action_config(
 		raise ValueError(f"CRM Action {code} must use channel {fixed_channel} or NONE.")
 	actors = _normalise_actors(allowed_actors)
 	if code in MANAGER_ONLY_ACTIONS and any(
-		actor not in {"Lead Sales", "Admissions Director", "System Manager"} for actor in actors
+		actor not in {"Lead Sale", "Admissions Director", "System Manager"} for actor in actors
 	):
 		raise ValueError(f"CRM Action {code} is restricted to manager roles.")
 	if execution_type not in EXECUTION_TYPES:

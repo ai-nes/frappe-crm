@@ -30,7 +30,7 @@ class TestInvitationRoleContract(FrappeTestCase):
 		role_field = next(field for field in doctype["fields"] if field["fieldname"] == "role")
 		self.assertEqual(
 			set(role_field["options"].splitlines()) - {""},
-			{"Sale", "Marketing", "Lead Sales", "Admissions Director", "System Manager"},
+			{"Sale", "Marketing", "Lead Sale", "Admissions Director", "System Manager"},
 		)
 
 	def test_accept_rejects_legacy_pending_invitation_before_creating_a_user(self):

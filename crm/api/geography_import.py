@@ -164,13 +164,13 @@ def _import_row(data):
 	_required(data, "region_code", "Khu Vực")
 
 	region = _upsert_doc(
-		"CRM Term",
-		{"term_name": data["region_code"], "category": "region"},
+		"CRM Region",
+		{"code": data["region_code"]},
 		{
-			"term_name": data["region_code"],
-			"category": "region",
+			"code": data["region_code"],
+			"display_name": data["region_code"],
 		},
-		fallback_filters={"term_name": data["region_code"], "category": "region"},
+		fallback_filters={"code": data["region_code"]},
 	)
 	province = _upsert_doc(
 		"CRM Province",
@@ -196,7 +196,7 @@ def _import_row(data):
 		fallback_filters={"ward_name": data["ward_name"], "province": province.name},
 	)
 	school_area = frappe.db.get_value(
-		"CRM Term", {"term_name": data.get("region_code"), "category": "school_area"}, "name"
+		"CRM School Area", {"name": data.get("region_code"), "enabled": 1}, "name"
 	) if data.get("region_code") else None
 	_upsert_doc(
 		"CRM High School",

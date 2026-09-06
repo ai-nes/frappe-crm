@@ -34,7 +34,7 @@
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "role": "System Manager"},
   {"create": 1, "export": 1, "read": 1, "role": "Admissions Director"},
-  {"read": 1, "role": "Lead Sales"}
+  {"read": 1, "role": "Lead Sale"}
  ],
  "row_format": "Dynamic",
  "search_fields": "event_key,payment,event_type,event_at",

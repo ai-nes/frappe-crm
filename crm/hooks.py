@@ -301,11 +301,6 @@ doc_events = {
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
 		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
 	},
-	"CRM Term": {
-		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
-		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
-		"before_rename": ["crm.fcrm.master_data_governance.prevent_governed_rename"],
-	},
 	"CRM Campus": {
 		"validate": ["crm.fcrm.master_data_governance.validate_governed_mutation"],
 		"on_trash": ["crm.fcrm.master_data_governance.prevent_governed_delete"],
@@ -376,7 +371,7 @@ for _governed_consumer_doctype in (
 	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
 	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
 	"CRM Staff", "CRM Academic Year Line", "CRM Student Pool", "CRM Student Routing Request",
-	"CRM Student SLA Attempt", "CRM Team", "CRM Term",
+	"CRM Student SLA Attempt", "CRM Team",
 ):
 	_governed_events = doc_events.setdefault(_governed_consumer_doctype, {})
 	_governed_events.setdefault("validate", []).append(

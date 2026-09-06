@@ -15,7 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import frappe
 
 from crm.api.director_school_common import parse_limit, raise_api_error
-from crm.fcrm.role_policy import resolve_compatibility_overlay, resolve_crm_profile
+from crm.fcrm.role_policy import resolve_crm_profile
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 TREND_RANGES = {"7d", "30d"}
@@ -24,7 +24,6 @@ DIRECT_INTERACTION_TYPES = {"outreach", "connected", "counseling"}
 CONNECTED_OUTCOMES = {"captured", "resolved", "converted", "connected"}
 TERMINAL_TASK_STATES = {"done", "canceled", "completed", "cancelled", "rejected", "superseded"}
 MANAGER_PROFILES = {"lead_sales"}
-MANAGER_OVERLAYS = {"team_leader"}
 
 STUDENT_FIELDS = ["name", "student_name", "lifecycle_stage", "enrollment_status", "modified"]
 CONTACT_FIELDS = ["name", "student", "readiness_level", "next_follow_up"]
@@ -37,20 +36,8 @@ INTERACTION_FIELDS = [
 	"source_verified",
 	"creation",
 ]
-TASK_FIELDS = [
-	"name",
-	"title",
-	"description",
-	"student",
-	"priority",
-	"status",
-	"due_date",
-	"modified",
-	"creation",
-]
 ACTION_FIELDS = [
 	"name",
-	"legacy_generic_task",
 	"student",
 	"action",
 	"action_type",
@@ -142,8 +129,7 @@ def _require_access() -> dict[str, Any]:
 		return {"user": user, "profile": "platform_superuser", "manager": True}
 
 	profile = resolve_crm_profile(roles)
-	overlay = resolve_compatibility_overlay(roles)
-	if profile not in {"ctv_sale", "lead_sales"} and overlay not in {"sales_own", "team_leader"}:
+	if profile not in {"ctv_sale", "lead_sales"}:
 		raise_api_error(
 			"FORBIDDEN",
 			"Bạn không có quyền truy cập tổng quan CTV Sale.",
@@ -153,7 +139,7 @@ def _require_access() -> dict[str, Any]:
 	return {
 		"user": user,
 		"profile": profile,
-		"manager": profile in MANAGER_PROFILES or overlay in MANAGER_OVERLAYS or "System Manager" in roles,
+		"manager": profile in MANAGER_PROFILES or "System Manager" in roles,
 	}
 
 
@@ -301,25 +287,7 @@ def _load_tasks(student_ids: list[str], warnings: list[str]) -> list[dict[str, A
 			warning_key="action_items",
 		)
 	]
-	migrated_task_ids = {
-		str(row.get("legacy_generic_task")) for row in action_rows if row.get("legacy_generic_task")
-	}
-	generic_rows = [
-		dict(row)
-		for row in _get_list(
-			"Task",
-			filters={"student": ["in", student_ids]},
-			fields=TASK_FIELDS,
-			order_by="due_date asc, name asc",
-			limit_page_length=0,
-			warnings=warnings,
-			warning_key="tasks",
-		)
-		if str(row.get("name")) not in migrated_task_ids
-	]
-	return [_normalize_action_task(row) for row in action_rows] + [
-		_normalize_generic_task(row) for row in generic_rows
-	]
+	return [_normalize_action_task(row) for row in action_rows]
 
 
 def _get_list(
@@ -387,30 +355,6 @@ def _normalize_action_task(row: dict[str, Any]) -> dict[str, Any]:
 		"status": status,
 		"due": _coerce_datetime(row.get("due_at")),
 		"completed": _coerce_datetime(row.get("completed_at")) if state == "completed" else None,
-	}
-
-
-def _normalize_generic_task(row: dict[str, Any]) -> dict[str, Any]:
-	title = str(row.get("title") or "")
-	detail = _plain_text(row.get("description")) or title
-	status = str(row.get("status") or "Todo").strip().lower()
-	return {
-		"id": f"Task:{row.get('name')}",
-		"student_id": str(row.get("student") or ""),
-		"title": title,
-		"detail": detail,
-		"task_type": _task_type(title, detail),
-		"task_type_label": _task_type_label(title, detail),
-		"priority": _priority(row.get("priority")),
-		"status": "done"
-		if status == "done"
-		else "canceled"
-		if status == "canceled"
-		else "in-progress"
-		if status == "in progress"
-		else "todo",
-		"due": _coerce_datetime(row.get("due_date")),
-		"completed": _coerce_datetime(row.get("modified")) if status == "done" else None,
 	}
 
 
@@ -754,10 +698,6 @@ def _as_timezone(value: datetime | None, timezone: ZoneInfo) -> datetime | None:
 
 def _day_label(value: date) -> str:
 	return ("T2", "T3", "T4", "T5", "T6", "T7", "CN")[value.weekday()]
-
-
-def _plain_text(value: Any) -> str:
-	return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 
 def _redact_sensitive(value: str) -> str:

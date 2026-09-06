@@ -178,7 +178,7 @@ def _authorized_recipients(student, recipient_role: str) -> list[str]:
 		user = frappe.db.get_value("CRM Staff", student.owner_staff, "user") if student.owner_staff else None
 		candidates = [user] if user else []
 	else:
-		role = {"lead_sales": "Lead Sales", "admissions_director": "Admissions Director"}.get(recipient_role)
+		role = {"lead_sales": "Lead Sale", "admissions_director": "Admissions Director"}.get(recipient_role)
 		candidates = frappe.get_all("Has Role", filters={"role": role}, pluck="parent") if role else []
 	return [
 		user
@@ -452,7 +452,7 @@ def approve_sla_reset(attempt_name: str, *, expected_revision: int):
 	attempt = _lock_attempt(attempt_name)
 	_assert_scope(attempt)
 	if not attempt.reset_requested_by or not attempt.reset_reason or not attempt.reset_evidence_reference:
-		_error("RESET_NOT_REQUESTED", "A Lead Sales reset request and evidence are required.")
+		_error("RESET_NOT_REQUESTED", "A Lead Sale reset request and evidence are required.")
 	if int(attempt.revision or 0) != int(expected_revision):
 		_error("STALE_REVISION", "SLA attempt changed; refresh before retrying.")
 	reset_sequence = int(attempt.reset_sequence or 0) + 1
@@ -614,7 +614,7 @@ def _auto_recall_if_due(name: str, now) -> bool:
 			{
 				"parent": student.owner_staff,
 				"parenttype": "CRM Staff",
-				"function": ["in", ["Sale", "CTV-Sale"]],
+				"function": ["in", ["Sale", "CTV Sale"]],
 			},
 			"team",
 		)

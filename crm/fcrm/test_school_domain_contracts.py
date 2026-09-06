@@ -163,9 +163,9 @@ def test_school_domain_schema_uses_canonical_links_and_minimal_fields():
 	activity_fields = _fields(activity)
 	association_fields = _fields(association)
 
-	assert high_school_fields["school_type"]["options"] == "CRM Term"
+	assert high_school_fields["school_type"]["options"] == "CRM School Type"
 	assert high_school_fields["school_area"]["fieldtype"] == "Link"
-	assert high_school_fields["school_area"]["options"] == "CRM Term"
+	assert high_school_fields["school_area"]["options"] == "CRM School Area"
 	assert high_school_fields["province"]["options"] == "CRM Province"
 	assert high_school_fields["ward"]["options"] == "CRM Ward"
 	assert high_school_fields["is_key_account"]["read_only"] == 1
@@ -197,7 +197,7 @@ def test_school_domain_schema_uses_canonical_links_and_minimal_fields():
 	assert snapshot_fields["enrollment_rate"]["read_only"] == 1
 
 	assert activity_fields["stakeholder"]["options"] == "CRM School Stakeholder"
-	assert activity_fields["activity_type"]["options"] == "CRM Term"
+	assert activity_fields["activity_type"]["options"] == "CRM School Activity Type"
 	assert activity_fields["status"]["options"].splitlines() == ["Planned", "Completed", "Cancelled"]
 	assert {"contact_count", "application_count"} <= set(activity_fields)
 	assert not {"ne_output", "source_record_id", "source_identity", "source_doctype", "source_docname"} & set(activity_fields)

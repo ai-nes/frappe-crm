@@ -54,7 +54,7 @@ class TestTaskApi(FrappeTestCase):
 	def test_task_permissions_cover_ctv_sale_create_and_update(self):
 		permissions = frappe.get_meta("Task").permissions
 
-		for role in ("CTV Sale", "CTV-Sale"):
+		for role in ("CTV Sale",):
 			role_permissions = [permission for permission in permissions if permission.role == role]
 			self.assertTrue(role_permissions, f"Task must define permissions for {role}")
 			self.assertTrue(
@@ -151,18 +151,16 @@ class TestTaskApi(FrappeTestCase):
 		_aggregate.assert_called_once_with("Administrator", None, None, None, "all", None)
 
 	@patch("crm.api.task._permission_condition", return_value="1=1")
-	def test_sales_task_aggregate_includes_both_sources_by_default(self, _permission):
+	def test_sales_task_aggregate_uses_canonical_action_items_only(self, _permission):
 		query, values = task_api._aggregate_tasks_sql("Administrator", None, None, None, "all", None)
 
-		self.assertIn("FROM `tabTask` task", query)
 		self.assertIn("FROM `tabCRM Action Item` action_item", query)
 		self.assertEqual(values, [])
-		self.assertEqual(_permission.call_count, 2)
+		self.assertEqual(_permission.call_count, 1)
 
 	@patch("crm.api.task._permission_condition", return_value="1=1")
-	def test_sales_task_type_filter_selects_one_source(self, _permission):
+	def test_sales_task_type_filter_rejects_legacy_task_source(self, _permission):
 		query, values = task_api._aggregate_tasks_sql("Administrator", None, None, None, "all", "Task")
 
-		self.assertIn("FROM `tabTask` task", query)
-		self.assertNotIn("FROM `tabCRM Action Item` action_item", query)
+		self.assertEqual(query, "")
 		self.assertEqual(values, [])

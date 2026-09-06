@@ -3,7 +3,6 @@ from frappe import _
 
 from crm.fcrm.role_policy import (
 	CRM_BUSINESS_ROLES,
-	LEGACY_COMPATIBILITY_OVERLAYS,
 	POLICY_VERSION,
 	PROFILE_LABELS,
 	PROFILE_ROLE_ALIASES,
@@ -11,7 +10,6 @@ from crm.fcrm.role_policy import (
 	capability_details,
 	classify_role_set,
 	is_crm_user,
-	resolve_compatibility_overlay,
 )
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
@@ -27,10 +25,9 @@ CRM_PROFILE_LABELS = PROFILE_LABELS
 def resolve_crm_profile(roles):
 	"""Return the sole canonical business profile, otherwise ``None``.
 
-	A person can keep several migration aliases for the same profile.  Roles
-	from two profiles are intentionally indistinguishable from an unmapped
-	caller: both fail closed rather than making declaration order a persona
-	selection policy.
+	Roles from two profiles are intentionally indistinguishable from an
+	unmapped caller: both fail closed rather than making declaration order a
+	persona selection policy.
 	"""
 	return _resolve_crm_profile(roles)
 
@@ -63,10 +60,6 @@ def get_crm_user_role(roles):
 	profile = resolve_crm_profile(role_names)
 	if role_state == "canonical_profile" and profile:
 		return CRM_PROFILE_LABELS[profile], profile
-	overlay = resolve_compatibility_overlay(role_names)
-	if role_state == "compatibility_overlay" and overlay:
-		legacy_roles = role_names & LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"]
-		return sorted(legacy_roles)[0], None
 	if role_state == "system_manager":
 		return "System Manager", None
 	if role_names & CRM_BUSINESS_ROLES:
@@ -100,7 +93,7 @@ def _session_role_flags(roles):
 	capabilities = sorted(capabilities_for_roles(role_names))
 
 	# Keep the legacy booleans stable for older SPA callers, while mapping them
-	# to the canonical Sale / Lead Sales profiles.
+	# to the canonical Sale / Lead Sale profiles.
 	return {
 		"is_system_manager": "System Manager" in role_names,
 		"is_sales_manager": profile == "lead_sales" and "System Manager" not in role_names,
@@ -287,7 +280,7 @@ def set_default_crm_app_for_sales(doc, event=None):
 	if doc.default_app:
 		return
 	roles = {row.role for row in doc.get("roles", [])}
-	if roles & {"Sale", "Lead Sales"}:
+	if roles & {"Sale", "Lead Sale"}:
 		doc.default_app = "crm"
 
 

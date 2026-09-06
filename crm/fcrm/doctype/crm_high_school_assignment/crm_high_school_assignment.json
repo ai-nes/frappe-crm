@@ -101,16 +101,16 @@
   },
   {
    "read": 1,
-   "role": "CTV-Sale"
+"role": "CTV Sale"
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+"role": "Promoter"
   },
   {
    "create": 1,
    "read": 1,
-   "role": "Admissions Operations",
+"role": "Admissions Director",
    "write": 1
   },
   {

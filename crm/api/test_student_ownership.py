@@ -17,7 +17,7 @@ from crm.fcrm.student_ownership import (
 
 class TestStudentOwnershipContract(FrappeTestCase):
 	def test_only_lead_sales_and_admissions_director_receive_capability(self):
-		self.assertIn("student.ownership.manage", capabilities_for_roles({"Lead Sales"}))
+		self.assertIn("student.ownership.manage", capabilities_for_roles({"Lead Sale"}))
 		self.assertIn("student.ownership.manage", capabilities_for_roles({"Admissions Director"}))
 		for roles in ({"Sale"}, {"Marketing"}, {"System Manager"}, {"Team Leader"}, {"Sales Manager"}):
 			self.assertNotIn("student.ownership.manage", capabilities_for_roles(roles))

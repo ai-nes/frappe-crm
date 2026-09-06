@@ -1,4 +1,4 @@
-"""Read-only, session-scoped projections for the Lead Sales team dashboard."""
+"""Read-only, session-scoped projections for the Lead Sale team dashboard."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from crm.api import sale as sale_overview
 from crm.api.director_school_common import parse_limit, raise_api_error
 
 DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
-MEMBER_FUNCTIONS = frozenset({"Sale", "CTV-Sale"})
+MEMBER_FUNCTIONS = frozenset({"Sale", "CTV Sale"})
 AVAILABILITY_VALUES = frozenset({"all", "active", "away", "leave"})
 SORT_VALUES = frozenset({"support", "load", "name"})
 ORDER_VALUES = frozenset({"asc", "desc"})
@@ -62,7 +62,7 @@ def get_sales_team_workspace(
 	sort: str = "support",
 	order: str | None = None,
 ) -> dict[str, Any]:
-	"""Return one consistent snapshot for the authenticated Lead Sales team."""
+	"""Return one consistent snapshot for the authenticated Lead Sale team."""
 	access = lead_sale_api._require_access()
 	report_timezone = lead_sale_api._parse_timezone(timezone)
 	report_date = lead_sale_api._parse_report_date(date, report_timezone)

@@ -39,18 +39,6 @@ _SIGNAL_FIELDS = [
 ]
 
 
-def _term_semantic_keys(term_names: set, category: str) -> dict:
-	if not term_names:
-		return {}
-	rows = frappe.get_all(
-		"CRM Term",
-		filters={"name": ["in", list(term_names)], "category": category, "is_active": 1},
-		fields=["name", "semantic_key"],
-		ignore_permissions=True,
-	)
-	return {row.name: row.semantic_key for row in rows}
-
-
 def _signal_docs(signal_names: set) -> dict:
 	"""Read signal content regardless of the calling session's own CRM Score
 	Signal row permission. This is internal policy-resolution plumbing, not a
@@ -79,13 +67,6 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 	endpoint consume."""
 	signal_names = {row.signal for row in template_doc.rules if row.signal and row.rule_kind != "time_decay"}
 	signals = _signal_docs(signal_names)
-	interaction_keys = _term_semantic_keys(
-		{signal.get("interaction_term") for signal in signals.values() if signal.get("interaction_term")},
-		"interaction_type",
-	)
-	intent_keys = _term_semantic_keys(
-		{signal.get("intent_type") for signal in signals.values() if signal.get("intent_type")}, "intent_type"
-	)
 
 	rules = []
 	for row in template_doc.rules:
@@ -110,8 +91,8 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 				"condition_field": sig.get("condition_field"),
 				"condition_operator": sig.get("condition_operator"),
 				"condition_value": sig.get("condition_value"),
-				"interaction_semantic_key": interaction_keys.get(sig.get("interaction_term")),
-				"intent_semantic_key": intent_keys.get(sig.get("intent_type")),
+				"interaction_semantic_key": sig.get("interaction_term") or None,
+				"intent_semantic_key": sig.get("intent_type") or None,
 				"intent_role": sig.get("intent_role"),
 				"intent_polarity": sig.get("intent_polarity"),
 				"min_confidence": float(sig.get("min_confidence") or 0),
@@ -140,7 +121,7 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 				"penalty_amount": float(row.penalty_amount or 0),
 				"cooldown_days": int(row.cooldown_days or 0),
 				"max_penalties": int(row.max_penalties or 0),
-				"interaction_semantic_key": interaction_keys.get(sig.get("interaction_term")),
+				"interaction_semantic_key": sig.get("interaction_term") or None,
 				"inactivity_days": int(sig.get("inactivity_days") or 30),
 			}
 		)

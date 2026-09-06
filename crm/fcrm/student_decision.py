@@ -409,6 +409,8 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	if accepting:
 		from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
 		from crm.fcrm.action_type_registry import is_available_action_type
+		from crm.fcrm.student_contact_conversion import contact_for_student
+		from crm.services.sales_action_policy import parent_contact_for_student
 
 		action_type = None
 		if doc.action:
@@ -466,12 +468,19 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 
 	action = existing_task
 	if accepting and not existing_task:
+		action_contact = (
+			parent_contact_for_student(student_name)
+			if canonical_type and action_category(canonical_type) == "PARENT"
+			else contact_for_student(student_name)
+		)
+		if not action_contact:
+			_fail("FORBIDDEN", "A unique governed recipient is required for this Action.")
 		canonical = frappe.get_doc(
 			{
 				"doctype": CANONICAL_ACTION,
 				"recommendation": doc.name,
 				"student": student_name,
-				"contact": frappe.db.get_value("CRM Contact", {"student": student_name}, "name"),
+				"contact": action_contact,
 				"current_slot": _free_current_slot(student_name),
 				"origin": "ai",
 				"action": canonical_type,
@@ -786,7 +795,8 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); objective = _required(objective, "objective")[:500]
 	from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
 	from crm.fcrm.action_type_registry import is_available_action_type
-	from crm.services.sales_action_policy import require_parent_contact_authority
+	from crm.fcrm.student_contact_conversion import contact_for_student, contact_is_linked_to_student
+	from crm.services.sales_action_policy import parent_contact_for_student, require_parent_contact_authority
 
 	action_type = canonicalize_action_type(action_type)
 	if not is_available_action_type(action_type):
@@ -797,9 +807,14 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 		_fail("FORBIDDEN", str(exc))
 	if priority not in {"high", "medium", "low"}: _fail("INVALID_INPUT", "Unsupported Action priority.")
 	if contact:
-		linked_student = frappe.db.get_value("CRM Contact", contact, "student")
-		if not linked_student or linked_student != student:
+		if not contact_is_linked_to_student(contact, student):
 			_fail("INVALID_INPUT", "Contact is not linked to the selected Student.")
+	elif action_category(action_type) == "PARENT":
+		contact = parent_contact_for_student(student)
+		if not contact:
+			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
+	else:
+		contact = contact_for_student(student)
 	student_doc = frappe.get_doc("CRM Student", student); scope = _scope(actor)
 	if actor != "Administrator" and not has_student_permission(student_doc, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Action is outside your current scope.")

@@ -9,6 +9,7 @@ from crm.fcrm.nba_policy import (
 	validate_decision_policy_numbers,
 	validate_diversity_rule,
 	validate_score_weights,
+	kernel_policy_snapshot,
 )
 
 
@@ -49,18 +50,24 @@ class CRMNBADecisionPolicy(Document):
 					frappe.ValidationError,
 				)
 
-		digest = canonical_digest(
-			decision_policy_digest_payload(
-				{
-					"top_n": self.top_n,
-					"max_recommendations": self.max_recommendations,
-					"min_score_threshold": self.min_score_threshold,
-					"score_weights": weights,
-					"conflict_key_fields": conflict_fields,
-					"diversity_rule": self.diversity_rule,
-				}
+		if self.kernel_policy:
+			try:
+				digest = canonical_digest(kernel_policy_snapshot({"kernel_policy": self.kernel_policy}))
+			except ValueError as exc:
+				frappe.throw(str(exc), frappe.ValidationError)
+		else:
+			digest = canonical_digest(
+				decision_policy_digest_payload(
+					{
+						"top_n": self.top_n,
+						"max_recommendations": self.max_recommendations,
+						"min_score_threshold": self.min_score_threshold,
+						"score_weights": weights,
+						"conflict_key_fields": conflict_fields,
+						"diversity_rule": self.diversity_rule,
+					}
+				)
 			)
-		)
 		if digest != (self.policy_digest or ""):
 			self.policy_digest = digest
 			self.policy_revision = (

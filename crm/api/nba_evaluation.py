@@ -53,6 +53,7 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 	intent = projection.get("intent") or {}
 	interaction = projection.get("interaction") or {}
 	assessment = projection.get("assessment") or {}
+	application = projection.get("application") or {}
 	score = projection.get("score") or {}
 	return {
 		"lifecycle": {"stage": lifecycle.get("stage")},
@@ -61,7 +62,17 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			"state": interaction.get("outcome") or "unknown",
 			"last_contact_days": interaction.get("days_since"),
 		},
-		"application_state": {"completeness": assessment.get("status") or "unknown", "missing": []},
+		"application_state": {
+			"completeness": application.get("completeness") or "unknown",
+			"missing": list(application.get("missing") or []),
+			"missing_count": int(application.get("missing_count") or 0),
+			"source_revision": application.get("source_revision") or "unknown",
+		},
+		"academic": {
+			"gpa": (projection.get("academic") or {}).get("gpa"),
+			"quality": (projection.get("academic") or {}).get("quality") or "unknown",
+			"source_revision": (projection.get("academic") or {}).get("source_revision") or "unknown",
+		},
 		"blockers": [assessment["primary_barrier"]] if assessment.get("primary_barrier") else [],
 		"deadlines": (
 			[
@@ -74,8 +85,12 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			else []
 		),
 		"contactability": {
-			"consent": bool((projection.get("eligibility") or {}).get("actionable")),
-			"channels": [interaction["channel"]] if interaction.get("channel") else [],
+			"consent": bool((projection.get("contactability") or {}).get("consent")),
+			"channels": list((projection.get("contactability") or {}).get("channels") or []),
+			"recipient_bound": (projection.get("contactability") or {}).get("recipient_bound") is not False,
+		},
+		"parent_authority": {
+			"valid": bool((projection.get("parent_authority") or {}).get("valid")),
 		},
 		"work_in_flight": [row.get("action_type") for row in projection.get("recent_actions") or []],
 		"owner_capacity": {"owner": None, "open_tasks": None},
@@ -124,12 +139,17 @@ def _shape_eligible_action_set(eligible: Mapping) -> dict:
 				"action_code": code,
 				"group": (action.get("category") or action_category(code) or "general").lower(),
 				"purpose": action.get("purpose") or code,
-				"addresses_opportunities": [],
+				"addresses_opportunities": list(action.get("addresses_opportunities") or []),
 				"allowed_channels": [channel] if channel not in (None, "NONE") else [],
 				"allowed_actors": list(action.get("allowed_actors") or []),
 				"execution_parameter_schema": {},
 				"default_parameters": {},
-				"hard_constraints": {},
+				"hard_constraints": {
+					"requires_parent_authority": bool(
+						action.get("requires_parent_authority") or action.get("category") == "PARENT"
+					),
+					"academic": dict(action.get("academic_constraint") or {}),
+				},
 				"normalized_timing_domain": {},
 				"metadata_state": "provisional",
 				"cost_band": _UNKNOWN_BAND,
@@ -154,8 +174,12 @@ def _shape_policies(decision: Mapping, eligible: Mapping, eligible_set: Mapping,
 		# The eligibility contract the engine binds is the reason-code vocabulary,
 		# not one student's exclusion list; that list is per-evaluation data.
 		"eligibility_digest": canonical_digest({"reason_codes": sorted(nba_policy.EXCLUSION_REASONS)}),
-		"decision_revision": f"nba-decision-policy-r{decision.get('policy_revision') or 1}",
+		"decision_revision": str(
+			(decision.get("decision_policy") or {}).get("revision")
+			or f"nba-decision-policy-r{decision.get('policy_revision') or 1}"
+		),
 		"decision_digest": _require_hex64(decision.get("policy_digest"), "decision_digest"),
+		"decision_policy": dict(decision.get("decision_policy") or {}),
 		"timing_revisions": [],
 		"timing_digest": _require_hex64(timing_digest, "timing_digest"),
 	}
@@ -181,7 +205,11 @@ def build_nba_evaluation_input(
 
 	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized)
 	eligible = nba_policy.eligible_action_set_for_student(
-		student, actor=actor, now=moment, service_authorized=service_authorized
+		student,
+		actor=actor,
+		now=moment,
+		service_authorized=service_authorized,
+		decision_context=projection,
 	)
 	decision = nba_policy.get_active_decision_policy()
 	timing = feasible_timing_domain({"trigger_type": "relative", "delay_value": 0}, now=moment)

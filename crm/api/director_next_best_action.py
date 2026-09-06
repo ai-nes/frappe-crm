@@ -134,7 +134,7 @@ def get_director_next_best_action(
 	"""Return the NBA queue within the caller's Student ownership scope.
 
 	Admissions Director/System Manager see the requested admission-year scope;
-	Sale and CTV Sale see their own assigned Students; Lead Sales sees the
+	Sale and CTV Sale see their own assigned Students; Lead Sale sees the
 	team-and-team-pool scope enforced by the shared Student permission policy.
 	"""
 	access = require_director_access(allow_sales=True)
@@ -481,7 +481,7 @@ def _students_for_year(year: str, access: dict[str, Any] | None = None) -> list[
 
 	The Student permission query remains the authoritative scope for every role.
 	The explicit owner filter for Sale/CTV Sale makes their personal portfolio
-	boundary visible in the query as well; Lead Sales intentionally keeps the
+	boundary visible in the query as well; Lead Sale intentionally keeps the
 	team-and-team-pool scope supplied by the Student permission policy.
 	"""
 	filters: dict[str, Any] = {"admission_year": year}

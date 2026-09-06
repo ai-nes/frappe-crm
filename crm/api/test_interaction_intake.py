@@ -2,7 +2,7 @@ from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.interaction_intake import _normalize_interaction_payload
+from crm.api.interaction_intake import _interaction_response, _normalize_interaction_payload
 from crm.fcrm.student_intake import StudentIntakeError
 
 
@@ -93,3 +93,15 @@ class TestInteractionIntakeContract(FrappeTestCase):
 				"receipt_id": "REC-1",
 			},
 		)
+
+	def test_response_exposes_analysis_run_for_service_worker(self):
+		response = _interaction_response(
+			{
+				"outcome": "created",
+				"interaction": "INT-1",
+				"student": "STU-1",
+				"analysis_run": "IAR-1",
+			}
+		)
+
+		self.assertEqual(response["analysis_run"], "IAR-1")

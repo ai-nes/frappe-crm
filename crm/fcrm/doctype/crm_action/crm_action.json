@@ -5,7 +5,7 @@
  "autoname": "field:code",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["code", "display_name", "action_type", "description", "purpose", "default_channel", "allowed_actors", "allowed_time_slots", "requires_approval", "auto_execute", "execution_type", "ai_allowed", "enabled", "sort_order", "definition_revision", "definition_digest", "effective_from", "effective_to"],
+ "field_order": ["code", "display_name", "action_type", "description", "purpose", "default_channel", "allowed_actors", "allowed_time_slots", "requires_approval", "requires_parent_authority", "academic_constraint", "auto_execute", "execution_type", "ai_allowed", "enabled", "sort_order", "definition_revision", "definition_digest", "effective_from", "effective_to"],
  "fields": [
   {"fieldname":"code","fieldtype":"Data","reqd":1,"unique":1,"in_list_view":1,"label":"Code"},
   {"fieldname":"display_name","fieldtype":"Data","reqd":1,"in_list_view":1,"label":"Action"},
@@ -16,6 +16,8 @@
   {"fieldname":"allowed_actors","fieldtype":"JSON","reqd":1,"label":"Allowed Actors"},
   {"fieldname":"allowed_time_slots","fieldtype":"JSON","label":"Allowed Time Slots","description":"Daily windows this Action may run in (subset of 0-6, 6-12, 12-18, 18-24). Empty means no restriction."},
   {"fieldname":"requires_approval","fieldtype":"Check","default":"0","label":"Requires Approval"},
+  {"fieldname":"requires_parent_authority","fieldtype":"Check","default":"0","label":"Requires Parent Authority"},
+  {"fieldname":"academic_constraint","fieldtype":"JSON","label":"Academic Constraint","description":"Optional bounded GPA range used only as an eligibility/support constraint."},
   {"fieldname":"auto_execute","fieldtype":"Check","default":"0","label":"Auto Execute"},
   {"fieldname":"execution_type","fieldtype":"Select","options":"MANUAL\nAI_ASSISTED","default":"MANUAL","reqd":1,"label":"Execution Type"},
   {"fieldname":"ai_allowed","fieldtype":"Check","default":"0","label":"AI Allowed"},
@@ -32,7 +34,7 @@
  "name": "CRM Action",
  "permissions": [
   {"read":1,"role":"Sale"},
-  {"read":1,"role":"Lead Sales"},
+  {"read":1,"role":"Lead Sale"},
   {"read":1,"role":"Marketing"},
   {"read":1,"role":"Promoter"},
   {"read":1,"role":"Admissions Director"},

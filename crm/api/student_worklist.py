@@ -602,7 +602,7 @@ def _recommendation_evaluation_lookup(rows: list) -> dict[str, dict]:
 	"""Parent evaluation disposition/status keyed by evaluation id.
 
 	``CRM NBA Evaluation`` grants row ``read`` to System Manager only, so a real
-	Sale / Lead Sales / Director caller has no doctype permission on it at all.
+	Sale / Lead Sale / Director caller has no doctype permission on it at all.
 	This is a deliberate service-internal enrichment read, not a fresh access
 	grant: every ``evaluation_id`` here was sourced from a ``CRM Recommendation``
 	row the caller already passed permission on in ``_fetch_recommendation_page``,

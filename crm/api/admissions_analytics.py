@@ -12,9 +12,8 @@ from crm.api.capability import _is_capability_gateway_user
 from crm.api.session import get_session_role_flags
 
 _ALLOWED_ROLES = frozenset({
-	"Sale", "Lead Sales", "Marketing", "Admissions Director",
-	"CTV-Sale", "Counseller", "Sales User", "Sales Manager", "Team Leader",
-	"Promoter", "Promoter-PR", "Marketing Operator", "Marketing Lead", "Admissions Operations", "Giám đốc Tuyển sinh",
+	"Sale", "CTV Sale", "Lead Sale", "Marketing", "Lead Marketing",
+	"Promoter", "Lead Promoter", "Admissions Director",
 })
 
 

@@ -225,10 +225,7 @@ def settle_interaction_analysis_result(
 		existing_refs = json.dumps(existing_refs, sort_keys=True, separators=(",", ":"))
 		existing_semantic_key = None
 		if existing.intent:
-			intent_type = frappe.db.get_value("CRM Intent", existing.intent, "intent_type")
-			existing_semantic_key = (
-				frappe.db.get_value("CRM Term", intent_type, "semantic_key") if intent_type else None
-			)
+			existing_semantic_key = frappe.db.get_value("CRM Intent", existing.intent, "intent_type") or None
 		expected_semantic_key = parsed_intent[0] if parsed_intent else None
 		if (
 			existing.analysis_run != run_id
@@ -284,11 +281,9 @@ def settle_interaction_analysis_result(
 				frappe.throw(
 					"Intent evidence reference is outside this analysis revision.", frappe.PermissionError
 				)
-		term = frappe.db.get_value(
-			"CRM Term", {"semantic_key": semantic_key, "category": "intent_type", "is_active": 1}, "name"
-		)
-		if not term:
-			frappe.throw("Intent semantic key is not an active CRM Term.", frappe.ValidationError)
+		if not frappe.db.exists("CRM Intent Type", {"name": semantic_key, "enabled": 1}):
+			frappe.throw("Intent type is not an active CRM Intent Type.", frappe.ValidationError)
+		term = semantic_key
 	else:
 		refs = []
 		term = None

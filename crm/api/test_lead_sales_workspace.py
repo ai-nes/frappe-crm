@@ -1,4 +1,4 @@
-"""Focused contracts for Lead Sales workspace reader boundaries."""
+"""Focused contracts for Lead Sale workspace reader boundaries."""
 
 from unittest.mock import patch
 
@@ -36,12 +36,12 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 	def _make_lead(self, label, campus, department, team):
 		email = f"{frappe.scrub(label)}@example.test"
 		frappe.get_doc(
-			{"doctype": "User", "email": email, "first_name": label, "send_welcome_email": 0, "roles": [{"role": "Lead Sales"}]}
+			{"doctype": "User", "email": email, "first_name": label, "send_welcome_email": 0, "roles": [{"role": "Lead Sale"}]}
 		).insert(ignore_permissions=True)
 		staff = frappe.get_doc(
 			{"doctype": "CRM Staff", "full_name": label, "user": email, "campus": campus, "department": department}
 		)
-		staff.append("team_memberships", {"team": team, "function": "Lead Sales", "term": "", "is_primary": 1})
+		staff.append("team_memberships", {"team": team, "function": "Lead Sale", "term": "", "is_primary": 1})
 		return email, staff.insert(ignore_permissions=True).name
 
 	def _make_student(self, label, owner, team):
