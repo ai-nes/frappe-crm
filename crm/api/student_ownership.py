@@ -12,6 +12,7 @@ import uuid
 import frappe
 from frappe import _
 
+from crm.fcrm.role_policy import STUDENT_OWNER_PROFILES
 from crm.fcrm.student_ownership import (
 	StudentOwnershipError,
 )
@@ -59,6 +60,7 @@ def get_assignable_sales(studentId: str | None = None, search: str | None = None
 	owners = [
 		owner
 		for owner in result.get("owners", [])
+		if owner.get("profile") in STUDENT_OWNER_PROFILES
 		if not needle
 		or any(needle in _search_key(owner.get(field)) for field in _ASSIGNABLE_SALES_SEARCH_FIELDS)
 	]

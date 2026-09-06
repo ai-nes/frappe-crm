@@ -59,15 +59,18 @@ PROFILE_ROLE_ALIASES = {
 	"ceo": frozenset({"Administrator"}),
 }
 
-# Both canonical Sales profiles can own Student cases.  Team membership uses
-# the same canonical values as the role catalog.
+# Both canonical Sales profiles can own Student cases.  Only Sale may initiate
+# a public ownership assignment.  Team membership uses the same canonical
+# values as the role catalog.
 STUDENT_OWNER_PROFILES = frozenset({"sales", "ctv_sale"})
+STUDENT_OWNERSHIP_ASSIGNER_PROFILES = frozenset({"sales"})
 STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV Sale"})
 
 PROFILE_CAPABILITIES = {
 	"sales": frozenset(
 		{
 			"student.execute",
+			"student.ownership.manage",
 			"conversion.execute",
 			"recommendation.decide",
 			"action.execute",

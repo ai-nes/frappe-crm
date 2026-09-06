@@ -146,6 +146,18 @@ def _row_revision(row: Mapping[str, object]) -> int:
 		return 1
 
 
+def _parse_time_slots(value: object) -> list[str]:
+	"""Normalise ``CRM Action.allowed_time_slots`` into a list of slot codes."""
+	if isinstance(value, str):
+		try:
+			value = json.loads(value) if value else []
+		except (TypeError, ValueError):
+			return []
+	if not isinstance(value, (list, tuple)):
+		return []
+	return [str(item) for item in value if str(item)]
+
+
 def filter_eligible_actions(
 	catalog_rows: Iterable[Mapping[str, object]],
 	*,
@@ -255,6 +267,7 @@ def filter_eligible_actions(
 				"allowed_actors": allowed_actors,
 				"purpose": snapshot["purpose"],
 				"addresses_opportunities": list(opportunities),
+				"allowed_time_slots": _parse_time_slots(row.get("allowed_time_slots")),
 			}
 		)
 
@@ -507,6 +520,7 @@ def eligible_action_set_for_student(
 			"requires_approval",
 			"requires_parent_authority",
 			"academic_constraint",
+			"allowed_time_slots",
 			"auto_execute",
 			"enabled",
 			"definition_revision",

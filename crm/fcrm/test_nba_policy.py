@@ -160,6 +160,21 @@ def test_eligible_set_digest_binds_wire_action_ids():
 	assert eligible_set_digest(actions) == expected
 
 
+def test_allowed_time_slots_pass_through_as_a_normalised_list():
+	actions = filter_eligible_actions([_row(allowed_time_slots=["6-12", "12-18"])], now=NOW)["actions"]
+	assert actions[0]["allowed_time_slots"] == ["6-12", "12-18"]
+
+
+def test_allowed_time_slots_json_string_is_parsed():
+	actions = filter_eligible_actions([_row(allowed_time_slots='["18-24"]')], now=NOW)["actions"]
+	assert actions[0]["allowed_time_slots"] == ["18-24"]
+
+
+def test_missing_allowed_time_slots_is_an_empty_list():
+	actions = filter_eligible_actions([_row()], now=NOW)["actions"]
+	assert actions[0]["allowed_time_slots"] == []
+
+
 def test_validate_decision_policy_numbers_rejects_bad_ranges():
 	validate_decision_policy_numbers(3, 10, 0.0)
 	with pytest.raises(ValueError):

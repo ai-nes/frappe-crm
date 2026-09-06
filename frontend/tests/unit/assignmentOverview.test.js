@@ -54,10 +54,10 @@ describe('assignment workspace data contract', () => {
 
   it('keeps routing strategy terminology understandable for operators', () => {
     expect(assignmentWorkspacePolicyLabel('round_robin')).toBe(
-      'Luân phiên công bằng',
+      'Chia đều lần lượt',
     )
     expect(assignmentWorkspacePolicyLabel('weighted_score')).toBe(
-      'Chấm điểm có trọng số',
+      'Ưu tiên người phù hợp',
     )
   })
 })

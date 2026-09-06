@@ -23,12 +23,13 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
-from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.permissions import has_student_list_read_permission
 from crm.fcrm.role_policy import (
 	POLICY_VERSION,
 	PROFILE_LABELS,
 	STUDENT_OWNER_PROFILES,
 	STUDENT_OWNER_TEAM_FUNCTIONS,
+	STUDENT_OWNERSHIP_ASSIGNER_PROFILES,
 	capabilities_for_roles,
 	resolve_crm_profile,
 )
@@ -282,7 +283,9 @@ def _authorize(actor: str) -> tuple[str, dict[str, Any]]:
 	roles = set(frappe.get_roles(actor))
 	profile = resolve_crm_profile(roles)
 	capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
-	if OWNERSHIP_CAPABILITY not in capabilities or profile not in {"lead_sales", "admissions_director"}:
+	if OWNERSHIP_CAPABILITY not in capabilities or profile not in (
+		STUDENT_OWNERSHIP_ASSIGNER_PROFILES | {"lead_sales", "admissions_director"}
+	):
 		_error("UNAUTHORIZED", "You are not permitted to manage Student ownership.")
 	return profile, {"roles": sorted(roles), "profile": profile}
 
@@ -413,6 +416,8 @@ def resolve_student_operational_target(
 		profile, _ = _authorize(actor)
 
 	if target_kind == "pool":
+		if actor and profile in STUDENT_OWNERSHIP_ASSIGNER_PROFILES:
+			_error("UNAUTHORIZED", "Sale users may only assign Students to an individual Sale or CTV Sale.")
 		pool, team = _load_pool(target_id, branch)
 		if target_team_id and target_team_id != team.name:
 			_error("INVALID_TARGET", "Pool target_team_id must match the pool Team.")
@@ -700,8 +705,8 @@ def change_student_ownership(
 		# Scope is checked from the current Student before any target Staff/Team
 		# lookup.  A historic event snapshot is never an authorization grant.
 		student_doc = frappe.get_doc("CRM Student", student_name)
-		if not _internal_service and not has_student_permission(student_doc, user=actor, permission_type="read"):
-			_error("OUT_OF_SCOPE", "Student is outside the actor's current scope.")
+		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
+			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 
 		receipt = _lock_receipt(keys)
 		if receipt:
@@ -735,8 +740,8 @@ def change_student_ownership(
 			raise
 		_lock("CRM Student", student_name)
 		student_doc = frappe.get_doc("CRM Student", student_name)
-		if not _internal_service and not has_student_permission(student_doc, user=actor, permission_type="read"):
-			_error("OUT_OF_SCOPE", "Student is outside the actor's current scope.")
+		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
+			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 		current_revision = _current_revision(student_doc)
 		if str(current_revision) != str(expected_revision):
 			_error("STALE_OWNERSHIP_REVISION", "Student ownership changed; refresh before retrying.")
@@ -896,8 +901,8 @@ def _student_for_read(student_name: str):
 	student_name = _required_text(student_name, "INVALID_INPUT", "student")
 	actor, profile, capabilities = _read_actor()
 	student_doc = frappe.get_doc("CRM Student", student_name)
-	if not has_student_permission(student_doc, user=actor, permission_type="read"):
-		_error("OUT_OF_SCOPE", "Student is outside the actor's current scope.")
+	if not has_student_list_read_permission(student_doc, user=actor):
+		_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 	return student_doc, actor, profile, capabilities
 
 
@@ -992,19 +997,22 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 	branch = student_doc.get("branch")
 	if not branch:
 		_error("INVALID_TARGET", "Student Campus is required for ownership.")
-	actor_teams = _team_rows_for_actor(actor) if profile == "lead_sales" else None
+	team_scoped_profiles = STUDENT_OWNER_PROFILES | {"lead_sales"}
+	actor_teams = _team_rows_for_actor(actor) if profile in team_scoped_profiles else None
 	allowed_team_names = {team.get("name") for team in actor_teams or []}
 	team_filters = {"campus": branch, "team_type": "Sales", "is_active": 1}
 	teams = frappe.get_all("CRM Team", filters=team_filters, fields=["name", "team_name", "campus", "is_active"])
-	if profile == "lead_sales":
+	if profile in team_scoped_profiles:
 		teams = [team for team in teams if team.name in allowed_team_names]
 	team_names = {team.name for team in teams}
-	pool_rows = frappe.get_all(
-		"CRM Student Pool",
-		filters={"campus": branch, "is_active": 1},
-		fields=["name", "pool_name", "team", "campus", "is_active"],
-	)
-	pool_rows = [pool for pool in pool_rows if pool.get("team") in team_names]
+	pool_rows = []
+	if profile not in STUDENT_OWNER_PROFILES:
+		pool_rows = frappe.get_all(
+			"CRM Student Pool",
+			filters={"campus": branch, "is_active": 1},
+			fields=["name", "pool_name", "team", "campus", "is_active"],
+		)
+		pool_rows = [pool for pool in pool_rows if pool.get("team") in team_names]
 	pools = [
 		{"name": pool.name, "label": pool.get("pool_name") or pool.name, "campus": pool.get("campus"), "team": pool.get("team")}
 		for pool in pool_rows

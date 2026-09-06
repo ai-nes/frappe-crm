@@ -146,6 +146,7 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_capabilities_are_server_derived_and_data_steward_is_not_a_profile(self):
 		self.assertIn("student.execute", capabilities_for_roles({"Sale"}))
+		self.assertIn("student.ownership.manage", capabilities_for_roles({"Sale"}))
 		self.assertEqual(
 			capabilities_for_roles({"CTV Sale"}),
 			frozenset({"student.execute", "recommendation.decide", "action.execute"}),

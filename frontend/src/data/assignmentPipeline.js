@@ -1,4 +1,4 @@
-import { call } from 'frappe-ui'
+import { call, frappeRequest } from 'frappe-ui'
 
 export const assignmentPipelineMethods = Object.freeze({
   snapshot: 'crm.api.lead_sale.get_student_assignment_workspace',
@@ -6,10 +6,14 @@ export const assignmentPipelineMethods = Object.freeze({
 })
 
 export async function getAssignmentPipelineSnapshot(params = {}) {
-  return call(assignmentPipelineMethods.snapshot, {
-    page: 1,
-    pageSize: 1,
-    ...cleanAssignmentPipelineParams(params),
+  return frappeRequest({
+    url: assignmentPipelineMethods.snapshot,
+    method: 'GET',
+    params: {
+      page: 1,
+      pageSize: 1,
+      ...cleanAssignmentPipelineParams(params),
+    },
   })
 }
 

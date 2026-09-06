@@ -813,20 +813,31 @@ def commit_nba_evaluation_result(
 # Post-commit explanation (best effort, outside the commit fence)
 # --------------------------------------------------------------------------- #
 _RATIONALE_SOURCES = frozenset({"model", "fallback_absent"})
-# WHAT + WHY + WHY NOW + EVIDENCE + UNCERTAINTY + WHEN -- the NBA boundary.
-# ``action``/``timing`` are kernel-owned nested objects (echoed, not chosen,
-# by the narration pass); the remaining top-level strings and ``evidence``
-# are the model's bounded prose. No execution-content field (message copy,
-# CTAs, retry/channel-switch guidance) belongs here -- that is a Template /
-# Sales Playbook / future NBA Evaluation concern, not this Recommendation.
-_EXPLANATION_STR_FIELDS = ("summary", "why_action", "why_now", "uncertainty")
-_EXPLANATION_TOP_FIELDS = frozenset(_EXPLANATION_STR_FIELDS) | {"action", "evidence", "timing"}
+# WHAT the sale must do (action.title) + WHAT GOAL to achieve (objective) +
+# WHY this action rather than another (why_this_action) + at most a few
+# grounded facts (context) -- the NBA boundary. ``action`` is a kernel-owned
+# nested object (echoed, not chosen, by the render pass); ``objective``,
+# ``why_this_action`` and ``context`` are the model's bounded prose. The work
+# item's name lives only once, nested under ``action.title`` -- never
+# model-authored, never duplicated at the top level -- always overridden
+# here with the action's own canonical Vietnamese display name from the
+# action type catalog, regardless of what the caller sent, so the
+# sale-facing work item name can never drift from the single source of
+# truth Frappe owns. No execution-content field (message copy, CTAs,
+# retry/channel-switch guidance) belongs here -- that is a Template / Sales
+# Playbook / future NBA Evaluation concern, not this Recommendation.
+_EXPLANATION_STR_FIELDS = ("objective", "why_this_action")
+_EXPLANATION_TOP_FIELDS = frozenset(_EXPLANATION_STR_FIELDS) | {"action", "context"}
 _EXPLANATION_STR_MAX_CHARS = 500
-_EXPLANATION_LIST_MAX_ITEMS = 8
-_EXPLANATION_ITEM_MAX_CHARS = 400
+_EXPLANATION_LIST_MAX_ITEMS = 3
+_EXPLANATION_ITEM_MAX_CHARS = 200
 _ACTION_FIELDS = frozenset({"code", "title"})
-_TIMING_FIELDS = frozenset({"recommended_at", "reason"})
-_EVIDENCE_ITEM_FIELDS = frozenset({"summary", "evidence_ref"})
+
+
+def _resolve_action_display_name(code: str) -> str:
+	from crm.fcrm.action_type_catalog import display_name_for_wire_action_code
+
+	return display_name_for_wire_action_code(code) or code
 
 
 def _validated_str(value: object, *, field: str, max_chars: int = _EXPLANATION_STR_MAX_CHARS) -> str:
@@ -847,12 +858,12 @@ def _validated_object(value: object, *, field: str, allowed: frozenset[str]) -> 
 
 
 def _validated_explanation(explanation: object) -> dict[str, Any]:
-	"""Bounded structural validation of the grounded, structured explanation.
+	"""Bounded structural validation of the rendered, sale-facing explanation.
 
 	The agent service is the one that grounds each field against the kernel's
-	decision (action, timing, evidence); this validates only shape and bounds
-	-- an unrecognised or missing field, an oversized string, or an oversized
-	list is rejected before the write.
+	decision (action, evidence); this validates only shape and bounds -- an
+	unrecognised or missing field, an oversized string, or an oversized list
+	is rejected before the write.
 	"""
 	if isinstance(explanation, str):
 		try:
@@ -874,36 +885,19 @@ def _validated_explanation(explanation: object) -> dict[str, Any]:
 		validated[field] = _validated_str(explanation.get(field), field=field)
 
 	action = _validated_object(explanation.get("action"), field="action", allowed=_ACTION_FIELDS)
-	validated["action"] = {
-		"code": _validated_str(action.get("code"), field="action.code"),
-		"title": _validated_str(action.get("title"), field="action.title"),
-	}
+	action_code = _validated_str(action.get("code"), field="action.code")
+	# The client-sent title is never trusted -- it is always overridden with
+	# the catalog's own display name.
+	_validated_str(action.get("title"), field="action.title")
+	validated["action"] = {"code": action_code, "title": _resolve_action_display_name(action_code)}
 
-	timing = _validated_object(explanation.get("timing"), field="timing", allowed=_TIMING_FIELDS)
-	validated["timing"] = {
-		"recommended_at": _validated_str(timing.get("recommended_at"), field="timing.recommended_at"),
-		"reason": _validated_str(timing.get("reason"), field="timing.reason"),
-	}
-
-	evidence = explanation.get("evidence")
-	if not isinstance(evidence, list) or len(evidence) > _EXPLANATION_LIST_MAX_ITEMS:
-		frappe.throw("Explanation field 'evidence' is invalid.", frappe.ValidationError)
-	cleaned_evidence = []
-	for item in evidence:
-		validated_item = _validated_object(item, field="evidence[]", allowed=_EVIDENCE_ITEM_FIELDS)
-		cleaned_evidence.append(
-			{
-				"summary": _validated_str(
-					validated_item.get("summary"), field="evidence[].summary", max_chars=_EXPLANATION_ITEM_MAX_CHARS
-				),
-				"evidence_ref": _validated_str(
-					validated_item.get("evidence_ref"),
-					field="evidence[].evidence_ref",
-					max_chars=_EXPLANATION_ITEM_MAX_CHARS,
-				),
-			}
-		)
-	validated["evidence"] = cleaned_evidence
+	context = explanation.get("context")
+	if not isinstance(context, list) or len(context) > _EXPLANATION_LIST_MAX_ITEMS:
+		frappe.throw("Explanation field 'context' is invalid.", frappe.ValidationError)
+	validated["context"] = [
+		_validated_str(item, field="context[]", max_chars=_EXPLANATION_ITEM_MAX_CHARS)
+		for item in context
+	]
 	return validated
 
 

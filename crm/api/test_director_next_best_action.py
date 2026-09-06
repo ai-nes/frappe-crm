@@ -442,16 +442,27 @@ class TestDirectorRecommendationsMapper(FrappeTestCase):
 			set(item),
 			{
 				"id",
+				"target",
+				"action",
+				"priority",
 				"rank",
+				"reason",
+				"objective",
+				"context",
+				"timing",
+				"status",
 				"recommendationKey",
 				"studentId",
 				"actionId",
 				"aiPayload",
+				"explanation",
+				"explanationSource",
 				"evaluation",
 				"generatedAt",
 			},
 		)
 		self.assertEqual(item["rank"], 2)
+		self.assertEqual(item["target"], {"type": "CRM Student", "id": "STU-1"})
 		self.assertEqual(item["recommendationKey"], "key-2")
 		self.assertEqual(item["studentId"], "STU-1")
 		self.assertEqual(item["actionId"], "ACT-2026-0002")
@@ -460,12 +471,10 @@ class TestDirectorRecommendationsMapper(FrappeTestCase):
 		)
 		for forbidden in (
 			"state",
-			"status",
 			"dueAt",
 			"dueLabel",
 			"assignee",
 			"assigneeId",
-			"priority",
 			"version",
 		):
 			self.assertNotIn(forbidden, item)
@@ -561,7 +570,6 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 		for forbidden in (
 			"state",
 			"dueAt",
-			"priority",
 			"assigneeId",
 			"suggestedAssigneeId",
 			"version",

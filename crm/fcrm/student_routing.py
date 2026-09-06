@@ -145,7 +145,7 @@ def _eligible_team_members(
 		if (
 			not staff.get("user")
 			or not frappe.db.get_value("User", staff.user, "enabled")
-			or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales"
+			or resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"}
 		):
 			continue
 		function = next(

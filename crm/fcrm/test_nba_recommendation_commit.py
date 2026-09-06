@@ -490,20 +490,11 @@ if FrappeTestCase is not None:
 		def _explanation(self, **overrides):
 			base = {
 				"action": {"code": "ACT-CALL", "title": "ACT-CALL"},
-				"summary": "Học viên đang ở giai đoạn cân nhắc học phí.",
-				"why_action": "Hành động này phù hợp vì học viên đã hỏi về học phí.",
-				"why_now": "Học viên im lặng 9 ngày sau khi hỏi về học phí, nên gọi ngay.",
-				"evidence": [
-					{
-						"summary": "Học viên đã hỏi về học phí trước khi im lặng.",
-						"evidence_ref": "interaction:CRMI-1001",
-					}
-				],
-				"uncertainty": "Độ tin cậy ở mức trung bình vì dữ liệu tương tác còn ít.",
-				"timing": {
-					"recommended_at": "2026-09-10T00:00:00+00:00",
-					"reason": "Thời điểm đề xuất nằm trong khung giờ khả thi.",
-				},
+				"objective": "Xác nhận học viên còn cân nhắc học phí không.",
+				"why_this_action": (
+					"Học viên im lặng 9 ngày sau khi hỏi về học phí, nên gọi ngay để xác nhận vướng mắc."
+				),
+				"context": ["Học viên đã hỏi về học phí trước khi im lặng."],
 			}
 			base.update(overrides)
 			return base
@@ -518,8 +509,12 @@ if FrappeTestCase is not None:
 			)
 			self.assertEqual(result["status"], "set")
 			stored = frappe.parse_json(frappe.db.get_value("CRM Recommendation", rec.name, "explanation"))
-			self.assertEqual(stored["summary"], explanation["summary"])
-			self.assertEqual(stored["evidence"], explanation["evidence"])
+			# `action.title` is never trusted from the caller -- always the
+			# catalog's own display name for the action code, here "Gọi điện"
+			# for CALL. There is no top-level `title` duplicate.
+			self.assertNotIn("title", stored)
+			self.assertEqual(stored["action"]["title"], "Gọi điện")
+			self.assertEqual(stored["context"], explanation["context"])
 			self.assertEqual(frappe.db.get_value("CRM Recommendation", rec.name, "rationale_source"), "model")
 
 		def test_same_value_replay_is_idempotent(self):
@@ -542,11 +537,11 @@ if FrappeTestCase is not None:
 			with self.assertRaises(frappe.ValidationError):
 				nba_evaluations.set_recommendation_rationale(
 					recommendation=rec.name,
-					explanation=self._explanation(summary="Bản khác hẳn."),
+					explanation=self._explanation(objective="Bản khác hẳn."),
 					source="model",
 				)
 			stored = frappe.parse_json(frappe.db.get_value("CRM Recommendation", rec.name, "explanation"))
-			self.assertNotEqual(stored["summary"], "Bản khác hẳn.")
+			self.assertNotEqual(stored["objective"], "Bản khác hẳn.")
 
 		def test_unrecognised_source_is_rejected(self):
 			rec = self._recommendation()
@@ -565,7 +560,7 @@ if FrappeTestCase is not None:
 		def test_missing_field_is_rejected(self):
 			rec = self._recommendation()
 			explanation = self._explanation()
-			del explanation["uncertainty"]
+			del explanation["objective"]
 			with self.assertRaises(frappe.ValidationError):
 				nba_evaluations.set_recommendation_rationale(
 					recommendation=rec.name, explanation=explanation, source="model"
@@ -589,7 +584,7 @@ if FrappeTestCase is not None:
 			rec.save(ignore_permissions=True)
 
 			fresh = frappe.get_doc("CRM Recommendation", rec.name)
-			fresh.explanation = self._explanation(summary="Bản khác qua ORM.")
+			fresh.explanation = self._explanation(objective="Bản khác qua ORM.")
 			fresh.flags.ignore_links = True
 			with self.assertRaises(frappe.ValidationError):
 				fresh.save(ignore_permissions=True)
@@ -606,7 +601,11 @@ if FrappeTestCase is not None:
 			fresh.flags.ignore_links = True
 			fresh.save(ignore_permissions=True)
 			stored = frappe.parse_json(frappe.get_doc("CRM Recommendation", rec.name).explanation)
-			self.assertEqual(stored["summary"], explanation["summary"])
+			# This path writes via the ORM directly, bypassing
+			# `set_recommendation_rationale`'s catalog title resolution -- the
+			# doctype's write-once guard only compares equality, so the raw
+			# value set above is what persists.
+			self.assertEqual(stored["action"]["title"], explanation["action"]["title"])
 
 
 if __name__ == "__main__":

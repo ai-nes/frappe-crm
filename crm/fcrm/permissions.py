@@ -1,9 +1,13 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
 Implements the locked row-level data-scope matrix:
-- Sale / CTV Sale        -> own-assigned records only
+- Sale / CTV Sale        -> own-assigned records only for direct CRUD/detail
 - Lead Sale              -> own team(s) + own team's unassigned pool
 - System Manager / CRM Manager / Administrator / Admissions Director -> full
+
+The Sale student-list projection is intentionally handled by the dashboard API
+as a separate read-only team/pool view because Sale has ownership-assignment
+authority. It does not change this canonical CRUD/detail scope.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -17,6 +21,7 @@ import frappe
 from crm.fcrm.role_policy import (
 	case_scope_for_roles,
 	delete_requires_ownership_for_roles,
+	resolve_crm_profile,
 )
 from crm.fcrm.student_feature_flags import enabled
 
@@ -195,6 +200,50 @@ def get_permission_query_conditions(doctype, user=None):
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
+
+
+def get_student_list_read_condition(user=None):
+	"""Return the list-only Student read scope for roles with assignment access.
+
+	Sale keeps the canonical assigned-only row scope for direct CRUD and detail
+	operations, but the student list must expose the Sale's team and team pool so
+	the user can choose a target for an ownership assignment. The assignment
+	command still enforces its own authorization and ownership revision checks.
+	Other profiles return ``None`` so callers continue using the canonical
+	permission query hook unchanged.
+	"""
+	user = user or frappe.session.user
+	if resolve_crm_profile(frappe.get_roles(user)) != "sales":
+		return None
+
+	crm_staff_name = _get_crm_staff_name(user)
+	if not crm_staff_name:
+		return "1=0"
+
+	table = "`tabCRM Student`"
+	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
+	team_condition = _team_leader_condition(table, crm_staff_name)
+	return f"({own_condition} or {team_condition})"
+
+
+def has_student_list_read_permission(doc, user=None):
+	"""Check the Student read scope used by list-and-assign flows.
+
+	For ordinary Student CRUD/detail access, callers must continue using
+	``has_permission``. Sale's assignment flow is the one deliberate exception:
+	it may inspect a Student in its own team or pool before assigning it.
+	"""
+	condition = get_student_list_read_condition(user)
+	if condition is None:
+		return has_permission(doc, user=user, permission_type="read")
+	if condition == "1=0" or not getattr(doc, "name", None):
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tabCRM Student` where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
 
 
 def get_interaction_permission_query_conditions(user=None, doctype=None):

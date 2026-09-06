@@ -62,6 +62,7 @@ immutable audit-row cleanup remains a separate fixture teardown concern. See
 `assignment-overview.spec.ts` is an additional guarded manager-to-Sale journey.
 It does not seed or reset data from the browser. Seed the local demo first, then
 provide the manager and assignment-Sale credentials above and run only that spec
-when checking the setup workspace. The test covers batch school mapping, direct
-Staff context setup and CRM Student intake-to-routing, with Campus derived from
-the Sale user's Staff context.
+when checking the setup workspace. The test covers the read-only assignment tree,
+the guided setup checklist, and CRM Student intake-to-routing. It does not mutate
+topology data from the browser; Campus is derived from the Sale user's Staff
+context.

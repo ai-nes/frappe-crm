@@ -13,12 +13,13 @@ Consumer-kernel determinism is covered against this shared wire contract in
 from datetime import datetime
 import json
 import pathlib
+import unittest
 from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api import student_decision_context
-from crm.api.nba_evaluation import build_nba_evaluation_input
+from crm.api.nba_evaluation import _shape_eligible_action_set, build_nba_evaluation_input
 from crm.fcrm import nba_policy
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import input_digest
@@ -136,3 +137,50 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["action_code"], "CALL")
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["addresses_opportunities"], ["ENGAGE_OR_REENGAGE"])
 		self.assertTrue(all(action["addresses_opportunities"] for action in first["eligible_action_set"]["actions"]))
+
+
+class TestShapeEligibleActionSetTiming(unittest.TestCase):
+	"""``CRM Action.allowed_time_slots`` -> ``normalized_timing_domain`` translation."""
+
+	_DIGEST = "a" * 64
+
+	def _eligible(self, allowed_time_slots):
+		return {
+			"revision": 1,
+			"exclusions": [],
+			"actions": [
+				{
+					"code": "CALL",
+					"revision": 1,
+					"digest": self._DIGEST,
+					"category": "CONTACT",
+					"default_channel": "CALL",
+					"requires_parent_authority": False,
+					"academic_constraint": {},
+					"allowed_actors": ["Sale"],
+					"purpose": "Re-engage the student.",
+					"addresses_opportunities": ["ENGAGE_OR_REENGAGE"],
+					"allowed_time_slots": allowed_time_slots,
+				}
+			],
+		}
+
+	def test_configured_slots_become_allowed_windows(self):
+		shaped = _shape_eligible_action_set(self._eligible(["6-12", "18-24"]), timezone="Asia/Ho_Chi_Minh")
+		domain = shaped["actions"][0]["normalized_timing_domain"]
+		self.assertEqual(domain["timezone"], "Asia/Ho_Chi_Minh")
+		self.assertEqual(
+			domain["allowed_windows"],
+			[
+				{"code": "6-12", "from": "06:00", "to": "12:00"},
+				{"code": "18-24", "from": "18:00", "to": "00:00"},
+			],
+		)
+
+	def test_no_configured_slots_stays_unconstrained(self):
+		shaped = _shape_eligible_action_set(self._eligible([]), timezone="Asia/Ho_Chi_Minh")
+		self.assertEqual(shaped["actions"][0]["normalized_timing_domain"], {})
+
+	def test_missing_slots_field_stays_unconstrained(self):
+		shaped = _shape_eligible_action_set(self._eligible(None), timezone="Asia/Ho_Chi_Minh")
+		self.assertEqual(shaped["actions"][0]["normalized_timing_domain"], {})

@@ -11,14 +11,14 @@
             aria-hidden="true"
           />
           <h2 class="font-semibold text-ink-gray-9">
-            {{ __('Phân công nhân sự') }}
+            {{ __('Kiểm tra điều kiện nhận Lead') }}
           </h2>
         </div>
       </div>
       <Button
         variant="subtle"
         size="sm"
-        :label="__('Làm mới kiểm tra')"
+        :label="__('Làm mới')"
         iconLeft="refresh-cw"
         :loading="loading"
         @click="$emit('refresh')"
@@ -34,88 +34,49 @@
         <strong class="tabular-nums font-semibold text-ink-gray-9">{{
           summary.accounts || 0
         }}</strong>
-        {{ __('tài khoản') }}
+        {{ __('người nhận Lead') }}
       </span>
       <span>
         <strong class="tabular-nums font-semibold text-green-700">{{
           summary.ready_accounts || 0
         }}</strong>
-        {{ __('sẵn sàng') }}
+        {{ __('đã đủ điều kiện') }}
       </span>
       <span>
         <strong class="tabular-nums font-semibold text-orange-700">{{
           summary.needs_review_accounts || 0
         }}</strong>
-        {{ __('cần rà soát') }}
-      </span>
-      <span v-if="summary.permission_profile_missing" class="text-orange-700">
-        {{ __('Thiếu Permission Profile') }}:
-        <strong class="tabular-nums font-semibold">{{
-          summary.permission_profile_missing
-        }}</strong>
-      </span>
-      <span v-if="summary.crm_staff_missing" class="text-orange-700">
-        {{ __('Thiếu profile Staff') }}:
-        <strong class="tabular-nums font-semibold">{{
-          summary.crm_staff_missing
-        }}</strong>
-      </span>
-      <span v-if="summary.team_membership_missing" class="text-orange-700">
-        {{ __('Thiếu Team') }}:
-        <strong class="tabular-nums font-semibold">{{
-          summary.team_membership_missing
-        }}</strong>
-      </span>
-      <span v-if="summary.campus_missing" class="text-orange-700">
-        {{ __('Thiếu Campus') }}:
-        <strong class="tabular-nums font-semibold">{{
-          summary.campus_missing
-        }}</strong>
+        {{ __('cần setup') }}
       </span>
     </div>
 
-    <div class="mt-3 flex flex-wrap items-center justify-between gap-2">
+    <div class="mt-3">
       <p class="text-xs text-ink-gray-5">
-        {{
-          showAccounts
-            ? __('Đang hiển thị danh sách tài khoản để xử lý.')
-            : __('Chỉ mở danh sách khi cần chỉnh từng tài khoản.')
-        }}
+        {{ __('Chỉ hiển thị người có thể tham gia nhận Lead.') }}
       </p>
-      <button
-        type="button"
-        class="inline-flex min-h-11 items-center gap-1.5 rounded-md border border-outline-gray-2 px-3 py-2 text-sm font-medium text-ink-gray-7 hover:bg-surface-gray-2 focus:outline-none focus:ring-2 focus:ring-outline-gray-4"
-        :aria-expanded="showAccounts"
-        data-testid="toggle-readiness-accounts"
-        @click="showAccounts = !showAccounts"
-      >
-        <FeatherIcon
-          :name="showAccounts ? 'chevron-up' : 'chevron-down'"
-          class="size-4"
-          aria-hidden="true"
-        />
-        {{
-          showAccounts
-            ? __('Ẩn danh sách tài khoản')
-            : __('Xem danh sách tài khoản')
-        }}
-      </button>
     </div>
 
     <div
-      v-if="showAccounts && visibleRows.length"
+      v-if="visibleRows.length"
       class="mt-3 max-h-[650px] overflow-auto rounded-md border border-outline-gray-1"
     >
-      <table class="w-full min-w-[1180px] table-fixed text-sm">
+      <table class="w-full min-w-[1200px] table-fixed text-sm">
+        <colgroup>
+          <col class="w-[230px]" />
+          <col class="w-[150px]" />
+          <col class="w-[270px]" />
+          <col class="w-[290px]" />
+          <col class="w-[260px]" />
+        </colgroup>
         <thead
           class="sticky top-0 z-10 bg-surface-gray-2 text-left text-xs text-ink-gray-6"
         >
           <tr>
-            <th class="w-[21%] px-3 py-2">{{ __('Tài khoản') }}</th>
-            <th class="w-[18%] px-3 py-2">{{ __('Role') }}</th>
-            <th class="w-[27%] px-3 py-2">{{ __('Thông tin phụ trách') }}</th>
-            <th class="w-[19%] px-3 py-2">{{ __('Trạng thái') }}</th>
-            <th class="w-[15%] px-3 py-2 text-right">{{ __('Thao tác') }}</th>
+            <th class="px-3 py-2">{{ __('Nhân sự') }}</th>
+            <th class="px-3 py-2">{{ __('Vai trò') }}</th>
+            <th class="px-3 py-2">{{ __('Nhóm & cơ sở') }}</th>
+            <th class="px-3 py-2">{{ __('Cần bổ sung') }}</th>
+            <th class="px-3 py-2 text-right">{{ __('Thao tác') }}</th>
           </tr>
         </thead>
         <tbody>
@@ -132,43 +93,17 @@
             </td>
             <td class="px-3 py-3">
               <p class="font-medium text-ink-gray-9">{{ primaryRole(row) }}</p>
-              <p
-                v-if="row.roles.length > 1"
-                class="mt-1 truncate text-xs text-ink-gray-5"
-                :title="row.roles.join(', ')"
-              >
-                {{ row.roles.length }} {{ __('quyền') }}
-              </p>
-              <p
-                class="mt-1 text-xs"
-                :class="
-                  row.permission_profile.exists ||
-                  row.role_state === 'platform_superuser'
-                    ? 'text-green-700'
-                    : 'text-orange-700'
-                "
-              >
-                {{
-                  row.permission_profile.exists ||
-                  row.role_state === 'platform_superuser'
-                    ? __('Profile sẵn sàng')
-                    : __('Thiếu Profile')
-                }}
-              </p>
             </td>
             <td class="px-3 py-3">
               <template v-if="row.crm_staff.name">
-                <p class="font-medium text-ink-gray-9">
-                  {{ row.crm_staff.full_name || row.crm_staff.name }}
-                </p>
                 <p
-                  class="mt-1 truncate text-xs text-ink-gray-6"
+                  class="truncate text-sm text-ink-gray-7"
                   :title="row.crm_staff.teams.join(', ')"
                 >
                   {{
                     row.crm_staff.teams.length
                       ? row.crm_staff.teams.join(', ')
-                      : __('Chưa có Team')
+                      : __('Chưa gán nhóm')
                   }}
                 </p>
                 <p
@@ -177,29 +112,44 @@
                     row.crm_staff.campus ? 'text-ink-gray-5' : 'text-orange-700'
                   "
                 >
-                  {{ row.crm_staff.campus || __('Chưa có Campus') }}
+                  {{ row.crm_staff.campus || __('Chưa gán cơ sở') }}
                 </p>
               </template>
               <span v-else class="text-orange-700">{{
-                __('Chưa có profile Staff')
+                __('Chưa có hồ sơ nhân sự')
               }}</span>
             </td>
-            <td class="px-3 py-3 text-right">
+            <td class="min-w-0 px-3 py-3">
               <IdentityProfileStatus :row="row" />
               <p
                 v-if="row.issues.length"
-                class="mt-1 line-clamp-2 text-left text-xs text-orange-800"
+                class="mt-1 max-w-full break-words whitespace-normal text-xs leading-4 text-orange-800"
                 :title="issueLabels(row)"
               >
                 {{ issueSummary(row) }}
               </p>
+              <p v-else class="mt-1 max-w-full whitespace-normal text-xs leading-4 text-ink-gray-5">
+                {{ __('Tài khoản đã đủ thông tin') }}
+              </p>
             </td>
-            <td class="px-3 py-3 text-right">
-              <div :data-testid="`assignment-actions-${row.user}`">
+            <td class="w-[260px] min-w-[260px] whitespace-nowrap px-3 py-3 text-right">
+              <div
+                class="flex flex-nowrap items-center justify-end gap-2"
+                :data-testid="`assignment-actions-${row.user}`"
+              >
+                <Button
+                  v-if="canEditRow(row)"
+                  size="sm"
+                  variant="solid"
+                  :label="__('Hoàn tất setup')"
+                  iconLeft="settings"
+                  :loading="savingUser === row.user"
+                  @click="openStaffContext(row)"
+                />
                 <Dropdown
                   :options="actionOptions(row)"
                   :button="{
-                    label: __('Thao tác'),
+                    label: __('Khác'),
                     iconLeft: 'more-horizontal',
                     variant: 'subtle',
                     loading: savingUser === row.user,
@@ -213,21 +163,13 @@
       </table>
     </div>
     <p
-      v-else-if="showAccounts"
+      v-else
       class="mt-4 rounded-md bg-surface-gray-2 p-4 text-sm text-ink-gray-5"
     >
       {{ __('Không có tài khoản cần hiển thị.') }}
     </p>
-    <p
-      v-if="showAccounts && rows.length > maxRows"
-      class="mt-3 text-xs text-ink-gray-5"
-    >
-      {{
-        __(
-          'Đang hiển thị {0} tài khoản đầu tiên. Dùng bộ lọc hoặc mở Users để xử lý tiếp.',
-          [maxRows],
-        )
-      }}
+    <p v-if="visibleRows.length > maxRows" class="mt-3 text-xs text-ink-gray-5">
+      {{ __('Đang hiển thị {0} tài khoản đầu tiên.', [maxRows]) }}
     </p>
     <StaffContextModal
       v-model="staffContextOpen"
@@ -253,29 +195,46 @@ const emit = defineEmits(['refresh'])
 const maxRows = 30
 const savingUser = ref('')
 const rows = computed(() => props.data?.rows || [])
-const visibleRows = computed(() => rows.value.slice(0, maxRows))
+const actionRows = computed(() =>
+  rows.value.filter((row) => row.status !== 'healthy'),
+)
+const visibleRows = computed(() => actionRows.value.slice(0, maxRows))
 const summary = computed(() => props.data?.summary || {})
 const canEditIdentity = computed(() =>
   Boolean(props.data?.capabilities?.can_edit_identity),
 )
 const staffContextOpen = ref(false)
 const staffContextRow = ref(null)
-const showAccounts = ref(false)
 
 function primaryRole(row) {
   if (row.role_state === 'platform_superuser') return __('Admin')
+  if (row.role_state === 'unmapped') return __('Chưa gán vai trò')
+  if (row.role_state === 'mixed_or_unmapped') return __('Vai trò cần rà soát')
   return row.crm_profile_label || row.role_state || '—'
 }
 
 function issueLabels(row) {
-  return row.issues.map((issue) => issue.label).join(' · ')
+  return row.issues.map((issue) => friendlyIssueLabel(issue)).join(' · ')
 }
 
 function issueSummary(row) {
-  const labels = row.issues.map((issue) => issue.label)
+  const labels = row.issues.map((issue) => friendlyIssueLabel(issue))
   const visible = labels.slice(0, 2).join(' · ')
   const remaining = labels.length - 2
   return remaining > 0 ? `${visible} · +${remaining}` : visible
+}
+
+function friendlyIssueLabel(issue) {
+  const labels = {
+    role_not_supported: __('Cần rà soát vai trò'),
+    permission_profile_missing: __('Thiếu quyền sử dụng'),
+    user_disabled: __('Tài khoản đang tắt'),
+    crm_staff_missing: __('Chưa có hồ sơ nhân sự'),
+    crm_staff_inactive: __('Hồ sơ nhân sự đang tắt'),
+    team_membership_missing: __('Chưa gán nhóm'),
+    campus_missing: __('Chưa gán cơ sở'),
+  }
+  return labels[issue.code] || issue.label
 }
 
 function canEditRow(row) {
@@ -290,34 +249,25 @@ function actionOptions(row) {
   const options = []
   if (canEditRow(row)) {
     options.push({
-      label: __('Thiết lập Role'),
+      label: __('Đổi vai trò'),
       icon: 'shield',
       submenu: roleOptions(row),
     })
   }
   options.push(
     {
-      label: __('Mở User'),
+      label: __('Mở tài khoản'),
       icon: 'user',
       onClick: () => openExternal(`/app/user/${encodeURIComponent(row.user)}`),
     },
     {
       label: row.crm_staff.name
-        ? __('Mở hồ sơ Staff')
-        : __('Mở danh sách Staff'),
+        ? __('Mở hồ sơ nhân sự')
+        : __('Mở danh sách nhân sự'),
       icon: 'users',
       onClick: () => openExternal(crmStaffHref(row)),
     },
   )
-  if (canEditRow(row)) {
-    options.push({
-      label: row.crm_staff.name
-        ? __('Chỉnh thông tin phụ trách')
-        : __('Tạo thông tin phụ trách'),
-      icon: row.crm_staff.name ? 'edit-2' : 'plus',
-      onClick: () => openStaffContext(row),
-    })
-  }
   return options
 }
 
@@ -340,15 +290,10 @@ async function updateRole(row, newRole) {
       user: row.user,
       new_role: newRole,
     })
-    toast.success(
-      __(
-        'Đã cập nhật Role cho {0}. CRM Permission Profile sẽ được resolve lại theo Role.',
-        [row.full_name],
-      ),
-    )
+    toast.success(__('Đã cập nhật vai trò cho {0}.', [row.full_name]))
     emit('refresh')
   } catch (error) {
-    toast.error(error?.messages?.[0] || __('Không thể cập nhật Role.'))
+    toast.error(error?.messages?.[0] || __('Không thể cập nhật vai trò.'))
   } finally {
     savingUser.value = ''
   }

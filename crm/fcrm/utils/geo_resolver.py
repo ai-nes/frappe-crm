@@ -67,15 +67,13 @@ def resolve_high_school(school_value, province_value=None):
 
 	province = _get_province_context(province_value)
 	scoped_filters = []
-	if province.get("province_code"):
+	if province.get("name"):
 		scoped_filters.extend(
 			[
-				{"school_code": school_value, "province_code": province.province_code},
-				{"school_name": school_value, "province_code": province.province_code},
+				{"school_code": school_value, "province": province.name},
+				{"school_name": school_value, "province": province.name},
 			]
 		)
-	if province.get("province_name"):
-		scoped_filters.append({"school_name": school_value, "province_name": province.province_name})
 
 	name = _first_matching_docname(
 		"CRM High School",
@@ -100,16 +98,13 @@ def resolve_high_school_strict(school_value, province_value=None):
 	code_matches = frappe.get_all(
 		"CRM High School",
 		filters={"school_code": school_value},
-		fields=["name", "province_code", "province_name"],
+		fields=["name", "province"],
 	)
 	if len(code_matches) == 1:
 		return code_matches[0].name
 	if len(code_matches) > 1:
 		scoped_matches = [
-			match
-			for match in code_matches
-			if (province.get("province_code") and match.province_code == province.province_code)
-			or (province.get("province_name") and match.province_name == province.province_name)
+			match for match in code_matches if province.get("name") and match.province == province.name
 		]
 		if len(scoped_matches) == 1:
 			return scoped_matches[0].name
@@ -123,7 +118,7 @@ def resolve_high_school_strict(school_value, province_value=None):
 
 	candidates = frappe.get_all(
 		"CRM High School",
-		fields=["name", "school_name", "province_code", "province_name"],
+		fields=["name", "school_name", "province"],
 		order_by="name",
 	)
 	matches = [c for c in candidates if normalize_text(c.school_name) == target]
@@ -134,23 +129,23 @@ def resolve_high_school_strict(school_value, province_value=None):
 			title="Trường học không hợp lệ",
 		)
 
-	distinct_provinces = {(m.province_code, m.province_name) for m in matches}
+	distinct_provinces = {m.province for m in matches}
 	if len(distinct_provinces) <= 1:
 		# Duplicate rows within the same province are a data-quality issue, not
 		# the multi-province ambiguity FR-04 cares about — pick the first match.
 		return matches[0].name
 
-	if province.get("province_code") or province.get("province_name"):
-		scoped = [
-			m
-			for m in matches
-			if (province.get("province_code") and m.province_code == province.province_code)
-			or (province.get("province_name") and m.province_name == province.province_name)
-		]
+	if province.get("name"):
+		scoped = [m for m in matches if m.province == province.name]
 		if len(scoped) == 1:
 			return scoped[0].name
 
-	province_names = sorted({m.province_name or m.province_code or "?" for m in matches})
+	province_names = sorted(
+		{
+			frappe.db.get_value("CRM Province", m.province, "province_name") or m.province or "?"
+			for m in matches
+		}
+	)
 	frappe.throw(
 		f"Trường <b>{school_value}</b> tồn tại ở nhiều tỉnh ({', '.join(province_names)}). "
 		"Vui lòng bổ sung đúng tỉnh/thành để xác định trường chính xác.",

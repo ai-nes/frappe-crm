@@ -2,7 +2,7 @@
 
 import frappe
 
-from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.role_policy import capabilities_for_roles, resolve_crm_profile
 from crm.fcrm.student_assignment import fairness_report
 from crm.fcrm.student_lead_operations import (
 	complete_ctv_item,
@@ -15,10 +15,12 @@ from crm.fcrm.student_lead_operations import (
 
 @frappe.whitelist(methods=["POST"])
 def manager_reassign(student, target_staff, target_team, reason, expected_revision, emergency_override=False):
-	roles = frappe.get_roles(frappe.session.user)
+	actor = frappe.session.user
+	roles = frappe.get_roles(actor)
+	profile = resolve_crm_profile(roles)
 	if "student.ownership.manage" not in capabilities_for_roles(
-		roles, administrator=frappe.session.user == "Administrator"
-	):
+		roles, administrator=actor == "Administrator"
+	) or profile not in {"lead_sales", "admissions_director"}:
 		frappe.throw("Manager ownership capability is required.", frappe.PermissionError)
 	return manager_reassign_student(
 		student, target_staff, target_team, reason, expected_revision, emergency_override=emergency_override
