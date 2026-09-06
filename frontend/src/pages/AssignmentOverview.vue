@@ -53,7 +53,9 @@
             :aria-selected="tabIndex === index"
             :aria-controls="`assignment-panel-${tab.key}`"
             class="shrink-0 border-b-2 border-transparent px-1 py-3 text-base text-ink-gray-5 transition hover:text-ink-gray-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-            :class="tabIndex === index ? 'border-ink-gray-9 text-ink-gray-9' : ''"
+            :class="
+              tabIndex === index ? 'border-ink-gray-9 text-ink-gray-9' : ''
+            "
             @click="tabIndex = index"
           >
             {{ tab.label }}
@@ -86,7 +88,11 @@
                   :title="__('Các bước setup')"
                   @click="setupDrawerOpen = true"
                 >
-                  <FeatherIcon name="help-circle" class="size-4" aria-hidden="true" />
+                  <FeatherIcon
+                    name="help-circle"
+                    class="size-4"
+                    aria-hidden="true"
+                  />
                 </button>
               </template>
             </AssignmentOverviewFilters>
@@ -316,13 +322,20 @@ async function reload({ append = false } = {}) {
   const payloadRows = payload?.rows || []
   if (!assignmentScope.value) {
     rows.value = append ? [...rows.value, ...payloadRows] : payloadRows
-    if (!append) topologyRows.value = payloadRows.filter((row) => row.level !== 'high_school')
+    if (!append)
+      topologyRows.value = payloadRows.filter(
+        (row) => row.level !== 'high_school',
+      )
     return
   }
 
   const scopedSchools = payloadRows.filter((row) => row.level === 'high_school')
-  const scopedTopology = payloadRows.filter((row) => row.level !== 'high_school')
-  const topology = append ? rows.value.filter((row) => row.level !== 'high_school') : topologyRows.value
+  const scopedTopology = payloadRows.filter(
+    (row) => row.level !== 'high_school',
+  )
+  const topology = append
+    ? rows.value.filter((row) => row.level !== 'high_school')
+    : topologyRows.value
   const topologyById = new Map(
     [...topology, ...scopedTopology].map((row) => [row.id, row]),
   )
@@ -387,9 +400,7 @@ async function saveCapacity(payload) {
     await refreshControl()
     toast.success(__('Đã cập nhật giới hạn Lead.'))
   } catch (error) {
-    toast.error(
-      error?.messages?.[0] || __('Không thể cập nhật giới hạn Lead.'),
-    )
+    toast.error(error?.messages?.[0] || __('Không thể cập nhật giới hạn Lead.'))
   } finally {
     capacitySaving.value = false
   }

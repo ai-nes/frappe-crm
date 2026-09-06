@@ -1135,18 +1135,18 @@ def get_setup_workspace():
 
 @frappe.whitelist(methods=["POST"])
 def create_setup_reference(
-	action,
-	name=None,
-	code=None,
-	province=None,
-	cluster=None,
-	team=None,
-	campus=None,
-	is_active=True,
-	reason=None,
-	idempotency_key=None,
-	correlation_id=None,
-):
+	action: str,
+	name: str | None = None,
+	code: str | None = None,
+	province: str | None = None,
+	cluster: str | None = None,
+	team: str | None = None,
+	campus: str | None = None,
+	is_active: bool | str | None = True,
+	reason: str | None = None,
+	idempotency_key: str | None = None,
+	correlation_id: str | None = None,
+) -> dict:
 	"""Create a geography or routing reference from the guarded setup UI.
 
 	The command intentionally supports creation only. Existing geography and
