@@ -78,28 +78,17 @@
               </div>
             </article>
 
-            <div v-if="step.id === 'input'" class="pipeline-connector connector-input-validation" aria-hidden="true">
-              <span>{{ __('Tiếp nhận') }}</span><FeatherIcon name="arrow-right" class="size-4" />
-            </div>
-            <div v-else-if="step.id === 'validation'" class="pipeline-connector connector-validation-classification" aria-hidden="true">
-              <span>{{ __('Pool hợp lệ') }}</span><FeatherIcon name="arrow-right" class="size-4" />
-            </div>
           </template>
 
-          <div class="pipeline-branch branch-input-review" aria-hidden="true">
-            <FeatherIcon name="corner-left-down" class="size-4" /><span>{{ __('Thiếu dữ liệu') }}</span>
-          </div>
-          <div class="pipeline-branch branch-classification-matching" aria-hidden="true">
-            <FeatherIcon name="corner-right-down" class="size-4" /><span>{{ __('Xác định Tier') }}</span>
-          </div>
-          <div class="pipeline-branch branch-matching-review" aria-hidden="true">
-            <FeatherIcon name="corner-left-down" class="size-4" /><span>{{ __('Deferred / queue') }}</span>
-          </div>
-          <div class="pipeline-branch branch-matching-assignment" aria-hidden="true">
-            <FeatherIcon name="arrow-down" class="size-4" /><span>{{ __('Tier 1/2 · áp dụng') }}</span>
-          </div>
-          <div class="pipeline-branch branch-review-assignment" aria-hidden="true">
-            <FeatherIcon name="corner-right-down" class="size-4" /><span>{{ __('Resolve thủ công') }}</span>
+          <div
+            v-for="connection in connections"
+            :key="connectionKey(connection)"
+            class="pipeline-connection"
+            :class="connectionClass(connection)"
+            aria-hidden="true"
+          >
+            <span v-if="connection.label">{{ connection.label }}</span>
+            <FeatherIcon :name="connectionIcon(connection)" class="size-4" />
           </div>
         </div>
       </div>
@@ -173,15 +162,29 @@ import {
   workflowStepStatusClass,
 } from '@/data/assignmentPipeline'
 
+const CONNECTION_PRESENTATION = Object.freeze({
+  'input-validation': { className: 'connection-input-validation', icon: 'arrow-right' },
+  'validation-classification': { className: 'connection-validation-classification', icon: 'arrow-right' },
+  'classification-matching': { className: 'connection-classification-matching', icon: 'corner-left-down' },
+  'classification-review': { className: 'connection-classification-review', icon: 'corner-left-down' },
+  'matching-review': { className: 'connection-matching-review', icon: 'corner-left-down' },
+  'matching-assignment': { className: 'connection-matching-assignment', icon: 'arrow-down' },
+  'review-assignment': { className: 'connection-review-assignment', icon: 'corner-right-down' },
+})
+
 const data = ref(null)
 const loading = ref(false)
 const running = ref(false)
 const error = ref(null)
 const selectedStep = ref(null)
 const closeButton = ref(null)
+const emit = defineEmits(['pipeline-run'])
 
 const workflow = computed(() => data.value?.workflow || {})
 const steps = computed(() => workflow.value.steps || [])
+const connections = computed(() =>
+  Array.isArray(workflow.value.connections) ? workflow.value.connections : [],
+)
 const progress = computed(() => workflowProgress(workflow.value))
 const lastRun = computed(() => workflow.value.lastRun || null)
 const statusMessage = computed(() => {
@@ -208,6 +211,7 @@ async function runPipeline() {
   error.value = null
   try {
     data.value = await runAssignmentPipeline({ limit: 50 })
+    emit('pipeline-run', data.value)
   } catch (err) {
     error.value = err
   } finally {
@@ -217,6 +221,18 @@ async function runPipeline() {
 
 function stepClass(step) {
   return workflowStepStatusClass(step.status)
+}
+
+function connectionKey(connection) {
+  return `${connection.source || 'unknown'}-${connection.target || 'unknown'}`
+}
+
+function connectionClass(connection) {
+  return CONNECTION_PRESENTATION[connectionKey(connection)]?.className || 'connection-unknown'
+}
+
+function connectionIcon(connection) {
+  return CONNECTION_PRESENTATION[connectionKey(connection)]?.icon || 'arrow-right'
 }
 
 function stepIcon(status) {
@@ -334,8 +350,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 .node-matching { grid-column: 3; grid-row: 3; }
 .node-assignment { grid-column: 3; grid-row: 5; }
 
-.pipeline-connector,
-.pipeline-branch {
+.pipeline-connection {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -346,58 +361,59 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
   text-align: center;
 }
 
-.pipeline-connector {
+.connection-input-validation,
+.connection-validation-classification {
+  flex-direction: row;
+}
+
+.connection-classification-matching,
+.connection-classification-review,
+.connection-matching-review,
+.connection-matching-assignment,
+.connection-review-assignment {
   flex-direction: column;
 }
 
-.pipeline-connector::before,
-.pipeline-branch::before {
-  content: '';
-  position: absolute;
-  background: rgb(251 146 60);
-}
+.connection-input-validation { grid-column: 2; grid-row: 1; }
+.connection-validation-classification { grid-column: 4; grid-row: 1; }
 
-.connector-input-validation { grid-column: 2; grid-row: 1; }
-.connector-validation-classification { grid-column: 4; grid-row: 1; }
-
-.branch-input-review {
+.connection-classification-review {
   position: absolute;
   left: 16%;
   top: 31%;
-  flex-direction: column;
   color: rgb(194 65 12);
 }
 
-.branch-classification-matching {
+.connection-classification-matching {
   position: absolute;
   right: 26%;
   top: 31%;
-  flex-direction: column;
   color: rgb(194 65 12);
 }
 
-.branch-matching-review {
+.connection-matching-review {
   position: absolute;
   left: 27%;
   top: 56%;
-  flex-direction: column;
   color: rgb(194 65 12);
 }
 
-.branch-matching-assignment {
+.connection-matching-assignment {
   position: absolute;
   left: 50%;
   top: 76%;
-  flex-direction: column;
   color: rgb(194 65 12);
 }
 
-.branch-review-assignment {
+.connection-review-assignment {
   position: absolute;
   left: 16%;
   top: 76%;
-  flex-direction: column;
   color: rgb(100 116 139);
+}
+
+.connection-unknown {
+  display: none;
 }
 
 .is-running .pipeline-step {
@@ -431,8 +447,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
     text-align: center;
   }
 
-  .pipeline-connector,
-  .pipeline-branch {
+  .pipeline-connection {
     display: none;
   }
 }
