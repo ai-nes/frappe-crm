@@ -17,7 +17,9 @@ describe('navigationConfig', () => {
   })
 
   it('resolves sales role for sales profile or default user', () => {
-    expect(resolveUserNavigationRole({ crm_profile: 'sales', role: 'Sale' })).toBe('sales')
+    expect(
+      resolveUserNavigationRole({ crm_profile: 'sales', role: 'Sale' }),
+    ).toBe('sales')
     expect(resolveUserNavigationRole({})).toBe('sales')
     expect(resolveUserNavigationRole(null)).toBe('sales')
   })
@@ -28,18 +30,24 @@ describe('navigationConfig', () => {
       name: 'CRM Students',
       params: { viewType: 'list' },
     })
-    expect(isRoleWorkspaceNavigationEnabled({ crm_profile: 'sales' })).toBe(false)
+    expect(isRoleWorkspaceNavigationEnabled({ crm_profile: 'sales' })).toBe(
+      false,
+    )
     const workspace = getNavigationForUser({
       crm_profile: 'sales',
       crm_feature_flags: { role_workspace_read: true },
     })
-    expect(workspace.find((item) => item.id === 'sales_my_records').to).toEqual({
-      name: 'Role Workspace',
-      params: { workspace: 'sales-records', view: 'new' },
-    })
-    expect(isRoleWorkspaceNavigationEnabled({
-      crm_feature_flags: { role_workspace_read: true },
-    })).toBe(true)
+    expect(workspace.find((item) => item.id === 'sales_my_records').to).toEqual(
+      {
+        name: 'Role Workspace',
+        params: { workspace: 'sales-records', view: 'new' },
+      },
+    )
+    expect(
+      isRoleWorkspaceNavigationEnabled({
+        crm_feature_flags: { role_workspace_read: true },
+      }),
+    ).toBe(true)
   })
 
   it('routes every Director dashboard to its workspace even without rollout flags', () => {
@@ -53,15 +61,26 @@ describe('navigationConfig', () => {
       params: { workspace: 'director-overview', view: 'overview' },
     })
     expect(overview.children.map((item) => item.to)).toEqual([
-      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'quota-progress' } },
-      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'campus' } },
-      { name: 'Role Workspace', params: { workspace: 'director-overview', view: 'program' } },
+      {
+        name: 'Role Workspace',
+        params: { workspace: 'director-overview', view: 'quota-progress' },
+      },
+      {
+        name: 'Role Workspace',
+        params: { workspace: 'director-overview', view: 'campus' },
+      },
+      {
+        name: 'Role Workspace',
+        params: { workspace: 'director-overview', view: 'program' },
+      },
     ])
     expect(workspace.find((item) => item.id === 'mgr_all_records').to).toEqual({
       name: 'Role Workspace',
       params: { workspace: 'director-records', view: 'all' },
     })
-    expect(workspace.find((item) => item.id === 'mgr_funnel_forecast').to).toEqual({
+    expect(
+      workspace.find((item) => item.id === 'mgr_funnel_forecast').to,
+    ).toEqual({
       name: 'Role Workspace',
       params: { workspace: 'director-forecast', view: 'funnel' },
     })
@@ -71,9 +90,13 @@ describe('navigationConfig', () => {
       params: { workspace: 'director-sla', view: 'team' },
     })
     expect(sla.children.map((item) => item.to.params.view)).toEqual([
-      'team', 'campus', 'ranking',
+      'team',
+      'campus',
+      'ranking',
     ])
-    expect(workspace.find((item) => item.id === 'mgr_quota_tuition').to).toEqual({
+    expect(
+      workspace.find((item) => item.id === 'mgr_quota_tuition').to,
+    ).toEqual({
       name: 'Role Workspace',
       params: { workspace: 'admissions-reference', view: 'quota-tuition' },
     })
@@ -93,22 +116,31 @@ describe('navigationConfig', () => {
       name: 'Role Workspace',
       params: { workspace: 'director-people', view: 'rebalance' },
     })
-    expect(typeof workspace.find((item) => item.id === 'mgr_business_config').action)
-      .toBe('function')
-    expect(isDirectorWorkspaceNavigationEnabled({
-      crm_profile: 'admissions_director',
-    })).toBe(true)
+    expect(
+      typeof workspace.find((item) => item.id === 'mgr_business_config').action,
+    ).toBe('function')
+    expect(
+      isDirectorWorkspaceNavigationEnabled({
+        crm_profile: 'admissions_director',
+      }),
+    ).toBe(true)
   })
 
   it('resolves lead_sales role for lead_sales profile', () => {
     expect(
-      resolveUserNavigationRole({ crm_profile: 'lead_sales', role: 'Lead Sales' }),
+      resolveUserNavigationRole({
+        crm_profile: 'lead_sales',
+        role: 'Lead Sales',
+      }),
     ).toBe('lead_sales')
   })
 
   it('resolves marketing role for marketing profile', () => {
     expect(
-      resolveUserNavigationRole({ crm_profile: 'marketing', role: 'Marketing' }),
+      resolveUserNavigationRole({
+        crm_profile: 'marketing',
+        role: 'Marketing',
+      }),
     ).toBe('marketing')
   })
 
@@ -162,7 +194,9 @@ describe('navigationConfig', () => {
       name: 'CRM Students',
       params: { viewType: 'list' },
     })
-    expect(salesTree.find((item) => item.id === 'sales_my_tasks').to).toBe('CTV Sale Tasks')
+    expect(salesTree.find((item) => item.id === 'sales_my_tasks').to).toBe(
+      'CTV Sale Tasks',
+    )
     expect(leads.children.map((item) => item.id)).toEqual([
       'sales_records_new',
       'sales_records_counseling',
@@ -187,6 +221,9 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Báo cáo nhóm')
     expect(labels).toContain('Tra cứu')
     expect(labels).toContain('Chính sách SLA (chỉ đọc)')
+    expect(
+      leadTree.filter((item) => item.label === 'Cơ chế phân bổ'),
+    ).toHaveLength(1)
     expect(labels).not.toContain('Hồ sơ nghi trùng')
 
     expect(
@@ -246,10 +283,14 @@ describe('navigationConfig', () => {
       name: 'CRM Students',
       query: { owner: 'unassigned', lead_view: 'unassigned' },
     })
-    expect(leadTree.find((item) => item.id === 'lead_assignment')).toMatchObject({
+    expect(
+      leadTree.find((item) => item.id === 'lead_assignment'),
+    ).toMatchObject({
       label: 'Hồ sơ chưa phân công',
     })
-    expect(leadTree.find((item) => item.id === 'lead_assignment').badgeKey).toBeUndefined()
+    expect(
+      leadTree.find((item) => item.id === 'lead_assignment').badgeKey,
+    ).toBeUndefined()
 
     expect(records.children.map((item) => item.id)).not.toContain(
       'lead_records_cold',
@@ -304,6 +345,15 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Chỉ tiêu & Học phí')
     expect(labels).toContain('Cấu hình nghiệp vụ')
     expect(labels).toContain('Báo cáo (Metabase)')
+    const businessConfig = mgrTree.find(
+      (item) => item.id === 'mgr_business_config',
+    )
+    expect(
+      businessConfig.children.filter((item) => item.label === 'Cơ chế phân bổ'),
+    ).toHaveLength(1)
+    expect(businessConfig.children.map((item) => item.label)).not.toContain(
+      'Chính sách phân phối',
+    )
   })
 
   it('verifies Admin (System Manager) navigation items structure', () => {
@@ -319,5 +369,11 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Sao lưu')
     expect(labels).toContain('Break Glass (quyền tạm)')
     expect(labels).toContain('Nhật ký truy cập')
+    const orgStructure = adminTree.find(
+      (item) => item.id === 'adm_org_structure',
+    )
+    expect(
+      orgStructure.children.filter((item) => item.label === 'Cơ chế phân bổ'),
+    ).toHaveLength(1)
   })
 })

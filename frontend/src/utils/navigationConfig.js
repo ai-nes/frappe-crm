@@ -498,7 +498,7 @@ const rawRoleNavigationTrees = {
         },
         {
           id: 'mgr_cfg_distribution',
-          label: 'Chính sách phân phối',
+          label: 'Cơ chế phân bổ',
           direct: true,
           to: 'Assignment Overview',
         },

@@ -14,6 +14,7 @@ from frappe import _
 
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.permissions import get_student_list_read_condition
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -118,6 +119,7 @@ STUDENT_FIELDS = [
 	"alt_address",
 	"notes",
 	"owner_staff",
+	"ownership_revision",
 	"assigned_to",
 	"admission_year",
 	"modified",
@@ -159,16 +161,30 @@ def get_director_students(
 	resolved_province = _resolve_province(query["province"]) if query["province"] else None
 	student_filters, or_filters = _student_filters(query, resolved_province)
 
-	total = _count_students(student_filters, or_filters)
+	list_scope_student_ids = _list_scope_student_ids()
+	total = _count_students(
+		student_filters,
+		or_filters,
+		allowed_student_ids=list_scope_student_ids,
+	)
 	total_all_filters = {"admission_year": query["admission_year"]}
-	total_all = _count_students(total_all_filters)
-	rows = _fetch_student_rows(query, student_filters, or_filters)
+	total_all = _count_students(total_all_filters, allowed_student_ids=list_scope_student_ids)
+	rows = _fetch_student_rows(
+		query,
+		student_filters,
+		or_filters,
+		allowed_student_ids=list_scope_student_ids,
+	)
 	snapshot = _as_iso(frappe.utils.now_datetime())
 
 	return {
 		"data": _hydrate_rows(rows, sort_field=query["sort"]),
-		"summary": _build_summary(query["admission_year"]),
-		"actionSummary": _build_action_summary(query["admission_year"]),
+		"summary": _build_summary(
+			query["admission_year"], allowed_student_ids=list_scope_student_ids
+		),
+		"actionSummary": _build_action_summary(
+			query["admission_year"], allowed_student_ids=list_scope_student_ids
+		),
 		"meta": {
 			"total": total,
 			"totalAll": total_all,
@@ -478,10 +494,45 @@ def _student_filters(
 	return filters, or_filters
 
 
-def _count_students(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
-	rows = frappe.get_list(
+def _list_scope_student_ids() -> list[str] | None:
+	"""Return explicit IDs for the Sale list-only team/pool read scope.
+
+	The normal CRM Student permission hook remains assigned-only for Sale so
+	direct CRUD/detail access cannot be widened. This endpoint uses the explicit
+	list condition only to expose rows that Sale may inspect before assigning;
+	all mutation commands perform their own ownership checks.
+	"""
+	condition = get_student_list_read_condition()
+	if condition is None:
+		return None
+	rows = frappe.db.sql(
+		f"select name from `tabCRM Student` where ({condition})",
+		as_dict=True,
+	)
+	return [row.get("name") for row in rows if row.get("name")]
+
+
+def _with_allowed_student_ids(
+	filters: dict[str, Any], allowed_student_ids: list[str] | None
+) -> dict[str, Any]:
+	if allowed_student_ids is None:
+		return filters
+	return {**filters, "name": ["in", allowed_student_ids]}
+
+
+def _count_students(
+	filters: dict[str, Any],
+	or_filters: list[list[str]] | None = None,
+	*,
+	allowed_student_ids: list[str] | None = None,
+) -> int:
+	if allowed_student_ids is not None and not allowed_student_ids:
+		return 0
+	query_filters = _with_allowed_student_ids(filters, allowed_student_ids)
+	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	rows = get_rows(
 		"CRM Student",
-		filters=filters,
+		filters=query_filters,
 		or_filters=or_filters or [],
 		fields=["count(name) as total"],
 		limit_page_length=1,
@@ -489,14 +540,28 @@ def _count_students(filters: dict[str, Any], or_filters: list[list[str]] | None 
 	return int(rows[0].get("total") or 0) if rows else 0
 
 
-def _fetch_student_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
+def _fetch_student_rows(
+	query: dict[str, Any],
+	filters: dict[str, Any],
+	or_filters: list[list[str]],
+	*,
+	allowed_student_ids: list[str] | None = None,
+) -> list:
 	if query["sort"] != "score":
-		return _fetch_computed_sort_rows(query, filters, or_filters)
+		return _fetch_computed_sort_rows(
+			query,
+			filters,
+			or_filters,
+			allowed_student_ids=allowed_student_ids,
+		)
 
 	field = SORT_FIELDS[query["sort"]]
-	return frappe.get_list(
+	if allowed_student_ids is not None and not allowed_student_ids:
+		return []
+	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	return get_rows(
 		"CRM Student",
-		filters=filters,
+		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
 		order_by=f"{field} {query['order']}, name {query['order']}",
@@ -506,12 +571,19 @@ def _fetch_student_rows(query: dict[str, Any], filters: dict[str, Any], or_filte
 
 
 def _fetch_computed_sort_rows(
-	query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]
+	query: dict[str, Any],
+	filters: dict[str, Any],
+	or_filters: list[list[str]],
+	*,
+	allowed_student_ids: list[str] | None = None,
 ) -> list:
 	"""Sort fields that live on related read models, then apply the page window."""
-	rows = frappe.get_list(
+	if allowed_student_ids is not None and not allowed_student_ids:
+		return []
+	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	rows = get_rows(
 		"CRM Student",
-		filters=filters,
+		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
 		order_by="name asc",
@@ -659,6 +731,24 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 	)
 	owner_key = (action.get("action_owner") if action else None) or row.get("owner_staff")
 	owner = lookups.get("owners", {}).get(owner_key) or owner_key
+	revision = row.get("ownership_revision")
+	if revision is None:
+		frappe.throw(
+			_("Student {0} is missing ownership revision.").format(row.get("name") or "unknown"),
+			frappe.ValidationError,
+		)
+	try:
+		revision = int(revision)
+	except (TypeError, ValueError):
+		frappe.throw(
+			_("Student {0} has an invalid ownership revision.").format(row.get("name") or "unknown"),
+			frappe.ValidationError,
+		)
+	if revision < 0:
+		frappe.throw(
+			_("Student {0} has an invalid ownership revision.").format(row.get("name") or "unknown"),
+			frappe.ValidationError,
+		)
 	return {
 		"id": row.get("name"),
 		"initials": _initials(row.get("student_name")),
@@ -677,6 +767,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"nextActionType": action.get("action_type") if action else None,
 		"nextActionDueAt": _as_iso(action.get("due_at")) if action and action.get("due_at") else None,
 		"owner": owner,
+		"revision": revision,
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source"),
 		"priority": priority["label"] if priority else None,
 		"priorityCode": action.get("priority") if action else None,
@@ -708,22 +799,35 @@ def _priority_descriptor(action) -> dict[str, Any] | None:
 	return PRIORITIES.get(str(action.get("priority") or "").strip().lower())
 
 
-def _build_summary(admission_year: str) -> dict[str, Any]:
-	rows = frappe.get_list(
-		"CRM Student",
-		filters={"admission_year": admission_year},
-		fields=["name", "latest_score", "interest_level", "assessment_status"],
-		limit_page_length=0,
-	)
+def _build_summary(
+	admission_year: str, *, allowed_student_ids: list[str] | None = None
+) -> dict[str, Any]:
+	if allowed_student_ids is not None and not allowed_student_ids:
+		rows = []
+	else:
+		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+		rows = get_rows(
+			"CRM Student",
+			filters=_with_allowed_student_ids(
+				{"admission_year": admission_year}, allowed_student_ids
+			),
+			fields=["name", "latest_score", "interest_level", "assessment_status"],
+			limit_page_length=0,
+		)
 	student_ids = [row.get("name") for row in rows if row.get("name")]
 	high_intent = [row for row in rows if _is_confirmed_high_intent(row)]
 	probabilities = _confirmed_probabilities(student_ids)
-	previous_rows = frappe.get_list(
-		"CRM Student",
-		filters={"admission_year": str(int(admission_year) - 1)},
-		fields=["name"],
-		limit_page_length=0,
-	)
+	if allowed_student_ids is not None and not allowed_student_ids:
+		previous_rows = []
+	else:
+		previous_rows = get_rows(
+			"CRM Student",
+			filters=_with_allowed_student_ids(
+				{"admission_year": str(int(admission_year) - 1)}, allowed_student_ids
+			),
+			fields=["name"],
+			limit_page_length=0,
+		)
 	return {
 		"trackedStudents": len(rows),
 		"trackedStudentsDeltaPercent": _percent_delta(len(rows), len(previous_rows)),
@@ -735,17 +839,25 @@ def _build_summary(admission_year: str) -> dict[str, Any]:
 	}
 
 
-def _build_action_summary(admission_year: str) -> dict[str, Any]:
-	student_ids = [
-		row.get("name")
-		for row in frappe.get_list(
-			"CRM Student",
-			filters={"admission_year": admission_year},
-			fields=["name"],
-			limit_page_length=0,
-		)
-		if row.get("name")
-	]
+def _build_action_summary(
+	admission_year: str, *, allowed_student_ids: list[str] | None = None
+) -> dict[str, Any]:
+	if allowed_student_ids is not None and not allowed_student_ids:
+		student_ids = []
+	else:
+		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+		student_ids = [
+			row.get("name")
+			for row in get_rows(
+				"CRM Student",
+				filters=_with_allowed_student_ids(
+					{"admission_year": admission_year}, allowed_student_ids
+				),
+				fields=["name"],
+				limit_page_length=0,
+			)
+			if row.get("name")
+		]
 	return {
 		"actionsDueToday": _count_due_actions(student_ids),
 		# No canonical declining-interaction rule has been released yet.
@@ -1791,11 +1903,10 @@ def _exists(doctype: str, value) -> bool:
 def _require_access():
 	"""Require an authenticated session with Student read permission.
 
-	The Student list/detail queries deliberately use Frappe's permission-aware
-	``get_list``/``has_permission`` APIs. The CRM Student permission query hook
-	then applies the role scope from the current session: Sale and CTV Sale are
-	limited to their own ``owner_staff`` rows, while Lead Sale also sees its
-	team members and the team's unassigned pool.
+	The Student detail and operational queries deliberately use Frappe's
+	permission-aware ``get_list``/``has_permission`` APIs. The list endpoint has
+	a separate, explicit Sale read projection so Sale can inspect its team and
+	pool before assigning; direct CRUD/detail scope remains assigned-only.
 	"""
 	user = getattr(frappe.session, "user", None)
 	if not user or user == "Guest":

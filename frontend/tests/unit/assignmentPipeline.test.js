@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
-const { call } = vi.hoisted(() => ({ call: vi.fn() }))
-vi.mock('frappe-ui', () => ({ call }))
+const { call, frappeRequest } = vi.hoisted(() => ({ call: vi.fn(), frappeRequest: vi.fn() }))
+vi.mock('frappe-ui', () => ({ call, frappeRequest }))
 
 import {
   assignmentPipelineMethods,
@@ -18,17 +18,22 @@ describe('assignment pipeline data contract', () => {
   })
 
   it('uses the assignment snapshot and run endpoints', async () => {
-    call.mockResolvedValueOnce({ workflow: { steps: [] } }).mockResolvedValueOnce({ run: { assigned: 3 } })
+    frappeRequest.mockResolvedValueOnce({ workflow: { steps: [] } })
+    call.mockResolvedValueOnce({ run: { assigned: 3 } })
 
     await getAssignmentPipelineSnapshot({ admissionYear: '2026' })
     await runAssignmentPipeline({ limit: 3 })
 
-    expect(call).toHaveBeenNthCalledWith(1, assignmentPipelineMethods.snapshot, {
-      page: 1,
-      pageSize: 1,
-      admissionYear: '2026',
+    expect(frappeRequest).toHaveBeenCalledWith({
+      url: assignmentPipelineMethods.snapshot,
+      method: 'GET',
+      params: {
+        page: 1,
+        pageSize: 1,
+        admissionYear: '2026',
+      },
     })
-    expect(call).toHaveBeenNthCalledWith(2, assignmentPipelineMethods.run, { limit: 3 })
+    expect(call).toHaveBeenCalledWith(assignmentPipelineMethods.run, { limit: 3 })
   })
 
   it('calculates completed workflow steps from server status', () => {

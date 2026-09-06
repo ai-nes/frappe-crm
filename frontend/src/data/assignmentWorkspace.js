@@ -4,6 +4,9 @@ const API_PREFIX = 'crm.api.assignment_workspace.'
 
 export const assignmentWorkspaceMethods = Object.freeze({
   overview: `${API_PREFIX}get_overview`,
+  routingControl: 'crm.api.assignment_control.get_routing_control',
+  setRoutingEnabled: 'crm.api.assignment_control.set_routing_enabled',
+  upsertStaffCapacity: 'crm.api.assignment_control.upsert_staff_capacity',
   readiness: `${API_PREFIX}get_setup_readiness`,
   batchImpact: `${API_PREFIX}get_assignment_batch_impact`,
   batchCommand: `${API_PREFIX}apply_assignment_batch_command`,
@@ -36,6 +39,11 @@ export const assignmentWorkspaceWorkloadLabels = Object.freeze({
   over_capacity: 'Vượt tải',
 })
 
+export const assignmentWorkspacePolicyLabels = Object.freeze({
+  round_robin: 'Luân phiên công bằng',
+  weighted_score: 'Chấm điểm có trọng số',
+})
+
 export function assignmentWorkspaceStatusTone(status) {
   if (status === 'healthy') return 'success'
   if (status === 'unassigned' || status === 'needs_review') return 'warning'
@@ -55,7 +63,11 @@ export function cleanAssignmentWorkspaceParams(params = {}) {
 export function serializeAssignmentWorkspaceFilters(filters = {}) {
   const normalized = Object.fromEntries(
     Object.entries(filters).filter(
-      ([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all',
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        value !== 'all',
     ),
   )
   return Object.keys(normalized).length ? JSON.stringify(normalized) : undefined
@@ -75,6 +87,10 @@ export function assignmentWorkspaceStatusLabel(status) {
 
 export function assignmentWorkspaceWorkloadLabel(workload) {
   return assignmentWorkspaceWorkloadLabels[workload] || workload || '—'
+}
+
+export function assignmentWorkspacePolicyLabel(strategy) {
+  return assignmentWorkspacePolicyLabels[strategy] || strategy || '—'
 }
 
 /**
@@ -102,7 +118,11 @@ export function normalizeAssignmentWorkspaceRows(rows = []) {
 export function assignmentWorkspaceFilterQuery(filters = {}) {
   return Object.fromEntries(
     Object.entries(filters).filter(
-      ([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all',
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        value !== 'all',
     ),
   )
 }

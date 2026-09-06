@@ -16,7 +16,7 @@
           </section>
 
           <LeadSalesKpiGrid :kpis="workspaceKpis(data)" />
-          <AssignmentPipeline />
+          <AssignmentPipeline @pipeline-run="resource.reload()" />
 
           <div class="grid gap-5 lg:grid-cols-2">
             <section class="rounded-lg border border-outline-gray-2 bg-surface-white">

@@ -59,6 +59,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"assessment_status": "confirmed",
 				"latest_score": 82,
 				"owner_staff": "STAFF-1",
+				"ownership_revision": 4,
 				"source": "SRC-1",
 			}
 		)
@@ -94,18 +95,23 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(item["score"], 82)
 		self.assertEqual(item["scoreDelta"], 13)
 		self.assertEqual(item["nextAction"], "Gọi phụ huynh về học phí")
+		self.assertEqual(item["revision"], 4)
 		self.assertEqual(item["priority"], "Cao")
 		self.assertEqual(item["priorityCode"], "high")
 		self.assertEqual(item["lastActivityAt"], "2026-08-31T09:56:00+07:00")
 
+	def test_student_row_mapping_rejects_missing_ownership_revision(self):
+		with self.assertRaises(frappe.ValidationError):
+			director_students._map_student_row(frappe._dict(name="ENR-1"))
+
 	def test_list_endpoint_returns_dashboard_envelope_and_server_applied_filters(self):
-		row = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An")
+		row = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", ownership_revision=4)
 		with (
 			patch.object(director_students, "_resolve_admission_year", return_value="2026"),
 			patch.object(director_students, "_resolve_province", return_value="Cần Thơ"),
 			patch.object(director_students, "_count_students", side_effect=[1, 8]),
 			patch.object(director_students, "_fetch_student_rows", return_value=[row]),
-			patch.object(director_students, "_hydrate_rows", return_value=[{"id": "ENR-1"}]),
+			patch.object(director_students, "_hydrate_rows", return_value=[{"id": "ENR-1", "revision": 4}]),
 			patch.object(
 				director_students,
 				"_build_summary",
@@ -140,7 +146,7 @@ class TestDirectorStudents(FrappeTestCase):
 				order="desc",
 			)
 
-		self.assertEqual(response["data"], [{"id": "ENR-1"}])
+		self.assertEqual(response["data"], [{"id": "ENR-1", "revision": 4}])
 		self.assertEqual(response["meta"]["total"], 1)
 		self.assertEqual(response["meta"]["totalAll"], 8)
 		self.assertEqual(response["meta"]["page"], 2)

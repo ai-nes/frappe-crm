@@ -1,7 +1,13 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.interaction_read import _date_bound, _decode_cursor, _encode_cursor, _family_interaction_types
+from crm.api.interaction_read import (
+	_date_bound,
+	_decode_cursor,
+	_encode_cursor,
+	_family_interaction_types,
+	_query_text,
+)
 
 
 class TestInteractionReadHelpers(FrappeTestCase):
@@ -21,3 +27,8 @@ class TestInteractionReadHelpers(FrappeTestCase):
 		bound, operator = _date_bound("2026-09-06", "to_date", end=True)
 		self.assertEqual(str(bound), "2026-09-07 00:00:00")
 		self.assertEqual(operator, "<")
+
+	def test_search_text_is_trimmed_and_bounded(self):
+		self.assertEqual(_query_text("  webchat inbound  ", "search"), "webchat inbound")
+		with self.assertRaises(frappe.ValidationError):
+			_query_text("x" * 141, "search")

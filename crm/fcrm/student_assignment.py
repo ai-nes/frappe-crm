@@ -22,6 +22,18 @@ REDUCED_LOAD = 0.85
 BLOCKED_LOAD = 1.0
 
 
+def _capacity_required() -> bool:
+	"""Return the workspace's strict-capacity mode without breaking old sites."""
+	try:
+		if frappe.db.exists("DocType", "CRM Assignment Control"):
+			value = frappe.db.get_single_value("CRM Assignment Control", "capacity_required")
+			if value is not None:
+				return value not in (0, "0", False, "false", "False", None)
+	except Exception:
+		pass
+	return False
+
+
 def _rows(doctype: str, filters: dict, fields: str | list[str] = "*"):
 
 	try:
@@ -162,6 +174,7 @@ def _capacity(staff: str, at=None) -> dict[str, Any]:
 	)
 	return {
 		"limit": limit,
+		"configured": bool(limit),
 		"active": active,
 		"daily": today,
 		"load": active / limit if limit else 0.0,
@@ -174,6 +187,8 @@ def capacity_eligible(
 ) -> tuple[bool, dict[str, Any]]:
 	"""Return eligibility and an explainable snapshot; direct school owners obey the same 100% block."""
 	snapshot = _capacity(member["staff"])
+	if _capacity_required() and not snapshot["configured"]:
+		return False, snapshot
 	if snapshot["limit"] and snapshot["active"] >= snapshot["limit"]:
 		return False, snapshot
 	if snapshot["limit"] and snapshot["daily"] >= snapshot["limit"]:
