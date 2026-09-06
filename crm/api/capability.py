@@ -451,7 +451,7 @@ def list_ai_students(filters=None, limit=20, offset=0):
 
 @frappe.whitelist()
 @_session_rate_limit(limit=60, seconds=60)
-def search_ai_students(query: str, filters=None, limit=20):
+def search_ai_students(query: str, filters: list | str | None = None, limit: int | str = 20):
 	"""Search projected Student contact fields in the caller's row scope.
 
 	Only callers whose real permlevel access already surfaces contact PII may
