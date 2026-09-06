@@ -26,11 +26,13 @@ from frappe.utils import now_datetime
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import (
 	POLICY_VERSION,
+	PROFILE_LABELS,
 	STUDENT_OWNER_PROFILES,
 	STUDENT_OWNER_TEAM_FUNCTIONS,
 	capabilities_for_roles,
 	resolve_crm_profile,
 )
+from crm.fcrm.utils.effective import is_effective
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 OWNERSHIP_EVENT_DOCTYPE = "CRM Student Ownership Event"
@@ -438,17 +440,20 @@ def resolve_student_operational_target(
 		_error("INVALID_TARGET", "Target Staff must be active.")
 	if staff.get("campus") and staff.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target Staff Campus must match the Student Campus.")
+	if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+		_error("INVALID_TARGET", "Target Staff must have an active User account.")
 	if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES:
 		_error("INVALID_TARGET", "Target Staff must have exactly a canonical Sale or CTV Sale profile.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
 		filters={"parent": staff.name, "parenttype": "CRM Staff", "team": team.name},
-		fields=["name", "team", "function"],
+		fields=["name", "team", "function", "effective_from", "effective_until"],
 	)
 	active_memberships = [
 		row
 		for row in memberships
-		if not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS
+		if is_effective(row)
+		and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
 	]
 	if len(active_memberships) != 1:
 		_error(
@@ -1015,30 +1020,34 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 	for staff in staff_rows:
 		if staff.get("campus") and staff.campus != branch:
 			continue
-		profile_name = resolve_crm_profile(frappe.get_roles(staff.user)) if staff.get("user") else None
-		if profile_name not in STUDENT_OWNER_PROFILES:
+		if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+			continue
+		profile = resolve_crm_profile(frappe.get_roles(staff.user))
+		if profile not in STUDENT_OWNER_PROFILES:
 			continue
 		memberships = frappe.get_all(
 			"CRM Team Membership",
 			filters={"parent": staff.name, "parenttype": "CRM Staff"},
-			fields=["name", "team", "function"],
+			fields=["name", "team", "function", "effective_from", "effective_until"],
 		)
 		eligible = [
 			row
 			for row in memberships
 			if row.get("team") in team_by_name
+			and is_effective(row)
 			and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
 		]
 		if len(eligible) != 1:
 			continue
 		team = team_by_name[eligible[0].team]
+		function = eligible[0].get("function") or ("CTV Sale" if profile == "ctv_sale" else "Sale")
 		owners.append(
 			{
 				"name": staff.name,
 				"label": staff.get("full_name") or staff.name,
-				"profile": profile_name,
-				"role": "CTV Sale" if profile_name == "ctv_sale" else "Sale",
-				"function": eligible[0].get("function") or "Sale",
+				"profile": profile,
+				"role": PROFILE_LABELS.get(profile, profile),
+				"function": function,
 				"team": team.name,
 				"campus": team.get("campus"),
 			}

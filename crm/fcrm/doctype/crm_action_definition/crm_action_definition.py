@@ -3,8 +3,9 @@ import json
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.action_constraints import ACTOR_ROLES
+
 CHANNELS = {"NONE", "CALL", "EMAIL", "MESSAGE"}
-ACTOR_ROLES = {"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director", "System Manager"}
 
 
 class CRMActionDefinition(Document):

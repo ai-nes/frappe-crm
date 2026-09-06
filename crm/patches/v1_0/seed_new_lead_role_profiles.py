@@ -26,6 +26,18 @@ from crm.patches.v1_0.setup_crm_roles import create_roles
 
 _ADMISSIONS_CASE_DOCTYPES = CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"]
 
+# These are the read-only sources consumed by the two Director projections
+# exposed to CTV Sale. Keep this list explicit: the CTV profile must not inherit
+# the broader reference-data permissions of the canonical Sale profile.
+CTV_SALE_DIRECTOR_READ_DOCTYPES = (
+	"CRM Admission Year",
+	"CRM High School",
+	"CRM Province",
+	"CRM Ward",
+	"CRM High School Annual Snapshot",
+	"CRM Recommendation",
+)
+
 # PRD-phan-quyen-lead.md P0-1 CRUD matrix, hand-transcribed. Every role here
 # gets `delete_requires_ownership=1` regardless of whether it has a delete
 # flag at all, matching every other seeded profile (see
@@ -50,8 +62,8 @@ _NEW_ROLE_PERMISSIONS = {
 _NEW_ROLE_NAMES = tuple(PROFILE_LABELS[profile] for profile in _NEW_ROLE_PERMISSIONS if PROFILE_LABELS[profile] != "Promoter")
 
 
-def _applicable_doctypes(flags):
-	return [
+def _applicable_doctypes(flags, extra_read_doctypes=()):
+	rows = [
 		{
 			"document_type": doctype,
 			"read": flags["read"],
@@ -62,6 +74,18 @@ def _applicable_doctypes(flags):
 		}
 		for doctype in _ADMISSIONS_CASE_DOCTYPES
 	]
+	rows.extend(
+		{
+			"document_type": doctype,
+			"read": 1,
+			"write": 0,
+			"create": 0,
+			"delete": 0,
+			"export": 0,
+		}
+		for doctype in extra_read_doctypes
+	)
+	return rows
 
 
 def execute():
@@ -74,7 +98,12 @@ def execute():
 
 	for profile, flags in _NEW_ROLE_PERMISSIONS.items():
 		role = PROFILE_LABELS[profile]
-		_upsert_profile(role, flags["row_scope"], _applicable_doctypes(flags))
+		extra_read_doctypes = CTV_SALE_DIRECTOR_READ_DOCTYPES if profile == "ctv_sale" else ()
+		_upsert_profile(
+			role,
+			flags["row_scope"],
+			_applicable_doctypes(flags, extra_read_doctypes),
+		)
 
 	# Picks up this deploy's P0-1 changes to the already-active Lead Sale
 	# (conditional delete) and Marketing (campus-scoped read) profiles.

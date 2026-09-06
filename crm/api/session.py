@@ -280,7 +280,7 @@ def set_default_crm_app_for_sales(doc, event=None):
 	if doc.default_app:
 		return
 	roles = {row.role for row in doc.get("roles", [])}
-	if roles & {"Sale", "Lead Sale"}:
+	if roles & {"Sale", "CTV Sale", "Lead Sale"}:
 		doc.default_app = "crm"
 
 

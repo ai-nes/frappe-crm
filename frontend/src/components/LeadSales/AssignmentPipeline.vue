@@ -47,7 +47,16 @@
       <div class="pipeline-viewport px-5 py-6">
         <div class="pipeline-grid" :class="{ 'is-running': running }">
           <template v-for="step in steps" :key="step.id">
-            <article class="pipeline-step" :class="[stepClass(step), `node-${step.id}`]">
+            <article
+              class="pipeline-step"
+              :class="[stepClass(step), `node-${step.id}`]"
+              role="button"
+              tabindex="0"
+              :aria-label="__('Xem chi tiết bước {0}', [step.title])"
+              @click="openStep(step)"
+              @keydown.enter="openStep(step)"
+              @keydown.space.prevent="openStep(step)"
+            >
               <div class="flex items-start gap-3">
                 <span class="step-icon" aria-hidden="true">
                   <FeatherIcon :name="stepIcon(step.status)" class="size-4" />
@@ -102,12 +111,61 @@
         </span>
       </footer>
     </template>
+
+    <Teleport to="body">
+      <div v-if="selectedStep" class="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="assignment-pipeline-detail-title">
+        <button class="absolute inset-0 cursor-default bg-black/20" type="button" :aria-label="__('Đóng')" @click="closeStep" />
+        <aside class="relative h-full w-full max-w-xl overflow-y-auto bg-surface-white shadow-xl">
+          <header class="flex items-start justify-between border-b border-outline-gray-1 px-5 py-4">
+            <div>
+              <p class="text-xs uppercase tracking-wide text-ink-gray-5">{{ __('Chi tiết bước xử lý') }}</p>
+              <h2 id="assignment-pipeline-detail-title" class="mt-1 text-lg font-semibold text-ink-gray-9">{{ selectedStep.title }}</h2>
+            </div>
+            <button ref="closeButton" type="button" class="inline-flex min-h-11 min-w-11 items-center justify-center rounded-md p-1.5 text-ink-gray-5 hover:bg-surface-gray-2 focus:outline-none focus:ring-2 focus:ring-outline-gray-4" :aria-label="__('Đóng')" @click="closeStep">
+              <FeatherIcon name="x" class="size-5" aria-hidden="true" />
+            </button>
+          </header>
+
+          <div class="space-y-5 p-5">
+            <p class="text-sm leading-6 text-ink-gray-7">{{ selectedStep.detail }}</p>
+
+            <section class="rounded-lg border border-outline-gray-2 bg-surface-gray-2/60 p-4">
+              <p class="text-sm text-ink-gray-6">{{ __('Trong snapshot workspace hiện tại') }}</p>
+              <p class="mt-2 text-xl font-semibold text-ink-gray-9">{{ selectedStep.metrics?.processedCount || 0 }} {{ __('hồ sơ') }}</p>
+              <p class="mt-1 text-xs text-ink-gray-6">
+                {{ selectedStep.metrics?.successCount || 0 }} {{ __('thành công') }} ·
+                {{ (selectedStep.metrics?.warningCount || 0) + (selectedStep.metrics?.errorCount || 0) }} {{ __('cần xử lý') }}
+              </p>
+            </section>
+
+            <section>
+              <h3 class="text-sm font-semibold text-ink-gray-9">{{ __('Cách xử lý') }}</h3>
+              <ul class="mt-3 space-y-3 text-sm text-ink-gray-7">
+                <li v-for="rule in selectedStep.rules || []" :key="rule" class="flex gap-2">
+                  <FeatherIcon name="check" class="mt-0.5 size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+                  <span>{{ rule }}</span>
+                </li>
+              </ul>
+            </section>
+
+            <div class="flex gap-2 rounded-lg border border-blue-100 bg-blue-50/70 p-3 text-sm text-blue-900">
+              <FeatherIcon name="info" class="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <p>{{ __('Điều kiện và metrics được lấy từ snapshot workspace hiện tại.') }}</p>
+            </div>
+
+            <RouterLink class="flex min-h-11 items-center justify-center rounded-md border border-outline-gray-2 px-4 py-2 text-sm font-medium text-ink-gray-8 hover:bg-surface-gray-2" :to="{ name: 'Assignment Overview' }" @click="closeStep">
+              {{ __('Xem danh sách học sinh') }}
+            </RouterLink>
+          </div>
+        </aside>
+      </div>
+    </Teleport>
   </section>
 </template>
 
 <script setup>
 import { Button, FeatherIcon, LoadingIndicator } from 'frappe-ui'
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   getAssignmentPipelineSnapshot,
   runAssignmentPipeline,
@@ -119,6 +177,8 @@ const data = ref(null)
 const loading = ref(false)
 const running = ref(false)
 const error = ref(null)
+const selectedStep = ref(null)
+const closeButton = ref(null)
 
 const workflow = computed(() => data.value?.workflow || {})
 const steps = computed(() => workflow.value.steps || [])
@@ -175,7 +235,27 @@ function errorMessage(value) {
   return value?.messages?.join?.(' ') || value?.message || String(value || __('Lỗi không xác định'))
 }
 
+function openStep(step) {
+  selectedStep.value = step
+}
+
+function closeStep() {
+  selectedStep.value = null
+}
+
+function handleKeydown(event) {
+  if (event.key === 'Escape' && selectedStep.value) closeStep()
+}
+
+watch(selectedStep, async (step) => {
+  if (!step) return
+  await nextTick()
+  closeButton.value?.focus()
+})
+
 onMounted(load)
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onBeforeUnmount(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <style scoped>

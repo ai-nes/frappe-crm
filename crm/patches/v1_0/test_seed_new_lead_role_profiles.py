@@ -2,7 +2,11 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.role_policy import CANONICAL_PERMISSION_MATRIX
-from crm.patches.v1_0.seed_new_lead_role_profiles import _NEW_ROLE_PERMISSIONS, execute
+from crm.patches.v1_0.seed_new_lead_role_profiles import (
+	CTV_SALE_DIRECTOR_READ_DOCTYPES,
+	_NEW_ROLE_PERMISSIONS,
+	execute,
+)
 
 
 class TestSeedNewLeadRoleProfiles(FrappeTestCase):
@@ -37,8 +41,16 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 			self.assertEqual(profile.delete_requires_ownership, 1)
 			self.assertEqual(profile.is_system_managed, 1)
 			seeded = {row.document_type: row for row in profile.applicable_doctypes}
-			self.assertEqual(set(seeded), set(doctypes))
-			for row in seeded.values():
+			extra_doctypes = set(CTV_SALE_DIRECTOR_READ_DOCTYPES) if profile_key == "ctv_sale" else set()
+			self.assertEqual(set(seeded), set(doctypes) | extra_doctypes)
+			for doctype, row in seeded.items():
+				if doctype in extra_doctypes:
+					self.assertTrue(row.read)
+					self.assertFalse(row.write)
+					self.assertFalse(row.create)
+					self.assertFalse(row.delete)
+					self.assertFalse(row.export)
+					continue
 				self.assertEqual(bool(row.read), bool(flags["read"]))
 				self.assertEqual(bool(row.write), bool(flags["write"]))
 				self.assertEqual(bool(row.create), bool(flags["create"]))

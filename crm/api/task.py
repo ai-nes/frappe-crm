@@ -18,6 +18,11 @@ from frappe.utils import get_datetime, now_datetime
 
 from crm.api._pagination import paged_list
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.student_decision import (
+	create_manual_action,
+	delete_manual_action,
+	update_manual_action,
+)
 
 ALLOWED_REFERENCE_DOCTYPES = {"CRM Student", "CRM Contact"}
 
@@ -45,6 +50,36 @@ _AGGREGATE_SORTS = {"due_date_asc", "modified_desc", "created_desc"}
 _ACTION_OPEN_STATES = ("pending", "accepted", "in-progress", "requires-review", "deferred")
 _ACTION_TERMINAL_STATES = ("completed", "cancelled", "rejected", "superseded")
 _SALES_TASK_PROFILES = {"sales", "ctv_sale", "lead_sales"}
+_TASK_STATUS_TO_ACTION_STATE = {
+	"backlog": "pending",
+	"pending": "pending",
+	"todo": "accepted",
+	"accepted": "accepted",
+	"in progress": "in-progress",
+	"in-progress": "in-progress",
+	"in_progress": "in-progress",
+	"requires-review": "requires-review",
+	"done": "completed",
+	"completed": "completed",
+	"canceled": "cancelled",
+	"cancelled": "cancelled",
+}
+_ACTION_STATE_TO_TASK_STATUS = {
+	"pending": "Backlog",
+	"accepted": "Todo",
+	"in-progress": "In Progress",
+	"requires-review": "In Progress",
+	"deferred": "Backlog",
+	"completed": "Done",
+	"cancelled": "Canceled",
+	"rejected": "Canceled",
+	"superseded": "Canceled",
+}
+_ACTION_ITEM_FIELDS = [
+	"name", "student", "contact", "objective", "description", "start_date",
+	"linked_interaction", "priority", "due_at", "action_owner", "state",
+	"legacy_task_deleted", "owner", "creation", "modified",
+]
 
 
 def _is_sales_task_actor(actor):
@@ -247,6 +282,7 @@ def _filter_values(search, status, priority, date_filter):
 
 def _action_query(student_condition, search, status, priority, date_filter, task_type):
 	conditions = [
+		"action_item.legacy_task_deleted = 0",
 		_action_scope_condition(student_condition),
 		_search_condition(search),
 		_status_condition(status),
@@ -257,8 +293,9 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 		_date_condition(date_filter, "action_item.due_at", "action_item.state")
 	)
 	if task_type and task_type.lower() in {"task", "generic", "manual", "legacy"}:
-		return None, []
-	if task_type:
+		conditions.append("action_item.origin = 'manual'")
+		conditions.append("action_item.action = 'CREATE_TASK'")
+	elif task_type:
 		conditions.append(
 			"LOWER(COALESCE(NULLIF(action_item.action_type, ''), "
 			"NULLIF(action_item.action, ''), 'CRM Action Item')) = LOWER(%s)"
@@ -293,7 +330,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 		WHERE {" AND ".join(conditions)}
 	"""
 	values = _filter_values(search, status, priority, date_filter)
-	if task_type:
+	if task_type and task_type.lower() not in {"task", "generic", "manual", "legacy"}:
 		values.append(task_type)
 	return query, values
 
@@ -340,7 +377,7 @@ def list_sales_tasks(
 	page_length=20,
 	sort_by="due_date_asc",
 ):
-	"""Return canonical ``CRM Action Item`` work for Sales profiles only."""
+	"""Return one permission-scoped CRM Action Item page for Sales profiles."""
 	actor = _require_sales_task_access()
 	start = _parse_aggregate_page(start, "start", 0, _MAX_AGGREGATE_PAGE_LENGTH)
 	page_length = _parse_aggregate_page(page_length, "page_length", 20, _MAX_AGGREGATE_PAGE_LENGTH)
@@ -395,11 +432,172 @@ def _check_reference_access(reference_doctype, reference_docname, permission_typ
 	return reference_doc
 
 
-@frappe.whitelist()
-def list_tasks(reference_doctype, reference_docname, search=None, status=None, start=0, page_length=20):
-	"""List Tasks attached to one CRM Student or CRM Contact."""
-	_check_reference_access(reference_doctype, reference_docname, "read")
+def _task_status_to_action_state(status, *, default=None):
+	if status in (None, ""):
+		return default
+	key = str(status).strip().lower()
+	try:
+		return _TASK_STATUS_TO_ACTION_STATE[key]
+	except KeyError:
+		frappe.throw(_("Unsupported Task status."), frappe.ValidationError)
 
+
+def _priority_to_action(priority, *, default="medium"):
+	if priority in (None, ""):
+		return default
+	value = str(priority).strip().lower()
+	if value not in {"low", "medium", "high"}:
+		frappe.throw(_("Unsupported Task priority."), frappe.ValidationError)
+	return value
+
+
+def _priority_to_task(priority):
+	return str(priority).capitalize() if priority else priority
+
+
+def _action_reference(action):
+	"""Return the old Task reference pair for an Action Item."""
+	if action.get("contact"):
+		return "CRM Contact", action.contact
+	return "CRM Student", action.student
+
+
+def _action_scope_reference(action):
+	"""Return the canonical permission scope for an Action Item."""
+	return "CRM Student", action.get("student")
+
+
+def _action_item_to_task(action, *, reference_doctype=None, reference_docname=None):
+	"""Adapt a canonical Action Item to the unchanged Task response DTO."""
+	if not isinstance(action, dict):
+		action = action.as_dict()
+	if not reference_doctype or not reference_docname:
+		reference_doctype, reference_docname = _action_reference(action)
+	assigned_to = None
+	if action.get("action_owner"):
+		assigned_to = frappe.db.get_value("CRM Staff", action.action_owner, "user")
+	return {
+		"name": action.get("name"),
+		"title": action.get("objective"),
+		"description": action.get("description") or action.get("objective"),
+		"student": action.get("student"),
+		"linked_interaction": action.get("linked_interaction"),
+		"priority": _priority_to_task(action.get("priority")),
+		"start_date": action.get("start_date"),
+		"assigned_to": assigned_to,
+		"status": _ACTION_STATE_TO_TASK_STATUS.get(action.get("state"), action.get("state")),
+		"due_date": action.get("due_at"),
+		"reference_doctype": reference_doctype,
+		"reference_docname": reference_docname,
+		"owner": action.get("owner"),
+		"creation": action.get("creation") or action.get("created_at"),
+		"modified": action.get("modified"),
+	}
+
+
+def _action_item_for_task(name):
+	if not frappe.db.exists("CRM Action Item", name):
+		return None
+	action = frappe.get_doc("CRM Action Item", name)
+	if action.get("legacy_task_deleted"):
+		frappe.throw(_("This Task has been deleted."), frappe.DoesNotExistError)
+	return action
+
+
+def _assigned_staff_for_user(user):
+	if user in (None, ""):
+		return None
+	if isinstance(user, dict):
+		values = [user.get(field) for field in ("name", "email", "user", "value", "full_name")]
+	else:
+		values = [user]
+	values = list(dict.fromkeys(str(value).strip() for value in values if value not in (None, "")))
+	if not values:
+		return None
+	# The legacy Task contract exposes a User value, while some callers use the
+	# CRM Staff link value or its display label. Resolve all three to the
+	# canonical CRM Staff name before passing it to the Action command service.
+	for value in values:
+		staff = frappe.db.get_value("CRM Staff", value, "name")
+		if not staff:
+			staff = frappe.db.get_value("CRM Staff", {"user": value}, "name")
+		if not staff:
+			staff = frappe.db.get_value("CRM Staff", {"full_name": value}, "name")
+		if staff:
+			return staff
+
+	# Some User Link controls submit the User's display name. Resolve that
+	# display value back to a User first, then use the CRM Staff relation.
+	for value in values:
+		user_name = frappe.db.get_value("User", value, "name")
+		if not user_name:
+			user_name = frappe.db.get_value("User", {"email": value}, "name")
+		if not user_name:
+			user_name = frappe.db.get_value("User", {"full_name": value, "enabled": 1}, "name")
+		if user_name:
+			staff = frappe.db.get_value("CRM Staff", {"user": user_name}, "name")
+			if staff:
+				return staff
+
+	assigned_value = ", ".join(values)[:140]
+	frappe.throw(
+		_("assigned_to '{0}' must reference an active CRM Staff/User.").format(assigned_value),
+		frappe.ValidationError,
+	)
+
+
+def _action_target(reference_doctype, reference_docname):
+	reference_doc = _check_reference_access(reference_doctype, reference_docname, "read")
+	if reference_doctype == "CRM Student":
+		return reference_docname, None
+	student = reference_doc.get("student")
+	return (student, reference_docname) if student else (None, None)
+
+
+def _compatibility_key(operation, name=None):
+	suffix = name or frappe.generate_hash(length=20)
+	return f"task-api-{operation}-{suffix}-{frappe.generate_hash(length=12)}"
+
+
+def _list_action_items(
+	search, status, start, page_length, *, student=None, contact=None,
+	reference_doctype=None, reference_docname=None,
+):
+	filters = {"legacy_task_deleted": 0}
+	if student:
+		filters["student"] = student
+	if contact:
+		filters["contact"] = contact
+	if status:
+		filters["state"] = _task_status_to_action_state(status)
+	or_filters = None
+	if search:
+		like = f"%{search}%"
+		or_filters = [["objective", "like", like], ["description", "like", like]]
+	result = paged_list(
+		"CRM Action Item",
+		_ACTION_ITEM_FIELDS,
+		filters=filters,
+		or_filters=or_filters,
+		start=start,
+		page_length=page_length,
+		order_by="modified desc",
+	)
+	rows = result.pop("rows")
+	return {
+		**result,
+		"tasks": [
+			_action_item_to_task(
+				row,
+				reference_doctype=reference_doctype,
+				reference_docname=reference_docname,
+			)
+			for row in rows
+		],
+	}
+
+
+def _list_legacy_tasks(reference_doctype, reference_docname, search, status, start, page_length):
 	filters = {"reference_doctype": reference_doctype, "reference_docname": reference_docname}
 	if status:
 		filters["status"] = status
@@ -423,8 +621,47 @@ def list_tasks(reference_doctype, reference_docname, search=None, status=None, s
 
 
 @frappe.whitelist()
+def list_tasks(
+	reference_doctype=None,
+	reference_docname=None,
+	search=None,
+	status=None,
+	start=0,
+	page_length=20,
+):
+	"""List Task-shaped rows; Student-backed rows come from CRM Action Item."""
+	if bool(reference_doctype) != bool(reference_docname):
+		frappe.throw(
+			_("reference_doctype and reference_docname must be supplied together."),
+			frappe.ValidationError,
+		)
+	if not reference_doctype and not reference_docname:
+		return _list_action_items(search, status, start, page_length)
+
+	student, contact = _action_target(reference_doctype, reference_docname)
+	if not student:
+		return _list_legacy_tasks(reference_doctype, reference_docname, search, status, start, page_length)
+	return _list_action_items(
+		search,
+		status,
+		start,
+		page_length,
+		student=student,
+		contact=contact,
+		reference_doctype=reference_doctype,
+		reference_docname=reference_docname,
+	)
+
+
+@frappe.whitelist()
 def get_task(name):
-	"""Get one Task and require read access to its referenced record."""
+	"""Get one Task-shaped row from Task or CRM Action Item."""
+	action = _action_item_for_task(name)
+	if action:
+		scope_doctype, scope_docname = _action_scope_reference(action)
+		_check_reference_access(scope_doctype, scope_docname, "read")
+		return _action_item_to_task(action)
+
 	doc = frappe.get_doc("Task", name)
 	doc.check_permission("read")
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
@@ -444,24 +681,44 @@ def create_task(
 	due_date=None,
 	linked_interaction=None,
 ):
-	"""Create a Task attached to a CRM Student or CRM Contact."""
-	_check_reference_access(reference_doctype, reference_docname, "read")
+	"""Create a Task-shaped CRM Action Item when the reference has a Student."""
+	student, contact = _action_target(reference_doctype, reference_docname)
+	if not student:
+		# CRM Action Item requires a Student. Keep the old path for standalone
+		# Contacts so existing integrations do not lose their legacy records.
+		doc = frappe.new_doc("Task")
+		doc.title = title
+		doc.description = description
+		doc.priority = priority
+		doc.start_date = start_date
+		doc.assigned_to = assigned_to
+		doc.status = status
+		doc.due_date = due_date
+		doc.linked_interaction = linked_interaction
+		doc.reference_doctype = reference_doctype
+		doc.reference_docname = reference_docname
+		doc.insert()
+		return doc.as_dict()
 
-	doc = frappe.new_doc("Task")
-	doc.title = title
-	doc.description = description
-	doc.priority = priority
-	doc.start_date = start_date
-	doc.assigned_to = assigned_to
-	doc.status = status
-	doc.due_date = due_date
-	doc.linked_interaction = linked_interaction
-	doc.reference_doctype = reference_doctype
-	doc.reference_docname = reference_docname
-	if reference_doctype == "CRM Student":
-		doc.student = reference_docname
-	doc.insert()
-	return doc.as_dict()
+	result = create_manual_action(
+		student=student,
+		contact=contact,
+		action_type="CREATE_TASK",
+		objective=title,
+		description=description,
+		start_date=start_date,
+		priority=_priority_to_action(priority),
+		due_at=due_date,
+		linked_interaction=linked_interaction,
+		assignee_staff=_assigned_staff_for_user(assigned_to),
+		initial_state=_task_status_to_action_state(status, default="pending"),
+		idempotency_key=_compatibility_key("create"),
+	)
+	return _action_item_to_task(
+		frappe.get_doc("CRM Action Item", result["action"]),
+		reference_doctype=reference_doctype,
+		reference_docname=reference_docname,
+	)
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
@@ -476,32 +733,57 @@ def update_task(
 	due_date=None,
 	linked_interaction=None,
 ):
-	"""Update mutable Task fields without moving its referenced record."""
-	doc = frappe.get_doc("Task", name)
-	doc.check_permission("write")
-	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
+	"""Update a Task-shaped CRM Action Item through its command service."""
+	action = _action_item_for_task(name)
+	if not action:
+		doc = frappe.get_doc("Task", name)
+		doc.check_permission("write")
+		_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 
-	values = {
-		"title": title,
-		"description": description,
-		"priority": priority,
-		"start_date": start_date,
-		"assigned_to": assigned_to,
-		"status": status,
-		"due_date": due_date,
-		"linked_interaction": linked_interaction,
-	}
-	for fieldname, value in values.items():
-		if value is not None:
-			setattr(doc, fieldname, value)
+		values = {
+			"title": title,
+			"description": description,
+			"priority": priority,
+			"start_date": start_date,
+			"assigned_to": assigned_to,
+			"status": status,
+			"due_date": due_date,
+			"linked_interaction": linked_interaction,
+		}
+		for fieldname, value in values.items():
+			if value is not None:
+				setattr(doc, fieldname, value)
 
-	doc.save()
-	return doc.as_dict()
+		doc.save()
+		return doc.as_dict()
+
+	scope_doctype, scope_docname = _action_scope_reference(action)
+	_check_reference_access(scope_doctype, scope_docname, "read")
+	update_manual_action(
+		name,
+		title=title,
+		description=description,
+		start_date=start_date,
+		priority=_priority_to_action(priority, default=None) if priority is not None else None,
+		due_at=due_date,
+		assignee_staff=_assigned_staff_for_user(assigned_to) if assigned_to is not None else None,
+		action_state=_task_status_to_action_state(status) if status is not None else None,
+		linked_interaction=linked_interaction,
+		idempotency_key=_compatibility_key("update", name),
+	)
+	return _action_item_to_task(frappe.get_doc("CRM Action Item", name))
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_task(name):
-	"""Delete a Task after checking access to its referenced record."""
+	"""Delete a Task-shaped row; canonical Action Items are soft-deleted."""
+	action = _action_item_for_task(name)
+	if action:
+		scope_doctype, scope_docname = _action_scope_reference(action)
+		_check_reference_access(scope_doctype, scope_docname, "read")
+		delete_manual_action(name, idempotency_key=_compatibility_key("delete", name))
+		return {"deleted": name}
+
 	doc = frappe.get_doc("Task", name)
 	doc.check_permission("delete")
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")

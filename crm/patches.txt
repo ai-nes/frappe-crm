@@ -128,3 +128,5 @@ crm.patches.v1_0.drop_contact_marketing_link_fields
 crm.patches.v1_0.drop_staff_sales_team_field
 crm.patches.v1_0.drop_crm_lead_status
 crm.patches.v1_0.backfill_admission_method_codes
+crm.patches.v1_0.allow_ctv_sale_action_acceptance
+crm.patches.v1_0.seed_ctv_sale_director_read_permissions

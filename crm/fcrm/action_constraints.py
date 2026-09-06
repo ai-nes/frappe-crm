@@ -13,8 +13,10 @@ from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA, is_valid_configur
 from crm.fcrm.nba_timing import TIME_SLOTS
 
 CHANNELS = frozenset({"NONE", "CALL", "EMAIL", "MESSAGE"})
+TASK_ACCEPTOR_ROLES = ("CTV Sale", "Sale", "Lead Sale")
+DEFAULT_ACTION_ACTORS = (*TASK_ACCEPTOR_ROLES, "Admissions Director")
 ACTOR_ROLES = frozenset(
-	{"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director", "System Manager"}
+	{*DEFAULT_ACTION_ACTORS, "Marketing", "Promoter", "System Manager"}
 )
 EXECUTION_TYPES = frozenset({"MANUAL", "AI_ASSISTED"})
 
@@ -58,7 +60,7 @@ APPROVAL_ACTIONS = frozenset(
 def _actors_for(code: str) -> list[str]:
 	if code in MANAGER_ONLY_ACTIONS:
 		return ["Lead Sale", "Admissions Director"]
-	return ["Sale", "Lead Sale", "Admissions Director"]
+	return list(DEFAULT_ACTION_ACTORS)
 
 
 def _checked(value: Any) -> bool:

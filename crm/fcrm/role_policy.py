@@ -25,9 +25,9 @@ PROFILE_LABELS = {
 	# PRD-phan-quyen-lead.md roles (2026-09-04). Unlike the profiles above,
 	# these are not derived from `CANONICAL_PERMISSION_MATRIX` -- their
 	# `CRM Permission Profile` rows are hand-transcribed from the PRD by
-	# `crm.patches.v1_0.seed_new_lead_role_profiles`, and they carry no
-	# `PROFILE_CAPABILITIES` (the PRD scopes them to plain Lead CRUD, none of
-	# the recommendation/lifecycle actions the other profiles gate).
+	# `crm.patches.v1_0.seed_new_lead_role_profiles`. CTV Sale is the one
+	# operational exception: it can process its own recommendations and tasks,
+	# while the other PRD profiles remain limited to their CRUD matrix.
 	# "PR (nhân viên)" reuses the pre-existing "Promoter" role name rather
 	# than introducing a new "PR" role (explicit product decision, 2026-09-04)
 	# -- `Promoter` is therefore split out of `marketing`'s aliases below into
@@ -132,6 +132,14 @@ PROFILE_CAPABILITIES = {
 			"student.policy.approve",
 		}
 	),
+	"ctv_sale": frozenset(
+		{
+			"student.execute",
+			"recommendation.decide",
+			"action.execute",
+		}
+	),
+	"pr": frozenset({"school.activity.manage", "school.person.manage"}),
 }
 
 # Human-readable metadata is published alongside the stable capability keys so

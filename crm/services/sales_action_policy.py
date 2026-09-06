@@ -8,6 +8,7 @@ from datetime import datetime
 import frappe
 from frappe.utils import now_datetime
 
+from crm.fcrm.action_constraints import DEFAULT_ACTION_ACTORS, TASK_ACCEPTOR_ROLES
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CATALOG, action_category
 from crm.fcrm.action_type_registry import available_action_types
 
@@ -32,7 +33,8 @@ class ActionPolicy:
 	)
 
 
-_DEFAULT_ACTORS = ("Sale", "Lead Sale", "Admissions Director")
+_DEFAULT_ACTORS = DEFAULT_ACTION_ACTORS
+_TASK_ACTORS = TASK_ACCEPTOR_ROLES
 _DEFAULT_POLICY = ("objective",)
 
 # Every catalog row is executable as a governed work item. Action-specific
@@ -44,17 +46,17 @@ ACTION_POLICIES = {
 }
 ACTION_POLICIES.update(
 	{
-		"CALL": ActionPolicy("CALL", ("objective", "package"), ("Sale", "Lead Sale")),
-		"EMAIL": ActionPolicy("EMAIL", ("objective", "package"), ("Sale", "Lead Sale")),
-		"MESSAGE": ActionPolicy("MESSAGE", ("objective", "channel"), ("Sale", "Lead Sale")),
-		"COUNSELING": ActionPolicy("COUNSELING", _DEFAULT_POLICY, ("Sale", "Lead Sale")),
-		"MEETING": ActionPolicy("MEETING", ("objective", "scheduled_at"), ("Sale", "Lead Sale")),
-		"EVENT_INVITE": ActionPolicy("EVENT_INVITE", ("objective", "event"), ("Sale", "Lead Sale")),
-		"CAMPUS_VISIT": ActionPolicy("CAMPUS_VISIT", ("objective", "campus"), ("Sale", "Lead Sale")),
-		"DOCUMENT_REQUEST": ActionPolicy("DOCUMENT_REQUEST", ("objective", "document_type"), ("Sale", "Lead Sale")),
-		"APPLICATION_SUPPORT": ActionPolicy("APPLICATION_SUPPORT", ("objective", "application_step"), ("Sale", "Lead Sale")),
-		"PARENT_CONTACT": ActionPolicy("PARENT_CONTACT", ("objective", "authority", "channel", "timing"), ("Sale", "Lead Sale")),
-		"HANDOFF": ActionPolicy("HANDOFF", ("objective", "handoff_to"), ("Sale", "Lead Sale"), can_dispatch=False),
+		"CALL": ActionPolicy("CALL", ("objective", "package"), _TASK_ACTORS),
+		"EMAIL": ActionPolicy("EMAIL", ("objective", "package"), _TASK_ACTORS),
+		"MESSAGE": ActionPolicy("MESSAGE", ("objective", "channel"), _TASK_ACTORS),
+		"COUNSELING": ActionPolicy("COUNSELING", _DEFAULT_POLICY, _TASK_ACTORS),
+		"MEETING": ActionPolicy("MEETING", ("objective", "scheduled_at"), _TASK_ACTORS),
+		"EVENT_INVITE": ActionPolicy("EVENT_INVITE", ("objective", "event"), _TASK_ACTORS),
+		"CAMPUS_VISIT": ActionPolicy("CAMPUS_VISIT", ("objective", "campus"), _TASK_ACTORS),
+		"DOCUMENT_REQUEST": ActionPolicy("DOCUMENT_REQUEST", ("objective", "document_type"), _TASK_ACTORS),
+		"APPLICATION_SUPPORT": ActionPolicy("APPLICATION_SUPPORT", ("objective", "application_step"), _TASK_ACTORS),
+		"PARENT_CONTACT": ActionPolicy("PARENT_CONTACT", ("objective", "authority", "channel", "timing"), _TASK_ACTORS),
+		"HANDOFF": ActionPolicy("HANDOFF", ("objective", "handoff_to"), _TASK_ACTORS, can_dispatch=False),
 	}
 )
 

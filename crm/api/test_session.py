@@ -97,6 +97,7 @@ class TestSessionRoleContract(FrappeTestCase):
 	def test_requested_profiles_are_crm_users_without_legacy_elevation(self):
 		for roles, profile, label in (
 			({"Sale"}, "sales", "Sale"),
+			({"CTV Sale"}, "ctv_sale", "CTV Sale"),
 			({"Marketing"}, "marketing", "Marketing"),
 			({"Lead Sale"}, "lead_sales", "Lead Sale"),
 			({"Admissions Director"}, "admissions_director", "Admissions Director"),
@@ -122,6 +123,10 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_capabilities_are_server_derived_and_data_steward_is_not_a_profile(self):
 		self.assertIn("student.execute", capabilities_for_roles({"Sale"}))
+		self.assertEqual(
+			capabilities_for_roles({"CTV Sale"}),
+			frozenset({"student.execute", "recommendation.decide", "action.execute"}),
+		)
 		self.assertIn("system.configure", capabilities_for_roles({"System Manager"}))
 		self.assertEqual(capabilities_for_roles({"CRM Data Steward"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
@@ -136,6 +141,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertIn("Sale", CRM_ALLOWED_ROLES)
 		self.assertNotIn("Sales", CRM_ALLOWED_ROLES)
 		self.assertIn("Sale", SALES_WORKLIST_ROLE_NAMES)
+		self.assertIn("CTV Sale", SALES_WORKLIST_ROLE_NAMES)
 		self.assertNotIn("Sales", SALES_WORKLIST_ROLE_NAMES)
 		self.assertIn("Lead Sale", SALES_WORKLIST_ROLE_NAMES)
 

@@ -33,6 +33,7 @@ ACTION_TRANSITIONS = {
 	"in-progress": {"completed", "requires-review", "cancelled"},
 	"completed": set(), "cancelled": set(), "rejected": set(), "superseded": set(),
 }
+CRM_ACTION_TERMINAL_STATES = frozenset({"completed", "cancelled", "rejected", "superseded"})
 
 
 # Baseline operational risk for each controlled Action type. An unknown or
@@ -145,6 +146,26 @@ def _staff_for_user(user):
 	return frappe.db.get_value("CRM Staff", {"user": user}, "name")
 
 
+def _active_staff_teams(staff):
+	"""Return the currently effective Sales Team memberships for a Staff row."""
+	if not staff:
+		return set()
+	memberships = frappe.get_all(
+		"CRM Team Membership",
+		filters={"parent": staff, "parenttype": "CRM Staff"},
+		fields=["team", "effective_from", "effective_until"],
+	)
+	return {
+		row.get("team")
+		for row in memberships
+		if row.get("team")
+		and (
+			(not row.get("effective_from") and not row.get("effective_until"))
+			or is_effective(row)
+		)
+	}
+
+
 def _valid_executor(student, staff, *, allow_global=False):
 	"""Keep assignment inside the live Student owner/team scope."""
 	staff_row = frappe.db.get_value("CRM Staff", staff, ["user", "is_active"], as_dict=True)
@@ -172,12 +193,14 @@ def _valid_executor(student, staff, *, allow_global=False):
 	if staff == owner:
 		return
 	if team:
-		memberships = frappe.get_all(
-			"CRM Team Membership",
-			filters={"parent": staff, "parenttype": "CRM Staff", "team": team},
-			fields=["effective_from", "effective_until"],
-		)
-		if any(is_effective(row) for row in memberships):
+		if team in _active_staff_teams(staff):
+			return
+	# Older Student rows may have a valid owner but no owning_team projection.
+	# Derive the fallback from the owner's current team so Lead Sale keeps the
+	# same scope that the Student permission query already grants. This does not
+	# create a new visibility scope; _can_decide has already checked Student read.
+	if not team and owner:
+		if _active_staff_teams(owner).intersection(_active_staff_teams(staff)):
 			return
 	# A school-specific assignment is a valid executor scope even when the
 	# Student is still waiting in a different pool projection.  It must still
@@ -790,9 +813,24 @@ def _record_manual_override(student, action, action_type, actor, scope, receipt,
 		)
 
 
-def create_manual_action(student: str, action_type: str, objective: str, idempotency_key: str, due_at: Any = None, priority: str = "medium", assignee_staff: str | None = None, contact: str | None = None):
+def create_manual_action(
+	student: str,
+	action_type: str,
+	objective: str,
+	idempotency_key: str,
+	due_at: Any = None,
+	priority: str = "medium",
+	assignee_staff: str | None = None,
+	contact: str | None = None,
+	description: str | None = None,
+	start_date: Any = None,
+	linked_interaction: str | None = None,
+	initial_state: str = "accepted",
+):
 	"""Create a user-authored Action through the governed aggregate."""
-	actor = _actor(); key = _required(idempotency_key, "idempotency_key"); objective = _required(objective, "objective")[:500]
+	actor = _actor()
+	key = _required(idempotency_key, "idempotency_key")
+	objective = _required(objective, "objective")[:500]
 	from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
 	from crm.fcrm.action_type_registry import is_available_action_type
 	from crm.fcrm.student_contact_conversion import contact_for_student, contact_is_linked_to_student
@@ -801,11 +839,14 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 	action_type = canonicalize_action_type(action_type)
 	if not is_available_action_type(action_type):
 		_fail("INVALID_INPUT", "Unsupported Action type.")
+	if initial_state not in {"pending", "accepted", "in-progress", "completed", "cancelled"}:
+		_fail("INVALID_INPUT", "Unsupported initial Action state.")
 	try:
 		require_parent_contact_authority(action_type, student)
 	except frappe.PermissionError as exc:
 		_fail("FORBIDDEN", str(exc))
-	if priority not in {"high", "medium", "low"}: _fail("INVALID_INPUT", "Unsupported Action priority.")
+	if priority not in {"high", "medium", "low"}:
+		_fail("INVALID_INPUT", "Unsupported Action priority.")
 	if contact:
 		if not contact_is_linked_to_student(contact, student):
 			_fail("INVALID_INPUT", "Contact is not linked to the selected Student.")
@@ -815,25 +856,272 @@ def create_manual_action(student: str, action_type: str, objective: str, idempot
 			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
 	else:
 		contact = contact_for_student(student)
-	student_doc = frappe.get_doc("CRM Student", student); scope = _scope(actor)
+	student_doc = frappe.get_doc("CRM Student", student)
+	scope = _scope(actor)
 	if actor != "Administrator" and not has_student_permission(student_doc, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Action is outside your current scope.")
 	assignee_staff = assignee_staff or _staff_for_user(actor)
-	if not assignee_staff: _fail("INVALID_INPUT", "A mapped Sales executor is required.")
-	_valid_executor(student, assignee_staff, allow_global=actor == "Administrator")
-	payload = {"student": student, "contact": contact, "action_type": action_type, "objective": objective, "due_at": due_at, "priority": priority, "assignee_staff": assignee_staff}
-	fingerprint = _fingerprint(payload); command_key = _command_key("manual_action", actor, key)
-	if replay := _replay(command_key, fingerprint): return replay
+	if not assignee_staff and actor != "Administrator":
+		_fail("INVALID_INPUT", "A mapped Sales executor is required.")
+	if assignee_staff:
+		_valid_executor(student, assignee_staff, allow_global=actor == "Administrator")
+	payload = {
+		"student": student,
+		"contact": contact,
+		"action_type": action_type,
+		"objective": objective,
+		"description": description,
+		"start_date": start_date,
+		"linked_interaction": linked_interaction,
+		"due_at": due_at,
+		"priority": priority,
+		"assignee_staff": assignee_staff,
+		"initial_state": initial_state,
+	}
+	fingerprint = _fingerprint(payload)
+	command_key = _command_key("manual_action", actor, key)
+	if replay := _replay(command_key, fingerprint):
+		return replay
 	_lock("CRM Student", student)
 	receipt = _new_receipt("action_decision", actor, student, key, fingerprint, scope, frappe.generate_hash(length=20))
-	previous_flag = getattr(frappe.flags, "crm_action_command", False); frappe.flags.crm_action_command = True
+	previous_flag = getattr(frappe.flags, "crm_action_command", False)
+	frappe.flags.crm_action_command = True
 	try:
-		action = frappe.get_doc({"doctype": CANONICAL_ACTION, "student": student, "contact": contact, "current_slot": _free_current_slot(student), "origin": "manual", "action": action_type, "action_type": action_category(action_type), "objective": objective, "disposition": "ACT", "state": "accepted", "execution_status": "planned", "priority": priority, "due_at": due_at, "action_owner": assignee_staff, "source_context_revision": int(student_doc.get("student_context_revision") or 0), "policy_context_version": POLICY_VERSION, "generation_idempotency_key": command_key, "producer_identity": f"user:{actor}", "payload_digest": fingerprint, "accepted_at": now_datetime(), "created_at": now_datetime(), "action_revision": 1, "decision_revision": 1}).insert(ignore_permissions=True)
+		now = now_datetime()
+		action = frappe.get_doc(
+			{
+				"doctype": CANONICAL_ACTION,
+				"student": student,
+				"contact": contact,
+				"current_slot": _free_current_slot(student),
+				"origin": "manual",
+				"action": action_type,
+				"action_type": action_category(action_type),
+				"objective": objective,
+				"description": description,
+				"start_date": start_date,
+				"linked_interaction": linked_interaction,
+				"disposition": "ACT",
+				"state": initial_state,
+				"execution_status": "completed" if initial_state == "completed" else "in_progress" if initial_state == "in-progress" else "cancelled" if initial_state == "cancelled" else "planned",
+				"priority": priority,
+				"due_at": due_at,
+				"action_owner": assignee_staff,
+				"source_context_revision": int(student_doc.get("student_context_revision") or 0),
+				"policy_context_version": POLICY_VERSION,
+				"generation_idempotency_key": command_key,
+				"producer_identity": f"user:{actor}",
+				"payload_digest": fingerprint,
+				"accepted_at": now if initial_state != "pending" else None,
+				"completed_at": now if initial_state == "completed" else None,
+				"created_at": now,
+				"started_at": now if initial_state == "in-progress" else None,
+				"action_revision": 1,
+				"decision_revision": 1,
+			}
+		).insert(ignore_permissions=True)
 		_record_manual_override(student, action, action_type, actor, scope, receipt, command_key)
-		result = {"status": "accepted", "action": action.name, "student": student, "revision": action.action_revision, "receipt": receipt.name}
-		_finish(receipt, result); return result
+		result = {
+			"status": "accepted" if initial_state == "accepted" else initial_state,
+			"action": action.name,
+			"student": student,
+			"revision": action.action_revision,
+			"receipt": receipt.name,
+		}
+		_finish(receipt, result)
+		return result
 	finally:
 		frappe.flags.crm_action_command = previous_flag
+
+
+def update_manual_action(
+	name: str,
+	*,
+	title: str | None = None,
+	description: str | None = None,
+	start_date: Any = None,
+	priority: str | None = None,
+	due_at: Any = None,
+	assignee_staff: str | None = None,
+	action_state: str | None = None,
+	linked_interaction: str | None = None,
+	idempotency_key: str,
+	correlation_id: str | None = None,
+):
+	"""Update a manually-created Action through the Task compatibility facade.
+
+	The legacy Task API has no expected revision or outcome payload.  The
+	compatibility command therefore keeps the aggregate lock and audit receipt,
+	while allowing the old CRUD status vocabulary to move an Action directly.
+	Canonical lifecycle endpoints remain stricter and still require outcome
+	evidence when completing an Action.
+	"""
+	actor = _actor()
+	key = _required(idempotency_key, "idempotency_key")
+	correlation_id = correlation_id or frappe.generate_hash(length=20)
+	if action_state and action_state not in {
+		"pending", "accepted", "in-progress", "requires-review", "deferred",
+		"completed", "cancelled", "rejected", "superseded",
+	}:
+		_fail("INVALID_INPUT", "Unsupported Action state.")
+	if priority is not None and priority not in {"high", "medium", "low"}:
+		_fail("INVALID_INPUT", "Unsupported Action priority.")
+	if title is not None:
+		title = _required(title, "title")[:500]
+
+	payload = {
+		"name": name,
+		"title": title,
+		"description": description,
+		"start_date": start_date,
+		"priority": priority,
+		"due_at": due_at,
+		"assignee_staff": assignee_staff,
+		"action_state": action_state,
+		"linked_interaction": linked_interaction,
+	}
+	fingerprint = _fingerprint(payload)
+	command_key = _command_key("manual_action_update", actor, key)
+	if replay := _replay(command_key, fingerprint):
+		return replay
+
+	_lock(CANONICAL_ACTION, name)
+	action = frappe.get_doc(CANONICAL_ACTION, name)
+	scope = _can_decide(actor, action)
+	if action.get("legacy_task_deleted"):
+		_fail("INVALID_STATE", "This Task has been deleted.")
+	if assignee_staff:
+		own_staff = _staff_for_user(actor)
+		if actor != "Administrator" and assignee_staff != own_staff and not (
+			{"team.oversee", "admissions.oversee"} & set(scope["capabilities"])
+		):
+			_fail("FORBIDDEN", "You may only assign yourself.")
+		_valid_executor(action.student, assignee_staff, allow_global=actor == "Administrator")
+
+	receipt = _new_receipt(
+		"action_decision", actor, action.student, key, fingerprint, scope, correlation_id
+	)
+	previous_state = action.state
+	previous_flag = getattr(frappe.flags, "crm_action_command", False)
+	previous_compatibility_flag = getattr(frappe.flags, "crm_action_compatibility_command", False)
+	frappe.flags.crm_action_command = True
+	frappe.flags.crm_action_compatibility_command = True
+	try:
+		if title is not None:
+			action.objective = title
+		if description is not None:
+			action.description = description
+		if start_date is not None:
+			action.start_date = start_date
+		if priority is not None:
+			action.priority = priority
+		if due_at is not None:
+			action.due_at = due_at
+		if assignee_staff is not None:
+			action.action_owner = assignee_staff
+		if linked_interaction is not None:
+			action.linked_interaction = linked_interaction
+		if action_state is not None:
+			action.state = action_state
+			action.execution_status = {
+				"completed": "completed",
+				"in-progress": "in_progress",
+				"cancelled": "cancelled",
+				"rejected": "cancelled",
+				"superseded": "cancelled",
+			}.get(action.state, "planned")
+		if action.state == "in-progress" and not action.started_at:
+			action.started_at = now_datetime()
+		if action.state == "completed":
+			action.completed_at = now_datetime()
+		if action.state in {"cancelled", "rejected", "superseded"}:
+			action.terminal_reason = "Updated through the Task API compatibility facade."
+		action.action_revision = int(action.get("action_revision") or 1) + 1
+		action.decision_actor = actor
+		action.decision_at = now_datetime()
+		action.save(ignore_permissions=True)
+		event = _event(
+			"action.manual_override", action.student, action.get("recommendation"), action.name,
+			actor, scope, receipt, correlation_id, action.action_revision,
+			{
+				"status": action.state,
+				"from_state": previous_state,
+				"reason": "Task API compatibility update",
+			},
+			manual_override=True,
+		)
+		result = {
+			"status": "updated",
+			"action": action.name,
+			"student": action.student,
+			"revision": action.action_revision,
+			"event": event.name,
+			"receipt": receipt.name,
+		}
+		_finish(receipt, result)
+		return result
+	finally:
+		frappe.flags.crm_action_command = previous_flag
+		frappe.flags.crm_action_compatibility_command = previous_compatibility_flag
+
+
+def delete_manual_action(name: str, *, idempotency_key: str, correlation_id: str | None = None):
+	"""Soft-delete an Action while preserving its audit trail and name."""
+	actor = _actor()
+	key = _required(idempotency_key, "idempotency_key")
+	correlation_id = correlation_id or frappe.generate_hash(length=20)
+	payload = {"name": name, "operation": "DELETE"}
+	fingerprint = _fingerprint(payload)
+	command_key = _command_key("manual_action_delete", actor, key)
+	if replay := _replay(command_key, fingerprint):
+		return replay
+
+	_lock(CANONICAL_ACTION, name)
+	action = frappe.get_doc(CANONICAL_ACTION, name)
+	scope = _can_decide(actor, action)
+	if action.get("legacy_task_deleted"):
+		return {"status": "deleted", "action": name, "student": action.student, "revision": action.action_revision}
+	receipt = _new_receipt(
+		"action_decision", actor, action.student, key, fingerprint, scope, correlation_id
+	)
+	previous_state = action.state
+	previous_flag = getattr(frappe.flags, "crm_action_command", False)
+	previous_compatibility_flag = getattr(frappe.flags, "crm_action_compatibility_command", False)
+	frappe.flags.crm_action_command = True
+	frappe.flags.crm_action_compatibility_command = True
+	try:
+		if action.state not in CRM_ACTION_TERMINAL_STATES:
+			action.state = "cancelled"
+			action.execution_status = "cancelled"
+			action.terminal_reason = "Deleted through the Task API compatibility facade."
+		action.legacy_task_deleted = 1
+		action.action_revision = int(action.get("action_revision") or 1) + 1
+		action.decision_actor = actor
+		action.decision_at = now_datetime()
+		action.save(ignore_permissions=True)
+		event = _event(
+			"action.manual_override", action.student, action.get("recommendation"), action.name,
+			actor, scope, receipt, correlation_id, action.action_revision,
+			{
+				"status": "deleted",
+				"from_state": previous_state,
+				"reason": "Task API compatibility delete",
+			},
+			manual_override=True,
+		)
+		result = {
+			"status": "deleted",
+			"action": action.name,
+			"student": action.student,
+			"revision": action.action_revision,
+			"event": event.name,
+			"receipt": receipt.name,
+		}
+		_finish(receipt, result)
+		return result
+	finally:
+		frappe.flags.crm_action_command = previous_flag
+		frappe.flags.crm_action_compatibility_command = previous_compatibility_flag
 
 
 def _transition_canonical_action(name: str, expected_revision: Any, status: str, idempotency_key: str, correlation_id: str | None = None, outcome_code: str | None = None, evidence: Any = None, reason: str | None = None, linked_interaction: str | None = None, expected_modified: str | None = None, attempt_id: str | None = None, impact_score: float | None = None):
