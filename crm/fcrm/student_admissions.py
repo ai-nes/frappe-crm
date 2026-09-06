@@ -151,7 +151,7 @@ def _finish_receipt(receipt, result: dict[str, Any], outcome: str = "created", e
 		receipt.db_set(field, value, update_modified=False)
 
 
-def _interaction_type(preferred: str = "OUTREACH") -> str:
+def _interaction_type(preferred: str = "MESSAGE") -> str:
 	if frappe.db.exists("CRM Interaction Type", {"name": preferred, "enabled": 1}):
 		return preferred
 	name = frappe.db.get_value("CRM Interaction Type", {"enabled": 1}, "name", order_by="sort_order asc, name asc")
@@ -160,7 +160,7 @@ def _interaction_type(preferred: str = "OUTREACH") -> str:
 	return name
 
 
-def _insert_interaction(student: str, actor: str, summary: str, notes: str | None, *, interaction_type: str = "OUTREACH", external_id: str | None = None, outcome: str | None = None):
+def _insert_interaction(student: str, actor: str, summary: str, notes: str | None, *, interaction_type: str = "MESSAGE", external_id: str | None = None, outcome: str | None = None):
 	if external_id:
 		existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
 		if existing:
@@ -209,7 +209,7 @@ def _call(student_doc, actor: str, data: dict[str, Any], *, success: bool, idemp
 		# reference fields so the fallback cannot create an unlinked duplicate.
 		from crm.fcrm.interaction_log import create_interaction
 		interaction = create_interaction(
-			interaction_type="CONNECTED" if success else "OUTREACH",
+			interaction_type="PHONE_CALL",
 			student=student_doc.name,
 			reference_doctype="Call Log",
 			reference_docname=call.name,
@@ -249,7 +249,7 @@ def _communication(student_doc, actor: str, data: dict[str, Any]):
 	if not interaction:
 		from crm.fcrm.interaction_log import create_interaction
 		interaction = create_interaction(
-			interaction_type="OUTREACH",
+			interaction_type="EMAIL",
 			student=student_doc.name,
 			reference_doctype="Communication",
 			reference_docname=comm.name,
@@ -272,7 +272,7 @@ def _event_action(student: str, actor: str, action: str, data: dict[str, Any], i
 		if action == "event_invite":
 			if not frappe.db.exists("CRM Event", event_name):
 				_fail("NOT_FOUND", _("The event does not exist."))
-			interaction = _insert_interaction(student, actor, _("Invited to {0}").format(event_name), data.get("notes"), interaction_type="OUTREACH", external_id=f"admissions:{idempotency_key}:interaction")
+			interaction = _insert_interaction(student, actor, _("Invited to {0}").format(event_name), data.get("notes"), interaction_type="EVENT_PARTICIPATION", external_id=f"admissions:{idempotency_key}:interaction")
 			result = {"interaction": interaction}
 			if data.get("campaign"):
 				result["campaign"] = student_attribution.record_campaign_touchpoint(student=student, crm_campaign=data["campaign"], source="Manual", notes=_("Open Day invitation"), idempotency_key=f"{idempotency_key}:campaign", correlation_id=correlation_id)
@@ -285,7 +285,7 @@ def _event_action(student: str, actor: str, action: str, data: dict[str, Any], i
 			supersedes = active
 		event = student_attribution.record_event_participation(student=student, crm_event=event_name, status=status, checked_in_at=frappe.utils.now_datetime() if status == "Checked-in" else None, supersedes=supersedes, idempotency_key=f"{idempotency_key}:event", correlation_id=correlation_id)
 		summary = _("Checked-in at {0}").format(event_name) if status == "Checked-in" else _("Registered for {0}").format(event_name)
-		interaction = _insert_interaction(student, actor, summary, data.get("notes"), interaction_type="CHECKED_IN" if action == "event_checkin" else "REGISTERED", external_id=f"admissions:{idempotency_key}:interaction")
+		interaction = _insert_interaction(student, actor, summary, data.get("notes"), interaction_type="EVENT_PARTICIPATION", external_id=f"admissions:{idempotency_key}:interaction")
 		return {"event": event, "interaction": interaction}
 	finally:
 		frappe.flags.student_admissions_service = previous
@@ -334,7 +334,7 @@ def _dispatch(student_doc, actor: str, action: str, data: dict[str, Any], idempo
 	if action in {"event_invite", "event_register", "event_checkin"}:
 		return _event_action(student_doc.name, actor, action, data, idempotency_key, correlation_id)
 	if action == "scholarship_interest":
-		interaction = _insert_interaction(student_doc.name, actor, _("Scholarship interest"), data.get("notes"), interaction_type="COUNSELING", external_id=f"admissions:{idempotency_key}:interaction")
+		interaction = _insert_interaction(student_doc.name, actor, _("Scholarship interest"), data.get("notes"), interaction_type="MEETING", external_id=f"admissions:{idempotency_key}:interaction")
 		intent_type = data.get("intent_type") or "SCHOLARSHIP"
 		if not frappe.db.exists("CRM Intent Type", intent_type):
 			_fail("INVALID_INPUT", _("Scholarship intent type is not configured."))

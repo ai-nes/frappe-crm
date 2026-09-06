@@ -325,6 +325,9 @@ doc_events = {
 		"after_insert": ["crm.utils.on_comment_insert"],
 		"on_update": ["crm.api.comment.on_update"],
 	},
+	"FCRM Note": {
+		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_note_insert"],
+	},
 	"WhatsApp Message": {
 		"validate": ["crm.api.whatsapp.validate"],
 		"on_update": ["crm.api.whatsapp.on_update"],

@@ -94,7 +94,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
 MAX_EXTERNAL_INTERACTION_TURNS = 200
-CHATWOOT_INTERACTION_TYPE = "MESSAGE_CHATWOOT"
+CHATWOOT_INTERACTION_TYPE = "MESSAGE"
 
 
 def external_id_for(reference_doctype, reference_docname, interaction_type):
@@ -544,9 +544,9 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 	interaction_type = (
 		CHATWOOT_INTERACTION_TYPE
 		if payload["source_namespace"] == "chatwoot"
-		else "CONNECTED"
+		else "MESSAGE"
 		if payload["direction"] == "inbound"
-		else "OUTREACH"
+		else "MESSAGE"
 	)
 	if not frappe.db.exists(
 		"CRM Interaction Type", {"name": interaction_type, "enabled": 1}
@@ -900,7 +900,7 @@ def create_interaction_from_communication_update(doc, method=None):
 
 	try:
 		_create_interaction_for_reference(
-			doc.reference_doctype, doc.reference_name, "CONNECTED", doc, summary=doc.subject
+			doc.reference_doctype, doc.reference_name, "MESSAGE", doc, summary=doc.subject
 		)
 	except Exception:
 		frappe.log_error(title="CRM Interaction creation failed (Communication update)")
@@ -929,7 +929,7 @@ def create_interaction_from_task_update(doc, method=None):
 		_create_interaction_for_reference(
 			doc.reference_doctype,
 			doc.reference_docname,
-			"COUNSELING",
+			"SYSTEM_ACTIVITY",
 			doc,
 			summary=doc.title,
 			actor=doc.assigned_to,
@@ -938,11 +938,34 @@ def create_interaction_from_task_update(doc, method=None):
 		frappe.log_error(title="CRM Interaction creation failed (Task update)")
 
 
+def create_interaction_from_note_insert(doc, method=None):
+	"""Record a Sale-authored FCRM Note as a scoped NOTE interaction."""
+	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+		return
+
+	try:
+		create_interaction(
+			interaction_type="NOTE",
+			crm_contact=doc.reference_name if doc.reference_doctype == "CRM Contact" else None,
+			student=doc.reference_name if doc.reference_doctype == "CRM Student" else None,
+			reference_doctype="FCRM Note",
+			reference_docname=doc.name,
+			actor=doc.owner,
+			summary="Ghi chú tư vấn",
+			notes=doc.content,
+			channel="Internal",
+			direction="Internal",
+			external_id=f"FCRM Note:{doc.name}:NOTE",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (FCRM Note insert)")
+
+
 def create_interaction_from_call_log_insert(doc, method=None):
 	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
 		return
 
-	interaction_type = "CONNECTED" if (doc.status == "Completed" and doc.duration) else "OUTREACH"
+	interaction_type = "PHONE_CALL"
 	try:
 		_create_interaction_for_reference(
 			doc.reference_doctype,
@@ -966,7 +989,7 @@ def create_interaction_from_contact_update(doc, method=None):
 	if doc.has_value_changed("lifecycle_stage"):
 		try:
 			create_interaction(
-				interaction_type="STAGE_CHANGED",
+				interaction_type="SYSTEM_ACTIVITY",
 				crm_contact=doc.name,
 				student=doc.student,
 				reference_doctype="CRM Contact",
@@ -979,7 +1002,7 @@ def create_interaction_from_contact_update(doc, method=None):
 	if doc.has_value_changed("owner_staff"):
 		before = doc.get_doc_before_save()
 		was_unassigned = not (before.owner_staff if before else None)
-		interaction_type = "LEAD_ASSIGNED" if was_unassigned else "LEAD_REASSIGNED"
+		interaction_type = "SYSTEM_ACTIVITY"
 		try:
 			create_interaction(
 				interaction_type=interaction_type,
@@ -1018,7 +1041,7 @@ def create_interaction_from_marketing_engagement_insert(doc, method=None):
 	try:
 		if doc.engagement_kind == "event_participation":
 			create_interaction(
-				interaction_type="REGISTERED",
+				interaction_type="EVENT_PARTICIPATION",
 				crm_contact=doc.crm_contact,
 				student=doc.student,
 				reference_doctype=doc.doctype,
@@ -1028,7 +1051,7 @@ def create_interaction_from_marketing_engagement_insert(doc, method=None):
 			)
 		elif doc.engagement_kind == "campaign_touch":
 			create_interaction(
-				interaction_type="CAMPAIGN_TOUCHED",
+				interaction_type="SYSTEM_ACTIVITY",
 				crm_contact=doc.crm_contact,
 				student=doc.student,
 				reference_doctype=doc.doctype,
@@ -1049,7 +1072,7 @@ def create_interaction_from_marketing_engagement_update(doc, method=None):
 		or not doc.has_value_changed("status")
 	):
 		return
-	interaction_type = EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE.get(doc.status)
+	interaction_type = "EVENT_PARTICIPATION"
 	if not interaction_type:
 		return
 	try:

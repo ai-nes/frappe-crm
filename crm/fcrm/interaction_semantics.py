@@ -187,6 +187,18 @@ INTERACTION_TYPE_MAPPING = {
 		"is_direct_touchpoint": False,
 		"evidence_kind": "campaign_touchpoint",
 	},
+	"PHONE_CALL": {"channel": "Call", "purpose": "Conversation", "disposition": "Occurred", "is_direct_touchpoint": True, "evidence_kind": "interaction"},
+	"MESSAGE": {"channel": "Chat", "purpose": "Conversation", "disposition": "Received", "is_direct_touchpoint": True, "evidence_kind": "interaction"},
+	"EMAIL": {"channel": "Email", "purpose": "Conversation", "disposition": "Sent", "is_direct_touchpoint": True, "evidence_kind": "interaction"},
+	"MEETING": {"channel": "Meeting", "purpose": "Counseling", "disposition": "Occurred", "is_direct_touchpoint": True, "evidence_kind": "interaction"},
+	"FORM_SUBMISSION": {"channel": "Form", "purpose": "Application", "disposition": "Submitted", "is_direct_touchpoint": False, "evidence_kind": "application_event"},
+	"APPLICATION_UPDATE": {"channel": "System", "purpose": "Application", "disposition": "Updated", "is_direct_touchpoint": False, "evidence_kind": "application_event"},
+	"DOCUMENT_SUBMISSION": {"channel": "Document", "purpose": "Application", "disposition": "Submitted", "is_direct_touchpoint": False, "evidence_kind": "document_event"},
+	"EVENT_PARTICIPATION": {"channel": "Event", "purpose": "Event Engagement", "disposition": "Participated", "is_direct_touchpoint": False, "evidence_kind": "event_participation"},
+	"PAYMENT": {"channel": "Payment", "purpose": "Enrollment", "disposition": "Paid", "is_direct_touchpoint": False, "evidence_kind": "payment_event"},
+	"SYSTEM_ACTIVITY": {"channel": "System", "purpose": "Lifecycle", "disposition": "Recorded", "is_direct_touchpoint": False, "evidence_kind": "system_event"},
+	"NOTE": {"channel": "Internal", "purpose": "Counseling", "disposition": "Noted", "is_direct_touchpoint": False, "evidence_kind": "sales_note"},
+	"OTHER": {"channel": "Unknown", "purpose": "Other", "disposition": "Occurred", "is_direct_touchpoint": False, "evidence_kind": "interaction"},
 }
 
 # The legacy `outcome` Select field on CRM Interaction conflates true
@@ -226,6 +238,13 @@ KNOWN_WRITER_INTERACTION_TYPES = frozenset(
 		"NO_SHOW",
 		"FEEDBACK",
 		"CAMPAIGN_TOUCHED",
+		"PHONE_CALL",
+		"MESSAGE",
+		"EMAIL",
+		"MEETING",
+		"EVENT_PARTICIPATION",
+		"SYSTEM_ACTIVITY",
+		"NOTE",
 	}
 )
 
@@ -244,7 +263,7 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "14ebca6127068138342a296f8034c22534482210c2ca0cdde41bdf8c9a0a1407"
+FROZEN_CONTENT_HASH = "873b67c10050aaab15dafd84cfc9bfd62a45febaf3a45d301bec684437699eb9"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(
