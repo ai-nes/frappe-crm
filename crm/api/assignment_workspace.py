@@ -50,6 +50,7 @@ FILTER_KEYS = {
 STATUS_VALUES = {"all", "unassigned", "needs_review", "placeholder_zone", "capacity_warning", "healthy"}
 WORKLOAD_VALUES = {"all", "unassigned", "near_capacity", "over_capacity"}
 TOPOLOGY_ACTIONS = {"zone_team", "school_assignment"}
+REFERENCE_ACTIONS = {"create_cluster", "create_zone", "create_pool"}
 TOPOLOGY_RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 TEAM_MEMBER_FUNCTIONS = {
 	"Sale",
@@ -907,9 +908,29 @@ def _setup_workspace_payload(context):
 		if _date_active(row)
 	]
 	provinces = _safe_get_all("CRM Province", ["name", "province_name"])
-	clusters = _safe_get_all("CRM Cluster", ["name", "cluster_name", "province"])
+	clusters = _safe_get_all(
+		"CRM Cluster",
+		["name", "cluster_name", "cluster_code", "province", "is_active", "modified"],
+		order_by="cluster_name asc, name asc",
+	)
 	zones = _safe_get_all(
-		"CRM Zone", ["name", "zone_name", "cluster", "is_placeholder", "current_team", "assignment_status"], order_by="zone_name asc, name asc"
+		"CRM Zone",
+		[
+			"name",
+			"zone_name",
+			"zone_code",
+			"cluster",
+			"is_placeholder",
+			"current_team",
+			"assignment_status",
+			"modified",
+		],
+		order_by="zone_name asc, name asc",
+	)
+	pools = _safe_get_all(
+		"CRM Student Pool",
+		["name", "pool_name", "team", "campus", "is_active", "modified"],
+		order_by="pool_name asc, name asc",
 	)
 	zone_assignments = [
 		row
@@ -1023,26 +1044,77 @@ def _setup_workspace_payload(context):
 			}
 		)
 
+	cluster_rows = []
+	for cluster in clusters:
+		province = province_map.get(cluster.province)
+		cluster_zones = [row for row in zones if row.cluster == cluster.name]
+		cluster_rows.append(
+			{
+				"id": cluster.name,
+				"cluster_name": cluster.cluster_name,
+				"cluster_code": cluster.cluster_code,
+				"province": cluster.province,
+				"province_name": _label(province, "province_name"),
+				"zone_count": len(cluster_zones),
+				"is_active": bool(cluster.is_active),
+				"revision": _reference_revision("CRM Cluster", cluster.name, cluster.modified),
+			}
+		)
+
+	pool_rows = []
+	for pool in pools:
+		team = team_map.get(pool.team)
+		campus = next((row for row in campuses if row.name == pool.campus), None)
+		pool_rows.append(
+			{
+				"id": pool.name,
+				"pool_name": pool.pool_name,
+				"team": pool.team,
+				"team_name": _label(team, "team_name"),
+				"campus": pool.campus,
+				"campus_name": _label(campus, "campus_name"),
+				"is_active": bool(pool.is_active),
+				"revision": _reference_revision("CRM Student Pool", pool.name, pool.modified),
+			}
+		)
+
 	return {
 		"schemaVersion": "assignment-setup-v1",
 		"as_of": str(now_datetime()),
 		"summary": {
+			"clusters": len(clusters),
 			"teams": len(teams),
 			"active_teams": sum(bool(row.is_active) for row in teams),
 			"staff": len(staff),
 			"active_staff": sum(bool(row.is_active) for row in staff),
 			"zones": len(zones),
 			"mapped_zones": len(active_assignment_by_zone),
+			"pools": len(pools),
+			"active_pools": sum(bool(row.is_active) for row in pools),
 		},
+		"clusters": cluster_rows,
 		"teams": team_rows,
 		"staff": staff_rows,
 		"zones": zone_rows,
+		"pools": pool_rows,
 		"options": {
 			"campuses": [
 				{"value": row.name, "label": _label(row, "campus_name")} for row in campuses
 			],
 			"territories": [
 				{"value": row.name, "label": _label(row, "territory_name")} for row in territories
+			],
+			"provinces": [
+				{"value": row.name, "label": _label(row, "province_name")} for row in provinces
+			],
+			"clusters": [
+				{
+					"value": row.name,
+					"label": _label(row, "cluster_name"),
+					"province": row.province,
+					"is_active": bool(row.is_active),
+				}
+				for row in clusters
 			],
 			"team_types": [
 				{"value": value, "label": value}
@@ -1059,6 +1131,155 @@ def get_setup_workspace():
 	"""Return Team, Staff and Zone setup rows for System Managers."""
 	context = _require_setup_access()
 	return _setup_workspace_payload(context)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_setup_reference(
+	action,
+	name=None,
+	code=None,
+	province=None,
+	cluster=None,
+	team=None,
+	campus=None,
+	is_active=True,
+	reason=None,
+	idempotency_key=None,
+	correlation_id=None,
+):
+	"""Create a geography or routing reference from the guarded setup UI.
+
+	The command intentionally supports creation only. Existing geography and
+	pool records are not silently renamed or deleted from the assignment page.
+	"""
+	context = _require_setup_access()
+	action = _required_command_text(action, "action", maximum=40)
+	if action not in REFERENCE_ACTIONS:
+		_command_error("UNKNOWN_ACTION", "Loại dữ liệu setup không được hỗ trợ.")
+	reason = _required_command_text(reason, "reason", minimum=5, maximum=2000)
+	idempotency_key = _required_command_text(idempotency_key, "idempotency_key", maximum=140)
+	correlation_id = _required_command_text(
+		correlation_id or str(uuid.uuid4()), "correlation_id", maximum=140
+	)
+	name = _required_command_text(
+		name,
+		{"create_cluster": "cluster_name", "create_zone": "zone_name", "create_pool": "pool_name"}[action],
+	)
+	code = _optional_command_text(code, "code", maximum=40)
+	is_active = _command_bool(is_active)
+
+	if action == "create_cluster":
+		province = _required_command_text(province, "province")
+		if not frappe.db.exists("CRM Province", province):
+			_command_error("TARGET_NOT_FOUND", "Tỉnh/TP không tồn tại.")
+		if frappe.db.exists("CRM Cluster", {"cluster_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên cụm đã tồn tại.")
+		doctype = "CRM Cluster"
+		values = {
+			"doctype": doctype,
+			"cluster_name": name,
+			"cluster_code": code,
+			"province": province,
+			"is_active": int(is_active),
+		}
+	elif action == "create_zone":
+		cluster = _required_command_text(cluster, "cluster")
+		cluster_row = frappe.db.get_value(
+			"CRM Cluster", cluster, ["name", "is_active"], as_dict=True
+		)
+		if not cluster_row:
+			_command_error("TARGET_NOT_FOUND", "Cụm không tồn tại.")
+		if not cluster_row.is_active:
+			_command_error("PARENT_INACTIVE", "Không thể tạo khu vực dưới một cụm đã tắt.")
+		if frappe.db.exists("CRM Zone", {"zone_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên khu vực đã tồn tại.")
+		doctype = "CRM Zone"
+		values = {
+			"doctype": doctype,
+			"zone_name": name,
+			"zone_code": code,
+			"cluster": cluster,
+			"is_placeholder": 0,
+			"assignment_status": "Unassigned",
+		}
+	else:
+		team = _required_command_text(team, "team")
+		team_row = frappe.db.get_value(
+			"CRM Team", team, ["name", "team_name", "campus", "team_type", "is_active"], as_dict=True
+		)
+		if not team_row:
+			_command_error("TARGET_NOT_FOUND", "Team không tồn tại.")
+		if not team_row.is_active:
+			_command_error("TEAM_INACTIVE", "Không thể tạo hàng chờ cho Team đã tắt.")
+		if team_row.team_type != "Sales":
+			_command_error("TEAM_TYPE_INVALID", "Hàng chờ Lead chỉ dùng cho Team Sales.")
+		campus = team_row.campus
+		if not campus:
+			_command_error("TEAM_CAMPUS_MISSING", "Team chưa có Cơ sở.")
+		if frappe.db.exists("CRM Student Pool", {"pool_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên hàng chờ đã tồn tại.")
+		if is_active and frappe.db.exists(
+			"CRM Student Pool", {"team": team, "campus": campus, "is_active": 1}
+		):
+			_command_error(
+				"ACTIVE_POOL_EXISTS",
+				"Team này đã có một hàng chờ đang hoạt động. Hãy dùng hàng chờ đó để tránh chia Lead bị mơ hồ.",
+			)
+		doctype = "CRM Student Pool"
+		values = {
+			"doctype": doctype,
+			"pool_name": name,
+			"team": team,
+			"campus": campus,
+			"is_active": int(is_active),
+		}
+
+	command_key = hashlib.sha256(
+		f"assignment-reference|{context['actor']}|{action}|{idempotency_key}".encode()
+	).hexdigest()
+	fingerprint = hashlib.sha256(json.dumps(values, sort_keys=True, default=str).encode()).hexdigest()
+	existing = _topology_receipt(command_key)
+	if existing:
+		return _replay_topology_receipt(existing, fingerprint)
+	receipt = _reserve_topology_receipt(
+		command_key=command_key,
+		fingerprint=fingerprint,
+		actor=context["actor"],
+		correlation_id=correlation_id,
+		context=context,
+	)
+	if isinstance(receipt, dict):
+		return receipt
+	try:
+		doc = frappe.get_doc(values).insert(ignore_permissions=True)
+		doc.add_comment(
+			"Comment",
+			_assignment_audit_comment(
+				action={
+					"create_cluster": "Create Cluster",
+					"create_zone": "Create Zone",
+					"create_pool": "Create Student Pool",
+				}[action],
+				reason=reason,
+				correlation_id=correlation_id,
+				idempotency_key=idempotency_key,
+			),
+		)
+		result = {
+			"status": "applied",
+			"action": action,
+			"record_id": doc.name,
+			"label": name,
+			"revision": _reference_revision(doctype, doc.name, doc.modified),
+			"correlation_id": correlation_id,
+			"replayed": False,
+		}
+		_complete_topology_receipt(receipt, result)
+		frappe.db.commit()
+		return result
+	except Exception:
+		frappe.db.rollback()
+		raise
 
 
 def _normalize_team_member_moves(value, source_team_id, source_campus):
@@ -2056,6 +2277,22 @@ def _required_command_text(value, label, *, minimum=1, maximum=140):
 			frappe.ValidationError,
 		)
 	return value
+
+
+def _optional_command_text(value, label, *, maximum=80):
+	if value in (None, ""):
+		return None
+	return _required_command_text(value, label, maximum=maximum)
+
+
+def _reference_revision(doctype, name, modified=None):
+	if not name:
+		return "0"
+	if modified is None:
+		modified = frappe.db.get_value(doctype, name, "modified")
+	return hashlib.sha256(
+		json.dumps({"doctype": doctype, "name": name, "modified": modified}, default=str).encode()
+	).hexdigest()[:24]
 
 
 def _command_error(code, message):
