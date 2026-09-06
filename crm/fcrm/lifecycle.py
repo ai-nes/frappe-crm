@@ -2,15 +2,13 @@
 
 Implements the long-term
 lifecycle track (Lead -> MQL -> Applicant -> Enrolled, with Lost as a
-separate terminal branch) derived from the existing CRM Term
+separate terminal branch) derived from the CRM Enrollment Status
 master (its `lifecycle_stage` field — see
 crm.fcrm.doctype.crm_enrollment_status), rather than from the day-to-day
-enrollment_status/lead_status working values directly. This keeps the two
-tracks from drifting: lifecycle_stage is a pure, read-only function of
+enrollment_status directly. This keeps the lifecycle projection from drifting:
+lifecycle_stage is a pure, read-only function of
 enrollment_status, recomputed on every save.
 """
-
-import json
 
 import frappe
 
@@ -25,8 +23,8 @@ LOST_STAGE = "Lost"
 # Roles allowed to move a lead backward in its lifecycle or reopen it from
 # Lost — locked in Phase 3 planning as "Team Lead or GĐ Tuyển sinh
 # equivalent". Reuses the existing full-visibility bypass roles (System
-# Manager/Administrator always need an override path) plus Lead Sales.
-LIFECYCLE_OVERRIDE_ROLES = FULL_VISIBILITY_ROLES | {"Lead Sales"}
+# Manager/Administrator always need an override path) plus Lead Sale.
+LIFECYCLE_OVERRIDE_ROLES = FULL_VISIBILITY_ROLES | {"Lead Sale"}
 
 
 def get_lifecycle_stage(enrollment_status):
@@ -39,13 +37,7 @@ def get_lifecycle_stage(enrollment_status):
 
 
 def _term_lifecycle_stage(enrollment_status):
-	metadata = frappe.db.get_value("CRM Term", {"name": enrollment_status, "category": "enrollment_status"}, "metadata") or {}
-	if isinstance(metadata, str):
-		try:
-			metadata = json.loads(metadata)
-		except (TypeError, ValueError):
-			metadata = {}
-	return metadata.get("lifecycle_stage") or ""
+	return frappe.db.get_value("CRM Enrollment Status", enrollment_status, "lifecycle_stage") or ""
 
 
 def lifecycle_rank(stage):
@@ -83,7 +75,7 @@ def enforce_lifecycle_change_policy(doc, before_enrollment_status):
 	if not user_can_override_lifecycle(frappe.session.user):
 		frappe.throw(
 			frappe._(
-			"Only a Lead Sales user or Admissions Director may move a lead backward "
+			"Only a Lead Sale user or Admissions Director may move a lead backward "
 				"in its lifecycle or reopen it from Lost."
 			),
 			frappe.PermissionError,

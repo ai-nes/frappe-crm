@@ -851,7 +851,6 @@ def _ensure_student_contact(
 		"student": student,
 		"student_identity": frappe.db.get_value("CRM Student", student, "identity"),
 		"enrollment_status": context["enrollment_status"],
-		"lead_status": "Mới",
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
 		"is_verified_lead": 1,
@@ -1303,8 +1302,8 @@ def seed() -> dict[str, Any]:
 		# contract used by the showcase seed before creating Students.
 		for pool in pools.values():
 			seed_showcase._ensure_policies(CAMPUS, pool)
-		# Admission offerings link to a governed CRM Term on a fresh local site.
-		seed_golden._ensure_admission_method("Transcript Review")
+		# Admission offerings link to a CRM Admission Method lookup on a fresh local site.
+		seed_golden._ensure_admission_method("TRANSCRIPT_REVIEW")
 		_ensure_nba_policy()
 		department = frappe.db.get_value(
 			"CRM Staff", staff_context["staff_by_user"]["nguyen.minh.khoi@gmail.com"], "department"

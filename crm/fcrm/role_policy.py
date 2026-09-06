@@ -33,7 +33,7 @@ PROFILE_LABELS = {
 	# -- `Promoter` is therefore split out of `marketing`'s aliases below into
 	# its own profile with the PRD's distinct CRUD.
 	# Department-head roles use the "Lead <Department>" naming already
-	# established by "Lead Sales" (explicit product decision, 2026-09-04).
+	# established by "Lead Sale" (explicit product decision, 2026-09-04).
 	"ctv_sale": "CTV Sale",
 	"pr": "Promoter",
 	"pr_manager": "Lead Promoter",
@@ -43,7 +43,7 @@ PROFILE_LABELS = {
 
 # Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
 # retirement and supersession are exposed only through master_data_governance.
-PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CRM Term", "CRM Campus"})
+PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CRM Campus"})
 
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
@@ -59,8 +59,8 @@ PROFILE_ROLE_ALIASES = {
 	"ceo": frozenset({"Administrator"}),
 }
 
-# Both canonical Sales profiles can own Student cases. Team membership keeps
-# the legacy hyphenated spelling because it is the persisted Select value.
+# Both canonical Sales profiles can own Student cases.  Team membership uses
+# the same canonical values as the role catalog.
 STUDENT_OWNER_PROFILES = frozenset({"sales", "ctv_sale"})
 STUDENT_OWNER_TEAM_FUNCTIONS = frozenset({"Sale", "CTV Sale"})
 
@@ -238,12 +238,17 @@ CANONICAL_PERMISSION_MATRIX = {
 	},
 	"reference": {
 		"doctypes": (
-			"CRM Major", "CRM Term", "CRM High School", "CRM Province", "CRM Ward",
+			"CRM Major", "CRM High School", "CRM Province", "CRM Ward",
 			"CRM Admission Year",
 			"CRM Education Program",
 			"CRM Department",
 			"Holiday List",
 			"CRM Team",
+			# Flat controlled-vocabulary lookups (formerly CRM Term categories).
+			"CRM Lost Reason", "CRM Campaign Type", "CRM Intent Type",
+			"CRM Interaction Type", "CRM School Type", "CRM School Area", "CRM Stakeholder Role",
+			"CRM School Activity Type", "CRM Major Group", "CRM Aspiration", "CRM Region",
+			"CRM Enrollment Status", "CRM Admission Method",
 		),
 		"permissions": {
 			"system_manager": "rwcdx",
@@ -266,7 +271,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_owned_record",
 	},
 	"governed_acquisition": {
-		"doctypes": ("CRM Lead Source", "CRM Platform", "CRM Term"),
+		"doctypes": ("CRM Lead Source", "CRM Platform"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -277,7 +282,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_governed_mutation",
 	},
 	"governed_admissions": {
-		"doctypes": ("CRM Term", "CRM Campus"),
+		"doctypes": ("CRM Campus",),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -286,7 +291,6 @@ CANONICAL_PERMISSION_MATRIX = {
 			"admissions_director": "r",
 		},
 		"per_doctype_permissions": {
-			"CRM Term": {"lead_sales": "rwc"},
 			"CRM Campus": {"admissions_director": "rwc"},
 		},
 		"row_scope": "campus_is_not_team_scope",
@@ -352,122 +356,15 @@ CANONICAL_PERMISSION_MATRIX = {
 	},
 }
 
-# These records preserve legacy scope in Phase 2.2 without elevating a user to
-# a canonical profile. A role set can select at most one overlay; the selector
-# will fail closed rather than union separate historic grants.
-LEGACY_COMPATIBILITY_OVERLAYS = {
-	"sales_own": {
-		"roles": frozenset({"CTV-Sale", "Sales User"}),
-		"case_permissions": "rwc",
-		"reference_permissions": "r",
-		"acquisition_permissions": "r",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "own_assigned",
-	},
-	"counseller_campus": {
-		"roles": frozenset({"Counseller"}),
-		"case_permissions": "rwc",
-		"reference_permissions": "r",
-		"acquisition_permissions": "r",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "campus_assigned",
-	},
-	"team_leader": {
-		"roles": frozenset({"Sales Manager", "Team Leader"}),
-		"case_permissions": "rwcdx",
-		"reference_permissions": "rx",
-		"acquisition_permissions": "rwcdx",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "team_members_and_own_team_pool",
-	},
-	"promoter_campus": {
-		"roles": frozenset({"Promoter-PR"}),
-		"case_permissions": {"CRM Student": "-", "CRM Contact": "r"},
-		"reference_permissions": "r",
-		"acquisition_permissions": "r",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "campus_assigned_contact",
-	},
-	"marketing_operator": {
-		"roles": frozenset({"Marketing Operator"}),
-		"case_permissions": "-",
-		"reference_permissions": "r",
-		"acquisition_permissions": "rwcdx",
-		"governed_acquisition_permissions": "rwc",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "no_case_scope",
-	},
-	"marketing_lead": {
-		"roles": frozenset({"Marketing Lead"}),
-		"case_permissions": "-",
-		"reference_permissions": "r",
-		"acquisition_permissions": "rwc",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "no_case_scope",
-	},
-	"admissions_operations": {
-		"roles": frozenset({"Admissions Operations"}),
-		"case_permissions": "rwc",
-		"reference_permissions": "r",
-		"acquisition_permissions": "r",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "rwc",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "all_cases",
-	},
-	"admissions_director_legacy": {
-		"roles": frozenset({"Giám đốc Tuyển sinh"}),
-		"case_permissions": "rx",
-		"reference_permissions": "rx",
-		"acquisition_permissions": "rx",
-		"governed_acquisition_permissions": "r",
-		"governed_admissions_permissions": "r",
-		"attribution_evidence_permissions": "-",
-		"control_permissions": "-",
-		"row_scope": "all_cases",
-	},
-}
+# Runtime authorization recognizes canonical roles only; no compatibility
+# overlay or alias catalog remains in the active policy.
+LEGACY_COMPATIBILITY_OVERLAYS = {}
 
-# Each source is retired only by the forward backfill migration below. The
-# resolver deliberately rejects accounts holding sources for multiple targets;
-# a migration must never guess a person's operating role.
-ROLE_BACKFILL_TARGETS = {
-	"CTV-Sale": "Sale",
-	"Counseller": "Sale",
-	"Sales User": "Sale",
-	"Sales Manager": "Lead Sales",
-	"Team Leader": "Lead Sales",
-	"Promoter-PR": "Marketing",
-	"Marketing Operator": "Marketing",
-	"Marketing Lead": "Marketing",
-	"Admissions Operations": "Admissions Director",
-	"Giám đốc Tuyển sinh": "Admissions Director",
-}
-ROLE_BACKFILL_SOURCES = frozenset(ROLE_BACKFILL_TARGETS)
-
-# These roles exist in some databases from pre-Phase-2 models. They are
-# explicit migration findings, never overlays and never permission sources.
-# ``Sales`` is the retired duplicate of canonical ``Sale``; new users must not
-# receive it and existing assignments must be migrated explicitly.
-LEGACY_UNMAPPED_ROLES = frozenset({"CRM Data Steward", "Sales"})
+# Seed-only deployments never carry a compatibility role catalog.  The legacy
+# exports remain empty for old patch-module imports, not as a migration path.
+ROLE_BACKFILL_TARGETS = {}
+ROLE_BACKFILL_SOURCES = frozenset()
+LEGACY_UNMAPPED_ROLES = frozenset({"CRM Data Steward"})
 
 SYSTEM_MANAGER_CAPABILITIES = frozenset(
 	{
@@ -500,31 +397,13 @@ _MIGRATION_ROLE_NAMES = frozenset(
 	| ROLE_BACKFILL_SOURCES
 )
 
-# A number of pre-Phase-2 accounts carry both an operating sales alias and a
-# sales-lead alias.  These roles describe one sales domain, so they have one
-# deterministic canonical outcome instead of a union of the two legacy
-# templates.  Keep the set intentionally narrow: roles from another business
-# domain must continue to fail closed.
-_SALES_OPERATOR_COMPATIBILITY_ROLES = frozenset({"Sale", "Sales User"})
-_SALES_LEAD_COMPATIBILITY_ROLES = frozenset({"Sales Manager", "Team Leader"})
-_SALES_COMPATIBILITY_ROLES = (
-	_SALES_OPERATOR_COMPATIBILITY_ROLES | _SALES_LEAD_COMPATIBILITY_ROLES
-)
-
-
 def _unknown_role_names(role_names):
 	"""Return role names outside the policy and Frappe's implicit roles."""
 	return role_names - _MIGRATION_ROLE_NAMES
 
 
 def resolve_crm_profile(roles) -> str | None:
-	"""Return one canonical profile using deterministic same-domain precedence.
-
-	System Manager is a control-plane role and therefore never resolves to an
-	operating profile.  A sales lead alias combined with a sales operator alias
-	resolves to ``lead_sales``; capabilities are taken from that profile only,
-	never unioned from both legacy role templates.
-	"""
+	"""Return one canonical operating profile, otherwise fail closed."""
 	role_names = frozenset(roles)
 	if (
 		_unknown_role_names(role_names)
@@ -532,32 +411,13 @@ def resolve_crm_profile(roles) -> str | None:
 		or SYSTEM_MANAGER_ROLE in role_names
 	):
 		return None
-	if role_names & LEGACY_OVERLAY_ROLES:
-		if (
-			role_names & _SALES_OPERATOR_COMPATIBILITY_ROLES
-			and role_names & _SALES_LEAD_COMPATIBILITY_ROLES
-			and not role_names - _SALES_COMPATIBILITY_ROLES - FRAMEWORK_ROLE_NAMES
-		):
-			return "lead_sales"
-		return None
 	matches = [profile for profile, aliases in PROFILE_ROLE_ALIASES.items() if role_names & aliases]
 	return matches[0] if len(matches) == 1 else None
 
 
 def resolve_compatibility_overlay(roles) -> str | None:
-	"""Return one retained legacy template, or None for absent/ambiguous input."""
-	role_names = frozenset(roles)
-	if _unknown_role_names(role_names) or role_names & (
-		CANONICAL_PROFILE_ROLES | {SYSTEM_MANAGER_ROLE} | LEGACY_UNMAPPED_ROLES
-	):
-		return None
-	matches = [
-		overlay
-		for overlay in LEGACY_OVERLAY_IDS
-		for template in (LEGACY_COMPATIBILITY_OVERLAYS[overlay],)
-		if role_names & template["roles"]
-	]
-	return matches[0] if len(matches) == 1 else None
+	"""Compatibility overlays were retired; aliases never grant access."""
+	return None
 
 
 def backfill_target_for_roles(roles) -> str | None:

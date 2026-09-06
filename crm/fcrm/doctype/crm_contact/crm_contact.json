@@ -17,7 +17,6 @@
   "col_break_1",
   "enrollment_status",
   "lifecycle_stage",
-  "lead_status",
   "readiness_level",
   "quality_bucket",
   "is_verified_lead",
@@ -111,8 +110,8 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Enrollment Status",
-   "options": "CRM Term",
-   "default": "Có triển vọng"
+   "options": "CRM Enrollment Status",
+   "default": "PROSPECT"
   },
   {
    "fieldname": "lifecycle_stage",
@@ -123,15 +122,6 @@
    "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
    "read_only": 1,
    "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
-  },
-  {
-   "fieldname": "lead_status",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Lead Status",
-   "options": "CRM Term",
-   "default": "Mới"
   },
   {
    "fieldname": "readiness_level",
@@ -262,7 +252,7 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Aspiration",
-   "options": "CRM Term"
+   "options": "CRM Aspiration"
   },
   {
    "fieldname": "col_break_profile",
@@ -438,6 +428,10 @@
    "role": "Admissions Director"
   },
   {
+   "read": 1,
+   "role": "AI Service"
+  },
+  {
    "create": 1,
    "delete": 1,
    "read": 1,
@@ -464,7 +458,7 @@
    "create": 1,
    "delete": 1,
    "read": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "write": 1
   },
   {

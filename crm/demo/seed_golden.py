@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from typing import Any
@@ -912,6 +913,7 @@ def _seed_flags():
 		"crm_governance_additive": frappe.flags.get("crm_governance_additive"),
 		"crm_governance_change": frappe.flags.get("crm_governance_change"),
 		"legacy_fact_migration": frappe.flags.get("legacy_fact_migration"),
+		"student_lifecycle_service": frappe.flags.get("student_lifecycle_service"),
 	}
 	try:
 		for key, value in keys.items():
@@ -919,6 +921,7 @@ def _seed_flags():
 		frappe.flags.crm_governance_additive = True
 		frappe.flags.crm_governance_change = True
 		frappe.flags.legacy_fact_migration = True
+		frappe.flags.student_lifecycle_service = True
 		yield
 	finally:
 		for key, value in previous_flags.items():
@@ -933,33 +936,49 @@ def _seed_flags():
 				frappe.conf[key] = value
 
 
-def _ensure_interaction_type(name: str) -> str:
-	term = frappe.db.get_value("CRM Term", {"term_name": name, "category": "interaction_type"}, "name")
-	if term:
-		return term
+def _as_code(value: str) -> str:
+	return re.sub(r"[^A-Z0-9]+", "_", value.strip().upper()).strip("_")
+
+
+def _ensure_lookup(doctype: str, name: str) -> str:
+	"""Resolve a flat lookup by code, display name, or a code derived from the label."""
+	if frappe.db.exists(doctype, name):
+		return name
+	by_name = frappe.db.get_value(doctype, {"display_name": name}, "name")
+	if by_name:
+		return by_name
+	code = _as_code(name)
+	if frappe.db.exists(doctype, code):
+		return code
 	return (
-		frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "interaction_type"})
+		frappe.get_doc({"doctype": doctype, "code": code, "display_name": name})
 		.insert(ignore_permissions=True)
 		.name
 	)
+
+
+def _ensure_interaction_type(name: str) -> str:
+	return _ensure_lookup("CRM Interaction Type", name)
 
 
 def _ensure_intent_type(name: str, importance: str) -> str:
-	term = frappe.db.get_value("CRM Term", {"term_name": name, "category": "intent_type"}, "name")
-	if term:
-		return term
-	return seed_demo._ensure_intent_type(name, importance, f"Golden seed fixture: {name}")
+	code = name if frappe.db.exists("CRM Intent Type", name) else _as_code(name)
+	if frappe.db.exists("CRM Intent Type", code):
+		return code
+	return seed_demo._ensure_intent_type(code, importance, f"Golden seed fixture: {name}")
+
+
+_TERM_DOCTYPE = {
+	"school_type": "CRM School Type",
+	"school_area": "CRM School Area",
+	"stakeholder_role": "CRM Stakeholder Role",
+	"activity_type": "CRM School Activity Type",
+	"aspiration": "CRM Aspiration",
+}
 
 
 def _ensure_term(name: str, category: str) -> str:
-	existing = frappe.db.get_value("CRM Term", {"term_name": name, "category": category}, "name")
-	if existing:
-		return existing
-	return (
-		frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": category})
-		.insert(ignore_permissions=True)
-		.name
-	)
+	return _ensure_lookup(_TERM_DOCTYPE[category], name)
 
 
 def _ensure_person(full_name: str, phone: str) -> str:
@@ -989,7 +1008,7 @@ def _submit_student(context: dict[str, Any], pool: str, high_school: str) -> str
 		"id_number": _ACTIVE["id_number"],
 		"gender": _ACTIVE["gender"],
 		"date_of_birth": _ACTIVE["date_of_birth"],
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"campus": context["campus"],
 		"owning_team": pool,
 		"admission_year": context["admission_year"],
@@ -1036,7 +1055,8 @@ def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
 	doc = frappe.get_doc("CRM Student", student)
 	parent = _ACTIVE.get("parent")
 	values = {
-		"admission_method": "Transcript Review",
+		"enrollment_status": context["enrollment_status"],
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"branch": context["campus"],
 		"major": context["major"],
 		"aspiration": context["aspiration"],
@@ -1106,6 +1126,12 @@ def _ensure_interaction(
 	external_id = _key("interaction", key)
 	existing = frappe.db.get_value("CRM Interaction", {"external_id": external_id}, "name")
 	if existing:
+		canonical_type = _ensure_interaction_type(interaction_type)
+		stored_type = frappe.db.get_value("CRM Interaction", existing, "interaction_type")
+		if stored_type != canonical_type and _as_code(stored_type or "") == canonical_type:
+			frappe.db.set_value(
+				"CRM Interaction", existing, "interaction_type", canonical_type, update_modified=False
+			)
 		return existing
 	return (
 		frappe.get_doc(
@@ -1133,11 +1159,19 @@ def _ensure_intent(student: str, interaction: str, intent_type: str, role: str, 
 	intent = _ensure_intent_type(
 		intent_type, "High" if intent_type in {"Scholarship", "Tuition"} else "Medium"
 	)
-	existing = frappe.db.get_value(
-		"CRM Intent", {"interaction": interaction, "intent_type": intent, "intent_role": role}, "name"
-	)
-	if existing:
-		return existing
+	for row in frappe.db.get_all(
+		"CRM Intent",
+		filters={"interaction": interaction, "intent_role": role},
+		fields=["name", "intent_type"],
+		limit_page_length=0,
+	):
+		stored_type = row.get("intent_type") or ""
+		if stored_type == intent or _as_code(stored_type) == intent:
+			if stored_type != intent:
+				frappe.db.set_value(
+					"CRM Intent", row["name"], "intent_type", intent, update_modified=False
+				)
+			return row["name"]
 	return (
 		frappe.get_doc(
 			{
@@ -1269,7 +1303,7 @@ def _ensure_application(student: str, context: dict[str, Any]) -> str | None:
 	from crm.demo import seed_admission_funnel
 	from crm.fcrm.admission_application import create_application
 
-	method = "Transcript Review"
+	method = "TRANSCRIPT_REVIEW"
 	offering = frappe.db.get_value(
 		"CRM Admission Offering",
 		{
@@ -1332,7 +1366,6 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str, high_school
 						"phone": spec["phone"],
 						"email": parent_email,
 						"enrollment_status": context["enrollment_status"],
-						"lead_status": "Mới",
 						"readiness_level": "Level 2 - Đang so sánh",
 						"quality_bucket": "Warm",
 						"is_verified_lead": 1,
@@ -1524,7 +1557,6 @@ def _ensure_student_contact(
 		"student": student,
 		"student_identity": frappe.db.get_value("CRM Student", student, "identity"),
 		"enrollment_status": context["enrollment_status"],
-		"lead_status": "Mới",
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
 		"is_verified_lead": 1,
@@ -1934,7 +1966,24 @@ def _ensure_ai_service_role() -> None:
 		if not frappe.db.exists(
 			"Custom DocPerm", {"parent": doctype, "role": AI_SERVICE_ROLE}
 		):
-			add_permission(doctype, AI_SERVICE_ROLE, 0)
+			# Keep the existing business-role permissions intact while adding the
+			# service read rule. `add_permission` validates the whole legacy
+			# permission set and can fail on unrelated duplicate role rows that
+			# predate this service role. Copying the current rules first and
+			# inserting the single read rule is deterministic and idempotent.
+			if not frappe.db.exists("Custom DocPerm", {"parent": doctype}):
+				copy_perms(doctype)
+			frappe.get_doc(
+				{
+					"doctype": "Custom DocPerm",
+					"parent": doctype,
+					"parenttype": "DocType",
+					"parentfield": "permissions",
+					"role": AI_SERVICE_ROLE,
+					"permlevel": 0,
+					"read": 1,
+				}
+			).insert(ignore_permissions=True)
 
 
 def _ensure_service_identity(service_api_key: str | None, service_api_secret: str | None) -> dict[str, Any]:
@@ -1965,6 +2014,14 @@ def _ensure_service_identity(service_api_key: str | None, service_api_secret: st
 		)
 		user.append("roles", {"role": AI_SERVICE_ROLE})
 		user.insert(ignore_permissions=True)
+	else:
+		user = frappe.get_doc("User", SERVICE_USER)
+		stale_roles = [row.role for row in user.get("roles") if row.role != AI_SERVICE_ROLE]
+		if stale_roles:
+			user.remove_roles(*stale_roles)
+		user = frappe.get_doc("User", SERVICE_USER)
+		if not any(row.role == AI_SERVICE_ROLE for row in user.get("roles")):
+			user.add_roles(AI_SERVICE_ROLE)
 
 	_set_site_config(SERVICE_USER_CONFIG_KEY, SERVICE_USER)
 
@@ -1994,23 +2051,12 @@ def _set_site_config(key: str, value: Any) -> None:
 # ---------------------------------------------------------------------------
 
 
-ADMISSION_METHOD = "Transcript Review"
+ADMISSION_METHOD = "TRANSCRIPT_REVIEW"
 
 
-def _ensure_admission_method(name: str) -> None:
-	"""Canonical admission method Term the admission offering links to."""
-	if frappe.db.exists("CRM Term", {"term_name": name, "category": "admission_method"}):
-		return
-	from crm.fcrm.master_data_governance import create_additive_value
-
-	create_additive_value(
-		"CRM Term",
-		name,
-		reason="Canonical admission method used by the golden demo dataset.",
-		idempotency_key=f"golden-seed:admission-method:{name}",
-		correlation_id="golden-seed",
-		category="admission_method",
-	)
+def _ensure_admission_method(code: str) -> None:
+	"""Canonical admission method the admission offering links to."""
+	_ensure_lookup("CRM Admission Method", code)
 
 
 def _bootstrap() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:

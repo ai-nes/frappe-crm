@@ -157,14 +157,9 @@ def _assert_local_site() -> None:
 
 
 def _ensure_interaction_type(name: str) -> str:
-	term = frappe.db.get_value("CRM Term", {"term_name": name, "category": "interaction_type"}, "name")
-	if term:
-		return term
-	return (
-		frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "interaction_type"})
-		.insert(ignore_permissions=True)
-		.name
-	)
+	from crm.demo import seed_demo
+
+	return seed_demo._ensure_interaction_type(name)
 
 
 def _resolve_student() -> str:
@@ -339,8 +334,7 @@ def _ensure_consent_and_parent(student: str) -> dict[str, str | None]:
 						"full_name": "Nguyễn Thị Hương",
 						"phone": "0908000177",
 						"email": contact_email,
-						"enrollment_status": student_doc.enrollment_status or "Mới",
-						"lead_status": "Mới",
+						"enrollment_status": student_doc.enrollment_status or "NEW",
 						"readiness_level": "Level 2 - Đang so sánh",
 						"quality_bucket": "Warm",
 						"is_verified_lead": 1,

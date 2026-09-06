@@ -72,7 +72,6 @@ CONTACT_FIELDS = [
 	"student",
 	"enrollment_status",
 	"lifecycle_stage",
-	"lead_status",
 	"readiness_level",
 	"quality_bucket",
 	"is_verified_lead",
@@ -100,7 +99,6 @@ INTERACTION_FIELDS = [
 ]
 ACTION_FIELDS = [
 	"name",
-	"legacy_generic_task",
 	"student",
 	"action",
 	"action_type",
@@ -113,20 +111,6 @@ ACTION_FIELDS = [
 	"modified",
 	"completed_at",
 ]
-TASK_FIELDS = [
-	"name",
-	"title",
-	"description",
-	"student",
-	"priority",
-	"status",
-	"start_date",
-	"due_date",
-	"modified",
-	"creation",
-]
-
-
 @frappe.whitelist(methods=["GET"])
 def get_sale_overview(
 	admissionYear: str | int | None = None,
@@ -416,25 +400,7 @@ def _load_tasks(student_ids: list[str], warnings: list[str]) -> list[dict[str, A
 			warning_key="action_items",
 		)
 	]
-	migrated_task_ids = {
-		str(row.get("legacy_generic_task")) for row in action_rows if row.get("legacy_generic_task")
-	}
-	generic_rows = [
-		dict(row)
-		for row in _get_list(
-			"Task",
-			filters={"student": ["in", student_ids]},
-			fields=TASK_FIELDS,
-			order_by="due_date asc, name asc",
-			limit_page_length=0,
-			warnings=warnings,
-			warning_key="tasks",
-		)
-		if str(row.get("name")) not in migrated_task_ids
-	]
-	return [_normalize_action_task(row) for row in action_rows] + [
-		_normalize_generic_task(row) for row in generic_rows
-	]
+	return [_normalize_action_task(row) for row in action_rows]
 
 
 def _get_list(
@@ -729,30 +695,6 @@ def _normalize_action_task(row: dict[str, Any]) -> dict[str, Any]:
 	}
 
 
-def _normalize_generic_task(row: dict[str, Any]) -> dict[str, Any]:
-	title = str(row.get("title") or "Việc cần xử lý")
-	detail = _plain_text(row.get("description")) or title
-	status = str(row.get("status") or "Todo").strip().casefold()
-	return {
-		"id": f"Task:{row.get('name')}",
-		"student_id": str(row.get("student") or ""),
-		"title": title,
-		"detail": detail,
-		"task_type": _task_type(title, detail),
-		"priority": _generic_priority(row.get("priority")),
-		"status": "Done"
-		if status == "done"
-		else "Canceled"
-		if status == "canceled"
-		else "In Progress"
-		if status == "in progress"
-		else "Todo",
-		"start_at": _coerce_datetime(row.get("start_date")),
-		"due_at": _coerce_datetime(row.get("due_date")),
-		"completed_at": _coerce_datetime(row.get("modified")) if status == "done" else None,
-	}
-
-
 def _serialize_task(task: dict[str, Any]) -> dict[str, Any]:
 	return {
 		"id": task["id"],
@@ -782,11 +724,6 @@ def _task_type(value: Any, detail: Any = None) -> str:
 
 def _priority(value: Any) -> str:
 	text = str(value or "medium").strip().lower()
-	return text if text in PRIORITY_ORDER else "medium"
-
-
-def _generic_priority(value: Any) -> str:
-	text = str(value or "Medium").strip().lower()
 	return text if text in PRIORITY_ORDER else "medium"
 
 
@@ -846,7 +783,7 @@ def _is_interested(
 	for row in contacts:
 		text = " ".join(
 			_fold(row.get(field))
-			for field in ("readiness_level", "quality_bucket", "lead_status", "enrollment_status")
+			for field in ("readiness_level", "quality_bucket", "enrollment_status")
 		)
 		if any(
 			token in text
@@ -866,7 +803,7 @@ def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, A
 
 
 def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if _fold(student.get("enrollment_status")) in {"da xac nhan", "da trung tuyen"}:
+	if _fold(student.get("enrollment_status")) in {"da xac nhan", "da trung tuyen", "confirmed"}:
 		return True
 	return any(_fold(row.get("status")) == "accepted" for row in applications)
 
@@ -874,7 +811,7 @@ def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -
 def _is_admitted(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
 	if (
 		str(student.get("lifecycle_stage") or "") == "Enrolled"
-		or _fold(student.get("enrollment_status")) == "da nhap hoc"
+		or _fold(student.get("enrollment_status")) in {"da nhap hoc", "enrolled", "converted"}
 	):
 		return True
 	return any(_fold(row.get("status")) == "enrolled" for row in applications)
@@ -992,10 +929,6 @@ def _year_number(value: Any) -> int:
 
 def _has_warning(warnings: list[str], key: str) -> bool:
 	return any(item.startswith(f"{key}.") for item in warnings)
-
-
-def _plain_text(value: Any) -> str:
-	return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", str(value or ""))).strip()
 
 
 def _redact_sensitive(value: str) -> str:

@@ -52,8 +52,8 @@ def normalize_dashboard_filters(from_date=None, to_date=None, user=None):
 		to_date = frappe.utils.get_last_day(to_date or frappe.utils.nowdate())
 
 	roles = frappe.get_roles(frappe.session.user)
-	is_manager = bool({"Lead Sales", "Sales Manager", "System Manager"}.intersection(roles))
-	is_user = bool({"Sale", "CTV Sale", "Sales User"}.intersection(roles)) and not is_manager
+	is_manager = bool({"Lead Sale", "System Manager"}.intersection(roles))
+	is_user = bool({"Sale", "CTV Sale"}.intersection(roles)) and not is_manager
 
 	if is_user:
 		user = frappe.session.user
@@ -136,14 +136,14 @@ def get_total_contacts(from_date=None, to_date=None, user=None):
 
 def get_qualified_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "Có triển vọng"]]
+		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "PROSPECT"]]
 	)
 	return number_chart("Qualified contacts", "Contacts currently in the qualified stage", value, delta)
 
 
 def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "Đã nhập học"]]
+		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "ENROLLED"]]
 	)
 	return number_chart("Enrolled contacts", "Contacts currently in the enrolled stage", value, delta)
 
@@ -348,7 +348,7 @@ def get_sidebar_badge_counts():
 	if frappe.db.table_exists("CRM Contact"):
 		pool_count = get_readable_count(
 			"CRM Contact",
-			filters={"lead_status": ["in", ["Unassigned", "Assigned"]], "owner_staff": ["is", "not set"]},
+			filters={"owner_staff": ["is", "not set"]},
 		)
 	elif frappe.db.table_exists("CRM Student"):
 		pool_count = get_readable_count("CRM Student", {"owner_staff": ["is", "not set"]})

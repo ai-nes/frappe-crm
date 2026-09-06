@@ -36,7 +36,9 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 		"CRM Recommendation", "CRM Action", "CRM Action Item",
 		"CRM Student Assessment", "CRM Student Outcome", "CRM Student Payment",
 		# admissions reference and organization
-		"CRM Campus", "CRM Department", "CRM Education Program", "CRM Major", "CRM Term",
+		"CRM Campus", "CRM Department", "CRM Education Program", "CRM Major",
+		"CRM Intent Type", "CRM Interaction Type", "CRM Enrollment Status",
+		"CRM Aspiration",
 		"CRM Lead Source", "CRM Staff", "CRM Team",
 		# marketing and campaign
 		"CRM Campaign", "CRM Marketing Engagement", "CRM Segment",
@@ -488,7 +490,7 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 			doctype.startswith("CRM ")
 			and doctype not in {"CRM AI Capability Grant", "CRM Agent Event", "CRM Copilot Audit Event", "CRM Student Command Receipt", "CRM Student Decision Event"}
 			and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-			and resolve_copilot_profile(frappe.get_roles()) in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
+			and resolve_copilot_profile(frappe.get_roles()) in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
 		)
 		if demo:
 			fields = _project_ai_fields(doctype, list(columns))
@@ -766,7 +768,7 @@ def get_capability_manifest():
 	# endpoint independently rechecks this same flag and the authenticated role.
 	if (
 		frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-		and copilot_profile in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}
+		and copilot_profile in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
 	):
 		semantic_capabilities = sorted(set(semantic_capabilities) | {"action.crm_mutation"})
 

@@ -8,10 +8,10 @@ from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_st
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
-# CRM Term values that constitute the "application/enrollment" milestone
-# at which a CRM Student record should be created for a Contact — locked business
-# rule for creating a student at the enrollment milestone.
-MILESTONE_ENROLLMENT_STATUSES = {"Đã xác nhận", "Đã nhập học"}
+# CRM Enrollment Status codes that constitute the "application/enrollment"
+# milestone at which a CRM Student record should be created for a Contact —
+# locked business rule for creating a student at the enrollment milestone.
+MILESTONE_ENROLLMENT_STATUSES = {"CONFIRMED", "ENROLLED"}
 
 CONVERSION_SERVICE_FLAG = "student_conversion_service"
 MIGRATION_SERVICE_FLAG = "contact_migration_service"
@@ -21,7 +21,6 @@ PROTECTED_CASE_FIELDS = frozenset(
 		"student",
 		"enrollment_status",
 		"lifecycle_stage",
-		"lead_status",
 		"assigned_to",
 		"owner_staff",
 		"owning_team",
@@ -80,7 +79,7 @@ class CRMContact(Document):
 				"label": "Enrollment Status",
 				"type": "Link",
 				"key": "enrollment_status",
-				"options": "CRM Term",
+				"options": "CRM Enrollment Status",
 				"width": "10rem",
 			},
 			{
