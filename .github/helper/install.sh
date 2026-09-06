@@ -47,3 +47,4 @@ bench pip install pytest
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
 bench --site test_site reinstall --yes
+bench --site test_site migrate
