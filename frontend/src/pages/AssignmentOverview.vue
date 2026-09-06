@@ -272,7 +272,7 @@ const data = computed(() => overview.data)
 const canManageSetup = computed(() =>
   Boolean(
     data.value?.capabilities?.can_view_readiness ||
-    data.value?.capabilities?.can_edit_identity,
+      data.value?.capabilities?.can_edit_identity,
   ),
 )
 const normalizedRows = computed(() =>

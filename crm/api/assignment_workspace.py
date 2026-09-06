@@ -874,9 +874,7 @@ def _team_revision(team_id):
 
 def _setup_workspace_payload(context):
 	"""Return the editable setup projection without exposing school rows."""
-	campuses = _safe_get_all(
-		"CRM Campus", ["name", "campus_name"], order_by="campus_name asc, name asc"
-	)
+	campuses = _safe_get_all("CRM Campus", ["name", "campus_name"], order_by="campus_name asc, name asc")
 	territories = _safe_get_all(
 		"CRM Territory", ["name", "territory_name", "is_active"], {"is_active": 1}, "territory_name asc"
 	)
@@ -971,19 +969,23 @@ def _setup_workspace_payload(context):
 				"team_name": team.team_name,
 				"team_type": team.team_type,
 				"campus": team.campus,
-				"campus_name": _label(next((row for row in campuses if row.name == team.campus), None), "campus_name"),
+				"campus_name": _label(
+					next((row for row in campuses if row.name == team.campus), None), "campus_name"
+				),
 				"territory": team.territory,
 				"is_active": bool(team.is_active),
 				"member_count": len(team_memberships),
 				"member_names": sorted(
-					_label(staff_map.get(row.staff), "full_name") for row in team_memberships if staff_map.get(row.staff)
+					_label(staff_map.get(row.staff), "full_name")
+					for row in team_memberships
+					if staff_map.get(row.staff)
 				),
-				"member_ids": sorted(
-					row.staff for row in team_memberships if row.staff in staff_map
-				),
+				"member_ids": sorted(row.staff for row in team_memberships if row.staff in staff_map),
 				"zone_count": len(team_zones),
 				"zone_names": sorted(
-					_label(zone_map.get(row.zone), "zone_name") for row in team_zones if zone_map.get(row.zone)
+					_label(zone_map.get(row.zone), "zone_name")
+					for row in team_zones
+					if zone_map.get(row.zone)
 				),
 				"revision": _team_revision(team.name),
 			}
@@ -1001,7 +1003,9 @@ def _setup_workspace_payload(context):
 				"campus": row.campus,
 				"is_active": bool(row.is_active),
 				"team_names": sorted(
-					_label(team_map.get(item.team), "team_name") for item in staff_memberships if team_map.get(item.team)
+					_label(team_map.get(item.team), "team_name")
+					for item in staff_memberships
+					if team_map.get(item.team)
 				),
 				"functions": sorted({item.function for item in staff_memberships if item.function}),
 				"memberships": [
@@ -1098,15 +1102,11 @@ def _setup_workspace_payload(context):
 		"zones": zone_rows,
 		"pools": pool_rows,
 		"options": {
-			"campuses": [
-				{"value": row.name, "label": _label(row, "campus_name")} for row in campuses
-			],
+			"campuses": [{"value": row.name, "label": _label(row, "campus_name")} for row in campuses],
 			"territories": [
 				{"value": row.name, "label": _label(row, "territory_name")} for row in territories
 			],
-			"provinces": [
-				{"value": row.name, "label": _label(row, "province_name")} for row in provinces
-			],
+			"provinces": [{"value": row.name, "label": _label(row, "province_name")} for row in provinces],
 			"clusters": [
 				{
 					"value": row.name,
@@ -1117,8 +1117,7 @@ def _setup_workspace_payload(context):
 				for row in clusters
 			],
 			"team_types": [
-				{"value": value, "label": value}
-				for value in ("Sales", "Marketing", "Admissions Operations")
+				{"value": value, "label": value} for value in ("Sales", "Marketing", "Admissions Operations")
 			],
 		},
 		"edit_options": _topology_options(_overview_sources(context), context),
@@ -1184,9 +1183,7 @@ def create_setup_reference(
 		}
 	elif action == "create_zone":
 		cluster = _required_command_text(cluster, "cluster")
-		cluster_row = frappe.db.get_value(
-			"CRM Cluster", cluster, ["name", "is_active"], as_dict=True
-		)
+		cluster_row = frappe.db.get_value("CRM Cluster", cluster, ["name", "is_active"], as_dict=True)
 		if not cluster_row:
 			_command_error("TARGET_NOT_FOUND", "Cụm không tồn tại.")
 		if not cluster_row.is_active:
@@ -1296,10 +1293,7 @@ def _normalize_team_member_moves(value, source_team_id, source_campus):
 		_command_error("INVALID_INPUT", "Không thể chuyển thành viên khi tạo Team mới.")
 
 	active_teams = {
-		row.name: row
-		for row in _safe_get_all(
-			"CRM Team", ["name", "campus", "is_active"], {"is_active": 1}
-		)
+		row.name: row for row in _safe_get_all("CRM Team", ["name", "campus", "is_active"], {"is_active": 1})
 	}
 	rows = []
 	seen_staff = set()

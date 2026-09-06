@@ -86,7 +86,9 @@ class TestTaskApi(FrappeTestCase):
 
 		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 		self.assertTrue(frappe.db.get_value("CRM Action Item", created["name"], "legacy_task_deleted"))
-		self.assertNotIn(created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]})
+		self.assertNotIn(
+			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
+		)
 
 	def test_student_task_assignee_accepts_user_and_staff_values(self):
 		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name

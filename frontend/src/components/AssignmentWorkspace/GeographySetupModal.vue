@@ -118,8 +118,8 @@ const clusterOptions = computed(() =>
 const canSubmit = computed(() =>
   Boolean(
     name.value.trim() &&
-    (isCluster.value ? province.value : cluster.value) &&
-    !submitting.value,
+      (isCluster.value ? province.value : cluster.value) &&
+      !submitting.value,
   ),
 )
 

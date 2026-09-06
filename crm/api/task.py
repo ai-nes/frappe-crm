@@ -76,9 +76,23 @@ _ACTION_STATE_TO_TASK_STATUS = {
 	"superseded": "Canceled",
 }
 _ACTION_ITEM_FIELDS = [
-	"name", "student", "contact", "objective", "description", "start_date",
-	"linked_interaction", "priority", "due_at", "action_owner", "action", "action_type", "state",
-	"legacy_task_deleted", "owner", "creation", "modified",
+	"name",
+	"student",
+	"contact",
+	"objective",
+	"description",
+	"start_date",
+	"linked_interaction",
+	"priority",
+	"due_at",
+	"action_owner",
+	"action",
+	"action_type",
+	"state",
+	"legacy_task_deleted",
+	"owner",
+	"creation",
+	"modified",
 ]
 
 
@@ -258,8 +272,13 @@ def _search_condition(search):
 	if not search:
 		return "1=1"
 	fields = (
-		"action_item.objective", "action_item.action", "action_item.action_type",
-		"student.student_name", "contact.full_name", "action_item.action_owner", "assigned_staff.full_name",
+		"action_item.objective",
+		"action_item.action",
+		"action_item.action_type",
+		"student.student_name",
+		"contact.full_name",
+		"action_item.action_owner",
+		"assigned_staff.full_name",
 	)
 	return "(" + " OR ".join(f"{field} LIKE %s" for field in fields) + ")"
 
@@ -289,9 +308,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 	]
 	if priority:
 		conditions.append("LOWER(action_item.priority) = LOWER(%s)")
-	conditions.append(
-		_date_condition(date_filter, "action_item.due_at", "action_item.state")
-	)
+	conditions.append(_date_condition(date_filter, "action_item.due_at", "action_item.state"))
 	if task_type and task_type.lower() in {"task", "generic", "manual", "legacy"}:
 		conditions.append("action_item.origin = 'manual'")
 		conditions.append("action_item.action = 'CREATE_TASK'")
@@ -561,8 +578,15 @@ def _compatibility_key(operation, name=None):
 
 
 def _list_action_items(
-	search, status, start, page_length, *, student=None, contact=None,
-	reference_doctype=None, reference_docname=None,
+	search,
+	status,
+	start,
+	page_length,
+	*,
+	student=None,
+	contact=None,
+	reference_doctype=None,
+	reference_docname=None,
 ):
 	filters = {"legacy_task_deleted": 0}
 	if student:
