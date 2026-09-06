@@ -40,7 +40,7 @@
   {"fieldname": "recommendation_key", "fieldtype": "Data", "label": "Recommendation Key", "read_only": 1},
   {"fieldname": "rank", "fieldtype": "Int", "label": "Rank", "read_only": 1},
   {"description": "Where `explanation` came from: model, or fallback_absent when no explanation was produced.", "fieldname": "rationale_source", "fieldtype": "Data", "label": "Rationale Source", "read_only": 1},
-  {"description": "Grounded, structured explanation of this recommendation (summary, why_action, why_now, timing_reason, evidence_summary, uncertainty, execution_guidance). Write-once: set from empty, never changed after. Blank until the explanation pass runs.", "fieldname": "explanation", "fieldtype": "JSON", "label": "Explanation", "read_only": 1}
+  {"description": "Rendered, sale-facing work item for this recommendation (action.title, objective, why_this_action, context). Write-once: set from empty, never changed after. Blank until the render pass runs.", "fieldname": "explanation", "fieldtype": "JSON", "label": "Explanation", "read_only": 1}
  ],
  "index_web_pages_for_search": 0,
  "links": [],

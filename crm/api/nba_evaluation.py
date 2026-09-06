@@ -322,10 +322,11 @@ def set_recommendation_rationale(recommendation: str, explanation: object, sourc
 
 	Service-only. Called strictly after ``commit_nba_evaluation_result``
 	accepted the owning evaluation; never touches score, rank, timing, action
-	or disposition. ``explanation`` is the structured six-field grounded
-	explanation object (``summary``, ``why_action``, ``why_now``,
-	``timing_reason``, ``evidence_summary``, ``uncertainty``,
-	``execution_guidance``).
+	or disposition. ``explanation`` is the structured, sale-facing work-item
+	object (``objective``, ``why_this_action``, ``context``, plus the
+	kernel-echoed ``action``). The work item's name lives only once, nested
+	under ``action.title``, and is always the action's own catalog display
+	name -- never model-authored.
 	"""
 	from crm.fcrm import nba_evaluations
 

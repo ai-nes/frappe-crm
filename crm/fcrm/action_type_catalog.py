@@ -175,3 +175,18 @@ def action_category(action_code: str | None) -> str | None:
 
 def metadata_for_action_type(action_type: str | None) -> dict[str, str] | None:
 	return ACTION_TYPE_METADATA.get(action_type or "")
+
+
+def display_name_for_wire_action_code(code: str | None) -> str | None:
+	"""The canonical Vietnamese display name for a wire action code.
+
+	``code`` may carry the ``ACT-<CODE>`` wire prefix (see
+	``crm.fcrm.nba_policy.wire_action_id``); this strips it before the
+	catalog lookup. Falls back to the raw code when the catalog has no entry,
+	rather than failing over an unmapped/legacy code.
+	"""
+	if not code:
+		return code
+	catalog_code = code[4:] if code.startswith("ACT-") else code
+	metadata = metadata_for_action_type(canonicalize_action_type(catalog_code))
+	return metadata["display_name"] if metadata else code
