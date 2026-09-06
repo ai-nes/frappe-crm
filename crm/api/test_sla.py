@@ -144,7 +144,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SLA Recompute%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 
-	def _make_contact(self, name, phone, sla_started_at, enrollment_status="Mới"):
+	def _make_contact(self, name, phone, sla_started_at, enrollment_status="NEW"):
 		contact = frappe.get_doc(
 			{
 				"doctype": "CRM Contact",
@@ -190,7 +190,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 				"doctype": "CRM Contact",
 				"full_name": "_Test SLA Recompute Unassigned",
 				"phone": "0922222304",
-				"enrollment_status": "Mới",
+				"enrollment_status": "NEW",
 			}
 		)
 		contact.insert(ignore_permissions=True)
@@ -208,7 +208,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 			"_Test SLA Recompute Closed",
 			"0922222305",
 			add_to_date(now_datetime(), minutes=-(SLA_BREACH_MINUTES + 5)),
-			enrollment_status="Đã nhập học",
+			enrollment_status="ENROLLED",
 		)
 		recompute_sla_statuses()
 		self.assertNotEqual(frappe.db.get_value("CRM Contact", name, "sla_status"), BREACH)

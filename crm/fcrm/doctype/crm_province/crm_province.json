@@ -38,7 +38,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Region",
-   "options": "CRM Term"
+   "options": "CRM Region"
   },
   {
    "fieldname": "city_type",
@@ -78,7 +78,7 @@
   },
   {
    "read": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "read": 1,
@@ -90,7 +90,7 @@
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+"role": "Promoter"
   },
   {
    "read": 1,

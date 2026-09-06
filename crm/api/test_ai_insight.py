@@ -47,7 +47,7 @@ class TestAIInsightAPI(FrappeTestCase):
 				"student_name": f"_Test AI Insight {suffix}",
 				"phone": "0981123456",
 				"email": f"ai-insight-{suffix.lower()}@example.com",
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -63,7 +63,7 @@ class TestAIInsightAPI(FrappeTestCase):
 				"full_name": f"_Test AI Insight Contact {suffix}",
 				"phone": "0981123457",
 				"student": student.name,
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "contact_migration_service", False)

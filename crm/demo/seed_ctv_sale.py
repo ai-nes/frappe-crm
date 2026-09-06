@@ -5,7 +5,7 @@ Run with::
     bench --site crm.localhost execute crm.demo.seed_ctv_sale.execute
 
 The account receives the canonical ``CTV Sale`` role and the persisted team
-membership value ``CTV-Sale``. The fixture is idempotent and never removes
+membership value ``CTV Sale``. The fixture is idempotent and never removes
 unrelated data.
 """
 
@@ -23,7 +23,7 @@ ACCOUNT_EMAIL = "ctvsale@gmail.com"
 ACCOUNT_FULL_NAME = "CTV Sale"
 ACCOUNT_ROLE = "CTV Sale"
 PASSWORD = "123456"
-TEAM_MEMBERSHIP_FUNCTION = "CTV-Sale"
+TEAM_MEMBERSHIP_FUNCTION = "CTV Sale"
 
 STUDENT_SCENARIOS: tuple[dict[str, Any], ...] = (
 	{
@@ -299,7 +299,7 @@ def _complete_student_profile(
 		"english_converted_score": english_score,
 		"total_score": scenario["total_score"],
 		"step": 3,
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"alt_name": parent["name"],
 		"alt_phone": parent["phone"],
 		"alt_address": parent["address"],
@@ -390,11 +390,11 @@ def _ensure_student(
 			"gender": scenario["gender"],
 			"date_of_birth": scenario["date_of_birth"],
 			"id_number": scenario["id_number"],
-			"admission_method": "Transcript Review",
+			"admission_method": "TRANSCRIPT_REVIEW",
 			"campus": context["campus"],
 			"owning_team": pool,
 			"admission_year": context["admission_year"],
-			"enrollment_status": "Mới",
+			"enrollment_status": "NEW",
 			"high_school": context["high_school"],
 			"province": context["province"],
 			"ward": context["ward"],
@@ -433,7 +433,7 @@ def _ensure_student(
 		student,
 		{
 			"student_name": scenario["student_name"],
-			"admission_method": "Transcript Review",
+			"admission_method": "TRANSCRIPT_REVIEW",
 			"import_source_id": source_id,
 		},
 		update_modified=False,

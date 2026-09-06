@@ -8,16 +8,17 @@ time. Bump CONTRACT_VERSION (and update CONTENT_HASH in both repos) for any
 intentional change, keeping both copies in lockstep.
 
 This module answers Channel / Purpose / Disposition and "is this a direct
-admissions touchpoint, or independent evidence?" for the legacy
-`CRM Term` (Link, open vocabulary) and `outcome` (Select) fields
-on CRM Interaction -- it does not change either field or any writer.
+admissions touchpoint, or independent evidence?" for the `interaction_type`
+(Link to `CRM Interaction Type`) and `outcome` (Select) fields on CRM
+Interaction. Its keys are the `CRM Interaction Type` codes that writers now
+store directly.
 """
 
 import hashlib
 import json
 from collections.abc import Mapping
 
-CONTRACT_VERSION = 2
+CONTRACT_VERSION = 3
 
 INTERACTION_INTELLIGENCE_CONTRACT_VERSION = "interaction-intelligence-v1"
 SILENCE_WINDOW_SECONDS = 15 * 60
@@ -74,105 +75,112 @@ INTERACTION_INTELLIGENCE_POLICY = {
 # the physical layer, so the contract marks them non-direct-touchpoint
 # rather than pretending they don't exist there.
 INTERACTION_TYPE_MAPPING = {
-	"Outreach": {
+	"OUTREACH": {
 		"channel": "Email",
 		"purpose": "Outreach",
 		"disposition": "Sent",
 		"is_direct_touchpoint": True,
 		"evidence_kind": "interaction",
 	},
-	"Connected": {
+	"MESSAGE_CHATWOOT": {
+		"channel": "Chat",
+		"purpose": "Conversation",
+		"disposition": "Received",
+		"is_direct_touchpoint": True,
+		"evidence_kind": "interaction",
+	},
+	"CONNECTED": {
 		"channel": "Call",
 		"purpose": "Outreach",
 		"disposition": "Connected",
 		"is_direct_touchpoint": True,
 		"evidence_kind": "interaction",
 	},
-	"Counseling": {
+	"COUNSELING": {
 		"channel": "Call",
 		"purpose": "Counseling",
 		"disposition": "Connected",
 		"is_direct_touchpoint": True,
 		"evidence_kind": "interaction",
 	},
-	"Stage Changed": {
+	"STAGE_CHANGED": {
 		"channel": "System",
 		"purpose": "Lifecycle",
 		"disposition": "Stage Changed",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "lifecycle_event",
 	},
-	"Lead Assigned": {
+	"LEAD_ASSIGNED": {
 		"channel": "System",
 		"purpose": "Lifecycle",
 		"disposition": "Assigned",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "ownership_event",
 	},
-	"Lead Reassigned": {
+	"LEAD_REASSIGNED": {
 		"channel": "System",
 		"purpose": "Lifecycle",
 		"disposition": "Reassigned",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "ownership_event",
 	},
-	"Opt-out": {
+	"OPT_OUT": {
 		"channel": "System",
 		"purpose": "Consent",
 		"disposition": "Opted Out",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "consent_event",
 	},
-	"Opt-in": {
+	"OPT_IN": {
 		"channel": "System",
 		"purpose": "Consent",
 		"disposition": "Opted In",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "consent_event",
 	},
-	"Bounce": {
+	"BOUNCE": {
 		"channel": "System",
 		"purpose": "Consent",
 		"disposition": "Bounced",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "consent_event",
 	},
-	"Data Error": {
+	"DATA_ERROR": {
 		"channel": "System",
 		"purpose": "Consent",
 		"disposition": "Suppressed",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "consent_event",
 	},
-	"Registered": {
+	"REGISTERED": {
 		"channel": "Event",
 		"purpose": "Event Engagement",
 		"disposition": "Registered",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "event_participation",
 	},
-	"Checked-in": {
+	"CHECKED_IN": {
 		"channel": "Event",
 		"purpose": "Event Engagement",
 		"disposition": "Checked-in",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "event_participation",
 	},
-	"No-show": {
+	"NO_SHOW": {
 		"channel": "Event",
 		"purpose": "Event Engagement",
 		"disposition": "No-show",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "event_participation",
 	},
-	"Feedback": {
+	"FEEDBACK": {
 		"channel": "Event",
 		"purpose": "Event Engagement",
 		"disposition": "Feedback Given",
 		"is_direct_touchpoint": False,
 		"evidence_kind": "event_participation",
 	},
-	"Campaign Touched": {
+	"CAMPAIGN_TOUCHED": {
 		"channel": "Campaign",
 		"purpose": "Attribution",
 		"disposition": "Touched",
@@ -198,25 +206,26 @@ OUTCOME_FIELD_MAPPING = {
 }
 
 # crm/fcrm/interaction_log.py's create_interaction_from_*() dispatchers
-# currently write these legacy CRM Term values. Completeness
+# write these CRM Interaction Type codes. Completeness
 # tests assert every one of them has a mapping entry above.
 KNOWN_WRITER_INTERACTION_TYPES = frozenset(
 	{
-		"Outreach",
-		"Connected",
-		"Counseling",
-		"Stage Changed",
-		"Lead Assigned",
-		"Lead Reassigned",
-		"Opt-out",
-		"Opt-in",
-		"Bounce",
-		"Data Error",
-		"Registered",
-		"Checked-in",
-		"No-show",
-		"Feedback",
-		"Campaign Touched",
+		"OUTREACH",
+		"MESSAGE_CHATWOOT",
+		"CONNECTED",
+		"COUNSELING",
+		"STAGE_CHANGED",
+		"LEAD_ASSIGNED",
+		"LEAD_REASSIGNED",
+		"OPT_OUT",
+		"OPT_IN",
+		"BOUNCE",
+		"DATA_ERROR",
+		"REGISTERED",
+		"CHECKED_IN",
+		"NO_SHOW",
+		"FEEDBACK",
+		"CAMPAIGN_TOUCHED",
 	}
 )
 
@@ -235,7 +244,7 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "609b5973410db06f277a2621d9da3080a7984552385f768fb2777e024f7194ea"
+FROZEN_CONTENT_HASH = "14ebca6127068138342a296f8034c22534482210c2ca0cdde41bdf8c9a0a1407"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(

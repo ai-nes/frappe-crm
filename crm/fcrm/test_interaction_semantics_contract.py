@@ -45,23 +45,23 @@ class TestInteractionSemanticsContract(unittest.TestCase):
 
 	def test_lifecycle_assignment_and_evidence_types_are_not_direct_touchpoints(self):
 		for name in (
-			"Stage Changed",
-			"Lead Assigned",
-			"Lead Reassigned",
-			"Opt-out",
-			"Opt-in",
-			"Bounce",
-			"Data Error",
-			"Registered",
-			"Checked-in",
-			"No-show",
-			"Feedback",
-			"Campaign Touched",
+			"STAGE_CHANGED",
+			"LEAD_ASSIGNED",
+			"LEAD_REASSIGNED",
+			"OPT_OUT",
+			"OPT_IN",
+			"BOUNCE",
+			"DATA_ERROR",
+			"REGISTERED",
+			"CHECKED_IN",
+			"NO_SHOW",
+			"FEEDBACK",
+			"CAMPAIGN_TOUCHED",
 		):
 			self.assertNotIn(name, DIRECT_TOUCHPOINT_TYPES)
 
 	def test_genuine_touchpoints_are_direct(self):
-		for name in ("Outreach", "Connected", "Counseling"):
+		for name in ("OUTREACH", "CONNECTED", "COUNSELING"):
 			self.assertIn(name, DIRECT_TOUCHPOINT_TYPES)
 
 	def test_resolve_interaction_type_returns_none_for_unmapped_value(self):

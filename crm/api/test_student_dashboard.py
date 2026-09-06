@@ -49,7 +49,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": name,
 				"phone": phone,
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)

@@ -11,7 +11,7 @@
   {"fieldname": "territory_code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Territory Code"},
   {"fieldname": "parent_territory", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Parent Territory", "options": "CRM Territory"},
   {"default": "0", "fieldname": "is_group", "fieldtype": "Check", "in_list_view": 1, "label": "Is Group"},
-  {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Region", "options": "CRM Term"},
+  {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Region", "options": "CRM Region"},
   {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From"},
   {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "label": "Effective Until"},
   {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"},
@@ -27,7 +27,7 @@
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"export": 1, "read": 1, "role": "Admissions Director"},
-  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Marketing"}
  ],
  "row_format": "Dynamic",

@@ -43,6 +43,14 @@ STATUS_TO_STAGE = {
 	"khong quan tam": "lost",
 	"sai so": "lost",
 	"tu choi": "lost",
+	# CRM Enrollment Status codes (post CRM Term cutover) -- enrollment_status
+	# now stores the UPPER_SNAKE code, not the Vietnamese display label above.
+	"new": "prospect",
+	"prospect": "qualified",
+	"confirmed": "accepted",
+	"enrolled": "enrolled",
+	"converted": "enrolled",
+	"refused": "lost",
 }
 APPLICATION_STAGE = {
 	"Submitted": "application",

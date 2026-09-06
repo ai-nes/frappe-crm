@@ -144,22 +144,17 @@ def _application_targets(students: list[dict[str, Any]]) -> list[dict[str, Any]]
 
 
 def _ensure_admission_methods(students: list[dict[str, Any]]) -> None:
-	"""Ensure Student Select values also exist in the canonical Term catalog."""
-	from crm.fcrm.master_data_governance import create_additive_value
-
-	for method in sorted({str(row.get("admission_method") or "").strip() for row in students}):
-		if not method or frappe.db.exists(
-			"CRM Term", {"term_name": method, "category": "admission_method"}
-		):
+	"""Ensure every Student admission-method code exists in the CRM Admission Method lookup."""
+	for code in sorted({str(row.get("admission_method") or "").strip() for row in students}):
+		if not code or frappe.db.exists("CRM Admission Method", code):
 			continue
-		create_additive_value(
-			"CRM Term",
-			method,
-			reason="Canonical admission method used by the Director funnel demo.",
-			idempotency_key=f"{NAMESPACE}:admission-method:{method}",
-			correlation_id=NAMESPACE,
-			category="admission_method",
-		)
+		frappe.get_doc(
+			{
+				"doctype": "CRM Admission Method",
+				"code": code,
+				"display_name": code.replace("_", " ").title(),
+			}
+		).insert(ignore_permissions=True)
 
 
 def _refresh_snapshot_dates(students: list[dict[str, Any]], as_of: datetime) -> dict[str, datetime]:

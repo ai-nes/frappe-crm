@@ -120,7 +120,7 @@
    "fieldname": "interaction_term",
    "fieldtype": "Link",
    "label": "Interaction Term",
-   "options": "CRM Term",
+   "options": "CRM Interaction Type",
    "depends_on": "eval:doc.signal_type == 'interaction'"
   },
   {
@@ -134,7 +134,7 @@
    "fieldname": "intent_type",
    "fieldtype": "Link",
    "label": "Intent Type",
-   "options": "CRM Term",
+   "options": "CRM Intent Type",
    "depends_on": "eval:doc.signal_type == 'intent'"
   },
   {
@@ -216,7 +216,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "read": 1,

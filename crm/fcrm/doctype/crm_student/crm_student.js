@@ -25,21 +25,14 @@ async function loadWardCode(frm) {
 
 frappe.ui.form.on("CRM Student", {
 	setup(frm) {
-		// CRM Term is a shared catalogue; this field must not expose intent,
+		// Enrollment Status is a dedicated lookup; this field must not expose intent,
 		// aspiration, or lost-reason terms as valid enrollment statuses.
 		frm.set_query("enrollment_status", () => ({
-			filters: {
-				category: "enrollment_status",
-				is_active: 1,
-			},
+			filters: { enabled: 1 },
 		}))
 
 		frm.set_query("aspiration", () => ({
-			filters: {
-				category: "aspiration",
-				is_active: 1,
-				term_name: ["in", ["NV1", "NV2", "NV3"]],
-			},
+			filters: { enabled: 1, code: ["in", ["NV1", "NV2", "NV3"]] },
 		}))
 
 		frm.set_query("ward", () => ({

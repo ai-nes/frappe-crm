@@ -8,7 +8,7 @@ class TestCRMIntent(FrappeTestCase):
 		self._ensure_master_data()
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Intent", filters={"intent_type": "_Test Intent Trash Type"}, pluck="name"):
+		for name in frappe.db.get_all("CRM Intent", filters={"intent_type": "MAJOR_INQUIRY"}, pluck="name"):
 			frappe.delete_doc("CRM Intent", name, force=True)
 		for name in frappe.db.get_all("CRM Interaction", filters={"summary": ["like", "_Test Intent Trash%"]}, pluck="name"):
 			frappe.delete_doc("CRM Interaction", name, force=True)
@@ -16,17 +16,9 @@ class TestCRMIntent(FrappeTestCase):
 			frappe.delete_doc("CRM Student", name, force=True)
 
 	def _ensure_master_data(self):
-		if not frappe.db.exists("CRM Term", "_Test Intent Trash Call"):
-			frappe.get_doc({
-				"doctype": "CRM Term",
-				"term_name": "_Test Intent Trash Call", "category": "interaction_type",
-			}).insert(ignore_permissions=True)
-		if not frappe.db.exists("CRM Term", "_Test Intent Trash Type"):
-			frappe.get_doc({
-				"doctype": "CRM Term",
-				"term_name": "_Test Intent Trash Type", "category": "intent_type",
-				"metadata": {"importance": "Very High"},
-			}).insert(ignore_permissions=True)
+		# "OUTREACH"/"MAJOR_INQUIRY" are real seeded lookup codes -- these tests
+		# only need valid link values, not dedicated fixture rows.
+		pass
 
 	def _make_student(self):
 		student = frappe.get_doc({
@@ -46,7 +38,7 @@ class TestCRMIntent(FrappeTestCase):
 		interaction = frappe.get_doc({
 			"doctype": "CRM Interaction",
 			"student": student.name,
-			"interaction_type": "_Test Intent Trash Call",
+			"interaction_type": "OUTREACH",
 			"summary": "_Test Intent Trash discussion",
 		})
 		interaction.insert(ignore_permissions=True)
@@ -58,7 +50,7 @@ class TestCRMIntent(FrappeTestCase):
 		intent = frappe.get_doc({
 			"doctype": "CRM Intent",
 			"interaction": interaction.name,
-			"intent_type": "_Test Intent Trash Type",
+			"intent_type": "MAJOR_INQUIRY",
 			"confidence": 70,
 		})
 		intent.insert(ignore_permissions=True)

@@ -78,7 +78,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Interaction Type",
-   "options": "CRM Term",
+   "options": "CRM Interaction Type",
    "reqd": 1
   },
   {
@@ -305,7 +305,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "share": 1,
    "write": 1
   },

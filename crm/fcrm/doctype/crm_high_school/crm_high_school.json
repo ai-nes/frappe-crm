@@ -57,7 +57,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "School Type",
-   "options": "CRM Term"
+   "options": "CRM School Type"
   },
   {
    "fieldname": "school_area",
@@ -65,8 +65,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "School Area",
-   "link_filters": "{\"category\":\"school_area\"}",
-   "options": "CRM Term"
+   "options": "CRM School Area"
   },
   {
    "fieldname": "school_tier",
@@ -218,7 +217,7 @@
   },
   {
    "read": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "read": 1,
@@ -230,7 +229,7 @@
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+"role": "Promoter"
   },
   {
    "read": 1,

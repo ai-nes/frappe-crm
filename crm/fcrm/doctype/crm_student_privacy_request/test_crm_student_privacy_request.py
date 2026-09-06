@@ -19,7 +19,7 @@ class TestCRMStudentPrivacyRequest(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": "_Test Privacy Student",
 				"phone": "0987000091",
-				"enrollment_status": "Mới",
+				"enrollment_status": "NEW",
 			}
 		)
 		frappe.flags.student_intake_service = True

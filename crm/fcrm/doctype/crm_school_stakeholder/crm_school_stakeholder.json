@@ -35,7 +35,7 @@
  "fields": [
   {"fieldname": "high_school", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "High School", "options": "CRM High School", "reqd": 1},
   {"fieldname": "person", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Person", "options": "CRM Person", "reqd": 1},
-  {"fieldname": "stakeholder_role", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Stakeholder Role", "link_filters": "{\"category\":\"stakeholder_role\"}", "options": "CRM Term", "reqd": 1},
+  {"fieldname": "stakeholder_role", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Stakeholder Role", "options": "CRM Stakeholder Role", "reqd": 1},
   {"fieldname": "position_title", "fieldtype": "Data", "in_list_view": 1, "label": "Position Title"},
   {"fieldname": "relationship_status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Relationship Status", "options": "New\nActive\nDormant\nDo Not Contact", "default": "New", "reqd": 1},
   {"fieldname": "relationship_revision", "fieldtype": "Int", "hidden": 1, "label": "Relationship Revision", "default": "1", "read_only": 1, "reqd": 1},
@@ -70,10 +70,10 @@
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "Administrator"},
   {"export": 1, "read": 1, "role": "Admissions Director"},
-  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Lead Sale"},
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "Marketing"},
   {"create": 1, "read": 1, "write": 1, "role": "Promoter"},
-  {"create": 1, "read": 1, "write": 1, "role": "Promoter-PR"},
+{"create": 1, "read": 1, "write": 1, "role": "Promoter"},
   {"read": 1, "role": "Sale"}
  ],
  "quick_entry": 1,

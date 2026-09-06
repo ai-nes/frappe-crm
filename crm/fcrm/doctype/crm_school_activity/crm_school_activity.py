@@ -20,10 +20,6 @@ class CRMSchoolActivity(Document):
 
 	def validate(self):
 		validate_portfolio_update(self)
-		if self.activity_type:
-			category = frappe.db.get_value("CRM Term", self.activity_type, "category")
-			if category and category != "activity_type":
-				frappe.throw("Activity Type must use an activity_type term.", frappe.ValidationError)
 		if self.stakeholder and self.high_school:
 			stakeholder_school = frappe.db.get_value("CRM School Stakeholder", self.stakeholder, "high_school")
 			if stakeholder_school and stakeholder_school != self.high_school:
@@ -50,7 +46,7 @@ class CRMSchoolActivity(Document):
 		columns = [
 			{"label": "High School", "type": "Link", "key": "high_school", "options": "CRM High School", "width": "16rem"},
 			{"label": "Date", "type": "Date", "key": "activity_date", "width": "9rem"},
-			{"label": "Activity", "type": "Link", "key": "activity_type", "options": "CRM Term", "width": "12rem"},
+			{"label": "Activity", "type": "Link", "key": "activity_type", "options": "CRM School Activity Type", "width": "12rem"},
 			{"label": "Status", "type": "Select", "key": "status", "width": "9rem"},
 			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
 		]

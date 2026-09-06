@@ -20,7 +20,7 @@ class TestCRMStudent(FrappeTestCase):
 			"student_name": name,
 			"phone": "0981000001",
 			"email": "test.convert@example.com",
-			"enrollment_status": "Đã xác nhận",
+			"enrollment_status": "CONFIRMED",
 		})
 		frappe.flags.student_intake_service = True
 		try:
@@ -54,7 +54,7 @@ class TestCRMStudent(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			convert_to_contact(student.name)
 		student.reload()
-		self.assertEqual(student.enrollment_status, "Đã xác nhận")
+		self.assertEqual(student.enrollment_status, "CONFIRMED")
 
 	def test_direct_student_creation_is_allowed(self):
 		student = frappe.get_doc(
@@ -62,7 +62,7 @@ class TestCRMStudent(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": "_Test Direct Student",
 				"phone": "0981000099",
-				"enrollment_status": "Mới",
+				"enrollment_status": "NEW",
 			}
 		)
 
@@ -149,10 +149,10 @@ class TestCRMStudent(FrappeTestCase):
 	# ---------------------------------------------------------------- lifecycle stage
 
 	def test_forward_progression_does_not_require_reason_or_role(self):
-		student = self._make_student_with_status("_Test Student Forward", "0941000001", "Mới")
+		student = self._make_student_with_status("_Test Student Forward", "0941000001", "NEW")
 		self.assertEqual(student.lifecycle_stage, "Lead")
 
-		student.enrollment_status = "Có triển vọng"
+		student.enrollment_status = "PROSPECT"
 		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
 		frappe.flags.student_lifecycle_service = True
 		try:
@@ -163,25 +163,25 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "MQL")
 
 	def test_reopen_from_lost_without_role_or_reason_is_blocked(self):
-		student = self._make_student_with_status("_Test Student Reopen No Role", "0941000002", "Từ chối")
+		student = self._make_student_with_status("_Test Student Reopen No Role", "0941000002", "REFUSED")
 		self.assertEqual(student.lifecycle_stage, "Lost")
 
 		user, _staff = self._make_user_and_staff("_Test Student Reopen No Role User", roles=["Sale"])
 		frappe.set_user(user)
 		try:
-			student.enrollment_status = "Có triển vọng"
+			student.enrollment_status = "PROSPECT"
 			with self.assertRaises(frappe.PermissionError):
 				student.save(ignore_permissions=True)
 		finally:
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
-		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "Từ chối")
+		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "REFUSED")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sales"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sale"])
 		frappe.set_user(user)
 		try:
-			student.enrollment_status = "Có triển vọng"
+			student.enrollment_status = "PROSPECT"
 			student.status_change_reason = ""
 			with self.assertRaises(frappe.ValidationError):
 				student.save(ignore_permissions=True)
@@ -189,12 +189,12 @@ class TestCRMStudent(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
-		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "Từ chối")
+		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "REFUSED")
 
-		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sales"])
+		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sale"])
 		frappe.set_user(user)
 		try:
-			student.enrollment_status = "Có triển vọng"
+			student.enrollment_status = "PROSPECT"
 			student.status_change_reason = "Phụ huynh xác nhận vẫn quan tâm."
 			previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
 			frappe.flags.student_lifecycle_service = True
@@ -206,7 +206,7 @@ class TestCRMStudent(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 		student.reload()
-		self.assertEqual(student.enrollment_status, "Có triển vọng")
+		self.assertEqual(student.enrollment_status, "PROSPECT")
 		self.assertEqual(student.lifecycle_stage, "MQL")
 
 	# --------------------------------------------------------------- assignment log

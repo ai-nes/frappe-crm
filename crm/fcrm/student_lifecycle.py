@@ -219,20 +219,11 @@ def _finish(receipt, result):
 
 
 def _status_for_stage(stage: str) -> str | None:
-	rows = frappe.get_all("CRM Term", filters={"category": "enrollment_status"}, fields=["name", "metadata"], order_by="sort_order asc, name asc")
-	for row in rows:
-		metadata = row.get("metadata") or {}
-		if isinstance(metadata, str):
-			try:
-				metadata = json.loads(metadata)
-			except (TypeError, ValueError):
-				metadata = {}
-		if metadata.get("lifecycle_stage") == stage:
-			return row.name
 	return frappe.db.get_value(
-		"CRM Term",
-		{"term_name": {"Lead": "Mới", "MQL": "Có triển vọng", "Applicant": "Đã nộp hồ sơ", "Enrolled": "Đã nhập học", "Lost": "Không quan tâm"}.get(stage), "category": "enrollment_status"},
+		"CRM Enrollment Status",
+		{"lifecycle_stage": stage, "enabled": 1},
 		"name",
+		order_by="stage_order asc",
 	)
 
 

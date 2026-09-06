@@ -313,14 +313,18 @@ def _load_lookups(rows: list) -> dict[str, dict]:
 		term_ids.update(row.get("school_type") for row in school_rows if row.get("school_type"))
 
 	regions = {}
-	if term_ids and _table_exists("CRM Term"):
-		term_rows = frappe.get_all(
-			"CRM Term",
-			filters={"name": ["in", list(term_ids)]},
-			fields=["name", "term_name"],
-			limit_page_length=0,
-		)
-		regions = {row.get("name"): row.get("term_name") or row.get("name") for row in term_rows}
+	if term_ids:
+		term_id_list = list(term_ids)
+		for lookup_doctype in ("CRM Region", "CRM Major Group", "CRM School Type"):
+			if not _table_exists(lookup_doctype):
+				continue
+			for row in frappe.get_all(
+				lookup_doctype,
+				filters={"name": ["in", term_id_list]},
+				fields=["name", "display_name"],
+				limit_page_length=0,
+			):
+				regions[row.get("name")] = row.get("display_name") or row.get("name")
 
 	return {"majors": majors, "provinces": provinces, "schools": schools, "regions": regions}
 
