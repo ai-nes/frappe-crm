@@ -4,6 +4,7 @@ vi.mock('frappe-ui', () => ({ createResource: () => ({}) }))
 
 import {
   assignmentWorkspaceFilterQuery,
+  assignmentWorkspacePolicyLabel,
   assignmentWorkspaceStatusLabel,
   normalizeAssignmentWorkspaceRows,
   serializeAssignmentWorkspaceFilters,
@@ -36,5 +37,10 @@ describe('assignment workspace data contract', () => {
   it('keeps status terminology centralized for the UI', () => {
     expect(assignmentWorkspaceStatusLabel('unassigned')).toBe('Chưa cấu hình')
     expect(assignmentWorkspaceStatusLabel('unknown')).toBe('unknown')
+  })
+
+  it('keeps routing strategy terminology understandable for operators', () => {
+    expect(assignmentWorkspacePolicyLabel('round_robin')).toBe('Luân phiên công bằng')
+    expect(assignmentWorkspacePolicyLabel('weighted_score')).toBe('Chấm điểm có trọng số')
   })
 })

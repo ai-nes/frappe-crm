@@ -31,7 +31,7 @@ def create_student_policy(doctype: str, values: dict) -> dict:
 	if doctype not in {"CRM Student Routing Policy", "CRM Student SLA Policy"} or not isinstance(values, dict):
 		frappe.throw("Unsupported Student policy payload.", frappe.ValidationError)
 	allowed = {
-		"CRM Student Routing Policy": {"policy_key", "policy_version", "campus", "student_pool", "strategy", "effective_from", "effective_until", "recipient_scope"},
+		"CRM Student Routing Policy": {"policy_key", "policy_version", "campus", "student_pool", "strategy", "scoring_weights", "effective_from", "effective_until", "recipient_scope"},
 		"CRM Student SLA Policy": {"policy_key", "policy_version", "campus", "student_pool", "warning_minutes", "breach_minutes", "escalation_minutes", "pause_reasons", "maximum_pause_minutes", "recipient_strategy", "effective_from", "effective_until"},
 	}[doctype]
 	doc = frappe.get_doc({"doctype": doctype, **{key: value for key, value in values.items() if key in allowed}})

@@ -76,6 +76,7 @@ REQUIRED_DOCTYPES = (
 	"CRM Team Zone Assignment",
 	"CRM High School Assignment",
 	"CRM Student",
+	"CRM Assignment Control",
 )
 
 

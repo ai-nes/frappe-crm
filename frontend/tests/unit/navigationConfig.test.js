@@ -187,6 +187,7 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Báo cáo nhóm')
     expect(labels).toContain('Tra cứu')
     expect(labels).toContain('Chính sách SLA (chỉ đọc)')
+    expect(leadTree.filter((item) => item.label === 'Cơ chế phân bổ')).toHaveLength(1)
     expect(labels).not.toContain('Hồ sơ nghi trùng')
 
     expect(
@@ -304,6 +305,9 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Chỉ tiêu & Học phí')
     expect(labels).toContain('Cấu hình nghiệp vụ')
     expect(labels).toContain('Báo cáo (Metabase)')
+    const businessConfig = mgrTree.find((item) => item.id === 'mgr_business_config')
+    expect(businessConfig.children.filter((item) => item.label === 'Cơ chế phân bổ')).toHaveLength(1)
+    expect(businessConfig.children.map((item) => item.label)).not.toContain('Chính sách phân phối')
   })
 
   it('verifies Admin (System Manager) navigation items structure', () => {
@@ -319,5 +323,7 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Sao lưu')
     expect(labels).toContain('Break Glass (quyền tạm)')
     expect(labels).toContain('Nhật ký truy cập')
+    const orgStructure = adminTree.find((item) => item.id === 'adm_org_structure')
+    expect(orgStructure.children.filter((item) => item.label === 'Cơ chế phân bổ')).toHaveLength(1)
   })
 })

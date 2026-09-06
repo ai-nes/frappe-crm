@@ -1,0 +1,360 @@
+"""Operational control plane for the automatic Student assignment workspace."""
+
+from __future__ import annotations
+
+import frappe
+from frappe import _
+from frappe.utils import getdate, now_datetime, today
+
+from crm.api.assignment_workspace import (
+	_active_students_summary,
+	_actor_context,
+	_capacity_by_staff,
+	_doctype_exists,
+	_grouped_students,
+	_overview_sources,
+	_safe_get_all,
+)
+from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.student_feature_flags import enabled as feature_enabled
+
+RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
+CONTROL_DOCTYPE = "CRM Assignment Control"
+
+
+def _as_bool(value) -> bool:
+	if isinstance(value, bool):
+		return value
+	if isinstance(value, str):
+		return value.lower() in {"1", "true", "yes", "on"}
+	return bool(value)
+
+
+def _require_control_access():
+	context = _actor_context()
+	if "system.configure" not in context["capabilities"]:
+		frappe.throw(_("Only System Managers may change automatic assignment settings."), frappe.PermissionError)
+	return context
+
+
+def _stored_control():
+	if not _doctype_exists(CONTROL_DOCTYPE):
+		return None
+	try:
+		return frappe.db.get_value(
+			CONTROL_DOCTYPE,
+			CONTROL_DOCTYPE,
+			[
+				"routing_enabled",
+				"capacity_required",
+				"last_changed_by",
+				"last_change_reason",
+				"revision",
+			],
+			as_dict=True,
+		)
+	except Exception:
+		return None
+
+
+def _routing_enabled(control) -> bool:
+	if control and control.get("routing_enabled") is not None:
+		return _as_bool(control.get("routing_enabled"))
+	return feature_enabled("routing")
+
+
+def _load_rows(context):
+	sources = _overview_sources(context)
+	allowed_teams = {row.name for row in sources["teams"]}
+	staff_map = {row.name: row for row in sources["staff"]}
+	team_map = {row.name: row for row in sources["teams"]}
+	user_enabled = {
+		row.name: bool(row.get("enabled"))
+		for row in _safe_get_all("User", ["name", "enabled"])
+	}
+	campus_map = {
+		row.name: row.get("campus_name") or row.name
+		for row in _safe_get_all("CRM Campus", ["name", "campus_name"])
+	}
+	students = _grouped_students()
+	student_by, _ = _active_students_summary(students)
+	capacity_by_staff = _capacity_by_staff()
+	memberships = [
+		row
+		for row in sources["memberships"]
+		if row.get("team") in allowed_teams and row.get("staff") in staff_map
+	]
+	rows = []
+	memberships_by_staff = {}
+	for membership in memberships:
+		memberships_by_staff.setdefault(membership.get("staff"), []).append(membership)
+	for staff_id, staff_memberships in memberships_by_staff.items():
+		staff = staff_map[staff_id]
+		staff_memberships.sort(
+			key=lambda row: (
+				not bool(row.get("is_primary")),
+				(team_map.get(row.get("team")) or {}).get("team_name") or row.get("team") or "",
+			)
+		)
+		primary_membership = staff_memberships[0]
+		team_id = primary_membership.get("team")
+		team = team_map.get(team_id)
+		team_names = [
+			(team_map.get(row.get("team")) or {}).get("team_name") or row.get("team")
+			for row in staff_memberships
+			if row.get("team")
+		]
+		capacity = capacity_by_staff.get(staff_id)
+		active = int(student_by["owner_staff"].get(staff_id, 0) or 0)
+		maximum = int(capacity.get("max_active_students") or 0) if capacity else 0
+		workload = "unconfigured"
+		if maximum > 0:
+			workload = "over_capacity" if active >= maximum else "near_capacity" if active >= maximum * 0.85 else "healthy"
+		eligible_membership = next(
+			(
+				row
+				for row in staff_memberships
+				if (row.get("function") or "Sale") in RECIPIENT_FUNCTIONS
+			),
+			None,
+		)
+		function = (eligible_membership or primary_membership).get("function") or "Sale"
+		recipient_eligible = function in RECIPIENT_FUNCTIONS
+		if recipient_eligible:
+			recipient_eligible = bool(staff.get("user")) and user_enabled.get(staff.get("user"), False)
+			if recipient_eligible:
+				recipient_eligible = resolve_crm_profile(frappe.get_roles(staff.get("user"))) == "sales"
+		rows.append(
+			{
+				"staff": staff_id,
+				"staff_name": staff.get("full_name") or staff_id,
+				"user": staff.get("user"),
+				"team": team_id,
+				"team_name": team.get("team_name") if team else team_id,
+				"team_names": team_names,
+				"campus": staff.get("campus") or (team.get("campus") if team else None),
+				"campus_name": campus_map.get(staff.get("campus")) or campus_map.get(team.get("campus") if team else None),
+				"function": function,
+				"active_leads": active,
+				"capacity": maximum or None,
+				"remaining": max(0, maximum - active) if maximum else None,
+				"load_percent": round(active / maximum * 100, 1) if maximum else None,
+				"workload": workload,
+				"capacity_configured": bool(maximum),
+				"period_start": str(capacity.get("period_start")) if capacity and capacity.get("period_start") else None,
+				"period_end": str(capacity.get("period_end")) if capacity and capacity.get("period_end") else None,
+				"recipient_eligible": recipient_eligible,
+				"is_active": bool(staff.get("is_active")),
+			}
+		)
+	return sorted(rows, key=lambda row: (row.get("team_name") or "", row.get("staff_name") or "")), sources
+
+
+def _policy_rows(context, sources):
+	allowed_pools = {row.name for row in sources["pools"]}
+	rows = _safe_get_all(
+		"CRM Student Routing Policy",
+		[
+			"name",
+			"policy_key",
+			"policy_version",
+			"status",
+			"campus",
+			"student_pool",
+			"strategy",
+			"scoring_weights",
+			"effective_from",
+			"effective_until",
+			"authored_by",
+			"approved_by",
+			"approved_at",
+		],
+		order_by="modified desc, name desc",
+	)
+	return [row for row in rows if row.get("student_pool") in allowed_pools]
+
+
+def _activation_checks(load_rows, policies):
+	active_policies = [row for row in policies if row.get("status") == "active"]
+	recipients = [row for row in load_rows if row.get("recipient_eligible") and row.get("is_active")]
+	missing_capacity = [row for row in recipients if not row.get("capacity_configured")]
+	checks = [
+		{
+			"code": "active_policy",
+			"label": _("Có chính sách phân bổ đang hiệu lực"),
+			"passed": bool(active_policies),
+			"count": len(active_policies),
+			"detail": _("Tạo và phê duyệt policy theo từng Pool trước khi bật.")
+			if not active_policies
+			else _("{0} policy đang hiệu lực.").format(len(active_policies)),
+		},
+		{
+			"code": "eligible_staff",
+			"label": _("Có Sale đủ điều kiện nhận Lead"),
+			"passed": bool(recipients),
+			"count": len(recipients),
+			"detail": _("Kiểm tra Staff active, User enabled và Team Membership hợp lệ.")
+			if not recipients
+			else _("{0} nhân sự đang tham gia cân bằng tải.").format(len(recipients)),
+		},
+		{
+			"code": "capacity_configured",
+			"label": _("Mọi Sale đều có capacity trong kỳ hiện tại"),
+			"passed": not missing_capacity,
+			"count": len(missing_capacity),
+			"detail": _("Còn thiếu: {0}.").format(", ".join(row["staff_name"] for row in missing_capacity[:5]))
+			if missing_capacity
+			else _("Mọi Sale đều có giới hạn Lead và còn trống được tính."),
+		},
+	]
+	return checks
+
+
+def _policy_options(sources):
+	return {
+		"campuses": [
+			{"value": row.name, "label": row.get("campus_name") or row.name}
+			for row in sources["campuses"]
+		],
+		"pools": [
+			{
+				"value": row.name,
+				"label": row.get("pool_name") or row.name,
+				"campus": row.get("campus"),
+			}
+			for row in sources["pools"]
+		],
+	}
+
+
+@frappe.whitelist()
+def get_routing_control():
+	"""Return the tabbed workspace model for toggle, policies and load balance."""
+	context = _actor_context()
+	load_rows, sources = _load_rows(context)
+	policies = _policy_rows(context, sources)
+	control = _stored_control()
+	checks = _activation_checks(load_rows, policies)
+	active_rows = [row for row in load_rows if row.get("recipient_eligible") and row.get("is_active")]
+	configured = [row for row in active_rows if row.get("capacity_configured")]
+	return {
+		"schemaVersion": "assignment-control-v1",
+		"as_of": str(now_datetime()),
+		"enabled": _routing_enabled(control),
+		"control_source": "workspace" if control else "site_config_fallback",
+		"control": control
+		or {
+			"capacity_required": False,
+			"revision": 0,
+		},
+		"can_manage": "system.configure" in context["capabilities"],
+		"can_approve_policy": "student.policy.approve" in context["capabilities"],
+		"checks": checks,
+		"ready_to_enable": all(check["passed"] for check in checks),
+		"summary": {
+			"eligible_staff": len(active_rows),
+			"capacity_configured": len(configured),
+			"capacity_missing": len(active_rows) - len(configured),
+			"active_leads": sum(row["active_leads"] for row in active_rows),
+			"total_capacity": sum(row["capacity"] or 0 for row in configured),
+			"remaining_capacity": sum(row["remaining"] or 0 for row in configured),
+			"near_capacity": sum(row["workload"] == "near_capacity" for row in active_rows),
+			"over_capacity": sum(row["workload"] == "over_capacity" for row in active_rows),
+		},
+		"staff_load": load_rows,
+		"policies": policies,
+		"policy_options": _policy_options(sources),
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def set_routing_enabled(enabled, reason=None):
+	"""Switch automatic assignment on/off after server-side readiness checks."""
+	_require_control_access()
+	reason = (reason or "").strip()
+	if len(reason) < 5:
+		frappe.throw(_("Cần ghi lý do thay đổi ít nhất 5 ký tự."), frappe.ValidationError)
+	requested = _as_bool(enabled)
+	snapshot = get_routing_control()
+	if requested and not snapshot["ready_to_enable"]:
+		failed = [check["label"] for check in snapshot["checks"] if not check["passed"]]
+		frappe.throw(
+			_("Chưa thể bật tự động phân công. Cần xử lý: {0}.").format("; ".join(failed)),
+			frappe.ValidationError,
+		)
+	doc = frappe.get_single(CONTROL_DOCTYPE)
+	doc.routing_enabled = 1 if requested else 0
+	doc.capacity_required = 1
+	doc.last_changed_by = frappe.session.user
+	doc.last_change_reason = reason
+	doc.revision = int(doc.revision or 0) + 1
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_routing_control()
+
+
+@frappe.whitelist(methods=["POST"])
+def upsert_staff_capacity(
+	staff,
+	max_active_students,
+	period_start=None,
+	period_end=None,
+	team=None,
+	reason=None,
+):
+	"""Create or update the active capacity period used by routing."""
+	_require_control_access()
+	if not staff or not frappe.db.exists("CRM Staff", staff):
+		frappe.throw(_("CRM Staff không tồn tại."), frappe.ValidationError)
+	try:
+		maximum = int(max_active_students)
+	except (TypeError, ValueError):
+		frappe.throw(_("Capacity phải là số nguyên."), frappe.ValidationError)
+	if maximum <= 0:
+		frappe.throw(_("Capacity phải lớn hơn 0 để tham gia tự động phân công."), frappe.ValidationError)
+	start = getdate(period_start or today())
+	end = getdate(period_end or f"{start.year}-12-31")
+	if start > end:
+		frappe.throw(_("Ngày bắt đầu không được sau ngày kết thúc."), frappe.ValidationError)
+	if len((reason or "").strip()) < 5:
+		frappe.throw(_("Cần ghi lý do cập nhật capacity ít nhất 5 ký tự."), frappe.ValidationError)
+	staff_row = frappe.db.get_value("CRM Staff", staff, ["campus", "is_active"], as_dict=True)
+	if not staff_row or not staff_row.is_active:
+		frappe.throw(_("Staff phải đang active."), frappe.ValidationError)
+	if not team:
+		team = frappe.db.get_value(
+			"CRM Team Membership",
+			{"parent": staff, "parenttype": "CRM Staff", "is_primary": 1},
+			"team",
+		)
+	if team:
+		team_row = frappe.db.get_value("CRM Team", team, ["campus", "is_active", "team_type"], as_dict=True)
+		membership_exists = frappe.db.exists(
+			"CRM Team Membership",
+			{"parent": staff, "parenttype": "CRM Staff", "team": team},
+		)
+		if not team_row or not team_row.is_active or team_row.team_type != "Sales" or not membership_exists:
+			frappe.throw(_("Team phải là Sales Team active của Staff."), frappe.ValidationError)
+		if team_row.campus and staff_row.campus and team_row.campus != staff_row.campus:
+			frappe.throw(_("Team và Campus của Staff không khớp."), frappe.ValidationError)
+	existing = frappe.db.get_value(
+		"CRM Staff Capacity Period",
+		{"staff": staff, "period_start": start, "period_end": end},
+		"name",
+	)
+	doc = frappe.get_doc("CRM Staff Capacity Period", existing) if existing else frappe.new_doc("CRM Staff Capacity Period")
+	doc.staff = staff
+	doc.team = team
+	doc.campus = staff_row.campus
+	doc.period_type = doc.period_type or "Term"
+	doc.period_start = start
+	doc.period_end = end
+	doc.capacity_units = maximum
+	doc.max_active_students = maximum
+	doc.approved = 1
+	doc.effective_from = start
+	doc.effective_until = end
+	doc.source_reference = f"assignment-overview:{frappe.session.user}:{reason.strip()}"[:140]
+	doc.save(ignore_permissions=True)
+	frappe.db.commit()
+	return get_routing_control()

@@ -8,7 +8,7 @@ class CRMStudentRoutingPolicy(Document):
 	"""A versioned routing policy; active versions are immutable."""
 
 	_LOCKED_FIELDS = (
-		"policy_key", "policy_version", "campus", "student_pool", "strategy",
+		"policy_key", "policy_version", "campus", "student_pool", "strategy", "scoring_weights",
 		"effective_from", "effective_until", "recipient_scope", "approved_by",
 		"approved_at", "break_glass_reason",
 	)

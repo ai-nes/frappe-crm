@@ -37,6 +37,18 @@ def enabled(feature: str, default: bool | None = None) -> bool:
 		default = False
 	if default is None:
 		default = DEFAULTS.get(feature, False)
+	# The assignment workspace owns the routing switch once its singleton has
+	# been changed from the UI.  Keep the site-config fallback so existing
+	# fixtures and sites remain compatible until an administrator saves the
+	# first workspace setting.
+	if feature == "routing":
+		try:
+			if frappe.db.exists("DocType", "CRM Assignment Control"):
+				stored = frappe.db.get_single_value("CRM Assignment Control", "routing_enabled")
+				if stored is not None:
+					return stored not in (0, "0", False, "false", "False", None)
+		except Exception:
+			pass
 	conf = getattr(frappe, "conf", {})
 	key = f"crm_student_{feature}_enabled"
 	alias_key = f"crm_student_{ALIASES.get(feature, feature)}_enabled"

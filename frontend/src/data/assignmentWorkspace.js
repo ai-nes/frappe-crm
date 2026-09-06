@@ -4,6 +4,9 @@ const API_PREFIX = 'crm.api.assignment_workspace.'
 
 export const assignmentWorkspaceMethods = Object.freeze({
   overview: `${API_PREFIX}get_overview`,
+  routingControl: 'crm.api.assignment_control.get_routing_control',
+  setRoutingEnabled: 'crm.api.assignment_control.set_routing_enabled',
+  upsertStaffCapacity: 'crm.api.assignment_control.upsert_staff_capacity',
   readiness: `${API_PREFIX}get_setup_readiness`,
   batchImpact: `${API_PREFIX}get_assignment_batch_impact`,
   batchCommand: `${API_PREFIX}apply_assignment_batch_command`,
@@ -34,6 +37,11 @@ export const assignmentWorkspaceWorkloadLabels = Object.freeze({
   healthy: 'Bình thường',
   near_capacity: 'Gần đầy',
   over_capacity: 'Vượt tải',
+})
+
+export const assignmentWorkspacePolicyLabels = Object.freeze({
+  round_robin: 'Luân phiên công bằng',
+  weighted_score: 'Chấm điểm có trọng số',
 })
 
 export function assignmentWorkspaceStatusTone(status) {
@@ -75,6 +83,10 @@ export function assignmentWorkspaceStatusLabel(status) {
 
 export function assignmentWorkspaceWorkloadLabel(workload) {
   return assignmentWorkspaceWorkloadLabels[workload] || workload || '—'
+}
+
+export function assignmentWorkspacePolicyLabel(strategy) {
+  return assignmentWorkspacePolicyLabels[strategy] || strategy || '—'
 }
 
 /**
