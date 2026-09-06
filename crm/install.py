@@ -9,7 +9,19 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
-from crm.patches.v1_0 import seed_reference_lookups
+from crm.patches.v1_0 import (
+	add_ai_capability_gateway_fields,
+	seed_crm_action_type,
+	seed_crm_education_program,
+	seed_crm_permission_profiles,
+	seed_default_nba_decision_policy,
+	seed_master_data_governance,
+	seed_new_lead_role_profiles,
+	seed_reference_lookups,
+	seed_student_pools,
+	setup_crm_roles,
+	setup_crm_student_extended_permissions,
+)
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
 # AI CRM is currently exposed directly from the EC2 host while its public
@@ -30,6 +42,21 @@ def before_install():
 
 
 def after_install(force=False):
+	# A fresh Frappe site marks every historical patch as complete. Keep the
+	# current runtime catalog and permission model explicit here so a new site
+	# has the same operational baseline as an upgraded site. Every routine is
+	# idempotent and only creates or reconciles records owned by CRM.
+	setup_crm_roles.execute()
+	add_ai_capability_gateway_fields.execute()
+	seed_reference_lookups.execute()
+	seed_crm_action_type.execute()
+	seed_crm_permission_profiles.execute()
+	seed_new_lead_role_profiles.execute()
+	seed_crm_education_program.execute()
+	setup_crm_student_extended_permissions.execute()
+	seed_master_data_governance.execute()
+	seed_student_pools.execute()
+	seed_default_nba_decision_policy.execute()
 	set_default_system_language()
 	add_chatwoot_cors_origin()
 	add_dashboard_cors_origin()
@@ -56,9 +83,10 @@ def after_migrate():
 
 def set_default_system_language():
 	frappe.db.set_single_value("System Settings", "language", "vi")
-	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value("User", "Administrator", "language"):
+	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value(
+		"User", "Administrator", "language"
+	):
 		frappe.db.set_value("User", "Administrator", "language", "vi")
-
 
 
 def complete_setup(_args: dict | None = None):
@@ -179,7 +207,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Person-Quick Entry": {
 			"doctype": "CRM Person",
-		"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -202,11 +230,11 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
-		"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
 		},
 		"CRM Person-Side Panel": {
 			"doctype": "CRM Person",
-		"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
 		},
 		"CRM Campaign-Side Panel": {
 			"doctype": "CRM Campaign",
@@ -233,7 +261,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
-		"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
 		},
 	}
 
