@@ -33,7 +33,7 @@ def _as_bool(value) -> bool:
 def _require_control_access():
 	context = _actor_context()
 	if "system.configure" not in context["capabilities"]:
-		frappe.throw(_("Only System Managers may change automatic assignment settings."), frappe.PermissionError)
+		frappe.throw(_("Chỉ Quản trị hệ thống mới được thay đổi thiết lập phân công tự động."), frappe.PermissionError)
 	return context
 
 
@@ -64,7 +64,11 @@ def _routing_enabled(control) -> bool:
 
 def _load_rows(context):
 	sources = _overview_sources(context)
-	allowed_teams = {row.name for row in sources["teams"]}
+	allowed_teams = {
+		row.name
+		for row in sources["teams"]
+		if row.get("is_active") and row.get("team_type") == "Sales"
+	}
 	staff_map = {row.name: row for row in sources["staff"]}
 	team_map = {row.name: row for row in sources["teams"]}
 	user_enabled = {
@@ -121,8 +125,11 @@ def _load_rows(context):
 		recipient_eligible = function in RECIPIENT_FUNCTIONS
 		if recipient_eligible:
 			recipient_eligible = bool(staff.get("user")) and user_enabled.get(staff.get("user"), False)
-			if recipient_eligible:
-				recipient_eligible = resolve_crm_profile(frappe.get_roles(staff.get("user"))) == "sales"
+		if recipient_eligible:
+			recipient_eligible = resolve_crm_profile(frappe.get_roles(staff.get("user"))) in {
+			"sales",
+			"ctv_sale",
+		}
 		rows.append(
 			{
 				"staff": staff_id,
@@ -173,37 +180,82 @@ def _policy_rows(context, sources):
 	return [row for row in rows if row.get("student_pool") in allowed_pools]
 
 
-def _activation_checks(load_rows, policies):
-	active_policies = [row for row in policies if row.get("status") == "active"]
+def _activation_checks(load_rows, policies, sources):
+	sales_team_ids = {
+		row.name
+		for row in sources["teams"]
+		if row.get("is_active") and row.get("team_type") == "Sales"
+	}
+	required_pools = [
+		row
+		for row in sources["pools"]
+		if row.get("is_active") and row.get("team") in sales_team_ids
+	]
+	today_date = getdate()
+	current_policies = [
+		row
+		for row in policies
+		if row.get("status") == "active"
+		and row.get("effective_from")
+		and getdate(row.get("effective_from")) <= today_date
+		and (
+			not row.get("effective_until")
+			or getdate(row.get("effective_until")) >= today_date
+		)
+	]
+	policies_by_pool = {}
+	for row in current_policies:
+		policies_by_pool.setdefault(row.get("student_pool"), []).append(row)
+	missing_pools = [
+		row
+		for row in required_pools
+		if not policies_by_pool.get(row.name)
+	]
+	overlapping_pools = [
+		row
+		for row in required_pools
+		if len(policies_by_pool.get(row.name, [])) > 1
+	]
 	recipients = [row for row in load_rows if row.get("recipient_eligible") and row.get("is_active")]
 	missing_capacity = [row for row in recipients if not row.get("capacity_configured")]
+	policy_ready = bool(required_pools) and not missing_pools and not overlapping_pools
+	if not required_pools:
+		policy_detail = _("Chưa có hàng chờ đang hoạt động thuộc nhóm Sales.")
+	elif overlapping_pools:
+		policy_detail = _("Có hàng chờ đang dùng nhiều cách chia cùng lúc: {0}.").format(
+			", ".join(row.get("pool_name") or row.name for row in overlapping_pools[:5])
+		)
+	elif missing_pools:
+		policy_detail = _("Chưa có cách chia đang dùng cho: {0}.").format(
+			", ".join(row.get("pool_name") or row.name for row in missing_pools[:5])
+		)
+	else:
+		policy_detail = _("Mỗi hàng chờ đang hoạt động đã có một cách chia hiệu lực.")
 	checks = [
 		{
 			"code": "active_policy",
-			"label": _("Có chính sách phân bổ đang hiệu lực"),
-			"passed": bool(active_policies),
-			"count": len(active_policies),
-			"detail": _("Tạo và phê duyệt policy theo từng Pool trước khi bật.")
-			if not active_policies
-			else _("{0} policy đang hiệu lực.").format(len(active_policies)),
+			"label": _("Có cách phân công đang dùng"),
+			"passed": policy_ready,
+			"count": len(current_policies),
+			"detail": policy_detail,
 		},
 		{
 			"code": "eligible_staff",
-			"label": _("Có Sale đủ điều kiện nhận Lead"),
+			"label": _("Có nhân viên tư vấn đủ điều kiện"),
 			"passed": bool(recipients),
 			"count": len(recipients),
-			"detail": _("Kiểm tra Staff active, User enabled và Team Membership hợp lệ.")
+			"detail": _("Kiểm tra nhân sự đang hoạt động, tài khoản và thành viên nhóm.")
 			if not recipients
-			else _("{0} nhân sự đang tham gia cân bằng tải.").format(len(recipients)),
+			else _("{0} nhân sự đang tham gia phân bổ Lead.").format(len(recipients)),
 		},
 		{
 			"code": "capacity_configured",
-			"label": _("Mọi Sale đều có capacity trong kỳ hiện tại"),
+			"label": _("Mọi nhân viên đều có giới hạn nhận Lead"),
 			"passed": not missing_capacity,
 			"count": len(missing_capacity),
 			"detail": _("Còn thiếu: {0}.").format(", ".join(row["staff_name"] for row in missing_capacity[:5]))
 			if missing_capacity
-			else _("Mọi Sale đều có giới hạn Lead và còn trống được tính."),
+			else _("Mỗi nhân viên có giới hạn Lead và còn chỗ trống được tính."),
 		},
 	]
 	return checks
@@ -233,7 +285,7 @@ def get_routing_control():
 	load_rows, sources = _load_rows(context)
 	policies = _policy_rows(context, sources)
 	control = _stored_control()
-	checks = _activation_checks(load_rows, policies)
+	checks = _activation_checks(load_rows, policies, sources)
 	active_rows = [row for row in load_rows if row.get("recipient_eligible") and row.get("is_active")]
 	configured = [row for row in active_rows if row.get("capacity_configured")]
 	return {
@@ -303,13 +355,13 @@ def upsert_staff_capacity(
 	"""Create or update the active capacity period used by routing."""
 	_require_control_access()
 	if not staff or not frappe.db.exists("CRM Staff", staff):
-		frappe.throw(_("CRM Staff không tồn tại."), frappe.ValidationError)
+		frappe.throw(_("Hồ sơ nhân sự không tồn tại."), frappe.ValidationError)
 	try:
 		maximum = int(max_active_students)
 	except (TypeError, ValueError):
-		frappe.throw(_("Capacity phải là số nguyên."), frappe.ValidationError)
+		frappe.throw(_("Giới hạn nhận phải là số nguyên."), frappe.ValidationError)
 	if maximum <= 0:
-		frappe.throw(_("Capacity phải lớn hơn 0 để tham gia tự động phân công."), frappe.ValidationError)
+		frappe.throw(_("Giới hạn nhận phải lớn hơn 0 để tham gia phân công tự động."), frappe.ValidationError)
 	start = getdate(period_start or today())
 	end = getdate(period_end or f"{start.year}-12-31")
 	if start > end:
@@ -318,7 +370,7 @@ def upsert_staff_capacity(
 		frappe.throw(_("Cần ghi lý do cập nhật capacity ít nhất 5 ký tự."), frappe.ValidationError)
 	staff_row = frappe.db.get_value("CRM Staff", staff, ["campus", "is_active"], as_dict=True)
 	if not staff_row or not staff_row.is_active:
-		frappe.throw(_("Staff phải đang active."), frappe.ValidationError)
+		frappe.throw(_("Nhân sự phải đang hoạt động."), frappe.ValidationError)
 	if not team:
 		team = frappe.db.get_value(
 			"CRM Team Membership",
@@ -332,9 +384,9 @@ def upsert_staff_capacity(
 			{"parent": staff, "parenttype": "CRM Staff", "team": team},
 		)
 		if not team_row or not team_row.is_active or team_row.team_type != "Sales" or not membership_exists:
-			frappe.throw(_("Team phải là Sales Team active của Staff."), frappe.ValidationError)
+			frappe.throw(_("Nhóm phải là nhóm đang hoạt động của nhân sự."), frappe.ValidationError)
 		if team_row.campus and staff_row.campus and team_row.campus != staff_row.campus:
-			frappe.throw(_("Team và Campus của Staff không khớp."), frappe.ValidationError)
+			frappe.throw(_("Nhóm và cơ sở của nhân sự không khớp."), frappe.ValidationError)
 	existing = frappe.db.get_value(
 		"CRM Staff Capacity Period",
 		{"staff": staff, "period_start": start, "period_end": end},

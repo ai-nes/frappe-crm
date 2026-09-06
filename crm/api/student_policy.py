@@ -27,9 +27,9 @@ def _service_save(doc):
 def create_student_policy(doctype: str, values: dict) -> dict:
 	actor, caps = _caps()
 	if actor != "Administrator" and "student.policy.manage" not in caps:
-		frappe.throw("Only a System Manager may author Student policies.", frappe.PermissionError)
+		frappe.throw("Chỉ Quản trị hệ thống mới được tạo cách phân công.", frappe.PermissionError)
 	if doctype not in {"CRM Student Routing Policy", "CRM Student SLA Policy"} or not isinstance(values, dict):
-		frappe.throw("Unsupported Student policy payload.", frappe.ValidationError)
+		frappe.throw("Dữ liệu cách phân công không hợp lệ.", frappe.ValidationError)
 	allowed = {
 		"CRM Student Routing Policy": {"policy_key", "policy_version", "campus", "student_pool", "strategy", "scoring_weights", "effective_from", "effective_until", "recipient_scope"},
 		"CRM Student SLA Policy": {"policy_key", "policy_version", "campus", "student_pool", "warning_minutes", "breach_minutes", "escalation_minutes", "pause_reasons", "maximum_pause_minutes", "recipient_strategy", "effective_from", "effective_until"},
@@ -46,9 +46,9 @@ def create_student_policy(doctype: str, values: dict) -> dict:
 def approve_student_policy(doctype: str, name: str) -> dict:
 	actor, caps = _caps()
 	if "student.policy.approve" not in caps:
-		frappe.throw("Only an Admissions Director may approve Student policies.", frappe.PermissionError)
+		frappe.throw("Chỉ Giám đốc tuyển sinh mới được duyệt cách phân công.", frappe.PermissionError)
 	if doctype not in {"CRM Student Routing Policy", "CRM Student SLA Policy"}:
-		frappe.throw("Unsupported Student policy type.", frappe.ValidationError)
+		frappe.throw("Loại cách phân công không được hỗ trợ.", frappe.ValidationError)
 	doc = frappe.get_doc(doctype, name)
 	doc.status = "active"
 	doc.approved_by = actor
@@ -62,9 +62,9 @@ def approve_student_policy(doctype: str, name: str) -> dict:
 def retire_student_policy(doctype: str, name: str) -> dict:
 	actor, caps = _caps()
 	if actor != "Administrator" and "student.policy.manage" not in caps:
-		frappe.throw("Only a System Manager may retire Student policies.", frappe.PermissionError)
+		frappe.throw("Chỉ Quản trị hệ thống mới được dừng cách phân công.", frappe.PermissionError)
 	if doctype not in {"CRM Student Routing Policy", "CRM Student SLA Policy"}:
-		frappe.throw("Unsupported Student policy type.", frappe.ValidationError)
+		frappe.throw("Loại cách phân công không được hỗ trợ.", frappe.ValidationError)
 	doc = frappe.get_doc(doctype, name)
 	doc.status = "retired"
 	_service_save(doc)

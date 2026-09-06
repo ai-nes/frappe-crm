@@ -6,10 +6,16 @@
     >
       {{ statusLabel }}
     </span>
-    <span v-if="row.crm_profile_label" class="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+    <span
+      v-if="row.crm_profile_label"
+      class="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+    >
       {{ row.crm_profile_label }}
     </span>
-    <span v-else-if="row.role_state === 'platform_superuser'" class="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700">
+    <span
+      v-else-if="row.role_state === 'platform_superuser'"
+      class="rounded-full bg-violet-50 px-2 py-0.5 text-xs text-violet-700"
+    >
       {{ __('Platform superuser') }}
     </span>
   </div>
@@ -21,7 +27,7 @@ import { computed } from 'vue'
 const props = defineProps({ row: { type: Object, required: true } })
 
 const statusLabel = computed(() =>
-  props.row.status === 'healthy' ? __('Sẵn sàng') : __('Cần setup'),
+  props.row.status === 'healthy' ? __('Có thể nhận Lead') : __('Cần bổ sung'),
 )
 
 const statusClass = computed(() =>

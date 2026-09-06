@@ -4,13 +4,14 @@
       <div class="flex min-w-0 flex-wrap items-center gap-2">
         <FeatherIcon name="filter" class="size-4 shrink-0 text-ink-gray-5" aria-hidden="true" />
         <h2 class="text-sm font-medium text-ink-gray-8">{{ __('Bộ lọc') }}</h2>
-        <span class="text-xs text-ink-gray-5">{{ __('Cây phân bổ') }}</span>
+        <span class="text-xs text-ink-gray-5">{{ __('Sơ đồ phân bổ') }}</span>
         <span v-if="activeFilterCount" class="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
           {{ activeFilterCount }} {{ __('đang dùng') }}
         </span>
         <span v-else class="text-xs text-ink-gray-5">{{ __('Không lọc') }}</span>
       </div>
       <div class="flex flex-wrap items-center justify-end gap-1.5">
+        <slot name="actions" />
         <Button
           v-if="activeFilterCount"
           variant="ghost"

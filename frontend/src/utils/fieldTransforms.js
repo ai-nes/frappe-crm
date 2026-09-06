@@ -42,7 +42,7 @@ export function getContextualLinkFilters(field, doc, baseFilters = null) {
   const filtersByDoctype = {
     'CRM Ward': doc.province ? { province: doc.province } : null,
     'CRM High School': {
-      ...(doc.province ? { province_name: doc.province } : {}),
+      ...(doc.province ? { province: doc.province } : {}),
       ...(wardCode ? { ward_code: wardCode } : {}),
       ...(wardName ? { ward_name: wardName } : {}),
     },

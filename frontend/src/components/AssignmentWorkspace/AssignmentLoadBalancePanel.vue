@@ -1,31 +1,33 @@
 <template>
   <section class="space-y-4" data-testid="assignment-load-balance">
-    <div class="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p
-          class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5"
-        >
-          {{ __('Cân bằng tải') }}
-        </p>
-        <h2 class="mt-1 text-xl font-semibold text-ink-gray-9">
-          {{ __('Mỗi Sale đang giữ bao nhiêu Lead?') }}
-        </h2>
-        <p class="mt-1 text-sm text-ink-gray-6">
-          {{
-            __(
-              'Capacity là số Lead hoạt động tối đa trong kỳ. Từ 85% là gần đầy, từ 100% sẽ không nhận thêm.',
-            )
-          }}
-        </p>
-      </div>
+    <div class="flex justify-end">
       <Button
         variant="subtle"
         size="sm"
-        :label="__('Làm mới tải')"
+        :label="__('Làm mới')"
         iconLeft="refresh-cw"
         :loading="loading"
         @click="$emit('refresh')"
       />
+    </div>
+
+    <div
+      v-if="staffLoad.length"
+      class="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg border border-blue-100 bg-blue-50/50 px-4 py-3 text-sm"
+      data-testid="assignment-load-summary"
+    >
+      <span class="font-medium text-ink-gray-8">{{
+        __('Mỗi người nhận Lead theo giới hạn riêng.')
+      }}</span>
+      <span class="text-orange-700"
+        >{{ loadSummary.unconfigured }} {{ __('chưa đặt giới hạn') }}</span
+      >
+      <span class="text-orange-700"
+        >{{ loadSummary.near_capacity }} {{ __('gần đầy') }}</span
+      >
+      <span class="text-red-700"
+        >{{ loadSummary.over_capacity }} {{ __('vượt giới hạn') }}</span
+      >
     </div>
 
     <div
@@ -34,19 +36,19 @@
       <table class="w-full min-w-[1060px] text-sm">
         <thead class="bg-surface-gray-1 text-left text-xs text-ink-gray-6">
           <tr>
-            <th class="px-4 py-3">{{ __('Sale / Team') }}</th>
-            <th class="px-4 py-3">{{ __('Vai trò nhận Lead') }}</th>
-            <th class="px-4 py-3 text-right">{{ __('Đang giữ') }}</th>
-            <th class="px-4 py-3 text-right">{{ __('Capacity') }}</th>
+            <th class="px-4 py-3">{{ __('Nhân viên tư vấn') }}</th>
+            <th class="px-4 py-3">{{ __('Vai trò') }}</th>
+            <th class="px-4 py-3 text-right">{{ __('Đang có') }}</th>
+            <th class="px-4 py-3 text-right">{{ __('Giới hạn Lead') }}</th>
             <th class="px-4 py-3 text-right">{{ __('Còn trống') }}</th>
-            <th class="w-56 px-4 py-3">{{ __('Mức tải') }}</th>
+            <th class="w-56 px-4 py-3">{{ __('Đã dùng') }}</th>
             <th class="px-4 py-3">{{ __('Trạng thái') }}</th>
             <th class="px-4 py-3 text-right">{{ __('Thao tác') }}</th>
           </tr>
         </thead>
         <tbody>
           <tr
-            v-for="row in staffLoad"
+            v-for="row in sortedStaffLoad"
             :key="`${row.staff}-${row.team}`"
             class="border-t border-outline-gray-1 align-top"
           >
@@ -112,7 +114,7 @@
                 </div>
               </div>
               <span v-else class="text-orange-700">{{
-                __('Chưa đặt capacity')
+                __('Chưa đặt giới hạn')
               }}</span>
             </td>
             <td class="px-4 py-3">
@@ -146,7 +148,7 @@
                   v-else
                   size="sm"
                   variant="subtle"
-                  :label="__('Đặt capacity')"
+                  :label="__('Đặt giới hạn Lead')"
                   iconLeft="edit-2"
                   @click="startEdit(row)"
                 />
@@ -172,9 +174,9 @@
 
 <script setup>
 import { Badge, Button, FormControl } from 'frappe-ui'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
-defineProps({
+const props = defineProps({
   staffLoad: { type: Array, default: () => [] },
   loading: Boolean,
   saving: Boolean,
@@ -183,6 +185,28 @@ defineProps({
 defineEmits(['refresh', 'save-capacity'])
 const editingStaff = ref('')
 const capacityDraft = ref('')
+
+const sortedStaffLoad = computed(() =>
+  [...props.staffLoad].sort((a, b) => {
+    const rank = {
+      unconfigured: 0,
+      over_capacity: 1,
+      near_capacity: 2,
+      healthy: 3,
+    }
+    return (rank[a.workload] ?? 4) - (rank[b.workload] ?? 4)
+  }),
+)
+const loadSummary = computed(() => ({
+  unconfigured: props.staffLoad.filter((row) => row.workload === 'unconfigured')
+    .length,
+  near_capacity: props.staffLoad.filter(
+    (row) => row.workload === 'near_capacity',
+  ).length,
+  over_capacity: props.staffLoad.filter(
+    (row) => row.workload === 'over_capacity',
+  ).length,
+}))
 
 function startEdit(row) {
   editingStaff.value = row.staff
@@ -201,14 +225,14 @@ function capacityPayload(row) {
     max_active_students: capacityDraft.value,
     period_start: row.period_start,
     period_end: row.period_end,
-    reason: `Cập nhật capacity cho ${row.staff_name}`,
+    reason: `Cập nhật giới hạn Lead cho ${row.staff_name}`,
   }
 }
 
 function workloadLabel(value) {
   return (
     {
-      unconfigured: __('Chưa đặt tải'),
+      unconfigured: __('Chưa đặt giới hạn'),
       healthy: __('Bình thường'),
       near_capacity: __('Gần đầy'),
       over_capacity: __('Vượt tải'),
