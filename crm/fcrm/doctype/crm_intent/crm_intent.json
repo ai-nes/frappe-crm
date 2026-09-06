@@ -185,6 +185,10 @@
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
   }
  ],
  "quick_entry": 0,

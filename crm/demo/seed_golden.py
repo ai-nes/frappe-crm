@@ -1912,14 +1912,15 @@ def _clear_legacy_service_credentials() -> None:
 _AI_SERVICE_READ_DOCTYPES = (
 	"CRM Score Template",
 	"CRM Score History",
-	"CRM Term",
+	"CRM Intent Type",
+	"CRM Interaction Type",
 	"CRM Student",
 )
 
 
 def _ensure_ai_service_role() -> None:
 	"""Create the desk-less AI service role if it doesn't exist yet (idempotent)."""
-	from frappe.permissions import add_permission
+	from frappe.permissions import copy_perms
 
 	if not frappe.db.exists("Role", AI_SERVICE_ROLE):
 		frappe.get_doc(
