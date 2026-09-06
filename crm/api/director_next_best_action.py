@@ -158,13 +158,17 @@ def get_director_next_best_action(
 		base_filters: dict[str, Any] = {"origin": "ai", "state": ["in", list(QUEUE_STATES)]}
 		if student_ids:
 			base_filters["student"] = ["in", student_ids]
-		all_rows = frappe.get_list(
-			"CRM Action Item",
-			filters=base_filters,
-			fields=_ACTION_FIELDS,
-			order_by="plan_rank asc, due_at asc, creation desc",
-			limit_page_length=0,
-		) if student_ids else []
+		all_rows = (
+			frappe.get_list(
+				"CRM Action Item",
+				filters=base_filters,
+				fields=_ACTION_FIELDS,
+				order_by="plan_rank asc, due_at asc, creation desc",
+				limit_page_length=0,
+			)
+			if student_ids
+			else []
+		)
 		if queue_filter == "urgent":
 			filtered = [row for row in all_rows if _is_urgent(row, now)]
 		else:
@@ -416,13 +420,22 @@ def apply_action_command(
 	expected_version = int(expectedVersion)
 	correlation_id = f"dnba:{key}"
 
-	if not frappe.db.exists("CRM Action Item", action_id):
-		raise_api_error("ACTION_NOT_FOUND", "Không tìm thấy hành động.", frappe.DoesNotExistError, 404)
-	doc = frappe.get_doc("CRM Action Item", action_id)
+	# ``CRM Action Item`` is the canonical work-item doctype. Keep the legacy
+	# ``CRM Action`` lookup as a read/command compatibility boundary for older
+	# clients and queued requests that predate the work-item split.
+	action_doctype = "CRM Action Item"
+	if not frappe.db.exists(action_doctype, action_id):
+		if frappe.db.exists("CRM Action", action_id):
+			action_doctype = "CRM Action"
+		else:
+			raise_api_error("ACTION_NOT_FOUND", "Không tìm thấy hành động.", frappe.DoesNotExistError, 404)
+	doc = frappe.get_doc(action_doctype, action_id)
 	if not doc.has_permission("read"):
 		raise_api_error("FORBIDDEN", "Hành động nằm ngoài phạm vi của bạn.", frappe.PermissionError, 403)
 	if int(doc.get("decision_revision") or 0) != expected_version:
-		raise_api_error("STALE_VERSION", "Hành động đã thay đổi; tải lại trước khi thử lại.", frappe.ValidationError, 409)
+		raise_api_error(
+			"STALE_VERSION", "Hành động đã thay đổi; tải lại trước khi thử lại.", frappe.ValidationError, 409
+		)
 
 	replayed = bool(_safe_exists(DECISION_EVENT, {"correlation_id": correlation_id}))
 
@@ -444,7 +457,8 @@ def apply_action_command(
 				status="deferred" if command_value == "defer" else "rejected",
 				idempotency_key=key,
 				correlation_id=correlation_id,
-				decision_reason=reason or ("Bỏ qua từ hàng đợi Director NBA." if command_value == "dismiss" else None),
+				decision_reason=reason
+				or ("Bỏ qua từ hàng đợi Director NBA." if command_value == "dismiss" else None),
 				revisit_at=deferUntil or None,
 			)
 	except StudentDecisionError as exc:
@@ -453,7 +467,7 @@ def apply_action_command(
 		status = 409 if exc.code in {"STALE_REVISION", "INVALID_STATE"} else 400
 		raise_api_error(exc.code, str(exc), frappe.ValidationError, status)
 
-	fresh = frappe.get_doc("CRM Action Item", action_id)
+	fresh = frappe.get_doc(action_doctype, action_id)
 	now = frappe.utils.now_datetime()
 	return {
 		"actionId": action_id,
@@ -595,7 +609,13 @@ def _counts(rows: list[Any], now) -> dict[str, int]:
 def _status_buckets(counts: dict[str, int]) -> list[dict[str, Any]]:
 	total = max(counts["all"], 1)
 	definition = [
-		("within-sla", "Còn trong hạn", counts["today"] + counts["soon"], "Có thể xử lý theo lịch hiện tại", "success"),
+		(
+			"within-sla",
+			"Còn trong hạn",
+			counts["today"] + counts["soon"],
+			"Có thể xử lý theo lịch hiện tại",
+			"success",
+		),
 		("due-soon", "Sắp đến hạn", counts["soon"], "Còn dưới mốc phản hồi", "warning"),
 		("overdue", "Đã quá hạn", counts["overdue"], "Cần điều phối ngay", "error"),
 	]

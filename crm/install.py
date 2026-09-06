@@ -22,6 +22,7 @@ from crm.patches.v1_0 import (
 	setup_crm_roles,
 	setup_crm_student_extended_permissions,
 )
+from crm.patches.v1_0.migrate_to_canonical_crm_roles import execute_for_fresh_site
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
 # AI CRM is currently exposed directly from the EC2 host while its public
@@ -47,6 +48,7 @@ def after_install(force=False):
 	# has the same operational baseline as an upgraded site. Every routine is
 	# idempotent and only creates or reconciles records owned by CRM.
 	setup_crm_roles.execute()
+	execute_for_fresh_site()
 	add_ai_capability_gateway_fields.execute()
 	seed_reference_lookups.execute()
 	seed_crm_action_type.execute()

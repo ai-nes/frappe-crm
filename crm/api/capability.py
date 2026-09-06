@@ -48,6 +48,7 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 		# Compatibility alias used by the discovery contract while CRM Lead is
 		# being represented by CRM Student in the admissions data model.
 		"CRM Lead",
+		"CRM Company",
 		# admissions reference and organization
 		"CRM Campus",
 		"CRM Department",
