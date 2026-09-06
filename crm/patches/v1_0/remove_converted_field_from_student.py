@@ -2,10 +2,10 @@ import frappe
 
 
 def execute():
-	# Migrate students with converted=1 but no enrollment_status set to "Đã chuyển đổi"
+	# Migrate students with converted=1 but no enrollment_status set to CONVERTED.
 	frappe.db.sql("""
 		UPDATE `tabCRM Student`
-		SET enrollment_status = 'Đã chuyển đổi'
+		SET enrollment_status = 'CONVERTED'
 		WHERE converted = 1
 		  AND (enrollment_status IS NULL OR enrollment_status = '')
 	""")

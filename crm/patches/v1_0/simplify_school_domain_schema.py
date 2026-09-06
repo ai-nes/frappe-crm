@@ -126,8 +126,10 @@ def _same_metric(left, right) -> bool:
 
 
 def _default_stakeholder_role() -> str | None:
+	if not frappe.db.exists("DocType", "CRM Stakeholder Role"):
+		return None
 	role = frappe.db.get_value(
-		"CRM Term", {"term_name": "Đầu mối tuyển sinh", "category": "stakeholder_role"}, "name"
+		"CRM Stakeholder Role", {"display_name": "Đầu mối tuyển sinh"}, "name"
 	)
 	if role:
 		return role
@@ -136,10 +138,10 @@ def _default_stakeholder_role() -> str | None:
 	try:
 		return frappe.get_doc(
 			{
-				"doctype": "CRM Term",
-				"term_name": "Đầu mối tuyển sinh",
-				"category": "stakeholder_role",
-				"is_active": 1,
+				"doctype": "CRM Stakeholder Role",
+				"code": "ADMISSIONS_CONTACT",
+				"display_name": "Đầu mối tuyển sinh",
+				"enabled": 1,
 			}
 		).insert(ignore_permissions=True).name
 	finally:
@@ -174,9 +176,10 @@ def _copy_person_relationships(snapshot: dict, report: dict) -> None:
 	for row in snapshot.get("person_relationships", []):
 		role = row.get("stakeholder_role")
 		if not role and row.get("role"):
-			role = frappe.db.get_value(
-				"CRM Term", {"term_name": row["role"], "category": "stakeholder_role"}, "name"
-			)
+			if frappe.db.exists("DocType", "CRM Stakeholder Role"):
+				role = frappe.db.get_value(
+					"CRM Stakeholder Role", {"display_name": row["role"]}, "name"
+				)
 		if not role:
 			role = _default_stakeholder_role()
 		if not role:

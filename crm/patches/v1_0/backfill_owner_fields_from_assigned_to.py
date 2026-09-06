@@ -8,7 +8,7 @@ derive_unassigned_owning_team):
   attributed to the record's *creator* (Frappe's standard `owner` field)'s own
   primary team, mirroring how CRMContact/CRMStudent.validate() attributes newly
   created unassigned records — without this, pre-existing unassigned rows would
-  never surface in any Lead Sales unassigned pool.
+  never surface in any Lead Sale unassigned pool.
 
 Runs after backfill_team_membership_from_staff so CRM Team Membership rows exist to
 derive owning_team from. Idempotent — only touches rows where owner_staff/owning_team

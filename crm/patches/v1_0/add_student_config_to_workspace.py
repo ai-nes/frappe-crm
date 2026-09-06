@@ -13,7 +13,7 @@ def execute():
 	_ensure_link(
 		workspace,
 		label="Enrollment Statuses",
-		link_to="CRM Term",
+		link_to="CRM Enrollment Status",
 		after_link_to="CRM High School",
 	)
 

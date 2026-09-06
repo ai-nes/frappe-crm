@@ -7,7 +7,7 @@ hand-transcribed directly from the PRD's P0-1 CRUD matrix rather than derived
 from `CANONICAL_PERMISSION_MATRIX` -- these roles have no entry there. This
 patch also re-runs `seed_crm_permission_profiles.execute()` and
 `apply_managed_docperms()` so the same deploy picks up the PRD's P0-1 changes
-to the already-active Lead Sales (adds conditional delete) and Marketing
+to the already-active Lead Sale (adds conditional delete) and Marketing
 (adds campus-scoped read) profiles.
 
 Field-level restriction of CTV Sale to "note/status" fields (PRD P0-1
@@ -76,7 +76,7 @@ def execute():
 		role = PROFILE_LABELS[profile]
 		_upsert_profile(role, flags["row_scope"], _applicable_doctypes(flags))
 
-	# Picks up this deploy's P0-1 changes to the already-active Lead Sales
+	# Picks up this deploy's P0-1 changes to the already-active Lead Sale
 	# (conditional delete) and Marketing (campus-scoped read) profiles.
 	seed_matrix_derived_profiles()
 	apply_managed_docperms()

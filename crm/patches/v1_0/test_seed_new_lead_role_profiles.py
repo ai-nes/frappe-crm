@@ -47,7 +47,7 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 	def test_lead_sales_and_marketing_updated_by_the_same_deploy(self):
 		doctypes = CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"]
 
-		lead_sales = self._profile("Lead Sales")
+		lead_sales = self._profile("Lead Sale")
 		lead_sales_flags = {row.document_type: row for row in lead_sales.applicable_doctypes}
 		for doctype in doctypes:
 			self.assertTrue(lead_sales_flags[doctype].delete)

@@ -6,7 +6,7 @@ import frappe
 def execute():
 	users = frappe.get_all(
 		"Has Role",
-		filters={"parenttype": "User", "role": ["in", ["Sale", "Lead Sales"]]},
+		filters={"parenttype": "User", "role": ["in", ["Sale", "Lead Sale"]]},
 		pluck="parent",
 	)
 	for user in frappe.get_all("User", filters={"name": ["in", sorted(set(users))]}, fields=["name", "default_app"]):

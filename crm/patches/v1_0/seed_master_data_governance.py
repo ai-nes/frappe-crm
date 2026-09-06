@@ -7,13 +7,12 @@ from crm.patches.v1_0.setup_crm_roles import create_roles
 GOVERNED_DOCTYPES = {
 	"CRM Lead Source": "Marketing",
 	"CRM Platform": "Marketing",
-	"CRM Term": "Lead Sales",
 	"CRM Campus": "Admissions Director",
 }
 
 
 def execute():
-	for doctype in ["CRM Lead Source", "CRM Platform", "CRM Term", "CRM Campus", "CRM Master Data Change"]:
+	for doctype in ["CRM Lead Source", "CRM Platform", "CRM Campus", "CRM Master Data Change"]:
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 
 	# Re-run permission setup so the 5 governed doctypes pick up the owner/approver

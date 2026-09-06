@@ -18,8 +18,8 @@ class TestSetupCrmPermissions(FrappeTestCase):
 
 		self.assertEqual(student_permissions["Sale"], {"role": "Sale", "read": 1, "write": 1, "create": 1})
 		self.assertEqual(
-			student_permissions["Lead Sales"],
-			{"role": "Lead Sales", "read": 1, "write": 1, "create": 1, "delete": 1},
+			student_permissions["Lead Sale"],
+			{"role": "Lead Sale", "read": 1, "write": 1, "create": 1, "delete": 1},
 		)
 		self.assertNotIn("CRM Data Steward", student_permissions)
 
@@ -46,7 +46,7 @@ class TestApplyManagedDocpermsIdempotentSync(FrappeTestCase):
 
 	TEST_ROLE = "_Test Docperm Sync Role"
 	TEST_DOCTYPE = "CRM Student"
-	OTHER_DOCTYPE = "CRM Term"
+	OTHER_DOCTYPE = "CRM Lost Reason"
 
 	def setUp(self):
 		if not frappe.db.exists("Role", self.TEST_ROLE):

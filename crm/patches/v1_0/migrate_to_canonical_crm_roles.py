@@ -15,7 +15,7 @@ import frappe
 from crm.patches.v1_0.setup_crm_roles import create_roles
 
 
-CANONICAL_BUSINESS_ROLES = frozenset({"Sale", "Lead Sales", "Marketing", "Promoter", "Admissions Director"})
+CANONICAL_BUSINESS_ROLES = frozenset({"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director"})
 CONTROL_ROLES = frozenset({"System Manager"})
 CANONICAL_ROLES = CANONICAL_BUSINESS_ROLES | CONTROL_ROLES
 
@@ -71,8 +71,8 @@ BACKFILL_ROLE_MAP = {
 	"CTV-Sale": "Sale",
 	"Counseller": "Sale",
 	"Sales User": "Sale",
-	"Sales Manager": "Lead Sales",
-	"Team Leader": "Lead Sales",
+	"Sales Manager": "Lead Sale",
+	"Team Leader": "Lead Sale",
 	"Promoter-PR": "Marketing",
 	"Marketing Operator": "Marketing",
 	"Marketing Lead": "Marketing",
@@ -391,7 +391,7 @@ def restore_from_snapshot(snapshot: dict) -> None:
 def _canonical_targets(role_names: set[str]) -> set[str]:
 	"""Return safe canonical targets; manager wins over a legacy sales pair."""
 	targets = {BACKFILL_ROLE_MAP.get(role, role) for role in role_names if role in CANONICAL_ROLES or role in BACKFILL_ROLE_MAP}
-	if "Lead Sales" in targets:
+	if "Lead Sale" in targets:
 		targets.discard("Sale")
 	return targets
 
