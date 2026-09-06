@@ -9,6 +9,7 @@ export const assignmentWorkspaceMethods = Object.freeze({
   upsertStaffCapacity: 'crm.api.assignment_control.upsert_staff_capacity',
   readiness: `${API_PREFIX}get_setup_readiness`,
   setup: `${API_PREFIX}get_setup_workspace`,
+  setupReference: `${API_PREFIX}create_setup_reference`,
   teamCommand: `${API_PREFIX}apply_team_command`,
   batchImpact: `${API_PREFIX}get_assignment_batch_impact`,
   batchCommand: `${API_PREFIX}apply_assignment_batch_command`,

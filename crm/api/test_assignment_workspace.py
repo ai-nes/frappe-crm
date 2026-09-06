@@ -13,6 +13,7 @@ from crm.api.assignment_workspace import (
 	_workload_status,
 	get_overview,
 	get_setup_readiness,
+	get_setup_workspace,
 )
 
 
@@ -62,6 +63,40 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 		]
 		result = _filter_rows(rows, {"school": "S1", "status": "unassigned"})
 		self.assertEqual([row["id"] for row in result], ["campus:1", "school:1"])
+
+	def test_filter_by_zone_keeps_all_schools_in_that_zone(self):
+		rows = [
+			{
+				"id": "cluster:kh",
+				"parent_id": None,
+				"filter_values": {"province": {"KH"}},
+			},
+			{
+				"id": "zone:kh",
+				"parent_id": "cluster:kh",
+				"filter_values": {"province": {"KH"}, "zone": {"ZONE-KH"}},
+			},
+			{
+				"id": "school:kh-1",
+				"parent_id": "zone:kh",
+				"filter_values": {"province": {"KH"}, "zone": {"ZONE-KH"}},
+			},
+			{
+				"id": "school:kh-2",
+				"parent_id": "zone:kh",
+				"filter_values": {"province": {"KH"}, "zone": {"ZONE-KH"}},
+			},
+			{
+				"id": "school:hcm-1",
+				"parent_id": "zone:hcm",
+				"filter_values": {"province": {"HCM"}, "zone": {"ZONE-HCM"}},
+			},
+		]
+
+		result = _filter_rows(rows, {"zone": "ZONE-KH"})
+		self.assertEqual(
+			[row["id"] for row in result], ["cluster:kh", "zone:kh", "school:kh-1", "school:kh-2"]
+		)
 
 	def test_workload_states_are_deterministic(self):
 		self.assertEqual(_workload_status(0, None), "unconfigured")
@@ -167,5 +202,18 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 			self.assertIn("summary", readiness)
 			self.assertNotIn("Administrator", {row["user"] for row in readiness["rows"]})
 			self.assertNotIn("platform_superuser", {row["role_state"] for row in readiness["rows"]})
+		finally:
+			frappe.set_user(previous_user)
+
+	def test_setup_workspace_exposes_creation_references(self):
+		previous_user = frappe.session.user
+		frappe.set_user("Administrator")
+		try:
+			setup = get_setup_workspace()
+			self.assertIn("clusters", setup)
+			self.assertIn("pools", setup)
+			self.assertIn("provinces", setup["options"])
+			self.assertIn("clusters", setup["options"])
+			self.assertIn("pools", setup["summary"])
 		finally:
 			frappe.set_user(previous_user)
