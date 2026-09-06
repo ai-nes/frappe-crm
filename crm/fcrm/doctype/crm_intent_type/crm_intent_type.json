@@ -33,7 +33,8 @@
   {"read": 1, "role": "Marketing"},
   {"read": 1, "role": "Promoter"},
   {"read": 1, "role": "Admissions Director"},
-  {"read": 1, "role": "AI Service"}
+  {"read": 1, "role": "AI Service"},
+  {"read": 1, "role": "CTV Sale"}
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",

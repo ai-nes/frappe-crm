@@ -96,7 +96,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.assertEqual(first, result)
 		self.assertEqual(second, result)
 		create.assert_called_once()
-		self.assertEqual(create.call_args.kwargs["interaction_type"], "MESSAGE_CHATWOOT")
+		self.assertEqual(create.call_args.kwargs["interaction_type"], "MESSAGE")
 
 	def test_configured_service_user_has_only_interaction_authority(self):
 		from crm.fcrm.student_intake import INTERACTION_CAPABILITY, SUBMIT_CAPABILITY, _resolve_authority
@@ -121,8 +121,6 @@ class TestInteractionLogDispatch(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._ensure_interaction_type("OUTREACH")
-		self._ensure_interaction_type("CONNECTED")
-		self._ensure_interaction_type("COUNSELING")
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -160,13 +158,13 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.addCleanup(self._delete_if_exists, "CRM Contact", contact.name)
 		return contact
 
-	def _counseling_interactions(self, task_name):
+	def _task_interactions(self, task_name):
 		return frappe.db.get_all(
 			"CRM Interaction",
 			filters={
 				"reference_doctype": "Task",
 				"reference_docname": task_name,
-				"interaction_type": "COUNSELING",
+				"interaction_type": "SYSTEM_ACTIVITY",
 			},
 			pluck="name",
 		)
@@ -223,9 +221,9 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		)
 		self.assertFalse(exists)
 
-	# ---------------------------------------- Task status -> Done -> Counseling (+ guard)
+	# ----------------------------------- Task status -> Done -> System Activity
 
-	def test_task_marked_done_creates_single_counseling_interaction(self):
+	def test_task_marked_done_creates_single_system_activity_interaction(self):
 		contact = self._make_contact("_Test Counseling Contact", "0919000003")
 		task = frappe.get_doc(
 			{
@@ -242,16 +240,16 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		interactions = self._counseling_interactions(task.name)
+		interactions = self._task_interactions(task.name)
 		self.assertEqual(len(interactions), 1)
 		self.addCleanup(self._delete_if_exists, "CRM Interaction", interactions[0])
 
 		# Regression guard: re-saving the already-Done task (no status change)
-		# must not create a second Counseling interaction.
+		# must not create a second System Activity interaction.
 		task.description = "_Test discussed enrollment options (follow-up note)"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 1)
+		self.assertEqual(len(self._task_interactions(task.name)), 1)
 
 	def test_task_done_without_description_creates_no_interaction(self):
 		contact = self._make_contact("_Test No Description Contact", "0919000004")
@@ -269,7 +267,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 0)
+		self.assertEqual(len(self._task_interactions(task.name)), 0)
 
 	def test_task_done_without_crm_reference_creates_no_interaction(self):
 		task = frappe.get_doc(
@@ -285,4 +283,4 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 0)
+		self.assertEqual(len(self._task_interactions(task.name)), 0)

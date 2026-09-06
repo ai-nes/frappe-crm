@@ -541,13 +541,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 	authority = _resolve_authority(INTERACTION_CAPABILITY, signed_context=signed_context)
 	target = _resolve_external_interaction_target(payload)
 	_assert_interaction_scope(target, authority)
-	interaction_type = (
-		CHATWOOT_INTERACTION_TYPE
-		if payload["source_namespace"] == "chatwoot"
-		else "MESSAGE"
-		if payload["direction"] == "inbound"
-		else "MESSAGE"
-	)
+	interaction_type = CHATWOOT_INTERACTION_TYPE if payload["source_namespace"] == "chatwoot" else "MESSAGE"
 	if not frappe.db.exists(
 		"CRM Interaction Type", {"name": interaction_type, "enabled": 1}
 	):
@@ -946,15 +940,15 @@ def create_interaction_from_note_insert(doc, method=None):
 	try:
 		create_interaction(
 			interaction_type="NOTE",
-			crm_contact=doc.reference_name if doc.reference_doctype == "CRM Contact" else None,
-			student=doc.reference_name if doc.reference_doctype == "CRM Student" else None,
+			crm_contact=doc.reference_docname if doc.reference_doctype == "CRM Contact" else None,
+			student=doc.reference_docname if doc.reference_doctype == "CRM Student" else None,
 			reference_doctype="FCRM Note",
 			reference_docname=doc.name,
 			actor=doc.owner,
 			summary="Ghi chú tư vấn",
 			notes=doc.content,
 			channel="Internal",
-			direction="Internal",
+			direction="internal",
 			external_id=f"FCRM Note:{doc.name}:NOTE",
 		)
 	except Exception:
@@ -1000,8 +994,6 @@ def create_interaction_from_contact_update(doc, method=None):
 			frappe.log_error(title="CRM Interaction creation failed (Contact stage change)")
 
 	if doc.has_value_changed("owner_staff"):
-		before = doc.get_doc_before_save()
-		was_unassigned = not (before.owner_staff if before else None)
 		interaction_type = "SYSTEM_ACTIVITY"
 		try:
 			create_interaction(
@@ -1090,7 +1082,7 @@ def create_interaction_from_marketing_engagement_update(doc, method=None):
 
 
 def clear_interaction_reference(doc, method=None):
-	"""on_trash hook (Communication/Task/Call Log/CRM Contact Consent Event):
+	"""on_trash hook (Communication/Task/Call Log/FCRM Note/CRM Contact Consent Event):
 	null out the dangling reference on any CRM Interaction that pointed at the
 	source record being deleted. Interactions are a historical audit trail and
 	must never be deleted themselves just because their source was."""

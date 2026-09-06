@@ -190,7 +190,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Direction",
-   "options": "inbound\noutbound",
+   "options": "inbound\noutbound\ninternal",
    "read_only": 1
   },
   {

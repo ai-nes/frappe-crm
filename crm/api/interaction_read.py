@@ -11,13 +11,14 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from datetime import timezone
+from datetime import timedelta, timezone
 from typing import Any
 
 import frappe
 from frappe import _
 from frappe.utils import get_datetime
 
+from crm.fcrm.interaction_semantics import INTERACTION_TYPE_MAPPING
 from crm.fcrm.permissions import get_interaction_permission_query_conditions
 
 CONTRACT_VERSION = "interaction.read:v1"
@@ -70,6 +71,80 @@ def _decode_cursor(cursor: str | None) -> tuple[str, str] | None:
 		frappe.throw(_("Invalid interaction cursor."), frappe.ValidationError)
 
 
+def _date_bound(value: str | None, fieldname: str, *, end: bool = False) -> tuple[Any, str | None]:
+	if not value:
+		return None, None
+	value = str(value).strip()
+	try:
+		parsed = get_datetime(value)
+	except (TypeError, ValueError):
+		frappe.throw(_(f"Invalid {fieldname}."), frappe.ValidationError)
+	if not parsed:
+		frappe.throw(_(f"Invalid {fieldname}."), frappe.ValidationError)
+	# Date-only `to_date` is inclusive for the whole calendar day.
+	if end and len(value) == 10:
+		return parsed + timedelta(days=1), "<"
+	return parsed, "<=" if end else ">="
+
+
+def _family_interaction_types(family: str | None) -> list[str] | None:
+	if not family:
+		return None
+	normalized = " ".join(str(family).strip().casefold().replace("_", " ").split())
+	matching_types = [
+		interaction_type
+		for interaction_type, semantic in INTERACTION_TYPE_MAPPING.items()
+		if " ".join(str(semantic.get("purpose") or "").casefold().split()) == normalized
+	]
+	if not matching_types:
+		frappe.throw(_("Invalid interaction family."), frappe.ValidationError)
+	return matching_types
+
+
+def _catalog_labels(doctype: str, names: list[str]) -> dict[str, str]:
+	unique_names = sorted({str(name).strip() for name in names if name and str(name).strip()})
+	if not unique_names:
+		return {}
+	rows = frappe.get_list(
+		doctype,
+		filters={"name": ["in", unique_names]},
+		fields=["name", "display_name"],
+		limit_page_length=len(unique_names),
+	)
+	return {row.name: row.display_name for row in rows if row.display_name}
+
+
+def _analysis_states(interactions: list[str]) -> dict[str, str]:
+	if not interactions:
+		return {}
+	runs = frappe.get_all(
+		"CRM Interaction Analysis Run",
+		filters={"interaction": ["in", interactions]},
+		fields=["name", "interaction"],
+		order_by="creation desc, name desc",
+	)
+	latest_runs: dict[str, str] = {}
+	for run in runs:
+		latest_runs.setdefault(run.interaction, run.name)
+	if not latest_runs:
+		return {}
+	results = frappe.get_all(
+		"CRM Interaction Analysis Result",
+		filters={"analysis_run": ["in", list(latest_runs.values())]},
+		fields=["analysis_run", "state"],
+		order_by="creation desc, name desc",
+	)
+	states_by_run: dict[str, str] = {}
+	for row in results:
+		if row.state:
+			states_by_run.setdefault(row.analysis_run, row.state)
+	return {
+		interaction: states_by_run[run_name]
+		for interaction, run_name in latest_runs.items()
+		if run_name in states_by_run
+	}
+
+
 def _require_target(*, student: str | None, contact: str | None) -> tuple[str, str]:
 	student, contact = str(student or "").strip(), str(contact or "").strip()
 	if bool(student) == bool(contact):
@@ -117,18 +192,76 @@ def _safe_analysis(interaction: str) -> dict[str, Any] | None:
 	return dict(rows[0]) if rows else None
 
 
-def _summary(row: dict[str, Any]) -> dict[str, Any]:
+def _summary(
+	row: dict[str, Any],
+	*,
+	interaction_labels: dict[str, str] | None = None,
+	analysis_states: dict[str, str] | None = None,
+) -> dict[str, Any]:
+	interaction_type = row.get("interaction_type")
+	semantic = INTERACTION_TYPE_MAPPING.get(interaction_type, {})
 	return {
 		"id": row["name"],
 		"occurred_at": _iso(row.get("interaction_datetime")),
-		"interaction_type": row.get("interaction_type"),
+		"interaction_type": interaction_type,
+		"interaction_label": (interaction_labels or {}).get(interaction_type) or interaction_type,
 		"channel": row.get("channel") or None,
 		"direction": row.get("direction") or None,
 		"outcome": row.get("outcome") or None,
 		"summary": row.get("summary") or "",
 		"episode_state": row.get("episode_state") or None,
+		"analysis_state": (analysis_states or {}).get(row["name"]),
+		"semantic": {
+			"channel": semantic.get("channel"),
+			"purpose": semantic.get("purpose"),
+			"disposition": semantic.get("disposition"),
+			"is_direct_touchpoint": semantic.get("is_direct_touchpoint"),
+			"evidence_kind": semantic.get("evidence_kind"),
+		},
 		"source_revision": int(row.get("source_revision") or 0),
 		"has_evidence": bool(row.get("evidence")),
+	}
+
+
+def _score_effect(row: Any) -> dict[str, Any]:
+	details = frappe.get_all(
+		"CRM Score History Detail",
+		filters={"parent": row.name},
+		fields=["category", "rule_id", "signal", "score", "reason"],
+		order_by="idx asc",
+	)
+	contributors = [
+		{
+			"category": detail.category,
+			"rule_id": detail.rule_id,
+			"signal": detail.signal,
+			"score": detail.score,
+			"reason": detail.reason or None,
+		}
+		for detail in details
+		if detail.category or detail.rule_id or detail.signal or detail.reason
+	]
+	reasons = [detail["reason"] for detail in contributors if detail.get("reason")]
+	source_key = row.get("triggered_by") or next(
+		(
+			detail.get("rule_id") or detail.get("signal")
+			for detail in contributors
+			if detail.get("rule_id") or detail.get("signal")
+		),
+		None,
+	)
+	return {
+		"id": row.name,
+		"source_score_input_revision": int(row.source_score_input_revision or 0),
+		"policy_revision": int(row.policy_revision or 0),
+		"policy_hash": row.policy_hash or None,
+		"scored_at": _iso(row.scoring_time),
+		"final_score": row.final_score,
+		"score_change": row.score_change,
+		"delta": row.score_change,
+		"display_reason": "; ".join(reasons) if reasons else None,
+		"source_key": source_key,
+		"contributors": contributors[:6],
 	}
 
 
@@ -139,6 +272,9 @@ def list_interactions(
 	channel: str | None = None,
 	direction: str | None = None,
 	status: str | None = None,
+	family: str | None = None,
+	from_date: str | None = None,
+	to_date: str | None = None,
 	cursor: str | None = None,
 	limit: int | str | None = None,
 ) -> dict[str, Any]:
@@ -158,6 +294,24 @@ def list_interactions(
 		if value:
 			conditions.append(f"`{field}` = %({field})s")
 			values[field] = str(value)
+	family_types = _family_interaction_types(family)
+	if family_types:
+		family_params = []
+		for index, interaction_type in enumerate(family_types):
+			key = f"family_{index}"
+			family_params.append(f"%({key})s")
+			values[key] = interaction_type
+		conditions.append(f"`interaction_type` IN ({', '.join(family_params)})")
+	from_bound, from_operator = _date_bound(from_date, "from_date")
+	to_bound, to_operator = _date_bound(to_date, "to_date", end=True)
+	if from_bound and to_bound and from_bound > to_bound:
+		frappe.throw(_("from_date must be before to_date."), frappe.ValidationError)
+	if from_bound:
+		conditions.append(f"`interaction_datetime` {from_operator} %(from_date)s")
+		values["from_date"] = from_bound
+	if to_bound:
+		conditions.append(f"`interaction_datetime` {to_operator} %(to_date)s")
+		values["to_date"] = to_bound
 	marker = _decode_cursor(cursor)
 	if marker:
 		marker_at, marker_name = marker
@@ -181,9 +335,14 @@ def list_interactions(
 	for row in page:
 		if row.get("student" if target_type == "CRM Student" else "crm_contact") != target:
 			frappe.throw(_("Interaction scope changed during read."), frappe.PermissionError)
+	interaction_labels = _catalog_labels("CRM Interaction Type", [row.get("interaction_type") for row in page])
+	analysis_states = _analysis_states([row["name"] for row in page])
 	return {
 		"contract_version": CONTRACT_VERSION,
-		"items": [_summary(dict(row)) for row in page],
+		"items": [
+			_summary(dict(row), interaction_labels=interaction_labels, analysis_states=analysis_states)
+			for row in page
+		],
 		"next_cursor": _encode_cursor(dict(page[-1])) if len(rows) > page_size and page else None,
 	}
 
@@ -192,7 +351,10 @@ def list_interactions(
 def get_interaction_detail(interaction: str) -> dict[str, Any]:
 	"""Return durable facts, analysis state, intents and score effects."""
 	doc = _require_interaction(interaction)
-	intents = frappe.get_list(
+	# The parent Interaction has already passed the caller's row-scope check.
+	# These are masked child projections, so re-checking the child DocPerm here
+	# would make a valid Interaction reader depend on unrelated child grants.
+	intents = frappe.get_all(
 		"CRM Intent",
 		filters={"interaction": doc.name},
 		fields=[
@@ -208,7 +370,7 @@ def get_interaction_detail(interaction: str) -> dict[str, Any]:
 		],
 		order_by="modified desc, name desc",
 	)
-	scores = frappe.get_list(
+	scores = frappe.get_all(
 		"CRM Score History",
 		filters={"triggered_by_doctype": "CRM Interaction", "triggered_by": doc.name},
 		fields=[
@@ -219,12 +381,15 @@ def get_interaction_detail(interaction: str) -> dict[str, Any]:
 			"scoring_time",
 			"final_score",
 			"score_change",
+			"triggered_by",
 		],
 		order_by="scoring_time desc, name desc",
 		limit_page_length=20,
 	)
 	analysis = _safe_analysis(doc.name)
-	evidence_refs = frappe.get_list(
+	interaction_labels = _catalog_labels("CRM Interaction Type", [doc.interaction_type])
+	intent_labels = _catalog_labels("CRM Intent Type", [row.intent_type for row in intents])
+	evidence_refs = frappe.get_all(
 		"CRM Interaction Evidence",
 		filters={"interaction": doc.name, "source_revision": int(doc.source_revision or 0)},
 		fields=["name", "actor_role", "evidence_kind", "occurred_at"],
@@ -232,7 +397,11 @@ def get_interaction_detail(interaction: str) -> dict[str, Any]:
 	)
 	return {
 		"contract_version": CONTRACT_VERSION,
-		"interaction": _summary(doc.as_dict()),
+		"interaction": _summary(
+			doc.as_dict(),
+			interaction_labels=interaction_labels,
+			analysis_states={doc.name: analysis.get("state")} if analysis else {},
+		),
 		"revision": {
 			"source_revision": int(doc.source_revision or 0),
 			"evidence_digest": doc.evidence_digest or None,
@@ -242,6 +411,8 @@ def get_interaction_detail(interaction: str) -> dict[str, Any]:
 			{
 				"id": row.name,
 				"term_id": row.intent_type,
+				"semantic_key": row.intent_type,
+				"display_name": intent_labels.get(row.intent_type) or row.intent_type,
 				"role": row.intent_role,
 				"polarity": row.polarity,
 				"importance": row.importance,
@@ -252,18 +423,7 @@ def get_interaction_detail(interaction: str) -> dict[str, Any]:
 			}
 			for row in intents
 		],
-		"score_effects": [
-			{
-				"id": row.name,
-				"source_score_input_revision": int(row.source_score_input_revision or 0),
-				"policy_revision": int(row.policy_revision or 0),
-				"policy_hash": row.policy_hash or None,
-				"scored_at": _iso(row.scoring_time),
-				"final_score": row.final_score,
-				"score_change": row.score_change,
-			}
-			for row in scores
-		],
+		"score_effects": [_score_effect(row) for row in scores],
 		"evidence_ref": doc.evidence or None,
 		"evidence_refs": [
 			{

@@ -47,6 +47,20 @@ class TestChatwootWebhook(FrappeTestCase):
 		self.assertEqual(result["direction"], "inbound")
 		self.assertEqual(result["conversation_id"], "99")
 		self.assertIsNone(result["agent_id"])
+		self.assertEqual(result["evidence_kind"], "message")
+		self.assertEqual(result["evidence_state"], "final")
+		self.assertEqual(result["source_revision"], 1)
+		self.assertEqual(
+			result["turns"],
+			[
+				{
+					"speaker_role": "student",
+					"content": "Em muốn hỏi học phí.",
+					"occurred_at": "2023-11-14 22:13:20",
+				}
+			],
+		)
+		self.assertNotIn("content", result)
 
 	def test_normalize_message_payload_uses_agent_id_for_outgoing_message(self):
 		result = normalize_message_payload(
@@ -67,6 +81,10 @@ class TestChatwootWebhook(FrappeTestCase):
 		self.assertEqual(result["agent_id"], "7")
 		self.assertEqual(result["conversation_id"], "8")
 		self.assertEqual(result["occurred_at"], "2026-09-04 10:00:00")
+		self.assertEqual(result["turns"][0]["speaker_role"], "advisor")
+		self.assertEqual(result["turns"][0]["content"], "I will check that for you.")
+		self.assertEqual(result["turns"][0]["occurred_at"], result["occurred_at"])
+		self.assertNotIn("content", result)
 
 	def test_resolve_contact_falls_back_to_unique_email_and_binds_chatwoot_id(self):
 		with (
@@ -131,23 +149,12 @@ class TestChatwootWebhook(FrappeTestCase):
 				"meta": {"sender": {"id": 7, "phone_number": "+84984251625"}},
 			},
 		}
-		canonical = {
-			"source_namespace": "chatwoot",
-			"source_record_id": "12:message:42",
-			"idempotency_key": "12:message:42",
-			"contact_id": "CRMC-0001",
-			"channel": "webchat",
-			"direction": "inbound",
-			"content": "Hello",
-			"occurred_at": "2026-09-04 10:00:00",
-		}
 		with (
 			patch("crm.api.chatwoot_webhook._raw_body", return_value=b"{}"),
 			patch("crm.api.chatwoot_webhook.verify_signature"),
 			patch("crm.api.chatwoot_webhook._json_body", return_value=payload),
 			patch("crm.api.chatwoot_webhook._assert_account", return_value="12"),
-			patch("crm.api.chatwoot_webhook.resolve_contact", return_value="CRMC-0001"),
-			patch("crm.api.chatwoot_webhook.normalize_message_payload", return_value=canonical),
+			patch("crm.api.chatwoot_webhook.resolve_contact", return_value="CRMC-0001") as resolve_contact,
 			patch("crm.api.chatwoot_webhook._signed_context", return_value={"scope_all": True}),
 			patch(
 				"crm.api.chatwoot_webhook.ingest_external_interaction",
@@ -166,7 +173,15 @@ class TestChatwootWebhook(FrappeTestCase):
 		resolve_contact.assert_called_once_with(
 			{"id": 7, "phone_number": "+84984251625"}
 		)
-		ingest.assert_called_once_with(canonical, signed_context={"scope_all": True})
+		ingest.assert_called_once()
+		canonical = ingest.call_args.args[0]
+		self.assertEqual(canonical["source_record_id"], "12:message:42")
+		self.assertEqual(canonical["contact_id"], "CRMC-0001")
+		self.assertEqual(canonical["direction"], "inbound")
+		self.assertEqual(canonical["turns"][0]["speaker_role"], "student")
+		self.assertEqual(canonical["turns"][0]["content"], "Hello")
+		self.assertNotIn("content", canonical)
+		self.assertEqual(ingest.call_args.kwargs, {"signed_context": {"scope_all": True}})
 
 	def test_receive_returns_validation_error_when_sender_phone_is_missing(self):
 		payload = {

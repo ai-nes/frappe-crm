@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.agent_migrations import SALES_WORKLIST_ROLE_NAMES
 from crm.api.capability import _is_capability_gateway_user
 from crm.api.session import (
+	_get_policy_roles,
 	_session_role_flags,
 	get_crm_user_role,
 	me,
@@ -24,6 +27,26 @@ from crm.fcrm.role_policy import (
 
 
 class TestSessionRoleContract(FrappeTestCase):
+	def test_explicit_administrator_profile_survives_frappe_role_filter(self):
+		with (
+			patch.object(frappe, "get_roles", return_value=["All", "Guest", "Desk User"]),
+			patch.object(frappe.db, "exists", return_value=True) as role_exists,
+		):
+			roles = _get_policy_roles("admin@gmail.com")
+
+		self.assertIn("Administrator", roles)
+		role_exists.assert_called_once_with(
+			"Has Role",
+			{"parent": "admin@gmail.com", "parenttype": "User", "role": "Administrator"},
+		)
+
+	def test_administrator_profile_is_treated_as_control_plane(self):
+		flags = _session_role_flags({"Administrator", "All", "Guest", "Desk User"})
+
+		self.assertTrue(flags["is_system_manager"])
+		self.assertEqual(flags["crm_profile"], "ceo")
+		self.assertEqual(flags["crm_role"], "Administrator")
+
 	def test_session_me_exposes_dashboard_permission_list(self):
 		previous_user = frappe.session.user
 		frappe.set_user("Administrator")

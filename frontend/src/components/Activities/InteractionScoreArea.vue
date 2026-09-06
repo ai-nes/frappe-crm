@@ -73,7 +73,7 @@
                 </span>
                 <Badge
                   v-if="interaction.interaction_type"
-                  :label="__(interaction.interaction_type)"
+                  :label="__(interaction.interaction_label || interaction.interaction_type)"
                   variant="subtle"
                 />
                 <Badge
@@ -112,8 +112,8 @@
               </p>
             </div>
             <Badge
-              v-if="selectedInteraction.analysis?.state"
-              :label="selectedInteraction.analysis.state"
+              v-if="selectedInteraction.analysis?.state || selectedInteraction.interaction?.analysis_state"
+              :label="selectedInteraction.analysis?.state || selectedInteraction.interaction?.analysis_state"
               variant="subtle"
             />
           </div>
@@ -124,7 +124,7 @@
               </div>
               <div v-if="selectedInteraction.intents?.length" class="mt-2 flex flex-col gap-2">
                 <div v-for="intent in selectedInteraction.intents" :key="intent.id" class="text-sm text-ink-gray-8">
-                  {{ displayIntentType(intent.term_id) }}
+                  {{ displayIntentType(intent.term_id, intent.display_name || intent.semantic_key) }}
                   <span class="text-ink-gray-5">{{ intent.role }}</span>
                 </div>
               </div>
@@ -853,8 +853,8 @@ function displayImportance(value) {
   return importanceLabels[value] || __(value || '')
 }
 
-function displayIntentType(value) {
-  return signalLabels[value] || __(value || '')
+function displayIntentType(value, displayName) {
+  return __(displayName || signalLabels[value] || value || '')
 }
 
 function displayScoreSignal(detail) {

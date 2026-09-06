@@ -327,6 +327,7 @@ doc_events = {
 	},
 	"FCRM Note": {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_note_insert"],
+		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	"WhatsApp Message": {
 		"validate": ["crm.api.whatsapp.validate"],
