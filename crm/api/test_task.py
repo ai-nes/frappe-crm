@@ -70,6 +70,7 @@ class TestTaskApi(FrappeTestCase):
 		)
 		self.assertEqual(created["priority"], "High")
 		self.assertEqual(created["status"], "Todo")
+		self.assertEqual(created["action_code"], "CREATE_TASK")
 		self.assertEqual(created["reference_doctype"], "CRM Student")
 		self.assertEqual(created["reference_docname"], student)
 
@@ -77,6 +78,7 @@ class TestTaskApi(FrappeTestCase):
 		self.assertIn(created["name"], {row["name"] for row in listed["tasks"]})
 		listed_row = next(row for row in listed["tasks"] if row["name"] == created["name"])
 		self.assertEqual(listed_row["reference_doctype"], "CRM Student")
+		self.assertEqual(listed_row["action_code"], "CREATE_TASK")
 
 		updated = update_task(created["name"], title="Updated compatibility task", status="Done")
 		self.assertEqual(updated["title"], "Updated compatibility task")
