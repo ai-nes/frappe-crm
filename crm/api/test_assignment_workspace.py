@@ -165,8 +165,7 @@ class TestAssignmentWorkspaceContract(FrappeTestCase):
 			self.assertIn("filter_schema", overview)
 			self.assertIn("rows", overview)
 			self.assertIn("summary", readiness)
-			administrator = next(row for row in readiness["rows"] if row["user"] == "Administrator")
-			self.assertEqual(administrator["role_state"], "platform_superuser")
-			self.assertEqual(administrator["status"], "healthy")
+			self.assertNotIn("Administrator", {row["user"] for row in readiness["rows"]})
+			self.assertNotIn("platform_superuser", {row["role_state"] for row in readiness["rows"]})
 		finally:
 			frappe.set_user(previous_user)
