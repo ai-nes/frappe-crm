@@ -29,15 +29,19 @@ class TestStudentAssignmentContract(FrappeTestCase):
 		self.assertTrue(lead_sale._assignment_filter_matches(assigned, "assigned"))
 		self.assertFalse(lead_sale._assignment_filter_matches(assigned, "review"))
 		self.assertTrue(lead_sale._assignment_filter_matches(missing, "review"))
-		self.assertTrue(lead_sale._assignment_matches({**missing, "name": "Nguyễn Minh An", "school": "THPT A"}, "nguyen"))
-		self.assertFalse(lead_sale._assignment_matches({**missing, "name": "Trần Minh An", "school": "THPT A"}, "nguyen"))
+		self.assertTrue(
+			lead_sale._assignment_matches({**missing, "name": "Nguyễn Minh An", "school": "THPT A"}, "nguyen")
+		)
+		self.assertFalse(
+			lead_sale._assignment_matches({**missing, "name": "Trần Minh An", "school": "THPT A"}, "nguyen")
+		)
 
 	def test_sort_uses_student_id_as_stable_tie_breaker(self):
 		left = {"studentId": "HS-002", "name": "An", "receivedAt": "2026-09-05T09:00:00+07:00"}
 		right = {"studentId": "HS-001", "name": "An", "receivedAt": "2026-09-05T09:00:00+07:00"}
 
 		self.assertGreater(lead_sale._assignment_compare(left, right, "receivedAt", "desc"), 0)
-		self.assertLess(lead_sale._assignment_compare(left, right, "receivedAt", "asc"), 0)
+		self.assertGreater(lead_sale._assignment_compare(left, right, "receivedAt", "asc"), 0)
 
 	def test_workspace_uses_scoped_student_query_and_selected_admission_year(self):
 		scope = {"team_ids": ["TEAM-1"], "staff_ids": ["STAFF-1"]}

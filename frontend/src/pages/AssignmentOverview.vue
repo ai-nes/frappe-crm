@@ -53,7 +53,9 @@
             :aria-selected="tabIndex === index"
             :aria-controls="`assignment-panel-${tab.key}`"
             class="shrink-0 border-b-2 border-transparent px-1 py-3 text-base text-ink-gray-5 transition hover:text-ink-gray-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
-            :class="tabIndex === index ? 'border-ink-gray-9 text-ink-gray-9' : ''"
+            :class="
+              tabIndex === index ? 'border-ink-gray-9 text-ink-gray-9' : ''
+            "
             @click="tabIndex = index"
           >
             {{ tab.label }}
@@ -86,7 +88,11 @@
                   :title="__('Các bước setup')"
                   @click="setupDrawerOpen = true"
                 >
-                  <FeatherIcon name="help-circle" class="size-4" aria-hidden="true" />
+                  <FeatherIcon
+                    name="help-circle"
+                    class="size-4"
+                    aria-hidden="true"
+                  />
                 </button>
               </template>
             </AssignmentOverviewFilters>
@@ -106,6 +112,7 @@
               :next-cursor="nextCursor"
               :active-filter-count="activeFilterCount"
               @load-more="loadMore"
+              @scope-change="loadAssignmentScope"
             />
             <p
               v-if="data?.warnings?.length"
@@ -265,7 +272,7 @@ const data = computed(() => overview.data)
 const canManageSetup = computed(() =>
   Boolean(
     data.value?.capabilities?.can_view_readiness ||
-    data.value?.capabilities?.can_edit_identity,
+      data.value?.capabilities?.can_edit_identity,
   ),
 )
 const normalizedRows = computed(() =>
@@ -273,6 +280,8 @@ const normalizedRows = computed(() =>
 )
 const nextCursor = computed(() => data.value?.next_cursor || null)
 const rows = ref([])
+const topologyRows = ref([])
+const assignmentScope = ref(null)
 const filters = reactive({
   campus: route.query.campus || undefined,
   province: route.query.province || undefined,
@@ -296,9 +305,10 @@ const activeFilterCount = computed(
     ).length,
 )
 
-function requestParams(cursor) {
+function requestParams(cursor, scope = assignmentScope.value) {
+  const requestFilters = scope ? { ...filters, ...scope } : filters
   return {
-    filters: serializeAssignmentWorkspaceFilters(filters),
+    filters: serializeAssignmentWorkspaceFilters(requestFilters),
     limit: 100,
     cursor,
   }
@@ -309,9 +319,41 @@ async function reload({ append = false } = {}) {
     requestParams(append ? nextCursor.value : undefined),
   )
   const payload = result || overview.data
-  rows.value = append
-    ? [...rows.value, ...(payload?.rows || [])]
-    : payload?.rows || []
+  const payloadRows = payload?.rows || []
+  if (!assignmentScope.value) {
+    rows.value = append ? [...rows.value, ...payloadRows] : payloadRows
+    if (!append)
+      topologyRows.value = payloadRows.filter(
+        (row) => row.level !== 'high_school',
+      )
+    return
+  }
+
+  const scopedSchools = payloadRows.filter((row) => row.level === 'high_school')
+  const scopedTopology = payloadRows.filter(
+    (row) => row.level !== 'high_school',
+  )
+  const topology = append
+    ? rows.value.filter((row) => row.level !== 'high_school')
+    : topologyRows.value
+  const topologyById = new Map(
+    [...topology, ...scopedTopology].map((row) => [row.id, row]),
+  )
+  const existingSchools = append
+    ? rows.value.filter((row) => row.level === 'high_school')
+    : []
+  const schoolsById = new Map(
+    [...existingSchools, ...scopedSchools].map((row) => [row.id, row]),
+  )
+  rows.value = [...topologyById.values(), ...schoolsById.values()]
+}
+
+async function loadAssignmentScope(scope) {
+  assignmentScope.value = {
+    province: scope?.province || undefined,
+    zone: scope?.zone || undefined,
+  }
+  await reload()
 }
 
 async function refresh() {
@@ -358,9 +400,7 @@ async function saveCapacity(payload) {
     await refreshControl()
     toast.success(__('Đã cập nhật giới hạn Lead.'))
   } catch (error) {
-    toast.error(
-      error?.messages?.[0] || __('Không thể cập nhật giới hạn Lead.'),
-    )
+    toast.error(error?.messages?.[0] || __('Không thể cập nhật giới hạn Lead.'))
   } finally {
     capacitySaving.value = false
   }
@@ -371,12 +411,14 @@ async function applyFilters(next) {
     if (!(key in next)) delete filters[key]
   }
   Object.assign(filters, next)
+  assignmentScope.value = null
   await router.replace({ query: assignmentWorkspaceFilterQuery(filters) })
   await reload()
 }
 
 async function resetFilters() {
   for (const key of Object.keys(filters)) delete filters[key]
+  assignmentScope.value = null
   await router.replace({ query: {} })
   await reload()
 }

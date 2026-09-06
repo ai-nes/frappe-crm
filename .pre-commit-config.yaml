@@ -42,10 +42,9 @@ repos:
       hooks:
           - id: eslint
             name: eslint
-            entry: bash -c 'cd frontend && eslint --fix src/**/*.{js,ts,vue}'
+            entry: eslint --config frontend/eslint.config.mjs --fix
             language: node
             files: ^frontend/.*\.(js|ts|vue)$
-            pass_filenames: false
             additional_dependencies:
                 - "eslint@^10.0.2"
                 - "@eslint/js@^10.0.1"

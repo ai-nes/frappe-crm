@@ -1,11 +1,13 @@
 """Focused release-gate tests; run inside a Frappe site/bench."""
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.student_feature_flags import enabled
-from crm.fcrm.student_sla import process_due_sla_attempts, process_pending_sla_deliveries
 from crm.fcrm.student_routing import process_pending_routing_requests
+from crm.fcrm.student_sla import process_due_sla_attempts, process_pending_sla_deliveries
 from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topology
 
 
@@ -22,14 +24,19 @@ class TestPhase4ReleaseGates(FrappeTestCase):
 		try:
 			for key in keys:
 				frappe.conf.pop(key, None)
-			self.assertFalse(enabled("routing"))
-			self.assertFalse(enabled("synchronous_routing"))
-			self.assertFalse(enabled("sla"))
-			self.assertFalse(enabled("delivery"))
-			self.assertFalse(enabled("shared_sla_outbox"))
-			self.assertEqual(process_pending_routing_requests(), {"processed": 0, "failed": 0, "disabled": 1})
-			self.assertEqual(process_due_sla_attempts(), {"processed": 0, "failed": 0, "disabled": 1})
-			self.assertEqual(process_pending_sla_deliveries(), {"processed": 0, "failed": 0, "disabled": 1})
+			with patch.object(frappe.db, "get_single_value", return_value=None):
+				self.assertFalse(enabled("routing"))
+				self.assertFalse(enabled("synchronous_routing"))
+				self.assertFalse(enabled("sla"))
+				self.assertFalse(enabled("delivery"))
+				self.assertFalse(enabled("shared_sla_outbox"))
+				self.assertEqual(
+					process_pending_routing_requests(), {"processed": 0, "failed": 0, "disabled": 1}
+				)
+				self.assertEqual(process_due_sla_attempts(), {"processed": 0, "failed": 0, "disabled": 1})
+				self.assertEqual(
+					process_pending_sla_deliveries(), {"processed": 0, "failed": 0, "disabled": 1}
+				)
 		finally:
 			for key, value in previous.items():
 				if value is not None:

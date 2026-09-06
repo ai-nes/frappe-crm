@@ -1,8 +1,14 @@
 <template>
-  <div class="flex h-full min-h-0 flex-col overflow-hidden" data-testid="system-workspace">
+  <div
+    class="flex h-full min-h-0 flex-col overflow-hidden"
+    data-testid="system-workspace"
+  >
     <LayoutHeader>
       <template #left-header>
-        <ViewBreadcrumbs :route-name="route.name" :label="workspaceTitle || route.name" />
+        <ViewBreadcrumbs
+          :route-name="route.name"
+          :label="workspaceTitle || route.name"
+        />
       </template>
       <template #right-header>
         <Button
@@ -33,10 +39,18 @@
           class="state-card"
           role="alert"
         >
-          <FeatherIcon name="shield-off" class="size-8 text-red-500 mb-2 opacity-70" />
-          <h2 class="text-base font-semibold text-ink-gray-9">{{ __('Không có quyền truy cập') }}</h2>
+          <FeatherIcon
+            name="shield-off"
+            class="size-8 text-red-500 mb-2 opacity-70"
+          />
+          <h2 class="text-base font-semibold text-ink-gray-9">
+            {{ __('Không có quyền truy cập') }}
+          </h2>
           <p class="text-sm text-ink-gray-6">
-            {{ workspaceMessage || __('Bạn không có quyền xem không gian làm việc này.') }}
+            {{
+              workspaceMessage ||
+              __('Bạn không có quyền xem không gian làm việc này.')
+            }}
           </p>
         </section>
 
@@ -45,10 +59,20 @@
           class="state-card"
           role="status"
         >
-          <FeatherIcon name="alert-circle" class="size-8 text-ink-gray-4 mb-2 opacity-60" />
-          <h2 class="text-base font-semibold text-ink-gray-9">{{ __('Không khả dụng') }}</h2>
+          <FeatherIcon
+            name="alert-circle"
+            class="size-8 text-ink-gray-4 mb-2 opacity-60"
+          />
+          <h2 class="text-base font-semibold text-ink-gray-9">
+            {{ __('Không khả dụng') }}
+          </h2>
           <p class="text-sm text-ink-gray-6">
-            {{ workspaceMessage || __('Chế độ xem hệ thống này chưa khả dụng trong môi trường hiện tại.') }}
+            {{
+              workspaceMessage ||
+              __(
+                'Chế độ xem hệ thống này chưa khả dụng trong môi trường hiện tại.',
+              )
+            }}
           </p>
         </section>
 
@@ -57,34 +81,38 @@
           class="state-card"
           role="alert"
         >
-          <FeatherIcon name="alert-triangle" class="size-8 text-amber-500 mb-2 opacity-80" />
-          <h2 class="text-base font-semibold text-ink-gray-9">{{ __('Không thể tải dữ liệu') }}</h2>
+          <FeatherIcon
+            name="alert-triangle"
+            class="size-8 text-amber-500 mb-2 opacity-80"
+          />
+          <h2 class="text-base font-semibold text-ink-gray-9">
+            {{ __('Không thể tải dữ liệu') }}
+          </h2>
           <p class="text-sm text-ink-gray-6">
             {{ workspaceMessage || __('Vui lòng thử lại.') }}
           </p>
           <Button class="mt-4" :label="__('Thử lại')" @click="loadWorkspace" />
         </section>
 
-        <div
-          v-else-if="workspaceLoading"
-          class="grid gap-4"
-          role="status"
-        >
-          <div class="h-48 animate-pulse rounded-xl border border-outline-gray-2/60 bg-surface-white" />
+        <div v-else-if="workspaceLoading" class="grid gap-4" role="status">
+          <div
+            class="h-48 animate-pulse rounded-xl border border-outline-gray-2/60 bg-surface-white"
+          />
           <span class="sr-only">{{ __('Đang tải dữ liệu...') }}</span>
         </div>
 
-        <section
-          v-else-if="!hasContent"
-          class="state-card"
-          role="status"
-        >
-          <FeatherIcon name="inbox" class="size-8 text-ink-gray-4 mb-2 opacity-60" />
+        <section v-else-if="!hasContent" class="state-card" role="status">
+          <FeatherIcon
+            name="inbox"
+            class="size-8 text-ink-gray-4 mb-2 opacity-60"
+          />
           <h2 class="text-base font-semibold text-ink-gray-9">
             {{ emptyTitle || __('Chưa có dữ liệu') }}
           </h2>
           <p class="text-sm text-ink-gray-6">
-            {{ emptyMessage || __('Chưa có dữ liệu hệ thống cho chế độ xem này.') }}
+            {{
+              emptyMessage || __('Chưa có dữ liệu hệ thống cho chế độ xem này.')
+            }}
           </p>
         </section>
 
@@ -93,10 +121,7 @@
             v-if="workspaceOrganization"
             v-bind="workspaceOrganization"
           />
-          <SystemStatusPanel
-            v-if="workspaceStatus"
-            v-bind="workspaceStatus"
-          />
+          <SystemStatusPanel v-if="workspaceStatus" v-bind="workspaceStatus" />
         </div>
       </div>
     </main>
@@ -105,8 +130,18 @@
 
 <script>
 export function systemWorkspaceState(payload = {}) {
-  if (payload.status === 401 || payload.status === 403 || payload.state === 'denied') return 'denied'
-  if (payload.available === false || payload.state === 'unavailable' || ['unavailable', 'migration_required'].includes(payload.contractStatus)) return 'unavailable'
+  if (
+    payload.status === 401 ||
+    payload.status === 403 ||
+    payload.state === 'denied'
+  )
+    return 'denied'
+  if (
+    payload.available === false ||
+    payload.state === 'unavailable' ||
+    ['unavailable', 'migration_required'].includes(payload.contractStatus)
+  )
+    return 'unavailable'
   if (payload.state === 'error') return 'error'
   return 'ready'
 }
@@ -118,7 +153,7 @@ import SystemStatusPanel from '@/components/Workspaces/SystemStatusPanel.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import { Button, call, FeatherIcon } from 'frappe-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 const props = defineProps({
@@ -150,15 +185,21 @@ const loadWorkspace = async () => {
   const sequence = ++requestSequence
   isLoading.value = true
   try {
-    const payload = await call('crm.api.role_workspaces.get_workspace_summary', {
-      workspace: workspace.route.workspace,
-      view: workspace.route.view || workspace.defaultView,
-      filters: workspace.preset || {},
-    })
+    const payload = await call(
+      'crm.api.role_workspaces.get_workspace_summary',
+      {
+        workspace: workspace.route.workspace,
+        view: workspace.route.view || workspace.defaultView,
+        filters: workspace.preset || {},
+      },
+    )
     if (sequence === requestSequence) response.value = payload || {}
   } catch (error) {
     if (sequence === requestSequence) {
-      response.value = { state: 'error', message: error?.message || __('Please try again.') }
+      response.value = {
+        state: 'error',
+        message: error?.message || __('Please try again.'),
+      }
     }
   } finally {
     if (sequence === requestSequence) isLoading.value = false
@@ -172,11 +213,21 @@ const model = computed(() => response.value || props)
 const workspaceState = computed(() => systemWorkspaceState(model.value))
 const workspaceLoading = computed(() => isLoading.value || props.loading)
 const workspaceTitle = computed(() => props.title || model.value.title)
-const workspaceDescription = computed(() => props.description || model.value.description)
-const workspaceMessage = computed(() => props.message || model.value.explanation || model.value.message)
-const workspaceOrganization = computed(() => props.organization || model.value.organization || null)
-const workspaceStatus = computed(() => props.status || model.value.status || model.value.systemStatus || null)
-const hasContent = computed(() => Boolean(workspaceOrganization.value || workspaceStatus.value))
+const workspaceDescription = computed(
+  () => props.description || model.value.description,
+)
+const workspaceMessage = computed(
+  () => props.message || model.value.explanation || model.value.message,
+)
+const workspaceOrganization = computed(
+  () => props.organization || model.value.organization || null,
+)
+const workspaceStatus = computed(
+  () => props.status || model.value.status || model.value.systemStatus || null,
+)
+const hasContent = computed(() =>
+  Boolean(workspaceOrganization.value || workspaceStatus.value),
+)
 </script>
 
 <style scoped>

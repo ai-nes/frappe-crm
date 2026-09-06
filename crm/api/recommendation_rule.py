@@ -197,6 +197,12 @@ def get_rule(name: str):
 @frappe.whitelist(methods=["POST"])
 def create_rule(**values):
 	values = _normalise_values(values)
+	# A rule without an event is an intentional manual rule. The DocType's
+	# historical default is ``event`` for persisted records, so make the API
+	# default explicit before inserting rather than asking non-technical users
+	# to provide an event they did not configure.
+	if "trigger_type" not in values and not values.get("trigger_event"):
+		values["trigger_type"] = "manual"
 	rule_key = values.pop("rule_key", None) or values.pop("key", None)
 	values.pop("status", None)
 	values.pop("version", None)
@@ -332,7 +338,7 @@ def list_condition_fields():
 
 
 @frappe.whitelist(methods=["POST"])
-def preview_rule(rule=None, context=None):
+def preview_rule(rule: Any = None, context: Any = None):
 	rule_values = _parse_payload(rule, "rule", {})
 	context_values = _parse_payload(context, "context", {})
 	if not isinstance(rule_values, dict):
@@ -340,9 +346,12 @@ def preview_rule(rule=None, context=None):
 	if not isinstance(context_values, dict):
 		frappe.throw(_("context must be a JSON object."), frappe.ValidationError)
 	rule_values = _normalise_values(rule_values)
+	trigger_type = rule_values.get("trigger_type") or (
+		"manual" if not rule_values.get("trigger_event") else "event"
+	)
 	try:
 		validate_rule_settings(
-			rule_values.get("trigger_type") or "event",
+			trigger_type,
 			rule_values.get("trigger_event"),
 			rule_values.get("priority") or "medium",
 			rule_values.get("cooldown_value") or 0,

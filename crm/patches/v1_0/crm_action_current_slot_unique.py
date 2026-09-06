@@ -14,7 +14,7 @@ patch is written to be idempotent and re-runnable:
 2. Add the unique key only if it is not already present.
 
 Rollback:
-  ``DROP INDEX `crm_action_student_current_slot_uniq` ON `tabCRM Action```
+  ``DROP INDEX `crm_action_student_current_slot_uniq` ON `tabCRM Action Item```
   The pre-patch slot values are not recoverable from this patch; restore them
   from a backup if the normalization must be reverted.
 """

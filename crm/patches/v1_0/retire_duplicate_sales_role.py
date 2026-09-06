@@ -21,9 +21,7 @@ from crm.patches.v1_0.setup_crm_permissions import apply_managed_docperms
 
 RETIRED_ROLE = "Sales"
 CANONICAL_ROLE = "Sale"
-_BLOCKING_ROLES = {"Administrator", "System Manager"} | (
-	LEGACY_UNMAPPED_ROLES - {RETIRED_ROLE}
-)
+_BLOCKING_ROLES = {"Administrator", "System Manager"} | (LEGACY_UNMAPPED_ROLES - {RETIRED_ROLE})
 
 
 def _target_for_roles(roles):
@@ -37,6 +35,7 @@ def _target_for_roles(roles):
 		- FRAMEWORK_ROLE_NAMES
 		- LEGACY_UNMAPPED_ROLES
 		- ROLE_BACKFILL_SOURCES
+		- {RETIRED_ROLE}
 	)
 	if unknown_roles:
 		return None

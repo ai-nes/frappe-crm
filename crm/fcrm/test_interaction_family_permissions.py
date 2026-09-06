@@ -15,8 +15,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.permissions import (
-	get_student_projection_permission_query_conditions,
 	get_interaction_permission_query_conditions,
+	get_student_projection_permission_query_conditions,
 	has_interaction_permission,
 	has_operational_record_permission,
 )
@@ -33,8 +33,10 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		self._department = TestSharedScopingPermissions._get_or_create_department(
 			self, "_Test IFP Dept", self._campus
 		)
-		# "OUTREACH" is a real seeded CRM Interaction Type code -- these tests
-		# only need a valid link value, not a dedicated fixture row.
+		if not frappe.db.exists("CRM Interaction Type", "OUTREACH"):
+			frappe.get_doc(
+				{"doctype": "CRM Interaction Type", "code": "OUTREACH", "display_name": "OUTREACH"}
+			).insert(ignore_permissions=True)
 
 	def tearDown(self):
 		interactions = frappe.db.get_all(
@@ -46,11 +48,17 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 			frappe.delete_doc("CRM Intent", name, force=True)
 		for name in interactions:
 			frappe.delete_doc("CRM Interaction", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test IFP%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"student_name": ["like", "_Test IFP%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Student", name, force=True)
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test IFP%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Contact", filters={"full_name": ["like", "_Test IFP%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Contact", name, force=True)
-		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "%_Test IFP%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Staff", filters={"full_name": ["like", "%_Test IFP%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Staff", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test IFP%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
@@ -101,20 +109,20 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 
 	def test_agent_event_scope_follows_student_for_operational_aggregates(self):
 		user, _staff = self._make_user_and_staff("_Test IFP Event Scope", ["Sale"])
-		condition = get_student_projection_permission_query_conditions(
-			doctype="CRM Agent Event", user=user
-		)
+		condition = get_student_projection_permission_query_conditions(doctype="CRM Agent Event", user=user)
 		self.assertIn("aggregate_doctype = 'CRM Student'", condition)
-		self.assertIn("aggregate_doctype = 'CRM Action'", condition)
+		self.assertIn("aggregate_doctype = 'CRM Action Item'", condition)
 		self.assertIn("aggregate_doctype = 'CRM Student Decision Event'", condition)
 		self.assertIn("tabCRM Student", condition)
 
-	def test_marketing_role_has_no_row_scope_despite_channel(self):
-		# Marketing has DocType-level read on CRM Interaction (crm_interaction.json),
-		# but must never see a row solely because the channel is Email/Chat -- it
-		# has no Student/Contact case scope in the canonical policy.
+	def test_marketing_role_uses_case_scope_not_channel(self):
+		# Marketing has a campus-scoped case policy. Interaction visibility must
+		# inherit that case scope and must never be granted solely by channel.
 		user, _staff = self._make_user_and_staff("_Test IFP Marketing", ["Marketing"])
-		self.assertEqual(get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction"), "1=0")
+		condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
+		self.assertIn("tabCRM Student", condition)
+		self.assertNotIn("interaction_type", condition)
+		self.assertNotIn("channel", condition)
 
 	def test_sale_only_sees_own_assigned_students_interaction(self):
 		user, staff = self._make_user_and_staff("_Test IFP Sale", ["Sale"])

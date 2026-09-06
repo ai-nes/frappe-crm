@@ -78,8 +78,13 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_retired_aliases_fail_closed(self):
 		for roles in (
-			{"Counseller"}, {"Team Leader"}, {"Promoter-PR"}, {"Marketing Operator"},
-			{"Admissions Operations"}, {"Giám đốc Tuyển sinh"}, {"Sales"},
+			{"Counseller"},
+			{"Team Leader"},
+			{"Promoter-PR"},
+			{"Marketing Operator"},
+			{"Admissions Operations"},
+			{"Giám đốc Tuyển sinh"},
+			{"Sales"},
 		):
 			with self.subTest(roles=roles):
 				self.assertIsNone(resolve_crm_profile(roles))
@@ -257,6 +262,6 @@ class TestSessionRoleContract(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags(roles)
 
-	def test_backfill_catalog_is_disabled_for_seed_only_deployments(self):
-		self.assertIsNone(backfill_target_for_roles({"Sales User"}))
-		self.assertIsNone(backfill_target_for_roles({"Sales Manager"}))
+	def test_backfill_catalog_has_explicit_migration_targets(self):
+		self.assertEqual(backfill_target_for_roles({"Sales User"}), "Sale")
+		self.assertEqual(backfill_target_for_roles({"Sales Manager"}), "Lead Sale")

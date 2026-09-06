@@ -131,3 +131,4 @@ crm.patches.v1_0.backfill_admission_method_codes
 crm.patches.v1_0.allow_ctv_sale_action_acceptance
 crm.patches.v1_0.normalize_nba_actor_roles
 crm.patches.v1_0.seed_ctv_sale_director_read_permissions
+crm.patches.v1_0.ensure_crm_action_current_slot_unique
