@@ -184,7 +184,12 @@ REFERENCE_CATALOG: Final[dict[str, tuple[dict, ...]]] = {
 			"sort_order": 1070,
 			"importance": "Very High",
 		},
-		{"code": "NOT_INTERESTED", "display_name": "Không quan tâm", "sort_order": 1080, "importance": "Low"},
+		{
+			"code": "NOT_INTERESTED",
+			"display_name": "Không quan tâm",
+			"sort_order": 1080,
+			"importance": "Medium",
+		},
 	),
 	"CRM Interaction Type": (
 		{"code": "PHONE_CALL", "display_name": "Cuộc gọi", "sort_order": 10},
