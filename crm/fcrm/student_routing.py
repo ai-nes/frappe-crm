@@ -578,7 +578,7 @@ def repair_orphan_routing_requests(limit: int = 1000) -> dict[str, int]:
 	rows = frappe.get_all(
 		REQUEST_DOCTYPE,
 		filters={"status": ["in", ["pending", "leased", "deferred"]]},
-		fields=["name", "student", "status"],
+		fields=["name", "student", "status", "revision"],
 		order_by="creation asc",
 		limit_page_length=page_limit,
 	)
@@ -587,14 +587,20 @@ def repair_orphan_routing_requests(limit: int = 1000) -> dict[str, int]:
 		for row in rows:
 			if frappe.db.exists("CRM Student", row.get("student")):
 				continue
-			request = frappe.get_doc(REQUEST_DOCTYPE, row["name"])
-			_save_request(
-				request,
-				status="failed",
-				last_error_code="STUDENT_NOT_FOUND",
-				completed_at=now_datetime(),
-				lease_token=None,
-				lease_expires_at=None,
+			# The Student link is intentionally orphaned. Updating through a Document
+			# would re-run Frappe link validation and prevent us from closing the
+			# audit row, so this maintenance path writes only the terminal fields.
+			frappe.db.set_value(
+				REQUEST_DOCTYPE,
+				row["name"],
+				{
+					"status": "failed",
+					"revision": int(row.get("revision") or 0) + 1,
+					"last_error_code": "STUDENT_NOT_FOUND",
+					"completed_at": now_datetime(),
+					"lease_token": None,
+					"lease_expires_at": None,
+				},
 			)
 			repaired += 1
 	if repaired and not getattr(frappe.flags, "in_test", False):

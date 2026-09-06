@@ -54,19 +54,17 @@ class TestStudentRouting(FrappeTestCase):
 		pool.assert_not_called()
 
 	def test_orphan_routing_requests_are_failed_without_deleting_audit_rows(self):
-		request = type("Request", (), {})()
-		request.status = "pending"
-		request.name = "route:missing:0"
-		request.student = "ENR-MISSING"
 		with patch(
 			"crm.fcrm.student_routing.frappe.get_all",
-			return_value=[{"name": request.name, "student": request.student, "status": "pending"}],
+			return_value=[{"name": "route:missing:0", "student": "ENR-MISSING", "status": "pending", "revision": 2}],
 		), patch("crm.fcrm.student_routing.frappe.db.exists", return_value=False), patch(
-			"crm.fcrm.student_routing.frappe.get_doc", return_value=request
-		), patch("crm.fcrm.student_routing._save_request") as save_request:
+			"crm.fcrm.student_routing.frappe.db.set_value"
+		) as set_value:
 			result = repair_orphan_routing_requests()
 
 		self.assertEqual(result, {"checked": 1, "repaired": 1})
-		save_request.assert_called_once()
-		self.assertEqual(save_request.call_args.kwargs["status"], "failed")
-		self.assertEqual(save_request.call_args.kwargs["last_error_code"], "STUDENT_NOT_FOUND")
+		set_value.assert_called_once()
+		values = set_value.call_args.args[2]
+		self.assertEqual(values["status"], "failed")
+		self.assertEqual(values["revision"], 3)
+		self.assertEqual(values["last_error_code"], "STUDENT_NOT_FOUND")
