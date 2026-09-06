@@ -190,8 +190,12 @@ services:
     <<: *crm-service
     restart: unless-stopped
     networks:
-      - default
-      - ai-crm_backend
+      default:
+      ai-crm_backend:
+        aliases:
+          # Keep service-to-service Frappe traffic inside Docker while
+          # preserving the canonical Host header used for site resolution.
+          - crm.faip.pro
     command:
       - bash
       - /opt/frappe/scripts/prod-runtime.sh

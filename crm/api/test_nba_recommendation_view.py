@@ -37,3 +37,30 @@ class TestRecommendationViewTiming(unittest.TestCase):
 	def test_selected_window_is_none_when_absent(self):
 		view = self._view({"scheduled_at": "2026-09-07T11:00:00+00:00", "timezone": "UTC"})
 		self.assertIsNone(view["timing"]["selected_window"])
+
+
+class TestRecommendationViewTitle(unittest.TestCase):
+	def _view(self, explanation):
+		return recommendation_view(
+			recommendation_id="REC-1",
+			target_type="CRM Lead",
+			target_id="LEAD-1",
+			action_code="CALL",
+			priority="high",
+			rank=1,
+			reason="",
+			explanation=explanation,
+			ai_payload=None,
+			expires_at_iso=None,
+			lifecycle_status=None,
+			decision_status=None,
+			execution_status=None,
+		)
+
+	def test_title_passes_through_from_the_rendered_explanation(self):
+		view = self._view({"title": "Gọi lại về học phí"})
+		self.assertEqual(view["title"], "Gọi lại về học phí")
+
+	def test_title_falls_back_to_the_generic_action_title_when_absent(self):
+		view = self._view(None)
+		self.assertEqual(view["title"], view["action"]["title"])

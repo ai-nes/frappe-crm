@@ -2,26 +2,17 @@
   <section class="space-y-4" data-testid="assignment-routing-control">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p
-          class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5"
-        >
-          {{ __('Điều khiển tự động') }}
-        </p>
         <h2 class="mt-1 text-xl font-semibold text-ink-gray-9">
-          {{ __('Lead mới có tự động phân công không?') }}
+          {{ __('Tự động phân công') }}
         </h2>
         <p class="mt-1 max-w-3xl text-sm text-ink-gray-6">
-          {{
-            __(
-              'Tắt: Lead vẫn vào hàng chờ theo Pool. Bật: hệ thống dùng policy đang hiệu lực để chọn Sale còn capacity.',
-            )
-          }}
+          {{ __('Lead mới sẽ được chia cho người còn chỗ trong đúng nhóm.') }}
         </p>
       </div>
       <Button
         variant="subtle"
         size="sm"
-        :label="__('Làm mới kiểm tra')"
+        :label="__('Làm mới')"
         iconLeft="refresh-cw"
         :loading="loading"
         @click="$emit('refresh')"
@@ -58,17 +49,13 @@
             </span>
             <div>
               <p class="font-semibold text-ink-gray-9">
-                {{
-                  control.enabled
-                    ? __('Đang bật tự động phân công')
-                    : __('Đang tắt tự động phân công')
-                }}
+                {{ control.enabled ? __('Đang bật') : __('Đang tắt') }}
               </p>
               <p class="mt-0.5 text-xs text-ink-gray-5">
                 {{
                   control.control_source === 'workspace'
-                    ? __('Được quản lý từ màn hình này')
-                    : __('Đang dùng cấu hình cũ từ site config')
+                    ? __('Quản lý tại đây')
+                    : __('Đang dùng thiết lập mặc định')
                 }}
               </p>
             </div>
@@ -83,53 +70,29 @@
         <div
           class="mt-5 rounded-lg border border-outline-gray-1 bg-surface-gray-1 p-3"
         >
-          <label class="block text-xs font-medium text-ink-gray-6">{{
-            __('Lý do thay đổi')
-          }}</label>
-          <FormControl
-            v-model="reason"
-            type="textarea"
-            :placeholder="
-              __('Ví dụ: Hoàn tất cấu hình capacity cho đội Sale TP.HCM')
-            "
-            class="mt-2"
-            :disabled="!canManage"
-          />
           <div class="mt-3 flex flex-wrap items-center justify-between gap-3">
             <p class="text-xs text-ink-gray-5">
-              {{
-                __(
-                  'Bật routing sẽ dùng policy active và chỉ chọn Sale có capacity.',
-                )
-              }}
+              {{ __('Hệ thống tự lưu thao tác vào lịch sử thay đổi.') }}
             </p>
             <Button
               :variant="control.enabled ? 'subtle' : 'solid'"
               :theme="control.enabled ? 'red' : 'green'"
               :label="
-                control.enabled
-                  ? __('Tắt tự động phân công')
-                  : __('Bật tự động phân công')
+                control.enabled ? __('Tắt phân công') : __('Bật phân công')
               "
               :disabled="
-                !canManage ||
-                reason.trim().length < 5 ||
-                (!control.enabled && !control.ready_to_enable)
+                !canManage || (!control.enabled && !control.ready_to_enable)
               "
               :loading="saving"
               :data-testid="
                 control.enabled ? 'disable-routing' : 'enable-routing'
               "
-              @click="$emit('toggle', { enabled: !control.enabled, reason })"
+              @click="$emit('toggle', { enabled: !control.enabled })"
             />
           </div>
         </div>
         <p v-if="!canManage" class="mt-3 text-xs text-orange-700">
-          {{
-            __(
-              'Chỉ System Manager có thể bật/tắt routing và cập nhật capacity.',
-            )
-          }}
+          {{ __('Chỉ System Manager được thay đổi.') }}
         </p>
       </div>
 
@@ -139,7 +102,7 @@
         <div class="flex items-center justify-between gap-3">
           <div>
             <p class="text-sm font-semibold text-ink-gray-9">
-              {{ __('Điều kiện trước khi bật') }}
+              {{ __('Điều kiện') }}
             </p>
             <p class="mt-1 text-xs text-ink-gray-5">
               {{
@@ -185,6 +148,15 @@
               >
                 {{ check.detail }}
               </p>
+              <button
+                v-if="!check.passed"
+                type="button"
+                class="mt-2 text-xs font-medium text-blue-700 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                :data-testid="`assignment-check-${check.code}`"
+                @click="$emit('navigate', checkTab(check.code))"
+              >
+                {{ __('Mở nơi thiết lập') }}
+              </button>
             </div>
           </div>
         </div>
@@ -196,11 +168,11 @@
       class="grid gap-3 sm:grid-cols-2 xl:grid-cols-6"
     >
       <MetricCard
-        :label="__('Sale đủ điều kiện')"
+        :label="__('Người nhận đủ điều kiện')"
         :value="control.summary.eligible_staff"
       />
       <MetricCard
-        :label="__('Đã đặt capacity')"
+        :label="__('Đã đặt giới hạn')"
         :value="control.summary.capacity_configured"
         :tone="control.summary.capacity_missing ? 'warning' : 'default'"
       />
@@ -209,7 +181,7 @@
         :value="control.summary.active_leads"
       />
       <MetricCard
-        :label="__('Tổng capacity')"
+        :label="__('Tổng Lead tối đa')"
         :value="control.summary.total_capacity"
       />
       <MetricCard
@@ -218,7 +190,7 @@
         :tone="control.summary.remaining_capacity ? 'success' : 'warning'"
       />
       <MetricCard
-        :label="__('Gần/vượt tải')"
+        :label="__('Gần/vượt giới hạn')"
         :value="`${control.summary.near_capacity}/${control.summary.over_capacity}`"
         :tone="control.summary.over_capacity ? 'warning' : 'default'"
       />
@@ -227,8 +199,7 @@
 </template>
 
 <script setup>
-import { Badge, Button, FeatherIcon, FormControl } from 'frappe-ui'
-import { ref } from 'vue'
+import { Badge, Button, FeatherIcon } from 'frappe-ui'
 
 defineProps({
   control: { type: Object, default: null },
@@ -237,8 +208,17 @@ defineProps({
   error: { type: [Object, String], default: null },
   canManage: Boolean,
 })
-defineEmits(['refresh', 'toggle'])
-const reason = ref('')
+defineEmits(['refresh', 'toggle', 'navigate'])
+
+function checkTab(code) {
+  return (
+    {
+      active_policy: 'policy',
+      eligible_staff: 'setup',
+      capacity_configured: 'load',
+    }[code] || 'setup'
+  )
+}
 
 function errorMessage(error) {
   return (

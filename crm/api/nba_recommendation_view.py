@@ -2,10 +2,11 @@
 
 Used by both the Sale worklist (`student_worklist.py`) and the Director
 review queue (`director_next_best_action.py`) so a client only has to learn
-one nested shape: ``target -> action -> priority -> reason -> objective ->
-timing -> status``. Deliberately excludes the raw ``ai_payload``/legacy flat
-fields those two callers still carry alongside this for the accept/edit
-decision flow -- this view is display-only, never the identity/diff source.
+one nested shape: ``title -> target -> action -> priority -> reason ->
+objective -> timing -> status``. Deliberately excludes the raw
+``ai_payload``/legacy flat fields those two callers still carry alongside
+this for the accept/edit decision flow -- this view is display-only, never
+the identity/diff source.
 """
 from __future__ import annotations
 
@@ -41,6 +42,7 @@ def recommendation_view(
 
 	return {
 		"id": recommendation_id,
+		"title": explanation.get("title") or action_title,
 		"target": {"type": target_type, "id": target_id},
 		"action": {"code": action_code, "title": action_title},
 		"priority": priority or "medium",

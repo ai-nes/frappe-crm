@@ -24,7 +24,7 @@
   {"fieldname": "expires_at", "fieldtype": "Datetime", "label": "Expires At", "read_only": 1},
   {"fieldname": "owner", "fieldtype": "Link", "label": "Owner", "options": "CRM Staff", "read_only": 1},
   {"fieldname": "lifecycle_status", "fieldtype": "Select", "label": "Lifecycle Status", "options": "proposed\nactive\ncompleted\ncancelled\nexpired\nsuperseded", "default": "proposed", "read_only": 1},
-  {"fieldname": "decision_status", "fieldtype": "Select", "label": "Decision Status", "options": "pending\naccepted\nrejected\ndeferred\ndismissed", "default": "pending", "read_only": 1},
+  {"fieldname": "decision_status", "fieldtype": "Select", "label": "Decision Status", "options": "pending\naccepted\nrejected\ndeferred\ndismissed\ndismissed_by_selection", "default": "pending", "read_only": 1},
   {"fieldname": "execution_status", "fieldtype": "Select", "label": "Execution Status", "options": "not_started\nscheduled\nin_progress\ncompleted\nfailed\ncancelled", "default": "not_started", "read_only": 1},
   {"fieldname": "model", "fieldtype": "Data", "label": "Model", "read_only": 1},
   {"fieldname": "model_version", "fieldtype": "Data", "label": "Model Version", "read_only": 1},

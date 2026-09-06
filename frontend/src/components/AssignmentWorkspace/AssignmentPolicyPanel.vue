@@ -2,30 +2,30 @@
   <section class="space-y-4" data-testid="assignment-policies">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p
-          class="text-xs font-semibold uppercase tracking-wide text-ink-gray-5"
-        >
-          {{ __('Chính sách phân bổ') }}
-        </p>
         <h2 class="mt-1 text-xl font-semibold text-ink-gray-9">
-          {{ __('Mỗi Pool chọn Sale theo cách nào?') }}
+          {{ __('Cách chia Lead') }}
         </h2>
         <p class="mt-1 text-sm text-ink-gray-6">
-          {{
-            __(
-              'Policy xác định phạm vi, chiến lược và thời gian hiệu lực. Policy active đã phê duyệt sẽ được dùng cho Lead mới.',
-            )
-          }}
+          {{ __('Chọn cách hệ thống chia Lead cho nhóm tư vấn.') }}
         </p>
       </div>
       <Button
         v-if="canManage"
         variant="solid"
         size="sm"
-        :label="__('Tạo policy phiên bản mới')"
+        :label="__('Tạo cách chia Lead')"
         iconLeft="plus"
-        @click="showCreate = true"
+        @click="openCreate"
       />
+    </div>
+
+    <div
+      class="rounded-xl border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-blue-900"
+    >
+      <p class="font-medium">{{ __('Luồng xử lý') }}</p>
+      <p class="mt-1 text-blue-800">
+        {{ __('Lead mới → hàng chờ → cách phân công → nhân viên tư vấn.') }}
+      </p>
     </div>
 
     <div
@@ -34,9 +34,9 @@
       <table class="w-full min-w-[960px] text-sm">
         <thead class="bg-surface-gray-1 text-left text-xs text-ink-gray-6">
           <tr>
-            <th class="px-4 py-3">{{ __('Policy / phạm vi') }}</th>
-            <th class="px-4 py-3">{{ __('Chiến lược') }}</th>
-            <th class="px-4 py-3">{{ __('Hiệu lực') }}</th>
+            <th class="px-4 py-3">{{ __('Hàng chờ') }}</th>
+            <th class="px-4 py-3">{{ __('Cách chia') }}</th>
+            <th class="px-4 py-3">{{ __('Thời gian dùng') }}</th>
             <th class="px-4 py-3">{{ __('Trạng thái') }}</th>
             <th class="px-4 py-3 text-right">{{ __('Thao tác') }}</th>
           </tr>
@@ -48,11 +48,11 @@
             class="border-t border-outline-gray-1"
           >
             <td class="px-4 py-3">
-              <p class="font-medium text-ink-gray-9">{{ policy.policy_key }}</p>
+              <p class="font-medium text-ink-gray-9">
+                {{ poolLabel(policy.student_pool) }}
+              </p>
               <p class="mt-0.5 text-xs text-ink-gray-5">
-                {{ policy.campus }} · {{ policy.student_pool }} · v{{
-                  policy.policy_version
-                }}
+                {{ campusLabel(policy.campus) }}
               </p>
             </td>
             <td class="px-4 py-3">
@@ -61,10 +61,16 @@
                 theme="blue"
                 variant="subtle"
               />
+              <p class="mt-1 max-w-xs text-xs text-ink-gray-5">
+                {{ policyDescription(policy.strategy) }}
+              </p>
             </td>
             <td class="px-4 py-3 text-xs text-ink-gray-6">
-              {{ formatDate(policy.effective_from) }} →
-              {{ formatDate(policy.effective_until) }}
+              <p>{{ __('Từ') }} {{ formatDate(policy.effective_from) }}</p>
+              <p v-if="policy.effective_until">
+                {{ __('Đến') }} {{ formatDate(policy.effective_until) }}
+              </p>
+              <p v-else class="text-ink-gray-5">{{ __('Không giới hạn') }}</p>
             </td>
             <td class="px-4 py-3">
               <Badge
@@ -78,13 +84,15 @@
                 v-if="policy.status === 'draft' && canApprove"
                 size="sm"
                 variant="subtle"
-                :label="__('Phê duyệt')"
+                :label="__('Duyệt dùng')"
                 :loading="approving === policy.name"
                 @click="approve(policy)"
               />
-              <span v-else class="text-xs text-ink-gray-5">{{
-                policy.status === 'active' ? __('Đang sử dụng') : __('Đã lưu')
-              }}</span>
+              <span v-else class="text-xs text-ink-gray-5">
+                {{
+                  policy.status === 'active' ? __('Đang dùng') : __('Đã dừng')
+                }}
+              </span>
             </td>
           </tr>
           <tr v-if="!policies.length">
@@ -102,7 +110,7 @@
     <Dialog v-model="showCreate" :options="{ size: 'lg' }">
       <template #body-title
         ><h3 class="text-lg font-semibold text-ink-gray-9">
-          {{ __('Tạo policy phân bổ') }}
+          {{ __('Tạo cách chia Lead') }}
         </h3></template
       >
       <template #body-content>
@@ -112,52 +120,41 @@
           >
             {{
               __(
-                'Policy mới bắt đầu ở trạng thái nháp. Một người có quyền Admissions Director cần phê duyệt trước khi dùng.',
+                'Sau khi lưu, người có quyền duyệt sẽ kiểm tra trước khi đưa vào sử dụng.',
               )
             }}
           </p>
           <div class="grid gap-4 sm:grid-cols-2">
             <FormControl
-              v-model="draft.policy_key"
-              :label="__('Mã policy')"
-              :placeholder="__('route-hcm-khu-dong-v2')"
-            />
-            <FormControl
-              v-model="draft.policy_version"
-              type="number"
-              :label="__('Phiên bản')"
-              min="1"
-            />
-            <FormControl
               v-model="draft.campus"
               type="select"
-              :label="__('Campus')"
+              :label="__('Cơ sở')"
               :options="campusOptions"
+              @update:model-value="draft.student_pool = ''"
             />
             <FormControl
               v-model="draft.student_pool"
               type="select"
-              :label="__('Pool tiếp nhận')"
+              :label="__('Hàng chờ Lead')"
               :options="poolOptions"
             />
             <FormControl
               v-model="draft.strategy"
               type="select"
-              :label="__('Chiến lược')"
+              :label="__('Cách chia')"
               :options="strategyOptions"
             />
             <FormControl
               v-model="draft.effective_from"
               type="date"
-              :label="__('Có hiệu lực từ')"
+              :label="__('Bắt đầu dùng từ')"
             />
           </div>
-          <FormControl
-            v-model="draft.scoring_weights"
-            type="textarea"
-            :label="__('Trọng số weighted score (JSON)')"
-            :disabled="draft.strategy !== 'weighted_score'"
-          />
+          <div
+            class="rounded-md bg-surface-gray-1 px-3 py-2 text-sm text-ink-gray-6"
+          >
+            {{ policyDescription(draft.strategy) }}
+          </div>
         </div>
       </template>
       <template #actions>
@@ -189,7 +186,10 @@ import {
   toast,
 } from 'frappe-ui'
 import { computed, ref } from 'vue'
-import { assignmentWorkspacePolicyLabel } from '@/data/assignmentWorkspace'
+import {
+  assignmentWorkspacePolicyDescription,
+  assignmentWorkspacePolicyLabel,
+} from '@/data/assignmentWorkspace'
 
 const props = defineProps({
   policies: { type: Array, default: () => [] },
@@ -202,7 +202,6 @@ const showCreate = ref(false)
 const creating = ref(false)
 const approving = ref('')
 const draft = ref({
-  policy_key: '',
   policy_version: 1,
   campus: '',
   student_pool: '',
@@ -228,15 +227,17 @@ const campusOptions = computed(() =>
 const poolOptions = computed(() =>
   (props.options.pools || [])
     .filter((item) => !draft.value.campus || item.campus === draft.value.campus)
-    .map((item) => ({ label: item.label, value: item.value })),
+    .map((item) => ({
+      label: humanPoolLabel(item.label),
+      value: item.value,
+    })),
 )
 const strategyOptions = [
-  { label: __('Luân phiên công bằng'), value: 'round_robin' },
-  { label: __('Chấm điểm có trọng số'), value: 'weighted_score' },
+  { label: __('Chia đều lần lượt'), value: 'round_robin' },
+  { label: __('Ưu tiên người phù hợp'), value: 'weighted_score' },
 ]
 const canCreate = computed(
   () =>
-    draft.value.policy_key &&
     draft.value.campus &&
     draft.value.student_pool &&
     draft.value.effective_from,
@@ -245,34 +246,117 @@ const canCreate = computed(
 function policyLabel(strategy) {
   return assignmentWorkspacePolicyLabel(strategy)
 }
+function policyDescription(strategy) {
+  return assignmentWorkspacePolicyDescription(strategy)
+}
+function optionLabel(options, value) {
+  return options.find((item) => item.value === value)?.label || 'Chưa xác định'
+}
+function humanPoolLabel(value) {
+  const raw = String(value || 'Chưa xác định').trim()
+  const cleaned = raw
+    .replace(/^crm-[^-]+-(?:showcase-)?/i, '')
+    .replace(/-routing-v\d+$/i, '')
+    .replace(/-v\d+$/i, '')
+  const match = cleaned.match(/^pool-(lead|ctv)(?:-(.*))?$/i)
+  if (match) {
+    const kind = match[1].toLowerCase() === 'ctv' ? 'CTV' : 'Lead'
+    const scope = formatPoolScope(match[2])
+    return scope ? `Hàng chờ ${kind} · ${scope}` : `Hàng chờ ${kind}`
+  }
+  return raw
+    .replace(/^Pool Lead\b/i, 'Hàng chờ Lead')
+    .replace(/^Pool CTV\b/i, 'Hàng chờ CTV')
+    .replace(/^Pool\b/i, 'Hàng chờ')
+}
+
+function formatPoolScope(value) {
+  if (!value) return ''
+  return value
+    .replace(/[-_]+/g, ' ')
+    .replace(/\bfptu\b/gi, 'FPTU')
+    .replace(/\btp hcm\b/gi, 'TP.HCM')
+    .replace(/\bkhu ng\b/gi, 'Khu Đông')
+    .replace(/\bkhu trung tam\b/gi, 'Khu trung tâm')
+    .replace(/\b\w/g, (character) => character.toUpperCase())
+}
+function campusLabel(value) {
+  return optionLabel(campusOptions.value, value)
+}
+function poolLabel(value) {
+  return optionLabel(poolOptionsForDisplay.value, value)
+}
 function statusLabel(status) {
   return (
     {
-      draft: __('Bản nháp'),
-      active: __('Đang hiệu lực'),
-      retired: __('Đã ngưng'),
-    }[status] || status
+      draft: __('Chờ duyệt'),
+      active: __('Đang dùng'),
+      retired: __('Đã dừng'),
+    }[status] || __('Chưa xác định')
   )
 }
 function statusTheme(status) {
   return { draft: 'orange', active: 'green', retired: 'gray' }[status] || 'gray'
 }
 function formatDate(value) {
-  return value ? String(value).slice(0, 10) : __('Không giới hạn')
+  return value ? String(value).slice(0, 10) : ''
+}
+
+const poolOptionsForDisplay = computed(() =>
+  (props.options.pools || []).map((item) => ({
+    label: humanPoolLabel(item.label),
+    value: item.value,
+  })),
+)
+
+function slug(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+function nextVersion(campus, pool) {
+  const versions = props.policies
+    .filter((item) => item.campus === campus && item.student_pool === pool)
+    .map((item) => Number(item.policy_version) || 0)
+  return Math.max(0, ...versions) + 1
+}
+
+function openCreate() {
+  draft.value = {
+    policy_version: 1,
+    campus: '',
+    student_pool: '',
+    strategy: 'round_robin',
+    effective_from: new Date().toISOString().slice(0, 10),
+    scoring_weights:
+      '{"load":0.35,"territory":0.30,"performance":0.20,"rotation":0.15}',
+  }
+  showCreate.value = true
 }
 
 async function createPolicy() {
   creating.value = true
   try {
+    const version = nextVersion(draft.value.campus, draft.value.student_pool)
+    const values = {
+      ...draft.value,
+      policy_version: version,
+      policy_key: `assignment-${slug(campusLabel(draft.value.campus))}-${slug(poolLabel(draft.value.student_pool))}-v${version}-${Date.now()}`,
+    }
     await policyCreate.submit({
       doctype: 'CRM Student Routing Policy',
-      values: { ...draft.value },
+      values,
     })
-    toast.success(__('Đã lưu policy nháp.'))
+    toast.success(__('Đã lưu cách phân công.'))
     showCreate.value = false
     emit('changed')
   } catch (error) {
-    toast.error(error?.messages?.[0] || __('Không thể tạo policy.'))
+    toast.error(error?.messages?.[0] || __('Không thể lưu cách phân công.'))
   } finally {
     creating.value = false
   }
@@ -285,10 +369,10 @@ async function approve(policy) {
       doctype: 'CRM Student Routing Policy',
       name: policy.name,
     })
-    toast.success(__('Đã phê duyệt policy.'))
+    toast.success(__('Đã đưa cách phân công vào sử dụng.'))
     emit('changed')
   } catch (error) {
-    toast.error(error?.messages?.[0] || __('Không thể phê duyệt policy.'))
+    toast.error(error?.messages?.[0] || __('Không thể duyệt cách phân công.'))
   } finally {
     approving.value = ''
   }
