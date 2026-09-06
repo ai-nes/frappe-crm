@@ -11,6 +11,11 @@ from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.student_decision_context import (
+	_ENGAGEMENT_MAP,
+	_canonical_label,
+	_academic_projection,
+	_contactability_projection,
+	_consent_scope_channels,
 	_days_to_deadline,
 	_intent_observation_count,
 	_interaction_recency,
@@ -134,7 +139,8 @@ class TestDecisionEvidenceSignals(FrappeTestCase):
 	def test_recent_actions_projects_canonical_semantic_fields_only(self):
 		rows = [
 			{
-				"action_type": "CALL",
+				"action": "CALL",
+				"action_type": "CONTACT",
 				"state": "completed",
 				"execution_status": "done",
 				"disposition": "ACT",
@@ -165,3 +171,80 @@ class TestDecisionEvidenceSignals(FrappeTestCase):
 		)
 		self.assertIsNone(projected[1]["at"])
 		self.assertNotIn("objective", str(projected))
+
+	def test_consent_scope_uses_explicit_channels_and_governed_legacy_scopes(self):
+		self.assertEqual(_consent_scope_channels("email_phone_zalo"), {"CALL", "EMAIL", "MESSAGE"})
+		self.assertEqual(_consent_scope_channels("student_profile_and_parent_follow_up"), set())
+		self.assertEqual(_consent_scope_channels("admissions_processing"), set())
+		self.assertEqual(_consent_scope_channels("unapproved-purpose"), set())
+
+	def test_business_outcome_labels_do_not_become_engagement_evidence(self):
+		self.assertEqual(_canonical_label("Resolved", _ENGAGEMENT_MAP), "unknown")
+		self.assertEqual(_canonical_label("Converted", _ENGAGEMENT_MAP), "unknown")
+
+	def test_recipient_binding_requires_exactly_one_contact(self):
+		event = {
+			"name": "CONSENT-1",
+			"event_type": "Granted",
+			"scope": "email",
+			"occurred_at": "2026-08-20 09:00:00",
+			"creation": "2026-08-20 09:00:00",
+		}
+		with patch("crm.api.student_decision_context.frappe.get_all", return_value=[event]):
+			for contacts, expected in (([], False), (["CON-1"], True), (["CON-1", "CON-2"], False)):
+				with patch("crm.api.student_decision_context.contacts_for_student", return_value=contacts):
+					assert _contactability_projection("STU-1")["recipient_bound"] is expected
+
+	def test_academic_projection_selects_one_latest_bounded_gpa(self):
+		rows = [
+			{"name": "GPA-11", "school_year": "2024-2025", "grade": "11", "gpa": 8.1, "modified": "2025-06-01", "idx": 1},
+			{"name": "GPA-12", "school_year": "2025-2026", "grade": "12", "gpa": 8.8, "modified": "2026-06-01", "idx": 1},
+		]
+		with patch("crm.api.student_decision_context.frappe.get_all", return_value=rows):
+			result = _academic_projection("STU-1")
+		self.assertEqual(result["gpa"], 8.8)
+		self.assertEqual(result["quality"], "current")
+		self.assertEqual(result["evidence_ref"], "academic_result:GPA-12")
+
+	def test_academic_projection_rejects_ambiguous_latest_rows(self):
+		rows = [
+			{"name": "GPA-A", "school_year": "2025-2026", "grade": "12", "gpa": 8.8, "modified": "2026-06-01", "idx": 1},
+			{"name": "GPA-B", "school_year": "2025-2026", "grade": "12", "gpa": 8.6, "modified": "2026-06-02", "idx": 2},
+		]
+		with patch("crm.api.student_decision_context.frappe.get_all", return_value=rows):
+			result = _academic_projection("STU-1")
+		self.assertIsNone(result["gpa"])
+		self.assertEqual(result["quality"], "conflicting")
+
+	def test_contactability_merges_student_and_legacy_contact_events(self):
+		student_event = {
+			"name": "CONSENT-1",
+			"event_type": "Granted",
+			"scope": "email",
+			"occurred_at": "2026-08-20 09:00:00",
+			"creation": "2026-08-20 09:00:00",
+		}
+		contact_event = {
+			"name": "CONSENT-2",
+			"event_type": "Granted",
+			"scope": "phone_zalo",
+			"occurred_at": "2026-08-21 09:00:00",
+			"creation": "2026-08-21 09:00:00",
+		}
+
+		def fake_get_all(doctype, **kwargs):
+			if kwargs.get("filters") == {"student": "STU-1"}:
+				return [student_event]
+			if kwargs.get("filters") == {"contact": ["in", ["CON-1"]]}:
+				return [contact_event]
+			return []
+
+		with patch("crm.api.student_decision_context.contacts_for_student", return_value=["CON-1"]), patch(
+			"crm.api.student_decision_context.frappe.get_all", side_effect=fake_get_all
+		):
+			result = _contactability_projection("STU-1")
+
+		self.assertEqual(
+			result,
+			{"consent": True, "channels": ["CALL", "EMAIL", "MESSAGE"], "recipient_bound": True},
+		)

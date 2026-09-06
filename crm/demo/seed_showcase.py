@@ -175,7 +175,10 @@ def ensure_demo_config() -> dict:
 		if frappe.conf.get(key) != value:
 			update_site_config(key, value, validate=False)
 			changed.append(key)
-	return {"changed": changed}
+
+	from crm.fcrm.nba_policy import ensure_default_decision_policy
+
+	return {"changed": changed, "default_nba_policy_created": ensure_default_decision_policy()}
 
 
 def ensure_local_integrity_keys() -> dict:
@@ -205,11 +208,11 @@ def ensure_local_integrity_keys() -> dict:
 # ---------------------------------------------------------------------------
 
 _ADMISSION_METHODS = (
-	"Transcript Review",
-	"National High School Exam",
-	"Language Certificate Review",
-	"Direct Admission",
-	"Combined",
+	"TRANSCRIPT_REVIEW",
+	"NATIONAL_HIGH_SCHOOL_EXAM",
+	"LANGUAGE_CERTIFICATE_REVIEW",
+	"DIRECT_ADMISSION",
+	"COMBINED",
 )
 
 # Student cases. Each scenario declares the target states it must produce; the
@@ -226,7 +229,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "thao-an",
 		"student_name": "Nguyễn Thảo An",
 		"gender": "Nữ",
-		"admission_method": "Combined",
+		"admission_method": "COMBINED",
 		"email": _natural_email("Nguyễn Thảo An"),
 		"phone": "0901900101",
 		"target_stage": "Lead",
@@ -240,7 +243,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "gia-han",
 		"student_name": "Võ Gia Hân",
 		"gender": "Nữ",
-		"admission_method": "Language Certificate Review",
+		"admission_method": "LANGUAGE_CERTIFICATE_REVIEW",
 		"email": _natural_email("Võ Gia Hân"),
 		"phone": "0901900102",
 		"target_stage": "MQL",
@@ -260,7 +263,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "minh-khang",
 		"student_name": "Bùi Minh Khang",
 		"gender": "Nam",
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"email": _natural_email("Bùi Minh Khang"),
 		"phone": "0901900103",
 		"target_stage": "Applicant",
@@ -268,7 +271,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"summary": "Rà soát hồ sơ xét tuyển còn thiếu bảng điểm có xác nhận",
 		"notes": "Hồ sơ đã tiếp nhận, cần gia đình bổ sung bảng điểm học kỳ II có xác nhận.",
 		"outcome_spec": ("qualified", "task"),
-		"next_action": "Lead Sales rà soát hồ sơ thiếu",
+		"next_action": "Lead Sale rà soát hồ sơ thiếu",
 		"sla_target": "escalated",
 		"score_series": 2,
 		"action_specs": (("DOCUMENT_REQUEST", "in-progress"), ("PARENT_CONTACT", "cancelled")),
@@ -278,7 +281,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "khanh-linh",
 		"student_name": "Trần Khánh Linh",
 		"gender": "Nữ",
-		"admission_method": "National High School Exam",
+		"admission_method": "NATIONAL_HIGH_SCHOOL_EXAM",
 		"email": _natural_email("Trần Khánh Linh"),
 		"phone": "0901900104",
 		"target_stage": "Lost",
@@ -292,7 +295,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "nhat-minh",
 		"student_name": "Đỗ Nhật Minh",
 		"gender": "Nam",
-		"admission_method": "Direct Admission",
+		"admission_method": "DIRECT_ADMISSION",
 		"email": _natural_email("Đỗ Nhật Minh"),
 		"phone": "0901900105",
 		"target_stage": "Enrolled",
@@ -310,7 +313,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-open",
 		"student_name": "Lê Hải Đăng",
 		"gender": "Nam",
-		"admission_method": "Combined",
+		"admission_method": "COMBINED",
 		"email": _natural_email("Lê Hải Đăng"),
 		"phone": "0901900201",
 		"target_stage": "Lead",
@@ -324,7 +327,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-responded",
 		"student_name": "Trịnh Gia Hưng",
 		"gender": "Nam",
-		"admission_method": "Language Certificate Review",
+		"admission_method": "LANGUAGE_CERTIFICATE_REVIEW",
 		"email": _natural_email("Trịnh Gia Hưng"),
 		"phone": "0901900209",
 		"target_stage": "Lead",
@@ -340,7 +343,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-warned",
 		"student_name": "Phạm Quỳnh Như",
 		"gender": "Nữ",
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"email": _natural_email("Phạm Quỳnh Như"),
 		"phone": "0901900202",
 		"target_stage": "Lead",
@@ -354,13 +357,13 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-breached",
 		"student_name": "Hoàng Đức Thành",
 		"gender": "Nam",
-		"admission_method": "National High School Exam",
+		"admission_method": "NATIONAL_HIGH_SCHOOL_EXAM",
 		"email": _natural_email("Hoàng Đức Thành"),
 		"phone": "0901900203",
 		"target_stage": "Lead",
 		"owner": True,
 		"summary": "Đã quá hạn phản hồi lần đầu",
-		"notes": "Đã quá hạn SLA, chờ Lead Sales xử lý.",
+		"notes": "Đã quá hạn SLA, chờ Lead Sale xử lý.",
 		"sla_target": "breached",
 		"score_series": 1,
 	},
@@ -368,7 +371,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-paused",
 		"student_name": "Ngô Thanh Mai",
 		"gender": "Nữ",
-		"admission_method": "Language Certificate Review",
+		"admission_method": "LANGUAGE_CERTIFICATE_REVIEW",
 		"email": _natural_email("Ngô Thanh Mai"),
 		"phone": "0901900204",
 		"target_stage": "Lead",
@@ -382,13 +385,13 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "sla-superseded",
 		"student_name": "Đặng Gia Bảo",
 		"gender": "Nam",
-		"admission_method": "Direct Admission",
+		"admission_method": "DIRECT_ADMISSION",
 		"email": _natural_email("Đặng Gia Bảo"),
 		"phone": "0901900205",
 		"target_stage": "Lead",
 		"owner": True,
-		"summary": "SLA cũ bị thay thế sau khi Lead Sales duyệt reset",
-		"notes": "Reset SLA được Lead Sales duyệt, mở lượt mới.",
+		"summary": "SLA cũ bị thay thế sau khi Lead Sale duyệt reset",
+		"notes": "Reset SLA được Lead Sale duyệt, mở lượt mới.",
 		"sla_target": "superseded",
 		"score_series": 1,
 	},
@@ -396,7 +399,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "no-response",
 		"student_name": "Lý Tuấn Kiệt",
 		"gender": "Nam",
-		"admission_method": "Combined",
+		"admission_method": "COMBINED",
 		"email": _natural_email("Lý Tuấn Kiệt"),
 		"phone": "0901900206",
 		"target_stage": "Lead",
@@ -410,7 +413,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "not-interested",
 		"student_name": "Dương Khánh Vy",
 		"gender": "Nữ",
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"email": _natural_email("Dương Khánh Vy"),
 		"phone": "0901900207",
 		"target_stage": "Lead",
@@ -424,7 +427,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "follow-up",
 		"student_name": "Phan Nhật Hạ",
 		"gender": "Nữ",
-		"admission_method": "National High School Exam",
+		"admission_method": "NATIONAL_HIGH_SCHOOL_EXAM",
 		"email": _natural_email("Phan Nhật Hạ"),
 		"phone": "0901900208",
 		"target_stage": "Lead",
@@ -439,7 +442,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "connected",
 		"student_name": "Hồ Minh Quân",
 		"gender": "Nam",
-		"admission_method": "Direct Admission",
+		"admission_method": "DIRECT_ADMISSION",
 		"email": _natural_email("Hồ Minh Quân"),
 		"phone": "0901999999",
 		"target_stage": "Lead",
@@ -453,7 +456,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "invalid-lead",
 		"student_name": "Vũ Hồng Ngọc",
 		"gender": "Nữ",
-		"admission_method": "Transcript Review",
+		"admission_method": "TRANSCRIPT_REVIEW",
 		"email": _natural_email("Vũ Hồng Ngọc"),
 		"phone": "0901900210",
 		"target_stage": "Lead",
@@ -467,7 +470,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"key": "reopened",
 		"student_name": "Huỳnh Gia Phúc",
 		"gender": "Nam",
-		"admission_method": "Combined",
+		"admission_method": "COMBINED",
 		"email": _natural_email("Huỳnh Gia Phúc"),
 		"phone": "0901900211",
 		"target_stage": "MQL",
@@ -493,11 +496,11 @@ _BULK_SCENARIO_COUNT = seed_bulk_realistic.background_student_count(
 	TARGET_SHOWCASE_STUDENTS, len(CURATED_SCENARIOS), _EDGE_STUDENT_COUNT
 )
 _BULK_ADMISSION_METHODS = (
-	"Combined",
-	"Direct Admission",
-	"Language Certificate Review",
-	"National High School Exam",
-	"Transcript Review",
+	"COMBINED",
+	"DIRECT_ADMISSION",
+	"LANGUAGE_CERTIFICATE_REVIEW",
+	"NATIONAL_HIGH_SCHOOL_EXAM",
+	"TRANSCRIPT_REVIEW",
 )
 # Vietnamese name pools -> a deterministic, de-duplicated cohort sized exactly to
 # _BULK_SCENARIO_COUNT (previously a hand-maintained literal kept in lock-step).
@@ -626,7 +629,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-new",
 		"full_name": "Trịnh Bảo Long",
-		"lead_status": "Mới",
 		"enrollment_status": "Mới",
 		"readiness_level": "Level 0",
 		"quality_bucket": "Warm",
@@ -638,7 +640,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-unassigned",
 		"full_name": "Cao Thùy Dương",
-		"lead_status": "Unassigned",
 		"enrollment_status": "Mới",
 		"readiness_level": "Level 0",
 		"quality_bucket": "Cool",
@@ -650,7 +651,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-unclaimed",
 		"full_name": "Đinh Quốc Anh",
-		"lead_status": "Chưa nhận",
 		"enrollment_status": "Mới",
 		"readiness_level": "Level 1",
 		"quality_bucket": "Warm",
@@ -662,7 +662,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-assigned",
 		"full_name": "Lương Hải Yến",
-		"lead_status": "Assigned",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 1",
 		"quality_bucket": "Hot",
@@ -675,7 +674,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-just-received",
 		"full_name": "Tạ Minh Trí",
-		"lead_status": "Mới nhận",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 2",
 		"quality_bucket": "Hot",
@@ -688,7 +686,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-counseling-en",
 		"full_name": "Đoàn Thu Trang",
-		"lead_status": "Counseling",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 2",
 		"quality_bucket": "Warm",
@@ -701,7 +698,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-counseling-vi",
 		"full_name": "Bạch Nhật Nam",
-		"lead_status": "Đang tư vấn",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 3",
 		"quality_bucket": "Hot",
@@ -714,7 +710,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-awaiting-en",
 		"full_name": "Mai Khánh Chi",
-		"lead_status": "Awaiting Documents",
 		"enrollment_status": "Đã xác nhận",
 		"readiness_level": "Level 3",
 		"quality_bucket": "Hot",
@@ -727,7 +722,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-awaiting-vi",
 		"full_name": "Vương Đức Huy",
-		"lead_status": "Chờ nộp hồ sơ",
 		"enrollment_status": "Đã xác nhận",
 		"readiness_level": "Level 4",
 		"quality_bucket": "Hot",
@@ -740,7 +734,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-nurture-en",
 		"full_name": "Kiều Thanh Thảo",
-		"lead_status": "Nurture",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 1",
 		"quality_bucket": "Cool",
@@ -752,7 +745,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-nurture-vi",
 		"full_name": "Tô Gia Linh",
-		"lead_status": "Nguội",
 		"enrollment_status": "Có triển vọng",
 		"readiness_level": "Level 1",
 		"quality_bucket": "Cool",
@@ -764,7 +756,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-won-en",
 		"full_name": "Chu Bảo Ngọc",
-		"lead_status": "Won",
 		"enrollment_status": "Đã nhập học",
 		"readiness_level": "Level 4",
 		"quality_bucket": "Hot",
@@ -777,7 +768,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-won-vi",
 		"full_name": "Hà Nhật Anh",
-		"lead_status": "Đã chốt",
 		"enrollment_status": "Đã nhập học",
 		"readiness_level": "Level 4",
 		"quality_bucket": "Hot",
@@ -790,7 +780,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-lost-en",
 		"full_name": "Lâm Tuệ Nhi",
-		"lead_status": "Lost",
 		"enrollment_status": "Từ chối",
 		"readiness_level": "Level 0",
 		"quality_bucket": "Không quan tâm",
@@ -802,7 +791,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-lost-vi",
 		"full_name": "Phùng Quốc Việt",
-		"lead_status": "Từ chối",
 		"enrollment_status": "Từ chối",
 		"readiness_level": "Level 0",
 		"quality_bucket": "Sai số",
@@ -814,7 +802,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 	{
 		"key": "c-unreachable",
 		"full_name": "Trương Mỹ Duyên",
-		"lead_status": "Nguội",
 		"enrollment_status": "Mới",
 		"readiness_level": "Level 0",
 		"quality_bucket": "Không liên lạc được",
@@ -827,18 +814,6 @@ CONTACT_ROWS: tuple[dict[str, Any], ...] = (
 
 
 _BULK_CONTACT_COUNT = max(0, TARGET_SHOWCASE_CONTACTS - len(CONTACT_ROWS))
-_BULK_CONTACT_LEAD_STATUSES = (
-	"Mới",
-	"Unassigned",
-	"Assigned",
-	"Mới nhận",
-	"Counseling",
-	"Đang tư vấn",
-	"Awaiting Documents",
-	"Nurture",
-	"Won",
-	"Lost",
-)
 _BULK_CONTACT_ENROLLMENT_STATUSES = ("Mới", "Có triển vọng", "Đã xác nhận", "Đã nhập học")
 _BULK_CONTACT_READINESS = ("Level 0", "Level 1", "Level 2", "Level 3", "Level 4")
 _BULK_CONTACT_QUALITY = ("Cool", "Warm", "Hot")
@@ -853,7 +828,6 @@ def _make_bulk_contact_row(index: int) -> dict[str, Any]:
 		"key": f"bulk-contact-{sequence:03d}",
 		"student_key": student_key,
 		"full_name": _BULK_STUDENT_NAMES[index],
-		"lead_status": _BULK_CONTACT_LEAD_STATUSES[index % len(_BULK_CONTACT_LEAD_STATUSES)],
 		"enrollment_status": _BULK_CONTACT_ENROLLMENT_STATUSES[
 			index % len(_BULK_CONTACT_ENROLLMENT_STATUSES)
 		],
@@ -1036,23 +1010,6 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 		"disposition": ["ACT", "MONITOR", "NURTURE"],
 	},
 	"CRM Contact": {
-		"lead_status": [
-			"Mới",
-			"Unassigned",
-			"Chưa nhận",
-			"Assigned",
-			"Mới nhận",
-			"Counseling",
-			"Đang tư vấn",
-			"Awaiting Documents",
-			"Chờ nộp hồ sơ",
-			"Nurture",
-			"Nguội",
-			"Won",
-			"Đã chốt",
-			"Lost",
-			"Từ chối",
-		],
 		"readiness_level": list(_READINESS_LABELS.values()),
 		"quality_bucket": [
 			"Hot",
@@ -1189,51 +1146,53 @@ def _savepoint_name(*parts: Any) -> str:
 	return "".join(ch if ch.isalnum() else "_" for ch in raw)
 
 
-def _ensure_interaction_type(name: str) -> str:
-	if frappe.db.exists("CRM Term", name):
-		return name
+_TERM_DOCTYPE = {
+	"stakeholder_role": "CRM Stakeholder Role",
+	"activity_type": "CRM School Activity Type",
+	"school_area": "CRM School Area",
+	"school_type": "CRM School Type",
+	"aspiration": "CRM Aspiration",
+}
+
+# The canonical showcase labels map straight onto the reference-catalog codes.
+_ENROLLMENT_CODE = {
+	"Mới": "NEW",
+	"Có triển vọng": "PROSPECT",
+	"Đã xác nhận": "CONFIRMED",
+	"Đã nhập học": "ENROLLED",
+	"Đã chuyển đổi": "CONVERTED",
+	"Từ chối": "REFUSED",
+}
+
+
+def _as_code(value: str) -> str:
+	folded = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode()
+	return re.sub(r"[^A-Z0-9]+", "_", folded.upper()).strip("_")
+
+
+def _lookup_code(doctype: str, label: str) -> str:
+	"""Resolve a flat lookup by code, display name, or a code derived from the label."""
+	if frappe.db.exists(doctype, label):
+		return label
+	by_name = frappe.db.get_value(doctype, {"display_name": label}, "name")
+	if by_name:
+		return by_name
+	code = _as_code(label)
+	if frappe.db.exists(doctype, code):
+		return code
 	return (
-		frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "interaction_type"})
+		frappe.get_doc({"doctype": doctype, "code": code, "display_name": label})
 		.insert(ignore_permissions=True)
 		.name
 	)
+
+
+def _ensure_interaction_type(name: str) -> str:
+	return _lookup_code("CRM Interaction Type", name)
 
 
 def _ensure_term(term_name: str, category: str) -> str:
-	"""Ensure a CRM Term row exists for a non-governed demo category."""
-	name = frappe.db.get_value("CRM Term", {"term_name": term_name, "category": category}, "name")
-	if name:
-		return name
-	return (
-		frappe.get_doc({"doctype": "CRM Term", "term_name": term_name, "category": category})
-		.insert(ignore_permissions=True)
-		.name
-	)
-
-
-def _ensure_lead_statuses() -> None:
-	rows = [
-		("Mới", 10),
-		("Unassigned", 10),
-		("Chưa nhận", 10),
-		("Assigned", 15),
-		("Mới nhận", 15),
-		("Counseling", 20),
-		("Đang tư vấn", 20),
-		("Awaiting Documents", 30),
-		("Chờ nộp hồ sơ", 30),
-		("Nurture", 35),
-		("Nguội", 35),
-		("Won", 40),
-		("Đã chốt", 40),
-		("Lost", 50),
-		("Từ chối", 50),
-	]
-	for name, order in rows:
-		if not frappe.db.exists("CRM Term", {"term_name": name, "category": "lead_status"}):
-			frappe.get_doc(
-				{"doctype": "CRM Term", "term_name": name, "category": "lead_status", "sort_order": order}
-			).insert(ignore_permissions=True)
+	return _lookup_code(_TERM_DOCTYPE[category], term_name)
 
 
 def _ensure_lifecycle_statuses() -> None:
@@ -1242,45 +1201,41 @@ def _ensure_lifecycle_statuses() -> None:
 		("Có triển vọng", 20, "open", "MQL"),
 		("Đã xác nhận", 30, "open", "Applicant"),
 		("Đã nhập học", 40, "enrolled", "Enrolled"),
-		("Từ chối", 50, "lost", "Lost"),
+		("Đã chuyển đổi", 50, "enrolled", "Enrolled"),
+		("Từ chối", 60, "lost", "Lost"),
 	):
 		_ensure_enrollment_status(name, order, category, stage)
-	_ensure_lead_statuses()
 
 
 def _ensure_enrollment_status(name: str, order: int, category: str, lifecycle_stage: str) -> str:
-	"""Ensure the lifecycle term used by the canonical seed exists and is current."""
-	meta = {"stage_category": category, "lifecycle_stage": lifecycle_stage}
-	term_name = frappe.db.get_value("CRM Term", {"term_name": name, "category": "enrollment_status"}, "name")
-	if not term_name and frappe.db.exists("CRM Term", name):
-		if frappe.db.get_value("CRM Term", name, "category") == "enrollment_status":
-			term_name = name
-	if term_name:
-		doc = frappe.get_doc("CRM Term", term_name)
-		doc.sort_order = order
-		doc.metadata = meta
-		doc.save(ignore_permissions=True)
-		return doc.name
+	"""Ensure the lifecycle lookup used by the canonical seed exists and is current."""
+	code = _ENROLLMENT_CODE.get(name, _as_code(name))
+	values = {
+		"stage_order": order,
+		"sort_order": order,
+		"stage_category": category,
+		"lifecycle_stage": lifecycle_stage,
+	}
+	if frappe.db.exists("CRM Enrollment Status", code):
+		frappe.db.set_value("CRM Enrollment Status", code, values)
+		return code
 	return (
-		frappe.get_doc(
-			{
-				"doctype": "CRM Term",
-				"term_name": name,
-				"category": "enrollment_status",
-				"sort_order": order,
-				"metadata": meta,
-			}
-		)
+		frappe.get_doc({
+			"doctype": "CRM Enrollment Status",
+			"code": code,
+			"display_name": name,
+			**values,
+		})
 		.insert(ignore_permissions=True)
 		.name
 	)
 
 
 def _enrollment_term(term_name: str) -> str:
-	name = frappe.db.get_value("CRM Term", {"term_name": term_name, "category": "enrollment_status"}, "name")
-	if not name:
-		raise frappe.ValidationError(f"enrollment_status term {term_name!r} missing.")
-	return name
+	code = _ENROLLMENT_CODE.get(term_name, _as_code(term_name))
+	if not frappe.db.exists("CRM Enrollment Status", code):
+		raise frappe.ValidationError(f"enrollment_status {term_name!r} ({code}) missing.")
+	return code
 
 
 # ---------------------------------------------------------------------------
@@ -1294,10 +1249,11 @@ def _ensure_policies(campus: str, pool: str) -> None:
 
 	now = now_datetime() - timedelta(minutes=1)
 	base = {"campus": campus, "student_pool": pool, "authored_by": "Administrator"}
+	pool_key = re.sub(r"[^a-z0-9]+", "-", pool.lower()).strip("-")
 	specs = (
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v1",
 			"policy_version": 1,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1305,7 +1261,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v2",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v2",
 			"policy_version": 2,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1313,7 +1269,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-routing-v0",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v0",
 			"policy_version": 3,
 			"strategy": "round_robin",
 			"effective_from": now,
@@ -1321,7 +1277,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v1",
 			"policy_version": 1,
 			"warning_minutes": 15,
 			"breach_minutes": 30,
@@ -1334,7 +1290,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v2",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v2",
 			"policy_version": 2,
 			"warning_minutes": 10,
 			"breach_minutes": 25,
@@ -1347,7 +1303,7 @@ def _ensure_policies(campus: str, pool: str) -> None:
 		},
 		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-sla-v0",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v0",
 			"policy_version": 3,
 			"warning_minutes": 20,
 			"breach_minutes": 40,
@@ -1427,7 +1383,7 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 				"campus": context["campus"],
 				"owning_team": pool,
 				"admission_year": context["admission_year"],
-				"enrollment_status": "Mới",
+				"enrollment_status": _enrollment_term("Mới"),
 				"high_school": high_school,
 				"province": province,
 				"ward": ward,
@@ -2736,7 +2692,6 @@ def _seed_contacts(context: dict, staff_context: dict) -> list[dict]:
 					"full_name": row["full_name"],
 					"phone": f"09018{_rng('contact', row['key']).randint(10000, 99999)}",
 					"enrollment_status": resolved[row["key"]],
-					"lead_status": row["lead_status"],
 					"readiness_level": _READINESS_LABELS[row["readiness_level"]],
 					"quality_bucket": row["quality_bucket"],
 					"decision_maker": row["decision_maker"],
@@ -2849,6 +2804,57 @@ def _ensure_consent_event(contact: str, consent: str) -> None:
 		frappe.get_doc(doc).insert(ignore_permissions=True)
 	if column is not None:
 		frappe.db.set_value("CRM Contact", contact, column, value, update_modified=False)
+
+
+def _ensure_marketing_engagement(student: str, contact: str, campaign: str | None, event: str | None) -> None:
+	"""Record campaign/event attribution as canonical Marketing Engagement rows.
+
+	CRM Contact no longer carries direct crm_campaign/crm_event shortcuts
+	(retired -- see CRM Marketing Engagement); this is the fixture-side
+	equivalent of student_attribution.record_campaign_touchpoint /
+	record_event_participation, inserted directly since seed fixtures run
+	without an authenticated actor/session for the idempotency-keyed RPC.
+	"""
+	if not frappe.db.table_exists("CRM Marketing Engagement"):
+		return
+	previous = frappe.flags.get("student_attribution_migration")
+	frappe.flags.student_attribution_migration = True
+	try:
+		if campaign and not frappe.db.exists(
+			"CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "student": student, "crm_campaign": campaign}
+		):
+			frappe.get_doc({
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "campaign_touch",
+				"reference_doctype": "CRM Campaign",
+				"reference_name": campaign,
+				"crm_campaign": campaign,
+				"crm_contact": contact,
+				"student": student,
+				"touched_at": now_datetime(),
+				"source": "Migrated",
+				"notes": f"{NAMESPACE} recorded touchpoint",
+			}).insert(ignore_permissions=True)
+		if event and not frappe.db.exists(
+			"CRM Marketing Engagement", {"engagement_kind": "event_participation", "student": student, "crm_event": event}
+		):
+			frappe.get_doc({
+				"doctype": "CRM Marketing Engagement",
+				"engagement_kind": "event_participation",
+				"reference_doctype": "CRM Event",
+				"reference_name": event,
+				"crm_event": event,
+				"crm_contact": contact,
+				"student": student,
+				"status": "Registered",
+				"registered_at": now_datetime(),
+				"notes": f"{NAMESPACE} recorded participation",
+			}).insert(ignore_permissions=True)
+	finally:
+		if previous is None:
+			frappe.flags.pop("student_attribution_migration", None)
+		else:
+			frappe.flags.student_attribution_migration = previous
 
 
 # ---------------------------------------------------------------------------
@@ -3748,7 +3754,7 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 			"key": f"edge-{variant}",
 			"student_name": _EDGE_DISPLAY_NAMES[variant],
 			"gender": "Nam",
-			"admission_method": "Combined",
+			"admission_method": "COMBINED",
 			"email": _natural_email(_EDGE_DISPLAY_NAMES[variant]),
 			"phone": f"090190030{['review', 'quarantine', 'legacy'].index(variant)}",
 			"target_stage": "Lead",
@@ -3793,7 +3799,7 @@ def _seed_edge_states(context: dict, staff_context: dict) -> dict:
 			"key": f"edge-sla-{variant}",
 			"student_name": _EDGE_DISPLAY_NAMES[variant],
 			"gender": "Nữ",
-			"admission_method": "Transcript Review",
+			"admission_method": "TRANSCRIPT_REVIEW",
 			"email": _natural_email(_EDGE_DISPLAY_NAMES[variant]),
 			"phone": f"09019004{['closed', 'closed-inactive'].index(variant):02d}",
 			"target_stage": "Lead",
@@ -4128,7 +4134,7 @@ def _seed_all() -> dict:
 	governance = _seed_governance(context)
 	# Commit the shared vocabulary / policy setup before the per-scenario loop:
 	# a failing scenario there issues a bare rollback, which would otherwise
-	# discard this setup and leave later steps unable to resolve lead statuses.
+	# discard this setup and leave later steps unable to resolve lifecycle statuses.
 	frappe.db.commit()
 
 	school = _seed_school_domain(context, staff_context)

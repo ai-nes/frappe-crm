@@ -1,8 +1,9 @@
 """Permission-scoped Student engagement context read service.
 
 This module is a read model only.  Outcome/lifecycle command services remain
-the sole event writers; compatibility Interaction and Enrollment Transition
-rows are used only while their legacy-read flag is enabled.
+the sole event writers; raw Interaction rows are only used to surface the
+latest touchpoint alongside an existing CRM Student Outcome, never as a
+substitute event source.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from frappe import _
 
 from crm.fcrm.qualification import redact_evidence
 from crm.fcrm.role_policy import capabilities_for_roles
-from crm.fcrm.student_feature_flags import enabled, legacy_read_enabled
+from crm.fcrm.student_feature_flags import enabled
 from crm.fcrm.student_lifecycle import get_lifecycle_context
 from crm.fcrm.attribution import get_student_attribution
 from crm.fcrm.student_contact_conversion import conversion_rows_for_student
@@ -372,15 +373,11 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 	interactions = _interactions(student, limit + 1, cursor_key)
 	outcome_rows = _current_events(_event_rows("CRM Student Outcome", student, limit + 1, cursor_key))
 	lifecycle_rows = _current_events(_event_rows("CRM Student Lifecycle Event", student, limit + 1, cursor_key))
-	canonical_lifecycle_present = bool(lifecycle_rows)
-	legacy = legacy_read_enabled()
 	latest_interaction_name = _get(outcome_rows[0], "interaction") if outcome_rows else None
 	latest_interaction = next((_interaction(row) for row in interactions if _get(row, "name") == latest_interaction_name), None)
-	if latest_interaction is None and interactions and (outcome_rows or legacy):
+	if latest_interaction is None and interactions and outcome_rows:
 		latest_interaction = _interaction(interactions[0])
 	outcomes = [_outcome(row, student) for row in outcome_rows[:limit]]
-	if not outcomes and legacy:
-		outcomes = [_interaction(row) for row in interactions[:limit]]
 	history = sorted([*[_lifecycle(row, student) for row in lifecycle_rows[:limit]], *outcomes], key=lambda item: (str(item.get("occurred_at") or ""), str(item.get("name") or "")), reverse=True)
 	if cursor_key:
 		history = [item for item in history if (str(item.get("occurred_at") or ""), str(item.get("name") or "")) < cursor_key]
@@ -473,7 +470,6 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		"history": page,
 		"next_cursor": _cursor(student, page[-1]) if len(history) > limit and page else None,
 		"policy_version": CONTEXT_POLICY_VERSION,
-		"legacy_read": bool(legacy and (not outcome_rows or not canonical_lifecycle_present)),
 	}
 
 

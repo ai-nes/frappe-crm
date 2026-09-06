@@ -6,6 +6,7 @@ from crm.fcrm.nba_policy import (
 	validate_decision_policy_numbers,
 	validate_diversity_rule,
 	validate_score_weights,
+	kernel_policy_snapshot,
 )
 
 _BASE_ROW = {
@@ -64,3 +65,27 @@ def test_diversity_rule_validation_rejects_unknown_rule():
 def test_score_weight_validation_rejects_non_numeric_values():
 	with pytest.raises(ValueError):
 		validate_score_weights({"recency": None})
+
+
+def test_kernel_policy_snapshot_requires_all_three_weights_and_knobs():
+	row = {
+		"kernel_policy": {
+			"revision": "nba-decision-policy-r1",
+			"score_threshold": 0.35,
+			"confidence_floor": 0.45,
+			"top_n_cap": 3,
+			"recommendation_ttl_seconds": 604800,
+			"component_weights": {"opportunity_fit": 0.45, "urgency": 0.25, "effectiveness_index": 0.30},
+			"recent_contact_days": 2,
+			"cooling_contact_days": 5,
+			"contact_pressure_penalty": 0.15,
+			"redundancy_penalty": 0.10,
+			"diversity_group_penalty": 0.05,
+			"deadline_horizon_days": 30,
+		}
+	}
+	snapshot = kernel_policy_snapshot(row)
+	assert snapshot["component_weights"]["opportunity_fit"] == 0.45
+	assert set(snapshot["component_weights"]) == {"opportunity_fit", "urgency", "effectiveness_index"}
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "component_weights": {"intent": 1.0}}})

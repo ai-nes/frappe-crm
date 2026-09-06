@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "policy_key", "revision", "snapshot", "snapshot_digest", "dataset_digest", "report_digest", "prior_revision", "status", "approved_by", "approved_at", "review_note"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "NBAPR-.YYYY.-", "options": "NBAPR-.YYYY.-"},
+  {"fieldname": "policy_key", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "reqd": 1, "read_only": 1, "non_negative": 1},
+  {"fieldname": "snapshot", "fieldtype": "JSON", "reqd": 1, "read_only": 1},
+  {"fieldname": "snapshot_digest", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "dataset_digest", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "report_digest", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "prior_revision", "fieldtype": "Int", "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "options": "approved\nrolled_back\nsuperseded", "default": "approved", "reqd": 1, "read_only": 1},
+  {"fieldname": "approved_by", "fieldtype": "Link", "options": "User", "read_only": 1},
+  {"fieldname": "approved_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "review_note", "fieldtype": "Small Text", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM NBA Decision Policy Revision",
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "revision",
+ "sort_order": "DESC"
+}

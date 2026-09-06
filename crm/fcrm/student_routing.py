@@ -128,7 +128,7 @@ def _eligible_team_members(
 	if staff_ids is not None:
 		memberships = [row for row in memberships if row.get("parent") in staff_ids]
 	sale_rows = [row for row in memberships if row.get("parent") and row.get("function") in (None, "", "Sale")]
-	ctv_rows = [row for row in memberships if row.get("parent") and row.get("function") == "CTV-Sale"]
+	ctv_rows = [row for row in memberships if row.get("parent") and row.get("function") == "CTV Sale"]
 	selected_rows = sale_rows or ctv_rows if prefer_sale else sale_rows + ctv_rows
 	staff_ids = sorted({row.parent for row in selected_rows})
 	if not staff_ids:
@@ -339,7 +339,7 @@ def route_pool_owned_student(
 			"student": student_name,
 			"tier": context.get("tier"),
 		}
-	if member.get("function") == "CTV-Sale":
+	if member.get("function") == "CTV Sale":
 		batch = deliver_ctv_student(student_doc, member, policy=policy)
 		if not batch:
 			return {
@@ -354,7 +354,7 @@ def route_pool_owned_student(
 			target_kind="owner",
 			target_id=member["staff"],
 			target_team_id=member["team"],
-			reason=f"Automatic {policy.get('strategy') or 'round_robin'} routing; tier={context.get('tier')}; scoring={scored}; mechanism={'ctv_batch' if member.get('function') == 'CTV-Sale' else 'individual'}",
+			reason=f"Automatic {policy.get('strategy') or 'round_robin'} routing; tier={context.get('tier')}; scoring={scored}; mechanism={'ctv_batch' if member.get('function') == 'CTV Sale' else 'individual'}",
 			idempotency_key=route_key,
 			expected_revision=current_revision,
 			correlation_id=correlation_id or str(uuid.uuid4()),

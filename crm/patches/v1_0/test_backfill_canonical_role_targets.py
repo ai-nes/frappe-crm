@@ -31,5 +31,5 @@ class TestBackfillCanonicalRoleTargets(FrappeTestCase):
 		self.assertEqual(result, {"migrated": users[:3], "conflicts": users[3:]})
 		self.assertEqual(
 			[call.args[1] for call in set_profile.call_args_list],
-			["Sale", "Lead Sales", "Admissions Director"],
+			["Sale", "Lead Sale", "Admissions Director"],
 		)

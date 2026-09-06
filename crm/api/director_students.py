@@ -13,10 +13,14 @@ import frappe
 from frappe import _
 
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
+from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 ACTIVE_ACTION_STATES = ("pending", "accepted", "in-progress", "requires-review")
+# Keep the canonical Chatwoot type and the legacy seeded type readable while
+# older CRM Interaction rows are being migrated to the canonical vocabulary.
+CHATWOOT_INTERACTION_TYPES = (CHATWOOT_INTERACTION_TYPE, "TIN_NHAN_CHATWOOT")
 
 STAGES = {
 	"interested": {"label": "Quan tâm", "lifecycle": "Lead"},
@@ -37,6 +41,27 @@ PRIORITIES = {
 	"low": {"label": "Thấp", "rank": 3},
 }
 PRIORITY_THRESHOLD = 70
+JOURNEY_MILESTONE_EVIDENCE_KINDS = frozenset(
+	{"application_event", "document_event", "lifecycle_event", "payment_event"}
+)
+JOURNEY_EXCLUDED_ACTIVITY_TYPES = frozenset(
+	{"note", "message", "message chatwoot", "message_chatwoot", "tin nhan chatwoot"}
+)
+JOURNEY_MILESTONE_TERMS = (
+	"nop ho so",
+	"hoan tat ho so",
+	"ho so xet tuyen",
+	"nhap hoc",
+	"enrolled",
+	"application",
+	"submitted",
+	"stage changed",
+	"stage change",
+	"chuyen giai doan",
+	"doi stage",
+	"thanh toan",
+	"payment",
+)
 ASSESSMENT_FIELDS = [
 	"status",
 	"assessment_source",
@@ -259,7 +284,7 @@ def get_student_chatwoot_interactions(
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
 	filters = {
 		"student": student_id,
-		"interaction_type": CHATWOOT_INTERACTION_TYPE,
+		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
 	}
 	rows = frappe.get_list(
 		"CRM Interaction",
@@ -668,11 +693,11 @@ def _stage_descriptor(row) -> dict[str, str] | None:
 		return STAGE_BY_LIFECYCLE[lifecycle]
 	status = str(row.get("enrollment_status") or "").strip()
 	status_map = {
-		"Mới": STAGE_BY_LIFECYCLE["Lead"],
-		"Có triển vọng": STAGE_BY_LIFECYCLE["MQL"],
-		"Đã xác nhận": STAGE_BY_LIFECYCLE["Applicant"],
-		"Đã nhập học": STAGE_BY_LIFECYCLE["Enrolled"],
-		"Đã chuyển đổi": STAGE_BY_LIFECYCLE["Enrolled"],
+		"NEW": STAGE_BY_LIFECYCLE["Lead"],
+		"PROSPECT": STAGE_BY_LIFECYCLE["MQL"],
+		"CONFIRMED": STAGE_BY_LIFECYCLE["Applicant"],
+		"ENROLLED": STAGE_BY_LIFECYCLE["Enrolled"],
+		"CONVERTED": STAGE_BY_LIFECYCLE["Enrolled"],
 	}
 	return status_map.get(status)
 
@@ -1000,7 +1025,7 @@ def _student_zalo_messages(
 	for ix in interactions:
 		channel = _fold(ix.get("channel") or "")
 		interaction_type = _fold(ix.get("interaction_type") or "")
-		is_chatwoot_message = interaction_type == _fold(CHATWOOT_INTERACTION_TYPE)
+		is_chatwoot_message = interaction_type in {_fold(value) for value in CHATWOOT_INTERACTION_TYPES}
 		if "zalo" not in channel and "zalo" not in interaction_type and not is_chatwoot_message:
 			continue
 
@@ -1558,8 +1583,9 @@ def _segmentation(row, item):
 
 
 def _journey(interactions, item):
+	milestones = [interaction for interaction in interactions if _is_journey_milestone(interaction)]
 	journey = []
-	for index, interaction in enumerate(reversed(interactions)):
+	for index, interaction in enumerate(reversed(milestones)):
 		journey.append(
 			{
 				"id": interaction.get("name"),
@@ -1567,10 +1593,30 @@ def _journey(interactions, item):
 				"title": interaction.get("summary") or interaction.get("channel") or "Hoạt động",
 				"description": interaction.get("next_follow_up_action") or "",
 				"channel": _journey_channel(interaction.get("channel"), interaction.get("interaction_type")),
-				"status": "current" if index == len(interactions) - 1 else "completed",
+				"status": "current" if index == len(milestones) - 1 else "completed",
 			}
 		)
 	return journey
+
+
+def _is_journey_milestone(interaction) -> bool:
+	"""Keep application/lifecycle milestones out of the general activity feed."""
+	if interaction.get("reference_doctype") == "FCRM Note":
+		return False
+	interaction_type = str(interaction.get("interaction_type") or "").strip().upper()
+	if _fold(interaction_type) in JOURNEY_EXCLUDED_ACTIVITY_TYPES:
+		return False
+	semantics = resolve_interaction_type(interaction_type)
+	if semantics and semantics.get("evidence_kind") in JOURNEY_MILESTONE_EVIDENCE_KINDS:
+		return True
+
+	legacy_text = _fold(
+		" ".join(
+			str(interaction.get(field) or "")
+			for field in ("summary", "next_follow_up_action")
+		)
+	)
+	return any(term in legacy_text for term in JOURNEY_MILESTONE_TERMS)
 
 
 def _engagement(interactions):
@@ -1748,7 +1794,7 @@ def _require_access():
 	The Student list/detail queries deliberately use Frappe's permission-aware
 	``get_list``/``has_permission`` APIs. The CRM Student permission query hook
 	then applies the role scope from the current session: Sale and CTV Sale are
-	limited to their own ``owner_staff`` rows, while Lead Sales also sees its
+	limited to their own ``owner_staff`` rows, while Lead Sale also sees its
 	team members and the team's unassigned pool.
 	"""
 	user = getattr(frappe.session, "user", None)

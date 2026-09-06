@@ -9,6 +9,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
+from crm.fcrm.action_constraints import DEFAULT_ACTION_ACTORS
 from crm.fcrm.action_type_catalog import (
 	ACTION_TYPE_CODES,
 	LEGACY_ACTION_TYPE_ALIASES,
@@ -29,7 +30,7 @@ DEFAULT_CHANNEL_BY_ACTION = {
 	"PARENT_CONTACT": "CALL",
 }
 APPROVAL_ACTIONS = frozenset({"EMAIL", "MESSAGE", "PARENT_CONTACT", "HANDOFF"})
-ALLOWED_ACTORS = ["Sale", "Lead Sales", "Admissions Director"]
+ALLOWED_ACTORS = list(DEFAULT_ACTION_ACTORS)
 SUPPORTED_CHANNELS = frozenset({"NONE", "CALL", "EMAIL", "MESSAGE"})
 FEEDBACK_SOURCES = frozenset({"human", "provider", "system", "analytics"})
 SCORE_MIN = -1.0
@@ -163,6 +164,17 @@ def validate_nba_action_execution(action, *, actor: str | None = None, operation
 				"This Action is waiting for approval.",
 				frappe.PermissionError,
 				title="ACTION_APPROVAL_REQUIRED",
+			)
+		from crm.fcrm.action_type_catalog import action_category
+		from crm.services.sales_action_policy import require_parent_contact_authority
+
+		action_type = action.get("action") or action.get("action_type")
+		if action_category(action_type) == "PARENT" or action_type in {"PARENT_CONTACT", "CONTACT_PARENT"}:
+			require_parent_contact_authority(
+				action_type,
+				action.get("student"),
+				resolve_nba_channel(action),
+				contact=action.get("contact"),
 			)
 	return definition
 

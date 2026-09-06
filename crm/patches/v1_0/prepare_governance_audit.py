@@ -6,7 +6,6 @@ from __future__ import annotations
 GOVERNED_DOCTYPES = (
 	"CRM Lead Source",
 	"CRM Platform",
-	"CRM Term",
 	"CRM Campus",
 )
 
@@ -51,7 +50,7 @@ def execute():
 	apply_managed_docperms()
 	for doctype in ("CRM Master Data Change", "CRM Master Data Change Approval"):
 		frappe.db.delete("DocPerm", {"parent": doctype})
-		roles = ("System Manager", "Marketing", "Lead Sales", "Admissions Director")
+		roles = ("System Manager", "Marketing", "Lead Sale", "Admissions Director")
 		for role in roles:
 			frappe.get_doc(
 				{

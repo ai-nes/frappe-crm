@@ -8,18 +8,11 @@ class CRMIntent(Document):
 		if self.interaction and not self.student:
 			self.student = frappe.db.get_value("CRM Interaction", self.interaction, "student")
 
-		# importance is read-only and always derived from intent_type; Frappe initializes an
-		# undefaulted Select field to its first option, so a "not self.importance" guard would
-		# always be false here and must not gate the derivation.
+		# importance is read-only and always derived from the linked intent type; Frappe
+		# initializes an undefaulted Select field to its first option, so a "not
+		# self.importance" guard would always be false here and must not gate the derivation.
 		if self.intent_type:
-			metadata = frappe.db.get_value("CRM Term", {"name": self.intent_type, "category": "intent_type"}, "metadata") or {}
-			if isinstance(metadata, str):
-				import json
-				try:
-					metadata = json.loads(metadata)
-				except ValueError:
-					metadata = {}
-			self.importance = metadata.get("importance")
+			self.importance = frappe.db.get_value("CRM Intent Type", self.intent_type, "importance")
 
 	def validate(self):
 		if self.intent_role == "Dominant" and self.interaction:
@@ -35,6 +28,8 @@ class CRMIntent(Document):
 				)
 
 	def on_update(self):
+		if getattr(frappe.flags, "interaction_analysis_result_service", False):
+			return
 		if self.student:
 			# Every intent is a direct Intent-scorer input -- always
 			# scoring-relevant, unlike a generic Student field edit.
@@ -72,7 +67,7 @@ class CRMIntent(Document):
 				"label": "Intent Type",
 				"type": "Link",
 				"key": "intent_type",
-				"options": "CRM Term",
+				"options": "CRM Intent Type",
 				"width": "14rem",
 			},
 			{"label": "Role", "type": "Select", "key": "intent_role", "width": "8rem"},

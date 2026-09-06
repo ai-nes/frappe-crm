@@ -220,5 +220,19 @@ def _seed_default_decision_policy() -> None:
 			"min_score_threshold": 0.0,
 			"diversity_rule": "unique_action_type",
 			"conflict_key_fields": json.dumps(["conflict_key"]),
+			"kernel_policy": json.dumps({
+				"revision": "nba-decision-policy-r1",
+				"score_threshold": 0.35,
+				"confidence_floor": 0.45,
+				"top_n_cap": 3,
+				"recommendation_ttl_seconds": 604800,
+				"component_weights": {"opportunity_fit": 0.45, "urgency": 0.25, "effectiveness_index": 0.30},
+				"recent_contact_days": 2,
+				"cooling_contact_days": 5,
+				"contact_pressure_penalty": 0.15,
+				"redundancy_penalty": 0.10,
+				"diversity_group_penalty": 0.05,
+				"deadline_horizon_days": 30,
+			}, sort_keys=True),
 		}
 	).insert(ignore_permissions=True)

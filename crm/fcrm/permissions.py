@@ -1,10 +1,9 @@
 """Shared row-level data-scope logic for CRM Contact and CRM Student.
 
 Implements the locked row-level data-scope matrix:
-- Sale / CTV-Sale        -> own-assigned records only
-- Team Leader            -> own team(s) + own team's unassigned pool
-- Counseller / Promoter-PR -> team/campus scope (not system-wide)
-- System Manager / CRM Manager / Administrator / Admissions Director / Admissions Operations -> full
+- Sale / CTV Sale        -> own-assigned records only
+- Lead Sale              -> own team(s) + own team's unassigned pool
+- System Manager / CRM Manager / Administrator / Admissions Director -> full
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -23,9 +22,7 @@ from crm.fcrm.student_feature_flags import enabled
 
 # Compatibility export for lifecycle.py only. Row-level Student/Contact access
 # no longer reads this set; it resolves the canonical policy below.
-FULL_VISIBILITY_ROLES = frozenset(
-	{"System Manager", "CRM Manager", "Administrator", "Admissions Director", "Admissions Operations"}
-)
+FULL_VISIBILITY_ROLES = frozenset({"System Manager", "CRM Manager", "Administrator", "Admissions Director"})
 
 CACHE_TTL_SEC = 300
 
@@ -91,9 +88,11 @@ def has_operational_record_permission(doc, user=None, permission_type=None, ptyp
 		# applies to every subsequent read/write once the row exists; only the
 		# DocType-level create grant governs who may create one at all.
 		return True
-	student_name = _nba_operational_student(doc) if doc.doctype in {
-		"CRM Action Execution", "CRM Action Outcome", "CRM Recommendation Feedback"
-	} else None
+	student_name = (
+		_nba_operational_student(doc)
+		if doc.doctype in {"CRM Action Execution", "CRM Action Outcome", "CRM Recommendation Feedback"}
+		else None
+	)
 	if student_name is None:
 		student_field = OPERATIONAL_RECORD_STUDENT_FIELDS.get(doc.doctype)
 		student_name = doc.get(student_field) if student_field else None
@@ -148,6 +147,15 @@ def _nba_operational_student(doc):
 def get_permission_query_conditions(doctype, user=None):
 	if not user:
 		user = frappe.session.user
+	if user == frappe.conf.get("crm_agents_service_user") and doctype in {
+		"CRM Student",
+		"CRM Contact",
+		"CRM Intent Type",
+	}:
+		# The configured crm-agents identity is a service capability, not a
+		# human CRM profile. Its scope is constrained at the named command
+		# boundary and must be able to read bounded analysis inputs/catalogues.
+		return None
 
 	roles = set(frappe.get_roles(user))
 	scope = _effective_case_scope(roles, doctype, user=user)
@@ -168,8 +176,8 @@ def get_permission_query_conditions(doctype, user=None):
 	table = f"`tab{doctype}`"
 
 	if frappe.conf.get("crm_legacy_campus_scoping"):
-		# Legacy fallback only ever applied to Counseller/Promoter-PR's campus-wide
-		# scope; Sale/CTV-Sale keep their own-assigned-only rule even when this flag
+		# The optional campus fallback never widens Sale/CTV Sale beyond their
+		# own-assigned-only rule even when this flag
 		# is set, so flipping it can't silently widen their visibility.
 		if scope in {"assigned", "own_assigned"}:
 			return f"{table}.assigned_to = {frappe.db.escape(crm_staff_name)}"
@@ -359,10 +367,7 @@ def get_student_projection_permission_query_conditions(user=None, doctype=None):
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	student_names = (
-		"select `tabCRM Student`.name from `tabCRM Student` "
-		f"where ({student_condition})"
-	)
+	student_names = f"select `tabCRM Student`.name from `tabCRM Student` where ({student_condition})"
 	if doctype == "CRM AI Lead Insight":
 		return f"`tabCRM AI Lead Insight`.student in ({student_names})"
 	return (
@@ -391,9 +396,7 @@ def has_student_projection_permission(doc, user=None, permission_type=None, ptyp
 		if not frappe.db.exists("CRM Student", student_name):
 			return False
 		return has_permission(frappe.get_doc("CRM Student", student_name), user=user)
-	condition = get_student_projection_permission_query_conditions(
-		user=user, doctype=doc.doctype
-	)
+	condition = get_student_projection_permission_query_conditions(user=user, doctype=doc.doctype)
 	if condition is None:
 		return True
 	if condition == "1=0":
@@ -421,7 +424,12 @@ def has_admission_decision_permission(doc, user=None, permission_type=None, ptyp
 	condition = get_admission_decision_permission_query_conditions(user=user, doctype=doc.doctype)
 	if condition is None:
 		return True
-	return bool(frappe.db.sql(f"select name from `tabCRM Admission Event Decision` where name=%s and ({condition}) limit 1", (doc.name,)))
+	return bool(
+		frappe.db.sql(
+			f"select name from `tabCRM Admission Event Decision` where name=%s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -503,9 +511,7 @@ def _contact_conversion_condition(user, roles, scope):
 	contact_table = "`tabCRM Contact`"
 	conversion_table = "`tabCRM Student Contact Conversion`"
 	if student_condition is None:
-		return (
-			f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion)"
-		)
+		return f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion)"
 	if student_condition == "1=0":
 		return "1=0"
 	# The nested query aliases CRM Student as ``student``.  Conditions returned

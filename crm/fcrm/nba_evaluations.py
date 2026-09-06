@@ -124,15 +124,22 @@ def _request_clock():
 	return now_datetime().replace(second=0, microsecond=0)
 
 
-def _identity_for(student: str, clock) -> tuple[dict, dict[str, Any]]:
-	"""Build the evaluation input and its bound identity at a fixed clock."""
-	envelope = build_nba_evaluation_input(student, now=clock)
+def _identity_for(student: str, clock, *, service_authorized: bool = False) -> tuple[dict, dict[str, Any]]:
+	"""Build the evaluation input and its bound identity at a fixed clock.
+
+	``service_authorized=True`` must only be passed by a caller that already
+	ran ``_service_only()`` on the current request -- see ``_projection``'s
+	docstring in ``student_decision_context.py``.
+	"""
+	envelope = build_nba_evaluation_input(student, now=clock, service_authorized=service_authorized)
 	return envelope, _identity_from_envelope(envelope)
 
 
-def _stored_identity(doc) -> tuple[dict, dict[str, Any]]:
+def _stored_identity(doc, *, service_authorized: bool = False) -> tuple[dict, dict[str, Any]]:
 	"""Recompute the live identity at the run's own recorded evaluation clock."""
-	return _identity_for(doc.student, frappe.utils.get_datetime(doc.evaluation_clock))
+	return _identity_for(
+		doc.student, frappe.utils.get_datetime(doc.evaluation_clock), service_authorized=service_authorized
+	)
 
 
 def _is_superseded(doc, identity: dict[str, Any]) -> bool:
@@ -352,7 +359,7 @@ def claim_nba_evaluation(*, evaluation: str, run_generation: int) -> dict[str, A
 	if int(run_generation) > int(doc.run_generation or 0):
 		frappe.throw("Evaluation claim references a future generation.", frappe.ValidationError)
 
-	_, identity = _stored_identity(doc)
+	_, identity = _stored_identity(doc, service_authorized=True)
 	if _is_superseded(doc, identity):
 		_mark_superseded(doc.name)
 		return {"terminal": True, "status": "failed", "reason": "superseded"}
@@ -403,7 +410,7 @@ def snapshot(*, evaluation: str, lease_token: str) -> dict[str, Any]:
 		or doc.lease_expires_at <= _lease_now()
 	):
 		frappe.throw("Snapshot request does not own the current evaluation lease.", frappe.PermissionError)
-	envelope, identity = _stored_identity(doc)
+	envelope, identity = _stored_identity(doc, service_authorized=True)
 	if _is_superseded(doc, identity):
 		frappe.db.sql(
 			"UPDATE `tabCRM NBA Evaluation` SET status='failed', terminal_reason='superseded', "
@@ -496,7 +503,7 @@ def settle_nba_evaluation(
 	):
 		frappe.throw("Evaluation settlement fence mismatch.", frappe.ValidationError)
 
-	_, identity = _stored_identity(doc)
+	_, identity = _stored_identity(doc, service_authorized=True)
 	if _is_superseded(doc, identity):
 		status, disposition, terminal_reason = "failed", None, "superseded"
 		result_digest = trace_digest = engine_revision_settled = None
@@ -724,7 +731,7 @@ def commit_nba_evaluation_result(
 	):
 		frappe.throw("Evaluation commit fence mismatch.", frappe.ValidationError)
 
-	_, identity = _stored_identity(doc)
+	_, identity = _stored_identity(doc, service_authorized=True)
 	if _is_superseded(doc, identity):
 		return _superseded_commit(doc.name, run_generation, lease_token)
 

@@ -10,7 +10,7 @@ duplicate-guard scenarios.
 Pure create_interaction()/CRMInteraction.validate() unit coverage, consent
 event mapping, and cleanup-on-delete live in
 crm/fcrm/doctype/crm_interaction/test_crm_interaction.py instead, since that
-file already has the CRM Term fixtures those need. Contact
+file already has the lookup fixtures those need. Contact
 lifecycle-stage/assignment-change interaction coverage lives in
 crm/fcrm/doctype/crm_contact/test_crm_contact.py alongside that doctype's
 other save-path tests.
@@ -22,6 +22,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.interaction_log import _source_matches_student, ingest_external_interaction
+from crm.fcrm.student_intake import StudentIntakeError
 
 
 class TestInteractionLogDispatch(FrappeTestCase):
@@ -38,7 +39,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 			"student_id": "STU-1",
 			"channel": "facebook",
 			"direction": "inbound",
-			"content": "Need tuition details",
+			"turns": [{"speaker_role": "student", "content": "Need tuition details"}],
 			"occurred_at": "2026-08-29 09:00:00",
 		}
 		result = {
@@ -66,6 +67,8 @@ class TestInteractionLogDispatch(FrappeTestCase):
 				return_value={"student": "STU-1", "contact": None},
 			),
 			patch("crm.fcrm.interaction_log._assert_interaction_scope"),
+			patch("crm.fcrm.interaction_log._ensure_interaction_evidence", return_value=["EVID-1"]),
+			patch("crm.fcrm.interaction_log._ensure_interaction_analysis_run", return_value="IAR-1"),
 			patch("crm.fcrm.interaction_log.create_interaction", return_value="INT-1") as create,
 			patch.object(frappe.db, "exists", return_value=True),
 			patch.object(
@@ -77,7 +80,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 						"name": "INT-1",
 						"student": "STU-1",
 						"crm_contact": None,
-						"notes": payload["content"],
+						"notes": payload["turns"][0]["content"],
 						"channel": "facebook",
 						"direction": "inbound",
 						"interaction_datetime": "2026-08-29 09:00:00",
@@ -93,31 +96,49 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.assertEqual(first, result)
 		self.assertEqual(second, result)
 		create.assert_called_once()
-		self.assertEqual(create.call_args.kwargs["interaction_type"], "Tin nhắn Chatwoot")
+		self.assertEqual(create.call_args.kwargs["interaction_type"], "MESSAGE")
+
+	def test_configured_service_user_has_only_interaction_authority(self):
+		from crm.fcrm.student_intake import INTERACTION_CAPABILITY, SUBMIT_CAPABILITY, _resolve_authority
+
+		previous_user = frappe.session.user
+		previous_service_user = frappe.conf.get("crm_agents_service_user")
+		try:
+			frappe.conf.crm_agents_service_user = "ai-service@crm-agents.local"
+			frappe.set_user("ai-service@crm-agents.local")
+			authority = _resolve_authority(INTERACTION_CAPABILITY)
+			self.assertEqual(authority["profile"], "service")
+			self.assertTrue(authority["scope_all"])
+			with self.assertRaises(StudentIntakeError):
+				_resolve_authority(SUBMIT_CAPABILITY)
+		finally:
+			frappe.set_user(previous_user)
+			if previous_service_user is None:
+				frappe.conf.pop("crm_agents_service_user", None)
+			else:
+				frappe.conf.crm_agents_service_user = previous_service_user
 
 	def setUp(self):
 		frappe.set_user("Administrator")
-		self._ensure_interaction_type("Outreach")
-		self._ensure_interaction_type("Counseling")
+		self._ensure_interaction_type("OUTREACH")
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
 
 	# ---------------------------------------------------------------------- helpers
 
-	def _ensure_interaction_type(self, name):
-		# These are the same production CRM Term names the
-		# seed_crm_interaction_types patch installs -- create_interaction() is a
+	def _ensure_interaction_type(self, code):
+		# These are the same production CRM Interaction Type codes the
+		# seed_reference_lookups patch installs -- create_interaction() is a
 		# no-op if the type doesn't already exist, so tests must seed it
 		# themselves in this bench-less environment. Intentionally not
-		# _Test-prefixed and not cleaned up in tearDown, matching how the real
-		# patch would leave them in place.
-		if not frappe.db.exists("CRM Term", name):
+		# cleaned up in tearDown, matching how the real seed leaves them in place.
+		if not frappe.db.exists("CRM Interaction Type", code):
 			frappe.get_doc(
 				{
-					"doctype": "CRM Term",
-					"term_name": name,
-					"category": "interaction_type",
+					"doctype": "CRM Interaction Type",
+					"code": code,
+					"display_name": code,
 				}
 			).insert(ignore_permissions=True)
 
@@ -137,13 +158,13 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.addCleanup(self._delete_if_exists, "CRM Contact", contact.name)
 		return contact
 
-	def _counseling_interactions(self, task_name):
+	def _task_interactions(self, task_name):
 		return frappe.db.get_all(
 			"CRM Interaction",
 			filters={
 				"reference_doctype": "Task",
 				"reference_docname": task_name,
-				"interaction_type": "Counseling",
+				"interaction_type": "SYSTEM_ACTIVITY",
 			},
 			pluck="name",
 		)
@@ -175,7 +196,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.addCleanup(self._delete_if_exists, "CRM Interaction", interaction_name)
 
 		interaction = frappe.get_doc("CRM Interaction", interaction_name)
-		self.assertEqual(interaction.interaction_type, "Outreach")
+		self.assertEqual(interaction.interaction_type, "OUTREACH")
 		self.assertEqual(interaction.crm_contact, contact.name)
 
 	def test_received_communication_does_not_create_outreach_interaction(self):
@@ -200,9 +221,9 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		)
 		self.assertFalse(exists)
 
-	# ---------------------------------------- Task status -> Done -> Counseling (+ guard)
+	# ----------------------------------- Task status -> Done -> System Activity
 
-	def test_task_marked_done_creates_single_counseling_interaction(self):
+	def test_task_marked_done_creates_single_system_activity_interaction(self):
 		contact = self._make_contact("_Test Counseling Contact", "0919000003")
 		task = frappe.get_doc(
 			{
@@ -219,16 +240,16 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		interactions = self._counseling_interactions(task.name)
+		interactions = self._task_interactions(task.name)
 		self.assertEqual(len(interactions), 1)
 		self.addCleanup(self._delete_if_exists, "CRM Interaction", interactions[0])
 
 		# Regression guard: re-saving the already-Done task (no status change)
-		# must not create a second Counseling interaction.
+		# must not create a second System Activity interaction.
 		task.description = "_Test discussed enrollment options (follow-up note)"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 1)
+		self.assertEqual(len(self._task_interactions(task.name)), 1)
 
 	def test_task_done_without_description_creates_no_interaction(self):
 		contact = self._make_contact("_Test No Description Contact", "0919000004")
@@ -246,7 +267,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 0)
+		self.assertEqual(len(self._task_interactions(task.name)), 0)
 
 	def test_task_done_without_crm_reference_creates_no_interaction(self):
 		task = frappe.get_doc(
@@ -262,4 +283,4 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		task.status = "Done"
 		task.save(ignore_permissions=True)
 
-		self.assertEqual(len(self._counseling_interactions(task.name)), 0)
+		self.assertEqual(len(self._task_interactions(task.name)), 0)

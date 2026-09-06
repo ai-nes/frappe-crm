@@ -573,11 +573,11 @@ def _load_lookups(rows: list[dict[str, Any]]) -> tuple[dict[str, dict[str, Any]]
 		if row.get("name")
 	}
 	activity_types = {
-		str(row["name"]): str(row.get("term_name") or row["name"])
+		str(row["name"]): str(row.get("display_name") or row["name"])
 		for row in _fetch_rows(
-			"CRM Term",
-			filters={"name": ["in", type_names], "category": "activity_type"} if type_names else {"name": "__none__"},
-			fields=["name", "term_name"],
+			"CRM School Activity Type",
+			filters={"name": ["in", type_names]} if type_names else {"name": "__none__"},
+			fields=["name", "display_name"],
 			allow_missing=True,
 		)
 		if row.get("name")

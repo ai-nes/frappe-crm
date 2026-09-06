@@ -19,11 +19,11 @@ BULK_IMPORT_NAMESPACE = "crm-demo-showcase:bulk"
 LEGACY_BULK_IMPORT_NAMESPACE = "crm-demo-showcase"
 
 _STAGE_STATUS_NAMES = {
-	"Lead": "Mới",
-	"MQL": "Có triển vọng",
-	"Applicant": "Đã xác nhận",
-	"Enrolled": "Đã nhập học",
-	"Lost": "Từ chối",
+	"Lead": "NEW",
+	"MQL": "PROSPECT",
+	"Applicant": "CONFIRMED",
+	"Enrolled": "ENROLLED",
+	"Lost": "REFUSED",
 }
 _GRADE_STAGES = (
 	("10", "grade_10"),

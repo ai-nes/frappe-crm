@@ -1,6 +1,6 @@
-"""Permission-scoped overview API for the Lead Sales dashboard.
+"""Permission-scoped overview API for the Lead Sale dashboard.
 
-The endpoint builds one snapshot from the current Lead Sales permission scope.
+The endpoint builds one snapshot from the current Lead Sale permission scope.
 The browser may choose presentation options (date, timezone, trend range and
 member limit), but it cannot choose a team, owner or student scope.
 """
@@ -41,7 +41,7 @@ ASSIGNMENT_FILTERS = {"all", "assigned", "review", "no_match", "missing_data", "
 ASSIGNMENT_SORTS = {"receivedAt", "name", "status", "owner", "matchScore"}
 ASSIGNMENT_ORDERS = {"asc", "desc"}
 ASSIGNMENT_PIPELINE_REQUEST_STATUSES = {"pending", "deferred"}
-ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV-Sale"}
+ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV Sale"}
 ASSIGNMENT_STUDENT_FIELDS = [
 	"name",
 	"student_name",
@@ -137,7 +137,7 @@ def get_lead_sale_overview(
 	timezone: str = DEFAULT_TIMEZONE,
 	teamMemberLimit: str | int = 20,
 ) -> dict[str, Any]:
-	"""Return one consistent, permission-scoped Lead Sales snapshot."""
+	"""Return one consistent, permission-scoped Lead Sale snapshot."""
 	access = _require_access()
 	report_timezone = _parse_timezone(timezone)
 	report_date = _parse_report_date(date, report_timezone)
@@ -198,7 +198,7 @@ def _require_access() -> dict[str, str]:
 	if not user or user == "Guest":
 		raise_api_error(
 			"UNAUTHENTICATED",
-			"Bạn cần đăng nhập để truy cập tổng quan Lead Sales.",
+			"Bạn cần đăng nhập để truy cập tổng quan Lead Sale.",
 			frappe.AuthenticationError,
 			401,
 		)
@@ -208,7 +208,7 @@ def _require_access() -> dict[str, str]:
 	if profile != "lead_sales":
 		raise_api_error(
 			"FORBIDDEN",
-			"Bạn không có quyền truy cập tổng quan Lead Sales.",
+			"Bạn không có quyền truy cập tổng quan Lead Sale.",
 			frappe.PermissionError,
 			403,
 		)
@@ -683,7 +683,7 @@ def _has_warning(warnings: list[str], key: str) -> bool:
 
 # Student assignment workspace -------------------------------------------------
 #
-# This projection intentionally lives beside the existing Lead Sales overview
+# This projection intentionally lives beside the existing Lead Sale overview
 # methods. It is a read model over the canonical Student ownership fields and
 # routing/ownership evidence; it does not create a parallel assignment table.
 
@@ -1121,7 +1121,7 @@ def run_student_assignment_pipeline(
 ) -> dict[str, Any]:
 	"""Run eligible pool-owned Students through the canonical routing worker.
 
-	The endpoint is deliberately scoped to the current Lead Sales team and never
+	The endpoint is deliberately scoped to the current Lead Sale team and never
 	passes an already-owned Student to the routing service. Deferred requests are
 	retried, pending requests are processed, and pool-owned Students without a
 	request receive one before processing.
@@ -1775,7 +1775,7 @@ def get_sales_team_workspace(
 	sort: str = "support",
 	order: str | None = None,
 ) -> dict[str, Any]:
-	"""Return the current Lead Sales team's member workspace projection."""
+	"""Return the current Lead Sale team's member workspace projection."""
 	from crm.api.lead_sales_team import get_sales_team_workspace as implementation
 
 	return implementation(admissionYear, date, timezone, availability, q, page, pageSize, sort, order)
@@ -1788,7 +1788,7 @@ def get_sales_team_member_detail(
 	date: str | None = None,
 	timezone: str = DEFAULT_TIMEZONE,
 ) -> dict[str, Any]:
-	"""Return a re-scoped aggregate detail for one Lead Sales member."""
+	"""Return a re-scoped aggregate detail for one Lead Sale member."""
 	from crm.api.lead_sales_team import get_sales_team_member_detail as implementation
 
 	return implementation(memberId, admissionYear, date, timezone)

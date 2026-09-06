@@ -324,6 +324,18 @@ def _resolve_authority(capability: str, *, signed_context: dict[str, Any] | None
 		}
 
 	user = _current_user()
+	configured_service_user = _text(frappe.conf.get("crm_agents_service_user"))
+	if configured_service_user and user == configured_service_user and capability == INTERACTION_CAPABILITY:
+		return {
+			"actor_user": user,
+			"actor_staff": None,
+			"profile": "service",
+			"campus_scope": [],
+			"team_scope": [],
+			"scope_all": True,
+			"capability": capability,
+			"signed": False,
+		}
 	roles = _roles(user)
 	# Administrator is the platform break-glass account, not a routine System
 	# Manager profile.  It remains useful for migrations and isolated tests.
@@ -396,7 +408,7 @@ def _resolve_manual_initial_ownership(authority: dict[str, Any]) -> tuple[str, s
 
 	The client never selects a staff member or pool.  Both the Campus and the
 	primary eligible Sales Team are authoritative CRM topology.  A Sale owns the
-	new case directly; a Lead Sales creates it in their primary pool for normal
+	new case directly; a Lead Sale creates it in their primary pool for normal
 	routing.  Missing or ambiguous topology fails closed with a stable code.
 	"""
 	staff_name = _text(authority.get("actor_staff"))
@@ -569,18 +581,20 @@ def receipt_keys(
 	principal: str,
 	nonce: str | None = None,
 	command_kind: str = "intake",
+	source_revision: int | None = None,
 ):
 	keys = []
 	for version, secret in _secret_versions():
+		source_parts = [source_namespace, source_record_id]
+		if source_revision is not None:
+			source_parts.append(str(source_revision))
 		keys.append(
 			{
 				"version": version,
 				"command_key": keyed_digest(
 					secret, f"crm.receipt.command.{version}", command_kind, principal, idempotency_key
 				),
-				"source_key": keyed_digest(
-					secret, f"crm.receipt.source.{version}", source_namespace, source_record_id
-				),
+				"source_key": keyed_digest(secret, f"crm.receipt.source.{version}", *source_parts),
 				"nonce_key": keyed_digest(secret, f"crm.receipt.nonce.{version}", source_namespace, nonce)
 				if nonce
 				else None,
@@ -743,7 +757,10 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 			_fail("UNAUTHORIZED", "The replay target is no longer available in the current scope.")
 		campuses = set(authority.get("campus_scope") or [])
 		teams = set(authority.get("team_scope") or [])
-		if authority.get("profile") not in {"platform_superuser", "admissions_director"} and not authority.get("scope_all"):
+		if authority.get("profile") not in {
+			"platform_superuser",
+			"admissions_director",
+		} and not authority.get("scope_all"):
 			if campuses and student.branch not in campuses:
 				_fail("UNAUTHORIZED", "The replay target is outside the current Campus scope.")
 			if authority.get("signed"):
@@ -759,7 +776,10 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 			_fail("UNAUTHORIZED", "The replay review is no longer available in the current scope.")
 		campuses = set(authority.get("campus_scope") or [])
 		teams = set(authority.get("team_scope") or [])
-		if authority.get("profile") not in {"platform_superuser", "admissions_director"} and not authority.get("scope_all"):
+		if authority.get("profile") not in {
+			"platform_superuser",
+			"admissions_director",
+		} and not authority.get("scope_all"):
 			proposed_campus = _text(_safe_get(review, "proposed_campus", "campus"))
 			anchor = _text(_safe_get(review, "scope_anchor"))
 			if campuses and proposed_campus not in campuses:
@@ -1022,7 +1042,7 @@ def _create_case(
 		"identity": identity,
 		"intake_integrity_state": "resolved",
 		"ownership_revision": 0,
-		"enrollment_status": payload.get("enrollment_status") or "Mới",
+		"enrollment_status": payload.get("enrollment_status") or "NEW",
 		"source": payload.get("source"),
 		"advertising_channel": payload.get("advertising_channel"),
 		"current_grade": payload.get("current_grade"),
@@ -1280,7 +1300,9 @@ def _persist_consent_grant(
 		doc.insert(ignore_permissions=True)
 	except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
 		if receipt and _has_field("CRM Contact Consent Event", "command_receipt"):
-			consent_event_name = frappe.db.get_value("CRM Contact Consent Event", {"command_receipt": receipt}, "name")
+			consent_event_name = frappe.db.get_value(
+				"CRM Contact Consent Event", {"command_receipt": receipt}, "name"
+			)
 		else:
 			raise
 	return consent_event_name or doc.name

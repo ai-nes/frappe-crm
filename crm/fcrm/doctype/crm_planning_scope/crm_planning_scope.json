@@ -9,7 +9,7 @@
  "field_order": ["scope_key", "region", "territory", "province", "team", "campus", "major", "effective_from", "effective_until", "status", "source_reference", "idempotency_fingerprint", "schema_version"],
  "fields": [
   {"fieldname": "scope_key", "fieldtype": "Data", "hidden": 1, "label": "Scope Key", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "label": "Region", "options": "CRM Term"},
+  {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "label": "Region", "options": "CRM Region"},
   {"fieldname": "territory", "fieldtype": "Link", "in_list_view": 1, "label": "Territory", "options": "CRM Territory"},
   {"fieldname": "province", "fieldtype": "Link", "in_list_view": 1, "label": "Province", "options": "CRM Province"},
   {"fieldname": "team", "fieldtype": "Link", "in_list_view": 1, "label": "Team", "options": "CRM Team"},

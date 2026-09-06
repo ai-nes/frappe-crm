@@ -13,7 +13,6 @@ export const governanceAuditApi = Object.freeze({
 export const governedDoctypes = Object.freeze({
   'CRM Lead Source': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
   'CRM Platform': { ownerRole: 'Marketing', approverRoles: ['Marketing'] },
-  'CRM Term': { ownerRole: 'Lead Sales', approverRoles: ['Lead Sales', 'Marketing'] },
   'CRM Campus': { ownerRole: 'Admissions Director', approverRoles: ['Admissions Director'] },
 })
 

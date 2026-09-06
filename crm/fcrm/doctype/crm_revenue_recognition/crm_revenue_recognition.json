@@ -27,6 +27,6 @@
  ],
  "indexes": [{"fields": ["payment", "recognition_period", "revision"], "name": "crm_revenue_recognition_payment_period_idx", "unique": 0}, {"fields": ["application", "status", "recognition_period"], "name": "crm_revenue_recognition_reporting_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Revenue Recognition", "naming_rule": "Naming Series", "naming_series_options": "REV-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
  "row_format": "Dynamic", "search_fields": "payment,application,student,recognition_period,status", "sort_field": "recognition_period", "sort_order": "DESC"
 }

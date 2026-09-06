@@ -1,4 +1,5 @@
 """Post-cutover proof that the Frappe site contains only canonical CRM roles."""
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import frappe
@@ -12,12 +13,29 @@ from crm.patches.v1_0.migrate_to_canonical_crm_roles import (
 	execute,
 	restore_from_snapshot,
 )
+from crm.operations_cutover_canonical_roles import _MODULE as canonical_cutover
 
 
 class TestCanonicalRoleCutover(FrappeTestCase):
+	def test_cutover_preserves_already_canonical_user_roles(self):
+		rows = [
+			SimpleNamespace(name="canonical", parent="user@example.com", role="Sale"),
+			SimpleNamespace(name="legacy", parent="user@example.com", role="Sales Manager"),
+		]
+		with (
+			patch.object(canonical_cutover.frappe, "get_all", side_effect=[rows, []]),
+			patch.object(canonical_cutover, "_ensure_user_role") as ensure_role,
+			patch.object(canonical_cutover.frappe.db, "delete") as delete,
+		):
+			changes = canonical_cutover._replace_user_roles()
+
+		self.assertEqual(changes, [{"user": "user@example.com", "from": "Sales Manager", "to": "Lead Sale"}])
+		ensure_role.assert_called_once_with("user@example.com", "Lead Sale")
+		delete.assert_called_once_with("Has Role", {"name": "legacy"})
+
 	def test_historical_assignments_map_to_one_least_privilege_role(self):
 		self.assertEqual(_canonical_targets({"Sales User"}), {"Sale"})
-		self.assertEqual(_canonical_targets({"Sales Manager", "Sales User"}), {"Lead Sales"})
+		self.assertEqual(_canonical_targets({"Sales Manager", "Sales User"}), {"Lead Sale"})
 		self.assertEqual(_canonical_targets({"Marketing Operator", "Marketing Lead"}), {"Marketing"})
 
 	def test_site_has_no_legacy_crm_role_records(self):

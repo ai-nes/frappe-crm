@@ -1,0 +1,32 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "dataset_digest", "report_digest", "baseline_json", "candidate_json", "exclusions_json", "status", "approved_by", "approved_at", "review_note", "prior_policy_revision"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "NBACP-.YYYY.-", "options": "NBACP-.YYYY.-"},
+  {"fieldname": "dataset_digest", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "report_digest", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "baseline_json", "fieldtype": "JSON", "read_only": 1},
+  {"fieldname": "candidate_json", "fieldtype": "JSON", "read_only": 1},
+  {"fieldname": "exclusions_json", "fieldtype": "JSON", "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "options": "shadow\napproved\nrejected\nsuperseded", "default": "shadow", "reqd": 1, "read_only": 1},
+  {"fieldname": "approved_by", "fieldtype": "Link", "options": "User", "read_only": 1},
+  {"fieldname": "approved_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "review_note", "fieldtype": "Small Text", "read_only": 1},
+  {"fieldname": "prior_policy_revision", "fieldtype": "Data", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM NBA Calibration Proposal",
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

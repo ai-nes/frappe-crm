@@ -82,7 +82,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": f"{name} Student",
 				"phone": phone,
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -96,7 +96,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Contact",
 				"full_name": name,
 				"phone": phone,
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 				"student": student.name,
 			}
 		)

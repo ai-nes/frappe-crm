@@ -6,7 +6,7 @@ The repository has one supported seed entrypoint:
 
 What this creates (all idempotent):
   Master data
-    CRM Term         — 8 types
+    CRM Intent Type         — 8 types
     CRM Score Signal        — 22 signals (Fit / Engagement / Intent / Negative)
     CRM Score Template      — "Default Scoring 2026" (active)
 
@@ -17,10 +17,17 @@ What this creates (all idempotent):
 
 from __future__ import annotations
 
-import json
+import re
+import unicodedata
 from datetime import datetime, timedelta
 
 import frappe
+
+
+def _as_code(value: str) -> str:
+    """Normalise a display label into an UPPER_SNAKE lookup code."""
+    folded = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode()
+    return re.sub(r"[^A-Z0-9]+", "_", folded.upper()).strip("_")
 
 
 # ---------------------------------------------------------------------------
@@ -45,14 +52,14 @@ TEMPLATE_NAME = "Default Scoring 2026"
 # ---------------------------------------------------------------------------
 
 INTENT_TYPES = [
-    {"name": "Major Inquiry",     "importance": "Medium",    "description_vi": "Hỏi về ngành học"},
-    {"name": "Environment",       "importance": "Medium",    "description_vi": "Hỏi về môi trường học tập / ký túc xá"},
-    {"name": "Tuition",           "importance": "High",      "description_vi": "Hỏi về học phí"},
-    {"name": "Scholarship",       "importance": "High",      "description_vi": "Hỏi về học bổng"},
-    {"name": "Dormitory",         "importance": "Medium",    "description_vi": "Hỏi về ký túc xá"},
-    {"name": "Admission Process", "importance": "High",      "description_vi": "Hỏi về quy trình xét tuyển"},
-    {"name": "Enrollment Intent", "importance": "Very High", "description_vi": "Có ý định đăng ký nhập học"},
-    {"name": "Deposit Intent",    "importance": "Very High", "description_vi": "Sẵn sàng đặt cọc / xác nhận nhập học"},
+    {"name": "MAJOR_INQUIRY",     "importance": "Medium",    "description_vi": "Hỏi về ngành học"},
+    {"name": "ENVIRONMENT",       "importance": "Medium",    "description_vi": "Hỏi về môi trường học tập / ký túc xá"},
+    {"name": "TUITION",           "importance": "High",      "description_vi": "Hỏi về học phí"},
+    {"name": "SCHOLARSHIP",       "importance": "High",      "description_vi": "Hỏi về học bổng"},
+    {"name": "DORMITORY",         "importance": "Medium",    "description_vi": "Hỏi về ký túc xá"},
+    {"name": "ADMISSION_PROCESS", "importance": "High",      "description_vi": "Hỏi về quy trình xét tuyển"},
+    {"name": "ENROLLMENT_INTENT", "importance": "Very High", "description_vi": "Có ý định đăng ký nhập học"},
+    {"name": "DEPOSIT_INTENT",    "importance": "Very High", "description_vi": "Sẵn sàng đặt cọc / xác nhận nhập học"},
 ]
 
 SIGNALS = [
@@ -85,68 +92,68 @@ SIGNALS = [
     {
         "signal_key": "website_visit",  "label": "Website Visit",
         "category": "Engagement",       "signal_type": "interaction",
-        "interaction_type": "Website Visit",
+        "interaction_term": "Website Visit",
     },
     {
         "signal_key": "major_view",     "label": "Major Page View",
         "category": "Engagement",       "signal_type": "interaction",
-        "interaction_type": "Major View",
+        "interaction_term": "Major View",
     },
     {
         "signal_key": "zalo_chat",      "label": "Zalo Chat",
         "category": "Engagement",       "signal_type": "interaction",
-        "interaction_type": "Zalo Chat",
+        "interaction_term": "Zalo Chat",
     },
     {
         "signal_key": "consultation_register", "label": "Consultation Register",
         "category": "Engagement",              "signal_type": "interaction",
-        "interaction_type": "Consultation Register",
+        "interaction_term": "Consultation Register",
     },
     {
         "signal_key": "webinar",        "label": "Webinar Attendance",
         "category": "Engagement",       "signal_type": "interaction",
-        "interaction_type": "Webinar",
+        "interaction_term": "Webinar",
     },
     {
         "signal_key": "open_day",       "label": "Open Day Visit",
         "category": "Engagement",       "signal_type": "interaction",
-        "interaction_type": "Open Day",
+        "interaction_term": "Open Day",
     },
     {
         "signal_key": "application_submit", "label": "Application Submitted",
         "category": "Engagement",           "signal_type": "interaction",
-        "interaction_type": "Application Submit",
+        "interaction_term": "Application Submit",
     },
     # Intent — intent-type-based
     {
         "signal_key": "intent_major",       "label": "Intent: Major Inquiry",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Major Inquiry",
+        "intent_type": "MAJOR_INQUIRY",
     },
     {
         "signal_key": "intent_tuition",     "label": "Intent: Tuition Question",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Tuition",
+        "intent_type": "TUITION",
     },
     {
         "signal_key": "intent_scholarship", "label": "Intent: Scholarship Question",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Scholarship",
+        "intent_type": "SCHOLARSHIP",
     },
     {
         "signal_key": "intent_admission",   "label": "Intent: Admission Process",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Admission Process",
+        "intent_type": "ADMISSION_PROCESS",
     },
     {
         "signal_key": "intent_enroll",      "label": "Intent: Enrollment",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Enrollment Intent",
+        "intent_type": "ENROLLMENT_INTENT",
     },
     {
         "signal_key": "intent_deposit",     "label": "Intent: Deposit",
         "category": "Intent",               "signal_type": "intent",
-        "intent_type": "Deposit Intent",
+        "intent_type": "DEPOSIT_INTENT",
     },
     # Negative — inactivity
     {
@@ -168,17 +175,17 @@ SIGNALS = [
     {
         "signal_key": "refuse_consultation", "label": "Refused Consultation",
         "category": "Negative",              "signal_type": "interaction",
-        "interaction_type": "Refuse Consultation",
+        "interaction_term": "Refuse Consultation",
     },
     {
         "signal_key": "cancel_event",   "label": "Cancelled Event",
         "category": "Negative",         "signal_type": "interaction",
-        "interaction_type": "Cancel Event",
+        "interaction_term": "Cancel Event",
     },
     {
         "signal_key": "transfer_school", "label": "Transferred to Another School",
         "category": "Negative",          "signal_type": "interaction",
-        "interaction_type": "Transfer School",
+        "interaction_term": "Transfer School",
     },
 ]
 
@@ -249,24 +256,46 @@ def _bootstrap():
 def _seed_intent_types():
     created = 0
     for it in INTENT_TYPES:
-        if not frappe.db.exists("CRM Term", it["name"]):
-            _create_governed_additive_value(
-                "CRM Term",
-                it["name"],
-                reason=f"Local scoring fixture: {it['description_vi']}",
-                category="intent_type",
-            )
+        if not frappe.db.exists("CRM Intent Type", it["name"]):
+            frappe.get_doc({
+                "doctype": "CRM Intent Type",
+                "code": it["name"],
+                "display_name": it["description_vi"],
+                "importance": it["importance"],
+            }).insert(ignore_permissions=True)
             created += 1
     print(f"  Intent Types: {created} created, {len(INTENT_TYPES) - created} skipped")
 
 
 def _seed_signals():
     created = 0
-    for s in SIGNALS:
+    repaired = 0
+    for source in SIGNALS:
+        s = dict(source)
+        if s.get("interaction_term"):
+            s["interaction_term"] = _ensure_interaction_type(s["interaction_term"])
+        if s.get("intent_type"):
+            intent = next(item for item in INTENT_TYPES if item["name"] == s["intent_type"])
+            s["intent_type"] = _ensure_intent_type(
+                intent["name"], intent["importance"], intent["description_vi"]
+            )
         if not frappe.db.exists("CRM Score Signal", s["signal_key"]):
             frappe.get_doc({"doctype": "CRM Score Signal", **s}).insert(ignore_permissions=True)
             created += 1
-    print(f"  Score Signals: {created} created, {len(SIGNALS) - created} skipped")
+            continue
+        doc = frappe.get_doc("CRM Score Signal", s["signal_key"])
+        changed = False
+        for field in (
+            "label", "category", "signal_type", "condition_field", "condition_operator",
+            "condition_value", "interaction_term", "intent_type",
+        ):
+            if field in s and getattr(doc, field, None) != s[field]:
+                setattr(doc, field, s[field])
+                changed = True
+        if changed:
+            doc.save(ignore_permissions=True)
+            repaired += 1
+    print(f"  Score Signals: {created} created, {repaired} repaired, {len(SIGNALS) - created - repaired} skipped")
 
 
 def _seed_score_template():
@@ -320,7 +349,7 @@ def _ensure_shared_context():
         "event":    _ensure_event(),
         "admission_year": _ensure_admission_year(),
         "education_program": _ensure_education_program(),
-        "enrollment_status": _ensure_enrollment_status("Mới"),
+        "enrollment_status": _ensure_enrollment_status("NEW"),
     }
 
 
@@ -391,12 +420,12 @@ def _ensure_major():
 
 def _ensure_aspiration():
     name = "NV1"
-    if frappe.db.exists("CRM Term", name):
+    if frappe.db.exists("CRM Aspiration", name):
         return name
     return frappe.get_doc({
-        "doctype": "CRM Term",
-        "term_name": name,
-        "category": "aspiration",
+        "doctype": "CRM Aspiration",
+        "code": name,
+        "display_name": "Nguyện vọng 1",
         "description": "First choice admission aspiration.",
     }).insert(ignore_permissions=True).name
 
@@ -451,15 +480,15 @@ def _ensure_campaign(campus=None):
 
 
 def _ensure_campaign_type():
-    name = "Open Day"
-    if frappe.db.exists("CRM Term", name):
+    name = "OPEN_DAY"
+    if frappe.db.exists("CRM Campaign Type", name):
         return name
-    return _create_governed_additive_value(
-        "CRM Term",
-        name,
-        reason="Campus visit and admission counseling campaign for the local fixture.",
-        category="campaign_type",
-    )
+    return frappe.get_doc({
+        "doctype": "CRM Campaign Type",
+        "code": name,
+        "display_name": "Ngày hội tuyển sinh",
+        "description": "Campus visit and admission counseling campaign for the local fixture.",
+    }).insert(ignore_permissions=True).name
 
 
 def _ensure_event():
@@ -474,49 +503,49 @@ def _ensure_event():
     }).insert(ignore_permissions=True).name
 
 
-def _ensure_enrollment_status(status_name):
-    if frappe.db.exists("CRM Term", status_name):
-        return status_name
-    defaults = {"Mới": (10, "open", "Lead")}
-    stage_order, stage_category, lifecycle_stage = defaults.get(status_name, (10, "open", "Lead"))
+def _ensure_enrollment_status(code):
+    if frappe.db.exists("CRM Enrollment Status", code):
+        return code
+    defaults = {"NEW": (10, "open", "Lead", "Mới")}
+    stage_order, stage_category, lifecycle_stage, display_name = defaults.get(
+        code, (10, "open", "Lead", code.replace("_", " ").title())
+    )
     doc = frappe.get_doc({
-        "doctype": "CRM Term",
-        "term_name": status_name,
-        "category": "enrollment_status",
+        "doctype": "CRM Enrollment Status",
+        "code": code,
+        "display_name": display_name,
+        "stage_order": stage_order,
         "sort_order": stage_order,
-        "metadata": {"stage_category": stage_category, "lifecycle_stage": lifecycle_stage},
+        "stage_category": stage_category,
+        "lifecycle_stage": lifecycle_stage,
     }).insert(ignore_permissions=True)
-    return doc.name
+    return code
 
 
 def _ensure_interaction_type(name):
-    if frappe.db.exists("CRM Term", name):
-        return name
+    code = name if frappe.db.exists("CRM Interaction Type", name) else _as_code(name)
+    if frappe.db.exists("CRM Interaction Type", code):
+        return code
     return frappe.get_doc({
-        "doctype": "CRM Term",
-        "term_name": name,
-        "category": "interaction_type",
+        "doctype": "CRM Interaction Type",
+        "code": code,
+        "display_name": name,
     }).insert(ignore_permissions=True).name
 
 
 def _ensure_intent_type(name, importance, description_vi):
-    term = frappe.db.exists("CRM Term", name)
-    if not term:
-        term = _create_governed_additive_value(
-            "CRM Term",
-            name,
-            reason=f"Local scoring fixture: {description_vi}",
-            category="intent_type",
-        )
-    # CRM Intent.importance is read-only and always derived from its
-    # intent_type term's metadata (crm_intent.py before_validate), so the
-    # term must carry the importance level, not the individual intent.
-    # Backfill on every call (not just creation) so terms left over from
-    # earlier fixture runs, seeded before this metadata existed, self-heal.
-    current_metadata = frappe.db.get_value("CRM Term", term, "metadata")
-    if not current_metadata or json.loads(current_metadata).get("importance") != importance:
-        frappe.db.set_value("CRM Term", term, "metadata", frappe.as_json({"importance": importance}))
-    return term
+    code = name if frappe.db.exists("CRM Intent Type", name) else _as_code(name)
+    if frappe.db.exists("CRM Intent Type", code):
+        # Importance now lives on the lookup row; keep fixture reruns self-healing.
+        if frappe.db.get_value("CRM Intent Type", code, "importance") != importance:
+            frappe.db.set_value("CRM Intent Type", code, "importance", importance)
+        return code
+    return frappe.get_doc({
+        "doctype": "CRM Intent Type",
+        "code": code,
+        "display_name": description_vi,
+        "importance": importance,
+    }).insert(ignore_permissions=True).name
 
 
 def _create_governed_additive_value(doctype, value, *, reason, category=None):

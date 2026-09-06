@@ -21,6 +21,6 @@
  ],
  "indexes": [{"fields": ["student", "occurred_at", "event_type"], "name": "crm_student_engagement_event_student_time_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Engagement Event", "naming_rule": "Naming Series", "naming_series_options": "ENG-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Sale"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}, {"read": 1, "role": "Marketing"}, {"read": 1, "role": "Sale"}],
  "row_format": "Dynamic", "search_fields": "student,event_type,campaign,source_reference", "sort_field": "occurred_at", "sort_order": "DESC", "track_changes": 1
 }

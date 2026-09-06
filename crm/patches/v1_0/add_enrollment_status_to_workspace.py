@@ -5,7 +5,7 @@ def execute():
 	workspace = frappe.get_doc("Workspace", "Frappe CRM")
 
 	for link in workspace.links:
-		if link.link_to == "CRM Term":
+		if link.link_to == "CRM Enrollment Status":
 			return
 
 	workspace.append(
@@ -16,7 +16,7 @@ def execute():
 			"is_query_report": 0,
 			"label": "Enrollment Statuses",
 			"link_count": 0,
-			"link_to": "CRM Term",
+			"link_to": "CRM Enrollment Status",
 			"link_type": "DocType",
 			"onboard": 0,
 			"type": "Link",

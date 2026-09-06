@@ -69,7 +69,7 @@ def _provider_key(action_name, operation, idempotency_key):
 	return "crm-action-" + hashlib.sha256(value).hexdigest()
 
 
-def authorize_attempt_for_send(attempt_id):
+def authorize_attempt_for_send(attempt_id, *, channel=None):
 	"""Worker-side, immediately-before-send authorization; never returns recipient data."""
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
 	if attempt.status != "queued":
@@ -93,6 +93,14 @@ def authorize_attempt_for_send(attempt_id):
 	if frappe.db.get_value("CRM Student", action.student, "privacy_status") == "opted_out" or (action.get("contact") and frappe.db.get_value("CRM Contact", action.contact, "is_opted_out")):
 		transition_attempt(attempt_id, "cancelled")
 		frappe.throw("Consent no longer permits this operation.", frappe.PermissionError, title="CONSENT_REQUIRED")
+	channel = resolve_nba_channel(action, channel)
+	from crm.services.outreach_consent import current_outreach_consent_allows
+
+	if not current_outreach_consent_allows(
+		student=action.get("student"), action_contact=action.get("contact"), channel=channel
+	):
+		transition_attempt(attempt_id, "cancelled")
+		frappe.throw("Consent no longer permits this channel or recipient.", frappe.PermissionError, title="CONSENT_REQUIRED")
 	if not attempt.provider_idempotency_key:
 		attempt.provider_idempotency_key = _provider_key(attempt.action, attempt.operation, attempt.idempotency_key)
 	attempt.lease_count = int(attempt.lease_count or 0) + 1
@@ -104,10 +112,13 @@ def process_queued_attempt(attempt_id, channel=None):
 	"""Worker entry point: authorize immediately, then call only a registered provider."""
 	attempt = frappe.get_doc("CRM Action Execution Attempt", attempt_id)
 	action = frappe.get_doc("CRM Action Item", attempt.action)
-	channel = resolve_nba_channel(action, channel)
+	configured_channel = resolve_nba_channel(action)
+	if channel is not None and str(channel).upper() != configured_channel:
+		frappe.throw("Channel override is not allowed for this governed Action.", frappe.PermissionError)
+	channel = configured_channel
 	if channel not in {"EMAIL", "MESSAGE", "CALL"}:
 		frappe.throw("Unsupported provider channel.", frappe.ValidationError)
-	result = authorize_attempt_for_send(attempt_id)
+	result = authorize_attempt_for_send(attempt_id, channel=channel)
 	update_nba_execution(attempt_id, status="in_progress", channel=channel, started_at=now_datetime())
 	from crm.services.action_provider import send
 	try:

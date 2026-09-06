@@ -17,7 +17,7 @@
   {"default": "Alternative", "fieldname": "preference", "fieldtype": "Select", "in_list_view": 1, "label": "Preference", "options": "Primary\nAlternative", "reqd": 1},
   {"fieldname": "major", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Major", "options": "CRM Major", "read_only": 1},
   {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus", "read_only": 1},
-  {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "label": "Admission Method", "options": "CRM Term", "read_only": 1},
+  {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "label": "Admission Method", "options": "CRM Admission Method", "read_only": 1},
   {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nSubmitted\nUnder Review\nAccepted\nEnrolled\nLost\nWithdrawn", "reqd": 1},
   {"default": "0", "fieldname": "document_total", "fieldtype": "Int", "in_list_view": 1, "label": "Document Total"},
   {"default": "0", "fieldname": "document_completed", "fieldtype": "Int", "in_list_view": 1, "label": "Document Completed"},
@@ -48,7 +48,7 @@
  "permissions": [
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
   {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
-  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Lead Sales"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Marketing"},
   {"read": 1, "role": "Sale"}
  ],

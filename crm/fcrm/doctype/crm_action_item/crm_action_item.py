@@ -20,10 +20,11 @@ class CRMActionItem(Document):
 	}
 
 	_PROTECTED = frozenset({
-		"student", "state", "action", "action_type", "nba_action", "objective", "disposition", "source_context_revision",
+		"student", "state", "action", "action_type", "objective", "disposition", "source_context_revision",
 		"policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references",
 		"action_revision", "current_slot", "risk_tier", "package_seed", "due_at", "revisit_at", "action_owner", "origin",
-		"contact", "legacy_student_task", "legacy_generic_task", "legacy_sales_action", "execution_status", "started_at",
+		"description", "start_date",
+		"contact", "legacy_student_task", "legacy_generic_task", "legacy_task_deleted", "legacy_sales_action", "execution_status", "started_at",
 		"source_decision_event", "action_definition_digest",
 		"outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "accepted_at", "completed_at",
 		"terminal_reason", "decision_reason", "decision_actor", "decision_at", "decision_revision",
@@ -67,7 +68,12 @@ class CRMActionItem(Document):
 					continue
 				if before.get(field) != self.get(field):
 					frappe.throw("CRM Action Item fields require a controlled command.", frappe.PermissionError)
-		if before and before.state != self.state and self.state not in self.TRANSITIONS.get(before.state, set()):
+		if (
+			before
+			and before.state != self.state
+			and not getattr(frappe.flags, "crm_action_compatibility_command", False)
+			and self.state not in self.TRANSITIONS.get(before.state, set())
+		):
 			frappe.throw(f"Illegal CRM Action Item transition: {before.state} -> {self.state}", frappe.ValidationError)
 
 

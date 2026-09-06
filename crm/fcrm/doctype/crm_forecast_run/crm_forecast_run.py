@@ -23,10 +23,6 @@ class CRMForecastRun(Document):
 	def validate(self):
 		if not self.planning_scope:
 			frappe.throw(_("Planning Scope is required."), frappe.ValidationError)
-		if self.scope_type or self.scope:
-			frappe.throw(
-				_("Legacy scope fields are read-only; link a Planning Scope instead."), frappe.ValidationError
-			)
 		if self.horizon_start > self.horizon_end:
 			frappe.throw(_("Horizon Start must not be after Horizon End."), frappe.ValidationError)
 		previous = self.get_doc_before_save()

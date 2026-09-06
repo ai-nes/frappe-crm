@@ -22,7 +22,7 @@ class Invitation(Document):
 		email_sent_at: DF.Datetime | None
 		invited_by: DF.Link | None
 		key: DF.Data | None
-		role: DF.Literal["", "Sale", "Marketing", "Lead Sales", "Admissions Director", "System Manager"]
+		role: DF.Literal["", "Sale", "Marketing", "Lead Sale", "Admissions Director", "System Manager"]
 		status: DF.Literal["", "Pending", "Accepted", "Expired"]
 	# end: auto-generated types
 

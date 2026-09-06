@@ -65,7 +65,7 @@
   },
   {
    "read": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "read": 1,
@@ -77,11 +77,15 @@
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+"role": "Promoter"
   },
   {
    "read": 1,
    "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "CTV Sale"
   },
   {
    "create": 1,

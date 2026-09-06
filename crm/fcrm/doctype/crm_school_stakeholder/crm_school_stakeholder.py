@@ -35,10 +35,6 @@ class CRMSchoolStakeholder(Document):
 			frappe.throw("Effective Until must not be before Effective From.", frappe.ValidationError)
 		if not 0 <= float(self.relationship_score or 0) <= 100:
 			frappe.throw("Relationship Score must be between 0 and 100.", frappe.ValidationError)
-		if self.stakeholder_role:
-			category = frappe.db.get_value("CRM Term", self.stakeholder_role, "category")
-			if category and category != "stakeholder_role":
-				frappe.throw("Stakeholder Role must use a stakeholder_role term.", frappe.ValidationError)
 		filters = {"high_school": self.high_school, "person": self.person}
 		if not self.is_new():
 			filters["name"] = ["!=", self.name]
@@ -73,7 +69,7 @@ class CRMSchoolStakeholder(Document):
 				"label": "Role",
 				"type": "Link",
 				"key": "stakeholder_role",
-				"options": "CRM Term",
+				"options": "CRM Stakeholder Role",
 				"width": "12rem",
 			},
 			{"label": "Relationship", "type": "Select", "key": "relationship_status", "width": "10rem"},

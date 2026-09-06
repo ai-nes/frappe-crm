@@ -11,7 +11,7 @@ class TestSidebarBadgeCounts(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	@patch("crm.api.dashboard.role_workspace_read_enabled", return_value=False)
-	@patch("crm.api.dashboard.frappe.get_roles", return_value=["Lead Sales"])
+	@patch("crm.api.dashboard.frappe.get_roles", return_value=["Lead Sale"])
 	@patch("crm.api.dashboard.frappe.get_list")
 	@patch("crm.api.dashboard.frappe.db.table_exists")
 	def test_sla_badges_use_permission_aware_counts_with_list_filters(

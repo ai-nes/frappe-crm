@@ -144,7 +144,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "share": 1,
    "write": 1
   },
@@ -159,12 +159,6 @@
    "create": 1,
    "read": 1,
    "role": "CTV Sale",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "read": 1,
-   "role": "CTV-Sale",
    "write": 1
   },
   {

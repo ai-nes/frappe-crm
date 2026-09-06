@@ -1,5 +1,5 @@
 """Propose -> check impact -> approve -> effective date/version ->
-audit log for the 5 governed shared lookup doctypes, per
+audit log for the 3 governed shared lookup doctypes, per
 crm/fcrm/master_data_governance.py."""
 
 import json
@@ -52,8 +52,6 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_governance_uses_only_canonical_roles(self):
 		self.assertEqual(GOVERNED_DOCTYPES["CRM Lead Source"]["owner_role"], "Marketing")
-		self.assertEqual(GOVERNED_DOCTYPES["CRM Term"]["owner_role"], "Lead Sales")
-		self.assertEqual(GOVERNED_DOCTYPES["CRM Term"]["approver_roles"], {"Lead Sales", "Marketing"})
 		self.assertEqual(GOVERNED_DOCTYPES["CRM Campus"]["owner_role"], "Admissions Director")
 		self.assertNotIn(
 			"CRM Data Steward",
@@ -66,10 +64,15 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def test_registry_is_versioned_and_has_concrete_consumers(self):
 		self.assertEqual(REGISTRY_REVISION, "P9-DEC-002")
-		self.assertIn("CRM Term", GOVERNED_REFERENCE_REGISTRY)
+		self.assertNotIn("CRM Term", GOVERNED_REFERENCE_REGISTRY)
 		self.assertEqual(
-			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Term"]["consumers"]},
-			{("CRM Campaign", "campaign_type")},
+			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Lead Source"]["consumers"]},
+			{
+				("CRM Contact", "source"),
+				("CRM Platform", "lead_source"),
+				("CRM Campaign Spend", "lead_source"),
+				("CRM Student", "source"),
+			},
 		)
 
 	def test_retired_value_cannot_receive_new_reference(self):
@@ -99,14 +102,6 @@ class TestMasterDataGovernance(FrappeTestCase):
 		usage = check_impact("CRM Platform", platform_name)
 		self.assertEqual(usage.get("CRM Contact.platform"), 1)
 		frappe.delete_doc("CRM Contact", contact, force=True)
-
-	def test_check_impact_empty_for_lost_reason_is_intentional_zero(self):
-		# CRM Term's usage_checks list is deliberately empty (nothing in
-		# this fork links to it yet) -- check_impact must return {} rather than
-		# erroring or fabricating a count.
-		lost_reason = self._make_lost_reason("_Test Gov Lost Reason Impact")
-		usage = check_impact("CRM Term", lost_reason)
-		self.assertEqual(usage, {})
 
 	# ------------------------------------------------------------- propose_change
 
@@ -226,35 +221,11 @@ class TestMasterDataGovernance(FrappeTestCase):
 		renamed = frappe.get_doc("CRM Lead Source", "_Test Gov Source Rename Dst")
 		self.assertEqual(renamed.version, 2)
 
-	def test_approve_change_dual_signoff_requires_both_roles(self):
-		lost_reason = self._make_lost_reason("_Test Gov Lost Reason Dual")
-		change_name = propose_change("CRM Term", lost_reason, "Retire", reason="no longer used")
-		self.addCleanup(lambda: frappe.delete_doc("CRM Master Data Change", change_name, force=True))
-
-		team_leader, _ = self._make_user_with_roles("_test_gov_lead_sales", roles=["Lead Sales"])
-		marketing_lead, _ = self._make_user_with_roles("_test_gov_dual_marketing", roles=["Marketing"])
-		try:
-			frappe.set_user(team_leader)
-			status_after_first = approve_change(change_name)
-			self.assertEqual(status_after_first, "Proposed")
-
-			change = frappe.get_doc("CRM Master Data Change", change_name)
-			self.assertEqual(change.approved_by_roles, "Lead Sales")
-			self.assertEqual(
-				frappe.db.get_value("CRM Term", lost_reason, "approval_state"), "Approved"
-			)
-
-			frappe.set_user(marketing_lead)
-			status_after_second = approve_change(change_name)
-			self.assertEqual(status_after_second, "Applied")
-
-			change.reload()
-			self.assertEqual(set(change.approved_by_roles.split(",")), {"Lead Sales", "Marketing"})
-			self.assertEqual(frappe.db.get_value("CRM Term", lost_reason, "approval_state"), "Retired")
-		finally:
-			frappe.set_user("Administrator")
-			self._cleanup_user(team_leader)
-			self._cleanup_user(marketing_lead)
+	# Dual-signoff (two distinct approver roles on one governed doctype) had no
+	# exerciser once CRM Term was retired -- the 3 remaining governed doctypes
+	# (Lead Source, Platform, Campus) each have exactly one approver role. The
+	# partial-approval code path in approve_change stays in place for any
+	# future doctype configured with more than one approver role.
 
 	# ------------------------------------------------------------- reject_change
 
@@ -337,26 +308,12 @@ class TestMasterDataGovernance(FrappeTestCase):
 		)
 		return doc.name
 
-	def _make_lost_reason(self, name):
-		if frappe.db.exists("CRM Term", name):
-			frappe.delete_doc("CRM Term", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": name, "category": "lost_reason"})
-		doc.insert(ignore_permissions=True)
-		self.addCleanup(
-			lambda: (
-				frappe.delete_doc("CRM Term", doc.name, force=True)
-				if frappe.db.exists("CRM Term", doc.name)
-				else None
-			)
-		)
-		return doc.name
-
 	def _make_contact(self, name, phone, platform=None):
 		payload = {
 			"doctype": "CRM Contact",
 			"full_name": name,
 			"phone": phone,
-			"enrollment_status": "Có triển vọng",
+			"enrollment_status": "PROSPECT",
 		}
 		if platform:
 			payload["platform"] = platform

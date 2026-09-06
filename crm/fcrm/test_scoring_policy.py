@@ -176,6 +176,18 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		self.assertEqual(len(result["policy"]["negative_rules"]), 1)
 		self.assertEqual(result["policy"]["negative_rules"][0]["penalty_amount"], 7)
 
+	def test_active_policy_observes_its_effective_window(self):
+		signal = self._make_signal("_Test SP Signal Window")
+		template = self._make_template("_Test SP Template Window", signal)
+		doc = frappe.get_doc("CRM Score Template", template)
+		doc.start_time = "2026-09-10 00:00:00"
+		doc.end_time = "2026-09-20 00:00:00"
+		doc.save(ignore_permissions=True)
+
+		self.assertIsNone(get_active_policy(as_of="2026-09-09 23:59:59"))
+		self.assertIsNotNone(get_active_policy(as_of="2026-09-10 00:00:00"))
+		self.assertIsNone(get_active_policy(as_of="2026-09-20 00:00:00"))
+
 	def test_get_active_score_policy_requires_service_identity(self):
 		frappe.conf.crm_agents_service_user = "someone-else@example.com"
 

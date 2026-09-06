@@ -1,9 +1,12 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.agent_migrations import SALES_WORKLIST_ROLE_NAMES
 from crm.api.capability import _is_capability_gateway_user
 from crm.api.session import (
+	_get_policy_roles,
 	_session_role_flags,
 	get_crm_user_role,
 	me,
@@ -24,6 +27,26 @@ from crm.fcrm.role_policy import (
 
 
 class TestSessionRoleContract(FrappeTestCase):
+	def test_explicit_administrator_profile_survives_frappe_role_filter(self):
+		with (
+			patch.object(frappe, "get_roles", return_value=["All", "Guest", "Desk User"]),
+			patch.object(frappe.db, "exists", return_value=True) as role_exists,
+		):
+			roles = _get_policy_roles("admin@gmail.com")
+
+		self.assertIn("Administrator", roles)
+		role_exists.assert_called_once_with(
+			"Has Role",
+			{"parent": "admin@gmail.com", "parenttype": "User", "role": "Administrator"},
+		)
+
+	def test_administrator_profile_is_treated_as_control_plane(self):
+		flags = _session_role_flags({"Administrator", "All", "Guest", "Desk User"})
+
+		self.assertTrue(flags["is_system_manager"])
+		self.assertEqual(flags["crm_profile"], "ceo")
+		self.assertEqual(flags["crm_role"], "Administrator")
+
 	def test_session_me_exposes_dashboard_permission_list(self):
 		previous_user = frappe.session.user
 		frappe.set_user("Administrator")
@@ -48,30 +71,28 @@ class TestSessionRoleContract(FrappeTestCase):
 	def test_canonical_role_names_resolve_without_legacy_aliases(self):
 		self.assertEqual(resolve_crm_profile({"Sale"}), "sales")
 		self.assertEqual(resolve_crm_profile({"CTV Sale"}), "ctv_sale")
-		self.assertEqual(resolve_crm_profile({"Lead Sales"}), "lead_sales")
+		self.assertEqual(resolve_crm_profile({"Lead Sale"}), "lead_sales")
 		self.assertEqual(resolve_crm_profile({"Marketing"}), "marketing")
 		self.assertEqual(resolve_crm_profile({"Admissions Director"}), "admissions_director")
 		self.assertIsNone(resolve_crm_profile({"Giám đốc Tuyển sinh"}))
 
-	def test_legacy_roles_select_one_overlay_instead_of_a_canonical_profile(self):
-		for roles, overlay in (
-			({"Counseller"}, "counseller_campus"),
-			({"Team Leader"}, "team_leader"),
-			({"Promoter-PR"}, "promoter_campus"),
-			({"Marketing Operator"}, "marketing_operator"),
-			({"Admissions Operations"}, "admissions_operations"),
-			({"Giám đốc Tuyển sinh"}, "admissions_director_legacy"),
+	def test_retired_aliases_fail_closed(self):
+		for roles in (
+			{"Counseller"}, {"Team Leader"}, {"Promoter-PR"}, {"Marketing Operator"},
+			{"Admissions Operations"}, {"Giám đốc Tuyển sinh"}, {"Sales"},
 		):
 			with self.subTest(roles=roles):
 				self.assertIsNone(resolve_crm_profile(roles))
-				self.assertEqual(resolve_compatibility_overlay(roles), overlay)
-				self.assertEqual(classify_role_set(roles), "compatibility_overlay")
+				self.assertIsNone(resolve_compatibility_overlay(roles))
+				self.assertEqual(classify_role_set(roles), "unmapped")
 				self.assertEqual(capabilities_for_roles(roles), frozenset())
+				with self.assertRaises(frappe.PermissionError):
+					_session_role_flags(roles)
 
 	def test_retired_sales_role_requires_migration(self):
 		self.assertIsNone(resolve_crm_profile({"Sales"}))
 		self.assertIsNone(resolve_compatibility_overlay({"Sales"}))
-		self.assertEqual(classify_role_set({"Sales"}), "legacy_migration_required")
+		self.assertEqual(classify_role_set({"Sales"}), "unmapped")
 		self.assertEqual(backfill_target_for_roles({"Sales"}), None)
 		self.assertEqual(capabilities_for_roles({"Sales"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
@@ -80,31 +101,28 @@ class TestSessionRoleContract(FrappeTestCase):
 	def test_unknown_and_cross_domain_business_profiles_fail_closed(self):
 		self.assertIsNone(resolve_crm_profile({"Unrelated Role"}))
 		self.assertIsNone(resolve_crm_profile({"Sale", "Unrelated Role"}))
-		self.assertEqual(resolve_crm_profile({"Sale", "Team Leader"}), "lead_sales")
+		self.assertIsNone(resolve_crm_profile({"Sale", "Team Leader"}))
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags({"Unrelated Role"})
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags({"Sale", "Marketing"})
-		self.assertEqual(get_crm_user_role({"Sale", "Team Leader"}), ("Lead Sales", "lead_sales"))
+		self.assertEqual(get_crm_user_role({"Sale", "Team Leader"}), ("", None))
 
-	def test_same_domain_sales_aliases_use_lead_sales_without_capability_union(self):
+	def test_sales_aliases_cannot_elevate_to_lead_sale(self):
 		for roles in (
 			{"Sales Manager", "Sales User"},
 			{"Team Leader", "Sale"},
 		):
 			with self.subTest(roles=roles):
-				flags = _session_role_flags(roles)
-				self.assertEqual(flags["crm_role_state"], "canonical_profile")
-				self.assertEqual(flags["crm_profile"], "lead_sales")
-				self.assertEqual(flags["crm_capabilities"], sorted(capabilities_for_roles({"Lead Sales"})))
-				self.assertTrue(flags["is_sales_manager"])
-				self.assertFalse(flags["is_sales_user"])
+				with self.assertRaises(frappe.PermissionError):
+					_session_role_flags(roles)
 
 	def test_requested_profiles_are_crm_users_without_legacy_elevation(self):
 		for roles, profile, label in (
 			({"Sale"}, "sales", "Sale"),
+			({"CTV Sale"}, "ctv_sale", "CTV Sale"),
 			({"Marketing"}, "marketing", "Marketing"),
-			({"Lead Sales"}, "lead_sales", "Lead Sales"),
+			({"Lead Sale"}, "lead_sales", "Lead Sale"),
 			({"Admissions Director"}, "admissions_director", "Admissions Director"),
 		):
 			with self.subTest(roles=roles):
@@ -115,13 +133,10 @@ class TestSessionRoleContract(FrappeTestCase):
 				self.assertEqual(flags["is_sales_user"], profile == "sales")
 				self.assertEqual(get_crm_user_role(roles), (label, profile))
 
-	def test_legacy_overlay_users_keep_crm_entry_without_canonical_capabilities(self):
-		flags = _session_role_flags({"Promoter-PR"})
-		self.assertTrue(flags["is_crm_user"])
-		self.assertIsNone(flags["crm_profile"])
-		self.assertEqual(flags["crm_role_state"], "compatibility_overlay")
-		self.assertEqual(flags["crm_capabilities"], [])
-		self.assertEqual(get_crm_user_role({"Promoter-PR"}), ("Promoter-PR", None))
+	def test_retired_alias_has_no_crm_entry(self):
+		with self.assertRaises(frappe.PermissionError):
+			_session_role_flags({"Promoter-PR"})
+		self.assertEqual(get_crm_user_role({"Promoter-PR"}), ("", None))
 
 	def test_system_manager_is_a_crm_user_without_a_business_profile(self):
 		flags = _session_role_flags({"System Manager"})
@@ -131,6 +146,10 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_capabilities_are_server_derived_and_data_steward_is_not_a_profile(self):
 		self.assertIn("student.execute", capabilities_for_roles({"Sale"}))
+		self.assertEqual(
+			capabilities_for_roles({"CTV Sale"}),
+			frozenset({"student.execute", "recommendation.decide", "action.execute"}),
+		)
 		self.assertIn("system.configure", capabilities_for_roles({"System Manager"}))
 		self.assertEqual(capabilities_for_roles({"CRM Data Steward"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
@@ -139,14 +158,15 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_canonical_sales_is_eligible_for_the_capability_gateway(self):
 		self.assertTrue(_is_capability_gateway_user(_session_role_flags({"Sale"})))
-		self.assertTrue(_is_capability_gateway_user(_session_role_flags({"Lead Sales"})))
+		self.assertTrue(_is_capability_gateway_user(_session_role_flags({"Lead Sale"})))
 		self.assertTrue(_is_capability_gateway_user(_session_role_flags({"Marketing"})))
 		self.assertFalse(_is_capability_gateway_user(_session_role_flags({"System Manager"})))
 		self.assertIn("Sale", CRM_ALLOWED_ROLES)
 		self.assertNotIn("Sales", CRM_ALLOWED_ROLES)
 		self.assertIn("Sale", SALES_WORKLIST_ROLE_NAMES)
+		self.assertIn("CTV Sale", SALES_WORKLIST_ROLE_NAMES)
 		self.assertNotIn("Sales", SALES_WORKLIST_ROLE_NAMES)
-		self.assertIn("Lead Sales", SALES_WORKLIST_ROLE_NAMES)
+		self.assertIn("Lead Sale", SALES_WORKLIST_ROLE_NAMES)
 
 	def test_permission_matrix_is_complete_and_versioned(self):
 		self.assertEqual(
@@ -179,30 +199,21 @@ class TestSessionRoleContract(FrappeTestCase):
 			"unchanged",
 		)
 
-	def test_legacy_overlay_cannot_become_a_canonical_capability_source(self):
-		self.assertEqual(
-			LEGACY_COMPATIBILITY_OVERLAYS["marketing_operator"]["roles"],
-			frozenset({"Marketing Operator"}),
-		)
-		self.assertNotIn(
-			"CRM Data Steward",
-			{role for overlay in LEGACY_COMPATIBILITY_OVERLAYS.values() for role in overlay["roles"]},
-		)
-		self.assertEqual(resolve_compatibility_overlay({"Counseller"}), "counseller_campus")
-		self.assertEqual(resolve_compatibility_overlay({"Sales Manager"}), "team_leader")
-		self.assertIsNone(resolve_compatibility_overlay({"Counseller", "Sale"}))
-		self.assertIsNone(resolve_compatibility_overlay({"Sales Manager", "System Manager"}))
-		self.assertEqual(classify_role_set({"Marketing Operator"}), "compatibility_overlay")
-		self.assertEqual(classify_role_set({"Admissions Operations"}), "compatibility_overlay")
+	def test_legacy_overlay_catalog_is_empty(self):
+		self.assertEqual(LEGACY_COMPATIBILITY_OVERLAYS, {})
+		self.assertIsNone(resolve_compatibility_overlay({"Counseller"}))
+		self.assertIsNone(resolve_compatibility_overlay({"Sales Manager"}))
+		self.assertEqual(classify_role_set({"Marketing Operator"}), "unmapped")
+		self.assertEqual(classify_role_set({"Admissions Operations"}), "unmapped")
 		self.assertEqual(classify_role_set({"Unknown Legacy Role"}), "unmapped")
 		self.assertEqual(classify_role_set({"CRM Data Steward"}), "legacy_migration_required")
-		self.assertEqual(classify_role_set({"Sales"}), "legacy_migration_required")
+		self.assertEqual(classify_role_set({"Sales"}), "unmapped")
 
 	def test_legacy_sales_manager_cannot_modify_other_business_profiles(self):
 		self.assertTrue(_can_manage_target(False, set()))
 		self.assertFalse(_can_manage_target(False, {"Sales Manager", "Sale"}))
 		self.assertFalse(_can_manage_target(False, {"Marketing"}))
-		self.assertFalse(_can_manage_target(False, {"Lead Sales"}))
+		self.assertFalse(_can_manage_target(False, {"Lead Sale"}))
 		self.assertTrue(_can_manage_target(True, {"Marketing"}))
 		self.assertFalse(_can_remove_target(False, {"System Manager"}))
 		self.assertTrue(_can_remove_target(True, {"System Manager"}))
@@ -219,7 +230,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertNotIn("CRM Data Steward", student_roles)
 
 	def test_system_manager_precedes_business_roles_as_control_plane_only(self):
-		roles = {"System Manager", "Sale", "Team Leader", "Marketing"}
+		roles = {"System Manager", "Sale", "Marketing"}
 		self.assertEqual(classify_role_set(roles), "system_manager")
 		self.assertEqual(capabilities_for_roles(roles), capabilities_for_roles({"System Manager"}))
 		flags = _session_role_flags(roles)
@@ -245,9 +256,6 @@ class TestSessionRoleContract(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags(roles)
 
-	def test_legacy_role_sources_have_one_explicit_backfill_target(self):
-		self.assertEqual(backfill_target_for_roles({"Sales User"}), "Sale")
-		self.assertEqual(backfill_target_for_roles({"Sales Manager"}), "Lead Sales")
-		self.assertEqual(backfill_target_for_roles({"Marketing Operator"}), "Marketing")
-		self.assertEqual(backfill_target_for_roles({"Admissions Operations"}), "Admissions Director")
-		self.assertIsNone(backfill_target_for_roles({"Sales User", "Sales Manager"}))
+	def test_backfill_catalog_is_disabled_for_seed_only_deployments(self):
+		self.assertIsNone(backfill_target_for_roles({"Sales User"}))
+		self.assertIsNone(backfill_target_for_roles({"Sales Manager"}))

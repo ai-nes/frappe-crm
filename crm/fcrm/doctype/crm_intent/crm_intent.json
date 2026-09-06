@@ -18,6 +18,7 @@
   "polarity",
   "importance",
   "confidence",
+  "analysis_result",
   "notes"
  ],
  "fields": [
@@ -57,7 +58,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Intent Type",
-   "options": "CRM Term",
+   "options": "CRM Intent Type",
    "reqd": 1
   },
   {
@@ -94,6 +95,14 @@
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Confidence"
+  },
+  {
+   "fieldname": "analysis_result",
+   "fieldtype": "Link",
+   "label": "Analysis Result",
+   "options": "CRM Interaction Analysis Result",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "notes",
@@ -143,7 +152,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "share": 1,
    "write": 1
   },
@@ -176,6 +185,10 @@
   {
    "read": 1,
    "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
   }
  ],
  "quick_entry": 0,

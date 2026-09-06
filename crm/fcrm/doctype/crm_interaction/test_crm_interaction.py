@@ -13,7 +13,7 @@ class TestCRMInteraction(FrappeTestCase):
 
 	def tearDown(self):
 		for name in frappe.db.get_all(
-			"CRM Intent", filters={"intent_type": "_Test Tuition Inquiry"}, pluck="name"
+			"CRM Intent", filters={"intent_type": "TUITION_FEE"}, pluck="name"
 		):
 			frappe.delete_doc("CRM Intent", name, force=True)
 		for name in frappe.db.get_all(
@@ -26,24 +26,19 @@ class TestCRMInteraction(FrappeTestCase):
 			frappe.delete_doc("CRM Student", name, force=True)
 
 	def _ensure_master_data(self):
-		if not frappe.db.exists("CRM Term", "_Test Phone Call"):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Term",
-					"term_name": "_Test Phone Call",
-					"category": "interaction_type",
-				}
-			).insert(ignore_permissions=True)
-
-		if not frappe.db.exists("CRM Term", "_Test Tuition Inquiry"):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Term",
-					"term_name": "_Test Tuition Inquiry",
-					"category": "intent_type",
-					"metadata": {"importance": "Very High"},
-				}
-			).insert(ignore_permissions=True)
+		for doctype, code, display_name in (
+			("CRM Interaction Type", "MESSAGE", "Tin nhắn"),
+			("CRM Interaction Type", "OPT_OUT", "Từ chối nhận tin"),
+			("CRM Intent Type", "TUITION_FEE", "Học phí"),
+		):
+			if not frappe.db.exists(doctype, code):
+				frappe.get_doc(
+					{
+						"doctype": doctype,
+						"code": code,
+						"display_name": display_name,
+					}
+				).insert(ignore_permissions=True)
 
 	def _make_student(self):
 		student = frappe.get_doc(
@@ -66,7 +61,7 @@ class TestCRMInteraction(FrappeTestCase):
 			{
 				"doctype": "CRM Interaction",
 				"student": student.name,
-				"interaction_type": "_Test Phone Call",
+				"interaction_type": "MESSAGE",
 				"summary": "_Test discussed tuition",
 			}
 		)
@@ -88,14 +83,14 @@ class TestCRMInteraction(FrappeTestCase):
 			{
 				"doctype": "CRM Intent",
 				"interaction": interaction.name,
-				"intent_type": "_Test Tuition Inquiry",
+				"intent_type": "TUITION_FEE",
 				"confidence": 80,
 			}
 		)
 		intent.insert(ignore_permissions=True)
 
 		self.assertEqual(intent.student, student.name)
-		self.assertEqual(intent.importance, "Very High")
+		self.assertEqual(intent.importance, "High")
 
 	# ---------------------------------------------------------------- validate()
 
@@ -103,7 +98,7 @@ class TestCRMInteraction(FrappeTestCase):
 		interaction = frappe.get_doc(
 			{
 				"doctype": "CRM Interaction",
-				"interaction_type": "_Test Phone Call",
+				"interaction_type": "MESSAGE",
 				"summary": "_Test no target validate",
 			}
 		)
@@ -116,7 +111,7 @@ class TestCRMInteraction(FrappeTestCase):
 			{
 				"doctype": "CRM Interaction",
 				"crm_contact": contact.name,
-				"interaction_type": "_Test Phone Call",
+				"interaction_type": "MESSAGE",
 				"summary": "_Test only contact set",
 			}
 		)
@@ -131,7 +126,7 @@ class TestCRMInteraction(FrappeTestCase):
 		contact.db_set("student", student.name)
 
 		name = create_interaction(
-			interaction_type="_Test Phone Call",
+			interaction_type="MESSAGE",
 			crm_contact=contact.name,
 			summary="_Test resolve student from contact",
 		)
@@ -142,7 +137,7 @@ class TestCRMInteraction(FrappeTestCase):
 		self.assertEqual(interaction.student, student.name)
 
 	def test_create_interaction_without_student_or_contact_returns_none(self):
-		result = create_interaction(interaction_type="_Test Phone Call", summary="_Test no target")
+		result = create_interaction(interaction_type="MESSAGE", summary="_Test no target")
 		self.assertIsNone(result)
 		self.assertFalse(frappe.db.exists("CRM Interaction", {"summary": "_Test no target"}))
 
@@ -159,7 +154,7 @@ class TestCRMInteraction(FrappeTestCase):
 	def test_create_interaction_defaults_actor_to_session_user(self):
 		student = self._make_student()
 		name = create_interaction(
-			interaction_type="_Test Phone Call",
+			interaction_type="MESSAGE",
 			student=student.name,
 			summary="_Test actor default",
 		)
@@ -177,14 +172,14 @@ class TestCRMInteraction(FrappeTestCase):
 		event = self._make_consent_event("_Test Interaction Dedup Contact", "0919500010")
 
 		first = create_interaction(
-			interaction_type="_Test Phone Call",
+			interaction_type="MESSAGE",
 			student=student.name,
 			reference_doctype="CRM Contact Consent Event",
 			reference_docname=event.name,
 			summary="_Test dedup first",
 		)
 		second = create_interaction(
-			interaction_type="_Test Phone Call",
+			interaction_type="MESSAGE",
 			student=student.name,
 			reference_doctype="CRM Contact Consent Event",
 			reference_docname=event.name,
@@ -198,7 +193,7 @@ class TestCRMInteraction(FrappeTestCase):
 				{
 					"reference_doctype": "CRM Contact Consent Event",
 					"reference_docname": event.name,
-					"interaction_type": "_Test Phone Call",
+					"interaction_type": "MESSAGE",
 				},
 			),
 			1,
@@ -213,13 +208,13 @@ class TestCRMInteraction(FrappeTestCase):
 		# instead of raising.
 		student = self._make_student()
 		event = self._make_consent_event("_Test Interaction Race Contact", "0919500011")
-		external_id = f"CRM Contact Consent Event:{event.name}:_Test Phone Call"
+		external_id = f"CRM Contact Consent Event:{event.name}:MESSAGE"
 
 		winner = frappe.get_doc(
 			{
 				"doctype": "CRM Interaction",
 				"student": student.name,
-				"interaction_type": "_Test Phone Call",
+				"interaction_type": "MESSAGE",
 				"reference_doctype": "CRM Contact Consent Event",
 				"reference_docname": event.name,
 				"summary": "_Test race winner",
@@ -237,7 +232,7 @@ class TestCRMInteraction(FrappeTestCase):
 			# not any other frappe.db.get_value call the surrounding code paths
 			# make (e.g. frappe.db.exists() is implemented on top of get_value
 			# in some Frappe versions, so a bare global call counter would also
-			# intercept the unrelated "CRM Term" exists() check and
+			# intercept the unrelated "CRM Interaction Type" exists() check and
 			# make it spuriously report the type as unknown).
 			if (
 				doctype == "CRM Interaction"
@@ -251,7 +246,7 @@ class TestCRMInteraction(FrappeTestCase):
 
 		with patch.object(frappe.db, "get_value", side_effect=_flaky_get_value):
 			result = create_interaction(
-				interaction_type="_Test Phone Call",
+				interaction_type="MESSAGE",
 				student=student.name,
 				reference_doctype="CRM Contact Consent Event",
 				reference_docname=event.name,
@@ -267,17 +262,17 @@ class TestCRMInteraction(FrappeTestCase):
 	def test_manual_interaction_without_reference_is_not_deduplicated(self):
 		student = self._make_student()
 		first = create_interaction(
-			interaction_type="_Test Phone Call", student=student.name, summary="_Test manual one"
+			interaction_type="MESSAGE", student=student.name, summary="_Test manual one"
 		)
 		second = create_interaction(
-			interaction_type="_Test Phone Call", student=student.name, summary="_Test manual two"
+			interaction_type="MESSAGE", student=student.name, summary="_Test manual two"
 		)
 		self.assertNotEqual(first, second)
 
 	def test_create_interaction_honors_explicit_actor(self):
 		student = self._make_student()
 		name = create_interaction(
-			interaction_type="_Test Phone Call",
+			interaction_type="MESSAGE",
 			student=student.name,
 			summary="_Test explicit actor",
 			actor="Administrator",
@@ -311,7 +306,7 @@ class TestCRMInteraction(FrappeTestCase):
 		self.addCleanup(self._delete_if_exists, "CRM Interaction", interaction_name)
 
 		interaction = frappe.get_doc("CRM Interaction", interaction_name)
-		self.assertEqual(interaction.interaction_type, "Opt-out")
+		self.assertEqual(interaction.interaction_type, "OPT_OUT")
 		self.assertEqual(interaction.crm_contact, contact.name)
 
 	def test_consent_event_marked_test_creates_no_interaction(self):
@@ -383,7 +378,7 @@ class TestCRMInteraction(FrappeTestCase):
 			{
 				"doctype": "CRM Interaction",
 				"crm_contact": contact.name,
-				"interaction_type": "_Test Phone Call",
+				"interaction_type": "MESSAGE",
 				"summary": "_Test trash via contact",
 			}
 		)

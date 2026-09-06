@@ -12,7 +12,7 @@
   {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year", "reqd": 1},
   {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus", "reqd": 1},
   {"fieldname": "major", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Major", "options": "CRM Major", "reqd": 1},
-  {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Method", "options": "CRM Term", "reqd": 1},
+  {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Method", "options": "CRM Admission Method", "reqd": 1},
   {"fieldname": "quota", "fieldtype": "Int", "in_list_view": 1, "label": "Quota", "default": "0", "reqd": 1},
   {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Effective From", "reqd": 1},
   {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Effective Until", "reqd": 1},

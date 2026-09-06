@@ -24,6 +24,6 @@
  ],
  "indexes": [{"fields": ["application", "status"], "name": "crm_student_payment_application_status_idx", "unique": 0}, {"fields": ["transaction_key", "currency", "revision"], "name": "crm_student_payment_transaction_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Payment", "naming_rule": "Naming Series", "naming_series_options": "PAY-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
  "row_format": "Dynamic", "search_fields": "application,student,payment_reference,status", "sort_field": "received_at", "sort_order": "DESC"
 }

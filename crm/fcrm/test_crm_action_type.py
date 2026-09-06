@@ -105,6 +105,12 @@ def test_action_defaults_are_compatible_with_action_master_constraints():
 	assert defaults["default_channel"] == "EMAIL"
 	assert defaults["execution_type"] == "AI_ASSISTED"
 	assert defaults["ai_allowed"] == 1
+	assert set(json.loads(defaults["allowed_actors"])) == {
+		"CTV Sale",
+		"Sale",
+		"Lead Sale",
+		"Admissions Director",
+	}
 
 
 def test_action_constraints_reject_a_fixed_channel_mismatch():

@@ -17,6 +17,6 @@
  ],
  "indexes": [{"fields": ["student", "contact"], "name": "crm_student_guardian_student_contact_uniq", "unique": 1}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Guardian", "naming_rule": "Naming Series", "naming_series_options": "GUARD-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Lead Sales"}, {"read": 1, "role": "Sale"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Lead Sale"}, {"read": 1, "role": "Sale"}],
  "row_format": "Dynamic", "search_fields": "student,contact,relationship", "sort_field": "modified", "sort_order": "DESC"
 }

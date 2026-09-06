@@ -52,24 +52,24 @@ class TestSaleOverview(FrappeTestCase):
 	def test_tasks_use_server_snapshot_for_overdue_and_priority_counts(self):
 		timezone = ZoneInfo("Asia/Ho_Chi_Minh")
 		tasks = [
-			sale._normalize_generic_task(
+			sale._normalize_action_task(
 				{
-					"name": "TASK-1",
-					"title": "Gọi lại",
+					"name": "ACTION-1",
+					"objective": "Gọi lại",
 					"student": "STU-1",
 					"priority": "High",
-					"status": "Todo",
-					"due_date": "2026-09-04 09:00:00",
+					"state": "pending",
+					"due_at": "2026-09-04 09:00:00",
 				}
 			),
-			sale._normalize_generic_task(
+			sale._normalize_action_task(
 				{
-					"name": "TASK-2",
-					"title": "Nhắc học bạ",
+					"name": "ACTION-2",
+					"objective": "Nhắc học bạ",
 					"student": "STU-1",
 					"priority": "Low",
-					"status": "Todo",
-					"due_date": "2026-09-06 09:00:00",
+					"state": "pending",
+					"due_at": "2026-09-06 09:00:00",
 				}
 			),
 		]
@@ -84,7 +84,7 @@ class TestSaleOverview(FrappeTestCase):
 		self.assertEqual(snapshot["priority"]["overdueCount"], 1)
 		self.assertEqual(snapshot["summary"]["overdue"]["count"], 1)
 		self.assertEqual(snapshot["summary"]["upcoming"]["count"], 1)
-		self.assertEqual(snapshot["priority"]["items"][0]["id"], "Task:TASK-1")
+		self.assertEqual(snapshot["priority"]["items"][0]["id"], "CRM Action Item:ACTION-1")
 		self.assertTrue(snapshot["priority"]["items"][0]["isOverdue"])
 
 	def test_endpoint_returns_the_complete_contract_and_does_not_query_unscoped_students(self):

@@ -1,4 +1,4 @@
-"""Focused contracts for the Lead Sales sales-team API projection."""
+"""Focused contracts for the Lead Sale sales-team API projection."""
 
 from datetime import date
 from unittest.mock import patch

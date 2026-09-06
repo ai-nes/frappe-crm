@@ -55,7 +55,7 @@ class TestSeedCrmPermissionProfiles(FrappeTestCase):
 	def test_canonical_row_scope_matches_admissions_case_matrix(self):
 		self.assertEqual(self._profile(SYSTEM_MANAGER_ROLE).row_scope, "all")
 		self.assertEqual(self._profile("Sale").row_scope, "assigned")
-		self.assertEqual(self._profile("Lead Sales").row_scope, "team_and_team_pool")
+		self.assertEqual(self._profile("Lead Sale").row_scope, "team_and_team_pool")
 		self.assertEqual(self._profile("Admissions Director").row_scope, "all")
 		self.assertEqual(
 			self._profile("Marketing").row_scope,

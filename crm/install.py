@@ -9,7 +9,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
-
+from crm.patches.v1_0 import seed_reference_lookups
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
 # AI CRM is currently exposed directly from the EC2 host while its public
@@ -38,10 +38,7 @@ def after_install(force=False):
 	add_email_template_custom_fields()
 	add_email_account_custom_field()
 	add_default_lead_sources()
-	add_default_lost_reasons()
-	add_default_enrollment_statuses()
-	add_default_lead_statuses()
-	add_default_interaction_types()
+	seed_reference_lookups.execute()
 	add_default_quick_filters()
 	add_standard_dropdown_items()
 	create_default_manager_dashboard(force)
@@ -162,7 +159,7 @@ def add_default_fields_layout(force=False):
 	quick_entry_layouts = {
 		"CRM Contact-Quick Entry": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","lead_status","assigned_to","admission_year"]}]},{"name":"section_parents","columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"name":"section_enrollment","columns":[{"name":"col_enroll1","fields":["source","crm_campaign"]},{"name":"col_enroll2","fields":["branch","crm_event"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"name":"section_parents","columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"name":"section_enrollment","columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]}]',
 		},
 		"CRM Student-Quick Entry": {
 			"doctype": "CRM Student",
@@ -197,7 +194,7 @@ def add_default_fields_layout(force=False):
 	sidebar_fields_layouts = {
 		"CRM Contact-Side Panel": {
 			"doctype": "CRM Contact",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","enrollment_status","lead_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent","fields":["parent_name","parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_admission","fields":["province","high_school","major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll","fields":["source","branch","crm_campaign","crm_event"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent","fields":["parent_name","parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_admission","fields":["province","high_school","major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll","fields":["source","branch"]}]}]',
 		},
 		"CRM Student-Side Panel": {
 			"doctype": "CRM Student",
@@ -228,7 +225,7 @@ def add_default_fields_layout(force=False):
 	data_fields_layouts = {
 		"CRM Contact-Data Fields": {
 			"doctype": "CRM Contact",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","lead_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_school","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll1","fields":["source","crm_campaign"]},{"name":"col_enroll2","fields":["branch","crm_event"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":false,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":false,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_school","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":false,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":false,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
 		},
 		"CRM Student-Data Fields": {
 			"doctype": "CRM Student",
@@ -364,110 +361,6 @@ def add_default_lead_sources():
 
 		doc = frappe.new_doc("CRM Lead Source")
 		doc.source_name = source
-		doc.insert()
-
-
-def add_default_lost_reasons():
-	lost_reasons = [
-		{
-			"reason": "Pricing",
-			"description": "The prospect found the pricing to be too high or not competitive.",
-		},
-		{"reason": "Competition", "description": "The prospect chose a competitor's product or service."},
-		{
-			"reason": "Budget Constraints",
-			"description": "The prospect did not have the budget to proceed with the purchase.",
-		},
-		{
-			"reason": "Missing Features",
-			"description": "The prospect felt that the product or service was missing key features they needed.",
-		},
-		{
-			"reason": "Long Sales Cycle",
-			"description": "The sales process took too long, leading to loss of interest.",
-		},
-		{
-			"reason": "No Decision-Maker",
-			"description": "The prospect was not the decision-maker and could not proceed.",
-		},
-		{"reason": "Unresponsive Prospect", "description": "The prospect did not respond to follow-ups."},
-		{"reason": "Poor Fit", "description": "The prospect was not a good fit for the product or service."},
-		{"reason": "Other", "description": ""},
-	]
-
-	for reason in lost_reasons:
-		if frappe.db.exists("CRM Term", {"term_name": reason["reason"], "category": "lost_reason"}):
-			continue
-
-		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": reason["reason"], "category": "lost_reason", "description": reason["description"]})
-		doc.insert()
-
-
-def add_default_lead_statuses():
-	lead_statuses = [
-		"Mới",
-		"Không nghe máy lần 1",
-		"Không nghe máy lần 2",
-		"Không nghe máy lần 3",
-		"Không liên lạc được",
-		"Hẹn liên hệ sau",
-		"Có triển vọng",
-		"Đang suy nghĩ",
-		"Không quan tâm",
-		"Không triển vọng",
-		"Sai số",
-		"Sai đối tượng",
-		"Không đủ tài chính",
-		"Lead nhắc lại",
-		"Lead trùng",
-		"Đã chuyển đổi",
-	]
-
-	for status in lead_statuses:
-		if frappe.db.exists("CRM Term", {"term_name": status, "category": "lead_status"}):
-			continue
-
-		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "lead_status"})
-		doc.insert()
-
-
-def add_default_enrollment_statuses():
-	# stage_order/stage_category are mandatory on the doctype; values mirror the
-	# business-confirmed mapping in patches/v1_0/backfill_enrollment_status_stage_category.py
-	# — keep both in sync if the classification changes.
-	enrollment_statuses = {
-		"Mới": (1, "open"),
-		"Có triển vọng": (2, "open"),
-		"Đã xác nhận": (3, "open"),
-		"Đã nhập học": (4, "enrolled"),
-		"Đã chuyển đổi": (5, "enrolled"),
-		"Từ chối": (6, "lost"),
-	}
-
-	lifecycle_stages = {"Mới": "Lead", "Có triển vọng": "MQL", "Đã xác nhận": "Applicant", "Đã nhập học": "Enrolled", "Đã chuyển đổi": "Enrolled", "Từ chối": "Lost"}
-	for status, (order, category) in enrollment_statuses.items():
-		if frappe.db.exists("CRM Term", {"term_name": status, "category": "enrollment_status"}):
-			continue
-
-		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": status, "category": "enrollment_status", "sort_order": order, "metadata": {"stage_category": category, "lifecycle_stage": lifecycle_stages[status]}})
-		doc.insert()
-
-
-def add_default_interaction_types():
-	# CRM Interaction.interaction_type is mandatory (reqd: 1); every fresh install
-	# must have at least one record or interaction creation fails outright.
-	interaction_types = [
-		"Tin nhắn Chatwoot",
-		"Cuộc gọi",
-		"Email",
-		"Gặp trực tiếp",
-	]
-
-	for interaction_type in interaction_types:
-		if frappe.db.exists("CRM Term", {"term_name": interaction_type, "category": "interaction_type"}):
-			continue
-
-		doc = frappe.get_doc({"doctype": "CRM Term", "term_name": interaction_type, "category": "interaction_type"})
 		doc.insert()
 
 

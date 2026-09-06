@@ -53,7 +53,7 @@ def get_marketing_lookup_perms():
 
 
 def get_lost_reason_perms():
-	return get_doctype_perms()["CRM Term"]
+	return get_doctype_perms()["CRM Lost Reason"]
 
 
 def get_campus_perms():

@@ -2,8 +2,8 @@ import frappe
 from frappe import _
 
 from crm.fcrm.role_policy import (
+	ADMINISTRATOR_ROLE,
 	CRM_BUSINESS_ROLES,
-	LEGACY_COMPATIBILITY_OVERLAYS,
 	POLICY_VERSION,
 	PROFILE_LABELS,
 	PROFILE_ROLE_ALIASES,
@@ -11,7 +11,6 @@ from crm.fcrm.role_policy import (
 	capability_details,
 	classify_role_set,
 	is_crm_user,
-	resolve_compatibility_overlay,
 )
 from crm.fcrm.role_policy import (
 	resolve_crm_profile as _resolve_crm_profile,
@@ -27,10 +26,9 @@ CRM_PROFILE_LABELS = PROFILE_LABELS
 def resolve_crm_profile(roles):
 	"""Return the sole canonical business profile, otherwise ``None``.
 
-	A person can keep several migration aliases for the same profile.  Roles
-	from two profiles are intentionally indistinguishable from an unmapped
-	caller: both fail closed rather than making declaration order a persona
-	selection policy.
+	Roles from two profiles are intentionally indistinguishable from an
+	unmapped caller: both fail closed rather than making declaration order a
+	persona selection policy.
 	"""
 	return _resolve_crm_profile(roles)
 
@@ -63,10 +61,6 @@ def get_crm_user_role(roles):
 	profile = resolve_crm_profile(role_names)
 	if role_state == "canonical_profile" and profile:
 		return CRM_PROFILE_LABELS[profile], profile
-	overlay = resolve_compatibility_overlay(role_names)
-	if role_state == "compatibility_overlay" and overlay:
-		legacy_roles = role_names & LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"]
-		return sorted(legacy_roles)[0], None
 	if role_state == "system_manager":
 		return "System Manager", None
 	if role_names & CRM_BUSINESS_ROLES:
@@ -100,9 +94,9 @@ def _session_role_flags(roles):
 	capabilities = sorted(capabilities_for_roles(role_names))
 
 	# Keep the legacy booleans stable for older SPA callers, while mapping them
-	# to the canonical Sale / Lead Sales profiles.
+	# to the canonical Sale / Lead Sale profiles.
 	return {
-		"is_system_manager": "System Manager" in role_names,
+		"is_system_manager": bool({"System Manager", ADMINISTRATOR_ROLE} & role_names),
 		"is_sales_manager": profile == "lead_sales" and "System Manager" not in role_names,
 		"is_sales_user": profile == "sales" and "System Manager" not in role_names,
 		"is_crm_user": is_crm_user(role_names),
@@ -115,6 +109,28 @@ def _session_role_flags(roles):
 		"crm_policy_version": POLICY_VERSION,
 		"crm_feature_flags": _crm_feature_flags(profile),
 	}
+
+
+def _get_policy_roles(user=None):
+	"""Return Frappe roles plus an explicitly assigned Administrator profile.
+
+	Frappe filters ``Administrator`` from ``frappe.get_roles`` for every user
+	except the technical Administrator account because it is an automatic role.
+	CRM exposes Administrator as a canonical selectable profile, so preserve an
+	explicit assignment for the CRM policy layer.
+	"""
+	user = user or frappe.session.user
+	roles = list(frappe.get_roles(user))
+	if (
+		user != "Administrator"
+		and ADMINISTRATOR_ROLE not in roles
+		and frappe.db.exists(
+			"Has Role",
+			{"parent": user, "parenttype": "User", "role": ADMINISTRATOR_ROLE},
+		)
+	):
+		roles.append(ADMINISTRATOR_ROLE)
+	return roles
 
 
 def get_session_role_flags():
@@ -138,7 +154,7 @@ def get_session_role_flags():
 			"crm_policy_version": POLICY_VERSION,
 			"crm_feature_flags": _crm_feature_flags(None),
 		}
-	return _session_role_flags(frappe.get_roles())
+	return _session_role_flags(_get_policy_roles())
 
 
 @frappe.whitelist()
@@ -156,7 +172,7 @@ def get_my_roles():
 	flags = get_session_role_flags()
 	return {
 		"user": frappe.session.user,
-		"roles": frappe.get_roles(),
+		"roles": _get_policy_roles(),
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_role_state": flags["crm_role_state"],
@@ -190,7 +206,7 @@ def me():
 		"email": user.email,
 		"full_name": user.full_name,
 		"user_image": user.user_image,
-		"roles": frappe.get_roles(),
+		"roles": _get_policy_roles(),
 		"crm_profile": flags["crm_profile"],
 		"crm_role": flags["crm_role"],
 		"crm_capabilities": flags["crm_capabilities"],
@@ -243,7 +259,7 @@ def get_users():
 			user.session_user = True
 			user.crm_feature_flags = session_roles["crm_feature_flags"]
 
-		user.roles = frappe.get_roles(user.name)
+		user.roles = _get_policy_roles(user.name)
 
 		if user.name == "Administrator":
 			# Same blanket-role-grant issue as get_session_role_flags(): Administrator
@@ -287,7 +303,7 @@ def set_default_crm_app_for_sales(doc, event=None):
 	if doc.default_app:
 		return
 	roles = {row.role for row in doc.get("roles", [])}
-	if roles & {"Sale", "Lead Sales"}:
+	if roles & {"Sale", "CTV Sale", "Lead Sale"}:
 		doc.default_app = "crm"
 
 

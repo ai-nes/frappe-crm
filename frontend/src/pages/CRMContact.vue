@@ -170,7 +170,6 @@ const sections = createResource({
       'student_identity',
       'enrollment_status',
       'lifecycle_stage',
-      'lead_status',
       'assigned_to',
       'owner_staff',
       'owning_team',

@@ -55,8 +55,15 @@ def contacts_for_student(student: str) -> list[str]:
 	contacts = [row.get("contact") for row in rows if row.get("contact")]
 	if contacts:
 		return list(dict.fromkeys(contacts))
-	legacy = frappe.db.get_value("CRM Contact", {"student": student}, "name")
-	return [legacy] if legacy else []
+	legacy_rows = frappe.db.get_all(
+		"CRM Contact",
+		filters={"student": student},
+		fields=["name"],
+		order_by="name asc",
+		limit_page_length=100,
+		ignore_permissions=True,
+	)
+	return [row.get("name") for row in legacy_rows if row.get("name")]
 
 
 def students_for_contact(contact: str) -> list[str]:

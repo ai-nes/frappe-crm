@@ -90,7 +90,7 @@ class CRMHighSchool(Document):
 		if not self.get_doc_before_save() or frappe.session.user in {"Administrator"}:
 			return
 		roles = set(frappe.get_roles(frappe.session.user))
-		if not roles & {"Promoter", "Promoter-PR"}:
+		if not roles & {"Promoter"}:
 			return
 		previous = self.get_doc_before_save()
 		if any(
@@ -112,7 +112,7 @@ class CRMHighSchool(Document):
 				"label": "School Type",
 				"type": "Link",
 				"key": "school_type",
-				"options": "CRM Term",
+				"options": "CRM School Type",
 				"width": "10rem",
 			},
 			{

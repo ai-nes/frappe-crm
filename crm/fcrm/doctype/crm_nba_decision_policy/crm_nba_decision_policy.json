@@ -6,7 +6,7 @@
  "creation": "2026-09-04 02:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["policy_key", "policy_revision", "policy_digest", "is_active", "top_n", "max_recommendations", "min_score_threshold", "score_weights", "conflict_key_fields", "diversity_rule", "effective_from", "effective_to"],
+ "field_order": ["policy_key", "policy_revision", "policy_digest", "is_active", "top_n", "max_recommendations", "min_score_threshold", "score_weights", "kernel_policy", "conflict_key_fields", "diversity_rule", "effective_from", "effective_to"],
  "fields": [
   {"fieldname": "policy_key", "fieldtype": "Data", "label": "Policy Key", "reqd": 1, "unique": 1, "in_list_view": 1},
   {"fieldname": "policy_revision", "fieldtype": "Int", "label": "Policy Revision", "default": "1", "read_only": 1, "non_negative": 1},
@@ -16,6 +16,7 @@
   {"fieldname": "max_recommendations", "fieldtype": "Int", "label": "Max Recommendations", "default": "10", "reqd": 1, "non_negative": 1},
   {"fieldname": "min_score_threshold", "fieldtype": "Float", "label": "Min Score Threshold", "default": "0"},
   {"fieldname": "score_weights", "fieldtype": "JSON", "label": "Score Weights"},
+  {"fieldname": "kernel_policy", "fieldtype": "JSON", "label": "Kernel Policy Snapshot", "description": "Complete versioned NBA kernel knobs; required for live evaluation."},
   {"fieldname": "conflict_key_fields", "fieldtype": "JSON", "label": "Conflict Key Fields"},
   {"fieldname": "diversity_rule", "fieldtype": "Select", "label": "Diversity Rule", "options": "none\nunique_action_type\nunique_category", "default": "none"},
   {"fieldname": "effective_from", "fieldtype": "Datetime", "label": "Effective From"},
@@ -27,7 +28,7 @@
  "name": "CRM NBA Decision Policy",
  "permissions": [
   {"read": 1, "role": "Sale"},
-  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Lead Sale"},
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
   {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}
  ],

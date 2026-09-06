@@ -18,16 +18,7 @@ class CRMPermissionProfile(Document):
 
 
 def get_permission_query_conditions(user=None):
-	"""Desk list-view declutter only -- never used for access control.
-
-	Legacy/compatibility-overlay role profiles (e.g. the Vietnamese
-	"Giám đốc Tuyển sinh") still have to exist so `case_scope_for_roles()`
-	resolves correctly for any account still holding that role name; this
-	only keeps them out of the profile list so admins see the roles the
-	product actually requires. `case_scope_for_roles()` reads a profile with
-	`frappe.db.get_value`/`frappe.get_doc`, neither of which applies this
-	condition, so it never affects live permission resolution.
-	"""
+	"""Desk list-view declutter only -- never used for access control."""
 	if not LEGACY_OVERLAY_ROLES:
 		return ""
 	roles = ", ".join(frappe.db.escape(role) for role in LEGACY_OVERLAY_ROLES)

@@ -23,13 +23,7 @@
   "engagement_weight",
   "intent_weight",
   "section_rules",
-  "rules",
-  "section_legacy",
-  "fit_scoring",
-  "engagement_scoring",
-  "intent_scoring",
-  "time_decay_scoring",
-  "negative_scoring"
+  "rules"
  ],
  "fields": [
   {
@@ -129,47 +123,6 @@
    "fieldtype": "Table",
    "label": "Rules",
    "options": "CRM Score Rule"
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_legacy",
-   "fieldtype": "Section Break",
-   "label": "Legacy JSON Config"
-  },
-  {
-   "fieldname": "fit_scoring",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "Fit Scoring",
-   "options": "JSON"
-  },
-  {
-   "fieldname": "engagement_scoring",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "Engagement Scoring",
-   "options": "JSON"
-  },
-  {
-   "fieldname": "intent_scoring",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "Intent Scoring",
-   "options": "JSON"
-  },
-  {
-   "fieldname": "time_decay_scoring",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "Time Decay Scoring",
-   "options": "JSON"
-  },
-  {
-   "fieldname": "negative_scoring",
-   "fieldtype": "Code",
-   "hidden": 1,
-   "label": "Negative Scoring",
-   "options": "JSON"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -211,7 +164,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "read": 1,
@@ -224,6 +177,10 @@
   {
    "read": 1,
    "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
   }
  ],
  "quick_entry": 0,

@@ -143,13 +143,13 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "Mới",
+   "default": "NEW",
    "fieldname": "enrollment_status",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Enrollment Status",
-   "options": "CRM Term"
+   "options": "CRM Enrollment Status"
   },
   {
    "fieldname": "lifecycle_stage",
@@ -331,7 +331,7 @@
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Aspiration",
-   "options": "CRM Term"
+   "options": "CRM Aspiration"
   },
   {
    "default": "1",
@@ -399,7 +399,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Admission Method",
-   "options": "\nTranscript Review\nNational High School Exam\nLanguage Certificate Review\nDirect Admission\nCombined"
+   "options": "\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
   },
   {
    "fieldname": "english_converted_score",
@@ -651,6 +651,10 @@
    "role": "Admissions Director"
   },
   {
+   "read": 1,
+   "role": "AI Service"
+  },
+  {
    "create": 1,
    "delete": 1,
    "read": 1,
@@ -677,7 +681,7 @@
    "create": 1,
    "delete": 1,
    "read": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "write": 1
   },
   {

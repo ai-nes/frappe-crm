@@ -5,7 +5,7 @@
  "autoname": "field:recommendation_id",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["recommendation_id", "target_type", "target_id", "action", "purpose", "channel", "trigger", "reason", "evidence", "priority", "confidence", "expected_impact", "timing_policy", "recommended_at", "expires_at", "owner", "lifecycle_status", "decision_status", "execution_status", "model", "model_version", "decision_section", "decision_operation", "decided_at", "decided_by", "source_decision_event", "linked_task", "evaluation_section", "evaluation", "ai_payload", "recommendation_key", "rank", "rationale_vi", "rationale_source", "explanation"],
+ "field_order": ["recommendation_id", "target_type", "target_id", "action", "purpose", "channel", "trigger", "reason", "evidence", "priority", "confidence", "expected_impact", "timing_policy", "recommended_at", "expires_at", "owner", "lifecycle_status", "decision_status", "execution_status", "model", "model_version", "decision_section", "decision_operation", "decided_at", "decided_by", "source_decision_event", "linked_task", "evaluation_section", "evaluation", "ai_payload", "recommendation_key", "rank", "rationale_source", "explanation"],
  "fields": [
   {"fieldname": "recommendation_id", "fieldtype": "Data", "hidden": 1, "label": "Recommendation ID", "reqd": 1, "read_only": 1, "unique": 1},
   {"fieldname": "target_type", "fieldtype": "Data", "label": "Target Type", "reqd": 1, "read_only": 1},
@@ -39,7 +39,6 @@
   {"description": "Immutable kernel recommendation object for the evaluation epoch.", "fieldname": "ai_payload", "fieldtype": "JSON", "label": "AI Payload", "read_only": 1},
   {"fieldname": "recommendation_key", "fieldtype": "Data", "label": "Recommendation Key", "read_only": 1},
   {"fieldname": "rank", "fieldtype": "Int", "label": "Rank", "read_only": 1},
-  {"description": "Superseded by the structured `explanation` field; kept dark/unused for backward compatibility.", "fieldname": "rationale_vi", "fieldtype": "Long Text", "label": "Rationale (VI) [superseded]", "read_only": 1},
   {"description": "Where `explanation` came from: model, or fallback_absent when no explanation was produced.", "fieldname": "rationale_source", "fieldtype": "Data", "label": "Rationale Source", "read_only": 1},
   {"description": "Grounded, structured explanation of this recommendation (summary, why_action, why_now, timing_reason, evidence_summary, uncertainty, execution_guidance). Write-once: set from empty, never changed after. Blank until the explanation pass runs.", "fieldname": "explanation", "fieldtype": "JSON", "label": "Explanation", "read_only": 1}
  ],
@@ -49,7 +48,7 @@
  "name": "CRM Recommendation",
  "permissions": [
   {"read": 1, "role": "Admissions Director"},
-  {"read": 1, "role": "Lead Sales"},
+  {"read": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Sale"},
   {"read": 1, "role": "CTV Sale"},
   {"create": 1, "delete": 1, "export": 1, "read": 1, "role": "System Manager", "write": 1}

@@ -1,10 +1,10 @@
-"""Seed one local Lead Sales login with three team-pool Student cases.
+"""Seed one local Lead Sale login with three team-pool Student cases.
 
 Run with::
 
     bench --site crm.localhost execute crm.demo.seed_lead_sales.execute
 
-Lead Sales is scoped to its team's cases and unassigned pool, so these cases
+Lead Sale is scoped to its team's cases and unassigned pool, so these cases
 remain pool-owned instead of being assigned as an individual owner.
 """
 
@@ -19,10 +19,10 @@ from crm.demo.seed_ctv_sale import SalesAccountSeed, execute_seed
 
 NAMESPACE = "crm-demo-lead-sales"
 ACCOUNT_EMAIL = "leadsale@gmail.com"
-ACCOUNT_FULL_NAME = "Lead Sales Demo"
-ACCOUNT_ROLE = "Lead Sales"
+ACCOUNT_FULL_NAME = "Lead Sale Demo"
+ACCOUNT_ROLE = "Lead Sale"
 PASSWORD = "123456"
-TEAM_MEMBERSHIP_FUNCTION = "Lead Sales"
+TEAM_MEMBERSHIP_FUNCTION = "Lead Sale"
 
 STUDENT_SCENARIOS: tuple[dict[str, Any], ...] = (
 	{
@@ -38,7 +38,7 @@ STUDENT_SCENARIOS: tuple[dict[str, Any], ...] = (
 		"transcript_score": 8.9,
 		"english_converted_score": 7.0,
 		"total_score": 24.6,
-		"notes": "Hồ sơ nằm trong pool team, chờ Lead Sales rà soát và phân tuyến.",
+		"notes": "Hồ sơ nằm trong pool team, chờ Lead Sale rà soát và phân tuyến.",
 		"parent": {
 			"name": "Nguyễn Văn Đức",
 			"phone": "0909901301",
@@ -78,7 +78,7 @@ STUDENT_SCENARIOS: tuple[dict[str, Any], ...] = (
 		"transcript_score": 8.6,
 		"english_converted_score": 7.0,
 		"total_score": 24.0,
-		"notes": "Hồ sơ mới vào pool, cần Lead Sales kiểm tra trước khi giao cho Sale phụ trách.",
+		"notes": "Hồ sơ mới vào pool, cần Lead Sale kiểm tra trước khi giao cho Sale phụ trách.",
 		"parent": {
 			"name": "Bùi Văn Nam",
 			"phone": "0909901303",
@@ -147,7 +147,7 @@ def reset() -> dict[str, Any]:
 				target_kind="pool",
 				target_id=pool,
 				target_team_id=team,
-				reason="Reset Lead Sales assignment pipeline fixture for another test run.",
+				reason="Reset Lead Sale assignment pipeline fixture for another test run.",
 				idempotency_key=f"{NAMESPACE}:reset:{scenario['key']}:r{current_revision}",
 				expected_revision=current_revision,
 				correlation_id=f"{NAMESPACE}:reset:{scenario['key']}:r{current_revision}",
@@ -180,5 +180,5 @@ def reset() -> dict[str, Any]:
 
 
 def execute() -> dict[str, Any]:
-	"""Create the local Lead Sales account and three team-pool Student cases."""
+	"""Create the local Lead Sale account and three team-pool Student cases."""
 	return execute_seed(SEED_SPEC)

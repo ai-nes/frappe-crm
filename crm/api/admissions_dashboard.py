@@ -36,12 +36,16 @@ def _get_delta(current, previous):
 	return round(((current - previous) / previous) * 100.0, 1)
 
 
-def _staff_names_in_sales_team(sales_team):
-	"""CRM Staff names belonging to a sales_team, or the sentinel "__none__"
-	(never a real doc name) when the team has no staff -- shared by every
-	dashboard that scopes CRM Contact.assigned_to by team, so the scoping
+def _staff_names_in_sales_team(team):
+	"""CRM Staff names with a CRM Team Membership for `team`, or the sentinel
+	"__none__" (never a real doc name) when the team has no staff -- shared by
+	every dashboard that scopes CRM Contact.assigned_to by team, so the scoping
 	logic can't silently diverge between them."""
-	staff_names = frappe.db.get_all("CRM Staff", filters={"sales_team": sales_team}, pluck="name")
+	staff_names = frappe.db.get_all(
+		"CRM Team Membership",
+		filters={"parenttype": "CRM Staff", "team": team},
+		pluck="parent",
+	)
 	return staff_names or ["__none__"]
 
 
@@ -95,14 +99,14 @@ def get_sales_dashboard(
 		prev_new = frappe.db.count("CRM Contact", filters=prev_filters)
 		delta_new = _get_delta(total_new, prev_new)
 
-		active_filters = base_filters + [["enrollment_status", "not in", ["Đã nhập học", "Không quan tâm", "Sai số"]]]
+		active_filters = base_filters + [["enrollment_status", "not in", ["ENROLLED", "Không quan tâm", "Sai số"]]]
 		total_active = frappe.db.count("CRM Contact", filters=active_filters)
-		prev_active = frappe.db.count("CRM Contact", filters=prev_filters + [["enrollment_status", "not in", ["Đã nhập học", "Không quan tâm", "Sai số"]]])
+		prev_active = frappe.db.count("CRM Contact", filters=prev_filters + [["enrollment_status", "not in", ["ENROLLED", "Không quan tâm", "Sai số"]]])
 		delta_active = _get_delta(total_active, prev_active)
 
-		enrolled_filters = base_filters + [["enrollment_status", "=", "Đã nhập học"]]
+		enrolled_filters = base_filters + [["enrollment_status", "=", "ENROLLED"]]
 		total_enrolled = frappe.db.count("CRM Contact", filters=enrolled_filters)
-		prev_enrolled = frappe.db.count("CRM Contact", filters=prev_filters + [["enrollment_status", "=", "Đã nhập học"]])
+		prev_enrolled = frappe.db.count("CRM Contact", filters=prev_filters + [["enrollment_status", "=", "ENROLLED"]])
 		delta_enrolled = _get_delta(total_enrolled, prev_enrolled)
 
 		# SLA rate
@@ -115,8 +119,15 @@ def get_sales_dashboard(
 		delta_overdue = _get_delta(total_overdue, prev_overdue)
 
 		# Funnel breakdown
-		stages = ["Lead mới", "Đã liên hệ", "Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]
-		funnel_data = [{"stage": s, "count": frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", s]])} for s in stages]
+		stages = [
+			("Lead mới", "Lead mới"),
+			("Đã liên hệ", "Đã liên hệ"),
+			("Có triển vọng", "PROSPECT"),
+			("Đang tư vấn", "Đang tư vấn"),
+			("Đã nộp hồ sơ", "Đã nộp hồ sơ"),
+			("Đã nhập học", "ENROLLED"),
+		]
+		funnel_data = [{"stage": label, "count": frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", value]])} for label, value in stages]
 
 		# Weekly leads (last 12 weeks)
 		weekly_data = []
@@ -142,7 +153,7 @@ def get_sales_dashboard(
 		staff_list = frappe.db.get_all("CRM Staff", fields=["name", "full_name"], limit=10)
 		sales_perf_data = []
 		for st in staff_list:
-			cnt = frappe.db.count("CRM Contact", filters=base_filters + [["assigned_to", "=", st.name], ["enrollment_status", "=", "Đã nhập học"]])
+			cnt = frappe.db.count("CRM Contact", filters=base_filters + [["assigned_to", "=", st.name], ["enrollment_status", "=", "ENROLLED"]])
 			sales_perf_data.append({"sales": st.full_name, "enrolled": cnt})
 		sales_perf_data = sorted(sales_perf_data, key=lambda x: x["enrolled"], reverse=True)[:5]
 		if not sales_perf_data:
@@ -297,7 +308,7 @@ def get_sales_dashboard(
 				AND i.item_kind = 'interest'
 				{interest_freshness_sql}
 				{insight_scope_sql}
-				AND c.enrollment_status = 'Đã nhập học'
+				AND c.enrollment_status = 'ENROLLED'
 				""",
 				(dim["code"], *interest_freshness_params, *insight_scope_params),
 			)[0][0] or 0
@@ -480,7 +491,7 @@ def get_sales_dashboard(
 			action_rows.append({
 				"lead": ac["full_name"] or ac["name"],
 				"owner": owner_name,
-				"stage": ac["enrollment_status"] or "Mới",
+				"stage": ac["enrollment_status"] or "NEW",
 				"interest": "Tư vấn tuyển sinh",
 				"readiness": 3 if "Level 3" in (ac["readiness_level"] or "") else 2,
 				"followUp": str(ac["next_follow_up"]) if ac["next_follow_up"] else "Chưa có",
@@ -564,21 +575,17 @@ def _campaign_spend_total(campaign, from_date, to_date):
 
 
 def _contact_names_touched_by_campaign(campaign):
-	"""Union of the deprecated singular crm_campaign field and the canonical
-	CRM Marketing Engagement table, so dashboards read correctly
-	whether a contact's campaign attribution came from before or after the
-	Phase 5 migration."""
-	names = set(frappe.db.get_all("CRM Contact", filters={"crm_campaign": campaign}, pluck="name"))
-	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
-	return names
+	"""Contacts with campaign attribution, read from the canonical
+	CRM Marketing Engagement table (CRM Contact.crm_campaign was migrated into
+	it and retired)."""
+	return set(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign}, pluck="crm_contact"))
 
 
 def _contact_names_with_event_participation():
-	"""Union of the deprecated singular crm_event field and the canonical
-	CRM Marketing Engagement table."""
-	names = set(frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], pluck="name"))
-	names.update(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
-	return names
+	"""Contacts with event participation, read from the canonical
+	CRM Marketing Engagement table (CRM Contact.crm_event was migrated into
+	it and retired)."""
+	return set(frappe.db.get_all("CRM Marketing Engagement", filters={"engagement_kind": "event_participation"}, pluck="crm_contact"))
 
 
 def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
@@ -610,7 +617,7 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 		# not applied to this canonical projection.
 		count_rows = frappe.get_list(
 			"CRM Student",
-			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "Đã nhập học"]],
+			filters=[["name", "in", list(attributed_students) or ["__none__"]], ["enrollment_status", "=", "ENROLLED"]],
 			fields=["count(name) as count"],
 			limit_page_length=1,
 		)
@@ -660,7 +667,7 @@ def get_digital_marketing_dashboard(
 	valid_leads = frappe.db.count("CRM Contact", filters=base_filters + [["phone", "is", "set"]])
 	valid_rate = round((valid_leads / total_digital_leads * 100.0), 1) if total_digital_leads else 0.0
 
-	qualified_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "in", ["Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]]])
+	qualified_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "in", ["PROSPECT", "Đang tư vấn", "Đã nộp hồ sơ", "ENROLLED"]]])
 	qualified_rate = round((qualified_leads / total_digital_leads * 100.0), 1) if total_digital_leads else 0.0
 
 	# Spend from CRM Campaign Spend -- scoped to the selected campaign when one
@@ -670,7 +677,7 @@ def get_digital_marketing_dashboard(
 	total_spend = _campaign_spend_total(campaign, from_date, to_date)
 
 	cpl = round(total_spend / total_digital_leads / 1000, 1) if total_digital_leads and total_spend else 0.0
-	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]])
+	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "ENROLLED"]])
 	cost_enrollment = round(total_spend / enrolled_leads / 1000000, 1) if enrolled_leads and total_spend else 0.0
 
 	# Platform Breakdown
@@ -704,7 +711,7 @@ def get_digital_marketing_dashboard(
 	# Source Quality
 	source_quality = []
 	for s in sources_list:
-		q = frappe.db.count("CRM Contact", filters=[["creation", ">=", from_date], ["creation", "<", to_date_plus_1], ["source", "=", s], ["enrollment_status", "in", ["Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]]])
+		q = frappe.db.count("CRM Contact", filters=[["creation", ">=", from_date], ["creation", "<", to_date_plus_1], ["source", "=", s], ["enrollment_status", "in", ["PROSPECT", "Đang tư vấn", "Đã nộp hồ sơ", "ENROLLED"]]])
 		source_quality.append({"source": s, "qualified": q})
 
 	# Campaign Contact: Query active CRM Campaigns
@@ -715,8 +722,8 @@ def get_digital_marketing_dashboard(
 		c_filters = base_filters + [["name", "in", list(_contact_names_touched_by_campaign(camp.name))]]
 		campaign_data.append({
 			"campaign": c_name,
-			"Đã chuyển đổi": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "Đã nhập học"]]),
-			"Có triển vọng": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "Có triển vọng"]]),
+			"Đã chuyển đổi": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "ENROLLED"]]),
+			"Có triển vọng": frappe.db.count("CRM Contact", filters=c_filters + [["enrollment_status", "=", "PROSPECT"]]),
 			"Sai số": frappe.db.count("CRM Contact", filters=c_filters + [["quality_bucket", "=", "Sai số"]]),
 			"Sai đối tượng": frappe.db.count("CRM Contact", filters=c_filters + [["quality_bucket", "=", "Không quan tâm"]]),
 			"Không liên lạc được": frappe.db.count("CRM Contact", filters=c_filters + [["quality_bucket", "=", "Không liên lạc được"]]),
@@ -1026,9 +1033,9 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 	total_leads = frappe.db.count("CRM Contact", filters=base_filters)
 	qualified_leads = frappe.db.count(
 		"CRM Contact",
-		filters=base_filters + [["enrollment_status", "in", ["Có triển vọng", "Đang tư vấn", "Đã nộp hồ sơ", "Đã nhập học"]]],
+		filters=base_filters + [["enrollment_status", "in", ["PROSPECT", "Đang tư vấn", "Đã nộp hồ sơ", "ENROLLED"]]],
 	)
-	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "Đã nhập học"]])
+	enrolled_leads = frappe.db.count("CRM Contact", filters=base_filters + [["enrollment_status", "=", "ENROLLED"]])
 	qualified_rate = round((qualified_leads / total_leads * 100.0), 1) if total_leads else 0.0
 	conversion_rate = round((enrolled_leads / total_leads * 100.0), 1) if total_leads else 0.0
 
@@ -1054,7 +1061,7 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 		"CRM Student",
 		filters={
 			"name": ["in", list(scoped_student_names) or ["__none__"]],
-			"enrollment_status": "Đã nhập học",
+			"enrollment_status": "ENROLLED",
 		},
 		pluck="name",
 		limit_page_length=200,

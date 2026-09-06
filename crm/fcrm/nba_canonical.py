@@ -99,6 +99,14 @@ def action_definition_snapshot(row: Mapping[str, Any]) -> dict:
 	``definition_digest``; keys are fixed and ordering is deterministic.
 	"""
 	category = row.get("category") or row.get("action_type")
+	academic_constraint = row.get("academic_constraint")
+	if isinstance(academic_constraint, str):
+		try:
+			academic_constraint = json.loads(academic_constraint)
+		except json.JSONDecodeError:
+			academic_constraint = {}
+	if not isinstance(academic_constraint, Mapping):
+		academic_constraint = {}
 	return {
 		"code": _text(row.get("code")),
 		"display_name": _text(row.get("display_name")),
@@ -107,6 +115,8 @@ def action_definition_snapshot(row: Mapping[str, Any]) -> dict:
 		"default_channel": _text(row.get("default_channel")) or "NONE",
 		"allowed_actors": _actor_list(row.get("allowed_actors")),
 		"requires_approval": _as_bool(row.get("requires_approval")),
+		"requires_parent_authority": _as_bool(row.get("requires_parent_authority")),
+		"academic_constraint": dict(academic_constraint),
 		"auto_execute": _as_bool(row.get("auto_execute")),
 		"enabled": _as_bool(row.get("enabled")),
 	}

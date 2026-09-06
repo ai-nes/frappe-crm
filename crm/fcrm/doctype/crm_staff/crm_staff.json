@@ -11,7 +11,6 @@
  "field_order": [
   "full_name",
   "user",
-  "sales_team",
   "is_active",
   "column_break_1",
   "department",
@@ -41,15 +40,6 @@
    "unique": 1
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
-   "fieldname": "sales_team",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Sales Team (Deprecated)",
-   "options": "\nTeam North\nTeam Central\nTeam South"
-  },
-  {
    "default": "1",
    "fieldname": "is_active",
    "fieldtype": "Check",
@@ -62,22 +52,22 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "description": "Primary organizational department. Its campus must match the staff primary campus.",
    "fieldname": "department",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Department (Deprecated)",
+   "label": "CRM Department",
    "options": "CRM Department",
    "reqd": 1
   },
   {
-   "description": "Deprecated — use Team Membership below instead. Kept for backward compatibility, do not remove.",
+   "description": "Primary campus for staff tenancy and User Permission scope. Kept aligned with the selected department.",
    "fieldname": "campus",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Campus (Deprecated)",
+   "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
   },
@@ -154,7 +144,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "share": 1,
    "write": 1
   },
@@ -172,7 +162,7 @@
   },
   {
    "read": 1,
-   "role": "Promoter-PR"
+"role": "Promoter"
   },
   {
    "read": 1,

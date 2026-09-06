@@ -21,11 +21,11 @@ class TestCRMSegment(FrappeTestCase):
 	# _make_contact's convenience "lifecycle_stage" kwarg maps through this table
 	# to the enrollment status this site's seed data maps to that stage.
 	LIFECYCLE_STAGE_ENROLLMENT_STATUS = {
-		"Lead": "Mới",
-		"MQL": "Có triển vọng",
-		"Applicant": "Đã xác nhận",
-		"Enrolled": "Đã nhập học",
-		"Lost": "Từ chối",
+		"Lead": "NEW",
+		"MQL": "PROSPECT",
+		"Applicant": "CONFIRMED",
+		"Enrolled": "ENROLLED",
+		"Lost": "REFUSED",
 	}
 
 	def setUp(self):
@@ -86,7 +86,7 @@ class TestCRMSegment(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
-	def _make_user(self, prefix, roles=("Lead Sales",)):
+	def _make_user(self, prefix, roles=("Lead Sale",)):
 		email = f"{frappe.scrub(prefix)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
@@ -137,7 +137,7 @@ class TestCRMSegment(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": student_name,
 				"phone": phone,
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -282,7 +282,7 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertEqual(len(result["contacts"]), 2)
 
 	def test_preview_private_segment_visible_to_owner(self):
-		owner_email = self._make_user("_Test Segment Owner", roles=("Lead Sales", "System Manager"))
+		owner_email = self._make_user("_Test Segment Owner", roles=("Lead Sale", "System Manager"))
 		frappe.set_user(owner_email)
 		try:
 			filters = {
@@ -323,8 +323,8 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_preview_public_segment_visible_to_other_users(self):
-		owner_email = self._make_user("_Test Segment PubOwner", roles=("Lead Sales", "System Manager"))
-		other_email = self._make_user("_Test Segment PubOther", roles=("Lead Sales", "System Manager"))
+		owner_email = self._make_user("_Test Segment PubOwner", roles=("Lead Sale", "System Manager"))
+		other_email = self._make_user("_Test Segment PubOther", roles=("Lead Sale", "System Manager"))
 
 		frappe.set_user(owner_email)
 		filters = {

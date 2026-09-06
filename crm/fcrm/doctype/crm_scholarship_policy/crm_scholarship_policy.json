@@ -19,6 +19,6 @@
  ],
  "indexes": [{"fields": ["policy_name", "admission_year", "version"], "name": "crm_scholarship_policy_lookup_idx", "unique": 1}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Scholarship Policy", "naming_rule": "Naming Series", "naming_series_options": "SCH-.YYYY.-", "owner": "Administrator",
- "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sales"}],
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
  "row_format": "Dynamic", "search_fields": "policy_name,admission_year,campus,major", "sort_field": "effective_from", "sort_order": "DESC"
 }

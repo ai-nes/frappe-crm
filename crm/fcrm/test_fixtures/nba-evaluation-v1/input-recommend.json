@@ -81,7 +81,7 @@
         ],
         "allowed_actors": [
           "Sale",
-          "Lead Sales"
+          "Lead Sale"
         ],
         "execution_parameter_schema": {
           "call_window": "string",

@@ -12,6 +12,7 @@ from crm.fcrm.interaction_log import (
 )
 from crm.fcrm.interaction_log import (
 	normalize_external_interaction_payload,
+	read_interaction_evidence,
 )
 
 
@@ -25,32 +26,21 @@ def _request_json(payload: Any = None):
 
 
 def _normalize_interaction_payload(payload: dict[str, Any]) -> dict[str, Any]:
-	"""Adapt the PRD shape while preserving the canonical source boundary."""
-	if not isinstance(payload, dict):
-		return normalize_external_interaction_payload(payload)
-	canonical = dict(payload)
-	has_explicit_target = bool(
-		payload.get("student_id") or payload.get("student") or payload.get("contact_id")
-	)
-	if not canonical.get("source_namespace") and canonical.get("source_system"):
-		canonical["source_namespace"] = canonical["source_system"]
-	if not canonical.get("source_record_id") and canonical.get("message_id"):
-		canonical["source_record_id"] = canonical["message_id"]
-	if has_explicit_target and not canonical.get("source_record_id") and canonical.get("external_id"):
-		canonical["source_record_id"] = canonical["external_id"]
-	if not has_explicit_target and not canonical.get("target_external_id") and canonical.get("external_id"):
-		canonical["target_external_id"] = canonical["external_id"]
-	return normalize_external_interaction_payload(canonical)
+	"""Validate the canonical interaction ingress shape without legacy aliases."""
+	return normalize_external_interaction_payload(payload)
 
 
 def _interaction_response(result: dict[str, Any]) -> dict[str, Any]:
-	return {
+	response = {
 		"interaction_id": result.get("interaction"),
 		"student_id": result.get("student"),
 		"contact_id": result.get("contact"),
 		"status": result.get("outcome"),
 		"receipt_id": result.get("receipt"),
 	}
+	if result.get("analysis_run"):
+		response["analysis_run"] = result["analysis_run"]
+	return response
 
 
 @frappe.whitelist(methods=["POST"])
@@ -68,3 +58,52 @@ def submit_interaction(payload: dict[str, Any] | str | None = None) -> dict[str,
 
 intake_interaction = submit_interaction
 receive = submit_interaction
+
+
+@frappe.whitelist(methods=["POST"])
+def get_interaction_evidence(interaction: str, expected_revision: int, expected_digest: str) -> dict:
+	"""Explicit service capability for one revision's raw turns; never a user-facing API."""
+	return read_interaction_evidence(
+		interaction, expected_revision=int(expected_revision), expected_digest=expected_digest
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def claim_interaction_analysis_run(run_id: str, stage_generation: int) -> dict:
+	from crm.fcrm.interaction_analysis import claim_interaction_analysis_run as claim
+
+	return claim(run_id=run_id, stage_generation=int(stage_generation))
+
+
+@frappe.whitelist(methods=["POST"])
+def settle_interaction_analysis_result(
+	run_id: str,
+	stage_generation: int,
+	lease_token: str,
+	expected_source_revision: int,
+	expected_source_digest: str,
+	state: str,
+	policy_revision: str,
+	model_revision: str,
+	result_digest: str,
+	intent=None,
+	terminal_reason: str | None = None,
+) -> dict:
+	"""Service-only, fenced settlement for the canonical Interaction worker."""
+	from crm.fcrm.interaction_analysis import settle_interaction_analysis_result as settle
+
+	if isinstance(intent, str):
+		intent = frappe.parse_json(intent)
+	return settle(
+		run_id=run_id,
+		stage_generation=int(stage_generation),
+		lease_token=lease_token,
+		expected_source_revision=int(expected_source_revision),
+		expected_source_digest=expected_source_digest,
+		state=state,
+		policy_revision=policy_revision,
+		model_revision=model_revision,
+		result_digest=result_digest,
+		intent=intent,
+		terminal_reason=terminal_reason,
+	)

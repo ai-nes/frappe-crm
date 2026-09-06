@@ -235,7 +235,7 @@ class CRMStudent(Document):
 				"label": "Enrollment Status",
 				"type": "Link",
 				"key": "enrollment_status",
-				"options": "CRM Term",
+				"options": "CRM Enrollment Status",
 				"width": "12rem",
 			},
 			{

@@ -27,7 +27,7 @@ def _enabled() -> bool:
 def _require_demo_user() -> None:
 	if frappe.session.user in ("", "Guest") or not _enabled():
 		frappe.throw(_("Copilot demo mutations are disabled."), frappe.PermissionError)
-	if resolve_copilot_profile(frappe.get_roles(frappe.session.user)) not in {"Sale", "Marketing", "Lead Sales", "Admissions Director"}:
+	if resolve_copilot_profile(frappe.get_roles(frappe.session.user)) not in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}:
 		frappe.throw(_("Only a canonical CRM Copilot role may mutate CRM demo data."), frappe.PermissionError)
 
 

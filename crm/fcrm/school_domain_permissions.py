@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import frappe
 
-PORTFOLIO_ROLES = frozenset({"Promoter", "Promoter-PR"})
-FULL_ACCESS_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director", "Lead Sales"})
+PORTFOLIO_ROLES = frozenset({"Promoter"})
+FULL_ACCESS_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director", "Lead Sale"})
 READ_ALL_ROLES = frozenset({"Marketing", "Sale"})
 
 

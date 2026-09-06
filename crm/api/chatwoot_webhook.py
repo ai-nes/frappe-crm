@@ -345,6 +345,8 @@ def normalize_message_payload(
 	conversation_id = _text(conversation.get("id") or conversation.get("display_id"))
 	sender_type = str(sender.get("type") or sender.get("sender_type") or "").casefold()
 	agent_id = _text(sender.get("id")) if sender_type in {"user", "agent", "agent_bot", "captain"} else None
+	speaker_role = "student" if direction == "inbound" else "advisor"
+	occurred_at = _occurred_at(payload.get("created_at"))
 	source_record_id = f"{account_id}:message:{message_id}"
 	return {
 		"source_namespace": "chatwoot",
@@ -353,10 +355,19 @@ def normalize_message_payload(
 		"contact_id": crm_contact,
 		"channel": _channel(payload),
 		"direction": direction,
-		"content": content,
-		"occurred_at": _occurred_at(payload.get("created_at")),
+		"occurred_at": occurred_at,
 		"conversation_id": conversation_id,
 		"agent_id": agent_id,
+		"evidence_kind": "message",
+		"evidence_state": "final",
+		"source_revision": 1,
+		"turns": [
+			{
+				"speaker_role": speaker_role,
+				"content": content,
+				"occurred_at": occurred_at,
+			}
+		],
 	}
 
 

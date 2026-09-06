@@ -10,14 +10,10 @@ class TestCRMSchoolStakeholder(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self.suffix = frappe.generate_hash(length=8)
-		self.role = frappe.db.get_value(
-			"CRM Term", {"category": "stakeholder_role", "is_active": 1}, "name"
-		)
-		self.activity_type = frappe.db.get_value(
-			"CRM Term", {"category": "activity_type", "is_active": 1}, "name"
-		)
+		self.role = frappe.db.get_value("CRM Stakeholder Role", {"enabled": 1}, "name")
+		self.activity_type = frappe.db.get_value("CRM School Activity Type", {"enabled": 1}, "name")
 		if not self.role or not self.activity_type:
-			self.skipTest("School-domain governed terms are not installed")
+			self.skipTest("School-domain lookups are not installed")
 		self.province = frappe.db.get_value("CRM Province", {}, "name")
 		self.ward = frappe.db.get_value("CRM Ward", {"province": self.province}, "name") if self.province else None
 		if not self.province or not self.ward:

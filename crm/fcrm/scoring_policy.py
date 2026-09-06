@@ -10,6 +10,7 @@ rows — is what changed) so both compute policy_hash from the same function,
 never a second ad hoc copy. `crm/api/scoring_policy.py` reads the already-
 resolved, already-versioned result for the crm-agents-facing endpoint.
 """
+
 import hashlib
 import json
 
@@ -28,8 +29,12 @@ _SIGNAL_FIELDS = [
 	"condition_field",
 	"condition_operator",
 	"condition_value",
-	"interaction_type",
+	"interaction_term",
 	"intent_type",
+	"intent_role",
+	"intent_polarity",
+	"min_confidence",
+	"intent_max_age_days",
 	"inactivity_days",
 ]
 
@@ -86,8 +91,12 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 				"condition_field": sig.get("condition_field"),
 				"condition_operator": sig.get("condition_operator"),
 				"condition_value": sig.get("condition_value"),
-				"interaction_type": sig.get("interaction_type"),
-				"intent_type": sig.get("intent_type"),
+				"interaction_semantic_key": sig.get("interaction_term") or None,
+				"intent_semantic_key": sig.get("intent_type") or None,
+				"intent_role": sig.get("intent_role"),
+				"intent_polarity": sig.get("intent_polarity"),
+				"min_confidence": float(sig.get("min_confidence") or 0),
+				"intent_max_age_days": int(sig.get("intent_max_age_days") or 0),
 				"inactivity_days": int(sig.get("inactivity_days") or 30),
 			}
 		)
@@ -112,13 +121,17 @@ def resolve_policy_rules(template_doc) -> tuple[list[dict], list[dict], list[dic
 				"penalty_amount": float(row.penalty_amount or 0),
 				"cooldown_days": int(row.cooldown_days or 0),
 				"max_penalties": int(row.max_penalties or 0),
-				"interaction_type": sig.get("interaction_type"),
+				"interaction_semantic_key": sig.get("interaction_term") or None,
 				"inactivity_days": int(sig.get("inactivity_days") or 30),
 			}
 		)
 
 	time_decay_config = [
-		{"max_days": int(row.max_days or 0), "multiplier": float(row.multiplier or 1.0), "tier_label": row.get("tier_label") or ""}
+		{
+			"max_days": int(row.max_days or 0),
+			"multiplier": float(row.multiplier or 1.0),
+			"tier_label": row.get("tier_label") or "",
+		}
 		for row in template_doc.rules
 		if row.rule_kind == "time_decay"
 	]
@@ -138,6 +151,8 @@ def compute_policy_hash(
 		"fit_weight": float(template_doc.fit_weight or 0),
 		"engagement_weight": float(template_doc.engagement_weight or 0),
 		"intent_weight": float(template_doc.intent_weight or 0),
+		"effective_from": str(template_doc.start_time or ""),
+		"effective_until": str(template_doc.end_time or ""),
 		"rules": rules,
 		"negative_rules": negative_rules,
 		"time_decay_config": time_decay_config,
@@ -184,13 +199,22 @@ def bump_active_templates_for_signal(signal_name: str) -> None:
 		frappe.get_doc("CRM Score Template", name).save(ignore_permissions=True)
 
 
-def get_active_policy() -> dict | None:
+def get_active_policy(*, as_of=None) -> dict | None:
 	"""Return the fully resolved, versioned policy for the single Active
 	`CRM Score Template`, or None if none is Active."""
+	current = as_of or frappe.utils.now_datetime()
 	template_name = frappe.db.get_value("CRM Score Template", {"status": "Active"}, "name")
 	if not template_name:
 		return None
 	template_doc = frappe.get_doc("CRM Score Template", template_name)
+	if template_doc.start_time and frappe.utils.get_datetime(
+		template_doc.start_time
+	) > frappe.utils.get_datetime(current):
+		return None
+	if template_doc.end_time and frappe.utils.get_datetime(
+		template_doc.end_time
+	) <= frappe.utils.get_datetime(current):
+		return None
 	rules, negative_rules, time_decay_config = resolve_policy_rules(template_doc)
 	return {
 		"contract_version": POLICY_CONTRACT_VERSION,
@@ -201,6 +225,8 @@ def get_active_policy() -> dict | None:
 		"fit_weight": float(template_doc.fit_weight or 0),
 		"engagement_weight": float(template_doc.engagement_weight or 0),
 		"intent_weight": float(template_doc.intent_weight or 0),
+		"effective_from": str(template_doc.start_time or "") or None,
+		"effective_until": str(template_doc.end_time or "") or None,
 		"rules": rules,
 		"negative_rules": negative_rules,
 		"time_decay_config": time_decay_config,

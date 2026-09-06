@@ -118,7 +118,17 @@ LEGACY_ACTION_TYPE_ALIASES: Final[frozenset[str]] = frozenset(
 		"HANDOFF",
 	}
 )
+# WAIT/FOLLOW_UP are recommendation-only outcomes, never a CRM Action: they
+# represent "do nothing yet" rather than a task to execute. They stay
+# supported for recommendations only (see SUPPORTED_RECOMMENDATION_ACTION_TYPES
+# below) as long as `crm/fcrm/nba.py` can still emit them; removing them here
+# is tech debt tied to retiring that WAIT/FOLLOW_UP branch in nba.py, not a
+# standalone cleanup.
 LEGACY_RECOMMENDATION_ONLY: Final[frozenset[str]] = frozenset({"WAIT", "FOLLOW_UP"})
+# Maps each alias above to its canonical catalog code at write boundaries
+# (see canonicalize_action_type()). CALL is intentionally absent: it is
+# already a canonical catalog code (see ACTION_TYPE_CATALOG above), listed
+# in LEGACY_ACTION_TYPE_ALIASES only because pre-catalog records also used it.
 LEGACY_ACTION_TYPE_CANONICAL: Final[dict[str, str]] = {
 	"EMAIL": "SEND_EMAIL",
 	"MESSAGE": "SEND_ZALO",

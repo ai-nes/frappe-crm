@@ -36,8 +36,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 						"full_name": "_Test Dash Student",
 						"phone": "0981112223",
 						"source": "_Test Dash Source",
-						"enrollment_status": "Có triển vọng",
-						"lead_status": "Mới",
+						"enrollment_status": "PROSPECT",
 						"is_test_record": 0,
 						"readiness_level": "Level 2 - Đang so sánh",
 						"quality_bucket": "Hot",
@@ -343,7 +342,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 				"doctype": "CRM Student",
 				"student_name": "_Test Dash Student Anchor",
 				"phone": "0981112230",
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -360,7 +359,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			"doctype": "CRM Contact",
 			"full_name": name,
 			"phone": phone,
-			"enrollment_status": "Có triển vọng",
+			"enrollment_status": "PROSPECT",
 		}
 		if crm_campaign:
 			payload["crm_campaign"] = crm_campaign

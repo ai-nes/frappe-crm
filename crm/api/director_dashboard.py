@@ -43,6 +43,14 @@ STATUS_TO_STAGE = {
 	"khong quan tam": "lost",
 	"sai so": "lost",
 	"tu choi": "lost",
+	# CRM Enrollment Status codes (post CRM Term cutover) -- enrollment_status
+	# now stores the UPPER_SNAKE code, not the Vietnamese display label above.
+	"new": "prospect",
+	"prospect": "qualified",
+	"confirmed": "accepted",
+	"enrolled": "enrolled",
+	"converted": "enrolled",
+	"refused": "lost",
 }
 APPLICATION_STAGE = {
 	"Submitted": "application",
@@ -512,8 +520,6 @@ def _load_targets(admission_year: str, scope: dict[str, Any]) -> dict[str, float
 				"metric_key",
 				"target_value",
 				"planning_scope",
-				"scope",
-				"scope_type",
 				"modified",
 				"version",
 			],
@@ -533,15 +539,12 @@ def _load_targets(admission_year: str, scope: dict[str, Any]) -> dict[str, float
 
 
 def _target_matches_scope(row: dict[str, Any], scope: dict[str, Any]) -> bool:
-	values = {_fold(row.get(field)) for field in ("planning_scope", "scope") if row.get(field)}
+	values = {_fold(row.get("planning_scope"))} if row.get("planning_scope") else set()
 	scope_key = _fold(row.get("planning_scope"))
-	scope_type = _fold(row.get("scope_type"))
 	if scope["id"] == "all":
-		if scope_type == "national" or scope_key == "national":
+		if scope_key == "national":
 			return True
-		return (not values and scope_type in {"", "national"}) or bool(
-			values & {"all", "national", "toan bo"}
-		)
+		return bool(values & {"all", "national", "toan bo"})
 	if scope.get("branch"):
 		branch = _fold(scope["branch"])
 		return branch in values or _fold(scope["id"]) in values or scope_key == f"campus:{branch}"

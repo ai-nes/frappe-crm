@@ -20,7 +20,7 @@ def _row(code="CALL", **overrides):
 		"category": "CONTACT",
 		"purpose": "reach out",
 		"default_channel": "CALL",
-		"allowed_actors": ["Sale", "Lead Sales"],
+		"allowed_actors": ["Sale", "Lead Sale"],
 		"requires_approval": 0,
 		"auto_execute": 0,
 		"enabled": 1,
@@ -75,9 +75,67 @@ def test_frequency_cap_below_threshold_is_allowed():
 	assert [a["code"] for a in result["actions"]] == ["CALL"]
 
 
+def test_contact_action_requires_authoritative_consent_and_channel():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={"contactability": {"consent": True, "channels": ["EMAIL"]}},
+	)
+	assert result["actions"] == []
+	assert result["exclusions"] == [{"action": "CALL", "reason": "CHANNEL_NOT_ALLOWED"}]
+
+
+def test_contact_action_fails_closed_when_recipient_is_ambiguous():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={
+			"contactability": {
+				"consent": True,
+				"channels": ["CALL"],
+				"recipient_bound": False,
+			}
+		},
+	)
+	assert result["actions"] == []
+	assert result["exclusions"] == [{"action": "CALL", "reason": "RECIPIENT_AMBIGUOUS"}]
+
+
+def test_terminal_lifecycle_blocks_contact_action_before_scoring():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={
+			"lifecycle": {"stage": "enrolled"},
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert result["exclusions"] == [{"action": "CALL", "reason": "LIFECYCLE_TERMINAL"}]
+
+
+def test_parent_action_is_deferred_until_recipient_specific_consent_exists():
+	row = _row("CONTACT_PARENT", category="PARENT")
+	result = filter_eligible_actions(
+		[row],
+		now=NOW,
+		decision_context={"contactability": {"consent": True, "channels": ["CALL"]}},
+		parent_authority_channels={"CALL"},
+	)
+	assert result["actions"] == []
+	assert result["exclusions"] == [
+		{"action": "CONTACT_PARENT", "reason": "PARENT_AUTHORITY_MISSING"}
+	]
+
+
 def test_unknown_code_is_excluded():
 	result = filter_eligible_actions([_row(code="NOT_A_REAL_CODE")], now=NOW)
 	assert result["exclusions"] == [{"action": "NOT_A_REAL_CODE", "reason": "UNKNOWN_CODE"}]
+
+
+def test_action_without_explicit_opportunity_mapping_is_excluded():
+	result = filter_eligible_actions([_row("REASSIGN_ADVISOR")], now=NOW)
+	assert result["actions"] == []
+	assert result["exclusions"] == [{"action": "REASSIGN_ADVISOR", "reason": "NO_OPPORTUNITY_MAPPING"}]
 
 
 def test_happy_path_digest_is_stable_and_order_independent():

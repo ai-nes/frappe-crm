@@ -19,6 +19,6 @@
   {"fieldname": "payload", "fieldtype": "JSON", "label": "Payload", "read_only": 1}
  ],
  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Revision Journal", "naming_rule": "By fieldname",
- "owner": "Administrator", "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Sale"}, {"read": 1, "role": "Lead Sales"}, {"read": 1, "role": "Admissions Director"}],
+ "owner": "Administrator", "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Sale"}, {"read": 1, "role": "Lead Sale"}, {"read": 1, "role": "Admissions Director"}],
  "sort_field": "stream_sequence", "sort_order": "DESC", "track_changes": 1
 }

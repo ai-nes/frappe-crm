@@ -29,7 +29,7 @@ CONDITION_FIELDS = {
 	"student.enrollment_status": {
 		"label": "Enrollment Status",
 		"type": "link",
-		"options_doctype": "CRM Term",
+		"options_doctype": "CRM Enrollment Status",
 		"operators": ("equals", "not_equals", "in", "not_in"),
 	},
 	"student.study_stage": {

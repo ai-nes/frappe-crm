@@ -38,7 +38,7 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 				"doctype": "CRM Contact",
 				"full_name": "_Test Migrate Contact",
 				"phone": "0977000003",
-				"enrollment_status": "Có triển vọng",
+				"enrollment_status": "PROSPECT",
 				"crm_campaign": self.campaign,
 				"crm_event": self.event,
 			}

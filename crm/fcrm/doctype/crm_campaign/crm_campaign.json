@@ -67,7 +67,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Campaign Type",
-   "options": "CRM Term"
+   "options": "CRM Campaign Type"
   },
   {
    "fieldname": "event_type",
@@ -203,7 +203,7 @@
   },
   {
    "read": 1,
-   "role": "Lead Sales"
+   "role": "Lead Sale"
   },
   {
    "create": 1,

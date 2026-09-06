@@ -184,16 +184,9 @@ def create_additive_value(doctype, value, reason=None, idempotency_key=None, cor
 		existing = frappe.db.get_value("CRM Master Data Change", {"idempotency_key": idempotency_key}, "name")
 		if existing:
 			return {"name": existing, "status": "replayed"}
-	if doctype == "CRM Term":
-		if not category:
-			frappe.throw("category is required for CRM Term values.", frappe.ValidationError)
-		if frappe.db.exists(doctype, {"term_name": value, "category": category}):
-			return {"name": frappe.db.get_value(doctype, {"term_name": value, "category": category}, "name"), "status": "existing"}
-	elif frappe.db.exists(doctype, value):
+	if frappe.db.exists(doctype, value):
 		return {"name": value, "status": "existing"}
 	payload = {"doctype": doctype, name_field: value}
-	if doctype == "CRM Term":
-		payload["category"] = category
 	if "lead_source" in config.get("required_fields", ()):
 		payload["lead_source"] = lead_source
 	if reason and config.get("description_field"):
@@ -253,13 +246,11 @@ def propose_additive_value(doctype, value, reason=None, idempotency_key=None, co
 	"""Open an approval-backed creation request for non-additive-safe lookups."""
 	_require_write_enabled()
 	config = _governed_config(doctype)
-	if not config.get("additive_requires_approval") and not (doctype == "CRM Term" and category == "lost_reason"):
+	if not config.get("additive_requires_approval"):
 		frappe.throw("This lookup uses the additive governance command.", frappe.ValidationError)
 	_require_role(config["owner_role"])
 	value = (value or "").strip()
-	if doctype == "CRM Term" and not category:
-		frappe.throw("category is required for CRM Term values.", frappe.ValidationError)
-	existing = frappe.db.exists(doctype, {"term_name": value, "category": category}) if doctype == "CRM Term" else frappe.db.exists(doctype, value)
+	existing = frappe.db.exists(doctype, value)
 	if not value or existing:
 		frappe.throw("value must be a new, non-empty lookup value", frappe.ValidationError)
 	if idempotency_key:
@@ -423,8 +414,6 @@ def _apply_approved_change(change):
 	if change.action == "Create":
 		config = _governed_config(change.reference_doctype)
 		payload = {"doctype": change.reference_doctype, config["name_field"]: change.new_value}
-		if change.reference_doctype == "CRM Term":
-			payload["category"] = change.reference_category
 		if frappe.db.exists(change.reference_doctype, change.new_value):
 			return frappe.get_doc(change.reference_doctype, change.new_value)
 		return frappe.get_doc(payload).insert(

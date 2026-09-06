@@ -358,9 +358,6 @@ def _insert_bundle_action(*, student, contact, candidate, current_revision, rank
 		"student": student,
 		"contact": contact,
 		"recommendation": recommendation,
-		# Legacy Action Definition links are no longer populated; the canonical
-		# master selection lives in `action`.
-		"nba_action": None,
 		"origin": "ai",
 		"plan_rank": rank,
 		"source_context_revision": current_revision,

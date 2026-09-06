@@ -46,7 +46,7 @@ def test_action_definition_snapshot_is_deterministic_and_order_independent():
 		"category": "CONTACT",
 		"purpose": "Reach the family",
 		"default_channel": "CALL",
-		"allowed_actors": ["Lead Sales", "Sale"],
+		"allowed_actors": ["Lead Sale", "Sale"],
 		"requires_approval": 0,
 		"auto_execute": 1,
 		"enabled": 1,
@@ -55,7 +55,7 @@ def test_action_definition_snapshot_is_deterministic_and_order_independent():
 		"enabled": True,
 		"auto_execute": "1",
 		"requires_approval": False,
-		"allowed_actors": ["Sale", "Lead Sales", "Sale"],
+		"allowed_actors": ["Sale", "Lead Sale", "Sale"],
 		"default_channel": "CALL",
 		"purpose": "Reach the family",
 		"action_type": "CONTACT",
@@ -63,13 +63,13 @@ def test_action_definition_snapshot_is_deterministic_and_order_independent():
 		"code": "CALL",
 	}
 	snap_a = action_definition_snapshot(row_a)
-	assert snap_a["allowed_actors"] == ["Lead Sales", "Sale"]
+	assert snap_a["allowed_actors"] == ["Lead Sale", "Sale"]
 	assert canonical_digest(snap_a) == canonical_digest(action_definition_snapshot(row_b))
 
 
 def test_action_definition_snapshot_parses_json_actor_string():
-	snap = action_definition_snapshot({"code": "CALL", "allowed_actors": '["Sale", "Lead Sales"]'})
-	assert snap["allowed_actors"] == ["Lead Sales", "Sale"]
+	snap = action_definition_snapshot({"code": "CALL", "allowed_actors": '["Sale", "Lead Sale"]'})
+	assert snap["allowed_actors"] == ["Lead Sale", "Sale"]
 
 
 def test_time_text_normalises_timedelta_and_short_strings():

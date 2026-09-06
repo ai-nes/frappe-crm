@@ -58,7 +58,7 @@ class TestKnowledgeGraphCapabilitySeed(unittest.TestCase):
 		role_names = (
 			"Sale",
 			"Marketing",
-			"Lead Sales",
+			"Lead Sale",
 			"Admissions Director",
 			"Administrator",
 			"System Manager",
@@ -69,7 +69,7 @@ class TestKnowledgeGraphCapabilitySeed(unittest.TestCase):
 			agent_migrations._grant_sales_worklist_capability()
 			agent_migrations._grant_sales_worklist_capability()
 
-		for role_name in ("Sale", "Marketing", "Lead Sales", "Admissions Director"):
+		for role_name in ("Sale", "Marketing", "Lead Sale", "Admissions Director"):
 			self.assertEqual(
 				[
 					row.value

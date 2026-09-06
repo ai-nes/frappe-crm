@@ -285,6 +285,47 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(channels[0]["response"], 100.0)
 		self.assertEqual(channels[1]["response"], 0.0)
 
+	def test_journey_keeps_milestones_and_excludes_activity_noise(self):
+		interactions = [
+			frappe._dict(
+				name="INTX-STAGE",
+				interaction_datetime="2026-09-05 09:00:00",
+				interaction_type="STAGE_CHANGED",
+				summary="Stage changed to Applicant",
+			),
+			frappe._dict(
+				name="INTX-NOTE",
+				interaction_datetime="2026-09-04 12:51:40",
+				interaction_type="NOTE",
+				summary="Hoàn tất hồ sơ nhập học (ghi chú nội bộ)",
+			),
+			frappe._dict(
+				name="INTX-WEBCHAT",
+				interaction_datetime="2026-09-04 12:47:31",
+				interaction_type="MESSAGE",
+				summary="webchat inbound",
+				channel="webchat",
+			),
+			frappe._dict(
+				name="INTX-ENROLLED",
+				interaction_datetime="2026-08-27 19:33:43",
+				interaction_type="COUNSELING",
+				summary="Hoàn tất hồ sơ nhập học ngành Kỹ thuật phần mềm",
+			),
+			frappe._dict(
+				name="INTX-TEST",
+				interaction_datetime="2026-08-26 10:00:00",
+				interaction_type="COUNSELING",
+				summary="test",
+			),
+		]
+
+		journey = director_students._journey(interactions, item={})
+
+		self.assertEqual([event["id"] for event in journey], ["INTX-ENROLLED", "INTX-STAGE"])
+		self.assertEqual(journey[0]["status"], "completed")
+		self.assertEqual(journey[1]["status"], "current")
+
 	def test_guardian_projection_reads_contact_as_a_permission_aware_row(self):
 		with (
 			patch.object(director_students, "_table_exists", return_value=True),
@@ -481,7 +522,7 @@ class TestDirectorStudents(FrappeTestCase):
 			[
 				frappe._dict(
 					name="INTX-CHATWOOT-1",
-					interaction_type="Tin nhắn Chatwoot",
+					interaction_type="TIN_NHAN_CHATWOOT",
 					interaction_datetime="2026-09-04 12:47:31",
 					direction="inbound",
 					notes="Em muốn hỏi học phí.",
@@ -503,7 +544,7 @@ class TestDirectorStudents(FrappeTestCase):
 			frappe._dict(
 				name="INTX-CHATWOOT-2",
 				student="ENR-1",
-				interaction_type="Tin nhắn Chatwoot",
+				interaction_type="TIN_NHAN_CHATWOOT",
 				interaction_datetime="2026-09-04 12:47:31",
 				direction="inbound",
 				notes="Tin nhắn mới",
@@ -536,7 +577,10 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0][0], "CRM Interaction")
 		self.assertEqual(
 			calls[0][1]["filters"],
-			{"student": "ENR-1", "interaction_type": "Tin nhắn Chatwoot"},
+			{
+				"student": "ENR-1",
+				"interaction_type": ["in", ("MESSAGE", "TIN_NHAN_CHATWOOT")],
+			},
 		)
 		self.assertEqual(calls[0][1]["limit_start"], 1)
 		self.assertEqual(calls[0][1]["limit_page_length"], 1)

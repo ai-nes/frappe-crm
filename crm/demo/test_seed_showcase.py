@@ -142,11 +142,6 @@ class TestCoverageMatrixConsistency(unittest.TestCase):
 		expected = set(COVERAGE_MATRIX["CRM Student"]["lifecycle_stage"])
 		self.assertTrue({s["target_stage"] for s in SCENARIOS}.issuperset(expected))
 
-	def test_contact_rows_cover_every_lead_status_in_the_matrix(self):
-		matrix = set(COVERAGE_MATRIX["CRM Contact"]["lead_status"])
-		seeded = {row["lead_status"] for row in CONTACT_ROWS}
-		self.assertTrue(matrix.issubset(seeded), matrix - seeded)
-
 	def test_contact_rows_cover_readiness_quality_channel_and_decision_maker(self):
 		for field in ("readiness_level", "quality_bucket", "decision_maker", "preferred_contact_channel"):
 			matrix = set(COVERAGE_MATRIX["CRM Contact"][field])

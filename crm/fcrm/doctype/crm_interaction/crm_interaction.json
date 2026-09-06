@@ -22,6 +22,11 @@
   "external_id",
   "source_namespace",
   "source_record_id",
+  "source_revision",
+  "evidence_digest",
+  "evidence",
+  "episode_key",
+  "episode_state",
   "channel",
   "direction",
   "conversation_id",
@@ -73,7 +78,7 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Interaction Type",
-   "options": "CRM Term",
+   "options": "CRM Interaction Type",
    "reqd": 1
   },
   {
@@ -136,6 +141,44 @@
    "read_only": 1
   },
   {
+   "fieldname": "source_revision",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Source Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence_digest",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Evidence Digest",
+   "length": 64,
+   "read_only": 1
+  },
+  {
+   "fieldname": "evidence",
+   "fieldtype": "Link",
+   "hidden": 1,
+   "label": "Evidence",
+   "options": "CRM Interaction Evidence",
+   "read_only": 1
+  },
+  {
+   "fieldname": "episode_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Interaction Episode",
+   "read_only": 1
+  },
+  {
+   "fieldname": "episode_state",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Episode State",
+   "options": "open\nsealed",
+   "read_only": 1
+  },
+  {
    "fieldname": "channel",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -147,7 +190,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Direction",
-   "options": "inbound\noutbound",
+   "options": "inbound\noutbound\ninternal",
    "read_only": 1
   },
   {
@@ -262,7 +305,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Lead Sales",
+   "role": "Lead Sale",
    "share": 1,
    "write": 1
   },
@@ -303,6 +346,10 @@
   {
    "read": 1,
    "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
   }
  ],
  "quick_entry": 0,

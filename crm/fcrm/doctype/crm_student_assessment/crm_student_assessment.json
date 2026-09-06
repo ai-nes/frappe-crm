@@ -63,7 +63,7 @@
  "owner": "Administrator",
  "permissions": [
   {"read": 1, "role": "Admissions Director"},
-  {"create": 1, "read": 1, "write": 1, "role": "Lead Sales"},
+  {"create": 1, "read": 1, "write": 1, "role": "Lead Sale"},
   {"create": 1, "read": 1, "write": 1, "role": "Sale"},
   {"create": 1, "read": 1, "write": 1, "delete": 1, "role": "System Manager"}
  ],

@@ -42,7 +42,7 @@ class TestScoringWrite(FrappeTestCase):
 				"student_name": name,
 				"phone": "0981100001",
 				"email": f"{name.lower().replace(' ', '.')}@example.com",
-				"enrollment_status": "Đã xác nhận",
+				"enrollment_status": "CONFIRMED",
 			}
 		)
 		frappe.flags.student_intake_service = True

@@ -62,15 +62,15 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._statuses = {}
-		for stage_order, status_name in enumerate(("_Test Status A", "_Test Status B", "_Test Status C"), 1):
-			if not frappe.db.exists("CRM Term", status_name):
+		for stage_order, status_name in enumerate(("TEST_STATUS_A", "TEST_STATUS_B", "TEST_STATUS_C"), 1):
+			if not frappe.db.exists("CRM Enrollment Status", status_name):
 				frappe.get_doc(
 					{
-						"doctype": "CRM Term",
-						"term_name": status_name,
-						"category": "enrollment_status",
+						"doctype": "CRM Enrollment Status",
+						"code": status_name,
+						"display_name": status_name,
 						"sort_order": stage_order,
-						"metadata": {"stage_category": "open"},
+						"stage_category": "open",
 					}
 				).insert(ignore_permissions=True)
 			self._statuses[status_name] = status_name
@@ -79,8 +79,8 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		for name in frappe.db.get_all("CRM Contact", filters={"phone": ["like", "090000%"]}, pluck="name"):
 			frappe.delete_doc("CRM Contact", name, force=True)
 		for status_name in self._statuses:
-			if frappe.db.exists("CRM Term", status_name):
-				frappe.delete_doc("CRM Term", status_name, force=True)
+			if frappe.db.exists("CRM Enrollment Status", status_name):
+				frappe.delete_doc("CRM Enrollment Status", status_name, force=True)
 
 	def _make_contact(self, phone, enrollment_status):
 		doc = frappe.get_doc(
@@ -99,24 +99,24 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		return doc
 
 	def test_status_change_appends_log_row(self):
-		contact = self._make_contact("0900000001", "_Test Status A")
+		contact = self._make_contact("0900000001", "TEST_STATUS_A")
 		self.assertEqual(len(contact.status_change_log), 1)
 		self.assertEqual(contact.status_change_log[0].to, "")
 
-		contact.enrollment_status = "_Test Status B"
+		contact.enrollment_status = "TEST_STATUS_B"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 2)
 		closed_row = contact.status_change_log[0]
-		self.assertEqual(closed_row.get("from"), "_Test Status A")
-		self.assertEqual(closed_row.to, "_Test Status B")
+		self.assertEqual(closed_row.get("from"), "TEST_STATUS_A")
+		self.assertEqual(closed_row.to, "TEST_STATUS_B")
 		open_row = contact.status_change_log[1]
-		self.assertEqual(open_row.get("from"), "_Test Status B")
+		self.assertEqual(open_row.get("from"), "TEST_STATUS_B")
 		self.assertEqual(open_row.to, "")
 
 	def test_no_status_change_does_not_append_new_row(self):
-		contact = self._make_contact("0900000002", "_Test Status A")
+		contact = self._make_contact("0900000002", "TEST_STATUS_A")
 		self.assertEqual(len(contact.status_change_log), 1)
 
 		contact.full_name = "_Test Status Contact Renamed"
@@ -124,22 +124,22 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 1)
-		self.assertEqual(contact.status_change_log[0].get("from"), "_Test Status A")
+		self.assertEqual(contact.status_change_log[0].get("from"), "TEST_STATUS_A")
 		self.assertEqual(contact.status_change_log[0].to, "")
 
 	def test_multiple_status_changes_each_append(self):
-		contact = self._make_contact("0900000003", "_Test Status A")
+		contact = self._make_contact("0900000003", "TEST_STATUS_A")
 
-		contact.enrollment_status = "_Test Status B"
+		contact.enrollment_status = "TEST_STATUS_B"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
-		contact.enrollment_status = "_Test Status C"
+		contact.enrollment_status = "TEST_STATUS_C"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 3)
-		self.assertEqual(contact.status_change_log[-1].get("from"), "_Test Status C")
+		self.assertEqual(contact.status_change_log[-1].get("from"), "TEST_STATUS_C")
 		self.assertEqual(contact.status_change_log[-1].to, "")
 
 	def test_status_change_on_record_with_empty_log_and_blank_previous_status(self):
@@ -152,20 +152,20 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		contact.reload()
 		self.assertEqual(len(contact.status_change_log), 0)
 
-		contact.enrollment_status = "_Test Status A"
+		contact.enrollment_status = "TEST_STATUS_A"
 		contact.save(ignore_permissions=True)  # must not raise IndexError
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 2)
 		closed_row = contact.status_change_log[0]
 		self.assertEqual(closed_row.get("from"), "")
-		self.assertEqual(closed_row.to, "_Test Status A")
+		self.assertEqual(closed_row.to, "TEST_STATUS_A")
 		open_row = contact.status_change_log[1]
-		self.assertEqual(open_row.get("from"), "_Test Status A")
+		self.assertEqual(open_row.get("from"), "TEST_STATUS_A")
 		self.assertEqual(open_row.to, "")
 
 	def test_log_status_change_failure_never_blocks_contact_save(self):
-		contact = self._make_contact("0900000004", "_Test Status A")
+		contact = self._make_contact("0900000004", "TEST_STATUS_A")
 
 		def _boom(doc):
 			raise RuntimeError("simulated status log failure")
@@ -175,11 +175,11 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		patched = scl_module.add_status_change_log
 		scl_module.add_status_change_log = _boom
 		try:
-			contact.enrollment_status = "_Test Status B"
+			contact.enrollment_status = "TEST_STATUS_B"
 			# Must not raise even though the status log helper blows up.
 			contact.save(ignore_permissions=True)
 		finally:
 			scl_module.add_status_change_log = patched
 
 		contact.reload()
-		self.assertEqual(contact.enrollment_status, "_Test Status B")
+		self.assertEqual(contact.enrollment_status, "TEST_STATUS_B")

@@ -10,7 +10,7 @@ import frappe
 
 # Precedence order mirrors crm.fcrm.permissions scope precedence: broadest role wins
 # when a staff member happens to hold more than one canonical CRM role.
-FUNCTION_PRECEDENCE = ["Lead Sales", "Admissions Director", "Sale", "Marketing"]
+FUNCTION_PRECEDENCE = ["Lead Sale", "Admissions Director", "Sale", "Marketing"]
 
 
 def execute():
@@ -65,7 +65,7 @@ def execute():
 			"function": function,
 			"term": "",
 			"is_primary": 1,
-			"is_team_lead": function == "Lead Sales",
+			"is_team_lead": function == "Lead Sale",
 		})
 		staff_doc.save(ignore_permissions=True)
 

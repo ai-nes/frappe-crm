@@ -127,7 +127,7 @@ def _load_supporting_sources(school, admission_year):
 			for row in frappe.get_list(
 				"CRM Contact",
 				filters={"high_school": school.get("name"), "admission_year": admission_year},
-				fields=["name", "lifecycle_stage", "lead_status"],
+				fields=["name", "lifecycle_stage"],
 				order_by="name asc",
 				limit_page_length=0,
 			)
@@ -181,11 +181,11 @@ def _load_supporting_sources(school, admission_year):
 		load(
 			"roles",
 			lambda: {
-				row.get("name"): row.get("term_name")
+				row.get("name"): row.get("display_name")
 				for row in frappe.get_list(
-					"CRM Term",
-					filters={"name": ["in", role_names], "category": "stakeholder_role"},
-					fields=["name", "term_name"],
+					"CRM Stakeholder Role",
+					filters={"name": ["in", role_names], "enabled": 1},
+					fields=["name", "display_name"],
 					order_by="name asc",
 					limit_page_length=_SUPPORT_LIMIT,
 				)
@@ -212,11 +212,11 @@ def _load_supporting_sources(school, admission_year):
 		load(
 			"activity_types",
 			lambda: {
-				row.get("name"): row.get("term_name")
+				row.get("name"): row.get("display_name")
 				for row in frappe.get_list(
-					"CRM Term",
-					filters={"name": ["in", activity_types], "category": "activity_type"},
-					fields=["name", "term_name"],
+					"CRM School Activity Type",
+					filters={"name": ["in", activity_types], "enabled": 1},
+					fields=["name", "display_name"],
 					order_by="name asc",
 					limit_page_length=_SUPPORT_LIMIT,
 				)

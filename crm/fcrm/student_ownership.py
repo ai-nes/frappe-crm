@@ -26,11 +26,13 @@ from frappe.utils import now_datetime
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import (
 	POLICY_VERSION,
+	PROFILE_LABELS,
 	STUDENT_OWNER_PROFILES,
 	STUDENT_OWNER_TEAM_FUNCTIONS,
 	capabilities_for_roles,
 	resolve_crm_profile,
 )
+from crm.fcrm.utils.effective import is_effective
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 OWNERSHIP_EVENT_DOCTYPE = "CRM Student Ownership Event"
@@ -224,7 +226,14 @@ def _replay_receipt(receipt, request_fingerprint: str):
 		events = frappe.get_all(
 			OWNERSHIP_EVENT_DOCTYPE,
 			filters={"command_receipt": receipt.name},
-			fields=["name", "student", "next_owner_staff", "next_owning_team", "aggregate_revision"],
+			fields=[
+				"name",
+				"student",
+				"next_owner_staff",
+				"next_owning_team",
+				"next_owning_pool",
+				"aggregate_revision",
+			],
 			order_by="event_at desc",
 			limit_page_length=1,
 			ignore_permissions=True,
@@ -233,10 +242,8 @@ def _replay_receipt(receipt, request_fingerprint: str):
 		events = []
 	if events:
 		event = events[0]
-		pool_name = event.get("next_owning_team")
-		team_name = (
-			frappe.db.get_value("CRM Student Pool", pool_name, "team") if pool_name else None
-		)
+		pool_name = event.get("next_owning_pool")
+		team_name = event.get("next_owning_team")
 		return {
 			"status": "applied",
 			"student": event.get("student") or _receipt_value(receipt, "target_student"),
@@ -244,6 +251,7 @@ def _replay_receipt(receipt, request_fingerprint: str):
 			"target_id": event.get("next_owner_staff") or pool_name,
 			"owner_staff": event.get("next_owner_staff"),
 			"owning_team": team_name,
+			"owning_pool": pool_name,
 			"revision": event.get("aggregate_revision") or _receipt_value(receipt, "result_revision"),
 			"event": event.get("name"),
 			"receipt": receipt.name,
@@ -312,19 +320,13 @@ def _student_is_active(student) -> bool:
 		return False
 	status = student.get("enrollment_status")
 	if status:
-		stage_category = _get_value("CRM Term", {"name": status, "category": "enrollment_status"}, "metadata")
-		if isinstance(stage_category, str):
-			import json
-			try:
-				stage_category = json.loads(stage_category).get("stage_category")
-			except ValueError:
-				stage_category = None
-		if stage_category in {"closed", "lost", "terminal"}:
+		stage_category = _get_value("CRM Enrollment Status", status, "stage_category")
+		if stage_category in {"enrolled", "lost"}:
 			return False
 	return True
 
 
-def _validate_current_topology(student) -> tuple[str | None, str | None]:
+def _validate_current_topology(student) -> tuple[str | None, str | None, str | None]:
 	owner = student.get("owner_staff") or None
 	pool = student.get("owning_team") or None
 	pool_id = student.get("owning_pool") or None
@@ -348,7 +350,7 @@ def _validate_current_topology(student) -> tuple[str | None, str | None]:
 		_error("INVALID_CURRENT_OWNERSHIP", "Active Student must have exactly one owner or pool.")
 	if owner and assigned != owner:
 		_error("INVALID_CURRENT_OWNERSHIP", "Student assigned_to must match owner_staff.")
-	return owner, pool
+	return owner, pool, pool_id
 
 
 def _load_team(team_name: str) -> dict[str, Any]:
@@ -392,21 +394,6 @@ def _load_pool(pool_name: str, branch: str) -> tuple[dict[str, Any], dict[str, A
 	if team.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target pool Team Campus must match the Student Campus.")
 	return pool, team
-
-
-def _pool_name_for_team(team_name: str | None, branch: str | None) -> str | None:
-	if not team_name:
-		return None
-	try:
-		rows = frappe.get_all(
-			"CRM Student Pool",
-			filters={"team": team_name, "campus": branch, "is_active": 1},
-			fields=["name"],
-			limit_page_length=2,
-		)
-		return rows[0].name if len(rows) == 1 else None
-	except Exception:
-		return None
 
 
 def resolve_student_operational_target(
@@ -453,17 +440,20 @@ def resolve_student_operational_target(
 		_error("INVALID_TARGET", "Target Staff must be active.")
 	if staff.get("campus") and staff.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target Staff Campus must match the Student Campus.")
+	if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+		_error("INVALID_TARGET", "Target Staff must have an active User account.")
 	if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES:
 		_error("INVALID_TARGET", "Target Staff must have exactly a canonical Sale or CTV Sale profile.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
 		filters={"parent": staff.name, "parenttype": "CRM Staff", "team": team.name},
-		fields=["name", "team", "function"],
+		fields=["name", "team", "function", "effective_from", "effective_until"],
 	)
 	active_memberships = [
 		row
 		for row in memberships
-		if not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS
+		if is_effective(row)
+		and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
 	]
 	if len(active_memberships) != 1:
 		_error(
@@ -573,6 +563,7 @@ def _event_values(
 	actor: str,
 	actor_scope: str,
 	previous_owner: str | None,
+	previous_team: str | None,
 	previous_pool: str | None,
 	target: dict[str, Any],
 	previous_revision: Any,
@@ -585,8 +576,16 @@ def _event_values(
 	route_trigger: str | None = None,
 	routing_policy_version: int | None = None,
 ) -> dict[str, Any]:
-	before = {"owner_staff": previous_owner, "owning_team": previous_pool}
-	after = {"owner_staff": target.get("owner_staff"), "owning_team": target.get("owning_team")}
+	before = {
+		"owner_staff": previous_owner,
+		"owning_team": previous_team,
+		"owning_pool": previous_pool,
+	}
+	after = {
+		"owner_staff": target.get("owner_staff"),
+		"owning_team": target.get("team", {}).get("name"),
+		"owning_pool": target.get("owning_pool"),
+	}
 	if target.get("owner_staff"):
 		event_type = "reassigned" if previous_owner else "owner_assigned"
 	elif previous_owner:
@@ -604,12 +603,10 @@ def _event_values(
 		"aggregate_revision": next_revision,
 		"prior_owner_staff": previous_owner,
 		"next_owner_staff": target.get("owner_staff"),
-		"prior_owning_team": previous_pool,
-		"next_owning_team": target.get("pool", {}).get("name") if target.get("pool") else None,
-		"from_owner_staff": previous_owner,
-		"to_owner_staff": target.get("owner_staff"),
-		"from_owning_team": previous_pool,
-		"to_owning_team": target.get("owning_team") or target.get("team", {}).get("name"),
+		"prior_owning_team": previous_team,
+		"next_owning_team": target.get("team", {}).get("name"),
+		"prior_owning_pool": previous_pool,
+		"next_owning_pool": target.get("owning_pool"),
 		"before_state": before,
 		"after_state": after,
 		"before_json": _canonical_json(before),
@@ -743,7 +740,7 @@ def change_student_ownership(
 		current_revision = _current_revision(student_doc)
 		if str(current_revision) != str(expected_revision):
 			_error("STALE_OWNERSHIP_REVISION", "Student ownership changed; refresh before retrying.")
-		previous_owner, previous_pool = _validate_current_topology(student_doc)
+		previous_owner, previous_team, previous_pool = _validate_current_topology(student_doc)
 		# Resolve only after the Student lock.  The authoritative branch and the
 		# actor's current Team/Campus scope must be evaluated against the same
 		# snapshot that will be mutated.
@@ -756,7 +753,7 @@ def change_student_ownership(
 			# before entering this transaction; public commands remain authorized.
 			actor=None if _internal_service else actor,
 		)
-		_lock("CRM Team", target["owning_team"])
+		_lock("CRM Team", target["team"]["name"])
 		if target.get("staff"):
 			_lock("CRM Staff", target["staff"]["name"])
 		if target.get("membership"):
@@ -787,7 +784,6 @@ def change_student_ownership(
 
 		teams = _team_rows_for_actor(actor)
 		actor_scope = _actor_scope_snapshot(actor, profile, teams)
-		previous_pool_name = _pool_name_for_team(previous_pool, student_doc.get("branch"))
 		event = _insert_audit_doc(
 			OWNERSHIP_EVENT_DOCTYPE,
 			_event_values(
@@ -795,7 +791,8 @@ def change_student_ownership(
 				actor=actor,
 				actor_scope=actor_scope,
 				previous_owner=previous_owner,
-				previous_pool=previous_pool_name,
+				previous_team=previous_team,
+				previous_pool=previous_pool,
 				target=target,
 				previous_revision=current_revision,
 				next_revision=next_revision,
@@ -818,7 +815,7 @@ def change_student_ownership(
 				ownership_revision=next_revision,
 				owner_staff=target.get("owner_staff"),
 				owning_team=target.get("team", {}).get("name"),
-				student_pool=previous_pool_name,
+				student_pool=previous_pool,
 				correlation_token=correlation_id,
 				actor=actor,
 			)
@@ -832,7 +829,8 @@ def change_student_ownership(
 			"owning_team": target.get("owning_team"),
 			"owning_pool": target.get("owning_pool"),
 			"previous_owner_staff": previous_owner,
-			"previous_owning_team": previous_pool,
+			"previous_owning_team": previous_team,
+			"previous_owning_pool": previous_pool,
 			"revision": next_revision,
 			"event": event.name,
 			"correlation_id": correlation_id,
@@ -945,11 +943,9 @@ def get_student_ownership(student: str) -> dict[str, Any]:
 			"next_owner_staff",
 			"prior_owning_team",
 			"next_owning_team",
+			"prior_owning_pool",
+			"next_owning_pool",
 			"aggregate_name",
-			"from_owner_staff",
-			"to_owner_staff",
-			"from_owning_team",
-			"to_owning_team",
 			"previous_revision",
 			"revision",
 			"aggregate_revision",
@@ -975,10 +971,6 @@ def get_student_ownership(student: str) -> dict[str, Any]:
 	can_read_reason = "student.audit.reason.read" in capabilities
 	for row in rows:
 		event = dict(row)
-		event.setdefault("from_owner_staff", event.get("prior_owner_staff"))
-		event.setdefault("to_owner_staff", event.get("next_owner_staff"))
-		event.setdefault("from_owning_team", event.get("prior_owning_team"))
-		event.setdefault("to_owning_team", event.get("next_owning_team"))
 		event.setdefault("occurred_at", event.get("event_at"))
 		if not can_read_reason:
 			event.pop("reason", None)
@@ -1028,26 +1020,34 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 	for staff in staff_rows:
 		if staff.get("campus") and staff.campus != branch:
 			continue
-		if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) != "sales":
+		if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+			continue
+		profile = resolve_crm_profile(frappe.get_roles(staff.user))
+		if profile not in STUDENT_OWNER_PROFILES:
 			continue
 		memberships = frappe.get_all(
 			"CRM Team Membership",
 			filters={"parent": staff.name, "parenttype": "CRM Staff"},
-			fields=["name", "team", "function"],
+			fields=["name", "team", "function", "effective_from", "effective_until"],
 		)
 		eligible = [
 			row
 			for row in memberships
 			if row.get("team") in team_by_name
+			and is_effective(row)
 			and (not row.get("function") or row.get("function") in STUDENT_OWNER_TEAM_FUNCTIONS)
 		]
 		if len(eligible) != 1:
 			continue
 		team = team_by_name[eligible[0].team]
+		function = eligible[0].get("function") or ("CTV Sale" if profile == "ctv_sale" else "Sale")
 		owners.append(
 			{
 				"name": staff.name,
 				"label": staff.get("full_name") or staff.name,
+				"profile": profile,
+				"role": PROFILE_LABELS.get(profile, profile),
+				"function": function,
 				"team": team.name,
 				"campus": team.get("campus"),
 			}
