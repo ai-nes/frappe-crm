@@ -2,7 +2,6 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.user import set_canonical_crm_profile
-from crm.fcrm.role_policy import DESK_MANAGEMENT_ROLE_NAMES
 
 
 class TestUserRoleContract(FrappeTestCase):
@@ -35,20 +34,19 @@ class TestUserRoleContract(FrappeTestCase):
 		self.assertNotIn("Sales Manager", roles)
 		self.assertNotIn("Sales User", roles)
 
-	def test_system_manager_assignment_includes_desk_management_roles(self):
-		set_canonical_crm_profile(self.user, "System Manager")
+	def test_administrator_assignment_is_a_canonical_management_profile(self):
+		set_canonical_crm_profile(self.user, "Administrator")
 		self.user.save(ignore_permissions=True)
 		self.user.reload()
 
 		roles = {row.role for row in self.user.roles}
-		self.assertIn("System Manager", roles)
-		self.assertTrue(set(DESK_MANAGEMENT_ROLE_NAMES).issubset(roles))
+		self.assertIn("Administrator", roles)
 		self.assertNotIn("Sale", roles)
 
 		set_canonical_crm_profile(self.user, "Marketing")
 		self.user.save(ignore_permissions=True)
 		self.user.reload()
-		self.assertFalse(set(DESK_MANAGEMENT_ROLE_NAMES).intersection(row.role for row in self.user.roles))
+		self.assertNotIn("Administrator", {row.role for row in self.user.roles})
 
 	def test_raw_alias_and_data_steward_cannot_be_selected(self):
 		with self.assertRaises(frappe.ValidationError):

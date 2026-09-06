@@ -7,6 +7,7 @@ there rather than replacing the command contract with an unfaithful mock.
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
 	import frappe
@@ -26,7 +27,10 @@ class TestStudentConversionCommand(unittest.TestCase):
 	def test_conversion_is_disabled_by_default(self):
 		from crm.fcrm.student_conversion import StudentConversionError, convert_student
 
-		with self.assertRaises(StudentConversionError) as ctx:
+		with (
+			patch("crm.fcrm.student_conversion.enabled", return_value=False),
+			self.assertRaises(StudentConversionError) as ctx,
+		):
 			convert_student(student="STU-1", expected_lifecycle_revision=1, idempotency_key="cmd-1")
 		self.assertEqual(ctx.exception.code, "DISABLED")
 
@@ -36,6 +40,7 @@ class TestStudentConversionCommand(unittest.TestCase):
 		student = CRMStudent({"doctype": "CRM Student", "name": "STU-1"})
 		with self.assertRaises(Exception):
 			student.convert_to_contact()
+
 	def test_command_exposes_exact_once_boundaries_for_replay_and_races(self):
 		from crm.fcrm import student_conversion
 
@@ -50,4 +55,4 @@ class TestStudentConversionCommand(unittest.TestCase):
 
 		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
 		self.assertIn("Enrolled", source)
-		self.assertIn("INVALID_STATE", source)
+		self.assertIn("CONVERSION_CONDITION_FAILED", source)

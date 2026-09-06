@@ -9,9 +9,10 @@ stale-revision ``superseded`` branch, the shadow/unified split, and the
 fail-closed invalid-mode guard were all unverified.
 """
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from unittest.mock import patch
 
 from crm.services.admission_event_policy import (
 	POLICY_VERSION,
@@ -64,9 +65,7 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		return student
 
 	def _revision(self):
-		return int(
-			frappe.db.get_value("CRM Student", self.student.name, "student_context_revision") or 0
-		)
+		return int(frappe.db.get_value("CRM Student", self.student.name, "student_context_revision") or 0)
 
 	def _decisions(self):
 		return frappe.get_all(
@@ -95,18 +94,22 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 	def test_same_source_event_is_idempotent(self):
 		rev = self._revision()
 		first = evaluate_admission_event(
-			student=self.student.name, revision=rev, source_event="evt-dup",
-			event_type="intent", source_reference="X",
+			student=self.student.name,
+			revision=rev,
+			source_event="evt-dup",
+			event_type="intent",
+			source_reference="X",
 		)
 		second = evaluate_admission_event(
-			student=self.student.name, revision=rev, source_event="evt-dup",
-			event_type="intent", source_reference="X",
+			student=self.student.name,
+			revision=rev,
+			source_event="evt-dup",
+			event_type="intent",
+			source_reference="X",
 		)
 		self.assertEqual(first, second)
 		self.assertEqual(
-			frappe.db.count(
-				"CRM Admission Event Decision", {"decision_key": f"{POLICY_VERSION}:evt-dup"}
-			),
+			frappe.db.count("CRM Admission Event Decision", {"decision_key": f"{POLICY_VERSION}:evt-dup"}),
 			1,
 		)
 
@@ -123,7 +126,7 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		self.assertEqual(doc.reason, "superseded")
 		self.assertFalse(doc.run)
 
-	def test_unified_mode_admitted_requests_one_automatic_run(self):
+	def test_unified_mode_admitted_records_decision_without_automatic_run(self):
 		frappe.conf["crm_admission_event_policy_mode"] = "unified"
 		import crm.fcrm.intelligence_runs as intelligence_runs
 
@@ -146,17 +149,10 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		finally:
 			intelligence_runs.request_automatic_run = original
 
-		self.assertEqual(len(calls), 1)
-		domain, target, kwargs = calls[0]
-		self.assertEqual(domain, "student")
-		self.assertEqual(target, self.student.name)
-		self.assertEqual(kwargs["admission_event"], "evt-unified")
-		self.assertEqual(kwargs["admission_decision"], name)
-		self.assertEqual(kwargs["candidate_revision"], self._revision())
-		self.assertEqual(kwargs["policy_revision"], POLICY_VERSION)
-		self.assertEqual(frappe.db.get_value("CRM Admission Event Decision", name, "run"), "RUN-TEST-1")
+		self.assertEqual(calls, [])
+		self.assertFalse(frappe.db.get_value("CRM Admission Event Decision", name, "run"))
 
-	def test_context_revision_enqueues_the_canonical_run_when_unified(self):
+	def test_context_revision_records_change_without_automatic_run(self):
 		frappe.conf["crm_intelligence_runs_enabled"] = 1
 		frappe.conf["crm_intelligence_writer_epoch"] = 0
 		with patch(
@@ -169,13 +165,8 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 				event_id="context-run-1",
 			)
 
-		self.assertEqual(result["analysis_run"], "RUN-CONTEXT-1")
-		request_run.assert_called_once_with(
-			"student",
-			self.student.name,
-			candidate_revision=result["revision"],
-			policy_revision="intelligence-run-nba-v1",
-		)
+		self.assertNotIn("analysis_run", result)
+		request_run.assert_not_called()
 
 	def test_invalid_policy_mode_fails_closed(self):
 		frappe.conf["crm_admission_event_policy_mode"] = "bogus"
@@ -192,9 +183,7 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 
 	def test_missing_identifiers_are_a_noop(self):
 		self.assertEqual(
-			evaluate_admission_event(
-				student="", revision=1, source_event="x", event_type="interaction"
-			),
+			evaluate_admission_event(student="", revision=1, source_event="x", event_type="interaction"),
 			"",
 		)
 		self.assertEqual(

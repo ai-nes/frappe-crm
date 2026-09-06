@@ -2,7 +2,7 @@
 # See license.txt
 
 import frappe
-from frappe.exceptions import MandatoryError
+from frappe.exceptions import PermissionError
 from frappe.tests.utils import FrappeTestCase
 
 
@@ -18,12 +18,14 @@ class TestCRMCampaignSpend(FrappeTestCase):
 			).insert(ignore_permissions=True)
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Campaign Spend", filters={"lead_source": "_Test Spend Source"}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campaign Spend", filters={"lead_source": "_Test Spend Source"}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campaign Spend", name, force=True)
 		if frappe.db.exists("CRM Lead Source", "_Test Spend Source"):
 			frappe.delete_doc("CRM Lead Source", "_Test Spend Source", force=True)
 
-	def test_create_campaign_spend(self):
+	def test_legacy_campaign_spend_is_read_only(self):
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Campaign Spend",
@@ -33,18 +35,16 @@ class TestCRMCampaignSpend(FrappeTestCase):
 				"impressions": 10000,
 				"clicks": 450,
 			}
-		).insert(ignore_permissions=True)
+		)
+		with self.assertRaises(PermissionError):
+			doc.insert(ignore_permissions=True)
 
-		self.assertTrue(doc.name.startswith("SPEND-"))
-		self.assertEqual(doc.amount, 5000000)
-		self.assertEqual(doc.lead_source, "_Test Spend Source")
-
-	def test_mandatory_fields(self):
+	def test_legacy_campaign_spend_rejects_writes_before_validation(self):
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Campaign Spend",
 				"amount": 1000000,
 			}
 		)
-		with self.assertRaises(MandatoryError):
+		with self.assertRaises(PermissionError):
 			doc.insert(ignore_permissions=True)

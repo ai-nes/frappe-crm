@@ -3,8 +3,8 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.role_policy import CANONICAL_PERMISSION_MATRIX
 from crm.patches.v1_0.seed_new_lead_role_profiles import (
-	CTV_SALE_DIRECTOR_READ_DOCTYPES,
 	_NEW_ROLE_PERMISSIONS,
+	CTV_SALE_DIRECTOR_READ_DOCTYPES,
 	execute,
 )
 
@@ -22,7 +22,7 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 		return frappe.get_doc("CRM Permission Profile", name)
 
 	def test_new_roles_are_created(self):
-		for role in ("CTV Sale", "Promoter", "Lead Promoter", "Lead Marketing", "CEO"):
+		for role in ("CTV Sale", "Promoter", "Lead Promoter", "Lead Marketing", "Administrator"):
 			self.assertTrue(frappe.db.exists("Role", role), f"expected Role {role!r} to exist")
 
 	def test_new_profiles_match_prd_crud_matrix(self):
@@ -32,7 +32,7 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 			"pr": "Promoter",
 			"pr_manager": "Lead Promoter",
 			"lead_marketing": "Lead Marketing",
-			"ceo": "CEO",
+			"ceo": "Administrator",
 		}
 		for profile_key, role in roles.items():
 			flags = _NEW_ROLE_PERMISSIONS[profile_key]
@@ -77,6 +77,6 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 	def test_seed_is_idempotent(self):
 		execute()
 		execute()
-		profile = self._profile("CEO")
+		profile = self._profile("Administrator")
 		doctypes = [row.document_type for row in profile.applicable_doctypes]
 		self.assertEqual(len(doctypes), len(set(doctypes)))

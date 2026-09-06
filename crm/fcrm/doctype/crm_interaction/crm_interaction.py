@@ -11,17 +11,26 @@ class CRMInteraction(Document):
 		if not self.actor:
 			self.actor = frappe.session.user
 		if not self.external_id:
-			self.external_id = external_id_for(self.reference_doctype, self.reference_docname, self.interaction_type)
+			self.external_id = external_id_for(
+				self.reference_doctype, self.reference_docname, self.interaction_type
+			)
 
 	def validate(self):
 		if not self.student and not self.crm_contact:
 			frappe.throw(frappe._("An interaction must be linked to a Student or a CRM Contact."))
 		previous = self.get_doc_before_save() if not self.is_new() else None
-		if ((self.source_verified and not previous) or (previous and bool(self.source_verified) != bool(previous.source_verified))) and not getattr(frappe.flags, "student_sla_source_service", False):
+		if (
+			(self.source_verified and not previous)
+			or (previous and bool(self.source_verified) != bool(previous.source_verified))
+		) and not getattr(frappe.flags, "student_sla_source_service", False):
 			frappe.throw(frappe._("Only the interaction source service may verify provenance."))
 		if self.sla_response_sealed and not getattr(frappe.flags, "student_sla_response_service", False):
 			frappe.throw(frappe._("An SLA response interaction is immutable."))
-		if previous and previous.sla_response_sealed and not getattr(frappe.flags, "student_sla_response_service", False):
+		if (
+			previous
+			and previous.sla_response_sealed
+			and not getattr(frappe.flags, "student_sla_response_service", False)
+		):
 			frappe.throw(frappe._("An SLA response interaction is immutable."))
 		if previous and previous.source_verified:
 			for fieldname in ("student", "reference_doctype", "reference_docname"):
@@ -30,7 +39,7 @@ class CRMInteraction(Document):
 
 	def on_update(self):
 		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
-		if student:
+		if student and frappe.db.exists("CRM Student", student):
 			# Every interaction is a direct Engagement-scorer input (see
 			# app/services/scoring/scorers.py) -- always scoring-relevant,
 			# unlike a generic Student field edit.
@@ -40,7 +49,7 @@ class CRMInteraction(Document):
 
 	def on_trash(self):
 		student = self.student or frappe.db.get_value("CRM Contact", self.crm_contact, "student")
-		if student:
+		if student and frappe.db.exists("CRM Student", student):
 			# Deleting an Engagement-scorer input changes the same fact
 			# surface as editing one -- the current score must not be left
 			# marked fresh against evidence that no longer exists.

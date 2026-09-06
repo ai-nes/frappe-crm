@@ -26,7 +26,7 @@ MANAGED_DOCPERM_ROLE_NAMES = tuple(
 		| LEGACY_OVERLAY_ROLES
 		| ROLE_BACKFILL_SOURCES
 		| LEGACY_UNMAPPED_ROLES
-		| {"Administrator"}
+		| {"Administrator", "System Manager"}
 	)
 )
 
@@ -135,7 +135,9 @@ def apply_managed_docperms():
 
 	previously_synced = _load_previously_synced_pairs()
 	for doctype, role in previously_synced - current_pairs:
-		frappe.db.delete("DocPerm", {"parent": doctype, "parenttype": "DocType", "role": role, "permlevel": 0})
+		frappe.db.delete(
+			"DocPerm", {"parent": doctype, "parenttype": "DocType", "role": role, "permlevel": 0}
+		)
 
 	_save_synced_pairs(current_pairs)
 

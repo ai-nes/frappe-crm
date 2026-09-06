@@ -1,4 +1,5 @@
 """Decision command adapters and the canonical CRM Action storage primitive."""
+
 from __future__ import annotations
 
 import hashlib
@@ -55,7 +56,9 @@ def _require_legacy_generation_epoch():
 
 	if nba_evaluation_epoch_active():
 		frappe.throw(
-			_("The NBA Evaluation runtime owns recommendation generation; the legacy Action writer is disabled."),
+			_(
+				"The NBA Evaluation runtime owns recommendation generation; the legacy Action writer is disabled."
+			),
 			frappe.ValidationError,
 		)
 
@@ -78,7 +81,9 @@ def _task_result(task, *, idempotent=False):
 		"action_type": task.action_type,
 		"action_code": task.get("action"),
 		"generation_status": task.get("generation_status") or "succeeded",
-		"generation_failed_at": str(task.get("generation_failed_at")) if task.get("generation_failed_at") else None,
+		"generation_failed_at": str(task.get("generation_failed_at"))
+		if task.get("generation_failed_at")
+		else None,
 		"source_context_revision": task.source_context_revision,
 		"task_revision": str(task.modified),
 		"action_revision": int(task.get("action_revision") or 0),
@@ -137,7 +142,9 @@ def write_canonical_action(
 	from crm.services.sales_action_policy import require_parent_contact_authority
 
 	if int(candidate.get("context_revision", -1)) != int(expected_context_revision):
-		frappe.throw(_("Candidate revision does not match expected context revision."), frappe.ValidationError)
+		frappe.throw(
+			_("Candidate revision does not match expected context revision."), frappe.ValidationError
+		)
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
 		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
 	if action_type and not is_available_action_type(action_type):
@@ -154,13 +161,16 @@ def write_canonical_action(
 	if source_stage_key:
 		existing_filters = {"student": student, "source_stage_key": source_stage_key}
 	existing = frappe.db.get_value(
-		"CRM Action Item", existing_filters,
+		"CRM Action Item",
+		existing_filters,
 		["name", "payload_digest"],
 		as_dict=True,
 	)
 	if existing:
 		if existing.payload_digest != payload_digest:
-			frappe.throw(_("Generation idempotency key was reused with a different payload."), frappe.ValidationError)
+			frappe.throw(
+				_("Generation idempotency key was reused with a different payload."), frappe.ValidationError
+			)
 		return _task_result(frappe.get_doc("CRM Action Item", existing.name), idempotent=True)
 	current_revision = int(row[0].student_context_revision or 0)
 	if current_revision != int(expected_context_revision):
@@ -193,10 +203,12 @@ def write_canonical_action(
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
 			from crm.fcrm.nba import sync_nba_recommendation_for_action
+
 			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
 	from crm.fcrm.nba import ensure_nba_recommendation
+
 	_validate_package_seed(candidate.get("package_seed"), action_type)
 	owner_staff = _default_action_owner(student)
 	nba_recommendation = ensure_nba_recommendation(
@@ -306,20 +318,35 @@ def _merge_rationale(package_seed: dict | None, rationale: dict | None) -> dict:
 # package content, this just logs drift.
 _PACKAGE_ENVELOPE_KEYS = frozenset({"package_version", "objective", "rationale"})
 _PACKAGE_FIELD_SETS: dict[str, frozenset[str]] = {
-	"CALL": frozenset({"opening", "talking_points", "questions", "objections", "desired_outcome", "next_step"}),
+	"CALL": frozenset(
+		{"opening", "talking_points", "questions", "objections", "desired_outcome", "next_step"}
+	),
 	"EMAIL": frozenset(
-		{"template_version", "recipient_ref", "subject", "body", "talking_points", "questions", "cta", "next_step"}
+		{
+			"template_version",
+			"recipient_ref",
+			"subject",
+			"body",
+			"talking_points",
+			"questions",
+			"cta",
+			"next_step",
+		}
 	),
 	"MESSAGE": frozenset({"channel", "opening", "key_points", "cta", "next_step"}),
 	"COUNSELING": frozenset({"topic", "agenda", "guidance_points", "concerns_to_address", "desired_outcome"}),
 	"MEETING": frozenset({"purpose", "agenda", "attendees_hint", "prep_checklist", "desired_outcome"}),
 	"EVENT_INVITE": frozenset({"event_ref", "why_relevant", "invite_message", "follow_up_step"}),
-	"CAMPUS_VISIT": frozenset({"visit_goal", "itinerary_points", "logistics_notes", "who_to_involve", "desired_outcome"}),
+	"CAMPUS_VISIT": frozenset(
+		{"visit_goal", "itinerary_points", "logistics_notes", "who_to_involve", "desired_outcome"}
+	),
 	"DOCUMENT_REQUEST": frozenset(
 		{"missing_documents", "deadline", "request_message", "consequence_if_missing", "follow_up_step"}
 	),
 	"APPLICATION_SUPPORT": frozenset({"blocking_steps", "support_actions", "deadline", "desired_outcome"}),
-	"PARENT_CONTACT": frozenset({"parent_ref", "reason", "talking_points", "sensitivities", "desired_outcome", "next_step"}),
+	"PARENT_CONTACT": frozenset(
+		{"parent_ref", "reason", "talking_points", "sensitivities", "desired_outcome", "next_step"}
+	),
 	"HANDOFF": frozenset({"to_role", "reason", "context_summary", "open_items", "expected_response_time"}),
 }
 
@@ -333,7 +360,21 @@ def _validate_package_seed(seed: dict | None, action_type: str | None) -> None:
 	"""
 	if not isinstance(seed, dict) or not seed or not action_type:
 		return
-	allowed = _PACKAGE_ENVELOPE_KEYS | _PACKAGE_FIELD_SETS.get(action_type, frozenset())
+	legacy_aliases = {
+		"REQUEST_MISSING_DOCUMENT": "DOCUMENT_REQUEST",
+		"SEND_EMAIL": "EMAIL",
+		"SEND_ZALO": "MESSAGE",
+		"ADVISE_MAJOR": "COUNSELING",
+		"BOOK_1ON1_CONSULTATION": "MEETING",
+		"INVITE_OPEN_DAY": "EVENT_INVITE",
+		"INVITE_CAMPUS_TOUR": "CAMPUS_VISIT",
+		"GUIDE_NEXT_STEP": "APPLICATION_SUPPORT",
+		"CONTACT_PARENT": "PARENT_CONTACT",
+		"ESCALATE_TO_SENIOR": "HANDOFF",
+	}
+	allowed = _PACKAGE_ENVELOPE_KEYS | _PACKAGE_FIELD_SETS.get(
+		action_type, _PACKAGE_FIELD_SETS.get(legacy_aliases.get(action_type), frozenset())
+	)
 	unknown = sorted(k for k in seed if k not in allowed)
 	if unknown:
 		frappe.logger("crm.decision").warning(
@@ -341,7 +382,22 @@ def _validate_package_seed(seed: dict | None, action_type: str | None) -> None:
 		)
 
 
-def _insert_bundle_action(*, student, contact, candidate, current_revision, rank, base_idempotency_key, base_stage_key, producer_identity, payload_digest, writer_epoch, recommendation=None, nba_action=None, rationale=None):
+def _insert_bundle_action(
+	*,
+	student,
+	contact,
+	candidate,
+	current_revision,
+	rank,
+	base_idempotency_key,
+	base_stage_key,
+	producer_identity,
+	payload_digest,
+	writer_epoch,
+	recommendation=None,
+	nba_action=None,
+	rationale=None,
+):
 	from crm.fcrm.action_type_catalog import canonicalize_action_type
 	from crm.fcrm.action_type_registry import is_available_action_type
 	from crm.services.sales_action_policy import require_parent_contact_authority
@@ -419,10 +475,14 @@ def write_canonical_action_bundle(
 		frappe.throw(_("Bundle candidates must have distinct action types."), frappe.ValidationError)
 	for candidate in candidates:
 		if int(candidate.get("context_revision", -1)) != int(expected_context_revision):
-			frappe.throw(_("Candidate revision does not match expected context revision."), frappe.ValidationError)
+			frappe.throw(
+				_("Candidate revision does not match expected context revision."), frappe.ValidationError
+			)
 
 	active_writer_epoch = frappe.conf.get("crm_intelligence_writer_epoch")
-	if active_writer_epoch is not None and (writer_epoch is None or int(writer_epoch) != int(active_writer_epoch)):
+	if active_writer_epoch is not None and (
+		writer_epoch is None or int(writer_epoch) != int(active_writer_epoch)
+	):
 		frappe.throw(_("writer_retired"), frappe.PermissionError)
 	if frappe.conf.get("crm_agents_v2_rollout_epoch") is not None and int(
 		frappe.conf.get("crm_agents_v2_rollout_epoch", 0)
@@ -445,7 +505,9 @@ def write_canonical_action_bundle(
 	)
 	if existing:
 		if existing.payload_digest != payload_digest:
-			frappe.throw(_("Bundle idempotency key was reused with a different payload."), frappe.ValidationError)
+			frappe.throw(
+				_("Bundle idempotency key was reused with a different payload."), frappe.ValidationError
+			)
 		rows = frappe.get_all(
 			"CRM Action Item",
 			filters={"student": student, "source_stage_key": ["like", f"{base_stage_key}:r%"]},
@@ -485,12 +547,14 @@ def write_canonical_action_bundle(
 			stale.current_slot = None
 			stale.save(ignore_permissions=True)
 			from crm.fcrm.nba import sync_nba_recommendation_for_action
+
 			sync_nba_recommendation_for_action(stale)
 		finally:
 			frappe.flags.crm_action_command = previous_flag
 
 	contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
 	from crm.fcrm.nba import ensure_nba_recommendation
+
 	nba_recommendations = {}
 	for rank, candidate in enumerate(candidates, start=1):
 		nba_recommendations[rank] = ensure_nba_recommendation(
@@ -551,7 +615,12 @@ def _call(fn, **kwargs):
 				}
 		except (AttributeError, TypeError):
 			pass
-		exc_type = frappe.PermissionError if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE", "CONTRACT_UNAVAILABLE", "OUTBOX_DISABLED"} else frappe.ValidationError
+		exc_type = (
+			frappe.PermissionError
+			if exc.code
+			in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE", "CONTRACT_UNAVAILABLE", "OUTBOX_DISABLED"}
+			else frappe.ValidationError
+		)
 		frappe.throw(str(exc), exc_type)
 
 
@@ -570,7 +639,9 @@ def _decide_by_name(name: str, **kwargs):
 
 
 @frappe.whitelist(methods=["POST"])
-def transition_recommendation(name: str, expected_revision: str, status: str | None = None, decision_reason: str | None = None, **kwargs):
+def transition_recommendation(
+	name: str, expected_revision: str, status: str | None = None, decision_reason: str | None = None, **kwargs
+):
 	"""Apply a Recommendation decision through the canonical command service."""
 	result = _call(
 		_decide_recommendation,
@@ -605,7 +676,11 @@ def create_action(**kwargs):
 	try:
 		return _create_manual_action(**kwargs)
 	except StudentDecisionError as exc:
-		exc_type = frappe.PermissionError if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE"} else frappe.ValidationError
+		exc_type = (
+			frappe.PermissionError
+			if exc.code in {"UNAUTHORIZED", "FORBIDDEN", "OUT_OF_SCOPE"}
+			else frappe.ValidationError
+		)
 		frappe.throw(str(exc), exc_type)
 
 
@@ -640,4 +715,12 @@ def get_action(name: str) -> dict:
 	doc = frappe.get_doc("CRM Action Item", name)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Action.", frappe.PermissionError)
-	return {"name": doc.name, "student": doc.student, "contact": doc.get("contact"), "action": doc.get("action"), "action_type": doc.action_type, "status": doc.get("execution_status") or doc.state, "revision": doc.get("action_revision") or 1}
+	return {
+		"name": doc.name,
+		"student": doc.student,
+		"contact": doc.get("contact"),
+		"action": doc.get("action"),
+		"action_type": doc.action_type,
+		"status": doc.get("execution_status") or doc.state,
+		"revision": doc.get("action_revision") or 1,
+	}

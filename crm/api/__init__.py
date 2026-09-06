@@ -1,3 +1,8 @@
+# Keep the workspace module available as a package attribute for callers that
+# patch or import it through ``crm.api.lead_sales_workspace``. Frappe's lazy
+# module loading can otherwise leave that dotted target unresolved in tests.
+from importlib import import_module
+
 import frappe
 from bs4 import BeautifulSoup
 from frappe import _
@@ -5,10 +10,7 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
-# Keep the workspace module available as a package attribute for callers that
-# patch or import it through ``crm.api.lead_sales_workspace``. Frappe's lazy
-# module loading can otherwise leave that dotted target unresolved in tests.
-from crm.api import lead_sales_workspace as lead_sales_workspace
+lead_sales_workspace = import_module("crm.api.lead_sales_workspace")
 from crm.api.session import get_session_role_flags
 from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
 from crm.utils import is_frappe_version

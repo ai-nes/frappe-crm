@@ -29,7 +29,16 @@ def conversion_rows_for_student(student: str, *, limit: int = 100) -> list[dict[
 	return frappe.db.get_all(
 		CONVERSION_DOCTYPE,
 		filters={"student": student},
-		fields=["name", "student", "student_identity", "case_key", "contact", "converted_at", "actor", "command_receipt"],
+		fields=[
+			"name",
+			"student",
+			"student_identity",
+			"case_key",
+			"contact",
+			"converted_at",
+			"actor",
+			"command_receipt",
+		],
 		order_by="converted_at asc, name asc",
 		limit_page_length=limit,
 		ignore_permissions=True,
@@ -42,7 +51,16 @@ def conversion_rows_for_contact(contact: str, *, limit: int = 100, start: int = 
 	return frappe.db.get_all(
 		CONVERSION_DOCTYPE,
 		filters={"contact": contact},
-		fields=["name", "student", "student_identity", "case_key", "contact", "converted_at", "actor", "command_receipt"],
+		fields=[
+			"name",
+			"student",
+			"student_identity",
+			"case_key",
+			"contact",
+			"converted_at",
+			"actor",
+			"command_receipt",
+		],
 		order_by="converted_at asc, name asc",
 		limit_page_length=limit,
 		limit_start=max(int(start or 0), 0),
@@ -55,15 +73,8 @@ def contacts_for_student(student: str) -> list[str]:
 	contacts = [row.get("contact") for row in rows if row.get("contact")]
 	if contacts:
 		return list(dict.fromkeys(contacts))
-	legacy_rows = frappe.db.get_all(
-		"CRM Contact",
-		filters={"student": student},
-		fields=["name"],
-		order_by="name asc",
-		limit_page_length=100,
-		ignore_permissions=True,
-	)
-	return [row.get("name") for row in legacy_rows if row.get("name")]
+	legacy_contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
+	return [legacy_contact] if legacy_contact else []
 
 
 def students_for_contact(contact: str) -> list[str]:
@@ -95,7 +106,9 @@ def relationship_source(contact: str, student: str | None = None) -> str:
 	rows = conversion_rows_for_contact(contact)
 	if rows and (student is None or any(row.get("student") == student for row in rows)):
 		return "junction"
-	if frappe.db.get_value("CRM Contact", contact, "student") and (student is None or frappe.db.get_value("CRM Contact", contact, "student") == student):
+	if frappe.db.get_value("CRM Contact", contact, "student") and (
+		student is None or frappe.db.get_value("CRM Contact", contact, "student") == student
+	):
 		return "legacy"
 	return "none"
 
@@ -124,7 +137,9 @@ def _decode_cursor(cursor: str | None) -> int:
 	return start
 
 
-def visible_conversion_history_page(contact: str, *, limit: int = 100, cursor: str | None = None) -> dict[str, Any]:
+def visible_conversion_history_page(
+	contact: str, *, limit: int = 100, cursor: str | None = None
+) -> dict[str, Any]:
 	"""Return one bounded, permission-filtered history page and opaque cursor."""
 	if not _table_available():
 		return {"history": [], "next_cursor": None, "redacted_count": 0}

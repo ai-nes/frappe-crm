@@ -474,6 +474,8 @@ def _priority_to_task(priority):
 
 def _action_reference(action):
 	"""Return the old Task reference pair for an Action Item."""
+	if action.get("student"):
+		return "CRM Student", action.student
 	if action.get("contact"):
 		return "CRM Contact", action.contact
 	return "CRM Student", action.student
