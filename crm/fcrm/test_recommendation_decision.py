@@ -39,6 +39,10 @@ class TestRecommendationDecision(FrappeTestCase):
 			"CRM Recommendation", filters={"target_id": self._student.name}, pluck="name"
 		):
 			frappe.delete_doc("CRM Recommendation", name, force=True)
+		for name in frappe.db.get_all(
+			"CRM NBA Evaluation", filters={"student": self._student.name}, pluck="name"
+		):
+			frappe.delete_doc("CRM NBA Evaluation", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
 		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
@@ -60,7 +64,20 @@ class TestRecommendationDecision(FrappeTestCase):
 		)
 		return student
 
-	def _make_recommendation(self, *, action="CALL", expires_at=None):
+	def _make_evaluation(self):
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM NBA Evaluation",
+				"student": self._student.name,
+				"trigger": "manual",
+				"status": "queued",
+				"engine_revision": "nba-engine-test",
+				"evaluation_key": frappe.generate_hash(length=64),
+			}
+		).insert(ignore_permissions=True)
+		return doc.name
+
+	def _make_recommendation(self, *, action="CALL", expires_at=None, evaluation=None, rank=None):
 		rec = frappe.get_doc(
 			{
 				"doctype": "CRM Recommendation",
@@ -77,6 +94,8 @@ class TestRecommendationDecision(FrappeTestCase):
 				"owner": self._sale_staff,
 				"lifecycle_status": "proposed",
 				"decision_status": "pending",
+				"evaluation": evaluation,
+				"rank": rank,
 			}
 		)
 		rec.flags.ignore_links = True
@@ -344,3 +363,56 @@ class TestRecommendationDecision(FrappeTestCase):
 		self.assertFalse(overrides[0]["decision_operation"])
 		rec.reload()
 		self.assertEqual(rec.decision_status, "pending")
+
+	def test_accepting_one_recommendation_dismisses_its_pending_evaluation_siblings(self):
+		evaluation = self._make_evaluation()
+		picked = self._make_recommendation(evaluation=evaluation, rank=1)
+		sibling_a = self._make_recommendation(evaluation=evaluation, rank=2)
+		sibling_b = self._make_recommendation(evaluation=evaluation, rank=3)
+		independent = self._make_recommendation(evaluation=None, rank=None)
+
+		decide_recommendation(
+			picked.name,
+			expected_revision=0,
+			operation="ACCEPT",
+			idempotency_key=f"pick-{picked.name}",
+		)
+
+		picked.reload()
+		sibling_a.reload()
+		sibling_b.reload()
+		independent.reload()
+		self.assertEqual(picked.decision_status, "accepted")
+		self.assertEqual(sibling_a.decision_status, "dismissed_by_selection")
+		self.assertEqual(sibling_a.lifecycle_status, "superseded")
+		self.assertEqual(sibling_b.decision_status, "dismissed_by_selection")
+		self.assertEqual(sibling_b.lifecycle_status, "superseded")
+		# A recommendation with no evaluation link (or from a different
+		# evaluation) is not a sibling and stays untouched.
+		self.assertEqual(independent.decision_status, "pending")
+
+		dismissed_events = [
+			e for e in self._events(sibling_a.name) if e["event_type"] == "recommendation_decided"
+		]
+		self.assertEqual(len(dismissed_events), 1)
+
+	def test_dismissed_siblings_can_no_longer_be_decided(self):
+		evaluation = self._make_evaluation()
+		picked = self._make_recommendation(evaluation=evaluation, rank=1)
+		sibling = self._make_recommendation(evaluation=evaluation, rank=2)
+
+		decide_recommendation(
+			picked.name,
+			expected_revision=0,
+			operation="ACCEPT",
+			idempotency_key=f"pick-{picked.name}",
+		)
+
+		with self.assertRaises(StudentDecisionError) as ctx:
+			decide_recommendation(
+				sibling.name,
+				expected_revision=0,
+				operation="ACCEPT",
+				idempotency_key=f"late-{sibling.name}",
+			)
+		self.assertEqual(ctx.exception.code, "INVALID_STATE")
