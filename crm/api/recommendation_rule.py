@@ -338,7 +338,7 @@ def list_condition_fields():
 
 
 @frappe.whitelist(methods=["POST"])
-def preview_rule(rule=None, context=None):
+def preview_rule(rule: Any = None, context: Any = None):
 	rule_values = _parse_payload(rule, "rule", {})
 	context_values = _parse_payload(context, "context", {})
 	if not isinstance(rule_values, dict):

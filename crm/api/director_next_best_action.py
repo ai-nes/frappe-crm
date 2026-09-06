@@ -909,7 +909,7 @@ def _camelize_keys(value: dict[str, Any]) -> dict[str, Any]:
 def _parse_json(value: Any) -> Any:
 	if value in (None, ""):
 		return None
-	if isinstance(value, (dict, list)):
+	if isinstance(value, dict | list):
 		return value
 	try:
 		return json.loads(value)
