@@ -22,7 +22,7 @@
             ref="linkRef"
             class="form-control flex-1 truncate"
             :value="lostReason"
-            doctype="CRM Term"
+            doctype="CRM Lost Reason"
             :onCreate="onCreate"
             @change="(v) => (lostReason = v)"
           />
@@ -54,7 +54,6 @@
 </template>
 <script setup>
 import Link from '@/components/Controls/Link.vue'
-import { buildAdditiveValuePayload, createGovernanceCommandId, governanceAuditApi, governanceErrorState } from '@/utils/governanceAudit'
 import { Dialog, call, toast } from 'frappe-ui'
 import { ref } from 'vue'
 
@@ -84,7 +83,7 @@ function save() {
     error.value = __('Lost Reason is required')
     return
   }
-  if (lostReason.value === 'Other' && !lostNotes.value) {
+  if (lostReason.value === 'OTHER' && !lostNotes.value) {
     error.value = __('Lost Notes are required when Lost Reason is "Other"')
     return
   }
@@ -99,17 +98,15 @@ function save() {
 
 async function onCreate(value, close) {
   error.value = ''
-  const idempotencyKey = createGovernanceCommandId()
   try {
-    await call(governanceAuditApi.proposeAdditiveValue, buildAdditiveValuePayload({
-      doctype: 'CRM Term', value,
-      category: 'lost_reason',
-      reason: 'New lost reason requested from the loss dialog', idempotencyKey,
-    }))
+    const code = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase()
+    await call('frappe.client.insert', {
+      doc: { doctype: 'CRM Lost Reason', code, display_name: value },
+    })
     close()
-    toast.success(__('Lost Reason proposal submitted for independent approval.'))
+    toast.success(__('Lost Reason created.'))
   } catch (requestError) {
-    error.value = governanceErrorState(requestError).message
+    error.value = requestError?.messages?.[0] || requestError?.message || __('Unable to create Lost Reason')
   }
 }
 </script>

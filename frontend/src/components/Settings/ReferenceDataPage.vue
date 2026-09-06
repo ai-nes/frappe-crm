@@ -39,11 +39,6 @@
 
     <!-- Records list -->
     <div class="flex-1 overflow-y-auto px-2">
-      <GovernanceApprovalQueue
-        v-if="activeTab.doctype === 'CRM Term'"
-        :doctype="activeTab.doctype"
-        @decided="activeResource.reload()"
-      />
       <div v-if="activeResource.loading" class="flex items-center justify-center h-32">
         <LoadingIndicator class="size-6" />
       </div>
@@ -94,7 +89,6 @@
 <script setup>
 import { ref, computed } from 'vue'
 import MasterDataChangePanel from '@/components/Governance/MasterDataChangePanel.vue'
-import GovernanceApprovalQueue from '@/components/Governance/GovernanceApprovalQueue.vue'
 import { isGovernedDoctype } from '@/utils/governanceAudit'
 import { createResource, LoadingIndicator, toast } from 'frappe-ui'
 import { useDoctypeModal } from '@/composables/doctypeModal'
@@ -112,7 +106,7 @@ const subTabs = [
   { idx: 1, label: __('Ward/Commune'), doctype: 'CRM Ward' },
   { idx: 2, label: __('Major'), doctype: 'CRM Major' },
   { idx: 3, label: __('Campus'), doctype: 'CRM Campus' },
-  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Term' },
+  { idx: 4, label: __('Lost Reason'), doctype: 'CRM Lost Reason' },
 ]
 
 const activeIdx = ref(0)

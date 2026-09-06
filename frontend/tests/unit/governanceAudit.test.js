@@ -17,14 +17,14 @@ describe('governance audit UI helpers', () => {
   })
 
   it('builds the additive value command instead of a raw insert DTO', () => {
-    expect(buildAdditiveValuePayload({ doctype: 'CRM Term', value: ' Budget ', idempotencyKey: 'idem-2' })).toEqual({
-      doctype: 'CRM Term', value: 'Budget', reason: null, idempotency_key: 'idem-2', correlation_id: 'idem-2',
+    expect(buildAdditiveValuePayload({ doctype: 'CRM Lost Reason', value: ' Budget ', idempotencyKey: 'idem-2' })).toEqual({
+      doctype: 'CRM Lost Reason', value: 'Budget', reason: null, idempotency_key: 'idem-2', correlation_id: 'idem-2',
     })
   })
 
   it('exposes only role-scoped affordances', () => {
-    expect(governanceAffordances({ roles: ['Marketing'] }, 'CRM Term')).toMatchObject({ canPropose: false, canApprove: true })
-    expect(governanceAffordances({ roles: ['Lead Sales'] }, 'CRM Term')).toMatchObject({ canPropose: true, canApprove: true })
+    expect(governanceAffordances({ roles: ['Marketing'] }, 'CRM Campus')).toMatchObject({ canPropose: false, canApprove: false })
+    expect(governanceAffordances({ roles: ['Admissions Director'] }, 'CRM Campus')).toMatchObject({ canPropose: true, canApprove: true })
     expect(governanceAffordances({ roles: ['Marketing'] }, 'CRM Lead Source')).toMatchObject({ canPropose: true, canApprove: true })
   })
 

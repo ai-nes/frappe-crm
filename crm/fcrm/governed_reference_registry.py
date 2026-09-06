@@ -21,19 +21,6 @@ GOVERNED_REFERENCE_REGISTRY = {
 		"additive_requires_approval": False, "required_fields": ("lead_source",),
 		"consumers": _refs(("CRM Contact", "platform"), ("CRM Campaign", "platform"), ("CRM Campaign Spend", "platform")),
 	},
-	"CRM Term": {
-		"name_field": "term_name", "owner_role": "Lead Sales", "approver_roles": frozenset({"Lead Sales", "Marketing"}),
-		"additive_requires_approval": False,
-		"consumers": _refs(
-			("CRM Contact", "enrollment_status"), ("CRM Contact", "lead_status"), ("CRM Contact", "aspiration"),
-			("CRM Student", "enrollment_status"), ("CRM Student", "aspiration"), ("CRM Campaign", "campaign_type"),
-			("CRM Intent", "intent_type"), ("CRM Interaction", "interaction_type"), ("CRM Score Signal", "intent_type"),
-			("CRM High School", "school_type"), ("CRM High School", "school_area"),
-			("CRM School Stakeholder", "stakeholder_role"),
-			("CRM School Activity", "activity_type"), ("CRM Major", "major_group"), ("CRM Province", "region"),
-			("CRM Admission Offering", "admission_method"), ("CRM Admission Application", "admission_method"),
-		),
-	},
 	"CRM Campus": {
 		"name_field": "campus_name", "owner_role": "Admissions Director", "approver_roles": frozenset({"Admissions Director"}),
 		"additive_requires_approval": False,
