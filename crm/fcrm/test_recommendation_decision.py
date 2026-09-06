@@ -6,6 +6,8 @@ distinction between an explicit DISMISS and passive expiry, idempotent replay,
 and fail-closed authorization.
 """
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
@@ -118,6 +120,20 @@ class TestRecommendationDecision(FrappeTestCase):
 		self.assertEqual(rec.decision_operation, "ACCEPT")
 		self.assertEqual(rec.linked_task, tasks[0])
 		self.assertEqual(rec.source_decision_event, result["event"])
+
+	def test_non_parent_lead_action_can_be_accepted_without_a_contact(self):
+		rec = self._make_recommendation(action="CALL")
+		with patch("crm.fcrm.student_contact_conversion.contact_for_student", return_value=None):
+			result = decide_recommendation(
+				rec.name,
+				expected_revision=0,
+				operation="ACCEPT",
+				idempotency_key=f"lead-no-contact-{rec.name}",
+			)
+
+		task = frappe.get_doc("CRM Action Item", result["action"])
+		self.assertEqual(task.student, self._student.name)
+		self.assertFalse(task.contact)
 
 	def test_accept_with_changes_uses_human_values_and_leaves_recommendation_action_unchanged(self):
 		rec = self._make_recommendation()

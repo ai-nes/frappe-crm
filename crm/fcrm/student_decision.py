@@ -491,13 +491,18 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 
 	action = existing_task
 	if accepting and not existing_task:
+		is_parent_action = bool(canonical_type and action_category(canonical_type) == "PARENT")
 		action_contact = (
 			parent_contact_for_student(student_name)
-			if canonical_type and action_category(canonical_type) == "PARENT"
+			if is_parent_action
 			else contact_for_student(student_name)
 		)
-		if not action_contact:
-			_fail("FORBIDDEN", "A unique governed recipient is required for this Action.")
+		# A new Lead is a governed CRM Student before it becomes a CRM Contact.
+		# Non-parent care actions can therefore be accepted against the Student
+		# directly. Parent actions remain fail-closed because they require a
+		# verified parent recipient and authority.
+		if is_parent_action and not action_contact:
+			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
 		canonical = frappe.get_doc(
 			{
 				"doctype": CANONICAL_ACTION,

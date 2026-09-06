@@ -565,6 +565,43 @@ def process_pending_routing_requests(limit: int = 50) -> dict[str, int]:
 	return {"processed": processed, "failed": failed}
 
 
+def repair_orphan_routing_requests(limit: int = 1000) -> dict[str, int]:
+	"""Close routing requests whose Student was removed, preserving the audit row.
+
+	Old production imports can leave pending requests for Students that no longer
+	exist. The normal worker intentionally fails closed on those rows, so this
+	one-time maintenance command classifies them as permanently failed instead
+	of deleting history or retrying them forever. It is idempotent and does not
+	touch applied, superseded, or already-failed requests.
+	"""
+	page_limit = min(max(int(limit), 1), 5000)
+	rows = frappe.get_all(
+		REQUEST_DOCTYPE,
+		filters={"status": ["in", ["pending", "leased", "deferred"]]},
+		fields=["name", "student", "status"],
+		order_by="creation asc",
+		limit_page_length=page_limit,
+	)
+	repaired = 0
+	with service_context():
+		for row in rows:
+			if frappe.db.exists("CRM Student", row.get("student")):
+				continue
+			request = frappe.get_doc(REQUEST_DOCTYPE, row["name"])
+			_save_request(
+				request,
+				status="failed",
+				last_error_code="STUDENT_NOT_FOUND",
+				completed_at=now_datetime(),
+				lease_token=None,
+				lease_expires_at=None,
+			)
+			repaired += 1
+	if repaired and not getattr(frappe.flags, "in_test", False):
+		frappe.db.commit()
+	return {"checked": len(rows), "repaired": repaired}
+
+
 def get_student_routing_status(request_name: str) -> dict[str, Any]:
 	request = frappe.get_doc(REQUEST_DOCTYPE, request_name)
 	student = frappe.get_doc("CRM Student", request.student)

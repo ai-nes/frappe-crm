@@ -1,10 +1,16 @@
 """Frappe-backed routing command checks (run with ``bench run-tests``)."""
 
-import frappe
 from unittest.mock import patch
+
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.student_routing import _select_member, process_pending_routing_requests, route_pool_owned_student
+from crm.fcrm.student_routing import (
+	_select_member,
+	process_pending_routing_requests,
+	repair_orphan_routing_requests,
+	route_pool_owned_student,
+)
 
 
 class TestStudentRouting(FrappeTestCase):
@@ -46,3 +52,21 @@ class TestStudentRouting(FrappeTestCase):
 		self.assertEqual(result["status"], "superseded")
 		self.assertEqual(result["reason"], "STALE_OWNERSHIP_REVISION")
 		pool.assert_not_called()
+
+	def test_orphan_routing_requests_are_failed_without_deleting_audit_rows(self):
+		request = type("Request", (), {})()
+		request.status = "pending"
+		request.name = "route:missing:0"
+		request.student = "ENR-MISSING"
+		with patch(
+			"crm.fcrm.student_routing.frappe.get_all",
+			return_value=[{"name": request.name, "student": request.student, "status": "pending"}],
+		), patch("crm.fcrm.student_routing.frappe.db.exists", return_value=False), patch(
+			"crm.fcrm.student_routing.frappe.get_doc", return_value=request
+		), patch("crm.fcrm.student_routing._save_request") as save_request:
+			result = repair_orphan_routing_requests()
+
+		self.assertEqual(result, {"checked": 1, "repaired": 1})
+		save_request.assert_called_once()
+		self.assertEqual(save_request.call_args.kwargs["status"], "failed")
+		self.assertEqual(save_request.call_args.kwargs["last_error_code"], "STUDENT_NOT_FOUND")
