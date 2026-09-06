@@ -6,6 +6,7 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api import student_lead_operations as student_lead_operations_api
 from crm.api import student_ownership as student_ownership_api
 from crm.api.student_ownership import change_student_ownership
 from crm.fcrm import student_ownership as student_ownership_domain
@@ -18,11 +19,54 @@ from crm.fcrm.student_ownership import (
 
 
 class TestStudentOwnershipContract(FrappeTestCase):
-	def test_only_lead_sales_and_admissions_director_receive_capability(self):
-		self.assertIn("student.ownership.manage", capabilities_for_roles({"Lead Sale"}))
-		self.assertIn("student.ownership.manage", capabilities_for_roles({"Admissions Director"}))
-		for roles in ({"Sale"}, {"Marketing"}, {"System Manager"}, {"Team Leader"}, {"Sales Manager"}):
+	def test_only_sale_and_managers_receive_ownership_capability(self):
+		for roles in ({"Sale"}, {"Lead Sale"}, {"Admissions Director"}):
+			with self.subTest(roles=roles):
+				self.assertIn("student.ownership.manage", capabilities_for_roles(roles))
+		for roles in ({"CTV Sale"}, {"Marketing"}, {"System Manager"}, {"Team Leader"}, {"Sales Manager"}):
 			self.assertNotIn("student.ownership.manage", capabilities_for_roles(roles))
+
+	def test_only_sale_can_authorize_public_ownership_command(self):
+		with patch.object(frappe, "get_roles", return_value=["Sale"]):
+			resolved_profile, policy = student_ownership_domain._authorize("sale@example.com")
+
+		self.assertEqual(resolved_profile, "sales")
+		self.assertEqual(policy["profile"], "sales")
+
+		with patch.object(frappe, "get_roles", return_value=["CTV Sale"]):
+			with self.assertRaises(StudentOwnershipError) as error:
+				student_ownership_domain._authorize("ctv@example.com")
+
+		self.assertEqual(error.exception.code, "UNAUTHORIZED")
+
+	def test_sales_cannot_assign_students_to_a_pool(self):
+		with patch.object(student_ownership_domain, "_authorize", return_value=("sales", {})):
+			with self.assertRaises(StudentOwnershipError) as error:
+				student_ownership_domain.resolve_student_operational_target(
+					frappe._dict(branch="CAMPUS-1"), "pool", "POOL-1", actor="sale@example.com"
+				)
+
+		self.assertEqual(error.exception.code, "UNAUTHORIZED")
+
+	def test_sale_can_read_team_pool_student_for_assignment_flow(self):
+		student = frappe._dict(name="STUDENT-POOL-1", branch="CAMPUS-1")
+		with (
+			patch.object(
+				student_ownership_domain,
+				"_read_actor",
+				return_value=("sale@example.com", "sales", set()),
+			),
+			patch.object(student_ownership_domain.frappe, "get_doc", return_value=student),
+			patch.object(
+				student_ownership_domain,
+				"has_student_list_read_permission",
+				return_value=True,
+			) as read_permission,
+		):
+			result = student_ownership_domain._student_for_read(student.name)
+
+		self.assertIs(result[0], student)
+		read_permission.assert_called_once_with(student, user="sale@example.com")
 
 	def test_receipt_encoding_is_length_delimited_and_domain_separated(self):
 		first = _length_delimited("crm.receipt.command.v1", "ownership", "a", "bc")
@@ -58,6 +102,17 @@ class TestStudentOwnershipContract(FrappeTestCase):
 
 
 class TestStudentOwnershipAPI(FrappeTestCase):
+	def test_manager_reassign_remains_restricted_to_manager_profiles(self):
+		frappe.set_user("sale@example.com")
+		try:
+			with patch.object(frappe, "get_roles", return_value=["Sale"]):
+				with self.assertRaises(frappe.PermissionError):
+					student_lead_operations_api.manager_reassign(
+						"STUDENT-1", "STAFF-2", "TEAM-1", "Transfer", 1
+					)
+		finally:
+			frappe.set_user("Administrator")
+
 	def test_api_does_not_accept_actor_or_scope_parameters(self):
 		# The signature is intentionally command-only; actor and target scope are
 		# resolved from the authenticated session and current Student state.
@@ -80,6 +135,23 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 		self.assertEqual(response["studentId"], "STUDENT-1")
 		self.assertEqual([row["name"] for row in response["sales"]], ["STAFF-SALE", "STAFF-CTV"])
 
+	def test_assignable_sales_get_excludes_lead_sale_candidates(self):
+		with patch.object(
+			student_ownership_api,
+			"_get_eligible_ownership_targets",
+			return_value={
+				"owners": [
+					{"name": "STAFF-SALE", "profile": "sales"},
+					{"name": "STAFF-CTV", "profile": "ctv_sale"},
+					{"name": "STAFF-LEAD", "profile": "lead_sales", "role": "Lead Sale"},
+				],
+				"pools": [],
+			},
+		):
+			response = student_ownership_api.get_assignable_sales(studentId="STUDENT-1")
+
+		self.assertEqual([row["name"] for row in response["sales"]], ["STAFF-SALE", "STAFF-CTV"])
+
 	def test_assignable_sales_search_is_case_and_accent_insensitive(self):
 		with patch.object(
 			student_ownership_api,
@@ -89,12 +161,14 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 					{
 						"name": "STAFF-1",
 						"label": "Nguyễn Minh Ánh",
+						"profile": "sales",
 						"role": "Sale",
 						"team": "TEAM-1",
 					},
 					{
 						"name": "STAFF-2",
 						"label": "CTV Bình Minh",
+						"profile": "ctv_sale",
 						"role": "CTV Sale",
 						"function": "CTV Sale",
 					},
@@ -125,7 +199,10 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 			patch.object(
 				student_ownership_api,
 				"_get_eligible_ownership_targets",
-				return_value={"owners": [{"name": "STAFF-CTV", "team": "TEAM-1"}], "pools": []},
+				return_value={
+					"owners": [{"name": "STAFF-CTV", "profile": "ctv_sale", "team": "TEAM-1"}],
+					"pools": [],
+				},
 			),
 			patch.object(
 				student_ownership_api,
@@ -217,3 +294,48 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 
 		self.assertEqual([row["profile"] for row in response["owners"]], ["sales", "ctv_sale"])
 		self.assertEqual([row["role"] for row in response["owners"]], ["Sale", "CTV Sale"])
+
+	def test_sales_target_listing_is_limited_to_actor_team(self):
+		teams = [
+			frappe._dict(name="TEAM-1", team_name="Team 1", campus="CAMPUS-1", is_active=1),
+			frappe._dict(name="TEAM-2", team_name="Team 2", campus="CAMPUS-1", is_active=1),
+		]
+		staff_rows = [
+			frappe._dict(name="STAFF-1", full_name="Sale 1", user="sale-1@example.com", campus="CAMPUS-1"),
+			frappe._dict(name="STAFF-2", full_name="Sale 2", user="sale-2@example.com", campus="CAMPUS-1"),
+		]
+		memberships = {
+			"STAFF-1": [frappe._dict(name="MEM-1", team="TEAM-1", function="Sale")],
+			"STAFF-2": [frappe._dict(name="MEM-2", team="TEAM-2", function="Sale")],
+		}
+
+		def get_all(doctype, filters=None, **_kwargs):
+			if doctype == "CRM Team":
+				return teams
+			if doctype == "CRM Student Pool":
+				return []
+			if doctype == "CRM Staff":
+				return staff_rows
+			if doctype == "CRM Team Membership":
+				return memberships[filters["parent"]]
+			return []
+
+		with (
+			patch.object(
+				student_ownership_domain,
+				"_student_for_read",
+				return_value=(frappe._dict(name="STUDENT-1", branch="CAMPUS-1"), "sale@example.com", "sales", set()),
+			),
+			patch.object(student_ownership_domain, "_authorize"),
+			patch.object(student_ownership_domain, "_team_rows_for_actor", return_value=[teams[0]]),
+			patch.object(student_ownership_domain.frappe, "get_all", side_effect=get_all),
+			patch.object(
+				student_ownership_domain.frappe,
+				"get_roles",
+				side_effect=lambda user: {"sale-1@example.com": {"Sale"}, "sale-2@example.com": {"Sale"}}[user],
+			),
+			patch.object(student_ownership_domain.frappe.db, "get_value", return_value=1),
+		):
+			response = student_ownership_domain.get_eligible_ownership_targets("STUDENT-1")
+
+		self.assertEqual([row["name"] for row in response["owners"]], ["STAFF-1"])

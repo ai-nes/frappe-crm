@@ -17,15 +17,15 @@ from crm.fcrm.role_policy import capabilities_for_roles
 
 
 class TestLeadProcessingPermissionContracts(FrappeTestCase):
-	def test_sale_can_work_assigned_student_but_not_manage_ownership(self):
+	def test_sale_can_work_assigned_student_and_manage_ownership(self):
 		capabilities = capabilities_for_roles({"Sale"})
-		self.assertIn("student.engagement.write", capabilities)
-		self.assertNotIn("student.ownership.manage", capabilities)
+		self.assertIn("student.execute", capabilities)
+		self.assertIn("student.ownership.manage", capabilities)
 
-	def test_lead_sales_can_read_scope_but_assignment_is_not_a_phase_two_capability(self):
+	def test_lead_sales_can_read_scope_and_manage_ownership(self):
 		capabilities = capabilities_for_roles({"Lead Sale"})
-		self.assertIn("student.context.read", capabilities)
-		self.assertNotIn("student.ownership.manage", capabilities)
+		self.assertIn("student.execute", capabilities)
+		self.assertIn("student.ownership.manage", capabilities)
 
 	def test_marketing_does_not_receive_sales_mutations(self):
 		capabilities = capabilities_for_roles({"Marketing"})

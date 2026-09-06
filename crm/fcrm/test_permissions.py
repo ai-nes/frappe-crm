@@ -22,6 +22,9 @@ from crm.fcrm.permissions import (
 	get_permission_query_conditions as shared_conditions,
 )
 from crm.fcrm.permissions import (
+	get_student_list_read_condition,
+)
+from crm.fcrm.permissions import (
 	has_permission as shared_has_permission,
 )
 from crm.fcrm.role_policy import PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY
@@ -80,6 +83,20 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			f"`tabCRM Contact`.owner_staff = {frappe.db.escape(sales_staff)}",
 		)
 		self.assertIn(lead_staff, shared_conditions("CRM Contact", user=lead_user))
+
+	def test_sale_student_list_scope_includes_team_pool_without_widening_crud_scope(self):
+		user, staff = self._make_user_and_staff(
+			"_Test Scope Sale List", roles=["Sale"], team=self._team, function="Sale"
+		)
+
+		list_condition = get_student_list_read_condition(user=user)
+
+		self.assertIn("owning_team", list_condition)
+		self.assertIn(staff, list_condition)
+		self.assertEqual(
+			shared_conditions("CRM Student", user=user),
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+		)
 
 	# --------------------------------------------------------------------- no staff
 

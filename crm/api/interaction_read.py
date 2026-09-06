@@ -42,6 +42,15 @@ def _page_size(limit: int | str | None) -> int:
 		frappe.throw(_("Invalid page size."), frappe.ValidationError)
 
 
+def _query_text(value: str | None, fieldname: str, *, max_length: int = 140) -> str | None:
+	if not value:
+		return None
+	normalized = str(value).strip()
+	if len(normalized) > max_length:
+		frappe.throw(_(f"{fieldname} is too long."), frappe.ValidationError)
+	return normalized or None
+
+
 def _as_bool(value: bool | str) -> bool:
 	if isinstance(value, bool):
 		return value
@@ -211,6 +220,8 @@ def _summary(
 		"summary": row.get("summary") or "",
 		"episode_state": row.get("episode_state") or None,
 		"analysis_state": (analysis_states or {}).get(row["name"]),
+		"source_type": row.get("reference_doctype") or None,
+		"source_id": row.get("reference_docname") or None,
 		"semantic": {
 			"channel": semantic.get("channel"),
 			"purpose": semantic.get("purpose"),
@@ -273,6 +284,11 @@ def list_interactions(
 	direction: str | None = None,
 	status: str | None = None,
 	family: str | None = None,
+	search: str | None = None,
+	interaction_type: str | None = None,
+	outcome: str | None = None,
+	source_type: str | None = None,
+	source_id: str | None = None,
 	from_date: str | None = None,
 	to_date: str | None = None,
 	cursor: str | None = None,
@@ -290,10 +306,26 @@ def list_interactions(
 		return {"contract_version": CONTRACT_VERSION, "items": [], "next_cursor": None}
 	if permission_condition:
 		conditions.append(f"({permission_condition})")
-	for field, value in (("channel", channel), ("direction", direction), ("episode_state", status)):
+	for field, value in (
+		("channel", channel),
+		("direction", direction),
+		("episode_state", status),
+		("interaction_type", interaction_type),
+		("outcome", outcome),
+		("reference_doctype", source_type),
+		("reference_docname", source_id),
+	):
 		if value:
 			conditions.append(f"`{field}` = %({field})s")
 			values[field] = str(value)
+	search_text = _query_text(search, "search")
+	if search_text:
+		values["search"] = f"%{search_text}%"
+		conditions.append(
+			"(`summary` LIKE %(search)s OR `notes` LIKE %(search)s OR `outcome` LIKE %(search)s "
+			"OR `interaction_type` LIKE %(search)s OR `channel` LIKE %(search)s "
+			"OR `reference_doctype` LIKE %(search)s OR `reference_docname` LIKE %(search)s)"
+		)
 	family_types = _family_interaction_types(family)
 	if family_types:
 		family_params = []
@@ -323,7 +355,8 @@ def list_interactions(
 		values.update({"cursor_at": marker_at, "cursor_name": marker_name})
 	values["page_limit"] = page_size + 1
 	rows = frappe.db.sql(
-		"SELECT name, student, crm_contact, interaction_datetime, interaction_type, channel, direction, outcome, summary, episode_state, source_revision, evidence "
+		"SELECT name, student, crm_contact, interaction_datetime, interaction_type, channel, direction, outcome, summary, episode_state, "
+		"source_revision, evidence, reference_doctype, reference_docname "
 		"FROM `tabCRM Interaction` WHERE "
 		+ " AND ".join(conditions)
 		+ " ORDER BY interaction_datetime DESC, name DESC LIMIT %(page_limit)s",
