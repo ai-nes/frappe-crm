@@ -134,7 +134,11 @@ def _timing_domain_for_action(allowed_time_slots: object, timezone: str) -> dict
 		except ValueError:
 			continue
 		windows.append(
-			{"from": f"{start.hour:02d}:{start.minute:02d}", "to": f"{end.hour:02d}:{end.minute:02d}"}
+			{
+				"code": str(slot),
+				"from": f"{start.hour:02d}:{start.minute:02d}",
+				"to": f"{end.hour:02d}:{end.minute:02d}",
+			}
 		)
 	if not windows:
 		return {}

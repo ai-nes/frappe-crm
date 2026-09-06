@@ -171,7 +171,10 @@ class TestShapeEligibleActionSetTiming(unittest.TestCase):
 		self.assertEqual(domain["timezone"], "Asia/Ho_Chi_Minh")
 		self.assertEqual(
 			domain["allowed_windows"],
-			[{"from": "06:00", "to": "12:00"}, {"from": "18:00", "to": "00:00"}],
+			[
+				{"code": "6-12", "from": "06:00", "to": "12:00"},
+				{"code": "18-24", "from": "18:00", "to": "00:00"},
+			],
 		)
 
 	def test_no_configured_slots_stays_unconstrained(self):

@@ -50,6 +50,7 @@ def recommendation_view(
 		"context": context if isinstance(context, list) else [],
 		"timing": {
 			"scheduled_at": timing.get("scheduled_at"),
+			"selected_window": timing.get("selected_window"),
 			"expires_at": expires_at_iso,
 			"timezone": timing.get("timezone"),
 		},

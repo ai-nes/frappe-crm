@@ -1,0 +1,39 @@
+import unittest
+
+from crm.api.nba_recommendation_view import recommendation_view
+
+
+class TestRecommendationViewTiming(unittest.TestCase):
+	def _view(self, recommended_timing):
+		return recommendation_view(
+			recommendation_id="REC-1",
+			target_type="CRM Lead",
+			target_id="LEAD-1",
+			action_code="CALL",
+			priority="high",
+			rank=1,
+			reason="",
+			explanation=None,
+			ai_payload={"recommended_timing": recommended_timing},
+			expires_at_iso=None,
+			lifecycle_status=None,
+			decision_status=None,
+			execution_status=None,
+		)
+
+	def test_selected_window_passes_through_from_ai_payload(self):
+		view = self._view(
+			{
+				"scheduled_at": "2026-09-07T11:00:00+00:00",
+				"selected_window": {"code": "18-24", "from": "18:00", "to": "00:00"},
+				"timezone": "Asia/Ho_Chi_Minh",
+			}
+		)
+		self.assertEqual(
+			view["timing"]["selected_window"],
+			{"code": "18-24", "from": "18:00", "to": "00:00"},
+		)
+
+	def test_selected_window_is_none_when_absent(self):
+		view = self._view({"scheduled_at": "2026-09-07T11:00:00+00:00", "timezone": "UTC"})
+		self.assertIsNone(view["timing"]["selected_window"])
