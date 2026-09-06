@@ -22,6 +22,7 @@ from crm.patches.v1_0 import (
 	setup_crm_roles,
 	setup_crm_student_extended_permissions,
 )
+from crm.patches.v1_0.crm_action_current_slot_unique import execute as ensure_current_slot_unique
 from crm.patches.v1_0.migrate_to_canonical_crm_roles import execute_for_fresh_site
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
@@ -78,7 +79,8 @@ def after_install(force=False):
 
 
 def after_migrate():
-	"""Keep integration CORS origins present on every production migration."""
+	"""Keep runtime schema guards and integration origins active after every migration."""
+	ensure_current_slot_unique()
 	add_chatwoot_cors_origin()
 	add_dashboard_cors_origin()
 
