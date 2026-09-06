@@ -28,6 +28,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"query": "Nguyen",
 				"stage": "counselling",
 				"province": "can-tho",
+				"owner_id": None,
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -85,7 +86,7 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 
 		self.assertEqual(item["id"], "ENR-2026-00001")
-		self.assertEqual(item["code"], "CK-ID-2026")
+		self.assertEqual(item["code"], "HS-2026-HCM-000001")
 		self.assertEqual(item["initials"], "MA")
 		self.assertEqual(item["school"], "THPT Châu Văn Liêm")
 		self.assertEqual(item["province"], "Cần Thơ")

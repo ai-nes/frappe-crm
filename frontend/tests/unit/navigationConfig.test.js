@@ -222,7 +222,7 @@ describe('navigationConfig', () => {
     expect(labels).toContain('Tra cứu')
     expect(labels).toContain('Chính sách SLA (chỉ đọc)')
     expect(
-      leadTree.filter((item) => item.label === 'Cơ chế phân bổ'),
+      leadTree.filter((item) => item.label === 'Phân bổ Lead'),
     ).toHaveLength(1)
     expect(labels).not.toContain('Hồ sơ nghi trùng')
 
@@ -349,7 +349,7 @@ describe('navigationConfig', () => {
       (item) => item.id === 'mgr_business_config',
     )
     expect(
-      businessConfig.children.filter((item) => item.label === 'Cơ chế phân bổ'),
+      businessConfig.children.filter((item) => item.label === 'Phân bổ Lead'),
     ).toHaveLength(1)
     expect(businessConfig.children.map((item) => item.label)).not.toContain(
       'Chính sách phân phối',
@@ -373,7 +373,7 @@ describe('navigationConfig', () => {
       (item) => item.id === 'adm_org_structure',
     )
     expect(
-      orgStructure.children.filter((item) => item.label === 'Cơ chế phân bổ'),
+      orgStructure.children.filter((item) => item.label === 'Phân bổ Lead'),
     ).toHaveLength(1)
   })
 })

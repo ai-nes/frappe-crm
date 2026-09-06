@@ -54,7 +54,10 @@ export function reviewCandidateOptions(review) {
     if (!value) continue
     const maskedLabel = candidate?.masked_label
     byId.set(value, {
-      label: maskedLabel && maskedLabel !== value ? maskedLabel : __('Verified identity'),
+      label:
+        maskedLabel && maskedLabel !== value
+          ? maskedLabel
+          : __('Verified identity'),
       value,
     })
   }
@@ -153,18 +156,22 @@ export function isStaleOwnershipError(error) {
 export function safeCommandError(error, fallback) {
   const responseData = error?.response?.data || error?.data
   if (responseData) {
-    const detail = responseData.message || responseData._server_messages || responseData.exc
+    const detail =
+      responseData.message || responseData._server_messages || responseData.exc
     if (detail && detail !== 'Internal Server Error') {
       if (typeof detail === 'string' && detail.startsWith('[')) {
         try {
           const parsed = JSON.parse(detail)
-          const text = parsed.map((item) => item.message || item).filter(Boolean).join('; ')
-          if (text) return text
+          const text = parsed
+            .map((item) => item.message || item)
+            .filter(Boolean)
+            .join('; ')
+          if (text) return text.replace(/^[A-Z][A-Z0-9_]+:\s*/, '')
         } catch {
           // Continue with the raw detail.
         }
       }
-      return String(detail)
+      return String(detail).replace(/^[A-Z][A-Z0-9_]+:\s*/, '')
     }
   }
   const status = error?.httpStatusCode || error?.status
@@ -177,7 +184,10 @@ export function safeCommandError(error, fallback) {
   const serverMessages = error?._server_messages || error?.server_messages
   if (serverMessages) {
     try {
-      const parsed = typeof serverMessages === 'string' ? JSON.parse(serverMessages) : serverMessages
+      const parsed =
+        typeof serverMessages === 'string'
+          ? JSON.parse(serverMessages)
+          : serverMessages
       const messages = Array.isArray(parsed) ? parsed : [parsed]
       const detail = messages
         .map((message) => {

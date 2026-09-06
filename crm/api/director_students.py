@@ -753,7 +753,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"id": row.get("name"),
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
-		"code": row.get("case_key") or row.get("name"),
+		"code": _profile_code(row),
 		"school": lookups.get("schools", {}).get(row.get("high_school")) or row.get("high_school"),
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province"),
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
@@ -773,6 +773,21 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"priorityCode": action.get("priority") if action else None,
 		"stageCode": stage["code"] if stage else None,
 	}
+
+
+def _profile_code(row) -> str:
+	"""Return the human-readable code shown in the dashboard.
+
+	The canonical case key remains an internal Frappe identity for crm-agents.
+	This display code is stable, non-sensitive, and derived from the technical
+	Student name plus the admission cycle and the current HCM admissions branch.
+	"""
+	student_id = str(row.get("name") or "")
+	match = re.search(r"ENR-(\d{4})-(\d+)$", student_id)
+	year = str(row.get("admission_year") or (match.group(1) if match else "2026"))
+	sequence = match.group(2)[-6:].zfill(6) if match else "000000"
+	region = "HCM"
+	return f"HS-{year}-{region}-{sequence}"
 
 
 def _stage_descriptor(row) -> dict[str, str] | None:

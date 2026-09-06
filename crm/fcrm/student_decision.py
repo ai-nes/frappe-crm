@@ -330,7 +330,7 @@ def _outbox(event_type, doc):
 # through a decision -- a different Action is a different recommendation.
 _DECISION_DELTA_ALLOWLIST = frozenset({"due_at", "revisit_at", "assignee_staff", "channel", "priority"})
 _DECISION_IDENTITY_KEYS = frozenset({"action", "action_type", "action_code", "nba_action", "target_id", "target_type", "student"})
-_DECISION_TERMINAL = frozenset({"accepted", "rejected", "dismissed"})
+_DECISION_TERMINAL = frozenset({"accepted", "rejected", "dismissed", "dismissed_by_selection"})
 _OPERATION_STATUS = {
 	"ACCEPT": "accepted",
 	"ACCEPT_WITH_CHANGES": "accepted",
@@ -362,6 +362,50 @@ def _normalize_decision_delta(operation: str, delta: Any) -> dict:
 	if operation != "ACCEPT_WITH_CHANGES":
 		_fail("INVALID_INPUT", "A parameter delta is only valid with ACCEPT_WITH_CHANGES.")
 	return {k: v for k, v in delta.items() if v not in (None, "")}
+
+
+def _supersede_evaluation_siblings(doc, *, actor, scope, receipt, correlation_id) -> None:
+	"""Dismiss every other still-pending recommendation from the same NBA
+	Evaluation once one of them is accepted -- a sale works exactly one of
+	the Top-N proposals at a time, never several in parallel.
+
+	A sibling is one produced by the same NBA Evaluation (``doc.evaluation``).
+	A legacy row with no ``evaluation`` link (produced outside the epoch
+	pipeline) has no siblings to supersede.
+	"""
+	if not doc.evaluation:
+		return
+	siblings = frappe.get_all(
+		RECOMMENDATION,
+		filters={"evaluation": doc.evaluation, "decision_status": "pending", "name": ["!=", doc.name]},
+		pluck="name",
+	)
+	for sibling_name in siblings:
+		frappe.db.set_value(
+			RECOMMENDATION,
+			sibling_name,
+			{
+				"decision_status": "dismissed_by_selection",
+				"lifecycle_status": "superseded",
+				"decision_operation": "DISMISS",
+				"decided_at": now_datetime(),
+				"decided_by": actor,
+			},
+			update_modified=False,
+		)
+		_event(
+			"recommendation.dismissed_by_selection",
+			doc.target_id,
+			sibling_name,
+			None,
+			actor,
+			scope,
+			receipt,
+			correlation_id,
+			0,
+			{"status": "dismissed_by_selection", "from_state": "pending", "reason": f"superseded_by:{doc.name}"},
+			decision_operation="DISMISS",
+		)
 
 
 def decide_recommendation(name: str, expected_revision: Any, status: str | None = None, idempotency_key: str | None = None, correlation_id: str | None = None, decision_reason: str | None = None, due_at: Any = None, assignee_staff: str | None = None, revisit_at: Any = None, defer_kind: str | None = None, expected_modified: str | None = None, operation: str | None = None, delta: Any = None):
@@ -566,6 +610,8 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 			frappe.flags.crm_action_command = previous_flag
 	frappe.db.set_value(RECOMMENDATION, doc.name, projection, update_modified=False)
 	_outbox("recommendation.decided.v1", event)
+	if accepting:
+		_supersede_evaluation_siblings(doc, actor=actor, scope=scope, receipt=receipt, correlation_id=correlation_id)
 	result = {"status": status, "operation": operation, "recommendation": doc.name, "action": action, "revision": 0, "event": event.name, "receipt": receipt.name}
 	_finish(receipt, result)
 	return result
