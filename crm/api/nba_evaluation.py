@@ -19,7 +19,7 @@ from crm.fcrm import nba_policy
 from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
-from crm.fcrm.nba_timing import feasible_timing_domain
+from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
 
 # Cost/risk/effort bands have no CRM Action source column yet. The wire contract
 # requires the keys, so they are emitted as "unknown" and the action carries
@@ -121,7 +121,27 @@ def _require_hex64(value: object, label: str) -> str:
 	frappe.throw(f"NBA control plane has no valid {label}; run the schema migration first.")
 
 
-def _shape_eligible_action_set(eligible: Mapping) -> dict:
+def _timing_domain_for_action(allowed_time_slots: object, timezone: str) -> dict:
+	"""Translate ``CRM Action.allowed_time_slots`` into a normalized timing domain.
+
+	An action with no configured slots stays unconstrained (``{}``), matching
+	current behaviour: the kernel schedules it as soon as evaluated.
+	"""
+	windows = []
+	for slot in allowed_time_slots or []:
+		try:
+			start, end = slot_bounds(str(slot))
+		except ValueError:
+			continue
+		windows.append(
+			{"from": f"{start.hour:02d}:{start.minute:02d}", "to": f"{end.hour:02d}:{end.minute:02d}"}
+		)
+	if not windows:
+		return {}
+	return {"timezone": timezone, "allowed_windows": windows}
+
+
+def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 	actions = []
 	wire_actions = []
 	for action in eligible.get("actions") or []:
@@ -150,7 +170,9 @@ def _shape_eligible_action_set(eligible: Mapping) -> dict:
 					),
 					"academic": dict(action.get("academic_constraint") or {}),
 				},
-				"normalized_timing_domain": {},
+				"normalized_timing_domain": _timing_domain_for_action(
+					action.get("allowed_time_slots"), timezone
+				),
 				"metadata_state": "provisional",
 				"cost_band": _UNKNOWN_BAND,
 				"risk_band": _UNKNOWN_BAND,
@@ -214,7 +236,7 @@ def build_nba_evaluation_input(
 	decision = nba_policy.get_active_decision_policy()
 	timing = feasible_timing_domain({"trigger_type": "relative", "delay_value": 0}, now=moment)
 
-	eligible_set = _shape_eligible_action_set(eligible)
+	eligible_set = _shape_eligible_action_set(eligible, timezone=timezone)
 	return assemble_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
 		_shape_context(projection, now=moment),
