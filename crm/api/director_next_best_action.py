@@ -24,6 +24,7 @@ from crm.api.director_school_common import (
 	require_director_access,
 	resolve_admission_year,
 )
+from crm.api.nba_recommendation_view import recommendation_view
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 POLICY_VERSION = "action-policy-2026.08"
@@ -238,6 +239,12 @@ _RECOMMENDATION_FIELDS = [
 	"ai_payload",
 	"recommendation_key",
 	"rank",
+	"priority",
+	"reason",
+	"expires_at",
+	"lifecycle_status",
+	"decision_status",
+	"execution_status",
 	"recommended_at",
 	"creation",
 	"explanation",
@@ -334,14 +341,30 @@ def _map_recommendation(row: Any, evaluations: dict[str, dict[str, Any]]) -> dic
 	if not isinstance(explanation, dict):
 		explanation = None
 	parent = evaluations.get(row.get("evaluation")) or {}
+	view = recommendation_view(
+		recommendation_id=row["name"],
+		target_type="CRM Student",
+		target_id=row.get("target_id") or None,
+		action_code=row.get("action") or None,
+		priority=row.get("priority"),
+		rank=int(row.get("rank") or 0),
+		reason=row.get("reason"),
+		explanation=explanation,
+		ai_payload=payload,
+		expires_at_iso=_as_iso(row.get("expires_at")),
+		lifecycle_status=row.get("lifecycle_status"),
+		decision_status=row.get("decision_status"),
+		execution_status=row.get("execution_status"),
+	)
 	return {
-		"id": row["name"],
-		"rank": int(row.get("rank") or 0),
+		**view,
 		"recommendationKey": row.get("recommendation_key") or None,
 		"studentId": row.get("target_id") or None,
 		"actionId": row.get("action") or None,
 		# Immutable kernel recommendation object, surfaced verbatim (no key
-		# rewriting) so the review queue shows exactly what the epoch committed.
+		# rewriting) so the accept/edit decision flow's identity/diff logic
+		# keeps its existing source of truth. Not for display -- use the
+		# nested view fields above for that.
 		"aiPayload": payload,
 		# Grounded, structured explanation (post-decision render); null until
 		# the best-effort explanation pass has run for this recommendation.

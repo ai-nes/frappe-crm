@@ -13,6 +13,8 @@ from frappe.exceptions import QueryDeadlockError, QueryTimeoutError
 from frappe.utils.password import get_encryption_key
 from pymysql import MySQLError
 
+from crm.api.nba_recommendation_view import recommendation_view
+
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
 _POLICY_VERSION = "worklist-v1"
@@ -570,19 +572,34 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 	if not isinstance(explanation, dict):
 		explanation = None
 	evaluation = (evaluations or {}).get(row.get("evaluation")) or {}
+	view = recommendation_view(
+		recommendation_id=row.name,
+		target_type="CRM Student",
+		target_id=row.student,
+		action_code=row.get("action") or None,
+		priority=row.priority,
+		rank=int(row.rank) if row.rank is not None else None,
+		reason=row.get("reason"),
+		explanation=explanation,
+		ai_payload=payload,
+		expires_at_iso=str(row.get("expires_at")) if row.get("expires_at") else None,
+		lifecycle_status=row.get("lifecycle_status"),
+		decision_status=row.get("decision_status"),
+		execution_status=row.get("execution_status"),
+	)
 	return {
-		"id": row.name,
+		**view,
 		# Stable wire compatibility: both keys identify the same recommendation.
 		"recommendation": row.name,
-		"rank": int(row.rank) if row.rank is not None else None,
 		"recommendationKey": row.get("recommendation_key") or None,
 		"studentId": row.student,
 		"student": row.student,
 		"studentName": row.student_name or row.student,
 		"actionId": row.get("action") or None,
-		"priority": row.priority or "medium",
 		"channel": row.get("channel") or None,
-		"reason": row.get("reason") or "",
+		# Immutable kernel recommendation object, surfaced verbatim so the
+		# accept/edit decision flow's identity/diff logic keeps its existing
+		# source of truth. Not for display -- use the nested view fields above.
 		"aiPayload": payload,
 		"explanation": explanation,
 		"evaluation": {
@@ -688,7 +705,9 @@ def _fetch_recommendation_page(
 		`tabCRM Student`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
 		`tabCRM Recommendation`.channel, `tabCRM Recommendation`.reason, `tabCRM Recommendation`.action,
 		`tabCRM Recommendation`.recommendation_key, `tabCRM Recommendation`.ai_payload,
-		`tabCRM Recommendation`.explanation,
+		`tabCRM Recommendation`.explanation, `tabCRM Recommendation`.expires_at,
+		`tabCRM Recommendation`.lifecycle_status, `tabCRM Recommendation`.decision_status,
+		`tabCRM Recommendation`.execution_status,
 		`tabCRM Recommendation`.evaluation, `tabCRM Recommendation`.recommended_at,
 		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
 		FROM `tabCRM Recommendation`
