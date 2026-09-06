@@ -12,10 +12,23 @@ import {
 
 describe('assignment workspace data contract', () => {
   it('serializes only active URL filters', () => {
-    expect(assignmentWorkspaceFilterQuery({ campus: 'HCM', status: 'all', search: '' })).toEqual({
+    expect(
+      assignmentWorkspaceFilterQuery({
+        campus: 'HCM',
+        status: 'all',
+        search: '',
+      }),
+    ).toEqual({
       campus: 'HCM',
     })
-    expect(JSON.parse(serializeAssignmentWorkspaceFilters({ campus: 'HCM', status: 'unassigned' }))).toEqual({
+    expect(
+      JSON.parse(
+        serializeAssignmentWorkspaceFilters({
+          campus: 'HCM',
+          status: 'unassigned',
+        }),
+      ),
+    ).toEqual({
       campus: 'HCM',
       status: 'unassigned',
     })
@@ -40,7 +53,11 @@ describe('assignment workspace data contract', () => {
   })
 
   it('keeps routing strategy terminology understandable for operators', () => {
-    expect(assignmentWorkspacePolicyLabel('round_robin')).toBe('Luân phiên công bằng')
-    expect(assignmentWorkspacePolicyLabel('weighted_score')).toBe('Chấm điểm có trọng số')
+    expect(assignmentWorkspacePolicyLabel('round_robin')).toBe(
+      'Luân phiên công bằng',
+    )
+    expect(assignmentWorkspacePolicyLabel('weighted_score')).toBe(
+      'Chấm điểm có trọng số',
+    )
   })
 })

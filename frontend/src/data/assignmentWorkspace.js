@@ -63,7 +63,11 @@ export function cleanAssignmentWorkspaceParams(params = {}) {
 export function serializeAssignmentWorkspaceFilters(filters = {}) {
   const normalized = Object.fromEntries(
     Object.entries(filters).filter(
-      ([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all',
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        value !== 'all',
     ),
   )
   return Object.keys(normalized).length ? JSON.stringify(normalized) : undefined
@@ -114,7 +118,11 @@ export function normalizeAssignmentWorkspaceRows(rows = []) {
 export function assignmentWorkspaceFilterQuery(filters = {}) {
   return Object.fromEntries(
     Object.entries(filters).filter(
-      ([, value]) => value !== undefined && value !== null && value !== '' && value !== 'all',
+      ([, value]) =>
+        value !== undefined &&
+        value !== null &&
+        value !== '' &&
+        value !== 'all',
     ),
   )
 }

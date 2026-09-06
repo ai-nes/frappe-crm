@@ -41,18 +41,17 @@ def _stored_control():
 	if not _doctype_exists(CONTROL_DOCTYPE):
 		return None
 	try:
-		return frappe.db.get_value(
-			CONTROL_DOCTYPE,
-			CONTROL_DOCTYPE,
-			[
+		doc = frappe.get_single(CONTROL_DOCTYPE)
+		return {
+			fieldname: doc.get(fieldname)
+			for fieldname in (
 				"routing_enabled",
 				"capacity_required",
 				"last_changed_by",
 				"last_change_reason",
 				"revision",
-			],
-			as_dict=True,
-		)
+			)
+		}
 	except Exception:
 		return None
 
@@ -268,7 +267,7 @@ def get_routing_control():
 
 
 @frappe.whitelist(methods=["POST"])
-def set_routing_enabled(enabled, reason=None):
+def set_routing_enabled(enabled: bool | str, reason: str | None = None):
 	"""Switch automatic assignment on/off after server-side readiness checks."""
 	_require_control_access()
 	reason = (reason or "").strip()
@@ -289,18 +288,17 @@ def set_routing_enabled(enabled, reason=None):
 	doc.last_change_reason = reason
 	doc.revision = int(doc.revision or 0) + 1
 	doc.save(ignore_permissions=True)
-	frappe.db.commit()
 	return get_routing_control()
 
 
 @frappe.whitelist(methods=["POST"])
 def upsert_staff_capacity(
-	staff,
-	max_active_students,
-	period_start=None,
-	period_end=None,
-	team=None,
-	reason=None,
+	staff: str,
+	max_active_students: int | str,
+	period_start: str | None = None,
+	period_end: str | None = None,
+	team: str | None = None,
+	reason: str | None = None,
 ):
 	"""Create or update the active capacity period used by routing."""
 	_require_control_access()
@@ -356,5 +354,4 @@ def upsert_staff_capacity(
 	doc.effective_until = end
 	doc.source_reference = f"assignment-overview:{frappe.session.user}:{reason.strip()}"[:140]
 	doc.save(ignore_permissions=True)
-	frappe.db.commit()
 	return get_routing_control()
