@@ -48,6 +48,12 @@ Trang danh sách học sinh chỉ đọc `CRM Student` thật đã được tạ
 (có `source_lead` và `converted_at`) và phải có `owner_staff`, `assigned_to` cùng
 `owning_team` hợp lệ. Lead `ASSIGNED`
 chưa handoff chỉ xuất hiện ở màn hình Lead/cần xử lý, không được chiếu như Student.
+
+Lead Sale dùng cùng màn hình Student hiện có như Sale nhưng ở phạm vi tổng quát:
+xem được Student đã chuyển đổi và đã có người phụ trách trong các Team thuộc Group
+mình quản lý, đồng thời nhìn thấy Sale/CTV Sale đang phụ trách. Phạm vi này không
+mở rộng sang Group khác và không tạo thêm endpoint riêng.
+
 Lead nguồn được trả dưới dạng metadata `sourceLead`, `processingStatus` và `resolution`;
 không dùng các field này để thay thế `student_stage`, `enrollment_status` hoặc
 `lifecycle_stage` của Student.
