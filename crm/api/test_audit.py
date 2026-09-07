@@ -1,7 +1,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.audit import get_student_audit_logs
+from crm.api.audit import get_lead_audit_logs, get_student_audit_logs
 
 
 class TestStudentAuditApi(FrappeTestCase):
@@ -103,3 +103,19 @@ class TestStudentAuditApi(FrappeTestCase):
 		)
 		self.assertEqual(initial_status_log["new_value"], "Mới")
 		self.assertEqual(initial_status_log["metadata"]["new_code"], "NEW")
+
+	def test_lead_audit_contract_exposes_lead_id(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Lead Audit API",
+				"phone": "0912345682",
+				"email": "lead-audit-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		result = get_lead_audit_logs(lead.name)
+
+		self.assertEqual(result["lead_id"], lead.name)
+		self.assertTrue(result["read_only"])
+		self.assertIn("created", [log["action"] for log in result["logs"]])

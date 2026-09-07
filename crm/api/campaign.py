@@ -153,9 +153,21 @@ def list_campaigns(
 
 
 @frappe.whitelist()
-def get_campaign(name: str) -> dict[str, Any]:
-	"""Get one campaign after checking read permission."""
-	doc = frappe.get_doc("CRM Campaign", name)
+def get_campaign(code: str | None = None, name: str | None = None) -> dict[str, Any]:
+	"""Get one campaign by stable code, with legacy name support."""
+	identifier = (code or name or "").strip()
+	if not identifier:
+		frappe.throw(_("Campaign code is required."), frappe.ValidationError)
+
+	campaign_name = frappe.db.get_value(
+		"CRM Campaign",
+		{"stable_code": identifier},
+		"name",
+	)
+	if not campaign_name and frappe.db.exists("CRM Campaign", identifier):
+		campaign_name = identifier
+
+	doc = frappe.get_doc("CRM Campaign", campaign_name or identifier)
 	doc.check_permission("read")
 	return doc.as_dict()
 

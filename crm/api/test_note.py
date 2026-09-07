@@ -1,7 +1,17 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.note import create_note, delete_note, get_note, list_notes, update_note
+from crm.api.note import (
+	create_lead_note,
+	create_note,
+	delete_lead_note,
+	delete_note,
+	get_note,
+	list_lead_notes,
+	list_notes,
+	update_lead_note,
+	update_note,
+)
 
 
 class TestNoteApi(FrappeTestCase):
@@ -85,3 +95,21 @@ class TestNoteApi(FrappeTestCase):
 		self.assertEqual(interaction.reference_docname, note["name"])
 		self.assertEqual(interaction.channel, "Internal")
 		self.assertEqual(interaction.direction, "internal")
+
+	def test_lead_note_crud_contract(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Lead Note API",
+				"phone": "0912345681",
+				"email": "lead-note-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		created = create_lead_note(lead.name, content="Ghi chú Lead")
+		self.assertEqual(created["reference_doctype"], "CRM Lead")
+		self.assertEqual(list_lead_notes(lead.name)["total"], 1)
+
+		updated = update_lead_note(created["name"], content="Ghi chú Lead đã cập nhật")
+		self.assertEqual(updated["content"], "Ghi chú Lead đã cập nhật")
+		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})

@@ -151,3 +151,4 @@ crm.patches.v1_0.allow_ctv_sale_action_item_read
 crm.patches.v1_0.add_team_group_management
 crm.patches.v1_0.add_team_group_province
 crm.patches.v1_0.backfill_team_management_groups
+crm.patches.v1_0.grant_lead_sale_campaign_permissions

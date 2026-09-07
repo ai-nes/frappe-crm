@@ -37,6 +37,7 @@ _SUMMARY_BLOCK_RE = re.compile(
 	r"\[AI_CALL_SUMMARY_V1\](.*?)\[/AI_CALL_SUMMARY_V1\]",
 	re.IGNORECASE | re.DOTALL,
 )
+_DISPLAY_CODE_RE = re.compile(r"HS-(?P<year>\d{4})-HCM-(?P<sequence>\d{6})$", re.IGNORECASE)
 
 STAGES = {
 	"interested": {"label": "Quan tâm", "lifecycle": "Lead"},
@@ -238,7 +239,8 @@ def get_director_students(
 def get_director_student(student_id: str) -> dict[str, Any]:
 	"""Return one permission-checked Student 360 projection."""
 	_require_access()
-	if not str(student_id or "").strip():
+	student_id = _resolve_student_id(student_id)
+	if not student_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
@@ -283,6 +285,18 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 		"zalo_messages": zalo_messages,
 		"calls": calls,
 		"total_interactions": len(interactions),
+	}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
+	"""Return permission-scoped call history for one CRM Lead."""
+	payload = get_student_interactions(lead_id)
+	calls = payload.get("calls") or []
+	return {
+		"lead_id": payload.get("student_id"),
+		"calls": calls,
+		"total": len(calls),
 	}
 
 
@@ -568,7 +582,40 @@ def _student_filters(
 			"source",
 		):
 			or_filters.append([field, "like", pattern])
+		display_code_ids = _display_code_student_ids(query["query"], query["admission_year"])
+		if display_code_ids:
+			or_filters.append(["name", "in", display_code_ids])
 	return filters, or_filters
+
+
+def _display_code_student_ids(display_code: str, admission_year: str | None) -> list[str]:
+	"""Resolve a dashboard display code to the canonical CRM Lead names."""
+	match = _DISPLAY_CODE_RE.fullmatch(str(display_code or "").strip())
+	if not match or not admission_year or match.group("year") != str(admission_year):
+		return []
+
+	rows = frappe.get_all(
+		"CRM Lead",
+		filters={
+			"admission_year": str(admission_year),
+			"name": ["like", f"ENR-{match.group('year')}-%"],
+		},
+		fields=["name", "admission_year"],
+		limit_page_length=0,
+	)
+	normalized_code = display_code.strip().casefold()
+	return [row.get("name") for row in rows if _profile_code(row).casefold() == normalized_code]
+
+
+def _resolve_student_id(student_id: str | None) -> str:
+	"""Accept either a canonical CRM Lead name or its dashboard display code."""
+	value = str(student_id or "").strip()
+	match = _DISPLAY_CODE_RE.fullmatch(value)
+	if not match:
+		return value
+
+	matches = _display_code_student_ids(value, match.group("year"))
+	return matches[0] if len(matches) == 1 else value
 
 
 def _list_scope_student_ids() -> list[str] | None:
@@ -1029,6 +1076,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 
 	return {
 		"student": {
+			"id": row.get("name"),
 			"initials": item.get("initials"),
 			"name": item.get("name"),
 			"code": item.get("code"),
@@ -1039,6 +1087,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"email": row.get("email"),
 			"province": item.get("province"),
 			"counselor": item.get("owner"),
+			"revision": item.get("revision"),
 			"studentStage": item.get("studentStage") or _student_stage_value(row),
 			"priority": item.get("priority"),
 			"verificationStatus": _verification_status(row, assessment),

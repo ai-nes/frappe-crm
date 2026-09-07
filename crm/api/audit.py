@@ -495,3 +495,14 @@ def get_student_audit_logs(
 		"page_length": page_length,
 		"read_only": True,
 	}
+
+
+@frappe.whitelist()
+def get_lead_audit_logs(
+	lead_id: str,
+	start: int | str | None = 0,
+	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
+) -> dict[str, Any]:
+	"""Return the read-only audit history for one CRM Lead."""
+	result = get_student_audit_logs(lead_id, start=start, page_length=page_length)
+	return {**result, "lead_id": result["student"]}

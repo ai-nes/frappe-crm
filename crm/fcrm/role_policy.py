@@ -323,6 +323,9 @@ CANONICAL_PERMISSION_MATRIX = {
 			"marketing": "rwcdx",
 			"admissions_director": "rx",
 		},
+		"per_doctype_permissions": {
+			"CRM Campaign": {"lead_sales": "rwc"},
+		},
 		"row_scope": "marketing_owned_record",
 	},
 	"governed_acquisition": {

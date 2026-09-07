@@ -13,14 +13,25 @@ from frappe import _
 from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
+from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_PAGE_SIZE = 100
 PROCESSING_STATUS_LABELS = {
 	"NEW": "Mới",
+	"PROCESSING": "Đang xử lý",
 	"PROCESSED": "Đã xử lý",
 	"ASSIGNED": "Đã phân công",
 	"CLOSED": "Đã đóng",
+}
+RESOLUTION_LABELS = {
+	"PENDING": "Chưa có kết quả",
+	"MATCHED": "Đã liên kết",
+	"CREATED": "Đã tạo mới",
+	"DUPLICATE": "Trùng lặp",
+	"INVALID": "Không hợp lệ",
+	"SPAM": "Spam",
+	"FAILED": "Thất bại",
 }
 
 LEAD_FIELDS = [
@@ -61,6 +72,7 @@ def get_director_leads(
 	pageSize: str | int = 20,
 	q: str | None = "",
 	status: str | None = None,
+	resolution: str | None = None,
 	order: str = "desc",
 	campaign: str | None = None,
 ) -> dict[str, Any]:
@@ -72,10 +84,12 @@ def get_director_leads(
 		page_size=pageSize,
 		query=q,
 		status=status,
+		resolution=resolution,
 		campaign=campaign,
 		order=order,
 	)
 	query["status"] = _resolve_status(query["status"])
+	query["resolution"] = _resolve_resolution(query["resolution"])
 	filters, or_filters = _lead_filters(query)
 	total = _count_leads(filters, or_filters)
 	total_all = _count_leads(_year_filter(query["admission_year"]))
@@ -93,6 +107,8 @@ def get_director_leads(
 		"query": query["query"],
 		"status": query["status"],
 		"statusOptions": _status_options(),
+		"resolution": query["resolution"],
+		"resolutionOptions": _resolution_options(),
 		"asOf": _as_iso(frappe.utils.now_datetime()),
 	}
 	if query.get("campaign"):
@@ -137,6 +153,7 @@ def _parse_query(
 	page_size: str | int = 20,
 	query: str | None = "",
 	status: str | None = None,
+	resolution: str | None = None,
 	campaign: str | None = None,
 	order: str = "desc",
 ) -> dict[str, Any]:
@@ -150,6 +167,9 @@ def _parse_query(
 	status_value = str(status or "").strip() or None
 	if status_value and _fold(status_value) == "all":
 		status_value = None
+	resolution_value = str(resolution or "").strip() or None
+	if resolution_value and _fold(resolution_value) == "all":
+		resolution_value = None
 	campaign_value = str(campaign or "").strip() or None
 	if campaign_value and _fold(campaign_value) == "all":
 		campaign_value = None
@@ -159,6 +179,7 @@ def _parse_query(
 		"page_size": _parse_int(page_size, "pageSize", 20, minimum=1, maximum=MAX_PAGE_SIZE),
 		"query": str(query or "").strip(),
 		"status": status_value,
+		"resolution": resolution_value,
 		"campaign": campaign_value,
 		"order": order_value,
 	}
@@ -167,19 +188,29 @@ def _parse_query(
 def _resolve_status(value: str | None) -> str | None:
 	if not value:
 		return None
-	if not _table_exists("CRM Enrollment Status"):
-		return value
-	if frappe.db.exists("CRM Enrollment Status", value):
-		return value
-	rows = frappe.get_all(
-		"CRM Enrollment Status",
-		filters={"display_name": value},
-		fields=["name"],
-		limit_page_length=1,
+	candidate = str(value).strip().upper()
+	if candidate in PROCESSING_STATUSES:
+		return candidate
+	_raise_api_error(
+		"INVALID_STATUS",
+		"Trạng thái xử lý Lead không hợp lệ.",
+		frappe.ValidationError,
+		422,
 	)
-	if rows:
-		return rows[0].get("name")
-	_raise_api_error("INVALID_STATUS", "Tình trạng Lead không hợp lệ.", frappe.ValidationError, 422)
+
+
+def _resolve_resolution(value: str | None) -> str | None:
+	if not value:
+		return None
+	candidate = str(value).strip().upper()
+	if candidate in RESOLUTIONS:
+		return candidate
+	_raise_api_error(
+		"INVALID_RESOLUTION",
+		"Kết quả Lead không hợp lệ.",
+		frappe.ValidationError,
+		422,
+	)
 
 
 def _resolve_campaign(value: str) -> str:
@@ -192,7 +223,9 @@ def _resolve_campaign(value: str) -> str:
 def _lead_filters(query: dict[str, Any]) -> tuple[dict[str, Any], list[list[str]]]:
 	filters = _year_filter(query["admission_year"])
 	if query.get("status"):
-		filters["enrollment_status"] = query["status"]
+		filters["processing_status"] = query["status"]
+	if query.get("resolution"):
+		filters["resolution"] = query["resolution"]
 	if query.get("campaign"):
 		filters["campaign"] = _resolve_campaign(query["campaign"])
 
@@ -406,9 +439,15 @@ def _status_lookup() -> dict[str, str]:
 
 def _status_options() -> list[dict[str, str]]:
 	return [
-		{"value": row.get("name"), "label": row.get("display_name") or row.get("name")}
-		for row in _status_rows()
-		if row.get("name") and row.get("enabled", 1)
+		{"value": status, "label": PROCESSING_STATUS_LABELS.get(status, status)}
+		for status in PROCESSING_STATUSES
+	]
+
+
+def _resolution_options() -> list[dict[str, str]]:
+	return [
+		{"value": resolution, "label": RESOLUTION_LABELS.get(resolution, resolution)}
+		for resolution in RESOLUTIONS
 	]
 
 

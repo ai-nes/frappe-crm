@@ -121,14 +121,18 @@ Response:
 ## Get one campaign
 
 ```http
-GET /api/method/crm.api.campaign.get_campaign?name=<campaign_name>
+GET /api/method/crm.api.campaign.get_campaign?code=<stable_code>
 ```
 
 Ví dụ:
 
 ```http
-GET /api/method/crm.api.campaign.get_campaign?name=Tuyển%20sinh%20m%C3%B9a%20thu%202026
+GET /api/method/crm.api.campaign.get_campaign?code=CAM-2026-00001
 ```
+
+`code` là `stable_code`, mã duy nhất do server sinh và không đổi sau khi tạo.
+Tham số `name` vẫn được hỗ trợ để tương thích với client/URL cũ, nhưng client mới
+nên dùng `code` để không phụ thuộc vào title có khoảng trắng hoặc thay đổi.
 
 Response `message` là một Campaign object.
 
@@ -137,7 +141,7 @@ Response `message` là một Campaign object.
 Trang chi tiết trên `dashboard-crm` dùng hai endpoint đọc sau:
 
 ```http
-GET /api/method/crm.api.campaign.get_campaign?name=<campaign_name>
+GET /api/method/crm.api.campaign.get_campaign?code=<stable_code>
 GET /api/method/crm.api.director_leads.get_director_leads?campaign=<campaign_name>&page=1&pageSize=100
 ```
 

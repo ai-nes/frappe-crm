@@ -198,6 +198,23 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertIsNone(all_statuses["assignment_status"])
 		self.assertIsNone(all_statuses["lifecycle_status"])
 
+	def test_student_filters_match_dashboard_display_code(self):
+		query = director_students._parse_query(
+			admissionYear="2026",
+			q="HS-2026-HCM-000018",
+		)
+		with patch.object(
+			director_students.frappe,
+			"get_all",
+			return_value=[
+				frappe._dict(name="ENR-2026-000018", admission_year="2026"),
+				frappe._dict(name="ENR-2026-000019", admission_year="2026"),
+			],
+		):
+			_filters, or_filters = director_students._student_filters(query, None)
+
+		self.assertIn(["name", "in", ["ENR-2026-000018"]], or_filters)
+
 	def test_stage_filters_keep_exploring_and_counselling_distinct(self):
 		exploring = director_students._parse_query(stage="exploring")
 		counselling = director_students._parse_query(stage="counselling")
@@ -237,6 +254,7 @@ class TestDirectorStudents(FrappeTestCase):
 			"lastActivityAt": "2026-08-31T09:56:00+07:00",
 			"nextAction": "Gọi phụ huynh về học phí",
 			"owner": "Trần Quốc Bảo",
+			"revision": 4,
 			"source": "Career Talk 28/05",
 			"priority": "Cao",
 		}
@@ -265,6 +283,7 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(response["student"]["phone"], "0900000000")
 		self.assertEqual(response["student"]["email"], "an@example.com")
+		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
 		self.assertEqual(response["student"]["verificationStatus"], "Đã xác thực")
@@ -628,6 +647,16 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["zalo_messages"], [])
 		self.assertEqual(result["calls"], [])
 		self.assertEqual(result["total_interactions"], 0)
+
+	def test_get_lead_call_logs_endpoint(self):
+		with patch.object(
+			director_students,
+			"get_student_interactions",
+			return_value={"student_id": "LEAD-1", "calls": [{"id": "CALL-1"}]},
+		):
+			result = director_students.get_lead_call_logs("LEAD-1")
+
+		self.assertEqual(result, {"lead_id": "LEAD-1", "calls": [{"id": "CALL-1"}], "total": 1})
 
 	def test_student_zalo_messages_include_chatwoot_interactions(self):
 		messages = director_students._student_zalo_messages(

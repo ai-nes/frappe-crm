@@ -56,7 +56,7 @@ class TestCampaignApi(FrappeTestCase):
 			utm_campaign="autumn-admissions",
 		)
 
-		self.assertEqual(get_campaign(created["name"])["stable_code"], created["stable_code"])
+		self.assertEqual(get_campaign(code=created["stable_code"])["name"], created["name"])
 		self.assertEqual(created["channel_type"], "OPEN_DAY")
 		self.assertEqual(created["channel_url"], "https://example.com/open-day")
 		updated = update_campaign(
@@ -94,7 +94,7 @@ class TestCampaignApi(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			update_campaign(created["name"], stable_code="CAM-2026-99999")
 
-		self.assertEqual(get_campaign(created["name"])["stable_code"], created["stable_code"])
+		self.assertEqual(get_campaign(name=created["name"])["stable_code"], created["stable_code"])
 
 	def test_lead_sale_can_create_and_update_campaign(self):
 		frappe.set_user("leadsale@gmail.com")

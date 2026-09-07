@@ -21,6 +21,7 @@ class TestDirectorLeads(FrappeTestCase):
 			page_size="10",
 			query="  Nguyen  ",
 			status="NEW",
+			resolution="MATCHED",
 			campaign=" Tuyen sinh mua thu 2026 ",
 			order="asc",
 		)
@@ -33,6 +34,7 @@ class TestDirectorLeads(FrappeTestCase):
 				"page_size": 10,
 				"query": "Nguyen",
 				"status": "NEW",
+				"resolution": "MATCHED",
 				"campaign": "Tuyen sinh mua thu 2026",
 				"order": "asc",
 			},
@@ -49,9 +51,21 @@ class TestDirectorLeads(FrappeTestCase):
 				with self.assertRaises(frappe.ValidationError):
 					director_leads._parse_query(**kwargs)
 
+		for resolver, value in (
+			(director_leads._resolve_status, "PROSPECT"),
+			(director_leads._resolve_resolution, "DONE"),
+		):
+			with self.subTest(resolver=resolver.__name__):
+				with self.assertRaises(frappe.ValidationError):
+					resolver(value)
+
 	def test_lead_filters_search_expected_fields_and_status(self):
 		query = director_leads._parse_query(
-			admission_year="2026", query="Nguyen", status="NEW", campaign="Tuyen sinh mua thu 2026"
+			admission_year="2026",
+			query="Nguyen",
+			status="NEW",
+			resolution="MATCHED",
+			campaign="Tuyen sinh mua thu 2026",
 		)
 		filters, or_filters = director_leads._lead_filters(query)
 
@@ -59,7 +73,8 @@ class TestDirectorLeads(FrappeTestCase):
 			filters,
 			{
 				"admission_year": "2026",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
+				"resolution": "MATCHED",
 				"campaign": "Tuyen sinh mua thu 2026",
 			},
 		)
@@ -142,6 +157,7 @@ class TestDirectorLeads(FrappeTestCase):
 	def test_processing_status_mapping_matches_form_submission_enum(self):
 		for status, label in {
 			"NEW": "Mới",
+			"PROCESSING": "Đang xử lý",
 			"PROCESSED": "Đã xử lý",
 			"ASSIGNED": "Đã phân công",
 			"CLOSED": "Đã đóng",
@@ -221,6 +237,7 @@ class TestDirectorLeads(FrappeTestCase):
 		with (
 			patch.object(director_leads, "_require_access"),
 			patch.object(director_leads, "_resolve_status", return_value="NEW"),
+			patch.object(director_leads, "_resolve_resolution", return_value="MATCHED"),
 			patch.object(director_leads, "_count_leads", side_effect=[1, 8, 1, 1, 1]),
 			patch.object(director_leads, "_fetch_lead_rows", return_value=[row]),
 			patch.object(director_leads, "_load_lookups", return_value={"statuses": {"NEW": "Mới"}}),
@@ -237,6 +254,7 @@ class TestDirectorLeads(FrappeTestCase):
 				pageSize="1",
 				q=" Nguyen ",
 				status="NEW",
+				resolution="MATCHED",
 				campaign="CAM-2026-00001",
 			)
 
@@ -248,6 +266,7 @@ class TestDirectorLeads(FrappeTestCase):
 		self.assertEqual(response["meta"]["totalPages"], 1)
 		self.assertFalse(response["meta"]["hasNextPage"])
 		self.assertEqual(response["meta"]["status"], "NEW")
+		self.assertEqual(response["meta"]["resolution"], "MATCHED")
 		self.assertEqual(
 			response["meta"]["stats"],
 			{"total": 1, "inProgress": 1, "closed": 1, "conversionRate": 100},

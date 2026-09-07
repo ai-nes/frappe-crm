@@ -194,6 +194,11 @@ class TestSessionRoleContract(FrappeTestCase):
 			("CRM Lead", "CRM Student"),
 		)
 		self.assertEqual(CANONICAL_PERMISSION_MATRIX["admissions_case"]["permissions"]["sales"], "rwc")
+		self.assertEqual(CANONICAL_PERMISSION_MATRIX["acquisition"]["permissions"]["lead_sales"], "r")
+		self.assertEqual(
+			CANONICAL_PERMISSION_MATRIX["acquisition"]["per_doctype_permissions"]["CRM Campaign"]["lead_sales"],
+			"rwc",
+		)
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["governed_admissions"]["per_doctype_permissions"]["CRM Campus"][
 				"admissions_director"
