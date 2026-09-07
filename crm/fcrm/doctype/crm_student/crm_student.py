@@ -144,6 +144,13 @@ class CRMStudent(Document):
 		}
 		if "student" in changed:
 			frappe.throw("CRM Student.student is a read-only legacy compatibility link.", frappe.PermissionError)
+		for fieldname, label in (
+			("source_lead", "CRM Student.source_lead"),
+			("lead_code", "CRM Student.lead_code"),
+			("converted_at", "CRM Student.converted_at"),
+		):
+			if fieldname in changed and (before.get(fieldname) or not self._is_service_write()):
+				frappe.throw(f"{label} is immutable.", frappe.PermissionError)
 		if "student_identity" in changed:
 			# Identity ownership can never be reassigned after it is set. A
 			# conversion/migration may stamp a blank identity once.
@@ -216,6 +223,10 @@ class CRMStudent(Document):
 			self.phone = self.phone.strip()
 		if isinstance(self.email, str):
 			self.email = self.email.strip().lower()
+		if isinstance(self.other_email, str):
+			self.other_email = self.other_email.strip().lower()
+		if isinstance(self.id_number, str):
+			self.id_number = self.id_number.strip()
 
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as _scoped

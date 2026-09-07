@@ -252,6 +252,7 @@ doc_events = {
 		"on_update": ["crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography"],
 	},
 	"CRM Interaction": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"after_insert": [
 			"crm.fcrm.interaction_log.satisfy_student_sla_from_interaction",
 			"crm.services.admission_event_policy.admit_interaction",
@@ -263,7 +264,11 @@ doc_events = {
 			"crm.api.agent_events.dispatch_interaction_domain_reevaluation",
 		],
 	},
+	"CRM Interaction Evidence": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
 	"CRM Intent": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"after_insert": [
 			"crm.services.admission_event_policy.admit_intent",
 			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
@@ -272,6 +277,18 @@ doc_events = {
 			"crm.services.admission_event_policy.admit_intent",
 			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
 		],
+	},
+	"CRM Score History": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Student Analysis Run": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Student Assessment": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM NBA Evaluation": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 	},
 	"CRM High School Annual Snapshot": {
 		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
@@ -345,8 +362,15 @@ doc_events = {
 		"on_trash": ["crm.fcrm.doctype.crm_student_privacy_request.crm_student_privacy_request.on_trash"],
 	},
 	"Task": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_task_update"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"CRM Action Item": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Admission Application": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 	},
 	"Call Log": {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],

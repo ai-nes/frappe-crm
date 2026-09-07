@@ -1,4 +1,4 @@
-"""Immutable Student-to-Contact conversion relationship."""
+"""Immutable Lead-to-Student conversion relationship."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def on_doctype_update():
 
 
 class CRMStudentContactConversion(Document):
-	"""Append-only junction; the conversion command is its only writer."""
+	"""Append-only Lead-to-Student junction; the command is its only writer."""
 
 	def before_validate(self):
 		if self.is_new() and not _service_write_enabled():
@@ -56,6 +56,13 @@ class CRMStudentContactConversion(Document):
 		self._validate_relationship()
 
 	def _validate_relationship(self):
+		if self.lead and self.lead != self.student:
+			frappe.throw("Conversion Lead alias does not match the legacy Student field.", frappe.ValidationError)
+		if self.canonical_student and self.canonical_student != self.contact:
+			frappe.throw(
+				"Conversion canonical Student alias does not match the Contact field.",
+				frappe.ValidationError,
+			)
 		student = frappe.db.get_value(
 			"CRM Lead",
 			self.student,

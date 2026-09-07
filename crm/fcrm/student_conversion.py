@@ -1,8 +1,9 @@
 """Authoritative Lead -> Student conversion command.
 
-Lead and Student are independent records. This command is the only workflow
-that copies the explicit Lead snapshot into a Student and stamps their direct
-relationship. Phone, email, and identity are never used to auto-merge records.
+Lead owns intake and routing; Student owns the post-conversion care aggregate.
+This command is the only workflow that copies the explicit Lead snapshot into a
+Student and stamps their direct relationship. Phone, email, and identity are
+never used to auto-merge records.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any
 
 import frappe
 
+from crm.fcrm.conversion_readiness import conversion_readiness
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -30,17 +32,26 @@ POLICY_VERSION = "phase8-conversion-v1"
 SCHEMA_VERSION = "phase8-v1"
 
 # Only fields with the same business meaning on both records are copied. Lead
-# scoring, campaign attribution, academic evidence, identity resolution, and
-# operational audit fields remain on Lead.
+# source attribution, scoring history, academic evidence, identity resolution,
+# and operational audit fields remain authoritative on their owning records.
 LEAD_TO_STUDENT_FIELDS = (
 	("student_name", "full_name"),
 	("phone", "phone"),
 	("email", "email"),
+	("other_email", "other_email"),
+	("gender", "gender"),
+	("date_of_birth", "date_of_birth"),
+	("id_number", "id_number"),
+	("id_issued_date", "id_issued_date"),
+	("id_issued_place", "id_issued_place"),
 	("enrollment_status", "enrollment_status"),
 	("assigned_to", "assigned_to"),
 	("admission_year", "admission_year"),
 	("high_school", "high_school"),
 	("province", "province"),
+	("ward", "ward"),
+	("current_grade", "current_grade"),
+	("study_stage", "study_stage"),
 	("major", "major"),
 	("aspiration", "aspiration"),
 	("branch", "branch"),
@@ -275,6 +286,9 @@ def _student_snapshot_values(lead, identity):
 	values = {
 		"doctype": CONTACT_DOCTYPE,
 		"student_identity": identity.name if identity else None,
+		"source_lead": lead.get("name"),
+		"lead_code": lead.get("lead_code"),
+		"converted_at": frappe.utils.now_datetime(),
 	}
 	for lead_field, student_field in LEAD_TO_STUDENT_FIELDS:
 		value = lead.get(lead_field)
@@ -325,8 +339,17 @@ def _link_lead_to_student(lead, contact):
 	linked_student = frappe.db.get_value(LEAD_DOCTYPE, lead.name, "student")
 	if linked_student and linked_student != contact.name:
 		_fail("RELATIONSHIP_CONFLICT", "Lead already points to a different Student.")
-	if not linked_student:
-		frappe.db.set_value(LEAD_DOCTYPE, lead.name, "student", contact.name, update_modified=False)
+	updates = {
+		"student": contact.name,
+		"converted_student": contact.name,
+		"conversion_status": "Converted",
+		"lead_status": "Converted",
+		"converted_at": frappe.utils.now_datetime(),
+	}
+	fields = _fields(LEAD_DOCTYPE)
+	for fieldname, value in updates.items():
+		if fieldname in fields:
+			frappe.db.set_value(LEAD_DOCTYPE, lead.name, fieldname, value, update_modified=False)
 
 
 def _lifecycle_event(student_name: str):
@@ -343,6 +366,8 @@ def _lifecycle_event(student_name: str):
 def _conversion_values(student, identity, case, contact, receipt, scope, idempotency_key, correlation_id):
 	values = {
 		"doctype": CONVERSION_DOCTYPE,
+		"lead": student.name,
+		"canonical_student": contact.name,
 		"student": student.name,
 		"student_identity": identity.name,
 		"case_key": case.name,
@@ -368,8 +393,10 @@ def _result(student, identity, case, contact, conversion, receipt, *, status, re
 		# explicit for new clients.
 		"student": student.name,
 		"lead": student.name,
+		"lead_id": student.name,
 		"contact": contact.name,
 		"target_student": contact.name,
+		"student_id": contact.name,
 		"conversion": conversion.name if hasattr(conversion, "name") else conversion.get("name"),
 		"receipt": receipt.name if hasattr(receipt, "name") else receipt.get("name"),
 		"replayed": replayed,
@@ -433,8 +460,12 @@ def convert_student(
 		# receipt must be replayed unchanged, never rewritten as ``attached``.
 		if replay := _replay(command_key, fingerprint):
 			return replay
-		if student_doc.get("lifecycle_stage") != "Enrolled":
-			_fail("CONVERSION_CONDITION_FAILED", "Only Enrolled Students can be converted.")
+		readiness = conversion_readiness(student_doc)
+		if not readiness["ready"]:
+			_fail(
+				"CONVERSION_CONDITION_FAILED",
+				"Lead is missing conversion requirements: " + ", ".join(readiness["blockers"]),
+			)
 		try:
 			current_revision = int(student_doc.get("lifecycle_revision") or 0)
 		except (TypeError, ValueError):

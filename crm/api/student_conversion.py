@@ -22,7 +22,7 @@ def convert_student(
 	correlation_id: str | None = None,
 	target_student: str | None = None,
 ) -> dict:
-	"""Convert a CRM Lead into an independent CRM Student snapshot.
+	"""Convert a qualified CRM Lead into the canonical CRM Student snapshot.
 
 	``student`` is retained as the request key for compatibility. New clients
 	may pass ``target_student`` to use an independently created/imported Student.

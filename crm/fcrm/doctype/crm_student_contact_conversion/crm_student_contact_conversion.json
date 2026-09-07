@@ -8,6 +8,8 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "lead",
+  "canonical_student",
   "student",
   "student_identity",
   "case_key",
@@ -23,6 +25,22 @@
   "schema_version"
  ],
  "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lead",
+   "options": "CRM Lead",
+   "read_only": 1
+  },
+  {
+   "fieldname": "canonical_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
   {
    "fieldname": "student",
    "fieldtype": "Link",

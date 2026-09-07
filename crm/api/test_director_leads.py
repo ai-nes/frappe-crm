@@ -56,6 +56,7 @@ class TestDirectorLeads(FrappeTestCase):
 			or_filters,
 			[
 				["name", "like", "%Nguyen%"],
+				["lead_code", "like", "%Nguyen%"],
 				["student_name", "like", "%Nguyen%"],
 				["phone", "like", "%Nguyen%"],
 				["email", "like", "%Nguyen%"],
@@ -69,6 +70,7 @@ class TestDirectorLeads(FrappeTestCase):
 		row = frappe._dict(
 			{
 				"name": "LEAD-2026-00001",
+				"lead_code": "LD-2026-00001",
 				"student_name": "Nguyễn Minh An",
 				"phone": "0900000000",
 				"high_school": "HS-1",
@@ -91,6 +93,8 @@ class TestDirectorLeads(FrappeTestCase):
 			item,
 			{
 				"id": "LEAD-2026-00001",
+				"leadCode": "LD-2026-00001",
+				"studentId": "LEAD-2026-00001",
 				"initials": "MA",
 				"name": "Nguyễn Minh An",
 				"phone": "0900000000",

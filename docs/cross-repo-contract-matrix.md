@@ -27,6 +27,10 @@ incompatible changes require a major version and coordinated deployment.
 | Current-Action claim command `crm.api.student_decision.claim_current_action` | frappe-crm | 1 | crm-agents care queue | 2026-09-01 |
 | CRM Action `risk_tier` policy field (`low\|mid\|high`, NOT NULL, Frappe-owned) | frappe-crm | 1 | crm-agents decision / PH-06 frontend | 2026-09-01 |
 
+The Lead Sale read model returns `leadCode` as the immutable, non-PII base identifier
+(`LD-YYYY-NNNNN`) and `studentId` separately. A school-qualified display value such as
+`LD-YYYY-SCHOOL-CODE-NNNNN` is presentation-only and must not replace `leadCode`.
+
 ## Student–Lead relationship
 
 `CRM Lead` and `CRM Student` are independent records. Either one may be created or
@@ -37,7 +41,20 @@ Each Student may have many Leads from different acquisition sources, including F
 Zalo, Open Day, High School events, Website, and Referral. Conversion may use an
 independently imported Student when it is explicitly selected, and never auto-merges by
 phone, email, name, or identity. The conversion junction and legacy `CRM Student.student`
-field remain read-compatible during migration; new code should use the direct Lead link.
+field remain read-compatible during migration. The target ownership contract below
+supersedes this compatibility description for new admissions-core code.
+
+### Target admissions core
+
+The target model makes `CRM Lead` the intake/routing layer and `CRM Student` the
+canonical post-conversion care aggregate. A Lead may convert only when
+`id_number`, `high_school`, and `major` are present. New conversion results expose
+`lead_id`, `student_id`, and the idempotency receipt; `CRM Student.source_lead`
+stores the explicit origin. Core child records expose `crm_student` as the
+canonical Student link; `crm_contact` remains as a compatibility alias on
+Interaction/Evidence while the legacy Lead reference is still available during
+migration. New writes must populate the canonical Student link whenever the Lead
+has been converted.
 
 The `crm/api/agent_events.py` delivery worker reads the crm-agents
 `/api/v1/contract-manifest` with a short Frappe cache when the BFF contract

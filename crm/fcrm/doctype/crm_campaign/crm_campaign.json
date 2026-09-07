@@ -45,12 +45,14 @@
    "unique": 1
   },
   {
-   "description": "Stable integration key. Uniqueness is enforced after the legacy profile is clean.",
+   "description": "Server-managed immutable identifier in CAM-YYYY-NNNNN format.",
    "fieldname": "stable_code",
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Stable Campaign Code"
+   "label": "Campaign Code",
+   "read_only": 1,
+   "unique": 1
   },
   {
    "fieldname": "campus",
@@ -188,7 +190,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Leads",
+   "link_doctype": "CRM Lead",
+   "link_fieldname": "campaign"
+  }
+ ],
  "modified": "2026-06-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",

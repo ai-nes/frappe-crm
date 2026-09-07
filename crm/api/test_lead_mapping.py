@@ -1,9 +1,16 @@
 from unittest import TestCase
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.lead_mapping import LeadMappingError, _parse_csv_rows, split_multi_value
+from crm.api.lead_mapping import (
+	LeadMappingError,
+	_normalize_public_lead_payload,
+	_parse_csv_rows,
+	_parse_public_payload,
+	split_multi_value,
+)
 
 
 class TestLeadMappingContract(TestCase):
@@ -39,6 +46,31 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(context.exception.code, "CSV_MISSING_HEADERS")
 		self.assertIn("assigned_to", str(context.exception))
 
+	def test_public_payload_rejects_server_managed_fields(self):
+		with self.assertRaises(LeadMappingError) as context:
+			_parse_public_payload({"student_name": "An", "lead_status": "Qualified"})
+
+		self.assertEqual(context.exception.code, "SERVER_MANAGED_FIELD")
+		self.assertIn("lead_status", str(context.exception))
+
+	def test_public_payload_normalizes_optional_intake_fields(self):
+		with (
+			patch("crm.api.lead_mapping._check_unique"),
+			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
+		):
+			values = _normalize_public_lead_payload(
+				{
+					"student_name": "An",
+					"phone": "+84981000099",
+					"segments": ["Scholarship", "Scholarship"],
+					"assignment_priority": "HIGH",
+				}
+			)
+
+		self.assertEqual(values["phone"], "0981000099")
+		self.assertEqual(values["segments"], '["Scholarship"]')
+		self.assertEqual(values["assignment_priority"], "high")
+
 
 class TestLeadMappingIntegration(FrappeTestCase):
 	def test_create_lead_resolves_csv_labels_and_enforces_contract(self):
@@ -60,6 +92,8 @@ class TestLeadMappingIntegration(FrappeTestCase):
 			)
 			created_name = result["name"]
 			self.assertEqual(result["doctype"], "CRM Lead")
+			self.assertRegex(result["leadCode"], r"^LD-\d{4}-\d{5,}$")
+			self.assertEqual(result["lead_code"], result["leadCode"])
 			self.assertEqual(
 				frappe.db.get_value("CRM Lead", created_name, "province"),
 				"Ho Chi Minh City",

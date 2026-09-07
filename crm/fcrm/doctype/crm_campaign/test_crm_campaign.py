@@ -134,3 +134,26 @@ class TestCRMCampaign(FrappeTestCase):
 		)
 		campaign.insert(ignore_permissions=True)
 		self.assertEqual(campaign.status, "Draft")
+
+	def test_campaign_code_is_generated_and_immutable(self):
+		campus = self._make_campus("_Test Campaign Code Campus")
+		campaign = frappe.get_doc(
+			{
+				"doctype": "CRM Campaign",
+				"title": "_Test Campaign Code",
+				"campus": campus,
+				"start_date": "2026-09-07",
+			}
+		)
+		campaign.insert(ignore_permissions=True)
+
+		self.assertRegex(campaign.stable_code, r"^CAM-2026-\d{5,}$")
+		code = campaign.stable_code
+		campaign.title = "_Test Campaign Code Renamed"
+		campaign.save(ignore_permissions=True)
+		campaign.reload()
+		self.assertEqual(campaign.stable_code, code)
+
+		campaign.stable_code = "CAM-2026-99999"
+		with self.assertRaises(frappe.ValidationError):
+			campaign.save(ignore_permissions=True)

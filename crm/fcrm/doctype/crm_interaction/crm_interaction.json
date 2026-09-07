@@ -12,6 +12,7 @@
   "naming_series",
   "student",
   "crm_contact",
+  "crm_student",
   "column_break_1",
   "interaction_type",
   "interaction_datetime",
@@ -67,6 +68,13 @@
    "in_standard_filter": 1,
    "label": "CRM Student",
    "options": "CRM Student"
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_1",
@@ -354,7 +362,7 @@
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "student,crm_contact,summary",
+ "search_fields": "student,crm_student,crm_contact,summary",
  "sort_field": "interaction_datetime",
  "sort_order": "DESC",
  "states": [],

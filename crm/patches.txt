@@ -137,3 +137,6 @@ crm.patches.v1_0.align_lead_mapping_contract
 crm.patches.v1_0.restore_contact_link_targets_after_doctype_rename
 crm.patches.v1_0.drop_orphaned_crm_students_table
 crm.patches.v1_0.link_leads_to_students
+crm.patches.v1_0.add_lead_code
+crm.patches.v1_0.admissions_core_lead_student
+crm.patches.v1_0.add_campaign_code

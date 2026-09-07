@@ -10,6 +10,12 @@
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
+  "lead_code",
+  "lead_status",
+  "conversion_status",
+  "conversion_blockers",
+  "converted_student",
+  "converted_at",
   "student_name",
   "phone",
   "email",
@@ -45,6 +51,7 @@
   "step",
   "source",
   "advertising_channel",
+  "campaign",
   "conversion_potential",
   "segments",
   "admission_year",
@@ -110,6 +117,54 @@
    "hidden": 1,
    "label": "Series",
    "options": "ENR-.YYYY.-"
+  },
+  {
+   "description": "Server-managed immutable identifier. Contains only the admission year and sequence; mutable Lead data is never encoded.",
+   "fieldname": "lead_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Lead Code",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "default": "New",
+   "fieldname": "lead_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead Status",
+   "options": "New\nWorking\nContacted\nNurturing\nQualified\nUnqualified\nConverted\nLost"
+  },
+  {
+   "default": "Not Ready",
+   "fieldname": "conversion_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Conversion Status",
+   "options": "Not Ready\nReady\nConverted\nBlocked",
+   "read_only": 1
+  },
+  {
+   "fieldname": "conversion_blockers",
+   "fieldtype": "JSON",
+   "label": "Conversion Blockers",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Converted Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_at",
+   "fieldtype": "Datetime",
+   "label": "Converted At",
+   "read_only": 1
   },
   {
    "fieldname": "student_name",
@@ -359,6 +414,15 @@
    "fieldname": "advertising_channel",
    "fieldtype": "Data",
    "label": "Advertising Channel"
+  },
+  {
+   "description": "The single campaign that acquired this Lead.",
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "CRM Campaign"
   },
   {
    "fieldname": "conversion_potential",
@@ -665,6 +729,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
+ "indexes": [
+  {
+   "fields": ["campaign"],
+   "name": "crm_lead_campaign_idx",
+   "unique": 0
+  }
+ ],
  "links": [],
  "modified": "2026-06-15 00:00:00.000000",
  "modified_by": "Administrator",
@@ -693,5 +764,5 @@
  "title_field": "student_name",
  "track_changes": 1,
  "translated_doctype": 1,
- "search_fields": "student_name,phone,email"
+ "search_fields": "lead_code,student_name,phone,email"
 }

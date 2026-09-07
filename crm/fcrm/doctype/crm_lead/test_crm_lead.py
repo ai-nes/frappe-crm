@@ -72,6 +72,25 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "Lead")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
+	def test_lead_code_is_stable_and_separate_from_student_id(self):
+		lead = self._make_student_with_status("_Test Lead Code", "0981000088", "NEW")
+
+		self.assertRegex(lead.lead_code, r"^LD-\d{4}-\d{5,}$")
+		self.assertEqual(lead.lead_code, lead.name.replace("ENR-", "LD-", 1))
+
+		lead_name = lead.name
+		lead_code = lead.lead_code
+		lead.student_name = "_Test Lead Code Updated"
+		lead.save(ignore_permissions=True)
+		lead.reload()
+
+		self.assertEqual(lead.name, lead_name)
+		self.assertEqual(lead.lead_code, lead_code)
+
+		lead.lead_code = "LD-2026-99999"
+		with self.assertRaises(frappe.ValidationError):
+			lead.save(ignore_permissions=True)
+
 	def test_current_grade_change_advances_student_context_revision(self):
 		if not frappe.get_meta("CRM Lead").has_field("current_grade"):
 			self.skipTest("CRM Student schema has not been migrated with current_grade")

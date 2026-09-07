@@ -6,9 +6,16 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
+from crm.fcrm.conversion_readiness import conversion_readiness
 from crm.fcrm.doctype.crm_lead.enrollment_transition import (
 	record_transition,
 	set_enrollment_status,
+)
+from crm.fcrm.lead_code import (
+	is_valid_lead_code,
+	lead_code_from_name,
+	lead_code_year,
+	next_lead_code,
 )
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
@@ -41,12 +48,26 @@ class CRMLead(Document):
 		self.flags.ignore_links = True
 
 	def before_insert(self):
+		# The code is server-managed; ignore any client/import value.
+		self.lead_code = None
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
 
+	def after_insert(self):
+		# Lead.name is available only after Frappe has assigned the naming series.
+		# Persist the public code after that point so ENR-YYYY-NNNNN records map
+		# deterministically to LD-YYYY-NNNNN without putting PII in the code.
+		self._ensure_lead_code()
+		frappe.db.set_value("CRM Lead", self.name, "lead_code", self.lead_code, update_modified=False)
+
 	def before_save(self):
 		before = self.get_doc_before_save()
+		if before and before.get("lead_code") and self.get("lead_code") != before.get("lead_code"):
+			frappe.throw(
+				_("Lead Code is immutable after creation."),
+				frappe.ValidationError,
+			)
 		if before and not getattr(frappe.flags, "student_lifecycle_service", False):
 			lifecycle_fields = ("enrollment_status", "lifecycle_stage")
 			if any(before.get(field) != self.get(field) for field in lifecycle_fields):
@@ -66,6 +87,8 @@ class CRMLead(Document):
 		self._resolve_geo()
 		if self.cohort_end_year:
 			self.cohort_start_year = int(self.cohort_end_year) - 3
+		if self.get("lead_code") and not is_valid_lead_code(self.lead_code):
+			frappe.throw(_("Lead Code must match LD-YYYY-NNNNN."), frappe.ValidationError)
 
 	def validate(self):
 		self._validate_phone_format()
@@ -75,6 +98,7 @@ class CRMLead(Document):
 		self._validate_study_stage()
 		self._resolve_geo()
 		self._validate_high_school_format()
+		self._update_conversion_readiness()
 		if (
 			getattr(frappe.flags, "student_intake_service", False)
 			or getattr(frappe.flags, "student_ownership_service", False)
@@ -86,6 +110,16 @@ class CRMLead(Document):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _update_conversion_readiness(self):
+		"""Keep the Lead's pre-conversion readiness projection server-managed."""
+		readiness = conversion_readiness(self)
+		if self.meta.has_field("conversion_blockers"):
+			self.conversion_blockers = json.dumps(readiness["blockers"], ensure_ascii=False)
+		if self.meta.has_field("conversion_status"):
+			self.conversion_status = (
+				"Converted" if self.get("student") or self.get("converted_student") else readiness["status"]
+			)
 
 	def _derive_owner_fields(self):
 		if self.assigned_to:
@@ -225,6 +259,21 @@ class CRMLead(Document):
 			if default_branch:
 				self.branch = default_branch
 
+	def _ensure_lead_code(self):
+		if self.get("lead_code"):
+			return
+		year = lead_code_year(
+			self.get("admission_year"),
+			self.get("creation"),
+			frappe.utils.now_datetime().year,
+		)
+		code = lead_code_from_name(self.name)
+		if not code:
+			code = next_lead_code(year)
+		while frappe.db.exists("CRM Lead", {"lead_code": code, "name": ["!=", self.name]}):
+			code = next_lead_code(year)
+		self.lead_code = code
+
 	def _resolve_geo(self):
 		# high_school is intentionally NOT resolved here — _validate_high_school_format()
 		# is the single source of truth for it (resolve_high_school_strict), called right
@@ -248,6 +297,12 @@ class CRMLead(Document):
 	@staticmethod
 	def default_list_data():
 		columns = [
+			{
+				"label": "Lead Code",
+				"type": "Data",
+				"key": "lead_code",
+				"width": "12rem",
+			},
 			{
 				"label": "Student Name",
 				"type": "Data",
@@ -288,6 +343,13 @@ class CRMLead(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Campaign",
+				"type": "Link",
+				"key": "campaign",
+				"options": "CRM Campaign",
+				"width": "12rem",
+			},
+			{
 				"label": "Last Modified",
 				"type": "Datetime",
 				"key": "modified",
@@ -302,6 +364,7 @@ class CRMLead(Document):
 			"enrollment_status",
 			"assigned_to",
 			"source",
+			"campaign",
 			"modified",
 		]
 		return {"columns": columns, "rows": rows}

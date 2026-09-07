@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from crm.fcrm.campaign_contracts import (
@@ -7,6 +10,36 @@ from crm.fcrm.campaign_contracts import (
 	validate_attribution_weights,
 	validate_observed_measures,
 )
+
+
+def _load_doctype(name):
+	path = Path(__file__).parent / "doctype" / name / f"{name}.json"
+	return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_campaign_has_one_to_many_lead_relationship():
+	campaign = _load_doctype("crm_campaign")
+	lead = _load_doctype("crm_lead")
+
+	campaign_field = next(field for field in lead["fields"] if field["fieldname"] == "campaign")
+
+	assert campaign_field["fieldtype"] == "Link"
+	assert campaign_field["options"] == "CRM Campaign"
+	assert campaign_field.get("reqd") != 1
+	assert campaign_field.get("unique") != 1
+	assert {field["fieldname"] for field in lead["fields"]} >= {"campaign"}
+	assert {
+		"group": "Leads",
+		"link_doctype": "CRM Lead",
+		"link_fieldname": "campaign",
+	} in campaign["links"]
+
+	indexes = {tuple(index["fields"]): index for index in lead.get("indexes", [])}
+	assert indexes[("campaign",)]["unique"] == 0
+
+	stable_code = next(field for field in campaign["fields"] if field["fieldname"] == "stable_code")
+	assert stable_code["unique"] == 1
+	assert stable_code["read_only"] == 1
 
 
 def test_dimension_key_is_stable_and_ignores_null_components():

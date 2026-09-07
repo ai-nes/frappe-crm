@@ -10,6 +10,7 @@
  "field_order": [
   "title",
   "student",
+  "crm_student",
   "linked_interaction",
   "priority",
   "start_date",
@@ -36,6 +37,14 @@
    "fieldtype": "Link",
    "label": "Student",
    "options": "CRM Lead",
+   "in_standard_filter": 1
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1,
    "in_standard_filter": 1
   },
   {

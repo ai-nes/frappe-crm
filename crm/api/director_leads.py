@@ -17,6 +17,7 @@ MAX_PAGE_SIZE = 100
 
 LEAD_FIELDS = [
 	"name",
+	"lead_code",
 	"student_name",
 	"phone",
 	"email",
@@ -166,7 +167,16 @@ def _lead_filters(query: dict[str, Any]) -> tuple[dict[str, Any], list[list[str]
 	or_filters: list[list[str]] = []
 	if query["query"]:
 		pattern = f"%{query['query']}%"
-		for field in ("name", "student_name", "phone", "email", "high_school", "owner_staff", "source"):
+		for field in (
+			"name",
+			"lead_code",
+			"student_name",
+			"phone",
+			"email",
+			"high_school",
+			"owner_staff",
+			"source",
+		):
 			or_filters.append([field, "like", pattern])
 	return filters, or_filters
 
@@ -254,6 +264,8 @@ def _map_lead_row(row, *, lookups: dict[str, dict[str, str]] | None = None) -> d
 	owner_key = row.get("owner_staff") or row.get("assigned_to")
 	return {
 		"id": row.get("name"),
+		"leadCode": row.get("lead_code"),
+		"studentId": row.get("name"),
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
 		"phone": row.get("phone") or "",

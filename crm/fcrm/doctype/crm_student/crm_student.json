@@ -11,8 +11,20 @@
  "field_order": [
   "naming_series",
   "full_name",
+  "lead_code",
+  "source_lead",
+  "converted_at",
   "phone",
   "email",
+  "other_email",
+  "gender",
+  "date_of_birth",
+  "id_number",
+  "id_issued_date",
+  "id_issued_place",
+  "current_grade",
+  "study_stage",
+  "ward",
   "chatwoot_contact_id",
   "col_break_1",
   "enrollment_status",
@@ -77,6 +89,27 @@
    "reqd": 0
   },
   {
+   "fieldname": "lead_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Lead Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Lead",
+   "options": "CRM Lead",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_at",
+   "fieldtype": "Datetime",
+   "label": "Converted At",
+   "read_only": 1
+  },
+  {
    "fieldname": "phone",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -90,6 +123,56 @@
    "label": "Email",
    "options": "Email",
    "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
+  },
+  {
+   "fieldname": "other_email",
+   "fieldtype": "Data",
+   "label": "Other Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "gender",
+   "fieldtype": "Select",
+   "label": "Gender",
+   "options": "\nNam\nNữ"
+  },
+  {
+   "fieldname": "date_of_birth",
+   "fieldtype": "Date",
+   "label": "Date of Birth"
+  },
+  {
+   "fieldname": "id_number",
+   "fieldtype": "Data",
+   "label": "ID Number"
+  },
+  {
+   "fieldname": "id_issued_date",
+   "fieldtype": "Date",
+   "label": "ID Issued Date"
+  },
+  {
+   "fieldname": "id_issued_place",
+   "fieldtype": "Data",
+   "label": "ID Issued Place"
+  },
+  {
+   "fieldname": "current_grade",
+   "fieldtype": "Select",
+   "label": "Current Grade",
+   "options": "10\n11\n12\npost_exam"
+  },
+  {
+   "fieldname": "study_stage",
+   "fieldtype": "Select",
+   "label": "Study Stage",
+   "options": "grade_10\ngrade_11\ngrade_12_h1\ngrade_12_h2\npost_exam"
+  },
+  {
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "label": "Ward",
+   "options": "CRM Ward"
   },
   {
    "description": "Server-managed Chatwoot contact identifier used by the signed message webhook.",

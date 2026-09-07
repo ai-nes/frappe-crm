@@ -83,9 +83,12 @@ class TestStudentConversionCommand(unittest.TestCase):
 		self.assertNotIn("_contacts_for_identity", source)
 		self.assertIn("target_student", source)
 
-	def test_only_enrolled_students_are_convertible(self):
+	def test_conversion_uses_the_three_business_requirements(self):
 		from crm.fcrm import student_conversion
 
 		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
-		self.assertIn("Enrolled", source)
+		self.assertIn("conversion_readiness", source)
 		self.assertIn("CONVERSION_CONDITION_FAILED", source)
+		self.assertIn("missing_id_number", Path(
+			student_conversion.__file__).with_name("conversion_readiness.py"
+		).read_text(encoding="utf-8"))
