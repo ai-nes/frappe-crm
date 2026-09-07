@@ -10,10 +10,12 @@
  "engine": "InnoDB",
  "field_order": [
   "team_name",
+  "group",
   "team_type",
   "column_break_1",
   "campus",
   "territory",
+  "team_lead_staff",
   "is_active"
  ],
  "fields": [
@@ -25,6 +27,14 @@
    "label": "Team Name",
    "reqd": 1,
    "unique": 1
+  },
+  {
+   "fieldname": "group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Team Group",
+   "options": "CRM Team Group"
   },
   {
    "fieldname": "team_type",
@@ -55,6 +65,13 @@
    "in_standard_filter": 1,
    "label": "Territory",
    "options": "CRM Territory"
+  },
+  {
+   "fieldname": "team_lead_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Team Lead",
+   "options": "CRM Staff"
   },
   {
    "default": "1",

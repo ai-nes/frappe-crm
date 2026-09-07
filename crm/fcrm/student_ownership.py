@@ -131,9 +131,7 @@ def ownership_command_keys(principal: str, idempotency_key: str) -> list[str]:
 		secret = _configured_secret(version)
 		if not secret:
 			_error("SCHEMA_NOT_READY", "Receipt HMAC secret is not configured.")
-		payload = _length_delimited(
-			f"{RECEIPT_DOMAIN}.{version}", "ownership", principal, idempotency_key
-		)
+		payload = _length_delimited(f"{RECEIPT_DOMAIN}.{version}", "ownership", principal, idempotency_key)
 		keys.append(hmac.new(secret.encode("utf-8"), payload, hashlib.sha256).hexdigest())
 	return keys
 
@@ -442,16 +440,17 @@ def resolve_student_operational_target(
 	team = _load_team(target_team_id)
 	if team.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target Team Campus must match the Student Campus.")
-	staff = frappe.db.get_value(
-		"CRM Staff", target_id, ["name", "user", "is_active", "campus"], as_dict=True
-	)
+	staff = frappe.db.get_value("CRM Staff", target_id, ["name", "user", "is_active", "campus"], as_dict=True)
 	if not staff or not staff.get("name") or not staff.get("is_active"):
 		_error("INVALID_TARGET", "Target Staff must be active.")
 	if staff.get("campus") and staff.get("campus") != branch:
 		_error("CAMPUS_MISMATCH", "Target Staff Campus must match the Student Campus.")
 	if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
 		_error("INVALID_TARGET", "Target Staff must have an active User account.")
-	if not staff.get("user") or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES:
+	if (
+		not staff.get("user")
+		or resolve_crm_profile(frappe.get_roles(staff.user)) not in STUDENT_OWNER_PROFILES
+	):
 		_error("INVALID_TARGET", "Target Staff must have exactly a canonical Sale or CTV Sale profile.")
 	memberships = frappe.get_all(
 		"CRM Team Membership",
@@ -536,7 +535,7 @@ def _receipt_values(
 ) -> dict[str, Any]:
 	result_json = _canonical_json(result) if result is not None else None
 	now = now_datetime()
-	return {
+	values = {
 		"receipt_key": command_key,
 		"command_key": command_key,
 		"command_key_version": 1,
@@ -547,7 +546,6 @@ def _receipt_values(
 		"idempotency_key": idempotency_key,
 		"request_fingerprint": fingerprint,
 		"fingerprint": fingerprint,
-		"target_student": student_name,
 		"student": student_name,
 		"aggregate_name": student_name,
 		"correlation_id": correlation_id,
@@ -564,6 +562,14 @@ def _receipt_values(
 		"result": result_json,
 		"result_revision": result.get("revision") if result else None,
 	}
+	# Ownership receipts are shared by the legacy CRM Student command and the
+	# Lead batch command.  The receipt's historical target_student link points to
+	# CRM Student, while ownership events support CRM Lead as the aggregate.  Do
+	# not write a Lead name into that Student link; the event remains the
+	# authoritative Lead audit record and replay path.
+	if frappe.db.exists("CRM Student", student_name):
+		values["target_student"] = student_name
+	return values
 
 
 def _event_values(
@@ -658,12 +664,15 @@ def change_student_ownership(
 	_route_trigger: str | None = None,
 	_routing_policy_version: int | None = None,
 	_enqueue_routing: bool = True,
+	_skip_sla: bool = False,
 ) -> dict[str, Any]:
 	"""Atomically change one Student's owner/pool and append one event.
 
 	The command locks receipt → Student → target Team/membership.  Receipt and
 	event writes are rolled back together with the Student projection on every
-	error, so a retry cannot observe a half-applied ownership transition.
+	error, so a retry cannot observe a half-applied ownership transition. Batch
+	Lead assignment may skip the optional SLA projection because SLA policy is
+	not part of the dashboard setup prerequisite.
 	"""
 
 	student_name = _required_text(student, "INVALID_INPUT", "student")
@@ -752,7 +761,7 @@ def change_student_ownership(
 			_error("STALE_OWNERSHIP_REVISION", "Student ownership changed; refresh before retrying.")
 		previous_owner, previous_team, previous_pool = _validate_current_topology(
 			student_doc,
-			allow_unassigned=_internal_service and target_kind == "pool" and current_revision == 0,
+			allow_unassigned=_internal_service and target_kind in {"pool", "owner"} and current_revision == 0,
 		)
 		# Resolve only after the Student lock.  The authoritative branch and the
 		# actor's current Team/Campus scope must be evaluated against the same
@@ -788,6 +797,7 @@ def change_student_ownership(
 		# Active Phase 6 work is reconciled in the same ownership transaction so a
 		# scope change cannot strand an action outside every executor queue.
 		from crm.fcrm.student_decision import reconcile_student_actions
+
 		reconcile_student_actions(
 			student_name,
 			next_owner_staff=target.get("owner_staff"),
@@ -814,12 +824,17 @@ def change_student_ownership(
 				reason=reason,
 				correlation_id=correlation_id,
 				receipt_name=receipt.name,
-				route_trigger=_route_trigger or ("pool_return" if target.get("target_kind") == "pool" else None),
+				route_trigger=_route_trigger
+				or ("pool_return" if target.get("target_kind") == "pool" else None),
 				routing_policy_version=_routing_policy_version,
 			),
 		)
 		sla_attempt = None
-		if target.get("target_kind") == "owner" and frappe.db.exists("DocType", "CRM Student SLA Attempt"):
+		if (
+			target.get("target_kind") == "owner"
+			and not _skip_sla
+			and frappe.db.exists("DocType", "CRM Student SLA Attempt")
+		):
 			from crm.fcrm.student_sla import open_sla_for_assignment
 
 			sla_attempt = open_sla_for_assignment(
@@ -865,7 +880,13 @@ def change_student_ownership(
 		)
 		# These request-identity fields are immutable once the reservation row is
 		# inserted; only completion/result fields may be updated.
-		for fieldname in ("command_kind", "command_key", "request_fingerprint", "actor", "request_received_at"):
+		for fieldname in (
+			"command_kind",
+			"command_key",
+			"request_fingerprint",
+			"actor",
+			"request_received_at",
+		):
 			completion_values.pop(fieldname, None)
 		_set_supported(receipt, completion_values)
 		# Receipt is append-only evidence.  Updating its initially reserved
@@ -1009,7 +1030,9 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 	actor_teams = _team_rows_for_actor(actor) if profile in team_scoped_profiles else None
 	allowed_team_names = {team.get("name") for team in actor_teams or []}
 	team_filters = {"campus": branch, "team_type": "Sales", "is_active": 1}
-	teams = frappe.get_all("CRM Team", filters=team_filters, fields=["name", "team_name", "campus", "is_active"])
+	teams = frappe.get_all(
+		"CRM Team", filters=team_filters, fields=["name", "team_name", "campus", "is_active"]
+	)
 	if profile in team_scoped_profiles:
 		teams = [team for team in teams if team.name in allowed_team_names]
 	team_names = {team.name for team in teams}
@@ -1022,7 +1045,12 @@ def get_eligible_ownership_targets(student: str) -> dict[str, list[dict[str, Any
 		)
 		pool_rows = [pool for pool in pool_rows if pool.get("team") in team_names]
 	pools = [
-		{"name": pool.name, "label": pool.get("pool_name") or pool.name, "campus": pool.get("campus"), "team": pool.get("team")}
+		{
+			"name": pool.name,
+			"label": pool.get("pool_name") or pool.name,
+			"campus": pool.get("campus"),
+			"team": pool.get("team"),
+		}
 		for pool in pool_rows
 	]
 
