@@ -24,6 +24,16 @@ colliding identities. `CRM Agent Event` read permission is intentionally
 granted to the canonical Copilot roles because Command Center `stream` is a
 delegated read-only projection.
 
+NBA domain changes use a durable, feature-gated dirty marker on `CRM Student`
+instead of creating an evaluation synchronously on the interaction, intent,
+or completed-action hot path. The hourly `reconcile_dirty_students` scheduler
+drains the oldest markers, uses the existing Student-row lock and evaluation
+coalescing rules, and clears a marker only after a successful compare-and-clear;
+failed dispatches remain eligible for a later sweep. Once an evaluation is
+created, its identity-only `nba.evaluation.requested` delivery contract is
+unchanged, so this scheduling change does not require a cross-repository
+payload version change.
+
 The school domain keeps `CRM High School` as the canonical persisted school
 identity, keyed by the unique `(province, ward, school_code)` combination. The
 import boundary may compute `province_code:ward_code:school_code` transiently

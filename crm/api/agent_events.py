@@ -197,30 +197,24 @@ def record_domain_reevaluation_trigger(student: str, *, trigger: str) -> dict:
 	"""Admit a Frappe-side domain event (student state change, new
 	interaction, ...) as an NBA re-evaluation trigger.
 
-	This is the domain-event counterpart of the WAIT ``revisit_at`` time
-	trigger handled by the scheduled ``reconcile_due_reevaluations``: a burst
-	of domain events for one student/identity never creates more than one
-	active ``CRM NBA Evaluation``. Coalescing itself is delegated to
-	``crm.fcrm.nba_evaluations.request_domain_reevaluation``, which reuses the
-	Student-row-locked, single-active-run-per-identity primitive already used
-	by every other NBA Evaluation entry point -- a domain event for a student
-	that already has a queued/running (or identity-unchanged terminal)
-	Evaluation is a no-op merge into that run, not a duplicate concurrent one.
+	The hot path only records a durable dirty marker. The hourly
+	``reconcile_dirty_students`` sweep owns evaluation creation and coalescing,
+	so bursts of domain events do not lock or read evaluation state synchronously.
 
 	Feature-gated and off by default; a caller with the flag disabled always
 	gets a safe no-op receipt instead of a failure.
 	"""
 	if frappe.conf.get("crm_nba_domain_reevaluation_enabled", 0) in (0, "0", False):
-		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": False, "marked_dirty": False}
 	if not isinstance(student, str) or not student.strip():
-		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": True, "marked_dirty": False}
 	trigger_name = str(trigger or "").strip()
 	if not trigger_name:
-		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": True, "marked_dirty": False}
 
-	from crm.fcrm.nba_evaluations import request_domain_reevaluation
+	from crm.fcrm.nba_evaluations import mark_student_nba_dirty
 
-	return request_domain_reevaluation(student.strip(), trigger_reason=trigger_name)
+	return {"enabled": True, "marked_dirty": mark_student_nba_dirty(student.strip())}
 
 
 def dispatch_interaction_domain_reevaluation(doc, method=None) -> None:

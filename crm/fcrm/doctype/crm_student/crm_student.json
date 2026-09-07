@@ -83,6 +83,7 @@
   "score_input_revision",
   "applied_score_input_revision",
   "applied_policy_revision",
+  "nba_dirty_since",
   "cohort_start_year",
   "cohort_end_year",
   "graduation_score",
@@ -589,6 +590,12 @@
    "fieldname": "applied_policy_revision",
    "fieldtype": "Int",
    "label": "Applied Policy Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "nba_dirty_since",
+   "fieldtype": "Datetime",
+   "label": "NBA Dirty Since",
    "read_only": 1
   },
   {
