@@ -7,7 +7,9 @@ Implements the locked row-level data-scope matrix:
 
 The Sale student-list projection is intentionally handled by the dashboard API
 as a separate read-only team/pool view because Sale has ownership-assignment
-authority. It does not change this canonical CRUD/detail scope.
+authority. Lead Sale also uses the existing dashboard projection to see assigned
+Students across the active Teams in Groups they lead. Neither projection
+changes the canonical CRUD/detail scope.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -233,11 +235,22 @@ def get_student_list_read_condition(user=None):
 	operations, but the student list must expose the Sale's team and team pool so
 	the user can choose a target for an ownership assignment. The assignment
 	command still enforces its own authorization and ownership revision checks.
+
+	Lead Sale additionally sees assigned Students in active Teams belonging to
+	active Groups led by the current CRM Staff. This is the existing Student
+	dashboard scope, not a new endpoint or a new UI flow.
+
 	Other profiles return ``None`` so callers continue using the canonical
 	permission query hook unchanged.
 	"""
 	user = user or frappe.session.user
-	if resolve_crm_profile(_get_policy_roles(user)) != "sales":
+	profile = resolve_crm_profile(_get_policy_roles(user))
+	if profile == "lead_sales":
+		crm_staff_name = _get_crm_staff_name(user)
+		if not crm_staff_name:
+			return "1=0"
+		return _lead_sales_student_read_condition("`tabCRM Student`", crm_staff_name)
+	if profile != "sales":
 		return None
 
 	crm_staff_name = _get_crm_staff_name(user)
@@ -248,6 +261,28 @@ def get_student_list_read_condition(user=None):
 	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 	team_condition = _team_leader_condition(table, crm_staff_name)
 	return f"({own_condition} or {team_condition})"
+
+
+def has_student_dashboard_read_permission(doc, user=None):
+	"""Check existing Student dashboard/detail visibility for Lead Sale.
+
+	This helper is deliberately separate from ``has_student_list_read_permission``
+	because the latter is also used by ownership commands. The Group-level
+	visibility is therefore not accidentally reused as a mutation grant.
+	"""
+	user = user or frappe.session.user
+	if resolve_crm_profile(_get_policy_roles(user)) != "lead_sales":
+		return bool(doc.has_permission("read"))
+
+	condition = get_student_list_read_condition(user)
+	if condition == "1=0" or not getattr(doc, "name", None):
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tabCRM Student` where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
 
 
 def has_student_list_read_permission(doc, user=None):
@@ -699,6 +734,55 @@ def _team_leader_condition(table, crm_staff_name):
 	if not parts:
 		return "1=0"
 	return "(" + " or ".join(parts) + ")"
+
+
+def _lead_sales_student_read_condition(table, crm_staff_name):
+	"""Add Group-level Student visibility to the existing Team scope."""
+	parts = []
+	team_condition = _team_leader_condition(table, crm_staff_name)
+	if team_condition != "1=0":
+		parts.append(team_condition)
+
+	group_ids = _get_groups_led_by_staff(crm_staff_name)
+	if group_ids:
+		teams = frappe.get_all(
+			"CRM Team",
+			filters={"group": ["in", group_ids], "is_active": 1},
+			pluck="name",
+		)
+		if teams:
+			team_parts = []
+			team_clause = _in_clause(f"{table}.owning_team", teams)
+			if team_clause:
+				team_parts.append(team_clause)
+			staff_in_teams = frappe.get_all(
+				"CRM Team Membership",
+				filters={"team": ["in", teams], "parenttype": "CRM Staff"},
+				pluck="parent",
+			)
+			staff_clause = _in_clause(f"{table}.owner_staff", staff_in_teams)
+			if staff_clause:
+				team_parts.append(staff_clause)
+			if team_parts:
+				assigned_clause = (
+					f"{table}.owner_staff is not null and {table}.assigned_to is not null"
+				)
+				parts.append(f"({assigned_clause} and ({' or '.join(team_parts)}))")
+
+	if not parts:
+		return "1=0"
+	return "(" + " or ".join(parts) + ")"
+
+
+def _get_groups_led_by_staff(crm_staff_name):
+	return _cached(
+		f"crm_staff_led_groups::{crm_staff_name}",
+		lambda: frappe.get_all(
+			"CRM Team Group",
+			filters={"group_lead_staff": crm_staff_name, "is_active": 1},
+			pluck="name",
+		),
+	)
 
 
 def _campus_condition(table, crm_staff_name):

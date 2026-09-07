@@ -107,6 +107,47 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
 		)
 
+	def test_lead_sale_group_leader_reads_managed_group_students(self):
+		user, staff = self._make_user_and_staff(
+			"_Test Scope Group Leader", roles=["Lead Sale"], function="Lead Sale"
+		)
+		province = frappe.get_doc(
+			{
+				"doctype": "CRM Province",
+				"province_name": "_Test Scope Group Province",
+				"province_code": "_TEST_SCOPE_GROUP",
+				"city_type": "Province",
+			}
+		)
+		province.insert(ignore_permissions=True)
+		group = frappe.get_doc(
+			{
+				"doctype": "CRM Team Group",
+				"group_name": "_Test Scope Group Leader Group",
+				"province": province.name,
+				"group_lead_staff": staff,
+				"is_active": 1,
+			}
+		)
+		group.insert(ignore_permissions=True)
+		team = frappe.get_doc("CRM Team", self._team)
+		team.group = group.name
+		team.save(ignore_permissions=True)
+
+		try:
+			condition = get_student_list_read_condition(user=user)
+			self.assertIn(frappe.db.escape(team.name), condition)
+			self.assertIn("owner_staff is not null", condition)
+			self.assertIn("assigned_to is not null", condition)
+			# The canonical CRUD scope remains unchanged because this user has no
+			# child Team Membership row.
+			self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
+		finally:
+			team.group = None
+			team.save(ignore_permissions=True)
+			frappe.delete_doc("CRM Team Group", group.name, force=True)
+			frappe.delete_doc("CRM Province", province.name, force=True)
+
 	def test_lead_board_read_is_whole_board_for_lead_sale_only(self):
 		"""The Lead Sale board keeps a routed Lead visible; row scope is untouched."""
 		lead_user, lead_staff = self._make_user_and_staff(

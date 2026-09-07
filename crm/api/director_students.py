@@ -16,7 +16,10 @@ from frappe import _
 
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
-from crm.fcrm.permissions import get_student_list_read_condition
+from crm.fcrm.permissions import (
+	get_student_list_read_condition,
+	has_student_dashboard_read_permission,
+)
 from crm.fcrm.student_reference import canonical_student, lead_for_student
 from crm.integrations.api import get_recording_url_path
 
@@ -125,22 +128,16 @@ STUDENT_FIELDS = [
 	"primary_barrier",
 	"current_grade",
 	"study_stage",
-	"admission_method",
 	"graduation_score",
 	"transcript_score",
 	"english_converted_score",
 	"total_score",
 	"source",
-	"advertising_channel",
 	"aspiration",
 	"branch",
 	"ward",
-	"alt_name",
-	"alt_phone",
-	"alt_address",
 	"notes",
 	"owner_staff",
-	"ownership_revision",
 	"assigned_to",
 	"admission_year",
 	"modified",
@@ -252,7 +249,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	if not doc.has_permission("read"):
+	if not has_student_dashboard_read_permission(doc):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	row = _normalize_student_row(frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS}))
@@ -2245,6 +2242,10 @@ def _require_access():
 	try:
 		frappe.has_permission("CRM Student", "read", user=user, throw=True)
 	except frappe.PermissionError:
+		# A Group leader may not have a child Team Membership row. The existing
+		# dashboard projection still grants the narrower Group-level read scope.
+		if get_student_list_read_condition(user) not in (None, "1=0"):
+			return
 		_raise_api_error(
 			"FORBIDDEN",
 			"Bạn không có quyền đọc dữ liệu học sinh.",

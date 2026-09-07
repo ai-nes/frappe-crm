@@ -7,6 +7,13 @@ from crm.api import director_students
 
 
 class TestDirectorStudents(FrappeTestCase):
+	def test_student_projection_fields_match_crm_student_schema(self):
+		available_fields = {field.fieldname for field in frappe.get_meta("CRM Student").fields}
+		available_fields.update({"name", "creation", "modified"})
+		missing_fields = set(director_students.STUDENT_FIELDS) - available_fields
+
+		self.assertEqual(missing_fields, set())
+
 	def test_query_normalization_accepts_contract_values(self):
 		query = director_students._parse_query(
 			admissionYear="2026",
