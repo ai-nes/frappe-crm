@@ -4,7 +4,6 @@ from frappe.model.document import Document
 
 from crm.fcrm.campaign_code import (
 	campaign_code_year,
-	is_valid_campaign_code,
 	next_campaign_code,
 )
 
@@ -27,8 +26,6 @@ class CRMCampaign(Document):
 				_("Campaign Code is immutable after creation."),
 				frappe.ValidationError,
 			)
-		if self.get("stable_code") and not is_valid_campaign_code(self.stable_code):
-			frappe.throw(_("Campaign Code must match CAM-YYYY-NNNNN."), frappe.ValidationError)
 
 	def _ensure_campaign_code(self):
 		if self.get("stable_code"):
