@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import json
 import re
 import unicodedata
 from datetime import timedelta
@@ -30,6 +32,11 @@ LIFECYCLE_STATUSES = {
 # Keep the canonical Chatwoot type and the legacy seeded type readable while
 # older CRM Interaction rows are being migrated to the canonical vocabulary.
 CHATWOOT_INTERACTION_TYPES = (CHATWOOT_INTERACTION_TYPE, "TIN_NHAN_CHATWOOT")
+_TRANSCRIPT_BLOCK_RE = re.compile(r"\[TRANSCRIPT\](.*?)\[/TRANSCRIPT\]", re.IGNORECASE | re.DOTALL)
+_SUMMARY_BLOCK_RE = re.compile(
+	r"\[AI_CALL_SUMMARY_V1\](.*?)\[/AI_CALL_SUMMARY_V1\]",
+	re.IGNORECASE | re.DOTALL,
+)
 
 STAGES = {
 	"interested": {"label": "Quan tâm", "lifecycle": "Lead"},
@@ -248,7 +255,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_student_interactions(student_id: str) -> dict[str, Any]:
-	"""Return interaction history (Zalo messages and call logs) for a student."""
+	"""Return interaction history (Zalo messages and Call Logs) for a CRM Lead."""
 	_require_access()
 	if not str(student_id or "").strip():
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
@@ -1201,6 +1208,54 @@ def _format_activity_time(value) -> str:
 	return str(value)
 
 
+def _plain_note_text(value: Any) -> str:
+	text = str(value or "")
+	text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+	text = re.sub(r"</(?:p|div|li)>\s*", "\n", text, flags=re.IGNORECASE)
+	text = re.sub(r"<[^>]+>", "", text)
+	text = html.unescape(text)
+	return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _call_note_projection(content: Any) -> dict[str, str | None]:
+	"""Extract safe plain-text transcript and summary blocks from an STT note."""
+	plain_content = _plain_note_text(content)
+	transcript_match = _TRANSCRIPT_BLOCK_RE.search(plain_content)
+	summary_match = _SUMMARY_BLOCK_RE.search(plain_content)
+	transcript = _plain_note_text(transcript_match.group(1)) if transcript_match else None
+	summary = None
+	if summary_match:
+		summary_body = _plain_note_text(summary_match.group(1))
+		try:
+			payload = json.loads(summary_body)
+			if isinstance(payload, dict) and payload.get("summary"):
+				summary = str(payload["summary"]).strip()
+		except (TypeError, json.JSONDecodeError):
+			# Keep compatibility with notes created before the JSON summary contract.
+			for line in summary_body.splitlines():
+				if re.match(r"^\s*summary\s*:", line, flags=re.IGNORECASE):
+					summary = re.sub(r"^\s*summary\s*:\s*", "", line, flags=re.IGNORECASE).strip()
+					break
+	return {"transcript": transcript or None, "summary": summary or None}
+
+
+def _call_note_projections(call_logs: list) -> dict[str, dict[str, str | None]]:
+	"""Load Call Log notes in one permission-aware query."""
+	note_names = sorted({str(row.get("note") or "").strip() for row in call_logs if row.get("note")})
+	if not note_names or not _table_exists("FCRM Note"):
+		return {}
+	try:
+		notes = frappe.get_list(
+			"FCRM Note",
+			filters={"name": ["in", note_names]},
+			fields=["name", "content"],
+			limit_page_length=0,
+		)
+	except frappe.PermissionError:
+		return {}
+	return {str(note.get("name")): _call_note_projection(note.get("content")) for note in notes}
+
+
 def _student_zalo_messages(
 	student_id: str | None,
 	interactions: list,
@@ -1316,7 +1371,7 @@ def _student_call_records(
 	seen_call_ids: set[str] = set()
 
 	if _table_exists("Call Log"):
-		call_logs = frappe.get_all(
+		call_logs = frappe.get_list(
 			"Call Log",
 			filters={"reference_doctype": "CRM Lead", "reference_docname": student_id},
 			fields=[
@@ -1338,6 +1393,7 @@ def _student_call_records(
 			order_by="start_time desc, creation desc",
 			limit_page_length=50,
 		)
+		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
 			seen_call_ids.add(cl.get("name"))
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
@@ -1367,8 +1423,9 @@ def _student_call_records(
 				receiver_role = contact_role
 				phone_number = cl.get("to") or student_phone
 
-			topic = cl.get("note") or "Cuộc gọi tư vấn"
-			summary = cl.get("note") or f"Cuộc gọi {cl.get('status') or ''}"
+			note_projection = note_projections.get(str(cl.get("note") or ""), {})
+			topic = note_projection.get("summary") or "Cuộc gọi tư vấn"
+			summary = note_projection.get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
 
 			calls.append(
 				{
@@ -1384,6 +1441,7 @@ def _student_call_records(
 					"durationSeconds": duration_secs,
 					"topic": topic,
 					"summary": summary,
+					"transcript": note_projection.get("transcript"),
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),
 						cl.get("recording_url"),
