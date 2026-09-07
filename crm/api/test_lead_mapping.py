@@ -69,7 +69,7 @@ class TestLeadMappingContract(TestCase):
 
 	def test_public_payload_normalizes_optional_intake_fields(self):
 		with (
-			patch("crm.api.lead_mapping._check_unique"),
+			patch("crm.api.lead_mapping._check_unique") as check_unique,
 			patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"),
 			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
 		):
@@ -77,6 +77,7 @@ class TestLeadMappingContract(TestCase):
 				{
 					"student_name": "An",
 					"phone": "+84981000099",
+					"id_number": "012-345 678 901",
 					"campaign_code": "CAM-2026-00001",
 					"segments": ["Scholarship", "Scholarship"],
 					"assignment_priority": "HIGH",
@@ -84,39 +85,52 @@ class TestLeadMappingContract(TestCase):
 			)
 
 		self.assertEqual(values["phone"], "0981000099")
+		self.assertEqual(values["id_number"], "012345678901")
 		self.assertEqual(frappe.parse_json(values["segments"]), ["Scholarship"])
 		self.assertEqual(values["assignment_priority"], "high")
 		self.assertEqual(values["campaign"], "_Test Campaign")
+		check_unique.assert_not_called()
 
-	def test_public_payload_maps_cccd_alias_to_id_number(self):
-		payload = {
-			"student_name": "An",
-			"campaign_code": "CAM-2026-00001",
-			"cccd": "012345678901",
-		}
-		self.assertEqual(_parse_public_payload(payload), payload)
-
+	def test_public_payload_keeps_repeat_submissions_for_one_student(self):
 		with (
 			patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"),
 			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
 		):
-			values = _normalize_public_lead_payload(payload)
+			first = _normalize_public_lead_payload(
+				{
+					"student_name": "An",
+					"phone": "0981000099",
+					"email": "an@example.com",
+					"id_number": "012345678901",
+					"campaign_code": "CAM-2026-00001",
+				}
+			)
+			second = _normalize_public_lead_payload(
+				{
+					"student_name": "An",
+					"phone": "0981000099",
+					"email": "an@example.com",
+					"id_number": "012345678901",
+					"campaign_code": "CAM-2026-00001",
+				}
+			)
 
-		self.assertEqual(values["id_number"], "012345678901")
+		self.assertEqual(first["id_number"], second["id_number"])
+		self.assertEqual(first["phone"], second["phone"])
+		self.assertEqual(first["email"], second["email"])
 
-	def test_public_payload_rejects_conflicting_cccd_alias(self):
-		with patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"):
-			with self.assertRaises(LeadMappingError) as context:
-				_normalize_public_lead_payload(
-					{
-						"student_name": "An",
-						"campaign_code": "CAM-2026-00001",
-						"cccd": "012345678901",
-						"id_number": "012345678902",
-					}
-				)
+	def test_public_payload_rejects_removed_cccd_field(self):
+		with self.assertRaises(LeadMappingError) as context:
+			_parse_public_payload(
+				{
+					"student_name": "An",
+					"campaign_code": "CAM-2026-00001",
+					"cccd": "012345678901",
+				}
+			)
 
-		self.assertEqual(context.exception.code, "INVALID_INPUT")
+		self.assertEqual(context.exception.code, "UNKNOWN_FIELD")
+		self.assertIn("cccd", str(context.exception))
 
 	@patch("crm.api.lead_mapping._create_public_lead", return_value={"ok": True})
 	def test_public_endpoint_ignores_frappe_cmd_metadata(self, create_lead):
@@ -208,6 +222,26 @@ class TestLeadMappingContract(TestCase):
 
 		self.assertEqual(result["items"][0]["code"], "SE")
 		self.assertEqual(get_all.call_args.kwargs["filters"], {"is_active": 1})
+
+	def test_internal_batch_payload_allows_missing_campaign_code(self):
+		with (
+			patch("crm.api.lead_mapping._check_unique"),
+			patch("crm.api.lead_mapping._resolve_source", return_value="Promoter"),
+			patch("crm.api.lead_mapping._resolve_province", return_value="Hồ Chí Minh"),
+			patch("crm.api.lead_mapping.frappe.db.exists", return_value=True),
+			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
+		):
+			values = _normalize_public_lead_payload(
+				{
+					"student_name": "An",
+					"phone": "0981000010",
+					"province": "Hồ Chí Minh",
+					"source": "Promoter",
+				},
+				require_campaign=False,
+			)
+
+		self.assertIsNone(values["campaign"])
 
 
 class TestLeadMappingIntegration(FrappeTestCase):

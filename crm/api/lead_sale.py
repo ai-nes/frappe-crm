@@ -62,55 +62,55 @@ ASSIGNMENT_STUDENT_FIELDS = [
 ]
 ASSIGNMENT_WORKFLOW_CONNECTIONS = (
 	{"source": "input", "target": "validation", "label": None},
-	{"source": "validation", "target": "classification", "label": "Pool hợp lệ"},
-	{"source": "classification", "target": "matching", "label": "Xác định Tier"},
-	{"source": "classification", "target": "review", "label": "Tier 3/4 hoặc lỗi địa bàn"},
-	{"source": "matching", "target": "assignment", "label": "Tier 1/2 · áp dụng"},
-	{"source": "matching", "target": "review", "label": "Deferred / queue"},
-	{"source": "review", "target": "assignment", "label": "Resolve thủ công"},
+	{"source": "validation", "target": "classification", "label": "Hàng chờ hợp lệ"},
+	{"source": "classification", "target": "matching", "label": "Xác định khu vực"},
+	{"source": "classification", "target": "review", "label": "Thiếu hoặc sai dữ liệu"},
+	{"source": "matching", "target": "assignment", "label": "Đủ điều kiện gán"},
+	{"source": "matching", "target": "review", "label": "Chờ xử lý"},
+	{"source": "review", "target": "assignment", "label": "Đã bổ sung"},
 )
 ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 	(
 		"input",
 		"Lead vào hệ thống",
-		"Tạo CRM Lead · pool theo Campus",
-		"Tiếp nhận lead, chống trùng và tạo CRM Student thuộc pool mặc định theo Campus.",
-		("Kiểm tra trùng qua CRM Student Case Key.", "Kích hoạt routing đồng bộ hoặc qua CRM Student Routing Request."),
+		"Tạo Lead · hàng chờ theo cơ sở",
+		"Tiếp nhận Lead, chống trùng và đưa vào hàng chờ theo cơ sở.",
+		("Kiểm tra Lead trùng trước khi đưa vào đợt.", "Chỉ chạy khi người vận hành bấm Sắp xếp tự động."),
 	),
 	(
 		"validation",
-		"Xác định pool chuẩn",
-		"Campus · Team · Student Pool",
-		"Resolve đúng một Student Pool active khớp Campus và ownership topology của CRM Lead.",
-		("Pool phải active và thuộc đúng Campus.", "Topology sai hoặc ambiguous: dừng routing với lỗi canonical."),
+		"Xác định hàng chờ",
+		"Cơ sở · Nhóm · Hàng chờ",
+		"Xác định đúng hàng chờ đang hoạt động và khớp cơ sở của Lead.",
+		("Hàng chờ phải đang hoạt động và thuộc đúng cơ sở.", "Sai cấu hình: dừng để kiểm tra lại."),
 	),
 	(
 		"classification",
-		"Xác định Zone và Tier",
-		"High School → Zone → Province",
-		"Xác định địa bàn theo thứ tự ưu tiên của trường học, Zone, Province và trạng thái chưa xác định.",
-		("Trường có owner active: Tier 1.", "Chỉ biết Province: Tier 3; không có địa bàn: Tier 4."),
+		"Xác định khu vực",
+		"Trường → Khu vực → Tỉnh",
+		"Xác định địa bàn theo thứ tự ưu tiên của trường học, khu vực và tỉnh.",
+		("Ưu tiên nhân sự được gán trực tiếp cho trường.", "Không có khu vực: đưa vào hàng chờ theo tỉnh."),
 	),
 	(
 		"matching",
-		"Điều phối theo 4 tầng",
-		"School owner · Zone team · Queue",
-		"Áp policy, capacity và chiến lược chọn người; deferred không tự động rơi xuống tầng khác.",
-		("Tier 1 ưu tiên school owner và kiểm tra capacity direct.", "Tier 2 route vào Zone Team Pool rồi chọn member."),
+		"Chọn người phụ trách",
+		"Trường · Khu vực · Hàng chờ",
+		"Chọn người còn chỗ nhận theo cách chia đã thiết lập.",
+		("Ưu tiên nhân sự gán trực tiếp cho trường.", "Nếu không có, chọn nhân sự trong nhóm của khu vực."),
 	),
 	(
 		"review",
-		"Hàng đợi xử lý",
-		"MANUAL_QUEUE · ENRICHMENT_QUEUE · Deferred",
-		"Các lead chưa thể tự động gán được giữ trong hàng đợi tương ứng để bổ sung dữ liệu, retry hoặc xử lý thủ công.",
-		("Tier 3 chờ Manager phân công thủ công.", "Tier 4 cần làm giàu dữ liệu; deferred không tự đổi tier."),
+		"Trường hợp cần kiểm tra",
+		"Thiếu dữ liệu · Hết chỗ · Chờ xử lý",
+		"Lead chưa thể gán sẽ được giữ lại để bổ sung dữ liệu hoặc xử lý sau.",
+		("Bổ sung trường, khu vực hoặc tỉnh còn thiếu.", "Chỉ chạy lại khi dữ liệu hoặc cấu hình đã được sửa."),
 	),
 	(
 		"assignment",
-		"Ownership và SLA",
-		"Owner cá nhân · Receipt · Audit · SLA",
-		"Ghi ownership qua command canonical, append audit event và mở SLA khi lead có owner cá nhân.",
-		("Chỉ change_student_ownership được ghi owner_staff.", "Tier 1/2 gán owner thì mở SLA; Tier 3/4 không mở SLA."),
+		"Ghi nhận kết quả",
+		"Người phụ trách · Nhóm · Lịch sử",
+		"Lưu người được gán, nhóm, khu vực và lý do để tra cứu về sau.",
+		("Không sửa trực tiếp dữ liệu phân công ngoài luồng này.", "Mỗi kết quả có lịch sử và mã đợt phân công."),
 	),
 )
 
@@ -1366,13 +1366,23 @@ def get_student_assignment_workspace(
 	return response
 
 
+@frappe.whitelist(methods=["GET"])
+def get_lead_assignment_workspace(**kwargs: Any) -> dict[str, Any]:
+	"""Canonical Lead-named alias for the assignment workspace contract."""
+	# Frappe injects the routed method name as ``cmd`` for RPC calls.  The
+	# Student-named implementation intentionally accepts only workspace query
+	# parameters, so do not forward this framework argument to it.
+	kwargs.pop("cmd", None)
+	return get_student_assignment_workspace(**kwargs)
+
+
 def _assignment_find_student(
 	student_id: str, admission_year: str | None, scope: dict[str, Any], warnings: list[str]
 ) -> dict[str, Any]:
 	students = _assignment_load_students(scope, admission_year, warnings)
 	row = next((row for row in students if str(row.get("name")) == student_id), None)
 	if not row:
-		raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+		raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
 	return row
 
 
@@ -1382,7 +1392,7 @@ def _assignment_issue(item: dict[str, Any]) -> dict[str, Any] | None:
 	if item["status"] == "missing_data":
 		return {
 			"code": "MISSING_DATA",
-			"message": "Thiếu khu vực của học sinh nên chưa thể tìm người phù hợp.",
+			"message": "Thiếu khu vực của Lead nên chưa thể tìm người phù hợp.",
 			"missingFields": ["region"],
 		}
 	if item["status"] == "error":
@@ -1574,6 +1584,12 @@ def get_student_assignment_detail(
 	}
 
 
+@frappe.whitelist(methods=["GET"])
+def get_lead_assignment_detail(**kwargs: Any) -> dict[str, Any]:
+	"""Canonical Lead-named alias for the assignment detail contract."""
+	return get_student_assignment_detail(**kwargs)
+
+
 def _assignment_required_payload_text(value: Any, field: str, *, minimum: int = 1, maximum: int = 500) -> str:
 	if not isinstance(value, str):
 		raise_api_error("INVALID_PAYLOAD", f"{field} là bắt buộc.", frappe.ValidationError, 400)
@@ -1683,7 +1699,7 @@ def resolve_student_assignment(
 	expectedRevision: str | int | None = None,
 	idempotency_key: str | None = None,
 ) -> dict[str, Any]:
-	"""Resolve one unassigned Student through the canonical ownership command."""
+	"""Resolve one unassigned Lead through the canonical ownership command."""
 	access = _require_assignment_access()
 	student_id = _assignment_required_payload_text(studentId, "studentId", maximum=140)
 	owner_id = _assignment_required_payload_text(ownerId, "ownerId", maximum=140)
@@ -1728,7 +1744,7 @@ def resolve_student_assignment(
 	if current_revision != expected_revision:
 		raise_api_error("STALE_REVISION", "Hồ sơ đã được cập nhật bởi người dùng khác. Vui lòng tải lại.", frappe.ValidationError, 409)
 	if not region_value and not student.get("province"):
-		raise_api_error("INVALID_ASSIGNMENT", "Region là bắt buộc với hồ sơ thiếu khu vực.", frappe.ValidationError, 422)
+		raise_api_error("INVALID_ASSIGNMENT", "Khu vực là bắt buộc với Lead đang thiếu khu vực.", frappe.ValidationError, 422)
 	if region_value:
 		province = _assignment_region_name(region_value)
 	if region_value and not student.get("province"):
@@ -1761,6 +1777,12 @@ def resolve_student_assignment(
 			raise_api_error("ASSIGNMENT_OWNER_NOT_FOUND", str(exc), frappe.DoesNotExistError, 404)
 		raise_api_error("INVALID_ASSIGNMENT", str(exc), frappe.ValidationError, 422)
 	return _assignment_command_result(result, student_id, owner_id, manual_reason)
+
+
+@frappe.whitelist(methods=["POST"])
+def resolve_lead_assignment(**kwargs: Any) -> dict[str, Any]:
+	"""Canonical Lead-named alias for the ownership command adapter."""
+	return resolve_student_assignment(**kwargs)
 
 
 @frappe.whitelist(methods=["GET"])

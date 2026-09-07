@@ -29,6 +29,7 @@
   "col_break_1",
   "enrollment_status",
   "lifecycle_stage",
+  "student_stage",
   "readiness_level",
   "quality_bucket",
   "is_verified_lead",
@@ -226,6 +227,17 @@
    "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
    "read_only": 1,
    "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
+  },
+  {
+   "default": "New",
+   "fieldname": "student_stage",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student Stage",
+   "options": "New\nAttempting\nConnected\nQualified\nDisqualified",
+   "read_only": 1,
+   "description": "Server-managed recruitment contact stage. Use the Student stage command."
   },
   {
    "fieldname": "readiness_level",

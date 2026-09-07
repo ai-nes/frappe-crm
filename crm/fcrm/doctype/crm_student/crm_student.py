@@ -6,6 +6,8 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
+from crm.fcrm.student_stage import SERVICE_FLAG as STUDENT_STAGE_SERVICE_FLAG
+from crm.fcrm.student_stage import validate_stage
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 # Kept for the legacy anomaly report. Student creation itself is no longer
@@ -54,6 +56,12 @@ class CRMStudent(Document):
 				"width": "10rem",
 			},
 			{
+				"label": "Student Stage",
+				"type": "Data",
+				"key": "student_stage",
+				"width": "10rem",
+			},
+			{
 				"label": "Assigned To",
 				"type": "Link",
 				"key": "assigned_to",
@@ -73,6 +81,7 @@ class CRMStudent(Document):
 			"phone",
 			"email",
 			"enrollment_status",
+			"student_stage",
 			"assigned_to",
 			"modified",
 		]
@@ -82,18 +91,15 @@ class CRMStudent(Document):
 	def default_kanban_settings():
 		return {
 			"title_field": "full_name",
-			"kanban_fields": '["name", "full_name", "phone", "email", "enrollment_status", "assigned_to"]',
+			"kanban_fields": '["name", "full_name", "phone", "email", "enrollment_status", "student_stage", "assigned_to"]',
 		}
 
 	def before_insert(self):
+		self.student_stage = self.get("student_stage") or "New"
 		self._normalize_shared_fields()
 		self._resolve_geo()
-		# Student is an independent record and may be created/imported directly.
-		# Routing only derives Student ownership; it never creates or updates a
-		# CRM Lead.
-		from crm.api.routing import route_new_lead
-
-		route_new_lead(self)
+		# Student is a post-conversion/care aggregate. Assignment is performed on
+		# CRM Lead through an explicit batch and is never inferred on Student insert.
 
 	def _set_defaults(self):
 		if not self.admission_year:
@@ -107,6 +113,13 @@ class CRMStudent(Document):
 
 	def before_save(self):
 		self._validate_guarded_update()
+		before = self.get_doc_before_save()
+		if before and not getattr(frappe.flags, STUDENT_STAGE_SERVICE_FLAG, False):
+			if before.get("student_stage") != self.get("student_stage"):
+				frappe.throw(
+					"Student stage changes must use the Student stage command.",
+					frappe.PermissionError,
+				)
 		self._normalize_shared_fields()
 		self._resolve_geo()
 
@@ -122,6 +135,8 @@ class CRMStudent(Document):
 			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def validate(self):
+		self.student_stage = self.get("student_stage") or "New"
+		validate_stage(self.student_stage)
 		self._normalize_shared_fields()
 		self._derive_owner_fields()
 		self._derive_lifecycle_stage()
@@ -149,7 +164,9 @@ class CRMStudent(Document):
 			if before.get(fieldname) != self.get(fieldname)
 		}
 		if "student" in changed:
-			frappe.throw("CRM Student.student is a read-only legacy compatibility link.", frappe.PermissionError)
+			frappe.throw(
+				"CRM Student.student is a read-only legacy compatibility link.", frappe.PermissionError
+			)
 		for fieldname, label in (
 			("source_lead", "CRM Student.source_lead"),
 			("lead_code", "CRM Student.lead_code"),
@@ -233,6 +250,7 @@ class CRMStudent(Document):
 			self.other_email = self.other_email.strip().lower()
 		if isinstance(self.id_number, str):
 			self.id_number = self.id_number.strip()
+
 
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as _scoped

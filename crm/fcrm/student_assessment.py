@@ -26,6 +26,13 @@ def _student_for_write(student: str):
 	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("write"):
 		frappe.throw(_("You do not have permission to assess this Student."), frappe.PermissionError)
+	actor = frappe.session.user
+	roles = set(frappe.get_roles(actor))
+	if actor != "Administrator" and not ({"System Manager", "Admissions Director"} & roles):
+		if not frappe.has_permission("CRM Student Assessment", "create", user=actor):
+			frappe.throw(
+				_("You do not have permission to write Student assessments."), frappe.PermissionError
+			)
 	return doc
 
 

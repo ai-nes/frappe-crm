@@ -2,6 +2,7 @@
 # See license.txt
 
 import uuid
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -176,6 +177,54 @@ class TestCallLog(FrappeTestCase):
 		result = get_call_log(call.name)
 		self.assertEqual(len(result["_tasks"]), 1)
 		self.assertEqual(result["_tasks"][0]["name"], task.name)
+
+	def test_get_call_log_skips_linked_note_without_read_permission(self):
+		note = frappe.get_doc(
+			{
+				"doctype": "FCRM Note",
+				"content": "Private transcript",
+			}
+		).insert(ignore_permissions=True)
+		call = create_test_call_log(note=note.name)
+
+		with patch(
+			"crm.fcrm.doctype.call_log.call_log.frappe.get_list",
+			return_value=[],
+		) as get_list:
+			result = get_call_log(call.name)
+
+		self.assertEqual(result["_notes"], [])
+		get_list.assert_called_once_with(
+			"FCRM Note",
+			filters={"name": note.name},
+			fields=["*"],
+			limit_page_length=1,
+		)
+
+	def test_get_call_log_skips_linked_task_without_read_permission(self):
+		call = create_test_call_log()
+		task = frappe.get_doc(
+			{
+				"doctype": "Task",
+				"title": "Private follow up",
+			}
+		).insert(ignore_permissions=True)
+		call.link_with_reference_doc("Task", task.name)
+		call.save()
+
+		with patch(
+			"crm.fcrm.doctype.call_log.call_log.frappe.get_list",
+			return_value=[],
+		) as get_list:
+			result = get_call_log(call.name)
+
+		self.assertEqual(result["_tasks"], [])
+		get_list.assert_called_once_with(
+			"Task",
+			filters={"name": task.name},
+			fields=["*"],
+			limit_page_length=1,
+		)
 
 	def test_create_contact_from_call_log_basic(self):
 		call = create_test_call_log(type="Incoming", from_number="+84912345678")

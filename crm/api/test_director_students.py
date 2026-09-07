@@ -510,6 +510,23 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
 
+	def test_call_note_projection_extracts_transcript_and_summary(self):
+		result = director_students._call_note_projection(
+			"""
+			<p>[AI_CALL_SUMMARY_V1]</p>
+			{&quot;summary&quot;:&quot;Lead quan tâm học phí &amp; học bổng.&quot;,&quot;key_points&quot;:[]}
+			<p>[/AI_CALL_SUMMARY_V1]</p>
+			<p>[TRANSCRIPT]</p>
+			[00:01] TƯ VẤN VIÊN: Em quan tâm ngành thiết kế.
+			<br>[00:08] HỌC SINH: Dạ, em muốn biết thêm học phí.
+			<p>[/TRANSCRIPT]</p>
+			"""
+		)
+
+		self.assertEqual(result["summary"], "Lead quan tâm học phí & học bổng.")
+		self.assertIn("TƯ VẤN VIÊN: Em quan tâm ngành thiết kế.", result["transcript"])
+		self.assertIn("HỌC SINH: Dạ, em muốn biết thêm học phí.", result["transcript"])
+
 	def test_student_call_records_build_worldfone_proxy_from_calluuid(self):
 		call_log = frappe._dict(
 			name="1788077950.625384",
@@ -529,7 +546,7 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 		with (
 			patch.object(director_students, "_table_exists", return_value=True),
-			patch.object(director_students.frappe, "get_all", return_value=[call_log]),
+			patch.object(director_students.frappe, "get_list", return_value=[call_log]),
 			patch.dict(
 				director_students.frappe.conf,
 				{"crm_worldfone_secret": "test-secret"},
@@ -547,6 +564,52 @@ class TestDirectorStudents(FrappeTestCase):
 			calls[0]["recordingUrl"],
 			"/api/method/crm.integrations.api.get_recording_url?call_log_name=1788077950.625384",
 		)
+
+	def test_student_call_records_include_transcript_from_linked_note(self):
+		call_log = frappe._dict(
+			name="CALL-TRANSCRIPT-1",
+			type="Outgoing",
+			status="Completed",
+			from_number="0901234412",
+			to="1200",
+			duration=48,
+			start_time="2026-08-30 16:20:58",
+			creation="2026-08-30 16:20:58",
+			recording_url=None,
+			telephony_medium="Manual",
+			medium="Worldfone",
+			caller="Administrator",
+			receiver=None,
+			note="NOTE-TRANSCRIPT-1",
+		)
+		note = frappe._dict(
+			name="NOTE-TRANSCRIPT-1",
+			content=(
+				"[AI_CALL_SUMMARY_V1]\nsummary: Quan tâm học phí.\n[/AI_CALL_SUMMARY_V1]\n"
+				"[TRANSCRIPT]\nTƯ VẤN VIÊN: Em cần tư vấn.\n[/TRANSCRIPT]"
+			),
+		)
+
+		def get_list(doctype, **kwargs):
+			return [call_log] if doctype == "Call Log" else [note]
+
+		with (
+			patch.object(
+				director_students,
+				"_table_exists",
+				side_effect=lambda doctype: doctype in {"Call Log", "FCRM Note"},
+			),
+			patch.object(director_students.frappe, "get_list", side_effect=get_list),
+		):
+			calls = director_students._student_call_records(
+				"ENR-1",
+				[],
+				frappe._dict(student_name="Student Demo", phone="0901234412"),
+				{},
+			)
+
+		self.assertEqual(calls[0]["summary"], "Quan tâm học phí.")
+		self.assertEqual(calls[0]["transcript"], "TƯ VẤN VIÊN: Em cần tư vấn.")
 
 	def test_get_student_interactions_endpoint(self):
 		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")

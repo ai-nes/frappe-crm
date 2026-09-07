@@ -18,6 +18,7 @@ MAX_PAGE_SIZE = 100
 LEAD_FIELDS = [
 	"name",
 	"lead_code",
+	"processing_status",
 	"student_name",
 	"phone",
 	"email",
@@ -38,6 +39,7 @@ LEAD_FIELDS = [
 	"notes",
 	"owner_staff",
 	"assigned_to",
+	"creation",
 	"modified",
 ]
 
@@ -70,21 +72,25 @@ def get_director_leads(
 	rows = _fetch_lead_rows(query, filters, or_filters)
 	lookups = _load_lookups(rows)
 
+	meta = {
+		"total": total,
+		"totalAll": total_all,
+		"page": query["page"],
+		"pageSize": query["page_size"],
+		"totalPages": _total_pages(total, query["page_size"]),
+		"hasNextPage": query["page"] < _total_pages(total, query["page_size"]),
+		"admissionYear": _year_number(query["admission_year"]),
+		"query": query["query"],
+		"status": query["status"],
+		"statusOptions": _status_options(),
+		"asOf": _as_iso(frappe.utils.now_datetime()),
+	}
+	if query.get("campaign"):
+		meta["stats"] = _campaign_stats(filters, or_filters)
+
 	return {
 		"data": [_map_lead_row(row, lookups=lookups) for row in rows],
-		"meta": {
-			"total": total,
-			"totalAll": total_all,
-			"page": query["page"],
-			"pageSize": query["page_size"],
-			"totalPages": _total_pages(total, query["page_size"]),
-			"hasNextPage": query["page"] < _total_pages(total, query["page_size"]),
-			"admissionYear": _year_number(query["admission_year"]),
-			"query": query["query"],
-			"status": query["status"],
-			"statusOptions": _status_options(),
-			"asOf": _as_iso(frappe.utils.now_datetime()),
-		},
+		"meta": meta,
 	}
 
 
@@ -212,6 +218,21 @@ def _count_leads(filters: dict[str, Any], or_filters: list[list[str]] | None = N
 	return int(rows[0].get("total") or 0) if rows else 0
 
 
+def _campaign_stats(filters: dict[str, Any], or_filters: list[list[str]]) -> dict[str, int]:
+	"""Return the processing funnel for a campaign-filtered lead query."""
+	total = _count_leads(filters, or_filters)
+	in_progress_filters = {**filters, "processing_status": ["in", ["PROCESSED", "ASSIGNED"]]}
+	closed_filters = {**filters, "processing_status": "CLOSED"}
+	in_progress = _count_leads(in_progress_filters, or_filters)
+	closed = _count_leads(closed_filters, or_filters)
+	return {
+		"total": total,
+		"inProgress": in_progress,
+		"closed": closed,
+		"conversionRate": round(closed / total * 100) if total else 0,
+	}
+
+
 def _fetch_lead_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
 	return frappe.get_list(
 		"CRM Lead",
@@ -278,7 +299,7 @@ def _status_options() -> list[dict[str, str]]:
 def _map_lead_row(row, *, lookups: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
 	lookups = lookups or {}
 	owner_key = row.get("owner_staff") or row.get("assigned_to")
-	return {
+	item = {
 		"id": row.get("name"),
 		"leadCode": row.get("lead_code"),
 		"studentId": row.get("name"),
@@ -291,6 +312,11 @@ def _map_lead_row(row, *, lookups: dict[str, dict[str, str]] | None = None) -> d
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source") or "",
 		"owner": lookups.get("owners", {}).get(owner_key) or owner_key or "Chưa phân công",
 	}
+	if row.get("processing_status"):
+		item["processingStatus"] = row.get("processing_status")
+	if row.get("creation"):
+		item["createdAt"] = _as_iso(row.get("creation")) or ""
+	return item
 
 
 def _map_detail_row(

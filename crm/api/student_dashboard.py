@@ -261,6 +261,7 @@ def _score_history_payload(history):
 @frappe.whitelist()
 def get_student_score_context(student: str | None = None, contact: str | None = None, limit: int = 20):
 	"""Return full score context for the student/contact detail scoring tab."""
+	_require_authenticated()
 	if not student and contact:
 		if not _can_read_doc("CRM Student", contact):
 			frappe.throw("Not permitted", frappe.PermissionError)
