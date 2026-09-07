@@ -50,12 +50,7 @@
  "module": "FCRM",
  "name": "CRM Student SLA Attempt",
  "naming_rule": "By fieldname",
- "permissions": [
-  {"read": 1, "role": "System Manager"},
-  {"read": 1, "role": "Sale"},
-  {"read": 1, "role": "Lead Sale"},
-  {"read": 1, "role": "Admissions Director"}
- ],
+ "permissions": [],
  "quick_entry": 0,
  "track_changes": 1
 }

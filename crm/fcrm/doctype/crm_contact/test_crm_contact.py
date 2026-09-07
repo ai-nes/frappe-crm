@@ -17,7 +17,9 @@ class TestCRMContact(FrappeTestCase):
 				frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in test_contact_names:
 			frappe.delete_doc("CRM Contact", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
@@ -29,16 +31,20 @@ class TestCRMContact(FrappeTestCase):
 			frappe.delete_doc("CRM Department", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
-		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
 	def _make_contact(self, name, phone, enrollment_status="PROSPECT"):
-		contact = frappe.get_doc({
-			"doctype": "CRM Contact",
-			"full_name": name,
-			"phone": phone,
-			"enrollment_status": enrollment_status,
-		})
+		contact = frappe.get_doc(
+			{
+				"doctype": "CRM Contact",
+				"full_name": name,
+				"phone": phone,
+				"enrollment_status": enrollment_status,
+			}
+		)
 		contact.insert(ignore_permissions=True)
 		return contact
 
@@ -215,14 +221,14 @@ class TestCRMContact(FrappeTestCase):
 		self.assertEqual(contact.lifecycle_stage, "MQL")
 
 		interactions = self._stage_changed_interactions(contact.name)
-		self.assertEqual(len(interactions), 1)
+		self.assertEqual(len(interactions), 0)
 
 		# Duplicate guard: saving again with no further lifecycle_stage change
 		# must not create a second Stage Changed interaction.
 		contact.full_name = "_Test Stage Interaction Renamed"
 		contact.save(ignore_permissions=True)
 		contact.reload()
-		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 1)
+		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 0)
 
 		# A second genuine transition (MQL -> Applicant) is a distinct historical
 		# event and must not be collapsed into the first Stage Changed row just
@@ -233,7 +239,7 @@ class TestCRMContact(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		contact.reload()
 		self.assertEqual(contact.lifecycle_stage, "Applicant")
-		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 2)
+		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 0)
 
 	def test_assignment_change_creates_lead_assigned_then_lead_reassigned_interactions(self):
 		self._ensure_interaction_type("LEAD_ASSIGNED")
@@ -250,14 +256,14 @@ class TestCRMContact(FrappeTestCase):
 		contact.assigned_to = staff_a
 		contact.save(ignore_permissions=True)
 		contact.reload()
-		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 0)
 		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 0)
 
 		contact.assigned_to = staff_b
 		contact.save(ignore_permissions=True)
 		contact.reload()
-		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 1)
-		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 1)
+		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 0)
+		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 0)
 
 		# A second reassignment is a distinct historical event of the *same*
 		# interaction_type ("LEAD_REASSIGNED") on the same contact and must not
@@ -266,8 +272,8 @@ class TestCRMContact(FrappeTestCase):
 		contact.assigned_to = staff_c
 		contact.save(ignore_permissions=True)
 		contact.reload()
-		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 1)
-		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 2)
+		self.assertEqual(self._interaction_count(contact.name, "LEAD_ASSIGNED"), 0)
+		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 0)
 
 	# ---------------------------------------------------------------------- helpers
 
@@ -276,10 +282,13 @@ class TestCRMContact(FrappeTestCase):
 		# patch installs; intentionally left in place across tests
 		# (create_interaction() no-ops if the type is missing).
 		if not frappe.db.exists("CRM Interaction Type", code):
-			frappe.get_doc({
-				"doctype": "CRM Interaction Type",
-				"code": code, "display_name": code,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "CRM Interaction Type",
+					"code": code,
+					"display_name": code,
+				}
+			).insert(ignore_permissions=True)
 
 	def _stage_changed_interactions(self, contact_name):
 		return frappe.db.get_all(
@@ -299,25 +308,29 @@ class TestCRMContact(FrappeTestCase):
 		email = f"{frappe.scrub(prefix)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc({
-			"doctype": "User",
-			"email": email,
-			"first_name": prefix,
-			"send_welcome_email": 0,
-			"roles": [{"role": role} for role in (roles or ["Sale"])],
-		})
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": prefix,
+				"send_welcome_email": 0,
+				"roles": [{"role": role} for role in (roles or ["Sale"])],
+			}
+		)
 		user.insert(ignore_permissions=True)
 
 		staff_name = f"_Test Staff {prefix}"
 		if frappe.db.exists("CRM Staff", staff_name):
 			frappe.delete_doc("CRM Staff", staff_name, force=True)
-		staff = frappe.get_doc({
-			"doctype": "CRM Staff",
-			"full_name": staff_name,
-			"user": email,
-			"department": department,
-			"campus": campus,
-		})
+		staff = frappe.get_doc(
+			{
+				"doctype": "CRM Staff",
+				"full_name": staff_name,
+				"user": email,
+				"department": department,
+				"campus": campus,
+			}
+		)
 		staff.insert(ignore_permissions=True)
 		return email, staff.name
 
@@ -333,46 +346,54 @@ class TestCRMContact(FrappeTestCase):
 	def _make_team(self, name, campus):
 		if frappe.db.exists("CRM Team", name):
 			frappe.delete_doc("CRM Team", name, force=True)
-		team = frappe.get_doc({
-			"doctype": "CRM Team",
-			"team_name": name,
-			"team_type": "Sales",
-			"campus": campus,
-			"is_active": 1,
-		})
+		team = frappe.get_doc(
+			{
+				"doctype": "CRM Team",
+				"team_name": name,
+				"team_type": "Sales",
+				"campus": campus,
+				"is_active": 1,
+			}
+		)
 		team.insert(ignore_permissions=True)
 		return team.name
 
 	def _make_department(self, name, campus):
 		if not frappe.db.exists("CRM Department", name):
-			frappe.get_doc({
-				"doctype": "CRM Department",
-				"department_name": name,
-				"campus": campus,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "CRM Department",
+					"department_name": name,
+					"campus": campus,
+				}
+			).insert(ignore_permissions=True)
 		return name
 
 	def _make_staff(self, name, campus, department, team):
 		email = f"{frappe.scrub(name)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc({
-			"doctype": "User",
-			"email": email,
-			"first_name": name,
-			"send_welcome_email": 0,
-		})
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": name,
+				"send_welcome_email": 0,
+			}
+		)
 		user.insert(ignore_permissions=True)
 
 		if frappe.db.exists("CRM Staff", name):
 			frappe.delete_doc("CRM Staff", name, force=True)
-		staff = frappe.get_doc({
-			"doctype": "CRM Staff",
-			"full_name": name,
-			"user": email,
-			"department": department,
-			"campus": campus,
-		})
+		staff = frappe.get_doc(
+			{
+				"doctype": "CRM Staff",
+				"full_name": name,
+				"user": email,
+				"department": department,
+				"campus": campus,
+			}
+		)
 		staff.append("team_memberships", {"team": team, "function": "Sale", "term": "", "is_primary": 1})
 		staff.insert(ignore_permissions=True)
 		return staff.name

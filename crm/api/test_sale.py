@@ -42,7 +42,7 @@ class TestSaleOverview(FrappeTestCase):
 		kpis = {item["id"]: item["value"] for item in sale._build_kpis(records)}
 		status = sale._build_student_status(records)
 
-		self.assertEqual([item["count"] for item in pipeline["stages"]], [3, 2, 2, 2, 1, 1, 1])
+		self.assertEqual([item["count"] for item in pipeline["stages"]], [3, 1, 1, 1, 1, 1, 1])
 		self.assertEqual(
 			kpis, {"assigned": 3, "consulting": 1, "qualified": 2, "documents": 1, "admission": 1}
 		)

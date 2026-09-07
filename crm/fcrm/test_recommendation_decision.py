@@ -255,6 +255,7 @@ class TestRecommendationDecision(FrappeTestCase):
 					"doctype": "CRM Action Item",
 					"recommendation": rec.name,
 					"student": self._student.name,
+					"current_slot": "CURRENT",
 					"origin": "ai",
 					"source_context_revision": 0,
 					"disposition": "MONITOR",

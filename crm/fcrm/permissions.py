@@ -163,6 +163,8 @@ def get_permission_query_conditions(doctype, user=None):
 		return None
 
 	roles = set(frappe.get_roles(user))
+	if user == "Administrator" or "System Manager" in roles:
+		return None
 	scope = _effective_case_scope(roles, doctype, user=user)
 	# Full-visibility roles must not be narrowed by the converted-Contact
 	# compatibility projection below. The scope policy is authoritative; the

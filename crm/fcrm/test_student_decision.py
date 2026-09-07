@@ -36,9 +36,9 @@ class TestDecideStudentTask(FrappeTestCase):
 		# a raw delete is the only way to clean it up in a test.
 		frappe.db.delete("CRM Student Decision Event", {"student": self._student.name})
 		for name in frappe.db.get_all(
-			"CRM Action", filters={"student": self._student.name}, pluck="name"
+			"CRM Action Item", filters={"student": self._student.name}, pluck="name"
 		):
-			frappe.delete_doc("CRM Action", name, force=True)
+			frappe.delete_doc("CRM Action Item", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
 		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
@@ -60,7 +60,7 @@ class TestDecideStudentTask(FrappeTestCase):
 	def _make_task(self, *, disposition="ACT", action_type="CALL", current_slot=None):
 		task = frappe.get_doc(
 			{
-				"doctype": "CRM Action",
+				"doctype": "CRM Action Item",
 				"student": self._student.name,
 				"origin": "ai",
 				"current_slot": current_slot,
@@ -89,15 +89,18 @@ class TestDecideStudentTask(FrappeTestCase):
 			"policy_version": "test-v2",
 		}
 		digest = hashlib.sha256(
-			json.dumps(candidate, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode()
+			json.dumps(
+				candidate, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str
+			).encode()
 		).hexdigest()
 		# The fenced Intelligence Run writer path is inert unless the site pins a
 		# writer epoch; this exercises the plain v2 generation command instead.
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_action_writer"), patch(
-			"crm.api.student_decision.frappe.conf", conf
+		with (
+			patch("crm.api.student_decision._require_action_writer"),
+			patch("crm.api.student_decision.frappe.conf", conf),
 		):
 			return api.write_canonical_action(
 				student=self._student.name,
@@ -140,7 +143,7 @@ class TestDecideStudentTask(FrappeTestCase):
 	def test_unique_current_slot_index_blocks_a_second_current_action(self):
 		index = frappe.db.sql(
 			"SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() "
-			"AND table_name = 'tabCRM Action' AND index_name = %s LIMIT 1",
+			"AND table_name = 'tabCRM Action Item' AND index_name = %s LIMIT 1",
 			("crm_action_student_current_slot_uniq",),
 		)
 		self.assertTrue(index, "patch crm_action_current_slot_unique must have created the unique key")
@@ -149,11 +152,9 @@ class TestDecideStudentTask(FrappeTestCase):
 			self._make_task(current_slot="CURRENT")
 
 	def test_new_recommendation_after_completion_opens_a_fresh_action(self):
-		base = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
-		)
+		base = int(frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0)
 		first = self._upsert_recommendation(revision=base, key="gen-first")
-		done = frappe.get_doc("CRM Action", first["action"])
+		done = frappe.get_doc("CRM Action Item", first["action"])
 		self.assertEqual(done.current_slot, "CURRENT")
 
 		previous = getattr(frappe.flags, "crm_action_command", False)
@@ -175,7 +176,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		self.assertNotEqual(second["action"], done.name)
 		done.reload()
 		self.assertEqual(done.state, "completed", "the completed Action must never be reopened")
-		fresh = frappe.get_doc("CRM Action", second["action"])
+		fresh = frappe.get_doc("CRM Action Item", second["action"])
 		self.assertEqual(fresh.current_slot, "CURRENT")
 		self.assertEqual(fresh.state, "pending")
 
@@ -216,7 +217,9 @@ class TestDecideStudentTask(FrappeTestCase):
 		)
 
 		after = set(frappe.db.get_all("CRM Agent Event", pluck="name"))
-		self.assertEqual(after - before, set(), "V2 task decisions must never route through the legacy outbox")
+		self.assertEqual(
+			after - before, set(), "V2 task decisions must never route through the legacy outbox"
+		)
 
 	def test_stale_expected_revision_is_rejected(self):
 		task = self._make_task()
@@ -277,17 +280,20 @@ class TestDecideStudentTask(FrappeTestCase):
 			}
 			for atype in action_types
 		]
-		for candidate, seed in zip(candidates, package_seeds or []):
+		for candidate, seed in zip(candidates, package_seeds or [], strict=False):
 			if seed is not None:
 				candidate["package_seed"] = seed
 		digest = hashlib.sha256(
-			json.dumps(candidates, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode()
+			json.dumps(
+				candidates, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str
+			).encode()
 		).hexdigest()
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_action_writer"), patch(
-			"crm.api.student_decision.frappe.conf", conf
+		with (
+			patch("crm.api.student_decision._require_action_writer"),
+			patch("crm.api.student_decision.frappe.conf", conf),
 		):
 			return api.write_canonical_action_bundle(
 				student=self._student.name,
@@ -307,17 +313,17 @@ class TestDecideStudentTask(FrappeTestCase):
 			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
 		)
 		result = self._upsert_bundle(
-			revision=revision, base_key="nba:test:r", action_types=["PARENT_CONTACT", "CALL", "EMAIL"]
+			revision=revision, base_key="nba:test:r", action_types=["CALL", "EMAIL", "MESSAGE"]
 		)
 		self.assertEqual(result["status"], "completed")
 		rows = frappe.get_all(
-			"CRM Action",
+			"CRM Action Item",
 			filters={"student": self._student.name, "origin": "ai"},
 			fields=["name", "plan_rank", "current_slot", "state", "action_type"],
 			order_by="plan_rank asc",
 		)
 		self.assertEqual([r.plan_rank for r in rows], [1, 2, 3])
-		self.assertEqual([r.action_type for r in rows], ["PARENT_CONTACT", "CALL", "EMAIL"])
+		self.assertEqual([r.action_type for r in rows], ["CONTACT", "CONTACT", "CONTACT"])
 		self.assertEqual(rows[0].current_slot, "CURRENT")
 		self.assertEqual(rows[0].state, "pending")
 		self.assertIsNone(rows[1].current_slot)
@@ -345,18 +351,16 @@ class TestDecideStudentTask(FrappeTestCase):
 		)
 		self.assertEqual(result["status"], "completed")
 		call_row = frappe.get_all(
-			"CRM Action",
-			filters={"student": self._student.name, "action_type": "CALL", "origin": "ai"},
+			"CRM Action Item",
+			filters={"student": self._student.name, "action": "CALL", "origin": "ai"},
 			fields=["package_seed"],
 		)[0]
 		seed = json.loads(call_row.package_seed)
-		self.assertEqual(
-			seed["rationale"]["why_now"], "Học viên im lặng 9 ngày sau khi hỏi về học phí."
-		)
+		self.assertEqual(seed["rationale"]["why_now"], "Học viên im lặng 9 ngày sau khi hỏi về học phí.")
 		self.assertEqual(seed["rationale"]["evidence_ref_ids"], ["ctx:1"])
 		email_row = frappe.get_all(
-			"CRM Action",
-			filters={"student": self._student.name, "action_type": "EMAIL", "origin": "ai"},
+			"CRM Action Item",
+			filters={"student": self._student.name, "action": "SEND_EMAIL", "origin": "ai"},
 			fields=["package_seed"],
 		)[0]
 		self.assertNotIn("rationale", json.loads(email_row.package_seed))
@@ -370,7 +374,7 @@ class TestDecideStudentTask(FrappeTestCase):
 			revision=revision, base_key="nba:replay:r", action_types=["CALL", "EMAIL"]
 		)
 		self.assertTrue(second["idempotent"])
-		count = frappe.db.count("CRM Action", {"student": self._student.name, "origin": "ai"})
+		count = frappe.db.count("CRM Action Item", {"student": self._student.name, "origin": "ai"})
 		self.assertEqual(count, 2)
 
 	def test_bundle_rejects_duplicate_action_types(self):
@@ -378,9 +382,7 @@ class TestDecideStudentTask(FrappeTestCase):
 			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
 		)
 		with self.assertRaises(frappe.ValidationError):
-			self._upsert_bundle(
-				revision=revision, base_key="nba:dupe:r", action_types=["CALL", "CALL"]
-			)
+			self._upsert_bundle(revision=revision, base_key="nba:dupe:r", action_types=["CALL", "CALL"])
 
 	def test_bundle_defaults_action_owner_to_the_student_owner_staff(self):
 		frappe.db.set_value(
@@ -393,7 +395,7 @@ class TestDecideStudentTask(FrappeTestCase):
 			revision=revision, base_key="nba:owner:r", action_types=["CALL", "EMAIL", "MESSAGE"]
 		)
 		owners = frappe.get_all(
-			"CRM Action",
+			"CRM Action Item",
 			filters={"student": self._student.name, "origin": "ai"},
 			pluck="action_owner",
 		)
@@ -404,11 +406,9 @@ class TestDecideStudentTask(FrappeTestCase):
 		revision = int(
 			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
 		)
-		self._upsert_bundle(
-			revision=revision, base_key="nba:noowner:r", action_types=["CALL", "EMAIL"]
-		)
+		self._upsert_bundle(revision=revision, base_key="nba:noowner:r", action_types=["CALL", "EMAIL"])
 		owners = frappe.get_all(
-			"CRM Action",
+			"CRM Action Item",
 			filters={"student": self._student.name, "origin": "ai"},
 			pluck="action_owner",
 		)
@@ -421,19 +421,15 @@ class TestDecideStudentTask(FrappeTestCase):
 		revision = int(
 			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
 		)
-		self._upsert_bundle(
-			revision=revision, base_key="nba:reassign:r", action_types=["CALL", "EMAIL"]
-		)
+		self._upsert_bundle(revision=revision, base_key="nba:reassign:r", action_types=["CALL", "EMAIL"])
 		rank1 = frappe.get_all(
-			"CRM Action",
+			"CRM Action Item",
 			filters={"student": self._student.name, "origin": "ai", "plan_rank": 1},
 			pluck="name",
 		)[0]
-		frappe.db.set_value("CRM Action", rank1, "action_owner", None, update_modified=False)
-		self._upsert_bundle(
-			revision=revision, base_key="nba:reassign:r", action_types=["CALL", "EMAIL"]
-		)
-		self.assertIsNone(frappe.db.get_value("CRM Action", rank1, "action_owner"))
+		frappe.db.set_value("CRM Action Item", rank1, "action_owner", None, update_modified=False)
+		self._upsert_bundle(revision=revision, base_key="nba:reassign:r", action_types=["CALL", "EMAIL"])
+		self.assertIsNone(frappe.db.get_value("CRM Action Item", rank1, "action_owner"))
 
 	def test_validate_package_seed_logs_drift_but_never_rejects(self):
 		from crm.api import student_decision as api
@@ -460,19 +456,41 @@ class TestDecideStudentTask(FrappeTestCase):
 		expected = {
 			"CALL": {"opening", "talking_points", "questions", "objections", "desired_outcome", "next_step"},
 			"EMAIL": {
-				"template_version", "recipient_ref", "subject", "body", "talking_points", "questions", "cta", "next_step"
+				"template_version",
+				"recipient_ref",
+				"subject",
+				"body",
+				"talking_points",
+				"questions",
+				"cta",
+				"next_step",
 			},
 			"MESSAGE": {"channel", "opening", "key_points", "cta", "next_step"},
 			"COUNSELING": {"topic", "agenda", "guidance_points", "concerns_to_address", "desired_outcome"},
 			"MEETING": {"purpose", "agenda", "attendees_hint", "prep_checklist", "desired_outcome"},
 			"EVENT_INVITE": {"event_ref", "why_relevant", "invite_message", "follow_up_step"},
-			"CAMPUS_VISIT": {"visit_goal", "itinerary_points", "logistics_notes", "who_to_involve", "desired_outcome"},
+			"CAMPUS_VISIT": {
+				"visit_goal",
+				"itinerary_points",
+				"logistics_notes",
+				"who_to_involve",
+				"desired_outcome",
+			},
 			"DOCUMENT_REQUEST": {
-				"missing_documents", "deadline", "request_message", "consequence_if_missing", "follow_up_step"
+				"missing_documents",
+				"deadline",
+				"request_message",
+				"consequence_if_missing",
+				"follow_up_step",
 			},
 			"APPLICATION_SUPPORT": {"blocking_steps", "support_actions", "deadline", "desired_outcome"},
 			"PARENT_CONTACT": {
-				"parent_ref", "reason", "talking_points", "sensitivities", "desired_outcome", "next_step"
+				"parent_ref",
+				"reason",
+				"talking_points",
+				"sensitivities",
+				"desired_outcome",
+				"next_step",
 			},
 			"HANDOFF": {"to_role", "reason", "context_summary", "open_items", "expected_response_time"},
 		}
@@ -504,8 +522,8 @@ class TestDecideStudentTask(FrappeTestCase):
 			logger.return_value.warning.assert_not_called()
 		self.assertEqual(result["status"], "completed")
 		row = frappe.get_all(
-			"CRM Action",
-			filters={"student": self._student.name, "action_type": "DOCUMENT_REQUEST", "origin": "ai"},
+			"CRM Action Item",
+			filters={"student": self._student.name, "action": "REQUEST_MISSING_DOCUMENT", "origin": "ai"},
 			fields=["package_seed"],
 		)[0]
 		self.assertEqual(json.loads(row.package_seed)["missing_documents"], ["Học bạ THPT", "Giấy khai sinh"])

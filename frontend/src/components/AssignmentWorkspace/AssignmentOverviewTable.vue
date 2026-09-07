@@ -101,139 +101,148 @@
         class="grid grid-cols-1 divide-y divide-outline-gray-1 lg:grid-cols-[1fr_1fr_1.15fr_1.3fr] lg:divide-x lg:divide-y-0"
       >
         <!-- Column 1: clusters -->
-        <div class="max-h-[520px] overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-col">
           <p
-            class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
+            class="flex shrink-0 items-center justify-between border-b border-outline-gray-1 bg-surface-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
           >
             {{ __('Cụm tuyển sinh')
             }}<span class="font-medium normal-case text-ink-gray-5">{{
               clusters.length
             }}</span>
           </p>
-          <ColumnItem
-            v-for="row in clusters"
-            :key="row.id"
-            :row="row"
-            :active="row.id === selectedClusterId"
-            :has-children="Boolean(row.children?.length)"
-            :meta-text="scopeTitle(row)"
-            @select="selectCluster(row)"
-          />
+          <div class="max-h-[520px] overflow-y-auto p-2">
+            <ColumnItem
+              v-for="row in clusters"
+              :key="row.id"
+              :row="row"
+              :active="row.id === selectedClusterId"
+              :has-children="Boolean(row.children?.length)"
+              :meta-text="scopeTitle(row)"
+              @select="selectCluster(row)"
+            />
+          </div>
         </div>
 
         <!-- Column 2: zones -->
-        <div class="max-h-[520px] overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-col">
           <p
-            class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
+            class="flex shrink-0 items-center justify-between border-b border-outline-gray-1 bg-surface-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
           >
             {{ __('Địa bàn')
             }}<span class="font-medium normal-case text-ink-gray-5">{{
               zones.length
             }}</span>
           </p>
-          <p
-            v-if="!zones.length"
-            class="px-2 py-6 text-center text-xs text-ink-gray-4"
-          >
-            {{ __('Chọn một cụm để xem địa bàn.') }}
-          </p>
-          <ColumnItem
-            v-for="row in zones"
-            :key="row.id"
-            :row="row"
-            :active="row.id === selectedZoneId"
-            :has-children="Boolean(row.children?.length)"
-            :meta-text="scopeTitle(row)"
-            @select="selectZone(row)"
-          />
+          <div class="max-h-[520px] overflow-y-auto p-2">
+            <p
+              v-if="!zones.length"
+              class="px-2 py-6 text-center text-xs text-ink-gray-4"
+            >
+              {{ __('Chọn một cụm để xem địa bàn.') }}
+            </p>
+            <ColumnItem
+              v-for="row in zones"
+              :key="row.id"
+              :row="row"
+              :active="row.id === selectedZoneId"
+              :has-children="Boolean(row.children?.length)"
+              :meta-text="scopeTitle(row)"
+              @select="selectZone(row)"
+            />
+          </div>
         </div>
 
         <!-- Column 3: facet (schools / team & staff) -->
-        <div class="max-h-[520px] overflow-y-auto p-2">
+        <div class="flex min-h-0 flex-col">
           <p
-            class="sticky top-0 flex items-center justify-between bg-surface-white px-2 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
+            class="flex shrink-0 items-center justify-between border-b border-outline-gray-1 bg-surface-white px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-ink-gray-4"
           >
             {{ __('Trường & đội phụ trách')
             }}<span class="font-medium normal-case text-ink-gray-5">{{
               schools.length + teams.length
             }}</span>
           </p>
-          <p
-            v-if="!selectedZoneId"
-            class="px-2 py-6 text-center text-xs text-ink-gray-4"
+          <div
+            v-if="selectedZoneId && (schools.length || teams.length)"
+            class="flex shrink-0 gap-1 border-b border-outline-gray-1 bg-surface-white px-3 py-2"
           >
-            {{ __('Chọn một địa bàn để xem trường và nhóm.') }}
-          </p>
-          <template v-else-if="!schools.length && !teams.length">
-            <p class="px-2 py-6 text-center text-xs text-ink-gray-4">
-              {{ __('Địa bàn này chưa gán trường hay nhóm nào.') }}
+            <button
+              type="button"
+              class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
+              :class="
+                facet === 'school'
+                  ? 'border-orange-500 bg-orange-50 text-ink-gray-9'
+                  : 'border-transparent bg-surface-gray-1 text-ink-gray-5'
+              "
+              @click="selectFacet('school')"
+            >
+              {{ __('Trường phụ trách') }} ({{ schools.length }})
+            </button>
+            <button
+              type="button"
+              class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
+              :class="
+                facet === 'team'
+                  ? 'border-orange-500 bg-orange-50 text-ink-gray-9'
+                  : 'border-transparent bg-surface-gray-1 text-ink-gray-5'
+              "
+              @click="selectFacet('team')"
+            >
+              {{ __('Team & thành viên') }} ({{ teams.length }})
+            </button>
+          </div>
+          <div class="max-h-[520px] overflow-y-auto p-2">
+            <p
+              v-if="!selectedZoneId"
+              class="px-2 py-6 text-center text-xs text-ink-gray-4"
+            >
+              {{ __('Chọn một địa bàn để xem trường và nhóm.') }}
             </p>
-          </template>
-          <template v-else>
-            <div class="mb-2 flex gap-1 px-1">
-              <button
-                type="button"
-                class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
-                :class="
-                  facet === 'school'
-                    ? 'border-orange-500 bg-orange-50 text-ink-gray-9'
-                    : 'border-transparent bg-surface-gray-1 text-ink-gray-5'
-                "
-                @click="selectFacet('school')"
-              >
-                {{ __('Trường phụ trách') }} ({{ schools.length }})
-              </button>
-              <button
-                type="button"
-                class="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium"
-                :class="
-                  facet === 'team'
-                    ? 'border-orange-500 bg-orange-50 text-ink-gray-9'
-                    : 'border-transparent bg-surface-gray-1 text-ink-gray-5'
-                "
-                @click="selectFacet('team')"
-              >
-                {{ __('Team & thành viên') }} ({{ teams.length }})
-              </button>
-            </div>
-            <div v-if="facet === 'school'">
-              <p
-                v-if="!schools.length"
-                class="px-2 py-6 text-center text-xs text-ink-gray-4"
-              >
-                {{ __('Chưa có trường nào được gán cho địa bàn này.') }}
+            <template v-else-if="!schools.length && !teams.length">
+              <p class="px-2 py-6 text-center text-xs text-ink-gray-4">
+                {{ __('Địa bàn này chưa gán trường hay nhóm nào.') }}
               </p>
-              <ColumnItem
-                v-for="row in schools"
-                :key="row.id"
-                :row="row"
-                :active="row.id === selectedLeafId"
-                :meta-text="
-                  row.active_students
-                    ? `${formatNumber(row.active_students)} Lead`
-                    : __('Chưa có Lead')
-                "
-                @select="selectLeaf(row)"
-              />
-            </div>
-            <div v-else>
-              <p
-                v-if="!teams.length"
-                class="px-2 py-6 text-center text-xs text-ink-gray-4"
-              >
-                {{ __('Địa bàn này chưa có nhóm phụ trách nào.') }}
-              </p>
-              <ColumnItem
-                v-for="row in teams"
-                :key="row.id"
-                :row="row"
-                :active="row.id === selectedLeafId"
-                :has-children="Boolean(row.children?.length)"
-                :meta-text="`${formatNumber(row.member_count)} ${__('thành viên')}`"
-                @select="selectLeaf(row)"
-              />
-            </div>
-          </template>
+            </template>
+            <template v-else>
+              <div v-if="facet === 'school'">
+                <p
+                  v-if="!schools.length"
+                  class="px-2 py-6 text-center text-xs text-ink-gray-4"
+                >
+                  {{ __('Chưa có trường nào được gán cho địa bàn này.') }}
+                </p>
+                <ColumnItem
+                  v-for="row in schools"
+                  :key="row.id"
+                  :row="row"
+                  :active="row.id === selectedLeafId"
+                  :meta-text="
+                    row.active_students
+                      ? `${formatNumber(row.active_students)} Lead`
+                      : __('Chưa có Lead')
+                  "
+                  @select="selectLeaf(row)"
+                />
+              </div>
+              <div v-else>
+                <p
+                  v-if="!teams.length"
+                  class="px-2 py-6 text-center text-xs text-ink-gray-4"
+                >
+                  {{ __('Địa bàn này chưa có nhóm phụ trách nào.') }}
+                </p>
+                <ColumnItem
+                  v-for="row in teams"
+                  :key="row.id"
+                  :row="row"
+                  :active="row.id === selectedLeafId"
+                  :has-children="Boolean(row.children?.length)"
+                  :meta-text="`${formatNumber(row.member_count)} ${__('thành viên')}`"
+                  @select="selectLeaf(row)"
+                />
+              </div>
+            </template>
+          </div>
         </div>
 
         <!-- Column 4: detail -->
@@ -416,16 +425,19 @@
 
     <div
       v-if="nextCursor"
-      class="flex justify-center border-t border-outline-gray-1 p-3"
+      ref="loadMoreSentinel"
+      class="flex min-h-10 items-center justify-center border-t border-outline-gray-1"
+      aria-hidden="true"
     >
-      <Button :label="__('Tải thêm')" :loading="loading" @click="loadMore" />
+      <LoadingIndicator v-if="loading" class="size-4" />
+      <span class="sr-only">{{ __('Đang tải thêm dữ liệu') }}</span>
     </div>
   </section>
 </template>
 
 <script setup>
 import { Button, FeatherIcon, LoadingIndicator } from 'frappe-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import StatusChip from './StatusChip.vue'
 import ColumnItem from './AssignmentColumnItem.vue'
 
@@ -436,7 +448,9 @@ const props = defineProps({
   activeFilterCount: { type: Number, default: 0 },
 })
 
-const emit = defineEmits(['load-more'])
+const emit = defineEmits(['load-more', 'scope-change'])
+const loadMoreSentinel = ref(null)
+let loadMoreObserver = null
 
 const levelLabels = {
   campus: 'Campus',
@@ -537,17 +551,42 @@ function pickDefaults() {
 
 watch(() => props.rows, pickDefaults, { immediate: true })
 
+function observeLoadMore() {
+  loadMoreObserver?.disconnect()
+  loadMoreObserver = null
+  if (!loadMoreSentinel.value || !props.nextCursor) return
+
+  loadMoreObserver = new IntersectionObserver(
+    (entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) loadMore()
+    },
+    { rootMargin: '0px 0px 320px 0px', threshold: 0 },
+  )
+  loadMoreObserver.observe(loadMoreSentinel.value)
+}
+
+function scheduleLoadMoreObserver() {
+  if (typeof window === 'undefined') return
+  window.requestAnimationFrame(observeLoadMore)
+}
+
+onMounted(observeLoadMore)
+watch([() => props.nextCursor, () => props.loading], scheduleLoadMoreObserver)
+onBeforeUnmount(() => loadMoreObserver?.disconnect())
+
 function selectCluster(row) {
   selectedClusterId.value = row.id
   selectedZoneId.value = childrenRows(row.id)[0]?.id || null
   selectedLeafId.value = null
   facet.value = 'school'
+  emit('scope-change', { province: row.province_id, zone: null })
 }
 
 function selectZone(row) {
   selectedZoneId.value = row.id
   selectedLeafId.value = null
   facet.value = 'school'
+  emit('scope-change', { province: row.province_id, zone: row.zone_id })
 }
 
 function selectFacet(next) {
@@ -780,6 +819,7 @@ function routingExplanation(row) {
 }
 
 function loadMore() {
+  if (props.loading || !props.nextCursor) return
   emit('load-more')
 }
 </script>

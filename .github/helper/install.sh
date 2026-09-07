@@ -42,7 +42,9 @@ sed -i 's/redis_socketio:/# redis_socketio:/g' Procfile
 
 bench get-app crm "${GITHUB_WORKSPACE}"
 bench setup requirements --dev
+bench pip install pytest
 
 bench start &>> ~/frappe-bench/bench_start.log &
 CI=Yes bench build --app frappe &
 bench --site test_site reinstall --yes
+bench --site test_site migrate

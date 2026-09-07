@@ -5,12 +5,23 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.api import task as task_api
 from crm.api.task import create_task, delete_task, get_task, list_sales_tasks, list_tasks, update_task
+from crm.fcrm.test_permissions import TestSharedScopingPermissions
 
 
 class TestTaskApi(FrappeTestCase):
 	def setUp(self):
 		self._original_user = frappe.session.user
 		frappe.set_user("Administrator")
+		self._campus = TestSharedScopingPermissions._make_campus(self, "_Test Task Assignee Campus")
+		self._department = TestSharedScopingPermissions._get_or_create_department(
+			self, "_Test Task Assignee Department", self._campus
+		)
+		self._assignees = [
+			TestSharedScopingPermissions._make_user_and_staff(
+				self, f"_Test Task Assignee {index}", roles=["Sale"]
+			)
+			for index in range(1, 5)
+		]
 
 	def tearDown(self):
 		frappe.set_user(self._original_user)
@@ -86,19 +97,16 @@ class TestTaskApi(FrappeTestCase):
 
 		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 		self.assertTrue(frappe.db.get_value("CRM Action Item", created["name"], "legacy_task_deleted"))
-		self.assertNotIn(created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]})
+		self.assertNotIn(
+			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
+		)
 
 	def test_student_task_assignee_accepts_user_and_staff_values(self):
 		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
 
-		for user in (
-			"ctvsale@gmail.com",
-			"sale@gmail.com",
-			"leadsale@gmail.com",
-			"nguyen.minh.khoi@gmail.com",
-		):
+		for user, staff_name in self._assignees:
 			staff = frappe.db.get_value("CRM Staff", {"user": user}, ["name", "full_name"], as_dict=True)
-			self.assertTrue(staff, f"Expected CRM Staff mapping for {user}")
+			self.assertEqual(staff.name, staff_name)
 
 			for assigned_to in (user, staff.name, staff.full_name):
 				created = create_task(

@@ -34,6 +34,7 @@ class TestDirectorDemographics(FrappeTestCase):
 			{
 				"kpis",
 				"demand",
+				"acquisitionMap",
 				"audienceComposition",
 				"segments",
 				"regionOpportunities",

@@ -4,6 +4,7 @@ The mapping below is migration input only.  It is never imported by request
 handlers: after this patch has run, Frappe runtime authorization sees only the
 four canonical business roles plus the System Manager control-plane role.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -14,7 +15,6 @@ import frappe
 
 from crm.patches.v1_0.setup_crm_roles import create_roles
 
-
 CANONICAL_BUSINESS_ROLES = frozenset({"Sale", "Lead Sale", "Marketing", "Promoter", "Admissions Director"})
 CONTROL_ROLES = frozenset({"System Manager"})
 CANONICAL_ROLES = CANONICAL_BUSINESS_ROLES | CONTROL_ROLES
@@ -23,25 +23,80 @@ CANONICAL_ROLES = CANONICAL_BUSINESS_ROLES | CONTROL_ROLES
 # scalar fields that affect role identity/authorization in the deployed
 # Frappe version; unrelated built-in roles are intentionally out of scope.
 ROLE_FIELDS = [
-	"name", "role_name", "home_page", "restrict_to_domain", "disabled",
-	"is_custom", "desk_access", "two_factor_auth",
+	"name",
+	"role_name",
+	"home_page",
+	"restrict_to_domain",
+	"disabled",
+	"is_custom",
+	"desk_access",
+	"two_factor_auth",
 ]
 PERMISSION_FIELDS = [
-	"name", "parent", "parenttype", "parentfield", "idx", "role", "permlevel",
-	"read", "write", "create", "submit", "cancel", "delete", "amend",
-	"report", "export", "import", "share", "print", "email", "if_owner", "select",
+	"name",
+	"parent",
+	"parenttype",
+	"parentfield",
+	"idx",
+	"role",
+	"permlevel",
+	"read",
+	"write",
+	"create",
+	"submit",
+	"cancel",
+	"delete",
+	"amend",
+	"report",
+	"export",
+	"import",
+	"share",
+	"print",
+	"email",
+	"if_owner",
+	"select",
 ]
 CUSTOM_PERMISSION_FIELDS = [
-	"name", "parent", "idx", "role", "permlevel", "read", "write", "create",
-	"submit", "cancel", "delete", "amend", "report", "export", "import",
-	"share", "print", "email", "if_owner", "select",
+	"name",
+	"parent",
+	"idx",
+	"role",
+	"permlevel",
+	"read",
+	"write",
+	"create",
+	"submit",
+	"cancel",
+	"delete",
+	"amend",
+	"report",
+	"export",
+	"import",
+	"share",
+	"print",
+	"email",
+	"if_owner",
+	"select",
 ]
 USER_PERMISSION_FIELDS = [
-	"name", "user", "allow", "for_value", "is_default", "apply_to_all_doctypes",
-	"applicable_for", "hide_descendants",
+	"name",
+	"user",
+	"allow",
+	"for_value",
+	"is_default",
+	"apply_to_all_doctypes",
+	"applicable_for",
+	"hide_descendants",
 ]
 INVITATION_FIELDS = [
-	"name", "email", "role", "key", "invited_by", "status", "email_sent_at", "accepted_at",
+	"name",
+	"email",
+	"role",
+	"key",
+	"invited_by",
+	"status",
+	"email_sent_at",
+	"accepted_at",
 ]
 
 # Frappe stores role references outside Has Role/DocPerm as well.  These are
@@ -65,6 +120,7 @@ ROLE_REFERENCE_SPECS = (
 def _has_role_reference_table(table: str, field: str) -> bool:
 	"""Return true only when both the doctype table and role-bearing column exist."""
 	return frappe.db.table_exists(table) and frappe.db.has_column(table, field)
+
 
 # Historical input for this patch only. Do not reuse this table at runtime.
 BACKFILL_ROLE_MAP = {
@@ -129,19 +185,20 @@ def _snapshot(*, capture_mode: str = "pre_cutover") -> dict:
 	)
 	user_filters = {"user": ["in", sorted(set(affected_users))]} if affected_users else {"user": "__none__"}
 	user_permissions = frappe.get_all("User Permission", filters=user_filters, fields=USER_PERMISSION_FIELDS)
-	invitations = frappe.get_all(
-		"Invitation", filters={"role": ["in", role_names]}, fields=INVITATION_FIELDS
-	)
+	invitations = frappe.get_all("Invitation", filters={"role": ["in", role_names]}, fields=INVITATION_FIELDS)
 	role_references = []
 	for table, field in ROLE_REFERENCE_SPECS:
 		if _has_role_reference_table(table, field):
-			role_references.append({
-				"table": table,
-				"field": field,
-				"rows": [dict(row) for row in frappe.get_all(
-					table, filters={field: ["in", role_names]}, fields=["*"]
-				)],
-			})
+			role_references.append(
+				{
+					"table": table,
+					"field": field,
+					"rows": [
+						dict(row)
+						for row in frappe.get_all(table, filters={field: ["in", role_names]}, fields=["*"])
+					],
+				}
+			)
 	manifest_hashes = {
 		role: hashlib.sha256(
 			json.dumps(
@@ -149,7 +206,9 @@ def _snapshot(*, capture_mode: str = "pre_cutover") -> dict:
 					"docperms": [dict(row) for row in docperms if row.role == role],
 					"grants": [dict(row) for row in grants if row.parent == role],
 				},
-				sort_keys=True, separators=(",", ":"), default=str,
+				sort_keys=True,
+				separators=(",", ":"),
+				default=str,
 			).encode()
 		).hexdigest()
 		for role in role_names
@@ -223,7 +282,18 @@ def restore_from_snapshot(snapshot: dict) -> None:
 	role_profile_assignments = snapshot.get("role_profile_assignments", [])
 	if not isinstance(role_profile_assignments, list):
 		raise ValueError("migration snapshot has invalid role profile assignments")
-	for section in ("scope_roles", "affected_users", "roles", "docperms", "custom_docperms", "capability_grants", "user_permissions", "invitations", "aliases", "manifest_hashes"):
+	for section in (
+		"scope_roles",
+		"affected_users",
+		"roles",
+		"docperms",
+		"custom_docperms",
+		"capability_grants",
+		"user_permissions",
+		"invitations",
+		"aliases",
+		"manifest_hashes",
+	):
 		if not isinstance(snapshot.get(section), list):
 			if section == "manifest_hashes":
 				if not isinstance(snapshot.get(section), dict):
@@ -241,13 +311,16 @@ def restore_from_snapshot(snapshot: dict) -> None:
 
 	def _role_names() -> set[str]:
 		names = {
-			row.get("name")
-			for row in snapshot.get("roles", [])
-			if isinstance(row, dict) and row.get("name")
+			row.get("name") for row in snapshot.get("roles", []) if isinstance(row, dict) and row.get("name")
 		}
 		names.update(
 			row.get("role")
-			for section in (assignments, role_profile_assignments, snapshot["docperms"], snapshot["custom_docperms"])
+			for section in (
+				assignments,
+				role_profile_assignments,
+				snapshot["docperms"],
+				snapshot["custom_docperms"],
+			)
 			for row in section
 			if isinstance(row, dict) and row.get("role")
 		)
@@ -294,17 +367,27 @@ def restore_from_snapshot(snapshot: dict) -> None:
 	for row in assignments:
 		if not isinstance(row, dict) or not row.get("parent") or not row.get("role"):
 			continue
-		frappe.get_doc({
-			"doctype": "Has Role", "parent": row["parent"], "parenttype": "User",
-			"parentfield": row.get("parentfield") or "roles", "role": row["role"],
-		}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Has Role",
+				"parent": row["parent"],
+				"parenttype": "User",
+				"parentfield": row.get("parentfield") or "roles",
+				"role": row["role"],
+			}
+		).insert(ignore_permissions=True)
 	for row in role_profile_assignments:
 		if not isinstance(row, dict) or not row.get("parent") or not row.get("role"):
 			continue
-		frappe.get_doc({
-			"doctype": "Has Role", "parent": row["parent"], "parenttype": "Role Profile",
-			"parentfield": row.get("parentfield") or "roles", "role": row["role"],
-		}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Has Role",
+				"parent": row["parent"],
+				"parenttype": "Role Profile",
+				"parentfield": row.get("parentfield") or "roles",
+				"role": row["role"],
+			}
+		).insert(ignore_permissions=True)
 
 	def _restore_child_rows(
 		doctype: str,
@@ -328,12 +411,17 @@ def restore_from_snapshot(snapshot: dict) -> None:
 			frappe.get_doc(payload).insert(ignore_permissions=True)
 
 	_restore_child_rows(
-		"DocPerm", snapshot["docperms"], "role",
+		"DocPerm",
+		snapshot["docperms"],
+		"role",
 		{"parenttype": "DocType", "parentfield": "permissions"},
 	)
 	_restore_child_rows(
-		"Custom DocPerm", snapshot["custom_docperms"], "role",
-		{}, drop_fields=frozenset({"parenttype", "parentfield"}),
+		"Custom DocPerm",
+		snapshot["custom_docperms"],
+		"role",
+		{},
+		drop_fields=frozenset({"parenttype", "parentfield"}),
 	)
 	# CRM AI Capability Grant is itself a Role child table.
 	grant_rows = [row for row in snapshot["capability_grants"] if isinstance(row, dict)]
@@ -343,14 +431,16 @@ def restore_from_snapshot(snapshot: dict) -> None:
 	for row in grant_rows:
 		if not row.get("parent") or not row.get("grant_type") or not row.get("value"):
 			continue
-		frappe.get_doc({
-			"doctype": "CRM AI Capability Grant",
-			"parent": row["parent"],
-			"parenttype": row.get("parenttype") or "Role",
-			"parentfield": row.get("parentfield") or "ai_capability_grants",
-			"grant_type": row["grant_type"],
-			"value": row["value"],
-		}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "CRM AI Capability Grant",
+				"parent": row["parent"],
+				"parenttype": row.get("parenttype") or "Role",
+				"parentfield": row.get("parentfield") or "ai_capability_grants",
+				"grant_type": row["grant_type"],
+				"value": row["value"],
+			}
+		).insert(ignore_permissions=True)
 
 	# The cutover does not mutate User Permission rows.  Restore missing
 	# snapshot grants without deleting unrelated grants added afterwards.
@@ -371,7 +461,11 @@ def restore_from_snapshot(snapshot: dict) -> None:
 	# exact snapshot names are replaced; rows created after the cutover remain
 	# untouched.
 	for reference in role_references:
-		if not isinstance(reference, dict) or not reference.get("table") or not isinstance(reference.get("rows"), list):
+		if (
+			not isinstance(reference, dict)
+			or not reference.get("table")
+			or not isinstance(reference.get("rows"), list)
+		):
 			continue
 		table = reference["table"]
 		field = reference.get("field")
@@ -390,7 +484,11 @@ def restore_from_snapshot(snapshot: dict) -> None:
 
 def _canonical_targets(role_names: set[str]) -> set[str]:
 	"""Return safe canonical targets; manager wins over a legacy sales pair."""
-	targets = {BACKFILL_ROLE_MAP.get(role, role) for role in role_names if role in CANONICAL_ROLES or role in BACKFILL_ROLE_MAP}
+	targets = {
+		BACKFILL_ROLE_MAP.get(role, role)
+		for role in role_names
+		if role in CANONICAL_ROLES or role in BACKFILL_ROLE_MAP
+	}
 	if "Lead Sale" in targets:
 		targets.discard("Sale")
 	return targets
@@ -409,7 +507,15 @@ def _backfill_user_roles() -> list[dict]:
 			frappe.db.delete("Has Role", {"parent": user, "role": old_role})
 		for role in targets:
 			if role not in roles:
-				frappe.get_doc({"doctype": "Has Role", "parent": user, "parenttype": "User", "parentfield": "roles", "role": role}).insert(ignore_permissions=True)
+				frappe.get_doc(
+					{
+						"doctype": "Has Role",
+						"parent": user,
+						"parenttype": "User",
+						"parentfield": "roles",
+						"role": role,
+					}
+				).insert(ignore_permissions=True)
 	return quarantine
 
 
@@ -440,15 +546,27 @@ def _replace_role_references() -> None:
 				frappe.db.set_value("Has Role", row.name, "role", new_role, update_modified=False)
 				seen.add(key)
 
-	for table, field in (("DocPerm", "role"), ("Custom DocPerm", "role"), ("CRM AI Capability Grant", "parent")):
+	for table, field in (
+		("DocPerm", "role"),
+		("Custom DocPerm", "role"),
+		("CRM AI Capability Grant", "parent"),
+	):
 		if not _has_role_reference_table(table, field):
 			continue
 		for old_role, new_role in BACKFILL_ROLE_MAP.items():
 			if table == "CRM AI Capability Grant":
-				rows = frappe.get_all(table, filters={"parent": old_role, "parenttype": "Role"}, fields=["name", "grant_type", "value"])
+				rows = frappe.get_all(
+					table,
+					filters={"parent": old_role, "parenttype": "Role"},
+					fields=["name", "grant_type", "value"],
+				)
 				existing = {
 					(row.grant_type, row.value)
-					for row in frappe.get_all(table, filters={"parent": new_role, "parenttype": "Role"}, fields=["grant_type", "value"])
+					for row in frappe.get_all(
+						table,
+						filters={"parent": new_role, "parenttype": "Role"},
+						fields=["grant_type", "value"],
+					)
 				}
 				for row in rows:
 					key = (row.grant_type, row.value)
@@ -480,7 +598,8 @@ def _replace_role_references() -> None:
 					updates = {
 						flag: 1
 						for flag in PERMISSION_FIELDS
-						if flag not in {"name", "parent", "parenttype", "parentfield", "idx", "role", "permlevel"}
+						if flag
+						not in {"name", "parent", "parenttype", "parentfield", "idx", "role", "permlevel"}
 						and (getattr(match, flag, 0) or getattr(row, flag, 0))
 					}
 					if updates:
@@ -506,7 +625,8 @@ def _replace_role_references() -> None:
 				if parent:
 					duplicate = next(
 						(
-							candidate for candidate in target_rows
+							candidate
+							for candidate in target_rows
 							if getattr(candidate, "parent", None) == parent
 							and getattr(candidate, "parenttype", None) == getattr(row, "parenttype", None)
 							and getattr(candidate, "parentfield", None) == getattr(row, "parentfield", None)
@@ -520,9 +640,7 @@ def _replace_role_references() -> None:
 				target_rows.append(row)
 	if frappe.db.table_exists("Invitation"):
 		for old_role, new_role in BACKFILL_ROLE_MAP.items():
-			frappe.db.set_value(
-				"Invitation", {"role": old_role}, "role", new_role, update_modified=False
-			)
+			frappe.db.set_value("Invitation", {"role": old_role}, "role", new_role, update_modified=False)
 
 
 def _delete_legacy_roles() -> None:
@@ -544,9 +662,7 @@ def _assert_no_legacy_references() -> None:
 		("Invitation", "role"),
 	):
 		if _has_role_reference_table(table, field) and frappe.db.exists(table, {field: ["in", legacy_roles]}):
-			raise frappe.ValidationError(
-				f"canonical CRM role cutover left legacy references in {table}"
-			)
+			raise frappe.ValidationError(f"canonical CRM role cutover left legacy references in {table}")
 	for table, field in ROLE_REFERENCE_SPECS:
 		if _has_role_reference_table(table, field) and frappe.db.exists(table, {field: ["in", legacy_roles]}):
 			raise frappe.ValidationError(
@@ -570,7 +686,9 @@ def execute():
 		create_roles(sorted(CANONICAL_ROLES | {"Administrator"}))
 		quarantine = _backfill_user_roles()
 		if quarantine:
-			frappe.log_error(json.dumps(quarantine, ensure_ascii=False), "canonical CRM role migration quarantine")
+			frappe.log_error(
+				json.dumps(quarantine, ensure_ascii=False), "canonical CRM role migration quarantine"
+			)
 			raise frappe.ValidationError("canonical CRM role migration has mixed-role users; see Error Log")
 		_replace_role_references()
 		# `setup_crm_permissions` is an earlier patch in patches.txt and has
@@ -586,3 +704,22 @@ def execute():
 	except Exception:
 		frappe.db.rollback()
 		raise
+
+
+def execute_for_fresh_site() -> None:
+	"""Install the canonical role contract while a new site is quiesced.
+
+	Fresh Frappe sites are created before any CRM traffic exists, so requiring a
+	separate maintenance flag there only leaves framework default roles behind.
+	Production upgrades continue to use :func:`execute`, which retains the
+	explicit maintenance-window guard and rollback snapshot.
+	"""
+	create_roles(sorted(CANONICAL_ROLES | {"Administrator"}))
+	quarantine = _backfill_user_roles()
+	if quarantine:
+		frappe.log_error(json.dumps(quarantine, ensure_ascii=False), "fresh CRM role setup quarantine")
+		raise frappe.ValidationError("fresh CRM role setup has mixed-role users; see Error Log")
+	_replace_role_references()
+	_delete_legacy_roles()
+	_assert_no_legacy_references()
+	frappe.clear_cache()

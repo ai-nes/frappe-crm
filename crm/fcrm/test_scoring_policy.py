@@ -189,7 +189,11 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		self.assertIsNone(get_active_policy(as_of="2026-09-20 00:00:00"))
 
 	def test_get_active_score_policy_requires_service_identity(self):
-		frappe.conf.crm_agents_service_user = "someone-else@example.com"
+		frappe.conf.crm_agents_service_user = "service@example.com"
+		frappe.set_user("someone-else@example.com")
 
-		with self.assertRaises(frappe.PermissionError):
-			get_active_score_policy()
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				get_active_score_policy()
+		finally:
+			frappe.set_user("Administrator")

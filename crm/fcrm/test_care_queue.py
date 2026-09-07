@@ -44,7 +44,7 @@ class TestCareQueue(FrappeTestCase):
 			self, "_Test Queue Sale", roles=["Sale"], team=self._team
 		)
 		self._lead_user, self._lead_staff = _perm.TestSharedScopingPermissions._make_user_and_staff(
-			self, "_Test Queue Lead", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			self, "_Test Queue Lead", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		self._outsider_user, self._outsider_staff = _perm.TestSharedScopingPermissions._make_user_and_staff(
 			self, "_Test Queue Outsider", roles=["Sale"]
@@ -54,8 +54,10 @@ class TestCareQueue(FrappeTestCase):
 	def tearDown(self):
 		frappe.set_user("Administrator")
 		frappe.db.delete("CRM Student Decision Event", {"student": self._student.name})
-		for name in frappe.db.get_all("CRM Action", filters={"student": self._student.name}, pluck="name"):
-			frappe.delete_doc("CRM Action", name, force=True)
+		for name in frappe.db.get_all(
+			"CRM Action Item", filters={"student": self._student.name}, pluck="name"
+		):
+			frappe.delete_doc("CRM Action Item", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
 		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		for staff in (self._sale_staff, self._lead_staff, self._outsider_staff):
@@ -79,10 +81,12 @@ class TestCareQueue(FrappeTestCase):
 			frappe.flags.student_intake_service = previous
 		return student
 
-	def _make_action(self, *, action_type="CALL", disposition="ACT", current_slot="CURRENT", package_seed=None, state=None):
+	def _make_action(
+		self, *, action_type="CALL", disposition="ACT", current_slot="CURRENT", package_seed=None, state=None
+	):
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Action",
+				"doctype": "CRM Action Item",
 				"student": self._student.name,
 				"origin": "ai",
 				"current_slot": current_slot,
@@ -122,13 +126,16 @@ class TestCareQueue(FrappeTestCase):
 			"policy_version": "test-v2",
 		}
 		digest = hashlib.sha256(
-			json.dumps(candidate, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode()
+			json.dumps(
+				candidate, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str
+			).encode()
 		).hexdigest()
 		conf = frappe._dict(frappe.conf)
 		conf.pop("crm_intelligence_writer_epoch", None)
 		conf.pop("crm_agents_v2_rollout_epoch", None)
-		with patch("crm.api.student_decision._require_action_writer"), patch(
-			"crm.api.student_decision.frappe.conf", conf
+		with (
+			patch("crm.api.student_decision._require_action_writer"),
+			patch("crm.api.student_decision.frappe.conf", conf),
 		):
 			return decision_api.write_canonical_action(
 				student=self._student.name,
@@ -144,12 +151,10 @@ class TestCareQueue(FrappeTestCase):
 		frappe.db.set_value("CRM Student", self._student.name, fields, update_modified=False)
 
 	def _context_base(self):
-		return int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
-		)
+		return int(frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0)
 
 	def _current_revision(self, action):
-		return int(frappe.db.get_value("CRM Action", action, "decision_revision") or 0)
+		return int(frappe.db.get_value("CRM Action Item", action, "decision_revision") or 0)
 
 	# ---- risk tier ----------------------------------------------------
 
@@ -172,7 +177,9 @@ class TestCareQueue(FrappeTestCase):
 
 	def test_package_seed_cannot_raise_or_lower_the_frappe_policy_tier(self):
 		self.assertEqual(sensitive_content_flags("CALL", {"mentions_scholarship": True}), [])
-		doc = self._make_action(action_type="CALL", current_slot=None, package_seed={"mentions_scholarship": True})
+		doc = self._make_action(
+			action_type="CALL", current_slot=None, package_seed={"mentions_scholarship": True}
+		)
 		self.assertEqual(doc.risk_tier, "low")
 		self.assertEqual(sensitive_content_flags("PARENT_CONTACT", {}), ["direct_to_applicant_or_parent"])
 
@@ -196,7 +203,9 @@ class TestCareQueue(FrappeTestCase):
 		self.assertEqual(doc.risk_tier, "low")
 
 	def test_legitimate_seed_edit_under_command_recomputes_the_tier(self):
-		doc = self._make_action(action_type="CALL", current_slot=None, package_seed={"mentions_tuition": True})
+		doc = self._make_action(
+			action_type="CALL", current_slot=None, package_seed={"mentions_tuition": True}
+		)
 		self._command_save(doc, package_seed=json.dumps({"opening": "Hello"}))
 		doc.reload()
 		self.assertEqual(doc.risk_tier, "low")
@@ -353,9 +362,9 @@ class TestCareQueue(FrappeTestCase):
 		)
 		self.assertEqual(result["code"], "STALE_REVISION")
 		self.assertEqual(result["current_action"]["name"], second["action"])
-		self.assertIsNone(frappe.get_doc("CRM Action", first["action"]).current_slot)
+		self.assertIsNone(frappe.get_doc("CRM Action Item", first["action"]).current_slot)
 		self.assertEqual(
-			frappe.db.count("CRM Action", {"student": self._student.name, "current_slot": "CURRENT"}), 1
+			frappe.db.count("CRM Action Item", {"student": self._student.name, "current_slot": "CURRENT"}), 1
 		)
 
 	def test_claim_then_regeneration_keeps_exactly_one_current_action(self):
@@ -373,12 +382,10 @@ class TestCareQueue(FrappeTestCase):
 		self._set_student(student_context_revision=base + 1)
 		second = self._generate(revision=base + 1, key="gen-y")
 		self.assertEqual(
-			frappe.db.count("CRM Action", {"student": self._student.name, "current_slot": "CURRENT"}), 1
+			frappe.db.count("CRM Action Item", {"student": self._student.name, "current_slot": "CURRENT"}), 1
 		)
-		self.assertTrue(frappe.db.exists("CRM Action", first["action"]))
-		self.assertEqual(
-			frappe.db.get_value("CRM Action", second["action"], "current_slot"), "CURRENT"
-		)
+		self.assertTrue(frappe.db.exists("CRM Action Item", first["action"]))
+		self.assertEqual(frappe.db.get_value("CRM Action Item", second["action"], "current_slot"), "CURRENT")
 
 	def test_out_of_scope_caller_is_rejected_and_not_added_to_assigned_to(self):
 		self._set_student(assigned_to=self._sale_staff, owner_staff=self._sale_staff)
@@ -437,8 +444,7 @@ class TestCareQueue(FrappeTestCase):
 		try:
 			frappe.set_user(director_user)
 			row = next(
-				r for r in student_worklist.list_action_queue()["items"]
-				if r["student"] == self._student.name
+				r for r in student_worklist.list_action_queue()["items"] if r["student"] == self._student.name
 			)
 			self.assertFalse(row["can_claim"])
 		finally:
@@ -480,8 +486,7 @@ class TestCareQueue(FrappeTestCase):
 		self._make_action()
 		frappe.set_user(self._sale_user)
 		row = next(
-			r for r in student_worklist.list_action_queue()["items"]
-			if r["student"] == self._student.name
+			r for r in student_worklist.list_action_queue()["items"] if r["student"] == self._student.name
 		)
 		self.assertFalse(row["can_execute"])
 		self.assertIsNone(row["assignee_ref"])

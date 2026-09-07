@@ -56,7 +56,15 @@
   {"fieldname":"decision_at","fieldtype":"Datetime","read_only":1},
   {"fieldname":"decision_revision","fieldtype":"Int","default":"0","read_only":1}
  ],
- "indexes": [{"fields": ["student", "source_context_revision", "source_stage_key"], "name": "crm_action_item_intelligence_stage_uniq", "unique": 1}],
- "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[{"read":1,"write":1,"role":"Lead Sale"},{"read":1,"write":1,"role":"Sale"},{"read":1,"role":"CTV Sale"},{"read":1,"role":"Admissions Director"},{"create":1,"delete":1,"read":1,"write":1,"role":"System Manager"}],
+ "indexes": [
+  {"fields": ["student", "source_context_revision", "source_stage_key"], "name": "crm_action_item_intelligence_stage_uniq", "unique": 1},
+  {"fields": ["student", "current_slot"], "name": "crm_action_student_current_slot_uniq", "unique": 1}
+ ],
+ "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[
+   {"role":"Admissions Director","read":1},
+   {"role":"Lead Sale","read":1},
+   {"role":"Sale","read":1},
+   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
+ ],
  "sort_field":"creation", "sort_order":"DESC"
 }

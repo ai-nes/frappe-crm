@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 
 import frappe
+from frappe import _
 from frappe.utils import get_datetime
 
 from crm.fcrm.student_contact_conversion import contacts_for_student, students_for_contact
@@ -23,7 +24,7 @@ def get_student_records_by_phone(phone: str | None = None):
 			"score_histories": [],
 			"interactions": [],
 			"intents": [],
-			"influences": []
+			"influences": [],
 		}
 
 	lookup_terms = get_phone_lookup_terms(phone)
@@ -158,7 +159,7 @@ def get_student_records_by_phone(phone: str | None = None):
 		"score_histories": score_histories,
 		"interactions": interactions,
 		"intents": intents,
-		"influences": influences
+		"influences": influences,
 	}
 
 
@@ -179,7 +180,7 @@ def to_display_date(dt):
 			dt = get_datetime(dt)
 		except Exception:
 			return dt
-	if isinstance(dt, (date, datetime)):
+	if isinstance(dt, date | datetime):
 		return dt.strftime("%d/%m/%Y")
 	return str(dt)
 
@@ -223,13 +224,15 @@ def _visible_contacts_for_student(student: str | None) -> list[str]:
 def _score_history_payload(history):
 	details = []
 	for detail in history.get("details") or []:
-		details.append({
-			"category": detail.get("category"),
-			"rule_id": detail.get("rule_id"),
-			"signal": detail.get("signal"),
-			"score": detail.get("score") or 0,
-			"reason": detail.get("reason"),
-		})
+		details.append(
+			{
+				"category": detail.get("category"),
+				"rule_id": detail.get("rule_id"),
+				"signal": detail.get("signal"),
+				"score": detail.get("score") or 0,
+				"reason": detail.get("reason"),
+			}
+		)
 
 	return {
 		"name": history.name,
@@ -258,7 +261,9 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 			frappe.throw("Not permitted", frappe.PermissionError)
 		students = _visible_students_for_contact(contact)
 		if len(students) != 1:
-			frappe.throw("A Contact is linked to multiple Student cases; select a Student.", frappe.ValidationError)
+			frappe.throw(
+				_("A Contact is linked to multiple Student cases; select a Student."), frappe.ValidationError
+			)
 		student = students[0]
 
 	if not student:
@@ -329,22 +334,19 @@ def get_student_score_context(student: str | None = None, contact: str | None = 
 
 
 @frappe.whitelist()
-def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, suggestedEventLimit: int = 10, eventStatus: str | None = None):
+def get_student_dashboard(
+	phone: str | None = None,
+	interactionLimit: int = 50,
+	suggestedEventLimit: int = 10,
+	eventStatus: str | None = None,
+):
 	_require_authenticated()
 	if not phone:
-		return {
-			"isSuccess": False,
-			"message": "Thiếu số điện thoại",
-			"data": None
-		}
+		return {"isSuccess": False, "message": "Thiếu số điện thoại", "data": None}
 
 	lookup_terms = get_phone_lookup_terms(phone)
 	if not lookup_terms:
-		return {
-			"isSuccess": False,
-			"message": "Số điện thoại không hợp lệ",
-			"data": None
-		}
+		return {"isSuccess": False, "message": "Số điện thoại không hợp lệ", "data": None}
 
 	# 1. Fetch CRM Student
 	students_list = get_docs_by_phone("CRM Student", phone)
@@ -391,14 +393,14 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	# Return error if student/contact not found
 	if not student_doc and not contact_doc:
-		return {
-			"isSuccess": False,
-			"message": "Không tìm thấy học sinh",
-			"data": None
-		}
+		return {"isSuccess": False, "message": "Không tìm thấy học sinh", "data": None}
 
-	linked_students = _visible_students_for_contact(contact_doc.name) if contact_doc and not student_doc else []
-	student_name = student_doc.name if student_doc else (linked_students[0] if len(linked_students) == 1 else None)
+	linked_students = (
+		_visible_students_for_contact(contact_doc.name) if contact_doc and not student_doc else []
+	)
+	student_name = (
+		student_doc.name if student_doc else (linked_students[0] if len(linked_students) == 1 else None)
+	)
 	contact_name = contact_doc.name if contact_doc else None
 
 	# 3. Fetch related documents
@@ -496,60 +498,53 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	prov_link = student_doc.province if student_doc else (contact_doc.province if contact_doc else None)
 
 	if hs_link or prov_link:
-		high_school = {
-			"province": prov_link or "",
-			"name": hs_link or ""
-		}
+		high_school = {"province": prov_link or "", "name": hs_link or ""}
 
 	home_address = None
-	ward_link = (student_doc.ward if student_doc else None) or (contact_doc.get("ward") if contact_doc else None)
+	ward_link = (student_doc.ward if student_doc else None) or (
+		contact_doc.get("ward") if contact_doc else None
+	)
 	if prov_link or ward_link:
-		home_address = {
-			"province": prov_link or "",
-			"district": ward_link or "",
-			"detail": ""
-		}
+		home_address = {"province": prov_link or "", "district": ward_link or "", "detail": ""}
 
 	academic_records = []
 	academic_source = contact_doc if contact_doc and contact_doc.get("academic_results") else student_doc
 	if academic_source and hasattr(academic_source, "academic_results"):
 		for result in academic_source.academic_results:
-			rank_map = {
-				"Giỏi": "Gioi",
-				"Khá": "Kha",
-				"Trung bình": "Trung binh",
-				"Yếu": "Yeu"
-			}
+			rank_map = {"Giỏi": "Gioi", "Khá": "Kha", "Trung bình": "Trung binh", "Yếu": "Yeu"}
 			rank = rank_map.get(result.academic_rank, "Gioi")
-			academic_records.append({
-				"year": result.school_year or "",
-				"grade": rank
-			})
+			academic_records.append({"year": result.school_year or "", "grade": rank})
 
 	languages = []
 	language_source = contact_doc if contact_doc and contact_doc.get("language_certificates") else student_doc
 	if language_source and hasattr(language_source, "language_certificates"):
 		for cert in language_source.language_certificates:
-			languages.append({
-				"language": cert.language or "Tiếng Anh",
-				"certificate": cert.certificate_name or "IELTS",
-				"score": str(cert.score_level) if cert.score_level else "",
-				"issuedAt": to_display_date(cert.issue_date) or ""
-			})
+			languages.append(
+				{
+					"language": cert.language or "Tiếng Anh",
+					"certificate": cert.certificate_name or "IELTS",
+					"score": str(cert.score_level) if cert.score_level else "",
+					"issuedAt": to_display_date(cert.issue_date) or "",
+				}
+			)
 
 	interested_programs = []
 	contact_program = getattr(contact_doc, "education_program", None) if contact_doc else None
 	prog = (
 		contact_program
 		if contact_program
-		else (student_doc.education_program if student_doc and hasattr(student_doc, "education_program") else None)
+		else (
+			student_doc.education_program
+			if student_doc and hasattr(student_doc, "education_program")
+			else None
+		)
 	)
 	if prog:
 		prog_map = {
 			"THPT thường": "thpt_thuong",
 			"THPT chuyên": "thpt_chuyen",
 			"Quốc tế": "quoc_te",
-			"Song ngữ": "song_ngu"
+			"Song ngữ": "song_ngu",
 		}
 		interested_programs.append(prog_map.get(prog, "quoc_te"))
 	else:
@@ -562,14 +557,11 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"Software Engineering": "cntt",
 			"Computer Science": "cntt",
 			"Kinh tế quốc tế": "kinh_te_quoc_te",
-			"Marketing": "marketing"
+			"Marketing": "marketing",
 		}
-		interested_majors.append({
-			"major": major_map.get(major_link, "cntt"),
-			"priority": "primary"
-		})
+		interested_majors.append({"major": major_map.get(major_link, "cntt"), "priority": "primary"})
 	else:
-		interested_majors = [{ "major": "cntt", "priority": "primary" }]
+		interested_majors = [{"major": "cntt", "priority": "primary"}]
 
 	social_media_interests = [
 		{
@@ -578,7 +570,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"engagementLevel": "high",
 			"handle": f"facebook.com/{full_name.lower().replace(' ', '.')}",
 			"lastActivityAt": to_unix(contact_doc.modified if contact_doc else datetime.now()),
-			"recentActivities": ["Comment bài tuyển sinh 2026"]
+			"recentActivities": ["Comment bài tuyển sinh 2026"],
 		}
 	]
 
@@ -598,7 +590,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		"interestedPrograms": interested_programs,
 		"interestedMajors": interested_majors,
 		"socialMediaInterests": social_media_interests,
-		"notes": notes
+		"notes": notes,
 	}
 
 	intent_key_map = {
@@ -637,7 +629,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"Admission Counseling": "conversation",
 			"Phone Call": "phone_call",
 			"Email": "email",
-			"Payment": "payment"
+			"Payment": "payment",
 		}
 		ix_type = type_map.get(ix.get("interaction_type"), "conversation")
 
@@ -651,21 +643,23 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 				if role == "Dominant":
 					ix_dominant_intent = key
 
-		interaction_items.append({
-			"id": ix.get("name"),
-			"type": ix_type,
-			"title": ix.get("summary") or ix.get("interaction_type") or "Tương tác",
-			"summary": ix.get("notes") or ix.get("summary") or "",
-			"occurredAt": to_unix(ix.get("interaction_datetime")),
-			"channel": ix.get("interaction_type") or "",
-			"intents": ix_intents,
-			"dominantIntent": ix_dominant_intent,
-			"supportIntents": [i["key"] for i in ix_intents if i["role"] == "Support"],
-			"metadata": { "conversationId": ix.get("name") }
-		})
+		interaction_items.append(
+			{
+				"id": ix.get("name"),
+				"type": ix_type,
+				"title": ix.get("summary") or ix.get("interaction_type") or "Tương tác",
+				"summary": ix.get("notes") or ix.get("summary") or "",
+				"occurredAt": to_unix(ix.get("interaction_datetime")),
+				"channel": ix.get("interaction_type") or "",
+				"intents": ix_intents,
+				"dominantIntent": ix_dominant_intent,
+				"supportIntents": [i["key"] for i in ix_intents if i["role"] == "Support"],
+				"metadata": {"conversationId": ix.get("name")},
+			}
+		)
 
 	interaction_items = sorted(interaction_items, key=lambda x: x["occurredAt"] or 0, reverse=True)
-	interaction_items = interaction_items[:int(interactionLimit)]
+	interaction_items = interaction_items[: int(interactionLimit)]
 
 	# --- Intents Mapping ---
 	intent_items = []
@@ -674,29 +668,26 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 		intent_type = intent_type_map.get(key, "admission")
 
-		importance_map = {
-			"Very High": "very_high",
-			"High": "high",
-			"Medium": "medium",
-			"Low": "low"
-		}
+		importance_map = {"Very High": "very_high", "High": "high", "Medium": "medium", "Low": "low"}
 		importance = importance_map.get(intent.get("importance"), "medium")
 
 		confidence = (intent.get("confidence") / 100.0) if intent.get("confidence") else None
 
 		role = intent.get("intent_role") or "Support"
-		intent_items.append({
-			"key": key,
-			"label": intent.get("intent_type") or "Ý định",
-			"intentType": intent_type,
-			"importance": importance,
-			"role": role,
-			"isDominant": role == "Dominant",
-			"detectedAt": to_unix(intent.get("modified")),
-			"sourceInteractionId": intent.get("interaction") or "",
-			"sourceType": "conversation",
-			"confidence": confidence
-		})
+		intent_items.append(
+			{
+				"key": key,
+				"label": intent.get("intent_type") or "Ý định",
+				"intentType": intent_type,
+				"importance": importance,
+				"role": role,
+				"isDominant": role == "Dominant",
+				"detectedAt": to_unix(intent.get("modified")),
+				"sourceInteractionId": intent.get("interaction") or "",
+				"sourceType": "conversation",
+				"confidence": confidence,
+			}
+		)
 
 	# --- Events Mapping ---
 	event_items = []
@@ -710,42 +701,50 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 	}
 
 	if contact_doc:
-		participations = list(_scoped_list(
-			"CRM Marketing Engagement",
-			filters={"crm_contact": contact_doc.name, "engagement_kind": "event_participation"},
-			fields=["name", "crm_event", "status", "registered_at", "checked_in_at"],
-			order_by="registered_at desc",
-			limit_page_length=0,
-		))
+		participations = list(
+			_scoped_list(
+				"CRM Marketing Engagement",
+				filters={"crm_contact": contact_doc.name, "engagement_kind": "event_participation"},
+				fields=["name", "crm_event", "status", "registered_at", "checked_in_at"],
+				order_by="registered_at desc",
+				limit_page_length=0,
+			)
+		)
 		participations.sort(key=lambda row: str(row.registered_at or ""), reverse=True)
 		for participation in participations:
 			try:
 				evt_doc = frappe.get_doc("CRM Event", participation.crm_event)
 			except frappe.DoesNotExistError:
 				continue
-			event_items.append({
-				"id": evt_doc.name,
-				"name": evt_doc.title or evt_doc.name,
-				"type": "open_day",
-				"attendedAt": to_unix(participation.checked_in_at)
-					or to_unix(participation.registered_at)
-					or to_unix(evt_doc.start_datetime or evt_doc.event_date)
-					or to_unix(evt_doc.creation),
-				"status": participation_status_map.get(participation.status, "registered"),
-			})
-			attended_event_names.append(evt_doc.name)
-
-		# Fallback for contacts predating the Phase 5 many-to-many migration
-		if not participations and contact_doc.crm_event:
-			try:
-				evt_doc = frappe.get_doc("CRM Event", contact_doc.crm_event)
-				event_items.append({
+			event_items.append(
+				{
 					"id": evt_doc.name,
 					"name": evt_doc.title or evt_doc.name,
 					"type": "open_day",
-					"attendedAt": to_unix(evt_doc.start_datetime or evt_doc.event_date) or to_unix(evt_doc.creation),
-					"status": "attended"
-				})
+					"attendedAt": to_unix(participation.checked_in_at)
+					or to_unix(participation.registered_at)
+					or to_unix(evt_doc.start_datetime or evt_doc.event_date)
+					or to_unix(evt_doc.creation),
+					"status": participation_status_map.get(participation.status, "registered"),
+				}
+			)
+			attended_event_names.append(evt_doc.name)
+
+		# Fallback for contacts predating the Phase 5 many-to-many migration
+		legacy_event = getattr(contact_doc, "crm_event", None)
+		if not participations and legacy_event:
+			try:
+				evt_doc = frappe.get_doc("CRM Event", legacy_event)
+				event_items.append(
+					{
+						"id": evt_doc.name,
+						"name": evt_doc.title or evt_doc.name,
+						"type": "open_day",
+						"attendedAt": to_unix(evt_doc.start_datetime or evt_doc.event_date)
+						or to_unix(evt_doc.creation),
+						"status": "attended",
+					}
+				)
 				attended_event_names.append(evt_doc.name)
 			except frappe.DoesNotExistError:
 				pass
@@ -760,16 +759,19 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 
 	for ue in upcoming_evts:
 		if ue.name not in attended_event_names:
-			suggested_event_items.append({
-				"id": ue.name,
-				"name": ue.title or ue.name,
-				"type": "open_day",
-				"startsAt": to_unix(ue.start_datetime or ue.event_date) or to_unix(datetime.now() + timedelta(days=5)),
-				"matchScore": 90,
-				"matchReason": "Phù hợp ngành học CNTT"
-			})
+			suggested_event_items.append(
+				{
+					"id": ue.name,
+					"name": ue.title or ue.name,
+					"type": "open_day",
+					"startsAt": to_unix(ue.start_datetime or ue.event_date)
+					or to_unix(datetime.now() + timedelta(days=5)),
+					"matchScore": 90,
+					"matchReason": "Phù hợp ngành học CNTT",
+				}
+			)
 
-	suggested_event_items = suggested_event_items[:int(suggestedEventLimit)]
+	suggested_event_items = suggested_event_items[: int(suggestedEventLimit)]
 
 	# --- Lead Score Mapping ---
 	lead_score = None
@@ -786,11 +788,13 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		breakdown = []
 		details_list = latest_score_history.get("details") or []
 		for det in details_list:
-			breakdown.append({
-				"label": det.get("signal") or det.get("reason") or "Điểm tiềm năng",
-				"points": det.get("score") or 0,
-				"category": (det.get("category") or "fit").lower()
-			})
+			breakdown.append(
+				{
+					"label": det.get("signal") or det.get("reason") or "Điểm tiềm năng",
+					"points": det.get("score") or 0,
+					"category": (det.get("category") or "fit").lower(),
+				}
+			)
 
 		trend = []
 		sorted_histories = sorted(score_histories, key=lambda x: x.get("scoring_time") or "")
@@ -800,10 +804,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			if sc_time:
 				dt_obj = get_datetime(sc_time)
 				date_str = dt_obj.strftime("%d/%m")
-			trend.append({
-				"date": date_str,
-				"score": sh.get("final_score") or 0
-			})
+			trend.append({"date": date_str, "score": sh.get("final_score") or 0})
 
 		lead_score = {
 			"fitScore": latest_score_history.get("fit_score") or 0,
@@ -817,7 +818,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"isPotentialCustomer": total_score >= 70,
 			"breakdown": breakdown,
 			"trend": trend,
-			"lastUpdated": to_unix(latest_score_history.get("scoring_time"))
+			"lastUpdated": to_unix(latest_score_history.get("scoring_time")),
 		}
 	else:
 		lead_score = {
@@ -832,7 +833,7 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 			"isPotentialCustomer": False,
 			"breakdown": [],
 			"trend": [],
-			"lastUpdated": to_unix(datetime.now())
+			"lastUpdated": to_unix(datetime.now()),
 		}
 
 	return {
@@ -840,72 +841,65 @@ def get_student_dashboard(phone: str | None = None, interactionLimit: int = 50, 
 		"message": "Thành công",
 		"data": {
 			"student": student_data,
-			"interactions": {
-				"items": interaction_items,
-				"nextCursor": None
-			},
+			"interactions": {"items": interaction_items, "nextCursor": None},
 			"intents": {
 				"items": intent_items,
 				"total": len(intent_items),
 				"dominant": [i for i in intent_items if i.get("isDominant")],
-				"support": [i for i in intent_items if not i.get("isDominant")]
+				"support": [i for i in intent_items if not i.get("isDominant")],
 			},
-			"events": {
-				"items": event_items
-			},
-			"suggestedEvents": {
-				"items": suggested_event_items
-			},
-			"leadScore": lead_score
+			"events": {"items": event_items},
+			"suggestedEvents": {"items": suggested_event_items},
+			"leadScore": lead_score,
 		},
-		"metadata": None
+		"metadata": None,
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_training_programs():
 	return {
 		"isSuccess": True,
 		"message": "Thành công",
 		"data": {
 			"items": [
-				{ "key": "thpt_thuong", "label": "THPT thường" },
-				{ "key": "thpt_chuyen", "label": "THPT chuyên" },
-				{ "key": "quoc_te", "label": "Quốc tế" },
-				{ "key": "song_ngu", "label": "Song ngữ" },
-				{ "key": "cao_dang_lien_thong", "label": "Cao đẳng liên thông" },
-				{ "key": "gdtx", "label": "Giáo dục thường xuyên" }
+				{"key": "thpt_thuong", "label": "THPT thường"},
+				{"key": "thpt_chuyen", "label": "THPT chuyên"},
+				{"key": "quoc_te", "label": "Quốc tế"},
+				{"key": "song_ngu", "label": "Song ngữ"},
+				{"key": "cao_dang_lien_thong", "label": "Cao đẳng liên thông"},
+				{"key": "gdtx", "label": "Giáo dục thường xuyên"},
 			]
 		},
-		"metadata": None
+		"metadata": None,
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_study_majors():
 	return {
 		"isSuccess": True,
 		"message": "Thành công",
 		"data": {
 			"items": [
-				{ "key": "cntt", "label": "Công nghệ thông tin" },
-				{ "key": "kinh_te", "label": "Kinh tế" },
-				{ "key": "kinh_te_quoc_te", "label": "Kinh tế quốc tế" },
-				{ "key": "quan_tri_kinh_doanh", "label": "Quản trị kinh doanh" },
-				{ "key": "marketing", "label": "Marketing" },
-				{ "key": "tai_chinh_ngan_hang", "label": "Tài chính ngân hàng" },
-				{ "key": "luat", "label": "Luật" },
-				{ "key": "ngoai_ngu", "label": "Ngoại ngữ" },
-				{ "key": "thiet_ke_do_hoa", "label": "Thiết kế đồ họa" },
-				{ "key": "y_duoc", "label": "Y dược" },
-				{ "key": "kiem_toan", "label": "Kiểm toán" }
+				{"key": "cntt", "label": "Công nghệ thông tin"},
+				{"key": "kinh_te", "label": "Kinh tế"},
+				{"key": "kinh_te_quoc_te", "label": "Kinh tế quốc tế"},
+				{"key": "quan_tri_kinh_doanh", "label": "Quản trị kinh doanh"},
+				{"key": "marketing", "label": "Marketing"},
+				{"key": "tai_chinh_ngan_hang", "label": "Tài chính ngân hàng"},
+				{"key": "luat", "label": "Luật"},
+				{"key": "ngoai_ngu", "label": "Ngoại ngữ"},
+				{"key": "thiet_ke_do_hoa", "label": "Thiết kế đồ họa"},
+				{"key": "y_duoc", "label": "Y dược"},
+				{"key": "kiem_toan", "label": "Kiểm toán"},
 			]
 		},
-		"metadata": None
+		"metadata": None,
 	}
 
 
-@frappe.whitelist(allow_guest=True)
+@frappe.whitelist(allow_guest=True)  # nosemgrep: security.guest-whitelisted-method
 def get_intent_definitions():
 	return {
 		"isSuccess": True,
@@ -916,106 +910,105 @@ def get_intent_definitions():
 					"key": "admission_inquiry",
 					"label": "Hỏi tuyển sinh",
 					"intentType": "admission",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "eligibility_check",
 					"label": "Kiểm tra điều kiện nhập học",
 					"intentType": "academic",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "scholarship_inquiry",
 					"label": "Hỏi học bổng",
 					"intentType": "financial",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "tuition_inquiry",
 					"label": "Hỏi học phí",
 					"intentType": "financial",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "application_submission",
 					"label": "Nộp hồ sơ tuyển sinh",
 					"intentType": "admission",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "admission_process",
 					"label": "Hỏi quy trình xét tuyển",
 					"intentType": "admission",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "enrollment_intent",
 					"label": "Ý định nhập học",
 					"intentType": "admission",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "deposit_intent",
 					"label": "Ý định đặt cọc",
 					"intentType": "admission",
-					"importance": "very_high"
+					"importance": "very_high",
 				},
 				{
 					"key": "career_exploration",
 					"label": "Tìm hiểu định hướng nghề nghiệp",
 					"intentType": "career",
-					"importance": "medium"
+					"importance": "medium",
 				},
 				{
 					"key": "major_inquiry",
 					"label": "Hỏi ngành học",
 					"intentType": "academic",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "major_comparison",
 					"label": "So sánh các ngành học",
 					"intentType": "academic",
-					"importance": "medium"
+					"importance": "medium",
 				},
 				{
 					"key": "university_comparison",
 					"label": "So sánh các trường đại học",
 					"intentType": "career",
-					"importance": "medium"
+					"importance": "medium",
 				},
 				{
 					"key": "event_registration",
 					"label": "Đăng ký sự kiện",
 					"intentType": "campus_life",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "campus_visit_inquiry",
 					"label": "Hỏi tham quan cơ sở",
 					"intentType": "campus_life",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "student_life_inquiry",
 					"label": "Hỏi đời sống sinh viên",
 					"intentType": "campus_life",
-					"importance": "medium"
+					"importance": "medium",
 				},
 				{
 					"key": "international_program_inquiry",
 					"label": "Hỏi chương trình quốc tế",
 					"intentType": "academic",
-					"importance": "high"
+					"importance": "high",
 				},
 				{
 					"key": "complaint_support",
 					"label": "Yêu cầu hỗ trợ/khiếu nại",
 					"intentType": "support",
-					"importance": "medium"
-				}
+					"importance": "medium",
+				},
 			]
 		},
-		"metadata": None
+		"metadata": None,
 	}
-
