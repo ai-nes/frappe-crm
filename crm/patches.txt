@@ -153,3 +153,5 @@ crm.patches.v1_0.add_team_group_province
 crm.patches.v1_0.backfill_team_management_groups
 crm.patches.v1_0.grant_lead_sale_campaign_permissions
 crm.patches.v1_0.reconcile_linked_student_ownership
+crm.patches.v1_0.repair_converted_lead_processing_status
+crm.patches.v1_0.repair_assignment_batch_audit

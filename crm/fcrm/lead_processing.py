@@ -189,7 +189,7 @@ def preview_lead(lead: str) -> dict[str, Any]:
 	}
 
 
-def _load_lead(lead: str):
+def _load_lead(lead: str, *, internal_service: bool = False):
 	lead_name = _required(lead, "lead")
 	try:
 		doc = frappe.get_doc("CRM Lead", lead_name)
@@ -197,7 +197,9 @@ def _load_lead(lead: str):
 		if exc.__class__.__name__ in {"DoesNotExistError", "ValidationError"}:
 			_fail("NOT_FOUND", "Lead does not exist.")
 		raise
-	if not doc.has_permission("write"):
+	# A trusted in-process caller authorized its operator before the command and
+	# may legitimately own a Lead that has just left that operator's row scope.
+	if not internal_service and not doc.has_permission("write"):
 		_fail("FORBIDDEN", "You cannot process this Lead.")
 	return doc
 
@@ -403,9 +405,15 @@ def handoff_lead(
 	idempotency_key: str = "",
 	correlation_id: str | None = None,
 	target_student: str | None = None,
+	_internal_service: bool = False,
 ) -> dict[str, Any]:
-	"""Convert an assigned Lead, initialise Student stage, and close the Lead."""
-	lead_doc = _load_lead(lead)
+	"""Convert an assigned Lead, initialise Student stage, and close the Lead.
+
+	``_internal_service`` mirrors ``assign_lead``: the assignment batch already
+	authorized the operator, so the conversion must not fail merely because the
+	committed ownership moved the Lead outside that operator's row scope.
+	"""
+	lead_doc = _load_lead(lead, internal_service=_internal_service)
 	resolution = _get_resolution(lead_doc)
 	if _get_status(lead_doc) != "ASSIGNED" or resolution not in ADVANCING_RESOLUTIONS:
 		_fail("INVALID_STATUS", "Only assigned MATCHED or CREATED Leads can be handed off.")
@@ -431,6 +439,7 @@ def handoff_lead(
 			idempotency_key=idempotency_key,
 			correlation_id=correlation_id,
 			target_student=target_student,
+			_internal_service=_internal_service,
 		)
 		student_id = conversion.get("target_student") or conversion.get("student_id")
 		if not student_id:

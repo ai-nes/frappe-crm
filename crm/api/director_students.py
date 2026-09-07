@@ -103,18 +103,21 @@ SORT_FIELDS = {
 }
 STUDENT_FIELDS = [
 	"name",
-	"student",
-	"student_name",
+	"full_name",
+	"lead_code",
+	"source_lead",
 	"phone",
 	"email",
 	"gender",
 	"date_of_birth",
-	"case_key",
+	"student_identity",
+	"student_context_revision",
 	"high_school",
 	"province",
 	"major",
 	"lifecycle_stage",
 	"enrollment_status",
+	"student_stage",
 	"latest_score",
 	"assessment_status",
 	"interest_level",
@@ -197,7 +200,7 @@ def get_director_students(
 		or_filters,
 		allowed_student_ids=list_scope_student_ids,
 	)
-	total_all_filters = {"admission_year": query["admission_year"]}
+	total_all_filters = _canonical_student_filters(query["admission_year"])
 	total_all = _count_students(total_all_filters, allowed_student_ids=list_scope_student_ids)
 	rows = _fetch_student_rows(
 		query,
@@ -238,28 +241,28 @@ def get_director_students(
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_student(student_id: str) -> dict[str, Any]:
-	"""Return one permission-checked Student 360 projection."""
+	"""Return one permission-checked canonical CRM Student projection."""
 	_require_access()
 	student_id = _resolve_student_id(student_id)
 	if not student_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", student_id)
+		doc = frappe.get_doc("CRM Student", student_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	row = _normalize_student_row(frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS}))
 	item = _hydrate_rows([row])[0]
 	return _build_student_360(row, item)
 
 
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_student_interactions(student_id: str) -> dict[str, Any]:
-	"""Return interaction history (Zalo messages and Call Logs) for a CRM Lead."""
+	"""Return interaction history (Zalo messages and Call Logs) for a CRM Student."""
 	_require_access()
 	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
 	if not requested_id:
@@ -553,16 +556,15 @@ def _resolve_province(value: str | None) -> str | None:
 def _student_filters(
 	query: dict[str, Any], province: str | None
 ) -> tuple[dict[str, Any], list[list[str]]]:
-	filters: dict[str, Any] = {"admission_year": query["admission_year"]}
+	filters: dict[str, Any] = _canonical_student_filters(query["admission_year"])
 	if query.get("owner_id"):
 		filters["owner_staff"] = query["owner_id"]
 	if query.get("assignment_status") == "assigned" and not query.get("owner_id"):
 		filters["owner_staff"] = ["is", "set"]
 	elif query.get("assignment_status") == "unassigned":
-		if query.get("owner_id"):
-			filters["assigned_to"] = ["is", "not set"]
-		else:
-			filters["owner_staff"] = ["is", "not set"]
+		# The Student page is a post-conversion list. Unassigned rows are
+		# intentionally excluded even when the legacy filter is requested.
+		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
 	if query.get("lifecycle_status"):
@@ -579,8 +581,9 @@ def _student_filters(
 		pattern = f"%{query['query']}%"
 		for field in (
 			"name",
-			"student_name",
-			"case_key",
+			"full_name",
+			"lead_code",
+			"student_identity",
 			"high_school",
 			"province",
 			"major",
@@ -595,17 +598,30 @@ def _student_filters(
 
 
 def _display_code_student_ids(display_code: str, admission_year: str | None) -> list[str]:
-	"""Resolve a dashboard display code to the canonical CRM Lead names."""
+	"""Resolve a dashboard display code to canonical CRM Student names.
+
+	``_profile_code`` builds the code from the Student's own technical name, so
+	the code can only be matched back against CRM Student rows: a converted
+	Student is named ``CRMC-<year>-<sequence>`` while its source Lead keeps its
+	own ``ENR-<year>-<sequence>``, and the two sequences never line up. Reading
+	the Leads instead made every student detail opened by code a 404.
+	"""
 	match = _DISPLAY_CODE_RE.fullmatch(str(display_code or "").strip())
 	if not match or not admission_year or match.group("year") != str(admission_year):
 		return []
 
+	filters: dict[str, Any] = {"admission_year": str(admission_year)}
+	sequence = match.group("sequence").lstrip("0")
+	if sequence:
+		# The code carries the last six digits of the technical name, so the
+		# name always ends with the unpadded sequence. An all-zero sequence can
+		# only come from a name the code cannot describe, and then falls back to
+		# scanning the admission year.
+		filters["name"] = ["like", f"%{sequence}"]
+
 	rows = frappe.get_all(
-		"CRM Lead",
-		filters={
-			"admission_year": str(admission_year),
-			"name": ["like", f"ENR-{match.group('year')}-%"],
-		},
+		"CRM Student",
+		filters=filters,
 		fields=["name", "admission_year"],
 		limit_page_length=0,
 	)
@@ -641,6 +657,16 @@ def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | No
 	return requested_id, lead_id or resolved_id, canonical_id
 
 
+def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
+	return {
+		"admission_year": admission_year,
+		"source_lead": ["is", "set"],
+		"converted_at": ["is", "set"],
+		"owner_staff": ["is", "set"],
+		"assigned_to": ["is", "set"],
+	}
+
+
 def _list_scope_student_ids() -> list[str] | None:
 	"""Return explicit IDs for the Sale list-only team/pool read scope.
 
@@ -652,10 +678,7 @@ def _list_scope_student_ids() -> list[str] | None:
 	condition = get_student_list_read_condition()
 	if condition is None:
 		return None
-	rows = frappe.db.sql(
-		f"select name from `tabCRM Lead` where ({condition})",
-		as_dict=True,
-	)
+	rows = frappe.db.sql(f"select name from `tabCRM Student` where ({condition})", as_dict=True)
 	return [row.get("name") for row in rows if row.get("name")]
 
 
@@ -678,7 +701,7 @@ def _count_students(
 	query_filters = _with_allowed_student_ids(filters, allowed_student_ids)
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 	rows = get_rows(
-		"CRM Lead",
+		"CRM Student",
 		filters=query_filters,
 		or_filters=or_filters or [],
 		fields=["count(name) as total"],
@@ -706,8 +729,8 @@ def _fetch_student_rows(
 	if allowed_student_ids is not None and not allowed_student_ids:
 		return []
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
-	return get_rows(
-		"CRM Lead",
+	rows = get_rows(
+		"CRM Student",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
@@ -715,6 +738,7 @@ def _fetch_student_rows(
 		limit_start=(query["page"] - 1) * query["page_size"],
 		limit_page_length=query["page_size"],
 	)
+	return _normalize_student_rows(rows)
 
 
 def _fetch_computed_sort_rows(
@@ -729,13 +753,14 @@ def _fetch_computed_sort_rows(
 		return []
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 	rows = get_rows(
-		"CRM Lead",
+		"CRM Student",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
 		order_by="name asc",
 		limit_page_length=0,
 	)
+	rows = _normalize_student_rows(rows)
 	student_ids = [row.get("name") for row in rows if row.get("name")]
 	related = {}
 	if query["sort"] == "priority":
@@ -785,6 +810,7 @@ def _sort_related_value(sort_field: str, related) -> int | str | None:
 def _hydrate_rows(rows: list, sort_field: str | None = None) -> list[dict[str, Any]]:
 	if not rows:
 		return []
+	rows = _normalize_student_rows(rows)
 	student_ids = [row.get("name") for row in rows if row.get("name")]
 	lookups = _load_lookups(rows)
 	activities = _latest_by_student(
@@ -826,6 +852,55 @@ def _hydrate_rows(rows: list, sort_field: str | None = None) -> list[dict[str, A
 		)
 		for row in rows
 	]
+
+
+def _normalize_student_row(row) -> Any:
+	return _normalize_student_rows([row])[0]
+
+
+def _normalize_student_rows(rows: list) -> list:
+	"""Normalize canonical CRM Student fields for the existing dashboard mapper.
+
+	The dashboard projection historically consumed CRM Lead-shaped rows. Keeping
+	this small adapter lets the rest of the read model use stable response keys
+	while making CRM Student the only source of rows.
+	"""
+	if not rows:
+		return []
+	source_leads = {
+		row.get("source_lead")
+		for row in rows
+		if row.get("source_lead")
+	}
+	lead_statuses = {}
+	if source_leads:
+		lead_statuses = {
+			row.name: row
+			for row in frappe.get_all(
+				"CRM Lead",
+				filters={"name": ["in", list(source_leads)]},
+				fields=["name", "processing_status", "resolution", "ownership_revision"],
+				limit_page_length=0,
+				ignore_permissions=True,
+			)
+		}
+	normalized = []
+	for row in rows:
+		item = frappe._dict(row)
+		item.student_name = item.get("student_name") or item.get("full_name")
+		item.case_key = item.get("case_key") or item.get("student_identity")
+		item.student = item.get("student") or item.get("name")
+		item.processing_status = item.get("processing_status")
+		item.resolution = item.get("resolution")
+		lead_status = lead_statuses.get(item.get("source_lead"))
+		if lead_status:
+			item.processing_status = lead_status.get("processing_status")
+			item.resolution = lead_status.get("resolution")
+			item.ownership_revision = lead_status.get("ownership_revision")
+		if item.get("ownership_revision") is None:
+			item.ownership_revision = item.get("student_context_revision")
+		normalized.append(item)
+	return normalized
 
 
 def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
@@ -909,6 +984,10 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"stage": stage["label"] if stage else None,
 		"lifecycleStatus": row.get("lifecycle_stage"),
 		"studentStage": _student_stage_value(row),
+		"processingStatus": row.get("processing_status"),
+		"resolution": row.get("resolution"),
+		"sourceLead": row.get("source_lead"),
+		"recordType": "student",
 		"assignmentStatus": "assigned"
 		if row.get("owner_staff") or row.get("assigned_to")
 		else "unassigned",
@@ -937,7 +1016,7 @@ def _profile_code(row) -> str:
 	Student name plus the admission cycle and the current HCM admissions branch.
 	"""
 	student_id = str(row.get("name") or "")
-	match = re.search(r"ENR-(\d{4})-(\d+)$", student_id)
+	match = re.search(r"(?:ENR|CRMC)-(\d{4})-(\d+)$", student_id)
 	year = str(row.get("admission_year") or (match.group(1) if match else "2026"))
 	sequence = match.group(2)[-6:].zfill(6) if match else "000000"
 	region = "HCM"
@@ -945,8 +1024,10 @@ def _profile_code(row) -> str:
 
 
 def _student_stage_value(row) -> str | None:
-	"""Read the canonical Student stage for a CRM Lead-backed projection."""
-	student = row.get("student")
+	"""Read the canonical Student stage without fabricating a default."""
+	if row.get("student_stage"):
+		return row.get("student_stage")
+	student = row.get("student") or row.get("name")
 	if not student:
 		return None
 	return frappe.db.get_value("CRM Student", student, "student_stage")
@@ -984,9 +1065,9 @@ def _build_summary(
 	else:
 		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 		rows = get_rows(
-			"CRM Lead",
+			"CRM Student",
 			filters=_with_allowed_student_ids(
-				{"admission_year": admission_year}, allowed_student_ids
+				_canonical_student_filters(admission_year), allowed_student_ids
 			),
 			fields=["name", "latest_score", "interest_level", "assessment_status"],
 			limit_page_length=0,
@@ -998,9 +1079,9 @@ def _build_summary(
 		previous_rows = []
 	else:
 		previous_rows = get_rows(
-			"CRM Lead",
+			"CRM Student",
 			filters=_with_allowed_student_ids(
-				{"admission_year": str(int(admission_year) - 1)}, allowed_student_ids
+				_canonical_student_filters(str(int(admission_year) - 1)), allowed_student_ids
 			),
 			fields=["name"],
 			limit_page_length=0,
@@ -1026,9 +1107,9 @@ def _build_action_summary(
 		student_ids = [
 			row.get("name")
 			for row in get_rows(
-				"CRM Lead",
+				"CRM Student",
 				filters=_with_allowed_student_ids(
-					{"admission_year": admission_year}, allowed_student_ids
+					_canonical_student_filters(admission_year), allowed_student_ids
 				),
 				fields=["name"],
 				limit_page_length=0,
@@ -1456,28 +1537,38 @@ def _student_call_records(
 	seen_call_ids: set[str] = set()
 
 	if _table_exists("Call Log"):
-		call_logs = frappe.get_list(
-			"Call Log",
-			filters={"reference_doctype": "CRM Lead", "reference_docname": student_id},
-			fields=[
-				"name",
-				"caller",
-				"receiver",
-				"from",
-				"to",
-				"duration",
-				"start_time",
-				"status",
-				"type",
-				"recording_url",
-				"telephony_medium",
-				"medium",
-				"creation",
-				"note",
-			],
-			order_by="start_time desc, creation desc",
-			limit_page_length=50,
-		)
+		try:
+			call_logs = frappe.get_list(
+				"Call Log",
+				filters={"reference_docname": student_id},
+				or_filters=[
+					{"reference_doctype": "CRM Student"},
+					{"reference_doctype": "CRM Lead"},
+				],
+				fields=[
+					"name",
+					"caller",
+					"receiver",
+					"from",
+					"to",
+					"duration",
+					"start_time",
+					"status",
+					"type",
+					"recording_url",
+					"telephony_medium",
+					"medium",
+					"creation",
+					"note",
+				],
+				order_by="start_time desc, creation desc",
+				limit_page_length=50,
+			)
+		except frappe.PermissionError:
+			# Sale and CTV Sale hold no Call Log read grant, so a telephony
+			# permission gap must degrade to an empty call history the way the
+			# Lead projection already does -- never break the whole 360 detail.
+			call_logs = []
 		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
 			seen_call_ids.add(cl.get("name"))
@@ -2152,7 +2243,7 @@ def _require_access():
 		)
 
 	try:
-		frappe.has_permission("CRM Lead", "read", user=user, throw=True)
+		frappe.has_permission("CRM Student", "read", user=user, throw=True)
 	except frappe.PermissionError:
 		_raise_api_error(
 			"FORBIDDEN",

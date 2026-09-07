@@ -38,27 +38,24 @@ GROUP_FIXTURES: tuple[dict[str, Any], ...] = (
 		"teams": (
 			{
 				"name": "Đội Tư vấn Quận 1 - TP.HCM",
-				"lead_email": "nguyen.hai.nam@fpt.edu.vn",
+				"lead_email": "tran.minh.anh@fpt.edu.vn",
 				"members": (
-					("nguyen.hai.nam@fpt.edu.vn", "Lead Sale"),
 					("tran.minh.anh@fpt.edu.vn", "Sale"),
 					("vo.ngoc.lan@fpt.edu.vn", "CTV Sale"),
 				),
 			},
 			{
 				"name": "Đội Tư vấn Thủ Đức - TP.HCM",
-				"lead_email": "pham.gia.huy@fpt.edu.vn",
+				"lead_email": "dang.hoang.long@fpt.edu.vn",
 				"members": (
-					("pham.gia.huy@fpt.edu.vn", "Lead Sale"),
 					("dang.hoang.long@fpt.edu.vn", "Sale"),
 					("nguyen.thuy.linh@fpt.edu.vn", "CTV Sale"),
 				),
 			},
 			{
 				"name": "Đội Tư vấn Bình Chánh - TP.HCM",
-				"lead_email": "dinh.quoc.duy@fpt.edu.vn",
+				"lead_email": "le.bao.chau@fpt.edu.vn",
 				"members": (
-					("dinh.quoc.duy@fpt.edu.vn", "Lead Sale"),
 					("le.bao.chau@fpt.edu.vn", "Sale"),
 					("do.minh.quan@fpt.edu.vn", "CTV Sale"),
 				),
@@ -73,27 +70,24 @@ GROUP_FIXTURES: tuple[dict[str, Any], ...] = (
 		"teams": (
 			{
 				"name": "Đội Tư vấn Biên Hòa - Đồng Nai",
-				"lead_email": "nguyen.thao.vy@fpt.edu.vn",
+				"lead_email": "le.hoang.phuc@fpt.edu.vn",
 				"members": (
-					("nguyen.thao.vy@fpt.edu.vn", "Lead Sale"),
 					("le.hoang.phuc@fpt.edu.vn", "Sale"),
 					("dang.ngoc.ha@fpt.edu.vn", "CTV Sale"),
 				),
 			},
 			{
 				"name": "Đội Tư vấn Long Thành - Đồng Nai",
-				"lead_email": "le.thanh.binh@fpt.edu.vn",
+				"lead_email": "nguyen.thu.ha@fpt.edu.vn",
 				"members": (
-					("le.thanh.binh@fpt.edu.vn", "Lead Sale"),
 					("nguyen.thu.ha@fpt.edu.vn", "Sale"),
 					("tran.anh.khoa@fpt.edu.vn", "CTV Sale"),
 				),
 			},
 			{
 				"name": "Đội Tư vấn Trảng Bom - Đồng Nai",
-				"lead_email": "pham.nhat.minh@fpt.edu.vn",
+				"lead_email": "bui.ngoc.mai@fpt.edu.vn",
 				"members": (
-					("pham.nhat.minh@fpt.edu.vn", "Lead Sale"),
 					("bui.ngoc.mai@fpt.edu.vn", "Sale"),
 					("vo.thanh.dat@fpt.edu.vn", "CTV Sale"),
 				),

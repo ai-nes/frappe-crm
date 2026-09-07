@@ -194,7 +194,8 @@ class TestDirectorStudents(FrappeTestCase):
 
 		unassigned = director_students._parse_query(assignment_status="unassigned")
 		unassigned_filters, _ = director_students._student_filters(unassigned, None)
-		self.assertEqual(unassigned_filters["owner_staff"], ["is", "not set"])
+		self.assertEqual(unassigned_filters["owner_staff"], ["is", "set"])
+		self.assertEqual(unassigned_filters["name"], "__student_without_owner__")
 
 		all_statuses = director_students._parse_query(assignmentStatus="all", lifecycleStatus="all")
 		self.assertIsNone(all_statuses["assignment_status"])
@@ -465,7 +466,7 @@ class TestDirectorStudents(FrappeTestCase):
 			)
 
 		get_list.assert_called_once_with(
-			"CRM Lead",
+			"CRM Student",
 			filters={"admission_year": "2026"},
 			or_filters=[],
 			fields=["count(name) as total"],
@@ -532,6 +533,42 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["outcome"], "connected")
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
+
+	def test_display_code_resolves_against_students_not_leads(self):
+		"""The display code is built from the Student name, so no Lead can match it."""
+		captured = {}
+
+		def fake_get_all(doctype, **kwargs):
+			captured["doctype"] = doctype
+			captured["filters"] = kwargs.get("filters")
+			return [frappe._dict(name="CRMC-2026-00063", admission_year="2026")]
+
+		with patch.object(director_students.frappe, "get_all", side_effect=fake_get_all):
+			names = director_students._display_code_student_ids("HS-2026-HCM-000063", "2026")
+
+		self.assertEqual(names, ["CRMC-2026-00063"])
+		self.assertEqual(captured["doctype"], "CRM Student")
+		self.assertEqual(captured["filters"]["admission_year"], "2026")
+		self.assertEqual(captured["filters"]["name"], ["like", "%63"])
+
+	def test_display_code_ignores_students_of_another_sequence(self):
+		with patch.object(
+			director_students.frappe,
+			"get_all",
+			return_value=[frappe._dict(name="CRMC-2026-00163", admission_year="2026")],
+		):
+			self.assertEqual(director_students._display_code_student_ids("HS-2026-HCM-000063", "2026"), [])
+
+	def test_student_call_records_degrade_when_call_log_read_is_denied(self):
+		"""Sale has no Call Log grant; the 360 detail must still render."""
+		row = frappe._dict(student_name="Nguyễn Minh An", phone="0901234412")
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students.frappe, "get_list", side_effect=frappe.PermissionError),
+		):
+			calls = director_students._student_call_records("CRMC-2026-00063", [], row, None)
+
+		self.assertEqual(calls, [])
 
 	def test_call_note_projection_extracts_transcript_and_summary(self):
 		result = director_students._call_note_projection(

@@ -15,6 +15,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.conversion_readiness import conversion_readiness
+from crm.fcrm.permissions import derive_owner_fields
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -46,6 +47,8 @@ LEAD_TO_STUDENT_FIELDS = (
 	("id_issued_place", "id_issued_place"),
 	("enrollment_status", "enrollment_status"),
 	("assigned_to", "assigned_to"),
+	("owner_staff", "owner_staff"),
+	("owning_team", "owning_team"),
 	("admission_year", "admission_year"),
 	("high_school", "high_school"),
 	("province", "province"),
@@ -141,10 +144,15 @@ def _lock(doctype: str, name: str):
 	frappe.db.sql(f"select name from `tab{doctype}` where name = %s for update", (name,))
 
 
-def _load_student(student_name: str, actor: str):
+def _load_student(student_name: str, actor: str, *, internal_service: bool = False):
 	if not _doctype_exists("CRM Lead") or not frappe.db.exists("CRM Lead", student_name):
 		_fail("NOT_FOUND", "The Student does not exist.")
 	student = frappe.get_doc("CRM Lead", student_name)
+	# Internal service callers (the assignment batch) authorize the operator once
+	# and then commit ownership to another Team.  Re-checking the operator's row
+	# scope here would strand every cross-Team Lead as ASSIGNED-never-converted.
+	if internal_service:
+		return student
 	if not has_student_permission(student, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside the actor's current scope.")
 	return student
@@ -266,7 +274,9 @@ def _lock_and_load_contact(contact_name: str):
 	return frappe.get_doc(CONTACT_DOCTYPE, contact_name)
 
 
-def _resolve_target_student(lead, requested_student: str | None, actor: str):
+def _resolve_target_student(
+	lead, requested_student: str | None, actor: str, *, internal_service: bool = False
+):
 	linked_student = lead.get("student")
 	if linked_student and requested_student and linked_student != requested_student:
 		_fail("RELATIONSHIP_CONFLICT", "Lead already points to a different Student.")
@@ -276,9 +286,97 @@ def _resolve_target_student(lead, requested_student: str | None, actor: str):
 	if not frappe.db.exists(CONTACT_DOCTYPE, student_name):
 		_fail("NOT_FOUND", "The selected Student does not exist.")
 	contact = _lock_and_load_contact(student_name)
-	if not has_student_permission(contact, user=actor, permission_type="read"):
+	if not internal_service and not has_student_permission(contact, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The selected Student is outside the actor's current scope.")
 	return contact
+
+
+def _lead_is_converted(lead) -> bool:
+	return bool(
+		lead.get("converted_student") or str(lead.get("conversion_status") or "").casefold() == "converted"
+	)
+
+
+def _assert_lead_ownership_ready(lead) -> None:
+	"""Require one active responsible Staff before Lead -> Student handoff."""
+	owner_staff = str(lead.get("owner_staff") or "").strip()
+	assigned_to = str(lead.get("assigned_to") or "").strip()
+	owning_team = str(lead.get("owning_team") or "").strip()
+	if not owning_team and assigned_to:
+		# change_student_ownership commits an owner target with a narrow db update
+		# and keeps owning_team empty (it projects pool ownership only). The Team
+		# of record is then the one CRM Student itself derives on save, so resolve
+		# the same way instead of rejecting every batch-assigned Lead.
+		owning_team = str(derive_owner_fields(assigned_to)[1] or "").strip()
+	if not owner_staff or not assigned_to or owner_staff != assigned_to or not owning_team:
+		_fail(
+			"OWNER_REQUIRED",
+			"Lead phải có owner_staff, assigned_to và owning_team hợp lệ trước khi tạo Student.",
+		)
+
+	staff = frappe.db.get_value(
+		"CRM Staff",
+		owner_staff,
+		["name", "is_active", "user"],
+		as_dict=True,
+	)
+	if not staff or not staff.get("is_active"):
+		_fail("OWNER_REQUIRED", "Người phụ trách Lead phải là CRM Staff đang hoạt động.")
+	if not staff.get("user") or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+		_fail("OWNER_REQUIRED", "Người phụ trách Lead phải có tài khoản User đang hoạt động.")
+	if not frappe.db.get_value("CRM Team", {"name": owning_team, "is_active": 1}, "name"):
+		_fail("OWNER_REQUIRED", "Team phụ trách Lead phải đang hoạt động.")
+
+
+def _assert_student_ownership_ready(contact) -> None:
+	"""Fail closed if a converted Student has no operational assignee."""
+	owner_staff = str(contact.get("owner_staff") or "").strip()
+	assigned_to = str(contact.get("assigned_to") or "").strip()
+	owning_team = str(contact.get("owning_team") or "").strip()
+	if not owner_staff or not assigned_to or owner_staff != assigned_to or not owning_team:
+		_fail("OWNER_REQUIRED", "Student bắt buộc phải có người phụ trách và Team sau khi chuyển đổi.")
+	if not frappe.db.get_value("CRM Team", {"name": owning_team, "is_active": 1}, "name"):
+		_fail("OWNER_REQUIRED", "Team phụ trách Student phải đang hoạt động.")
+
+
+def _assert_lead_handoff_ready(lead) -> None:
+	"""Prevent direct Lead -> Student creation before assignment.
+
+	The public business flow is NEW -> PROCESSING -> PROCESSED -> ASSIGNED,
+	then Sale handoff. Legacy converted Leads are allowed through for an
+	idempotent status repair, but a fresh Lead cannot create a Student directly.
+	"""
+	if _lead_is_converted(lead):
+		return
+	processing_status = str(lead.get("processing_status") or "NEW").upper()
+	resolution = str(lead.get("resolution") or "PENDING").upper()
+	if "processing_status" not in _fields(LEAD_DOCTYPE):
+		_assert_lead_ownership_ready(lead)
+		return
+	if processing_status != "ASSIGNED" or resolution not in {"MATCHED", "CREATED"}:
+		_fail(
+			"LEAD_NOT_ASSIGNED",
+			"Lead phải ở trạng thái ASSIGNED với resolution MATCHED hoặc CREATED trước khi tạo Student.",
+		)
+	_assert_lead_ownership_ready(lead)
+
+
+def _sync_lead_processing_after_conversion(lead, contact, resolution: str) -> None:
+	"""Close the Lead only after Student conversion has succeeded."""
+	fields = _fields(LEAD_DOCTYPE)
+	updates = {}
+	if "processing_status" in fields:
+		updates["processing_status"] = "CLOSED"
+	if "resolution" in fields:
+		updates["resolution"] = resolution
+	if "resolution_reason" in fields:
+		updates["resolution_reason"] = f"{resolution} handoff completed."
+	if resolution == "MATCHED" and "matched_student" in fields:
+		target_student = contact.name if contact else lead.get("converted_student")
+		if target_student:
+			updates["matched_student"] = target_student
+	if updates:
+		frappe.db.set_value(LEAD_DOCTYPE, lead.name, updates, update_modified=False)
 
 
 def _student_snapshot_values(lead, identity):
@@ -321,8 +419,8 @@ def _copy_snapshot_to_existing_student(lead, contact, identity):
 		setattr(frappe.flags, SERVICE_FLAG, previous)
 
 
-def _insert_or_reuse_contact(lead, identity, requested_student, actor):
-	contact = _resolve_target_student(lead, requested_student, actor)
+def _insert_or_reuse_contact(lead, identity, requested_student, actor, *, internal_service: bool = False):
+	contact = _resolve_target_student(lead, requested_student, actor, internal_service=internal_service)
 	if contact:
 		return _copy_snapshot_to_existing_student(lead, contact, identity)
 	previous = getattr(frappe.flags, SERVICE_FLAG, False)
@@ -333,7 +431,7 @@ def _insert_or_reuse_contact(lead, identity, requested_student, actor):
 		setattr(frappe.flags, SERVICE_FLAG, previous)
 
 
-def _link_lead_to_student(lead, contact):
+def _link_lead_to_student(lead, contact, resolution: str):
 	if "student" not in _fields(LEAD_DOCTYPE):
 		_fail("CONFIGURATION_ERROR", "CRM Lead.student is not installed.")
 	linked_student = frappe.db.get_value(LEAD_DOCTYPE, lead.name, "student")
@@ -350,6 +448,7 @@ def _link_lead_to_student(lead, contact):
 	for fieldname, value in updates.items():
 		if fieldname in fields:
 			frappe.db.set_value(LEAD_DOCTYPE, lead.name, fieldname, value, update_modified=False)
+	_sync_lead_processing_after_conversion(lead, contact, resolution)
 
 
 def _lifecycle_event(student_name: str):
@@ -414,6 +513,7 @@ def convert_student(
 	idempotency_key: str,
 	correlation_id: str | None = None,
 	target_student: str | None = None,
+	_internal_service: bool = False,
 ):
 	"""Convert one Lead into one independent Student snapshot.
 
@@ -422,9 +522,14 @@ def convert_student(
 	otherwise the Lead's direct ``student`` link is used, or a new Student is
 	created. No weak-identifier matching is performed.
 
-	No lifecycle transition is performed. Errors roll back the receipt, Student,
-	direct link, and junction together; callers should not catch-and-return
-	partial state.
+	``_internal_service`` is private to trusted in-process callers (the Lead
+	assignment batch) that already authorized the operator and then moved the
+	Lead out of that operator's row scope. It never crosses the HTTP boundary:
+	the whitelisted adapters pass explicit keyword arguments only.
+
+	A successful conversion closes the Lead and preserves its MATCHED/CREATED
+	resolution. Errors roll back the receipt, Student, direct link, and junction
+	together; callers should not catch-and-return partial state.
 	"""
 	if not enabled("conversion_write"):
 		_fail("DISABLED", "Student conversion writes are disabled by rollout policy.")
@@ -445,7 +550,18 @@ def convert_student(
 	command_key = conversion_command_key(scope["actor"], idempotency_key)
 	# Authorize the current Student before looking up an actor-scoped receipt.
 	# Otherwise a user who lost row access could still replay an old result.
-	_load_student(student_name, scope["actor"])
+	_load_student(student_name, scope["actor"], internal_service=_internal_service)
+	lead_doc = frappe.get_doc(LEAD_DOCTYPE, student_name)
+	_assert_lead_handoff_ready(lead_doc)
+	if _lead_is_converted(lead_doc):
+		resolution = str(lead_doc.get("resolution") or "").upper()
+		if resolution not in {"MATCHED", "CREATED"}:
+			resolution = "CREATED"
+		converted_student = lead_doc.get("converted_student") or lead_doc.get("student")
+		if not converted_student or not frappe.db.exists("CRM Student", converted_student):
+			_fail("OWNER_REQUIRED", "Lead đã chuyển đổi nhưng chưa liên kết CRM Student hợp lệ.")
+		_assert_student_ownership_ready(frappe.get_doc("CRM Student", converted_student))
+		_sync_lead_processing_after_conversion(lead_doc, None, resolution)
 	if replay := _replay(command_key, fingerprint):
 		return replay
 
@@ -453,9 +569,10 @@ def convert_student(
 		# Fixed lock order: Lead -> Identity -> existing Student. A Lead lock
 		# serializes conversion attempts for one intake touchpoint; the direct
 		# link, rather than phone/email matching, selects the target Student.
-		student_doc = _load_student(student_name, scope["actor"])
+		student_doc = _load_student(student_name, scope["actor"], internal_service=_internal_service)
 		_lock(LEAD_DOCTYPE, student_name)
-		student_doc = _load_student(student_name, scope["actor"])
+		student_doc = _load_student(student_name, scope["actor"], internal_service=_internal_service)
+		_assert_lead_handoff_ready(student_doc)
 		# A concurrent retry waits on the aggregate lock.  The winner's committed
 		# receipt must be replayed unchanged, never rewritten as ``attached``.
 		if replay := _replay(command_key, fingerprint):
@@ -484,7 +601,11 @@ def convert_student(
 			if target_student_name and target_student_name != existing_conversion.get("contact"):
 				_fail("RELATIONSHIP_CONFLICT", "Lead is already converted to a different Student.")
 			contact = _lock_and_load_contact(existing_conversion.get("contact"))
-			_link_lead_to_student(student_doc, contact)
+			_assert_student_ownership_ready(contact)
+			resolution = str(student_doc.get("resolution") or "").upper()
+			if resolution not in {"MATCHED", "CREATED"}:
+				resolution = "CREATED"
+			_link_lead_to_student(student_doc, contact, resolution)
 			receipt = _insert_receipt(
 				command_key=command_key,
 				fingerprint=fingerprint,
@@ -527,8 +648,11 @@ def convert_student(
 			identity,
 			target_student_name,
 			scope["actor"],
+			internal_service=_internal_service,
 		)
-		_link_lead_to_student(student_doc, contact)
+		_assert_student_ownership_ready(contact)
+		resolution = "MATCHED" if target_student_name or student_doc.get("student") else "CREATED"
+		_link_lead_to_student(student_doc, contact, resolution)
 		conversion_values = _conversion_values(
 			student_doc,
 			identity,

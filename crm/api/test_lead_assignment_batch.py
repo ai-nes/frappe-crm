@@ -149,6 +149,61 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["scanned"], 2)
 		self.assertEqual(result["trigger"], "unassigned_leads")
 
+	def test_handoff_assigned_lead_uses_revision_and_batch_idempotency(self):
+		lead = frappe._dict(name="LEAD-1", lifecycle_revision=7)
+		conversion = {"status": "CLOSED", "student": "STUDENT-1"}
+		with (
+			patch.object(lead_assignment_batch.frappe, "get_doc", return_value=lead),
+			patch.object(lead_assignment_batch, "handoff_lead", return_value=conversion) as handoff,
+		):
+			result = lead_assignment_batch._handoff_assigned_lead("LEAD-1", "BATCH-1", "ITEM-1", "EXEC-1")
+
+		self.assertEqual(result, conversion)
+		# The batch authorized its operator already; the conversion runs as an
+		# internal service because the committed owner may sit outside that scope.
+		handoff.assert_called_once_with(
+			lead="LEAD-1",
+			expected_lifecycle_revision=7,
+			idempotency_key="lead-assignment-conversion:BATCH-1:ITEM-1:7",
+			correlation_id="EXEC-1:ITEM-1:conversion",
+			_internal_service=True,
+		)
+
+	def test_converted_student_id_reads_handoff_envelope_and_command_result(self):
+		self.assertEqual(
+			lead_assignment_batch._converted_student_id(
+				{"status": "CLOSED", "student": "STUDENT-1", "conversion": {"target_student": "STUDENT-1"}}
+			),
+			"STUDENT-1",
+		)
+		self.assertEqual(
+			lead_assignment_batch._converted_student_id({"conversion": {"student_id": "STUDENT-2"}}),
+			"STUDENT-2",
+		)
+		self.assertEqual(lead_assignment_batch._converted_student_id({}), "—")
+
+	def test_batch_recipient_forwards_in_run_load_overrides(self):
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
+		overrides = {"STAFF-1": 1}
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(
+				lead_assignment_batch,
+				"select_province_recipient",
+				return_value={"ownerStaff": "STAFF-2"},
+			) as select,
+		):
+			lead_assignment_batch._resolve_batch_recipient(batch, lead, {}, load_overrides=overrides)
+
+		select.assert_called_once_with(
+			"Ho Chi Minh City",
+			campus="CAMPUS-1",
+			team_id=None,
+			load_overrides=overrides,
+		)
+
 	def test_batch_import_requires_school_and_major_headers(self):
 		with self.assertRaises(LeadMappingError) as context:
 			lead_assignment_batch._parse_batch_import_rows(

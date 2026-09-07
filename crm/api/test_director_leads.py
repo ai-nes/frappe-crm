@@ -294,10 +294,35 @@ class TestDirectorLeads(FrappeTestCase):
 		doc.has_permission = lambda permission_type: False
 		with (
 			patch.object(director_leads, "_require_access"),
+			patch.object(director_leads, "can_read_full_lead_board", return_value=False),
 			patch.object(director_leads.frappe, "get_doc", return_value=doc),
 			self.assertRaises(frappe.DoesNotExistError),
 		):
 			director_leads.get_director_lead("LEAD-1")
+
+	def test_lead_reader_is_unscoped_only_for_the_full_board_profile(self):
+		with patch.object(director_leads, "can_read_full_lead_board", return_value=True):
+			self.assertIs(director_leads._lead_reader(), frappe.get_all)
+		with patch.object(director_leads, "can_read_full_lead_board", return_value=False):
+			self.assertIs(director_leads._lead_reader(), frappe.get_list)
+
+	def test_detail_endpoint_serves_routed_lead_to_the_full_board_profile(self):
+		"""A Lead routed to another Team leaves the row scope but stays on the board."""
+		doc = frappe._dict(name="LEAD-1", student_name="Nguyễn Minh An")
+		doc.has_permission = lambda permission_type: False
+		with (
+			patch.object(director_leads, "_require_access"),
+			patch.object(director_leads, "can_read_full_lead_board", return_value=True),
+			patch.object(director_leads.frappe, "get_doc", return_value=doc),
+			patch.object(director_leads.frappe.utils, "now_datetime", return_value="2026-09-08 10:00:00"),
+			patch.object(director_leads, "_load_lookups", return_value={"statuses": {}}),
+			patch.object(director_leads, "_event_projection", return_value=([], [])),
+			patch.object(director_leads, "_lead_log", return_value=[]),
+			patch.object(director_leads, "_map_detail_row", return_value={"id": "LEAD-1"}),
+		):
+			response = director_leads.get_director_lead("LEAD-1")
+
+		self.assertEqual(response["lead"], {"id": "LEAD-1"})
 
 	def test_event_projection_skips_unreadable_marketing_engagement(self):
 		with (

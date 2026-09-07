@@ -17,7 +17,7 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
-from crm.fcrm.lead_processing import assign_lead, preview_lead, process_lead
+from crm.fcrm.lead_processing import assign_lead, handoff_lead, preview_lead, process_lead
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -26,6 +26,7 @@ from crm.fcrm.student_assignment import (
 )
 from crm.fcrm.student_ownership import change_student_ownership
 from crm.fcrm.team_routing import (
+	active_lead_count,
 	province_for_zone,
 	require_team_routing_ready,
 	select_province_recipient,
@@ -35,6 +36,20 @@ BATCH_DOCTYPE = "CRM Lead Assignment Batch"
 MAX_BATCH_SIZE = 1000
 RUNNABLE_STATUSES = {"draft", "ready", "completed_with_errors"}
 TERMINAL_ITEM_STATUSES = {"assigned", "skipped"}
+ROUTING_REVIEW_CODES = frozenset(
+	{
+		"MISSING_PROVINCE",
+		"MISSING_CAMPUS",
+		"TEAM_NOT_FOUND_FOR_PROVINCE",
+		"NO_ELIGIBLE_RECIPIENT",
+		"TEAM_NOT_READY",
+		"PROVINCE_MISMATCH",
+		"TEAM_PROVINCE_MISMATCH",
+		"TEAM_SCOPE_MISMATCH",
+		"MISSING_INPUT_QUEUE",
+		"MULTIPLE_INPUT_QUEUES",
+	}
+)
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
 	{"student_name", "phone", "province", "high_school", "major", "id_number", "source"}
 )
@@ -101,6 +116,27 @@ def _lead(name: str):
 	return doc
 
 
+def _batch_item_lead(item):
+	"""Load one batch item's Lead, tolerating ownership this batch itself committed.
+
+	The operator's row scope is enforced when the Lead enters the batch. Once the
+	run commits ownership to a Sale on another Team the Lead leaves that scope, so
+	re-reading it with the operator scope would fail the conversion step and every
+	later retry of a Lead the batch already assigned.
+	"""
+	name = item.lead
+	if not frappe.db.exists("CRM Lead", name):
+		frappe.throw(_("Không tìm thấy Lead: {0}.").format(name), frappe.ValidationError)
+	doc = frappe.get_doc("CRM Lead", name)
+	assigned_by_batch = bool(item.owner_staff) and item.owner_staff in {
+		doc.get("owner_staff"),
+		doc.get("assigned_to"),
+	}
+	if not assigned_by_batch:
+		_lead_permission(doc)
+	return doc
+
+
 def _pool(pool_name: str | None, branch: str | None, actor_context: dict[str, Any] | None = None):
 	if not pool_name:
 		return None
@@ -138,6 +174,8 @@ def _reset_item(item, *, status: str = "pending", reason: str | None = None):
 		"completed_at",
 	):
 		item.set(fieldname, None)
+	for fieldname in ("active_load", "capacity_limit", "remaining_capacity"):
+		item.set(fieldname, 0)
 	item.status = status
 	item.reason = reason
 
@@ -332,13 +370,30 @@ def _preview_item(
 	*,
 	load_overrides: dict[str, int] | None = None,
 ) -> None:
-	lead = _lead(item.lead)
+	lead = _batch_item_lead(item)
 	_validate_batch_scope(batch, lead, actor_context)
 	if lead.get("converted_student") or lead.get("conversion_status") == "Converted":
 		_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
 		return
 	if lead.get("owner_staff") or lead.get("assigned_to"):
+		processing_status = str(lead.get("processing_status") or "NEW").upper()
+		resolution = str(lead.get("resolution") or "PENDING").upper()
+		if (
+			processing_status == "ASSIGNED"
+			and resolution in {"MATCHED", "CREATED"}
+			and not lead.get("converted_student")
+			and str(lead.get("conversion_status") or "").casefold() != "converted"
+		):
+			# A previous run may have committed ownership before conversion failed.
+			# Keep the Lead eligible for the conversion retry instead of hiding it as
+			# an already-completed assignment.
+			item.status = "pending"
+			item.reason = item.reason or "Đã phân công, chờ chuyển CRM Student."
+			item.team = lead.get("owning_team")
+			item.owner_staff = lead.get("owner_staff") or lead.get("assigned_to")
+			item.ownership_revision = int(lead.get("ownership_revision") or 0)
+			return
 		_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
 		return
@@ -377,9 +432,9 @@ def _preview_item(
 	item.zone = None
 	item.team = recipient["team"]
 	item.owner_staff = recipient["ownerStaff"]
-	item.active_load = recipient["capacity"]["active"]
-	item.capacity_limit = recipient["capacity"]["limit"]
-	item.remaining_capacity = recipient["capacity"]["remaining"]
+	item.active_load = int(recipient["capacity"].get("active") or 0)
+	item.capacity_limit = int(recipient["capacity"].get("limit") or 0)
+	item.remaining_capacity = int(recipient["capacity"].get("remaining") or 0)
 	item.policy_version = recipient["policyVersion"]
 	item.ownership_revision = int(lead.get("ownership_revision") or 0)
 	item.error_code = None
@@ -439,6 +494,83 @@ def _count_items(batch) -> None:
 	batch.failed_count = counts["failed"]
 
 
+def _persist_item(item) -> None:
+	"""Persist the audit row independently after ownership commits.
+
+	``assign_lead`` commits the Lead ownership transaction by design. Saving the
+	parent batch's in-memory child row afterwards was not reliable across that
+	transaction boundary, leaving successful items as ``pending`` in history.
+	"""
+	fields = (
+		"status",
+		"reason",
+		"error_code",
+		"routing_tier",
+		"queue",
+		"zone",
+		"team",
+		"owner_staff",
+		"active_load",
+		"capacity_limit",
+		"remaining_capacity",
+		"policy_version",
+		"ownership_revision",
+		"routing_request",
+		"execution_id",
+		"completed_at",
+	)
+	frappe.db.set_value(
+		"CRM Lead Assignment Batch Item",
+		item.name,
+		{
+			fieldname: (
+				int(item.get(fieldname) or 0)
+				if fieldname in {"active_load", "capacity_limit", "remaining_capacity", "ownership_revision"}
+				else item.get(fieldname)
+			)
+			for fieldname in fields
+		},
+		update_modified=True,
+	)
+
+
+def _handoff_assigned_lead(lead_name: str, batch_name: str, item_name: str, execution_id: str):
+	"""Convert an assigned Lead and return the canonical Student result.
+
+	Ownership is committed by ``assign_lead`` before this function runs. The
+	conversion command then enforces the same owner on the new or matched
+	Student and closes the Lead only after that write succeeds. The batch already
+	authorized its operator, so the conversion runs as an internal service: the
+	committed owner is a Sale who may sit outside the operator's own row scope.
+	"""
+	lead = frappe.get_doc("CRM Lead", lead_name)
+	revision = int(lead.get("lifecycle_revision") or 0)
+	return handoff_lead(
+		lead=lead.name,
+		expected_lifecycle_revision=revision,
+		idempotency_key=f"lead-assignment-conversion:{batch_name}:{item_name}:{revision}",
+		correlation_id=f"{execution_id}:{item_name}:conversion",
+		_internal_service=True,
+	)
+
+
+def _converted_student_id(conversion: dict[str, Any]) -> str:
+	"""Read the Student the handoff created from the command result.
+
+	``handoff_lead`` reports the Student on the envelope and keeps the raw
+	conversion command result nested, so the audit line has to look in both.
+	"""
+	nested = conversion.get("conversion") or {}
+	return (
+		conversion.get("student")
+		or nested.get("target_student")
+		or nested.get("student_id")
+		or conversion.get("target_student")
+		or conversion.get("student_id")
+		or "—"
+	)
+
+
 def _serialize_item(item) -> dict[str, Any]:
 	lead = (
 		frappe.db.get_value(
@@ -491,6 +623,7 @@ def _serialize_item(item) -> dict[str, Any]:
 		"processingStatus": frappe.db.get_value("CRM Lead", item.lead, "processing_status"),
 		"resolution": frappe.db.get_value("CRM Lead", item.lead, "resolution"),
 		"matchedStudent": frappe.db.get_value("CRM Lead", item.lead, "matched_student"),
+		"convertedStudent": frappe.db.get_value("CRM Lead", item.lead, "converted_student"),
 	}
 
 
@@ -823,12 +956,7 @@ def _capacity_snapshot(staff: str | None) -> dict[str, int | None]:
 		as_dict=True,
 	)
 	limit = int((period or {}).get("max_active_students") or 0)
-	active = int(
-		frappe.db.count(
-			"CRM Lead",
-			{"owner_staff": staff, "lifecycle_stage": ["not in", ["Lost", "Converted"]]},
-		)
-	)
+	active = active_lead_count(staff)
 	return {"active": active, "limit": limit or None, "remaining": max(0, limit - active) if limit else None}
 
 
@@ -847,16 +975,39 @@ def run_lead_assignment_batch(batch_name: str):
 	batch.completed_at = None
 	_save_batch(batch)
 
+	# Capacity is measured from open Leads, and this run closes every Lead it
+	# converts. Without an in-run tally each item would therefore see the same
+	# zero load and the whole batch would land on one Sale, contradicting the
+	# rotation the preview already showed the operator.
+	load_overrides: dict[str, int] = {}
 	for index, item in enumerate(batch.items):
 		if item.status in TERMINAL_ITEM_STATUSES:
-			continue
-		if item.status == "manual_review":
 			continue
 		savepoint = f"lead_assignment_{index}"
 		frappe.db.savepoint(savepoint)
 		try:
-			lead = _lead(item.lead)
-			if str(lead.get("processing_status") or "NEW").upper() == "NEW":
+			lead = _batch_item_lead(item)
+			processing_status = str(lead.get("processing_status") or "NEW").upper()
+			if processing_status == "ASSIGNED":
+				# Ownership may have been committed by an earlier attempt while the
+				# conversion failed. Retry only the missing conversion step.
+				if (
+					lead.get("converted_student")
+					or str(lead.get("conversion_status") or "").casefold() == "converted"
+				):
+					_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
+					item.execution_id = batch.execution_id
+					item.completed_at = now_datetime()
+					_persist_item(item)
+					continue
+				conversion = _handoff_assigned_lead(lead.name, batch.name, item.name, batch.execution_id)
+				item.status = "assigned"
+				item.reason = f"{item.reason or 'Đã phân công'} → Student {_converted_student_id(conversion)}"
+				item.execution_id = batch.execution_id
+				item.completed_at = now_datetime()
+				_persist_item(item)
+				continue
+			if processing_status == "NEW":
 				processing = process_lead(lead.name)
 				if processing.get("status") == "CLOSED":
 					_reset_item(
@@ -869,11 +1020,34 @@ def run_lead_assignment_batch(batch_name: str):
 					item.completed_at = now_datetime()
 					_save_batch(batch)
 					continue
-				lead = _lead(item.lead)
+				lead = _batch_item_lead(item)
+				processing_status = str(lead.get("processing_status") or "NEW").upper()
+			elif processing_status == "CLOSED":
+				_reset_item(
+					item,
+					status="manual_review",
+					reason=lead.get("resolution") or "CLOSED",
+				)
+				item.error_code = lead.get("resolution") or "CLOSED"
+				item.execution_id = batch.execution_id
+				item.completed_at = now_datetime()
+				_save_batch(batch)
+				continue
+			elif processing_status != "PROCESSED":
+				# PROCESSING records are not safe assignment inputs. Do not force
+				# them forward or overwrite their lifecycle state.
+				_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
+				item.error_code = "INVALID_PROCESSING_STATUS"
+				item.execution_id = batch.execution_id
+				item.completed_at = now_datetime()
+				_save_batch(batch)
+				continue
 			if lead.get("owner_staff") or lead.get("assigned_to"):
 				_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 			else:
-				recipient = _resolve_batch_recipient(batch, lead, actor_context)
+				recipient = _resolve_batch_recipient(
+					batch, lead, actor_context, load_overrides=load_overrides
+				)
 				assignment = assign_lead(
 					lead.name,
 					recipient["ownerStaff"],
@@ -883,6 +1057,7 @@ def run_lead_assignment_batch(batch_name: str):
 					expected_revision=int(lead.get("ownership_revision") or 0),
 					correlation_id=f"{batch.execution_id}:{item.name}",
 				)
+				load_overrides[recipient["ownerStaff"]] = load_overrides.get(recipient["ownerStaff"], 0) + 1
 				result = {
 					"status": "applied",
 					"owner_staff": recipient["ownerStaff"],
@@ -894,9 +1069,15 @@ def run_lead_assignment_batch(batch_name: str):
 				}
 				_apply_result(item, result, batch.execution_id)
 				item.ownership_revision = int(result.get("revision") or lead.get("ownership_revision") or 0)
-				item.active_load = recipient["capacity"]["active"]
-				item.capacity_limit = recipient["capacity"]["limit"]
-				item.remaining_capacity = recipient["capacity"]["remaining"]
+				item.active_load = int(recipient["capacity"].get("active") or 0)
+				item.capacity_limit = int(recipient["capacity"].get("limit") or 0)
+				item.remaining_capacity = int(recipient["capacity"].get("remaining") or 0)
+				_persist_item(item)
+				conversion = _handoff_assigned_lead(lead.name, batch.name, item.name, batch.execution_id)
+				item.status = "assigned"
+				item.reason = f"{item.reason or 'Đã phân công'} → Student {_converted_student_id(conversion)}"
+				item.completed_at = now_datetime()
+				_persist_item(item)
 		except Exception as exc:
 			try:
 				frappe.db.rollback(save_point=savepoint)
@@ -906,16 +1087,21 @@ def run_lead_assignment_batch(batch_name: str):
 				pass
 			batch.reload()
 			item = next(row for row in batch.items if row.name == item.name)
-			item.status = "failed"
+			code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
+			if not code and str(exc).strip() in ROUTING_REVIEW_CODES:
+				code = str(exc).strip()
+			code = code or "ROUTING_FAILED"
+			item.status = "manual_review" if code in ROUTING_REVIEW_CODES else "failed"
 			item.reason = str(exc)
-			item.error_code = (
-				getattr(exc, "code", None) or getattr(exc, "error_code", None) or "ROUTING_FAILED"
-			)
+			item.error_code = code
 			item.execution_id = batch.execution_id
 			item.completed_at = now_datetime()
 		batch.status = "running"
 		_save_batch(batch)
 
+	# Reload the child table after per-item ownership commits so the final
+	# summary/history is calculated from the persisted audit rows.
+	batch.reload()
 	batch.completed_at = now_datetime()
 	_count_items(batch)
 	batch.status = (

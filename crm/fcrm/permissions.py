@@ -189,7 +189,16 @@ def get_permission_query_conditions(doctype, user=None):
 		return _team_leader_condition(table, crm_staff_name)
 
 	if scope in {"team_and_team_pool", "team_members_and_own_team_pool"}:
-		return _team_leader_condition(table, crm_staff_name)
+		team_condition = _team_leader_condition(table, crm_staff_name)
+		# Lead Sale must be able to see every Lead that has not been assigned
+		# yet. Intake is owned by another system, so an unassigned Lead may not
+		# have owning_team populated and cannot be discovered through the old
+		# team-pool condition alone. Keep the existing team scope as well so
+		# already-routed records remain visible to their team leader.
+		if doctype == "CRM Lead":
+			unassigned_condition = f"({table}.owner_staff is null and {table}.assigned_to is null)"
+			return f"({unassigned_condition} or {team_condition})"
+		return team_condition
 
 	if scope in {"campus_assigned", "campus_assigned_contact"}:
 		return _campus_condition(table, crm_staff_name)
@@ -198,6 +207,23 @@ def get_permission_query_conditions(doctype, user=None):
 		return f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 
 	return "1=0"
+
+
+def can_read_full_lead_board(user=None) -> bool:
+	"""Whether this profile reads the whole Lead intake board, not one team slice.
+
+	Lead Sale routes Leads into every province's Team, so the board it works
+	from must keep showing a Lead after a batch commits ownership to a Sale on
+	another Team -- the canonical team scope would otherwise hide exactly the
+	rows the operator just routed, the converted ones included.
+
+	This widens the read-only Lead projections in ``crm.api.director_leads``
+	only. ``get_permission_query_conditions``/``has_permission`` stay the single
+	authority for Lead CRUD, desk and REST resource access, and every command,
+	so no assignment, conversion or ownership rule changes with it.
+	"""
+	user = user or frappe.session.user
+	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
 
 
 def get_student_list_read_condition(user=None):

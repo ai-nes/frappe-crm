@@ -87,6 +87,16 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_task.seed"
 
+  seed-assignment-scenarios:
+    desc: Local only — xóa Lead/Student và seed lại 20 Lead để test phân công
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_scenarios.execute"
+
+  seed-assignment-conversion:
+    desc: Local only — seed 10 Lead hợp lệ để bấm phân công và tạo Student có owner
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_conversion_scenarios.execute"
+
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
     cmds:

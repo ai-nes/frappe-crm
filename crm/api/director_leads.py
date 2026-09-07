@@ -14,6 +14,7 @@ from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
+from crm.fcrm.permissions import can_read_full_lead_board
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_PAGE_SIZE = 100
@@ -133,7 +134,7 @@ def get_director_lead(lead_id: str) -> dict[str, Any]:
 	except frappe.DoesNotExistError:
 		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
 
-	if not doc.has_permission("read"):
+	if not doc.has_permission("read") and not can_read_full_lead_board():
 		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
 
 	row = frappe._dict({field: doc.get(field) for field in LEAD_FIELDS})
@@ -250,8 +251,20 @@ def _year_filter(admission_year: str | None) -> dict[str, Any]:
 	return {"admission_year": admission_year} if admission_year else {}
 
 
+def _lead_reader():
+	"""Return the row reader matching the caller's Lead board scope.
+
+	``frappe.get_list`` applies the canonical row scope, which hides a Lead as
+	soon as it is routed to another Team. The Lead Sale board is deliberately
+	whole-board (see ``can_read_full_lead_board``) so it reads through
+	``frappe.get_all``; both endpoints have already asserted the DocType read
+	grant in ``_require_access``.
+	"""
+	return frappe.get_all if can_read_full_lead_board() else frappe.get_list
+
+
 def _count_leads(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
-	rows = frappe.get_list(
+	rows = _lead_reader()(
 		"CRM Lead",
 		filters=filters,
 		or_filters=or_filters or [],
@@ -280,7 +293,7 @@ def _campaign_stats(filters: dict[str, Any], or_filters: list[list[str]]) -> dic
 
 
 def _fetch_lead_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
-	return frappe.get_list(
+	return _lead_reader()(
 		"CRM Lead",
 		filters=filters,
 		or_filters=or_filters,

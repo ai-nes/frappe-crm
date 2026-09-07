@@ -19,10 +19,11 @@ from crm.fcrm.doctype.crm_student.crm_student import (
 	get_permission_query_conditions as contact_conditions,
 )
 from crm.fcrm.permissions import (
-	get_permission_query_conditions as shared_conditions,
+	can_read_full_lead_board,
+	get_student_list_read_condition,
 )
 from crm.fcrm.permissions import (
-	get_student_list_read_condition,
+	get_permission_query_conditions as shared_conditions,
 )
 from crm.fcrm.permissions import (
 	has_permission as shared_has_permission,
@@ -104,6 +105,22 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertEqual(
 			shared_conditions("CRM Lead", user=user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
+		)
+
+	def test_lead_board_read_is_whole_board_for_lead_sale_only(self):
+		"""The Lead Sale board keeps a routed Lead visible; row scope is untouched."""
+		lead_user, lead_staff = self._make_user_and_staff(
+			"_Test Scope Lead Board", roles=["Lead Sale"], team=self._team, function="Lead Sale"
+		)
+		sale_user, sale_staff = self._make_user_and_staff("_Test Scope Board Sale", roles=["Sale"])
+
+		self.assertTrue(can_read_full_lead_board(user=lead_user))
+		self.assertFalse(can_read_full_lead_board(user=sale_user))
+		self.assertFalse(can_read_full_lead_board(user="Administrator"))
+		self.assertIn(lead_staff, shared_conditions("CRM Lead", user=lead_user))
+		self.assertEqual(
+			shared_conditions("CRM Lead", user=sale_user),
+			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(sale_staff)}",
 		)
 
 	# --------------------------------------------------------------------- no staff

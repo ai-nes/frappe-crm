@@ -198,17 +198,36 @@ def _staff_capacity(staff: str, at=None) -> dict[str, int | None]:
 		as_dict=True,
 	)
 	limit = int((period or {}).get("max_active_students") or 0)
-	active = int(
-		frappe.db.count(
-			"CRM Lead",
-			{"owner_staff": staff, "lifecycle_stage": ["not in", ["Lost", "Converted"]]},
-		)
-	)
+	active = active_lead_count(staff)
 	return {
 		"active": active,
 		"limit": limit or None,
 		"remaining": max(0, limit - active) if limit else None,
 	}
+
+
+def active_lead_count(staff: str) -> int:
+	"""Count current ownership using the Lead assignment workflow state.
+
+	``lifecycle_stage`` is a separate admissions funnel and may be empty while a
+	Lead is already assigned. Assignment capacity must therefore use the
+	server-managed processing/conversion fields and treat missing processing
+	status as an active legacy Lead, not as an SQL ``NULL NOT IN`` miss.
+	"""
+	if not staff:
+		return 0
+	row = frappe.db.sql(
+		"""
+		select count(distinct name)
+		from `tabCRM Lead`
+		where (owner_staff = %s or assigned_to = %s)
+			and coalesce(processing_status, 'NEW') <> 'CLOSED'
+			and coalesce(conversion_status, '') <> 'Converted'
+			and coalesce(converted_student, '') = ''
+		""",
+		(staff, staff),
+	)[0]
+	return int(row[0] or 0)
 
 
 def _active_team_recipients(team_id: str, at=None) -> list[dict[str, Any]]:
