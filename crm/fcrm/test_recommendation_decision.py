@@ -12,6 +12,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
+from crm.api.task import get_task, list_sales_tasks
 from crm.fcrm.student_decision import (
 	StudentDecisionError,
 	create_manual_action,
@@ -37,9 +38,17 @@ class TestRecommendationDecision(FrappeTestCase):
 		frappe.set_user("Administrator")
 		frappe.db.delete("CRM Student Decision Event", {"student": self._student.name})
 		for name in frappe.db.get_all(
-			"CRM Action Execution Attempt", filters={"action": ["in", frappe.db.get_all(
-				"CRM Action Item", filters={"student": self._student.name}, pluck="name"
-			) or [""]]}, pluck="name"
+			"CRM Action Execution Attempt",
+			filters={
+				"action": [
+					"in",
+					frappe.db.get_all(
+						"CRM Action Item", filters={"student": self._student.name}, pluck="name"
+					)
+					or [""],
+				]
+			},
+			pluck="name",
 		):
 			frappe.delete_doc("CRM Action Execution Attempt", name, force=True)
 		for name in frappe.db.get_all(
@@ -59,7 +68,7 @@ class TestRecommendationDecision(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM NBA Evaluation", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
@@ -67,16 +76,14 @@ class TestRecommendationDecision(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
 			student.insert(ignore_permissions=True)
 		finally:
 			frappe.flags.student_intake_service = previous
-		frappe.db.set_value(
-			"CRM Student", student.name, "owner_staff", self._sale_staff, update_modified=False
-		)
+		frappe.db.set_value("CRM Lead", student.name, "owner_staff", self._sale_staff, update_modified=False)
 		return student
 
 	def _make_evaluation(self):
@@ -97,7 +104,7 @@ class TestRecommendationDecision(FrappeTestCase):
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": "REC-" + frappe.generate_hash(length=18),
-				"target_type": "CRM Student",
+				"target_type": "CRM Lead",
 				"target_id": self._student.name,
 				"action": action,
 				"purpose": "Call the family about the offer.",
@@ -145,6 +152,16 @@ class TestRecommendationDecision(FrappeTestCase):
 		self.assertEqual(len(tasks), 1)
 		task = frappe.get_doc("CRM Action Item", tasks[0])
 		self.assertEqual(task.state, "accepted")
+		self.assertEqual(task.objective, "Gọi điện")
+		self.assertEqual(task.description, rec.reason)
+		task_dto = get_task(result["action"])
+		self.assertEqual(task_dto["title"], "Gọi điện")
+		self.assertEqual(task_dto["description"], rec.reason)
+		task_row = next(
+			row for row in list_sales_tasks(page_length=100)["tasks"] if row["name"] == result["action"]
+		)
+		self.assertEqual(task_row["title"], "Gọi điện")
+		self.assertEqual(task_row["description"], rec.reason)
 		self.assertEqual(task.source_decision_event, result["event"])
 		self.assertEqual(
 			task.action_definition_digest, frappe.db.get_value("CRM Action", "CALL", "definition_digest")
@@ -270,6 +287,7 @@ class TestRecommendationDecision(FrappeTestCase):
 					"doctype": "CRM Action Item",
 					"recommendation": rec.name,
 					"student": self._student.name,
+					"current_slot": "CURRENT",
 					"origin": "ai",
 					"source_context_revision": 0,
 					"disposition": "MONITOR",
@@ -473,7 +491,8 @@ class TestRecommendationDecision(FrappeTestCase):
 				attempt_id=attempt.name,
 			)
 		reevaluation_calls = [
-			call for call in enqueue.call_args_list
+			call
+			for call in enqueue.call_args_list
 			if call.args and call.args[0] == "crm.api.agent_events.record_domain_reevaluation_trigger"
 		]
 		self.assertEqual(len(reevaluation_calls), 1)
