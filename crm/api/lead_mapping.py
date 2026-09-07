@@ -169,7 +169,6 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 		"segments",
 		"assignment_priority",
 		"branch",
-		"cccd",
 		"id_number",
 		"id_issued_date",
 		"id_issued_place",
@@ -506,14 +505,6 @@ def _normalize_public_segments(value: Any) -> str | None:
 	return frappe.as_json(list(dict.fromkeys(item.strip() for item in value)))
 
 
-def _normalize_public_cccd(payload: dict[str, Any]) -> str | None:
-	cccd = _text(payload.get("cccd"))
-	id_number = _text(payload.get("id_number"))
-	if cccd and id_number and cccd != id_number:
-		_fail("INVALID_INPUT", "cccd và id_number phải có cùng giá trị nếu cùng được gửi.")
-	return cccd or id_number
-
-
 def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 	name = _text(payload.get("student_name"))
 	if not name:
@@ -604,8 +595,6 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 	alt_phone_value = _text(payload.get("alt_phone"))
 	alt_phone = _normalize_phone(alt_phone_value) if alt_phone_value else None
-	cccd = _normalize_public_cccd(payload)
-
 	return {
 		"student_name": name,
 		"phone": phone,
@@ -620,7 +609,7 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 		"segments": _normalize_public_segments(payload.get("segments")),
 		"assignment_priority": assignment_priority,
 		"branch": branch,
-		"id_number": cccd,
+		"id_number": _text(payload.get("id_number")),
 		"id_issued_date": _text(payload.get("id_issued_date")),
 		"id_issued_place": _text(payload.get("id_issued_place")),
 		"high_school": high_school,

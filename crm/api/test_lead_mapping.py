@@ -88,35 +88,18 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(values["assignment_priority"], "high")
 		self.assertEqual(values["campaign"], "_Test Campaign")
 
-	def test_public_payload_maps_cccd_alias_to_id_number(self):
-		payload = {
-			"student_name": "An",
-			"campaign_code": "CAM-2026-00001",
-			"cccd": "012345678901",
-		}
-		self.assertEqual(_parse_public_payload(payload), payload)
+	def test_public_payload_rejects_removed_cccd_field(self):
+		with self.assertRaises(LeadMappingError) as context:
+			_parse_public_payload(
+				{
+					"student_name": "An",
+					"campaign_code": "CAM-2026-00001",
+					"cccd": "012345678901",
+				}
+			)
 
-		with (
-			patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"),
-			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
-		):
-			values = _normalize_public_lead_payload(payload)
-
-		self.assertEqual(values["id_number"], "012345678901")
-
-	def test_public_payload_rejects_conflicting_cccd_alias(self):
-		with patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"):
-			with self.assertRaises(LeadMappingError) as context:
-				_normalize_public_lead_payload(
-					{
-						"student_name": "An",
-						"campaign_code": "CAM-2026-00001",
-						"cccd": "012345678901",
-						"id_number": "012345678902",
-					}
-				)
-
-		self.assertEqual(context.exception.code, "INVALID_INPUT")
+		self.assertEqual(context.exception.code, "UNKNOWN_FIELD")
+		self.assertIn("cccd", str(context.exception))
 
 	@patch("crm.api.lead_mapping._create_public_lead", return_value={"ok": True})
 	def test_public_endpoint_ignores_frappe_cmd_metadata(self, create_lead):
