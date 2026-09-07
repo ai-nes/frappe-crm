@@ -19,6 +19,14 @@ from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 ACTIVE_ACTION_STATES = ("pending", "accepted", "in-progress", "requires-review")
+ASSIGNMENT_STATUSES = {
+	"assigned": {"label": "Đã phân công"},
+	"unassigned": {"label": "Chưa phân công"},
+}
+LIFECYCLE_STATUSES = {
+	stage: {"label": stage}
+	for stage in ("Lead", "MQL", "Applicant", "Enrolled", "Lost")
+}
 # Keep the canonical Chatwoot type and the legacy seeded type readable while
 # older CRM Interaction rows are being migrated to the canonical vocabulary.
 CHATWOOT_INTERACTION_TYPES = (CHATWOOT_INTERACTION_TYPE, "TIN_NHAN_CHATWOOT")
@@ -138,6 +146,12 @@ def get_director_students(
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
+	assignmentStatus: str | None = None,
+	lifecycleStatus: str | None = None,
+	provinceId: str | None = None,
+	assignment_status: str | None = None,
+	lifecycle_status: str | None = None,
+	province_id: str | None = None,
 ) -> dict[str, Any]:
 	"""Return the session-scoped list/KPI envelope consumed by ``/director/students``.
 
@@ -156,6 +170,12 @@ def get_director_students(
 		ownerId=ownerId,
 		sort=sort,
 		order=order,
+		assignmentStatus=assignmentStatus,
+		lifecycleStatus=lifecycleStatus,
+		provinceId=provinceId,
+		assignment_status=assignment_status,
+		lifecycle_status=lifecycle_status,
+		province_id=province_id,
 	)
 	query["admission_year"] = _resolve_admission_year(query["admission_year"])
 	resolved_province = _resolve_province(query["province"]) if query["province"] else None
@@ -196,6 +216,8 @@ def get_director_students(
 			"query": query["query"],
 			"filters": {
 				"stage": STAGES[query["stage"]]["label"] if query["stage"] else None,
+				"assignmentStatus": query["assignment_status"],
+				"lifecycleStatus": query["lifecycle_status"],
 				"province": _province_label(resolved_province),
 			},
 			"sort": {"field": query["sort"], "order": query["order"]},
@@ -348,12 +370,27 @@ def _parse_query(
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
+	assignmentStatus: str | None = None,
+	lifecycleStatus: str | None = None,
+	provinceId: str | None = None,
+	assignment_status: str | None = None,
+	lifecycle_status: str | None = None,
+	province_id: str | None = None,
 ) -> dict[str, Any]:
 	"""Normalize and validate public query arguments without touching the DB."""
 	admission_year = _parse_admission_year(admissionYear)
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_size = _parse_int(pageSize, "pageSize", 20, minimum=1, maximum=100)
 	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
+	assignment_value = _first_query_value(assignmentStatus, assignment_status)
+	lifecycle_value = _first_query_value(lifecycleStatus, lifecycle_status)
+	province_value = _first_query_value(province, provinceId, province_id)
+	normalized_assignment_status = _normalize_optional_enum(
+		assignment_value, ASSIGNMENT_STATUSES, "assignmentStatus"
+	)
+	normalized_lifecycle_status = _normalize_optional_enum(
+		lifecycle_value, LIFECYCLE_STATUSES, "lifecycleStatus"
+	)
 	normalized_sort = _normalize_enum(sort, SORT_FIELDS, "sort")
 	normalized_order = str(order or "").strip().lower()
 	if normalized_order not in {"asc", "desc"}:
@@ -361,6 +398,12 @@ def _parse_query(
 	owner_id = str(ownerId or "").strip() or None
 	if owner_id and len(owner_id) > 140:
 		frappe.throw(_("ownerId is invalid."), frappe.ValidationError)
+	if (
+		normalized_stage
+		and normalized_lifecycle_status
+		and STAGES[normalized_stage]["lifecycle"] != normalized_lifecycle_status
+	):
+		frappe.throw(_("stage and lifecycleStatus must refer to the same lifecycle."), frappe.ValidationError)
 
 	return {
 		"admission_year": admission_year,
@@ -368,11 +411,28 @@ def _parse_query(
 		"page_size": page_size,
 		"query": str(q or "").strip(),
 		"stage": normalized_stage,
-		"province": str(province or "").strip() or None,
+		"province": str(province_value or "").strip() or None,
 		"owner_id": owner_id,
+		"assignment_status": normalized_assignment_status,
+		"lifecycle_status": normalized_lifecycle_status,
 		"sort": normalized_sort,
 		"order": normalized_order,
 	}
+
+
+def _first_query_value(*values: str | None) -> str | None:
+	for value in values:
+		if value is not None and str(value).strip():
+			return value
+	return None
+
+
+def _normalize_optional_enum(
+	value: str | None, choices: dict[str, Any], field: str
+) -> str | None:
+	if not value or _fold(value) == "all":
+		return None
+	return _normalize_enum(value, choices, field)
 
 
 def _parse_admission_year(value: str | int | None) -> str | None:
@@ -468,8 +528,17 @@ def _student_filters(
 	filters: dict[str, Any] = {"admission_year": query["admission_year"]}
 	if query.get("owner_id"):
 		filters["owner_staff"] = query["owner_id"]
+	if query.get("assignment_status") == "assigned" and not query.get("owner_id"):
+		filters["owner_staff"] = ["is", "set"]
+	elif query.get("assignment_status") == "unassigned":
+		if query.get("owner_id"):
+			filters["assigned_to"] = ["is", "not set"]
+		else:
+			filters["owner_staff"] = ["is", "not set"]
 	if province:
 		filters["province"] = province
+	if query.get("lifecycle_status"):
+		filters["lifecycle_stage"] = query["lifecycle_status"]
 	if query["stage"]:
 		filters["lifecycle_stage"] = STAGES[query["stage"]]["lifecycle"]
 		if query["stage"] == "exploring":
@@ -756,8 +825,13 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"code": _profile_code(row),
 		"school": lookups.get("schools", {}).get(row.get("high_school")) or row.get("high_school"),
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province"),
+		"provinceId": row.get("province"),
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
 		"stage": stage["label"] if stage else None,
+		"lifecycleStatus": row.get("lifecycle_stage"),
+		"assignmentStatus": "assigned"
+		if row.get("owner_staff") or row.get("assigned_to")
+		else "unassigned",
 		"score": _number(row.get("latest_score")),
 		"scoreDelta": _number(score_history.get("score_change")) if score_history else None,
 		"lastActivity": _relative_time(activity_at),
