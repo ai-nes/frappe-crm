@@ -53,7 +53,7 @@ export function buildAdditiveValuePayload({ doctype, value, reason, idempotencyK
 export function governanceAffordances(user, doctype) {
   const profileRoles = {
     marketing: 'Marketing',
-    lead_sales: 'Lead Sales',
+    lead_sales: 'Lead Sale',
     admissions_director: 'Admissions Director',
   }
   const roles = new Set([

@@ -83,7 +83,7 @@
             { label: __('Sale'), value: 'Sale' },
             { label: __('Marketing'), value: 'Marketing' },
             { label: __('Promoter'), value: 'Promoter' },
-            { label: __('Lead Sales'), value: 'Lead Sales' },
+            { label: __('Lead Sale'), value: 'Lead Sale' },
             { label: __('Admissions Director'), value: 'Admissions Director' },
           ]"
         />
@@ -139,7 +139,7 @@
                   iconLeft:
                     user.role === 'System Manager'
                       ? 'shield'
-                      : user.role === 'Lead Sales'
+                      : user.role === 'Lead Sale'
                         ? 'briefcase'
                         : 'user-check',
                 }"
@@ -206,7 +206,7 @@ const roleMap = {
   Sales: __('Sales (legacy)'),
   'CTV-Sale': __('Sales (legacy)'),
   Marketing: __('Marketing'),
-  'Lead Sales': __('Lead Sales'),
+  'Lead Sale': __('Lead Sale'),
   'Admissions Director': __('Admissions Director'),
 }
 

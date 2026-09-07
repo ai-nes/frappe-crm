@@ -803,7 +803,7 @@ export function resolveUserNavigationRole(user) {
     return 'system_manager'
   }
 
-  if (user.crm_profile === 'lead_sales' || user.role === 'Lead Sales') {
+  if (user.crm_profile === 'lead_sales' || user.role === 'Lead Sale') {
     return 'lead_sales'
   }
 

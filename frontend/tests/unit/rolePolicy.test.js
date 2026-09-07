@@ -14,7 +14,7 @@ import {
 } from '../../src/utils/rolePolicy'
 
 describe('rolePolicy', () => {
-  it('allows the aggregate task workbench for Sale, CTV Sale and Lead Sales only', () => {
+  it('allows the aggregate task workbench for Sale, CTV Sale and Lead Sale only', () => {
     expect(canAccessSalesTaskWorkbench({ crm_profile: 'sales' })).toBe(true)
     expect(canAccessSalesTaskWorkbench({ crm_profile: 'ctv_sale' })).toBe(true)
     expect(canAccessSalesTaskWorkbench({ crm_profile: 'lead_sales' })).toBe(true)
@@ -203,6 +203,8 @@ describe('rolePolicy', () => {
       anyOf: ['acquisition.manage', 'system.configure'],
     })
     expect(roleOptionFor('Sale')).toMatchObject({ value: 'Sale' })
+    expect(roleOptionFor('Lead Sale')).toMatchObject({ value: 'Lead Sale' })
+    expect(roleOptionFor('Lead Sales')).toBeUndefined()
     expect(roleOptionFor('Sales')).toBeUndefined()
   })
 
