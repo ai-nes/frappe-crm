@@ -30,6 +30,13 @@ incompatible changes require a major version and coordinated deployment.
 The Lead Sale read model returns `leadCode` as the immutable, non-PII base identifier
 (`LD-YYYY-NNNNN`) and `studentId` separately. A school-qualified display value such as
 `LD-YYYY-SCHOOL-CODE-NNNNN` is presentation-only and must not replace `leadCode`.
+List rows expose the Form Submission Status enum (sourced from
+`CRM Lead.processing_status`) through
+`status`/`statusCode`, the `result` value from `resolution` (`""` while pending),
+a backward-compatible `processingStatus` alias, `contactNoAnswer`,
+`contactSuccess`, and ISO-8601 `createdAt`.
+Contact counters are permission-aware batch projections from Lead-linked Call Logs and
+phone-call Interactions; Call Log references are de-duplicated.
 
 ## Student–Lead relationship
 

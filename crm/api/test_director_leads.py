@@ -96,6 +96,7 @@ class TestDirectorLeads(FrappeTestCase):
 				"name": "LEAD-2026-00001",
 				"lead_code": "LD-2026-00001",
 				"processing_status": "ASSIGNED",
+				"resolution": "MATCHED",
 				"student_name": "Nguyễn Minh An",
 				"phone": "0900000000",
 				"high_school": "HS-1",
@@ -126,14 +127,94 @@ class TestDirectorLeads(FrappeTestCase):
 				"name": "Nguyễn Minh An",
 				"phone": "0900000000",
 				"school": "THPT Châu Văn Liêm",
-				"status": "Mới",
-				"statusCode": "NEW",
+				"status": "Đã phân công",
+				"statusCode": "ASSIGNED",
+				"result": "MATCHED",
 				"source": "Website",
 				"owner": "Trần Quốc Bảo",
+				"contactNoAnswer": 0,
+				"contactSuccess": 0,
 				"processingStatus": "ASSIGNED",
 				"createdAt": "2026-09-07T10:00:00+07:00",
 			},
 		)
+
+	def test_processing_status_mapping_matches_form_submission_enum(self):
+		for status, label in {
+			"NEW": "Mới",
+			"PROCESSED": "Đã xử lý",
+			"ASSIGNED": "Đã phân công",
+			"CLOSED": "Đã đóng",
+		}.items():
+			with self.subTest(status=status):
+				item = director_leads._map_lead_row(
+					frappe._dict(name="LEAD-1", processing_status=status),
+				)
+				self.assertEqual(item["status"], label)
+				self.assertEqual(item["statusCode"], status)
+
+	def test_contact_counts_merge_call_logs_and_interactions_without_duplicates(self):
+		rows = [
+			frappe._dict(name="LEAD-1"),
+			frappe._dict(name="LEAD-2", student="STUDENT-2"),
+		]
+		call_logs = [
+			frappe._dict(
+				name="CALL-1",
+				reference_docname="LEAD-1",
+				status="Completed",
+				duration=60,
+			),
+			frappe._dict(
+				name="CALL-2",
+				reference_docname="LEAD-1",
+				status="No Answer",
+				duration=0,
+			),
+			frappe._dict(
+				name="CALL-3",
+				reference_docname="LEAD-2",
+				status="Failed",
+				duration=0,
+			),
+		]
+		interactions = [
+			frappe._dict(
+				name="IX-DUPLICATE",
+				student="LEAD-1",
+				interaction_type="PHONE_CALL",
+				channel="Call",
+				outcome="Connected",
+				reference_doctype="Call Log",
+				reference_docname="CALL-1",
+			),
+			frappe._dict(
+				name="IX-NO-ANSWER",
+				student="LEAD-1",
+				interaction_type="PHONE_CALL",
+				channel="Call",
+				outcome="No Response",
+				reference_doctype=None,
+				reference_docname=None,
+			),
+			frappe._dict(
+				name="IX-CONNECTED",
+				student="STUDENT-2",
+				interaction_type="PHONE_CALL",
+				channel="Call",
+				outcome="Connected",
+				reference_doctype=None,
+				reference_docname=None,
+			),
+		]
+		with (
+			patch.object(director_leads, "_table_exists", return_value=True),
+			patch.object(director_leads.frappe, "get_list", side_effect=[call_logs, interactions]),
+		):
+			counts = director_leads._contact_counts(rows)
+
+		self.assertEqual(counts["LEAD-1"], {"no_answer": 2, "success": 1})
+		self.assertEqual(counts["LEAD-2"], {"no_answer": 1, "success": 1})
 
 	def test_list_endpoint_returns_paginated_envelope(self):
 		row = frappe._dict(name="LEAD-1", student_name="Nguyễn Minh An")
@@ -205,3 +286,36 @@ class TestDirectorLeads(FrappeTestCase):
 			patch.object(director_leads.frappe, "get_list", side_effect=frappe.PermissionError),
 		):
 			self.assertEqual(director_leads._event_projection("LEAD-1", {}), ([], []))
+
+	def test_lead_log_maps_detailed_audit_events_without_dropping_source_fields(self):
+		doc = frappe._dict(name="LEAD-1", owner="Administrator", creation="2026-09-07 10:00:00")
+		with (
+			patch.object(
+				director_leads,
+				"get_audit_logs_for_document",
+				return_value=[
+					{
+						"event_id": "status:1",
+						"category": "status",
+						"event_type": "status_changed",
+						"fieldname": "enrollment_status",
+						"field_label": "Enrollment Status",
+						"old_value": "Mới",
+						"new_value": "Có triển vọng",
+						"metadata": {"old_code": "NEW", "new_code": "PROSPECT"},
+						"owner": "Administrator",
+						"owner_full_name": "Administrator",
+						"occurred_at": "2026-09-07 11:00:00",
+						"source": "Status Change Log",
+					}
+				],
+			),
+			patch.object(director_leads, "_table_exists", return_value=False),
+		):
+			entries = director_leads._lead_log(doc, lookups={}, event_entries=[])
+
+		self.assertEqual(len(entries), 1)
+		self.assertEqual(entries[0]["title"], "Cập nhật tình trạng Lead")
+		self.assertIn('từ "Mới" sang "Có triển vọng"', entries[0]["content"])
+		self.assertEqual(entries[0]["event_type"], "status_changed")
+		self.assertEqual(entries[0]["metadata"]["new_code"], "PROSPECT")
