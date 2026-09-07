@@ -415,6 +415,7 @@ scheduler_events = {
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.fcrm.nba_evaluations.reconcile",
 		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
+		"crm.fcrm.nba_evaluations.reconcile_dirty_students",
 	],
 	"daily": [
 		"crm.fcrm.doctype.crm_lead.enrollment_transition.reconcile_enrollment_transitions",

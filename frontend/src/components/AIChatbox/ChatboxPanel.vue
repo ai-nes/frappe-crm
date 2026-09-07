@@ -119,6 +119,7 @@
             v-html="renderMarkdown(message.text) + (message.streaming ? streamingCursor : '')"
           />
           <!-- eslint-enable vue/no-v-html -->
+          <Overview360Card :overview="message.overview360" />
           <div v-if="message.error" class="mt-1 text-xs text-ink-red-4">
             {{ message.error }}
           </div>
@@ -195,6 +196,7 @@ import { marked } from 'marked'
 import { Button, FeatherIcon, FormControl } from 'frappe-ui'
 import MaximizeIcon from '@/components/Icons/MaximizeIcon.vue'
 import MinimizeIcon from '@/components/Icons/MinimizeIcon.vue'
+import Overview360Card from '@/components/AIChatbox/Overview360Card.vue'
 import { sanitizeHTML } from '@/utils'
 
 const streamingCursor = '<span>▍</span>'

@@ -564,6 +564,7 @@ class TestDirectorStudents(FrappeTestCase):
 			calls[0]["recordingUrl"],
 			"/api/method/crm.integrations.api.get_recording_url?call_log_name=1788077950.625384",
 		)
+		self.assertFalse(calls[0]["summaryAvailable"])
 
 	def test_student_call_records_include_transcript_from_linked_note(self):
 		call_log = frappe._dict(
@@ -609,6 +610,7 @@ class TestDirectorStudents(FrappeTestCase):
 			)
 
 		self.assertEqual(calls[0]["summary"], "Quan tâm học phí.")
+		self.assertTrue(calls[0]["summaryAvailable"])
 		self.assertEqual(calls[0]["transcript"], "TƯ VẤN VIÊN: Em cần tư vấn.")
 
 	def test_get_student_interactions_endpoint(self):

@@ -203,6 +203,57 @@ describe('AI chat stream terminal handling', () => {
     expect(message.analysisBrief.recommended_actions).toEqual(['Call'])
   })
 
+  it('stores a validated generic Student or School 360 envelope', () => {
+    const run = { finished: false }
+    const message = { text: '', streaming: true }
+    applyUIStreamEvent(
+      {
+        type: 'data-360',
+        data: {
+          contract_version: '360-overview-v1',
+          subject_type: 'school',
+          subject_id: 'HS-1',
+          summary: 'Có dữ liệu.',
+          signals: [],
+          risks: [],
+          opportunities: [],
+          recent_changes: [],
+          data_quality: [],
+          generated_at: '2026-09-07T10:00:00Z',
+        },
+      },
+      message,
+      run,
+      true,
+      () => {},
+    )
+    expect(message.overview360.subject_type).toBe('school')
+    expect(message.overview360.subject_id).toBe('HS-1')
+  })
+
+  it('ignores malformed or unknown 360 envelopes', () => {
+    const run = { finished: false }
+    const message = { text: '', streaming: true, overview360: null }
+    applyUIStreamEvent(
+      {
+        type: 'data-360',
+        data: {
+          contract_version: '360-overview-v1',
+          subject_type: 'lead',
+          subject_id: 'LEAD-1',
+          summary: 'Sai subject.',
+          signals: [], risks: [], opportunities: [], recent_changes: [],
+          data_quality: [], generated_at: '2026-09-07T10:00:00Z',
+        },
+      },
+      message,
+      run,
+      true,
+      () => {},
+    )
+    expect(message.overview360).toBeNull()
+  })
+
   it('forwards model-authored reasoning summaries separately from graph activity', () => {
     const run = { finished: false }
     const message = { text: '', streaming: true }

@@ -249,6 +249,7 @@ function createAssistantMessage(prompt) {
     error: '',
     retryable: false,
     approval: null,
+		overview360: null,
 		activity: [],
 	}
 	messages.value.push(message)

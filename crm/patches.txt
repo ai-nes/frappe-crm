@@ -146,6 +146,7 @@ crm.patches.v1_0.backfill_student_intelligence_projection
 crm.patches.v1_0.backfill_student_ai_links
 crm.patches.v1_0.backfill_student_admission_decision_links
 crm.patches.v1_0.seed_campaign_channel_type
+crm.patches.v1_0.add_nba_student_dirty_marker
 crm.patches.v1_0.allow_ctv_sale_action_item_read
 crm.patches.v1_0.add_team_group_management
 crm.patches.v1_0.add_team_group_province
