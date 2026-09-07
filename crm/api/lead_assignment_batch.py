@@ -42,7 +42,21 @@ def _require_access():
 	capabilities = set(context["capabilities"])
 	if not context.get("is_system_manager") and "student.routing.operate" not in capabilities:
 		frappe.throw(
-			_("Bạn không có quyền chạy phân công theo batch."),
+			_("Bạn không có quyền thực hiện phân công theo đợt."),
+			frappe.PermissionError,
+		)
+	return context
+
+
+def _require_read_access():
+	"""Allow routing readers to inspect batch history without granting mutations."""
+	context = _actor_context()
+	capabilities = set(context["capabilities"])
+	if not context.get("is_system_manager") and not capabilities.intersection(
+		{"student.routing.read", "student.routing.operate"}
+	):
+		frappe.throw(
+			_("Bạn không có quyền xem lịch sử phân công theo đợt."),
 			frappe.PermissionError,
 		)
 	return context
@@ -65,7 +79,7 @@ def _parse_list(value: Any, label: str) -> list[str]:
 		frappe.throw(_("{0} không được rỗng.").format(label), frappe.ValidationError)
 	if len(values) > MAX_BATCH_SIZE:
 		frappe.throw(
-			_("Một batch tối đa {0} Lead.").format(MAX_BATCH_SIZE),
+			_("Một đợt tối đa {0} Lead.").format(MAX_BATCH_SIZE),
 			frappe.ValidationError,
 		)
 	return values
@@ -222,6 +236,22 @@ def _preview_item(batch, item, actor_context: dict[str, Any]) -> None:
 	item.error_code = None
 
 
+def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
+	"""Evaluate every item before execution, keeping exceptions out of the run path."""
+	for item in batch.items:
+		try:
+			_preview_item(batch, item, actor_context)
+		except Exception as exc:
+			code = (
+				getattr(exc, "code", None) or getattr(exc, "error_code", None) or str(exc).strip()
+				if str(exc).strip() in {"MISSING_INPUT_QUEUE", "MULTIPLE_INPUT_QUEUES"}
+				else "PREVIEW_FAILED"
+			)
+			_reset_item(item, status="manual_review", reason=code)
+			item.error_code = code
+	batch.status = "ready"
+
+
 def _count_items(batch) -> None:
 	counts = {"assigned": 0, "deferred": 0, "manual_review": 0, "failed": 0}
 	for item in batch.items:
@@ -235,9 +265,38 @@ def _count_items(batch) -> None:
 
 
 def _serialize_item(item) -> dict[str, Any]:
+	lead = (
+		frappe.db.get_value(
+			"CRM Lead",
+			item.lead,
+			[
+				"student_name",
+				"phone",
+				"id_number",
+				"email",
+				"province",
+				"high_school",
+				"major",
+				"source",
+				"branch",
+			],
+			as_dict=True,
+		)
+		or {}
+	)
 	return {
 		"id": item.name,
 		"lead": item.lead,
+		"leadId": item.lead,
+		"studentName": lead.get("student_name") or item.lead,
+		"phone": lead.get("phone"),
+		"idNumber": lead.get("id_number"),
+		"email": lead.get("email"),
+		"province": lead.get("province"),
+		"highSchool": lead.get("high_school"),
+		"major": lead.get("major"),
+		"source": lead.get("source"),
+		"branch": lead.get("branch"),
 		"status": item.status,
 		"reason": item.reason,
 		"errorCode": item.error_code,
@@ -275,10 +334,14 @@ def _serialize_batch(batch) -> dict[str, Any]:
 		"completedAt": str(batch.completed_at) if batch.completed_at else None,
 		"summary": {
 			"total": batch.total_count,
+			"valid": max(0, batch.total_count - batch.manual_review_count),
+			"invalid": batch.manual_review_count,
+			"pending": sum(item.status == "pending" for item in batch.items),
 			"assigned": batch.assigned_count,
 			"deferred": batch.deferred_count,
 			"manualReview": batch.manual_review_count,
 			"failed": batch.failed_count,
+			"skipped": sum(item.status == "skipped" for item in batch.items),
 		},
 		"items": [_serialize_item(item) for item in batch.items],
 	}
@@ -301,9 +364,9 @@ def create_lead_assignment_batch(
 	actor_context = _require_access()
 	batch_name = str(batch_name or "").strip()
 	if not batch_name:
-		frappe.throw(_("Tên batch là bắt buộc."), frappe.ValidationError)
+		frappe.throw(_("Tên đợt là bắt buộc."), frappe.ValidationError)
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
-		frappe.throw(_("Tên batch đã tồn tại."), frappe.DuplicateEntryError)
+		frappe.throw(_("Tên đợt đã tồn tại."), frappe.DuplicateEntryError)
 	lead_names = _parse_list(lead_ids, "lead_ids")
 	if pool:
 		_pool(pool, None, actor_context)
@@ -347,7 +410,7 @@ def _parse_batch_import_rows(rows: list[dict[str, Any]] | str | None, csv_conten
 	if not isinstance(rows, list) or not rows:
 		frappe.throw(_("Cần truyền rows hoặc csv_content."), frappe.ValidationError)
 	if len(rows) > MAX_BATCH_SIZE:
-		frappe.throw(_("Một batch tối đa {0} Lead.").format(MAX_BATCH_SIZE), frappe.ValidationError)
+		frappe.throw(_("Một đợt tối đa {0} Lead.").format(MAX_BATCH_SIZE), frappe.ValidationError)
 	return [lead_mapping._parse_public_payload(row) for row in rows]
 
 
@@ -422,9 +485,9 @@ def import_leads_to_assignment_batch(
 	actor_context = _require_access()
 	batch_name = str(batch_name or "").strip()
 	if not batch_name:
-		frappe.throw(_("Tên batch là bắt buộc."), frappe.ValidationError)
+		frappe.throw(_("Tên đợt là bắt buộc."), frappe.ValidationError)
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
-		frappe.throw(_("Tên batch đã tồn tại."), frappe.DuplicateEntryError)
+		frappe.throw(_("Tên đợt đã tồn tại."), frappe.DuplicateEntryError)
 	input_pool = _pool(str(pool or "").strip(), None, actor_context) if pool else None
 	parsed_rows = _parse_batch_import_rows(rows, csv_content)
 	batch = frappe.get_doc(
@@ -486,19 +549,8 @@ def preview_lead_assignment_batch(batch_name: str):
 	actor_context = _require_access()
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.status in {"running", "completed", "cancelled"}:
-		frappe.throw(_("Batch này không còn xem trước được."), frappe.ValidationError)
-	for item in batch.items:
-		try:
-			_preview_item(batch, item, actor_context)
-		except Exception as exc:
-			code = (
-				getattr(exc, "code", None) or getattr(exc, "error_code", None) or str(exc).strip()
-				if str(exc).strip() in {"MISSING_INPUT_QUEUE", "MULTIPLE_INPUT_QUEUES"}
-				else "PREVIEW_FAILED"
-			)
-			_reset_item(item, status="manual_review", reason=code)
-			item.error_code = code
-	batch.status = "ready"
+		frappe.throw(_("Đợt này không còn cho phép kiểm tra trước."), frappe.ValidationError)
+	_preview_batch_items(batch, actor_context)
 	_save_batch(batch)
 	frappe.db.commit()
 	return _serialize_batch(batch)
@@ -515,7 +567,7 @@ def _assign_input_pool(batch, item, lead, actor_context: dict[str, Any]):
 		target_kind="pool",
 		target_id=pool.name,
 		target_team_id=pool.team,
-		reason="Gán Lead vào hàng chờ của batch trước khi phân công.",
+		reason="Gán Lead vào hàng chờ của đợt trước khi phân công.",
 		idempotency_key=f"lead-batch-pool:{batch.name}:{item.name}:{lead.get('ownership_revision') or 0}",
 		expected_revision=int(lead.get("ownership_revision") or 0),
 		correlation_id=batch.execution_id or str(uuid.uuid4()),
@@ -585,7 +637,9 @@ def run_lead_assignment_batch(batch_name: str):
 	actor_context = _require_access()
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.status not in RUNNABLE_STATUSES:
-		frappe.throw(_("Batch phải ở trạng thái Nháp, Sẵn sàng hoặc Có lỗi."), frappe.ValidationError)
+		frappe.throw(_("Đợt phải ở trạng thái Nháp, Sẵn sàng hoặc Có lỗi."), frappe.ValidationError)
+	if batch.status == "draft":
+		_preview_batch_items(batch, actor_context)
 	batch.status = "running"
 	batch.execution_id = f"lead-batch-{uuid.uuid4().hex}"
 	batch.started_at = now_datetime()
@@ -595,7 +649,7 @@ def run_lead_assignment_batch(batch_name: str):
 	for index, item in enumerate(batch.items):
 		if item.status in TERMINAL_ITEM_STATUSES:
 			continue
-		if item.status == "manual_review" and item.reason not in {"MISSING_INPUT_QUEUE", "MISSING_CAMPUS"}:
+		if item.status == "manual_review":
 			continue
 		savepoint = f"lead_assignment_{index}"
 		frappe.db.savepoint(savepoint)
@@ -629,7 +683,7 @@ def run_lead_assignment_batch(batch_name: str):
 				if result.get("status") == "applied":
 					mark_lead_assigned(
 						lead.name,
-						reason=result.get("reason") or "Phân công tự động trong batch.",
+						reason=result.get("reason") or "Phân công tự động trong đợt.",
 					)
 				item.ownership_revision = int(result.get("revision") or revision)
 				snapshot = _capacity_snapshot(item.owner_staff)
@@ -680,7 +734,7 @@ def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | Non
 
 @frappe.whitelist()
 def get_lead_assignment_batch(batch_name: str):
-	actor_context = _require_access()
+	actor_context = _require_read_access()
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.pool:
 		_pool(batch.pool, None, actor_context)
@@ -688,13 +742,30 @@ def get_lead_assignment_batch(batch_name: str):
 
 
 @frappe.whitelist()
-def list_lead_assignment_batches(limit: int | str = 50):
-	actor_context = _require_access()
+def list_lead_assignment_batches(
+	limit: int | str = 50,
+	page: int | str = 1,
+	page_size: int | str | None = None,
+	status: str | None = None,
+	q: str | None = None,
+):
+	actor_context = _require_read_access()
 	try:
-		limit = max(1, min(int(limit), 100))
+		requested_page_size = page_size if page_size not in (None, "") else limit
+		page_size = max(1, min(int(requested_page_size), 100))
+		page = max(1, int(page or 1))
 	except (TypeError, ValueError):
-		frappe.throw(_("limit không hợp lệ."), frappe.ValidationError)
+		frappe.throw(_("Thông tin phân trang không hợp lệ."), frappe.ValidationError)
 	filters = {}
+	if status and status != "all":
+		if status not in {"draft", "ready", "running", "completed", "completed_with_errors", "cancelled"}:
+			frappe.throw(_("Trạng thái đợt không hợp lệ."), frappe.ValidationError)
+		filters["status"] = status
+	search = str(q or "").strip()
+	if len(search) > 140:
+		frappe.throw(_("Từ khóa tìm kiếm quá dài."), frappe.ValidationError)
+	if search:
+		filters["batch_name"] = ["like", f"%{search}%"]
 	if not actor_context.get("is_system_manager"):
 		allowed_pools = frappe.get_all(
 			"CRM Student Pool",
@@ -731,19 +802,37 @@ def list_lead_assignment_batches(limit: int | str = 50):
 		"filters": filters,
 		"fields": fields,
 		"order_by": "creation desc",
-		"limit_page_length": limit,
+		"limit_page_length": page_size,
+		"limit_start": (page - 1) * page_size,
 	}
 	if or_filters:
 		query["or_filters"] = or_filters
+	total = len(
+		frappe.get_all(
+			BATCH_DOCTYPE,
+			filters=filters,
+			or_filters=or_filters,
+			fields=["name"],
+			limit_page_length=0,
+		)
+	)
+	total_pages = max(1, (total + page_size - 1) // page_size)
 	return {
 		"items": frappe.get_all(**query),
+		"pagination": {
+			"page": page,
+			"page_size": page_size,
+			"total": total,
+			"total_pages": total_pages,
+			"has_next_page": page < total_pages,
+		},
 	}
 
 
 @frappe.whitelist()
 def get_lead_assignment_batch_options():
 	"""Return human-readable input queues available to the current operator."""
-	actor_context = _require_access()
+	actor_context = _require_read_access()
 	filters = {"is_active": 1}
 	if not actor_context.get("is_system_manager"):
 		filters["team"] = ["in", actor_context.get("teams") or ["__no_team__"]]
@@ -780,7 +869,7 @@ def _catalog_rows(doctype: str, fields: list[str], label_field: str, filters=Non
 @frappe.whitelist(methods=["GET"])
 def get_lead_assignment_catalogs(province: str | None = None):
 	"""Return Frappe-owned choices for the batch Lead form."""
-	_require_access()
+	_require_read_access()
 	province_name = str(province or "").strip()
 	if province_name and not frappe.db.exists("CRM Province", province_name):
 		province_name = lead_mapping._resolve_province(province_name)

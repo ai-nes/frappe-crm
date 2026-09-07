@@ -29,9 +29,7 @@ class TestStudentAuditApi(FrappeTestCase):
 		result = get_student_audit_logs(student.name)
 		actions = [log["action"] for log in result["logs"]]
 		updated = next(
-			log
-			for log in result["logs"]
-			if log["action"] == "updated" and log["fieldname"] == "student_name"
+			log for log in result["logs"] if log["action"] == "updated" and log["fieldname"] == "student_name"
 		)
 
 		self.assertGreaterEqual(result["total"], 2)
@@ -69,3 +67,39 @@ class TestStudentAuditApi(FrappeTestCase):
 		self.assertGreaterEqual(result["total"], 2)
 		self.assertTrue(any(log["action"] == "deleted" for log in all_logs["logs"]))
 		self.assertTrue(all_logs["read_only"])
+
+	def test_student_audit_includes_status_transition_metadata(self):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Audit Status Student",
+				"phone": "0912345680",
+				"enrollment_status": "NEW",
+			}
+		).insert(ignore_permissions=True)
+
+		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
+		frappe.flags.student_lifecycle_service = True
+		try:
+			student.enrollment_status = "PROSPECT"
+			student.save(ignore_permissions=True, ignore_version=False)
+		finally:
+			frappe.flags.student_lifecycle_service = previous_flag
+
+		result = get_student_audit_logs(student.name, page_length=100)
+		status_log = next(
+			log
+			for log in result["logs"]
+			if log.get("source") == "Status Change Log" and log.get("event_type") == "status_changed"
+		)
+
+		self.assertEqual(status_log["category"], "status")
+		self.assertEqual(status_log["fieldname"], "enrollment_status")
+		self.assertEqual(status_log["metadata"]["old_code"], "NEW")
+		self.assertEqual(status_log["metadata"]["new_code"], "PROSPECT")
+
+		initial_status_log = next(
+			log for log in result["logs"] if log.get("event_type") == "status_initialized"
+		)
+		self.assertEqual(initial_status_log["new_value"], "Mới")
+		self.assertEqual(initial_status_log["metadata"]["new_code"], "NEW")
