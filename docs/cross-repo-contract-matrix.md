@@ -19,6 +19,7 @@ incompatible changes require a major version and coordinated deployment.
 | `settle_analysis_stage` result digest (optional, 64-hex) | frappe-crm | 1 | crm-agents analysis worker | 2026-09-01 |
 | AI Insight CAS write-back | frappe-crm | 1 | crm-agents conversation/insight | 2026-08-30 |
 | Command Center `/api/cc/*` | crm-agents | cc-v1 | PH-05 frontend | 2026-08-30 |
+| Worldfone call summary gateway `crm.api.call_summary.summarize_call` | frappe-crm / crm-agents | call-summary-v1 | speech-to-text-crm-submodule | 2026-09-07 |
 | School-domain normalized schema and migration | frappe-crm | 1 | School Data panel and import operator | 2026-08-30 |
 | School stakeholder endpoint `crm.api.school_domain.get_school_stakeholders` | frappe-crm | 1 | School Data panel | 2026-08-30 |
 | School-domain workbook import boundary | frappe-crm | unversioned module contract | External seed/import operator | 2026-08-30 |
@@ -30,6 +31,18 @@ incompatible changes require a major version and coordinated deployment.
 The Lead Sale read model returns `leadCode` as the immutable, non-PII base identifier
 (`LD-YYYY-NNNNN`) and `studentId` separately. A school-qualified display value such as
 `LD-YYYY-SCHOOL-CODE-NNNNN` is presentation-only and must not replace `leadCode`.
+
+## Worldfone call summary
+
+The STT bridge sends the redacted transcript and diarized segments to
+`crm.api.call_summary.summarize_call` using Frappe token authentication. Frappe
+checks the caller's read permission on the target `Call Log`, then forwards the
+payload to the authenticated `crm-agents` endpoint `/api/v1/call-summary`.
+`crm-agents` returns the `call-summary-v1` object (`summary`, `key_points`,
+`action_items`, `sentiment`, and `next_step`) without writing CRM data. The STT
+bridge remains responsible for the idempotent `FCRM Note` write, so a summary
+failure does not remove an already saved transcript or change the call status.
+
 List rows expose the Form Submission Status enum (sourced from
 `CRM Lead.processing_status`) through
 `status`/`statusCode`, the `result` value from `resolution` (`""` while pending),
