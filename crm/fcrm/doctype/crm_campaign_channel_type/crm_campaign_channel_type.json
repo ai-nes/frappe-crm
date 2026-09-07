@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "field:code",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["code", "display_name", "is_online", "is_offline", "enabled", "sort_order", "description"],
+ "fields": [
+  {"fieldname": "code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Code", "reqd": 1, "unique": 1},
+  {"fieldname": "display_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Loại kênh", "reqd": 1, "translatable": 1},
+  {"default": "0", "fieldname": "is_online", "fieldtype": "Check", "in_list_view": 1, "in_standard_filter": 1, "label": "Online"},
+  {"default": "0", "fieldname": "is_offline", "fieldtype": "Check", "in_list_view": 1, "in_standard_filter": 1, "label": "Offline"},
+  {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "in_list_view": 1, "in_standard_filter": 1, "label": "Enabled"},
+  {"default": "0", "fieldname": "sort_order", "fieldtype": "Int", "in_list_view": 1, "label": "Sort Order", "non_negative": 1, "reqd": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Campaign Channel Type",
+ "permissions": [
+  {"export": 1, "read": 1, "role": "Sale"},
+  {"export": 1, "read": 1, "role": "Lead Sale"},
+  {"export": 1, "read": 1, "role": "Marketing"},
+  {"export": 1, "read": 1, "role": "Admissions Director"},
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}
+ ],
+ "quick_entry": 1,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "title_field": "display_name",
+ "translated_doctype": 1
+}

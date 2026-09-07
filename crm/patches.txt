@@ -145,3 +145,4 @@ crm.patches.v1_0.migrate_ai_aggregates_to_crm_student
 crm.patches.v1_0.backfill_student_intelligence_projection
 crm.patches.v1_0.backfill_student_ai_links
 crm.patches.v1_0.backfill_student_admission_decision_links
+crm.patches.v1_0.seed_campaign_channel_type

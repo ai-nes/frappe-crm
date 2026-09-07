@@ -50,18 +50,31 @@ class TestCampaignApi(FrappeTestCase):
 			status="ACTIVE",
 			start_date="2026-09-01",
 			end_date="2026-09-30",
+			channel_type="OPEN_DAY",
+			channel_url="https://example.com/open-day",
 			budget=125000,
 			utm_campaign="autumn-admissions",
 		)
 
 		self.assertEqual(get_campaign(created["name"])["stable_code"], created["stable_code"])
-		updated = update_campaign(created["name"], status="CLOSED", notes="Updated through API")
+		self.assertEqual(created["channel_type"], "OPEN_DAY")
+		self.assertEqual(created["channel_url"], "https://example.com/open-day")
+		updated = update_campaign(
+			created["name"],
+			status="CLOSED",
+			notes="Updated through API",
+			channel_type="EXPERIENCE_DAY",
+			channel_url="https://example.com/experience-day",
+		)
 		self.assertEqual(updated["status"], "CLOSED")
 		self.assertEqual(updated["notes"], "Updated through API")
+		self.assertEqual(updated["channel_type"], "EXPERIENCE_DAY")
+		self.assertEqual(updated["channel_url"], "https://example.com/experience-day")
 
 		listed = list_campaigns(
 			status="CLOSED",
 			campus=self.campus,
+			channel_type="EXPERIENCE_DAY",
 			start_date_from="2026-09-01",
 			start_date_to="2026-09-30",
 			search="autumn-admissions",
@@ -73,9 +86,20 @@ class TestCampaignApi(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("CRM Campaign", created["name"]))
 
 	def test_campaign_code_is_server_managed(self):
-		created = self._create_campaign()
+		created = self._create_campaign(stable_code="CUSTOM-CODE")
+
+		self.assertRegex(created["stable_code"], r"^CAM-\d{4}-\d{5,}$")
+		self.assertNotEqual(created["stable_code"], "CUSTOM-CODE")
 
 		with self.assertRaises(frappe.ValidationError):
 			update_campaign(created["name"], stable_code="CAM-2026-99999")
 
 		self.assertEqual(get_campaign(created["name"])["stable_code"], created["stable_code"])
+
+	def test_lead_sale_can_create_and_update_campaign(self):
+		frappe.set_user("leadsale@gmail.com")
+		try:
+			self.assertTrue(frappe.has_permission("CRM Campaign", "create"))
+			self.assertTrue(frappe.has_permission("CRM Campaign", "write"))
+		finally:
+			frappe.set_user(self._original_user)
