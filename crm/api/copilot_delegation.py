@@ -168,10 +168,10 @@ def _require_copilot_user() -> None:
 	"""Require a current canonical CRM business profile for the BFF."""
 	if frappe.session.user in ("", "Guest") or not frappe.session.sid:
 		frappe.throw("Authentication is required.", frappe.PermissionError)
-	from crm.api.session import get_session_role_flags
+	from crm.api.session import _get_policy_roles, get_session_role_flags
 
 	get_session_role_flags()
-	if not _is_copilot_authorized(frappe.get_roles()):
+	if not _is_copilot_authorized(_get_policy_roles()):
 		frappe.throw("A canonical CRM business role is required.", frappe.PermissionError)
 
 
@@ -374,6 +374,12 @@ def run_student_nba_evaluation(
 	student = str(student_id or "").strip()
 	if not student or len(student) > 140:
 		frappe.throw("A valid student ID is required.", frappe.ValidationError)
+	from crm.fcrm.student_reference import canonical_student
+
+	# The dashboard still routes through the legacy Lead id (ENR-...), while
+	# NBA Evaluation and Recommendation rows use the canonical CRM Student id
+	# (CRMC-...). Keep the upstream response and the persisted target on one id.
+	student = canonical_student(student) or student
 	if force_rerun_reason is not None:
 		force_rerun_reason = str(force_rerun_reason).strip()
 		if len(force_rerun_reason) < 10 or len(force_rerun_reason) > 500:
@@ -506,6 +512,11 @@ def run_student_analysis(
 	force_rerun_reason: str | None = None,
 ):
 	student = _validate_analysis_target(student_id, "student ID")
+	from crm.fcrm.student_reference import canonical_student
+
+	# Student 360 stores runs against the canonical CRM Student id, while the
+	# dashboard may still submit the legacy Lead id for the same record.
+	student = canonical_student(student) or student
 	reason = _validate_analysis_force_reason(force_rerun_reason)
 	body = {"student_id": student}
 	if reason:

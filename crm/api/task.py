@@ -1,4 +1,4 @@
-"""Task APIs scoped to CRM Lead / CRM Student.
+"""Task APIs scoped to canonical CRM Students.
 
 Task DocType permissions grant the supported sales roles the required CRUD
 operations, while the permission hooks below add record-level checks on the
@@ -23,6 +23,7 @@ from crm.fcrm.student_decision import (
 	delete_manual_action,
 	update_manual_action,
 )
+from crm.fcrm.student_reference import canonical_student
 
 ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
 
@@ -159,28 +160,28 @@ def _permission_condition(doctype, alias, actor):
 	return condition.replace(f"`tab{doctype}`", alias)
 
 
-def _task_reference_scope_condition(student_condition, contact_condition):
-	"""Scope generic Task queries through their CRM Student or Contact reference."""
+def _task_reference_scope_condition(student_condition, legacy_lead_condition):
+	"""Scope generic Task queries through canonical or legacy Student references."""
 	task_table = "`tabTask`"
-	student_reference = (
+	canonical_student_reference = (
+		f"CASE WHEN {task_table}.reference_doctype = 'CRM Student' "
+		f"THEN NULLIF({task_table}.reference_docname, '') END"
+	)
+	legacy_lead_reference = (
 		f"COALESCE(NULLIF({task_table}.student, ''), "
 		f"CASE WHEN {task_table}.reference_doctype = 'CRM Lead' "
 		f"THEN NULLIF({task_table}.reference_docname, '') END)"
 	)
-	contact_reference = (
-		f"CASE WHEN {task_table}.reference_doctype = 'CRM Student' "
-		f"THEN NULLIF({task_table}.reference_docname, '') END"
-	)
 	return f"""(
 		EXISTS (
-			SELECT 1 FROM `tabCRM Lead` student_scope
-			WHERE student_scope.name = {student_reference}
+			SELECT 1 FROM `tabCRM Student` student_scope
+			WHERE student_scope.name = {canonical_student_reference}
 			AND ({student_condition})
 		)
 		OR EXISTS (
-			SELECT 1 FROM `tabCRM Student` contact_scope
-			WHERE contact_scope.name = {contact_reference}
-			AND ({contact_condition})
+			SELECT 1 FROM `tabCRM Lead` legacy_lead_scope
+			WHERE legacy_lead_scope.name = {legacy_lead_reference}
+			AND ({legacy_lead_condition})
 		)
 	)"""
 
@@ -193,11 +194,11 @@ def get_permission_query_conditions(user=None):
 	if not _is_sales_task_actor(actor):
 		return None
 
-	student_condition = _permission_condition("CRM Lead", "student_scope", actor)
-	contact_condition = _permission_condition("CRM Student", "contact_scope", actor)
-	if student_condition == "1=0" and contact_condition == "1=0":
+	student_condition = _permission_condition("CRM Student", "student_scope", actor)
+	legacy_lead_condition = _permission_condition("CRM Lead", "legacy_lead_scope", actor)
+	if student_condition == "1=0" and legacy_lead_condition == "1=0":
 		return "1=0"
-	return _task_reference_scope_condition(student_condition, contact_condition)
+	return _task_reference_scope_condition(student_condition, legacy_lead_condition)
 
 
 def _has_task_reference_permission(doc):
@@ -227,7 +228,7 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 
 def _action_scope_condition(student_condition):
 	return f"""EXISTS (
-		SELECT 1 FROM `tabCRM Lead` student_scope
+		SELECT 1 FROM `tabCRM Student` student_scope
 		WHERE student_scope.name = action_item.student
 		AND ({student_condition})
 	)"""
@@ -332,7 +333,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 			assigned_staff.full_name AS assigned_to_name,
 			action_item.student AS student,
 			COALESCE(student.student_name, contact.full_name) AS student_name,
-			CASE WHEN action_item.student IS NOT NULL AND action_item.student != '' THEN 'CRM Lead' ELSE 'CRM Student' END AS reference_doctype,
+			'CRM Student' AS reference_doctype,
 			COALESCE(NULLIF(action_item.student, ''), NULLIF(action_item.contact, '')) AS reference_docname,
 			action_item.linked_interaction AS linked_interaction,
 			action_item.action AS action,
@@ -341,7 +342,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 			action_item.created_at AS created_at,
 			action_item.modified AS modified
 		FROM `tabCRM Action Item` action_item
-		LEFT JOIN `tabCRM Lead` student ON student.name = action_item.student
+		LEFT JOIN `tabCRM Student` student ON student.name = action_item.student
 		LEFT JOIN `tabCRM Student` contact ON contact.name = action_item.contact
 		LEFT JOIN `tabCRM Staff` assigned_staff ON assigned_staff.name = action_item.action_owner
 		WHERE {" AND ".join(conditions)}
@@ -353,7 +354,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 
 
 def _aggregate_tasks_sql(actor, search, status, priority, date_filter, task_type):
-	student_condition = _permission_condition("CRM Lead", "student_scope", actor)
+	student_condition = _permission_condition("CRM Student", "student_scope", actor)
 	action_query, action_values = _action_query(
 		student_condition, search, status, priority, date_filter, task_type
 	)
@@ -443,7 +444,7 @@ def list_sales_tasks(
 
 def _check_reference_access(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Tasks are only supported for CRM Student and CRM Student."), frappe.ValidationError)
+		frappe.throw(_("Tasks are only supported for CRM Student or CRM Lead references."), frappe.ValidationError)
 	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
 	reference_doc.check_permission(permission_type)
 	return reference_doc
@@ -473,17 +474,13 @@ def _priority_to_task(priority):
 
 
 def _action_reference(action):
-	"""Return the old Task reference pair for an Action Item."""
-	if action.get("student"):
-		return "CRM Lead", action.student
-	if action.get("contact"):
-		return "CRM Student", action.contact
-	return "CRM Lead", action.student
+	"""Return the canonical Student reference pair for an Action Item."""
+	return "CRM Student", action.get("student") or action.get("contact")
 
 
 def _action_scope_reference(action):
 	"""Return the canonical permission scope for an Action Item."""
-	return "CRM Lead", action.get("student")
+	return "CRM Student", action.get("student")
 
 
 def _action_item_to_task(action, *, reference_doctype=None, reference_docname=None):
@@ -567,11 +564,26 @@ def _assigned_staff_for_user(user):
 
 
 def _action_target(reference_doctype, reference_docname):
-	reference_doc = _check_reference_access(reference_doctype, reference_docname, "read")
-	if reference_doctype == "CRM Lead":
-		return reference_docname, None
-	student = reference_doc.get("student")
-	return (student, reference_docname) if student else (None, None)
+	"""Resolve a task reference to the canonical CRM Student name.
+
+	CRM Lead remains an accepted compatibility input during the migration window,
+	but every Action Item command receives the resolved CRM Student ID.
+	"""
+	if reference_doctype == "CRM Student":
+		student = canonical_student(reference_docname)
+		if not student:
+			_check_reference_access("CRM Student", reference_docname, "read")
+			student = reference_docname
+		elif student != reference_docname:
+			_check_reference_access("CRM Lead", reference_docname, "read")
+		_check_reference_access("CRM Student", student, "read")
+		return student, None
+
+	reference_doc = _check_reference_access("CRM Lead", reference_docname, "read")
+	student = canonical_student(reference_doc.name)
+	if student:
+		_check_reference_access("CRM Student", student, "read")
+	return student, None
 
 
 def _compatibility_key(operation, name=None):
@@ -675,8 +687,8 @@ def list_tasks(
 		page_length,
 		student=student,
 		contact=contact,
-		reference_doctype=reference_doctype,
-		reference_docname=reference_docname,
+		reference_doctype="CRM Student",
+		reference_docname=student,
 	)
 
 
@@ -711,8 +723,8 @@ def create_task(
 	"""Create a Task-shaped CRM Action Item when the reference has a Student."""
 	student, contact = _action_target(reference_doctype, reference_docname)
 	if not student:
-		# CRM Action Item requires a Student. Keep the old path for standalone
-		# Contacts so existing integrations do not lose their legacy records.
+		# An unconverted legacy Lead cannot own a canonical Action Item. Keep the
+		# old Task path for that migration-window case.
 		doc = frappe.new_doc("Task")
 		doc.title = title
 		doc.description = description
@@ -743,8 +755,8 @@ def create_task(
 	)
 	return _action_item_to_task(
 		frappe.get_doc("CRM Action Item", result["action"]),
-		reference_doctype=reference_doctype,
-		reference_docname=reference_docname,
+		reference_doctype="CRM Student",
+		reference_docname=student,
 	)
 
 

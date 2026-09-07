@@ -21,6 +21,7 @@ from frappe.utils import add_to_date, now_datetime
 
 from crm.api.nba_evaluation import build_nba_evaluation_input
 from crm.fcrm.intelligence_runs import _lease_now, _require_force_rerun_permission, _service_only
+from crm.fcrm.permissions import has_permission as has_student_permission
 
 DOCTYPE = "CRM NBA Evaluation"
 TERMINAL = {"completed", "failed", "dead_lettered"}
@@ -108,7 +109,8 @@ def _validated_hex64(value: object, label: str) -> str | None:
 def _require_student_scope(student: str) -> None:
 	if not student or not frappe.db.exists("CRM Student", student):
 		frappe.throw("NBA Evaluation target does not exist.", frappe.DoesNotExistError)
-	if not frappe.has_permission("CRM Student", "read", student):
+	student_doc = frappe.get_doc("CRM Student", student)
+	if not has_student_permission(student_doc, user=frappe.session.user, permission_type="read"):
 		frappe.throw("NBA Evaluation target is outside current scope.", frappe.PermissionError)
 
 

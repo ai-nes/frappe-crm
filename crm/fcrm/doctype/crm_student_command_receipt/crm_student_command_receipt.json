@@ -64,7 +64,7 @@
    "reqd": 1
   },
   {"fieldname": "error_code", "fieldtype": "Data", "label": "Error Code", "read_only": 1},
-  {"fieldname": "target_student", "fieldtype": "Link", "in_list_view": 1, "label": "Target Student", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "target_student", "fieldtype": "Link", "in_list_view": 1, "label": "Target Student", "options": "CRM Lead", "read_only": 1},
   {"fieldname": "target_contact", "fieldtype": "Link", "in_list_view": 1, "label": "Target Contact", "options": "CRM Student", "read_only": 1},
   {"fieldname": "target_case_key", "fieldtype": "Link", "label": "Target Case Key", "options": "CRM Student Case Key", "read_only": 1},
   {"fieldname": "review", "fieldtype": "Link", "label": "Intake Review", "options": "CRM Student Intake Review", "read_only": 1},
