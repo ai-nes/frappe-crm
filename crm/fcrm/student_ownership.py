@@ -511,6 +511,31 @@ def _next_revision(student, current):
 	return current
 
 
+def _sync_linked_student_ownership(lead_name: str, updates: dict[str, Any], revision: Any) -> None:
+	"""Keep the canonical Student scope aligned with its Lead assignment.
+
+	The ownership command still uses CRM Lead as the operational aggregate for
+	backward-compatible assignment flows, while Student owns the post-conversion
+	status command.  A linked Student must therefore carry the same assignment
+	projection; otherwise a Sale/CTV Sale can open the Lead-backed detail but is
+	denied when changing the canonical Student stage.
+	"""
+	student_name = frappe.db.get_value("CRM Lead", lead_name, "student")
+	if not student_name or not frappe.db.exists("CRM Student", student_name):
+		return
+
+	student_fields = _doctype_fields("CRM Student")
+	student_updates = {
+		fieldname: updates.get(fieldname)
+		for fieldname in ("owner_staff", "owning_team", "owning_pool", "assigned_to")
+		if fieldname in student_fields
+	}
+	if "ownership_revision" in student_fields:
+		student_updates["ownership_revision"] = revision
+	if student_updates:
+		frappe.db.set_value("CRM Student", student_name, student_updates, update_modified=True)
+
+
 def _actor_scope_snapshot(actor: str, profile: str, teams: list[dict[str, Any]]) -> str:
 	snapshot = {
 		"profile": profile,
@@ -794,6 +819,7 @@ def change_student_ownership(
 		if _revision_field():
 			updates[_revision_field()] = next_revision
 		frappe.db.set_value("CRM Lead", student_name, updates, update_modified=True)
+		_sync_linked_student_ownership(student_name, updates, next_revision)
 		# Active Phase 6 work is reconciled in the same ownership transaction so a
 		# scope change cannot strand an action outside every executor queue.
 		from crm.fcrm.student_decision import reconcile_student_actions

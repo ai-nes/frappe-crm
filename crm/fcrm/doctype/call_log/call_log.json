@@ -208,6 +208,10 @@
   },
   {
    "read": 1,
+   "role": "CTV Sale"
+  },
+  {
+   "read": 1,
    "role": "Marketing"
   },
   {

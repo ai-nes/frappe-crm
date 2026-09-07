@@ -28,6 +28,13 @@ PROCESSING_STATUSES = ("NEW", "PROCESSING", "PROCESSED", "ASSIGNED", "CLOSED")
 RESOLUTIONS = ("PENDING", "MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED")
 ADVANCING_RESOLUTIONS = frozenset({"MATCHED", "CREATED"})
 TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
+STATUS_DEFAULT_RESOLUTIONS = {
+	"NEW": "PENDING",
+	"PROCESSING": "PENDING",
+	"PROCESSED": "CREATED",
+	"ASSIGNED": "CREATED",
+	"CLOSED": "FAILED",
+}
 SERVICE_FLAG = "lead_processing_service"
 
 
@@ -207,6 +214,16 @@ def _get_resolution(lead) -> str:
 	return str(lead.get("resolution") or "PENDING").strip().upper()
 
 
+def _resolution_for_status(status: str, current_resolution: str) -> str:
+	if status in {"NEW", "PROCESSING"}:
+		return "PENDING"
+	if status in {"PROCESSED", "ASSIGNED"} and current_resolution in ADVANCING_RESOLUTIONS:
+		return current_resolution
+	if status == "CLOSED" and current_resolution in RESOLUTIONS[1:]:
+		return current_resolution
+	return STATUS_DEFAULT_RESOLUTIONS[status]
+
+
 def _set_processing_values(name: str, values: dict[str, Any]) -> None:
 	previous = getattr(frappe.flags, SERVICE_FLAG, False)
 	setattr(frappe.flags, SERVICE_FLAG, True)
@@ -214,6 +231,33 @@ def _set_processing_values(name: str, values: dict[str, Any]) -> None:
 		frappe.db.set_value("CRM Lead", name, values, update_modified=True)
 	finally:
 		setattr(frappe.flags, SERVICE_FLAG, previous)
+
+
+def update_processing_status(lead: str, status: str, reason: str | None = None) -> dict[str, Any]:
+	"""Apply a manual processing-status correction without bypassing validation."""
+	lead_doc = _load_lead(lead)
+	_lock_lead(lead_doc.name)
+	lead_doc = _load_lead(lead_doc.name)
+	requested_status = _required(status, "status").upper()
+	if requested_status not in PROCESSING_STATUSES:
+		_fail("INVALID_STATUS", "Status must be one of the supported processing statuses.")
+
+	resolution = _resolution_for_status(requested_status, _get_resolution(lead_doc))
+	values = {
+		"processing_status": requested_status,
+		"resolution": resolution,
+		"resolution_reason": _reason(reason) or f"Manual status update: {requested_status}.",
+	}
+	if requested_status in {"NEW", "PROCESSING"}:
+		values["matched_student"] = None
+	_set_processing_values(lead_doc.name, values)
+	return {
+		"status": requested_status,
+		"resolution": resolution,
+		"lead": lead_doc.name,
+		"target_student": lead_doc.get("matched_student") if resolution == "MATCHED" else None,
+		"validation": {},
+	}
 
 
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict[str, Any]:

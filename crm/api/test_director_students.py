@@ -57,6 +57,7 @@ class TestDirectorStudents(FrappeTestCase):
 		row = frappe._dict(
 			{
 				"name": "ENR-2026-00001",
+				"student": "CRMC-2026-00001",
 				"student_name": "Nguyễn Minh An",
 				"case_key": "CK-ID-2026",
 				"high_school": "HS-1",
@@ -92,6 +93,7 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 
 		self.assertEqual(item["id"], "ENR-2026-00001")
+		self.assertEqual(item["studentId"], "CRMC-2026-00001")
 		self.assertEqual(item["code"], "HS-2026-HCM-000001")
 		self.assertEqual(item["initials"], "MA")
 		self.assertEqual(item["school"], "THPT Châu Văn Liêm")
@@ -229,6 +231,7 @@ class TestDirectorStudents(FrappeTestCase):
 	def test_detail_projection_contains_contract_sections(self):
 		row = frappe._dict(
 			name="ENR-1",
+			student="CRMC-1",
 			student_name="Nguyễn Minh An",
 			phone="0900000000",
 			email="an@example.com",
@@ -282,6 +285,7 @@ class TestDirectorStudents(FrappeTestCase):
 			response = director_students._build_student_360(row, item)
 
 		self.assertEqual(response["student"]["phone"], "0900000000")
+		self.assertEqual(response["student"]["studentId"], "CRMC-1")
 		self.assertEqual(response["student"]["email"], "an@example.com")
 		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
@@ -648,6 +652,27 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["calls"], [])
 		self.assertEqual(result["total_interactions"], 0)
 
+	def test_get_student_interactions_resolves_canonical_student_id(self):
+		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_activity_target",
+				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+			),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students.frappe, "has_permission", return_value=True),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_guardian", return_value={}),
+		):
+			result = director_students.get_student_interactions("CRMC-1")
+
+		self.assertEqual(result["student_id"], "CRMC-1")
+		self.assertEqual(result["zalo_messages"], [])
+		self.assertEqual(result["calls"], [])
+
 	def test_get_lead_call_logs_endpoint(self):
 		with patch.object(
 			director_students,
@@ -702,16 +727,22 @@ class TestDirectorStudents(FrappeTestCase):
 
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_activity_target",
+				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+			),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students.frappe, "has_permission", return_value=True),
 			patch.object(director_students.frappe, "get_list", side_effect=get_list),
 			patch.object(director_students, "_student_guardian", return_value={}),
 			patch.object(
 				director_students, "_student_zalo_messages", return_value=[{"id": "INTX-CHATWOOT-2"}]
 			),
 		):
-			result = director_students.get_student_chatwoot_interactions("ENR-1", page="2", page_size="1")
+			result = director_students.get_student_chatwoot_interactions("CRMC-1", page="2", page_size="1")
 
-		self.assertEqual(result["student_id"], "ENR-1")
+		self.assertEqual(result["student_id"], "CRMC-1")
 		self.assertEqual(result["data"], rows)
 		self.assertEqual(result["zalo_messages"], [{"id": "INTX-CHATWOOT-2"}])
 		self.assertEqual(result["meta"], {"page": 2, "page_size": 1, "total": 3, "has_next_page": True})

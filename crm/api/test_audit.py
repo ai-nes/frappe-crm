@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -119,3 +121,22 @@ class TestStudentAuditApi(FrappeTestCase):
 		self.assertEqual(result["lead_id"], lead.name)
 		self.assertTrue(result["read_only"])
 		self.assertIn("created", [log["action"] for log in result["logs"]])
+
+	def test_student_audit_resolves_canonical_student_id_to_source_lead(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Canonical Audit Student",
+				"phone": "0912345683",
+				"email": "canonical-audit-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		with (
+			patch("crm.api.audit.canonical_student", return_value="CRMC-AUDIT-1"),
+			patch("crm.api.audit.lead_for_student", return_value=lead.name),
+		):
+			result = get_student_audit_logs("CRMC-AUDIT-1")
+
+		self.assertEqual(result["student"], "CRMC-AUDIT-1")
+		self.assertTrue(result["logs"])

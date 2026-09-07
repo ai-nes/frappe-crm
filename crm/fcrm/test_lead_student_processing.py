@@ -122,6 +122,33 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		self.assertFalse(result["validation"]["id_number"])
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
 
+	def test_status_command_persists_every_supported_status(self):
+		from crm.fcrm.lead_processing import update_processing_status
+
+		expected_resolutions = {
+			"NEW": "PENDING",
+			"PROCESSING": "PENDING",
+			"PROCESSED": "CREATED",
+			"ASSIGNED": "CREATED",
+			"CLOSED": "FAILED",
+		}
+
+		for status, resolution in expected_resolutions.items():
+			with self.subTest(status=status):
+				lead = self._new_lead(f"StatusUpdate{status}")
+				result = update_processing_status(lead.name, status)
+
+				self.assertEqual(result["status"], status)
+				self.assertEqual(result["resolution"], resolution)
+				self.assertEqual(
+					frappe.db.get_value("CRM Lead", lead.name, "processing_status"),
+					status,
+				)
+				self.assertEqual(
+					frappe.db.get_value("CRM Lead", lead.name, "resolution"),
+					resolution,
+				)
+
 	def test_valid_gate_classifies_new_student_path(self):
 		from crm.fcrm.lead_processing import process_lead
 

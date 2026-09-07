@@ -19,6 +19,33 @@ from crm.fcrm.student_ownership import (
 
 
 class TestStudentOwnershipContract(FrappeTestCase):
+	def test_linked_student_scope_follows_current_lead_assignment(self):
+		updates = {
+			"owner_staff": "STAFF-CTV",
+			"owning_team": None,
+			"owning_pool": None,
+			"assigned_to": "STAFF-CTV",
+		}
+		with (
+			patch.object(student_ownership_domain.frappe.db, "get_value", return_value="CRMC-1") as get_value,
+			patch.object(student_ownership_domain.frappe.db, "exists", return_value=True),
+			patch.object(
+				student_ownership_domain,
+				"_doctype_fields",
+				return_value={*updates, "ownership_revision"},
+			),
+			patch.object(student_ownership_domain.frappe.db, "set_value") as set_value,
+		):
+			student_ownership_domain._sync_linked_student_ownership("ENR-1", updates, 7)
+
+		get_value.assert_called_once_with("CRM Lead", "ENR-1", "student")
+		set_value.assert_called_once_with(
+			"CRM Student",
+			"CRMC-1",
+			{**updates, "ownership_revision": 7},
+			update_modified=True,
+		)
+
 	def test_only_sale_and_managers_receive_ownership_capability(self):
 		for roles in ({"Sale"}, {"Lead Sale"}, {"Admissions Director"}):
 			with self.subTest(roles=roles):

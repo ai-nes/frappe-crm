@@ -36,6 +36,7 @@ CTV_SALE_DIRECTOR_READ_DOCTYPES = (
 	"CRM Ward",
 	"CRM High School Annual Snapshot",
 	"CRM Recommendation",
+	"Call Log",
 )
 
 # PRD-phan-quyen-lead.md P0-1 CRUD matrix, hand-transcribed. Every role here

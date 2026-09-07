@@ -6,6 +6,8 @@ from typing import Any
 import frappe
 from frappe import _
 
+from crm.fcrm.student_reference import canonical_student, lead_for_student
+
 STUDENT_DOCTYPE = "CRM Lead"
 DEFAULT_PAGE_LENGTH = 50
 MAX_PAGE_LENGTH = 100
@@ -474,21 +476,33 @@ def get_student_audit_logs(
 	start: int | str | None = 0,
 	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
 ) -> dict[str, Any]:
-	"""Return immutable create/update/delete history for one CRM Lead."""
-	if not student or not frappe.db.exists(STUDENT_DOCTYPE, student):
+	"""Return immutable create/update/delete history for one CRM Student.
+
+	Audit rows are still recorded against the legacy CRM Lead projection, so a
+	canonical CRM Student ID is resolved to its source Lead before reading the
+	immutable history.
+	"""
+	requested_student = str(student or "").strip()
+	canonical_id = canonical_student(requested_student)
+	audit_docname = lead_for_student(canonical_id) if canonical_id else requested_student
+	if not audit_docname or not frappe.db.exists(STUDENT_DOCTYPE, audit_docname):
 		frappe.throw(_("Student not found"), frappe.DoesNotExistError)
 
-	if not frappe.has_permission(STUDENT_DOCTYPE, "read", student):
+	if canonical_id:
+		allowed = frappe.has_permission("CRM Student", "read", canonical_id)
+	else:
+		allowed = frappe.has_permission(STUDENT_DOCTYPE, "read", audit_docname)
+	if not allowed:
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 	start = _parse_pagination(start, 0, "start")
 	page_length = _parse_pagination(page_length, DEFAULT_PAGE_LENGTH, "page_length", minimum=1)
 	page_length = min(page_length, MAX_PAGE_LENGTH)
 
-	logs = get_audit_logs_for_document(student)
+	logs = get_audit_logs_for_document(audit_docname)
 
 	return {
-		"student": student,
+		"student": requested_student,
 		"logs": logs[start : start + page_length],
 		"total": len(logs),
 		"start": start,

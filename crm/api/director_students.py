@@ -17,6 +17,7 @@ from frappe import _
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.permissions import get_student_list_read_condition
+from crm.fcrm.student_reference import canonical_student, lead_for_student
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -260,28 +261,31 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and Call Logs) for a CRM Lead."""
 	_require_access()
-	if not str(student_id or "").strip():
+	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
+	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", student_id)
+		doc = frappe.get_doc("CRM Lead", lead_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
+	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
-	interactions = _student_interactions(student_id)
-	guardian = _student_guardian(student_id)
+	interactions = _student_interactions(lead_id)
+	guardian = _student_guardian(lead_id)
 	if not guardian.get("name") and row.get("alt_name"):
 		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
 
-	zalo_messages = _student_zalo_messages(student_id, interactions, row, guardian)
-	calls = _student_call_records(student_id, interactions, row, guardian)
+	zalo_messages = _student_zalo_messages(lead_id, interactions, row, guardian)
+	calls = _student_call_records(lead_id, interactions, row, guardian)
 
 	return {
-		"student_id": student_id,
+		"student_id": requested_id,
 		"zalo_messages": zalo_messages,
 		"calls": calls,
 		"total_interactions": len(interactions),
@@ -328,22 +332,24 @@ def get_student_chatwoot_interactions(
 ) -> dict[str, Any]:
 	"""Return permission-aware Chatwoot interactions for one Student."""
 	_require_access()
-	student_id = str(student_id or "").strip()
-	if not student_id:
+	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
+	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", student_id)
+		doc = frappe.get_doc("CRM Lead", lead_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
+	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
 	filters = {
-		"student": student_id,
+		"student": lead_id,
 		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
 	}
 	rows = frappe.get_list(
@@ -361,7 +367,7 @@ def get_student_chatwoot_interactions(
 		limit_page_length=0,
 		pluck="name",
 	)
-	guardian = _student_guardian(student_id)
+	guardian = _student_guardian(lead_id)
 	student_row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
 	if not guardian.get("name") and student_row.get("alt_name"):
 		guardian.update(
@@ -369,9 +375,9 @@ def get_student_chatwoot_interactions(
 		)
 
 	return {
-		"student_id": student_id,
+		"student_id": requested_id,
 		"data": rows,
-		"zalo_messages": _student_zalo_messages(student_id, rows, student_row, guardian),
+		"zalo_messages": _student_zalo_messages(lead_id, rows, student_row, guardian),
 		"meta": {
 			"page": page_number,
 			"page_size": page_length,
@@ -616,6 +622,23 @@ def _resolve_student_id(student_id: str | None) -> str:
 
 	matches = _display_code_student_ids(value, match.group("year"))
 	return matches[0] if len(matches) == 1 else value
+
+
+def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | None]:
+	"""Resolve a Student Detail ID to the legacy Lead-backed activity target.
+
+	The activity tables still store their legacy ``student``/``reference_docname``
+	values as CRM Lead names. Student Detail, however, uses the canonical CRM
+	Student ID for its child APIs. Keep that compatibility mapping in one place
+	so Zalo, Chatwoot and Call Log queries share the same permission boundary.
+	"""
+	requested_id = str(student_id or "").strip()
+	resolved_id = _resolve_student_id(requested_id)
+	canonical_id = canonical_student(resolved_id)
+	lead_id = resolved_id if frappe.db.exists("CRM Lead", resolved_id) else None
+	if not lead_id and canonical_id:
+		lead_id = lead_for_student(canonical_id)
+	return requested_id, lead_id or resolved_id, canonical_id
 
 
 def _list_scope_student_ids() -> list[str] | None:
@@ -875,6 +898,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		)
 	return {
 		"id": row.get("name"),
+		"studentId": row.get("student"),
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
 		"code": _profile_code(row),
@@ -1077,6 +1101,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 	return {
 		"student": {
 			"id": row.get("name"),
+			"studentId": row.get("student"),
 			"initials": item.get("initials"),
 			"name": item.get("name"),
 			"code": item.get("code"),

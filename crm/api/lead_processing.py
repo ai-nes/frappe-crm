@@ -19,6 +19,9 @@ from crm.fcrm.lead_processing import (
 from crm.fcrm.lead_processing import (
 	process_lead as _process_lead,
 )
+from crm.fcrm.lead_processing import (
+	update_processing_status as _update_processing_status,
+)
 from crm.fcrm.student_conversion import StudentConversionError
 
 _PERMISSION_ERRORS = {"FORBIDDEN", "UNAUTHORIZED", "OUT_OF_SCOPE"}
@@ -35,6 +38,11 @@ def _run(command, **kwargs):
 @frappe.whitelist(methods=["POST"])
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict:
 	return _run(_process_lead, lead=lead, resolution=resolution, reason=reason)
+
+
+@frappe.whitelist(methods=["POST"])
+def update_processing_status(lead: str, status: str, reason: str | None = None) -> dict:
+	return _run(_update_processing_status, lead=lead, status=status, reason=reason)
 
 
 @frappe.whitelist(methods=["GET", "POST"])
