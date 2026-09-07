@@ -62,6 +62,7 @@
   {"fields": ["student", "current_slot"], "name": "crm_action_student_current_slot_uniq", "unique": 1}
  ],
  "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[
+   {"role":"CTV Sale","read":1},
    {"role":"Admissions Director","read":1},
    {"role":"Lead Sale","read":1},
    {"role":"Sale","read":1},

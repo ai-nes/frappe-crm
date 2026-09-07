@@ -242,6 +242,14 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(doc.check_permission_calls, ["write"])
 		self.assertEqual(doc.save_calls, 1)
 
+	def test_ctv_sale_can_only_update_note_and_status_fields(self):
+		with (
+			patch.object(frappe.session, "user", "ctv@example.com"),
+			patch.object(frappe, "get_roles", return_value=["CTV Sale"]),
+		):
+			with self.assertRaises(frappe.PermissionError):
+				update_student("STU-001", {"phone": "0900000000"})
+
 	def test_update_school_accepts_partial_dict(self):
 		doc = _FakeDocument("CRM High School", "SCH-001")
 		with patch.object(frappe, "get_doc", return_value=doc):

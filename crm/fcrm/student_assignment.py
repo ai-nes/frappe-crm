@@ -261,7 +261,11 @@ def score_member(member: dict[str, Any], student, policy=None) -> dict[str, Any]
 
 
 def fairness_report(
-	*, zone: str | None = None, since: date | None = None, until: date | None = None
+	*,
+	zone: str | None = None,
+	since: date | None = None,
+	until: date | None = None,
+	staff_scope: set[str] | None = None,
 ) -> dict[str, Any]:
 	since = since or date.today().replace(day=1)
 	until = until or date.today()
@@ -272,6 +276,8 @@ def fairness_report(
 	rows = _rows(
 		"CRM Student Ownership Event", filters, ["next_owner_staff", "event_at", "reason", "student"]
 	)
+	if staff_scope is not None:
+		rows = [row for row in rows if row.get("next_owner_staff") in staff_scope]
 	if zone:
 		student_ids = []
 		for student_name in {r.get("student") for r in rows if r.get("student")}:

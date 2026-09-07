@@ -4,7 +4,11 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.student_dashboard import get_student_dashboard, get_student_records_by_phone
+from crm.api.student_dashboard import (
+	get_student_dashboard,
+	get_student_records_by_phone,
+	get_student_score_context,
+)
 
 
 class TestStudentDashboardEvents(FrappeTestCase):
@@ -93,6 +97,14 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		try:
 			with self.assertRaises(frappe.PermissionError):
 				get_student_dashboard(phone="0987000099")
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_score_context_requires_an_authenticated_session(self):
+		frappe.set_user("Guest")
+		try:
+			with self.assertRaises(frappe.PermissionError):
+				get_student_score_context()
 		finally:
 			frappe.set_user("Administrator")
 
