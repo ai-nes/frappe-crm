@@ -79,7 +79,7 @@ def get_count(doctype, from_date, to_date, user=None, extra_filters=None):
 		["creation", "<", frappe.utils.add_days(to_date, 1)],
 	]
 
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	if extra_filters:
@@ -99,7 +99,7 @@ def get_count_delta(doctype, from_date, to_date, user=None, extra_filters=None):
 		["creation", "<", from_date],
 	]
 
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		crm_staff = get_assigned_crm_staff(user)
 		current_filters.append(["assigned_to", "=", crm_staff])
 		previous_filters.append(["assigned_to", "=", crm_staff])
@@ -125,32 +125,32 @@ def number_chart(title, tooltip, value, delta):
 
 
 def get_total_students(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("CRM Student", from_date, to_date)
+	value, delta = get_count_delta("CRM Lead", from_date, to_date)
 	return number_chart("Total students", "Total number of imported enrollment students", value, delta)
 
 
 def get_total_contacts(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("CRM Contact", from_date, to_date, user)
+	value, delta = get_count_delta("CRM Student", from_date, to_date, user)
 	return number_chart("Total CRM contacts", "Total number of admission contacts", value, delta)
 
 
 def get_qualified_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "PROSPECT"]]
+		"CRM Student", from_date, to_date, user, [["enrollment_status", "=", "PROSPECT"]]
 	)
 	return number_chart("Qualified contacts", "Contacts currently in the qualified stage", value, delta)
 
 
 def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["enrollment_status", "=", "ENROLLED"]]
+		"CRM Student", from_date, to_date, user, [["enrollment_status", "=", "ENROLLED"]]
 	)
 	return number_chart("Enrolled contacts", "Contacts currently in the enrolled stage", value, delta)
 
 
 def get_admission_trend(from_date=None, to_date=None, user=None):
-	students = daily_counts("CRM Student", from_date, to_date)
-	contacts = daily_counts("CRM Contact", from_date, to_date, user)
+	students = daily_counts("CRM Lead", from_date, to_date)
+	contacts = daily_counts("CRM Student", from_date, to_date, user)
 	dates = sorted(set(students) | set(contacts))
 	data = [
 		{
@@ -179,7 +179,7 @@ def daily_counts(doctype, from_date, to_date, user=None):
 		["creation", ">=", from_date],
 		["creation", "<", frappe.utils.add_days(to_date, 1)],
 	]
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	counts = {}
@@ -191,7 +191,7 @@ def daily_counts(doctype, from_date, to_date, user=None):
 
 def get_contacts_by_stage(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Contact",
+		"CRM Student",
 		"enrollment_status",
 		"enrollment_status",
 		"Contacts by stage",
@@ -204,7 +204,7 @@ def get_contacts_by_stage(from_date=None, to_date=None, user=None):
 
 def get_contacts_by_source(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Contact",
+		"CRM Student",
 		"source",
 		"source",
 		"Contacts by source",
@@ -217,7 +217,7 @@ def get_contacts_by_source(from_date=None, to_date=None, user=None):
 
 def get_students_by_source(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Student",
+		"CRM Lead",
 		"source",
 		"source",
 		"Students by source",
@@ -229,7 +229,7 @@ def get_students_by_source(from_date=None, to_date=None, user=None):
 
 def get_contacts_by_high_school(from_date=None, to_date=None, user=None):
 	return axis_chart(
-		"CRM Contact",
+		"CRM Student",
 		"high_school",
 		"high_school",
 		"Contacts by high school",
@@ -249,7 +249,7 @@ def get_contacts_by_assignee(from_date=None, to_date=None, user=None):
 		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	rows = frappe.get_list(
-		"CRM Contact",
+		"CRM Student",
 		filters=filters,
 		fields=["assigned_to", "count(name) as count"],
 		group_by="assigned_to",
@@ -307,7 +307,7 @@ def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=No
 		["creation", ">=", from_date],
 		["creation", "<", frappe.utils.add_days(to_date, 1)],
 	]
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	rows = frappe.get_list(
@@ -345,13 +345,13 @@ def get_sidebar_badge_counts():
 		urgent_sla_count = get_readable_count("CRM Student SLA Attempt", {"status": "open"})
 
 	pool_count = 0
-	if frappe.db.table_exists("CRM Contact"):
+	if frappe.db.table_exists("CRM Student"):
 		pool_count = get_readable_count(
-			"CRM Contact",
+			"CRM Student",
 			filters={"owner_staff": ["is", "not set"]},
 		)
-	elif frappe.db.table_exists("CRM Student"):
-		pool_count = get_readable_count("CRM Student", {"owner_staff": ["is", "not set"]})
+	elif frappe.db.table_exists("CRM Lead"):
+		pool_count = get_readable_count("CRM Lead", {"owner_staff": ["is", "not set"]})
 
 	team_sla_breached_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):
@@ -360,8 +360,8 @@ def get_sidebar_badge_counts():
 		)
 
 	duplicate_count = 0
-	if frappe.db.table_exists("CRM Contact"):
-		duplicate_count = get_readable_count("CRM Contact", {"full_name": ["like", "%(Trùng%"]})
+	if frappe.db.table_exists("CRM Student"):
+		duplicate_count = get_readable_count("CRM Student", {"full_name": ["like", "%(Trùng%"]})
 
 	pending_spend_approval_count = 0
 	if frappe.db.table_exists("CRM Campaign Spend"):

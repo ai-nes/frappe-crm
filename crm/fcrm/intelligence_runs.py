@@ -47,7 +47,7 @@ _STUDENT_UNSAFE_ANALYSIS_LANGUAGE = (
 	"scholarship interest",
 )
 PROVENANCE_DOCTYPES = {
-	"student": "CRM Student",
+	"student": "CRM Lead",
 	"school": "CRM High School",
 	"snapshot": "CRM High School Annual Snapshot",
 	"stakeholder": "CRM School Stakeholder",
@@ -85,7 +85,7 @@ def _digest(value: Any) -> str:
 def _target(domain: str, target: str):
 	if domain not in RUN_TYPES or not target:
 		frappe.throw("Invalid Intelligence Run target.", frappe.ValidationError)
-	doctype = "CRM Student" if domain == "student" else "CRM High School"
+	doctype = "CRM Lead" if domain == "student" else "CRM High School"
 	if not frappe.db.exists(doctype, target):
 		frappe.throw("Intelligence Run target does not exist.", frappe.DoesNotExistError)
 	if not frappe.has_permission(doctype, "read", target):
@@ -94,7 +94,7 @@ def _target(domain: str, target: str):
 
 def _source(domain: str, target: str, admission_year: int | None = None) -> tuple[str, str]:
 	if domain == "student":
-		revision = str(int(frappe.db.get_value("CRM Student", target, "student_context_revision") or 0))
+		revision = str(int(frappe.db.get_value("CRM Lead", target, "student_context_revision") or 0))
 		evidence = _student_stage_evidence(target, revision).get("student_360")
 		if not isinstance(evidence, dict):
 			frappe.throw("Student 360 source evidence is unavailable.", frappe.ValidationError)
@@ -132,7 +132,7 @@ def _student_360_analysis_input(evidence: dict[str, Any]) -> dict[str, Any]:
 
 def _lock_target(domain: str, target: str) -> None:
 	"""Serialize run creation for one aggregate until schema-level uniqueness wins."""
-	doctype = "CRM Student" if domain == "student" else "CRM High School"
+	doctype = "CRM Lead" if domain == "student" else "CRM High School"
 	frappe.db.sql(f"SELECT name FROM `tab{doctype}` WHERE name=%s FOR UPDATE", (target,))
 
 
@@ -378,7 +378,7 @@ def read_receipt(request_id: str) -> dict[str, Any]:
 		frappe.throw("Analysis request receipt has expired.", frappe.DoesNotExistError)
 	run = frappe.get_doc(receipt.parent_run_type, receipt.parent_run)
 	target_type, target = (
-		("CRM Student", run.student)
+		("CRM Lead", run.student)
 		if receipt.parent_run_type == RUN_TYPES["student"]
 		else ("CRM High School", run.high_school)
 	)
@@ -599,7 +599,7 @@ def _automatic_identity(domain: str, target: str, revision: str, source_digest: 
 def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	"""Return only the bounded, no-PII evidence surface for Student 360."""
 	row = frappe.db.get_value(
-		"CRM Student", student,
+		"CRM Lead", student,
 		[
 			"lifecycle_stage", "enrollment_status", "current_grade", "study_stage",
 			"assessment_status", "interest_level", "fit_level", "primary_barrier",

@@ -51,11 +51,11 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		frappe.conf.pop("crm_intelligence_writer_epoch", None)
 		frappe.db.delete("CRM Admission Event Decision", {"student": self.student.name})
 		frappe.db.delete("CRM Student Revision Journal", {"student": self.student.name})
-		frappe.delete_doc("CRM Student", self.student.name, force=True)
+		frappe.delete_doc("CRM Lead", self.student.name, force=True)
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -65,7 +65,7 @@ class TestAdmissionEventPolicy(FrappeTestCase):
 		return student
 
 	def _revision(self):
-		return int(frappe.db.get_value("CRM Student", self.student.name, "student_context_revision") or 0)
+		return int(frappe.db.get_value("CRM Lead", self.student.name, "student_context_revision") or 0)
 
 	def _decisions(self):
 		return frappe.get_all(

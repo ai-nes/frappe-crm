@@ -13,29 +13,29 @@ Catalogs three anomaly classes and writes them to a single Error Log entry:
 2. CRM Contact rows whose `student` link points at a CRM Student that no longer
    exists (dangling link).
 3. CRM Student rows whose enrollment_status was never in
-   crm.fcrm.doctype.crm_contact.crm_contact.MILESTONE_ENROLLMENT_STATUSES,
+   crm.fcrm.doctype.crm_student.crm_student.MILESTONE_ENROLLMENT_STATUSES,
    suggesting they were created by the old unconditional (pre-milestone) auto-create
    path rather than a genuine milestone event.
 """
 
 import frappe
 
-from crm.fcrm.doctype.crm_contact.crm_contact import MILESTONE_ENROLLMENT_STATUSES
+from crm.fcrm.doctype.crm_student.crm_student import MILESTONE_ENROLLMENT_STATUSES
 
 
 def execute():
 	linked_students = set(
-		frappe.get_all("CRM Contact", filters={"student": ["is", "set"]}, pluck="student")
+		frappe.get_all("CRM Student", filters={"student": ["is", "set"]}, pluck="student")
 	)
 	all_students = frappe.get_all(
-		"CRM Student", fields=["name", "enrollment_status"]
+		"CRM Lead", fields=["name", "enrollment_status"]
 	)
 	all_student_names = {row.name for row in all_students}
 
 	orphaned_students = [row.name for row in all_students if row.name not in linked_students]
 
 	dangling_contact_links = frappe.get_all(
-		"CRM Contact",
+		"CRM Student",
 		filters={"student": ["is", "set"]},
 		fields=["name", "student"],
 	)
@@ -48,7 +48,7 @@ def execute():
 	]
 
 	report = (
-		f"Orphaned CRM Student (no linked CRM Contact): {len(orphaned_students)}\n"
+		f"Orphaned CRM Lead (no linked CRM Student): {len(orphaned_students)}\n"
 		f"{orphaned_students}\n\n"
 		f"CRM Contact with dangling student link: {len(dangling_contact_links)}\n"
 		f"{dangling_contact_links}\n\n"

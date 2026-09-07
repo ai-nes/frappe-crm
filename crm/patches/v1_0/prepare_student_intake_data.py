@@ -286,7 +286,7 @@ def _ensure_case_key(student: dict, identity: str, cycle: str) -> str:
 
 
 def _set_student(name: str, values: dict) -> None:
-	frappe.db.set_value("CRM Student", name, values, update_modified=False)
+	frappe.db.set_value("CRM Lead", name, values, update_modified=False)
 
 
 def _add_unique_index(table: str, columns: tuple[str, ...], index_name: str) -> bool:
@@ -339,7 +339,7 @@ def execute():
 		"owner_staff",
 		"owning_team",
 	]
-	students = frappe.get_all("CRM Student", fields=fields, order_by="name asc")
+	students = frappe.get_all("CRM Lead", fields=fields, order_by="name asc")
 	resolvable = {}
 	groups = defaultdict(list)
 	for student in students:

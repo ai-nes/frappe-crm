@@ -13,7 +13,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "Language: en\n"
 
-#. CRM Contact — custom fields
+#. CRM Student — custom fields
 
 msgid "Parent Information"
 msgstr "Parent Information"
@@ -92,7 +92,7 @@ msgstr "Academic Results"
 msgid "CRM Student Language Certificate"
 msgstr "Language Certificates"
 
-#. CRM Contact — field labels and options (standard strings)
+#. CRM Student — field labels and options (standard strings)
 
 msgid "Admission Year"
 msgstr "Admission Year"

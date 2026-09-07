@@ -45,7 +45,7 @@ class TestRecommendationDecision(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM NBA Evaluation", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
@@ -53,7 +53,7 @@ class TestRecommendationDecision(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -61,7 +61,7 @@ class TestRecommendationDecision(FrappeTestCase):
 		finally:
 			frappe.flags.student_intake_service = previous
 		frappe.db.set_value(
-			"CRM Student", student.name, "owner_staff", self._sale_staff, update_modified=False
+			"CRM Lead", student.name, "owner_staff", self._sale_staff, update_modified=False
 		)
 		return student
 
@@ -83,7 +83,7 @@ class TestRecommendationDecision(FrappeTestCase):
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": "REC-" + frappe.generate_hash(length=18),
-				"target_type": "CRM Student",
+				"target_type": "CRM Lead",
 				"target_id": self._student.name,
 				"action": action,
 				"purpose": "Call the family about the offer.",

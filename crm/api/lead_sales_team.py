@@ -364,7 +364,7 @@ def _team_scope(user: str, report_date: date, warnings: list[str]) -> dict[str, 
 
 
 def _load_students(scope: dict[str, Any], year: str, warnings: list[str]) -> list[dict[str, Any]]:
-	if not _table_exists("CRM Student"):
+	if not _table_exists("CRM Lead"):
 		raise_api_error(
 			"SALES_TEAM_UNAVAILABLE",
 			"Không thể đọc dữ liệu học sinh của đội Sale.",
@@ -377,7 +377,7 @@ def _load_students(scope: dict[str, Any], year: str, warnings: list[str]) -> lis
 		return [
 			dict(row)
 			for row in frappe.get_list(
-				"CRM Student",
+				"CRM Lead",
 				filters={"admission_year": year, "lifecycle_stage": ["!=", "Lost"]},
 				or_filters=[
 					["owner_staff", "in", staff_ids],

@@ -5,7 +5,7 @@
 surface here since lifecycle_rank/is_backward_or_reopen/user_can_override_lifecycle
 are plain logic with no DB writes required. get_lifecycle_stage/enforce_lifecycle_change_policy
 still need frappe.db / frappe.session and are covered indirectly through
-CRM Contact / CRM Student save-path tests (test_crm_contact.py / test_crm_student.py)."""
+CRM Student / CRM Student save-path tests (test_crm_contact.py / test_crm_student.py)."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase

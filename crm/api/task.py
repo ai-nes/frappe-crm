@@ -1,4 +1,4 @@
-"""Task APIs scoped to CRM Student / CRM Contact.
+"""Task APIs scoped to CRM Lead / CRM Student.
 
 Task DocType permissions grant the supported sales roles the required CRUD
 operations, while the permission hooks below add record-level checks on the
@@ -24,7 +24,7 @@ from crm.fcrm.student_decision import (
 	update_manual_action,
 )
 
-ALLOWED_REFERENCE_DOCTYPES = {"CRM Student", "CRM Contact"}
+ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
 
 FIELDS = [
 	"name",
@@ -164,21 +164,21 @@ def _task_reference_scope_condition(student_condition, contact_condition):
 	task_table = "`tabTask`"
 	student_reference = (
 		f"COALESCE(NULLIF({task_table}.student, ''), "
-		f"CASE WHEN {task_table}.reference_doctype = 'CRM Student' "
+		f"CASE WHEN {task_table}.reference_doctype = 'CRM Lead' "
 		f"THEN NULLIF({task_table}.reference_docname, '') END)"
 	)
 	contact_reference = (
-		f"CASE WHEN {task_table}.reference_doctype = 'CRM Contact' "
+		f"CASE WHEN {task_table}.reference_doctype = 'CRM Student' "
 		f"THEN NULLIF({task_table}.reference_docname, '') END"
 	)
 	return f"""(
 		EXISTS (
-			SELECT 1 FROM `tabCRM Student` student_scope
+			SELECT 1 FROM `tabCRM Lead` student_scope
 			WHERE student_scope.name = {student_reference}
 			AND ({student_condition})
 		)
 		OR EXISTS (
-			SELECT 1 FROM `tabCRM Contact` contact_scope
+			SELECT 1 FROM `tabCRM Student` contact_scope
 			WHERE contact_scope.name = {contact_reference}
 			AND ({contact_condition})
 		)
@@ -193,8 +193,8 @@ def get_permission_query_conditions(user=None):
 	if not _is_sales_task_actor(actor):
 		return None
 
-	student_condition = _permission_condition("CRM Student", "student_scope", actor)
-	contact_condition = _permission_condition("CRM Contact", "contact_scope", actor)
+	student_condition = _permission_condition("CRM Lead", "student_scope", actor)
+	contact_condition = _permission_condition("CRM Student", "contact_scope", actor)
 	if student_condition == "1=0" and contact_condition == "1=0":
 		return "1=0"
 	return _task_reference_scope_condition(student_condition, contact_condition)
@@ -227,7 +227,7 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 
 def _action_scope_condition(student_condition):
 	return f"""EXISTS (
-		SELECT 1 FROM `tabCRM Student` student_scope
+		SELECT 1 FROM `tabCRM Lead` student_scope
 		WHERE student_scope.name = action_item.student
 		AND ({student_condition})
 	)"""
@@ -332,7 +332,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 			assigned_staff.full_name AS assigned_to_name,
 			action_item.student AS student,
 			COALESCE(student.student_name, contact.full_name) AS student_name,
-			CASE WHEN action_item.student IS NOT NULL AND action_item.student != '' THEN 'CRM Student' ELSE 'CRM Contact' END AS reference_doctype,
+			CASE WHEN action_item.student IS NOT NULL AND action_item.student != '' THEN 'CRM Lead' ELSE 'CRM Student' END AS reference_doctype,
 			COALESCE(NULLIF(action_item.student, ''), NULLIF(action_item.contact, '')) AS reference_docname,
 			action_item.linked_interaction AS linked_interaction,
 			action_item.action AS action,
@@ -341,8 +341,8 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 			action_item.created_at AS created_at,
 			action_item.modified AS modified
 		FROM `tabCRM Action Item` action_item
-		LEFT JOIN `tabCRM Student` student ON student.name = action_item.student
-		LEFT JOIN `tabCRM Contact` contact ON contact.name = action_item.contact
+		LEFT JOIN `tabCRM Lead` student ON student.name = action_item.student
+		LEFT JOIN `tabCRM Student` contact ON contact.name = action_item.contact
 		LEFT JOIN `tabCRM Staff` assigned_staff ON assigned_staff.name = action_item.action_owner
 		WHERE {" AND ".join(conditions)}
 	"""
@@ -353,7 +353,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 
 
 def _aggregate_tasks_sql(actor, search, status, priority, date_filter, task_type):
-	student_condition = _permission_condition("CRM Student", "student_scope", actor)
+	student_condition = _permission_condition("CRM Lead", "student_scope", actor)
 	action_query, action_values = _action_query(
 		student_condition, search, status, priority, date_filter, task_type
 	)
@@ -443,7 +443,7 @@ def list_sales_tasks(
 
 def _check_reference_access(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Tasks are only supported for CRM Student and CRM Contact."), frappe.ValidationError)
+		frappe.throw(_("Tasks are only supported for CRM Student and CRM Student."), frappe.ValidationError)
 	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
 	reference_doc.check_permission(permission_type)
 	return reference_doc
@@ -475,15 +475,15 @@ def _priority_to_task(priority):
 def _action_reference(action):
 	"""Return the old Task reference pair for an Action Item."""
 	if action.get("student"):
-		return "CRM Student", action.student
+		return "CRM Lead", action.student
 	if action.get("contact"):
-		return "CRM Contact", action.contact
-	return "CRM Student", action.student
+		return "CRM Student", action.contact
+	return "CRM Lead", action.student
 
 
 def _action_scope_reference(action):
 	"""Return the canonical permission scope for an Action Item."""
-	return "CRM Student", action.get("student")
+	return "CRM Lead", action.get("student")
 
 
 def _action_item_to_task(action, *, reference_doctype=None, reference_docname=None):
@@ -568,7 +568,7 @@ def _assigned_staff_for_user(user):
 
 def _action_target(reference_doctype, reference_docname):
 	reference_doc = _check_reference_access(reference_doctype, reference_docname, "read")
-	if reference_doctype == "CRM Student":
+	if reference_doctype == "CRM Lead":
 		return reference_docname, None
 	student = reference_doc.get("student")
 	return (student, reference_docname) if student else (None, None)

@@ -54,7 +54,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Canonical Student",
-   "options": "CRM Student",
+   "options": "CRM Lead",
    "read_only": 1,
    "reqd": 1
   },
@@ -62,7 +62,7 @@
    "fieldname": "source_student",
    "fieldtype": "Link",
    "label": "Source Student",
-   "options": "CRM Student",
+   "options": "CRM Lead",
    "read_only": 1,
    "reqd": 1
   },

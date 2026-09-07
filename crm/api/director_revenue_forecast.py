@@ -216,7 +216,7 @@ def _filter_student_scope(
 		{
 			row.name: row.campus
 			for row in frappe.get_all(
-				"CRM Student",
+				"CRM Lead",
 				filters={"name": ["in", list(student_ids)]},
 				fields=["name", "campus"],
 				limit_page_length=0,
@@ -470,7 +470,7 @@ def _regions(ledger: list[dict[str, Any]]) -> list[dict[str, Any]]:
 		{
 			row.name: row.province
 			for row in frappe.get_all(
-				"CRM Student",
+				"CRM Lead",
 				filters={"name": ["in", list(by_student)]},
 				fields=["name", "province"],
 				limit_page_length=0,

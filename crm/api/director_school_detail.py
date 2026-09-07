@@ -111,7 +111,7 @@ def _load_supporting_sources(school, admission_year):
 		lambda: [
 			dict(row)
 			for row in frappe.get_list(
-				"CRM Student",
+				"CRM Lead",
 				filters={"high_school": school.get("name"), "admission_year": admission_year},
 				fields=["name", "current_grade", "study_stage", "lifecycle_stage"],
 				order_by="name asc",
@@ -125,7 +125,7 @@ def _load_supporting_sources(school, admission_year):
 		lambda: [
 			dict(row)
 			for row in frappe.get_list(
-				"CRM Contact",
+				"CRM Student",
 				filters={"high_school": school.get("name"), "admission_year": admission_year},
 				fields=["name", "lifecycle_stage"],
 				order_by="name asc",

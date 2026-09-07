@@ -35,14 +35,14 @@ class TestAiExposureAuthority(FrappeTestCase):
 		already sees in the CRM desk UI."""
 		fields = ["name", "student_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
 		self.assertEqual(
-			_project_ai_fields("CRM Student", fields),
+			_project_ai_fields("CRM Lead", fields),
 			["email", "latest_score", "name", "phone", "student_name"],
 		)
 
 	def test_student_projection_excludes_fields_outside_the_operational_pii_ceiling(self):
 		fields = ["name", "latest_score", "date_of_birth", "id_number"]
 		self.assertEqual(
-			_project_ai_fields("CRM Student", fields),
+			_project_ai_fields("CRM Lead", fields),
 			["latest_score", "name"],
 		)
 

@@ -129,8 +129,8 @@ before_uninstall = "crm.uninstall.before_uninstall"
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
-	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
+	"CRM Lead": "crm.fcrm.doctype.crm_lead.crm_lead.get_permission_query_conditions",
 	"CRM Student Routing Request": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Ownership Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
@@ -172,8 +172,8 @@ permission_query_conditions = {
 
 has_permission = {
 	"File": "crm.fcrm.file_permissions.has_permission",
-	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
+	"CRM Lead": "crm.fcrm.doctype.crm_lead.crm_lead.has_permission",
 	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Ownership Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.has_operational_record_permission",
@@ -228,8 +228,8 @@ override_doctype_class = {
 # growing a hardcoded chain of field names per adopter.
 
 status_change_log_field = {
-	"CRM Contact": "enrollment_status",
 	"CRM Student": "enrollment_status",
+	"CRM Lead": "enrollment_status",
 }
 
 # Document Events
@@ -243,11 +243,11 @@ doc_events = {
 	"Contact": {
 		"validate": ["crm.api.contact.validate"],
 	},
-	"CRM Contact": {
+	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
 	},
-	"CRM Student": {
+	"CRM Lead": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 		"on_update": ["crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography"],
 	},
@@ -372,7 +372,7 @@ doc_events = {
 # Consumer-side enforcement is required because retiring a Link target does
 # not cause Frappe to revalidate existing consumer writes automatically.
 for _governed_consumer_doctype in (
-	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
+	"CRM Student", "CRM Platform", "CRM Lead", "CRM Campaign Spend",
 	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
 	"CRM Staff", "CRM Academic Year Line", "CRM Student Pool", "CRM Student Routing Request",
 	"CRM Student SLA Attempt", "CRM Team",
@@ -393,7 +393,7 @@ scheduler_events = {
 		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
 	],
 	"daily": [
-		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+		"crm.fcrm.doctype.crm_lead.enrollment_transition.reconcile_enrollment_transitions",
 		"crm.fcrm.master_data_governance.expire_break_glass_requests",
 	],
 	"cron": {

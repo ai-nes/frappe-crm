@@ -33,9 +33,9 @@ def create_email_account(data: dict):
 			email_doc.api_key = data.get("api_key")
 			email_doc.api_secret = data.get("api_secret")
 			email_doc.frappe_mail_site = data.get("frappe_mail_site")
-			email_doc.append_to = "CRM Contact"
+			email_doc.append_to = "CRM Student"
 		else:
-			email_doc.append("imap_folder", {"append_to": "CRM Contact", "folder_name": "INBOX"})
+			email_doc.append("imap_folder", {"append_to": "CRM Student", "folder_name": "INBOX"})
 			email_doc.password = data.get("password")
 			# validate whether the credentials are correct
 			email_doc.get_incoming_server()

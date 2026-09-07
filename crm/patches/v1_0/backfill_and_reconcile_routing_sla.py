@@ -8,7 +8,7 @@ from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topolo
 
 def execute():
 	students = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		fields=["name", "enrollment_status", "lifecycle_stage", "owner_staff", "assigned_to", "owning_team", "owning_pool", "branch"],
 		order_by="name asc",
 	)

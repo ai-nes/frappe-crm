@@ -131,9 +131,9 @@ def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
 
 	user = user or frappe.session.user
-	condition = student_scope("CRM Student", user=user)
+	condition = student_scope("CRM Lead", user=user)
 	return (
-		f"`tabCRM Action Item`.student in (select name from `tabCRM Student` where {condition})"
+		f"`tabCRM Action Item`.student in (select name from `tabCRM Lead` where {condition})"
 		if condition
 		else None
 	)
@@ -148,11 +148,11 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 		return False
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
 
-	condition = student_scope("CRM Student", user=user or frappe.session.user)
+	condition = student_scope("CRM Lead", user=user or frappe.session.user)
 	if condition is None:
 		return True
 	return bool(
 		frappe.db.sql(
-			"select name from `tabCRM Student` where name = %s and (" + condition + ") limit 1", (student,)
+			"select name from `tabCRM Lead` where name = %s and (" + condition + ") limit 1", (student,)
 		)
 	)

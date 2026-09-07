@@ -47,14 +47,14 @@ class _FakeDocument:
 
 class TestStudentSchoolApi(TestCase):
 	def test_create_student_returns_created_fields(self):
-		doc = _FakeDocument("CRM Student", "STU-NEW-001")
+		doc = _FakeDocument("CRM Lead", "STU-NEW-001")
 		with patch.object(frappe, "new_doc", return_value=doc):
 			result = create_student({"student_name": "Nguyen Van B", "phone": "0900000001"})
 
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"name": "STU-NEW-001",
 				"created_fields": {"student_name": "Nguyen Van B", "phone": "0900000001"},
 			},
@@ -90,7 +90,7 @@ class TestStudentSchoolApi(TestCase):
 		new_doc.assert_not_called()
 
 	def test_get_student_returns_only_doctype_list_view_fields(self):
-		doc = _FakeDocument("CRM Student", "STU-GET-001")
+		doc = _FakeDocument("CRM Lead", "STU-GET-001")
 		doc.values = {"student_name": "Nguyen Van C", "phone": "0900000002", "email": "c@example.com"}
 		meta = Mock(
 			fields=[
@@ -108,7 +108,7 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"name": "STU-GET-001",
 				"fields": {"student_name": "Nguyen Van C", "phone": "0900000002"},
 			},
@@ -196,7 +196,7 @@ class TestStudentSchoolApi(TestCase):
 			patch.object(frappe, "get_list", return_value=rows) as get_list,
 		):
 			result = get_field_options(
-				"CRM Student",
+				"CRM Lead",
 				"ward",
 				province="PROVINCE-001",
 				limit=10,
@@ -223,7 +223,7 @@ class TestStudentSchoolApi(TestCase):
 				get_field_options("CRM High School", "school_name")
 
 	def test_update_student_accepts_json_and_returns_updated_fields(self):
-		doc = _FakeDocument("CRM Student", "STU-001")
+		doc = _FakeDocument("CRM Lead", "STU-001")
 		with patch.object(frappe, "get_doc", return_value=doc):
 			result = update_student(
 				"STU-001",
@@ -233,7 +233,7 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"name": "STU-001",
 				"updated_fields": {"student_name": "Nguyen Van A", "phone": "0900000000"},
 			},
@@ -289,7 +289,7 @@ class TestStudentSchoolApi(TestCase):
 		get_doc.assert_not_called()
 
 	def test_delete_checks_permission_and_returns_deleted_document(self):
-		doc = _FakeDocument("CRM Student", "STU-DELETE-001")
+		doc = _FakeDocument("CRM Lead", "STU-DELETE-001")
 		with (
 			patch.object(frappe, "get_doc", return_value=doc),
 			patch.object(frappe, "delete_doc") as delete_doc,
@@ -298,10 +298,10 @@ class TestStudentSchoolApi(TestCase):
 
 		self.assertEqual(
 			result,
-			{"doctype": "CRM Student", "name": "STU-DELETE-001", "deleted": True},
+			{"doctype": "CRM Lead", "name": "STU-DELETE-001", "deleted": True},
 		)
 		self.assertEqual(doc.check_permission_calls, ["delete"])
-		delete_doc.assert_called_once_with("CRM Student", "STU-DELETE-001")
+		delete_doc.assert_called_once_with("CRM Lead", "STU-DELETE-001")
 
 	def test_delete_rejects_empty_name_before_loading_document(self):
 		with patch.object(frappe, "get_doc") as get_doc:
@@ -321,8 +321,8 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 			self.skipTest("CRM Province fixtures are required")
 
 		try:
-			province_options = get_field_options("CRM Student", "province", limit=5)
-			ward_options = get_field_options("CRM Student", "ward", filters={"province": province}, limit=5)
+			province_options = get_field_options("CRM Lead", "province", limit=5)
+			ward_options = get_field_options("CRM Lead", "ward", filters={"province": province}, limit=5)
 			self.assertEqual(province_options["target_doctype"], "CRM Province")
 			self.assertTrue(province_options["options"])
 			self.assertEqual(ward_options["target_doctype"], "CRM Ward")
@@ -401,7 +401,7 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 		frappe.set_user("Administrator")
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": "_Update API Student",
 				"phone": "0981000077",
 				"enrollment_status": "NEW",
@@ -414,9 +414,9 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 			)
 			self.assertEqual(result["name"], student.name)
 			self.assertEqual(
-				frappe.db.get_value("CRM Student", student.name, ["student_name", "email"], as_dict=True),
+				frappe.db.get_value("CRM Lead", student.name, ["student_name", "email"], as_dict=True),
 				{"student_name": "_Updated API Student", "email": "api@example.com"},
 			)
 		finally:
-			frappe.delete_doc("CRM Student", student.name, force=True, ignore_permissions=True)
+			frappe.delete_doc("CRM Lead", student.name, force=True, ignore_permissions=True)
 			frappe.set_user(previous_user)

@@ -35,7 +35,7 @@
    "fieldname": "student",
    "fieldtype": "Link",
    "label": "Student",
-   "options": "CRM Student",
+   "options": "CRM Lead",
    "in_standard_filter": 1
   },
   {

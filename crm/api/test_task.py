@@ -30,7 +30,7 @@ class TestTaskApi(FrappeTestCase):
 	def test_task_crud_is_scoped_to_reference(self):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Task API Contact",
 				"email": "task-api-contact@example.com",
 				"stage": "Interested",
@@ -38,17 +38,17 @@ class TestTaskApi(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 		created = create_task(
-			"CRM Contact",
+			"CRM Student",
 			contact.name,
 			"Initial task",
 			description="Follow up",
 			priority="High",
 			status="Todo",
 		)
-		self.assertEqual(created["reference_doctype"], "CRM Contact")
+		self.assertEqual(created["reference_doctype"], "CRM Student")
 		self.assertEqual(created["reference_docname"], contact.name)
 
-		listed = list_tasks("CRM Contact", contact.name)
+		listed = list_tasks("CRM Student", contact.name)
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["tasks"][0]["name"], created["name"])
 
@@ -63,10 +63,10 @@ class TestTaskApi(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("Task", created["name"]))
 
 	def test_student_task_crud_uses_action_item_with_task_dto(self):
-		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
+		student = frappe.get_all("CRM Lead", fields=["name"], limit_page_length=1)[0].name
 
 		created = create_task(
-			"CRM Student",
+			"CRM Lead",
 			student,
 			"Compatibility task",
 			description="Keep the old Task API contract.",
@@ -82,13 +82,13 @@ class TestTaskApi(FrappeTestCase):
 		self.assertEqual(created["priority"], "High")
 		self.assertEqual(created["status"], "Todo")
 		self.assertEqual(created["action_code"], "CREATE_TASK")
-		self.assertEqual(created["reference_doctype"], "CRM Student")
+		self.assertEqual(created["reference_doctype"], "CRM Lead")
 		self.assertEqual(created["reference_docname"], student)
 
-		listed = list_tasks("CRM Student", student)
+		listed = list_tasks("CRM Lead", student)
 		self.assertIn(created["name"], {row["name"] for row in listed["tasks"]})
 		listed_row = next(row for row in listed["tasks"] if row["name"] == created["name"])
-		self.assertEqual(listed_row["reference_doctype"], "CRM Student")
+		self.assertEqual(listed_row["reference_doctype"], "CRM Lead")
 		self.assertEqual(listed_row["action_code"], "CREATE_TASK")
 
 		updated = update_task(created["name"], title="Updated compatibility task", status="Done")
@@ -98,11 +98,11 @@ class TestTaskApi(FrappeTestCase):
 		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 		self.assertTrue(frappe.db.get_value("CRM Action Item", created["name"], "legacy_task_deleted"))
 		self.assertNotIn(
-			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
+			created["name"], {row["name"] for row in list_tasks("CRM Lead", student)["tasks"]}
 		)
 
 	def test_student_task_assignee_accepts_user_and_staff_values(self):
-		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
+		student = frappe.get_all("CRM Lead", fields=["name"], limit_page_length=1)[0].name
 
 		for user, staff_name in self._assignees:
 			staff = frappe.db.get_value("CRM Staff", {"user": user}, ["name", "full_name"], as_dict=True)
@@ -110,7 +110,7 @@ class TestTaskApi(FrappeTestCase):
 
 			for assigned_to in (user, staff.name, staff.full_name):
 				created = create_task(
-					"CRM Student",
+					"CRM Lead",
 					student,
 					f"Assignee compatibility: {assigned_to}",
 					assigned_to=assigned_to,
@@ -119,7 +119,7 @@ class TestTaskApi(FrappeTestCase):
 				self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 
 			created = create_task(
-				"CRM Student",
+				"CRM Lead",
 				student,
 				f"Assignee object compatibility: {user}",
 				assigned_to={"name": user, "full_name": staff.full_name},
@@ -128,14 +128,14 @@ class TestTaskApi(FrappeTestCase):
 			self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 
 	def test_list_tasks_without_reference_lists_action_items(self):
-		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
-		created = create_task("CRM Student", student, "Global task list compatibility")
+		student = frappe.get_all("CRM Lead", fields=["name"], limit_page_length=1)[0].name
+		created = create_task("CRM Lead", student, "Global task list compatibility")
 
 		listed = list_tasks(search="Global task list compatibility")
 
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["tasks"][0]["name"], created["name"])
-		self.assertEqual(listed["tasks"][0]["reference_doctype"], "CRM Student")
+		self.assertEqual(listed["tasks"][0]["reference_doctype"], "CRM Lead")
 		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
 
 	def test_action_item_task_updates_check_student_scope(self):
@@ -157,7 +157,7 @@ class TestTaskApi(FrappeTestCase):
 			updated = update_task(action.name, title="Updated scoped task")
 
 		self.assertEqual(updated["title"], "Scoped task")
-		check_reference.assert_called_once_with("CRM Student", action.student, "read")
+		check_reference.assert_called_once_with("CRM Lead", action.student, "read")
 
 	def test_task_permissions_cover_ctv_sale_create_and_update(self):
 		permissions = frappe.get_meta("Task").permissions
@@ -187,14 +187,14 @@ class TestTaskApi(FrappeTestCase):
 			condition = task_api.get_permission_query_conditions("sale@example.com")
 
 		self.assertIn("EXISTS", condition)
+		self.assertIn("`tabCRM Lead`", condition)
 		self.assertIn("`tabCRM Student`", condition)
-		self.assertIn("`tabCRM Contact`", condition)
 		self.assertIn("`tabTask`.reference_doctype", condition)
 
 	def test_task_has_permission_checks_reference_scope(self):
 		doc = frappe._dict(
 			doctype="Task",
-			reference_doctype="CRM Student",
+			reference_doctype="CRM Lead",
 			reference_docname="ENR-2026-00001",
 			name="TASK-00001",
 		)
@@ -204,7 +204,7 @@ class TestTaskApi(FrappeTestCase):
 		):
 			self.assertTrue(task_api.has_permission(doc, user="sale@example.com", ptype="write"))
 
-		check_reference.assert_called_once_with("CRM Student", "ENR-2026-00001", "read")
+		check_reference.assert_called_once_with("CRM Lead", "ENR-2026-00001", "read")
 
 	@patch("crm.api.task._require_sales_task_access", return_value="Administrator")
 	@patch("crm.api.task._aggregate_tasks_sql", return_value=("SELECT 1", []))
@@ -224,7 +224,7 @@ class TestTaskApi(FrappeTestCase):
 				assigned_to_name="Administrator",
 				student="ENR-2026-00001",
 				student_name="Test Student",
-				reference_doctype="CRM Student",
+				reference_doctype="CRM Lead",
 				reference_docname="ENR-2026-00001",
 				linked_interaction=None,
 				action=None,
@@ -275,5 +275,5 @@ class TestTaskApi(FrappeTestCase):
 		self.assertNotIn("FROM `tabTask` task", query)
 		self.assertIn("action_item.origin = 'manual'", query)
 		self.assertIn("action_item.action = 'CREATE_TASK'", query)
-		_permission.assert_called_once_with("CRM Student", "student_scope", "Administrator")
+		_permission.assert_called_once_with("CRM Lead", "student_scope", "Administrator")
 		self.assertEqual(values, [])

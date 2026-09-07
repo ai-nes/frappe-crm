@@ -9,7 +9,7 @@
  "field_order": ["event_id", "student", "from_stage", "to_stage", "transition_kind", "prior_active_stage", "reason", "evidence_references", "actor", "actor_scope", "occurred_at", "command_receipt", "idempotency_key", "correlation_id", "policy_version", "schema_version", "supersedes"],
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
   {"fieldname": "from_stage", "fieldtype": "Select", "in_list_view": 1, "label": "From Stage", "options": "Lead\nMQL\nApplicant\nEnrolled\nLost", "read_only": 1},
   {"fieldname": "to_stage", "fieldtype": "Select", "in_list_view": 1, "label": "To Stage", "options": "Lead\nMQL\nApplicant\nEnrolled\nLost", "read_only": 1, "reqd": 1},
   {"fieldname": "transition_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Transition Kind", "options": "forward\nlost\nreopen\noverride", "read_only": 1, "reqd": 1},

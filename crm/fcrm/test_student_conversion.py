@@ -35,9 +35,9 @@ class TestStudentConversionCommand(unittest.TestCase):
 		self.assertEqual(ctx.exception.code, "DISABLED")
 
 	def test_legacy_endpoint_cannot_synthesize_request_identity(self):
-		from crm.fcrm.doctype.crm_student.crm_student import CRMStudent
+		from crm.fcrm.doctype.crm_lead.crm_lead import CRMLead
 
-		student = CRMStudent({"doctype": "CRM Student", "name": "STU-1"})
+		student = CRMLead({"doctype": "CRM Lead", "name": "STU-1"})
 		with self.assertRaises(Exception):
 			student.convert_to_contact()
 
@@ -49,6 +49,39 @@ class TestStudentConversionCommand(unittest.TestCase):
 		self.assertIn("IDEMPOTENCY_KEY_REUSED", source)
 		self.assertIn("expected_lifecycle_revision", source)
 		self.assertIn("CONVERSION_DOCTYPE", source)
+
+	def test_conversion_uses_explicit_lead_to_student_snapshot_map(self):
+		from crm.fcrm.student_conversion import _student_snapshot_values
+
+		lead = frappe._dict(
+			{
+				"student_name": "Mapped Lead",
+				"phone": "0911111199",
+				"email": "mapped@example.com",
+				"enrollment_status": "PROSPECT",
+				"source": "Website",
+				"latest_score": 98,
+				"student_context_revision": 7,
+				"notes": "Snapshot note",
+			}
+		)
+		identity = frappe._dict(name="ID-MAPPED")
+
+		values = _student_snapshot_values(lead, identity)
+
+		self.assertEqual(values["full_name"], "Mapped Lead")
+		self.assertEqual(values["phone"], "0911111199")
+		self.assertEqual(values["source"], "Website")
+		self.assertEqual(values["notes"], "Snapshot note")
+		self.assertNotIn("latest_score", values)
+		self.assertNotIn("student_context_revision", values)
+
+	def test_conversion_does_not_auto_match_by_identity(self):
+		from crm.fcrm import student_conversion
+
+		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
+		self.assertNotIn("_contacts_for_identity", source)
+		self.assertIn("target_student", source)
 
 	def test_only_enrolled_students_are_convertible(self):
 		from crm.fcrm import student_conversion

@@ -4,7 +4,7 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.student_dashboard import get_student_dashboard
+from crm.api.student_dashboard import get_student_dashboard, get_student_records_by_phone
 
 
 class TestStudentDashboardEvents(FrappeTestCase):
@@ -18,10 +18,10 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			"CRM Marketing Engagement", filters={"engagement_kind": "event_participation", "crm_event": ["like", "_Test SD%"]}, pluck="name"
 		):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SD%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test SD%"]}, pluck="name"):
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test SD%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
+		for name in frappe.db.get_all("CRM Lead", filters={"student_name": ["like", "_Test SD%"]}, pluck="name"):
+			frappe.delete_doc("CRM Lead", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test SD%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test SD%"]}, pluck="name"):
@@ -46,7 +46,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 	def _make_student(self, name, phone):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": name,
 				"phone": phone,
 				"enrollment_status": "PROSPECT",
@@ -76,7 +76,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 
 	def _make_contact(self, full_name, phone, crm_event=None, student=None):
 		fields = {
-			"doctype": "CRM Contact",
+			"doctype": "CRM Student",
 			"full_name": full_name,
 			"phone": phone,
 		}
@@ -117,8 +117,20 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			self.assertEqual(event_items[0]["status"], "attended")
 		finally:
 			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
-			frappe.delete_doc("CRM Contact", contact_name, force=True)
+			frappe.delete_doc("CRM Student", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)
+
+	def test_student_can_have_multiple_leads(self):
+		contact_name = self._make_contact("_Test SD Multi Lead Student", "0987000095")
+		lead_one = self._make_student("_Test SD Multi Lead One", "0987000096")
+		lead_two = self._make_student("_Test SD Multi Lead Two", "0987000097")
+		frappe.db.set_value("CRM Lead", lead_one, "student", contact_name, update_modified=False)
+		frappe.db.set_value("CRM Lead", lead_two, "student", contact_name, update_modified=False)
+
+		result = get_student_records_by_phone("0987000095")
+		lead_names = {row["name"] for row in result["students"]}
+
+		self.assertEqual(lead_names, {lead_one, lead_two})
 
 	def test_events_mapping_returns_only_canonical_participation(self):
 		participation_event = self._make_event("_Test SD Participation Event", start_datetime="2026-09-20 09:00:00")
@@ -152,7 +164,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			self.assertEqual(matched["status"], "attended")
 		finally:
 			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
-			frappe.delete_doc("CRM Contact", contact_name, force=True)
+			frappe.delete_doc("CRM Student", contact_name, force=True)
 			frappe.delete_doc("CRM Event", participation_event, force=True)
 
 	def test_events_mapping_maps_feedback_given_status(self):
@@ -186,7 +198,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			self.assertEqual(matched["status"], "feedback_given")
 		finally:
 			frappe.delete_doc("CRM Marketing Engagement", participation.name, force=True)
-			frappe.delete_doc("CRM Contact", contact_name, force=True)
+			frappe.delete_doc("CRM Student", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)
 
 	def test_suggested_events_prefer_start_datetime_over_event_date(self):
@@ -206,5 +218,5 @@ class TestStudentDashboardEvents(FrappeTestCase):
 
 			self.assertEqual(matched["startsAt"], to_unix(expected_start))
 		finally:
-			frappe.delete_doc("CRM Contact", contact_name, force=True)
+			frappe.delete_doc("CRM Student", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)

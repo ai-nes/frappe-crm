@@ -223,7 +223,7 @@ def _should_update_modified(doc: Communication | Comment) -> bool:
 	if not (doc.reference_doctype and doc.reference_name):
 		return False
 
-	if doc.reference_doctype != "CRM Contact":
+	if doc.reference_doctype != "CRM Student":
 		return False
 
 	if doc.doctype not in ["Comment", "Communication"]:
@@ -272,10 +272,10 @@ def create_crm_contact_from_incoming_email(doc: Communication, method: str | Non
 	if not create_contact_enabled:
 		return
 
-	if frappe.db.exists("CRM Contact", {"email": doc.sender}):
+	if frappe.db.exists("CRM Student", {"email": doc.sender}):
 		return
 
-	contact = frappe.new_doc("CRM Contact")
+	contact = frappe.new_doc("CRM Student")
 	contact.email = doc.sender
 	contact.full_name = doc.sender_full_name or doc.sender.split("@")[0]
 	contact.stage = "Interested"
@@ -285,7 +285,7 @@ def create_crm_contact_from_incoming_email(doc: Communication, method: str | Non
 
 	contact.insert(ignore_permissions=True)
 
-	doc.reference_doctype = "CRM Contact"
+	doc.reference_doctype = "CRM Student"
 	doc.reference_name = contact.name
 	doc.save(ignore_permissions=True)
 
@@ -294,7 +294,7 @@ def on_comment_insert(doc: Comment, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype != "CRM Contact" or doc.comment_type != "Comment":
+	if doc.reference_doctype != "CRM Student" or doc.comment_type != "Comment":
 		return
 
 	if not _should_update_modified(doc):
@@ -316,7 +316,7 @@ def on_communication_update(doc: Communication, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype != "CRM Contact":
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	should_update_modified = _should_update_modified(doc)

@@ -442,7 +442,7 @@ class TestDirectorStudents(FrappeTestCase):
 			)
 
 		get_list.assert_called_once_with(
-			"CRM Student",
+			"CRM Lead",
 			filters={"admission_year": "2026"},
 			or_filters=[],
 			fields=["count(name) as total"],

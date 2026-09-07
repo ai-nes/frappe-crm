@@ -49,9 +49,9 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 		return bool(
 			(user or frappe.session.user) == "Administrator"
 			or "System Manager" in roles
-			or ("Admissions Director" in roles and frappe.has_permission("CRM Student", "write", student, user=user))
+			or ("Admissions Director" in roles and frappe.has_permission("CRM Lead", "write", student, user=user))
 		)
-	return bool(frappe.has_permission("CRM Student", "read", student, user=user))
+	return bool(frappe.has_permission("CRM Lead", "read", student, user=user))
 
 
 def on_trash(doc, method=None):
@@ -63,9 +63,9 @@ def get_permission_query_conditions(user=None):
 		user = frappe.session.user
 	from crm.fcrm.permissions import get_permission_query_conditions as student_conditions
 
-	condition = student_conditions("CRM Student", user=user)
+	condition = student_conditions("CRM Lead", user=user)
 	if condition is None:
 		return None
 	if condition == "1=0":
 		return "1=0"
-	return "`tabCRM Student Privacy Request`.student in (select `tabCRM Student`.name from `tabCRM Student` where ({0}))".format(condition)
+	return "`tabCRM Student Privacy Request`.student in (select `tabCRM Lead`.name from `tabCRM Lead` where ({0}))".format(condition)

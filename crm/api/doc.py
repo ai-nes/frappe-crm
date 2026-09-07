@@ -543,7 +543,7 @@ def get_data(
 
 
 def get_query_filters(doctype, filters):
-	if doctype != "CRM Student":
+	if doctype != "CRM Lead":
 		return filters
 
 	potential_score_tier = filters.get("_potential_score_tier")

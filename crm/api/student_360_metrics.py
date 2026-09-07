@@ -25,7 +25,7 @@ def _students(filters: dict) -> list:
 	]
 	rows, offset, page_size = [], 0, 1000
 	while True:
-		page = frappe.get_list("CRM Student", filters=query, fields=fields, limit_start=offset, limit_page_length=page_size, order_by="name asc")
+		page = frappe.get_list("CRM Lead", filters=query, fields=fields, limit_start=offset, limit_page_length=page_size, order_by="name asc")
 		rows.extend(page)
 		if len(page) < page_size:
 			return rows
@@ -123,7 +123,7 @@ def _campaign_costs(student_ids: list[str]) -> dict:
 
 	last_touch = get_last_touch_campaign_by_student(student_ids)
 	enrolled = Counter()
-	for row in frappe.get_list("CRM Student", filters={"name": ["in", student_ids]}, fields=["name", "lifecycle_stage", "enrollment_status"], limit_page_length=0):
+	for row in frappe.get_list("CRM Lead", filters={"name": ["in", student_ids]}, fields=["name", "lifecycle_stage", "enrollment_status"], limit_page_length=0):
 		if _is_enrolled(row) and last_touch.get(row.name):
 			enrolled[last_touch[row.name]] += 1
 	spend_rows = frappe.get_list("CRM Campaign Spend", fields=["crm_campaign", "amount"], filters={"crm_campaign": ["in", list(enrolled)]}, limit_page_length=0)

@@ -20,7 +20,7 @@ def recommended_target(*, applications: int, enrollments: int) -> int:
 def seed(context: dict[str, Any]) -> dict[str, Any]:
 	"""Create one approved annual enrollment target per seeded province."""
 	if not all(
-		frappe.db.table_exists(doctype) for doctype in ("CRM Planning Scope", "CRM Target", "CRM Student")
+		frappe.db.table_exists(doctype) for doctype in ("CRM Planning Scope", "CRM Target", "CRM Lead")
 	):
 		return {"status": "skipped", "reason": "regional_target_doctypes_unavailable"}
 
@@ -134,7 +134,7 @@ def _ensure_advisor(province: str, territory: str):
 
 def _province_metrics(year: str) -> dict[str, dict[str, int]]:
 	rows = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"admission_year": year, "import_source_id": ["like", "crm-demo-showcase:%"]},
 		fields=["province", "lifecycle_stage", "enrollment_status"],
 		limit_page_length=0,

@@ -217,7 +217,7 @@ def _ensure_assignment(
 	spec: SalesAccountSeed, student: str, staff_name: str, team: str, key: str
 ) -> dict[str, Any] | None:
 	current = frappe.db.get_value(
-		"CRM Student",
+		"CRM Lead",
 		student,
 		["owner_staff", "owning_team", "owning_pool", "ownership_revision"],
 		as_dict=True,
@@ -272,7 +272,7 @@ def _complete_student_profile(
 	admission_year = int(context["admission_year"])
 	transcript_score = scenario["transcript_score"]
 	english_score = scenario["english_converted_score"]
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	values = {
 		"student_name": scenario["student_name"],
 		"phone": scenario["phone"],
@@ -363,8 +363,8 @@ def _ensure_student(
 ) -> str:
 	key = scenario["key"]
 	source_id = f"{spec.namespace}:{key}"
-	student = frappe.db.get_value("CRM Student", {"import_source_id": source_id}, "name")
-	student_by_email = frappe.db.get_value("CRM Student", {"email": scenario["email"]}, "name")
+	student = frappe.db.get_value("CRM Lead", {"import_source_id": source_id}, "name")
+	student_by_email = frappe.db.get_value("CRM Lead", {"email": scenario["email"]}, "name")
 	if student and student_by_email and student != student_by_email:
 		frappe.throw(
 			f"Seed identity collision for {scenario['email']}: {student} vs {student_by_email}.",
@@ -372,7 +372,7 @@ def _ensure_student(
 		)
 	if (
 		student_by_email
-		and frappe.db.get_value("CRM Student", student_by_email, "import_source_id") != source_id
+		and frappe.db.get_value("CRM Lead", student_by_email, "import_source_id") != source_id
 	):
 		frappe.throw(
 			f"Student email {scenario['email']} already belongs to another seed or business record.",
@@ -429,7 +429,7 @@ def _ensure_student(
 		student = result["student"]
 
 	frappe.db.set_value(
-		"CRM Student",
+		"CRM Lead",
 		student,
 		{
 			"student_name": scenario["student_name"],

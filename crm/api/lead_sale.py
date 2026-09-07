@@ -73,7 +73,7 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 	(
 		"input",
 		"Lead vào hệ thống",
-		"Tạo CRM Student · pool theo Campus",
+		"Tạo CRM Lead · pool theo Campus",
 		"Tiếp nhận lead, chống trùng và tạo CRM Student thuộc pool mặc định theo Campus.",
 		("Kiểm tra trùng qua CRM Student Case Key.", "Kích hoạt routing đồng bộ hoặc qua CRM Student Routing Request."),
 	),
@@ -81,7 +81,7 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 		"validation",
 		"Xác định pool chuẩn",
 		"Campus · Team · Student Pool",
-		"Resolve đúng một Student Pool active khớp Campus và ownership topology của CRM Student.",
+		"Resolve đúng một Student Pool active khớp Campus và ownership topology của CRM Lead.",
 		("Pool phải active và thuộc đúng Campus.", "Topology sai hoặc ambiguous: dừng routing với lỗi canonical."),
 	),
 	(
@@ -339,7 +339,7 @@ def _load_students(admission_year: str, warnings: list[str]) -> list[dict[str, A
 	return [
 		dict(row)
 		for row in _get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters={"admission_year": admission_year, "lifecycle_stage": ["!=", "Lost"]},
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,
@@ -765,7 +765,7 @@ def _assignment_load_students(
 	if not team_ids and not staff_ids:
 		return []
 	try:
-		if not frappe.db.table_exists("CRM Student"):
+		if not frappe.db.table_exists("CRM Lead"):
 			warnings.append("students.source_unavailable")
 			return []
 		filters = {"lifecycle_stage": ["!=", "Lost"]}
@@ -774,7 +774,7 @@ def _assignment_load_students(
 		return [
 			dict(row)
 			for row in frappe.get_list(
-				"CRM Student",
+				"CRM Lead",
 				filters=filters,
 				or_filters=[
 					["owner_staff", "in", staff_ids or ["__no_staff__"]],
@@ -1733,9 +1733,9 @@ def resolve_student_assignment(
 		province = _assignment_region_name(region_value)
 	if region_value and not student.get("province"):
 		# Keep the region update in the same transaction as the ownership command.
-		# CRM Student's save hook records the material context revision while the
+		# CRM Lead's save hook records the material context revision while the
 		# ownership command remains the only writer of owner fields.
-		locked = frappe.get_doc("CRM Student", student_id)
+		locked = frappe.get_doc("CRM Lead", student_id)
 		locked.province = province
 		locked.save(ignore_permissions=True)
 	from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership

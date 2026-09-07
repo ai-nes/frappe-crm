@@ -29,15 +29,15 @@ LOOKUP_CONSUMERS: dict[str, tuple[tuple[str, str], ...]] = {
 	"CRM Stakeholder Role": (("CRM School Stakeholder", "stakeholder_role"),),
 	"CRM School Activity Type": (("CRM School Activity", "activity_type"),),
 	"CRM Major Group": (("CRM Major", "major_group"),),
-	"CRM Aspiration": (("CRM Contact", "aspiration"), ("CRM Student", "aspiration")),
+	"CRM Aspiration": (("CRM Student", "aspiration"), ("CRM Lead", "aspiration")),
 	"CRM Region": (
 		("CRM Province", "region"),
 		("CRM Territory", "region"),
 		("CRM Planning Scope", "region"),
 	),
 	"CRM Enrollment Status": (
-		("CRM Contact", "enrollment_status"),
 		("CRM Student", "enrollment_status"),
+		("CRM Lead", "enrollment_status"),
 	),
 	"CRM Admission Method": (
 		("CRM Admission Offering", "admission_method"),

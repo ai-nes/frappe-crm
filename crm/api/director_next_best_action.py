@@ -290,7 +290,7 @@ def get_director_recommendations(
 			"CRM Recommendation",
 			filters={
 				"evaluation": ["is", "set"],
-				"target_type": "CRM Student",
+				"target_type": "CRM Lead",
 				"target_id": ["in", student_ids],
 			},
 			fields=_RECOMMENDATION_FIELDS,
@@ -347,7 +347,7 @@ def _map_recommendation(row: Any, evaluations: dict[str, dict[str, Any]]) -> dic
 	parent = evaluations.get(row.get("evaluation")) or {}
 	view = recommendation_view(
 		recommendation_id=row["name"],
-		target_type="CRM Student",
+		target_type="CRM Lead",
 		target_id=row.get("target_id") or None,
 		action_code=row.get("action") or None,
 		priority=row.get("priority"),
@@ -532,7 +532,7 @@ def _students_for_year(year: str, access: dict[str, Any] | None = None) -> list[
 		filters["owner_staff"] = staff
 	try:
 		rows = frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters=filters,
 			fields=["name"],
 			limit_page_length=0,
@@ -685,7 +685,7 @@ def _load_lookups(rows: list[Any]) -> dict[str, dict[str, Any]]:
 		{
 			row["name"]: row
 			for row in _get_lookup_rows(
-				"CRM Student",
+				"CRM Lead",
 				filters={"name": ["in", student_ids]},
 				fields=["name", "student_name", "high_school", "major", "interest_level"],
 			)

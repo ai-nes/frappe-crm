@@ -6,8 +6,8 @@ from crm.install import add_default_fields_layout
 def execute():
     """Recreate all Fields Layout entries with updated field groupings and new High School layouts."""
     doctypes = [
-        "CRM Contact",
         "CRM Student",
+        "CRM Lead",
         "CRM High School",
         "CRM Person",
         "CRM Campaign",

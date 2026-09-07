@@ -18,8 +18,8 @@ class TestCRMPermissionProfile(FrappeTestCase):
 				"role": role,
 				"row_scope": "assigned",
 				"applicable_doctypes": [
-					{"document_type": "CRM Student", "read": 1, "write": 1},
-					{"document_type": "CRM Contact", "read": 1},
+					{"document_type": "CRM Lead", "read": 1, "write": 1},
+					{"document_type": "CRM Student", "read": 1},
 				],
 				**kwargs,
 			}

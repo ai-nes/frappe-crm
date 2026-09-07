@@ -225,7 +225,7 @@ def get_call_log(name: str):
 		notes.append(note)
 
 	if call.get("reference_doctype") and call.get("reference_docname"):
-		if call.get("reference_doctype") == "CRM Contact":
+		if call.get("reference_doctype") == "CRM Student":
 			call["_crm_contact"] = call.get("reference_docname")
 		elif call.get("reference_doctype") == "Contact":
 			call["_contact"] = call.get("reference_docname")
@@ -238,7 +238,7 @@ def get_call_log(name: str):
 			elif link.get("link_doctype") == "FCRM Note":
 				note = frappe.get_cached_doc("FCRM Note", link.get("link_name")).as_dict()
 				notes.append(note)
-			elif link.get("link_doctype") == "CRM Contact":
+			elif link.get("link_doctype") == "CRM Student":
 				call["_crm_contact"] = link.get("link_name")
 			elif link.get("link_doctype") == "Contact":
 				call["_contact"] = link.get("link_name")
@@ -267,15 +267,15 @@ def create_contact_from_call_log(call_log: str | dict, contact_details: str | di
 	if not call_doc.has_permission("write"):
 		frappe.throw(_("You are not permitted to update this call log."), frappe.PermissionError)
 
-	if not frappe.has_permission("CRM Contact", "create"):
+	if not frappe.has_permission("CRM Student", "create"):
 		frappe.throw(_("You are not permitted to create CRM contacts."), frappe.PermissionError)
 
 	contact_details_data = frappe.parse_json(contact_details or {})
 	if contact_details_data and not isinstance(contact_details_data, dict):
 		frappe.throw(_("Invalid contact details supplied."), frappe.ValidationError)
 
-	contact = frappe.new_doc("CRM Contact")
-	meta = frappe.get_meta("CRM Contact")
+	contact = frappe.new_doc("CRM Student")
+	meta = frappe.get_meta("CRM Student")
 	valid_fieldnames = [df.fieldname for df in meta.fields]
 
 	sanitized_details = {
@@ -298,7 +298,7 @@ def create_contact_from_call_log(call_log: str | dict, contact_details: str | di
 	contact.update(sanitized_details)
 	contact.insert()
 
-	call_doc.link_with_reference_doc("CRM Contact", contact.name)
+	call_doc.link_with_reference_doc("CRM Student", contact.name)
 	call_doc.save()
 
 	return contact.name

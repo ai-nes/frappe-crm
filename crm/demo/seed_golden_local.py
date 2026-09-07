@@ -801,7 +801,7 @@ def _ensure_target_account(campus: str, department: str, teams: dict[str, str]) 
 
 def _force_assignment(student: str, staff: str, team: str) -> None:
 	current = frappe.db.get_value(
-		"CRM Student",
+		"CRM Lead",
 		student,
 		["owner_staff", "owning_team", "owning_pool", "ownership_revision"],
 		as_dict=True,
@@ -841,15 +841,15 @@ def _ensure_student_contact(
 	for the Enrolled conversion command, so this fixture keeps the lead in Lead
 	stage and uses the compatibility link here.
 	"""
-	contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
+	contact = frappe.db.get_value("CRM Student", {"student": student}, "name")
 	if not contact:
-		contact = frappe.db.get_value("CRM Contact", {"email": profile["email"]}, "name")
+		contact = frappe.db.get_value("CRM Student", {"email": profile["email"]}, "name")
 	values = {
 		"full_name": profile["student_name"],
 		"phone": profile["phone"],
 		"email": profile["email"],
 		"student": student,
-		"student_identity": frappe.db.get_value("CRM Student", student, "identity"),
+		"student_identity": frappe.db.get_value("CRM Lead", student, "identity"),
 		"enrollment_status": context["enrollment_status"],
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
@@ -875,10 +875,10 @@ def _ensure_student_contact(
 		if contact:
 			# The fixture owns this email namespace. Direct db_set avoids reopening
 			# protected post-conversion fields through a normal browser save path.
-			frappe.db.set_value("CRM Contact", contact, values, update_modified=False)
+			frappe.db.set_value("CRM Student", contact, values, update_modified=False)
 		else:
 			contact = (
-				frappe.get_doc({"doctype": "CRM Contact", **values}).insert(ignore_permissions=True).name
+				frappe.get_doc({"doctype": "CRM Student", **values}).insert(ignore_permissions=True).name
 			)
 	finally:
 		if previous is None:
@@ -1013,7 +1013,7 @@ def _seed_student(
 def _ensure_ai_insight(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
 	from crm.api.ai_insight import upsert_ai_insight
 
-	revision = int(frappe.db.get_value("CRM Student", item["student"], "student_context_revision") or 0)
+	revision = int(frappe.db.get_value("CRM Lead", item["student"], "student_context_revision") or 0)
 	insight = profile["insight"]
 	interests = [
 		{
@@ -1064,7 +1064,7 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 	from crm.fcrm import intelligence_runs
 
 	current_revision = int(
-		frappe.db.get_value("CRM Student", item["student"], "student_context_revision") or 0
+		frappe.db.get_value("CRM Lead", item["student"], "student_context_revision") or 0
 	)
 	request = request_student_analysis_run(
 		item["student"],
@@ -1372,7 +1372,7 @@ def verify() -> dict[str, Any]:
 	"""Read-only verification for the fixture and its dependent DocTypes."""
 	_assert_local_site()
 	rows = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"import_source_id": ["like", f"{NAMESPACE}:%"]},
 		fields=[
 			"name",
@@ -1390,7 +1390,7 @@ def verify() -> dict[str, Any]:
 	student_names = [row.name for row in rows]
 	counts = {}
 	for doctype, field in (
-		("CRM Contact", "student"),
+		("CRM Student", "student"),
 		("CRM Interaction", "student"),
 		("CRM Intent", "student"),
 		("CRM Student Outcome", "student"),
@@ -1408,7 +1408,7 @@ def verify() -> dict[str, Any]:
 		counts[doctype] = frappe.db.count(doctype, {field: ["in", student_names]}) if student_names else 0
 	contact_names = (
 		frappe.get_all(
-			"CRM Contact", filters={"student": ["in", student_names]}, pluck="name", limit_page_length=0
+			"CRM Student", filters={"student": ["in", student_names]}, pluck="name", limit_page_length=0
 		)
 		if student_names
 		else []

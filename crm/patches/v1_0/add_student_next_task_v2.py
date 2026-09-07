@@ -5,7 +5,7 @@ import frappe
 
 def execute():
 	for doctype in (
-		"CRM Student",
+		"CRM Lead",
 		"CRM Agent Event",
 		"CRM Student Revision Journal",
 		"CRM Parent Contact Authority",
@@ -19,7 +19,7 @@ def execute():
 	# Frappe creates DocType indexes during model sync; these explicit indexes
 	# make existing sites converge without rewriting any evidence rows.
 	frappe.db.add_index(
-		"CRM Student", ["student_context_revision"], index_name="student_context_revision_idx"
+		"CRM Lead", ["student_context_revision"], index_name="student_context_revision_idx"
 	)
 	frappe.db.add_index(
 		"CRM Agent Event",
@@ -33,9 +33,9 @@ def execute():
 			"student_task_idempotency_idx",
 			["producer_identity", "student", "generation_idempotency_key"],
 		)
-	for student in frappe.get_all("CRM Student", pluck="name"):
-		if frappe.db.get_value("CRM Student", student, "student_context_revision") is None:
-			frappe.db.set_value("CRM Student", student, "student_context_revision", 0, update_modified=False)
+	for student in frappe.get_all("CRM Lead", pluck="name"):
+		if frappe.db.get_value("CRM Lead", student, "student_context_revision") is None:
+			frappe.db.set_value("CRM Lead", student, "student_context_revision", 0, update_modified=False)
 
 
 def _ensure_unique_index(doctype, index_name, fields):

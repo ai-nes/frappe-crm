@@ -23,8 +23,21 @@ incompatible changes require a major version and coordinated deployment.
 | School stakeholder endpoint `crm.api.school_domain.get_school_stakeholders` | frappe-crm | 1 | School Data panel | 2026-08-30 |
 | School-domain workbook import boundary | frappe-crm | unversioned module contract | External seed/import operator | 2026-08-30 |
 | Care-queue read-model `crm.api.student_worklist.list_action_queue` | frappe-crm | action-queue-row-v1 | crm-agents care queue / PH-06 frontend | 2026-09-01 |
+| Lead Sale lead list/detail read-model `crm.api.director_leads.get_director_leads` / `get_director_lead` | frappe-crm | lead-sale-read-v1 | dashboard-crm `/lead-sale/leads` | 2026-09-07 |
 | Current-Action claim command `crm.api.student_decision.claim_current_action` | frappe-crm | 1 | crm-agents care queue | 2026-09-01 |
 | CRM Action `risk_tier` policy field (`low\|mid\|high`, NOT NULL, Frappe-owned) | frappe-crm | 1 | crm-agents decision / PH-06 frontend | 2026-09-01 |
+
+## Student–Lead relationship
+
+`CRM Lead` and `CRM Student` are independent records. Either one may be created or
+imported without creating or updating the other. An explicit Lead-to-Student conversion
+copies the server-defined Lead snapshot once, then sets the nullable, indexed
+`CRM Lead.student` link; subsequent edits do not synchronize between the records.
+Each Student may have many Leads from different acquisition sources, including Facebook,
+Zalo, Open Day, High School events, Website, and Referral. Conversion may use an
+independently imported Student when it is explicitly selected, and never auto-merges by
+phone, email, name, or identity. The conversion junction and legacy `CRM Student.student`
+field remain read-compatible during migration; new code should use the direct Lead link.
 
 The `crm/api/agent_events.py` delivery worker reads the crm-agents
 `/api/v1/contract-manifest` with a short Frappe cache when the BFF contract

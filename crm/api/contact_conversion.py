@@ -27,7 +27,7 @@ def get_contact_conversion_history(contact: str, limit: int = 50, cursor: str | 
 			"redacted_count": 0,
 			"read_enabled": False,
 		}
-	doc = frappe.get_doc("CRM Contact", contact)
+	doc = frappe.get_doc("CRM Student", contact)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Contact.", frappe.PermissionError)
 	page = visible_conversion_history_page(contact, limit=min(max(int(limit or 50), 1), 100), cursor=cursor)
@@ -43,7 +43,7 @@ def get_contact_conversion_history(contact: str, limit: int = 50, cursor: str | 
 @frappe.whitelist()
 def get_student_conversion_context(student: str):
 	actor = _actor()
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Student.", frappe.PermissionError)
 	read_enabled = enabled("conversion_read")

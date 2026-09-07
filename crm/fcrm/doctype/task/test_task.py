@@ -74,7 +74,7 @@ class TestTask(FrappeTestCase):
 		"""Test creating task with reference to another document"""
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Task Reference Contact",
 				"email": "task-reference@example.com",
 				"stage": "Interested",
@@ -84,11 +84,11 @@ class TestTask(FrappeTestCase):
 		# Create task with reference
 		task = create_test_task(
 			title="CRM Contact Task",
-			reference_doctype="CRM Contact",
+			reference_doctype="CRM Student",
 			reference_docname=contact.name,
 		)
 
-		self.assertEqual(task.reference_doctype, "CRM Contact")
+		self.assertEqual(task.reference_doctype, "CRM Student")
 		self.assertEqual(task.reference_docname, contact.name)
 
 	def test_task_due_date(self):

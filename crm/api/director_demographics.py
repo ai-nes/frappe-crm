@@ -253,7 +253,7 @@ def _empty_acquisition_map() -> dict[str, Any]:
 
 def _load_students(admission_year: str) -> list:
 	return frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"admission_year": admission_year},
 		fields=STUDENT_FIELDS,
 		order_by="creation asc, name asc",

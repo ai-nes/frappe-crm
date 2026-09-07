@@ -38,7 +38,7 @@ def require_dashboard_access(dashboard, user=None, user_roles=None):
 def get_campus_scope(user=None, user_roles=None):
 	"""Returns None for admin roles (no campus restriction — see all campuses).
 	For every other role, returns the calling user's CRM Staff.campus.
-	Fail-closed, mirroring CRM Contact.get_permission_query_conditions: raises
+	Fail-closed, mirroring CRM Student.get_permission_query_conditions: raises
 	DashboardAccessDenied (not an unfiltered/all-campus query) if the user has no
 	linked CRM Staff record or that record has no campus set.
 	"""
@@ -65,7 +65,7 @@ def get_campus_scope(user=None, user_roles=None):
 
 def get_campus_scoped_staff_names(campus):
 	"""CRM Staff names sharing the given campus — the join target for scoping
-	CRM Contact.assigned_to in new frappe.qb aggregation queries."""
+	CRM Student.assigned_to in new frappe.qb aggregation queries."""
 	return frappe.db.get_all("CRM Staff", filters={"campus": campus}, pluck="name")
 
 

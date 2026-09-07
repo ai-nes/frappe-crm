@@ -135,16 +135,16 @@ class TestCoverageMatrixConsistency(unittest.TestCase):
 
 	def test_student_admission_methods_match_the_shared_tuple(self):
 		self.assertEqual(
-			set(COVERAGE_MATRIX["CRM Student"]["admission_method"]), set(_ADMISSION_METHODS)
+			set(COVERAGE_MATRIX["CRM Lead"]["admission_method"]), set(_ADMISSION_METHODS)
 		)
 
 	def test_curated_data_targets_every_reachable_student_lifecycle_value(self):
-		expected = set(COVERAGE_MATRIX["CRM Student"]["lifecycle_stage"])
+		expected = set(COVERAGE_MATRIX["CRM Lead"]["lifecycle_stage"])
 		self.assertTrue({s["target_stage"] for s in SCENARIOS}.issuperset(expected))
 
 	def test_contact_rows_cover_readiness_quality_channel_and_decision_maker(self):
 		for field in ("readiness_level", "quality_bucket", "decision_maker", "preferred_contact_channel"):
-			matrix = set(COVERAGE_MATRIX["CRM Contact"][field])
+			matrix = set(COVERAGE_MATRIX["CRM Student"][field])
 			seeded = {row[field] for row in CONTACT_ROWS}
 			if field == "readiness_level":
 				# CONTACT_ROWS carry the short key; the seed expands it to the

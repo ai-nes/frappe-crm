@@ -11,7 +11,7 @@
   {"default": "open", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "open\npaused\nwarned\nresponded\nbreached\nescalated\nclosed\nclosed_inactive\nsuperseded", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "reset_sequence", "fieldtype": "Int", "label": "Reset Sequence", "read_only": 1, "reqd": 1},
-  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
   {"default": "normal", "fieldname": "priority", "fieldtype": "Select", "label": "Priority", "options": "low\nnormal\nhigh\nurgent", "read_only": 1, "reqd": 1},
   {"fieldname": "first_response_deadline", "fieldtype": "Datetime", "label": "First Response Deadline", "read_only": 1},
   {"fieldname": "opening_ownership_revision", "fieldtype": "Int", "label": "Opening Ownership Revision", "read_only": 1, "reqd": 1},

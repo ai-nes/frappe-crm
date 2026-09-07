@@ -303,7 +303,7 @@ def get_contact_reference_from_number(number: str):
 		doctype = "Contact"
 		docname = contact.get("name")
 		if contact.get("crm_contact"):
-			doctype = "CRM Contact"
+			doctype = "CRM Student"
 			docname = contact.get("crm_contact")
 		return docname, doctype
 	return None, None
@@ -362,7 +362,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		.replace("+", "")
 	)
 
-	CRMContact = frappe.qb.DocType("CRM Contact")
+	CRMContact = frappe.qb.DocType("CRM Student")
 	normalized_phone = Replace(
 		Replace(Replace(Replace(Replace(CRMContact.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
@@ -383,7 +383,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	for contact in crm_contacts:
 		if are_same_phone_number(contact.mobile_no, phone_number, country, validate=not exact_match):
 			contact["crm_contact"] = contact.name
-			contact["doctype"] = "CRM Contact"
+			contact["doctype"] = "CRM Student"
 			return contact
 
 	Contact = frappe.qb.DocType("Contact")

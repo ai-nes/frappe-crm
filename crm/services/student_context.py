@@ -90,15 +90,15 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 	if prior:
 		return {"student": student, "revision": int(prior.revision), "stream_sequence": int(prior.stream_sequence), "change": prior.name}
 	row = frappe.db.sql(
-		"SELECT student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		"SELECT student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if not row:
-		raise frappe.DoesNotExistError(f"CRM Student {student} does not exist")
+		raise frappe.DoesNotExistError(f"CRM Lead {student} does not exist")
 	revision = int(row[0].student_context_revision or 0) + 1
 	frappe.db.sql(
-		"UPDATE `tabCRM Student` SET student_context_revision = %s WHERE name = %s",
+		"UPDATE `tabCRM Lead` SET student_context_revision = %s WHERE name = %s",
 		(revision, student),
 	)
 	sequence = _next_stream_sequence("context")

@@ -3,8 +3,8 @@
  "field_order": ["naming_series", "student", "contact", "relationship_verified", "relationship_type", "decision_role", "decision_influence", "concerns", "lawful_basis", "allowed_channels", "effective_at", "expires_at", "proof_reference", "revoked_at", "revocation_evidence"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "PCA-.YYYY.-", "options": "PCA-.YYYY.-"},
-  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1},
-  {"fieldname": "contact", "fieldtype": "Link", "options": "CRM Contact", "reqd": 1, "read_only": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Lead", "reqd": 1, "read_only": 1},
+  {"fieldname": "contact", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1},
   {"fieldname": "relationship_verified", "fieldtype": "Check", "reqd": 1, "read_only": 1},
   {"fieldname": "relationship_type", "fieldtype": "Data", "reqd": 1, "read_only": 1},
   {"fieldname": "decision_role", "fieldtype": "Select", "options": "Unknown\nPrimary decision maker\nInfluencer\nInformation only", "default": "Unknown", "read_only": 1},

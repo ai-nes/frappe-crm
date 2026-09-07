@@ -1,5 +1,5 @@
 """
-Re-parent academic fields from CRM Student to CRM Contact.
+Re-parent academic fields from CRM Student to CRM Student.
 
 cohort_start_year and cohort_end_year were added to tabCRM Student by mistake
 and are now defined on CRM Contact instead. This patch drops the stale columns
@@ -12,18 +12,18 @@ import frappe
 def execute():
     # Drop stale integer columns from tabCRM Student if they still exist
     for col in ("cohort_start_year", "cohort_end_year"):
-        if frappe.db.has_column("CRM Student", col):
-            frappe.db.sql(f"ALTER TABLE `tabCRM Student` DROP COLUMN `{col}`")
+        if frappe.db.has_column("CRM Lead", col):
+            frappe.db.sql(f"ALTER TABLE `tabCRM Lead` DROP COLUMN `{col}`")
 
-    # Re-parent child table rows that still point at CRM Student
+    # Re-parent child table rows that still point at CRM Lead
     for child_doctype in (
         "CRM Student Academic Result",
         "CRM Student Language Certificate",
     ):
         frappe.db.sql(
             f"""UPDATE `tab{child_doctype}`
-                SET parenttype = 'CRM Contact'
-                WHERE parenttype = 'CRM Student'"""
+                SET parenttype = 'CRM Student'
+                WHERE parenttype = 'CRM Lead'"""
         )
 
     # Force Frappe to pick up the updated JSON schemas

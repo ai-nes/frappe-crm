@@ -12,7 +12,7 @@
   "evidence_ref": {"doctype": "CRM Message Evidence", "name": "EVID-0001"},
   "evidence_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "sequence": 1,
-  "target": {"doctype": "CRM Student", "name": "STU-0001"},
+  "target": {"doctype": "CRM Lead", "name": "STU-0001"},
   "actor": {"id": "CONTACT-0001", "role": "student"},
   "correlation_id": "conversation-0001",
   "idempotency_key": "chatwoot:message-123:1",

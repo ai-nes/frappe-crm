@@ -89,7 +89,7 @@ def _add_index(doctype: str, columns: tuple[str, ...], index_name: str) -> bool:
 
 def execute():
 	students = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		fields=[
 			"name", "enrollment_status", "lifecycle_stage", "owner_staff", "assigned_to",
 			"owning_team", "owning_pool", "branch",
@@ -121,7 +121,7 @@ def execute():
 			None,
 		)
 		if pool:
-			frappe.db.set_value("CRM Student", student.name, "owning_pool", pool.name, update_modified=False)
+			frappe.db.set_value("CRM Lead", student.name, "owning_pool", pool.name, update_modified=False)
 	for doctype, columns, index_name in (
 		(
 			"CRM Student SLA Attempt",

@@ -16,7 +16,7 @@ class TestStudentAuditApi(FrappeTestCase):
 	def test_student_audit_returns_creation_and_field_changes(self):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": "Audit API Student",
 				"phone": "0912345678",
 				"email": "audit-api-student@example.com",
@@ -47,7 +47,7 @@ class TestStudentAuditApi(FrappeTestCase):
 	def test_student_audit_returns_deleted_event_and_supports_pagination(self):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": "Deleted Audit API Student",
 				"phone": "0912345679",
 				"email": "deleted-audit-api-student@example.com",
@@ -56,7 +56,7 @@ class TestStudentAuditApi(FrappeTestCase):
 		frappe.get_doc(
 			{
 				"doctype": "Deleted Document",
-				"deleted_doctype": "CRM Student",
+				"deleted_doctype": "CRM Lead",
 				"deleted_name": student.name,
 				"data": "{}",
 			}

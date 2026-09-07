@@ -10,7 +10,7 @@ MODULES = {
 		"CRM Parent Contact Authority", "CRM Influence", "CRM Contact Consent Event", "CRM Student Contact Conversion",
 	),
 	"CRM Student Lifecycle": (
-		"CRM Student", "CRM Student Lifecycle Event", "CRM Student Decision Event", "CRM Student Ownership Event",
+		"CRM Lead", "CRM Student Lifecycle Event", "CRM Student Decision Event", "CRM Student Ownership Event",
 		"CRM Student Outcome", "CRM Student Command Receipt", "CRM Student Intake Review",
 		"CRM Student Dispatch Receipt", "CRM Student Revision Journal", "CRM Event Stream Cursor", "CRM Assignment Log",
 	),

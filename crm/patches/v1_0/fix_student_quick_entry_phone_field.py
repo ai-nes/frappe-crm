@@ -6,10 +6,10 @@ QUICK_ENTRY_LAYOUT = '[{"name":"details_section","columns":[{"name":"col_name","
 
 
 def execute():
-	if not frappe.db.exists("Fields Layout", "CRM Student-Quick Entry"):
+	if not frappe.db.exists("Fields Layout", "CRM Lead-Quick Entry"):
 		return
 
-	layout_doc = frappe.get_doc("Fields Layout", "CRM Student-Quick Entry")
+	layout_doc = frappe.get_doc("Fields Layout", "CRM Lead-Quick Entry")
 	if not layout_doc.layout:
 		return
 
@@ -27,4 +27,4 @@ def execute():
 				dirty = True
 
 	if dirty:
-		frappe.db.set_value("Fields Layout", "CRM Student-Quick Entry", "layout", json.dumps(parsed), update_modified=False)
+		frappe.db.set_value("Fields Layout", "CRM Lead-Quick Entry", "layout", json.dumps(parsed), update_modified=False)

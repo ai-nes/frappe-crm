@@ -40,7 +40,7 @@ def application_backfill_decision(
 				"student": student.get("name"),
 			}
 		offering = candidates[0]
-		source_reference = f"CRM Student:{student.get('name')}"
+		source_reference = f"CRM Lead:{student.get('name')}"
 		attempt_key = canonical_attempt_key(student["case_key"], offering["name"], source_reference)
 	else:
 		offering = None
@@ -66,7 +66,7 @@ def application_backfill_decision(
 		"status": "Enrolled" if student.get("enrollment_status") == "ENROLLED" else "Draft",
 	}
 	metadata = provenance(
-		source_doctype="CRM Student",
+		source_doctype="CRM Lead",
 		source_name=str(student.get("name")),
 		source_reference=source_reference,
 		**values,

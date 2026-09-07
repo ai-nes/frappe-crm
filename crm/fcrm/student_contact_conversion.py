@@ -1,8 +1,9 @@
-"""Read-only relationship helpers for Student ↔ Contact conversion history.
+"""Read-only relationship helpers for Student ↔ Lead/Contact history.
 
 The conversion junction is authoritative once present.  The legacy
-``CRM Contact.student`` link is used only as a temporary compatibility fallback
-for rows that have not been migrated yet.
+``CRM Student.student`` link is used only as a temporary compatibility fallback
+for rows that have not been migrated yet; direct ``CRM Lead.student`` links are
+the canonical one-to-many relationship.
 """
 
 from __future__ import annotations
@@ -69,21 +70,51 @@ def conversion_rows_for_contact(contact: str, *, limit: int = 100, start: int = 
 
 
 def contacts_for_student(student: str) -> list[str]:
+	contacts = []
+	if _lead_student_link_available():
+		linked_contact = frappe.db.get_value("CRM Lead", student, "student")
+		if linked_contact:
+			contacts.append(linked_contact)
+
 	rows = conversion_rows_for_student(student)
-	contacts = [row.get("contact") for row in rows if row.get("contact")]
-	if contacts:
-		return list(dict.fromkeys(contacts))
-	legacy_contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
-	return [legacy_contact] if legacy_contact else []
+	contacts.extend(row.get("contact") for row in rows if row.get("contact"))
+	legacy_contact = frappe.db.get_value("CRM Student", {"student": student}, "name")
+	if legacy_contact:
+		contacts.append(legacy_contact)
+	return list(dict.fromkeys(contacts))
+
+
+def leads_for_student(student: str) -> list[str]:
+	leads = []
+	if _lead_student_link_available():
+		leads.extend(
+			frappe.get_all(
+				"CRM Lead",
+				filters={"student": student},
+				pluck="name",
+				order_by="creation asc, name asc",
+				ignore_permissions=True,
+			)
+		)
+
+	rows = conversion_rows_for_contact(student)
+	leads.extend(row.get("student") for row in rows if row.get("student"))
+	legacy = frappe.db.get_value("CRM Student", student, "student")
+	if legacy:
+		leads.append(legacy)
+	return list(dict.fromkeys(leads))
 
 
 def students_for_contact(contact: str) -> list[str]:
-	rows = conversion_rows_for_contact(contact)
-	students = [row.get("student") for row in rows if row.get("student")]
-	if students:
-		return list(dict.fromkeys(students))
-	legacy = frappe.db.get_value("CRM Contact", contact, "student")
-	return [legacy] if legacy else []
+	"""Backward-compatible alias for the Lead list linked to one Student."""
+	return leads_for_student(contact)
+
+
+def _lead_student_link_available() -> bool:
+	try:
+		return frappe.get_meta("CRM Lead").has_field("student")
+	except Exception:
+		return False
 
 
 def contact_for_student(student: str, *, requested_contact: str | None = None) -> str | None:
@@ -96,18 +127,22 @@ def contact_for_student(student: str, *, requested_contact: str | None = None) -
 def contact_is_linked_to_student(contact: str, student: str) -> bool:
 	if not contact or not student:
 		return False
+	if _lead_student_link_available() and frappe.db.get_value("CRM Lead", student, "student") == contact:
+		return True
 	rows = conversion_rows_for_contact(contact)
-	if rows:
-		return any(row.get("student") == student for row in rows)
-	return frappe.db.get_value("CRM Contact", contact, "student") == student
+	return any(row.get("student") == student for row in rows) or frappe.db.get_value(
+		"CRM Student", contact, "student"
+	) == student
 
 
 def relationship_source(contact: str, student: str | None = None) -> str:
 	rows = conversion_rows_for_contact(contact)
 	if rows and (student is None or any(row.get("student") == student for row in rows)):
 		return "junction"
-	if frappe.db.get_value("CRM Contact", contact, "student") and (
-		student is None or frappe.db.get_value("CRM Contact", contact, "student") == student
+	if student and _lead_student_link_available() and frappe.db.get_value("CRM Lead", student, "student") == contact:
+		return "lead_link"
+	if frappe.db.get_value("CRM Student", contact, "student") and (
+		student is None or frappe.db.get_value("CRM Student", contact, "student") == student
 	):
 		return "legacy"
 	return "none"
@@ -151,7 +186,7 @@ def visible_conversion_history_page(
 	for row in rows:
 		student = row.get("student")
 		try:
-			allowed = bool(frappe.has_permission("CRM Student", "read", student))
+			allowed = bool(frappe.has_permission("CRM Lead", "read", student))
 		except Exception:
 			allowed = False
 		if allowed:

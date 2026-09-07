@@ -10,8 +10,8 @@ def get_sales_data(site_info):
 	activation_level = site_info.get("activation", {}).get("activation_level", 0)
 	sales_data = site_info.get("activation", {}).get("sales_data", [])
 	doctypes = [
+		"CRM Lead",
 		"CRM Student",
-		"CRM Contact",
 		"CRM High School",
 		"CRM High School Annual Snapshot",
 		"CRM School Activity",

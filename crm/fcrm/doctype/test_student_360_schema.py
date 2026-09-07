@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import TestCase
 
 
-SCHEMA_PATH = Path(__file__).parent / "crm_student" / "crm_student.json"
+SCHEMA_PATH = Path(__file__).parent / "crm_lead" / "crm_lead.json"
 CONTEXT_SERVICE_PATH = Path(__file__).parents[2] / "services" / "student_context.py"
 
 

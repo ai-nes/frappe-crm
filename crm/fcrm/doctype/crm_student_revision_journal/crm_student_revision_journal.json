@@ -3,7 +3,7 @@
  "field_order": ["event_id", "student", "event_type", "stream", "revision", "stream_sequence", "reason", "actor", "actor_scope", "occurred_at", "idempotency_key", "correlation_id", "policy_version", "schema_version", "payload"],
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
   {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "label": "Event Type", "options": "context_changed\nscore_input_changed", "read_only": 1, "reqd": 1},
   {"fieldname": "stream", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Stream", "options": "context\nscoring", "read_only": 1, "reqd": 1},
   {"fieldname": "revision", "fieldtype": "Int", "in_list_view": 1, "label": "Revision", "read_only": 1, "reqd": 1},

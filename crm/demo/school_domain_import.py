@@ -60,8 +60,8 @@ _SCHOOL_DOMAIN_CHILD_LINKS = (
 	("CRM Student Geography Snapshot", "high_school"),
 )
 _SCHOOL_DOMAIN_PROTECTED_LINKS = (
+	("CRM Lead", "high_school"),
 	("CRM Student", "high_school"),
-	("CRM Contact", "high_school"),
 )
 
 

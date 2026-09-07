@@ -29,7 +29,7 @@ if FrappeTestCase is not None:
 					"NBA Recommendation commit tests require a bench site (use bench run-tests)"
 				)
 			super().setUpClass()
-			student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
+			student = frappe.get_all("CRM Lead", pluck="name", limit_page_length=1)
 			if not student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
 			cls.student = student[0]
@@ -74,7 +74,7 @@ if FrappeTestCase is not None:
 				{
 					"doctype": "CRM Recommendation",
 					"recommendation_id": f"{evaluation}-{rank}",
-					"target_type": "CRM Student",
+					"target_type": "CRM Lead",
 					"target_id": self.student,
 					"reason": "kernel recommendation",
 					"priority": "medium",
@@ -90,7 +90,7 @@ if FrappeTestCase is not None:
 				{
 					"doctype": "CRM Recommendation",
 					"recommendation_id": f"REC-legacy-{frappe.generate_hash(length=8)}",
-					"target_type": "CRM Student",
+					"target_type": "CRM Lead",
 					"target_id": self.student,
 					"reason": "legacy recommendation",
 					"priority": "medium",
@@ -173,7 +173,7 @@ if FrappeTestCase is not None:
 			frappe.conf["crm_agents_service_user"] = "Administrator"
 			frappe.conf["crm_nba_manual_requests_per_actor_target"] = 500
 			frappe.conf["crm_agents_outbox_enabled"] = 1
-			student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
+			student = frappe.get_all("CRM Lead", pluck="name", limit_page_length=1)
 			if not student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
 			cls.student = student[0]
@@ -451,7 +451,7 @@ if FrappeTestCase is not None:
 			super().setUpClass()
 			cls._conf_backup = {key: frappe.conf.get(key) for key in ("crm_agents_service_user",)}
 			frappe.conf["crm_agents_service_user"] = "Administrator"
-			student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
+			student = frappe.get_all("CRM Lead", pluck="name", limit_page_length=1)
 			if not student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
 			cls.student = student[0]
@@ -478,7 +478,7 @@ if FrappeTestCase is not None:
 				{
 					"doctype": "CRM Recommendation",
 					"recommendation_id": "REC-rationale-" + frappe.generate_hash(length=10),
-					"target_type": "CRM Student",
+					"target_type": "CRM Lead",
 					"target_id": self.student,
 					"reason": "kernel recommendation",
 					"priority": "medium",

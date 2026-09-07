@@ -37,7 +37,7 @@ class CRMAdmissionApplication(Document):
 			and self.application_attempt_key
 		):
 			self.idempotency_fingerprint = provenance(
-				source_doctype=self.source_doctype or "CRM Student",
+				source_doctype=self.source_doctype or "CRM Lead",
 				source_name=self.source_name or self.student,
 				source_reference=self.source_reference,
 				admission_year=self.admission_year,

@@ -13,7 +13,7 @@ to the already-active Lead Sale (adds conditional delete) and Marketing
 Field-level restriction of CTV Sale to "note/status" fields (PRD P0-1
 acceptance criteria, Open Question #2) is not implemented here -- the PRD
 itself leaves the exact field list unresolved, so CTV Sale is seeded with an
-unrestricted write flag on CRM Student/CRM Contact as an interim measure.
+unrestricted write flag on CRM Lead/CRM Contact as an interim measure.
 """
 
 import frappe

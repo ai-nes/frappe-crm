@@ -69,12 +69,12 @@ def route_new_lead(doc):
 
 
 @frappe.whitelist()
-def route_unassigned_leads(doctype="CRM Contact"):
+def route_unassigned_leads(doctype="CRM Student"):
 	"""Batch retry for leads that were captured while no staff was
 	available for their team (e.g. via import, or a team with no active
 	members at capture time). Safe to call repeatedly/on a schedule."""
-	if doctype not in ("CRM Contact",):
-		frappe.throw(frappe._("Routing is only supported for CRM Contact."))
+	if doctype not in ("CRM Student",):
+		frappe.throw(frappe._("Routing is only supported for CRM Student."))
 
 	from crm.api.staff_assignment import _has_staff_assign_permission
 

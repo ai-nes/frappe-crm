@@ -27,12 +27,12 @@ def compute_crm_metrics(high_school, admission_year):
 	"""Return distinct CRM funnel measures for one school and admission year."""
 	contact_filters = {"high_school": high_school, "admission_year": admission_year}
 	student_filters = {"high_school": high_school, "admission_year": admission_year}
-	contact_count = frappe.db.count("CRM Contact", contact_filters)
-	student_count = frappe.db.count("CRM Student", student_filters)
-	applicant_count = frappe.db.count("CRM Contact", {**contact_filters, "lifecycle_stage": "Applicant"})
-	enrolled_contacts = frappe.db.count("CRM Contact", {**contact_filters, "lifecycle_stage": "Enrolled"})
-	enrolled_students = frappe.db.count("CRM Student", {**student_filters, "lifecycle_stage": "Enrolled"})
-	student_names = frappe.get_all("CRM Student", filters=student_filters, pluck="name")
+	contact_count = frappe.db.count("CRM Student", contact_filters)
+	student_count = frappe.db.count("CRM Lead", student_filters)
+	applicant_count = frappe.db.count("CRM Student", {**contact_filters, "lifecycle_stage": "Applicant"})
+	enrolled_contacts = frappe.db.count("CRM Student", {**contact_filters, "lifecycle_stage": "Enrolled"})
+	enrolled_students = frappe.db.count("CRM Lead", {**student_filters, "lifecycle_stage": "Enrolled"})
+	student_names = frappe.get_all("CRM Lead", filters=student_filters, pluck="name")
 	conversion_count = 0
 	if student_names and frappe.db.exists("DocType", "CRM Student Contact Conversion"):
 		conversion_count = frappe.db.count(

@@ -142,7 +142,7 @@ def get_matching_contact_names(filters):
 	names = set()
 	for group in filters["groups"]:
 		group_filters = _group_to_query_filters(group["conditions"])
-		names.update(frappe.get_list("CRM Contact", filters=group_filters, pluck="name", limit_page_length=0))
+		names.update(frappe.get_list("CRM Student", filters=group_filters, pluck="name", limit_page_length=0))
 
 	return names
 
@@ -163,7 +163,7 @@ def get_segment_fields():
 
 @frappe.whitelist()
 def preview_segment(segment=None, filters=None, start=0, page_length=20):
-	"""Count + a page of CRM Contacts matching either a saved Segment (by name)
+	"""Count + a page of CRM Students matching either a saved Segment (by name)
 	or unsaved draft rules. Draft filters go through the exact same
 	validate_segment_filters()/get_matching_contact_names() gate as a saved
 	Segment, so allow-list rejection is identical on both paths."""
@@ -185,7 +185,7 @@ def preview_segment(segment=None, filters=None, start=0, page_length=20):
 
 	contacts = (
 		frappe.get_list(
-			"CRM Contact",
+			"CRM Student",
 			filters=[["name", "in", page_names]],
 			fields=PREVIEW_CONTACT_FIELDS,
 			order_by="name asc",

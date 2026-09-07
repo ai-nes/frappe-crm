@@ -21,7 +21,7 @@ class TestAIInsightAPI(FrappeTestCase):
 		else:
 			frappe.conf.crm_agents_service_user = self._previous_service_user
 		students = frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test AI Insight%"]}, pluck="name"
+			"CRM Lead", filters={"student_name": ["like", "_Test AI Insight%"]}, pluck="name"
 		)
 		for insight in frappe.db.get_all(
 			"CRM AI Lead Insight", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
@@ -34,16 +34,16 @@ class TestAIInsightAPI(FrappeTestCase):
 		):
 			frappe.db.delete("CRM Student Command Receipt", {"name": receipt})
 		for contact in frappe.db.get_all(
-			"CRM Contact", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
+			"CRM Student", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
 		):
-			frappe.delete_doc("CRM Contact", contact, force=True)
+			frappe.delete_doc("CRM Student", contact, force=True)
 		for student in students:
-			frappe.delete_doc("CRM Student", student, force=True)
+			frappe.delete_doc("CRM Lead", student, force=True)
 
 	def _make_pair(self, suffix="Base"):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": f"_Test AI Insight {suffix}",
 				"phone": "0981123456",
 				"email": f"ai-insight-{suffix.lower()}@example.com",
@@ -59,7 +59,7 @@ class TestAIInsightAPI(FrappeTestCase):
 
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": f"_Test AI Insight Contact {suffix}",
 				"phone": "0981123457",
 				"student": student.name,
@@ -79,7 +79,7 @@ class TestAIInsightAPI(FrappeTestCase):
 		payload = {
 			"student": student.name,
 			"expected_context_revision": int(
-				frappe.db.get_value("CRM Student", student.name, "student_context_revision") or 0
+				frappe.db.get_value("CRM Lead", student.name, "student_context_revision") or 0
 			),
 			"generation_idempotency_key": key,
 			"idempotency_key": key,

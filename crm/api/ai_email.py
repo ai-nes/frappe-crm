@@ -12,10 +12,10 @@ def generate_email_draft(
 	CRM AI Personal Email Draft record. Enforces contact read permission
 	and the contact's opt-out consent flag before creating anything.
 	"""
-	if not frappe.has_permission("CRM Contact", "read", contact):
+	if not frappe.has_permission("CRM Student", "read", contact):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
-	if frappe.db.get_value("CRM Contact", contact, "is_opted_out"):
+	if frappe.db.get_value("CRM Student", contact, "is_opted_out"):
 		frappe.throw(_("This contact has opted out of communications — an AI draft cannot be generated."))
 
 	draft = frappe.get_doc(

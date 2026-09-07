@@ -59,7 +59,7 @@ class TestCareQueue(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM Action Item", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		for staff in (self._sale_staff, self._lead_staff, self._outsider_staff):
 			frappe.delete_doc("CRM Staff", staff, force=True)
 		for user in (self._sale_user, self._lead_user, self._outsider_user):
@@ -72,7 +72,7 @@ class TestCareQueue(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -148,10 +148,10 @@ class TestCareQueue(FrappeTestCase):
 			)
 
 	def _set_student(self, **fields):
-		frappe.db.set_value("CRM Student", self._student.name, fields, update_modified=False)
+		frappe.db.set_value("CRM Lead", self._student.name, fields, update_modified=False)
 
 	def _context_base(self):
-		return int(frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0)
+		return int(frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0)
 
 	def _current_revision(self, action):
 		return int(frappe.db.get_value("CRM Action Item", action, "decision_revision") or 0)
@@ -264,7 +264,7 @@ class TestCareQueue(FrappeTestCase):
 		)
 		self.assertEqual(result["status"], "claimed")
 		row = frappe.db.get_value(
-			"CRM Student", self._student.name, ["assigned_to", "owner_staff", "owning_team"], as_dict=True
+			"CRM Lead", self._student.name, ["assigned_to", "owner_staff", "owning_team"], as_dict=True
 		)
 		self.assertEqual(row.assigned_to, self._lead_staff)
 		self.assertIsNone(row.owner_staff)
@@ -400,7 +400,7 @@ class TestCareQueue(FrappeTestCase):
 			)
 		self.assertEqual(ctx.exception.code, "OUT_OF_SCOPE")
 		self.assertEqual(
-			frappe.db.get_value("CRM Student", self._student.name, "assigned_to"), self._sale_staff
+			frappe.db.get_value("CRM Lead", self._student.name, "assigned_to"), self._sale_staff
 		)
 
 	def test_no_current_action_claims_as_stale(self):

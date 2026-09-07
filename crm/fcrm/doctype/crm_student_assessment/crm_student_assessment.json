@@ -32,7 +32,7 @@
  ],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "S360-.YYYY.-", "options": "S360-.YYYY.-"},
-  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Lead", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "assessment_revision", "fieldtype": "Int", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "status", "fieldtype": "Select", "options": "proposed\nconfirmed\nsuperseded\nrejected", "default": "proposed", "reqd": 1, "in_list_view": 1},
   {"fieldname": "assessment_source", "fieldtype": "Select", "options": "system\nmanual", "reqd": 1, "read_only": 1},

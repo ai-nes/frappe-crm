@@ -191,7 +191,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		)
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"],
-			("CRM Student", "CRM Contact"),
+			("CRM Lead", "CRM Student"),
 		)
 		self.assertEqual(CANONICAL_PERMISSION_MATRIX["admissions_case"]["permissions"]["sales"], "rwc")
 		self.assertEqual(
@@ -225,7 +225,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertTrue(_can_remove_target(True, {"System Manager"}))
 
 	def test_managed_docperm_rows_are_policy_derived_and_preserve_legacy_untouched(self):
-		student_roles = {row["role"]: row for row in managed_docperm_rows()["CRM Student"]}
+		student_roles = {row["role"]: row for row in managed_docperm_rows()["CRM Lead"]}
 		self.assertEqual(
 			{key for key, value in student_roles["Sale"].items() if value == 1},
 			{"read", "write", "create"},

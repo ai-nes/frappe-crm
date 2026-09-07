@@ -52,12 +52,12 @@ class TestCanonicalRoleCutover(FrappeTestCase):
 			"roles": [{"name": "Sales User", "role_name": "Sales User", "desk_access": 1, "disabled": 0}],
 			"assignments": [{"parent": "user@example.com", "role": "Sales User"}],
 			"docperms": [{
-				"name": "perm-sales-user", "parent": "CRM Student", "parenttype": "DocType", "parentfield": "permissions", "idx": 1,
+				"name": "perm-sales-user", "parent": "CRM Lead", "parenttype": "DocType", "parentfield": "permissions", "idx": 1,
 				"role": "Sales User", "permlevel": 0, "read": 1, "write": 0, "create": 0, "delete": 0,
 				"submit": 0, "cancel": 0, "amend": 0, "report": 1, "export": 1, "import": 0, "share": 0, "print": 1, "email": 0, "if_owner": 1, "select": 1,
 			}],
 			"custom_docperms": [{
-				"name": "custom-perm-sales-user", "parent": "CRM Student", "parenttype": "Customize Form", "parentfield": "permissions", "idx": 1,
+				"name": "custom-perm-sales-user", "parent": "CRM Lead", "parenttype": "Customize Form", "parentfield": "permissions", "idx": 1,
 				"role": "Sales User", "permlevel": 0, "read": 1, "write": 0, "create": 0, "delete": 0,
 				"submit": 0, "cancel": 0, "amend": 0, "report": 1, "export": 1, "import": 0, "share": 0, "print": 1, "email": 0, "if_owner": 1, "select": 1,
 			}],
@@ -66,8 +66,8 @@ class TestCanonicalRoleCutover(FrappeTestCase):
 				"grant_type": "data_scope", "value": "student.self",
 			}],
 			"user_permissions": [{
-				"name": "user-perm-sales-user", "user": "user@example.com", "allow": "CRM Student", "for_value": "STU-1",
-				"is_default": 0, "apply_to_all_doctypes": 0, "applicable_for": "CRM Student", "hide_descendants": 0,
+				"name": "user-perm-sales-user", "user": "user@example.com", "allow": "CRM Lead", "for_value": "STU-1",
+				"is_default": 0, "apply_to_all_doctypes": 0, "applicable_for": "CRM Lead", "hide_descendants": 0,
 			}],
 			"invitations": [{
 				"name": "invite-sales-user", "email": "invite@example.com", "role": "Sales User", "key": "k", "invited_by": "Administrator", "status": "Pending",

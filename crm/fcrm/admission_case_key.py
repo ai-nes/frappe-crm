@@ -117,7 +117,7 @@ def ensure_case_key(
 		return _result(existing.target_case_key, existing.target_student, existing, True)
 
 	student = frappe.db.sql(
-		"SELECT name, identity, admission_year, case_key FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
+		"SELECT name, identity, admission_year, case_key FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
 		(canonical_student,),
 		as_dict=True,
 	)
@@ -179,7 +179,7 @@ def ensure_case_key(
 				)
 			case_name = row.name
 
-	frappe.db.set_value("CRM Student", canonical_student, "case_key", case_name, update_modified=False)
+	frappe.db.set_value("CRM Lead", canonical_student, "case_key", case_name, update_modified=False)
 	receipt = _write_receipt(
 		command_key=command_key,
 		fingerprint=fingerprint,

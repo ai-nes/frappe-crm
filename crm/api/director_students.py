@@ -234,7 +234,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Student", student_id)
+		doc = frappe.get_doc("CRM Lead", student_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
@@ -254,7 +254,7 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Student", student_id)
+		doc = frappe.get_doc("CRM Lead", student_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
@@ -311,7 +311,7 @@ def get_student_chatwoot_interactions(
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Student", student_id)
+		doc = frappe.get_doc("CRM Lead", student_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
@@ -575,7 +575,7 @@ def _list_scope_student_ids() -> list[str] | None:
 	if condition is None:
 		return None
 	rows = frappe.db.sql(
-		f"select name from `tabCRM Student` where ({condition})",
+		f"select name from `tabCRM Lead` where ({condition})",
 		as_dict=True,
 	)
 	return [row.get("name") for row in rows if row.get("name")]
@@ -600,7 +600,7 @@ def _count_students(
 	query_filters = _with_allowed_student_ids(filters, allowed_student_ids)
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 	rows = get_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters=query_filters,
 		or_filters=or_filters or [],
 		fields=["count(name) as total"],
@@ -629,7 +629,7 @@ def _fetch_student_rows(
 		return []
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 	return get_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
@@ -651,7 +651,7 @@ def _fetch_computed_sort_rows(
 		return []
 	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 	rows = get_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
@@ -896,7 +896,7 @@ def _build_summary(
 	else:
 		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
 		rows = get_rows(
-			"CRM Student",
+			"CRM Lead",
 			filters=_with_allowed_student_ids(
 				{"admission_year": admission_year}, allowed_student_ids
 			),
@@ -910,7 +910,7 @@ def _build_summary(
 		previous_rows = []
 	else:
 		previous_rows = get_rows(
-			"CRM Student",
+			"CRM Lead",
 			filters=_with_allowed_student_ids(
 				{"admission_year": str(int(admission_year) - 1)}, allowed_student_ids
 			),
@@ -938,7 +938,7 @@ def _build_action_summary(
 		student_ids = [
 			row.get("name")
 			for row in get_rows(
-				"CRM Student",
+				"CRM Lead",
 				filters=_with_allowed_student_ids(
 					{"admission_year": admission_year}, allowed_student_ids
 				),
@@ -1318,7 +1318,7 @@ def _student_call_records(
 	if _table_exists("Call Log"):
 		call_logs = frappe.get_all(
 			"Call Log",
-			filters={"reference_doctype": "CRM Student", "reference_docname": student_id},
+			filters={"reference_doctype": "CRM Lead", "reference_docname": student_id},
 			fields=[
 				"name",
 				"caller",
@@ -1620,7 +1620,7 @@ def _student_guardian(student_id: str | None) -> dict[str, Any]:
 	contact_name = guardian.get("contact")
 	contact_rows = (
 		frappe.get_all(
-			"CRM Contact",
+			"CRM Student",
 			filters={"name": contact_name},
 			fields=["name", "full_name", "phone", "email"],
 			limit_page_length=1,
@@ -2007,7 +2007,7 @@ def _require_access():
 		)
 
 	try:
-		frappe.has_permission("CRM Student", "read", user=user, throw=True)
+		frappe.has_permission("CRM Lead", "read", user=user, throw=True)
 	except frappe.PermissionError:
 		_raise_api_error(
 			"FORBIDDEN",

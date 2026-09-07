@@ -124,8 +124,8 @@ STUDENT_DATA_FIELDS_LAYOUT = [
 
 
 def execute():
-	_upsert_layout("CRM Student", "Side Panel", "CRM Student-Side Panel", STUDENT_SIDE_PANEL_LAYOUT)
-	_upsert_layout("CRM Student", "Data Fields", "CRM Student-Data Fields", STUDENT_DATA_FIELDS_LAYOUT)
+	_upsert_layout("CRM Lead", "Side Panel", "CRM Lead-Side Panel", STUDENT_SIDE_PANEL_LAYOUT)
+	_upsert_layout("CRM Lead", "Data Fields", "CRM Lead-Data Fields", STUDENT_DATA_FIELDS_LAYOUT)
 	frappe.clear_cache(doctype="Fields Layout")
 
 

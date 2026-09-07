@@ -19,7 +19,7 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 	"""
 	if not isinstance(values, dict):
 		frappe.throw(_("Application values must be an object."), frappe.ValidationError)
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	if not student_doc.has_permission("write"):
 		frappe.throw(_("You are not permitted to create an application for this Student."), frappe.PermissionError)
 	application_values = dict(values)
@@ -36,7 +36,7 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 		canonical_attempt_key(application_values["case_key"], application_values["offering"], application_values["source_reference"]),
 	)
 	metadata = provenance(
-		source_doctype="CRM Student",
+		source_doctype="CRM Lead",
 		source_name=student,
 		source_reference=application_values["source_reference"],
 		application_attempt_key=application_values["application_attempt_key"],

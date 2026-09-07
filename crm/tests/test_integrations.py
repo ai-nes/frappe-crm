@@ -214,7 +214,7 @@ class TestIntegrations(FrappeTestCase):
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["crm_contact"], contact.name)
-		self.assertEqual(result["doctype"], "CRM Contact")
+		self.assertEqual(result["doctype"], "CRM Student")
 
 	def test_get_contact_by_phone_number_finds_contact(self):
 		contact = frappe.get_doc(
@@ -244,7 +244,7 @@ class TestIntegrations(FrappeTestCase):
 		docname, doctype = get_contact_reference_from_number("0912345700")
 
 		self.assertEqual(docname, contact.name)
-		self.assertEqual(doctype, "CRM Contact")
+		self.assertEqual(doctype, "CRM Student")
 
 	def test_get_contact_reference_from_number_returns_contact(self):
 		contact = frappe.get_doc(
@@ -312,7 +312,7 @@ def create_test_call_log(**kwargs):
 
 def create_test_crm_contact(**kwargs):
 	data = {
-		"doctype": "CRM Contact",
+		"doctype": "CRM Student",
 		"full_name": "Phone Lookup Contact",
 		"phone": "0912345000",
 		"email": f"lookup-{uuid.uuid4().hex[:8]}@example.com",

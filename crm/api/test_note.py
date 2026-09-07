@@ -24,21 +24,21 @@ class TestNoteApi(FrappeTestCase):
 	def test_note_crud_returns_owner_full_name_without_title(self):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Note API Contact",
 				"email": "note-api-contact@example.com",
 				"stage": "Interested",
 			}
 		).insert(ignore_permissions=True)
 
-		created = create_note("CRM Contact", contact.name, content="Initial note")
+		created = create_note("CRM Student", contact.name, content="Initial note")
 		owner_full_name = frappe.get_cached_value("User", "Administrator", "full_name")
 
 		self.assertEqual(created["content"], "Initial note")
 		self.assertEqual(created["owner_full_name"], owner_full_name)
 		self.assertNotIn("title", created)
 
-		listed = list_notes("CRM Contact", contact.name)
+		listed = list_notes("CRM Student", contact.name)
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["notes"][0]["owner_full_name"], owner_full_name)
 
@@ -64,14 +64,14 @@ class TestNoteApi(FrappeTestCase):
 	def test_note_insert_creates_scoped_internal_interaction(self):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Note Interaction Contact",
 				"email": "note-interaction@example.com",
 				"stage": "Interested",
 			}
 		).insert(ignore_permissions=True)
 
-		note = create_note("CRM Contact", contact.name, content="Tư vấn hồ sơ")
+		note = create_note("CRM Student", contact.name, content="Tư vấn hồ sơ")
 		interaction = frappe.db.get_value(
 			"CRM Interaction",
 			{"external_id": f"FCRM Note:{note['name']}:NOTE"},

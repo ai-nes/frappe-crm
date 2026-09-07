@@ -31,8 +31,8 @@ AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 	{
 		# core admissions and CRM aggregates
+		"CRM Lead",
 		"CRM Student",
-		"CRM Contact",
 		"CRM Person",
 		"CRM Interaction",
 		"CRM Intent",
@@ -216,7 +216,7 @@ def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
 		name.strip() for name in (getattr(meta, "search_fields", "") or "").split(",") if name.strip()
 	]
 	declared_candidates = [name for name in declared_search_fields if name in set(search_candidates)]
-	if doctype == "CRM Student" and "student_name" in search_candidates:
+	if doctype == "CRM Lead" and "student_name" in search_candidates:
 		search_field = "student_name"
 	elif declared_candidates:
 		search_field = declared_candidates[0]
@@ -367,7 +367,7 @@ def _project_ai_fields(doctype: str, fields: list[str]) -> list[str]:
 	surface because CRM Student remains unexposed until the staged DTO
 	endpoint and raw delegated REST gate are complete.
 	"""
-	if doctype != "CRM Student":
+	if doctype != "CRM Lead":
 		return fields
 	allowed = _STUDENT_OPERATIONAL_FIELDS | _STUDENT_SALES_APPROVED_PII_FIELDS
 	return sorted(set(fields) & allowed)
@@ -377,15 +377,15 @@ def _student_projection_for_current_user() -> list[str]:
 	roles = frappe.get_roles()
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM Student data."), frappe.PermissionError)
-	meta = frappe.get_meta("CRM Student")
-	allowed_permlevels = set(get_permlevel_access("read", "CRM Student")) | {0}
+	meta = frappe.get_meta("CRM Lead")
+	allowed_permlevels = set(get_permlevel_access("read", "CRM Lead")) | {0}
 	permlevel_by_field = {df.fieldname: df.permlevel for df in meta.fields}
 	readable_columns = [
 		fieldname
 		for fieldname in _doctype_columns(meta)
 		if permlevel_by_field.get(fieldname, 0) in allowed_permlevels
 	]
-	return _project_ai_fields("CRM Student", readable_columns)
+	return _project_ai_fields("CRM Lead", readable_columns)
 
 
 def _safe_student_filters(raw_filters, allowed_fields: set[str]):
@@ -418,11 +418,11 @@ def get_ai_student(name: str):
 	"""Return one row-scoped, role-projected CRM Student DTO for Copilot."""
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
-	doc = frappe.get_doc("CRM Student", name)
+	doc = frappe.get_doc("CRM Lead", name)
 	# Pass the loaded document—not merely its name—to Frappe's global resolver,
 	# so the registered Student ``has_permission`` hook evaluates row scope.
-	if not frappe.has_permission("CRM Student", ptype="read", doc=doc):
-		frappe.throw(_("You are not permitted to access this CRM Student."), frappe.PermissionError)
+	if not frappe.has_permission("CRM Lead", ptype="read", doc=doc):
+		frappe.throw(_("You are not permitted to access this CRM Lead."), frappe.PermissionError)
 	return {fieldname: doc.get(fieldname) for fieldname in fields}
 
 
@@ -440,7 +440,7 @@ def list_ai_students(filters=None, limit=20, offset=0):
 		frappe.throw(_("Student pagination is invalid."), frappe.ValidationError)
 	return {
 		"records": frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=fields,
 			filters=_safe_student_filters(filters, set(fields)),
 			start=offset,
@@ -475,7 +475,7 @@ def search_ai_students(query: str, filters: list | str | None = None, limit: int
 		frappe.throw(_("Student pagination is invalid."), frappe.ValidationError)
 	return {
 		"records": frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=fields,
 			filters=_safe_student_filters(filters, set(fields)),
 			or_filters=[
@@ -494,7 +494,7 @@ def count_ai_students(filters=None):
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
 	rows = frappe.get_list(
-		"CRM Student",
+		"CRM Lead",
 		fields=["count(name) as count"],
 		filters=_safe_student_filters(filters, set(fields)),
 		page_length=1,
@@ -913,7 +913,7 @@ def count_ai_resource(resource: str, filters=None, discovery_revision: str | Non
 	policy = description["query_policy"].get("count", {})
 	if not policy.get("enabled") or policy.get("count_mode") == "deny":
 		frappe.throw(_("Count is not available."), frappe.PermissionError)
-	if resource == "CRM Student":
+	if resource == "CRM Lead":
 		# Keep the temporary protected DTO path authoritative for Student while
 		# the generic-path parity/exit criteria are still pending.
 		return count_ai_students(filters=filters)

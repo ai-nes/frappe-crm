@@ -58,15 +58,15 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Student",
-   "options": "CRM Student"
+   "options": "CRM Lead"
   },
   {
    "fieldname": "crm_contact",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Contact",
-   "options": "CRM Contact"
+   "label": "CRM Student",
+   "options": "CRM Student"
   },
   {
    "fieldname": "column_break_1",

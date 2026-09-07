@@ -3,7 +3,7 @@
 
 """Tests for Phase 3 auto-assignment routing (crm/api/routing.py), exercised both
 directly against pick_team_for_campus/pick_round_robin_staff and end-to-end through
-CRM Contact.before_insert -> route_new_lead."""
+CRM Student.before_insert -> route_new_lead."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -16,8 +16,8 @@ class TestRouting(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test Routing%"]}, pluck="name"):
@@ -92,7 +92,7 @@ class TestRouting(FrappeTestCase):
 	def _make_contact(self, name, phone, branch):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 				"branch": branch,
@@ -127,7 +127,7 @@ class TestRouting(FrappeTestCase):
 		contact = self._make_contact("_Test Routing No Staff Contact", "0921111101", campus)
 
 		self.assertFalse(contact.assigned_to)
-		self.assertTrue(frappe.db.exists("CRM Contact", contact.name))
+		self.assertTrue(frappe.db.exists("CRM Student", contact.name))
 
 	def test_no_active_staff_because_all_inactive_leaves_contact_unassigned(self):
 		campus = self._make_campus("_Test Routing All Inactive Campus")
@@ -161,7 +161,7 @@ class TestRouting(FrappeTestCase):
 
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Routing Preassigned Contact",
 				"phone": "0921111104",
 				"branch": campus,
@@ -176,7 +176,7 @@ class TestRouting(FrappeTestCase):
 
 	def test_route_new_lead_noop_when_no_branch(self):
 		contact = frappe.get_doc(
-			{"doctype": "CRM Contact", "full_name": "_Test Routing No Branch Contact", "phone": "0921111105"}
+			{"doctype": "CRM Student", "full_name": "_Test Routing No Branch Contact", "phone": "0921111105"}
 		)
 		route_new_lead(contact)
 		self.assertFalse(contact.assigned_to)

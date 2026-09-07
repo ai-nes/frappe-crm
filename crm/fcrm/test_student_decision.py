@@ -40,7 +40,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM Action Item", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
@@ -48,7 +48,7 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -152,7 +152,7 @@ class TestDecideStudentTask(FrappeTestCase):
 			self._make_task(current_slot="CURRENT")
 
 	def test_new_recommendation_after_completion_opens_a_fresh_action(self):
-		base = int(frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0)
+		base = int(frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0)
 		first = self._upsert_recommendation(revision=base, key="gen-first")
 		done = frappe.get_doc("CRM Action Item", first["action"])
 		self.assertEqual(done.current_slot, "CURRENT")
@@ -170,7 +170,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		self.assertIsNone(done.current_slot)
 
 		frappe.db.set_value(
-			"CRM Student", self._student.name, "student_context_revision", base + 1, update_modified=False
+			"CRM Lead", self._student.name, "student_context_revision", base + 1, update_modified=False
 		)
 		second = self._upsert_recommendation(revision=base + 1, key="gen-second")
 		self.assertNotEqual(second["action"], done.name)
@@ -310,7 +310,7 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_bundle_creates_three_distinct_ranked_actions(self):
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		result = self._upsert_bundle(
 			revision=revision, base_key="nba:test:r", action_types=["CALL", "EMAIL", "MESSAGE"]
@@ -332,7 +332,7 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_bundle_folds_the_nba_rationale_into_the_package_without_shifting_the_digest(self):
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		result = self._upsert_bundle(
 			revision=revision,
@@ -367,7 +367,7 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_bundle_replay_is_idempotent(self):
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		self._upsert_bundle(revision=revision, base_key="nba:replay:r", action_types=["CALL", "EMAIL"])
 		second = self._upsert_bundle(
@@ -379,17 +379,17 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_bundle_rejects_duplicate_action_types(self):
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		with self.assertRaises(frappe.ValidationError):
 			self._upsert_bundle(revision=revision, base_key="nba:dupe:r", action_types=["CALL", "CALL"])
 
 	def test_bundle_defaults_action_owner_to_the_student_owner_staff(self):
 		frappe.db.set_value(
-			"CRM Student", self._student.name, "owner_staff", self._sale_staff, update_modified=False
+			"CRM Lead", self._student.name, "owner_staff", self._sale_staff, update_modified=False
 		)
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		self._upsert_bundle(
 			revision=revision, base_key="nba:owner:r", action_types=["CALL", "EMAIL", "MESSAGE"]
@@ -404,7 +404,7 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_bundle_leaves_action_owner_unset_when_the_student_has_no_owner_staff(self):
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		self._upsert_bundle(revision=revision, base_key="nba:noowner:r", action_types=["CALL", "EMAIL"])
 		owners = frappe.get_all(
@@ -416,10 +416,10 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def test_idempotent_bundle_replay_does_not_overwrite_a_reassigned_owner(self):
 		frappe.db.set_value(
-			"CRM Student", self._student.name, "owner_staff", self._sale_staff, update_modified=False
+			"CRM Lead", self._student.name, "owner_staff", self._sale_staff, update_modified=False
 		)
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		self._upsert_bundle(revision=revision, base_key="nba:reassign:r", action_types=["CALL", "EMAIL"])
 		rank1 = frappe.get_all(
@@ -500,7 +500,7 @@ class TestDecideStudentTask(FrappeTestCase):
 		from crm.api import student_decision as api
 
 		revision = int(
-			frappe.db.get_value("CRM Student", self._student.name, "student_context_revision") or 0
+			frappe.db.get_value("CRM Lead", self._student.name, "student_context_revision") or 0
 		)
 		seed = {
 			"package_version": "action-package:v2",

@@ -16,7 +16,7 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 	def tearDown(self):
 		frappe.set_user("Administrator")
 		for doctype, filters in (
-			("CRM Student", {"student_name": ["like", "_Test LSW%"]}),
+			("CRM Lead", {"student_name": ["like", "_Test LSW%"]}),
 			("CRM Staff", {"full_name": ["like", "_Test LSW%"]}),
 			("User", {"first_name": ["like", "_Test LSW%"]}),
 			("CRM Team", {"team_name": ["like", "_Test LSW%"]}),
@@ -72,7 +72,7 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 		return email, staff.insert(ignore_permissions=True).name
 
 	def _make_student(self, label, owner, team):
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": label, "phone": "0900000000"})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": label, "phone": "0900000000"})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -164,8 +164,8 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 		self.assertEqual(
 			count.call_args_list,
 			[
-				(("CRM Student", {"lifecycle_stage": ["not in", ["Lost"]]}),),
-				(("CRM Student", {"owner_staff": ["is", "not set"]}),),
+				(("CRM Lead", {"lifecycle_stage": ["not in", ["Lost"]]}),),
+				(("CRM Lead", {"owner_staff": ["is", "not set"]}),),
 				(
 					("CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}),
 					{"ignore_permissions": True},

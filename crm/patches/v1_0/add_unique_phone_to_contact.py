@@ -1,5 +1,5 @@
 """
-Add unique indexes on phone (primary) and email (secondary) in CRM Contact.
+Add unique indexes on phone (primary) and email (secondary) in CRM Student.
 Skips each index if duplicate data exists (logs a warning instead of crashing migrate).
 """
 
@@ -36,5 +36,5 @@ def _add_unique_index(table, column, index_name):
 
 
 def execute():
-	_add_unique_index("tabCRM Contact", "phone", "unique_contact_phone")
-	_add_unique_index("tabCRM Contact", "email", "unique_contact_email")
+	_add_unique_index("tabCRM Student", "phone", "unique_contact_phone")
+	_add_unique_index("tabCRM Student", "email", "unique_contact_email")

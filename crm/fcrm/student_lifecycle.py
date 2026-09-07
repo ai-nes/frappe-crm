@@ -134,7 +134,7 @@ def _capabilities(actor: str):
 
 
 def _student(name: str):
-	student = frappe.get_doc("CRM Student", name)
+	student = frappe.get_doc("CRM Lead", name)
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
@@ -153,9 +153,9 @@ def _verify_evidence(student: str, references: list[dict[str, str]], *, outcome_
 		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
 			_fail("OUT_OF_SCOPE", "A referenced qualification record is outside your scope.")
 		linked_student = doc.get("student")
-		if not linked_student and doc.get("reference_doctype") == "CRM Student":
+		if not linked_student and doc.get("reference_doctype") == "CRM Lead":
 			linked_student = doc.get("reference_docname")
-		if not linked_student and doc.get("attached_to_doctype") == "CRM Student":
+		if not linked_student and doc.get("attached_to_doctype") == "CRM Lead":
 			linked_student = doc.get("attached_to_name")
 		if not linked_student and doc.get("interaction"):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
@@ -252,7 +252,7 @@ def _status_for_stage(stage: str) -> str | None:
 
 def _lock(name: str):
 	try:
-		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -334,7 +334,7 @@ def request_transition(
 		status = _status_for_stage(transition["to_stage"])
 		if status:
 			updates["enrollment_status"] = status
-		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
+		frappe.db.set_value("CRM Lead", student, updates, update_modified=False)
 		from crm.services.admission_event_policy import admit_lifecycle_transition
 		from crm.services.student_context import bump_student_context_revision
 		context_change = bump_student_context_revision(

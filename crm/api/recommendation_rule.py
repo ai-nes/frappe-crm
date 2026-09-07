@@ -137,7 +137,7 @@ def _student_context(context: dict[str, Any]) -> dict[str, Any]:
 	context = dict(context)
 	student = context.get("student")
 	if isinstance(student, str):
-		student_doc = frappe.get_doc("CRM Student", student)
+		student_doc = frappe.get_doc("CRM Lead", student)
 		student_doc.check_permission("read")
 		context["student"] = student_doc.as_dict()
 	return context

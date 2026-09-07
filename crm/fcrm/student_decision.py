@@ -132,9 +132,9 @@ def _can_decide(actor, doc):
 		_fail("FORBIDDEN", "You are not permitted to decide recommendations.")
 	student_name = doc.get("student")
 	if doc.doctype == RECOMMENDATION:
-		student_name = doc.target_id if doc.target_type == "CRM Student" else None
+		student_name = doc.target_id if doc.target_type == "CRM Lead" else None
 	try:
-		student = frappe.get_doc("CRM Student", student_name)
+		student = frappe.get_doc("CRM Lead", student_name)
 	except Exception:
 		_fail("OUT_OF_SCOPE", "The recommendation is outside your current scope.")
 	if not has_student_permission(student, user=actor, permission_type="read"):
@@ -186,7 +186,7 @@ def _valid_executor(student, staff, *, allow_global=False):
 	if allow_global:
 		return
 	student_row = frappe.db.get_value(
-		"CRM Student", student, ["owner_staff", "assigned_to", "owning_team", "high_school"], as_dict=True
+		"CRM Lead", student, ["owner_staff", "assigned_to", "owning_team", "high_school"], as_dict=True
 	) or {}
 	owner = student_row.get("owner_staff") or student_row.get("assigned_to")
 	team = student_row.get("owning_team")
@@ -455,10 +455,10 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	_lock(RECOMMENDATION, name)
 	doc = frappe.get_doc(RECOMMENDATION, name)
 	scope = _can_decide(actor, doc)
-	student_name = doc.target_id if doc.target_type == "CRM Student" else None
+	student_name = doc.target_id if doc.target_type == "CRM Lead" else None
 	if not student_name:
 		_fail("INVALID_INPUT", "Only CRM Student recommendations can be decided.")
-	_lock("CRM Student", student_name)
+	_lock("CRM Lead", student_name)
 	expires_at = frappe.utils.get_datetime(doc.expires_at) if doc.expires_at else None
 	if expires_at and expires_at <= now_datetime():
 		_fail("ACTION_EXPIRED", "This recommendation has expired and must be regenerated.")
@@ -545,7 +545,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 			if is_parent_action
 			else contact_for_student(student_name)
 		)
-		# A new Lead is a governed CRM Student before it becomes a CRM Contact.
+		# A new Lead is a governed CRM Student before it becomes a CRM Student.
 		# Non-parent care actions can therefore be accepted against the Student
 		# directly. Parent actions remain fail-closed because they require a
 		# verified parent recipient and authority.
@@ -710,11 +710,11 @@ def claim_grants_execute(student: str, user: str) -> bool:
 	if not staff:
 		return False
 	row = frappe.db.get_value(
-		"CRM Student", student, ["owner_staff", "assigned_to"], as_dict=True
+		"CRM Lead", student, ["owner_staff", "assigned_to"], as_dict=True
 	)
 	if not row:
 		return False
-	if not has_student_permission(frappe.get_doc("CRM Student", student), user=user, permission_type="read"):
+	if not has_student_permission(frappe.get_doc("CRM Lead", student), user=user, permission_type="read"):
 		return False
 	return _claim_would_grant_execute(student, staff, row.owner_staff, row.assigned_to)
 
@@ -758,7 +758,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 	student = _required(student, "student")
 	expected_action = _required(expected_action, "expected_action")
 	correlation_id = correlation_id or frappe.generate_hash(length=20)
-	if not frappe.db.exists("CRM Student", student):
+	if not frappe.db.exists("CRM Lead", student):
 		_fail("INVALID_INPUT", "Student not found.")
 	scope = _scope(actor)
 	if actor != "Administrator" and not ({"student.execute", "action.execute"} & set(scope["capabilities"])):
@@ -767,7 +767,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 	if not staff and actor != "Administrator":
 		_fail("INVALID_INPUT", "A mapped Sales executor is required to claim work.")
 	if actor != "Administrator" and not has_student_permission(
-		frappe.get_doc("CRM Student", student), user=actor, permission_type="read"
+		frappe.get_doc("CRM Lead", student), user=actor, permission_type="read"
 	):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current care scope.")
 
@@ -776,7 +776,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 	command_key = _command_key("action_claim", actor, key)
 	if replay := _replay(command_key, fingerprint):
 		return replay
-	_lock("CRM Student", student)
+	_lock("CRM Lead", student)
 	if replay := _replay(command_key, fingerprint):
 		return replay
 
@@ -806,7 +806,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 		}
 
 	owner_staff, assigned_to = frappe.db.get_value(
-		"CRM Student", student, ["owner_staff", "assigned_to"]
+		"CRM Lead", student, ["owner_staff", "assigned_to"]
 	) or (None, None)
 	if not _claim_would_grant_execute(student, staff, owner_staff, assigned_to):
 		_fail("OUT_OF_SCOPE", "Claiming would not grant execute rights on this Student.")
@@ -817,7 +817,7 @@ def claim_current_action(student: str, expected_revision: Any, idempotency_key: 
 	frappe.flags.crm_action_command = True
 	try:
 		if staff and not owner_staff and not assigned_to:
-			frappe.db.set_value("CRM Student", student, "assigned_to", staff, update_modified=False)
+			frappe.db.set_value("CRM Lead", student, "assigned_to", staff, update_modified=False)
 		action.action_owner = staff or previous_owner
 		action.decision_revision = int(action.get("decision_revision") or 0) + 1
 		# Bump the execution revision too: a client holding a pre-claim revision
@@ -856,7 +856,7 @@ def _record_manual_override(student, action, action_type, actor, scope, receipt,
 
 	pending = frappe.get_all(
 		RECOMMENDATION,
-		filters={"target_type": "CRM Student", "target_id": student, "decision_status": "pending"},
+		filters={"target_type": "CRM Lead", "target_id": student, "decision_status": "pending"},
 		fields=["name", "action"],
 		limit_page_length=5,
 	)
@@ -917,7 +917,7 @@ def create_manual_action(
 			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
 	else:
 		contact = contact_for_student(student)
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	scope = _scope(actor)
 	if actor != "Administrator" and not has_student_permission(student_doc, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Action is outside your current scope.")
@@ -943,7 +943,7 @@ def create_manual_action(
 	command_key = _command_key("manual_action", actor, key)
 	if replay := _replay(command_key, fingerprint):
 		return replay
-	_lock("CRM Student", student)
+	_lock("CRM Lead", student)
 	receipt = _new_receipt("action_decision", actor, student, key, fingerprint, scope, frappe.generate_hash(length=20))
 	previous_flag = getattr(frappe.flags, "crm_action_command", False)
 	frappe.flags.crm_action_command = True
@@ -1286,7 +1286,7 @@ def reassign_action(name: str, expected_revision: Any, assignee_staff: str, idem
 	if replay := _replay(command_key, fingerprint): return replay
 	# Claim/reassign and generation share the Student lock domain. Cancel
 	# unsent attempts before changing ownership so workers cannot send stale work.
-	_lock("CRM Student", action.student)
+	_lock("CRM Lead", action.student)
 	_lock(CANONICAL_ACTION, name)
 	if replay := _replay(command_key, fingerprint): return replay
 	receipt = _new_receipt("action_reassign", actor, action.student, key, fingerprint, scope, correlation_id)
@@ -1320,7 +1320,7 @@ def release_action(name: str, expected_revision: Any, idempotency_key: str, reas
 	payload = {"name": name, "expected_revision": expected_revision, "reason": reason}
 	fingerprint = _fingerprint(payload); command_key = _command_key("action_release", actor, key)
 	if replay := _replay(command_key, fingerprint): return replay
-	_lock("CRM Student", action.student); _lock(CANONICAL_ACTION, name)
+	_lock("CRM Lead", action.student); _lock(CANONICAL_ACTION, name)
 	action.reload()
 	if str(action.get("action_revision") or 1) != str(expected_revision):
 		_fail("STALE_REVISION", "Action changed; reload before retrying.")
