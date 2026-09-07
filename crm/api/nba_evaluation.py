@@ -38,6 +38,28 @@ __all__ = [
 _DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 
 
+def _recent_outcomes_by_category(recent_actions: list) -> dict:
+	"""Latest ``outcome_code`` per action category, not just the single most
+	recent action overall.
+
+	A domain's own closing signal (an APPLICATION-category
+	``APPLICATION_COMPLETED``, a CONTACT-category ``NOT_INTERESTED``) must stay
+	visible to the kernel until a newer action in that *same* domain
+	supersedes it -- it must never be erased just because a newer action was
+	logged in an unrelated domain (e.g. a follow-up CALL superseding an
+	earlier CHECK_APPLICATION completion in the projection's single most
+	recent row).
+	"""
+	result: dict = {}
+	for row in recent_actions:
+		category = row.get("action_category")
+		outcome_code = row.get("outcome_code")
+		if not category or not outcome_code or category in result:
+			continue
+		result[category] = outcome_code
+	return result
+
+
 def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict:
 	return {
 		"student_id": projection.get("student_id"),
@@ -55,6 +77,14 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 	assessment = projection.get("assessment") or {}
 	application = projection.get("application") or {}
 	score = projection.get("score") or {}
+	academic = projection.get("academic") or {}
+	academic_signal = {
+		"gpa": academic.get("gpa"),
+		"quality": academic.get("quality") or "unknown",
+		"source_revision": academic.get("source_revision") or "unknown",
+	}
+	if academic.get("quality") == "current" and academic.get("evidence_ref"):
+		academic_signal["evidence_ref"] = str(academic["evidence_ref"])
 	return {
 		"lifecycle": {"stage": lifecycle.get("stage")},
 		"intent": {"type": intent.get("type"), "polarity": intent.get("polarity")},
@@ -68,11 +98,7 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			"missing_count": int(application.get("missing_count") or 0),
 			"source_revision": application.get("source_revision") or "unknown",
 		},
-		"academic": {
-			"gpa": (projection.get("academic") or {}).get("gpa"),
-			"quality": (projection.get("academic") or {}).get("quality") or "unknown",
-			"source_revision": (projection.get("academic") or {}).get("source_revision") or "unknown",
-		},
+		"academic": academic_signal,
 		"blockers": [assessment["primary_barrier"]] if assessment.get("primary_barrier") else [],
 		"deadlines": (
 			[
@@ -93,6 +119,12 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			"valid": bool((projection.get("parent_authority") or {}).get("valid")),
 		},
 		"work_in_flight": [row.get("action_type") for row in projection.get("recent_actions") or []],
+		# Domain-scoped outcome history, structured input for the kernel's
+		# opportunity suppression -- see `_recent_outcomes_by_category`.
+		"recent_outcomes": _recent_outcomes_by_category(projection.get("recent_actions") or []),
+		# Owner capacity has no approved scenario in v1. Preserve the member for
+		# historical replay while emitting explicit unknown rather than inferring
+		# workload from action rows or assignments.
 		"owner_capacity": {"owner": None, "open_tasks": None},
 		"evidence_refs": list(projection.get("evidence_refs") or []),
 		"signal_quality": {
@@ -188,6 +220,10 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 		"set_revision": int(eligible.get("revision") or 0),
 		"set_digest": nba_policy.eligible_set_digest(wire_actions),
 		"actions": actions,
+		"exclusions": sorted(
+			list(eligible.get("exclusions") or []),
+			key=lambda item: (str(item.get("action") or ""), str(item.get("reason") or "")),
+		),
 	}
 
 
@@ -229,7 +265,7 @@ def build_nba_evaluation_input(
 	moment = now or frappe.utils.now_datetime()
 	timezone = frappe.db.get_single_value("System Settings", "time_zone") or _DEFAULT_TIMEZONE
 
-	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized)
+	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized, at=moment)
 	eligible = nba_policy.eligible_action_set_for_student(
 		student,
 		actor=actor,

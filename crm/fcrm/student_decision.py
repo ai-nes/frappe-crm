@@ -1218,6 +1218,9 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 		if status == "in_progress": action.started_at = now_datetime()
 		if status == "completed":
 			action.completed_at = now_datetime(); action.outcome_code = outcome_code; action.outcome_evidence = str(evidence)[:2000]; action.outcome_notes = evidence if isinstance(evidence, str) else None; action.linked_interaction = linked_interaction
+			if not action.linked_interaction:
+				from crm.fcrm.interaction_log import create_interaction_for_completed_action
+				action.linked_interaction = create_interaction_for_completed_action(action)
 		if status in {"failed", "cancelled"}: action.terminal_reason = reason
 		action.save(ignore_permissions=True)
 		from crm.fcrm.nba import record_nba_outcome_for_action, sync_nba_recommendation_for_action
@@ -1245,6 +1248,18 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 			context_revision = change["revision"]
 			from crm.services.admission_event_policy import admit_action_outcome
 			admit_action_outcome(student=action.student, revision=context_revision, source_event=change["change"], source_reference=action.name)
+		if status == "completed":
+			if action.get("recommendation"):
+				frappe.db.set_value(
+					"CRM Recommendation", action.get("recommendation"), "lifecycle_status", "completed", update_modified=False
+				)
+			frappe.enqueue(
+				"crm.api.agent_events.record_domain_reevaluation_trigger",
+				queue="short",
+				enqueue_after_commit=True,
+				student=action.student,
+				trigger="action_outcome_recorded",
+			)
 		event = _event(f"action.{status}", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": status, "from_state": previous, "outcome_code": outcome_code, "progress": progress, "context_revision": context_revision, "reason": reason})
 		_outbox("action.outcome_recorded.v1", action)
 		result = {"status": status, "action": action.name, "student": action.student, "revision": action.action_revision, "event": event.name, "receipt": receipt.name, "nba_outcome": nba_outcome.name if nba_outcome else None}

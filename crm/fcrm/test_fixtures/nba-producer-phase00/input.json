@@ -20,6 +20,7 @@
     "lifecycle": {"stage": "Qualified"},
     "owner_capacity": {"open_tasks": null, "owner": null},
     "parent_authority": {"valid": false},
+    "recent_outcomes": {},
     "signal_quality": {"conflicts": [], "freshness": "current", "missingness": []},
     "work_in_flight": ["CALL"]
   },
@@ -45,6 +46,7 @@
       "purpose": "Re-engage the student about tuition.",
       "risk_band": "unknown"
     }],
+    "exclusions": [],
     "set_digest": "22cd04e50e1258deaa44f04d7391908cea8034cc41c46b2012aca189f0c6bcaa",
     "set_revision": 3
   },
@@ -76,7 +78,7 @@
     "timing_revisions": []
   },
   "student": {
-    "context_digest": "2feb968d13c271314ff0d54735bbf6e958b07d069613180d3c63e906fc6aec2a",
+    "context_digest": "78c8bc1e6737fbb44bdb17b7d2bae9e307d20d9cc4174f053f0bb100a1d4df54",
     "context_revision": 42,
     "observed_at": "2026-09-04T02:00:00",
     "student_id": "ENR-2026-00001",

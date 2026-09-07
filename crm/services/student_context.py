@@ -50,6 +50,7 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 		"id_issued_date",
 		"id_issued_place",
 		"notes",
+		"academic_results",
 	}
 )
 

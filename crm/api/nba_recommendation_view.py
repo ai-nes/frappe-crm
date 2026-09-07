@@ -34,6 +34,11 @@ def recommendation_view(
 	explanation = explanation if isinstance(explanation, dict) else {}
 	action = explanation.get("action") if isinstance(explanation.get("action"), dict) else {}
 	action_title = action.get("title") or display_name_for_wire_action_code(action_code) or action_code
+	# Narration is best-effort and fails closed to no explanation (see
+	# narrate_recommendation); every card must still carry an objective, so
+	# fall back to the kernel-composed, always-populated `reason` rather than
+	# leaving the field null and giving cards an inconsistent FE contract.
+	objective = explanation.get("objective") or reason or None
 
 	timing = ai_payload.get("recommended_timing") if isinstance(ai_payload, dict) else None
 	timing = timing if isinstance(timing, dict) else {}
@@ -48,7 +53,7 @@ def recommendation_view(
 		"priority": priority or "medium",
 		"rank": rank,
 		"reason": reason or "",
-		"objective": explanation.get("objective") or None,
+		"objective": objective,
 		"context": context if isinstance(context, list) else [],
 		"timing": {
 			"scheduled_at": timing.get("scheduled_at"),

@@ -673,6 +673,9 @@ def decide_recommendation(name: str, **kwargs):
 def create_action(**kwargs):
 	"""Manual Sale -> Action command; AI acceptance uses the same aggregate."""
 	kwargs.pop("_internal_service", None)
+	# Frappe injects the routed RPC command into **kwargs; it is transport
+	# metadata, not part of the decision payload (see _call() above).
+	kwargs.pop("cmd", None)
 	try:
 		return _create_manual_action(**kwargs)
 	except StudentDecisionError as exc:
