@@ -57,18 +57,13 @@ def _resolve_campus(campus: str | None) -> str:
 	frappe.throw("Cần có ít nhất một CRM Campus trước khi seed Campaign.", frappe.ValidationError)
 
 
-def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool]:
+def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str]:
 	code = spec["code"]
 	title = spec["title"]
 
 	existing = frappe.db.get_value("CRM Campaign", {"stable_code": code}, ["name", "title"], as_dict=True)
 	if existing:
-		if existing.title != title:
-			frappe.throw(
-				f"Campaign code {code} đã được dùng cho Campaign {existing.title!r}.",
-				frappe.ValidationError,
-			)
-		return existing.name, False
+		return existing.name, False, existing.title
 
 	existing_name = frappe.db.get_value("CRM Campaign", {"title": title}, "name")
 	if existing_name:
@@ -79,7 +74,7 @@ def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool]:
 				frappe.ValidationError,
 			)
 		frappe.db.set_value("CRM Campaign", existing_name, "stable_code", code, update_modified=False)
-		return existing_name, False
+		return existing_name, False, title
 
 	doc = frappe.get_doc(
 		{
@@ -101,7 +96,7 @@ def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool]:
 	if doc.stable_code != code:
 		frappe.db.set_value("CRM Campaign", doc.name, "stable_code", code, update_modified=False)
 		doc.stable_code = code
-	return doc.name, True
+	return doc.name, True, title
 
 
 def execute(
@@ -114,9 +109,9 @@ def execute(
 	created = 0
 	campaigns = []
 	for spec in specs:
-		name, was_created = _ensure_campaign(spec, resolved_campus)
+		name, was_created, title = _ensure_campaign(spec, resolved_campus)
 		created += int(was_created)
-		campaigns.append({"name": name, "code": spec["code"], "title": spec["title"]})
+		campaigns.append({"name": name, "code": spec["code"], "title": title})
 
 	if not getattr(frappe.flags, "in_test", False):
 		frappe.db.commit()
