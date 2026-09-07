@@ -21,6 +21,7 @@ class TestDirectorLeads(FrappeTestCase):
 			page_size="10",
 			query="  Nguyen  ",
 			status="NEW",
+			campaign=" Tuyen sinh mua thu 2026 ",
 			order="asc",
 		)
 
@@ -32,6 +33,7 @@ class TestDirectorLeads(FrappeTestCase):
 				"page_size": 10,
 				"query": "Nguyen",
 				"status": "NEW",
+				"campaign": "Tuyen sinh mua thu 2026",
 				"order": "asc",
 			},
 		)
@@ -48,10 +50,19 @@ class TestDirectorLeads(FrappeTestCase):
 					director_leads._parse_query(**kwargs)
 
 	def test_lead_filters_search_expected_fields_and_status(self):
-		query = director_leads._parse_query(admission_year="2026", query="Nguyen", status="NEW")
+		query = director_leads._parse_query(
+			admission_year="2026", query="Nguyen", status="NEW", campaign="Tuyen sinh mua thu 2026"
+		)
 		filters, or_filters = director_leads._lead_filters(query)
 
-		self.assertEqual(filters, {"admission_year": "2026", "enrollment_status": "NEW"})
+		self.assertEqual(
+			filters,
+			{
+				"admission_year": "2026",
+				"enrollment_status": "NEW",
+				"campaign": "Tuyen sinh mua thu 2026",
+			},
+		)
 		self.assertEqual(
 			or_filters,
 			[
@@ -66,6 +77,19 @@ class TestDirectorLeads(FrappeTestCase):
 			],
 		)
 
+	def test_lead_filters_resolve_campaign_stable_code(self):
+		with (
+			patch.object(director_leads.frappe.db, "exists", return_value=False),
+			patch.object(
+				director_leads.frappe.db,
+				"get_value",
+				return_value="Tuyen sinh mua thu 2026",
+			),
+		):
+			filters, _ = director_leads._lead_filters(director_leads._parse_query(campaign="CAM-2026-00001"))
+
+		self.assertEqual(filters["campaign"], "Tuyen sinh mua thu 2026")
+
 	def test_lead_row_mapping_uses_lookup_labels_without_fabrication(self):
 		row = frappe._dict(
 			{
@@ -79,6 +103,7 @@ class TestDirectorLeads(FrappeTestCase):
 				"source": "SRC-1",
 			}
 		)
+		self.assertIsNone(director_leads._parse_query(campaign="all")["campaign"])
 		item = director_leads._map_lead_row(
 			row,
 			lookups={
@@ -127,6 +152,7 @@ class TestDirectorLeads(FrappeTestCase):
 				pageSize="1",
 				q=" Nguyen ",
 				status="NEW",
+				campaign="CAM-2026-00001",
 			)
 
 		self.assertEqual(response["data"], [{"id": "LEAD-1", "status": "Mới"}])

@@ -50,6 +50,7 @@ def get_director_leads(
 	q: str | None = "",
 	status: str | None = None,
 	order: str = "desc",
+	campaign: str | None = None,
 ) -> dict[str, Any]:
 	"""Return a permission-scoped, paginated Lead list for the dashboard."""
 	_require_access()
@@ -59,6 +60,7 @@ def get_director_leads(
 		page_size=pageSize,
 		query=q,
 		status=status,
+		campaign=campaign,
 		order=order,
 	)
 	query["status"] = _resolve_status(query["status"])
@@ -119,6 +121,7 @@ def _parse_query(
 	page_size: str | int = 20,
 	query: str | None = "",
 	status: str | None = None,
+	campaign: str | None = None,
 	order: str = "desc",
 ) -> dict[str, Any]:
 	"""Normalize and validate public list arguments without querying Lead rows."""
@@ -131,12 +134,16 @@ def _parse_query(
 	status_value = str(status or "").strip() or None
 	if status_value and _fold(status_value) == "all":
 		status_value = None
+	campaign_value = str(campaign or "").strip() or None
+	if campaign_value and _fold(campaign_value) == "all":
+		campaign_value = None
 	return {
 		"admission_year": admission_year_value,
 		"page": _parse_int(page, "page", 1, minimum=1),
 		"page_size": _parse_int(page_size, "pageSize", 20, minimum=1, maximum=MAX_PAGE_SIZE),
 		"query": str(query or "").strip(),
 		"status": status_value,
+		"campaign": campaign_value,
 		"order": order_value,
 	}
 
@@ -159,10 +166,19 @@ def _resolve_status(value: str | None) -> str | None:
 	_raise_api_error("INVALID_STATUS", "Tình trạng Lead không hợp lệ.", frappe.ValidationError, 422)
 
 
+def _resolve_campaign(value: str) -> str:
+	"""Accept the campaign document name and its stable code as filter values."""
+	if frappe.db.exists("CRM Campaign", value):
+		return value
+	return frappe.db.get_value("CRM Campaign", {"stable_code": value}, "name") or value
+
+
 def _lead_filters(query: dict[str, Any]) -> tuple[dict[str, Any], list[list[str]]]:
 	filters = _year_filter(query["admission_year"])
 	if query.get("status"):
 		filters["enrollment_status"] = query["status"]
+	if query.get("campaign"):
+		filters["campaign"] = _resolve_campaign(query["campaign"])
 
 	or_filters: list[list[str]] = []
 	if query["query"]:

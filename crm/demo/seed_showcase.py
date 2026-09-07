@@ -923,6 +923,11 @@ _SHOWCASE_CAMPAIGN_RENAMES = {
 	"FPTU 2025 Referral Pilot": "FPTU HCMC 2025 Referral Admissions Pilot",
 }
 _SHOWCASE_CAMPAIGN_TITLES = [title for title, _, _ in _SHOWCASE_CAMPAIGNS]
+_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS = {
+	"thao-an": "FPTU 2026 Admission Campaign - HCMC",
+	"gia-han": "FPTU HCMC 2026 Scholarship Drive",
+	"minh-khang": "FPTU HCMC 2026 High School Roadshow",
+}
 _SHOWCASE_EDUCATION_PROGRAMS = (
 	("FPTU Chính quy CNTT", "Chính quy"),
 	("FPTU Liên thông CNTT", "Liên thông"),
@@ -2567,6 +2572,29 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 	return manifest, errors
 
 
+def _link_seed_leads_to_campaigns(students: list[dict], marketing: dict) -> list[dict]:
+	"""Attach a small, deterministic subset of showcase leads to seed campaigns."""
+	students_by_key = {row["key"]: row["student"] for row in students}
+	seed_campaign_names = set(marketing.get("campaigns", []))
+	links: list[dict] = []
+
+	for student_key, campaign_title in _SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS.items():
+		student = students_by_key.get(student_key)
+		campaign = frappe.db.get_value("CRM Campaign", {"title": campaign_title}, "name")
+		if not student:
+			continue
+		if not campaign or campaign not in seed_campaign_names:
+			raise frappe.ValidationError(
+				f"Seed campaign {campaign_title!r} is missing for Lead {student_key}."
+			)
+
+		if frappe.db.get_value("CRM Lead", student, "campaign") != campaign:
+			frappe.db.set_value("CRM Lead", student, "campaign", campaign, update_modified=False)
+		links.append({"key": student_key, "student": student, "campaign": campaign})
+
+	return links
+
+
 def _seed_bulk_richness(bulk_manifest: list[dict]) -> dict[str, int]:
 	"""Add a small deterministic assessment/score/interaction sample."""
 	from crm.fcrm.student_assessment import record_student_assessment
@@ -4150,6 +4178,7 @@ def _seed_all() -> dict:
 	contacts = _seed_contacts(context, staff_context)
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
+	campaign_leads = _link_seed_leads_to_campaigns(students, marketing)
 	campaign_intelligence = seed_director_campaign_intelligence.seed(context, marketing)
 	revenue_forecast = seed_director_revenue_forecast.seed(context)
 	edge = _seed_edge_states(context, staff_context)
@@ -4182,6 +4211,7 @@ def _seed_all() -> dict:
 		"school_field_activity": school_field_activity,
 		"market_snapshots": market_snapshots,
 		"marketing": marketing,
+		"campaign_leads": campaign_leads,
 		"campaign_intelligence": campaign_intelligence,
 		"revenue_forecast": revenue_forecast,
 		"governance": governance,

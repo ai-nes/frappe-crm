@@ -20,7 +20,9 @@ from crm.demo.seed_showcase import (
 	_PERSON_REL,
 	_READINESS_LABELS,
 	_SCHOOL_AREAS,
+	_SHOWCASE_CAMPAIGN_TITLES,
 	_SHOWCASE_KEY_ACCOUNT_COUNT,
+	_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS,
 	BULK_CONTACT_ROWS,
 	BULK_SCENARIOS,
 	CONTACT_ROWS,
@@ -76,6 +78,17 @@ class TestSeedShowcaseData(unittest.TestCase):
 	def test_scenario_keys_are_unique(self):
 		keys = [scenario["key"] for scenario in SCENARIOS]
 		self.assertEqual(len(keys), len(set(keys)))
+
+	def test_seed_campaign_assignments_target_known_curated_leads(self):
+		keys = {scenario["key"] for scenario in SCENARIOS}
+		self.assertEqual(
+			set(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS),
+			{"thao-an", "gia-han", "minh-khang"},
+		)
+		self.assertTrue(set(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS).issubset(keys))
+		self.assertTrue(
+			set(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS.values()).issubset(_SHOWCASE_CAMPAIGN_TITLES)
+		)
 
 	def test_contact_rows_have_natural_display_identity(self):
 		keys = [row["key"] for row in CONTACT_ROWS]

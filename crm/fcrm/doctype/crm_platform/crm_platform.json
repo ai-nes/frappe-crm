@@ -12,6 +12,7 @@
   "platform_name",
   "lead_source",
   "sub_channel",
+  "channel_url",
   "section_governance",
   "owner_role",
   "approval_state",
@@ -44,6 +45,12 @@
    "in_standard_filter": 1,
    "label": "Sub Channel",
    "options": "\nForm\nLanding Page"
+  },
+  {
+   "fieldname": "channel_url",
+   "fieldtype": "Data",
+   "label": "Channel URL",
+   "options": "URL"
   },
   {
    "fieldname": "section_governance",
