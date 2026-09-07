@@ -141,3 +141,4 @@ crm.patches.v1_0.add_lead_code
 crm.patches.v1_0.admissions_core_lead_student
 crm.patches.v1_0.add_campaign_code
 crm.patches.v1_0.normalize_campaign_statuses
+crm.patches.v1_0.seed_campaign_channel_type

@@ -21,6 +21,7 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 
 from crm.api.routing import route_new_lead
+from crm.fcrm.campaign_code import is_valid_campaign_code
 from crm.fcrm.student_attribution import record_event_participation
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
@@ -137,6 +138,7 @@ _LEAD_FIELDS = frozenset(
 		"admission_year",
 		"conversion_potential",
 		"source",
+		"campaign_code",
 		"enrollment_status",
 		"assigned_to",
 		"branch",
@@ -161,6 +163,7 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 		"gender",
 		"date_of_birth",
 		"source",
+		"campaign_code",
 		"advertising_channel",
 		"import_source_id",
 		"segments",
@@ -207,6 +210,7 @@ _PUBLIC_SERVER_MANAGED_FIELDS = frozenset(
 		"identity",
 		"case_key",
 		"student",
+		"campaign",
 	}
 )
 
@@ -318,6 +322,18 @@ def _resolve_source(value: Any) -> str:
 	return source
 
 
+def _resolve_campaign_code(value: Any) -> str:
+	code = _text(value)
+	if not code:
+		_fail("REQUIRED_FIELD", "campaign_code là bắt buộc.")
+	if not is_valid_campaign_code(code):
+		_fail("INVALID_CAMPAIGN_CODE", "campaign_code phải có dạng CAM-YYYY-NNNNN.")
+	campaign = frappe.db.get_value("CRM Campaign", {"stable_code": code}, "name")
+	if not campaign:
+		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy Campaign với code: {code}.")
+	return campaign
+
+
 def _resolve_status(value: Any) -> str:
 	status = _resolve_link("CRM Enrollment Status", value, ("code", "display_name"), "Tình trạng Lead")
 	if frappe.db.get_value("CRM Enrollment Status", status, "enabled") == 0:
@@ -391,6 +407,7 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 	if not source_value:
 		_fail("REQUIRED_FIELD", "Nguồn là bắt buộc.")
 	source = _resolve_source(source_value)
+	campaign = _resolve_campaign_code(payload.get("campaign_code")) if payload.get("campaign_code") else None
 	status = _resolve_status(payload.get("enrollment_status") or "NEW")
 
 	high_school_value = _text(payload.get("high_school"))
@@ -462,6 +479,7 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 		"admission_year": admission_year,
 		"conversion_potential": conversion_potential,
 		"source": source,
+		"campaign": campaign,
 		"enrollment_status": status,
 		"assigned_to": assigned_to,
 		"branch": branch,
@@ -491,6 +509,7 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 	name = _text(payload.get("student_name"))
 	if not name:
 		_fail("REQUIRED_FIELD", "Họ và tên là bắt buộc.")
+	campaign = _resolve_campaign_code(payload.get("campaign_code"))
 
 	phone_value = _text(payload.get("phone"))
 	phone = _normalize_phone(phone_value) if phone_value else None
@@ -585,6 +604,7 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 		"gender": _text(payload.get("gender")),
 		"date_of_birth": _text(payload.get("date_of_birth")),
 		"source": source,
+		"campaign": campaign,
 		"advertising_channel": _text(payload.get("advertising_channel")),
 		"import_source_id": _text(payload.get("import_source_id")),
 		"segments": _normalize_public_segments(payload.get("segments")),
@@ -673,6 +693,7 @@ def _create_lead(fields: dict[str, Any]) -> dict[str, Any]:
 				"admission_year",
 				"conversion_potential",
 				"source",
+				"campaign",
 				"enrollment_status",
 				"assigned_to",
 				"branch",
@@ -706,6 +727,8 @@ def _create_public_lead(fields: dict[str, Any]) -> dict[str, Any]:
 		"lead_status": doc.get("lead_status"),
 		"conversion_status": doc.get("conversion_status"),
 		"conversion_blockers": doc.get("conversion_blockers"),
+		"campaign": doc.get("campaign"),
+		"campaign_code": fields.get("campaign_code"),
 		"assigned_to": doc.get("assigned_to"),
 		"branch": doc.get("branch"),
 	}

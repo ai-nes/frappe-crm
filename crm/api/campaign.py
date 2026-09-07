@@ -24,6 +24,8 @@ CAMPAIGN_FIELDS = [
 	"owning_team",
 	"platform",
 	"channel_boundary",
+	"channel_type",
+	"channel_url",
 	"utm_source",
 	"utm_medium",
 	"utm_campaign",
@@ -50,6 +52,8 @@ WRITABLE_FIELDS = [
 	"owning_team",
 	"platform",
 	"channel_boundary",
+	"channel_type",
+	"channel_url",
 	"utm_source",
 	"utm_medium",
 	"utm_campaign",
@@ -84,6 +88,7 @@ def list_campaigns(
 	owning_team: str | None = None,
 	platform: str | None = None,
 	channel_boundary: str | None = None,
+	channel_type: str | None = None,
 	stable_code: str | None = None,
 	start_date_from: str | None = None,
 	start_date_to: str | None = None,
@@ -105,6 +110,7 @@ def list_campaigns(
 		("owning_team", owning_team),
 		("platform", platform),
 		("channel_boundary", channel_boundary),
+		("channel_type", channel_type),
 		("stable_code", stable_code),
 	):
 		if value not in (None, ""):

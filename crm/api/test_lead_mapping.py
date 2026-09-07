@@ -53,15 +53,26 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(context.exception.code, "SERVER_MANAGED_FIELD")
 		self.assertIn("lead_status", str(context.exception))
 
+	def test_public_payload_requires_campaign_code_during_normalization(self):
+		from crm.api.lead_mapping import _normalize_public_lead_payload
+
+		with self.assertRaises(LeadMappingError) as context:
+			_normalize_public_lead_payload({"student_name": "An"})
+
+		self.assertEqual(context.exception.code, "REQUIRED_FIELD")
+		self.assertIn("campaign_code", str(context.exception))
+
 	def test_public_payload_normalizes_optional_intake_fields(self):
 		with (
 			patch("crm.api.lead_mapping._check_unique"),
+			patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"),
 			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
 		):
 			values = _normalize_public_lead_payload(
 				{
 					"student_name": "An",
 					"phone": "+84981000099",
+					"campaign_code": "CAM-2026-00001",
 					"segments": ["Scholarship", "Scholarship"],
 					"assignment_priority": "HIGH",
 				}
@@ -70,6 +81,7 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(values["phone"], "0981000099")
 		self.assertEqual(values["segments"], '["Scholarship"]')
 		self.assertEqual(values["assignment_priority"], "high")
+		self.assertEqual(values["campaign"], "_Test Campaign")
 
 
 class TestLeadMappingIntegration(FrappeTestCase):

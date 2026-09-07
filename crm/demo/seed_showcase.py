@@ -907,11 +907,11 @@ _CONSENT_EVENTS = {
 # Named fixtures this seed owns. Also used by _coverage_scope() so verify()
 # checks only rows this seed creates, not the whole table.
 _SHOWCASE_CAMPAIGNS = (
-	("FPTU 2026 Admission Campaign - HCMC", "Active", "On-Campus"),
-	("FPTU HCMC 2025 Early Bird Admissions", "Completed", "Off-Campus"),
-	("FPTU HCMC 2026 Scholarship Drive", "Draft", "On-Campus"),
-	("FPTU HCMC 2026 High School Roadshow", "Approved", "Off-Campus"),
-	("FPTU HCMC 2025 Referral Admissions Pilot", "Cancelled", "On-Campus"),
+	("FPTU 2026 Admission Campaign - HCMC", "ACTIVE", "On-Campus"),
+	("FPTU HCMC 2025 Early Bird Admissions", "CLOSED", "Off-Campus"),
+	("FPTU HCMC 2026 Scholarship Drive", "DRAFT", "On-Campus"),
+	("FPTU HCMC 2026 High School Roadshow", "UPCOMING", "Off-Campus"),
+	("FPTU HCMC 2025 Referral Admissions Pilot", "CLOSED", "On-Campus"),
 )
 # Titles used by earlier runs of this seed. They are renamed in-place so a
 # rerun does not leave old, out-of-scope campaign names behind or create a
@@ -1084,7 +1084,7 @@ COVERAGE_MATRIX: dict[str, dict[str, list[str]]] = {
 		"influence": ["Low", "Medium", "High", "Decision Maker"],
 	},
 	"CRM Campaign": {
-		"status": ["Draft", "Approved", "Active", "Completed", "Cancelled"],
+		"status": ["DRAFT", "UPCOMING", "ACTIVE", "CLOSED"],
 		"event_type": ["On-Campus", "Off-Campus"],
 	},
 	"CRM Marketing Engagement": {
@@ -1345,6 +1345,27 @@ def _ensure_policies(campus: str, pool: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _find_seed_lead(scenario: dict, filters: dict) -> str | None:
+	"""Return a seed-owned Lead only when its display identity still matches."""
+	row = frappe.db.get_value(
+		"CRM Lead",
+		filters,
+		["name", "student_name", "email"],
+		as_dict=True,
+	)
+	legacy_email = _LEGACY_STUDENT_EMAIL_BY_KEY.get(scenario["key"])
+	if not legacy_email and scenario["key"].startswith("bulk-student-"):
+		legacy_email = f"{scenario['key']}.showcase@example.test"
+	allowed_emails = {scenario["email"], legacy_email}
+	if (
+		row
+		and row.get("student_name") == scenario["student_name"]
+		and row.get("email") in allowed_emails
+	):
+		return row.get("name")
+	return None
+
+
 def _ensure_student(scenario: dict, context: dict, pool: str):
 	from crm.fcrm.lifecycle import get_lifecycle_stage
 	from crm.fcrm.student_intake import submit_intake
@@ -1353,13 +1374,16 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 	# it. (submit_intake receipts are append-only; after a reset() the receipt
 	# survives but its Student is gone, so a plain replay would fail with
 	# "replay target is no longer available" — fall back to fresh ingress keys.)
-	existing = frappe.db.get_value("CRM Lead", {"email": scenario["email"]}, "name")
+	seed_source_id = f"{NAMESPACE}:{scenario['key']}"
+	existing = _find_seed_lead(scenario, {"import_source_id": seed_source_id})
+	if not existing:
+		existing = _find_seed_lead(scenario, {"email": scenario["email"]})
 	if not existing:
 		legacy_email = _LEGACY_STUDENT_EMAIL_BY_KEY.get(scenario["key"])
 		if not legacy_email and scenario["key"].startswith("bulk-student-"):
 			legacy_email = f"{scenario['key']}.showcase@example.test"
 		if legacy_email:
-			existing = frappe.db.get_value("CRM Lead", {"email": legacy_email}, "name")
+			existing = _find_seed_lead(scenario, {"email": legacy_email})
 			if existing:
 				frappe.db.set_value(
 					"CRM Lead",
@@ -1415,7 +1439,17 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 			else:
 				raise
 		student_name = result.get("student")
-		if student_name and frappe.db.get_value("CRM Lead", student_name, "email") != scenario["email"]:
+		identity = (
+			frappe.db.get_value(
+				"CRM Lead", student_name, ["email", "student_name"], as_dict=True
+			)
+			if student_name
+			else None
+		)
+		if student_name and (
+			(identity or {}).get("email") != scenario["email"]
+			or (identity or {}).get("student_name") != scenario["student_name"]
+		):
 			# A previous run may have persisted a source receipt after attaching
 			# this scenario to a different identity (for example after a fixture
 			# phone was corrected). Use a new source identity for the repair rather
@@ -1424,9 +1458,15 @@ def _ensure_student(scenario: dict, context: dict, pool: str):
 			student_name = result.get("student")
 		if result.get("outcome") not in {"created", "attached"} or not student_name:
 			raise frappe.ValidationError(f"Intake did not create Student {scenario['key']}: {result}")
-		if frappe.db.get_value("CRM Lead", student_name, "email") != scenario["email"]:
+		identity = frappe.db.get_value(
+			"CRM Lead", student_name, ["email", "student_name"], as_dict=True
+		) or {}
+		if (
+			identity.get("email") != scenario["email"]
+			or identity.get("student_name") != scenario["student_name"]
+		):
 			raise frappe.ValidationError(
-				f"Intake attached Student {student_name} to the wrong email for {scenario['key']}."
+				f"Intake attached Student {student_name} to the wrong identity for {scenario['key']}."
 			)
 	doc = frappe.get_doc("CRM Lead", student_name)
 	if not doc.lifecycle_stage and doc.enrollment_status:
@@ -2572,17 +2612,31 @@ def _seed_students(context: dict, staff_context: dict) -> tuple[list[dict], list
 	return manifest, errors
 
 
-def _link_seed_leads_to_campaigns(students: list[dict], marketing: dict) -> list[dict]:
+def _link_seed_leads_to_campaigns(
+	students: list[dict], marketing: dict, *, strict: bool = True
+) -> list[dict]:
 	"""Attach a small, deterministic subset of showcase leads to seed campaigns."""
 	students_by_key = {row["key"]: row["student"] for row in students}
+	scenarios_by_key = {row["key"]: row for row in SCENARIOS}
 	seed_campaign_names = set(marketing.get("campaigns", []))
 	links: list[dict] = []
 
 	for student_key, campaign_title in _SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS.items():
 		student = students_by_key.get(student_key)
+		if not student:
+			scenario = scenarios_by_key[student_key]
+			student = _find_seed_lead(
+				scenario, {"import_source_id": f"{NAMESPACE}:{student_key}"}
+			)
+			if not student:
+				student = _find_seed_lead(scenario, {"email": scenario["email"]})
 		campaign = frappe.db.get_value("CRM Campaign", {"title": campaign_title}, "name")
 		if not student:
-			continue
+			if not strict:
+				continue
+			raise frappe.ValidationError(
+				f"Showcase Lead {student_key!r} is missing; cannot attach campaign {campaign_title!r}."
+			)
 		if not campaign or campaign not in seed_campaign_names:
 			raise frappe.ValidationError(
 				f"Seed campaign {campaign_title!r} is missing for Lead {student_key}."
@@ -4143,7 +4197,7 @@ def _seed_market_snapshots(context: dict) -> dict[str, int]:
 	return {"created": created, "skipped": skipped}
 
 
-def _seed_all() -> dict:
+def _seed_all(strict: bool = True) -> dict:
 	frappe.set_user("Administrator")
 	legacy_cleanup = _cleanup_legacy_seed_data()
 	context = seed_demo._bootstrap()
@@ -4178,7 +4232,7 @@ def _seed_all() -> dict:
 	contacts = _seed_contacts(context, staff_context)
 	market_snapshots = _seed_market_snapshots(context)
 	marketing = _seed_marketing(context, staff_context)
-	campaign_leads = _link_seed_leads_to_campaigns(students, marketing)
+	campaign_leads = _link_seed_leads_to_campaigns(students, marketing, strict=strict)
 	campaign_intelligence = seed_director_campaign_intelligence.seed(context, marketing)
 	revenue_forecast = seed_director_revenue_forecast.seed(context)
 	edge = _seed_edge_states(context, staff_context)
@@ -4233,7 +4287,7 @@ def execute(strict: bool = True) -> dict:
 	ensure_local_integrity_keys()
 	_assert_integrity_keys()
 	with _temporary_local_flags():
-		result = _seed_all()
+		result = _seed_all(strict=strict)
 	print(frappe.as_json(result))
 	bulk_errors = int((result.get("bulk") or {}).get("errors", 0))
 	funnel_errors = len((result.get("admission_funnel") or {}).get("errors", []))
