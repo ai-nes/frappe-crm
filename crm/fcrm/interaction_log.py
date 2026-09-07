@@ -81,6 +81,29 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
+# A completed CRM Action Item is only a genuine parent/student touchpoint when
+# its underlying CRM Action has a real contact channel; an internal action
+# (default_channel NONE) never produces an Interaction.
+ACTION_CHANNEL_TO_INTERACTION_TYPE = {
+	"CALL": "PHONE_CALL",
+	"EMAIL": "OUTREACH",
+	"MESSAGE": "MESSAGE",
+}
+
+# CRM Action Item.outcome_code (7 admissions-specific values) mapped onto the
+# CRM Interaction.outcome enum (7 generic CRM values). Deliberately not a
+# 1:1 identity map -- the two vocabularies describe different things and stay
+# separate; this is the one explicit, auditable translation between them.
+ACTION_OUTCOME_TO_INTERACTION_OUTCOME = {
+	"NO_RESPONSE": "No Response",
+	"INTEREST_INCREASED": "Captured",
+	"NEEDS_MORE_INFORMATION": "Follow Up Needed",
+	"CALL_BACK_LATER": "Follow Up Needed",
+	"APPLICATION_STARTED": "Resolved",
+	"APPLICATION_COMPLETED": "Converted",
+	"NOT_INTERESTED": "Resolved",
+}
+
 # Attribution is evidence, not an admissions engagement.  In particular, an
 # event registration/check-in must not close Student SLA or create outcomes.
 SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
@@ -971,6 +994,39 @@ def create_interaction_from_call_log_insert(doc, method=None):
 		)
 	except Exception:
 		frappe.log_error(title="CRM Interaction creation failed (Call Log insert)")
+
+
+def create_interaction_for_completed_action(action) -> str | None:
+	"""Create the CRM Interaction a completed CRM Action Item represents.
+
+	Only actions with a real contact channel (CALL/EMAIL/MESSAGE) are genuine
+	touchpoints; an internal action (default_channel NONE) returns None.
+	Caller is responsible for persisting the returned name onto
+	``action.linked_interaction`` -- this never writes the Action Item itself.
+	"""
+	if not action.get("action"):
+		return None
+	default_channel = frappe.db.get_value("CRM Action", action.action, "default_channel")
+	interaction_type = ACTION_CHANNEL_TO_INTERACTION_TYPE.get(default_channel)
+	if not interaction_type:
+		return None
+	try:
+		return create_interaction(
+			interaction_type=interaction_type,
+			student=action.student,
+			crm_contact=action.get("contact"),
+			reference_doctype="CRM Action Item",
+			reference_docname=action.name,
+			actor=frappe.session.user,
+			summary=action.get("objective") or action.get("action_type") or interaction_type,
+			notes=action.get("outcome_notes"),
+			outcome=ACTION_OUTCOME_TO_INTERACTION_OUTCOME.get(action.get("outcome_code")),
+			channel=default_channel,
+			direction="outbound",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (Action Item completion)")
+		return None
 
 
 def create_interaction_from_contact_update(doc, method=None):

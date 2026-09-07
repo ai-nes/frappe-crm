@@ -45,6 +45,21 @@ PROTECTED_CASE_FIELDS = frozenset(
 )
 
 
+def _academic_results_changed(before, after) -> bool:
+	"""Compare GPA source fields without child-row bookkeeping fields."""
+	if before is None:
+		return bool(after.get("academic_results"))
+	fields = ("school_year", "grade", "gpa", "academic_rank")
+
+	def rows(doc):
+		return sorted(
+			tuple(row.get(field) for field in fields)
+			for row in (doc.get("academic_results") or [])
+		)
+
+	return rows(before) != rows(after)
+
+
 class CRMContact(Document):
 	def __init__(self, *args, **kwargs):
 		super().__init__(*args, **kwargs)
@@ -145,9 +160,19 @@ class CRMContact(Document):
 		self._resolve_geo()
 
 	def on_update(self):
-		# Contact is a post-conversion identity record.  No lifecycle, routing,
-		# SLA or Student writer is allowed to run from a Contact hook.
-		return
+		# Academic rows are a compatibility GPA source only when a Student has no
+		# direct result. A change therefore invalidates linked Student contexts,
+		# but never mutates lifecycle, routing or assignment state.
+		before = self.get_doc_before_save()
+		if not _academic_results_changed(before, self):
+			return
+		from crm.fcrm.nba_evaluations import request_domain_reevaluation
+		from crm.fcrm.student_contact_conversion import students_for_contact
+		from crm.services.student_context import bump_student_context_revision
+
+		for student in students_for_contact(self.name):
+			bump_student_context_revision(student, "contact_academic_result_change")
+			request_domain_reevaluation(student, trigger_reason="academic_result_changed")
 
 	def validate(self):
 		self._normalize_shared_fields()

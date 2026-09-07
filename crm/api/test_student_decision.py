@@ -26,3 +26,13 @@ class TestStudentDecisionAPI(FrappeTestCase):
 		with patch("crm.api.student_decision._transition_action", return_value={"status": "in_progress"}) as command:
 			student_decision.transition_action(_internal_service=True, **payload)
 		command.assert_called_once_with(**payload)
+
+	def test_create_action_strips_routed_rpc_command(self):
+		"""Every real HTTP call to a Frappe RPC method injects ``cmd`` into
+		**kwargs; create_action must strip it like the other adapters do,
+		instead of forwarding it into _create_manual_action."""
+		payload = {"student": "STU-1", "action_type": "CALL", "objective": "Follow up", "idempotency_key": "manual-1"}
+		with patch("crm.api.student_decision._create_manual_action", return_value={"status": "accepted"}) as command:
+			result = student_decision.create_action(cmd="crm.api.student_decision.create_action", **payload)
+		self.assertEqual(result["status"], "accepted")
+		command.assert_called_once_with(**payload)

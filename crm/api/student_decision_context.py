@@ -143,20 +143,38 @@ def _application_projection(student: str) -> dict:
 
 
 def _academic_projection(student: str) -> dict:
-	"""Resolve one bounded GPA signal from the latest student academic row.
+	"""Resolve one bounded GPA, preferring the Student-owned table.
 
-	Rows with an invalid GPA or an ambiguous latest school-year/grade are
-	 published as unknown; no best-effort value is selected from conflicting
-	 records.
+	A confirmed Student → Contact relation is only a compatibility fallback;
+	multiple linked Contacts are ambiguous rather than an arbitrary source.
+	Invalid/conflicting rows remain unknown/conflicting.
 	"""
+	fields = ["name", "school_year", "grade", "gpa", "modified", "idx"]
 	rows = frappe.get_all(
 		"CRM Student Academic Result",
-		filters={"parent": student},
-		fields=["name", "school_year", "grade", "gpa", "modified", "idx"],
+		filters={"parent": student, "parenttype": "CRM Student"},
+		fields=fields,
 		order_by="modified desc, name desc",
 		limit_page_length=100,
 		ignore_permissions=True,
 	)
+	if not rows:
+		contacts = contacts_for_student(student)
+		if len(contacts) != 1:
+			return {
+				"gpa": None,
+				"quality": "unknown",
+				"source_revision": "ambiguous_contact" if contacts else "none",
+				"evidence_ref": None,
+			}
+		rows = frappe.get_all(
+			"CRM Student Academic Result",
+			filters={"parent": contacts[0], "parenttype": "CRM Contact"},
+			fields=fields,
+			order_by="modified desc, name desc",
+			limit_page_length=100,
+			ignore_permissions=True,
+		)
 	if not rows:
 		return {"gpa": None, "quality": "unknown", "source_revision": "none", "evidence_ref": None}
 	def rank_row(row):
@@ -306,16 +324,16 @@ def _intent_provenance(intent: dict, student: str) -> dict:
 	}
 
 
-def _interaction_recency(interaction: dict) -> int | None:
+def _interaction_recency(interaction: dict, *, at=None) -> int | None:
 	"""Whole days since the most recent interaction, or None when there is none.
 
 	This is a "why now" signal for the decision layer: silence duration is a
 	first-class input to Next Best Action, independent of any 360 analysis.
 	"""
-	at = interaction.get("interaction_datetime")
-	if not at:
+	interaction_at = interaction.get("interaction_datetime")
+	if not interaction_at:
 		return None
-	delta = frappe.utils.now_datetime() - frappe.utils.get_datetime(at)
+	delta = (at or frappe.utils.now_datetime()) - frappe.utils.get_datetime(interaction_at)
 	return max(delta.days, 0)
 
 
@@ -330,7 +348,7 @@ def _intent_observation_count(student: str, intent_type: str | None) -> int:
 	return frappe.db.count("CRM Intent", {"student": student, "intent_type": intent_type})
 
 
-def _days_to_deadline(student: str) -> int | None:
+def _days_to_deadline(student: str, *, at=None) -> int | None:
 	"""Whole days until the nearest open admission-application deadline.
 
 	A hard "why now" signal and the override the WAIT pre-check needs: a looming
@@ -352,7 +370,7 @@ def _days_to_deadline(student: str) -> int | None:
 	)
 	if not rows or not rows[0].get("deadline"):
 		return None
-	delta = frappe.utils.getdate(rows[0]["deadline"]) - frappe.utils.getdate()
+	delta = frappe.utils.getdate(rows[0]["deadline"]) - frappe.utils.getdate(at or frappe.utils.now_datetime())
 	return delta.days
 
 
@@ -366,7 +384,7 @@ def _recent_actions(student: str) -> list[dict]:
 	rows = frappe.get_all(
 		"CRM Action Item",
 		filters={"student": student},
-		fields=["action", "action_type", "state", "execution_status", "disposition", "creation"],
+		fields=["action", "action_type", "state", "execution_status", "disposition", "creation", "outcome_code"],
 		order_by="creation desc",
 		limit_page_length=5,
 		ignore_permissions=True,
@@ -378,10 +396,15 @@ def _recent_actions(student: str) -> list[dict]:
 			# this field to detect an in-flight action by code, so never project
 			# the category when the canonical code is available.
 			"action_type": row.get("action") or row.get("action_type"),
+			# The broad UI category on its own -- lets opportunity suppression
+			# require the closing action to actually be in the opportunity's own
+			# domain (e.g. APPLICATION), not just be the latest action taken.
+			"action_category": row.get("action_type"),
 			"state": row.get("state"),
 			"execution_status": row.get("execution_status"),
 			"disposition": row.get("disposition"),
 			"at": str(row.get("creation")) if row.get("creation") else None,
+			"outcome_code": row.get("outcome_code"),
 		}
 		for row in rows
 	]
@@ -419,7 +442,7 @@ def _score_projection(row: dict) -> dict:
 	}
 
 
-def _projection(student: str, minimum_revision: int, *, service_authorized: bool = False) -> dict:
+def _projection(student: str, minimum_revision: int, *, service_authorized: bool = False, at=None) -> dict:
 	"""Build the bounded decision DTO.
 
 	``service_authorized`` is deliberately private and is only used by Frappe's
@@ -460,9 +483,10 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	academic = _academic_projection(student)
 	contactability = _contactability_projection(student)
 	sla_state = row.sla_evidence_state or "unknown"
+	evaluated_at = at or frappe.utils.now_datetime()
 	if (
 		row.sla_evidence_observed_at
-		and row.sla_evidence_observed_at < frappe.utils.now_datetime() - timedelta(minutes=5)
+		and row.sla_evidence_observed_at < evaluated_at - timedelta(minutes=5)
 	):
 		sla_state = "stale"
 	# Do not add names, phones, emails, raw notes, or free text to this DTO.
@@ -506,7 +530,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 			),
 			"outcome": _canonical_label(interaction.get("outcome"), _ENGAGEMENT_MAP),
 			"at": interaction.get("interaction_datetime"),
-			"days_since": _interaction_recency(interaction),
+			"days_since": _interaction_recency(interaction, at=evaluated_at),
 		},
 		"sla_evidence": {
 			"state": sla_state,
@@ -538,7 +562,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 			"next_task_action": action,
 			"next_task_objective": objective,
 			"stage_label": _journey_label(stage),
-			"days_to_deadline": _days_to_deadline(student),
+			"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
 		}
 	)
 	context["evidence_refs"] = [
@@ -546,6 +570,8 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		f"student-context:revision:{revision}:stage",
 		f"score-input:revision:{context['score']['current_revision']}:score",
 	]
+	if academic.get("quality") == "current" and academic.get("evidence_ref"):
+		context["evidence_refs"].append(str(academic["evidence_ref"]))
 	if action in {"PARENT_CONTACT", "CONTACT_PARENT"}:
 		context["evidence_refs"].append(f"student-context:revision:{revision}:parent-authority")
 	hash_input = {key: value for key, value in context.items() if key not in {"student_id"}}

@@ -232,9 +232,9 @@ def filter_eligible_actions(
 			exclusions.append({"action": code, "reason": "LIFECYCLE_TERMINAL"})
 			continue
 		channel = str(snapshot["default_channel"] or "NONE").upper()
-		# Parent outreach needs recipient-specific consent as well as authority.
-		# That contactability model is introduced in Phase 04; until then exclude
-		# every parent action rather than borrowing the student's consent.
+		# Parent-recipient consent is introduced with the dedicated authority
+		# projection in phase 04. Until then, do not borrow the student's consent
+		# to make a parent action executable.
 		if decision_context is not None and category == "PARENT":
 			exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
 			continue
@@ -357,15 +357,34 @@ def kernel_policy_snapshot(row: Mapping[str, object]) -> dict:
 	missing = [key for key in _KERNEL_POLICY_REQUIRED if key not in raw]
 	if missing:
 		raise ValueError(f"kernel_policy is missing: {sorted(missing)}")
+	unexpected = sorted(set(raw) - set(_KERNEL_POLICY_REQUIRED))
+	if unexpected:
+		raise ValueError(f"kernel_policy has unexpected fields: {unexpected}")
 	weights = raw["component_weights"]
 	if not isinstance(weights, Mapping) or set(weights) != {"opportunity_fit", "urgency", "effectiveness_index"}:
 		raise ValueError("kernel_policy.component_weights must contain the three kernel weights.")
+	if not isinstance(raw.get("revision"), str) or not raw["revision"]:
+		raise ValueError("kernel_policy revision must be a non-empty string.")
+	integer_fields = {
+		"top_n_cap", "recommendation_ttl_seconds", "recent_contact_days",
+		"cooling_contact_days", "deadline_horizon_days",
+	}
+	decimal_fields = {
+		"score_threshold", "confidence_floor", "contact_pressure_penalty",
+		"redundancy_penalty", "diversity_group_penalty",
+	}
+	if any(isinstance(raw[key], bool) or not isinstance(raw[key], int) for key in integer_fields):
+		raise ValueError("kernel_policy integer values must be integers.")
+	if any(isinstance(raw[key], bool) or not isinstance(raw[key], (int, float)) for key in decimal_fields):
+		raise ValueError("kernel_policy decimal values must be numeric.")
+	if any(isinstance(weights.get(key), bool) or not isinstance(weights.get(key), (int, float)) for key in weights):
+		raise ValueError("kernel_policy weights must be numeric.")
 	try:
 		weights = {key: float(weights[key]) for key in sorted(weights)}
 		if any(not math.isfinite(value) or value < 0 for value in weights.values()) or abs(sum(weights.values()) - 1.0) > 1e-9:
 			raise ValueError
-		return {
-			"revision": str(raw["revision"]),
+		snapshot = {
+			"revision": raw["revision"],
 			"score_threshold": float(raw["score_threshold"]),
 			"confidence_floor": float(raw["confidence_floor"]),
 			"top_n_cap": int(raw["top_n_cap"]),
@@ -378,6 +397,19 @@ def kernel_policy_snapshot(row: Mapping[str, object]) -> dict:
 			"diversity_group_penalty": float(raw["diversity_group_penalty"]),
 			"deadline_horizon_days": int(raw["deadline_horizon_days"]),
 		}
+		if snapshot["top_n_cap"] < 1 or snapshot["recommendation_ttl_seconds"] < 1:
+			raise ValueError
+		if any(snapshot[key] < 0 for key in ("recent_contact_days", "cooling_contact_days", "deadline_horizon_days")):
+			raise ValueError
+		if any(
+			not math.isfinite(snapshot[key]) or not 0.0 <= snapshot[key] <= 1.0
+			for key in (
+				"score_threshold", "confidence_floor", "contact_pressure_penalty",
+				"redundancy_penalty", "diversity_group_penalty",
+			)
+		):
+			raise ValueError
+		return snapshot
 	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError("kernel_policy contains invalid numeric values.") from exc
 

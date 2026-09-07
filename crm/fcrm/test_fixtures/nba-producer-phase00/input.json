@@ -1,7 +1,7 @@
 {
   "contract_version": "nba-evaluation-v1",
-  "evaluation_id": "NBAEVAL-f8aabea836cf735e",
-  "evaluation_key": "f8aabea836cf735e5c77e243baabef3178acf4a29d60a3aa615afdc394ad1651",
+  "evaluation_id": "NBAEVAL-f25b26cf3578c4fd",
+  "evaluation_key": "f25b26cf3578c4fdf1e7675e248918963a7ba669b96993705bc5b1aa0d494578",
   "evaluation_clock": "2026-09-04T02:00:00",
   "student": {
     "student_id": "ENR-2026-00001",
@@ -26,6 +26,7 @@
     "contactability": {"consent": true, "channels": ["CALL", "EMAIL", "MESSAGE"], "recipient_bound": true},
     "parent_authority": {"valid": false},
     "work_in_flight": ["CALL"],
+    "recent_outcomes": {},
     "owner_capacity": {"owner": null, "open_tasks": null},
     "evidence_refs": [
       "student-context:revision:42:intent",
@@ -56,7 +57,8 @@
       "risk_band": "unknown",
       "effort_band": "unknown",
       "conflict_keys": ["action:CALL"]
-    }]
+    }],
+    "exclusions": []
   },
   "policies": {
     "library_revision": "action-library-r3",
@@ -64,8 +66,25 @@
     "eligibility_revision": "eligibility-reason-codes-v1",
     "eligibility_digest": "acb4c8b644214f034da0756305160330c104727d1ac02287842a1001c0396bfc",
     "decision_revision": "nba-decision-policy-r1",
-    "decision_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-    "decision_policy": {"revision": "nba-decision-policy-r1"},
+    "decision_digest": "5f583345a805d72e4bd19ff7fb898bc27d04f512fc6e673dbd51ac6105ac57be",
+    "decision_policy": {
+      "revision": "nba-decision-policy-r1",
+      "score_threshold": 0.35,
+      "confidence_floor": 0.45,
+      "top_n_cap": 3,
+      "recommendation_ttl_seconds": 604800,
+      "component_weights": {
+        "opportunity_fit": 0.45,
+        "urgency": 0.25,
+        "effectiveness_index": 0.3
+      },
+      "recent_contact_days": 2,
+      "cooling_contact_days": 5,
+      "contact_pressure_penalty": 0.15,
+      "redundancy_penalty": 0.1,
+      "diversity_group_penalty": 0.05,
+      "deadline_horizon_days": 30
+    },
     "timing_revisions": [],
     "timing_digest": "015b5bc03e0ac445d7f7f95f5622b0ab35053fed3e646437adaf35b1cce97cf9"
   }
