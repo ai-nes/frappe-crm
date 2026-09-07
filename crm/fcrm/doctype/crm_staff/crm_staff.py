@@ -9,7 +9,13 @@ class CRMStaff(Document):
 	def default_list_data():
 		columns = [
 			{"label": "Full Name", "type": "Data", "key": "full_name", "width": "16rem"},
-			{"label": "Department", "type": "Link", "key": "department", "options": "CRM Department", "width": "12rem"},
+			{
+				"label": "Department",
+				"type": "Link",
+				"key": "department",
+				"options": "CRM Department",
+				"width": "12rem",
+			},
 			{"label": "Campus", "type": "Link", "key": "campus", "options": "CRM Campus", "width": "12rem"},
 			{"label": "User", "type": "Link", "key": "user", "options": "User", "width": "12rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
@@ -18,7 +24,6 @@ class CRMStaff(Document):
 		return {"columns": columns, "rows": rows}
 
 	def validate(self):
-		self._derive_team_lead_flags()
 		self._validate_no_overlapping_team_memberships()
 		self._validate_one_primary_membership_per_context()
 
@@ -31,7 +36,9 @@ class CRMStaff(Document):
 		"""
 		seen = []
 		for row in self.get("team_memberships") or []:
-			if row.team and any(previous.team == row.team and periods_overlap(previous, row) for previous in seen):
+			if row.team and any(
+				previous.team == row.team and periods_overlap(previous, row) for previous in seen
+			):
 				frappe.throw(
 					f"Nhân sự <b>{self.full_name}</b> không thể có hai membership đang hiệu lực "
 					f"trong cùng Team <b>{row.team}</b>. Hãy kết thúc membership cũ trước khi thêm "
@@ -39,10 +46,6 @@ class CRMStaff(Document):
 					title="Trùng Team Membership",
 				)
 			seen.append(row)
-
-	def _derive_team_lead_flags(self):
-		for row in self.get("team_memberships") or []:
-			row.is_team_lead = row.function == "Lead Sale"
 
 	def _validate_one_primary_membership_per_context(self):
 		"""One staff member may hold only one *primary* membership per
@@ -113,10 +116,12 @@ class CRMStaff(Document):
 		if existing:
 			frappe.db.set_value("User Permission", existing, "for_value", self.campus)
 		else:
-			frappe.get_doc({
-				"doctype": "User Permission",
-				"user": self.user,
-				"allow": "CRM Campus",
-				"for_value": self.campus,
-				"apply_to_all_doctypes": 1,
-			}).insert(ignore_permissions=True)
+			frappe.get_doc(
+				{
+					"doctype": "User Permission",
+					"user": self.user,
+					"allow": "CRM Campus",
+					"for_value": self.campus,
+					"apply_to_all_doctypes": 1,
+				}
+			).insert(ignore_permissions=True)

@@ -307,6 +307,13 @@ def get_nba_evaluation_input(student: str, minimum_revision: int = 0) -> dict:
 def request_nba_evaluation(student: str, idempotency_key: str | None = None, force_reason: str | None = None):
 	"""Delegated or service caller: create/reuse one scoped NBA Evaluation run."""
 	from crm.fcrm import nba_evaluations
+	from crm.fcrm.student_reference import canonical_student
+
+	# The dashboard can send the legacy Lead id (for example, ``ENR-2026-00003``)
+	# while the NBA aggregate is stored under the canonical ``CRM Student`` id
+	# (for example, ``CRMC-2026-00003``). Resolve it before the existence and
+	# row-scope checks so a valid, visible target is not reported as forbidden.
+	student = canonical_student(student) or student
 
 	return nba_evaluations.request_nba_evaluation(
 		student=student,

@@ -1,10 +1,9 @@
-"""Explicit CRM Lead assignment batches.
+"""CRM Lead assignment runs.
 
-Lead intake is deliberately separate from assignment.  A user imports or
-selects Leads into a batch, previews the routing context, then starts one
-bounded execution.  This module is the only batch-facing entrypoint; the
-actual owner transition still goes through ``student_ownership`` and the
-zone/capacity selector remains shared with the legacy Student service.
+The backend keeps the explicit batch document as an audit record, while the
+operator-facing flow can simply scan every unassigned Lead and run the
+province-based resolver.  The older explicit create/import APIs remain for
+backward compatibility and historical records.
 """
 
 from __future__ import annotations
@@ -18,8 +17,7 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
-from crm.fcrm.lead_processing import mark_lead_assigned, preview_lead, process_lead
-from crm.fcrm.lead_routing import route_lead_now
+from crm.fcrm.lead_processing import assign_lead, preview_lead, process_lead
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -27,6 +25,11 @@ from crm.fcrm.student_assignment import (
 	zone_team_pool,
 )
 from crm.fcrm.student_ownership import change_student_ownership
+from crm.fcrm.team_routing import (
+	province_for_zone,
+	require_team_routing_ready,
+	select_province_recipient,
+)
 
 BATCH_DOCTYPE = "CRM Lead Assignment Batch"
 MAX_BATCH_SIZE = 1000
@@ -149,16 +152,148 @@ def _queue_for_zone(lead, routing_context: dict[str, Any]) -> str | None:
 	return None
 
 
+def _expected_team_province(lead, routing_context: dict[str, Any]) -> str | None:
+	"""Use canonical Province links, never free-text geography labels."""
+	zone = routing_context.get("zone")
+	return province_for_zone(zone) or lead.get("province")
+
+
+def _raise_batch_error(code: str, message: str):
+	exception = frappe.ValidationError(message)
+	exception.code = code
+	exception.error_code = code
+	raise exception
+
+
+def _team_scope(team_id: str | None, actor_context: dict[str, Any]) -> dict[str, Any] | None:
+	if not team_id:
+		return None
+	team = frappe.db.get_value(
+		"CRM Team",
+		team_id,
+		["name", "team_name", "group", "campus", "is_active", "team_type"],
+		as_dict=True,
+	)
+	if not team or not team.is_active:
+		_raise_batch_error("TEAM_NOT_FOUND", "Team nhận batch không tồn tại hoặc đã tắt.")
+	if not actor_context.get("is_system_manager") and team.name not in set(actor_context.get("teams") or []):
+		frappe.throw(_("Team nằm ngoài phạm vi của bạn."), frappe.PermissionError)
+	group = (
+		frappe.db.get_value(
+			"CRM Team Group",
+			team.group,
+			["name", "province", "is_active"],
+			as_dict=True,
+		)
+		if team.group
+		else None
+	)
+	if not group or not group.is_active or not group.province:
+		_raise_batch_error("TEAM_NOT_READY", "Team chưa thuộc Group có tỉnh đang hoạt động.")
+	return {**dict(team), "groupProvince": group.province}
+
+
+def _canonical_province(value: str | None) -> str | None:
+	value = str(value or "").strip()
+	if not value:
+		return None
+	if frappe.db.exists("CRM Province", value):
+		return value
+	return lead_mapping._resolve_province(value)
+
+
+def _validate_batch_scope(batch, lead, actor_context: dict[str, Any]) -> None:
+	lead_province = str(lead.get("province") or "").strip()
+	if batch.province and lead_province != batch.province:
+		_raise_batch_error(
+			"PROVINCE_MISMATCH",
+			"Tỉnh của Lead không khớp với tỉnh đã xác định cho batch.",
+		)
+	if batch.target_team:
+		team = _team_scope(batch.target_team, actor_context)
+		if team and lead_province != team["groupProvince"]:
+			_raise_batch_error(
+				"TEAM_PROVINCE_MISMATCH",
+				"Tỉnh của Lead không khớp với Group của Team nhận batch.",
+			)
+
+
+def _sync_batch_scope(batch, actor_context: dict[str, Any]) -> None:
+	"""Persist the province inferred from the batch without changing Leads."""
+	if batch.target_team:
+		team = _team_scope(batch.target_team, actor_context)
+		if batch.province and batch.province != team["groupProvince"]:
+			_raise_batch_error(
+				"TEAM_PROVINCE_MISMATCH",
+				"Team nhận batch không thuộc tỉnh đã chọn.",
+			)
+		batch.province = team["groupProvince"]
+		return
+	if batch.province:
+		return
+	provinces = {
+		str(frappe.db.get_value("CRM Lead", item.lead, "province") or "").strip()
+		for item in batch.items
+		if item.lead
+	}
+	provinces.discard("")
+	if len(provinces) == 1:
+		batch.province = next(iter(provinces))
+
+
+def _validate_batch_pool(pool, lead, routing_context):
+	if not pool:
+		return None
+	require_team_routing_ready(
+		pool.team,
+		campus=pool.campus,
+		expected_province=_expected_team_province(lead, routing_context),
+	)
+	return pool
+
+
 def _resolve_batch_pool(batch, lead, actor_context: dict[str, Any]):
 	"""Resolve the internal intake Pool without exposing it to operators."""
+	context = resolve_student_zone(lead)
+	if batch.target_team:
+		team = _team_scope(batch.target_team, actor_context)
+		mapped_team = context.get("school_owner_team")
+		if context.get("zone") and not mapped_team:
+			mapping = zone_team_pool(context["zone"], lead.get("branch"))
+			mapped_team = mapping.get("team") if mapping else None
+		if mapped_team and mapped_team != team["name"]:
+			_raise_batch_error(
+				"TEAM_SCOPE_MISMATCH",
+				"Team nhận batch không phụ trách Zone/Trường của Lead.",
+			)
+		pool_rows = frappe.get_all(
+			"CRM Student Pool",
+			filters={"team": team["name"], "campus": lead.get("branch"), "is_active": 1},
+			fields=["name", "team", "campus", "is_active"],
+			limit_page_length=2,
+		)
+		if len(pool_rows) > 1:
+			_raise_batch_error("MULTIPLE_INPUT_QUEUES", "Team nhận batch có nhiều hàng chờ đang hoạt động.")
+		if not pool_rows:
+			_raise_batch_error("MISSING_INPUT_QUEUE", "Team nhận batch chưa có hàng chờ đang hoạt động.")
+		pool = _pool(pool_rows[0].name, lead.get("branch"), actor_context)
+		return _validate_batch_pool(pool, lead, context)
+
 	pool_name = lead.get("owning_pool") or batch.get("pool")
 	if pool_name:
 		pool = _pool(pool_name, lead.get("branch"), actor_context)
 		if pool:
-			return pool
+			return _validate_batch_pool(pool, lead, context)
 
-	context = resolve_student_zone(lead)
 	branch = lead.get("branch")
+	# A Lead with a mapped school/Zone already contains enough information to
+	# find the correct Team. Resolve this before looking at campus-wide pools;
+	# otherwise multiple Teams in one Campus make the old Pool selector win.
+	if context.get("zone"):
+		mapping = zone_team_pool(context["zone"], branch)
+		if mapping and mapping.get("pool"):
+			return _validate_batch_pool(_pool(mapping["pool"], branch, actor_context), lead, context)
+
 	filters = {"is_active": 1, "campus": branch}
 	if not actor_context.get("is_system_manager"):
 		filters["team"] = ["in", actor_context.get("teams") or ["__no_team__"]]
@@ -169,18 +304,13 @@ def _resolve_batch_pool(batch, lead, actor_context: dict[str, Any]):
 		limit_page_length=3,
 	)
 	if len(candidates) == 1:
-		return _pool(candidates[0].name, branch, actor_context)
+		return _validate_batch_pool(_pool(candidates[0].name, branch, actor_context), lead, context)
 	if len(candidates) > 1:
 		raise frappe.ValidationError("MULTIPLE_INPUT_QUEUES")
 
-	# System Managers may not have an actor Team. In that case, use the
-	# configured Zone pool when it is unambiguous, then fall back to one campus
-	# pool. For a scoped operator, the actor Team pool above is always preferred.
-	if branch and context.get("zone"):
-		mapping = zone_team_pool(context["zone"], branch)
-		if mapping and mapping.get("pool"):
-			return _pool(mapping["pool"], branch, actor_context)
-
+	# System Managers may not have an actor Team. If no school/Zone mapping is
+	# available, retain the safe legacy fallback only when one campus Pool exists.
+	# Multiple Teams remain a Province/manual-review case; never guess a Team.
 	if actor_context.get("is_system_manager"):
 		campus_pools = frappe.get_all(
 			"CRM Student Pool",
@@ -189,14 +319,21 @@ def _resolve_batch_pool(batch, lead, actor_context: dict[str, Any]):
 			limit_page_length=3,
 		)
 		if len(campus_pools) == 1:
-			return _pool(campus_pools[0].name, branch, actor_context)
+			return _validate_batch_pool(_pool(campus_pools[0].name, branch, actor_context), lead, context)
 		if len(campus_pools) > 1:
 			raise frappe.ValidationError("MULTIPLE_INPUT_QUEUES")
 	raise frappe.ValidationError("MISSING_INPUT_QUEUE")
 
 
-def _preview_item(batch, item, actor_context: dict[str, Any]) -> None:
+def _preview_item(
+	batch,
+	item,
+	actor_context: dict[str, Any],
+	*,
+	load_overrides: dict[str, int] | None = None,
+) -> None:
 	lead = _lead(item.lead)
+	_validate_batch_scope(batch, lead, actor_context)
 	if lead.get("converted_student") or lead.get("conversion_status") == "Converted":
 		_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
@@ -218,35 +355,73 @@ def _preview_item(batch, item, actor_context: dict[str, Any]) -> None:
 		_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 		item.error_code = "INVALID_PROCESSING_STATUS"
 		return
+	province = _canonical_province(lead.get("province"))
+	if not province:
+		_reset_item(item, status="manual_review", reason="MISSING_PROVINCE")
+		item.error_code = "MISSING_PROVINCE"
+		return
 	if not lead.get("branch"):
 		_reset_item(item, status="manual_review", reason="MISSING_CAMPUS")
+		item.error_code = "MISSING_CAMPUS"
 		return
-	context = resolve_student_zone(lead)
-	pool = _resolve_batch_pool(batch, lead, actor_context)
-	if not pool:
-		_reset_item(item, status="manual_review", reason="MISSING_INPUT_QUEUE")
-		return
+	recipient = _resolve_batch_recipient(
+		batch,
+		lead,
+		actor_context,
+		load_overrides=load_overrides,
+	)
 	item.status = "pending"
-	item.reason = context.get("reason") or "ready"
-	item.routing_tier = context.get("tier")
-	item.queue = _queue_for_zone(lead, context)
-	item.zone = context.get("zone")
-	item.team = context.get("school_owner_team") or context.get("mapping", {}).get("team")
+	item.reason = recipient["reason"]
+	item.routing_tier = "province"
+	item.queue = f"PROVINCE:{province}"
+	item.zone = None
+	item.team = recipient["team"]
+	item.owner_staff = recipient["ownerStaff"]
+	item.active_load = recipient["capacity"]["active"]
+	item.capacity_limit = recipient["capacity"]["limit"]
+	item.remaining_capacity = recipient["capacity"]["remaining"]
+	item.policy_version = recipient["policyVersion"]
 	item.ownership_revision = int(lead.get("ownership_revision") or 0)
 	item.error_code = None
 
 
+def _resolve_batch_recipient(batch, lead, actor_context: dict[str, Any], *, load_overrides=None):
+	"""Resolve a Team and Sale/CTV from the Lead's canonical Province."""
+	province = _canonical_province(lead.get("province"))
+	if not province:
+		_raise_batch_error("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
+	_validate_batch_scope(batch, lead, actor_context)
+	return select_province_recipient(
+		province,
+		campus=lead.get("branch"),
+		team_id=batch.target_team or None,
+		load_overrides=load_overrides,
+	)
+
+
 def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
 	"""Evaluate every item before execution, keeping exceptions out of the run path."""
+	_sync_batch_scope(batch, actor_context)
+	load_overrides: dict[str, int] = {}
 	for item in batch.items:
+		if item.status in TERMINAL_ITEM_STATUSES:
+			continue
 		try:
-			_preview_item(batch, item, actor_context)
+			_preview_item(batch, item, actor_context, load_overrides=load_overrides)
+			if item.status == "pending" and item.owner_staff:
+				load_overrides[item.owner_staff] = load_overrides.get(item.owner_staff, 0) + 1
 		except Exception as exc:
-			code = (
-				getattr(exc, "code", None) or getattr(exc, "error_code", None) or str(exc).strip()
-				if str(exc).strip() in {"MISSING_INPUT_QUEUE", "MULTIPLE_INPUT_QUEUES"}
-				else "PREVIEW_FAILED"
-			)
+			code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
+			if not code and str(exc).strip() in {
+				"MISSING_PROVINCE",
+				"MISSING_CAMPUS",
+				"TEAM_NOT_FOUND_FOR_PROVINCE",
+				"NO_ELIGIBLE_RECIPIENT",
+				"TEAM_NOT_READY",
+				"PROVINCE_MISMATCH",
+			}:
+				code = str(exc).strip()
+			code = code or "PREVIEW_FAILED"
 			_reset_item(item, status="manual_review", reason=code)
 			item.error_code = code
 	batch.status = "ready"
@@ -306,8 +481,8 @@ def _serialize_item(item) -> dict[str, Any]:
 		"team": item.team,
 		"ownerStaff": item.owner_staff,
 		"activeLoad": item.active_load,
-		"capacityLimit": item.capacity_limit,
-		"remainingCapacity": item.remaining_capacity,
+		"capacityLimit": item.capacity_limit or None,
+		"remainingCapacity": item.remaining_capacity if item.capacity_limit else None,
 		"policyVersion": item.policy_version,
 		"ownershipRevision": item.ownership_revision,
 		"routingRequest": item.routing_request,
@@ -325,6 +500,8 @@ def _serialize_batch(batch) -> dict[str, Any]:
 		"name": batch.name,
 		"batchName": batch.batch_name,
 		"status": batch.status,
+		"province": batch.province,
+		"targetTeam": batch.target_team,
 		"source": batch.source,
 		"pool": batch.pool,
 		"description": batch.description,
@@ -357,6 +534,8 @@ def create_lead_assignment_batch(
 	batch_name: str,
 	lead_ids: list[str] | str,
 	pool: str | None = None,
+	province: str | None = None,
+	target_team: str | None = None,
 	source: str | None = None,
 	description: str | None = None,
 ):
@@ -370,11 +549,19 @@ def create_lead_assignment_batch(
 	lead_names = _parse_list(lead_ids, "lead_ids")
 	if pool:
 		_pool(pool, None, actor_context)
+	canonical_province = _canonical_province(province) if province else None
+	team_scope = _team_scope(target_team, actor_context) if target_team else None
+	if team_scope:
+		if canonical_province and canonical_province != team_scope["groupProvince"]:
+			_raise_batch_error("TEAM_PROVINCE_MISMATCH", "Team nhận batch không thuộc tỉnh đã chọn.")
+		canonical_province = team_scope["groupProvince"]
 	batch = frappe.get_doc(
 		{
 			"doctype": BATCH_DOCTYPE,
 			"batch_name": batch_name,
 			"status": "draft",
+			"province": canonical_province,
+			"target_team": team_scope["name"] if team_scope else target_team,
 			"pool": pool,
 			"source": (source or "").strip()[:140],
 			"description": (description or "").strip(),
@@ -391,6 +578,9 @@ def create_lead_assignment_batch(
 				"ownership_revision": int(lead.get("ownership_revision") or 0),
 			},
 		)
+	if batch.province or batch.target_team:
+		for item in batch.items:
+			_validate_batch_scope(batch, _lead(item.lead), actor_context)
 	_save_batch(batch)
 	frappe.db.commit()
 	return _serialize_batch(batch)
@@ -434,7 +624,7 @@ def _default_campus(row: dict[str, Any], actor_context: dict[str, Any]) -> str:
 			return default_campus
 		campuses = frappe.get_all(
 			"CRM Campus",
-			filters={"is_active": 1},
+			filters={"approval_state": ["!=", "Retired"]},
 			pluck="name",
 			limit_page_length=2,
 		)
@@ -476,6 +666,8 @@ def _create_batch_import_lead(row: dict[str, Any], actor_context: dict[str, Any]
 def import_leads_to_assignment_batch(
 	batch_name: str,
 	pool: str | None = None,
+	province: str | None = None,
+	target_team: str | None = None,
 	rows: list[dict[str, Any]] | str | None = None,
 	csv_content: str | None = None,
 	filename: str | None = None,
@@ -489,12 +681,20 @@ def import_leads_to_assignment_batch(
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
 		frappe.throw(_("Tên đợt đã tồn tại."), frappe.DuplicateEntryError)
 	input_pool = _pool(str(pool or "").strip(), None, actor_context) if pool else None
+	canonical_province = _canonical_province(province) if province else None
+	team_scope = _team_scope(target_team, actor_context) if target_team else None
+	if team_scope:
+		if canonical_province and canonical_province != team_scope["groupProvince"]:
+			_raise_batch_error("TEAM_PROVINCE_MISMATCH", "Team nhận batch không thuộc tỉnh đã chọn.")
+		canonical_province = team_scope["groupProvince"]
 	parsed_rows = _parse_batch_import_rows(rows, csv_content)
 	batch = frappe.get_doc(
 		{
 			"doctype": BATCH_DOCTYPE,
 			"batch_name": batch_name,
 			"status": "draft",
+			"province": canonical_province,
+			"target_team": team_scope["name"] if team_scope else target_team,
 			"pool": input_pool.name if input_pool else None,
 			"source": (filename or "dashboard-crm").strip()[:140],
 			"description": (description or "Nhập Lead vào đợt phân công.").strip(),
@@ -638,8 +838,9 @@ def run_lead_assignment_batch(batch_name: str):
 	batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
 	if batch.status not in RUNNABLE_STATUSES:
 		frappe.throw(_("Đợt phải ở trạng thái Nháp, Sẵn sàng hoặc Có lỗi."), frappe.ValidationError)
-	if batch.status == "draft":
-		_preview_batch_items(batch, actor_context)
+	# Re-check topology immediately before execution. A Group, Team or member
+	# may have changed after the operator first previewed the batch.
+	_preview_batch_items(batch, actor_context)
 	batch.status = "running"
 	batch.execution_id = f"lead-batch-{uuid.uuid4().hex}"
 	batch.started_at = now_datetime()
@@ -672,26 +873,37 @@ def run_lead_assignment_batch(batch_name: str):
 			if lead.get("owner_staff") or lead.get("assigned_to"):
 				_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 			else:
-				revision = _assign_input_pool(batch, item, lead, actor_context)
-				result = route_lead_now(
+				recipient = _resolve_batch_recipient(batch, lead, actor_context)
+				assignment = assign_lead(
 					lead.name,
-					trigger="pool_entry",
-					expected_revision=revision,
+					recipient["ownerStaff"],
+					recipient["team"],
+					recipient["reason"],
+					idempotency_key=f"lead-batch-owner:{batch.name}:{item.name}:{lead.get('ownership_revision') or 0}",
+					expected_revision=int(lead.get("ownership_revision") or 0),
 					correlation_id=f"{batch.execution_id}:{item.name}",
 				)
+				result = {
+					"status": "applied",
+					"owner_staff": recipient["ownerStaff"],
+					"owning_team": recipient["team"],
+					"reason": recipient["reason"],
+					"policy_version": recipient["policyVersion"],
+					"revision": assignment.get("ownership", {}).get("revision"),
+					"ownership": assignment.get("ownership") or {},
+				}
 				_apply_result(item, result, batch.execution_id)
-				if result.get("status") == "applied":
-					mark_lead_assigned(
-						lead.name,
-						reason=result.get("reason") or "Phân công tự động trong đợt.",
-					)
-				item.ownership_revision = int(result.get("revision") or revision)
-				snapshot = _capacity_snapshot(item.owner_staff)
-				item.active_load = snapshot["active"]
-				item.capacity_limit = snapshot["limit"]
-				item.remaining_capacity = snapshot["remaining"]
+				item.ownership_revision = int(result.get("revision") or lead.get("ownership_revision") or 0)
+				item.active_load = recipient["capacity"]["active"]
+				item.capacity_limit = recipient["capacity"]["limit"]
+				item.remaining_capacity = recipient["capacity"]["remaining"]
 		except Exception as exc:
-			frappe.db.rollback(save_point=savepoint)
+			try:
+				frappe.db.rollback(save_point=savepoint)
+			except Exception:
+				# assign_lead protects its own command transaction and may roll back
+				# the database transaction, which also removes this savepoint.
+				pass
 			batch.reload()
 			item = next(row for row in batch.items if row.name == item.name)
 			item.status = "failed"
@@ -714,6 +926,97 @@ def run_lead_assignment_batch(batch_name: str):
 	_save_batch(batch)
 	frappe.db.commit()
 	return _serialize_batch(batch)
+
+
+def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
+	"""Return visible, unassigned Leads without considering their source."""
+	rows = frappe.get_all(
+		"CRM Lead",
+		fields=["name", "owner_staff", "assigned_to", "converted_student", "conversion_status"],
+		order_by="creation asc, name asc",
+		limit_page_length=MAX_BATCH_SIZE,
+	)
+	lead_names = []
+	for row in rows:
+		if row.get("owner_staff") or row.get("assigned_to") or row.get("converted_student"):
+			continue
+		if str(row.get("conversion_status") or "").casefold() == "converted":
+			continue
+		# get_all is intentionally used for the candidate scan, but each Lead is
+		# still checked through the normal row permission boundary before use.
+		try:
+			_lead(row.get("name"))
+		except frappe.PermissionError:
+			continue
+		lead_names.append(row.get("name"))
+	return [name for name in lead_names if name]
+
+
+def _new_unassigned_lead_batch(lead_names: list[str]):
+	"""Create an internal audit batch for one manual scan."""
+	stamp = now_datetime().strftime("%Y%m%d-%H%M%S")
+	batch_name = f"Phân công tự động {stamp}"
+	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
+		batch_name = f"{batch_name}-{uuid.uuid4().hex[:6]}"
+	batch = frappe.get_doc(
+		{
+			"doctype": BATCH_DOCTYPE,
+			"batch_name": batch_name,
+			"status": "draft",
+			"source": "system-unassigned-leads",
+			"description": "Hệ thống quét Lead chưa được phân công và chạy theo cấu hình hiện tại.",
+			"created_by": frappe.session.user,
+		}
+	)
+	for lead_name in lead_names:
+		lead = _lead(lead_name)
+		batch.append(
+			"items",
+			{
+				"lead": lead.name,
+				"status": "pending",
+				"ownership_revision": int(lead.get("ownership_revision") or 0),
+			},
+		)
+	_save_batch(batch)
+	frappe.db.commit()
+	return batch
+
+
+@frappe.whitelist(methods=["POST"])
+def run_unassigned_lead_assignment():
+	"""Scan and assign all visible CRM Leads that do not have an owner.
+
+	This is the simple operator action used by dashboard-crm.  Lead source is
+	not part of the selection rule because another system owns Lead intake.
+	"""
+	actor_context = _require_access()
+	lead_names = _unassigned_lead_names(actor_context)
+	if not lead_names:
+		return {
+			"status": "no_work",
+			"message": "Không có Lead chưa được phân công.",
+			"scanned": 0,
+			"batch": None,
+			"items": [],
+			"summary": {
+				"total": 0,
+				"valid": 0,
+				"invalid": 0,
+				"pending": 0,
+				"assigned": 0,
+				"deferred": 0,
+				"manualReview": 0,
+				"failed": 0,
+				"skipped": 0,
+			},
+		}
+
+	batch = _new_unassigned_lead_batch(lead_names)
+	result = run_lead_assignment_batch(batch.name)
+	result["scanned"] = len(lead_names)
+	result["trigger"] = "unassigned_leads"
+	return result
 
 
 @frappe.whitelist(methods=["POST"])
@@ -767,19 +1070,24 @@ def list_lead_assignment_batches(
 	if search:
 		filters["batch_name"] = ["like", f"%{search}%"]
 	if not actor_context.get("is_system_manager"):
-		allowed_pools = frappe.get_all(
-			"CRM Student Pool",
-			filters={
-				"is_active": 1,
-				"team": ["in", actor_context.get("teams") or ["__no_team__"]],
-				"campus": ["in", actor_context.get("campuses") or ["__no_campus__"]],
-			},
-			pluck="name",
+		allowed_teams = actor_context.get("teams") or ["__no_team__"]
+		team_province_rows = frappe.get_all(
+			"CRM Team",
+			filters={"name": ["in", allowed_teams], "is_active": 1},
+			fields=["group"],
+			limit_page_length=0,
+		)
+		allowed_group_ids = [row.group for row in team_province_rows if row.group]
+		allowed_provinces = frappe.get_all(
+			"CRM Team Group",
+			filters={"name": ["in", allowed_group_ids or ["__no_group__"]], "is_active": 1},
+			pluck="province",
 			limit_page_length=200,
 		)
 		or_filters = [
-			{"pool": ["in", allowed_pools or ["__no_pool__"]]},
-			{"pool": ["is", "not set"], "created_by": actor_context["actor"]},
+			{"province": ["in", allowed_provinces or ["__no_province__"]]},
+			{"target_team": ["in", allowed_teams]},
+			{"created_by": actor_context["actor"]},
 		]
 	else:
 		or_filters = None
@@ -787,6 +1095,8 @@ def list_lead_assignment_batches(
 		"name",
 		"batch_name",
 		"status",
+		"province",
+		"target_team",
 		"pool",
 		"source",
 		"total_count",
@@ -831,20 +1141,48 @@ def list_lead_assignment_batches(
 
 @frappe.whitelist()
 def get_lead_assignment_batch_options():
-	"""Return human-readable input queues available to the current operator."""
+	"""Return province choices; Team/Pool are legacy compatibility fields only.
+
+	New dashboard flows choose no queue and no Team.  The batch router resolves
+	all active Teams under the Lead's Province Group automatically.
+	"""
 	actor_context = _require_read_access()
-	filters = {"is_active": 1}
+	team_filters = {"is_active": 1, "team_type": "Sales"}
 	if not actor_context.get("is_system_manager"):
-		filters["team"] = ["in", actor_context.get("teams") or ["__no_team__"]]
-		filters["campus"] = ["in", actor_context.get("campuses") or ["__no_campus__"]]
+		team_filters["name"] = ["in", actor_context.get("teams") or ["__no_team__"]]
+	teams = frappe.get_list(
+		"CRM Team",
+		filters=team_filters,
+		fields=["name", "team_name", "group", "campus"],
+		order_by="team_name asc, name asc",
+		limit_page_length=200,
+	)
+	for team in teams:
+		team["province"] = (
+			frappe.db.get_value("CRM Team Group", team.get("group"), "province")
+			if team.get("group")
+			else None
+		)
+	province_filters = {}
+	if not actor_context.get("is_system_manager"):
+		allowed_provinces = {team.get("province") for team in teams if team.get("province")}
+		province_filters = {"name": ["in", sorted(allowed_provinces) or ["__no_province__"]]}
 	return {
+		"provinces": frappe.get_list(
+			"CRM Province",
+			filters=province_filters,
+			fields=["name", "province_name", "province_code"],
+			order_by="province_name asc, name asc",
+			limit_page_length=200,
+		),
+		"teams": teams,
 		"pools": frappe.get_list(
 			"CRM Student Pool",
-			filters=filters,
+			filters={"is_active": 1},
 			fields=["name", "pool_name", "team", "campus"],
 			order_by="pool_name asc",
 			limit_page_length=200,
-		)
+		),
 	}
 
 
@@ -860,7 +1198,10 @@ def _catalog_rows(doctype: str, fields: list[str], label_field: str, filters=Non
 		{
 			"id": row.get("name"),
 			"label": row.get(label_field) or row.get("name"),
-			"code": row.get("province_code") or row.get("school_code") or row.get("major_code"),
+			"code": row.get("province_code")
+			or row.get("school_code")
+			or row.get("major_code")
+			or row.get("campus_code"),
 		}
 		for row in rows
 	]
@@ -889,6 +1230,12 @@ def get_lead_assignment_catalogs(province: str | None = None):
 			"CRM Major",
 			["name", "major_name", "major_code"],
 			"major_name",
+		),
+		"branches": _catalog_rows(
+			"CRM Campus",
+			["name", "campus_name", "campus_code"],
+			"campus_name",
+			{"approval_state": ["!=", "Retired"]},
 		),
 		"highSchools": (
 			_catalog_rows(

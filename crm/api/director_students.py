@@ -1437,6 +1437,7 @@ def _student_call_records(
 			note_projection = note_projections.get(str(cl.get("note") or ""), {})
 			topic = note_projection.get("summary") or "Cuộc gọi tư vấn"
 			summary = note_projection.get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
+			summary_available = bool(note_projection.get("summary"))
 
 			calls.append(
 				{
@@ -1452,6 +1453,7 @@ def _student_call_records(
 					"durationSeconds": duration_secs,
 					"topic": topic,
 					"summary": summary,
+					"summaryAvailable": summary_available,
 					"transcript": note_projection.get("transcript"),
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),

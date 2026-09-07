@@ -20,6 +20,7 @@ from crm.fcrm.analysis_runs import (
 	validate_claim_set,
 	validate_execution_revisions,
 )
+from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.school_intelligence import get_school_intelligence
 
 SERVICE_USER_KEY = "crm_agents_service_user"
@@ -88,7 +89,12 @@ def _target(domain: str, target: str):
 	doctype = "CRM Student" if domain == "student" else "CRM High School"
 	if not frappe.db.exists(doctype, target):
 		frappe.throw("Intelligence Run target does not exist.", frappe.DoesNotExistError)
-	if not frappe.has_permission(doctype, "read", target):
+	if domain == "student":
+		target_doc = frappe.get_doc(doctype, target)
+		permitted = has_student_permission(target_doc, user=frappe.session.user, permission_type="read")
+	else:
+		permitted = frappe.has_permission(doctype, "read", target)
+	if not permitted:
 		frappe.throw("Intelligence Run target is outside current scope.", frappe.PermissionError)
 
 

@@ -16,7 +16,36 @@ class CRMTeamZoneAssignment(Document):
 		if self.effective_until and getdate(self.effective_from) > getdate(self.effective_until):
 			frappe.throw(_("Effective Until must not be before Effective From."), frappe.ValidationError)
 		if self.status == "Active":
+			self._validate_group_province()
 			self._validate_team_has_active_member()
+
+	def _validate_group_province(self):
+		"""Keep a managed Team's active Zones inside its Group Province.
+
+		Ungrouped legacy Teams remain readable and routable only through the
+		batch readiness gate until an administrator completes their setup.
+		"""
+		team = frappe.db.get_value("CRM Team", self.team, ["group", "is_active"], as_dict=True)
+		if not team or not team.group:
+			return
+		group = frappe.db.get_value("CRM Team Group", team.group, ["province", "is_active"], as_dict=True)
+		if not group or not group.is_active:
+			frappe.throw(
+				_("Không thể gán Zone cho Team thuộc Group chưa hoạt động."),
+				frappe.ValidationError,
+			)
+		if not group.province:
+			frappe.throw(
+				_("Group của Team phải được gắn tỉnh trước khi gán Zone."),
+				frappe.ValidationError,
+			)
+		cluster = frappe.db.get_value("CRM Zone", self.zone, "cluster")
+		zone_province = frappe.db.get_value("CRM Cluster", cluster, "province") if cluster else None
+		if zone_province and zone_province != group.province:
+			frappe.throw(
+				_("Zone phải thuộc cùng tỉnh với Group của Team."),
+				frappe.ValidationError,
+			)
 
 	def before_save(self):
 		if self.status == "Active":
@@ -26,7 +55,10 @@ class CRMTeamZoneAssignment(Document):
 		self._sync_zone_current_team()
 
 	def on_trash(self):
-		frappe.throw(_("Team Zone assignments are append-only. Retire the row instead of deleting it."), frappe.PermissionError)
+		frappe.throw(
+			_("Team Zone assignments are append-only. Retire the row instead of deleting it."),
+			frappe.PermissionError,
+		)
 
 	def _validate_team_has_active_member(self):
 		memberships = frappe.get_all(

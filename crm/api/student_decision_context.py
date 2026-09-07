@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import re
+from datetime import timedelta
 
 import frappe
 
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.scoring_policy import get_active_policy
+from crm.fcrm.student_contact_conversion import contacts_for_student
 from crm.services.sales_action_policy import allowed_generation_actions, parent_authority_is_valid
 from crm.services.student_context import snapshot_hash
 from crm.services.student_next_task_policy import _journey_label, choose_next_task_policy
-from crm.fcrm.student_contact_conversion import contacts_for_student
 
 _STUDENT_FIELDS = [
 	"name",
@@ -454,7 +455,11 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	row = frappe.db.get_value("CRM Student", student, _STUDENT_FIELDS, as_dict=True)
 	if not row:
 		frappe.throw("Student not found.", frappe.DoesNotExistError)
-	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
+	if not service_authorized and not has_student_permission(
+		frappe.get_doc("CRM Student", student),
+		user=frappe.session.user,
+		permission_type="read",
+	):
 		frappe.throw("Student projection is not authorized.", frappe.PermissionError)
 	revision = int(row.student_context_revision or 0)
 	if revision < int(minimum_revision):

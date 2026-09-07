@@ -51,7 +51,7 @@
   {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "read_only": 1, "reqd": 1},
   {"fieldname": "scope_snapshot", "fieldtype": "JSON", "label": "Scope Snapshot", "read_only": 1, "reqd": 1},
   {"default": "phase2-v1", "fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
-  {"fieldname": "route_trigger", "fieldtype": "Select", "label": "Route Trigger", "options": "pool_entry\npool_return\nmanager_transfer\nsla_auto_recall\nctv_batch_recall", "read_only": 1},
+  {"fieldname": "route_trigger", "fieldtype": "Select", "label": "Route Trigger", "options": "pool_entry\npool_return\nmanager_transfer\nsla_auto_recall\nctv_batch_recall\nassignment_batch", "read_only": 1},
   {"fieldname": "routing_policy_version", "fieldtype": "Data", "label": "Routing Policy Version", "read_only": 1},
   {"default": "phase3-v1", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
   {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1, "reqd": 1},

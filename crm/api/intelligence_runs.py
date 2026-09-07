@@ -5,10 +5,15 @@ import frappe
 
 from crm.api.director_school_common import resolve_school_id
 from crm.fcrm import intelligence_runs
+from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.student_reference import canonical_student
 
 
 @frappe.whitelist(methods=["POST"])
 def request_student_analysis_run(student: str, idempotency_key: str | None = None, force_reason: str | None = None):
+	# Student 360 stores runs against the canonical CRM Student id. The CRM
+	# dashboard may still submit its legacy Lead id for the same record.
+	student = canonical_student(student) or student
 	return intelligence_runs.request_run(
 		domain="student", target=student, idempotency_key=idempotency_key or frappe.get_request_header("Idempotency-Key"), force_reason=force_reason
 	)
@@ -32,8 +37,20 @@ def get_analysis_run(run_type: str, run_id: str):
 	if run_type not in intelligence_runs.RUN_TYPES.values():
 		frappe.throw("Invalid Intelligence Run type.", frappe.ValidationError)
 	run = frappe.get_doc(run_type, run_id)
-	target_type, target = ("CRM Lead", run.student) if run_type == "CRM Student Analysis Run" else ("CRM High School", run.high_school)
-	if not frappe.has_permission(target_type, "read", target):
+	target_type, target = (
+		("CRM Student", run.student)
+		if run_type == "CRM Student Analysis Run"
+		else ("CRM High School", run.high_school)
+	)
+	if target_type == "CRM Student":
+		permitted = has_student_permission(
+			frappe.get_doc(target_type, target),
+			user=frappe.session.user,
+			permission_type="read",
+		)
+	else:
+		permitted = frappe.has_permission(target_type, "read", target)
+	if not permitted:
 		frappe.throw("Intelligence Run target is outside current scope.", frappe.PermissionError)
 	return intelligence_runs.public_run_payload(run)
 

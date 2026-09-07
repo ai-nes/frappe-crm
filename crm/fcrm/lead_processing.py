@@ -329,7 +329,12 @@ def assign_lead(
 			idempotency_key=idempotency_key,
 			expected_revision=expected_revision,
 			correlation_id=correlation_id,
+			_internal_service=True,
+			_internal_actor=getattr(frappe.session, "user", None),
 			_commit=False,
+			_route_trigger="assignment_batch",
+			_enqueue_routing=False,
+			_skip_sla=True,
 		)
 		_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED"})
 		frappe.db.commit()
