@@ -95,12 +95,14 @@ class TestDirectorLeads(FrappeTestCase):
 			{
 				"name": "LEAD-2026-00001",
 				"lead_code": "LD-2026-00001",
+				"processing_status": "ASSIGNED",
 				"student_name": "Nguyễn Minh An",
 				"phone": "0900000000",
 				"high_school": "HS-1",
 				"enrollment_status": "NEW",
 				"owner_staff": "STAFF-1",
 				"source": "SRC-1",
+				"creation": "2026-09-07 10:00:00",
 			}
 		)
 		self.assertIsNone(director_leads._parse_query(campaign="all")["campaign"])
@@ -128,6 +130,8 @@ class TestDirectorLeads(FrappeTestCase):
 				"statusCode": "NEW",
 				"source": "Website",
 				"owner": "Trần Quốc Bảo",
+				"processingStatus": "ASSIGNED",
+				"createdAt": "2026-09-07T10:00:00+07:00",
 			},
 		)
 
@@ -136,7 +140,7 @@ class TestDirectorLeads(FrappeTestCase):
 		with (
 			patch.object(director_leads, "_require_access"),
 			patch.object(director_leads, "_resolve_status", return_value="NEW"),
-			patch.object(director_leads, "_count_leads", side_effect=[1, 8]),
+			patch.object(director_leads, "_count_leads", side_effect=[1, 8, 1, 1, 1]),
 			patch.object(director_leads, "_fetch_lead_rows", return_value=[row]),
 			patch.object(director_leads, "_load_lookups", return_value={"statuses": {"NEW": "Mới"}}),
 			patch.object(
@@ -163,6 +167,10 @@ class TestDirectorLeads(FrappeTestCase):
 		self.assertEqual(response["meta"]["totalPages"], 1)
 		self.assertFalse(response["meta"]["hasNextPage"])
 		self.assertEqual(response["meta"]["status"], "NEW")
+		self.assertEqual(
+			response["meta"]["stats"],
+			{"total": 1, "inProgress": 1, "closed": 1, "conversionRate": 100},
+		)
 
 	def test_detail_endpoint_checks_read_permission_before_projection(self):
 		doc = frappe._dict(name="LEAD-1", student_name="Nguyễn Minh An")
