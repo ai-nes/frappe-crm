@@ -10,6 +10,10 @@ from crm.api.lead_mapping import (
 	_parse_csv_rows,
 	_parse_public_payload,
 	create_public_lead,
+	get_public_high_schools,
+	get_public_majors,
+	get_public_provinces,
+	get_public_wards,
 	split_multi_value,
 )
 
@@ -120,6 +124,90 @@ class TestLeadMappingContract(TestCase):
 
 		self.assertEqual(result, {"ok": True})
 		create_lead.assert_called_once_with({"student_name": "An"})
+
+	@patch(
+		"crm.api.lead_mapping.frappe.get_all",
+		return_value=[{"name": "Ho Chi Minh City", "province_name": "Hồ Chí Minh", "province_code": "HCM"}],
+	)
+	def test_public_provinces_return_dropdown_items(self, get_all):
+		result = get_public_provinces()
+
+		self.assertEqual(
+			result,
+			{
+				"items": [{"value": "Ho Chi Minh City", "label": "Hồ Chí Minh", "code": "HCM"}],
+				"total": 1,
+			},
+		)
+		get_all.assert_called_once()
+
+	@patch("crm.api.lead_mapping.resolve_province", return_value="Ho Chi Minh City")
+	@patch("crm.api.lead_mapping.frappe.db.exists", return_value=True)
+	@patch(
+		"crm.api.lead_mapping.frappe.get_all",
+		return_value=[
+			{
+				"name": "Ward 1 - Ho Chi Minh City",
+				"ward_name": "Phường Bến Nghé",
+				"ward_code": "HCM-001",
+				"ward_type": "Ward",
+				"province": "Ho Chi Minh City",
+			}
+		],
+	)
+	def test_public_wards_require_and_scope_province(self, get_all, exists, resolve_province):
+		result = get_public_wards("HCM")
+
+		self.assertEqual(result["total"], 1)
+		self.assertEqual(result["items"][0]["value"], "Ward 1 - Ho Chi Minh City")
+		self.assertEqual(result["items"][0]["ward_type"], "Ward")
+		resolve_province.assert_called_once_with("HCM")
+		exists.assert_called_once_with("CRM Province", "Ho Chi Minh City")
+		self.assertEqual(get_all.call_args.kwargs["filters"], {"province": "Ho Chi Minh City"})
+
+	@patch("crm.api.lead_mapping.resolve_ward", return_value="Ward 1 - Ho Chi Minh City")
+	@patch("crm.api.lead_mapping.frappe.db.exists", return_value=True)
+	@patch(
+		"crm.api.lead_mapping.frappe.get_all",
+		return_value=[
+			{
+				"name": "High School 1",
+				"school_name": "THPT Nguyễn Huệ",
+				"school_code": "HCM-THPT-001",
+				"school_type": "Public",
+				"province": "Ho Chi Minh City",
+				"ward": "Ward 1 - Ho Chi Minh City",
+			}
+		],
+	)
+	def test_public_high_schools_scope_ward_and_only_active(self, get_all, exists, resolve_ward):
+		result = get_public_high_schools("HCM-001")
+
+		self.assertEqual(result["items"][0]["label"], "THPT Nguyễn Huệ")
+		resolve_ward.assert_called_once_with("HCM-001")
+		exists.assert_called_once_with("CRM Ward", "Ward 1 - Ho Chi Minh City")
+		self.assertEqual(
+			get_all.call_args.kwargs["filters"],
+			{"ward": "Ward 1 - Ho Chi Minh City", "is_active": 1},
+		)
+
+	@patch(
+		"crm.api.lead_mapping.frappe.get_all",
+		return_value=[
+			{
+				"name": "Software Engineering",
+				"major_name": "Kỹ thuật phần mềm",
+				"major_code": "SE",
+				"degree_name": "Cử nhân",
+				"major_group": "Technology",
+			}
+		],
+	)
+	def test_public_majors_return_active_dropdown_items(self, get_all):
+		result = get_public_majors()
+
+		self.assertEqual(result["items"][0]["code"], "SE")
+		self.assertEqual(get_all.call_args.kwargs["filters"], {"is_active": 1})
 
 
 class TestLeadMappingIntegration(FrappeTestCase):

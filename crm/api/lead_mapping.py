@@ -765,6 +765,89 @@ def create_public_lead(
 	return _create_public_lead(_parse_public_payload(fields if fields is not None else payload))
 
 
+def _public_lookup_response(
+	rows: list[Any], label_field: str, code_field: str | None = None, extra_fields: tuple[str, ...] = ()
+) -> dict[str, Any]:
+	items = []
+	for row in rows:
+		item = {"value": row.get("name"), "label": row.get(label_field)}
+		if code_field:
+			item["code"] = row.get(code_field)
+		for fieldname in extra_fields:
+			item[fieldname] = row.get(fieldname)
+		items.append(item)
+	return {"items": items, "total": len(items)}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_provinces() -> dict[str, Any]:
+	"""Return provinces for the public admission form."""
+	rows = frappe.get_all(
+		"CRM Province",
+		fields=["name", "province_name", "province_code"],
+		order_by="province_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "province_name", "province_code")
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_wards(province: str | None = None) -> dict[str, Any]:
+	"""Return wards scoped to one province for the public admission form."""
+	province_value = _text(province)
+	if not province_value:
+		_fail("REQUIRED_FIELD", "province là bắt buộc.")
+	province_name = resolve_province(province_value)
+	if not frappe.db.exists("CRM Province", province_name):
+		_fail("INVALID_PROVINCE", f"Không tìm thấy Tỉnh/Thành phố: {province_value}.")
+
+	rows = frappe.get_all(
+		"CRM Ward",
+		filters={"province": province_name},
+		fields=["name", "ward_name", "ward_code", "ward_type", "province"],
+		order_by="ward_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "ward_name", "ward_code", ("ward_type", "province"))
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_high_schools(ward: str | None = None) -> dict[str, Any]:
+	"""Return active high schools scoped to one ward for the public form."""
+	ward_value = _text(ward)
+	if not ward_value:
+		_fail("REQUIRED_FIELD", "ward là bắt buộc.")
+	ward_name = resolve_ward(ward_value)
+	if not frappe.db.exists("CRM Ward", ward_name):
+		_fail("INVALID_WARD", f"Không tìm thấy Xã/Phường: {ward_value}.")
+
+	rows = frappe.get_all(
+		"CRM High School",
+		filters={"ward": ward_name, "is_active": 1},
+		fields=["name", "school_name", "school_code", "school_type", "province", "ward"],
+		order_by="school_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "school_name", "school_code", ("school_type", "province", "ward"))
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_majors() -> dict[str, Any]:
+	"""Return active majors for the public admission form."""
+	rows = frappe.get_all(
+		"CRM Major",
+		filters={"is_active": 1},
+		fields=["name", "major_name", "major_code", "degree_name", "major_group"],
+		order_by="major_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "major_name", "major_code", ("degree_name", "major_group"))
+
+
 def _parse_csv_rows(csv_content: str) -> list[dict[str, Any]]:
 	if not isinstance(csv_content, str) or not csv_content.strip():
 		_fail("INVALID_CSV", "csv_content không được rỗng.")

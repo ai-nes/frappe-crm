@@ -144,8 +144,9 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.reset"
 
   seed-campaign:
-    desc: Tạo hoặc cập nhật 4 campaign code cho Public Lead API
+    desc: Seed khoảng 35 trường + địa bàn + ngành, sau đó tạo 4 campaign code cho Public Lead API
     cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_api_lookups.execute"
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_api_campaigns.execute"
 
   seed-reset:
