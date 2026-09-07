@@ -9,6 +9,7 @@ from crm.api.lead_mapping import (
 	_normalize_public_lead_payload,
 	_parse_csv_rows,
 	_parse_public_payload,
+	create_public_lead,
 	split_multi_value,
 )
 
@@ -79,9 +80,46 @@ class TestLeadMappingContract(TestCase):
 			)
 
 		self.assertEqual(values["phone"], "0981000099")
-		self.assertEqual(values["segments"], '["Scholarship"]')
+		self.assertEqual(frappe.parse_json(values["segments"]), ["Scholarship"])
 		self.assertEqual(values["assignment_priority"], "high")
 		self.assertEqual(values["campaign"], "_Test Campaign")
+
+	def test_public_payload_maps_cccd_alias_to_id_number(self):
+		payload = {
+			"student_name": "An",
+			"campaign_code": "CAM-2026-00001",
+			"cccd": "012345678901",
+		}
+		self.assertEqual(_parse_public_payload(payload), payload)
+
+		with (
+			patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"),
+			patch("crm.api.lead_mapping.frappe.db.get_value", return_value=None),
+		):
+			values = _normalize_public_lead_payload(payload)
+
+		self.assertEqual(values["id_number"], "012345678901")
+
+	def test_public_payload_rejects_conflicting_cccd_alias(self):
+		with patch("crm.api.lead_mapping._resolve_campaign_code", return_value="_Test Campaign"):
+			with self.assertRaises(LeadMappingError) as context:
+				_normalize_public_lead_payload(
+					{
+						"student_name": "An",
+						"campaign_code": "CAM-2026-00001",
+						"cccd": "012345678901",
+						"id_number": "012345678902",
+					}
+				)
+
+		self.assertEqual(context.exception.code, "INVALID_INPUT")
+
+	@patch("crm.api.lead_mapping._create_public_lead", return_value={"ok": True})
+	def test_public_endpoint_ignores_frappe_cmd_metadata(self, create_lead):
+		result = create_public_lead(student_name="An", cmd="crm.api.lead_mapping.create_public_lead")
+
+		self.assertEqual(result, {"ok": True})
+		create_lead.assert_called_once_with({"student_name": "An"})
 
 
 class TestLeadMappingIntegration(FrappeTestCase):

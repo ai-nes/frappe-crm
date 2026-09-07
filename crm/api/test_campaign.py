@@ -86,7 +86,10 @@ class TestCampaignApi(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("CRM Campaign", created["name"]))
 
 	def test_campaign_code_is_server_managed(self):
-		created = self._create_campaign()
+		created = self._create_campaign(stable_code="CUSTOM-CODE")
+
+		self.assertRegex(created["stable_code"], r"^CAM-\d{4}-\d{5,}$")
+		self.assertNotEqual(created["stable_code"], "CUSTOM-CODE")
 
 		with self.assertRaises(frappe.ValidationError):
 			update_campaign(created["name"], stable_code="CAM-2026-99999")
