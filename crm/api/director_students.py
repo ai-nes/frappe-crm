@@ -101,6 +101,7 @@ SORT_FIELDS = {
 }
 STUDENT_FIELDS = [
 	"name",
+	"student",
 	"student_name",
 	"phone",
 	"email",
@@ -836,6 +837,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
 		"stage": stage["label"] if stage else None,
 		"lifecycleStatus": row.get("lifecycle_stage"),
+		"studentStage": _student_stage_value(row),
 		"assignmentStatus": "assigned"
 		if row.get("owner_staff") or row.get("assigned_to")
 		else "unassigned",
@@ -869,6 +871,14 @@ def _profile_code(row) -> str:
 	sequence = match.group(2)[-6:].zfill(6) if match else "000000"
 	region = "HCM"
 	return f"HS-{year}-{region}-{sequence}"
+
+
+def _student_stage_value(row) -> str | None:
+	"""Read the canonical Student stage for a CRM Lead-backed projection."""
+	student = row.get("student")
+	if not student:
+		return None
+	return frappe.db.get_value("CRM Student", student, "student_stage")
 
 
 def _stage_descriptor(row) -> dict[str, str] | None:
@@ -1029,6 +1039,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"email": row.get("email"),
 			"province": item.get("province"),
 			"counselor": item.get("owner"),
+			"studentStage": item.get("studentStage") or _student_stage_value(row),
 			"priority": item.get("priority"),
 			"verificationStatus": _verification_status(row, assessment),
 			"contactConsent": _contact_consent(student_id, row.get("privacy_status")),

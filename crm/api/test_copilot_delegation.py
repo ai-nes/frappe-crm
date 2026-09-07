@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -7,7 +8,9 @@ from frappe.tests.utils import FrappeTestCase
 from crm.api.copilot_delegation import (
 	_is_copilot_authorized,
 	_relay_upstream,
+	_require_copilot_user,
 	_utc_epoch_seconds,
+	run_student_analysis,
 	stream_chat,
 )
 
@@ -58,6 +61,44 @@ class TestCopilotDelegationRelay(FrappeTestCase):
 		self.assertTrue(_is_copilot_authorized({"Sale"}))
 		self.assertFalse(_is_copilot_authorized({"Counseller"}))
 		self.assertFalse(_is_copilot_authorized({"Unrelated Role"}))
+
+	def test_student_nba_operator_profiles_are_authorized(self):
+		for role in ("CTV Sale", "Sale", "Lead Sale", "Administrator", "Admissions Director"):
+			with self.subTest(role=role):
+				self.assertTrue(_is_copilot_authorized({role}))
+
+	def test_copilot_uses_normalized_roles_for_the_ceo_profile(self):
+		with (
+			patch(
+				"crm.api.copilot_delegation.frappe.session",
+				SimpleNamespace(user="ceo@example.com", sid="session-id"),
+			),
+			patch("crm.api.session.get_session_role_flags"),
+			patch("crm.api.session._get_policy_roles", return_value=["Administrator"]),
+			patch("crm.api.copilot_delegation._is_copilot_authorized", return_value=True) as authorized,
+		):
+			_require_copilot_user()
+
+		authorized.assert_called_once_with(["Administrator"])
+
+	def test_student_analysis_normalizes_legacy_lead_id(self):
+		with (
+			patch(
+				"crm.api.copilot_delegation._validate_analysis_target",
+				return_value="ENR-2026-00003",
+			),
+			patch("crm.api.copilot_delegation._validate_analysis_force_reason", return_value=None),
+			patch("crm.api.copilot_delegation._validate_analysis_idempotency_key", return_value="analysis-test-key"),
+			patch("crm.fcrm.student_reference.canonical_student", return_value="CRMC-2026-00003"),
+			patch("crm.api.copilot_delegation._run_analysis_agent", return_value="response") as run,
+		):
+			self.assertEqual(run_student_analysis("ENR-2026-00003"), "response")
+
+		run.assert_called_once_with(
+			"/api/v1/analysis-runs/student/run",
+			{"student_id": "CRMC-2026-00003"},
+			"analysis-test-key",
+		)
 
 	def test_relay_flushes_small_chunks_and_preserves_finish(self):
 		upstream = _FakeUpstream([

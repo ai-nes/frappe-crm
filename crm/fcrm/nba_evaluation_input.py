@@ -1,4 +1,4 @@
-"""Pure assembly of the NBA Evaluation v1 input envelope.
+"""Pure assembly of the NBA Evaluation v2 input envelope.
 
 No Frappe import: the shaping and digest binding are testable without a bench
 and stay byte-aligned with the shared golden fixtures under
@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm.fcrm.nba_canonical import canonical_digest
 
-CONTRACT_VERSION = "nba-evaluation-v1"
+CONTRACT_VERSION = "nba-evaluation-v2"
 
 
 def _clock(now: datetime | str) -> str:
@@ -28,6 +28,7 @@ def assemble_evaluation_input(
 	*,
 	now: datetime | str,
 	evaluation_id: str | None = None,
+	contract_version: str = CONTRACT_VERSION,
 ) -> dict:
 	"""Bind pre-shaped sub-documents into the NBA Evaluation v1 input envelope.
 
@@ -51,7 +52,7 @@ def assemble_evaluation_input(
 		}
 	)
 	return {
-		"contract_version": CONTRACT_VERSION,
+		"contract_version": contract_version,
 		"evaluation_id": evaluation_id or f"NBAEVAL-{evaluation_key[:16]}",
 		"evaluation_key": evaluation_key,
 		"evaluation_clock": _clock(now),

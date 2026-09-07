@@ -103,7 +103,7 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 	def test_real_canonical_identities_publish_their_own_manifest_role(self):
 		from crm.api.capability import get_capability_manifest
 
-		for role in ("Sale", "Lead Sale", "Marketing", "Admissions Director"):
+		for role in ("Sale", "Lead Sale", "Marketing", "Admissions Director", "Administrator"):
 			with self.subTest(role=role):
 				frappe.set_user(self._user(role))
 				manifest = get_capability_manifest()

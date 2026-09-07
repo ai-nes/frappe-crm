@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from crm.fcrm.student_stage import STUDENT_STAGES
+
 MAX_CONDITIONS_PER_GROUP = 20
 TRIGGER_TYPES = frozenset({"event", "state", "inactivity", "deadline", "manual"})
 COOLDOWN_UNITS = frozenset({"minutes", "hours", "days"})
@@ -20,17 +22,25 @@ STOP_CONDITIONS = frozenset(
 )
 
 CONDITION_FIELDS = {
+	"student.student_stage": {
+		"label": "Student Stage",
+		"type": "select",
+		"operators": ("equals", "not_equals", "in", "not_in"),
+		"options": STUDENT_STAGES,
+	},
 	"student.lifecycle_stage": {
 		"label": "Lifecycle Stage",
 		"type": "select",
 		"operators": ("equals", "not_equals", "in", "not_in"),
 		"options": ("Lead", "MQL", "Applicant", "Enrolled", "Lost"),
+		"deprecated": True,
 	},
 	"student.enrollment_status": {
 		"label": "Enrollment Status",
 		"type": "link",
 		"options_doctype": "CRM Enrollment Status",
 		"operators": ("equals", "not_equals", "in", "not_in"),
+		"deprecated": True,
 	},
 	"student.study_stage": {
 		"label": "Study Stage",
@@ -112,6 +122,7 @@ _NUMERIC_OPERATORS = frozenset({"gt", "gte", "lt", "lte"})
 _LIST_OPERATORS = frozenset({"in", "not_in"})
 _EMPTY_OPERATORS = frozenset({"is_empty", "not_empty"})
 _SCALAR_OPERATORS = frozenset({"equals", "not_equals"})
+LEGACY_STAGE_CONDITION_FIELDS = frozenset({"student.lifecycle_stage", "student.enrollment_status"})
 
 
 def parse_json(value: Any, field: str, default: Any):
@@ -234,10 +245,25 @@ def condition_metadata() -> list[dict[str, Any]]:
 	return [
 		{
 			"field": field,
-			**{key: list(value) if isinstance(value, tuple) else value for key, value in metadata.items()},
+			**{
+				key: list(value) if isinstance(value, tuple) else value
+				for key, value in metadata.items()
+				if key != "deprecated"
+			},
 		}
 		for field, metadata in CONDITION_FIELDS.items()
+		if not metadata.get("deprecated")
 	]
+
+
+def has_legacy_stage_condition(value: Any) -> bool:
+	"""Return whether a rule still depends on the retired status axes."""
+	conditions = normalize_conditions(value)
+	return any(
+		condition.get("field") in LEGACY_STAGE_CONDITION_FIELDS
+		for group in (conditions["all"], conditions["any"])
+		for condition in group
+	)
 
 
 def _context_value(context: dict[str, Any], field: str):

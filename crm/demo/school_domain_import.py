@@ -742,6 +742,76 @@ def _upsert(doctype, filters, values):
 		return doc, "existing_after_race"
 
 
+def _province_alias_key(value) -> str:
+	"""Normalize administrative prefixes for old/new province labels."""
+	value = _normalize(value)
+	return re.sub(r"^(tp|tinh|thanh pho)\s+", "", value)
+
+
+def _existing_province(canonical_name: str) -> str | None:
+	"""Find a pre-boundary province row without changing its primary key."""
+	rows = frappe.get_all("CRM Province", fields=["name", "province_name"], limit_page_length=0)
+	exact = _normalize(canonical_name)
+	for row in rows:
+		if _normalize(row.province_name or row.name) == exact:
+			return row.name
+	alias = _province_alias_key(canonical_name)
+	for row in rows:
+		if _province_alias_key(row.province_name or row.name) == alias:
+			return row.name
+	return None
+
+
+def _upsert_import_province(data: dict, canonical_name: str):
+	"""Reuse existing master rows when a province code changed at the boundary."""
+	province = frappe.db.get_value("CRM Province", {"province_code": data["province_code"]}, "name")
+	if not province:
+		province = _existing_province(canonical_name)
+	if province:
+		return _upsert(
+			"CRM Province",
+			{"name": province},
+			{"province_name": canonical_name},
+		)
+	return _upsert(
+		"CRM Province",
+		{"province_code": data["province_code"]},
+		{"province_code": data["province_code"], "province_name": canonical_name},
+	)
+
+
+def _ensure_school_seed_zone(province: str, province_code: str) -> str:
+	"""Provide the required zone for imported wards lacking an assignment zone."""
+	suffix = re.sub(r"[^a-z0-9]+", "-", _normalize(province)).strip("-") or province_code
+	cluster_name = f"School Seed Cluster — {province}"
+	cluster = frappe.db.exists("CRM Cluster", cluster_name)
+	if not cluster:
+		cluster = frappe.get_doc(
+			{
+				"doctype": "CRM Cluster",
+				"cluster_name": cluster_name,
+				"cluster_code": f"SCHOOL-SEED-{suffix.upper()}",
+				"province": province,
+				"is_placeholder": 1,
+				"is_active": 1,
+			}
+		).insert(ignore_permissions=True).name
+	zone_name = f"School Seed Zone — {province}"
+	zone = frappe.db.exists("CRM Zone", zone_name)
+	if zone:
+		return zone
+	return frappe.get_doc(
+		{
+			"doctype": "CRM Zone",
+			"zone_name": zone_name,
+			"zone_code": f"SCHOOL-SEED-{suffix.upper()}",
+			"cluster": cluster,
+			"is_placeholder": 1,
+			"assignment_status": "Unassigned",
+		}
+	).insert(ignore_permissions=True).name
+
+
 def _ensure_admission_year(year):
 	name = str(year)
 	if frappe.db.exists("CRM Admission Year", name):
@@ -905,21 +975,19 @@ def seed_school_seed(
 		savepoint = f"crm_school_seed_{record['source_row']}"
 		frappe.db.savepoint(savepoint)
 		try:
-			province, state = _upsert(
-				"CRM Province",
-				{"province_code": data["province_code"]},
-				{
-					"province_code": data["province_code"],
-					"province_name": record["canonical_province"],
-				},
-			)
+			province, state = _upsert_import_province(data, record["canonical_province"])
 			counts[f"province_{state}"] += 1
+			ward_filters = {"ward_code": data["ward_code"], "province": province.name}
+			ward_name = frappe.db.get_value("CRM Ward", ward_filters, "name")
+			ward_zone = frappe.db.get_value("CRM Ward", ward_name, "zone") if ward_name else None
+			zone = ward_zone or _ensure_school_seed_zone(province.name, data["province_code"])
 			ward, state = _upsert(
 				"CRM Ward",
-				{"ward_code": data["ward_code"], "province": province.name},
+				ward_filters,
 				{
 					"ward_code": data["ward_code"],
 					"ward_name": data.get("ward_name"),
+					"zone": zone,
 					"province": province.name,
 					"province_name": record["canonical_province"],
 				},

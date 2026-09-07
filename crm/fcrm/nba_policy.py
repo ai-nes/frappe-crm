@@ -14,6 +14,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category
+from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 from crm.fcrm.nba_canonical import (
 	action_definition_snapshot,
 	canonical_digest,
@@ -33,6 +34,9 @@ EXCLUSION_REASONS: frozenset[str] = frozenset(
 		"UNKNOWN_CODE",
 		"NO_OPPORTUNITY_MAPPING",
 		"LIFECYCLE_TERMINAL",
+		"STUDENT_STAGE_TERMINAL",
+		"STUDENT_STAGE_UNKNOWN",
+		"STUDENT_STAGE_NOT_ALLOWED",
 		"CHANNEL_NOT_ALLOWED",
 		"RECIPIENT_AMBIGUOUS",
 		"PARENT_AUTHORITY_MISSING",
@@ -75,6 +79,14 @@ _ACTION_OPPORTUNITIES: dict[str, tuple[str, ...]] = {
 			"SEND_APPLICATION_CHECKLIST", "REMIND_APPLICATION_DEADLINE",
 		)
 	},
+}
+
+_STAGE_ALLOWED_CATEGORIES: dict[str, frozenset[str]] = {
+	"New": frozenset({"CONTACT", "INFORMATION", "ENGAGEMENT"}),
+	"Attempting": frozenset({"CONTACT", "INFORMATION", "ENGAGEMENT", "RECOVERY"}),
+	"Connected": frozenset({
+		"CONTACT", "INFORMATION", "ENGAGEMENT", "APPLICATION", "CONVERSION", "PARENT", "RECOVERY"
+	}),
 }
 
 
@@ -179,6 +191,10 @@ def filter_eligible_actions(
 	exclusions: list[dict] = []
 	roles = {str(r) for r in actor_roles} if actor_roles is not None else None
 	decision_context = decision_context if isinstance(decision_context, Mapping) else None
+	uses_student_stage = decision_context is not None and "student_stage" in decision_context
+	student_stage = str((decision_context or {}).get("student_stage") or "")
+	student_stage_valid = student_stage in STUDENT_STAGES
+	student_stage_terminal = student_stage in TERMINAL_STAGES
 	lifecycle = (decision_context or {}).get("lifecycle") or {}
 	stage = str(lifecycle.get("stage") or "").casefold()
 	terminal_lifecycle = stage in {"lost", "enrolled", "đã xác nhận", "closed", "withdrawn"}
@@ -227,6 +243,15 @@ def filter_eligible_actions(
 		opportunities = action_opportunities(code, category)
 		if not opportunities:
 			exclusions.append({"action": code, "reason": "NO_OPPORTUNITY_MAPPING"})
+			continue
+		if uses_student_stage and not student_stage_valid:
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_UNKNOWN"})
+			continue
+		if uses_student_stage and student_stage_terminal:
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_TERMINAL"})
+			continue
+		if uses_student_stage and category not in _STAGE_ALLOWED_CATEGORIES.get(student_stage, frozenset()):
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_NOT_ALLOWED"})
 			continue
 		if decision_context is not None and terminal_lifecycle:
 			exclusions.append({"action": code, "reason": "LIFECYCLE_TERMINAL"})
@@ -536,8 +561,17 @@ def eligible_action_set_for_student(
 	"""
 	import frappe
 
-	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
-		frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
+	if not service_authorized:
+		from crm.fcrm.permissions import has_permission as has_student_permission
+
+		student_doc = frappe.get_doc("CRM Student", student)
+		permitted = has_student_permission(
+			student_doc,
+			user=frappe.session.user,
+			permission_type="read",
+		)
+		if not permitted:
+			frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
 
 	evaluated_at = now or frappe.utils.now_datetime()
 	catalog_rows = frappe.get_all(
@@ -620,7 +654,6 @@ def get_active_decision_policy() -> dict:
 		"conflict_key_fields": json_string_list(row.get("conflict_key_fields")),
 		"diversity_rule": row.get("diversity_rule") or "none",
 		"decision_policy": kernel,
-		"policy_digest": kernel_digest,
 	}
 
 

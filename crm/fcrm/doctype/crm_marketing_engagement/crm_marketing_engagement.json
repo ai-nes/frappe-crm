@@ -17,7 +17,7 @@
   {"fieldname": "crm_campaign", "fieldtype": "Link", "in_standard_filter": 1, "label": "Campaign", "options": "CRM Campaign"},
   {"fieldname": "crm_event", "fieldtype": "Link", "in_standard_filter": 1, "label": "Event", "options": "CRM Event"},
   {"fieldname": "crm_contact", "fieldtype": "Link", "in_standard_filter": 1, "label": "CRM Student", "options": "CRM Student", "read_only": 1},
-  {"description": "Required Student anchor for new attribution evidence.", "fieldname": "student", "fieldtype": "Link", "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"description": "Required canonical Student anchor for new attribution evidence.", "fieldname": "student", "fieldtype": "Link", "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
   {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1},
   {"fieldname": "idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Key", "read_only": 1},
   {"fieldname": "correlation_id", "fieldtype": "Data", "hidden": 1, "label": "Correlation ID", "read_only": 1},

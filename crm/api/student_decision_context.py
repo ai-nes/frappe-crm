@@ -2,22 +2,24 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
 import re
+from datetime import timedelta
 
 import frappe
 
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.scoring_policy import get_active_policy
+from crm.fcrm.student_contact_conversion import contacts_for_student
 from crm.services.sales_action_policy import allowed_generation_actions, parent_authority_is_valid
 from crm.services.student_context import snapshot_hash
 from crm.services.student_next_task_policy import _journey_label, choose_next_task_policy
-from crm.fcrm.student_contact_conversion import contacts_for_student
 
 _STUDENT_FIELDS = [
 	"name",
 	"enrollment_status",
 	"lifecycle_stage",
+	"student_stage",
 	"major",
 	"current_grade",
 	"study_stage",
@@ -453,7 +455,11 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	row = frappe.db.get_value("CRM Student", student, _STUDENT_FIELDS, as_dict=True)
 	if not row:
 		frappe.throw("Student not found.", frappe.DoesNotExistError)
-	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
+	if not service_authorized and not has_student_permission(
+		frappe.get_doc("CRM Student", student),
+		user=frappe.session.user,
+		permission_type="read",
+	):
 		frappe.throw("Student projection is not authorized.", frappe.PermissionError)
 	revision = int(row.student_context_revision or 0)
 	if revision < int(minimum_revision):
@@ -498,6 +504,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"lifecycle": {
 			"stage": row.lifecycle_stage or row.enrollment_status,
 		},
+		"student_stage": row.student_stage,
 		"study": {
 			"current_grade": row.current_grade,
 			"stage": row.study_stage,
@@ -543,6 +550,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"academic": academic,
 		"contactability": contactability,
 		"parent_authority": {"valid": bool(parent_authority_is_valid(student))},
+		"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
 	}
 	allowed_actions = context["allowed_action_types"]
 	parent_authorized = parent_authority_is_valid(student)
@@ -562,7 +570,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 			"next_task_action": action,
 			"next_task_objective": objective,
 			"stage_label": _journey_label(stage),
-			"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
+			"days_to_deadline": context["days_to_deadline"],
 		}
 	)
 	context["evidence_refs"] = [
