@@ -128,9 +128,15 @@ class CRMStudent(Document):
 		self._resolve_geo()
 
 	def on_update(self):
-		# Student updates stay on the Student record. No hook writes back to a
-		# CRM Lead; the conversion command is the only one-time snapshot writer.
-		return
+		before = self.get_doc_before_save()
+		from crm.services.student_context import bump_student_context_revision, material_student_changed
+
+		if material_student_changed(self, before):
+			bump_student_context_revision(self.name, "student_material_change")
+		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
+
+		if student_score_input_changed(self, before):
+			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def validate(self):
 		self.student_stage = self.get("student_stage") or "New"

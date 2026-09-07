@@ -7,6 +7,8 @@ class CRMIntent(Document):
 	def before_validate(self):
 		if self.interaction and not self.student:
 			self.student = frappe.db.get_value("CRM Interaction", self.interaction, "student")
+		if self.student:
+			self.crm_student = self.student
 
 		# importance is read-only and always derived from the linked intent type; Frappe
 		# initializes an undefaulted Select field to its first option, so a "not
@@ -60,7 +62,7 @@ class CRMIntent(Document):
 				"label": "Student",
 				"type": "Link",
 				"key": "student",
-				"options": "CRM Lead",
+				"options": "CRM Student",
 				"width": "14rem",
 			},
 			{

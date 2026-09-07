@@ -81,8 +81,8 @@ def _touchpoints_for_student(student):
 
 def get_student_touchpoints(student):
 	"""All Student evidence, oldest first; unresolved Event campaigns are kept."""
-	if not frappe.db.exists("CRM Lead", student):
-		frappe.throw(f"CRM Lead {student} does not exist")
+	if not frappe.db.exists("CRM Student", student):
+		frappe.throw(f"CRM Student {student} does not exist")
 	return _touchpoints_for_student(student)
 
 
@@ -193,7 +193,7 @@ def get_campaign_progression_rollups():
 	all_students = {student for values in students_by_campaign.values() for student in values}
 	stages = {
 		row.name: (row.lifecycle_stage or row.enrollment_status or "Lead")
-		for row in frappe.db.get_all("CRM Lead", filters={"name": ["in", list(all_students) or ["__none__"]]}, fields=["name", "lifecycle_stage", "enrollment_status"])
+		for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(all_students) or ["__none__"]]}, fields=["name", "lifecycle_stage", "enrollment_status"])
 	}
 	rollups = {}
 	for campaign, students in students_by_campaign.items():
@@ -221,9 +221,9 @@ def _student_for_contact(contact):
 	if len(students) != 1:
 		return None
 	student = students[0]
-	if not frappe.db.exists("CRM Lead", student):
+	if not frappe.db.exists("CRM Student", student):
 		return None
-	doc = frappe.get_doc("CRM Lead", student)
+	doc = frappe.get_doc("CRM Student", student)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Student.", frappe.PermissionError)
 	return student
@@ -271,9 +271,9 @@ def get_contact_touchpoints(crm_contact):
 	if students:
 		touchpoints = []
 		for student in students:
-			if not frappe.db.exists("CRM Lead", student):
+			if not frappe.db.exists("CRM Student", student):
 				continue
-			doc = frappe.get_doc("CRM Lead", student)
+			doc = frappe.get_doc("CRM Student", student)
 			if not doc.has_permission("read"):
 				continue
 			touchpoints.extend(get_student_touchpoints(student))

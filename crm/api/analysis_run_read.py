@@ -36,7 +36,7 @@ def _student_scope(student: str | None) -> str:
 	student = str(student or "").strip()
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Vui lòng đăng nhập để xem toàn cảnh hồ sơ."), frappe.PermissionError)
-	if not student or not frappe.has_permission("CRM Lead", "read", student, user=frappe.session.user):
+	if not student or not frappe.has_permission("CRM Student", "read", student, user=frappe.session.user):
 		frappe.throw(_("Bạn không có quyền xem toàn cảnh hồ sơ này."), frappe.PermissionError)
 	return student
 

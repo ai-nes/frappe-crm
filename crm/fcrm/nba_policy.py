@@ -536,7 +536,7 @@ def eligible_action_set_for_student(
 	"""
 	import frappe
 
-	if not service_authorized and not frappe.has_permission("CRM Lead", "read", student, throw=False):
+	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
 		frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
 
 	evaluated_at = now or frappe.utils.now_datetime()
