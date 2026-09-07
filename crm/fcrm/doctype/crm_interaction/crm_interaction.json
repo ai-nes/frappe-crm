@@ -53,13 +53,13 @@
    "options": "INTX-.YYYY.-"
   },
   {
-   "description": "Either Student or CRM Contact must be set (enforced in validate) -- not required alone, since most interactions happen before a lead is promoted to Student.",
+   "description": "Student is the canonical AI-analysis target. Raw CRM Leads must qualify and convert before an interaction can be analyzed.",
    "fieldname": "student",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Student",
-   "options": "CRM Lead"
+   "options": "CRM Student"
   },
   {
    "fieldname": "crm_contact",

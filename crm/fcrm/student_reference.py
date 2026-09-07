@@ -22,7 +22,7 @@ def lead_for_student(student: str | None) -> str | None:
 	)
 
 
-def sync_canonical_student(doc):
+def sync_canonical_student(doc, method=None):
 	"""Populate the canonical Student link while retaining legacy Lead aliases."""
 	has_canonical_field = doc.meta.has_field(CANONICAL_FIELD)
 	has_contact_field = doc.meta.has_field("crm_contact")

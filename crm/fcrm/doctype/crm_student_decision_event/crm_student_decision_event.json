@@ -11,7 +11,7 @@
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "label": "Event Type", "options": "recommendation_decided\ntask_decided\naction_started\naction_completed\naction_failed\naction_cancelled\naction_reassigned\naction_superseded", "read_only": 1, "reqd": 1},
   {"fieldname": "decision_operation", "fieldtype": "Select", "in_list_view": 1, "label": "Decision Operation", "options": "\nACCEPT\nACCEPT_WITH_CHANGES\nREJECT\nDEFER\nDISMISS", "read_only": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "in_list_view": 1, "label": "Recommendation", "options": "CRM Recommendation", "read_only": 1},
   {"fieldname": "action", "fieldtype": "Link", "in_list_view": 1, "label": "Action", "options": "CRM Action Item", "read_only": 1},
   {"fieldname": "action_definition_revision", "fieldtype": "Link", "label": "Action Definition Revision", "options": "CRM Action Definition Revision", "read_only": 1},

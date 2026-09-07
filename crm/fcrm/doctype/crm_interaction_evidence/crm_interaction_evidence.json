@@ -8,7 +8,7 @@
  "field_order": ["naming_series", "student", "crm_contact", "crm_student", "interaction", "external_event_key", "source_namespace", "source_record_id", "source_revision", "evidence_digest", "evidence_kind", "evidence_state", "channel", "direction", "actor_role", "occurred_at", "content"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "options": "EVID-.YYYY.-", "hidden": 1},
-  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Lead", "read_only": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "read_only": 1},
   {"fieldname": "crm_contact", "fieldtype": "Link", "options": "CRM Student", "read_only": 1},
   {"fieldname": "crm_student", "fieldtype": "Link", "label": "Canonical Student", "options": "CRM Student", "read_only": 1},
   {"fieldname": "interaction", "fieldtype": "Link", "options": "CRM Interaction", "read_only": 1},

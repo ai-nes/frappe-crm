@@ -69,6 +69,26 @@
   "status_change_log",
   "section_assignment_history",
   "assignment_log",
+  "section_intelligence",
+  "latest_score",
+  "assessment_status",
+  "assessment_revision",
+  "interest_level",
+  "fit_level",
+  "primary_barrier",
+  "sla_evidence_state",
+  "sla_evidence_observed_at",
+  "privacy_status",
+  "student_context_revision",
+  "score_input_revision",
+  "applied_score_input_revision",
+  "applied_policy_revision",
+  "cohort_start_year",
+  "cohort_end_year",
+  "graduation_score",
+  "transcript_score",
+  "english_converted_score",
+  "total_score",
   "section_notes",
   "notes"
  ],
@@ -482,6 +502,124 @@
    "label": "Assignment Log",
    "options": "CRM Assignment Log",
    "read_only": 1
+  },
+  {
+   "fieldname": "section_intelligence",
+   "fieldtype": "Section Break",
+   "label": "Student Intelligence"
+  },
+  {
+   "fieldname": "latest_score",
+   "fieldtype": "Float",
+   "label": "Latest Score",
+   "read_only": 1
+  },
+  {
+   "fieldname": "assessment_status",
+   "fieldtype": "Data",
+   "label": "Assessment Status",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "assessment_revision",
+   "fieldtype": "Int",
+   "label": "Assessment Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "interest_level",
+   "fieldtype": "Data",
+   "label": "Interest Level",
+   "read_only": 1
+  },
+  {
+   "fieldname": "fit_level",
+   "fieldtype": "Data",
+   "label": "Fit Level",
+   "read_only": 1
+  },
+  {
+   "fieldname": "primary_barrier",
+   "fieldtype": "Data",
+   "label": "Primary Barrier",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_evidence_state",
+   "fieldtype": "Data",
+   "label": "SLA Evidence State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sla_evidence_observed_at",
+   "fieldtype": "Datetime",
+   "label": "SLA Evidence Observed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "privacy_status",
+   "fieldtype": "Data",
+   "label": "Privacy Status",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "student_context_revision",
+   "fieldtype": "Int",
+   "label": "Student Context Revision",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "score_input_revision",
+   "fieldtype": "Int",
+   "label": "Score Input Revision",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "applied_score_input_revision",
+   "fieldtype": "Int",
+   "label": "Applied Score Input Revision",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "applied_policy_revision",
+   "fieldtype": "Int",
+   "label": "Applied Policy Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "cohort_start_year",
+   "fieldtype": "Int",
+   "label": "Cohort Start Year"
+  },
+  {
+   "fieldname": "cohort_end_year",
+   "fieldtype": "Int",
+   "label": "Cohort End Year"
+  },
+  {
+   "fieldname": "graduation_score",
+   "fieldtype": "Float",
+   "label": "Graduation Score"
+  },
+  {
+   "fieldname": "transcript_score",
+   "fieldtype": "Float",
+   "label": "Transcript Score"
+  },
+  {
+   "fieldname": "english_converted_score",
+   "fieldtype": "Float",
+   "label": "English Score"
+  },
+  {
+   "fieldname": "total_score",
+   "fieldtype": "Float",
+   "label": "Total Score"
   },
   {
    "fieldname": "section_notes",

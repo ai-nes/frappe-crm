@@ -9,7 +9,7 @@
  "field_order": ["event_id", "student", "interaction", "outcome_code", "continuity_kind", "next_action", "next_action_assignee", "next_action_due_at", "continuity_reason", "continuity_expires_at", "qualification_evidence", "source_doctype", "source_name", "source_key", "actor", "actor_scope", "occurred_at", "supersedes", "command_receipt", "idempotency_key", "correlation_id", "policy_version", "schema_version", "legal_hold"],
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "interaction", "fieldtype": "Link", "in_list_view": 1, "label": "Interaction", "options": "CRM Interaction", "read_only": 1},
   {"fieldname": "outcome_code", "fieldtype": "Select", "in_list_view": 1, "label": "Outcome", "options": "connected\nqualified\nfollow_up_required\nno_response\nnot_interested\ninvalid\ncompleted", "read_only": 1, "reqd": 1},
   {"fieldname": "continuity_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Continuity", "options": "task\nwaiting\nterminal", "read_only": 1, "reqd": 1},

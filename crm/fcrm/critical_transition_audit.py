@@ -115,10 +115,10 @@ def _can_read_student(student: str) -> bool:
 	if not student:
 		return False
 	try:
-		return bool(frappe.has_permission("CRM Lead", "read", student))
+		return bool(frappe.has_permission("CRM Student", "read", student))
 	except Exception:
 		try:
-			return bool(frappe.get_doc("CRM Lead", student).has_permission("read"))
+			return bool(frappe.get_doc("CRM Student", student).has_permission("read"))
 		except Exception:
 			return False
 

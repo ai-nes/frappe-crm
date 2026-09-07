@@ -1946,7 +1946,10 @@ _AI_SERVICE_READ_DOCTYPES = (
 	"CRM Score History",
 	"CRM Intent Type",
 	"CRM Interaction Type",
-	"CRM Lead",
+	"CRM Interaction",
+	"CRM Intent",
+	"CRM Student",
+	"CRM Enrollment Status",
 )
 
 

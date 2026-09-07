@@ -106,9 +106,9 @@ def _validated_hex64(value: object, label: str) -> str | None:
 
 
 def _require_student_scope(student: str) -> None:
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		frappe.throw("NBA Evaluation target does not exist.", frappe.DoesNotExistError)
-	if not frappe.has_permission("CRM Lead", "read", student):
+	if not frappe.has_permission("CRM Student", "read", student):
 		frappe.throw("NBA Evaluation target is outside current scope.", frappe.PermissionError)
 
 
@@ -269,7 +269,7 @@ def request_nba_evaluation(
 	if not key or len(key) > 140:
 		frappe.throw("Idempotency-Key is required and bounded to 140 characters.", frappe.ValidationError)
 	# The Student row is the mutex for button-click races on one identity.
-	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name=%s FOR UPDATE", (student,))
+	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,))
 	clock = _request_clock()
 	_, identity = _identity_for(student, clock)
 	evaluation_key = identity["evaluation_key"]
@@ -768,7 +768,7 @@ def commit_nba_evaluation_result(
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": f"{doc.name}-{rank}",
-				"target_type": "CRM Lead",
+				"target_type": "CRM Student",
 				"target_id": doc.student,
 				"reason": _committed_recommendation_reason(rec),
 				"priority": _committed_recommendation_priority(rank),
@@ -1024,9 +1024,9 @@ def _request_automatic_nba_evaluation(
 	"""
 	if not nba_evaluation_runtime_enabled():
 		return None
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		return None
-	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name=%s FOR UPDATE", (student,))
+	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,))
 	if on_locked:
 		on_locked()
 	clock = _request_clock()
@@ -1063,7 +1063,7 @@ def request_domain_reevaluation(student: str, *, trigger_reason: str) -> dict[st
 	"""
 	if not nba_evaluation_runtime_enabled():
 		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
 	trigger_reason = str(trigger_reason or "").strip()[:140]
 	if not trigger_reason:

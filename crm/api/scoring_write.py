@@ -85,7 +85,7 @@ def append_score_if_current(
 
 	row = frappe.db.sql(
 		"SELECT name, applied_score_input_revision, applied_policy_revision "
-		"FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+		"FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
@@ -136,7 +136,7 @@ def append_score_if_current(
 	history = frappe.get_doc(payload).insert(ignore_permissions=True)
 
 	frappe.db.set_value(
-		"CRM Lead",
+		"CRM Student",
 		student,
 		{
 			"latest_score": final_score,

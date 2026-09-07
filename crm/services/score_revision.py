@@ -103,15 +103,15 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 		raise ValueError("student is required")
 	reason = str(reason or "scoring_fact_change").strip()[:140] or "scoring_fact_change"
 	row = frappe.db.sql(
-		"SELECT score_input_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+		"SELECT score_input_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
 	if not row:
-		raise frappe.DoesNotExistError(f"CRM Lead {student} does not exist")
+		raise frappe.DoesNotExistError(f"CRM Student {student} does not exist")
 	revision = int(row[0].score_input_revision or 0) + 1
 	frappe.db.sql(
-		"UPDATE `tabCRM Lead` SET score_input_revision = %s WHERE name = %s",
+		"UPDATE `tabCRM Student` SET score_input_revision = %s WHERE name = %s",
 		(revision, student),
 	)
 	sequence = _next_stream_sequence("scoring")

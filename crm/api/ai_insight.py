@@ -291,8 +291,8 @@ def _read_receipt(command_key: str, fingerprint: str) -> dict[str, Any] | None:
 	if not isinstance(result, dict):
 		result = {}
 	student = receipt.get("target_student")
-	if student and frappe.db.exists("CRM Lead", student):
-		result["current_revision"] = int(frappe.db.get_value("CRM Lead", student, "student_context_revision") or 0)
+	if student and frappe.db.exists("CRM Student", student):
+		result["current_revision"] = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
 	outcome = receipt.get("outcome")
 	if outcome == "pending":
 		# A previous worker may have crashed after creating the receipt but
@@ -351,7 +351,7 @@ def _finish_receipt(receipt, result: dict[str, Any], *, outcome: str, error_code
 
 def _lock_student(student: str):
 	row = frappe.db.sql(
-		"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
@@ -627,7 +627,7 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 			applied=False,
 			duplicate=False,
 			stale=False,
-			current_revision=int(frappe.db.get_value("CRM Lead", request["student"], "student_context_revision") or 0),
+			current_revision=int(frappe.db.get_value("CRM Student", request["student"], "student_context_revision") or 0),
 			error_code=exc.code,
 			verification_failed=True,
 		)
@@ -639,7 +639,7 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 		try:
 			current_revision = int(
 				frappe.db.get_value(
-					"CRM Lead", request["student"], "student_context_revision"
+					"CRM Student", request["student"], "student_context_revision"
 				)
 				or 0
 			)

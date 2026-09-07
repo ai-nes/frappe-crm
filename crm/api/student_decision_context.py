@@ -450,10 +450,10 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	Reader-facing calls must continue to pass the normal Student permission
 	check below.
 	"""
-	row = frappe.db.get_value("CRM Lead", student, _STUDENT_FIELDS, as_dict=True)
+	row = frappe.db.get_value("CRM Student", student, _STUDENT_FIELDS, as_dict=True)
 	if not row:
 		frappe.throw("Student not found.", frappe.DoesNotExistError)
-	if not service_authorized and not frappe.has_permission("CRM Lead", "read", student, throw=False):
+	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
 		frappe.throw("Student projection is not authorized.", frappe.PermissionError)
 	revision = int(row.student_context_revision or 0)
 	if revision < int(minimum_revision):
@@ -598,7 +598,7 @@ def get_execution_personalization_context(task: str, action: str | None = None) 
 	)
 	if not task_row or task_row.state not in {"accepted", "in-progress", "requires-review"}:
 		frappe.throw("Execution context requires an accepted task.", frappe.ValidationError)
-	if not frappe.has_permission("CRM Lead", "read", task_row.student, throw=False):
+	if not frappe.has_permission("CRM Student", "read", task_row.student, throw=False):
 		frappe.throw("Task is outside the actor's Student scope.", frappe.PermissionError)
 	return {
 		"task": task_row.name,

@@ -88,7 +88,7 @@ def _can_read_record(doctype: str, name: Any) -> bool:
 
 def _linked_student(row: Any) -> str | None:
 	student = _get(row, "student")
-	if not student and _get(row, "reference_doctype") == "CRM Lead":
+	if not student and _get(row, "reference_doctype") == "CRM Student":
 		student = _get(row, "reference_docname")
 	return student
 
@@ -103,7 +103,7 @@ def _visible_linked_record(doctype: str, name: Any, student: str | None) -> bool
 		linked = _linked_student(doc)
 		if not linked and doc.get("interaction"):
 			linked = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
-		if not linked and doc.get("attached_to_doctype") == "CRM Lead":
+		if not linked and doc.get("attached_to_doctype") == "CRM Student":
 			linked = doc.get("attached_to_name")
 		return linked == student
 	except Exception:
@@ -358,7 +358,7 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		frappe.throw(_("Student context is disabled by rollout policy."), frappe.PermissionError)
 	limit = _limit(history_limit)
 	cursor_key = _verify_cursor(history_cursor, student)
-	doc = frappe.get_doc("CRM Lead", student)
+	doc = frappe.get_doc("CRM Student", student)
 	if not doc.has_permission("read"):
 		frappe.throw(_("You do not have permission to view this Student."), frappe.PermissionError)
 	try:

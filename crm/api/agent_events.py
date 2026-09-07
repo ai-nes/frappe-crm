@@ -272,7 +272,7 @@ def record_score_input_event(student: str, revision: int, *, event_id: str | Non
 	pending = frappe.db.sql(
 		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
 		"AND event_type = %s AND status = 'pending' ORDER BY creation DESC LIMIT 1 FOR UPDATE",
-		("CRM Lead", student, "student.score_input_changed.v1"),
+		("CRM Student", student, "student.score_input_changed.v1"),
 		as_dict=True,
 	)
 	if pending:
@@ -288,7 +288,7 @@ def record_score_input_event(student: str, revision: int, *, event_id: str | Non
 				"doctype": "CRM Agent Event",
 				"event_id": event_id or str(uuid.uuid4()),
 				"event_type": "student.score_input_changed.v1",
-				"aggregate_doctype": "CRM Lead",
+				"aggregate_doctype": "CRM Student",
 				"aggregate_name": student,
 				"source_revision": str(revision),
 				"source_revision_bigint": revision,
@@ -318,7 +318,7 @@ def record_sla_notification(*, sla_event, student, recipient_user: str, recipien
 			"doctype": "CRM Agent Event",
 			"event_id": str(uuid.uuid4()),
 			"event_type": SLA_NOTIFICATION_EVENT,
-			"aggregate_doctype": "CRM Lead",
+			"aggregate_doctype": "CRM Student",
 			"aggregate_name": student.name,
 			"source_revision": str(sla_event.attempt_revision),
 			"contract_version": 1,
@@ -635,9 +635,9 @@ def _deliver_realtime_notification(event, lease_id: str) -> bool:
 				raise ValueError("Shared SLA digest payload contains unsupported fields")
 			frappe.publish_realtime("student_sla_digest", payload, user=event.recipient_user)
 		else:
-			if event.aggregate_doctype != "CRM Lead":
+			if event.aggregate_doctype != "CRM Student":
 				raise ValueError("Invalid shared SLA aggregate")
-			student = frappe.get_doc("CRM Lead", event.aggregate_name)
+			student = frappe.get_doc("CRM Student", event.aggregate_name)
 			if not has_student_permission(student, user=event.recipient_user, permission_type="read"):
 				_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_OUT_OF_SCOPE")
 				return True

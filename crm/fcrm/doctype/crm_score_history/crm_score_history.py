@@ -12,7 +12,7 @@ class CRMScoreHistory(Document):
 
 	def on_update(self):
 		frappe.db.set_value(
-			"CRM Lead",
+			"CRM Student",
 			self.student,
 			"latest_score",
 			self.final_score or 0,
