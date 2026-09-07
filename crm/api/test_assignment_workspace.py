@@ -1,7 +1,10 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.assignment_workspace import (
+	_actor_context,
 	_clean_row,
 	_expected_revision_map,
 	_filter_rows,
@@ -18,6 +21,40 @@ from crm.api.assignment_workspace import (
 
 
 class TestAssignmentWorkspaceContract(FrappeTestCase):
+	def test_ceo_role_is_global_without_a_staff_record(self):
+		previous_user = frappe.session.user
+		frappe.set_user("ceo@example.com")
+		try:
+			with patch(
+				"crm.api.assignment_workspace._get_policy_roles",
+				return_value=["Administrator"],
+			):
+				context = _actor_context()
+		finally:
+			frappe.set_user(previous_user)
+
+		self.assertEqual(context["profile"], "ceo")
+		self.assertTrue(context["is_system_manager"])
+		self.assertEqual(context["staff"], None)
+		self.assertEqual(context["teams"], [])
+
+	def test_director_role_is_global_without_a_staff_record(self):
+		previous_user = frappe.session.user
+		frappe.set_user("director@example.com")
+		try:
+			with patch(
+				"crm.api.assignment_workspace._get_policy_roles",
+				return_value=["Admissions Director"],
+			):
+				context = _actor_context()
+		finally:
+			frappe.set_user(previous_user)
+
+		self.assertEqual(context["profile"], "admissions_director")
+		self.assertFalse(context["is_system_manager"])
+		self.assertEqual(context["staff"], None)
+		self.assertEqual(context["teams"], [])
+
 	def test_batch_payload_helpers_are_bounded_and_complete(self):
 		self.assertEqual(
 			_parse_string_list('["school-a", "school-a", "school-b"]', "schools"), ["school-a", "school-b"]

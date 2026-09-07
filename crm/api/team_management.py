@@ -27,6 +27,13 @@ from crm.fcrm.team_routing import team_routing_readiness
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
 SUPPORTED_FUNCTIONS = ("Sale", "CTV Sale", "Lead Sale")
+TEAM_MANAGEMENT_READ_CAPABILITIES = frozenset(
+	{"system.configure", "admissions.oversee", "team.oversee", "student.execute"}
+)
+TEAM_MANAGEMENT_WRITE_CAPABILITIES = frozenset(
+	{"system.configure", "admissions.oversee", "team.oversee"}
+)
+TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES = frozenset({"sales", "lead_sales"})
 
 
 def _text(value, label, *, required=True, maximum=140):
@@ -53,25 +60,32 @@ def _error(code, message):
 
 
 def _is_global(context):
-	return bool(context.get("is_system_manager") or context.get("profile") == "admissions_director")
+	return bool(context.get("is_system_manager") or context.get("profile") in {"ceo", "admissions_director"})
 
 
 def _can_manage_leads(context):
-	return _is_global(context) or context.get("profile") == "lead_sales"
+	return _is_global(context) or context.get("profile") in {"lead_sales", "sales"}
+
+
+def _has_unrestricted_team_management_scope(context):
+	return _is_global(context) or context.get("profile") in TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES
 
 
 def _require_access(*, write=False):
-	context = _actor_context()
+	context = _actor_context(required_capabilities=TEAM_MANAGEMENT_READ_CAPABILITIES)
 	capabilities = set(context.get("capabilities") or [])
-	if not capabilities.intersection({"system.configure", "admissions.oversee", "team.oversee"}):
+	if not capabilities.intersection(TEAM_MANAGEMENT_READ_CAPABILITIES):
 		frappe.throw(_("Bạn không có quyền xem quản lý đội ngũ."), frappe.PermissionError)
-	if write and not capabilities.intersection({"system.configure", "admissions.oversee", "team.oversee"}):
+	if write and not (
+		capabilities.intersection(TEAM_MANAGEMENT_WRITE_CAPABILITIES)
+		or context.get("profile") in TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES
+	):
 		frappe.throw(_("Bạn không có quyền thay đổi quản lý đội ngũ."), frappe.PermissionError)
 	return context
 
 
 def _team_in_scope(team_id, context):
-	return _is_global(context) or team_id in set(context.get("teams") or [])
+	return _has_unrestricted_team_management_scope(context) or team_id in set(context.get("teams") or [])
 
 
 def _assert_team_scope(team_id, context):
@@ -84,7 +98,7 @@ def _assert_team_scope(team_id, context):
 def _assert_group_scope(group_id, context):
 	if not frappe.db.exists("CRM Team Group", group_id):
 		_error("GROUP_NOT_FOUND", "Nhóm quản lý không tồn tại.")
-	if _is_global(context):
+	if _has_unrestricted_team_management_scope(context):
 		return
 	team_ids = frappe.get_all("CRM Team", filters={"group": group_id}, pluck="name")
 	if not set(team_ids).intersection(set(context.get("teams") or [])):
@@ -543,9 +557,7 @@ def _save_group(
 	if clear_group_lead:
 		doc.group_lead_staff = None
 	elif group_lead_staff is not None:
-		staff = frappe.db.get_value(
-			"CRM Staff", group_lead_staff, ["name", "is_active"], as_dict=True
-		)
+		staff = frappe.db.get_value("CRM Staff", group_lead_staff, ["name", "is_active"], as_dict=True)
 		if not staff:
 			_error("STAFF_NOT_FOUND", "Nhân sự không tồn tại.")
 		if not staff.is_active:

@@ -82,6 +82,18 @@ function `Lead Sale`, `Sale` hoặc `CTV Sale`.
 
 ### Quản lý Group/Team
 
+Các API đọc Group/Team yêu cầu một trong các capability `system.configure`,
+`admissions.oversee`, `team.oversee` hoặc `student.execute`; vì vậy Sale và CTV
+Sale có thể tải workspace để xem Team của mình. Tạm thời profile Sale và Lead
+Sale cũng được gọi các API ghi để chạy UI trước; đây chưa phải boundary bảo mật
+cuối cùng. Việc tạo Group mới vẫn dành cho hai profile được cấp phạm vi toàn
+cục và đầy đủ quyền đọc/ghi của workspace:
+
+- CEO: role canonical `Administrator` (profile `ceo`), không bị giới hạn theo Team/Cơ sở.
+- Director: role canonical `Admissions Director` (profile `admissions_director`), không bị giới hạn theo Team/Cơ sở.
+
+Các kiểm tra nghiệp vụ và validation dữ liệu vẫn được áp dụng ở backend.
+
 | API | Mục đích |
 |---|---|
 | `crm.api.team_management.get_team_management_workspace` | Đọc Group, Team, nhân sự và tỉnh |
@@ -93,6 +105,7 @@ function `Lead Sale`, `Sale` hoặc `CTV Sale`.
 | `crm.api.team_management.move_team_member` | Chuyển thành viên giữa Team |
 | `crm.api.team_management.remove_team_member` | Gỡ thành viên |
 | `crm.api.team_management.change_team_lead` | Đổi Trưởng nhóm tổ chức |
+| `crm.api.team_management.update_team_member` | Cập nhật tên nhân sự |
 
 ### Thông tin vai trò của tài khoản đăng nhập
 

@@ -18,6 +18,7 @@ import frappe
 from frappe import _
 from frappe.utils import getdate, now_datetime, today
 
+from crm.api.session import _get_policy_roles
 from crm.fcrm.role_policy import (
 	PROFILE_LABELS,
 	capabilities_for_roles,
@@ -63,6 +64,8 @@ TEAM_MEMBER_FUNCTIONS = {
 	"Lead Marketing",
 }
 MAX_BATCH_SCHOOLS = 100
+_GLOBAL_SCOPE_PROFILES = frozenset({"system_manager", "ceo", "admissions_director"})
+_GLOBAL_CONTROL_PROFILES = frozenset({"system_manager", "ceo"})
 REQUIRED_DOCTYPES = (
 	"CRM Campus",
 	"CRM Province",
@@ -164,12 +167,12 @@ def _safe_get_all(doctype, fields, filters=None, order_by=None):
 
 def _roles_for_user(user):
 	try:
-		return sorted(set(frappe.get_roles(user)))
+		return sorted(set(_get_policy_roles(user)))
 	except Exception:
 		return []
 
 
-def _actor_context():
+def _actor_context(*, required_capabilities=None):
 	actor = getattr(frappe.session, "user", None)
 	if not actor or actor == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.AuthenticationError)
@@ -182,15 +185,21 @@ def _actor_context():
 	else:
 		profile = resolve_crm_profile(roles)
 	capabilities = capabilities_for_roles(roles, administrator=administrator)
+	required_capabilities = required_capabilities or {
+		"system.configure",
+		"team.oversee",
+		"admissions.oversee",
+		"student.routing.read",
+	}
 	if not profile or not capabilities.intersection(
-		{"system.configure", "team.oversee", "admissions.oversee", "student.routing.read"}
+		required_capabilities
 	):
 		frappe.throw(_("You are not permitted to access assignment setup."), frappe.PermissionError)
 
 	staff = None
 	team_names = set()
 	campus_names = set()
-	if profile != "system_manager":
+	if profile not in _GLOBAL_SCOPE_PROFILES:
 		staff = frappe.db.get_value(
 			"CRM Staff", {"user": actor, "is_active": 1}, ["name", "campus"], as_dict=True
 		)
@@ -217,7 +226,7 @@ def _actor_context():
 		"staff": staff.name if staff else None,
 		"teams": sorted(team_names),
 		"campuses": sorted(campus_names),
-		"is_system_manager": profile == "system_manager",
+		"is_system_manager": profile in _GLOBAL_CONTROL_PROFILES,
 	}
 
 

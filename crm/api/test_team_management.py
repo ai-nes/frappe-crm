@@ -1,12 +1,16 @@
 """Contracts for the Group/Team management workspace API."""
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.team_management import (
 	RECIPIENT_FUNCTIONS,
 	_initials,
+	_is_global,
 	_member_role,
+	_require_access,
 	get_team_management_workspace,
 )
 
@@ -14,6 +18,31 @@ from crm.api.team_management import (
 class TestTeamManagementWorkspace(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+
+	def test_ceo_and_director_have_global_read_write_access(self):
+		for profile, capabilities in (
+			("ceo", {"system.configure"}),
+			("admissions_director", {"admissions.oversee"}),
+		):
+			with self.subTest(profile=profile):
+				context = {"profile": profile, "capabilities": capabilities}
+				self.assertTrue(_is_global(context))
+				with patch("crm.api.team_management._actor_context", return_value=context):
+					self.assertIs(_require_access(write=True), context)
+
+	def test_sale_and_ctv_sale_have_workspace_read_access(self):
+		for profile in ("sales", "ctv_sale"):
+			with self.subTest(profile=profile):
+				context = {"profile": profile, "capabilities": {"student.execute"}}
+				with patch("crm.api.team_management._actor_context", return_value=context):
+					self.assertIs(_require_access(), context)
+
+	def test_sale_and_lead_sale_have_temporary_team_management_write_access(self):
+		for profile in ("sales", "lead_sales"):
+			with self.subTest(profile=profile):
+				context = {"profile": profile, "capabilities": {"student.execute"}}
+				with patch("crm.api.team_management._actor_context", return_value=context):
+					self.assertIs(_require_access(write=True), context)
 
 	def test_workspace_has_stable_dashboard_contract(self):
 		workspace = get_team_management_workspace()
