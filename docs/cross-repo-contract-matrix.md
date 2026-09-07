@@ -20,6 +20,7 @@ incompatible changes require a major version and coordinated deployment.
 | AI Insight CAS write-back | frappe-crm | 1 | crm-agents conversation/insight | 2026-08-30 |
 | Command Center `/api/cc/*` | crm-agents | cc-v1 | PH-05 frontend | 2026-08-30 |
 | Worldfone call summary gateway `crm.api.call_summary.summarize_call` | frappe-crm / crm-agents | call-summary-v1 | speech-to-text-crm-submodule | 2026-09-07 |
+| Worldfone call-history projection `crm.api.director_students.get_student_interactions` | frappe-crm | call-history-v1 | dashboard-crm | 2026-09-08 |
 | School-domain normalized schema and migration | frappe-crm | 1 | School Data panel and import operator | 2026-08-30 |
 | School stakeholder endpoint `crm.api.school_domain.get_school_stakeholders` | frappe-crm | 1 | School Data panel | 2026-08-30 |
 | School-domain workbook import boundary | frappe-crm | unversioned module contract | External seed/import operator | 2026-08-30 |
@@ -42,6 +43,11 @@ payload to the authenticated `crm-agents` endpoint `/api/v1/call-summary`.
 `action_items`, `sentiment`, and `next_step`) without writing CRM data. The STT
 bridge remains responsible for the idempotent `FCRM Note` write, so a summary
 failure does not remove an already saved transcript or change the call status.
+
+The call-history projection keeps the existing fallback `summary` text for
+backward compatibility and adds `summaryAvailable`. Dashboard consumers must
+render the fallback only when `summaryAvailable` is true; when it is false and
+the call has a transcript, the dashboard may trigger the STT summary backfill.
 
 List rows expose the Form Submission Status enum (sourced from
 `CRM Lead.processing_status`) through
