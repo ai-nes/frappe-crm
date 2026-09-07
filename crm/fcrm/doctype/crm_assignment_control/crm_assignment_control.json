@@ -5,6 +5,7 @@
  "engine": "InnoDB",
  "field_order": [
   "routing_enabled",
+  "assignment_mode",
   "capacity_required",
   "last_changed_by",
   "last_change_reason",
@@ -17,6 +18,15 @@
    "fieldname": "routing_enabled",
    "fieldtype": "Check",
    "label": "Automatic Lead Assignment Enabled"
+  },
+  {
+   "default": "manual_batch",
+   "description": "Manual batch is the safe default after the Lead core refactor. Automatic on create is a compatibility mode only.",
+   "fieldname": "assignment_mode",
+   "fieldtype": "Select",
+   "label": "Assignment Execution Mode",
+   "options": "manual_batch\nautomatic_on_create",
+   "reqd": 1
   },
   {
    "default": "1",

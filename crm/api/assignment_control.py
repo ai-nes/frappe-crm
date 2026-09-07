@@ -46,6 +46,7 @@ def _stored_control():
 			fieldname: doc.get(fieldname)
 			for fieldname in (
 				"routing_enabled",
+				"assignment_mode",
 				"capacity_required",
 				"last_changed_by",
 				"last_change_reason",

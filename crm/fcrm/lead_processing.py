@@ -3,13 +3,13 @@
 The workflow deliberately keeps intake processing separate from the existing
 admissions lifecycle and conversion commands:
 
-    NEW -> PROCESSED -> ASSIGNED -> CLOSED
+    NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
-Email, phone, and province are all required before resolution. Only MATCHED and
-CREATED may be assigned; the other four resolutions close the Lead without
-creating a Student. Successful handoff delegates conversion to the existing
-conversion command and therefore remains fail-closed behind its rollout and
-integrity checks.
+CCCD, high school, and major are required before resolution. Phone, email, and
+province remain routing/contact context, not conversion gates. Only MATCHED and
+CREATED may be assigned; terminal resolutions close the Lead without invoking
+conversion. Successful handoff delegates conversion to the existing command
+and therefore remains fail-closed behind its rollout and integrity checks.
 """
 
 from __future__ import annotations
@@ -18,12 +18,13 @@ from typing import Any
 
 import frappe
 
+from crm.fcrm.conversion_readiness import conversion_blockers
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
-from crm.fcrm.student_intake import normalize_email, normalize_phone
+from crm.fcrm.student_intake import normalize_email, normalize_national_id, normalize_phone
 from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
 
-PROCESSING_STATUSES = ("NEW", "PROCESSED", "ASSIGNED", "CLOSED")
+PROCESSING_STATUSES = ("NEW", "PROCESSING", "PROCESSED", "ASSIGNED", "CLOSED")
 RESOLUTIONS = ("PENDING", "MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED")
 ADVANCING_RESOLUTIONS = frozenset({"MATCHED", "CREATED"})
 TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
@@ -63,23 +64,32 @@ def _normalise_province(value: Any) -> str:
 
 
 def _normalise_identifiers(lead) -> dict[str, str]:
+	id_number = normalize_national_id(lead.get("id_number"))
+	high_school = " ".join(str(lead.get("high_school") or "").strip().split()).casefold()
+	major = " ".join(str(lead.get("major") or "").strip().split()).casefold()
 	phone = normalize_phone(lead.get("phone"))
 	email = normalize_email(lead.get("email"))
 	province = _normalise_province(lead.get("province"))
-	blockers: list[str] = []
-	if not email:
-		blockers.append("missing_or_invalid_email")
-	if not phone:
-		blockers.append("missing_or_invalid_phone")
-	if not province:
-		blockers.append("missing_or_invalid_province")
+	blockers = conversion_blockers(lead)
+	if not id_number:
+		blockers = [*blockers] if "missing_id_number" in blockers else [*blockers, "missing_id_number"]
 	if blockers:
-		_fail("IDENTIFIER_GATE_FAILED", "Email, phone, and province are required before processing.")
-	return {"phone": phone, "email": email, "province": province}
+		_fail("IDENTIFIER_GATE_FAILED", "CCCD, trường THPT và ngành quan tâm là bắt buộc trước khi xử lý.")
+	return {
+		"id_number": id_number,
+		"high_school": high_school,
+		"major": major,
+		"phone": phone or "",
+		"email": email or "",
+		"province": province,
+	}
 
 
 def _normalise_row(row: Any) -> dict[str, str]:
 	return {
+		"id_number": normalize_national_id(row.get("id_number")) or "",
+		"high_school": " ".join(str(row.get("high_school") or "").strip().split()).casefold(),
+		"major": " ".join(str(row.get("major") or "").strip().split()).casefold(),
 		"phone": normalize_phone(row.get("phone")) or "",
 		"email": normalize_email(row.get("email")) or "",
 		"province": _normalise_province(row.get("province")),
@@ -88,7 +98,7 @@ def _normalise_row(row: Any) -> dict[str, str]:
 
 def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str | None = None) -> list[Any]:
 	filters = []
-	for fieldname in ("phone", "email"):
+	for fieldname in ("id_number", "phone", "email"):
 		if identifiers[fieldname]:
 			filters.append({fieldname: identifiers[fieldname]})
 	if not filters:
@@ -96,7 +106,7 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 	rows = frappe.get_all(
 		doctype,
 		or_filters=filters,
-		fields=["name", "phone", "email", "province"],
+		fields=["name", "id_number", "high_school", "major", "phone", "email", "province"],
 		limit_page_length=0,
 		ignore_permissions=True,
 	)
@@ -104,9 +114,22 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 
 
 def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | None]:
-	"""Classify only on an exact phone/email/province match."""
+	"""Classify by CCCD first, with contact fields as a compatibility fallback."""
 	student_matches = _candidate_rows("CRM Student", identifiers)
-	exact_students = [row for row in student_matches if _normalise_row(row) == identifiers]
+	exact_students = []
+	for row in student_matches:
+		candidate = _normalise_row(row)
+		if identifiers["id_number"] and candidate["id_number"] == identifiers["id_number"]:
+			exact_students.append(row)
+		elif (
+			candidate["phone"]
+			and candidate["email"]
+			and candidate["province"]
+			and candidate["phone"] == identifiers["phone"]
+			and candidate["email"] == identifiers["email"]
+			and candidate["province"] == identifiers["province"]
+		):
+			exact_students.append(row)
 	if len(exact_students) == 1:
 		return "MATCHED", exact_students[0].get("name")
 	if len(exact_students) > 1:
@@ -115,9 +138,48 @@ def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | 
 	lead_matches = _candidate_rows("CRM Lead", identifiers, exclude=lead.name)
 	for row in lead_matches:
 		row_identifiers = _normalise_row(row)
-		if row_identifiers == identifiers:
+		if identifiers["id_number"] and row_identifiers["id_number"] == identifiers["id_number"]:
+			return "DUPLICATE", None
+		if (
+			row_identifiers["phone"]
+			and row_identifiers["email"]
+			and row_identifiers["province"]
+			and row_identifiers["phone"] == identifiers["phone"]
+			and row_identifiers["email"] == identifiers["email"]
+			and row_identifiers["province"] == identifiers["province"]
+		):
 			return "DUPLICATE", None
 	return "CREATED", None
+
+
+def preview_lead(lead: str) -> dict[str, Any]:
+	"""Return the processing decision without mutating the Lead."""
+	lead_doc = _load_lead(lead)
+	if _get_status(lead_doc) != "NEW":
+		return {
+			"status": _get_status(lead_doc),
+			"resolution": _get_resolution(lead_doc),
+			"lead": lead_doc.name,
+			"target_student": lead_doc.get("matched_student") or lead_doc.get("converted_student"),
+		}
+	try:
+		identifiers = _normalise_identifiers(lead_doc)
+	except LeadProcessingError as exc:
+		return {
+			"status": "CLOSED",
+			"resolution": "INVALID",
+			"lead": lead_doc.name,
+			"reason": str(exc),
+			"error_code": exc.code,
+		}
+	resolution, target_student = _classify_resolution(lead_doc, identifiers)
+	return {
+		"status": "PROCESSED" if resolution in ADVANCING_RESOLUTIONS else "CLOSED",
+		"resolution": resolution,
+		"lead": lead_doc.name,
+		"target_student": target_student,
+		"validation": {"id_number": True, "high_school": True, "major": True},
+	}
 
 
 def _load_lead(lead: str):
@@ -155,27 +217,29 @@ def _set_processing_values(name: str, values: dict[str, Any]) -> None:
 
 
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict[str, Any]:
-	"""Validate identifiers and assign one of the six resolutions."""
+	"""Validate a NEW Lead and assign one of the business resolutions."""
 	lead_doc = _load_lead(lead)
 	_lock_lead(lead_doc.name)
 	lead_doc = _load_lead(lead_doc.name)
 	if _get_status(lead_doc) != "NEW":
 		_fail("INVALID_STATUS", "Only NEW Leads can enter processing.")
+	_set_processing_values(lead_doc.name, {"processing_status": "PROCESSING"})
+	lead_doc = _load_lead(lead_doc.name)
 
 	try:
 		identifiers = _normalise_identifiers(lead_doc)
 	except LeadProcessingError:
 		validation = {
-			"province": bool(_normalise_province(lead_doc.get("province"))),
-			"email": bool(normalize_email(lead_doc.get("email"))),
-			"phone": bool(normalize_phone(lead_doc.get("phone"))),
+			"id_number": bool(normalize_national_id(lead_doc.get("id_number"))),
+			"high_school": bool(str(lead_doc.get("high_school") or "").strip()),
+			"major": bool(str(lead_doc.get("major") or "").strip()),
 		}
 		_set_processing_values(
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
 				"resolution": "INVALID",
-				"resolution_reason": "Identifier gate failed.",
+				"resolution_reason": "Thiếu CCCD, trường THPT hoặc ngành quan tâm.",
 			},
 		)
 		return {
@@ -206,7 +270,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 			"resolution_reason": _reason(reason) or f"Resolution: {final_resolution}.",
 			"phone": identifiers["phone"],
 			"email": identifiers["email"],
-			**({"student": target_student} if target_student else {}),
+			**({"matched_student": target_student} if target_student else {}),
 		},
 	)
 	return {
@@ -214,7 +278,25 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		"resolution": final_resolution,
 		"lead": lead_doc.name,
 		"target_student": target_student,
-		"validation": {"email": True, "phone": True, "province": True},
+		"validation": {"id_number": True, "high_school": True, "major": True},
+	}
+
+
+def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
+	"""Mark a successfully owned Lead as ASSIGNED without writing ownership twice."""
+	lead_doc = _load_lead(lead)
+	if _get_status(lead_doc) == "ASSIGNED":
+		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": _get_resolution(lead_doc)}
+	if _get_status(lead_doc) != "PROCESSED" or _get_resolution(lead_doc) not in ADVANCING_RESOLUTIONS:
+		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	if not lead_doc.get("owner_staff") and not lead_doc.get("assigned_to"):
+		_fail("OWNER_REQUIRED", "Lead ownership must be written before marking it assigned.")
+	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED"})
+	return {
+		"status": "ASSIGNED",
+		"lead": lead_doc.name,
+		"resolution": _get_resolution(lead_doc),
+		"reason": reason,
 	}
 
 
@@ -285,6 +367,8 @@ def handoff_lead(
 	if resolution == "CREATED" and target_student:
 		_fail("TARGET_STUDENT_NOT_ALLOWED", "CREATED handoff must create a new Student.")
 
+	if resolution == "MATCHED" and not target_student:
+		target_student = lead_doc.get("matched_student")
 	if resolution == "MATCHED" and not target_student:
 		identifiers = _normalise_identifiers(lead_doc)
 		_, target_student = _classify_resolution(lead_doc, identifiers)

@@ -3,7 +3,6 @@
 import json
 import unittest
 from pathlib import Path
-from types import SimpleNamespace
 
 try:
 	import frappe
@@ -24,26 +23,30 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			{"MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED"},
 		)
 
-	def test_identifier_gate_requires_email_phone_and_province(self):
+	def test_identifier_gate_requires_cccd_high_school_and_major(self):
 		from crm.fcrm.lead_processing import LeadProcessingError, _normalise_identifiers
 
-		valid = SimpleNamespace(
-			get=lambda field: {
-				"email": " Student@Example.com ",
-				"phone": "+84981000001",
-				"province": " Ho Chi Minh ",
-			}.get(field)
-		)
+		valid = {
+			"id_number": " 012345678901 ",
+			"high_school": " THPT A ",
+			"major": " Công nghệ thông tin ",
+			"email": " Student@Example.com ",
+			"phone": "+84981000001",
+			"province": " Ho Chi Minh ",
+		}
 		self.assertEqual(
 			_normalise_identifiers(valid),
 			{
+				"id_number": "012345678901",
+				"high_school": "thpt a",
+				"major": "công nghệ thông tin",
 				"email": "student@example.com",
 				"phone": "0981000001",
 				"province": "ho chi minh",
 			},
 		)
 
-		invalid = SimpleNamespace(get=lambda field: {"email": "", "phone": None, "province": None}.get(field))
+		invalid = {"id_number": "", "high_school": None, "major": None}
 		with self.assertRaises(LeadProcessingError) as ctx:
 			_normalise_identifiers(invalid)
 		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
@@ -75,6 +78,8 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 
 		self.assertEqual(lead_fields["processing_status"]["default"], "NEW")
 		self.assertTrue(lead_fields["processing_status"]["read_only"])
+		self.assertIn("PROCESSING", lead_fields["processing_status"]["options"])
+		self.assertEqual(lead_fields["matched_student"]["options"], "CRM Student")
 		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
 		self.assertEqual(student_fields["student_stage"]["default"], "New")
 		self.assertTrue(student_fields["student_stage"]["read_only"])
@@ -114,20 +119,27 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 
 		self.assertEqual(result["status"], "CLOSED")
 		self.assertEqual(result["resolution"], "INVALID")
-		self.assertFalse(result["validation"]["province"])
+		self.assertFalse(result["validation"]["id_number"])
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
 
 	def test_valid_gate_classifies_new_student_path(self):
 		from crm.fcrm.lead_processing import process_lead
 
 		province = frappe.db.get_value("CRM Province", {}, "name")
+		high_school = frappe.db.get_value("CRM High School", {}, "name")
+		major = frappe.db.get_value("CRM Major", {}, "name")
 		self.assertTrue(province)
-		lead = self._new_lead("Created", province=province)
+		self.assertTrue(high_school)
+		self.assertTrue(major)
+		lead = self._new_lead(
+			"Created", province=province, id_number="012345678901", high_school=high_school, major=major
+		)
 		result = process_lead(lead.name)
 
 		self.assertEqual(result["status"], "PROCESSED")
 		self.assertEqual(result["resolution"], "CREATED")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "CREATED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "PROCESSED")
 
 	def test_student_stage_command_advances_one_edge(self):
 		from crm.fcrm.student_stage import set_student_stage
@@ -161,3 +173,9 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		student.student_stage = "Attempting"
 		with self.assertRaises(frappe.PermissionError):
 			student.save(ignore_permissions=True)
+
+	def test_new_lead_cannot_inject_processing_status(self):
+		lead = self._new_lead("ServerDefaults", processing_status="ASSIGNED", resolution="CREATED")
+
+		self.assertEqual(lead.processing_status, "NEW")
+		self.assertEqual(lead.resolution, "PENDING")

@@ -98,12 +98,8 @@ class CRMStudent(Document):
 		self.student_stage = self.get("student_stage") or "New"
 		self._normalize_shared_fields()
 		self._resolve_geo()
-		# Student is an independent record and may be created/imported directly.
-		# Routing only derives Student ownership; it never creates or updates a
-		# CRM Lead.
-		from crm.api.routing import route_new_lead
-
-		route_new_lead(self)
+		# Student is a post-conversion/care aggregate. Assignment is performed on
+		# CRM Lead through an explicit batch and is never inferred on Student insert.
 
 	def _set_defaults(self):
 		if not self.admission_year:

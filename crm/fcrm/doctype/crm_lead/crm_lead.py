@@ -51,8 +51,9 @@ class CRMLead(Document):
 	def before_insert(self):
 		# The code is server-managed; ignore any client/import value.
 		self.lead_code = None
-		self.processing_status = self.get("processing_status") or "NEW"
-		self.resolution = self.get("resolution") or "PENDING"
+		self.processing_status = "NEW"
+		self.resolution = "PENDING"
+		self.matched_student = None
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
@@ -87,7 +88,12 @@ class CRMLead(Document):
 					title=_("Ownership command required"),
 				)
 		if before and not getattr(frappe.flags, SERVICE_FLAG, False):
-			processing_fields = ("processing_status", "resolution", "resolution_reason")
+			processing_fields = (
+				"processing_status",
+				"resolution",
+				"resolution_reason",
+				"matched_student",
+			)
 			if any(before.get(field) != self.get(field) for field in processing_fields):
 				frappe.throw(
 					_("Lead processing changes must use the processing command."),
@@ -132,6 +138,8 @@ class CRMLead(Document):
 			frappe.throw(_("Invalid Lead resolution."), frappe.ValidationError)
 		if status == "NEW" and resolution != "PENDING":
 			frappe.throw(_("A NEW Lead must have PENDING resolution."), frappe.ValidationError)
+		if status == "PROCESSING" and resolution != "PENDING":
+			frappe.throw(_("A Lead in PROCESSING must have PENDING resolution."), frappe.ValidationError)
 		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"MATCHED", "CREATED"}:
 			frappe.throw(
 				_("Only MATCHED or CREATED Leads can be PROCESSED or ASSIGNED."),

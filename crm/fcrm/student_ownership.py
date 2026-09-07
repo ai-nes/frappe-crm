@@ -329,14 +329,16 @@ def _student_is_active(student) -> bool:
 	return True
 
 
-def _validate_current_topology(student) -> tuple[str | None, str | None, str | None]:
+def _validate_current_topology(
+	student, *, allow_unassigned: bool = False
+) -> tuple[str | None, str | None, str | None]:
 	owner = student.get("owner_staff") or None
 	pool = student.get("owning_team") or None
 	pool_id = student.get("owning_pool") or None
 	assigned = student.get("assigned_to") or None
 	if not _student_is_active(student):
 		_error("STUDENT_NOT_ACTIVE", "Only active Student cases may change ownership.")
-	if pool and not pool_id:
+	if pool and not pool_id and not (allow_unassigned and not owner):
 		_error("POOL_CANONICAL_MISSING", "Student pool ownership requires a canonical Student Pool link.")
 	if pool_id:
 		pool_row = frappe.db.get_value(
@@ -349,6 +351,8 @@ def _validate_current_topology(student) -> tuple[str | None, str | None, str | N
 			or pool_row.get("team") != pool
 		):
 			_error("INVALID_CURRENT_OWNERSHIP", "Student Pool, Team and Campus must form one valid topology.")
+	if allow_unassigned and not owner and not pool_id:
+		return None, pool, None
 	if bool(owner) == bool(pool_id):
 		_error("INVALID_CURRENT_OWNERSHIP", "Active Student must have exactly one owner or pool.")
 	if owner and assigned != owner:
@@ -653,6 +657,7 @@ def change_student_ownership(
 	_commit: bool = True,
 	_route_trigger: str | None = None,
 	_routing_policy_version: int | None = None,
+	_enqueue_routing: bool = True,
 ) -> dict[str, Any]:
 	"""Atomically change one Student's owner/pool and append one event.
 
@@ -745,7 +750,10 @@ def change_student_ownership(
 		current_revision = _current_revision(student_doc)
 		if str(current_revision) != str(expected_revision):
 			_error("STALE_OWNERSHIP_REVISION", "Student ownership changed; refresh before retrying.")
-		previous_owner, previous_team, previous_pool = _validate_current_topology(student_doc)
+		previous_owner, previous_team, previous_pool = _validate_current_topology(
+			student_doc,
+			allow_unassigned=_internal_service and target_kind == "pool" and current_revision == 0,
+		)
 		# Resolve only after the Student lock.  The authoritative branch and the
 		# actor's current Team/Campus scope must be evaluated against the same
 		# snapshot that will be mutated.
@@ -863,7 +871,7 @@ def change_student_ownership(
 		# Receipt is append-only evidence.  Updating its initially reserved
 		# processing row is the one supported completion mutation.
 		receipt.save(ignore_permissions=True)
-		if target.get("target_kind") == "pool":
+		if target.get("target_kind") == "pool" and _enqueue_routing:
 			from crm.fcrm.student_feature_flags import enabled
 			from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 

@@ -161,12 +161,6 @@ def _eligible_members(pool: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _routing_context(student, pool):
 	geo = resolve_student_zone(student)
-	if geo.get("tier") in {3, 4}:
-		mapped_team = pool.get("team") and frappe.db.exists(
-			"CRM Team Zone Assignment", {"team": pool["team"], "status": "Active"}
-		)
-		if not mapped_team:
-			return {"tier": 0, "legacy": True}
 	if geo.get("tier") == 1:
 		return {
 			"tier": 1,
@@ -290,6 +284,7 @@ def route_pool_owned_student(
 			expected_revision=current_revision,
 			correlation_id=correlation_id or str(uuid.uuid4()),
 			_internal_service=True,
+			_internal_actor=getattr(frappe.session, "user", None),
 			_commit=False,
 			_route_trigger=trigger,
 			_routing_policy_version=policy.policy_version if policy else None,
@@ -315,6 +310,7 @@ def route_pool_owned_student(
 			expected_revision=current_revision,
 			correlation_id=correlation_id or str(uuid.uuid4()),
 			_internal_service=True,
+			_internal_actor=getattr(frappe.session, "user", None),
 			_commit=False,
 			_route_trigger=trigger,
 		)
