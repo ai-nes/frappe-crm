@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo
 
 import frappe
 
-from crm.api.director_school_common import raise_api_error, resolve_admission_year
+from crm.api.director_school_common import parse_limit, raise_api_error, resolve_admission_year
 from crm.fcrm.role_policy import (
 	CANONICAL_PROFILE_ROLES,
 	DESK_MANAGEMENT_ROLE_NAMES,
@@ -24,6 +24,28 @@ from crm.fcrm.role_policy import (
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 GRANULARITIES = frozenset({"day", "week", "month"})
+LEAD_STATUS_GROUPS = {
+	"new": "Mới",
+	"in_progress": "Đang xử lý",
+	"no_response": "Chưa kết nối",
+	"disqualified": "Không phù hợp",
+	"converted": "Đã chuyển đổi",
+}
+LEAD_QUALITY_GROUPS = {"invalid": "Sai số", "duplicate": "Lead trùng", "unknown": "Chưa phân loại"}
+PRIMARY_ATTRIBUTION_RULE = "first_touch_weight_confidence_earliest_v1"
+# Exact historical labels are retained for installations with legacy lookup rows.
+LEAD_STATUS_ALIASES = {
+	"new": {"NEW", "Mới"},
+	"in_progress": {"PROSPECT", "CONFIRMED", "Hẹn liên hệ sau", "Đang suy nghĩ", "Lead nhắc lại",
+		"Có triển vọng", "Có triển vọng (quan tâm)"},
+	"no_response": {"NO_RESPONSE", "UNCONTACTABLE", "Không nghe máy lần 1", "Không nghe máy lần 2",
+		"Không nghe máy lần 3", "Không liên lạc được"},
+	"disqualified": {"REFUSED", "NOT_INTERESTED", "Không quan tâm", "Không triển vọng",
+		"Không đủ tài chính", "Sai đối tượng"},
+	"converted": {"CONVERTED", "ENROLLED", "Đã chuyển đổi", "Đã nhập học"},
+	"invalid": {"WRONG_NUMBER", "INVALID", "Sai số"},
+	"duplicate": {"DUPLICATE", "Lead trùng"},
+}
 FUNNEL_STAGES = (
 	("impressions", "Impressions"),
 	("clicks", "Clicks"),
@@ -73,8 +95,12 @@ def get_director_campaign_intelligence(
 	campus_id = _resolve_link_filter("campus", campus, "CRM Campus")
 	channel_id = _resolve_link_filter("channel", channel, "CRM Platform")
 	facts = _load_facts(date_from, date_to, campus_id, channel_id, scope_context, warnings)
-	campaigns = _load_campaigns({row["campaign"] for row in facts})
-	attribution = _load_attribution({row["campaign"] for row in facts}, date_from, date_to, warnings)
+	leads = _load_campaign_lead_rows(admission_year, date_from, date_to, campus_id, channel_id, scope_context)
+	campaign_ids = {row["campaign"] for row in facts} | set(leads or {})
+	campaigns = _load_campaigns(campaign_ids)
+	attribution = _load_attribution(
+		campaign_ids, date_from, date_to, warnings
+	)
 	return _build_response(
 		admission_year,
 		date_from,
@@ -85,7 +111,312 @@ def get_director_campaign_intelligence(
 		campaigns,
 		attribution,
 		warnings,
+		leads,
 	)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_campaign_leads(
+	campaignId: str | None = None,
+	admissionYear: str | int | None = None,
+	statusGroup: str = "all",
+	page: str | int = 1,
+	pageSize: str | int = 20,
+	channel: str = "all",
+	campus: str = "all",
+	scope: str = "all",
+	fromDate: str | None = None,
+	toDate: str | None = None,
+	**query: Any,
+) -> dict[str, Any]:
+	"""Return minimal CRM Lead rows from the same primary-attribution cohort as the chart."""
+	access = require_campaign_intelligence_access()
+	year = resolve_admission_year(admissionYear)
+	date_from, date_to, warnings = _resolve_date_range(year, query.get("from", fromDate), query.get("to", toDate))
+	page_number = parse_limit(page, field="page", minimum=1, maximum=1000000, default=1)
+	page_size = parse_limit(pageSize, field="pageSize", minimum=1, maximum=100, default=20)
+	group = str(statusGroup or "all").strip().lower()
+	if group not in {"all", *LEAD_STATUS_GROUPS, *LEAD_QUALITY_GROUPS}:
+		raise_api_error("INVALID_QUERY", "Tham số statusGroup không hợp lệ.", frappe.ValidationError, 400)
+	campaign_id = str(campaignId or "").strip()
+	if not campaign_id or len(campaign_id) > 140:
+		raise_api_error("INVALID_QUERY", "Tham số campaignId không hợp lệ.", frappe.ValidationError, 400)
+	# Permission-aware lookup deliberately returns the same error for missing/invisible campaigns.
+	if not frappe.get_list("CRM Campaign", filters={"name": campaign_id}, fields=["name"], limit_page_length=1):
+		raise_api_error("NOT_FOUND", "Không tìm thấy chiến dịch trong phạm vi truy cập.", frappe.DoesNotExistError, 404)
+	scope_context = _resolve_scope(scope, access)
+	campus_id = _resolve_link_filter("campus", campus, "CRM Campus")
+	channel_id = _resolve_link_filter("channel", channel, "CRM Platform")
+	page_result = _load_campaign_lead_page(
+		year,
+		date_from,
+		date_to,
+		campus_id,
+		channel_id,
+		scope_context,
+		campaign_id,
+		group,
+		page_number,
+		page_size,
+	)
+	if page_result is None:
+		raise_api_error(
+			"CAMPAIGN_INTELLIGENCE_DATA_UNAVAILABLE",
+			"Nguồn dữ liệu lead chưa sẵn sàng.",
+			frappe.ValidationError,
+			503,
+		)
+	rows = page_result["rows"]
+	total = page_result["total"]
+	return {
+		"meta": {"admissionYear": int(year), "from": date_from.isoformat(), "to": date_to.isoformat(),
+			"scope": scope_context["id"], "attributionRule": PRIMARY_ATTRIBUTION_RULE, "warnings": warnings},
+		"campaignId": campaign_id,
+		"items": _build_lead_items(rows),
+		"pagination": {"page": page_number, "pageSize": page_size, "total": total,
+			"totalPages": (total + page_size - 1) // page_size},
+	}
+
+
+def _primary_attributions(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+	"""Choose globally within the date cohort, before campus/channel/campaign filters."""
+	def rank(row):
+		return (-int(row.get("is_first_touch") or 0), -_number(row.get("weight")),
+			-_number(row.get("confidence")), str(row.get("attributed_at") or ""), str(row["name"]))
+	primary = {}
+	for row in sorted(rows, key=rank):
+		if row.get("student") and row.get("campaign"):
+			primary.setdefault(row["student"], row)
+	return primary
+
+
+def _lead_status_group(code: str, status: dict[str, Any]) -> str:
+	status_codes = {str(value) for value in (code, status.get("code")) if value}
+	display_name = status.get("display_name")
+	for group, aliases in LEAD_STATUS_ALIASES.items():
+		if status_codes & aliases or display_name in aliases:
+			return group
+	# Metadata supports custom canonical statuses without guessing from free text.
+	if status.get("stage_category") == "enrolled":
+		return "converted"
+	if status.get("stage_category") == "lost":
+		return "disqualified"
+	if status.get("lifecycle_stage") == "Lead":
+		return "new"
+	if status.get("lifecycle_stage") in {"MQL", "Applicant"}:
+		return "in_progress"
+	if status.get("lifecycle_stage") == "Enrolled":
+		return "converted"
+	if status.get("lifecycle_stage") == "Lost":
+		return "disqualified"
+	return "unknown"
+
+
+def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
+	"""Load one permission-scoped cohort; unavailable optional tables yield no lead metrics."""
+	if not all(
+		frappe.db.table_exists(doctype)
+		for doctype in ("CRM Campaign Attribution", "CRM Lead", "CRM Enrollment Status")
+	):
+		return None
+	attributions = frappe.get_all(
+		"CRM Campaign Attribution",
+		filters=[["attributed_at", ">=", date_from.isoformat()],
+			["attributed_at", "<", (date_to + timedelta(days=1)).isoformat()]],
+		fields=["name", "student", "campaign", "weight", "confidence", "is_first_touch", "attributed_at"],
+		limit_page_length=0,
+	)
+	primary = _primary_attributions(attributions)
+	if not primary:
+		return {}
+	campaign_ids = {row["campaign"] for row in primary.values()}
+	visible_campaigns = set(campaign_ids)
+	if campaign_ids:
+		campaign_filters = {"name": ["in", sorted(campaign_ids)]}
+		if campus:
+			campaign_filters["campus"] = campus
+		visible_campaigns = {
+			row["name"]
+			for row in frappe.get_list("CRM Campaign", filters=campaign_filters, fields=["name"], limit_page_length=0)
+		}
+	if channel:
+		assignments = frappe.get_all(
+			"CRM Campaign Channel Assignment",
+			filters={"campaign": ["in", sorted(visible_campaigns)], "channel": channel}
+			if visible_campaigns
+			else {"campaign": ["in", [""]], "channel": channel},
+			fields=["campaign"],
+			limit_page_length=0,
+		)
+		visible_campaigns &= {row["campaign"] for row in assignments}
+	student_ids = [student for student, row in primary.items() if row["campaign"] in visible_campaigns]
+	if not student_ids:
+		return {}
+	year_id = frappe.db.get_value("CRM Admission Year", {"year_name": year}, "name") or year
+	filters = {"name": ["in", student_ids], "admission_year": year_id}
+	if campus:
+		filters["branch"] = campus
+	if scope.get("territory"):
+		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
+		filters["owning_team"] = ["in", teams or [""]]
+	students = frappe.get_list("CRM Lead", filters=filters,
+		fields=["name", "lead_code", "student_name", "high_school", "enrollment_status", "owner_staff", "source", "modified"],
+		limit_page_length=0)
+	statuses = {row["name"]: row for row in frappe.get_all("CRM Enrollment Status",
+		fields=["name", "display_name", "stage_category", "lifecycle_stage"], limit_page_length=0)}
+	grouped = defaultdict(list)
+	for student in students:
+		row = dict(student)
+		code = str(row.get("enrollment_status") or "")
+		status = statuses.get(code, {})
+		row.update(statusCode=code, status=status.get("display_name") or code,
+			statusGroup=_lead_status_group(code, status))
+		grouped[primary[row["name"]]["campaign"]].append(row)
+	return dict(grouped)
+
+
+def _load_campaign_lead_page(year, date_from, date_to, campus, channel, scope, campaign_id, status_group, page, page_size):
+	"""Load one page from the campaign cohort instead of slicing a full student list in Python."""
+	if not all(
+		frappe.db.table_exists(doctype)
+		for doctype in ("CRM Campaign Attribution", "CRM Lead", "CRM Enrollment Status")
+	):
+		return None
+	attributions = frappe.get_all(
+		"CRM Campaign Attribution",
+		filters=[
+			["attributed_at", ">=", date_from.isoformat()],
+			["attributed_at", "<", (date_to + timedelta(days=1)).isoformat()],
+		],
+		fields=["name", "student", "campaign", "weight", "confidence", "is_first_touch", "attributed_at"],
+		limit_page_length=0,
+	)
+	primary = _primary_attributions(attributions)
+	if not primary:
+		return {"rows": [], "total": 0}
+
+	campaign_ids = {row["campaign"] for row in primary.values()}
+	campaign_filters = {"name": ["in", sorted(campaign_ids)]}
+	if campus:
+		campaign_filters["campus"] = campus
+	visible_campaigns = {
+		row["name"]
+		for row in frappe.get_list("CRM Campaign", filters=campaign_filters, fields=["name"], limit_page_length=0)
+	}
+	if not campus:
+		visible_campaigns = set(campaign_ids)
+	if channel:
+		assignments = frappe.get_all(
+			"CRM Campaign Channel Assignment",
+			filters={"campaign": ["in", sorted(visible_campaigns)], "channel": channel}
+			if visible_campaigns
+			else {"campaign": ["in", [""]], "channel": channel},
+			fields=["campaign"],
+			limit_page_length=0,
+		)
+		visible_campaigns &= {row["campaign"] for row in assignments}
+	student_ids = [
+		student
+		for student, attribution in primary.items()
+		if attribution["campaign"] == campaign_id and campaign_id in visible_campaigns
+	]
+	if not student_ids:
+		return {"rows": [], "total": 0}
+
+	year_id = frappe.db.get_value("CRM Admission Year", {"year_name": year}, "name") or year
+	filters = {"name": ["in", student_ids], "admission_year": year_id}
+	if campus:
+		filters["branch"] = campus
+	if scope.get("territory"):
+		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
+		filters["owning_team"] = ["in", teams or [""]]
+	statuses = {
+		row["name"]: row
+		for row in frappe.get_all(
+			"CRM Enrollment Status",
+			fields=["name", "display_name", "stage_category", "lifecycle_stage"],
+			limit_page_length=0,
+		)
+	}
+	if status_group != "all":
+		group_codes = [
+			code for code, status in statuses.items() if _lead_status_group(code, status) == status_group
+		]
+		if status_group == "unknown":
+			known_codes = [
+				code
+				for code, status in statuses.items()
+				if _lead_status_group(code, status) in {*LEAD_STATUS_GROUPS, *LEAD_QUALITY_GROUPS}
+			]
+			filters["enrollment_status"] = ["not in", known_codes or ["__none__"]]
+		else:
+			filters["enrollment_status"] = ["in", group_codes or ["__none__"]]
+
+	total = frappe.db.count("CRM Lead", filters)
+	rows = frappe.get_list(
+		"CRM Lead",
+		filters=filters,
+		fields=["name", "lead_code", "student_name", "high_school", "enrollment_status", "owner_staff", "source", "modified"],
+		order_by="modified desc, name asc",
+		limit_start=(page - 1) * page_size,
+		limit_page_length=page_size,
+	)
+	for row in rows:
+		code = str(row.get("enrollment_status") or "")
+		status = statuses.get(code, {})
+		row.update(
+			statusCode=code,
+			status=status.get("display_name") or code,
+			statusGroup=_lead_status_group(code, status),
+		)
+	return {"rows": rows, "total": total}
+
+
+def _lead_counts(rows):
+	if rows is None:
+		return {
+			"leadCount": None,
+			"statusBreakdown": None,
+			"qualityCount": None,
+			"qualityBreakdown": None,
+		}
+	counts = defaultdict(int)
+	for row in rows:
+		counts[row["statusGroup"]] += 1
+	def breakdown(groups):
+		return [{"code": code, "label": label, "count": counts[code],
+			"share": round(counts[code] / len(rows) * 100, 1) if rows else 0.0}
+			for code, label in groups.items()]
+	return {"leadCount": len(rows), "statusBreakdown": breakdown(LEAD_STATUS_GROUPS),
+		"qualityCount": sum(counts[code] for code in LEAD_QUALITY_GROUPS),
+		"qualityBreakdown": breakdown(LEAD_QUALITY_GROUPS)}
+
+
+def _build_lead_items(rows):
+	if not rows:
+		return []
+	def labels(doctype, field, ids):
+		if not ids:
+			return {}
+		return {row["name"]: row.get(field) or row["name"] for row in frappe.get_all(
+			doctype, filters={"name": ["in", sorted(ids)]}, fields=["name", field], limit_page_length=0)}
+	schools = labels("CRM High School", "school_name", {row["high_school"] for row in rows if row.get("high_school")})
+	owners = labels("CRM Staff", "full_name", {row["owner_staff"] for row in rows if row.get("owner_staff")})
+	sources = labels("CRM Lead Source", "source_name", {row["source"] for row in rows if row.get("source")})
+	interactions = frappe.get_list("CRM Interaction",
+		filters={"student": ["in", [row["name"] for row in rows]], "direction": "outbound",
+			"interaction_datetime": ["is", "set"]},
+		fields=["student", "interaction_datetime"], limit_page_length=0)
+	contacts = defaultdict(list)
+	for interaction in interactions:
+		contacts[interaction["student"]].append(str(interaction["interaction_datetime"]))
+	return [{"id": row["name"], "leadCode": row.get("lead_code") or row["name"],
+		"name": row.get("student_name") or row["name"],
+		"school": schools.get(row.get("high_school"), ""), "status": row["status"], "statusCode": row["statusCode"],
+		"statusGroup": row["statusGroup"], "owner": owners.get(row.get("owner_staff"), ""),
+		"source": sources.get(row.get("source"), ""), "contactAttemptCount": len(contacts[row["name"]]),
+		"lastContactAt": max(contacts[row["name"]], default=None),
+		"modifiedAt": str(row["modified"]) if row.get("modified") else None} for row in rows]
 
 
 def require_campaign_intelligence_access() -> dict[str, Any]:
@@ -301,8 +632,9 @@ def _build_response(
 	campaigns: dict[str, dict[str, Any]],
 	attribution: dict[str, float],
 	warnings: list[str],
+	leads: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-	campaign_rows = _build_campaigns(facts, campaigns, attribution)
+	campaign_rows = _build_campaigns(facts, campaigns, attribution, leads)
 	summary = _summary(campaign_rows)
 	return {
 		"meta": {
@@ -314,6 +646,7 @@ def _build_response(
 			"scope": scope["id"],
 			"status": "partial" if warnings else "available",
 			"source": "CRM Campaign Performance Fact v1",
+			"leadAttributionRule": PRIMARY_ATTRIBUTION_RULE,
 			"warnings": list(dict.fromkeys(warnings)),
 		},
 		"generatedAt": datetime.now(LOCAL_TIMEZONE).isoformat(timespec="seconds"),
@@ -326,11 +659,14 @@ def _build_response(
 
 
 def _build_campaigns(
-	facts: list[dict[str, Any]], campaigns: dict[str, dict[str, Any]], attribution: dict[str, float]
+	facts: list[dict[str, Any]], campaigns: dict[str, dict[str, Any]], attribution: dict[str, float],
+	leads: dict[str, list[dict[str, Any]]] | None = None,
 ) -> list[dict[str, Any]]:
 	grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
 	for fact in facts:
 		grouped[fact["campaign"]].append(fact)
+	for campaign_id in leads or {}:
+		grouped.setdefault(campaign_id, [])
 	rows = []
 	for campaign_id, values in grouped.items():
 		metrics = _metrics(values)
@@ -344,6 +680,7 @@ def _build_campaigns(
 				"name": campaigns.get(campaign_id, {}).get("title") or campaign_id,
 				"channel": _single_or_mixed({value.get("channel") for value in values}),
 				**metrics,
+				**_lead_counts(None if leads is None else (leads or {}).get(campaign_id, [])),
 				"roas": _ratio(revenue, spend),
 				"cpql": _ratio(spend, metrics["qualifiedLeads"]),
 				"enrollmentRate": enrollment_rate,
