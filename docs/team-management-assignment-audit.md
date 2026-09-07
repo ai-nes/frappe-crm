@@ -7,17 +7,17 @@
 ## 1. Mô hình nghiệp vụ chuẩn
 
 ```text
-Trưởng Group (một người quản lý tất cả Group đang hoạt động)
+Admin/System Manager
   └── Group (một tỉnh)
+        ├── một Trưởng Group
         └── nhiều Team
-              ├── một Trưởng nhóm tổ chức
+              ├── một Trưởng nhóm tổ chức của từng Team
               └── nhiều thành viên: Lead Sale, Sale, CTV Sale
 ```
 
-- Admin quyết định ai là Trưởng Group.
-- Trưởng Group được áp dụng đồng nhất cho tất cả Group đang hoạt động.
-- Admin quyết định Trưởng nhóm tổ chức riêng cho từng Team.
-- Trưởng nhóm quản lý các Team và phạm vi tỉnh đã được giao.
+- Admin hoặc Lead Sale được chọn một Trưởng Group cho từng Group.
+- Admin hoặc Lead Sale được quyết định Trưởng nhóm tổ chức riêng cho từng Team.
+- Trưởng nhóm quản lý thành viên của Team mình.
 - Mỗi tỉnh có một Group hoạt động.
 - Một Group có thể có nhiều Team.
 - Một Team có nhiều Sale/CTV; không bắt buộc chỉ một Lead Sale.
@@ -30,10 +30,10 @@ Trưởng Group (một người quản lý tất cả Group đang hoạt động
 
 Người vận hành chỉ cần làm bốn việc:
 
-1. Chọn Trưởng Group cho toàn bộ các Group đang hoạt động.
-2. Tạo hoặc chọn Group và gắn một tỉnh.
+1. Tạo hoặc chọn Group và gắn một tỉnh.
+2. Chọn Trưởng Group cho Group.
 3. Tạo Team bên trong Group.
-4. Thêm Trưởng nhóm tổ chức và các thành viên Sale/CTV cho Team.
+4. Chọn Trưởng nhóm cho từng Team và thêm các thành viên Sale/CTV.
 
 Team được coi là sẵn sàng khi:
 
@@ -71,6 +71,7 @@ thủ công.
 | Vai trò | Quyền |
 |---|---|
 | Admin/System Manager | Xem và quản lý tất cả Group, Team, trưởng nhóm, thành viên |
+| Lead Sale | Xem và chỉnh Trưởng Group/Trưởng nhóm, quản lý thành viên trong phạm vi |
 | Trưởng nhóm | Xem cấu trúc được cấp quyền và quản lý thành viên/Team trong phạm vi |
 | Sale/CTV | Xem Team và xử lý Lead được giao |
 
@@ -87,12 +88,20 @@ function `Lead Sale`, `Sale` hoặc `CTV Sale`.
 | `crm.api.team_management.get_team_group_detail` | Đọc một Group và các Team |
 | `crm.api.team_management.get_team_detail` | Đọc một Team và thành viên |
 | `crm.api.team_management.save_team_group` | Tạo/cập nhật Group và tỉnh |
-| `crm.api.team_management.save_global_group_lead` | Đặt một Trưởng Group cho tất cả Group đang hoạt động |
 | `crm.api.team_management.save_team` | Tạo/cập nhật Team trong Group |
 | `crm.api.team_management.add_team_member` | Thêm/cập nhật thành viên và function |
 | `crm.api.team_management.move_team_member` | Chuyển thành viên giữa Team |
 | `crm.api.team_management.remove_team_member` | Gỡ thành viên |
 | `crm.api.team_management.change_team_lead` | Đổi Trưởng nhóm tổ chức |
+
+### Thông tin vai trò của tài khoản đăng nhập
+
+`crm.api.session.me` bổ sung `crm_team_memberships`. Mỗi phần tử cho biết:
+
+- `role`/`function`: vai trò nghiệp vụ của người đó (`Sale`, `CTV Sale`, `Lead Sale`).
+- `membership_role`: vai trò trong Team (`Trưởng nhóm` hoặc `Thành viên`).
+- `team_id`, `team_name`, `group_id`, `group_name`, `province_id`: phạm vi tổ chức.
+- `is_team_lead`: giá trị máy đọc được tương ứng với `membership_role`.
 
 ### Phân công theo đợt
 
@@ -122,6 +131,7 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 - [ ] Admin tạo được Group có tỉnh từ danh mục Frappe.
 - [ ] Tạo được nhiều Team trong cùng Group.
 - [ ] Một Team có thể có nhiều Lead Sale, nhiều Sale và nhiều CTV.
+- [ ] Mỗi card Group hiển thị và cho phép chỉnh một Trưởng Group.
 - [ ] Trưởng nhóm được quản lý độc lập với function của thành viên.
 - [ ] Team thiếu Sale/CTV hiển thị chưa sẵn sàng.
 - [ ] Batch không cần chọn hàng chờ hoặc Team.

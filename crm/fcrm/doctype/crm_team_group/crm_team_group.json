@@ -32,8 +32,8 @@
   {
    "fieldname": "group_lead_staff",
    "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Group Lead",
+   "hidden": 1,
+   "label": "Legacy Group Lead",
    "options": "CRM Staff"
   },
   {

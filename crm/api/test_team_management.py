@@ -30,10 +30,6 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 			self.assertIn("provinceId", group)
 			self.assertIn("provinceCode", group)
 			self.assertIn("provinceName", group)
-		self.assertIn("globalGroupLead", workspace)
-		self.assertIn(
-			workspace["globalGroupLead"]["status"], {"configured", "not_configured", "inconsistent"}
-		)
 		self.assertGreaterEqual(workspace["summary"]["teamCount"], len(workspace["teams"]))
 		self.assertTrue(workspace["permissions"]["canManageAll"])
 
@@ -50,6 +46,8 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 			self.assertLessEqual(
 				team["leadCount"] + team["saleCount"] + team["ctvCount"], team["memberCount"]
 			)
+		for group in workspace["groups"]:
+			self.assertIn("groupLeadId", group)
 
 	def test_member_role_and_initials_are_normalized_for_dashboard(self):
 		self.assertEqual(_member_role("Sale"), "SALE")

@@ -6,7 +6,6 @@ from frappe.model.document import Document
 class CRMTeamGroup(Document):
 	def validate(self):
 		self._validate_province()
-		self._validate_lead()
 		self._validate_deactivation()
 
 	def _validate_province(self):
@@ -35,17 +34,6 @@ class CRMTeamGroup(Document):
 					_("Tỉnh này đã có Group đang hoạt động: {0}.").format(other_group),
 					frappe.ValidationError,
 				)
-
-	def _validate_lead(self):
-		if not self.group_lead_staff:
-			return
-		staff = frappe.db.get_value(
-			"CRM Staff", self.group_lead_staff, ["name", "full_name", "is_active"], as_dict=True
-		)
-		if not staff:
-			frappe.throw(_("Group lead không tồn tại."), frappe.ValidationError)
-		if not staff.is_active:
-			frappe.throw(_("Group lead phải là nhân sự đang hoạt động."), frappe.ValidationError)
 
 	def _validate_deactivation(self):
 		if self.is_active:

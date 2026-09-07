@@ -56,6 +56,10 @@ def _is_global(context):
 	return bool(context.get("is_system_manager") or context.get("profile") == "admissions_director")
 
 
+def _can_manage_leads(context):
+	return _is_global(context) or context.get("profile") == "lead_sales"
+
+
 def _require_access(*, write=False):
 	context = _actor_context()
 	capabilities = set(context.get("capabilities") or [])
@@ -206,51 +210,6 @@ def _command(
 
 def _staff_label(staff, fallback=None):
 	return (staff or {}).get("full_name") or (staff or {}).get("name") or fallback or "—"
-
-
-def _global_group_lead(groups):
-	"""Return the one organizational leader shared by active Groups.
-
-	``group_lead_staff`` remains stored on each Group for compatibility with the
-	existing DocType and audit history.  The dashboard treats one consistent
-	value across active Groups as the global Group leader.
-	"""
-	active_groups = [group for group in groups if group.is_active]
-	lead_ids = {group.group_lead_staff for group in active_groups if group.group_lead_staff}
-	if not lead_ids:
-		return {
-			"staffId": None,
-			"name": None,
-			"email": None,
-			"status": "not_configured",
-		}
-	if len(lead_ids) != 1:
-		return {
-			"staffId": None,
-			"name": None,
-			"email": None,
-			"status": "inconsistent",
-		}
-	lead_id = next(iter(lead_ids))
-	staff = frappe.db.get_value(
-		"CRM Staff",
-		lead_id,
-		["name", "full_name", "user", "is_active"],
-		as_dict=True,
-	)
-	if not staff or not staff.is_active:
-		return {
-			"staffId": None,
-			"name": None,
-			"email": None,
-			"status": "not_configured",
-		}
-	return {
-		"staffId": staff.name,
-		"name": staff.full_name or staff.name,
-		"email": staff.user,
-		"status": "configured",
-	}
 
 
 def _initials(name):
@@ -442,12 +401,11 @@ def _read_workspace(context):
 	for group in groups:
 		group_teams = [row for row in team_rows if row["groupId"] == group.name]
 		group_member_ids = {member_id for team in group_teams for member_id in team["memberIds"]}
-		lead_id = group.group_lead_staff
 		group_rows.append(
 			{
 				"id": group.name,
 				"name": group.group_name,
-				"leadId": lead_id,
+				"groupLeadId": group.group_lead_staff,
 				"provinceId": group.province,
 				"provinceCode": frappe.db.get_value("CRM Province", group.province, "province_code")
 				if group.province
@@ -483,7 +441,6 @@ def _read_workspace(context):
 			"activeStaffCount": sum(row["isActive"] for row in member_rows),
 		},
 		"groups": group_rows,
-		"globalGroupLead": _global_group_lead(groups),
 		"teams": team_rows,
 		"members": member_rows,
 		"options": {
@@ -546,7 +503,15 @@ def get_team_detail(team_id):
 	}
 
 
-def _save_group(group_id, group_name, province, group_lead_staff, clear_group_lead, is_active, context):
+def _save_group(
+	group_id,
+	group_name,
+	province,
+	group_lead_staff,
+	clear_group_lead,
+	is_active,
+	context,
+):
 	group_id = _text(group_id, "group_id", required=False)
 	group_name = _text(group_name, "group_name")
 	if group_id:
@@ -573,10 +538,19 @@ def _save_group(group_id, group_name, province, group_lead_staff, clear_group_le
 		)
 		if other_group:
 			_error("PROVINCE_GROUP_EXISTS", "Tỉnh này đã có Group đang hoạt động.")
+	if (clear_group_lead or group_lead_staff is not None) and not _can_manage_leads(context):
+		frappe.throw(_("Bạn không có quyền đổi Trưởng Group."), frappe.PermissionError)
 	if clear_group_lead:
 		doc.group_lead_staff = None
 	elif group_lead_staff is not None:
-		doc.group_lead_staff = _text(group_lead_staff, "group_lead_staff", required=False)
+		staff = frappe.db.get_value(
+			"CRM Staff", group_lead_staff, ["name", "is_active"], as_dict=True
+		)
+		if not staff:
+			_error("STAFF_NOT_FOUND", "Nhân sự không tồn tại.")
+		if not staff.is_active:
+			_error("STAFF_INACTIVE", "Trưởng Group phải là nhân sự đang hoạt động.")
+		doc.group_lead_staff = group_lead_staff
 	doc.is_active = int(_bool(is_active, True))
 	if group_id:
 		doc.save(ignore_permissions=True)
@@ -607,11 +581,6 @@ def save_team_group(
 			_("Chỉ quản trị viên cấp Admissions mới được tạo Group."),
 			frappe.PermissionError,
 		)
-	if (group_lead_staff or _bool(clear_group_lead)) and not _is_global(context):
-		frappe.throw(
-			_("Chỉ quản trị viên cấp Admissions mới được đặt trưởng Group."),
-			frappe.PermissionError,
-		)
 	payload = {
 		"group_id": group_id,
 		"group_name": group_name,
@@ -630,71 +599,13 @@ def save_team_group(
 			group_name,
 			province,
 			group_lead_staff,
-			clear_group_lead,
+			_bool(clear_group_lead),
 			is_active,
 			context,
 		)
 
 	return _command(
 		"group_setup",
-		payload,
-		context,
-		apply,
-		idempotency_key=idempotency_key,
-		correlation_id=correlation_id,
-	)
-
-
-@frappe.whitelist(methods=["POST"])
-def save_global_group_lead(
-	staff_id=None,
-	clear_group_lead=False,
-	idempotency_key=None,
-	correlation_id=None,
-):
-	"""Set one organizational leader for every active province Group."""
-	context = _require_access(write=True)
-	if not _is_global(context):
-		frappe.throw(
-			_("Chỉ quản trị viên cấp Admissions mới được đặt Trưởng Group."),
-			frappe.PermissionError,
-		)
-	clear_group_lead = _bool(clear_group_lead)
-	staff_id = _text(staff_id, "staff_id", required=False)
-	if not staff_id and not clear_group_lead:
-		_error("GROUP_LEAD_REQUIRED", "Hãy chọn Trưởng Group.")
-	if staff_id:
-		staff = frappe.db.get_value("CRM Staff", staff_id, ["name", "full_name", "is_active"], as_dict=True)
-		if not staff:
-			_error("STAFF_NOT_FOUND", "Nhân sự không tồn tại.")
-		if not staff.is_active:
-			_error("STAFF_INACTIVE", "Trưởng Group phải là nhân sự đang hoạt động.")
-
-	payload = {
-		"staff_id": staff_id,
-		"clear_group_lead": clear_group_lead,
-	}
-
-	def apply():
-		group_ids = frappe.get_all(
-			"CRM Team Group", filters={"is_active": 1}, pluck="name", limit_page_length=0
-		)
-		for group_id in group_ids:
-			frappe.db.set_value(
-				"CRM Team Group",
-				group_id,
-				"group_lead_staff",
-				None if clear_group_lead else staff_id,
-				update_modified=True,
-			)
-		return {
-			"action": "global_group_lead_setup",
-			"staffId": None if clear_group_lead else staff_id,
-			"groupCount": len(group_ids),
-		}
-
-	return _command(
-		"global_group_lead_setup",
 		payload,
 		context,
 		apply,
@@ -732,18 +643,18 @@ def _save_team(
 		_assert_team_scope(team_id, context)
 		doc = frappe.get_doc("CRM Team", team_id)
 		requested_lead = _text(team_lead_staff, "team_lead_staff", required=False)
-		if not _is_global(context) and requested_lead != (doc.team_lead_staff or None):
+		if not _can_manage_leads(context) and requested_lead != (doc.team_lead_staff or None):
 			frappe.throw(
-				_("Chỉ Admin cấp cao được chọn hoặc thay đổi Trưởng nhóm."),
+				_("Bạn không có quyền chọn hoặc thay đổi Trưởng nhóm."),
 				frappe.PermissionError,
 			)
 	else:
 		if frappe.db.exists("CRM Team", {"team_name": team_name}):
 			_error("TEAM_ALREADY_EXISTS", "Tên đội tư vấn đã tồn tại.")
 		doc = frappe.get_doc({"doctype": "CRM Team"})
-		if team_lead_staff and not _is_global(context):
+		if team_lead_staff and not _can_manage_leads(context):
 			frappe.throw(
-				_("Chỉ Admin cấp cao được chọn Trưởng nhóm."),
+				_("Bạn không có quyền chọn Trưởng nhóm."),
 				frappe.PermissionError,
 			)
 	doc.team_name = team_name
@@ -875,9 +786,9 @@ def _save_membership(
 	if function not in SUPPORTED_FUNCTIONS:
 		_error("FUNCTION_INVALID", "Vai trò nhân sự không được hỗ trợ.")
 	is_team_lead = _bool(is_team_lead)
-	if is_team_lead and not _is_global(context):
+	if is_team_lead and not _can_manage_leads(context):
 		frappe.throw(
-			_("Chỉ Admin cấp cao được chọn Trưởng nhóm."),
+			_("Bạn không có quyền chọn Trưởng nhóm."),
 			frappe.PermissionError,
 		)
 	term = _text(term, "term", required=False)
@@ -1120,9 +1031,9 @@ def change_team_lead(
 ):
 	"""Change the organizational Team leader without changing staff function."""
 	context = _require_access(write=True)
-	if not _is_global(context):
+	if not _can_manage_leads(context):
 		frappe.throw(
-			_("Chỉ Admin cấp cao được chọn hoặc thay đổi Trưởng nhóm."),
+			_("Bạn không có quyền chọn hoặc thay đổi Trưởng nhóm."),
 			frappe.PermissionError,
 		)
 	payload = {

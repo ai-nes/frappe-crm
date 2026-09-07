@@ -28,12 +28,12 @@ LOCAL_SITE = "crm.localhost"
 FIXTURE_PASSWORD = "12345@"
 FIXTURE_CAMPUS = "FPTU Ho Chi Minh Campus"
 FIXTURE_DEPARTMENT = seed_staff.FIXTURE_DEPARTMENT_NAME
-GROUP_LEAD_EMAIL = "nguyen.hai.nam@fpt.edu.vn"
 
 GROUP_FIXTURES: tuple[dict[str, Any], ...] = (
 	{
 		"name": "Phân nhóm Tuyển sinh Hồ Chí Minh",
 		"province": "Ho Chi Minh City",
+		"group_lead_email": "nguyen.hai.nam@fpt.edu.vn",
 		"legacy_names": ("Phân nhóm Tuyển sinh TP.HCM",),
 		"teams": (
 			{
@@ -68,6 +68,7 @@ GROUP_FIXTURES: tuple[dict[str, Any], ...] = (
 	{
 		"name": "Phân nhóm Tuyển sinh Đồng Nai",
 		"province": "Đồng Nai",
+		"group_lead_email": "nguyen.thao.vy@fpt.edu.vn",
 		"legacy_names": (),
 		"teams": (
 			{
@@ -431,7 +432,7 @@ def _ensure_group(fixture: dict[str, Any], staff_by_email: dict[str, str]) -> st
 		).insert(ignore_permissions=True)
 	group.province = province
 	group.is_active = 1
-	group.group_lead_staff = staff_by_email[GROUP_LEAD_EMAIL]
+	group.group_lead_staff = staff_by_email[fixture["group_lead_email"]]
 	group.save(ignore_permissions=True)
 	return group.name
 
