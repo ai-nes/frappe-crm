@@ -4652,8 +4652,8 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 		else []
 	)
 	legacy_actions = (
-		frappe.get_all("CRM Action", filters={"student": ["in", legacy_student_list]}, pluck="name")
-		if legacy_student_list and frappe.db.table_exists("CRM Action")
+		frappe.get_all("CRM Action Item", filters={"student": ["in", legacy_student_list]}, pluck="name")
+		if legacy_student_list and frappe.db.table_exists("CRM Action Item")
 		else []
 	)
 	legacy_identity_names = (
@@ -4753,7 +4753,7 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 	for doctype, field in (
 		("CRM Student SLA Attempt", "student"),
 		("CRM Student Routing Request", "student"),
-		("CRM Action", "student"),
+		("CRM Action Item", "student"),
 		("CRM Score History", "student"),
 		("Task", "student"),
 		("CRM Student Contact Conversion", "student"),
@@ -4786,7 +4786,7 @@ def _cleanup_legacy_seed_data() -> dict[str, int]:
 			),
 		)
 	if legacy_actions:
-		delete_docs("CRM Action", legacy_actions)
+		delete_docs("CRM Action Item", legacy_actions)
 	if legacy_recommendations:
 		delete_docs("CRM Recommendation", legacy_recommendations)
 	if legacy_interactions and frappe.db.table_exists("CRM Intent"):
@@ -4906,7 +4906,7 @@ def reset() -> dict:
 		)
 		students = sorted(set(students) | set(legacy_students))
 		for student in students:
-			for dt in ("CRM Admission Application", "CRM Action", "CRM Interaction", "Task"):
+			for dt in ("CRM Admission Application", "CRM Action Item", "CRM Interaction", "Task"):
 				for name in frappe.get_all(
 					dt, filters={"student": student}, pluck="name", limit_page_length=0
 				):

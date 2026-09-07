@@ -524,13 +524,17 @@ def _ensure_assignment_geography() -> tuple[str, dict[str, str], dict[str, str]]
 
 	wards: dict[str, str] = {}
 	for key, ward_name in WARD_NAMES.items():
-		ward = frappe.db.exists("CRM Ward", {"ward_name": ward_name})
+		ward_code = "760" if key == "central" else "HCM-TNP"
+		# Ward is autonamed "{ward_code} - {province}" (crm_ward.json), which may
+		# already exist from a real geography import under a different ward_name.
+		# Match on that key, not ward_name, or insert collides on the primary key.
+		ward = frappe.db.exists("CRM Ward", {"ward_code": ward_code, "province": province})
 		if not ward:
 			ward = (
 				frappe.get_doc(
 					{
 						"doctype": "CRM Ward",
-						"ward_code": "760" if key == "central" else "HCM-TNP",
+						"ward_code": ward_code,
 						"ward_name": ward_name,
 						"zone": zones[key],
 						"province": province,
@@ -548,7 +552,7 @@ def _ensure_assignment_geography() -> tuple[str, dict[str, str], dict[str, str]]
 				"zone": zones[key],
 				"province": province,
 				"province_name": "Ho Chi Minh City",
-				"ward_code": "760" if key == "central" else "HCM-TNP",
+				"ward_code": ward_code,
 			},
 			update_modified=False,
 		)
