@@ -3,7 +3,7 @@
  "field_order": ["naming_series", "student", "event_type", "occurred_at", "interaction", "marketing_engagement", "outcome", "campaign", "school_activity", "consent_state", "supersedes", "source_doctype", "source_name", "source_reference", "idempotency_fingerprint", "schema_version"],
  "fields": [
   {"default": "ENG-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "ENG-.YYYY.-"},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
   {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Event Type", "options": "Interaction\nMarketing Engagement\nOutcome\nCampaign\nSchool Activity", "reqd": 1},
   {"fieldname": "occurred_at", "fieldtype": "Datetime", "in_list_view": 1, "in_standard_filter": 1, "label": "Occurred At", "reqd": 1},
   {"fieldname": "interaction", "fieldtype": "Link", "in_list_view": 1, "label": "Interaction", "options": "CRM Interaction"},

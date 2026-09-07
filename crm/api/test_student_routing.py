@@ -6,6 +6,8 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.fcrm.student_routing import (
+	MANUAL_QUEUE,
+	_routing_context,
 	_select_member,
 	process_pending_routing_requests,
 	repair_orphan_routing_requests,
@@ -14,6 +16,19 @@ from crm.fcrm.student_routing import (
 
 
 class TestStudentRouting(FrappeTestCase):
+	def test_province_only_lead_stays_in_province_queue(self):
+		with (
+			patch(
+				"crm.fcrm.student_routing.resolve_student_zone",
+				return_value={"tier": 3, "reason": "province"},
+			),
+			patch.object(frappe.db, "exists") as exists,
+		):
+			result = _routing_context({"province": "HCM"}, {"team": "TEAM-1"})
+
+		self.assertEqual(result, {"tier": 3, "queue": MANUAL_QUEUE})
+		exists.assert_not_called()
+
 	def test_round_robin_selection_advances_after_cursor(self):
 		members = [{"staff": "STAFF-1"}, {"staff": "STAFF-2"}, {"staff": "STAFF-3"}]
 		self.assertEqual(_select_member(members, None)["staff"], "STAFF-1")
@@ -38,6 +53,14 @@ class TestStudentRouting(FrappeTestCase):
 			patch("crm.fcrm.student_routing.frappe.db.sql"),
 			patch("crm.fcrm.student_routing.frappe.get_doc", return_value=student),
 			patch("crm.fcrm.student_routing._canonical_pool", return_value={"name": "POOL-1"}),
+			patch(
+				"crm.fcrm.student_routing._routing_context",
+				return_value={
+					"tier": 2,
+					"zone": "ZONE-1",
+					"mapping": {"pool": "POOL-1", "team": "TEAM-1"},
+				},
+			),
 			patch("crm.fcrm.student_routing._active_policy", return_value=None),
 			patch("crm.fcrm.student_routing._eligible_members") as members,
 		):

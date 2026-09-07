@@ -17,6 +17,7 @@ from crm.fcrm.lead_code import (
 	lead_code_year,
 	next_lead_code,
 )
+from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS, SERVICE_FLAG
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.utils.geo_resolver import (
@@ -50,6 +51,9 @@ class CRMLead(Document):
 	def before_insert(self):
 		# The code is server-managed; ignore any client/import value.
 		self.lead_code = None
+		self.processing_status = "NEW"
+		self.resolution = "PENDING"
+		self.matched_student = None
 		self._set_defaults()
 		self._normalize_phone_fields()
 		self._resolve_geo()
@@ -83,6 +87,19 @@ class CRMLead(Document):
 					_("Student ownership changes must use the ownership command."),
 					title=_("Ownership command required"),
 				)
+		if before and not getattr(frappe.flags, SERVICE_FLAG, False):
+			processing_fields = (
+				"processing_status",
+				"resolution",
+				"resolution_reason",
+				"matched_student",
+			)
+			if any(before.get(field) != self.get(field) for field in processing_fields):
+				frappe.throw(
+					_("Lead processing changes must use the processing command."),
+					frappe.PermissionError,
+					title=_("Processing command required"),
+				)
 		self._normalize_phone_fields()
 		self._resolve_geo()
 		if self.cohort_end_year:
@@ -91,6 +108,7 @@ class CRMLead(Document):
 			frappe.throw(_("Lead Code must match LD-YYYY-NNNNN."), frappe.ValidationError)
 
 	def validate(self):
+		self._validate_processing_contract()
 		self._validate_phone_format()
 		self._validate_conversion_potential()
 		self._validate_segments()
@@ -110,6 +128,25 @@ class CRMLead(Document):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _validate_processing_contract(self):
+		status = str(self.get("processing_status") or "NEW").strip().upper()
+		resolution = str(self.get("resolution") or "PENDING").strip().upper()
+		if status not in PROCESSING_STATUSES:
+			frappe.throw(_("Invalid Lead processing status."), frappe.ValidationError)
+		if resolution not in RESOLUTIONS:
+			frappe.throw(_("Invalid Lead resolution."), frappe.ValidationError)
+		if status == "NEW" and resolution != "PENDING":
+			frappe.throw(_("A NEW Lead must have PENDING resolution."), frappe.ValidationError)
+		if status == "PROCESSING" and resolution != "PENDING":
+			frappe.throw(_("A Lead in PROCESSING must have PENDING resolution."), frappe.ValidationError)
+		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"MATCHED", "CREATED"}:
+			frappe.throw(
+				_("Only MATCHED or CREATED Leads can be PROCESSED or ASSIGNED."),
+				frappe.ValidationError,
+			)
+		if status == "CLOSED" and resolution == "PENDING":
+			frappe.throw(_("A CLOSED Lead must have a resolution."), frappe.ValidationError)
 
 	def _update_conversion_readiness(self):
 		"""Keep the Lead's pre-conversion readiness projection server-managed."""
@@ -219,15 +256,6 @@ class CRMLead(Document):
 
 	def on_update(self):
 		self._log_enrollment_transition()
-		before = self.get_doc_before_save()
-		from crm.services.student_context import bump_student_context_revision, material_student_changed
-
-		if material_student_changed(self, before):
-			bump_student_context_revision(self.name, "student_material_change")
-		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
-
-		if student_score_input_changed(self, before):
-			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def _log_enrollment_transition(self):
 		# Fires on both insert and update (Frappe calls on_update after
@@ -329,6 +357,18 @@ class CRMLead(Document):
 				"width": "12rem",
 			},
 			{
+				"label": "Processing Status",
+				"type": "Data",
+				"key": "processing_status",
+				"width": "10rem",
+			},
+			{
+				"label": "Resolution",
+				"type": "Data",
+				"key": "resolution",
+				"width": "10rem",
+			},
+			{
 				"label": "Assigned To",
 				"type": "Link",
 				"key": "assigned_to",
@@ -362,6 +402,8 @@ class CRMLead(Document):
 			"phone",
 			"email",
 			"enrollment_status",
+			"processing_status",
+			"resolution",
 			"assigned_to",
 			"source",
 			"campaign",

@@ -7,6 +7,8 @@ SCHOOL360_READ_ROLE_NAMES = (
 )
 SCHOOL360_CAPABILITY_ID = "school360.overview.read:v1"
 SCHOOL360_ROLLOUT_CONFIG_KEY = "crm_agents_school360_contract"
+STUDENT360_CAPABILITY_ID = "student360.overview.read:v1"
+STUDENT360_ROLLOUT_CONFIG_KEY = "crm_agents_student360_contract"
 SCHOOL360_RECOMMENDATION_CAPABILITY_ID = "school360.recommendation.context.read:v1"
 SCHOOL360_RECOMMENDATION_ROLLOUT_CONFIG_KEY = "crm_agents_school360_recommendation_contract"
 # Retired semantic grants must not remain advertised by Frappe after the
@@ -96,6 +98,25 @@ def _grant_sales_worklist_capability() -> None:
 		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(SCHOOL360_ROLLOUT_CONFIG_KEY)
 		== SCHOOL360_CAPABILITY_ID
 	)
+	student_consumer_ready = (
+		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(STUDENT360_ROLLOUT_CONFIG_KEY)
+		== STUDENT360_CAPABILITY_ID
+	)
+	for role_name in SCHOOL360_READ_ROLE_NAMES if student_consumer_ready else ():
+		if not frappe.db.exists("Role", role_name):
+			continue
+		role = frappe.get_doc("Role", role_name)
+		if any(
+			row.grant_type == "semantic_capability" and row.value == STUDENT360_CAPABILITY_ID
+			for row in role.custom_ai_capability_grants
+		):
+			continue
+		role.append(
+			"custom_ai_capability_grants",
+			{"grant_type": "semantic_capability", "value": STUDENT360_CAPABILITY_ID},
+		)
+		role.save(ignore_permissions=True)
+		changed = True
 	for role_name in SCHOOL360_READ_ROLE_NAMES if consumer_ready else ():
 		if not frappe.db.exists("Role", role_name):
 			continue

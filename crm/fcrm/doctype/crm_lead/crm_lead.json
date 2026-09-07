@@ -12,6 +12,10 @@
   "naming_series",
   "lead_code",
   "lead_status",
+  "processing_status",
+  "resolution",
+  "resolution_reason",
+  "matched_student",
   "conversion_status",
   "conversion_blockers",
   "converted_student",
@@ -135,6 +139,43 @@
    "in_standard_filter": 1,
    "label": "Lead Status",
    "options": "New\nWorking\nContacted\nNurturing\nQualified\nUnqualified\nConverted\nLost"
+  },
+  {
+   "default": "NEW",
+   "fieldname": "processing_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Processing Status",
+   "options": "NEW\nPROCESSING\nPROCESSED\nASSIGNED\nCLOSED",
+   "read_only": 1,
+   "description": "Server-managed intake workflow status. Use the Lead processing commands."
+  },
+  {
+   "default": "PENDING",
+   "fieldname": "resolution",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Resolution",
+   "options": "PENDING\nMATCHED\nCREATED\nDUPLICATE\nINVALID\nSPAM\nFAILED",
+   "read_only": 1,
+   "description": "Server-managed resolution assigned during Lead processing."
+  },
+  {
+   "fieldname": "resolution_reason",
+   "fieldtype": "Small Text",
+   "label": "Resolution Reason",
+   "read_only": 1,
+   "description": "PII-safe explanation for the Lead processing resolution."
+  },
+  {
+   "fieldname": "matched_student",
+   "fieldtype": "Link",
+   "label": "Matched Student",
+   "options": "CRM Student",
+   "read_only": 1,
+   "description": "Student selected during processing; copied to Converted Student during handoff."
   },
   {
    "default": "Not Ready",

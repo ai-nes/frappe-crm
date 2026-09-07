@@ -92,7 +92,7 @@ if FrappeTestCase is not None:
 			frappe.conf["crm_agents_service_user"] = "Administrator"
 			frappe.conf["crm_nba_manual_requests_per_actor_target"] = 500
 			frappe.conf["crm_agents_outbox_enabled"] = 1
-			cls.student = frappe.get_all("CRM Lead", pluck="name", limit_page_length=1)
+			cls.student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
 			if not cls.student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
 			cls.student = cls.student[0]
@@ -307,7 +307,7 @@ if FrappeTestCase is not None:
 			original = frappe.has_permission
 
 			def deny(doctype, ptype=None, doc=None, *args, **kwargs):
-				if doctype == "CRM Lead":
+				if doctype == "CRM Student":
 					return False
 				return original(doctype, ptype, doc, *args, **kwargs)
 

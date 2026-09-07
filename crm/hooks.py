@@ -415,6 +415,7 @@ scheduler_events = {
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.fcrm.nba_evaluations.reconcile",
 		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
+		"crm.fcrm.nba_evaluations.reconcile_dirty_students",
 	],
 	"daily": [
 		"crm.fcrm.doctype.crm_lead.enrollment_transition.reconcile_enrollment_transitions",
@@ -425,7 +426,8 @@ scheduler_events = {
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
 		"* * * * *": [
 			"crm.fcrm.master_data_governance.apply_effective_changes",
-			"crm.fcrm.student_routing.process_pending_routing_requests",
+			# Assignment runs explicitly from a Lead batch. Keep routing requests
+			# for audit/compatibility, but do not execute them in the background.
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",
 			"crm.fcrm.student_lead_operations.recall_expired_ctv_batches",

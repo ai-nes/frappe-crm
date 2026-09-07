@@ -12,12 +12,22 @@ import frappe
 from frappe import _
 from frappe.utils import get_datetime
 
+from crm.api.audit import get_audit_logs_for_document
+
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_PAGE_SIZE = 100
+PROCESSING_STATUS_LABELS = {
+	"NEW": "Mới",
+	"PROCESSED": "Đã xử lý",
+	"ASSIGNED": "Đã phân công",
+	"CLOSED": "Đã đóng",
+}
 
 LEAD_FIELDS = [
 	"name",
 	"lead_code",
+	"processing_status",
+	"resolution",
 	"student_name",
 	"phone",
 	"email",
@@ -38,6 +48,8 @@ LEAD_FIELDS = [
 	"notes",
 	"owner_staff",
 	"assigned_to",
+	"student",
+	"creation",
 	"modified",
 ]
 
@@ -70,21 +82,25 @@ def get_director_leads(
 	rows = _fetch_lead_rows(query, filters, or_filters)
 	lookups = _load_lookups(rows)
 
+	meta = {
+		"total": total,
+		"totalAll": total_all,
+		"page": query["page"],
+		"pageSize": query["page_size"],
+		"totalPages": _total_pages(total, query["page_size"]),
+		"hasNextPage": query["page"] < _total_pages(total, query["page_size"]),
+		"admissionYear": _year_number(query["admission_year"]),
+		"query": query["query"],
+		"status": query["status"],
+		"statusOptions": _status_options(),
+		"asOf": _as_iso(frappe.utils.now_datetime()),
+	}
+	if query.get("campaign"):
+		meta["stats"] = _campaign_stats(filters, or_filters)
+
 	return {
 		"data": [_map_lead_row(row, lookups=lookups) for row in rows],
-		"meta": {
-			"total": total,
-			"totalAll": total_all,
-			"page": query["page"],
-			"pageSize": query["page_size"],
-			"totalPages": _total_pages(total, query["page_size"]),
-			"hasNextPage": query["page"] < _total_pages(total, query["page_size"]),
-			"admissionYear": _year_number(query["admission_year"]),
-			"query": query["query"],
-			"status": query["status"],
-			"statusOptions": _status_options(),
-			"asOf": _as_iso(frappe.utils.now_datetime()),
-		},
+		"meta": meta,
 	}
 
 
@@ -212,6 +228,24 @@ def _count_leads(filters: dict[str, Any], or_filters: list[list[str]] | None = N
 	return int(rows[0].get("total") or 0) if rows else 0
 
 
+def _campaign_stats(filters: dict[str, Any], or_filters: list[list[str]]) -> dict[str, int]:
+	"""Return the processing funnel for a campaign-filtered lead query."""
+	total = _count_leads(filters, or_filters)
+	in_progress_filters = {
+		**filters,
+		"processing_status": ["in", ["PROCESSED", "ASSIGNED"]],
+	}
+	closed_filters = {**filters, "processing_status": "CLOSED"}
+	in_progress = _count_leads(in_progress_filters, or_filters)
+	closed = _count_leads(closed_filters, or_filters)
+	return {
+		"total": total,
+		"inProgress": in_progress,
+		"closed": closed,
+		"conversionRate": round(closed / total * 100) if total else 0,
+	}
+
+
 def _fetch_lead_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
 	return frappe.get_list(
 		"CRM Lead",
@@ -224,7 +258,7 @@ def _fetch_lead_rows(query: dict[str, Any], filters: dict[str, Any], or_filters:
 	)
 
 
-def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
+def _load_lookups(rows: list) -> dict[str, Any]:
 	return {
 		"schools": _lookup_map("CRM High School", {row.get("high_school") for row in rows}, "school_name"),
 		"provinces": _lookup_map("CRM Province", {row.get("province") for row in rows}, "province_name"),
@@ -235,6 +269,7 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 		"aspirations": _lookup_map("CRM Aspiration", {row.get("aspiration") for row in rows}, "display_name"),
 		"events": {},
 		"statuses": _status_lookup(),
+		"contact_counts": _contact_counts(rows),
 	}
 
 
@@ -246,6 +281,108 @@ def _lookup_map(doctype: str, names: set[str | None], label_field: str) -> dict[
 		doctype, filters={"name": ["in", keys]}, fields=["name", label_field], limit_page_length=0
 	)
 	return {row.get("name"): row.get(label_field) or row.get("name") for row in rows}
+
+
+def _contact_counts(rows: list) -> dict[str, dict[str, int]]:
+	"""Aggregate call attempts for one Lead page without per-row queries."""
+	lead_ids = {str(row.get("name")) for row in rows if row.get("name")}
+	counts = {lead_id: {"no_answer": 0, "success": 0} for lead_id in lead_ids}
+	if not lead_ids:
+		return counts
+
+	call_log_ids_by_lead: dict[str, set[str]] = {}
+	if _table_exists("Call Log"):
+		try:
+			call_logs = frappe.get_list(
+				"Call Log",
+				filters={
+					"reference_doctype": "CRM Lead",
+					"reference_docname": ["in", sorted(lead_ids)],
+				},
+				fields=["name", "reference_docname", "status", "duration"],
+				limit_page_length=0,
+			)
+		except frappe.PermissionError:
+			call_logs = []
+		for call in call_logs:
+			lead_id = str(call.get("reference_docname") or "")
+			call_id = str(call.get("name") or "")
+			if lead_id not in counts:
+				continue
+			if call_id:
+				call_log_ids_by_lead.setdefault(lead_id, set()).add(call_id)
+			_bucket_contact_attempt(counts[lead_id], _call_log_succeeded(call))
+
+	interaction_leads: dict[str, set[str]] = {}
+	for row in rows:
+		lead_id = str(row.get("name") or "")
+		if lead_id not in lead_ids:
+			continue
+		student_id = str(row.get("student") or "")
+		for target_id in {lead_id, student_id} - {""}:
+			interaction_leads.setdefault(target_id, set()).add(lead_id)
+
+	if _table_exists("CRM Interaction"):
+		try:
+			interactions = frappe.get_list(
+				"CRM Interaction",
+				filters={"student": ["in", sorted(interaction_leads)]},
+				fields=[
+					"name",
+					"student",
+					"interaction_type",
+					"channel",
+					"outcome",
+					"reference_doctype",
+					"reference_docname",
+				],
+				limit_page_length=0,
+			)
+		except frappe.PermissionError:
+			interactions = []
+		for interaction in interactions:
+			lead_ids_for_interaction = interaction_leads.get(str(interaction.get("student") or ""), set())
+			if not lead_ids_for_interaction or not _is_call_interaction(interaction):
+				continue
+			for lead_id in lead_ids_for_interaction:
+				if interaction.get("reference_doctype") == "Call Log" and str(
+					interaction.get("reference_docname") or ""
+				) in call_log_ids_by_lead.get(lead_id, set()):
+					continue
+				_bucket_contact_attempt(counts[lead_id], _interaction_succeeded(interaction))
+
+	return counts
+
+
+def _bucket_contact_attempt(count: dict[str, int], succeeded: bool) -> None:
+	count["success" if succeeded else "no_answer"] += 1
+
+
+def _call_log_succeeded(row: dict[str, Any]) -> bool:
+	status = _fold(row.get("status"))
+	if status in {"completed", "connected"}:
+		return True
+	if status in {"no answer", "busy", "canceled", "missed", "failed"}:
+		return False
+	try:
+		return int(row.get("duration") or 0) > 0
+	except (TypeError, ValueError):
+		return False
+
+
+def _is_call_interaction(row: dict[str, Any]) -> bool:
+	channel = _fold(row.get("channel"))
+	interaction_type = _fold(row.get("interaction_type"))
+	return any(marker in channel for marker in ("call", "phone", "goi")) or interaction_type in {
+		"phone_call",
+		"connected",
+		"outreach",
+	}
+
+
+def _interaction_succeeded(row: dict[str, Any]) -> bool:
+	outcome = _fold(row.get("outcome"))
+	return outcome not in {"no response", "uncontactable", "no answer", "missed", "failed", "busy"}
 
 
 def _status_rows() -> list:
@@ -275,10 +412,10 @@ def _status_options() -> list[dict[str, str]]:
 	]
 
 
-def _map_lead_row(row, *, lookups: dict[str, dict[str, str]] | None = None) -> dict[str, Any]:
+def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, Any]:
 	lookups = lookups or {}
 	owner_key = row.get("owner_staff") or row.get("assigned_to")
-	return {
+	item = {
 		"id": row.get("name"),
 		"leadCode": row.get("lead_code"),
 		"studentId": row.get("name"),
@@ -286,22 +423,33 @@ def _map_lead_row(row, *, lookups: dict[str, dict[str, str]] | None = None) -> d
 		"name": row.get("student_name") or row.get("name"),
 		"phone": row.get("phone") or "",
 		"school": lookups.get("schools", {}).get(row.get("high_school")) or row.get("high_school") or "",
-		"status": _status_label(row.get("enrollment_status"), lookups),
-		"statusCode": row.get("enrollment_status"),
+		"status": _processing_status_label(row.get("processing_status")),
+		"statusCode": row.get("processing_status"),
+		"result": _result_code(row.get("resolution")),
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source") or "",
 		"owner": lookups.get("owners", {}).get(owner_key) or owner_key or "Chưa phân công",
 	}
+	contact_count = lookups.get("contact_counts", {}).get(str(row.get("name")), {})
+	item["contactNoAnswer"] = max(0, int(contact_count.get("no_answer", 0) or 0))
+	item["contactSuccess"] = max(0, int(contact_count.get("success", 0) or 0))
+	if row.get("processing_status"):
+		item["processingStatus"] = row.get("processing_status")
+	if row.get("creation"):
+		item["createdAt"] = _as_iso(row.get("creation")) or ""
+	return item
 
 
 def _map_detail_row(
 	row,
 	*,
-	lookups: dict[str, dict[str, str]],
+	lookups: dict[str, Any],
 	event_titles: list[str],
 ) -> dict[str, Any]:
 	item = _map_lead_row(row, lookups=lookups)
 	return {
 		**item,
+		"lifecycleStatus": _status_label(row.get("enrollment_status"), lookups),
+		"lifecycleStatusCode": row.get("enrollment_status"),
 		"email": row.get("email") or "",
 		"secondaryEmail": row.get("other_email") or "",
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province") or "",
@@ -378,43 +526,15 @@ def _event_projection(
 def _lead_log(
 	doc, *, lookups: dict[str, dict[str, str]], event_entries: list[dict[str, Any]]
 ) -> list[dict[str, Any]]:
-	entries = list(event_entries)
-	status_entry_added = False
-	for index, change in enumerate(doc.get("status_change_log") or []):
-		from_status = _status_label(change.get("from"), lookups)
-		to_status = _status_label(change.get("to"), lookups)
-		if not from_status and not to_status:
-			continue
-		is_initial_status = not to_status
-		content = (
-			f'Lead được tạo với tình trạng "{from_status}".'
-			if is_initial_status
-			else f'Tình trạng Lead được cập nhật từ "{from_status or "-"}" sang "{to_status}".'
-		)
-		entries.append(
-			{
-				"id": change.get("name") or f"{doc.name}:status:{index}",
-				"type": "activity",
-				"title": "Lead được tạo" if is_initial_status else "Cập nhật tình trạng Lead",
-				"author": _user_label(change.get("log_owner")),
-				"date": _as_iso(change.get("to_date") or change.get("from_date")) or "",
-				"content": content,
-			}
-		)
-		status_entry_added = True
-
-	created_at = _as_iso(doc.get("creation")) or ""
-	if created_at and not status_entry_added:
-		entries.append(
-			{
-				"id": f"{doc.name}:created",
-				"type": "activity",
-				"title": "Lead được tạo",
-				"author": _user_label(doc.get("owner")),
-				"date": created_at,
-				"content": "Lead được tiếp nhận từ hệ thống CRM.",
-			}
-		)
+	entries: list[dict[str, Any]] = []
+	for log in get_audit_logs_for_document(
+		doc.name,
+		doctype="CRM Lead",
+		include_creation=True,
+		include_deletion=False,
+	):
+		entries.extend(_map_audit_log_entry(log))
+	entries.extend(event_entries)
 
 	if _table_exists("FCRM Note"):
 		notes = frappe.get_list(
@@ -440,6 +560,60 @@ def _lead_log(
 	return sorted(entries, key=lambda entry: entry.get("date") or "", reverse=True)
 
 
+def _map_audit_log_entry(log: dict[str, Any]) -> list[dict[str, Any]]:
+	category = log.get("category") or "data"
+	title = {
+		"record": "Lead được tạo",
+		"status": "Cập nhật tình trạng Lead",
+		"lifecycle": "Cập nhật vòng đời Lead",
+		"assignment": "Thay đổi phân công Lead",
+		"processing": "Cập nhật xử lý Lead",
+		"conversion": "Cập nhật chuyển đổi Lead",
+		"outcome": "Ghi nhận kết quả Lead",
+	}.get(category, "Cập nhật dữ liệu Lead")
+	if log.get("event_type") == "status_initialized":
+		title = "Gán tình trạng ban đầu cho Lead"
+	old_value = log.get("old_value")
+	new_value = log.get("new_value")
+	if category == "record":
+		content = "Lead được tiếp nhận từ hệ thống CRM."
+	elif log.get("field_label") or log.get("fieldname"):
+		field = log.get("field_label") or log.get("fieldname")
+		content = f'{field} được cập nhật từ "{_audit_value_text(old_value)}" sang "{_audit_value_text(new_value)}".'
+	else:
+		content = "Thông tin Lead được cập nhật."
+	if log.get("reason"):
+		content = f"{content} Lý do: {log['reason']}"
+
+	return [
+		{
+			"id": log.get("event_id"),
+			"type": "activity",
+			"title": title,
+			"author": log.get("owner_full_name") or _user_label(log.get("owner")),
+			"date": _as_iso(log.get("occurred_at")) or "",
+			"content": content,
+			"event_type": log.get("event_type"),
+			"category": category,
+			"fieldname": log.get("fieldname"),
+			"field_label": log.get("field_label"),
+			"old_value": old_value,
+			"new_value": new_value,
+			"reason": log.get("reason"),
+			"source": log.get("source"),
+			"metadata": log.get("metadata"),
+		}
+	]
+
+
+def _audit_value_text(value: Any) -> str:
+	if value in (None, ""):
+		return "-"
+	if isinstance(value, (dict, list)):
+		return json.dumps(value, ensure_ascii=False, sort_keys=True)
+	return str(value)
+
+
 def _segments(value: Any) -> list[str]:
 	if isinstance(value, str):
 		try:
@@ -460,6 +634,16 @@ def _conversion_label(value: Any) -> str | None:
 def _status_label(value: Any, lookups: dict[str, dict[str, str]]) -> str:
 	value = str(value or "").strip()
 	return lookups.get("statuses", {}).get(value) or value
+
+
+def _processing_status_label(value: Any) -> str:
+	value = str(value or "").strip()
+	return PROCESSING_STATUS_LABELS.get(value) or value
+
+
+def _result_code(value: Any) -> str:
+	result = str(value or "").strip().upper()
+	return "" if result in {"", "PENDING"} else result
 
 
 def _user_label(user: Any) -> str:

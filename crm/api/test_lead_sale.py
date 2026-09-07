@@ -9,6 +9,19 @@ from crm.api import lead_sale
 
 
 class TestLeadSaleOverview(FrappeTestCase):
+	@patch.object(lead_sale, "get_student_assignment_workspace")
+	def test_lead_workspace_alias_drops_frappe_cmd(self, get_workspace):
+		get_workspace.return_value = {"ok": True}
+
+		response = lead_sale.get_lead_assignment_workspace(
+			cmd="crm.api.lead_sale.get_lead_assignment_workspace",
+			admissionYear="2026",
+			filter="review",
+		)
+
+		self.assertEqual(response, {"ok": True})
+		get_workspace.assert_called_once_with(admissionYear="2026", filter="review")
+
 	def test_pipeline_candidates_are_pool_owned_and_request_scoped(self):
 		students = [
 			{"name": "STU-POOL", "owning_pool": "POOL-1", "owner_staff": None, "assigned_to": None},

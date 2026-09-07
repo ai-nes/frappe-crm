@@ -16,8 +16,9 @@ class CRMInteraction(Document):
 			)
 
 	def validate(self):
-		if not self.student and not self.crm_contact:
-			frappe.throw(frappe._("An interaction must be linked to a Student or a CRM Student."))
+		if not self.student:
+			frappe.throw(frappe._("An interaction must be linked to a CRM Student."))
+		self.crm_student = self.student
 		previous = self.get_doc_before_save() if not self.is_new() else None
 		if (
 			(self.source_verified and not previous)
@@ -38,8 +39,8 @@ class CRMInteraction(Document):
 					frappe.throw(frappe._("A verified interaction source is immutable."))
 
 	def on_update(self):
-		student = self.student or frappe.db.get_value("CRM Student", self.crm_contact, "student")
-		if student and frappe.db.exists("CRM Lead", student):
+		student = self.student
+		if student and frappe.db.exists("CRM Student", student):
 			# Every interaction is a direct Engagement-scorer input (see
 			# app/services/scoring/scorers.py) -- always scoring-relevant,
 			# unlike a generic Student field edit.
@@ -48,8 +49,8 @@ class CRMInteraction(Document):
 			bump_score_input_revision(student, "interaction_material_change")
 
 	def on_trash(self):
-		student = self.student or frappe.db.get_value("CRM Student", self.crm_contact, "student")
-		if student and frappe.db.exists("CRM Lead", student):
+		student = self.student
+		if student and frappe.db.exists("CRM Student", student):
 			# Deleting an Engagement-scorer input changes the same fact
 			# surface as editing one -- the current score must not be left
 			# marked fresh against evidence that no longer exists.
@@ -64,7 +65,7 @@ class CRMInteraction(Document):
 				"label": "Student",
 				"type": "Link",
 				"key": "student",
-				"options": "CRM Lead",
+				"options": "CRM Student",
 				"width": "14rem",
 			},
 			{

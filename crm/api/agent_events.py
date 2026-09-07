@@ -197,30 +197,24 @@ def record_domain_reevaluation_trigger(student: str, *, trigger: str) -> dict:
 	"""Admit a Frappe-side domain event (student state change, new
 	interaction, ...) as an NBA re-evaluation trigger.
 
-	This is the domain-event counterpart of the WAIT ``revisit_at`` time
-	trigger handled by the scheduled ``reconcile_due_reevaluations``: a burst
-	of domain events for one student/identity never creates more than one
-	active ``CRM NBA Evaluation``. Coalescing itself is delegated to
-	``crm.fcrm.nba_evaluations.request_domain_reevaluation``, which reuses the
-	Student-row-locked, single-active-run-per-identity primitive already used
-	by every other NBA Evaluation entry point -- a domain event for a student
-	that already has a queued/running (or identity-unchanged terminal)
-	Evaluation is a no-op merge into that run, not a duplicate concurrent one.
+	The hot path only records a durable dirty marker. The hourly
+	``reconcile_dirty_students`` sweep owns evaluation creation and coalescing,
+	so bursts of domain events do not lock or read evaluation state synchronously.
 
 	Feature-gated and off by default; a caller with the flag disabled always
 	gets a safe no-op receipt instead of a failure.
 	"""
 	if frappe.conf.get("crm_nba_domain_reevaluation_enabled", 0) in (0, "0", False):
-		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": False, "marked_dirty": False}
 	if not isinstance(student, str) or not student.strip():
-		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": True, "marked_dirty": False}
 	trigger_name = str(trigger or "").strip()
 	if not trigger_name:
-		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
+		return {"enabled": True, "marked_dirty": False}
 
-	from crm.fcrm.nba_evaluations import request_domain_reevaluation
+	from crm.fcrm.nba_evaluations import mark_student_nba_dirty
 
-	return request_domain_reevaluation(student.strip(), trigger_reason=trigger_name)
+	return {"enabled": True, "marked_dirty": mark_student_nba_dirty(student.strip())}
 
 
 def dispatch_interaction_domain_reevaluation(doc, method=None) -> None:
@@ -272,7 +266,7 @@ def record_score_input_event(student: str, revision: int, *, event_id: str | Non
 	pending = frappe.db.sql(
 		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
 		"AND event_type = %s AND status = 'pending' ORDER BY creation DESC LIMIT 1 FOR UPDATE",
-		("CRM Lead", student, "student.score_input_changed.v1"),
+		("CRM Student", student, "student.score_input_changed.v1"),
 		as_dict=True,
 	)
 	if pending:
@@ -288,7 +282,7 @@ def record_score_input_event(student: str, revision: int, *, event_id: str | Non
 				"doctype": "CRM Agent Event",
 				"event_id": event_id or str(uuid.uuid4()),
 				"event_type": "student.score_input_changed.v1",
-				"aggregate_doctype": "CRM Lead",
+				"aggregate_doctype": "CRM Student",
 				"aggregate_name": student,
 				"source_revision": str(revision),
 				"source_revision_bigint": revision,
@@ -318,7 +312,7 @@ def record_sla_notification(*, sla_event, student, recipient_user: str, recipien
 			"doctype": "CRM Agent Event",
 			"event_id": str(uuid.uuid4()),
 			"event_type": SLA_NOTIFICATION_EVENT,
-			"aggregate_doctype": "CRM Lead",
+			"aggregate_doctype": "CRM Student",
 			"aggregate_name": student.name,
 			"source_revision": str(sla_event.attempt_revision),
 			"contract_version": 1,
@@ -635,9 +629,9 @@ def _deliver_realtime_notification(event, lease_id: str) -> bool:
 				raise ValueError("Shared SLA digest payload contains unsupported fields")
 			frappe.publish_realtime("student_sla_digest", payload, user=event.recipient_user)
 		else:
-			if event.aggregate_doctype != "CRM Lead":
+			if event.aggregate_doctype != "CRM Student":
 				raise ValueError("Invalid shared SLA aggregate")
-			student = frappe.get_doc("CRM Lead", event.aggregate_name)
+			student = frappe.get_doc("CRM Student", event.aggregate_name)
 			if not has_student_permission(student, user=event.recipient_user, permission_type="read"):
 				_complete_delivery(event, lease_id, status="cancelled", error="RECIPIENT_OUT_OF_SCOPE")
 				return True

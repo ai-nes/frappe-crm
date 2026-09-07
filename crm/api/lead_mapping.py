@@ -21,7 +21,9 @@ from frappe import _
 from frappe.rate_limiter import rate_limit
 
 from crm.api.routing import route_new_lead
+from crm.fcrm.campaign_code import is_valid_campaign_code
 from crm.fcrm.student_attribution import record_event_participation
+from crm.fcrm.student_intake import normalize_national_id
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
 	resolve_province,
@@ -76,6 +78,7 @@ _HEADER_ALIASES = {
 	"full name": "student_name",
 	"student name": "student_name",
 	"di dong": "phone",
+	"so dien thoai": "phone",
 	"mobile": "phone",
 	"phone": "phone",
 	"email": "email",
@@ -84,6 +87,9 @@ _HEADER_ALIASES = {
 	"tinh thanh pho": "province",
 	"province city": "province",
 	"province": "province",
+	"cccd": "id_number",
+	"so can cuoc": "id_number",
+	"id number": "id_number",
 	"truong thpt": "high_school",
 	"high school": "high_school",
 	"nganh quan tam": "major",
@@ -100,6 +106,9 @@ _HEADER_ALIASES = {
 	"conversion potential": "conversion_potential",
 	"nguon": "source",
 	"source": "source",
+	"ma chien dich": "campaign_code",
+	"campaign code": "campaign_code",
+	"campaign_code": "campaign_code",
 	"tinh trang lead": "enrollment_status",
 	"lead status": "enrollment_status",
 	"enrollment status": "enrollment_status",
@@ -123,6 +132,7 @@ _LEAD_FIELDS = frozenset(
 		"student_name",
 		"phone",
 		"email",
+		"id_number",
 		"other_email",
 		"gender",
 		"date_of_birth",
@@ -137,6 +147,7 @@ _LEAD_FIELDS = frozenset(
 		"admission_year",
 		"conversion_potential",
 		"source",
+		"campaign_code",
 		"enrollment_status",
 		"assigned_to",
 		"branch",
@@ -161,6 +172,7 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 		"gender",
 		"date_of_birth",
 		"source",
+		"campaign_code",
 		"advertising_channel",
 		"import_source_id",
 		"segments",
@@ -207,6 +219,7 @@ _PUBLIC_SERVER_MANAGED_FIELDS = frozenset(
 		"identity",
 		"case_key",
 		"student",
+		"campaign",
 	}
 )
 
@@ -318,6 +331,18 @@ def _resolve_source(value: Any) -> str:
 	return source
 
 
+def _resolve_campaign_code(value: Any) -> str:
+	code = _text(value)
+	if not code:
+		_fail("REQUIRED_FIELD", "campaign_code là bắt buộc.")
+	if not is_valid_campaign_code(code):
+		_fail("INVALID_CAMPAIGN_CODE", "campaign_code phải có dạng CAM-YYYY-NNNNN.")
+	campaign = frappe.db.get_value("CRM Campaign", {"stable_code": code}, "name")
+	if not campaign:
+		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy Campaign với code: {code}.")
+	return campaign
+
+
 def _resolve_status(value: Any) -> str:
 	status = _resolve_link("CRM Enrollment Status", value, ("code", "display_name"), "Tình trạng Lead")
 	if frappe.db.get_value("CRM Enrollment Status", status, "enabled") == 0:
@@ -363,12 +388,17 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 	if not name:
 		_fail("REQUIRED_FIELD", "Họ và tên là bắt buộc.")
 	phone = _normalize_phone(payload.get("phone"))
-	_check_unique("phone", phone, "Di động")
+	id_number_value = _text(payload.get("id_number"))
+	id_number = normalize_national_id(id_number_value) if id_number_value else None
+	if id_number_value and not id_number:
+		_fail("INVALID_ID_NUMBER", "CCCD phải gồm 9 hoặc 12 chữ số hợp lệ.")
+	# A person may submit multiple forms. Duplicate detection belongs to the
+	# processing step, where an existing Student or another Lead can be classified
+	# as MATCHED/DUPLICATE without rejecting the raw intake event.
 
 	email = _text(payload.get("email"))
 	if email:
 		email = email.casefold()
-		_check_unique("email", email, "Email")
 	other_email = _text(payload.get("other_email"))
 	if other_email:
 		other_email = other_email.casefold()
@@ -391,6 +421,7 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 	if not source_value:
 		_fail("REQUIRED_FIELD", "Nguồn là bắt buộc.")
 	source = _resolve_source(source_value)
+	campaign = _resolve_campaign_code(payload.get("campaign_code")) if payload.get("campaign_code") else None
 	status = _resolve_status(payload.get("enrollment_status") or "NEW")
 
 	high_school_value = _text(payload.get("high_school"))
@@ -447,6 +478,7 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 	values = {
 		"student_name": name,
 		"phone": phone,
+		"id_number": id_number,
 		"email": email,
 		"other_email": other_email,
 		"gender": _text(payload.get("gender")),
@@ -462,6 +494,7 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 		"admission_year": admission_year,
 		"conversion_potential": conversion_potential,
 		"source": source,
+		"campaign": campaign,
 		"enrollment_status": status,
 		"assigned_to": assigned_to,
 		"branch": branch,
@@ -484,23 +517,39 @@ def _normalize_public_segments(value: Any) -> str | None:
 			_fail("INVALID_SEGMENTS", "segments phải là JSON array.")
 	if not isinstance(value, list) or any(not isinstance(item, str) or not item.strip() for item in value):
 		_fail("INVALID_SEGMENTS", "segments phải là JSON array gồm các chuỗi không rỗng.")
-	return frappe.as_json(list(dict.fromkeys(item.strip() for item in value)))
+	return json.dumps(
+		list(dict.fromkeys(item.strip() for item in value)),
+		ensure_ascii=False,
+		separators=(",", ":"),
+	)
 
 
-def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def _normalize_public_cccd(payload: dict[str, Any]) -> str | None:
+	cccd = _text(payload.get("cccd"))
+	id_number = _text(payload.get("id_number"))
+	if cccd and id_number and cccd != id_number:
+		_fail("INVALID_INPUT", "cccd và id_number phải có cùng giá trị nếu cùng được gửi.")
+	return cccd or id_number
+
+
+def _normalize_public_lead_payload(
+	payload: dict[str, Any], *, require_campaign: bool = True
+) -> dict[str, Any]:
 	name = _text(payload.get("student_name"))
 	if not name:
 		_fail("REQUIRED_FIELD", "Họ và tên là bắt buộc.")
+	campaign = (
+		_resolve_campaign_code(payload.get("campaign_code"))
+		if require_campaign or payload.get("campaign_code")
+		else None
+	)
 
 	phone_value = _text(payload.get("phone"))
 	phone = _normalize_phone(phone_value) if phone_value else None
-	if phone:
-		_check_unique("phone", phone, "Di động")
 
 	email = _text(payload.get("email"))
 	if email:
 		email = email.casefold()
-		_check_unique("email", email, "Email")
 	other_email = _text(payload.get("other_email"))
 	if other_email:
 		other_email = other_email.casefold()
@@ -576,7 +625,10 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
 	alt_phone_value = _text(payload.get("alt_phone"))
 	alt_phone = _normalize_phone(alt_phone_value) if alt_phone_value else None
-
+	id_number_value = _text(payload.get("id_number"))
+	id_number = normalize_national_id(id_number_value) if id_number_value else None
+	if id_number_value and not id_number:
+		_fail("INVALID_ID_NUMBER", "CCCD phải gồm 9 hoặc 12 chữ số hợp lệ.")
 	return {
 		"student_name": name,
 		"phone": phone,
@@ -585,12 +637,13 @@ def _normalize_public_lead_payload(payload: dict[str, Any]) -> dict[str, Any]:
 		"gender": _text(payload.get("gender")),
 		"date_of_birth": _text(payload.get("date_of_birth")),
 		"source": source,
+		"campaign": campaign,
 		"advertising_channel": _text(payload.get("advertising_channel")),
 		"import_source_id": _text(payload.get("import_source_id")),
 		"segments": _normalize_public_segments(payload.get("segments")),
 		"assignment_priority": assignment_priority,
 		"branch": branch,
-		"id_number": _text(payload.get("id_number")),
+		"id_number": id_number,
 		"id_issued_date": _text(payload.get("id_issued_date")),
 		"id_issued_place": _text(payload.get("id_issued_place")),
 		"high_school": high_school,
@@ -663,6 +716,7 @@ def _create_lead(fields: dict[str, Any]) -> dict[str, Any]:
 				"conversion_blockers",
 				"student_name",
 				"phone",
+				"id_number",
 				"email",
 				"other_email",
 				"province",
@@ -673,6 +727,7 @@ def _create_lead(fields: dict[str, Any]) -> dict[str, Any]:
 				"admission_year",
 				"conversion_potential",
 				"source",
+				"campaign",
 				"enrollment_status",
 				"assigned_to",
 				"branch",
@@ -696,7 +751,6 @@ def create_lead(fields: dict[str, Any] | str | None = None) -> dict[str, Any]:
 def _create_public_lead(fields: dict[str, Any]) -> dict[str, Any]:
 	values = _normalize_public_lead_payload(fields)
 	doc = frappe.get_doc({"doctype": "CRM Lead", **values})
-	route_new_lead(doc)
 	doc.insert(ignore_permissions=True)
 	return {
 		"doctype": "CRM Lead",
@@ -706,6 +760,8 @@ def _create_public_lead(fields: dict[str, Any]) -> dict[str, Any]:
 		"lead_status": doc.get("lead_status"),
 		"conversion_status": doc.get("conversion_status"),
 		"conversion_blockers": doc.get("conversion_blockers"),
+		"campaign": doc.get("campaign"),
+		"campaign_code": fields.get("campaign_code"),
 		"assigned_to": doc.get("assigned_to"),
 		"branch": doc.get("branch"),
 	}
@@ -723,12 +779,103 @@ def create_public_lead(
 	dictionary directly as POST parameters. Ownership, status, consent and
 	audit fields remain server-managed.
 	"""
+	# Frappe injects the routed method name as ``cmd`` into form_dict. It is
+	# transport metadata, not a client field, and must not make guest payloads
+	# fail the public field allowlist.
+	payload.pop("cmd", None)
 	if fields is not None and payload:
 		_fail("INVALID_INPUT", "Gửi fields hoặc các field trực tiếp, không gửi cả hai.")
 	return _create_public_lead(_parse_public_payload(fields if fields is not None else payload))
 
 
-def _parse_csv_rows(csv_content: str) -> list[dict[str, Any]]:
+def _public_lookup_response(
+	rows: list[Any], label_field: str, code_field: str | None = None, extra_fields: tuple[str, ...] = ()
+) -> dict[str, Any]:
+	items = []
+	for row in rows:
+		item = {"value": row.get("name"), "label": row.get(label_field)}
+		if code_field:
+			item["code"] = row.get(code_field)
+		for fieldname in extra_fields:
+			item[fieldname] = row.get(fieldname)
+		items.append(item)
+	return {"items": items, "total": len(items)}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_provinces() -> dict[str, Any]:
+	"""Return provinces for the public admission form."""
+	rows = frappe.get_all(
+		"CRM Province",
+		fields=["name", "province_name", "province_code"],
+		order_by="province_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "province_name", "province_code")
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_wards(province: str | None = None) -> dict[str, Any]:
+	"""Return wards scoped to one province for the public admission form."""
+	province_value = _text(province)
+	if not province_value:
+		_fail("REQUIRED_FIELD", "province là bắt buộc.")
+	province_name = resolve_province(province_value)
+	if not frappe.db.exists("CRM Province", province_name):
+		_fail("INVALID_PROVINCE", f"Không tìm thấy Tỉnh/Thành phố: {province_value}.")
+
+	rows = frappe.get_all(
+		"CRM Ward",
+		filters={"province": province_name},
+		fields=["name", "ward_name", "ward_code", "ward_type", "province"],
+		order_by="ward_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "ward_name", "ward_code", ("ward_type", "province"))
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_high_schools(ward: str | None = None) -> dict[str, Any]:
+	"""Return active high schools scoped to one ward for the public form."""
+	ward_value = _text(ward)
+	if not ward_value:
+		_fail("REQUIRED_FIELD", "ward là bắt buộc.")
+	ward_name = resolve_ward(ward_value)
+	if not frappe.db.exists("CRM Ward", ward_name):
+		_fail("INVALID_WARD", f"Không tìm thấy Xã/Phường: {ward_value}.")
+
+	rows = frappe.get_all(
+		"CRM High School",
+		filters={"ward": ward_name, "is_active": 1},
+		fields=["name", "school_name", "school_code", "school_type", "province", "ward"],
+		order_by="school_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "school_name", "school_code", ("school_type", "province", "ward"))
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_majors() -> dict[str, Any]:
+	"""Return active majors for the public admission form."""
+	rows = frappe.get_all(
+		"CRM Major",
+		filters={"is_active": 1},
+		fields=["name", "major_name", "major_code", "degree_name", "major_group"],
+		order_by="major_name asc, name asc",
+		limit_page_length=0,
+	)
+	return _public_lookup_response(rows, "major_name", "major_code", ("degree_name", "major_group"))
+
+
+def _parse_csv_rows(
+	csv_content: str,
+	*,
+	required_headers: frozenset[str] = _CSV_REQUIRED_HEADERS,
+) -> list[dict[str, Any]]:
 	if not isinstance(csv_content, str) or not csv_content.strip():
 		_fail("INVALID_CSV", "csv_content không được rỗng.")
 	reader = csv.DictReader(io.StringIO(csv_content.lstrip("\ufeff")))
@@ -739,7 +886,7 @@ def _parse_csv_rows(csv_content: str) -> list[dict[str, Any]]:
 		canonical = _HEADER_ALIASES.get(_normalize_header(header))
 		if canonical:
 			canonical_headers[header] = canonical
-	missing = sorted(_CSV_REQUIRED_HEADERS - set(canonical_headers.values()))
+	missing = sorted(required_headers - set(canonical_headers.values()))
 	if missing:
 		_fail("CSV_MISSING_HEADERS", f"CSV thiếu cột bắt buộc: {', '.join(missing)}.")
 	rows = []

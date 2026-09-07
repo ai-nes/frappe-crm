@@ -84,6 +84,35 @@ export function applyUIStreamEvent(
     return
   }
 
+  if (event.type === 'data-360' || event.type === 'data-student-360') {
+    const overview =
+      typeof event.data === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(event.data || '{}')
+            } catch {
+              return null
+            }
+          })()
+        : event.data
+    const itemArrays = ['signals', 'risks', 'opportunities', 'recent_changes']
+    if (
+      overview &&
+      typeof overview === 'object' &&
+      overview.contract_version === '360-overview-v1' &&
+      (overview.subject_type === 'student' || overview.subject_type === 'school') &&
+      typeof overview.subject_id === 'string' &&
+      overview.subject_id &&
+      typeof overview.summary === 'string' &&
+      typeof overview.generated_at === 'string' &&
+      Array.isArray(overview.data_quality) &&
+      itemArrays.every((key) => Array.isArray(overview[key]))
+    ) {
+      message.overview360 = overview
+    }
+    return
+  }
+
   if (event.type === 'data-approval-required') {
     run.approvalRequired = true
     if (isCurrentRun) {

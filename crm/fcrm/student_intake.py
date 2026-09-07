@@ -1097,12 +1097,15 @@ def _create_case(
 			correlation_id,
 			_text(payload.get("_intake_actor_user")),
 		)
-	from crm.fcrm.student_feature_flags import enabled
+	from crm.fcrm.student_feature_flags import (
+		automatic_assignment_on_create_enabled,
+		enabled,
+	)
 	from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
 	# A Sale's manual intake is now staff-owned through the canonical ownership
 	# command. Only pool-owned cases are eligible for the routing worker.
-	if not initial_owner:
+	if not initial_owner and automatic_assignment_on_create_enabled():
 		if enabled("synchronous_routing"):
 			route_pool_owned_student(student.name, trigger="pool_entry")
 		elif _doctype_exists("CRM Student Routing Request"):

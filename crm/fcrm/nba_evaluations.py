@@ -106,9 +106,9 @@ def _validated_hex64(value: object, label: str) -> str | None:
 
 
 def _require_student_scope(student: str) -> None:
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		frappe.throw("NBA Evaluation target does not exist.", frappe.DoesNotExistError)
-	if not frappe.has_permission("CRM Lead", "read", student):
+	if not frappe.has_permission("CRM Student", "read", student):
 		frappe.throw("NBA Evaluation target is outside current scope.", frappe.PermissionError)
 
 
@@ -269,7 +269,7 @@ def request_nba_evaluation(
 	if not key or len(key) > 140:
 		frappe.throw("Idempotency-Key is required and bounded to 140 characters.", frappe.ValidationError)
 	# The Student row is the mutex for button-click races on one identity.
-	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name=%s FOR UPDATE", (student,))
+	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,))
 	clock = _request_clock()
 	_, identity = _identity_for(student, clock)
 	evaluation_key = identity["evaluation_key"]
@@ -768,7 +768,7 @@ def commit_nba_evaluation_result(
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": f"{doc.name}-{rank}",
-				"target_type": "CRM Lead",
+				"target_type": "CRM Student",
 				"target_id": doc.student,
 				"reason": _committed_recommendation_reason(rec),
 				"priority": _committed_recommendation_priority(rank),
@@ -1024,9 +1024,9 @@ def _request_automatic_nba_evaluation(
 	"""
 	if not nba_evaluation_runtime_enabled():
 		return None
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		return None
-	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name=%s FOR UPDATE", (student,))
+	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,))
 	if on_locked:
 		on_locked()
 	clock = _request_clock()
@@ -1046,24 +1046,37 @@ def _request_automatic_nba_evaluation(
 	return evaluation.name
 
 
+def mark_student_nba_dirty(student: str) -> bool:
+	"""Record the earliest pending NBA re-evaluation timestamp for a student."""
+	if not nba_evaluation_runtime_enabled():
+		return False
+	if not student or not frappe.db.exists("CRM Student", student):
+		return False
+	now = now_datetime()
+	frappe.db.sql(
+		"UPDATE `tabCRM Student` SET nba_dirty_since = "
+		"COALESCE(LEAST(nba_dirty_since, %(now)s), %(now)s) "
+		"WHERE name = %(student)s",
+		{"now": now, "student": student},
+	)
+	return True
+
+
 def request_domain_reevaluation(student: str, *, trigger_reason: str) -> dict[str, Any]:
-	"""Coalesced NBA re-evaluation request for a domain event (student state
-	change, new interaction, ...), the counterpart of the WAIT revisit_at time
-	trigger in :func:`reconcile_due_reevaluations`.
+	"""Re-check and dispatch pending WAIT boundaries for one student.
 
 	Reuses :func:`_request_automatic_nba_evaluation` unchanged: its Student-row
 	lock and single-active-run-per-identity check is the coalescing primitive.
-	A domain event for a student that already has a queued or running
-	Evaluation, or whose governed identity has not moved since the latest
-	terminal run, merges into that run -- no new Evaluation is created and no
-	duplicate concurrent run is started. A completed WAIT boundary that named
-	this exact trigger and carries no ``revisit_at`` (the domain-event
-	counterpart of the time-based boundary) is stamped dispatched so a later
-	domain event of the same name never re-fires it.
+	A student that already has a queued or running Evaluation, or whose governed
+	identity has not moved since the latest terminal run, merges into that run --
+	no new Evaluation is created and no duplicate concurrent run is started. All
+	completed WAIT boundaries without ``revisit_at`` are considered because this
+	primitive is driven by the dirty-student sweep rather than an exact domain
+	event name.
 	"""
 	if not nba_evaluation_runtime_enabled():
 		return {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0}
-	if not student or not frappe.db.exists("CRM Lead", student):
+	if not student or not frappe.db.exists("CRM Student", student):
 		return {"enabled": True, "created": None, "coalesced": False, "matched_waits": 0}
 	trigger_reason = str(trigger_reason or "").strip()[:140]
 	if not trigger_reason:
@@ -1084,11 +1097,10 @@ def request_domain_reevaluation(student: str, *, trigger_reason: str) -> dict[st
 					"status": "completed",
 					"disposition": "WAIT",
 					"revisit_at": ["is", "not set"],
-					"reevaluation_trigger": trigger_reason,
 					"reevaluation_dispatched_at": ["is", "not set"],
 				},
 				pluck="name",
-				limit_page_length=20,
+				limit_page_length=0,
 			)
 		)
 
@@ -1156,3 +1168,42 @@ def reconcile_due_reevaluations(limit: int = 200) -> dict[str, Any]:
 		if created:
 			dispatched += 1
 	return {"dispatched": dispatched, "due": len(due), "enabled": True}
+
+
+def reconcile_dirty_students(limit: int = 200) -> dict[str, Any]:
+	"""Dispatch NBA re-evaluations for the oldest dirty students first."""
+	if not nba_evaluation_runtime_enabled():
+		return {"dispatched": 0, "dirty": 0, "enabled": False}
+	page = min(int(limit), 500)
+	dirty = frappe.get_all(
+		"CRM Student",
+		filters={"nba_dirty_since": ["is", "set"]},
+		fields=["name", "nba_dirty_since"],
+		order_by="nba_dirty_since asc",
+		limit_page_length=page,
+	)
+	dispatched = 0
+	for row in dirty:
+		savepoint = f"nba_dirty_student_{frappe.generate_hash(length=8)}"
+		frappe.db.savepoint(savepoint)
+		try:
+			created = request_domain_reevaluation(
+				row.name, trigger_reason=f"dirty-sweep:{row.name}"
+			)
+			# The request primitive locks the CRM Student row before reading or
+			# dispatching evaluation state. A concurrent marker write therefore
+			# either lands before this compare or waits until this transaction
+			# commits and re-stamps the student afterward.
+			frappe.db.sql(
+				"UPDATE `tabCRM Student` SET nba_dirty_since = NULL "
+				"WHERE name = %(student)s AND nba_dirty_since = %(dirty_since)s",
+				{"student": row.name, "dirty_since": row.nba_dirty_since},
+			)
+			if created.get("created"):
+				dispatched += 1
+		except Exception:
+			frappe.db.rollback(save_point=savepoint)
+			frappe.log_error(
+				title="NBA dirty-student re-evaluation dispatch failed", message=f"student={row.name}"
+			)
+	return {"dispatched": dispatched, "dirty": len(dirty), "enabled": True}

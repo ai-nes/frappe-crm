@@ -21,6 +21,7 @@ from crm.demo.seed_showcase import (
 	_READINESS_LABELS,
 	_SCHOOL_AREAS,
 	_SHOWCASE_CAMPAIGN_TITLES,
+	_SHOWCASE_CAMPAIGNS,
 	_SHOWCASE_KEY_ACCOUNT_COUNT,
 	_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS,
 	BULK_CONTACT_ROWS,
@@ -88,6 +89,74 @@ class TestSeedShowcaseData(unittest.TestCase):
 		self.assertTrue(set(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS).issubset(keys))
 		self.assertTrue(
 			set(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS.values()).issubset(_SHOWCASE_CAMPAIGN_TITLES)
+		)
+
+	def test_seed_campaign_statuses_match_current_doctype_contract(self):
+		self.assertEqual(
+			{status for _, status, _ in _SHOWCASE_CAMPAIGNS},
+			{"DRAFT", "UPCOMING", "ACTIVE", "CLOSED"},
+		)
+
+	def test_seed_campaign_links_are_written_to_leads_idempotently(self):
+		students = [
+			{"key": student_key, "student": f"lead-{student_key}"}
+			for student_key in ("thao-an", "minh-khang")
+		]
+		campaigns = {
+			title: f"campaign-{index}"
+			for index, title in enumerate(_SHOWCASE_CAMPAIGN_TITLES, start=1)
+		}
+		seed_source_leads = {"crm-demo-showcase:gia-han": "lead-gia-han"}
+		lead_campaigns = {}
+		writes = []
+		original_get_value = seed_showcase.frappe.db.get_value
+		original_set_value = seed_showcase.frappe.db.set_value
+
+		def fake_get_value(doctype, filters, fieldname, **kwargs):
+			if doctype == "CRM Campaign":
+				return campaigns[filters["title"]]
+			if doctype == "CRM Lead":
+				if isinstance(filters, dict) and "import_source_id" in filters:
+					name = seed_source_leads.get(filters["import_source_id"])
+					if kwargs.get("as_dict"):
+						return (
+							{
+								"name": name,
+								"student_name": "Võ Gia Hân",
+								"email": "vo.gia.han@gmail.com",
+							}
+							if name
+							else None
+						)
+					return name
+				return lead_campaigns.get(filters)
+			raise AssertionError(f"Unexpected lookup: {doctype} {filters} {fieldname}")
+
+		def fake_set_value(doctype, name, fieldname, value, **kwargs):
+			self.assertEqual(doctype, "CRM Lead")
+			self.assertEqual(fieldname, "campaign")
+			self.assertFalse(kwargs["update_modified"])
+			lead_campaigns[name] = value
+			writes.append((name, value))
+
+		seed_showcase.frappe.db.get_value = fake_get_value
+		seed_showcase.frappe.db.set_value = fake_set_value
+		try:
+			first = seed_showcase._link_seed_leads_to_campaigns(
+				students, {"campaigns": list(campaigns.values())}
+			)
+			second = seed_showcase._link_seed_leads_to_campaigns(
+				students, {"campaigns": list(campaigns.values())}
+			)
+		finally:
+			seed_showcase.frappe.db.get_value = original_get_value
+			seed_showcase.frappe.db.set_value = original_set_value
+
+		self.assertEqual(first, second)
+		self.assertEqual(len(writes), len(_SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS))
+		self.assertEqual(
+			{value for _, value in writes},
+			{campaigns[title] for title in _SHOWCASE_LEAD_CAMPAIGN_ASSIGNMENTS.values()},
 		)
 
 	def test_contact_rows_have_natural_display_identity(self):

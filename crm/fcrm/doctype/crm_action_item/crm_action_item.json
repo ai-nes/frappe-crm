@@ -11,7 +11,7 @@
   {"fieldname":"source_decision_event","fieldtype":"Link","options":"CRM Student Decision Event","read_only":1,"label":"Source Decision Event"},
   {"fieldname":"action","fieldtype":"Link","options":"CRM Action","read_only":1,"in_list_view":1,"label":"Action"},
   {"fieldname":"action_definition_digest","fieldtype":"Data","read_only":1,"label":"Action Definition Digest"},
-  {"fieldname":"student","fieldtype":"Link","options":"CRM Lead","reqd":1,"read_only":1,"in_list_view":1},
+  {"fieldname":"student","fieldtype":"Link","options":"CRM Student","reqd":1,"read_only":1,"in_list_view":1},
   {"fieldname":"crm_student","fieldtype":"Link","options":"CRM Student","read_only":1,"in_list_view":1,"label":"Canonical Student"},
   {"fieldname":"contact","fieldtype":"Link","options":"CRM Student","read_only":1},
   {"fieldname":"origin","fieldtype":"Select","options":"manual\nai\nsystem","default":"system","reqd":1,"read_only":1,"in_list_view":1},
@@ -62,6 +62,7 @@
   {"fields": ["student", "current_slot"], "name": "crm_action_student_current_slot_uniq", "unique": 1}
  ],
  "module":"FCRM", "name":"CRM Action Item", "owner":"Administrator","permissions":[
+   {"role":"CTV Sale","read":1},
    {"role":"Admissions Director","read":1},
    {"role":"Lead Sale","read":1},
    {"role":"Sale","read":1},

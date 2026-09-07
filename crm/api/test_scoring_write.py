@@ -30,31 +30,27 @@ class TestScoringWrite(FrappeTestCase):
 
 	def _delete_test_students(self):
 		for student in frappe.db.get_all(
-			"CRM Lead", filters={"student_name": ["like", "_Test SW%"]}, pluck="name"
+			"CRM Student", filters={"full_name": ["like", "_Test SW%"]}, pluck="name"
 		):
 			for history in frappe.db.get_all("CRM Score History", filters={"student": student}, pluck="name"):
 				frappe.delete_doc("CRM Score History", history, force=True)
-			frappe.delete_doc("CRM Lead", student, force=True)
+			frappe.delete_doc("CRM Student", student, force=True)
 
 	def _make_student(self, name="_Test SW Student"):
-		for student in frappe.db.get_all("CRM Lead", filters={"student_name": name}, pluck="name"):
+		for student in frappe.db.get_all("CRM Student", filters={"full_name": name}, pluck="name"):
 			for history in frappe.db.get_all("CRM Score History", filters={"student": student}, pluck="name"):
 				frappe.delete_doc("CRM Score History", history, force=True)
-			frappe.delete_doc("CRM Lead", student, force=True)
+			frappe.delete_doc("CRM Student", student, force=True)
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Lead",
-				"student_name": name,
+				"doctype": "CRM Student",
+				"full_name": name,
 				"phone": "0981100001",
 				"email": f"{name.lower().replace(' ', '.')}@example.com",
 				"enrollment_status": "CONFIRMED",
 			}
 		)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = False
+		student.insert(ignore_permissions=True)
 		return student
 
 	def _make_template(self, name="_Test SW Template"):
@@ -85,7 +81,7 @@ class TestScoringWrite(FrappeTestCase):
 	def test_first_write_applies_and_updates_student(self):
 		student = self._make_student()
 		template = self._make_template()
-		source_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision")
+		source_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision")
 
 		result = append_score_if_current(
 			**self._payload(student.name, template, source_score_input_revision=source_revision)
@@ -153,7 +149,7 @@ class TestScoringWrite(FrappeTestCase):
 		student = self._make_student("_Test SW Student Bump")
 		# Student insert already bumped score_input_revision once (on_update
 		# always bumps for a new row) -- explicit bumps continue from there.
-		baseline = frappe.db.get_value("CRM Lead", student.name, "score_input_revision")
+		baseline = frappe.db.get_value("CRM Student", student.name, "score_input_revision")
 
 		first = bump_score_input_revision(student.name, "test_reason", enqueue=False)
 		second = bump_score_input_revision(student.name, "test_reason", enqueue=False)

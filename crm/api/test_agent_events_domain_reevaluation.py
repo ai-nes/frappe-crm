@@ -31,28 +31,22 @@ class TestDomainReevaluationTrigger(FrappeTestCase):
 		with _flag(0):
 			result = record_domain_reevaluation_trigger("STU-1", trigger="student_state_changed")
 
-		self.assertEqual(result, {"enabled": False, "created": None, "coalesced": False, "matched_waits": 0})
+		self.assertEqual(result, {"enabled": False, "marked_dirty": False})
 
 	def test_blank_student_or_trigger_is_a_safe_no_op(self):
 		with _flag(1):
-			self.assertIsNone(record_domain_reevaluation_trigger("   ", trigger="new_interaction")["created"])
-			self.assertIsNone(record_domain_reevaluation_trigger("STU-1", trigger="  ")["created"])
+			self.assertFalse(record_domain_reevaluation_trigger("   ", trigger="new_interaction")["marked_dirty"])
+			self.assertFalse(record_domain_reevaluation_trigger("STU-1", trigger="  ")["marked_dirty"])
 
-	def test_enabled_delegates_to_the_coalescing_primitive(self):
+	def test_enabled_delegates_to_the_dirty_marker(self):
 		with (
 			_flag(1),
-			patch("crm.fcrm.nba_evaluations.request_domain_reevaluation") as delegate,
+			patch("crm.fcrm.nba_evaluations.mark_student_nba_dirty", return_value=True) as delegate,
 		):
-			delegate.return_value = {
-				"enabled": True,
-				"created": "NBAEVAL-1",
-				"coalesced": False,
-				"matched_waits": 0,
-			}
 			result = record_domain_reevaluation_trigger(" STU-1 ", trigger=" new_interaction ")
 
-		delegate.assert_called_once_with("STU-1", trigger_reason="new_interaction")
-		self.assertEqual(result["created"], "NBAEVAL-1")
+		delegate.assert_called_once_with("STU-1")
+		self.assertEqual(result, {"enabled": True, "marked_dirty": True})
 
 
 class TestDomainReevaluationDocEventHooks(FrappeTestCase):

@@ -25,6 +25,8 @@
   "column_break_2",
   "platform",
   "channel_boundary",
+  "channel_type",
+  "channel_url",
   "utm_source",
   "utm_medium",
   "utm_campaign",
@@ -140,14 +142,27 @@
    "label": "Platform",
    "options": "CRM Platform"
   },
-  {
-   "fieldname": "channel_boundary",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Channel Boundary",
-   "options": "\nDigital\nField\nPartner\nMixed"
-  },
+ {
+  "fieldname": "channel_boundary",
+  "fieldtype": "Select",
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "label": "Channel Boundary",
+  "options": "\nDigital\nField\nPartner\nMixed"
+ },
+ {
+  "fieldname": "channel_type",
+  "fieldtype": "Link",
+  "in_standard_filter": 1,
+  "label": "Channel Type",
+  "options": "CRM Campaign Channel Type"
+ },
+ {
+  "fieldname": "channel_url",
+  "fieldtype": "Data",
+  "label": "Channel URL",
+  "options": "URL"
+ },
   {
    "fieldname": "utm_source",
    "fieldtype": "Data",
@@ -210,8 +225,10 @@
    "role": "Admissions Director"
   },
   {
+   "create": 1,
    "read": 1,
-   "role": "Lead Sale"
+   "role": "Lead Sale",
+   "write": 1
   },
   {
    "create": 1,

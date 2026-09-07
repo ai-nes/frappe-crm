@@ -1,7 +1,11 @@
-"""Phase 3 automatic lead routing: assigns a newly captured CRM Contact to a
-team and an owner within that team, replacing the manual-only assignment
-flow. Locked algorithm — round-robin within the team matching the lead's
-campus (branch):
+"""Compatibility surface for the retired campus-only router.
+
+The core admissions refactor assigns persisted ``CRM Lead`` rows through an
+explicit batch and the canonical zone/capacity service.  The helpers below are
+kept temporarily for old imports/tests, but ``route_new_lead`` deliberately
+does not mutate a record anymore.
+
+The old algorithm was round-robin within the team matching the lead's campus:
 1. Pick the active CRM Team whose campus matches the lead's branch (oldest
    first if more than one exists for that campus).
 2. Among that team's active staff members, pick whoever was routed longest
@@ -48,51 +52,29 @@ def mark_staff_routed(staff):
 
 
 def route_new_lead(doc):
-	"""Auto-assigns doc.assigned_to in place if it is a new, unassigned
-	CRM Contact with a known campus. No-op (silent, leaves the lead
-	unassigned for manual pickup) if no matching team or no active staff is
-	found — covers the "no available staff on a team" scenario."""
-	if doc.assigned_to or not doc.branch:
-		return
-
-	team = pick_team_for_campus(doc.branch)
-	if not team:
-		return
-
-	staff = pick_round_robin_staff(team)
-	if not staff:
-		return
-
-	doc.assigned_to = staff
-	doc.flags.auto_routed = True
-	mark_staff_routed(staff)
+	"""Deprecated compatibility no-op; assignment requires an explicit batch."""
+	return {
+		"status": "deferred",
+		"reason": "BATCH_REQUIRED",
+		"lead": getattr(doc, "name", None),
+	}
 
 
 @frappe.whitelist()
-def route_unassigned_leads(doctype="CRM Student"):
-	"""Batch retry for leads that were captured while no staff was
-	available for their team (e.g. via import, or a team with no active
-	members at capture time). Safe to call repeatedly/on a schedule."""
-	if doctype not in ("CRM Student",):
-		frappe.throw(frappe._("Routing is only supported for CRM Student."))
+def route_unassigned_leads(doctype="CRM Lead"):
+	"""Retained endpoint that explains the new explicit-batch contract."""
+	if doctype not in ("CRM Lead", "CRM Student"):
+		frappe.throw(frappe._("Routing is only supported for CRM Lead."))
 
 	from crm.api.staff_assignment import _has_staff_assign_permission
 
 	if not _has_staff_assign_permission():
 		frappe.throw(frappe._("You are not permitted to route leads."), frappe.PermissionError)
 
-	unassigned = frappe.get_all(
-		doctype,
-		filters={"assigned_to": ["is", "not set"], "branch": ["is", "set"]},
-		fields=["name"],
-	)
-	routed = 0
-	for row in unassigned:
-		doc = frappe.get_doc(doctype, row.name)
-		route_new_lead(doc)
-		if doc.assigned_to:
-			doc.save(ignore_permissions=True)
-			routed += 1
-
-	frappe.db.commit()
-	return {"routed": routed, "checked": len(unassigned)}
+	return {
+		"routed": 0,
+		"checked": 0,
+		"status": "deferred",
+		"reason": "BATCH_REQUIRED",
+		"message": frappe._("Create or select a Lead Assignment Batch before routing."),
+	}

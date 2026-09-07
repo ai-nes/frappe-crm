@@ -5,9 +5,12 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from crm.fcrm.role_policy import resolve_crm_profile
+
 _STUDENT_BASIC_FIELDS = frozenset(
 	{
 		"student_name",
+		"lead_status",
 		"phone",
 		"email",
 		"other_email",
@@ -56,6 +59,7 @@ _OPTION_DOCTYPES = frozenset({"CRM Lead", "CRM High School"})
 _OPTION_FIELD_TYPES = frozenset({"Link", "Select"})
 _DEFAULT_OPTION_LIMIT = 20
 _MAX_OPTION_LIMIT = 100
+_CTV_STUDENT_UPDATE_FIELDS = frozenset({"lead_status", "notes"})
 
 
 def _parse_fields(fields: dict | str | None, allowed_fields: frozenset[str]) -> dict:
@@ -97,6 +101,19 @@ def _update_document(doctype: str, name: str, fields: dict, allowed_fields: froz
 		frappe.throw(_("Document name is required."), frappe.ValidationError)
 
 	values = _parse_fields(fields, allowed_fields)
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	profile = (
+		resolve_crm_profile(frappe.get_roles(actor))
+		if actor not in {None, "Guest", "None", "Administrator"}
+		else None
+	)
+	if doctype == "CRM Lead" and profile == "ctv_sale":
+		unauthorized_fields = set(values) - _CTV_STUDENT_UPDATE_FIELDS
+		if unauthorized_fields:
+			frappe.throw(
+				_("CTV Sale may only update: {0}.").format(", ".join(sorted(_CTV_STUDENT_UPDATE_FIELDS))),
+				frappe.PermissionError,
+			)
 	doc = frappe.get_doc(doctype, name.strip())
 	doc.check_permission("write")
 

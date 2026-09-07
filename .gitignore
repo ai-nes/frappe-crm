@@ -23,6 +23,10 @@ docker/.env
 docker/.env.*
 !docker/.env.example
 docs/*
+# Keep local test evidence that is useful for review and handoff.
+!docs/test-evidence/
+!docs/test-evidence/lead-conversion-local-2026-09-07/
+!docs/test-evidence/lead-conversion-local-2026-09-07/*
 plans/*
 crm/migration/id_maps/*.json
 crm/migration/fixtures/*.csv
@@ -33,4 +37,3 @@ crm/migration/fixtures/*.csv
 .mcp.json.claude/
 .codex/
 .agents/
-

@@ -33,16 +33,16 @@ class TestAiExposureAuthority(FrappeTestCase):
 		"""PII is gated only by real permlevel access (`fields` already reflects
 		that), not by a second role-identity check -- the same fields the role
 		already sees in the CRM desk UI."""
-		fields = ["name", "student_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
+		fields = ["name", "full_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
 		self.assertEqual(
-			_project_ai_fields("CRM Lead", fields),
-			["email", "latest_score", "name", "phone", "student_name"],
+			_project_ai_fields("CRM Student", fields),
+			["email", "full_name", "latest_score", "name", "phone"],
 		)
 
 	def test_student_projection_excludes_fields_outside_the_operational_pii_ceiling(self):
 		fields = ["name", "latest_score", "date_of_birth", "id_number"]
 		self.assertEqual(
-			_project_ai_fields("CRM Lead", fields),
+			_project_ai_fields("CRM Student", fields),
 			["latest_score", "name"],
 		)
 

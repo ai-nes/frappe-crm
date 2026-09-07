@@ -5,7 +5,7 @@
  "engine": "InnoDB",
  "field_order": ["student", "crm_student", "source_revision", "source_digest", "analysis_input_digest", "candidate_revision", "admission_decision", "admission_event", "automatic_identity", "trigger", "status", "request_fingerprint", "requested_by", "policy_revision", "model_revision", "terminal_reason"],
  "fields": [
-  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "crm_student", "fieldtype": "Link", "label": "Canonical Student", "options": "CRM Student", "read_only": 1},
   {"fieldname": "source_revision", "fieldtype": "Data", "label": "Source Revision", "read_only": 1, "reqd": 1},
   {"fieldname": "source_digest", "fieldtype": "Data", "label": "Source Digest", "read_only": 1},
