@@ -71,7 +71,6 @@ def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict
 
 
 def _shape_context(projection: Mapping, *, now: datetime) -> dict:
-	lifecycle = projection.get("lifecycle") or {}
 	intent = projection.get("intent") or {}
 	interaction = projection.get("interaction") or {}
 	assessment = projection.get("assessment") or {}
@@ -86,7 +85,7 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 	if academic.get("quality") == "current" and academic.get("evidence_ref"):
 		academic_signal["evidence_ref"] = str(academic["evidence_ref"])
 	return {
-		"lifecycle": {"stage": lifecycle.get("stage")},
+		"student_stage": projection.get("student_stage"),
 		"intent": {"type": intent.get("type"), "polarity": intent.get("polarity")},
 		"engagement": {
 			"state": interaction.get("outcome") or "unknown",
@@ -104,10 +103,10 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			[
 				{
 					"kind": "application",
-					"at": (now + timedelta(days=int(lifecycle["days_to_deadline"]))).isoformat(),
+					"at": (now + timedelta(days=int(projection["days_to_deadline"]))).isoformat(),
 				}
 			]
-			if lifecycle.get("days_to_deadline") is not None
+			if projection.get("days_to_deadline") is not None
 			else []
 		),
 		"contactability": {

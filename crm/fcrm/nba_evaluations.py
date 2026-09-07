@@ -231,7 +231,7 @@ def _insert_evaluation(
 		"trigger": trigger,
 		"status": "queued",
 		"run_generation": 0,
-		"contract_version": "nba-evaluation-v1",
+		"contract_version": "nba-evaluation-v2",
 		"engine_revision": _engine_revision(),
 		"evaluation_key": identity["evaluation_key"],
 		"context_revision": identity["context_revision"],

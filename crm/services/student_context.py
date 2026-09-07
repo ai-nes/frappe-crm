@@ -18,6 +18,7 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 		"email",
 		"enrollment_status",
 		"lifecycle_stage",
+		"student_stage",
 		"assigned_to",
 		"owner_staff",
 		"owning_team",

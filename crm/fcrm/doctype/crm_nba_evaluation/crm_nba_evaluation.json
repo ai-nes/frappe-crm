@@ -11,7 +11,7 @@
   {"fieldname": "trigger", "fieldtype": "Select", "label": "Trigger", "options": "manual\nautomatic", "default": "manual", "read_only": 1, "reqd": 1},
   {"default": "queued", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Run Status", "options": "queued\nrunning\ncompleted\nfailed\ndead_lettered", "read_only": 1, "reqd": 1},
   {"fieldname": "disposition", "fieldtype": "Data", "label": "Business Disposition", "read_only": 1},
-  {"fieldname": "contract_version", "fieldtype": "Data", "label": "Contract Version", "default": "nba-evaluation-v1", "read_only": 1, "reqd": 1},
+  {"fieldname": "contract_version", "fieldtype": "Data", "label": "Contract Version", "default": "nba-evaluation-v2", "read_only": 1, "reqd": 1},
   {"fieldname": "engine_revision", "fieldtype": "Data", "label": "Engine Revision", "read_only": 1, "reqd": 1},
   {"fieldname": "evaluation_key", "fieldtype": "Data", "label": "Evaluation Key", "length": 64, "read_only": 1, "reqd": 1, "in_list_view": 1},
   {"fieldname": "context_revision", "fieldtype": "Data", "label": "Context Revision", "read_only": 1},

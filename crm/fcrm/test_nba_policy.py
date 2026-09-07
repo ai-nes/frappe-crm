@@ -113,6 +113,54 @@ def test_terminal_lifecycle_blocks_contact_action_before_scoring():
 	assert result["exclusions"] == [{"action": "CALL", "reason": "LIFECYCLE_TERMINAL"}]
 
 
+def test_terminal_student_stage_blocks_contact_action_before_scoring():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={
+			"student_stage": "Qualified",
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert result["exclusions"] == [{"action": "CALL", "reason": "STUDENT_STAGE_TERMINAL"}]
+
+
+def test_new_student_excludes_application_actions():
+	result = filter_eligible_actions(
+		[_row("REMIND_APPLICATION", category="APPLICATION")],
+		now=NOW,
+		decision_context={
+			"student_stage": "New",
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert result["exclusions"] == [{"action": "REMIND_APPLICATION", "reason": "STUDENT_STAGE_NOT_ALLOWED"}]
+
+
+def test_connected_student_allows_application_actions():
+	result = filter_eligible_actions(
+		[_row("REMIND_APPLICATION", category="APPLICATION")],
+		now=NOW,
+		decision_context={
+			"student_stage": "Connected",
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert [action["code"] for action in result["actions"]] == ["REMIND_APPLICATION"]
+
+
+def test_unknown_student_stage_fails_closed():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={
+			"student_stage": None,
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert result["exclusions"] == [{"action": "CALL", "reason": "STUDENT_STAGE_UNKNOWN"}]
+
+
 def test_parent_action_is_deferred_until_recipient_specific_consent_exists():
 	row = _row("CONTACT_PARENT", category="PARENT")
 	result = filter_eligible_actions(

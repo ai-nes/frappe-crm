@@ -1,8 +1,8 @@
 import pytest
-
 from crm.fcrm.recommendation_rule_constraints import (
 	condition_metadata,
 	evaluate_conditions,
+	has_legacy_stage_condition,
 	normalize_conditions,
 	normalize_stop_conditions,
 	validate_rule_settings,
@@ -12,7 +12,7 @@ from crm.fcrm.recommendation_rule_constraints import (
 def _conditions():
 	return {
 		"all": [
-			{"field": "student.lifecycle_stage", "operator": "in", "value": ["Lead", "MQL"]},
+			{"field": "student.student_stage", "operator": "in", "value": ["New", "Connected"]},
 			{"field": "student.latest_score", "operator": "gte", "value": 70},
 		],
 		"any": [],
@@ -22,9 +22,9 @@ def _conditions():
 def test_normalize_conditions_accepts_object_and_json_string():
 	assert normalize_conditions(_conditions()) == _conditions()
 	assert normalize_conditions(
-		'{"all": [{"field": "student.lifecycle_stage", "operator": "equals", "value": "Lead"}], "any": []}'
+		'{"all": [{"field": "student.student_stage", "operator": "equals", "value": "New"}], "any": []}'
 	) == {
-		"all": [{"field": "student.lifecycle_stage", "operator": "equals", "value": "Lead"}],
+		"all": [{"field": "student.student_stage", "operator": "equals", "value": "New"}],
 		"any": [],
 	}
 
@@ -39,15 +39,15 @@ def test_normalize_conditions_rejects_unknown_fields_and_empty_rules():
 
 
 def test_evaluate_conditions_supports_all_any_and_nested_student_context():
-	context = {"student": {"lifecycle_stage": "MQL", "latest_score": 82}}
+	context = {"student": {"student_stage": "Connected", "latest_score": 82}}
 	assert evaluate_conditions(_conditions(), context) is True
 	assert (
 		evaluate_conditions(
 			{
 				"all": [],
 				"any": [
-					{"field": "student.lifecycle_stage", "operator": "equals", "value": "Lost"},
-					{"field": "student.lifecycle_stage", "operator": "equals", "value": "MQL"},
+					{"field": "student.student_stage", "operator": "equals", "value": "Lost"},
+					{"field": "student.student_stage", "operator": "equals", "value": "Connected"},
 				],
 			},
 			context,
@@ -70,11 +70,18 @@ def test_normalize_stop_conditions_rejects_duplicates_and_unknown_codes():
 def test_condition_metadata_is_safe_for_frontend_pickers():
 	fields = condition_metadata()
 	assert {field["field"] for field in fields} >= {
-		"student.lifecycle_stage",
+		"student.student_stage",
 		"student.latest_score",
 		"student.owner_staff",
 	}
 	assert all(field["operators"] for field in fields)
+	assert "student.lifecycle_stage" not in {field["field"] for field in fields}
+
+
+def test_legacy_stage_condition_is_detectable_for_persisted_rules():
+	assert has_legacy_stage_condition(
+		{"all": [{"field": "student.lifecycle_stage", "operator": "equals", "value": "Lead"}], "any": []}
+	)
 
 
 def test_missing_values_do_not_match_negative_conditions():

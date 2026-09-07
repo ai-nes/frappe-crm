@@ -96,6 +96,17 @@ def set_student_stage(
 			)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
+		from crm.services.student_context import bump_student_context_revision
+		from crm.fcrm.nba_evaluations import mark_student_nba_dirty
+
+		change = bump_student_context_revision(
+			doc.name,
+			"student_stage_change",
+			event_id=f"student-stage:{doc.name}:{current_stage}:{target_stage}",
+		)
+		mark_student_nba_dirty(doc.name)
+	else:
+		change = None
 
 	return {
 		"status": "unchanged" if raw_current_stage == target_stage else "applied",
@@ -103,4 +114,5 @@ def set_student_stage(
 		"previous_stage": current_stage,
 		"student_stage": target_stage,
 		"replayed": raw_current_stage == target_stage,
+		"context_revision": change["revision"] if change else None,
 	}

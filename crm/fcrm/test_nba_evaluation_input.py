@@ -24,6 +24,7 @@ def _assemble_from_reference():
 			reference["eligible_action_set"],
 			reference["policies"],
 			now=reference["evaluation_clock"],
+			contract_version=reference["contract_version"],
 		),
 		reference,
 	)

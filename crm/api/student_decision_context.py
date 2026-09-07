@@ -18,6 +18,7 @@ _STUDENT_FIELDS = [
 	"name",
 	"enrollment_status",
 	"lifecycle_stage",
+	"student_stage",
 	"major",
 	"current_grade",
 	"study_stage",
@@ -498,6 +499,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"lifecycle": {
 			"stage": row.lifecycle_stage or row.enrollment_status,
 		},
+		"student_stage": row.student_stage,
 		"study": {
 			"current_grade": row.current_grade,
 			"stage": row.study_stage,
@@ -543,6 +545,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"academic": academic,
 		"contactability": contactability,
 		"parent_authority": {"valid": bool(parent_authority_is_valid(student))},
+		"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
 	}
 	allowed_actions = context["allowed_action_types"]
 	parent_authorized = parent_authority_is_valid(student)
@@ -562,7 +565,7 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 			"next_task_action": action,
 			"next_task_objective": objective,
 			"stage_label": _journey_label(stage),
-			"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
+			"days_to_deadline": context["days_to_deadline"],
 		}
 	)
 	context["evidence_refs"] = [
