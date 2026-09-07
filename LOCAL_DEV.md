@@ -45,10 +45,9 @@ task fe
 
 Mở `http://crm.localhost:5000/crm`
 
-`task setup` = bật Docker + cài frontend deps. Container tự tạo bench, site `crm.localhost`, cài app CRM, migrate **và seed bộ dữ liệu demo** (lần đầu). School domain giữ toàn bộ trường canonical; cohort showcase có đúng 3.184 học sinh, mỗi em liên kết trường + province + ward, với phân bổ ưu tiên HCM/Đồng Nai. Market Intelligence dùng annual school snapshots cho application/enrollment/conversion, còn `opportunity`, `potentialScore` và các chỉ số grade-12 vẫn `unavailable` cho tới khi có nguồn được xác minh. Đặt `CRM_SEED_DEMO=0` trong `docker/.env` nếu muốn site rỗng.
+`task setup` = bật Docker + cài frontend deps. Container tự tạo bench, site `crm.localhost`, cài app CRM, migrate **và seed bộ dữ liệu local liên kết** (lần đầu): 7 tỉnh, 35 trường, 6 ngành, 4 campaign, tài khoản cho các role, 20 Lead và 20 Student cùng hồ sơ tuyển sinh liên quan. Đặt `CRM_SEED_DEMO=0` trong `docker/.env` nếu muốn site rỗng.
 
-Seed lại thủ công: `task seed` (giữ site, import toàn bộ trường canonical và cập nhật cohort 3.184 học sinh) hoặc `task seed-fresh` (reinstall + migrate + seed). Seed idempotent và không prune trường đang có liên kết Student/Contact.
-Chỉ làm gọn school domain local: `task seed-school-domain-demo`. Lệnh này xóa các business rows do showcase tạo (giữ audit/receipt append-only), rồi import lại toàn bộ school domain.
+Seed lại thủ công: `task seed`. Seed idempotent, mỗi Lead chỉ có một owner trực tiếp và owner được phân bổ vòng giữa `ctvsale@gmail.com` và `sale@gmail.com`; `leadsale@gmail.com` là trưởng nhóm giám sát, không nhận Lead trực tiếp. Lệnh không prune dữ liệu đang có liên kết.
 
 ---
 

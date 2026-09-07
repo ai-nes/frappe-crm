@@ -160,7 +160,7 @@ def get_permission_query_conditions(doctype, user=None):
 		# boundary and must be able to read bounded analysis inputs/catalogues.
 		return None
 
-	roles = set(frappe.get_roles(user))
+	roles = set(_get_policy_roles(user))
 	if user == "Administrator" or "System Manager" in roles:
 		return None
 	scope = _effective_case_scope(roles, doctype, user=user)
@@ -211,7 +211,7 @@ def get_student_list_read_condition(user=None):
 	permission query hook unchanged.
 	"""
 	user = user or frappe.session.user
-	if resolve_crm_profile(frappe.get_roles(user)) != "sales":
+	if resolve_crm_profile(_get_policy_roles(user)) != "sales":
 		return None
 
 	crm_staff_name = _get_crm_staff_name(user)
@@ -523,8 +523,21 @@ def _effective_case_scope(roles, doctype, *, user):
 
 
 def _delete_requires_ownership(user):
-	roles = set(frappe.get_roles(user))
+	roles = set(_get_policy_roles(user))
 	return delete_requires_ownership_for_roles(roles, administrator=user == "Administrator")
+
+
+def _get_policy_roles(user=None):
+	"""Return the role set used by both session and row-scope authorization.
+
+	Frappe omits an explicitly assigned ``Administrator`` role from its raw role
+	list for normal users.  The session contract restores that role so it can
+	represent the CRM CEO profile; row-level permission checks must use the same
+	normalized role set or CEO accounts are denied despite their DocPerm grant.
+	"""
+	from crm.api.session import _get_policy_roles as get_policy_roles
+
+	return get_policy_roles(user)
 
 
 def _user_owns_or_is_assigned_to(doc, user):

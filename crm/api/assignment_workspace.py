@@ -1014,7 +1014,9 @@ def _setup_workspace_payload(context):
 						"function": item.function,
 						"term": item.term,
 						"is_primary": bool(item.is_primary),
-						"is_team_lead": bool(item.is_team_lead),
+						"is_team_lead": bool(
+							team_map.get(item.team) and team_map[item.team].team_lead_staff == row.name
+						),
 						"effective_from": item.effective_from,
 						"effective_until": item.effective_until,
 					}

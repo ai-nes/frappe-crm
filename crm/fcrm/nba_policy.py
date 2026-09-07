@@ -536,8 +536,17 @@ def eligible_action_set_for_student(
 	"""
 	import frappe
 
-	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
-		frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
+	if not service_authorized:
+		from crm.fcrm.permissions import has_permission as has_student_permission
+
+		student_doc = frappe.get_doc("CRM Student", student)
+		permitted = has_student_permission(
+			student_doc,
+			user=frappe.session.user,
+			permission_type="read",
+		)
+		if not permitted:
+			frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
 
 	evaluated_at = now or frappe.utils.now_datetime()
 	catalog_rows = frappe.get_all(
@@ -620,7 +629,6 @@ def get_active_decision_policy() -> dict:
 		"conflict_key_fields": json_string_list(row.get("conflict_key_fields")),
 		"diversity_rule": row.get("diversity_rule") or "none",
 		"decision_policy": kernel,
-		"policy_digest": kernel_digest,
 	}
 
 

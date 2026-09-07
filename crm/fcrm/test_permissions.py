@@ -127,9 +127,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		finally:
 			frappe.delete_doc("User", user.name, force=True)
 
-	def test_administrator_role_string_is_not_the_platform_superuser(self):
+	def test_explicit_administrator_role_is_the_ceo_profile(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Admin Role", roles=["Administrator"])
-		self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
+		self.assertIsNone(shared_conditions("CRM Student", user=user))
 
 	def test_system_manager_direct_access_does_not_require_a_staff_record(self):
 		user = self._make_user_without_staff("_test_system_manager_no_staff@example.com", ["System Manager"])

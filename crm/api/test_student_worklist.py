@@ -16,6 +16,7 @@ from crm.api.student_worklist import (
 	_recommendation_sort_key,
 	_serialize_nba,
 	get_next_best_action_for_student,
+	list_actions_for_record,
 	list_student_worklist,
 )
 from crm.fcrm.test_permissions import TestSharedScopingPermissions
@@ -109,6 +110,35 @@ class TestStudentWorklist(FrappeTestCase):
 			query.return_value.build_match_conditions.return_value = None
 			self.assertEqual(_fetch_recommendation_page("Administrator", None, 1), [])
 
+	def test_record_actions_are_filtered_by_canonical_student(self):
+		action = frappe._dict(
+			name="ACT-1",
+			student="STU-1",
+			action="CALL",
+			action_type="CALL",
+			objective="Call the student",
+			state="pending",
+			execution_status="planned",
+			priority="medium",
+			due_at=None,
+			action_owner=None,
+			origin="manual",
+			action_revision=1,
+		)
+		with (
+			_as_user("staff@example.com"),
+			patch.object(frappe, "has_permission"),
+			patch("crm.api.student_worklist.canonical_student", return_value="STU-1"),
+			patch("crm.api.student_worklist._ensure_visible_student") as ensure_visible,
+			patch("frappe.get_list", return_value=[action]) as get_list,
+		):
+			result = list_actions_for_record("CRM Student", "STU-1")
+
+		ensure_visible.assert_called_once_with("STU-1")
+		self.assertEqual(get_list.call_args.args[0], "CRM Action Item")
+		self.assertEqual(get_list.call_args.kwargs["filters"], {"student": "STU-1"})
+		self.assertEqual(result["items"][0]["student"], "STU-1")
+
 
 class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
 	"""``CRM NBA Evaluation`` grants doctype ``read`` to System Manager only, so
@@ -128,16 +158,10 @@ class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
 		)
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
 		student = frappe.get_doc(
-			{"doctype": "CRM Lead", "student_name": "_Test Worklist Perm Student", "phone": phone}
-		)
-		previous = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous
+			{"doctype": "CRM Student", "full_name": "_Test Worklist Perm Student", "phone": phone}
+		).insert(ignore_permissions=True)
 		frappe.db.set_value(
-			"CRM Lead", student.name, "owner_staff", self._sale_staff, update_modified=False
+			"CRM Student", student.name, "owner_staff", self._sale_staff, update_modified=False
 		)
 		self._student = student
 
@@ -158,7 +182,7 @@ class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": "REC-" + frappe.generate_hash(length=18),
-				"target_type": "CRM Lead",
+				"target_type": "CRM Student",
 				"target_id": self._student.name,
 				"action": "CALL",
 				"reason": "Silent for nine days after a tuition question.",
@@ -180,7 +204,7 @@ class TestStudentWorklistRealNonSystemManagerSession(FrappeTestCase):
 		frappe.delete_doc("CRM NBA Evaluation", self._evaluation.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
-		frappe.delete_doc("CRM Lead", self._student.name, force=True)
+		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
 		frappe.delete_doc("CRM Campus", self._campus, force=True)
 
@@ -245,7 +269,7 @@ class TestStudentNextBestAction(FrappeTestCase):
 
 		def fake_get_list(doctype, **kwargs):
 			calls.append((doctype, kwargs))
-			return [{"name": "STU-2026-00042"}] if doctype == "CRM Lead" else [action]
+			return [{"name": "STU-2026-00042"}] if doctype == "CRM Student" else [action]
 
 		with (
 			_as_user("staff@example.com"),
@@ -256,7 +280,7 @@ class TestStudentNextBestAction(FrappeTestCase):
 
 		has_permission.assert_has_calls(
 			[
-				call("CRM Lead", "read", user="staff@example.com", throw=True),
+				call("CRM Student", "read", user="staff@example.com", throw=True),
 				call("CRM Action Item", "read", user="staff@example.com", throw=True),
 			]
 		)
@@ -269,7 +293,7 @@ class TestStudentNextBestAction(FrappeTestCase):
 
 	def test_endpoint_returns_null_when_student_has_no_active_action(self):
 		def fake_get_list(doctype, **kwargs):
-			return [{"name": "STU-2026-00042"}] if doctype == "CRM Lead" else []
+			return [{"name": "STU-2026-00042"}] if doctype == "CRM Student" else []
 
 		with (
 			_as_user("staff@example.com"),

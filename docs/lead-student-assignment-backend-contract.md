@@ -1,29 +1,29 @@
 ---
 type: spec
-date: 2026-09-07
-status: local-backend-contract
+date: 2026-09-08
+status: local-backend-and-dashboard-contract
 owner: frappe-crm
 audience: dashboard-crm FE
 ---
 
-# Contract BE phân công Lead theo batch
+# Contract BE phân công Lead tự động
 
 ## 1. Mục tiêu
 
-Tài liệu này là contract hiện tại giữa `frappe-crm` và `dashboard-crm` cho luồng:
+Tài liệu này là contract hiện tại giữa `frappe-crm` và `dashboard-crm` cho luồng chính:
 
 ```text
-Tạo/import Lead
-  → tạo batch
-  → xem trước
-  → bấm phân công
+Nguồn khác đổ Lead vào CRM
+  → người vận hành bấm “Phân công Lead”
+  → BE quét Lead chưa có người phụ trách
   → xử lý dữ liệu
   → chọn Team/Sale theo cấu hình Frappe
   → cập nhật ownership
 ```
 
 BE là nguồn sự thật cho dữ liệu, status, permission và thuật toán. FE chỉ hiển thị,
-nhập dữ liệu và gọi API; không tự tính Team, Zone, Sale hoặc capacity.
+gọi API và hiển thị kết quả; không tự tính Team, Zone, Sale hoặc capacity. Batch vẫn
+được BE tạo nội bộ để lưu lịch sử, không phải bước setup của người dùng.
 
 ## 2. Mô hình dữ liệu chuẩn
 
@@ -216,6 +216,7 @@ Tất cả API trả dữ liệu trong `response.message` theo chuẩn Frappe.
 | `crm.api.lead_assignment_batch.create_lead_assignment_batch` | POST | Tạo batch từ các Lead đã có bằng `lead_ids`; chưa phân công. |
 | `crm.api.lead_assignment_batch.preview_lead_assignment_batch` | POST | Kiểm tra điều kiện và routing context, chuyển batch sang `ready`. |
 | `crm.api.lead_assignment_batch.run_lead_assignment_batch` | POST | Xử lý Lead và phân công một lần. |
+| `crm.api.lead_assignment_batch.run_unassigned_lead_assignment` | POST | Quét toàn bộ Lead chưa có `owner_staff`/`assigned_to`, tạo bản ghi chạy nội bộ và phân công một lần. Không lọc theo `source`. |
 | `crm.api.lead_assignment_batch.retry_lead_assignment_batch` | POST | Chạy lại item lỗi/deferred/manual review. |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch` | GET | Lấy chi tiết một batch và item. |
 | `crm.api.lead_assignment_batch.list_lead_assignment_batches` | GET | Lấy lịch sử các batch. |
@@ -252,7 +253,34 @@ import.
 
 ### 5.5. Preview và run
 
-FE nên gọi theo thứ tự:
+#### Luồng chính trên dashboard
+
+FE gọi một API duy nhất khi người dùng bấm nút:
+
+```text
+POST crm.api.lead_assignment_batch.run_unassigned_lead_assignment
+```
+
+BE sẽ bỏ qua Lead đã có người phụ trách hoặc đã Converted, không quan tâm Lead đến từ
+form, import hay hệ thống nào. Kết quả trả về có cùng cấu trúc batch/item hiện tại;
+`batch` là bản ghi audit nội bộ để FE hiển thị lịch sử. Nếu không có việc cần làm,
+BE trả `status = "no_work"`, `batch = null` và `items = []`.
+
+Response khi có Lead cần xử lý có thêm:
+
+```json
+{
+  "status": "completed",
+  "scanned": 10,
+  "batch": { "name": "...", "status": "completed", "summary": {} },
+  "items": []
+}
+```
+
+`scanned` là số Lead được quét trong lần bấm. FE không cần cho người dùng nhập tên
+batch, chọn hàng chờ, chọn Team hoặc import CSV.
+
+Các API explicit batch dưới đây vẫn được giữ để tương thích lịch sử và công cụ nội bộ:
 
 ```text
 import/create batch
@@ -270,26 +298,31 @@ Khi chạy:
 1. Lead `NEW` được BE đưa sang `PROCESSING`.
 2. Lead không hợp lệ thành `CLOSED / INVALID`, item thành `manual_review`.
 3. Lead hợp lệ thành `PROCESSED`.
-4. BE chạy engine routing và ghi Team/Sale ownership.
+4. BE tìm Team theo tỉnh của Lead rồi ghi Team/Sale ownership.
 5. Ghi ownership thành công mới đổi Lead thành `ASSIGNED`, item thành `assigned`.
-6. Không đủ capacity/policy/mapping thì Lead giữ `PROCESSED`, item thành `deferred`.
+6. Không có Team hoặc Sale/CTV đủ điều kiện thì Lead giữ `PROCESSED`, item thành
+   `manual_review` hoặc `deferred`.
 
 FE không hiển thị nút “chạy ngầm”, không polling worker và không tự đổi status.
 
-## 6. Thứ tự phân công
+## 6. Thứ tự phân công Lead batch
 
-Engine hiện tại dùng context địa bàn/trường và capacity của Frappe:
+Luồng Lead batch mới dùng một route đơn giản, không yêu cầu người vận hành setup
+Pool/Policy/Zone:
 
-1. Nhân sự gán trực tiếp cho trường (`CRM High School Assignment`).
-2. Nếu không có, Team phụ trách Zone (`CRM Team Zone Assignment`) và policy active.
-3. Nếu không xác định được Zone, đưa vào nhánh province/manual review theo routing context.
-4. Sale được chọn phải là nhân sự active, thuộc Team active, đúng cơ sở và còn capacity.
+1. Chuẩn hóa `CRM Lead.province`.
+2. Tìm Group đang hoạt động có đúng tỉnh.
+3. Lấy các Team Sales đang hoạt động thuộc Group.
+4. Chỉ giữ Team có trưởng nhóm tổ chức và có Sale/CTV Sale đang hoạt động.
+5. Chọn Sale/CTV có tải thấp nhất và còn giới hạn nhận nếu có.
+
+Trường THPT vẫn là field nghiệp vụ bắt buộc của Lead và phục vụ bước chuyển sang
+Student, nhưng không còn là khóa để người vận hành mapping Team trong batch.
 
 Các kết quả routing được trả ở item:
 
 ```text
-routingTier
-zone
+province
 team
 ownerStaff
 activeLoad
@@ -302,10 +335,9 @@ reason
 
 FE chỉ hiển thị các giá trị BE trả về. Không tính lại phần trăm tải hoặc tự chọn người.
 
-`pool` vẫn tồn tại trong BE như lớp tương thích nội bộ với engine routing hiện tại. FE
-không cần bắt người dùng hiểu hoặc chọn “hàng chờ đầu vào”; nếu BE trả lỗi liên quan
-`MISSING_INPUT_QUEUE` hoặc `MULTIPLE_INPUT_QUEUES`, hiển thị là “Cấu hình phân công
-chưa hoàn tất, cần quản trị viên kiểm tra Team/Zone”.
+`pool`, `zone` và policy cũ vẫn có thể xuất hiện trong contract để tương thích lịch
+sử, nhưng không phải dữ liệu setup của Lead batch mới. Mã
+`policyVersion = province-capacity-v1` chỉ dùng để truy vết kết quả.
 
 ## 7. Handoff sau khi Sale xử lý
 
@@ -337,12 +369,11 @@ hoặc ghi đè dữ liệu mới.
 
 ### FE phải làm
 
-- Dùng catalog Frappe cho province, high school, major, source.
-- Hiển thị rõ hai bước: “Nhập Lead” và “Phân công batch”.
-- Cho tạo nhiều batch; mỗi batch có tên, mô tả, số lượng và status.
-- Cho xem preview trước nút phân công.
+- Hiển thị một nút “Phân công Lead” để gọi `run_unassigned_lead_assignment`.
+- Hiển thị trạng thái đang chạy, không có Lead cần xử lý và kết quả từng Lead.
+- Cho xem lịch sử các lần chạy nội bộ; mỗi lần chạy có status và summary.
 - Hiển thị kết quả từng item: đã phân công, chờ xử lý, cần bổ sung, lỗi.
-- Sau khi run, gọi lại `get_lead_assignment_batch` để lấy trạng thái cuối.
+- Sau khi run, dùng `batch.name` để gọi lại `get_lead_assignment_batch` nếu cần tải chi tiết.
 - Cho retry riêng các item `deferred`, `manual_review`, `failed`.
 - Giữ nguyên error code để support/debug, nhưng hiển thị thông báo tiếng Việt.
 
@@ -351,7 +382,7 @@ hoặc ghi đè dữ liệu mới.
 - Không tự ghi `processing_status`, `resolution`, `owner_staff`, `owning_team`.
 - Không tự tính hoặc tự chọn Sale/Team/Zone.
 - Không tạo CRM Student ở bước nhập Lead hoặc phân công.
-- Không gọi worker hoặc endpoint routing cũ thay cho batch API.
+- Không gọi worker; nút trên dashboard là điểm kích hoạt duy nhất.
 - Không dùng `lead_status` để thay thế `processing_status`.
 - Không hardcode dữ liệu tỉnh, trường, ngành, nguồn.
 
@@ -363,9 +394,9 @@ hoặc ghi đè dữ liệu mới.
 | `INVALID_ID_NUMBER` | CCCD phải gồm 9 hoặc 12 chữ số. |
 | `INVALID_LOOKUP` / `INVALID_PROVINCE` / `INVALID_HIGH_SCHOOL` | Chọn lại dữ liệu từ danh sách Frappe. |
 | `MISSING_CAMPUS` | Bổ sung cơ sở cho Lead hoặc cấu hình cơ sở mặc định. |
-| `MISSING_INPUT_QUEUE` / `MULTIPLE_INPUT_QUEUES` | Quản trị viên cần hoàn tất cấu hình Team/Zone. |
-| `CAPACITY_BLOCKED` | Sale/Team đã đủ giới hạn nhận Lead. |
-| `NO_ACTIVE_POLICY` | Chưa có cách chia Lead đang hiệu lực cho Team. |
+| `TEAM_NOT_FOUND_FOR_PROVINCE` | Chưa có Team hoạt động phụ trách tỉnh. |
+| `NO_ELIGIBLE_RECIPIENT` | Chưa có Sale/CTV hoạt động hoặc còn chỗ nhận. |
+| `TEAM_NOT_READY` | Team thiếu Group/tỉnh/trưởng nhóm/nhân sự cần thiết. |
 | `STALE_OWNERSHIP_REVISION` | Dữ liệu đã thay đổi; tải lại batch rồi retry. |
 | `FORBIDDEN` / `OUT_OF_SCOPE` | Tài khoản không có quyền hoặc ngoài phạm vi Team/cơ sở. |
 
@@ -376,13 +407,17 @@ hoặc ghi đè dữ liệu mới.
 - Migration thành công, 190 CRM JSON hợp lệ.
 - Processing contract: 9 tests pass.
 - Lead mapping/catalog: 16 tests pass.
-- Assignment batch: 5 tests pass.
+- Assignment batch: 10 tests pass.
 - Routing: 10 tests pass.
 - Student routing: 6 tests pass.
 - Ruff, format và `git diff --check` pass.
 
-Dashboard chưa tích hợp lại theo contract này. Đây là điểm bắt đầu để FE viết lại UI
-batch assignment mà không phải suy đoán từ các component cũ.
+- API `run_unassigned_lead_assignment` đã có; dashboard gọi API này từ nút
+  “Phân công Lead”.
+- Card tạo/import batch đã bỏ khỏi luồng chính; các API explicit batch vẫn giữ để đọc
+  lịch sử và tương thích dữ liệu cũ.
+- Seed local `crm.demo.seed_unassigned_leads.execute` tạo 10 Lead đủ dữ liệu routing,
+  chưa có người phụ trách.
 
 ## References
 

@@ -54,6 +54,63 @@ class TestCRMTeam(FrappeTestCase):
 		team.delete()
 		self.assertFalse(frappe.db.exists("CRM Team", team.name))
 
+	def test_team_allows_multiple_active_lead_sale_memberships(self):
+		team = self._make_team("_Test Team Multiple Lead Sales")
+		first_staff, first_user = self._make_staff("_Test First Lead")
+		second_staff, second_user = self._make_staff("_Test Second Lead")
+
+		first_staff.append(
+			"team_memberships",
+			{
+				"team": team.name,
+				"function": "Lead Sale",
+				"term": "",
+				"is_primary": 1,
+			},
+		)
+		first_staff.save(ignore_permissions=True)
+
+		second_staff.append(
+			"team_memberships",
+			{
+				"team": team.name,
+				"function": "Lead Sale",
+				"term": "",
+				"is_primary": 1,
+			},
+		)
+		second_staff.save(ignore_permissions=True)
+		self.assertEqual(
+			frappe.db.count(
+				"CRM Team Membership",
+				filters={"team": team.name, "function": "Lead Sale"},
+			),
+			2,
+		)
+
+		self._cleanup_staff(first_staff.name, first_user)
+		self._cleanup_staff(second_staff.name, second_user)
+
+	def test_team_lead_pointer_is_independent_from_staff_function(self):
+		team = self._make_team("_Test Team Lead Pointer")
+		staff, user = self._make_staff("_Test Pointer Staff")
+		staff.append(
+			"team_memberships",
+			{
+				"team": team.name,
+				"function": "Sale",
+				"term": "",
+				"is_primary": 1,
+			},
+		)
+		staff.save(ignore_permissions=True)
+
+		team.team_lead_staff = staff.name
+		team.save(ignore_permissions=True)
+		self.assertEqual(team.team_lead_staff, staff.name)
+
+		self._cleanup_staff(staff.name, user)
+
 	# ---------------------------------------------------------------- helpers
 
 	def _make_campus(self, name):

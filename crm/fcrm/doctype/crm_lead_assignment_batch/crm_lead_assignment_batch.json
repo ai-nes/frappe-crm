@@ -9,6 +9,8 @@
  "engine": "InnoDB",
  "field_order": [
   "batch_name",
+  "province",
+  "target_team",
   "status",
   "source",
   "pool",
@@ -28,9 +30,11 @@
  ],
  "fields": [
   {"fieldname":"batch_name","fieldtype":"Data","in_list_view":1,"label":"Batch name","reqd":1,"unique":1},
+  {"fieldname":"province","fieldtype":"Link","in_list_view":1,"label":"Province","options":"CRM Province"},
+  {"fieldname":"target_team","fieldtype":"Link","in_list_view":1,"label":"Target Team","options":"CRM Team"},
   {"default":"draft","fieldname":"status","fieldtype":"Select","in_list_view":1,"label":"Status","options":"draft\nready\nrunning\ncompleted\ncompleted_with_errors\ncancelled","read_only":1,"reqd":1},
   {"fieldname":"source","fieldtype":"Data","in_list_view":1,"label":"Source"},
-  {"fieldname":"pool","fieldtype":"Link","in_list_view":1,"label":"Input queue","options":"CRM Student Pool"},
+  {"fieldname":"pool","fieldtype":"Link","hidden":1,"label":"Legacy input queue","options":"CRM Student Pool"},
   {"fieldname":"description","fieldtype":"Small Text","label":"Description"},
   {"fieldname":"column_break_1","fieldtype":"Column Break"},
   {"fieldname":"created_by","fieldtype":"Link","label":"Created by","options":"User","read_only":1},
