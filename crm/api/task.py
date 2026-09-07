@@ -324,7 +324,7 @@ def _action_query(student_condition, search, status, priority, date_filter, task
 			'CRM Action Item' AS doctype,
 			COALESCE(NULLIF(action_item.action_type, ''), NULLIF(action_item.action, ''), 'CRM Action Item') AS task_type,
 			action_item.objective AS title,
-			action_item.objective AS description,
+			COALESCE(NULLIF(action_item.description, ''), action_item.objective) AS description,
 			action_item.state AS status,
 			action_item.priority AS priority,
 			action_item.due_at AS due_date,

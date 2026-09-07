@@ -12,6 +12,7 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
+from crm.api.task import get_task, list_sales_tasks
 from crm.fcrm.student_decision import StudentDecisionError, create_manual_action, decide_recommendation
 from crm.fcrm.test_permissions import TestSharedScopingPermissions
 
@@ -130,6 +131,16 @@ class TestRecommendationDecision(FrappeTestCase):
 		self.assertEqual(len(tasks), 1)
 		task = frappe.get_doc("CRM Action Item", tasks[0])
 		self.assertEqual(task.state, "accepted")
+		self.assertEqual(task.objective, "Gọi điện")
+		self.assertEqual(task.description, rec.reason)
+		task_dto = get_task(result["action"])
+		self.assertEqual(task_dto["title"], "Gọi điện")
+		self.assertEqual(task_dto["description"], rec.reason)
+		task_row = next(
+			row for row in list_sales_tasks(page_length=100)["tasks"] if row["name"] == result["action"]
+		)
+		self.assertEqual(task_row["title"], "Gọi điện")
+		self.assertEqual(task_row["description"], rec.reason)
 		self.assertEqual(task.source_decision_event, result["event"])
 		self.assertEqual(
 			task.action_definition_digest, frappe.db.get_value("CRM Action", "CALL", "definition_digest")

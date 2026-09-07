@@ -474,7 +474,11 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	canonical_type = None
 	definition_digest = None
 	if accepting:
-		from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+		from crm.fcrm.action_type_catalog import (
+			action_category,
+			canonicalize_action_type,
+			display_name_for_wire_action_code,
+		)
 		from crm.fcrm.action_type_registry import is_available_action_type
 		from crm.fcrm.student_contact_conversion import contact_for_student
 		from crm.services.sales_action_policy import parent_contact_for_student
@@ -547,6 +551,11 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 		# verified parent recipient and authority.
 		if is_parent_action and not action_contact:
 			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
+		task_title = (
+			display_name_for_wire_action_code(canonical_type or action_type)
+			or doc.purpose
+			or doc.reason
+		)
 		canonical = frappe.get_doc(
 			{
 				"doctype": CANONICAL_ACTION,
@@ -558,7 +567,8 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 				"action": canonical_type,
 				"action_type": action_category(canonical_type) if canonical_type else None,
 				"action_definition_digest": definition_digest,
-				"objective": doc.purpose or doc.reason,
+				"objective": task_title,
+				"description": doc.reason,
 				"disposition": "ACT" if canonical_type else "MONITOR",
 				"state": "accepted",
 				"priority": applied_delta.get("priority") or doc.priority or "medium",
