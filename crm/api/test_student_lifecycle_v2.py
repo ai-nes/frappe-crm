@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api import student_lifecycle
@@ -43,4 +44,31 @@ class TestStudentLifecycleV2API(FrappeTestCase):
 		self.assertEqual(result, {"status": "created"})
 		command.assert_called_once_with(
 			student="STU-1", reason="Candidate returned", expected_revision=4, idempotency_key="reopen-1", correlation_id="corr-1"
+		)
+
+	def test_get_lifecycle_stages_forwards_to_read_service(self):
+		expected = {
+			"stages": [{"stage": "Lead", "label": "Lead", "order": 0, "is_terminal": False}],
+			"policy_version": "phase5-lifecycle-v1",
+		}
+		with patch("crm.api.student_lifecycle._get_lifecycle_stages", return_value=expected) as reader:
+			result = student_lifecycle.get_lifecycle_stages()
+		self.assertEqual(result, expected)
+		reader.assert_called_once_with()
+
+	def test_get_lifecycle_stages_returns_canonical_catalog(self):
+		frappe.set_user("Administrator")
+
+		self.assertEqual(
+			student_lifecycle.get_lifecycle_stages(),
+			{
+				"stages": [
+					{"stage": "Lead", "label": "Lead", "order": 0, "is_terminal": False},
+					{"stage": "MQL", "label": "MQL", "order": 1, "is_terminal": False},
+					{"stage": "Applicant", "label": "Applicant", "order": 2, "is_terminal": False},
+					{"stage": "Enrolled", "label": "Enrolled", "order": 3, "is_terminal": False},
+					{"stage": "Lost", "label": "Lost", "order": 4, "is_terminal": True},
+				],
+				"policy_version": "phase5-lifecycle-v1",
+			},
 		)

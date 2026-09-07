@@ -11,6 +11,9 @@ from crm.fcrm.student_lifecycle import (
 	get_lifecycle_context as _get_lifecycle_context,
 )
 from crm.fcrm.student_lifecycle import (
+	get_lifecycle_stages as _get_lifecycle_stages,
+)
+from crm.fcrm.student_lifecycle import (
 	reopen as _reopen,
 )
 from crm.fcrm.student_lifecycle import (
@@ -42,3 +45,8 @@ def reopen(student: str, reason: str, expected_revision=None, idempotency_key=No
 @frappe.whitelist()
 def get_lifecycle_context(student: str):
 	return _read(_get_lifecycle_context, student=student)
+
+
+@frappe.whitelist(methods=["GET"])
+def get_lifecycle_stages():
+	return _read(_get_lifecycle_stages)

@@ -9,8 +9,8 @@ from typing import Any
 import frappe
 
 from crm.fcrm.qualification import (
-	MEANINGFUL_OUTCOMES,
 	EVIDENCE_DOCTYPES,
+	MEANINGFUL_OUTCOMES,
 	QUALIFICATION_POLICY_VERSION,
 	QualificationValidationError,
 	normalize_evidence,
@@ -53,6 +53,29 @@ def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str
 	if "lifecycle.lost" in capabilities:
 		targets.append({"stage": LOST_STAGE, "label": LOST_STAGE, "requires_reason": True})
 	return targets
+
+
+def get_lifecycle_stages() -> dict[str, Any]:
+	"""Return the canonical lifecycle stages available to Student clients."""
+	_actor()
+	stages = [
+		{
+			"stage": stage,
+			"label": stage,
+			"order": order,
+			"is_terminal": False,
+		}
+		for order, stage in enumerate(ACTIVE_STAGES)
+	]
+	stages.append(
+		{
+			"stage": LOST_STAGE,
+			"label": LOST_STAGE,
+			"order": len(ACTIVE_STAGES),
+			"is_terminal": True,
+		}
+	)
+	return {"stages": stages, "policy_version": POLICY_VERSION}
 
 
 def validate_transition(current_stage: str, target_stage: str, *, reason: str | None = None, evidence: Any = None, outcome_code: str | None = None, capabilities: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -312,8 +335,8 @@ def request_transition(
 		if status:
 			updates["enrollment_status"] = status
 		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
-		from crm.services.student_context import bump_student_context_revision
 		from crm.services.admission_event_policy import admit_lifecycle_transition
+		from crm.services.student_context import bump_student_context_revision
 		context_change = bump_student_context_revision(
 			student, "lifecycle_transition", enqueue=False,
 			event_id=f"lifecycle:{event.name}",
