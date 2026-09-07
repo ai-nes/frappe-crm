@@ -31,7 +31,7 @@ class TestAuditCanonicalCrmProfiles(FrappeTestCase):
 
 		self.assertEqual(
 			report["counts"],
-			{"alias": 1, "canonical": 3, "missing_staff": 0, "mixed_profile": 1, "unmapped": 0},
+			{"alias": 0, "canonical": 2, "missing_staff": 0, "mixed_profile": 1, "unmapped": 2},
 		)
 		self.assertEqual(report["users"]["mixed_profile"], ["mixed@example.com"])
 		self.assertTrue(report["generated_at"])

@@ -84,7 +84,7 @@ def recall_expired_ctv_batches(limit: int = 50):
 		for item in batch.get("items") or []:
 			if item.status != "delivered":
 				continue
-			student = frappe.get_doc("CRM Student", item.student)
+			student = frappe.get_doc("CRM Lead", item.student)
 			if student.get("owner_staff"):
 				pool = frappe.db.get_value(
 					"CRM Student Pool",
@@ -153,7 +153,7 @@ def manager_reassign_student(
 	*,
 	emergency_override: bool = False,
 ) -> dict:
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	geo = resolve_student_zone(student_doc)
 	if geo.get("zone") and not emergency_override:
 		from crm.fcrm.student_assignment import zone_team_pool

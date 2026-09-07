@@ -158,7 +158,7 @@ def _require_target(*, student: str | None, contact: str | None) -> tuple[str, s
 	student, contact = str(student or "").strip(), str(contact or "").strip()
 	if bool(student) == bool(contact):
 		frappe.throw(_("Provide exactly one Student or Contact."), frappe.ValidationError)
-	target_type, target = ("CRM Student", student) if student else ("CRM Contact", contact)
+	target_type, target = ("CRM Lead", student) if student else ("CRM Student", contact)
 	if frappe.session.user == "Guest" or not frappe.has_permission(target_type, "read", target):
 		frappe.throw(_("You are not allowed to view these interactions."), frappe.PermissionError)
 	return target_type, target
@@ -296,7 +296,7 @@ def list_interactions(
 ) -> dict[str, Any]:
 	"""Return a stable, target-scoped Interaction feed without evidence."""
 	target_type, target = _require_target(student=student, contact=contact)
-	target_field = "student" if target_type == "CRM Student" else "crm_contact"
+	target_field = "student" if target_type == "CRM Lead" else "crm_contact"
 	conditions = [f"`{target_field}` = %(target)s"]
 	values: dict[str, Any] = {"target": target}
 	permission_condition = get_interaction_permission_query_conditions(
@@ -366,7 +366,7 @@ def list_interactions(
 	page = rows[:page_size]
 	# The target filter is necessary but not sufficient after joins/cursors.
 	for row in page:
-		if row.get("student" if target_type == "CRM Student" else "crm_contact") != target:
+		if row.get("student" if target_type == "CRM Lead" else "crm_contact") != target:
 			frappe.throw(_("Interaction scope changed during read."), frappe.PermissionError)
 	interaction_labels = _catalog_labels("CRM Interaction Type", [row.get("interaction_type") for row in page])
 	analysis_states = _analysis_states([row["name"] for row in page])

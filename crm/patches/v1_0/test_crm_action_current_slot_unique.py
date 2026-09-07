@@ -24,23 +24,25 @@ class TestCRMActionCurrentSlotUnique(FrappeTestCase):
 		self._student = self._make_student("_Slot Patch Student")
 		# Drop the migrated key so a pre-migration violation can be fabricated;
 		# restore it afterwards regardless of how the test exits.
-		frappe.db.sql_ddl(f"DROP INDEX IF EXISTS `{_INDEX}` ON `tabCRM Action`")
+		frappe.db.sql_ddl(f"DROP INDEX IF EXISTS `{_INDEX}` ON `tabCRM Action Item`")
 		self.addCleanup(
 			frappe.db.sql_ddl,
-			f"ALTER TABLE `tabCRM Action` ADD UNIQUE KEY `{_INDEX}` (student, current_slot)",
+			f"ALTER TABLE `tabCRM Action Item` ADD UNIQUE KEY `{_INDEX}` (student, current_slot)",
 		)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
-		for name in frappe.db.get_all("CRM Action", filters={"student": self._student.name}, pluck="name"):
-			frappe.delete_doc("CRM Action", name, force=True)
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		for name in frappe.db.get_all(
+			"CRM Action Item", filters={"student": self._student.name}, pluck="name"
+		):
+			frappe.delete_doc("CRM Action Item", name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
 		frappe.delete_doc("CRM Campus", self._campus, force=True)
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -50,20 +52,21 @@ class TestCRMActionCurrentSlotUnique(FrappeTestCase):
 		return student
 
 	def _raw_current_slot(self, name):
-		return frappe.db.get_value("CRM Action", name, "current_slot")
+		return frappe.db.get_value("CRM Action Item", name, "current_slot")
 
 	def _force_current_slot(self, name, value):
-		frappe.db.set_value("CRM Action", name, "current_slot", value, update_modified=False)
+		frappe.db.set_value("CRM Action Item", name, "current_slot", value, update_modified=False)
 
 	def _make_action(self, state="pending"):
 		return frappe.get_doc(
 			{
-				"doctype": "CRM Action",
+				"doctype": "CRM Action Item",
 				"student": self._student.name,
 				"origin": "ai",
 				"source_context_revision": 1,
 				"disposition": "ACT",
-				"action_type": "CALL",
+				"action": "CALL",
+				"action_type": "CONTACT",
 				"objective": "x",
 				"policy_context_version": "t",
 				"generation_idempotency_key": frappe.generate_hash(length=20),

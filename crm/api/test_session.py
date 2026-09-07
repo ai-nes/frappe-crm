@@ -78,8 +78,13 @@ class TestSessionRoleContract(FrappeTestCase):
 
 	def test_retired_aliases_fail_closed(self):
 		for roles in (
-			{"Counseller"}, {"Team Leader"}, {"Promoter-PR"}, {"Marketing Operator"},
-			{"Admissions Operations"}, {"Giám đốc Tuyển sinh"}, {"Sales"},
+			{"Counseller"},
+			{"Team Leader"},
+			{"Promoter-PR"},
+			{"Marketing Operator"},
+			{"Admissions Operations"},
+			{"Giám đốc Tuyển sinh"},
+			{"Sales"},
 		):
 			with self.subTest(roles=roles):
 				self.assertIsNone(resolve_crm_profile(roles))
@@ -186,7 +191,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		)
 		self.assertEqual(
 			CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"],
-			("CRM Student", "CRM Contact"),
+			("CRM Lead", "CRM Student"),
 		)
 		self.assertEqual(CANONICAL_PERMISSION_MATRIX["admissions_case"]["permissions"]["sales"], "rwc")
 		self.assertEqual(
@@ -220,7 +225,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertTrue(_can_remove_target(True, {"System Manager"}))
 
 	def test_managed_docperm_rows_are_policy_derived_and_preserve_legacy_untouched(self):
-		student_roles = {row["role"]: row for row in managed_docperm_rows()["CRM Student"]}
+		student_roles = {row["role"]: row for row in managed_docperm_rows()["CRM Lead"]}
 		self.assertEqual(
 			{key for key, value in student_roles["Sale"].items() if value == 1},
 			{"read", "write", "create"},
@@ -257,6 +262,6 @@ class TestSessionRoleContract(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags(roles)
 
-	def test_backfill_catalog_is_disabled_for_seed_only_deployments(self):
-		self.assertIsNone(backfill_target_for_roles({"Sales User"}))
-		self.assertIsNone(backfill_target_for_roles({"Sales Manager"}))
+	def test_backfill_catalog_has_explicit_migration_targets(self):
+		self.assertEqual(backfill_target_for_roles({"Sales User"}), "Sale")
+		self.assertEqual(backfill_target_for_roles({"Sales Manager"}), "Lead Sale")

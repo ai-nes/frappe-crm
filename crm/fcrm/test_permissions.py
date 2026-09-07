@@ -2,8 +2,8 @@
 # See license.txt
 
 """Tests for the shared row-level scoping logic in crm/fcrm/permissions.py, exercised
-through both CRM Contact.get_permission_query_conditions and
-CRM Student.get_permission_query_conditions (see business-rules-data-scope.md for the
+through both CRM Student.get_permission_query_conditions and
+CRM Lead.get_permission_query_conditions (see business-rules-data-scope.md for the
 locked precedence matrix: Lead Sale > Sale > Marketing/deny).
 """
 
@@ -12,11 +12,11 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.doctype.crm_contact.crm_contact import (
-	get_permission_query_conditions as contact_conditions,
+from crm.fcrm.doctype.crm_lead.crm_lead import (
+	get_permission_query_conditions as student_conditions,
 )
 from crm.fcrm.doctype.crm_student.crm_student import (
-	get_permission_query_conditions as student_conditions,
+	get_permission_query_conditions as contact_conditions,
 )
 from crm.fcrm.permissions import (
 	get_permission_query_conditions as shared_conditions,
@@ -66,23 +66,31 @@ class TestSharedScopingPermissions(FrappeTestCase):
 
 	def test_full_visibility_role_returns_none(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Admin", roles=["System Manager"])
-		self.assertIsNone(shared_conditions("CRM Contact", user=user))
 		self.assertIsNone(shared_conditions("CRM Student", user=user))
+		self.assertIsNone(shared_conditions("CRM Lead", user=user))
 
 	def test_admissions_director_has_full_visibility(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Director", roles=["Admissions Director"])
-		self.assertIsNone(shared_conditions("CRM Contact", user=user))
+		self.assertIsNone(shared_conditions("CRM Student", user=user))
 
 	def test_canonical_sales_and_lead_sales_use_policy_scopes(self):
 		sales_user, sales_staff = self._make_user_and_staff("_Test Scope Sale", roles=["Sale"])
 		lead_user, lead_staff = self._make_user_and_staff(
-			"_Test Scope Lead Sale", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Scope Lead Sale", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		self.assertEqual(
-			shared_conditions("CRM Contact", user=sales_user),
-			f"`tabCRM Contact`.owner_staff = {frappe.db.escape(sales_staff)}",
+			shared_conditions("CRM Student", user=sales_user),
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(sales_staff)}",
 		)
-		self.assertIn(lead_staff, shared_conditions("CRM Contact", user=lead_user))
+		self.assertIn(lead_staff, shared_conditions("CRM Student", user=lead_user))
+
+	def test_conversion_read_does_not_hide_standalone_students(self):
+		frappe.conf[self._conversion_read_flag] = True
+		user, staff = self._make_user_and_staff("_Test Scope Standalone Student", roles=["Sale"])
+		self.assertEqual(
+			shared_conditions("CRM Student", user=user),
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+		)
 
 	def test_sale_student_list_scope_includes_team_pool_without_widening_crud_scope(self):
 		user, staff = self._make_user_and_staff(
@@ -94,8 +102,8 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertIn("owning_team", list_condition)
 		self.assertIn(staff, list_condition)
 		self.assertEqual(
-			shared_conditions("CRM Student", user=user),
-			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+			shared_conditions("CRM Lead", user=user),
+			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
 		)
 
 	# --------------------------------------------------------------------- no staff
@@ -115,18 +123,18 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		)
 		user.insert(ignore_permissions=True)
 		try:
-			self.assertEqual(shared_conditions("CRM Contact", user=user.name), "1=0")
+			self.assertEqual(shared_conditions("CRM Student", user=user.name), "1=0")
 		finally:
 			frappe.delete_doc("User", user.name, force=True)
 
 	def test_administrator_role_string_is_not_the_platform_superuser(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Admin Role", roles=["Administrator"])
-		self.assertEqual(shared_conditions("CRM Contact", user=user), "1=0")
+		self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
 
 	def test_system_manager_direct_access_does_not_require_a_staff_record(self):
 		user = self._make_user_without_staff("_test_system_manager_no_staff@example.com", ["System Manager"])
 		self.assertTrue(
-			shared_has_permission(frappe._dict(doctype="CRM Contact", name="not-queried"), user=user)
+			shared_has_permission(frappe._dict(doctype="CRM Student", name="not-queried"), user=user)
 		)
 
 	def test_new_document_create_uses_ptype_without_running_name_scope_sql(self):
@@ -134,7 +142,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		# therefore the row predicate must not be queried with ``name = None``.
 		with patch("crm.fcrm.permissions.frappe.db.sql") as sql:
 			allowed = shared_has_permission(
-				frappe._dict(doctype="CRM Student", name=None), user="sale@example.com", ptype="create"
+				frappe._dict(doctype="CRM Lead", name=None), user="sale@example.com", ptype="create"
 			)
 		self.assertTrue(allowed)
 		sql.assert_not_called()
@@ -143,9 +151,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 
 	def test_team_leader_condition_scopes_to_team_and_unassigned_pool(self):
 		user, staff = self._make_user_and_staff(
-			"_Test Scope Leader", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Scope Leader", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
-		condition = shared_conditions("CRM Contact", user=user)
+		condition = shared_conditions("CRM Student", user=user)
 		self.assertIsNotNone(condition)
 		self.assertIn("owner_staff", condition)
 		self.assertIn("owning_team", condition)
@@ -160,13 +168,13 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		# returned by a query using the generated condition — not just that the
 		# condition string mentions the right column names.
 		user, _staff = self._make_user_and_staff(
-			"_Test Scope Leader Pool Query", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Scope Leader Pool Query", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		frappe.set_user(user)
 		try:
 			contact = frappe.get_doc(
 				{
-					"doctype": "CRM Contact",
+					"doctype": "CRM Student",
 					"full_name": "_Test Unassigned Pool Contact",
 					"phone": "0933000111",
 				}
@@ -177,18 +185,18 @@ class TestSharedScopingPermissions(FrappeTestCase):
 
 		try:
 			self.assertEqual(contact.owning_team, self._team)
-			condition = shared_conditions("CRM Contact", user=user)
+			condition = shared_conditions("CRM Student", user=user)
 			matched = frappe.db.sql(
-				f"select name from `tabCRM Contact` where name = %s and ({condition})",
+				f"select name from `tabCRM Student` where name = %s and ({condition})",
 				(contact.name,),
 			)
 			self.assertTrue(matched, "unassigned contact must be visible via the leader's pool condition")
 		finally:
-			frappe.delete_doc("CRM Contact", contact.name, force=True)
+			frappe.delete_doc("CRM Student", contact.name, force=True)
 
 	def test_team_leader_with_no_team_denied(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Leader No Team", roles=["Lead Sale"])
-		self.assertEqual(shared_conditions("CRM Contact", user=user), "1=0")
+		self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
 
 	def test_team_leader_pool_excludes_sibling_team_on_same_campus(self):
 		# self._team is the leader's own team, on self._campus. A second, unrelated
@@ -200,9 +208,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			"_Test Scope Leader Shared Campus",
 			roles=["Lead Sale"],
 			team=self._team,
-			function="Team Leader",
+			function="Lead Sale",
 		)
-		condition = shared_conditions("CRM Contact", user=user)
+		condition = shared_conditions("CRM Student", user=user)
 		self.assertIsNotNone(condition)
 		self.assertNotIn(frappe.db.escape(sibling_team), condition)
 		self.assertIn(staff, condition)
@@ -217,16 +225,16 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			"_Test Scope Leader Two Teams",
 			roles=["Lead Sale"],
 			team=self._team,
-			function="Team Leader",
+			function="Lead Sale",
 		)
 		staff_doc = frappe.get_doc("CRM Staff", staff)
 		staff_doc.append(
 			"team_memberships",
-			{"team": second_team, "function": "Team Leader", "term": "", "is_primary": 0},
+			{"team": second_team, "function": "Lead Sale", "term": "", "is_primary": 0},
 		)
 		staff_doc.save(ignore_permissions=True)
 
-		condition = shared_conditions("CRM Contact", user=user)
+		condition = shared_conditions("CRM Student", user=user)
 		self.assertIsNotNone(condition)
 		self.assertIn("owning_team in", condition)
 		self.assertIn(frappe.db.escape(self._team), condition)
@@ -240,36 +248,36 @@ class TestSharedScopingPermissions(FrappeTestCase):
 
 	def test_lead_sales_scoped_to_team(self):
 		user, staff = self._make_user_and_staff(
-			"_Test Scope Lead Sale Student", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Scope Lead Sale Student", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
-		condition = shared_conditions("CRM Student", user=user)
+		condition = shared_conditions("CRM Lead", user=user)
 		self.assertIsNotNone(condition)
 		self.assertIn("owning_team", condition)
 		self.assertIn(staff, condition)
 
 	def test_sale_scoped_to_own_contact(self):
 		user, staff = self._make_user_and_staff("_Test Scope Sale Contact", roles=["Sale"])
-		condition = shared_conditions("CRM Contact", user=user)
+		condition = shared_conditions("CRM Student", user=user)
 		self.assertIn(staff, condition)
 
 	def test_sale_scoped_to_own_assigned_only(self):
 		user, staff = self._make_user_and_staff("_Test Scope Sale", roles=["Sale"])
-		condition = shared_conditions("CRM Contact", user=user)
-		self.assertEqual(condition, f"`tabCRM Contact`.owner_staff = {frappe.db.escape(staff)}")
+		condition = shared_conditions("CRM Student", user=user)
+		self.assertEqual(condition, f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}")
 
 	def test_sale_scoped_to_own_assigned_student(self):
 		user, staff = self._make_user_and_staff("_Test Scope Sale Student", roles=["Sale"])
-		condition = shared_conditions("CRM Student", user=user)
-		self.assertEqual(condition, f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}")
+		condition = shared_conditions("CRM Lead", user=user)
+		self.assertEqual(condition, f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}")
 
 	def test_lead_sales_uses_team_scope(self):
 		user, _staff = self._make_user_and_staff(
 			"_Test Scope Precedence",
 			roles=["Lead Sale"],
 			team=self._team,
-			function="Team Leader",
+			function="Lead Sale",
 		)
-		condition = shared_conditions("CRM Contact", user=user)
+		condition = shared_conditions("CRM Student", user=user)
 		self.assertNotEqual(condition, "1=0")
 		self.assertIn("owning_team", condition)
 
@@ -278,31 +286,31 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			"_Test Scope Cross Domain",
 			roles=["Lead Sale", "Marketing"],
 			team=self._team,
-			function="Team Leader",
+			function="Lead Sale",
 		)
-		self.assertEqual(shared_conditions("CRM Contact", user=user), "1=0")
+		self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
 
 	def test_marketing_scoped_to_own_campus(self):
 		# PRD-phan-quyen-lead.md P0-1/P0-2 (2026-09-04): Marketing gets
 		# read-only, campus-scoped visibility instead of the old full deny.
 		user, staff = self._make_user_and_staff("_Test Scope Marketing Student", roles=["Marketing"])
-		condition = shared_conditions("CRM Student", user=user)
+		condition = shared_conditions("CRM Lead", user=user)
 		self.assertNotEqual(condition, "1=0")
 		self.assertIn(staff, condition)
 
 	def test_unrecognized_role_denied(self):
 		with patch("crm.fcrm.permissions.frappe.get_roles", return_value=["Unknown Legacy Role"]):
-			self.assertEqual(shared_conditions("CRM Contact", user="unknown-role@example.com"), "1=0")
+			self.assertEqual(shared_conditions("CRM Student", user="unknown-role@example.com"), "1=0")
 
 	# ----------------------------------------------------- doctype delegation wiring
 
 	def test_crm_contact_delegates_to_shared_module(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Delegate Contact", roles=["Sale"])
-		self.assertEqual(contact_conditions(user=user), shared_conditions("CRM Contact", user=user))
+		self.assertEqual(contact_conditions(user=user), shared_conditions("CRM Student", user=user))
 
 	def test_crm_student_delegates_to_shared_module(self):
 		user, _staff = self._make_user_and_staff("_Test Scope Delegate Student", roles=["Sale"])
-		self.assertEqual(student_conditions(user=user), shared_conditions("CRM Student", user=user))
+		self.assertEqual(student_conditions(user=user), shared_conditions("CRM Lead", user=user))
 
 	# ---------------------------------------------------------- ownership-gated delete
 
@@ -311,7 +319,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		# called out by Phase 5 step 1: the acting user authored the record but
 		# it is currently assigned to a teammate, not to themselves.
 		leader_user, _leader_staff = self._make_user_and_staff(
-			"_Test Ownership Leader Creator", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Ownership Leader Creator", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		_teammate_user, teammate_staff = self._make_user_and_staff(
 			"_Test Ownership Teammate", roles=["Sale"], team=self._team, function="Sale"
@@ -320,7 +328,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		try:
 			contact = frappe.get_doc(
 				{
-					"doctype": "CRM Contact",
+					"doctype": "CRM Student",
 					"full_name": "_Test Ownership Creator Contact",
 					"phone": "0933000222",
 					"assigned_to": teammate_staff,
@@ -334,7 +342,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			self.assertEqual(contact.assigned_to, teammate_staff)
 			self.assertTrue(shared_has_permission(contact, user=leader_user, ptype="delete"))
 		finally:
-			frappe.delete_doc("CRM Contact", contact.name, force=True)
+			frappe.delete_doc("CRM Student", contact.name, force=True)
 
 	def test_delete_denied_when_in_scope_but_neither_owner_nor_assigned(self):
 		# AND-not-OR: being inside the acting user's row-scope must not be
@@ -344,11 +352,11 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			"_Test Ownership Other Teammate", roles=["Sale"], team=self._team, function="Sale"
 		)
 		bystander_user, bystander_staff = self._make_user_and_staff(
-			"_Test Ownership Bystander", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Ownership Bystander", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Ownership Bystander Contact",
 				"phone": "0933000333",
 				"assigned_to": teammate_staff,
@@ -359,28 +367,28 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			self.assertNotEqual(contact.owner, bystander_user)
 			self.assertNotEqual(contact.assigned_to, bystander_staff)
 			# Visible via team scope ...
-			condition = shared_conditions("CRM Contact", user=bystander_user)
+			condition = shared_conditions("CRM Student", user=bystander_user)
 			self.assertTrue(
 				frappe.db.sql(
-					f"select name from `tabCRM Contact` where name = %s and ({condition})",
+					f"select name from `tabCRM Student` where name = %s and ({condition})",
 					(contact.name,),
 				)
 			)
 			# ... but not deletable: bystander is neither creator nor assignee.
 			self.assertFalse(shared_has_permission(contact, user=bystander_user, ptype="delete"))
 		finally:
-			frappe.delete_doc("CRM Contact", contact.name, force=True)
+			frappe.delete_doc("CRM Student", contact.name, force=True)
 
 	def test_kill_switch_restores_delete_without_ownership_gate(self):
 		_teammate_user, teammate_staff = self._make_user_and_staff(
 			"_Test Ownership KillSwitch Teammate", roles=["Sale"], team=self._team, function="Sale"
 		)
 		bystander_user, _bystander_staff = self._make_user_and_staff(
-			"_Test Ownership KillSwitch Bystander", roles=["Lead Sale"], team=self._team, function="Team Leader"
+			"_Test Ownership KillSwitch Bystander", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Ownership KillSwitch Contact",
 				"phone": "0933000444",
 				"assigned_to": teammate_staff,
@@ -395,7 +403,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			self.assertTrue(shared_has_permission(contact, user=bystander_user, ptype="delete"))
 		finally:
 			frappe.conf.pop(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, None)
-			frappe.delete_doc("CRM Contact", contact.name, force=True)
+			frappe.delete_doc("CRM Student", contact.name, force=True)
 
 	def test_delete_still_denied_outside_row_scope_even_if_owner(self):
 		# Ownership must never act as an alternate grant path around row-scope:
@@ -408,7 +416,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		try:
 			contact = frappe.get_doc(
 				{
-					"doctype": "CRM Contact",
+					"doctype": "CRM Student",
 					"full_name": "_Test Ownership Sale Reassigned Contact",
 					"phone": "0933000555",
 					"assigned_to": sale_staff,
@@ -421,10 +429,13 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		contact.save(ignore_permissions=True)
 		try:
 			self.assertEqual(contact.owner, sale_user)
-			self.assertEqual(shared_conditions("CRM Contact", user=sale_user), f"`tabCRM Contact`.owner_staff = {frappe.db.escape(sale_staff)}")
+			self.assertEqual(
+				shared_conditions("CRM Student", user=sale_user),
+				f"`tabCRM Student`.owner_staff = {frappe.db.escape(sale_staff)}",
+			)
 			self.assertFalse(shared_has_permission(contact, user=sale_user, ptype="delete"))
 		finally:
-			frappe.delete_doc("CRM Contact", contact.name, force=True)
+			frappe.delete_doc("CRM Student", contact.name, force=True)
 
 	# ---------------------------------------------------------------------- helpers
 
@@ -493,6 +504,7 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			}
 		)
 		if team:
+			function = "Lead Sale" if function == "Team Leader" else function
 			staff.append(
 				"team_memberships",
 				{

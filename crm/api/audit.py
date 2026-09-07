@@ -6,7 +6,7 @@ from typing import Any
 import frappe
 from frappe import _
 
-STUDENT_DOCTYPE = "CRM Student"
+STUDENT_DOCTYPE = "CRM Lead"
 DEFAULT_PAGE_LENGTH = 50
 MAX_PAGE_LENGTH = 100
 
@@ -158,7 +158,7 @@ def get_student_audit_logs(
 	start: int | str | None = 0,
 	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
 ) -> dict[str, Any]:
-	"""Return immutable create/update/delete history for one CRM Student."""
+	"""Return immutable create/update/delete history for one CRM Lead."""
 	if not student or not frappe.db.exists(STUDENT_DOCTYPE, student):
 		frappe.throw(_("Student not found"), frappe.DoesNotExistError)
 

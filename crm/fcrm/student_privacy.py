@@ -15,7 +15,7 @@ from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("write"):
 		frappe.throw(_("You do not have permission to manage privacy requests for this Student."), frappe.PermissionError)
 	roles = set(frappe.get_roles(frappe.session.user))
@@ -30,7 +30,7 @@ def open_privacy_request(student: str, request_type: str, *, details: str | None
 	if request_type not in REQUEST_TYPES:
 		frappe.throw(_("Privacy request type is invalid."), frappe.ValidationError)
 	if contact:
-		if not frappe.db.exists("CRM Contact", contact):
+		if not frappe.db.exists("CRM Student", contact):
 			frappe.throw(_("The privacy-request Contact does not exist."), frappe.ValidationError)
 		if not contact_is_linked_to_student(contact, student) and not frappe.db.exists("CRM Parent Contact Authority", {"student": student, "contact": contact}):
 			frappe.throw(_("The privacy-request Contact is not related to this Student."), frappe.ValidationError)

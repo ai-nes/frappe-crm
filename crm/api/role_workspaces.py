@@ -196,11 +196,11 @@ def resolve_workspace_row_detail(workspace: str, view: str, filters=None, snapsh
 	student = validate_row_detail_token(token, policy, validated_snapshot)
 	# Tokens bind the scope revision, but ownership/campus can change after a
 	# token was issued. Recheck the current campus before disclosing a route.
-	if frappe.db.get_value("CRM Student", student, "branch") not in policy.campuses:
+	if frappe.db.get_value("CRM Lead", student, "branch") not in policy.campuses:
 		frappe.throw(_("Workspace row detail is not available."), frappe.PermissionError)
-	if not frappe.has_permission("CRM Student", "read", student):
+	if not frappe.has_permission("CRM Lead", "read", student):
 		frappe.throw(_("Workspace row detail is not available."), frappe.PermissionError)
-	return {"route": {"name": "Student", "params": {"doctype": "CRM Student", "name": student}}}
+	return {"route": {"name": "Student", "params": {"doctype": "CRM Lead", "name": student}}}
 
 
 @frappe.whitelist()

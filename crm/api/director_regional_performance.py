@@ -108,7 +108,7 @@ def _load_students(admission_year: str, scope: dict[str, Any], warnings: list[st
 	rows = [
 		dict(row)
 		for row in frappe.get_all(
-			"CRM Student",
+			"CRM Lead",
 			filters={"admission_year": admission_year},
 			fields=STUDENT_FIELDS,
 			order_by="creation asc, name asc",
@@ -241,7 +241,7 @@ def _load_previous_students(
 	previous_year = str(int(admission_year) - 1)
 	try:
 		rows = frappe.get_all(
-			"CRM Student",
+			"CRM Lead",
 			filters={"admission_year": previous_year, "province": ["in", province_ids]},
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,

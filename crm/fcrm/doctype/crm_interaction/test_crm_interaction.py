@@ -21,9 +21,9 @@ class TestCRMInteraction(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test%"]}, pluck="name"
+			"CRM Lead", filters={"student_name": ["like", "_Test%"]}, pluck="name"
 		):
-			frappe.delete_doc("CRM Student", name, force=True)
+			frappe.delete_doc("CRM Lead", name, force=True)
 
 	def _ensure_master_data(self):
 		for doctype, code, display_name in (
@@ -43,7 +43,7 @@ class TestCRMInteraction(FrappeTestCase):
 	def _make_student(self):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": "_Test Interaction Student",
 				"phone": "0901234567",
 			}
@@ -363,11 +363,11 @@ class TestCRMInteraction(FrappeTestCase):
 	def test_deleting_interaction_bumps_score_input_revision(self):
 		student = self._make_student()
 		interaction = self._make_interaction(student)
-		before_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		before_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 
 		frappe.delete_doc("CRM Interaction", interaction.name, force=True)
 
-		after_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		after_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 		self.assertGreater(after_revision, before_revision)
 
 	def test_deleting_interaction_resolves_student_from_contact(self):
@@ -383,11 +383,11 @@ class TestCRMInteraction(FrappeTestCase):
 			}
 		)
 		interaction.insert(ignore_permissions=True)
-		before_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		before_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 
 		frappe.delete_doc("CRM Interaction", interaction.name, force=True)
 
-		after_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		after_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 		self.assertGreater(after_revision, before_revision)
 
 	# ---------------------------------------------------------------------- helpers
@@ -395,13 +395,13 @@ class TestCRMInteraction(FrappeTestCase):
 	def _make_contact(self, name, phone):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 			}
 		)
 		contact.insert(ignore_permissions=True)
-		self.addCleanup(self._delete_if_exists, "CRM Contact", contact.name)
+		self.addCleanup(self._delete_if_exists, "CRM Student", contact.name)
 		return contact
 
 	def _make_consent_event(self, contact_name, phone):

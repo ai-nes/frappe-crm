@@ -6,7 +6,6 @@ from unittest import TestCase
 
 from crm.patches.v1_0.prepare_student_routing_sla import classify_student_topology
 
-
 DOCTYPE_ROOT = Path(__file__).parent
 
 
@@ -39,14 +38,16 @@ class TestStudentRoutingSLAContracts(TestCase):
 		for directory, fieldname in unique_fields.items():
 			fields = {field["fieldname"]: field for field in load_schema(directory)["fields"]}
 			self.assertEqual(fields[fieldname].get("unique"), 1)
-		attempt_fields = {field["fieldname"]: field for field in load_schema("crm_student_sla_delivery_attempt")["fields"]}
+		attempt_fields = {
+			field["fieldname"]: field for field in load_schema("crm_student_sla_delivery_attempt")["fields"]
+		}
 		self.assertIn("recipient", attempt_fields)
 		self.assertIn("submitted", attempt_fields["outcome"]["options"])
 
 	def test_policies_expose_only_approved_v1_strategies(self):
 		routing = {field["fieldname"]: field for field in load_schema("crm_student_routing_policy")["fields"]}
 		sla = {field["fieldname"]: field for field in load_schema("crm_student_sla_policy")["fields"]}
-		self.assertEqual(routing["strategy"]["options"], "round_robin")
+		self.assertEqual(routing["strategy"]["options"], "round_robin\nweighted_score")
 		self.assertEqual(
 			sla["recipient_strategy"]["options"],
 			"owner_warning_lead_breach_director_escalation\nowner_warning_lead_breach_director_daily_digest",
@@ -67,7 +68,17 @@ class TestStudentRoutingSLAContracts(TestCase):
 
 	def test_shared_outbox_owns_recipient_retry_metadata(self):
 		fields = {field["fieldname"]: field for field in load_schema("crm_agent_event")["fields"]}
-		self.assertTrue({"delivery_key", "channel", "recipient_user", "recipient_role", "payload", "retention_until", "legal_hold"}.issubset(fields))
+		self.assertTrue(
+			{
+				"delivery_key",
+				"channel",
+				"recipient_user",
+				"recipient_role",
+				"payload",
+				"retention_until",
+				"legal_hold",
+			}.issubset(fields)
+		)
 		self.assertEqual(fields["delivery_key"].get("unique"), 1)
 
 	def test_interactions_require_backend_verified_source_for_sla(self):

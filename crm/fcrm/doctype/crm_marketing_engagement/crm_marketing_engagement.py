@@ -60,7 +60,7 @@ class CRMMarketingEngagement(Document):
 			{"label": "Kind", "type": "Select", "key": "engagement_kind", "width": "10rem"},
 			{"label": "Campaign", "type": "Link", "key": "crm_campaign", "options": "CRM Campaign", "width": "14rem"},
 			{"label": "Event", "type": "Link", "key": "crm_event", "options": "CRM Event", "width": "14rem"},
-			{"label": "Contact", "type": "Link", "key": "crm_contact", "options": "CRM Contact", "width": "14rem"},
+			{"label": "Contact", "type": "Link", "key": "crm_contact", "options": "CRM Student", "width": "14rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
 		rows = ["name", "engagement_kind", "crm_campaign", "crm_event", "crm_contact", "status", "touched_at", "registered_at", "modified"]

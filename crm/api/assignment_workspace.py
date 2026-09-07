@@ -50,6 +50,7 @@ FILTER_KEYS = {
 STATUS_VALUES = {"all", "unassigned", "needs_review", "placeholder_zone", "capacity_warning", "healthy"}
 WORKLOAD_VALUES = {"all", "unassigned", "near_capacity", "over_capacity"}
 TOPOLOGY_ACTIONS = {"zone_team", "school_assignment"}
+REFERENCE_ACTIONS = {"create_cluster", "create_zone", "create_pool"}
 TOPOLOGY_RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 TEAM_MEMBER_FUNCTIONS = {
 	"Sale",
@@ -75,7 +76,7 @@ REQUIRED_DOCTYPES = (
 	"CRM Student Pool",
 	"CRM Team Zone Assignment",
 	"CRM High School Assignment",
-	"CRM Student",
+	"CRM Lead",
 	"CRM Assignment Control",
 )
 
@@ -258,6 +259,7 @@ def _identity_row(user, staff_by_user, memberships_by_staff, team_labels=None):
 	administrator = user.name == "Administrator"
 	role_state = classify_role_set(roles, administrator=administrator)
 	profile = None if administrator or role_state == "system_manager" else resolve_crm_profile(roles)
+	assignment_candidate = profile in {"sales", "ctv_sale"}
 	profile_role = "System Manager" if role_state == "system_manager" else PROFILE_LABELS.get(profile)
 	profile_record = _profile_record(profile_role)
 	staff = staff_by_user.get(user.name)
@@ -280,12 +282,15 @@ def _identity_row(user, staff_by_user, memberships_by_staff, team_labels=None):
 				"next_action": "open_role_settings",
 			}
 		)
-	if not administrator and role_state not in {
-		"system_manager",
-		"unmapped",
-		"mixed_or_unmapped",
-		"legacy_migration_required",
-	}:
+	if assignment_candidate:
+		if not user.enabled:
+			issues.append(
+				{
+					"code": "user_disabled",
+					"label": _("Tài khoản đang tắt"),
+					"next_action": "open_user",
+				}
+			)
 		if not staff:
 			issues.append(
 				{
@@ -325,6 +330,7 @@ def _identity_row(user, staff_by_user, memberships_by_staff, team_labels=None):
 		"roles": roles,
 		"role_state": role_state,
 		"crm_profile": profile,
+		"assignment_candidate": assignment_candidate,
 		"crm_profile_label": PROFILE_LABELS.get(profile) if profile else profile_role,
 		"permission_profile": {
 			"role": profile_role,
@@ -372,7 +378,12 @@ def get_setup_readiness():
 	for row in membership_rows:
 		if row.get("staff") and _date_active(row):
 			memberships_by_staff[row.staff].append(row)
-	rows = [_identity_row(user, staff_by_user, memberships_by_staff, team_labels) for user in users]
+	rows = [
+		row
+		for user in users
+		for row in [_identity_row(user, staff_by_user, memberships_by_staff, team_labels)]
+		if row["assignment_candidate"]
+	]
 
 	counts = defaultdict(int)
 	for row in rows:
@@ -412,11 +423,11 @@ def get_setup_readiness():
 
 
 def _grouped_students():
-	if not _doctype_exists("CRM Student"):
+	if not _doctype_exists("CRM Lead"):
 		return []
 	try:
 		return frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters={"lifecycle_stage": ["not in", ["Lost"]]},
 			fields=[
 				"branch",
@@ -733,6 +744,19 @@ def _context_revision(staff_id):
 
 def _staff_context_options():
 	return {
+		"users": [
+			{
+				"value": row.name,
+				"label": row.get("full_name") or row.name,
+				"email": row.name,
+			}
+			for row in _safe_get_all(
+				"User",
+				["name", "full_name", "enabled"],
+				{"enabled": 1, "name": ["not in", ["Guest"]]},
+				"full_name asc, name asc",
+			)
+		],
 		"campuses": [
 			{"value": row.name, "label": _label(row, "campus_name")}
 			for row in _safe_get_all(
@@ -807,10 +831,685 @@ def get_staff_context(staff_id=None, user=None):
 	"""Return editable CRM Staff + Team Membership context for setup managers."""
 	_require_setup_access()
 	if not staff_id and not user:
-		frappe.throw(_("staff_id or user is required."), frappe.ValidationError)
+		return _staff_context_payload(None)
 	if staff_id and not frappe.db.exists("CRM Staff", staff_id):
 		_command_error("TARGET_NOT_FOUND", "CRM Staff không tồn tại.")
 	return _staff_context_payload(staff_id, user)
+
+
+def _team_revision(team_id):
+	if not team_id:
+		return "0"
+	team = frappe.db.get_value(
+		"CRM Team",
+		team_id,
+		["name", "team_name", "team_type", "campus", "territory", "is_active", "modified"],
+		as_dict=True,
+	)
+	if not team:
+		return "0"
+	memberships = [
+		dict(row)
+		for row in _safe_get_all(
+			"CRM Team Membership",
+			[
+				"name",
+				"parent as staff",
+				"team",
+				"function",
+				"term",
+				"effective_from",
+				"effective_until",
+				"is_primary",
+				"is_team_lead",
+			],
+			{"team": team_id},
+			"name asc",
+		)
+		if _date_active(row)
+	]
+	payload = {"team": dict(team), "memberships": memberships}
+	return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:24]
+
+
+def _setup_workspace_payload(context):
+	"""Return the editable setup projection without exposing school rows."""
+	campuses = _safe_get_all("CRM Campus", ["name", "campus_name"], order_by="campus_name asc, name asc")
+	territories = _safe_get_all(
+		"CRM Territory", ["name", "territory_name", "is_active"], {"is_active": 1}, "territory_name asc"
+	)
+	teams = _safe_get_all(
+		"CRM Team",
+		["name", "team_name", "team_type", "campus", "territory", "is_active", "modified"],
+		order_by="team_name asc, name asc",
+	)
+	staff = _safe_get_all(
+		"CRM Staff",
+		["name", "full_name", "user", "department", "campus", "is_active", "modified"],
+		order_by="full_name asc, name asc",
+	)
+	memberships = [
+		row
+		for row in _safe_get_all(
+			"CRM Team Membership",
+			[
+				"parent as staff",
+				"team",
+				"function",
+				"term",
+				"is_primary",
+				"is_team_lead",
+				"effective_from",
+				"effective_until",
+			],
+		)
+		if _date_active(row)
+	]
+	provinces = _safe_get_all("CRM Province", ["name", "province_name"])
+	clusters = _safe_get_all(
+		"CRM Cluster",
+		["name", "cluster_name", "cluster_code", "province", "is_active", "modified"],
+		order_by="cluster_name asc, name asc",
+	)
+	zones = _safe_get_all(
+		"CRM Zone",
+		[
+			"name",
+			"zone_name",
+			"zone_code",
+			"cluster",
+			"is_placeholder",
+			"current_team",
+			"assignment_status",
+			"modified",
+		],
+		order_by="zone_name asc, name asc",
+	)
+	pools = _safe_get_all(
+		"CRM Student Pool",
+		["name", "pool_name", "team", "campus", "is_active", "modified"],
+		order_by="pool_name asc, name asc",
+	)
+	zone_assignments = [
+		row
+		for row in _safe_get_all(
+			"CRM Team Zone Assignment",
+			["name", "team", "zone", "status", "effective_from", "effective_until", "revision", "modified"],
+			{"status": "Active"},
+		)
+		if _date_active(row)
+	]
+
+	team_map = {row.name: row for row in teams}
+	staff_map = {row.name: row for row in staff}
+	province_map = {row.name: row for row in provinces}
+	cluster_map = {row.name: row for row in clusters}
+	zone_map = {row.name: row for row in zones}
+	members_by_team = defaultdict(list)
+	teams_by_staff = defaultdict(list)
+	for membership in memberships:
+		if membership.get("team") in team_map and membership.get("staff") in staff_map:
+			members_by_team[membership.team].append(membership)
+			teams_by_staff[membership.staff].append(membership)
+	zones_by_team = defaultdict(list)
+	active_assignment_by_zone = {}
+	for assignment in zone_assignments:
+		if assignment.get("zone") in zone_map and assignment.get("team") in team_map:
+			active_assignment_by_zone[assignment.zone] = assignment
+			zones_by_team[assignment.team].append(assignment)
+
+	team_rows = []
+	for team in teams:
+		team_memberships = members_by_team.get(team.name, [])
+		team_zones = zones_by_team.get(team.name, [])
+		team_rows.append(
+			{
+				"id": team.name,
+				"name": team.name,
+				"team_name": team.team_name,
+				"team_type": team.team_type,
+				"campus": team.campus,
+				"campus_name": _label(
+					next((row for row in campuses if row.name == team.campus), None), "campus_name"
+				),
+				"territory": team.territory,
+				"is_active": bool(team.is_active),
+				"member_count": len(team_memberships),
+				"member_names": sorted(
+					_label(staff_map.get(row.staff), "full_name")
+					for row in team_memberships
+					if staff_map.get(row.staff)
+				),
+				"member_ids": sorted(row.staff for row in team_memberships if row.staff in staff_map),
+				"zone_count": len(team_zones),
+				"zone_names": sorted(
+					_label(zone_map.get(row.zone), "zone_name")
+					for row in team_zones
+					if zone_map.get(row.zone)
+				),
+				"revision": _team_revision(team.name),
+			}
+		)
+
+	staff_rows = []
+	for row in staff:
+		staff_memberships = teams_by_staff.get(row.name, [])
+		staff_rows.append(
+			{
+				"id": row.name,
+				"full_name": row.full_name,
+				"user": row.user,
+				"department": row.department,
+				"campus": row.campus,
+				"is_active": bool(row.is_active),
+				"team_names": sorted(
+					_label(team_map.get(item.team), "team_name")
+					for item in staff_memberships
+					if team_map.get(item.team)
+				),
+				"functions": sorted({item.function for item in staff_memberships if item.function}),
+				"memberships": [
+					{
+						"team": item.team,
+						"function": item.function,
+						"term": item.term,
+						"is_primary": bool(item.is_primary),
+						"is_team_lead": bool(item.is_team_lead),
+						"effective_from": item.effective_from,
+						"effective_until": item.effective_until,
+					}
+					for item in staff_memberships
+				],
+				"revision": _context_revision(row.name),
+			}
+		)
+
+	zone_rows = []
+	for zone in zones:
+		assignment = active_assignment_by_zone.get(zone.name)
+		cluster = cluster_map.get(zone.cluster)
+		province = province_map.get(cluster.province) if cluster else None
+		team = team_map.get(assignment.team) if assignment else team_map.get(zone.current_team)
+		zone_rows.append(
+			{
+				"id": zone.name,
+				"name": zone.name,
+				"zone_name": zone.zone_name,
+				"cluster": zone.cluster,
+				"cluster_name": _label(cluster, "cluster_name"),
+				"province": cluster.province if cluster else None,
+				"province_name": _label(province, "province_name"),
+				"team": team.name if team else None,
+				"team_name": _label(team, "team_name") if team else None,
+				"assignment_name": assignment.name if assignment else None,
+				"assignment_status": assignment.status if assignment else "Unassigned",
+				"revision": str(assignment.revision if assignment else 0),
+				"is_placeholder": bool(zone.is_placeholder),
+			}
+		)
+
+	cluster_rows = []
+	for cluster in clusters:
+		province = province_map.get(cluster.province)
+		cluster_zones = [row for row in zones if row.cluster == cluster.name]
+		cluster_rows.append(
+			{
+				"id": cluster.name,
+				"cluster_name": cluster.cluster_name,
+				"cluster_code": cluster.cluster_code,
+				"province": cluster.province,
+				"province_name": _label(province, "province_name"),
+				"zone_count": len(cluster_zones),
+				"is_active": bool(cluster.is_active),
+				"revision": _reference_revision("CRM Cluster", cluster.name, cluster.modified),
+			}
+		)
+
+	pool_rows = []
+	for pool in pools:
+		team = team_map.get(pool.team)
+		campus = next((row for row in campuses if row.name == pool.campus), None)
+		pool_rows.append(
+			{
+				"id": pool.name,
+				"pool_name": pool.pool_name,
+				"team": pool.team,
+				"team_name": _label(team, "team_name"),
+				"campus": pool.campus,
+				"campus_name": _label(campus, "campus_name"),
+				"is_active": bool(pool.is_active),
+				"revision": _reference_revision("CRM Student Pool", pool.name, pool.modified),
+			}
+		)
+
+	return {
+		"schemaVersion": "assignment-setup-v1",
+		"as_of": str(now_datetime()),
+		"summary": {
+			"clusters": len(clusters),
+			"teams": len(teams),
+			"active_teams": sum(bool(row.is_active) for row in teams),
+			"staff": len(staff),
+			"active_staff": sum(bool(row.is_active) for row in staff),
+			"zones": len(zones),
+			"mapped_zones": len(active_assignment_by_zone),
+			"pools": len(pools),
+			"active_pools": sum(bool(row.is_active) for row in pools),
+		},
+		"clusters": cluster_rows,
+		"teams": team_rows,
+		"staff": staff_rows,
+		"zones": zone_rows,
+		"pools": pool_rows,
+		"options": {
+			"campuses": [{"value": row.name, "label": _label(row, "campus_name")} for row in campuses],
+			"territories": [
+				{"value": row.name, "label": _label(row, "territory_name")} for row in territories
+			],
+			"provinces": [{"value": row.name, "label": _label(row, "province_name")} for row in provinces],
+			"clusters": [
+				{
+					"value": row.name,
+					"label": _label(row, "cluster_name"),
+					"province": row.province,
+					"is_active": bool(row.is_active),
+				}
+				for row in clusters
+			],
+			"team_types": [
+				{"value": value, "label": value} for value in ("Sales", "Marketing", "Admissions Operations")
+			],
+		},
+		"edit_options": _topology_options(_overview_sources(context), context),
+		"capabilities": {"can_manage_setup": True},
+	}
+
+
+@frappe.whitelist()
+def get_setup_workspace():
+	"""Return Team, Staff and Zone setup rows for System Managers."""
+	context = _require_setup_access()
+	return _setup_workspace_payload(context)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_setup_reference(
+	action: str,
+	name: str | None = None,
+	code: str | None = None,
+	province: str | None = None,
+	cluster: str | None = None,
+	team: str | None = None,
+	campus: str | None = None,
+	is_active: bool | str | None = True,
+	reason: str | None = None,
+	idempotency_key: str | None = None,
+	correlation_id: str | None = None,
+) -> dict:
+	"""Create a geography or routing reference from the guarded setup UI.
+
+	The command intentionally supports creation only. Existing geography and
+	pool records are not silently renamed or deleted from the assignment page.
+	"""
+	context = _require_setup_access()
+	action = _required_command_text(action, "action", maximum=40)
+	if action not in REFERENCE_ACTIONS:
+		_command_error("UNKNOWN_ACTION", "Loại dữ liệu setup không được hỗ trợ.")
+	reason = _required_command_text(reason, "reason", minimum=5, maximum=2000)
+	idempotency_key = _required_command_text(idempotency_key, "idempotency_key", maximum=140)
+	correlation_id = _required_command_text(
+		correlation_id or str(uuid.uuid4()), "correlation_id", maximum=140
+	)
+	name = _required_command_text(
+		name,
+		{"create_cluster": "cluster_name", "create_zone": "zone_name", "create_pool": "pool_name"}[action],
+	)
+	code = _optional_command_text(code, "code", maximum=40)
+	is_active = _command_bool(is_active)
+
+	if action == "create_cluster":
+		province = _required_command_text(province, "province")
+		if not frappe.db.exists("CRM Province", province):
+			_command_error("TARGET_NOT_FOUND", "Tỉnh/TP không tồn tại.")
+		if frappe.db.exists("CRM Cluster", {"cluster_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên cụm đã tồn tại.")
+		doctype = "CRM Cluster"
+		values = {
+			"doctype": doctype,
+			"cluster_name": name,
+			"cluster_code": code,
+			"province": province,
+			"is_active": int(is_active),
+		}
+	elif action == "create_zone":
+		cluster = _required_command_text(cluster, "cluster")
+		cluster_row = frappe.db.get_value("CRM Cluster", cluster, ["name", "is_active"], as_dict=True)
+		if not cluster_row:
+			_command_error("TARGET_NOT_FOUND", "Cụm không tồn tại.")
+		if not cluster_row.is_active:
+			_command_error("PARENT_INACTIVE", "Không thể tạo khu vực dưới một cụm đã tắt.")
+		if frappe.db.exists("CRM Zone", {"zone_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên khu vực đã tồn tại.")
+		doctype = "CRM Zone"
+		values = {
+			"doctype": doctype,
+			"zone_name": name,
+			"zone_code": code,
+			"cluster": cluster,
+			"is_placeholder": 0,
+			"assignment_status": "Unassigned",
+		}
+	else:
+		team = _required_command_text(team, "team")
+		team_row = frappe.db.get_value(
+			"CRM Team", team, ["name", "team_name", "campus", "team_type", "is_active"], as_dict=True
+		)
+		if not team_row:
+			_command_error("TARGET_NOT_FOUND", "Team không tồn tại.")
+		if not team_row.is_active:
+			_command_error("TEAM_INACTIVE", "Không thể tạo hàng chờ cho Team đã tắt.")
+		if team_row.team_type != "Sales":
+			_command_error("TEAM_TYPE_INVALID", "Hàng chờ Lead chỉ dùng cho Team Sales.")
+		campus = team_row.campus
+		if not campus:
+			_command_error("TEAM_CAMPUS_MISSING", "Team chưa có Cơ sở.")
+		if frappe.db.exists("CRM Student Pool", {"pool_name": name}):
+			_command_error("DUPLICATE_NAME", "Tên hàng chờ đã tồn tại.")
+		if is_active and frappe.db.exists(
+			"CRM Student Pool", {"team": team, "campus": campus, "is_active": 1}
+		):
+			_command_error(
+				"ACTIVE_POOL_EXISTS",
+				"Team này đã có một hàng chờ đang hoạt động. Hãy dùng hàng chờ đó để tránh chia Lead bị mơ hồ.",
+			)
+		doctype = "CRM Student Pool"
+		values = {
+			"doctype": doctype,
+			"pool_name": name,
+			"team": team,
+			"campus": campus,
+			"is_active": int(is_active),
+		}
+
+	command_key = hashlib.sha256(
+		f"assignment-reference|{context['actor']}|{action}|{idempotency_key}".encode()
+	).hexdigest()
+	fingerprint = hashlib.sha256(json.dumps(values, sort_keys=True, default=str).encode()).hexdigest()
+	existing = _topology_receipt(command_key)
+	if existing:
+		return _replay_topology_receipt(existing, fingerprint)
+	receipt = _reserve_topology_receipt(
+		command_key=command_key,
+		fingerprint=fingerprint,
+		actor=context["actor"],
+		correlation_id=correlation_id,
+		context=context,
+	)
+	if isinstance(receipt, dict):
+		return receipt
+	try:
+		doc = frappe.get_doc(values).insert(ignore_permissions=True)
+		doc.add_comment(
+			"Comment",
+			_assignment_audit_comment(
+				action={
+					"create_cluster": "Create Cluster",
+					"create_zone": "Create Zone",
+					"create_pool": "Create Student Pool",
+				}[action],
+				reason=reason,
+				correlation_id=correlation_id,
+				idempotency_key=idempotency_key,
+			),
+		)
+		result = {
+			"status": "applied",
+			"action": action,
+			"record_id": doc.name,
+			"label": name,
+			"revision": _reference_revision(doctype, doc.name, doc.modified),
+			"correlation_id": correlation_id,
+			"replayed": False,
+		}
+		_complete_topology_receipt(receipt, result)
+		frappe.db.commit()
+		return result
+	except Exception:
+		frappe.db.rollback()
+		raise
+
+
+def _normalize_team_member_moves(value, source_team_id, source_campus):
+	if value in (None, "", []):
+		return []
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value)
+		except (TypeError, ValueError):
+			frappe.throw(_("member_moves must be a JSON array."), frappe.ValidationError)
+	if not isinstance(value, list) or len(value) > 50:
+		frappe.throw(_("member_moves must be an array with at most 50 rows."), frappe.ValidationError)
+	if not source_team_id:
+		_command_error("INVALID_INPUT", "Không thể chuyển thành viên khi tạo Team mới.")
+
+	active_teams = {
+		row.name: row for row in _safe_get_all("CRM Team", ["name", "campus", "is_active"], {"is_active": 1})
+	}
+	rows = []
+	seen_staff = set()
+	for item in value:
+		if not isinstance(item, dict):
+			frappe.throw(_("A Team member move row is invalid."), frappe.ValidationError)
+		staff_id = item.get("staff_id")
+		target_team = item.get("target_team")
+		expected_revision = item.get("expected_revision")
+		if not isinstance(staff_id, str) or not staff_id.strip():
+			_command_error("INVALID_INPUT", "staff_id là bắt buộc khi chuyển thành viên.")
+		staff_id = staff_id.strip()
+		if staff_id in seen_staff:
+			_command_error("INVALID_INPUT", "Không thể chuyển cùng một thành viên nhiều lần trong một lệnh.")
+		seen_staff.add(staff_id)
+		if not isinstance(target_team, str) or not target_team.strip():
+			_command_error("INVALID_INPUT", "target_team là bắt buộc khi chuyển thành viên.")
+		target_team = target_team.strip()
+		if target_team == source_team_id:
+			_command_error("INVALID_INPUT", "Team đích phải khác Team hiện tại.")
+		if target_team not in active_teams:
+			_command_error("TEAM_INVALID", "Team đích phải đang hoạt động.")
+		if active_teams[target_team].campus != source_campus:
+			_command_error("TEAM_CAMPUS_MISMATCH", "Team đích phải cùng Campus với Team hiện tại.")
+		if not frappe.db.exists("CRM Staff", staff_id):
+			_command_error("TARGET_NOT_FOUND", "CRM Staff không tồn tại.")
+		staff_campus = frappe.db.get_value("CRM Staff", staff_id, "campus")
+		if staff_campus != source_campus:
+			_command_error("STAFF_CAMPUS_MISMATCH", "Nhân sự phải cùng Campus với Team hiện tại.")
+		if not isinstance(expected_revision, str) or not expected_revision.strip():
+			_command_error("INVALID_INPUT", "expected_revision của thành viên là bắt buộc.")
+		rows.append(
+			{
+				"staff_id": staff_id,
+				"target_team": target_team,
+				"expected_revision": expected_revision.strip(),
+			}
+		)
+	return rows
+
+
+@frappe.whitelist(methods=["POST"])
+def apply_team_command(
+	team_id=None,
+	team_name=None,
+	team_type=None,
+	campus=None,
+	territory=None,
+	is_active=True,
+	expected_revision=None,
+	reason=None,
+	idempotency_key=None,
+	correlation_id=None,
+	member_moves=None,
+):
+	"""Create or update a Team through the guarded setup UI command."""
+	context = _require_setup_access()
+	team_id = team_id.strip() if isinstance(team_id, str) and team_id.strip() else None
+	team_name = _required_command_text(team_name, "team_name")
+	team_type = _required_command_text(team_type, "team_type", maximum=80)
+	if team_type not in {"Sales", "Marketing", "Admissions Operations"}:
+		_command_error("TEAM_TYPE_INVALID", "Loại Team không được hỗ trợ.")
+	campus = _required_command_text(campus, "campus")
+	if not frappe.db.exists("CRM Campus", campus):
+		_command_error("TARGET_NOT_FOUND", "Campus không tồn tại.")
+	territory = territory.strip() if isinstance(territory, str) and territory.strip() else None
+	if territory and not frappe.db.exists("CRM Territory", territory):
+		_command_error("TARGET_NOT_FOUND", "Territory không tồn tại.")
+	if expected_revision in (None, ""):
+		_command_error("INVALID_INPUT", "expected_revision là bắt buộc.")
+	current = None
+	if team_id:
+		current = frappe.db.get_value(
+			"CRM Team", team_id, ["name", "campus", "is_active", "modified"], as_dict=True
+		)
+		if not current:
+			_command_error("TARGET_NOT_FOUND", "Team không tồn tại.")
+	if str(expected_revision) != _team_revision(team_id):
+		_command_error("STALE_TEAM_REVISION", "Team đã thay đổi; hãy tải lại trước khi lưu.")
+	if current and current.campus != campus:
+		active_members = [
+			row
+			for row in _safe_get_all(
+				"CRM Team Membership",
+				["parent as staff", "effective_from", "effective_until"],
+				{"team": team_id},
+			)
+			if _date_active(row)
+		]
+		if active_members:
+			_command_error(
+				"TEAM_WITH_MEMBERS_CAMPUS_CHANGE",
+				"Không thể đổi Campus của Team đang có thành viên active.",
+			)
+	member_moves = _normalize_team_member_moves(member_moves, team_id, current.campus if current else campus)
+	duplicate = frappe.db.get_value("CRM Team", {"team_name": team_name}, "name")
+	if duplicate and duplicate != team_id:
+		_command_error("TEAM_ALREADY_EXISTS", "Tên Team đã tồn tại.")
+	reason = _required_command_text(reason, "reason", minimum=5, maximum=2000)
+	idempotency_key = _required_command_text(idempotency_key, "idempotency_key", maximum=140)
+	correlation_id = _required_command_text(
+		correlation_id or str(uuid.uuid4()), "correlation_id", maximum=140
+	)
+	request = {
+		"action": "team_setup",
+		"team_id": team_id,
+		"team_name": team_name,
+		"team_type": team_type,
+		"campus": campus,
+		"territory": territory,
+		"is_active": _command_bool(is_active),
+		"expected_revision": str(expected_revision),
+		"reason": reason,
+		"member_moves": member_moves,
+	}
+	actor = frappe.session.user
+	command_key = hashlib.sha256(f"assignment-team-setup|{actor}|{idempotency_key}".encode()).hexdigest()
+	fingerprint = hashlib.sha256(json.dumps(request, sort_keys=True, default=str).encode()).hexdigest()
+	existing = _topology_receipt(command_key)
+	if existing:
+		return _replay_topology_receipt(existing, fingerprint)
+	receipt = _reserve_topology_receipt(
+		command_key=command_key,
+		fingerprint=fingerprint,
+		actor=actor,
+		correlation_id=correlation_id,
+		context=context,
+	)
+	if isinstance(receipt, dict):
+		return receipt
+	try:
+		doc = frappe.get_doc("CRM Team", team_id) if current else frappe.get_doc({"doctype": "CRM Team"})
+		doc.team_name = team_name
+		doc.team_type = team_type
+		doc.campus = campus
+		doc.territory = territory
+		doc.is_active = int(_command_bool(is_active))
+		if current:
+			doc.save(ignore_permissions=True)
+		else:
+			doc.insert(ignore_permissions=True)
+		moved_members = []
+		for move in member_moves:
+			staff_doc = frappe.get_doc("CRM Staff", move["staff_id"])
+			if _context_revision(staff_doc.name) != move["expected_revision"]:
+				_command_error(
+					"STALE_STAFF_CONTEXT",
+					f"CRM Staff {staff_doc.full_name or staff_doc.name} đã thay đổi; hãy tải lại trước khi lưu.",
+				)
+			source_membership = next(
+				(
+					row
+					for row in staff_doc.team_memberships
+					if row.team == team_id and _date_active(row.as_dict())
+				),
+				None,
+			)
+			if not source_membership:
+				_command_error(
+					"TEAM_MEMBERSHIP_NOT_FOUND",
+					f"{staff_doc.full_name or staff_doc.name} không còn thuộc Team nguồn.",
+				)
+			target_membership = next(
+				(
+					row
+					for row in staff_doc.team_memberships
+					if row.team == move["target_team"] and _date_active(row.as_dict())
+				),
+				None,
+			)
+			if target_membership:
+				staff_doc.team_memberships = [
+					row for row in staff_doc.team_memberships if row.name != source_membership.name
+				]
+			else:
+				source_membership.team = move["target_team"]
+			staff_doc.save(ignore_permissions=True)
+			staff_doc.add_comment(
+				"Comment",
+				_assignment_audit_comment(
+					action="Team membership move",
+					reason=reason,
+					correlation_id=correlation_id,
+					idempotency_key=idempotency_key,
+				),
+			)
+			moved_members.append(
+				{
+					"staff_id": staff_doc.name,
+					"target_team": move["target_team"],
+				}
+			)
+		doc.add_comment(
+			"Comment",
+			_assignment_audit_comment(
+				action="Team setup",
+				reason=reason,
+				correlation_id=correlation_id,
+				idempotency_key=idempotency_key,
+			),
+		)
+		result = {
+			"status": "applied",
+			"action": "team_setup",
+			"team_id": doc.name,
+			"revision": _team_revision(doc.name),
+			"moved_members": moved_members,
+			"correlation_id": correlation_id,
+			"replayed": False,
+		}
+		_complete_topology_receipt(receipt, result)
+		frappe.db.commit()
+		return result
+	except Exception:
+		frappe.db.rollback()
+		raise
 
 
 def _active_students_summary(student_rows):
@@ -1574,6 +2273,22 @@ def _required_command_text(value, label, *, minimum=1, maximum=140):
 	return value
 
 
+def _optional_command_text(value, label, *, maximum=80):
+	if value in (None, ""):
+		return None
+	return _required_command_text(value, label, maximum=maximum)
+
+
+def _reference_revision(doctype, name, modified=None):
+	if not name:
+		return "0"
+	if modified is None:
+		modified = frappe.db.get_value(doctype, name, "modified")
+	return hashlib.sha256(
+		json.dumps({"doctype": doctype, "name": name, "modified": modified}, default=str).encode()
+	).hexdigest()[:24]
+
+
 def _command_error(code, message):
 	frappe.throw(_("{0}: {1}").format(code, message), frappe.ValidationError)
 
@@ -1610,11 +2325,11 @@ def _school_revision_from_database(high_school):
 
 
 def _student_count_for_schools(schools):
-	if not schools or not _doctype_exists("CRM Student"):
+	if not schools or not _doctype_exists("CRM Lead"):
 		return 0
 	return len(
 		_safe_get_all(
-			"CRM Student",
+			"CRM Lead",
 			["name"],
 			{"high_school": ["in", list(schools)], "lifecycle_stage": ["not in", ["Lost"]]},
 		)

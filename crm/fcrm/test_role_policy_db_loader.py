@@ -106,7 +106,7 @@ class TestRolePolicyDbCutover(FrappeTestCase):
 		for role in LEGACY_OVERLAY_ROLES:
 			if not frappe.db.exists("Role", role):
 				continue
-			for doctype in (*_ADMISSIONS_CASE_DOCTYPES, "CRM Contact"):
+			for doctype in (*_ADMISSIONS_CASE_DOCTYPES, "CRM Student"):
 				with self.subTest(role=role, doctype=doctype):
 					self.assertEqual(
 						case_scope_for_roles({role}, doctype),
@@ -117,8 +117,8 @@ class TestRolePolicyDbCutover(FrappeTestCase):
 		role = "Promoter-PR"
 		if not frappe.db.exists("Role", role):
 			self.skipTest("Promoter-PR role not present on this site")
-		self.assertEqual(case_scope_for_roles({role}, "CRM Contact"), "campus_assigned_contact")
-		self.assertEqual(case_scope_for_roles({role}, "CRM Student"), "deny")
+		self.assertEqual(case_scope_for_roles({role}, "CRM Student"), "campus_assigned_contact")
+		self.assertEqual(case_scope_for_roles({role}, "CRM Lead"), "deny")
 
 	def test_all_cases_overlay_normalizes_to_all(self):
 		for overlay, template in LEGACY_COMPATIBILITY_OVERLAYS.items():
@@ -128,31 +128,31 @@ class TestRolePolicyDbCutover(FrappeTestCase):
 				if not frappe.db.exists("Role", role):
 					continue
 				with self.subTest(overlay=overlay, role=role):
-					self.assertEqual(case_scope_for_roles({role}, "CRM Student"), "all")
+					self.assertEqual(case_scope_for_roles({role}, "CRM Lead"), "all")
 
 	def test_unknown_role_denies(self):
 		role = "_Test Role Policy Unknown Role"
-		self.assertEqual(case_scope_for_roles({role}, "CRM Student"), "deny")
+		self.assertEqual(case_scope_for_roles({role}, "CRM Lead"), "deny")
 
 	def test_administrator_is_all_without_touching_the_database(self):
-		self.assertEqual(case_scope_for_roles(set(), "CRM Student", administrator=True), "all")
+		self.assertEqual(case_scope_for_roles(set(), "CRM Lead", administrator=True), "all")
 
 	def test_editing_a_profile_is_visible_on_the_next_read(self):
 		name = frappe.db.get_value("CRM Permission Profile", {"role": "Sale"}, "name")
 		doc = frappe.get_doc("CRM Permission Profile", name)
-		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Student"), "assigned")
+		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Lead"), "assigned")
 
 		doc.row_scope = "all"
 		doc.save(ignore_permissions=True)
 
-		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Student"), "all")
+		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Lead"), "all")
 
 	def test_missing_profile_for_a_resolvable_identity_falls_back_to_deny_and_logs(self):
 		name = frappe.db.get_value("CRM Permission Profile", {"role": "Marketing"}, "name")
 		frappe.delete_doc("CRM Permission Profile", name, ignore_permissions=True, delete_permanently=True)
 
 		error_count_before = frappe.db.count("Error Log")
-		self.assertEqual(case_scope_for_roles({"Marketing"}, "CRM Student"), "deny")
+		self.assertEqual(case_scope_for_roles({"Marketing"}, "CRM Lead"), "deny")
 		self.assertGreater(frappe.db.count("Error Log"), error_count_before)
 
 	def test_delete_requires_ownership_is_on_for_every_seeded_profile(self):
@@ -180,14 +180,14 @@ class TestRolePolicyDbCutover(FrappeTestCase):
 		doc.save(ignore_permissions=True)
 
 		# Without the kill-switch, the DB edit takes effect immediately.
-		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Student"), "all")
+		self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Lead"), "all")
 
 		frappe.conf[PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY] = 1
 		try:
 			# With it set, the hardcoded matrix wins even though the DB record
 			# now disagrees -- proving the kill-switch is a real bypass, not
 			# just a no-op flag.
-			self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Student"), "assigned")
+			self.assertEqual(case_scope_for_roles({"Sale"}, "CRM Lead"), "assigned")
 			self.assertEqual(managed_docperm_rows(), _hardcoded_managed_docperm_rows())
 		finally:
 			frappe.conf.pop(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, None)

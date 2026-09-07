@@ -130,7 +130,7 @@ def _complete_receipt(receipt, result: dict[str, Any]):
 
 def _student(student: str):
 	student = _required(student, "student")
-	if not frappe.db.exists("CRM Student", student):
+	if not frappe.db.exists("CRM Lead", student):
 		_fail("NOT_FOUND", "The Student does not exist.")
 	return student
 
@@ -138,7 +138,7 @@ def _student(student: str):
 def _linked_contact(student: str, crm_contact: str | None):
 	if not crm_contact:
 		return None
-	if not frappe.db.exists("CRM Contact", crm_contact):
+	if not frappe.db.exists("CRM Student", crm_contact):
 		_fail("NOT_FOUND", "The CRM Contact does not exist.")
 	if not contact_is_linked_to_student(crm_contact, student):
 		_fail("STUDENT_CONTACT_MISMATCH", "The CRM Contact is not linked to this Student.")
@@ -218,7 +218,7 @@ def _metrics(rows):
 	metrics = {"students": len(students), "lead": 0, "mql": 0, "applicant": 0, "enrolled": 0, "lost": 0}
 	if not students:
 		return metrics
-	for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(students)]}, fields=["enrollment_status"]):
+	for row in frappe.db.get_all("CRM Lead", filters={"name": ["in", list(students)]}, fields=["enrollment_status"]):
 		status = (row.enrollment_status or "").lower()
 		if "mql" in status:
 			metrics["mql"] += 1

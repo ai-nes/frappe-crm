@@ -7,6 +7,6 @@ DATA_FIELDS = '[{"name":"first_tab","sections":[{"label":"Details","name":"detai
 
 
 def execute():
-	if frappe.db.exists("Fields Layout", "CRM Contact-Data Fields"):
-		frappe.db.set_value("Fields Layout", "CRM Contact-Data Fields", "layout", DATA_FIELDS)
-		frappe.clear_cache(doctype="CRM Contact")
+	if frappe.db.exists("Fields Layout", "CRM Student-Data Fields"):
+		frappe.db.set_value("Fields Layout", "CRM Student-Data Fields", "layout", DATA_FIELDS)
+		frappe.clear_cache(doctype="CRM Student")

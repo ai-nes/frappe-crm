@@ -56,7 +56,9 @@ class TestDirectorNextBestActionMappers(FrappeTestCase):
 
 	def test_item_mapping_does_not_fabricate_probability_or_confidence_source(self):
 		lookups = {
-			"students": {"STU-1": {"student_name": "Nguyễn Văn An", "high_school": "HS-1", "interest_level": "Cao"}},
+			"students": {
+				"STU-1": {"student_name": "Nguyễn Văn An", "high_school": "HS-1", "interest_level": "Cao"}
+			},
 			"schools": {"HS-1": "THPT Trưng Vương"},
 			"majors": {},
 			"owners": {},
@@ -82,9 +84,7 @@ class TestDirectorNextBestActionMappers(FrappeTestCase):
 		out = nba._camelize_keys(
 			{"talking_points": ["a"], "desired_outcome": "x", "objective": "o", "nested_dict": {"keep_me": 1}}
 		)
-		self.assertEqual(
-			set(out), {"talkingPoints", "desiredOutcome", "objective", "nestedDict"}
-		)
+		self.assertEqual(set(out), {"talkingPoints", "desiredOutcome", "objective", "nestedDict"})
 		self.assertEqual(out["nestedDict"], {"keep_me": 1})
 
 	def test_item_mapping_surfaces_typed_package_and_rationale(self):
@@ -165,24 +165,40 @@ class TestDirectorNextBestActionMappers(FrappeTestCase):
 
 class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 	def test_envelope_has_all_five_blocks_with_real_rows(self):
-		queue_rows = [_row(), _row(name="ACT-2026-0002", plan_rank=2, action_type="PARENT_CONTACT", state="deferred")]
+		queue_rows = [
+			_row(),
+			_row(name="ACT-2026-0002", plan_rank=2, action_type="PARENT_CONTACT", state="deferred"),
+		]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Student":
-				return [{"name": "STU-1", "student_name": "Nguyễn Văn An", "high_school": "HS-1", "major": None, "interest_level": "Cao"}]
-			if doctype == "CRM Action" and kwargs.get("fields") == ["action_type", "state"]:
-				return [{"action_type": "CALL", "state": "completed"}, {"action_type": "CALL", "state": "pending"}]
-			if doctype == "CRM Action":
+			if doctype == "CRM Lead":
+				return [
+					{
+						"name": "STU-1",
+						"student_name": "Nguyễn Văn An",
+						"high_school": "HS-1",
+						"major": None,
+						"interest_level": "Cao",
+					}
+				]
+			if doctype == "CRM Action Item" and kwargs.get("fields") == ["action_type", "state"]:
+				return [
+					{"action_type": "CALL", "state": "completed"},
+					{"action_type": "CALL", "state": "pending"},
+				]
+			if doctype == "CRM Action Item":
 				return list(queue_rows)
 			if doctype == "CRM High School":
 				return [{"name": "HS-1", "school_name": "THPT Trưng Vương"}]
 			return []
 
-		with patch.object(nba, "require_director_access", return_value={"user": "director@example.com"}), patch.object(
-			nba, "resolve_admission_year", return_value="2026"
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(nba, "require_director_access", return_value={"user": "director@example.com"}),
+			patch.object(nba, "resolve_admission_year", return_value="2026"),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			result = nba.get_director_next_best_action(admissionYear="2026", page=1, pageSize=20)
 
 		self.assertEqual(set(result), {"meta", "queue", "sla", "outcomes", "controlPolicy"})
@@ -210,19 +226,29 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Student":
-				return [{"name": "STU-1", "student_name": "An", "high_school": None, "major": None, "interest_level": None}]
-			if doctype == "CRM Action" and kwargs.get("fields") == ["action_type", "state"]:
+			if doctype == "CRM Lead":
+				return [
+					{
+						"name": "STU-1",
+						"student_name": "An",
+						"high_school": None,
+						"major": None,
+						"interest_level": None,
+					}
+				]
+			if doctype == "CRM Action Item" and kwargs.get("fields") == ["action_type", "state"]:
 				return []
-			if doctype == "CRM Action":
+			if doctype == "CRM Action Item":
 				return list(rows)
 			return []
 
-		with patch.object(nba, "require_director_access", return_value={}), patch.object(
-			nba, "resolve_admission_year", return_value="2026"
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(nba, "require_director_access", return_value={}),
+			patch.object(nba, "resolve_admission_year", return_value="2026"),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			result = nba.get_director_next_best_action(queueFilter="urgent")
 
 		ids = {action["id"] for action in result["queue"]["actions"]}
@@ -232,19 +258,29 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		rows = [_row(name=f"A{index:02d}", plan_rank=2) for index in range(14)]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Student":
-				return [{"name": "STU-1", "student_name": "An", "high_school": None, "major": None, "interest_level": None}]
-			if doctype == "CRM Action" and kwargs.get("fields") == ["action_type", "state"]:
+			if doctype == "CRM Lead":
+				return [
+					{
+						"name": "STU-1",
+						"student_name": "An",
+						"high_school": None,
+						"major": None,
+						"interest_level": None,
+					}
+				]
+			if doctype == "CRM Action Item" and kwargs.get("fields") == ["action_type", "state"]:
 				return []
-			if doctype == "CRM Action":
+			if doctype == "CRM Action Item":
 				return list(rows)
 			return []
 
-		with patch.object(nba, "require_director_access", return_value={}), patch.object(
-			nba, "resolve_admission_year", return_value="2026"
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(nba, "require_director_access", return_value={}),
+			patch.object(nba, "resolve_admission_year", return_value="2026"),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			result = nba.get_director_next_best_action()
 
 		pagination = result["queue"]["pagination"]
@@ -264,8 +300,9 @@ class TestDirectorNextBestActionScope(FrappeTestCase):
 					seen[doctype] = kwargs
 					return [{"name": "STU-1"}]
 
-				with patch.object(nba.frappe.db, "get_value", return_value="STAFF-1"), patch(
-					"frappe.get_list", side_effect=fake_get_list
+				with (
+					patch.object(nba.frappe.db, "get_value", return_value="STAFF-1"),
+					patch("frappe.get_list", side_effect=fake_get_list),
 				):
 					student_ids = nba._students_for_year(
 						"2026", {"user": "sales@example.com", "profile": profile}
@@ -273,7 +310,7 @@ class TestDirectorNextBestActionScope(FrappeTestCase):
 
 				self.assertEqual(student_ids, ["STU-1"])
 				self.assertEqual(
-					seen["CRM Student"]["filters"],
+					seen["CRM Lead"]["filters"],
 					{"admission_year": "2026", "owner_staff": "STAFF-1"},
 				)
 
@@ -290,7 +327,7 @@ class TestDirectorNextBestActionScope(FrappeTestCase):
 			)
 
 		self.assertEqual(student_ids, ["STU-1"])
-		self.assertEqual(seen["CRM Student"]["filters"], {"admission_year": "2026"})
+		self.assertEqual(seen["CRM Lead"]["filters"], {"admission_year": "2026"})
 
 
 class _FakeAction:
@@ -314,12 +351,12 @@ def _command_harness(*, decision_revision=2, action_revision=1):
 	real_exists = frappe.db.exists
 
 	def fake_get_doc(doctype, *args, **kwargs):
-		if doctype == "CRM Action":
+		if doctype == "CRM Action Item":
 			return action
 		return real_get_doc(doctype, *args, **kwargs)
 
 	def fake_exists(doctype, *args, **kwargs):
-		if doctype == "CRM Action":
+		if doctype == "CRM Action Item":
 			return True
 		return real_exists(doctype, *args, **kwargs)
 
@@ -333,13 +370,15 @@ def _command_harness(*, decision_revision=2, action_revision=1):
 		action._values["decision_revision"] += 1
 		return {"status": kwargs["status"], "revision": action._values["decision_revision"]}
 
-	with patch.object(nba, "require_director_access", return_value={}), patch(
-		"frappe.db.exists", side_effect=fake_exists
-	), patch("frappe.get_doc", side_effect=fake_get_doc), patch.object(
-		sd, "reassign_action", side_effect=fake_reassign
-	), patch.object(sd, "decide_student_task", side_effect=fake_decide), patch.object(
-		nba, "_safe_exists", return_value=False
-	), patch.object(nba, "_latest_event_id", return_value="EVT-1"):
+	with (
+		patch.object(nba, "require_director_access", return_value={}),
+		patch("frappe.db.exists", side_effect=fake_exists),
+		patch("frappe.get_doc", side_effect=fake_get_doc),
+		patch.object(sd, "reassign_action", side_effect=fake_reassign),
+		patch.object(sd, "decide_student_task", side_effect=fake_decide),
+		patch.object(nba, "_safe_exists", return_value=False),
+		patch.object(nba, "_latest_event_id", return_value="EVT-1"),
+	):
 		yield calls
 
 
@@ -398,7 +437,9 @@ class TestDirectorNextBestActionCommand(FrappeTestCase):
 
 	def test_primitive_forbidden_is_translated(self):
 		with _command_harness() as calls:  # noqa: F841
-			with patch.object(sd, "decide_student_task", side_effect=sd.StudentDecisionError("FORBIDDEN", "nope")):
+			with patch.object(
+				sd, "decide_student_task", side_effect=sd.StudentDecisionError("FORBIDDEN", "nope")
+			):
 				with self.assertRaises(frappe.PermissionError):
 					nba.apply_action_command(
 						actionId="ACT-2026-0001",
@@ -412,7 +453,7 @@ def _recommendation_row(**overrides):
 	rank = overrides.get("rank", 1)
 	base = {
 		"name": f"NBA-EVAL-1-{rank}",
-		"target_type": "CRM Student",
+		"target_type": "CRM Lead",
 		"target_id": "STU-1",
 		"action": f"ACT-2026-000{rank}",
 		"evaluation": "NBA-EVAL-1",
@@ -444,6 +485,7 @@ class TestDirectorRecommendationsMapper(FrappeTestCase):
 				"id",
 				"target",
 				"action",
+				"title",
 				"priority",
 				"rank",
 				"reason",
@@ -462,7 +504,7 @@ class TestDirectorRecommendationsMapper(FrappeTestCase):
 			},
 		)
 		self.assertEqual(item["rank"], 2)
-		self.assertEqual(item["target"], {"type": "CRM Student", "id": "STU-1"})
+		self.assertEqual(item["target"], {"type": "CRM Lead", "id": "STU-1"})
 		self.assertEqual(item["recommendationKey"], "key-2")
 		self.assertEqual(item["studentId"], "STU-1")
 		self.assertEqual(item["actionId"], "ACT-2026-0002")
@@ -510,7 +552,7 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 
 		def fake_get_list(doctype, **call):
 			seen[doctype] = call
-			if doctype == "CRM Student":
+			if doctype == "CRM Lead":
 				return [{"name": "STU-1"}]
 			if doctype == "CRM Recommendation":
 				return list(queue_rows)
@@ -518,9 +560,11 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 				return [{"name": "NBA-EVAL-1", "disposition": "RECOMMEND", "status": "completed"}]
 			return []
 
-		with patch.object(nba, "require_director_access", return_value={}), patch.object(
-			nba, "resolve_admission_year", return_value=admission_year
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(nba, "require_director_access", return_value={}),
+			patch.object(nba, "resolve_admission_year", return_value=admission_year),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			result = nba.get_director_recommendations(**kwargs)
 		return result, seen
 
@@ -539,7 +583,7 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 	def test_only_epoch_rows_are_requested_legacy_rows_are_excluded(self):
 		result, seen = self._run([_recommendation_row()])
 		self.assertEqual(seen["CRM Recommendation"]["filters"]["evaluation"], ["is", "set"])
-		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_type"], "CRM Student")
+		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_type"], "CRM Lead")
 		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_id"], ["in", ["STU-1"]])
 		self.assertEqual(len(result["recommendations"]), 1)
 
@@ -590,9 +634,10 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 			calls.append(doctype)
 			return []
 
-		with patch.object(
-			nba, "require_director_access", side_effect=frappe.PermissionError("nope")
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(nba, "require_director_access", side_effect=frappe.PermissionError("nope")),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			with self.assertRaises(frappe.PermissionError):
 				nba.get_director_recommendations(admissionYear="2026")
 		self.assertEqual(calls, [])
@@ -609,24 +654,27 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 
 		def fake_get_list(doctype, **call):
 			seen[doctype] = call
-			if doctype == "CRM Student":
+			if doctype == "CRM Lead":
 				return [{"name": "STU-1"}]
 			if doctype == "CRM Recommendation":
 				return [_recommendation_row()]
 			return []
 
-		with patch.object(
-			nba,
-			"require_director_access",
-			return_value={"user": "sale@example.com", "profile": "sales"},
-		) as access, patch.object(nba, "resolve_admission_year", return_value="2026"), patch.object(
-			nba.frappe.db, "get_value", return_value="STAFF-1"
-		), patch("frappe.get_list", side_effect=fake_get_list):
+		with (
+			patch.object(
+				nba,
+				"require_director_access",
+				return_value={"user": "sale@example.com", "profile": "sales"},
+			) as access,
+			patch.object(nba, "resolve_admission_year", return_value="2026"),
+			patch.object(nba.frappe.db, "get_value", return_value="STAFF-1"),
+			patch("frappe.get_list", side_effect=fake_get_list),
+		):
 			result = nba.get_director_recommendations(admissionYear="2026")
 
 		access.assert_called_once_with(allow_sales=True)
 		self.assertEqual(result["meta"]["count"], 1)
 		self.assertEqual(
-			seen["CRM Student"]["filters"],
+			seen["CRM Lead"]["filters"],
 			{"admission_year": "2026", "owner_staff": "STAFF-1"},
 		)

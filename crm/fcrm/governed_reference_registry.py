@@ -14,17 +14,17 @@ GOVERNED_REFERENCE_REGISTRY = {
 	"CRM Lead Source": {
 		"name_field": "source_name", "owner_role": "Marketing", "approver_roles": frozenset({"Marketing"}),
 		"additive_requires_approval": False,
-		"consumers": _refs(("CRM Contact", "source"), ("CRM Platform", "lead_source"), ("CRM Campaign Spend", "lead_source"), ("CRM Student", "source")),
+		"consumers": _refs(("CRM Student", "source"), ("CRM Platform", "lead_source"), ("CRM Campaign Spend", "lead_source"), ("CRM Lead", "source")),
 	},
 	"CRM Platform": {
 		"name_field": "platform_name", "owner_role": "Marketing", "approver_roles": frozenset({"Marketing"}),
 		"additive_requires_approval": False, "required_fields": ("lead_source",),
-		"consumers": _refs(("CRM Contact", "platform"), ("CRM Campaign", "platform"), ("CRM Campaign Spend", "platform")),
+		"consumers": _refs(("CRM Student", "platform"), ("CRM Campaign", "platform"), ("CRM Campaign Spend", "platform")),
 	},
 	"CRM Campus": {
 		"name_field": "campus_name", "owner_role": "Admissions Director", "approver_roles": frozenset({"Admissions Director"}),
 		"additive_requires_approval": False,
-		"consumers": _refs(("CRM Contact", "branch"), ("CRM Department", "campus"), ("CRM Staff", "campus"), ("CRM Campaign", "campus"), ("CRM Campaign Spend", "campus"), ("CRM Student Pool", "campus"), ("CRM Student Routing Request", "campus"), ("CRM Student SLA Attempt", "campus"), ("CRM Team", "campus")),
+		"consumers": _refs(("CRM Student", "branch"), ("CRM Department", "campus"), ("CRM Staff", "campus"), ("CRM Campaign", "campus"), ("CRM Campaign Spend", "campus"), ("CRM Student Pool", "campus"), ("CRM Student Routing Request", "campus"), ("CRM Student SLA Attempt", "campus"), ("CRM Team", "campus")),
 	},
 }
 

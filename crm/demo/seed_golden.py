@@ -11,7 +11,7 @@ it builds one integral, realistic dataset on top of a fresh site:
 * a real-looking HCMC assignment topology (cluster, two zones, two wards, three
   teams/pools) and the requested Sale account (``TARGET_EMAIL``) as the owner
   of every seeded lead;
-* four ``CRM Student`` leads (Lead stage) spread across two zones/schools,
+* four ``CRM Lead`` leads (Lead stage) spread across two zones/schools,
   each with the complete raw CRM chain the admissions API and the AI features
   read: consent + geography snapshot on intake, three interactions, three
   intents, a qualification outcome, an admission application, parent
@@ -422,7 +422,7 @@ def _ensure_target_account(campus: str, department: str, teams: dict[str, str]) 
 
 def _force_assignment(student: str, staff: str, team: str) -> None:
 	current = frappe.db.get_value(
-		"CRM Student", student, ["owner_staff", "owning_team", "ownership_revision"], as_dict=True
+		"CRM Lead", student, ["owner_staff", "owning_team", "ownership_revision"], as_dict=True
 	)
 	if current.owner_staff == staff and current.owning_team == team:
 		return
@@ -1035,7 +1035,7 @@ def _submit_student(context: dict[str, Any], pool: str, high_school: str) -> str
 		payload["alt_name"] = parent["name"]
 		payload["alt_phone"] = parent["phone"]
 
-	existing = frappe.db.get_value("CRM Student", {"email": email}, "name")
+	existing = frappe.db.get_value("CRM Lead", {"email": email}, "name")
 	if existing:
 		return existing
 
@@ -1052,7 +1052,7 @@ def _submit_student(context: dict[str, Any], pool: str, high_school: str) -> str
 
 
 def _complete_student_profile(student: str, context: dict[str, Any]) -> None:
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	parent = _ACTIVE.get("parent")
 	values = {
 		"enrollment_status": context["enrollment_status"],
@@ -1194,7 +1194,7 @@ def _ensure_file(student: str) -> str:
 	file_name = f"{_ACTIVE['key']}-{NAMESPACE}-phieu-tiep-nhan-ho-so.txt"
 	existing = frappe.db.get_value(
 		"File",
-		{"attached_to_doctype": "CRM Student", "attached_to_name": student, "file_name": file_name},
+		{"attached_to_doctype": "CRM Lead", "attached_to_name": student, "file_name": file_name},
 		"name",
 	)
 	if existing:
@@ -1206,7 +1206,7 @@ def _ensure_file(student: str) -> str:
 				"file_name": file_name,
 				"is_private": 1,
 				"content": f"Phiếu tiếp nhận hồ sơ tuyển sinh demo\nHọc sinh: {_ACTIVE['student_name']}\n",
-				"attached_to_doctype": "CRM Student",
+				"attached_to_doctype": "CRM Lead",
 				"attached_to_name": student,
 			}
 		)
@@ -1232,7 +1232,7 @@ def _ensure_outcome(student: str, interaction: str, evidence_file: str) -> str:
 		next_action_due_at=SEED_NOW + timedelta(days=1),
 		qualification_evidence=[{"category": "document", "doctype": "File", "name": evidence_file}],
 		source_key=source_key,
-		expected_revision=int(frappe.db.get_value("CRM Student", student, "engagement_revision") or 0),
+		expected_revision=int(frappe.db.get_value("CRM Lead", student, "engagement_revision") or 0),
 		idempotency_key=source_key,
 		correlation_id=_correlation(),
 	)
@@ -1262,7 +1262,7 @@ def _ensure_lifecycle(student: str, outcome: str, intent: str, evidence_file: st
 	}
 	walked: list[str] = []
 	for stage in _LIFECYCLE_ORDER[1 : _LIFECYCLE_ORDER.index(forward_target) + 1]:
-		doc = frappe.get_doc("CRM Student", student)
+		doc = frappe.get_doc("CRM Lead", student)
 		current = doc.lifecycle_stage or "Lead"
 		if current == stage:
 			continue
@@ -1282,7 +1282,7 @@ def _ensure_lifecycle(student: str, outcome: str, intent: str, evidence_file: st
 		)
 		walked.append(stage)
 	if target == "Lost":
-		doc = frappe.get_doc("CRM Student", student)
+		doc = frappe.get_doc("CRM Lead", student)
 		if doc.lifecycle_stage != "Lost":
 			request_transition(
 				student,
@@ -1340,7 +1340,7 @@ def _ensure_application(student: str, context: dict[str, Any]) -> str | None:
 			"submitted_at": SEED_NOW - timedelta(days=3),
 			"source_reference": source_reference,
 		},
-		expected_revision=int(frappe.db.get_value("CRM Student", student, "engagement_revision") or 0),
+		expected_revision=int(frappe.db.get_value("CRM Lead", student, "engagement_revision") or 0),
 		idempotency_key=source_reference,
 	)
 	return result["application"]
@@ -1353,7 +1353,7 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str, high_school
 	from crm.fcrm.student_parent_context import record_parent_contact_authority
 
 	parent_email = spec["email"]
-	contact = frappe.db.get_value("CRM Contact", {"email": parent_email}, "name")
+	contact = frappe.db.get_value("CRM Student", {"email": parent_email}, "name")
 	if not contact:
 		previous = frappe.flags.get("student_conversion_service")
 		frappe.flags.student_conversion_service = True
@@ -1361,7 +1361,7 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str, high_school
 			contact = (
 				frappe.get_doc(
 					{
-						"doctype": "CRM Contact",
+						"doctype": "CRM Student",
 						"full_name": spec["name"],
 						"phone": spec["phone"],
 						"email": parent_email,
@@ -1513,7 +1513,7 @@ def _ensure_score(student: str) -> str:
 	policy = get_active_policy()
 	if not policy:
 		frappe.throw("No active CRM scoring policy is available.", frappe.ValidationError)
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	spec = _ACTIVE["score"]
 	result = append_local_fixture_score(
 		student=student,
@@ -1547,15 +1547,15 @@ def _ensure_student_contact(
 	from crm.demo import seed_showcase
 
 	profile_email = _ACTIVE["student_email"]
-	contact = frappe.db.get_value("CRM Contact", {"student": student}, "name")
+	contact = frappe.db.get_value("CRM Student", {"student": student}, "name")
 	if not contact:
-		contact = frappe.db.get_value("CRM Contact", {"email": profile_email}, "name")
+		contact = frappe.db.get_value("CRM Student", {"email": profile_email}, "name")
 	values = {
 		"full_name": _ACTIVE["student_name"],
 		"phone": _ACTIVE["student_phone"],
 		"email": profile_email,
 		"student": student,
-		"student_identity": frappe.db.get_value("CRM Student", student, "identity"),
+		"student_identity": frappe.db.get_value("CRM Lead", student, "identity"),
 		"enrollment_status": context["enrollment_status"],
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
@@ -1579,9 +1579,9 @@ def _ensure_student_contact(
 	frappe.flags.student_conversion_service = True
 	try:
 		if contact:
-			frappe.db.set_value("CRM Contact", contact, values, update_modified=False)
+			frappe.db.set_value("CRM Student", contact, values, update_modified=False)
 		else:
-			contact = frappe.get_doc({"doctype": "CRM Contact", **values}).insert(ignore_permissions=True).name
+			contact = frappe.get_doc({"doctype": "CRM Student", **values}).insert(ignore_permissions=True).name
 	finally:
 		if previous is None:
 			frappe.flags.pop("student_conversion_service", None)
@@ -1601,7 +1601,7 @@ def _digest(value: Any) -> str:
 def _ensure_ai_insight(student: str, interactions: list[str]) -> dict[str, Any]:
 	from crm.api.ai_insight import upsert_ai_insight
 
-	revision = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
+	revision = int(frappe.db.get_value("CRM Lead", student, "student_context_revision") or 0)
 	insight = _ACTIVE["insight"]
 	interests = [
 		{
@@ -1646,7 +1646,7 @@ def _ensure_student_analysis(student: str, interactions: list[str], score: str |
 	from crm.api.intelligence_runs import request_student_analysis_run
 	from crm.fcrm import intelligence_runs
 
-	current_revision = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
+	current_revision = int(frappe.db.get_value("CRM Lead", student, "student_context_revision") or 0)
 	request = request_student_analysis_run(
 		student,
 		idempotency_key=f"{_ns()}:analysis:v1:r{current_revision}",
@@ -1879,10 +1879,10 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 	return {
 		"variant": _ACTIVE["key"],
 		"student": student,
-		"student_name": frappe.db.get_value("CRM Student", student, "student_name"),
+		"student_name": frappe.db.get_value("CRM Lead", student, "student_name"),
 		"high_school": high_school,
 		"target_stage": _ACTIVE["target_stage"],
-		"lifecycle_stage": frappe.db.get_value("CRM Student", student, "lifecycle_stage"),
+		"lifecycle_stage": frappe.db.get_value("CRM Lead", student, "lifecycle_stage"),
 		"lifecycle_walk": walked,
 		"owner_staff": owner_staff,
 		"contact": contact,
@@ -1946,7 +1946,7 @@ _AI_SERVICE_READ_DOCTYPES = (
 	"CRM Score History",
 	"CRM Intent Type",
 	"CRM Interaction Type",
-	"CRM Student",
+	"CRM Lead",
 )
 
 
@@ -2161,7 +2161,7 @@ def verify() -> dict[str, Any]:
 
 	students = []
 	for profile in _PROFILES:
-		name = frappe.db.get_value("CRM Student", {"email": profile["student_email"]}, "name")
+		name = frappe.db.get_value("CRM Lead", {"email": profile["student_email"]}, "name")
 		if not name:
 			students.append({"variant": profile["key"], "seeded": False})
 			continue
@@ -2180,7 +2180,7 @@ def verify() -> dict[str, Any]:
 				"parent_context": len(ctx["parent_context"]),
 				"score_state": ctx["admissions_context"]["score"].get("state"),
 				"history_count": len(ctx["history"]),
-				"owner_staff": frappe.db.get_value("CRM Student", name, "owner_staff"),
+				"owner_staff": frappe.db.get_value("CRM Lead", name, "owner_staff"),
 				"ai_insight": frappe.db.exists("CRM AI Lead Insight", {"student": name}),
 				"recommendations": frappe.db.count("CRM Recommendation", {"target_id": name}),
 			}

@@ -48,10 +48,10 @@ def list_student_worklist(
 
 	page_size = _parse_page_size(page_size)
 	principal = frappe.session.user
-	# The recommendation hook also scopes through CRM Student, but keep the
+	# The recommendation hook also scopes through CRM Lead, but keep the
 	# aggregate permission explicit so this endpoint cannot become a side door
 	# if recommendation storage or its hook changes later.
-	frappe.has_permission("CRM Student", "read", user=principal, throw=True)
+	frappe.has_permission("CRM Lead", "read", user=principal, throw=True)
 	roles = sorted(frappe.get_roles(principal))
 	last_sort_key = (
 		_decode_cursor(cursor, principal, roles, policy_version=_RECOMMENDATION_WORKLIST_POLICY_VERSION)
@@ -89,16 +89,16 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 	"""Return permission-filtered canonical Actions for Student or Contact detail."""
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	if doctype not in {"CRM Student", "CRM Contact"} or not isinstance(name, str) or not name.strip():
+	if doctype not in {"CRM Lead", "CRM Student"} or not isinstance(name, str) or not name.strip():
 		frappe.throw(_("A valid Student or Contact is required."), frappe.ValidationError)
 	name = name.strip()
 	page_size = _parse_page_size(page_size)
-	if doctype == "CRM Student":
+	if doctype == "CRM Lead":
 		_ensure_visible_student(name)
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	# `get_list` applies CRM Action's permission query conditions; `get_all`
 	# would allow a caller to probe another student's objective/evidence by name.
-	rows = frappe.get_list("CRM Action Item", filters={"student" if doctype == "CRM Student" else "contact": name}, fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
+	rows = frappe.get_list("CRM Action Item", filters={"student" if doctype == "CRM Lead" else "contact": name}, fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
 	now = frappe.utils.now_datetime()
 	return {"items": [{"name": row.name, "student": row.student, "action": row.action, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
 
@@ -188,7 +188,7 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	page_size = _parse_page_size(page_size)
 	if student is not None and (not isinstance(student, str) or not student.strip()):
 		frappe.throw(_("student must be a Student name."), frappe.ValidationError)
-	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Lead", "read", user=frappe.session.user, throw=True)
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 
 	from crm.fcrm.role_policy import capabilities_for_roles
@@ -219,7 +219,7 @@ def list_action_queue(page_size: int | str = 20, student: str | None = None) -> 
 	context_revisions = {
 		r.name: int(r.student_context_revision or 0)
 		for r in frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters={"name": ["in", list(student_names)]} if student_names else {"name": ["in", [""]]},
 			fields=["name", "student_context_revision"],
 			limit_page_length=0,
@@ -399,7 +399,7 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	page_size = _parse_page_size(page_size)
-	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Lead", "read", user=frappe.session.user, throw=True)
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	staff = frappe.db.get_value("CRM Staff", {"user": frappe.session.user}, "name")
 	if not staff:
@@ -417,7 +417,7 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 		"""select a.name, a.student, s.student_name, a.action, a.action_type, a.execution_status,
 		a.due_at, {due_expr} as due_sort, a.action_owner as assignee_staff, a.action_revision, a.linked_interaction, a.creation,
 		a.outcome_code from `tabCRM Action Item` a
-		left join `tabCRM Student` s on s.name = a.student where {where}
+		left join `tabCRM Lead` s on s.name = a.student where {where}
 		order by due_sort asc, a.creation asc, a.name asc limit %(limit)s""".format(where=" and ".join(conditions), due_expr=due_expr),
 		values, as_dict=True,
 	)
@@ -449,9 +449,9 @@ def _action_transitions(status):
 
 def _ensure_visible_student(student_id: str) -> None:
 	"""Make a named Student lookup obey the current session's row scope."""
-	frappe.has_permission("CRM Student", "read", user=frappe.session.user, throw=True)
+	frappe.has_permission("CRM Lead", "read", user=frappe.session.user, throw=True)
 	if not frappe.get_list(
-		"CRM Student",
+		"CRM Lead",
 		filters={"name": student_id},
 		fields=["name"],
 		limit_page_length=1,
@@ -574,7 +574,7 @@ def _recommendation_dto(row, evaluations: dict[str, dict] | None = None) -> dict
 	evaluation = (evaluations or {}).get(row.get("evaluation")) or {}
 	view = recommendation_view(
 		recommendation_id=row.name,
-		target_type="CRM Student",
+		target_type="CRM Lead",
 		target_id=row.student,
 		action_code=row.get("action") or None,
 		priority=row.priority,
@@ -680,7 +680,7 @@ def _fetch_recommendation_page(
 	)
 	values = {"limit": limit, "now": frappe.utils.now_datetime()}
 	conditions = [
-		"`tabCRM Recommendation`.target_type = 'CRM Student'",
+		"`tabCRM Recommendation`.target_type = 'CRM Lead'",
 		"`tabCRM Recommendation`.decision_status = 'pending'",
 		"`tabCRM Recommendation`.evaluation IS NOT NULL AND `tabCRM Recommendation`.evaluation != ''",
 		"(`tabCRM Recommendation`.expires_at IS NULL OR `tabCRM Recommendation`.expires_at > %(now)s)",
@@ -702,7 +702,7 @@ def _fetch_recommendation_page(
 		values.update(dict(zip(("rank", "timing", "creation", "name"), last_sort_key, strict=True)))
 	return frappe.db.sql(
 		"""SELECT `tabCRM Recommendation`.name, `tabCRM Recommendation`.target_id AS student,
-		`tabCRM Student`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
+		`tabCRM Lead`.student_name, `tabCRM Recommendation`.rank, `tabCRM Recommendation`.priority,
 		`tabCRM Recommendation`.channel, `tabCRM Recommendation`.reason, `tabCRM Recommendation`.action,
 		`tabCRM Recommendation`.recommendation_key, `tabCRM Recommendation`.ai_payload,
 		`tabCRM Recommendation`.explanation, `tabCRM Recommendation`.expires_at,
@@ -711,7 +711,7 @@ def _fetch_recommendation_page(
 		`tabCRM Recommendation`.evaluation, `tabCRM Recommendation`.recommended_at,
 		`tabCRM Recommendation`.modified, `tabCRM Recommendation`.creation
 		FROM `tabCRM Recommendation`
-		LEFT JOIN `tabCRM Student` ON `tabCRM Student`.name = `tabCRM Recommendation`.target_id
+		LEFT JOIN `tabCRM Lead` ON `tabCRM Lead`.name = `tabCRM Recommendation`.target_id
 		WHERE {conditions}
 		ORDER BY COALESCE(`tabCRM Recommendation`.rank, 999) ASC,
 		COALESCE(`tabCRM Recommendation`.recommended_at, '9999-12-31 23:59:59.999999') ASC,

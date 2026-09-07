@@ -37,10 +37,10 @@ class TestAttribution(FrappeTestCase):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"student_name": ["like", "_Test Attr%"]}, pluck="name"):
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
+		for name in frappe.db.get_all("CRM Lead", filters={"student_name": ["like", "_Test Attr%"]}, pluck="name"):
+			frappe.delete_doc("CRM Lead", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Campaign", name, force=True)
 		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test Attr%"]}, pluck="name"):
@@ -79,7 +79,7 @@ class TestAttribution(FrappeTestCase):
 	def _make_contact(self, name, phone):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": f"{name} Student",
 				"phone": phone,
 				"enrollment_status": "PROSPECT",
@@ -93,7 +93,7 @@ class TestAttribution(FrappeTestCase):
 			frappe.flags.student_intake_service = previous_intake_flag
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 				"enrollment_status": "PROSPECT",

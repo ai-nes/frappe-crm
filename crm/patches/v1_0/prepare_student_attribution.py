@@ -1,4 +1,4 @@
-"""Safely anchor legacy attribution evidence to CRM Student.
+"""Safely anchor legacy attribution evidence to CRM Lead.
 
 The patch is additive and rerunnable: it only fills a blank ``student`` from
 the already-linked Contact, records anomalies for manual review, and never
@@ -82,7 +82,7 @@ def _contact_students(rows):
 		return {}
 	return {
 		row.name: row.student
-		for row in frappe.db.get_all("CRM Contact", filters={"name": ["in", contacts]}, fields=["name", "student"])
+		for row in frappe.db.get_all("CRM Student", filters={"name": ["in", contacts]}, fields=["name", "student"])
 		if row.student
 	}
 

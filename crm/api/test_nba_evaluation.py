@@ -69,7 +69,7 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		}
 
 		def get_value(doctype, filters, fields, **kwargs):
-			if doctype == "CRM Student":
+			if doctype == "CRM Lead":
 				return student
 			if doctype == "CRM Intent":
 				return student_decision_context.frappe._dict(

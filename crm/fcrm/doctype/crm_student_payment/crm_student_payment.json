@@ -5,7 +5,7 @@
   {"default": "PAY-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "PAY-.YYYY.-"},
   {"fieldname": "transaction_key", "fieldtype": "Data", "hidden": 1, "label": "Transaction Key", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "application", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Application", "options": "CRM Admission Application", "reqd": 1},
-  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Lead", "reqd": 1},
   {"fieldname": "payment_reference", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Payment Reference", "reqd": 1},
   {"fieldname": "amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Amount", "reqd": 1},
   {"default": "VND", "fieldname": "currency", "fieldtype": "Data", "in_list_view": 1, "label": "Currency", "reqd": 1},

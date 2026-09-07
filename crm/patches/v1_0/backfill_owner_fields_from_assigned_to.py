@@ -17,7 +17,7 @@ are unset, so a rerun is a cheap no-op.
 
 import frappe
 
-DOCTYPES = ["CRM Contact", "CRM Student"]
+DOCTYPES = ["CRM Student", "CRM Lead"]
 
 
 def _primary_teams(staff_names):

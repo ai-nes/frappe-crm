@@ -14,10 +14,10 @@ import frappe
 def execute():
 	if not frappe.db.exists("DocType", "CRM Score Input Change"):
 		return {"status": "revision_journal_pending"}
-	for doctype in ("CRM Student", "CRM Score History", "CRM Score Input Change"):
+	for doctype in ("CRM Lead", "CRM Score History", "CRM Score Input Change"):
 		frappe.reload_doc("fcrm", "doctype", frappe.scrub(doctype))
 	frappe.db.add_index(
-		"CRM Student", ["score_input_revision"], index_name="score_input_revision_idx"
+		"CRM Lead", ["score_input_revision"], index_name="score_input_revision_idx"
 	)
 	frappe.db.add_index(
 		"CRM Score History",
@@ -27,7 +27,7 @@ def execute():
 	frappe.db.add_index(
 		"CRM Score Input Change", ["global_sequence"], index_name="score_input_change_seq_idx"
 	)
-	for student in frappe.get_all("CRM Student", pluck="name"):
+	for student in frappe.get_all("CRM Lead", pluck="name"):
 		updates = {}
 		for field, default in (
 			("student_context_revision", 0),
@@ -36,7 +36,7 @@ def execute():
 			("applied_policy_revision", 0),
 			("sla_evidence_state", "unknown"),
 		):
-			if frappe.db.get_value("CRM Student", student, field) is None:
+			if frappe.db.get_value("CRM Lead", student, field) is None:
 				updates[field] = default
 		if updates:
-			frappe.db.set_value("CRM Student", student, updates, update_modified=False)
+			frappe.db.set_value("CRM Lead", student, updates, update_modified=False)

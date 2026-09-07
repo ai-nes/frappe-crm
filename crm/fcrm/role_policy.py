@@ -83,9 +83,14 @@ PROFILE_CAPABILITIES = {
 			"student.sla.respond",
 		}
 	),
-	"marketing": frozenset({
-		"acquisition.manage", "attribution.manage", "school.activity.manage", "school.person.manage",
-	}),
+	"marketing": frozenset(
+		{
+			"acquisition.manage",
+			"attribution.manage",
+			"school.activity.manage",
+			"school.person.manage",
+		}
+	),
 	"lead_sales": frozenset(
 		{
 			"student.execute",
@@ -150,26 +155,50 @@ PROFILE_CAPABILITIES = {
 # copy of the policy vocabulary.
 CAPABILITY_METADATA = {
 	"action.execute": ("Thực hiện hành động", "Thực hiện các hành động tư vấn đã được phép."),
-	"action.reassign": ("Phân công lại hành động", "Chuyển hành động cho nhân sự khác trong phạm vi được phép."),
+	"action.reassign": (
+		"Phân công lại hành động",
+		"Chuyển hành động cho nhân sự khác trong phạm vi được phép.",
+	),
 	"acquisition.manage": ("Quản lý thu hút", "Quản lý dữ liệu và hoạt động thu hút tuyển sinh."),
 	"admissions.oversee": ("Giám sát tuyển sinh", "Xem và giám sát tổng quan hoạt động tuyển sinh."),
 	"attribution.manage": ("Quản lý attribution", "Quản lý dữ liệu nguồn và hiệu quả attribution."),
 	"conversion.execute": ("Thực hiện chuyển đổi", "Chuyển hồ sơ sang Contact khi đủ điều kiện."),
-	"interaction.record": ("Ghi nhận tương tác", "Ghi nhận cuộc gọi, tin nhắn và các tương tác với thí sinh."),
-	"lifecycle.exception": ("Xử lý ngoại lệ vòng đời", "Xử lý các chuyển đổi vòng đời ngoài luồng thông thường."),
+	"interaction.record": (
+		"Ghi nhận tương tác",
+		"Ghi nhận cuộc gọi, tin nhắn và các tương tác với thí sinh.",
+	),
+	"lifecycle.exception": (
+		"Xử lý ngoại lệ vòng đời",
+		"Xử lý các chuyển đổi vòng đời ngoài luồng thông thường.",
+	),
 	"lifecycle.lost": ("Đánh dấu thất bại", "Đánh dấu hồ sơ không tiếp tục tuyển sinh."),
 	"lifecycle.reopen": ("Mở lại vòng đời", "Mở lại hồ sơ đã đóng khi có căn cứ phù hợp."),
 	"lifecycle.transition": ("Chuyển giai đoạn", "Cập nhật giai đoạn tuyển sinh của hồ sơ."),
 	"outcome.record": ("Ghi nhận kết quả", "Ghi nhận kết quả của hành động hoặc phiên tư vấn."),
 	"recommendation.decide": ("Xử lý đề xuất", "Chấp nhận, từ chối hoặc quyết định trên đề xuất liên hệ."),
 	"roles.manage": ("Quản lý vai trò", "Quản lý vai trò và quyền truy cập người dùng."),
-	"school.activity.manage": ("Quản lý hoạt động trường", "Tạo và quản lý hoạt động làm việc với trường học."),
+	"school.activity.manage": (
+		"Quản lý hoạt động trường",
+		"Tạo và quản lý hoạt động làm việc với trường học.",
+	),
 	"school.person.manage": ("Quản lý liên hệ trường", "Quản lý người liên hệ thuộc các trường học."),
-	"student.audit.reason.read": ("Xem lý do kiểm toán", "Xem lý do và bằng chứng của các thay đổi quan trọng."),
+	"student.audit.reason.read": (
+		"Xem lý do kiểm toán",
+		"Xem lý do và bằng chứng của các thay đổi quan trọng.",
+	),
 	"student.execute": ("Xử lý hồ sơ", "Tạo và thực hiện các nghiệp vụ trên hồ sơ thí sinh."),
-	"student.ownership.manage": ("Quản lý chủ sở hữu", "Phân công và điều chỉnh người hoặc nhóm phụ trách hồ sơ."),
-	"student.policy.approve": ("Phê duyệt chính sách hồ sơ", "Phê duyệt các chính sách vận hành hồ sơ tuyển sinh."),
-	"student.policy.manage": ("Quản lý chính sách hồ sơ", "Cấu hình chính sách hệ thống liên quan đến hồ sơ."),
+	"student.ownership.manage": (
+		"Quản lý chủ sở hữu",
+		"Phân công và điều chỉnh người hoặc nhóm phụ trách hồ sơ.",
+	),
+	"student.policy.approve": (
+		"Phê duyệt chính sách hồ sơ",
+		"Phê duyệt các chính sách vận hành hồ sơ tuyển sinh.",
+	),
+	"student.policy.manage": (
+		"Quản lý chính sách hồ sơ",
+		"Cấu hình chính sách hệ thống liên quan đến hồ sơ.",
+	),
 	"student.routing.operate": ("Vận hành phân tuyến", "Chạy và điều chỉnh quy tắc phân tuyến hồ sơ."),
 	"student.routing.read": ("Xem phân tuyến", "Xem thông tin phân tuyến và kết quả phân công hồ sơ."),
 	"student.routing.retry": ("Chạy lại phân tuyến", "Thử lại các yêu cầu phân tuyến bị lỗi."),
@@ -198,7 +227,10 @@ def capability_details(capabilities):
 		for capability in sorted(capabilities)
 	]
 
-CANONICAL_SELECTABLE_ROLES = frozenset({ADMINISTRATOR_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]})
+
+CANONICAL_SELECTABLE_ROLES = frozenset(
+	{ADMINISTRATOR_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]}
+)
 
 _PERMISSION_FLAGS = {
 	"r": "read",
@@ -225,7 +257,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "student_context_or_redacted_endpoint",
 	},
 	"admissions_case": {
-		"doctypes": ("CRM Student", "CRM Contact"),
+		"doctypes": ("CRM Lead", "CRM Student"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "rwc",
@@ -249,17 +281,29 @@ CANONICAL_PERMISSION_MATRIX = {
 	},
 	"reference": {
 		"doctypes": (
-			"CRM Major", "CRM High School", "CRM Province", "CRM Ward",
+			"CRM Major",
+			"CRM High School",
+			"CRM Province",
+			"CRM Ward",
 			"CRM Admission Year",
 			"CRM Education Program",
 			"CRM Department",
 			"Holiday List",
 			"CRM Team",
 			# Flat controlled-vocabulary lookups (formerly CRM Term categories).
-			"CRM Lost Reason", "CRM Campaign Type", "CRM Intent Type",
-			"CRM Interaction Type", "CRM School Type", "CRM School Area", "CRM Stakeholder Role",
-			"CRM School Activity Type", "CRM Major Group", "CRM Aspiration", "CRM Region",
-			"CRM Enrollment Status", "CRM Admission Method",
+			"CRM Lost Reason",
+			"CRM Campaign Type",
+			"CRM Intent Type",
+			"CRM Interaction Type",
+			"CRM School Type",
+			"CRM School Area",
+			"CRM Stakeholder Role",
+			"CRM School Activity Type",
+			"CRM Major Group",
+			"CRM Aspiration",
+			"CRM Region",
+			"CRM Enrollment Status",
+			"CRM Admission Method",
 		),
 		"permissions": {
 			"system_manager": "rwcdx",
@@ -371,10 +415,21 @@ CANONICAL_PERMISSION_MATRIX = {
 # overlay or alias catalog remains in the active policy.
 LEGACY_COMPATIBILITY_OVERLAYS = {}
 
-# Seed-only deployments never carry a compatibility role catalog.  The legacy
-# exports remain empty for old patch-module imports, not as a migration path.
-ROLE_BACKFILL_TARGETS = {}
-ROLE_BACKFILL_SOURCES = frozenset()
+# Legacy roles are retained here only as migration input. They never resolve to
+# a runtime profile or grant permissions; active users must use canonical roles.
+ROLE_BACKFILL_TARGETS = {
+	"CTV-Sale": "Sale",
+	"Counseller": "Sale",
+	"Sales User": "Sale",
+	"Sales Manager": "Lead Sale",
+	"Team Leader": "Lead Sale",
+	"Promoter-PR": "Marketing",
+	"Marketing Operator": "Marketing",
+	"Marketing Lead": "Marketing",
+	"Admissions Operations": "Admissions Director",
+	"Giám đốc Tuyển sinh": "Admissions Director",
+}
+ROLE_BACKFILL_SOURCES = frozenset(ROLE_BACKFILL_TARGETS)
 LEGACY_UNMAPPED_ROLES = frozenset({"CRM Data Steward"})
 
 SYSTEM_MANAGER_CAPABILITIES = frozenset(
@@ -393,9 +448,7 @@ LEGACY_OVERLAY_ROLES = frozenset().union(
 	*(LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"] for overlay in LEGACY_OVERLAY_IDS)
 )
 CANONICAL_PROFILE_ROLES = frozenset().union(*PROFILE_ROLE_ALIASES.values())
-CRM_POLICY_ROLE_NAMES = tuple(
-	sorted(CANONICAL_SELECTABLE_ROLES)
-)
+CRM_POLICY_ROLE_NAMES = tuple(sorted(CANONICAL_SELECTABLE_ROLES))
 CRM_BUSINESS_ROLES = CANONICAL_PROFILE_ROLES
 CRM_ALLOWED_ROLES = CANONICAL_SELECTABLE_ROLES
 FRAMEWORK_ROLE_NAMES = frozenset({"All", "Guest", "Desk User", "Website User"})
@@ -409,6 +462,7 @@ _MIGRATION_ROLE_NAMES = frozenset(
 	| ROLE_BACKFILL_SOURCES
 )
 
+
 def _unknown_role_names(role_names):
 	"""Return role names outside the policy and Frappe's implicit roles."""
 	return role_names - _MIGRATION_ROLE_NAMES
@@ -420,6 +474,7 @@ def resolve_crm_profile(roles) -> str | None:
 	if (
 		_unknown_role_names(role_names)
 		or role_names & LEGACY_UNMAPPED_ROLES
+		or role_names & ROLE_BACKFILL_SOURCES
 		or SYSTEM_MANAGER_ROLE in role_names
 	):
 		return None
@@ -446,9 +501,15 @@ def classify_role_set(roles, *, administrator=False) -> str:
 	role_names = frozenset(roles)
 	if role_names & LEGACY_UNMAPPED_ROLES:
 		return "legacy_migration_required"
+	if role_names & ROLE_BACKFILL_SOURCES:
+		if SYSTEM_MANAGER_ROLE in role_names and not _unknown_role_names(role_names):
+			return "system_manager"
+		return "mixed_or_unmapped" if role_names & CANONICAL_PROFILE_ROLES else "unmapped"
 	unknown_roles = _unknown_role_names(role_names)
 	if unknown_roles:
-		known_business_roles = role_names & (CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | {SYSTEM_MANAGER_ROLE})
+		known_business_roles = role_names & (
+			CANONICAL_PROFILE_ROLES | LEGACY_OVERLAY_ROLES | {SYSTEM_MANAGER_ROLE}
+		)
 		return "mixed_or_unmapped" if known_business_roles else "unmapped"
 	# System Manager remains the CRM control plane when it also has known Frappe
 	# Desk-management roles. Unknown roles still fail closed above.
@@ -517,7 +578,7 @@ def case_scope_for_roles(roles, doctype, *, administrator=False):
 		_warn_missing_permission_profile(role)
 		return "deny"
 	scope = profile["row_scope"]
-	if scope == "campus_assigned_contact" and doctype != "CRM Contact":
+	if scope == "campus_assigned_contact" and doctype != "CRM Student":
 		return "deny"
 	return scope
 
@@ -558,7 +619,7 @@ def _hardcoded_case_scope_for_roles(roles, doctype):
 	if not overlay:
 		return "deny"
 	scope = LEGACY_COMPATIBILITY_OVERLAYS[overlay]["row_scope"]
-	if scope == "campus_assigned_contact" and doctype != "CRM Contact":
+	if scope == "campus_assigned_contact" and doctype != "CRM Student":
 		return "deny"
 	if scope == "all_cases":
 		return "all"
@@ -603,8 +664,10 @@ def _hardcoded_managed_docperm_rows():
 		for doctype in definition["doctypes"]:
 			rows = []
 			for profile, permission_set in definition["permissions"].items():
-				permission_set = definition.get("per_doctype_permissions", {}).get(doctype, {}).get(
-					profile, permission_set
+				permission_set = (
+					definition.get("per_doctype_permissions", {})
+					.get(doctype, {})
+					.get(profile, permission_set)
 				)
 				role = SYSTEM_MANAGER_ROLE if profile == "system_manager" else PROFILE_LABELS[profile]
 				if doctype in PHASE9_COMMAND_ONLY_DOCTYPES:

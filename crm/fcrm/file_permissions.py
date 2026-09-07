@@ -14,18 +14,18 @@ from crm.fcrm.role_policy import capabilities_for_roles
 
 def before_insert(doc, method=None):
 	"""Force every new Student attachment private at the trust boundary."""
-	if doc.get("attached_to_doctype") == "CRM Student":
+	if doc.get("attached_to_doctype") == "CRM Lead":
 		doc.is_private = 1
 
 
 def has_permission(doc, user=None, permission_type=None):
-	student = doc.get("attached_to_name") if hasattr(doc, "get") and doc.get("attached_to_doctype") == "CRM Student" else None
+	student = doc.get("attached_to_name") if hasattr(doc, "get") and doc.get("attached_to_doctype") == "CRM Lead" else None
 	if not student:
 		return None
 	user = user or frappe.session.user
 	if permission_type == "read":
 		try:
-			return bool(frappe.has_permission("CRM Student", "read", student, user=user))
+			return bool(frappe.has_permission("CRM Lead", "read", student, user=user))
 		except Exception:
 			return False
 	roles = frappe.get_roles(user)
@@ -34,7 +34,7 @@ def has_permission(doc, user=None, permission_type=None):
 		return user == "Administrator" or "System Manager" in roles or "admissions.oversee" in capabilities
 	if permission_type == "create":
 		try:
-			return bool(frappe.has_permission("CRM Student", "write", student, user=user))
+			return bool(frappe.has_permission("CRM Lead", "write", student, user=user))
 		except Exception:
 			return False
 	return None

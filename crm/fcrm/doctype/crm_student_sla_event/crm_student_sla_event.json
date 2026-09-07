@@ -4,7 +4,7 @@
   "fields": [
     {"fieldname": "event_id", "fieldtype": "Data", "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
     {"fieldname": "event_type", "fieldtype": "Select", "label": "Event Type", "options": "opened\nwarned\npaused\nresumed\npause_expired\nbreached\nescalated\nresponded\nclosed\nreset_requested\nreset_approved", "read_only": 1},
-    {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+    {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
     {"fieldname": "sla_attempt", "fieldtype": "Link", "label": "SLA Attempt", "options": "CRM Student SLA Attempt", "read_only": 1, "reqd": 1},
     {"fieldname": "attempt_revision", "fieldtype": "Int", "label": "Attempt Revision", "read_only": 1, "reqd": 1},
     {"fieldname": "ownership_revision", "fieldtype": "Int", "label": "Ownership Revision", "read_only": 1, "reqd": 1},

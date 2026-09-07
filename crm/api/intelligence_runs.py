@@ -32,7 +32,7 @@ def get_analysis_run(run_type: str, run_id: str):
 	if run_type not in intelligence_runs.RUN_TYPES.values():
 		frappe.throw("Invalid Intelligence Run type.", frappe.ValidationError)
 	run = frappe.get_doc(run_type, run_id)
-	target_type, target = ("CRM Student", run.student) if run_type == "CRM Student Analysis Run" else ("CRM High School", run.high_school)
+	target_type, target = ("CRM Lead", run.student) if run_type == "CRM Student Analysis Run" else ("CRM High School", run.high_school)
 	if not frappe.has_permission(target_type, "read", target):
 		frappe.throw("Intelligence Run target is outside current scope.", frappe.PermissionError)
 	return intelligence_runs.public_run_payload(run)

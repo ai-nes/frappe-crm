@@ -49,7 +49,7 @@ def evaluate_admission_event(*, student: str, revision: int, source_event: str,
 	if not student or not source_event:
 		return ""
 	_mode()  # fail closed on an invalid rollout mode before any write
-	current = frappe.db.sql("SELECT student_context_revision FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,), as_dict=True)
+	current = frappe.db.sql("SELECT student_context_revision FROM `tabCRM Lead` WHERE name=%s FOR UPDATE", (student,), as_dict=True)
 	if not current:
 		return ""
 	current_revision = int(current[0].student_context_revision or 0)
@@ -61,7 +61,7 @@ def evaluate_admission_event(*, student: str, revision: int, source_event: str,
 
 
 def _student_for(doc):
-	return doc.get("student") or (frappe.db.get_value("CRM Contact", doc.get("crm_contact"), "student") if doc.get("crm_contact") else None)
+	return doc.get("student") or (frappe.db.get_value("CRM Student", doc.get("crm_contact"), "student") if doc.get("crm_contact") else None)
 
 
 def admit_interaction(doc, method=None):

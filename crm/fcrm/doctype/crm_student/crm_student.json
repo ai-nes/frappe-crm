@@ -3,128 +3,131 @@
  "allow_import": 1,
  "allow_rename": 0,
  "autoname": "naming_series:",
- "creation": "2026-05-30 00:00:00.000000",
+ "creation": "2026-06-03 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
   "naming_series",
-  "student_name",
+  "full_name",
+  "lead_code",
+  "source_lead",
+  "converted_at",
   "phone",
   "email",
+  "other_email",
   "gender",
   "date_of_birth",
+  "id_number",
+  "id_issued_date",
+  "id_issued_place",
+  "current_grade",
+  "study_stage",
+  "ward",
+  "chatwoot_contact_id",
   "col_break_1",
   "enrollment_status",
   "lifecycle_stage",
+  "readiness_level",
+  "quality_bucket",
+  "is_verified_lead",
   "assigned_to",
   "owner_staff",
   "owning_team",
-  "owning_pool",
-  "latest_score",
-  "section_student_360",
-  "assessment_status",
-  "assessment_revision",
-  "interest_level",
-  "fit_level",
-  "primary_barrier",
-  "student_context_revision",
-  "enrollment_date",
-  "section_links",
-  "province",
-  "ward",
+  "student",
+  "student_identity",
+  "admission_year",
+  "section_parents",
+  "parent_name",
+  "col_break_parents",
+  "parent_phone",
+  "section_academic",
   "high_school",
-  "current_grade",
-  "study_stage",
-  "col_break_2",
-  "branch",
+  "province",
+  "col_break_profile",
   "major",
   "aspiration",
-  "step",
+  "section_enrollment",
   "source",
-  "advertising_channel",
-  "admission_year",
-  "section_academic_history",
-  "cohort_start_year",
-  "education_program",
-  "graduation_score",
-  "transcript_score",
-  "col_break_academic",
-  "cohort_end_year",
-  "admission_method",
-  "english_converted_score",
-  "total_score",
-  "section_academic_tables",
-  "academic_results",
-  "language_certificates",
-  "section_parent",
-  "alt_name",
-  "col_break_parent",
-  "alt_phone",
-  "alt_address",
-  "privacy_status",
+  "platform",
+  "col_break_enrollment",
+  "branch",
+  "first_contact_time",
+  "sla_status",
+  "sla_started_at",
+  "next_follow_up",
+  "col_break_follow_up",
+  "decision_maker",
+  "preferred_contact_channel",
+  "section_consent",
+  "is_opted_out",
+  "is_test_record",
+  "email_bounced",
   "section_status_history",
   "status_change_reason",
   "status_change_log",
   "section_assignment_history",
   "assignment_log",
   "section_notes",
-  "notes",
-  "section_identity",
-  "identity",
-  "case_key",
-  "ownership_revision",
-  "assignment_priority",
-  "engagement_revision",
-  "lifecycle_revision",
-  "student_context_revision",
-  "sla_evidence_state",
-  "sla_evidence_observed_at",
-  "score_input_revision",
-  "applied_score_input_revision",
-  "applied_policy_revision",
-  "intake_integrity_state",
-  "intake_quarantine_reason",
-  "id_number",
-  "id_issued_date",
-  "id_issued_place",
-  "import_source_id"
+  "notes"
  ],
  "fields": [
- {
-  "default": "normal",
-  "fieldname": "assignment_priority",
-  "fieldtype": "Select",
-  "label": "Assignment Priority",
-  "options": "low\nnormal\nhigh\nurgent"
- },
- {
-   "default": "ENR-.YYYY.-",
+  {
+   "default": "CRMC-.YYYY.-",
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Series",
-   "options": "ENR-.YYYY.-"
+   "options": "CRMC-.YYYY.-"
   },
   {
-   "fieldname": "student_name",
+   "fieldname": "full_name",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Student Name",
-   "reqd": 1
+   "label": "Full Name",
+   "reqd": 0
+  },
+  {
+   "fieldname": "lead_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Lead Code",
+   "read_only": 1
+  },
+  {
+   "fieldname": "source_lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Source Lead",
+   "options": "CRM Lead",
+   "read_only": 1
+  },
+  {
+   "fieldname": "converted_at",
+   "fieldtype": "Datetime",
+   "label": "Converted At",
+   "read_only": 1
   },
   {
    "fieldname": "phone",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Phone",
-   "options": "Phone"
+   "options": "Phone",
+   "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
   },
   {
    "fieldname": "email",
    "fieldtype": "Data",
    "label": "Email",
+   "options": "Email",
+   "description": "Optional identity observation. It is not globally unique; identity resolution is authoritative."
+  },
+  {
+   "fieldname": "other_email",
+   "fieldtype": "Data",
+   "label": "Other Email",
    "options": "Email"
   },
   {
@@ -139,17 +142,59 @@
    "label": "Date of Birth"
   },
   {
+   "fieldname": "id_number",
+   "fieldtype": "Data",
+   "label": "ID Number"
+  },
+  {
+   "fieldname": "id_issued_date",
+   "fieldtype": "Date",
+   "label": "ID Issued Date"
+  },
+  {
+   "fieldname": "id_issued_place",
+   "fieldtype": "Data",
+   "label": "ID Issued Place"
+  },
+  {
+   "fieldname": "current_grade",
+   "fieldtype": "Select",
+   "label": "Current Grade",
+   "options": "10\n11\n12\npost_exam"
+  },
+  {
+   "fieldname": "study_stage",
+   "fieldtype": "Select",
+   "label": "Study Stage",
+   "options": "grade_10\ngrade_11\ngrade_12_h1\ngrade_12_h2\npost_exam"
+  },
+  {
+   "fieldname": "ward",
+   "fieldtype": "Link",
+   "label": "Ward",
+   "options": "CRM Ward"
+  },
+  {
+   "description": "Server-managed Chatwoot contact identifier used by the signed message webhook.",
+   "fieldname": "chatwoot_contact_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Chatwoot Contact ID",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
    "fieldname": "col_break_1",
    "fieldtype": "Column Break"
   },
   {
-   "default": "NEW",
    "fieldname": "enrollment_status",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Enrollment Status",
-   "options": "CRM Enrollment Status"
+   "options": "CRM Enrollment Status",
+   "default": "PROSPECT"
   },
   {
    "fieldname": "lifecycle_stage",
@@ -162,14 +207,37 @@
    "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
   },
   {
-    "fieldname": "assigned_to",
-    "read_only": 1,
+   "fieldname": "readiness_level",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Readiness Level",
+   "options": "\nLevel 0 - Chưa xác định\nLevel 1 - Đang tìm hiểu\nLevel 2 - Đang so sánh\nLevel 3 - Có ý định nộp hồ sơ\nLevel 4 - Sẵn sàng nhập học",
+   "default": ""
+  },
+  {
+   "fieldname": "quality_bucket",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead Quality Bucket",
+   "options": "\nHot\nWarm\nCool\nSai số\nKhông liên lạc được\nKhông quan tâm"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_verified_lead",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Verified Lead"
+  },
+  {
+   "fieldname": "assigned_to",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assigned To (Legacy Projection)",
-   "options": "CRM Staff",
-   "description": "Compatibility projection of owner_staff. Ownership commands are the authority."
+   "label": "Assigned To",
+   "options": "CRM Staff"
   },
   {
    "fieldname": "owner_staff",
@@ -187,87 +255,58 @@
    "label": "Owning Team",
    "options": "CRM Team",
    "read_only": 1,
-   "description": "Compatibility projection of a named Student Pool's Team. Ownership commands are the authority."
+   "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
   },
   {
-   "fieldname": "owning_pool",
+   "fieldname": "student",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Owning Student Pool",
-   "options": "CRM Student Pool",
+   "label": "Student",
+   "options": "CRM Lead",
    "read_only": 1,
-   "description": "Canonical pool identity for routing and SLA scope. Ownership commands are the authority."
+   "description": "Legacy compatibility link only. Direct Lead.student is the canonical relationship; leave blank for standalone Student imports."
   },
   {
-   "fieldname": "latest_score",
-   "fieldtype": "Float",
-   "in_list_view": 1,
-   "label": "Latest Score",
-   "read_only": 1
-  },
-  {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_student_360",
-   "fieldtype": "Section Break",
-   "label": "Student 360 Assessment"
-  },
-  {
-   "fieldname": "assessment_status",
-   "fieldtype": "Select",
+   "fieldname": "student_identity",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Assessment Status",
-   "options": "\nproposed\nconfirmed\nsuperseded\nrejected",
-   "read_only": 1,
-   "description": "Read-only projection of the canonical CRM Student Assessment record."
+   "label": "Student Identity",
+   "options": "CRM Student Identity",
+   "description": "Nullable during legacy migration; new conversion Contacts must resolve to this identity."
   },
   {
-   "fieldname": "assessment_revision",
-   "fieldtype": "Int",
-   "label": "Assessment Revision",
-   "read_only": 1
-  },
-  {
-   "fieldname": "interest_level",
-   "fieldtype": "Select",
-   "label": "Interest",
-   "options": "\nHigh\nMedium\nLow\nUnknown",
-   "read_only": 1
-  },
-  {
-   "fieldname": "fit_level",
-   "fieldtype": "Select",
-   "label": "Fit",
-   "options": "\nHigh\nMedium\nLow\nUnknown",
-   "read_only": 1
-  },
-  {
-   "fieldname": "primary_barrier",
-   "fieldtype": "Select",
-   "label": "Primary Barrier",
-   "options": "\nCost\nCapability\nFamily\nInformation\nGeography\nCompetition\nNone\nUnknown",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "student_context_revision",
-   "fieldtype": "Int",
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Student Context Revision",
-   "read_only": 1,
-   "description": "Frappe-owned monotonic revision for material Student context changes. Never edit directly."
+   "in_standard_filter": 1,
+   "label": "Admission Year",
+   "options": "CRM Admission Year"
   },
   {
-   "fieldname": "enrollment_date",
-   "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "Enrollment Date"
-  },
-  {
-   "fieldname": "section_links",
+   "fieldname": "section_parents",
    "fieldtype": "Section Break",
-   "label": "Links"
+   "label": "Parent Information"
+  },
+  {
+   "fieldname": "parent_name",
+   "fieldtype": "Data",
+   "label": "Parent Name"
+  },
+  {
+   "fieldname": "col_break_parents",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "parent_phone",
+   "fieldtype": "Data",
+   "label": "Parent Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "section_academic",
+   "fieldtype": "Section Break",
+   "label": "Student Profile"
   },
   {
    "fieldname": "high_school",
@@ -278,24 +317,6 @@
    "options": "CRM High School"
   },
   {
-   "fieldname": "current_grade",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Current Grade",
-   "options": "10\n11\n12\npost_exam",
-   "reqd": 0,
-   "description": "Current learning stage supplied by the student or staff. Use post_exam after the final high-school exam and before enrollment; leave blank when unknown. Do not infer from cohort dates."
-  },
-  {
-   "fieldname": "study_stage",
-   "fieldtype": "Select",
-   "in_standard_filter": 1,
-   "label": "Study Stage",
-   "options": "grade_10\ngrade_11\ngrade_12_h1\ngrade_12_h2\npost_exam",
-   "reqd": 0,
-   "description": "Academic recruitment stage supplied by the student or staff. Grade 12 is split by semester for stage-appropriate content; never infer from cohort dates."
-  },
-  {
    "fieldname": "province",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -303,27 +324,10 @@
    "options": "CRM Province"
   },
   {
-   "fieldname": "ward",
-   "fieldtype": "Link",
-   "label": "Ward",
-   "options": "CRM Ward"
-  },
-  {
-   "fieldname": "col_break_2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "branch",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Campus",
-   "options": "CRM Campus"
-  },
-  {
    "fieldname": "major",
    "fieldtype": "Link",
-   "label": "Major",
+   "in_standard_filter": 1,
+   "label": "Applied Major",
    "options": "CRM Major"
   },
   {
@@ -334,134 +338,120 @@
    "options": "CRM Aspiration"
   },
   {
-   "default": "1",
-   "fieldname": "step",
-   "fieldtype": "Int",
-   "label": "Registration Step"
+   "fieldname": "col_break_profile",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_enrollment",
+   "fieldtype": "Section Break",
+   "label": "Enrollment Information"
   },
   {
    "fieldname": "source",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Source",
    "options": "CRM Lead Source"
   },
   {
-   "fieldname": "advertising_channel",
-   "fieldtype": "Data",
-   "label": "Advertising Channel"
-  },
-  {
-   "fieldname": "admission_year",
-   "fieldtype": "Link",
-   "label": "Admission Year",
-   "options": "CRM Admission Year"
-  },
-  {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_academic_history",
-   "fieldtype": "Section Break",
-   "label": "Academic & Scores"
-  },
-  {
-   "fieldname": "cohort_start_year",
-   "fieldtype": "Int",
-   "label": "Cohort Start Year"
-  },
-  {
-   "fieldname": "education_program",
+   "fieldname": "platform",
    "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Education Program",
-   "options": "CRM Education Program"
+   "label": "Platform",
+   "options": "CRM Platform"
   },
   {
-   "fieldname": "graduation_score",
-   "fieldtype": "Float",
-   "label": "Graduation Score"
-  },
-  {
-   "fieldname": "transcript_score",
-   "fieldtype": "Float",
-   "label": "Transcript Score"
-  },
-  {
-   "fieldname": "col_break_academic",
+   "fieldname": "col_break_enrollment",
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "cohort_end_year",
-   "fieldtype": "Int",
-   "label": "Cohort End Year"
-  },
-  {
-   "fieldname": "admission_method",
-   "fieldtype": "Select",
+   "fieldname": "branch",
+   "fieldtype": "Link",
    "in_standard_filter": 1,
-   "label": "Admission Method",
-   "options": "\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
+   "label": "Branch",
+   "options": "CRM Campus"
   },
   {
-   "fieldname": "english_converted_score",
-   "fieldtype": "Float",
-   "label": "English Score"
+   "fieldname": "first_contact_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "First Contact Time"
   },
   {
-   "fieldname": "total_score",
-   "fieldtype": "Float",
-   "label": "Total Score"
-  },
-  {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_academic_tables",
-   "fieldtype": "Section Break",
-   "label": "Results"
-  },
-  {
-   "fieldname": "academic_results",
-   "fieldtype": "Table",
-   "label": "Academic Results",
-   "options": "CRM Student Academic Result"
-  },
-  {
-   "fieldname": "language_certificates",
-   "fieldtype": "Table",
-   "label": "Language Certificates",
-   "options": "CRM Student Language Certificate"
-  },
-  {
-   "fieldname": "section_parent",
-   "fieldtype": "Section Break",
-   "label": "Parent Info"
-  },
-  {
-   "fieldname": "alt_name",
-   "fieldtype": "Data",
-   "label": "Parent/Contact Name"
-  },
-  {
-   "fieldname": "col_break_parent",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "alt_phone",
-   "fieldtype": "Data",
-   "label": "Parent Phone",
-   "options": "Phone"
-  },
-  {
-   "fieldname": "alt_address",
-   "fieldtype": "Text",
-   "label": "Parent Address"
-  },
-  {
-   "fieldname": "privacy_status",
+   "fieldname": "sla_status",
    "fieldtype": "Select",
-   "label": "Privacy Status",
-   "options": "unknown\ngranted\nopted_out\nwithdrawn\nexpired",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "SLA Status",
+   "options": "\nĐúng SLA\nSắp quá hạn\nQuá SLA",
    "read_only": 1,
-   "description": "Read-only projection of the latest consent event."
+   "description": "Computed on a schedule from sla_started_at/first_contact_time — see crm.api.sla. Do not edit directly."
+  },
+  {
+   "fieldname": "sla_started_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "SLA Started At",
+   "description": "Set once when this lead is first assigned to a staff member — the response-window countdown start (see crm.api.sla). Do not edit directly."
+  },
+  {
+   "fieldname": "next_follow_up",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Next Follow-up"
+  },
+  {
+   "fieldname": "col_break_follow_up",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "decision_maker",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Decision Maker",
+   "options": "\nStudent\nParent\nBoth"
+  },
+  {
+   "fieldname": "preferred_contact_channel",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Preferred Contact Channel",
+   "options": "\nEmail\nZalo\nPhone"
+  },
+  {
+   "fieldname": "section_consent",
+   "fieldtype": "Section Break",
+   "label": "Consent & Compliance"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_opted_out",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Opted Out",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_test_record",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Test Record",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
+  },
+  {
+   "default": "0",
+   "fieldname": "email_bounced",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Email Bounced",
+   "read_only": 1,
+   "description": "Managed by CRM Contact Consent Event — do not edit directly"
   },
   {
    "fieldname": "section_status_history",
@@ -500,221 +490,45 @@
   },
   {
    "fieldname": "notes",
-   "fieldtype": "Text",
+   "fieldtype": "Text Editor",
    "label": "Notes"
-  },
-  {
-   "collapsed": 1,
-   "collapsible": 1,
-   "fieldname": "section_identity",
-   "fieldtype": "Section Break",
-   "label": "Identity"
-  },
-  {
-   "fieldname": "identity",
-   "fieldtype": "Link",
-   "label": "Student Identity",
-   "options": "CRM Student Identity",
-   "read_only": 1,
-   "description": "Canonical identity resolved by Student Intake; never inferred from a weak phone/email match."
-  },
-  {
-   "fieldname": "case_key",
-   "fieldtype": "Link",
-   "label": "Admission Case Key",
-   "options": "CRM Student Case Key",
-   "read_only": 1,
-   "description": "Physical identity + admission cycle enforcement record."
-  },
-  {
-   "default": "0",
-   "fieldname": "ownership_revision",
-   "fieldtype": "Int",
-   "label": "Ownership Revision",
-   "read_only": 1,
-   "description": "Optimistic-concurrency revision incremented by ownership commands."
-  },
-  {
-   "default": "0",
-   "fieldname": "engagement_revision",
-   "fieldtype": "Int",
-   "label": "Engagement Revision",
-   "read_only": 1,
-   "description": "Optimistic-concurrency revision incremented by Student outcome commands."
-  },
-  {
-   "default": "0",
-   "fieldname": "lifecycle_revision",
-   "fieldtype": "Int",
-   "label": "Lifecycle Revision",
-   "read_only": 1,
-   "description": "Optimistic-concurrency revision incremented by lifecycle commands."
-  },
-  {
-   "default": "0",
-   "fieldname": "student_context_revision",
-   "fieldtype": "Int",
-   "label": "Student Context Revision",
-   "read_only": 1,
-   "description": "Monotonic revision incremented on any material Student-context fact change. Backing field for CRM Student Revision Journal and the crm-agents v2 outbox/high-water contract."
-  },
-  {
-   "default": "unknown",
-   "fieldname": "sla_evidence_state",
-   "fieldtype": "Select",
-   "label": "SLA Evidence State",
-   "options": "known\nstale\nunknown",
-   "read_only": 1,
-   "description": "Set by crm.api.sla.recompute_sla_statuses(); never fabricated when SLA status is not resolvable."
-  },
-  {
-   "fieldname": "sla_evidence_observed_at",
-   "fieldtype": "Datetime",
-   "label": "SLA Evidence Observed At",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "score_input_revision",
-   "fieldtype": "Int",
-   "label": "Score Input Revision",
-   "read_only": 1,
-   "description": "Monotonic revision incremented only on a scoring-relevant fact change -- distinct from student_context_revision, which covers all material Student-context facts."
-  },
-  {
-   "default": "0",
-   "fieldname": "applied_score_input_revision",
-   "fieldtype": "Int",
-   "label": "Applied Score Input Revision",
-   "read_only": 1,
-   "description": "The (score_input_revision, policy_revision) tuple actually used to compute the current latest_score -- set only by append_score_if_current's CAS write, never by a generic Student save."
-  },
-  {
-   "default": "0",
-   "fieldname": "applied_policy_revision",
-   "fieldtype": "Int",
-   "label": "Applied Policy Revision",
-   "read_only": 1
-  },
-  {
-   "default": "review_required",
-   "fieldname": "intake_integrity_state",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Intake Integrity State",
-   "options": "resolved\nreview_required\nquarantined\nlegacy",
-   "read_only": 1,
-   "description": "Set by the signed intake/migration workflow; not a generic edit field."
-  },
-  {
-   "fieldname": "intake_quarantine_reason",
-   "fieldtype": "Small Text",
-   "label": "Intake Quarantine Reason",
-   "read_only": 1,
-   "description": "Redacted reason/category for remediation; raw PII never belongs here."
-  },
-  {
-   "fieldname": "id_number",
-   "fieldtype": "Data",
-   "label": "ID Number"
-  },
-  {
-   "fieldname": "id_issued_date",
-   "fieldtype": "Date",
-   "label": "ID Issued Date"
-  },
-  {
-   "fieldname": "id_issued_place",
-   "fieldtype": "Data",
-   "label": "ID Issued Place"
-  },
-  {
-   "fieldname": "import_source_id",
-   "fieldtype": "Data",
-   "label": "Source ID"
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "kanban_field": "enrollment_status",
+ "links": [
+  {
+   "link_doctype": "CRM Lead",
+   "link_fieldname": "student",
+   "group": "Leads"
+  }
+ ],
  "modified": "2026-06-15 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Student",
  "naming_rule": "Naming Series",
- "naming_series_options": "ENR-.YYYY.-",
+ "naming_series_options": "CRMC-.YYYY.-",
  "owner": "Administrator",
  "permissions": [
-  {
-   "export": 1,
-   "read": 1,
-   "role": "Admissions Director"
-  },
-  {
-   "read": 1,
-   "role": "AI Service"
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "read": 1,
-   "role": "CEO",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "CTV Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Lead Marketing"
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "read": 1,
-   "role": "Lead Promoter",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "read": 1,
-   "role": "Lead Sale",
-   "write": 1
-  },
-  {
-   "read": 1,
-   "role": "Marketing"
-  },
-  {
-   "create": 1,
-   "read": 1,
-   "role": "Promoter"
-  },
-  {
-   "create": 1,
-   "read": 1,
-   "role": "Sale",
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "export": 1,
-   "read": 1,
-   "role": "System Manager",
-   "write": 1
-  }
+   {"role":"Administrator","read":1,"write":1,"create":1,"delete":1},
+   {"role":"Admissions Director","read":1,"write":1,"create":1,"delete":1},
+   {"role":"CTV Sale","read":1,"write":1},
+   {"role":"Lead Marketing","read":1},
+   {"role":"Lead Promoter","read":1,"write":1,"create":1,"delete":1},
+   {"role":"Lead Sale","read":1,"write":1,"create":1,"delete":1},
+   {"role":"Marketing","read":1},
+   {"role":"Promoter","read":1,"create":1},
+   {"role":"Sale","read":1,"write":1,"create":1},
+   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
+ "search_fields": "phone,email,high_school",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "student_name",
+ "title_field": "full_name",
  "track_changes": 1,
- "translated_doctype": 1,
- "search_fields": "student_name,phone,email"
+ "translated_doctype": 1
 }

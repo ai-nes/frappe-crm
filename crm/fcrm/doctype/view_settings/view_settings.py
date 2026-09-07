@@ -300,7 +300,7 @@ def fetch_and_update_kanban_columns(name: str | int):
 
 
 def get_route_name(doctype):
-	# Example: "CRM Contact" -> "CRM Contacts"
+	# Example: "CRM Student" -> "CRM Students"
 	if doctype.startswith("CRM "):
 		doctype = doctype[4:]
 

@@ -13,7 +13,7 @@ from crm.patches.v1_0.setup_crm_permissions import get_doctype_perms
 class TestSetupCrmPermissions(FrappeTestCase):
 	def test_permissions_are_emitted_from_the_canonical_policy_matrix(self):
 		student_permissions = {
-			permission["role"]: permission for permission in get_doctype_perms()["CRM Student"]
+			permission["role"]: permission for permission in get_doctype_perms()["CRM Lead"]
 		}
 
 		self.assertEqual(student_permissions["Sale"], {"role": "Sale", "read": 1, "write": 1, "create": 1})
@@ -45,7 +45,7 @@ class TestApplyManagedDocpermsIdempotentSync(FrappeTestCase):
 	"""
 
 	TEST_ROLE = "_Test Docperm Sync Role"
-	TEST_DOCTYPE = "CRM Student"
+	TEST_DOCTYPE = "CRM Lead"
 	OTHER_DOCTYPE = "CRM Lost Reason"
 
 	def setUp(self):

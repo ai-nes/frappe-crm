@@ -164,7 +164,7 @@ def _weekly_observations(campaign_index: int) -> list[dict[str, int]]:
 
 def _ensure_attributions(campaigns: list[str], year: str) -> int:
 	students = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"import_source_id": ["like", "crm-demo-showcase:%"]},
 		pluck="name",
 		order_by="name asc",

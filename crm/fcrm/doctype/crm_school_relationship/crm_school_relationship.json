@@ -4,7 +4,7 @@
  "fields": [
   {"default": "SCHR-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "SCHR-.YYYY.-"},
   {"fieldname": "high_school", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "High School", "options": "CRM High School", "reqd": 1},
-  {"fieldname": "contact", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Contact", "options": "CRM Contact", "reqd": 1},
+  {"fieldname": "contact", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Contact", "options": "CRM Student", "reqd": 1},
   {"fieldname": "relationship_level", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Relationship Level", "options": "Prospect\nEngaged\nPartner\nStrategic", "reqd": 1},
   {"fieldname": "relationship_score", "fieldtype": "Percent", "in_list_view": 1, "label": "Relationship Score"},
   {"default": "0", "fieldname": "is_primary", "fieldtype": "Check", "in_list_view": 1, "label": "Primary Relationship"},

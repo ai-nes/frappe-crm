@@ -35,20 +35,22 @@ class TestAiExposureAuthority(FrappeTestCase):
 		already sees in the CRM desk UI."""
 		fields = ["name", "student_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
 		self.assertEqual(
-			_project_ai_fields("CRM Student", fields),
+			_project_ai_fields("CRM Lead", fields),
 			["email", "latest_score", "name", "phone", "student_name"],
 		)
 
 	def test_student_projection_excludes_fields_outside_the_operational_pii_ceiling(self):
 		fields = ["name", "latest_score", "date_of_birth", "id_number"]
 		self.assertEqual(
-			_project_ai_fields("CRM Student", fields),
+			_project_ai_fields("CRM Lead", fields),
 			["latest_score", "name"],
 		)
 
 	def test_student_dto_filters_cannot_target_hidden_pii(self):
 		allowed = {"name", "latest_score"}
-		self.assertEqual(_safe_student_filters([["latest_score", "=", 0.8]], allowed), [["latest_score", "=", 0.8]])
+		self.assertEqual(
+			_safe_student_filters([["latest_score", "=", 0.8]], allowed), [["latest_score", "=", 0.8]]
+		)
 		with self.assertRaises(frappe.PermissionError):
 			_safe_student_filters([["phone", "=", "0900000000"]], allowed)
 
@@ -85,11 +87,16 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 		email = f"_test_manifest_{frappe.scrub(role)}@example.com"
 		if frappe.db.exists("User", email):
 			frappe.delete_doc("User", email, force=True)
-		user = frappe.get_doc({
-			"doctype": "User", "email": email, "first_name": "Manifest",
-			"user_type": "System User", "send_welcome_email": 0,
-			"roles": [{"role": role}],
-		}).insert(ignore_permissions=True)
+		user = frappe.get_doc(
+			{
+				"doctype": "User",
+				"email": email,
+				"first_name": "Manifest",
+				"user_type": "System User",
+				"send_welcome_email": 0,
+				"roles": [{"role": role}],
+			}
+		).insert(ignore_permissions=True)
 		self._created_users.append(user.name)
 		return user.name
 
@@ -125,10 +132,15 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 		frappe.set_user(self._user("Sale"))
 		before = get_capability_revision()
 		role = frappe.get_doc("Role", "Sale")
-		role.append("custom_ai_capability_grants", {"grant_type": "data_scope", "value": "own_campus"})
-		role.save(ignore_permissions=True)
-		after = get_capability_revision()
-		self.assertNotEqual(before["revision"], after["revision"])
+		original_home_page = role.home_page
+		try:
+			role.home_page = f"{original_home_page or '/app'}?capability_revision_probe=1"
+			role.save(ignore_permissions=True)
+			after = get_capability_revision()
+			self.assertNotEqual(before["revision"], after["revision"])
+		finally:
+			role.home_page = original_home_page
+			role.save(ignore_permissions=True)
 
 	def test_capability_revision_denies_system_manager(self):
 		from crm.api.capability import get_capability_revision

@@ -68,7 +68,7 @@ class TestApplyPhase2RolePolicy(FrappeTestCase):
 			frappe.conf.pop(PERMISSION_PROFILE_KILL_SWITCH_CONFIG_KEY, None)
 
 		managed_doctypes = {call.args[1]["parent"] for call in delete.call_args_list}
-		self.assertIn("CRM Student", managed_doctypes)
+		self.assertIn("CRM Lead", managed_doctypes)
 		self.assertNotIn("CRM Staff", managed_doctypes)
 		self.assertIn("CRM Recommendation", managed_doctypes)
 		for call in delete.call_args_list:

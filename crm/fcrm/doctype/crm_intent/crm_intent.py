@@ -60,7 +60,7 @@ class CRMIntent(Document):
 				"label": "Student",
 				"type": "Link",
 				"key": "student",
-				"options": "CRM Student",
+				"options": "CRM Lead",
 				"width": "14rem",
 			},
 			{

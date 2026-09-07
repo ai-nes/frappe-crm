@@ -28,8 +28,15 @@ class TestStudentDemoContext(FrappeTestCase):
 				},
 			]
 		}
-		with patch("crm.fcrm.student_context._scholarship_interest", return_value={"label": "Scholarship", "notes": "Mục tiêu học bổng: 50%"}), patch(
-			"crm.fcrm.student_context._next_action", return_value={"title": "Follow-up hồ sơ", "due_date": "2026-08-28"}
+		with (
+			patch(
+				"crm.fcrm.student_context._scholarship_interest",
+				return_value={"label": "Scholarship", "notes": "Mục tiêu học bổng: 50%"},
+			),
+			patch(
+				"crm.fcrm.student_context._next_action",
+				return_value={"title": "Follow-up hồ sơ", "due_date": "2026-08-28"},
+			),
 		):
 			context = _demo_context("STU-1", attribution)
 
@@ -37,13 +44,14 @@ class TestStudentDemoContext(FrappeTestCase):
 		self.assertEqual(context["event"]["status"], "Checked-in")
 		self.assertEqual(context["scholarship"]["notes"], "Mục tiêu học bổng: 50%")
 		self.assertEqual(context["next_action"]["summary"], "Follow-up hồ sơ")
-		self.assertEqual([item["summary"] for item in context["activity"]], ["Invited to Open Day 2026", "Checked in at Open Day HCM"])
+		self.assertEqual([item["summary"] for item in context["activity"]], ["Checked in at Open Day HCM"])
 		self.assertNotIn("reference_docname", str(context))
 		self.assertNotIn("reference_doctype", str(context))
 
 	def test_demo_context_omits_superseded_attribution_rows(self):
-		with patch("crm.fcrm.student_context._scholarship_interest", return_value=None), patch(
-			"crm.fcrm.student_context._next_action", return_value=None
+		with (
+			patch("crm.fcrm.student_context._scholarship_interest", return_value=None),
+			patch("crm.fcrm.student_context._next_action", return_value=None),
 		):
 			context = _demo_context(
 				"STU-1",

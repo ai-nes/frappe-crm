@@ -1039,7 +1039,7 @@ msgstr "Status Konverzacije"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-msgid "CRM Contacts"
+msgid "CRM Students"
 msgstr "Kontakti"
 
 #. Name of a DocType
@@ -1653,7 +1653,7 @@ msgstr "Poveži Sustav sa Podrškom Prodaje"
 msgid "Connect your Email"
 msgstr "Povežite e-poštu"
 
-#. Label of the contact (Link) field in DocType 'CRM Contacts'
+#. Label of the contact (Link) field in DocType 'CRM Students'
 #. Label of the contact (Link) field in DocType 'CRM Deal'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -2648,7 +2648,7 @@ msgstr "Uređivanje Događaja"
 msgid "Editing Row {0}"
 msgstr "Uređivanje Reda {0}"
 
-#. Label of the email (Data) field in DocType 'CRM Contacts'
+#. Label of the email (Data) field in DocType 'CRM Students'
 #. Label of the email (Data) field in DocType 'Invitation'
 #. Label of the email (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3453,7 +3453,7 @@ msgstr "Od Korisnika"
 msgid "Fulfilled"
 msgstr "Ispunjeno"
 
-#. Label of the full_name (Data) field in DocType 'CRM Contacts'
+#. Label of the full_name (Data) field in DocType 'CRM Students'
 #. Label of the lead_name (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
@@ -3472,7 +3472,7 @@ msgstr "Konverzija lijevka"
 msgid "GMT+5:30"
 msgstr "GMT+5:30"
 
-#. Label of the gender (Link) field in DocType 'CRM Contacts'
+#. Label of the gender (Link) field in DocType 'CRM Students'
 #. Label of the gender (Link) field in DocType 'CRM Deal'
 #. Label of the gender (Link) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3941,7 +3941,7 @@ msgstr "Je li ERPNext instaliran na drugom mjestu?"
 msgid "Is Group"
 msgstr "Grupa"
 
-#. Label of the is_primary (Check) field in DocType 'CRM Contacts'
+#. Label of the is_primary (Check) field in DocType 'CRM Students'
 #. Label of the is_primary (Check) field in DocType 'Telephony Phone'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/telephony_phone/telephony_phone.json
@@ -4581,7 +4581,7 @@ msgstr "Nedostaju obavezna polja: {0}"
 msgid "Mobile App Installation"
 msgstr "Instalacija mobilne aplikacije"
 
-#. Label of the mobile_no (Data) field in DocType 'CRM Contacts'
+#. Label of the mobile_no (Data) field in DocType 'CRM Students'
 #. Label of the mobile_no (Data) field in DocType 'CRM Lead'
 #. Label of the mobile_no (Data) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -5437,7 +5437,7 @@ msgstr "Osoba"
 msgid "Personal Mobile No."
 msgstr "Broj Osobnog Mobitela"
 
-#. Label of the phone (Data) field in DocType 'CRM Contacts'
+#. Label of the phone (Data) field in DocType 'CRM Students'
 #. Label of the phone (Data) field in DocType 'CRM Lead'
 #. Option for the 'Device' (Select) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json

@@ -7,6 +7,7 @@ there rather than replacing the command contract with an unfaithful mock.
 
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 try:
 	import frappe
@@ -26,16 +27,20 @@ class TestStudentConversionCommand(unittest.TestCase):
 	def test_conversion_is_disabled_by_default(self):
 		from crm.fcrm.student_conversion import StudentConversionError, convert_student
 
-		with self.assertRaises(StudentConversionError) as ctx:
+		with (
+			patch("crm.fcrm.student_conversion.enabled", return_value=False),
+			self.assertRaises(StudentConversionError) as ctx,
+		):
 			convert_student(student="STU-1", expected_lifecycle_revision=1, idempotency_key="cmd-1")
 		self.assertEqual(ctx.exception.code, "DISABLED")
 
 	def test_legacy_endpoint_cannot_synthesize_request_identity(self):
-		from crm.fcrm.doctype.crm_student.crm_student import CRMStudent
+		from crm.fcrm.doctype.crm_lead.crm_lead import CRMLead
 
-		student = CRMStudent({"doctype": "CRM Student", "name": "STU-1"})
+		student = CRMLead({"doctype": "CRM Lead", "name": "STU-1"})
 		with self.assertRaises(Exception):
 			student.convert_to_contact()
+
 	def test_command_exposes_exact_once_boundaries_for_replay_and_races(self):
 		from crm.fcrm import student_conversion
 
@@ -45,9 +50,45 @@ class TestStudentConversionCommand(unittest.TestCase):
 		self.assertIn("expected_lifecycle_revision", source)
 		self.assertIn("CONVERSION_DOCTYPE", source)
 
-	def test_only_enrolled_students_are_convertible(self):
+	def test_conversion_uses_explicit_lead_to_student_snapshot_map(self):
+		from crm.fcrm.student_conversion import _student_snapshot_values
+
+		lead = frappe._dict(
+			{
+				"student_name": "Mapped Lead",
+				"phone": "0911111199",
+				"email": "mapped@example.com",
+				"enrollment_status": "PROSPECT",
+				"source": "Website",
+				"latest_score": 98,
+				"student_context_revision": 7,
+				"notes": "Snapshot note",
+			}
+		)
+		identity = frappe._dict(name="ID-MAPPED")
+
+		values = _student_snapshot_values(lead, identity)
+
+		self.assertEqual(values["full_name"], "Mapped Lead")
+		self.assertEqual(values["phone"], "0911111199")
+		self.assertEqual(values["source"], "Website")
+		self.assertEqual(values["notes"], "Snapshot note")
+		self.assertNotIn("latest_score", values)
+		self.assertNotIn("student_context_revision", values)
+
+	def test_conversion_does_not_auto_match_by_identity(self):
 		from crm.fcrm import student_conversion
 
 		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
-		self.assertIn("Enrolled", source)
-		self.assertIn("INVALID_STATE", source)
+		self.assertNotIn("_contacts_for_identity", source)
+		self.assertIn("target_student", source)
+
+	def test_conversion_uses_the_three_business_requirements(self):
+		from crm.fcrm import student_conversion
+
+		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
+		self.assertIn("conversion_readiness", source)
+		self.assertIn("CONVERSION_CONDITION_FAILED", source)
+		self.assertIn("missing_id_number", Path(
+			student_conversion.__file__).with_name("conversion_readiness.py"
+		).read_text(encoding="utf-8"))

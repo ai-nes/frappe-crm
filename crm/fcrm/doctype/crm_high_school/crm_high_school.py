@@ -12,7 +12,7 @@ from crm.fcrm.school_domain_permissions import (
 
 class CRMHighSchool(Document):
 	_DEPENDENT_DOCTYPES = (
-		"CRM Contact",
+		"CRM Student",
 		"CRM High School Annual Snapshot",
 		"CRM High School Assignment",
 		"CRM School Activity",
@@ -21,7 +21,7 @@ class CRMHighSchool(Document):
 		"CRM School Intelligence Revision Journal",
 		"CRM School Relationship",
 		"CRM School Stakeholder",
-		"CRM Student",
+		"CRM Lead",
 		"CRM Student Geography Snapshot",
 	)
 

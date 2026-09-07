@@ -73,7 +73,12 @@
                 </span>
                 <Badge
                   v-if="interaction.interaction_type"
-                  :label="__(interaction.interaction_label || interaction.interaction_type)"
+                  :label="
+                    __(
+                      interaction.interaction_label ||
+                        interaction.interaction_type,
+                    )
+                  "
                   variant="subtle"
                 />
                 <Badge
@@ -96,7 +101,12 @@
           </div>
         </div>
         <div v-if="interactions.data?.next_cursor" class="pt-2">
-          <Button :label="__('Load more')" :loading="loadingMoreInteractions" :disabled="loadingMoreInteractions" @click="loadMoreInteractions" />
+          <Button
+            :label="__('Load more')"
+            :loading="loadingMoreInteractions"
+            :disabled="loadingMoreInteractions"
+            @click="loadMoreInteractions"
+          />
         </div>
         <div
           v-if="selectedInteraction"
@@ -108,43 +118,87 @@
                 {{ __('Interaction detail') }}
               </h3>
               <p class="mt-1 text-sm text-ink-gray-5">
-                {{ displayInteractionSummary(selectedInteraction.interaction?.summary) }}
+                {{
+                  displayInteractionSummary(
+                    selectedInteraction.interaction?.summary,
+                  )
+                }}
               </p>
             </div>
             <Badge
-              v-if="selectedInteraction.analysis?.state || selectedInteraction.interaction?.analysis_state"
-              :label="selectedInteraction.analysis?.state || selectedInteraction.interaction?.analysis_state"
+              v-if="
+                selectedInteraction.analysis?.state ||
+                selectedInteraction.interaction?.analysis_state
+              "
+              :label="
+                selectedInteraction.analysis?.state ||
+                selectedInteraction.interaction?.analysis_state
+              "
               variant="subtle"
             />
           </div>
           <div class="mt-4 grid gap-4 md:grid-cols-2">
             <div class="rounded bg-surface-gray-1 p-3">
-              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+              <div
+                class="text-xs font-medium uppercase tracking-wide text-ink-gray-5"
+              >
                 {{ __('Detected intents') }}
               </div>
-              <div v-if="selectedInteraction.intents?.length" class="mt-2 flex flex-col gap-2">
-                <div v-for="intent in selectedInteraction.intents" :key="intent.id" class="text-sm text-ink-gray-8">
-                  {{ displayIntentType(intent.term_id, intent.display_name || intent.semantic_key) }}
+              <div
+                v-if="selectedInteraction.intents?.length"
+                class="mt-2 flex flex-col gap-2"
+              >
+                <div
+                  v-for="intent in selectedInteraction.intents"
+                  :key="intent.id"
+                  class="text-sm text-ink-gray-8"
+                >
+                  {{
+                    displayIntentType(
+                      intent.term_id,
+                      intent.display_name || intent.semantic_key,
+                    )
+                  }}
                   <span class="text-ink-gray-5">{{ intent.role }}</span>
                 </div>
               </div>
-              <p v-else class="mt-2 text-sm text-ink-gray-5">{{ __('No scored intent was recorded.') }}</p>
+              <p v-else class="mt-2 text-sm text-ink-gray-5">
+                {{ __('No scored intent was recorded.') }}
+              </p>
             </div>
             <div class="rounded bg-surface-gray-1 p-3">
-              <div class="text-xs font-medium uppercase tracking-wide text-ink-gray-5">
+              <div
+                class="text-xs font-medium uppercase tracking-wide text-ink-gray-5"
+              >
                 {{ __('Score effects') }}
               </div>
-              <div v-if="selectedInteraction.score_effects?.length" class="mt-2 flex flex-col gap-2">
-                <div v-for="effect in selectedInteraction.score_effects" :key="effect.id" class="flex items-center justify-between text-sm text-ink-gray-8">
+              <div
+                v-if="selectedInteraction.score_effects?.length"
+                class="mt-2 flex flex-col gap-2"
+              >
+                <div
+                  v-for="effect in selectedInteraction.score_effects"
+                  :key="effect.id"
+                  class="flex items-center justify-between text-sm text-ink-gray-8"
+                >
                   <span>{{ __('Policy') }} {{ effect.policy_revision }}</span>
-                  <span class="font-medium">{{ formatSignedNumber(effect.score_change) }}</span>
+                  <span class="font-medium">{{
+                    formatSignedNumber(effect.score_change)
+                  }}</span>
                 </div>
               </div>
-              <p v-else class="mt-2 text-sm text-ink-gray-5">{{ __('No score change was recorded.') }}</p>
+              <p v-else class="mt-2 text-sm text-ink-gray-5">
+                {{ __('No score change was recorded.') }}
+              </p>
             </div>
           </div>
-          <div class="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-gray-5">
-            <span>{{ __('Source revision') }} {{ selectedInteraction.revision?.source_revision || 0 }}</span>
+          <div
+            class="mt-4 flex flex-wrap items-center gap-2 text-xs text-ink-gray-5"
+          >
+            <span
+              >{{ __('Source revision') }}
+              {{ selectedInteraction.revision?.source_revision || 0 }}</span
+            >
             <Button
               v-if="selectedInteraction.evidence_refs?.length"
               :label="__('View evidence')"
@@ -153,10 +207,24 @@
               @click="loadEvidence(selectedInteraction.evidence_refs[0].id)"
             />
           </div>
-          <div v-if="evidenceDetails.data" class="mt-3 rounded bg-surface-gray-1 p-3 text-sm text-ink-gray-7">
-            <div class="mb-1 font-medium">{{ __('Evidence') }} · {{ evidenceDetails.data.speaker_role || __('Unknown speaker') }}</div>
-            <p v-if="evidenceDetails.data.content" class="whitespace-pre-wrap">{{ evidenceDetails.data.content }}</p>
-            <p v-else>{{ evidenceDetails.data.content_redacted ? __('You do not have permission to view raw evidence.') : __('No raw evidence is available.') }}</p>
+          <div
+            v-if="evidenceDetails.data"
+            class="mt-3 rounded bg-surface-gray-1 p-3 text-sm text-ink-gray-7"
+          >
+            <div class="mb-1 font-medium">
+              {{ __('Evidence') }} ·
+              {{ evidenceDetails.data.speaker_role || __('Unknown speaker') }}
+            </div>
+            <p v-if="evidenceDetails.data.content" class="whitespace-pre-wrap">
+              {{ evidenceDetails.data.content }}
+            </p>
+            <p v-else>
+              {{
+                evidenceDetails.data.content_redacted
+                  ? __('You do not have permission to view raw evidence.')
+                  : __('No raw evidence is available.')
+              }}
+            </p>
           </div>
         </div>
         <EmptyState
@@ -819,14 +887,6 @@ function formatPercent(value) {
   return `${formatNumber(value)}%`
 }
 
-function formatPercentWeight(value) {
-  let number = Number(value || 0)
-  if (number > 0 && number <= 1) {
-    number *= 100
-  }
-  return `${formatNumber(number)}%`
-}
-
 function formatScoreDate(value) {
   if (!value) return ''
   let date = new Date(value)
@@ -929,8 +989,12 @@ function onInteractionInvalidated() {
   if (props.type === 'interactions') loadData()
 }
 
-onMounted(() => $socket?.on('crm_interaction_invalidated', onInteractionInvalidated))
-onUnmounted(() => $socket?.off('crm_interaction_invalidated', onInteractionInvalidated))
+onMounted(() =>
+  $socket?.on('crm_interaction_invalidated', onInteractionInvalidated),
+)
+onUnmounted(() =>
+  $socket?.off('crm_interaction_invalidated', onInteractionInvalidated),
+)
 
 async function loadMoreInteractions() {
   if (loadingMoreInteractions.value || !interactions.data?.next_cursor) return
@@ -949,7 +1013,9 @@ async function loadMoreInteractions() {
     const merged = [...existingItems, ...(payload?.items || [])]
     interactions.data = {
       ...payload,
-      items: Array.from(new Map(merged.map((item) => [item.id, item])).values()),
+      items: Array.from(
+        new Map(merged.map((item) => [item.id, item])).values(),
+      ),
     }
   } finally {
     loadingMoreInteractions.value = false
@@ -975,18 +1041,6 @@ watch(
 <script>
 export default {
   components: {
-    ScoreMetric: {
-      props: {
-        label: { type: String, required: true },
-        value: { type: [Number, String], default: 0 },
-      },
-      template: `
-        <div class="rounded bg-surface-gray-1 px-3 py-2">
-          <div class="text-xs text-ink-gray-5">{{ label }}</div>
-          <div class="mt-1 text-base font-medium text-ink-gray-9">{{ value || 0 }}</div>
-        </div>
-      `,
-    },
     ScoreBar: {
       props: {
         label: { type: String, required: true },

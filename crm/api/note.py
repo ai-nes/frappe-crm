@@ -1,4 +1,4 @@
-"""CRUD API for FCRM Note, scoped to CRM Student / CRM Contact.
+"""CRUD API for FCRM Note, scoped to CRM Lead / CRM Student.
 
 FCRM Note itself carries only global role permissions (no
 permission_query_conditions/has_permission hook), so a plain
@@ -13,14 +13,14 @@ from frappe import _
 
 from crm.api._pagination import paged_list
 
-ALLOWED_REFERENCE_DOCTYPES = {"CRM Student", "CRM Contact"}
+ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
 
 FIELDS = ["name", "content", "reference_doctype", "reference_docname", "owner", "creation", "modified"]
 
 
 def _check_reference_access(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Notes are only supported for CRM Student and CRM Contact."), frappe.ValidationError)
+		frappe.throw(_("Notes are only supported for CRM Student and CRM Student."), frappe.ValidationError)
 	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
 	reference_doc.check_permission(permission_type)
 	return reference_doc
@@ -37,7 +37,7 @@ def _with_owner_full_name(note):
 
 @frappe.whitelist()
 def list_notes(reference_doctype, reference_docname, search=None, start=0, page_length=20):
-	"""List FCRM Notes attached to one CRM Student or CRM Contact.
+	"""List FCRM Notes attached to one CRM Student or CRM Student.
 
 	Requires read access to that student/contact. Optional search matches content.
 	"""
@@ -73,7 +73,7 @@ def get_note(name):
 
 @frappe.whitelist(methods=["POST"])
 def create_note(reference_doctype, reference_docname, content=None):
-	"""Create an FCRM Note on a CRM Student or CRM Contact. Requires read
+	"""Create an FCRM Note on a CRM Student or CRM Student. Requires read
 	access to that student/contact and create access to FCRM Note.
 	"""
 	_check_reference_access(reference_doctype, reference_docname, "read")

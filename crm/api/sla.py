@@ -1,6 +1,6 @@
-"""Phase 3 SLA response-window tracking for CRM Contact. Replaces the
+"""Phase 3 SLA response-window tracking for CRM Student. Replaces the
 previously dead sla_status placeholder with real logic: the countdown starts
-when a lead is first assigned (CRM Contact.sla_started_at, set once in
+when a lead is first assigned (CRM Student.sla_started_at, set once in
 crm_contact.py's validate()) and is measured against first_contact_time —
 the moment a staff member logs the first real contact. Locked thresholds:
 30 minutes to "Sắp quá hạn" (warning), 2 hours to "Quá SLA" (breach).
@@ -35,7 +35,7 @@ def recompute_sla_statuses():
 	now = now_datetime()
 	frappe.db.sql(
 		f"""
-		update `tabCRM Contact`
+		update `tabCRM Student`
 		set sla_status = %(breach)s
 		where sla_started_at is not null
 		  and {_OPEN_STATUS_SUBQUERY}
@@ -45,7 +45,7 @@ def recompute_sla_statuses():
 	)
 	frappe.db.sql(
 		f"""
-		update `tabCRM Contact`
+		update `tabCRM Student`
 		set sla_status = %(warning)s
 		where sla_started_at is not null
 		  and {_OPEN_STATUS_SUBQUERY}
@@ -56,7 +56,7 @@ def recompute_sla_statuses():
 	)
 	frappe.db.sql(
 		f"""
-		update `tabCRM Contact`
+		update `tabCRM Student`
 		set sla_status = %(on_time)s
 		where sla_started_at is not null
 		  and {_OPEN_STATUS_SUBQUERY}
@@ -74,7 +74,7 @@ def materialize_sla_evidence():
 	only state/freshness metadata and never derives an SLA clock.
 	"""
 	rows = frappe.db.sql(
-		"""SELECT student, sla_status, modified FROM `tabCRM Contact`
+		"""SELECT student, sla_status, modified FROM `tabCRM Student`
 			WHERE student IS NOT NULL ORDER BY modified DESC""",
 		as_dict=True,
 	)
@@ -85,9 +85,9 @@ def materialize_sla_evidence():
 			continue
 		seen.add(row.student)
 		state = "known" if row.sla_status else "unknown"
-		previous = frappe.db.get_value("CRM Student", row.student, "sla_evidence_state")
+		previous = frappe.db.get_value("CRM Lead", row.student, "sla_evidence_state")
 		frappe.db.set_value(
-			"CRM Student",
+			"CRM Lead",
 			row.student,
 			{"sla_evidence_state": state, "sla_evidence_observed_at": observed_at},
 			update_modified=False,

@@ -54,7 +54,7 @@ def _seed_exposed_crm_doctypes():
 	# distinct from 0 and would otherwise silently skip the row.
 	frappe.db.sql(
 		"UPDATE `tabDocType` SET custom_ai_exposed = 1 "
-		"WHERE name LIKE 'CRM%' AND name NOT IN ('CRM Student', 'CRM Intent', 'CRM Interaction') "
+		"WHERE name LIKE 'CRM%' AND name NOT IN ('CRM Lead', 'CRM Intent', 'CRM Interaction') "
 		"AND istable = 0 AND issingle = 0 "
 		"AND COALESCE(custom_ai_exposed, 0) != 1"
 	)

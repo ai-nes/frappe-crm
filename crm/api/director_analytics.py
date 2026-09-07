@@ -69,7 +69,7 @@ def _definition(workspace, view):
 	return {
 		"id": metric_id, "version": DIRECTOR_DEFINITION_VERSION, "label": _LABELS[workspace],
 		"formula": None, "numerator": None, "denominator": None, "unit": "count", "format": "number",
-		"sources": ["CRM Student"], "grain": "state asOf", "asOfRule": "request-time source watermark",
+		"sources": ["CRM Lead"], "grain": "state asOf", "asOfRule": "request-time source watermark",
 		"businessTimezone": "Asia/Ho_Chi_Minh", "privacyRule": "suppress small aggregates", "scopeLabel": DIRECTOR_SCOPE_LABEL,
 	}
 
@@ -78,8 +78,8 @@ DIRECTOR_VIEW_DEFINITIONS = {
 	(workspace, view): {
 		"definition": _definition(workspace, view), "filterKeys": _FILTERS[workspace], "rowSchema": [],
 		"availability": "unavailable", "reason": "The source contract for this view is not released.",
-		"metricGrain": {"key": "CRM Student.name", "classification": "state", "lateArrival": "request-watermark"},
-		"dependencyDag": {"sources": ["CRM Student"], "metrics": [f"{workspace}.{view}"]},
+		"metricGrain": {"key": "CRM Lead.name", "classification": "state", "lateArrival": "request-watermark"},
+		"dependencyDag": {"sources": ["CRM Lead"], "metrics": [f"{workspace}.{view}"]},
 	}
 	for workspace, view in sorted(set(_ROUTES.values()))
 }
@@ -99,11 +99,11 @@ _PRIVACY_MINIMUM = 5
 # Multi-source readers remain partial until the storage layer supports an
 # immutable as-of query.  These fields are immutable opening attribution.
 _VIEW_SOURCES = {
-	("director-forecast", "funnel"): ("CRM Student", "CRM Student Lifecycle Event"),
+	("director-forecast", "funnel"): ("CRM Lead", "CRM Student Lifecycle Event"),
 	("director-sla", "team"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
 	("director-sla", "campus"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
 	("director-sla", "ranking"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
-	("admissions-reference", "quota-tuition"): ("CRM Admission Year", "CRM Academic Year Config", "CRM Academic Year Line", "CRM Student"),
+	("admissions-reference", "quota-tuition"): ("CRM Admission Year", "CRM Academic Year Config", "CRM Academic Year Line", "CRM Lead"),
 }
 for _route, _sources in _VIEW_SOURCES.items():
 	DIRECTOR_VIEW_DEFINITIONS[_route]["definition"].update({"sources": list(_sources), "grain": "event" if _route[0] in {"director-forecast", "director-sla"} else "configured reference"})
@@ -124,7 +124,7 @@ def route_is_ready(workspace, view):
 
 def snapshot_context(policy, workspace, view, filters):
 	"""Preflight every source before issuing a usable analytics snapshot."""
-	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Student",))
+	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))
 	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in sources):
 		return None
 	watermarks = {source: _watermark(source) for source in sources}
@@ -186,7 +186,7 @@ def _watermark(doctype):
 def _ready_response(kind, snapshot, workspace, view, filters, *, kpis=None, series=None, rows=None, row_schema=None, total=None, reason=None):
 	response = _response(kind, snapshot, workspace, view, filters)
 	definition = response["definition"]
-	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Student",))
+	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))
 	watermarks = {source: _watermark(source) for source in sources}
 	watermark = max((value for value in watermarks.values() if value), default=None)
 	# The current Frappe reader has no immutable/as-of predicate.  Keep live
@@ -200,8 +200,8 @@ def _ready_response(kind, snapshot, workspace, view, filters, *, kpis=None, seri
 
 def _student_kpis(policy, filters):
 	student_filters = _student_filters(policy, filters)
-	total = frappe.db.count("CRM Student", filters=student_filters)
-	stages = frappe.db.get_all("CRM Student", filters=student_filters, fields=["lifecycle_stage", "count(name) as value"], group_by="lifecycle_stage")
+	total = frappe.db.count("CRM Lead", filters=student_filters)
+	stages = frappe.db.get_all("CRM Lead", filters=student_filters, fields=["lifecycle_stage", "count(name) as value"], group_by="lifecycle_stage")
 	child_suppressed = any(row.value < _PRIVACY_MINIMUM for row in stages)
 	visible_total = total if total >= _PRIVACY_MINIMUM and not child_suppressed else None
 	return [
@@ -211,7 +211,7 @@ def _student_kpis(policy, filters):
 
 
 def _student_series(policy, filters, dimension="lifecycle_stage"):
-	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=[f"{dimension} as label", "count(name) as value"], group_by=dimension, order_by=f"{dimension} asc")
+	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=[f"{dimension} as label", "count(name) as value"], group_by=dimension, order_by=f"{dimension} asc")
 	points = [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows]
 	return [{"metricId": "students.count", "definitionId": "students.count", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "points": points, "unit": "count"}]
 
@@ -256,7 +256,7 @@ def _sla_projection(policy, filters, dimension):
 def _forecast_series(policy, filters):
 	# Current Frappe projections do not retain an immutable eligible-cohort
 	# denominator.  Return lifecycle evidence, but withhold every forecast.
-	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=["lifecycle_stage as label", "count(name) as value"], group_by="lifecycle_stage")
+	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=["lifecycle_stage as label", "count(name) as value"], group_by="lifecycle_stage")
 	return [{"metricId": "funnel.current_state", "definitionId": "funnel.current_state", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Phân bổ hồ sơ hiện tại", "grain": "state_as_of", "points": [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows], "forecast": {"status": "insufficient_forecast_data", "horizonDays": 90, "methodVersion": "cohort-backtest-v1", "reason": "Lifecycle events do not yet prove six completed eligible cohorts and three rolling backtests."}}]
 
 
@@ -282,7 +282,7 @@ def _quota_rows(policy, filters):
 
 
 def get_summary(policy, workspace, view, filters, snapshot):
-	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Student",))):
+	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))):
 		return _response("summary", snapshot, workspace, view, filters)
 	if (workspace, view) == ("director-forecast", "funnel"):
 		return _ready_response("summary", snapshot, workspace, view, filters, kpis=[{"metricId": "forecast.status", "definitionId": "forecast.status", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Dự báo tuyển sinh", "value": None, "unit": "count", "nullReason": "insufficient_forecast_data"}], reason="Chưa đủ dữ liệu cohort đã hoàn tất để hiển thị dự báo đáng tin cậy.")
@@ -307,7 +307,7 @@ def get_summary(policy, workspace, view, filters, snapshot):
 
 
 def get_series(policy, workspace, view, filters, snapshot):
-	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Student",))):
+	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))):
 		return _response("series", snapshot, workspace, view, filters)
 	if (workspace, view) == ("director-forecast", "funnel"):
 		return _ready_response("series", snapshot, workspace, view, filters, series=_forecast_series(policy, filters), reason="Chưa đủ dữ liệu cohort đã hoàn tất để hiển thị dự báo đáng tin cậy.")
@@ -334,10 +334,10 @@ _STUDENT_ROW_FIELDS = ["name", "student_name", "branch", "major", "lifecycle_sta
 def get_rows(policy, workspace, view, filters, snapshot, cursor=None):
 	if route_is_ready(workspace, view) and workspace != "director-records":
 		return _ready_response("rows", snapshot, workspace, view, filters, rows=[], row_schema=[])
-	if workspace != "director-records" or not _source_available("CRM Student"):
+	if workspace != "director-records" or not _source_available("CRM Lead"):
 		return _response("rows", snapshot, workspace, view, filters)
 	page_length = 50
-	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=_STUDENT_ROW_FIELDS, order_by="modified desc, name desc", limit_page_length=page_length)
+	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=_STUDENT_ROW_FIELDS, order_by="modified desc, name desc", limit_page_length=page_length)
 	# A logical destination is intentionally emitted instead of raw Contact links.
 	projected = [{key: row.get(key) for key in _STUDENT_ROW_FIELDS if key != "name"} | {"drillDown": {"kind": "student", "resolver": "crm.api.role_workspaces.resolve_workspace_row_detail", "token": mint_row_detail_token(policy, snapshot, row.name)}} for row in rows]
 	return _ready_response("rows", snapshot, workspace, view, filters, rows=projected, row_schema=[{"field": field, "redaction": "standard"} for field in _STUDENT_ROW_FIELDS if field != "name"], total=None)

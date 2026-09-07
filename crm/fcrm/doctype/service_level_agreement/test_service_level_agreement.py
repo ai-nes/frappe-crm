@@ -16,14 +16,14 @@ class TestServiceLevelAgreement(FrappeTestCase):
 	def test_create_sla_for_crm_contact(self):
 		sla = create_test_sla()
 
-		self.assertEqual(sla.apply_on, "CRM Contact")
+		self.assertEqual(sla.apply_on, "CRM Student")
 		self.assertEqual(sla.priorities[0].priority, "Open")
 		self.assertEqual(sla.priorities[1].priority, "Replied")
 
 	def test_get_sla_returns_matching_crm_contact_sla(self):
 		email = f"sla-{uuid.uuid4().hex[:8]}@example.com"
 		sla = create_test_sla(condition=f"doc.email == '{email}'")
-		contact = frappe.new_doc("CRM Contact")
+		contact = frappe.new_doc("CRM Student")
 		contact.full_name = "SLA Match"
 		contact.email = email
 		contact.stage = "Interested"
@@ -36,7 +36,7 @@ class TestServiceLevelAgreement(FrappeTestCase):
 	def test_get_sla_skips_non_matching_condition(self):
 		email = f"sla-{uuid.uuid4().hex[:8]}@example.com"
 		create_test_sla(condition=f"doc.email == '{email}'")
-		contact = frappe.new_doc("CRM Contact")
+		contact = frappe.new_doc("CRM Student")
 		contact.full_name = "SLA No Match"
 		contact.email = f"other-{uuid.uuid4().hex[:8]}@example.com"
 		contact.stage = "Interested"
@@ -53,7 +53,7 @@ class TestServiceLevelAgreement(FrappeTestCase):
 
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Apply SLA",
 				"email": email,
 				"stage": "Interested",
@@ -72,7 +72,7 @@ class TestServiceLevelAgreement(FrappeTestCase):
 		create_test_sla(condition=f"doc.email == '{email}'")
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Response SLA",
 				"email": email,
 				"stage": "Interested",
@@ -89,7 +89,7 @@ class TestServiceLevelAgreement(FrappeTestCase):
 				"doctype": "Service Level Agreement",
 				"sla_name": "Invalid SLA",
 				"enabled": 1,
-				"apply_on": "CRM Contact",
+				"apply_on": "CRM Student",
 				"condition": "doc.email ==",
 				"priorities": [
 					{
@@ -116,7 +116,7 @@ def create_test_sla(**kwargs):
 		"sla_name": name,
 		"enabled": 1,
 		"default": 0,
-		"apply_on": "CRM Contact",
+		"apply_on": "CRM Student",
 		"condition": condition,
 		"priorities": [
 			{

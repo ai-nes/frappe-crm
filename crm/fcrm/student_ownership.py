@@ -1,4 +1,4 @@
-"""Authoritative ownership command for CRM Student.
+"""Authoritative ownership command for CRM Lead.
 
 Ownership is deliberately implemented as a command rather than as a writable
 field convention.  The command is the only supported application writer for
@@ -482,7 +482,7 @@ def resolve_student_operational_target(
 
 
 def _revision_field() -> str | None:
-	fields = _doctype_fields("CRM Student")
+	fields = _doctype_fields("CRM Lead")
 	for fieldname in ("ownership_revision", "revision"):
 		if fieldname in fields:
 			return fieldname
@@ -602,7 +602,7 @@ def _event_values(
 		"event_type": event_type,
 		"student": student_name,
 		"aggregate_name": student_name,
-		"aggregate_doctype": "CRM Student",
+		"aggregate_doctype": "CRM Lead",
 		"previous_revision": previous_revision,
 		"revision": next_revision,
 		"aggregate_revision": next_revision,
@@ -704,7 +704,7 @@ def change_student_ownership(
 	try:
 		# Scope is checked from the current Student before any target Staff/Team
 		# lookup.  A historic event snapshot is never an authorization grant.
-		student_doc = frappe.get_doc("CRM Student", student_name)
+		student_doc = frappe.get_doc("CRM Lead", student_name)
 		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 
@@ -738,8 +738,8 @@ def change_student_ownership(
 			if receipt:
 				return _replay_receipt(receipt, fingerprint)
 			raise
-		_lock("CRM Student", student_name)
-		student_doc = frappe.get_doc("CRM Student", student_name)
+		_lock("CRM Lead", student_name)
+		student_doc = frappe.get_doc("CRM Lead", student_name)
 		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 		current_revision = _current_revision(student_doc)
@@ -776,7 +776,7 @@ def change_student_ownership(
 		}
 		if _revision_field():
 			updates[_revision_field()] = next_revision
-		frappe.db.set_value("CRM Student", student_name, updates, update_modified=True)
+		frappe.db.set_value("CRM Lead", student_name, updates, update_modified=True)
 		# Active Phase 6 work is reconciled in the same ownership transaction so a
 		# scope change cannot strand an action outside every executor queue.
 		from crm.fcrm.student_decision import reconcile_student_actions
@@ -900,7 +900,7 @@ def _read_actor() -> tuple[str, str, set[str]]:
 def _student_for_read(student_name: str):
 	student_name = _required_text(student_name, "INVALID_INPUT", "student")
 	actor, profile, capabilities = _read_actor()
-	student_doc = frappe.get_doc("CRM Student", student_name)
+	student_doc = frappe.get_doc("CRM Lead", student_name)
 	if not has_student_list_read_permission(student_doc, user=actor):
 		_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 	return student_doc, actor, profile, capabilities

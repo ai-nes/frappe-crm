@@ -47,7 +47,7 @@ class CRMWard(Document):
 
 	def on_trash(self):
 		block_delete_if_has_children(self, "CRM High School", "ward")
-		for doctype in ("CRM Contact", "CRM Student", "CRM Student Geography Snapshot"):
+		for doctype in ("CRM Student", "CRM Lead", "CRM Student Geography Snapshot"):
 			block_delete_if_has_children(
 				self,
 				doctype,

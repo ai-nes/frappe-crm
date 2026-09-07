@@ -90,7 +90,7 @@ def authorize_attempt_for_send(attempt_id, *, channel=None):
 	if int(action.action_revision or 1) != int(attempt.action_revision) or int(action.execution_package_version or 0) != int(attempt.package_revision):
 		transition_attempt(attempt_id, "cancelled")
 		frappe.throw("Pinned Action/package revision is stale.", frappe.ValidationError, title="STALE_REVISION")
-	if frappe.db.get_value("CRM Student", action.student, "privacy_status") == "opted_out" or (action.get("contact") and frappe.db.get_value("CRM Contact", action.contact, "is_opted_out")):
+	if frappe.db.get_value("CRM Lead", action.student, "privacy_status") == "opted_out" or (action.get("contact") and frappe.db.get_value("CRM Student", action.contact, "is_opted_out")):
 		transition_attempt(attempt_id, "cancelled")
 		frappe.throw("Consent no longer permits this operation.", frappe.PermissionError, title="CONSENT_REQUIRED")
 	channel = resolve_nba_channel(action, channel)

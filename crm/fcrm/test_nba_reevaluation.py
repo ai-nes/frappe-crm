@@ -44,7 +44,7 @@ if FrappeTestCase is not None:
 			frappe.conf["crm_agents_service_user"] = "Administrator"
 			frappe.conf["crm_nba_manual_requests_per_actor_target"] = 500
 			frappe.conf["crm_agents_outbox_enabled"] = 1
-			student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
+			student = frappe.get_all("CRM Lead", pluck="name", limit_page_length=1)
 			if not student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
 			cls.student = student[0]
@@ -261,7 +261,7 @@ if FrappeTestCase is not None:
 			original_get_all = frappe.get_all
 
 			def tracking_sql(query, *args, **kwargs):
-				if "FOR UPDATE" in str(query) and "tabCRM Student" in str(query):
+				if "FOR UPDATE" in str(query) and "tabCRM Lead" in str(query):
 					order.append("lock")
 				return original_sql(query, *args, **kwargs)
 

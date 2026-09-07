@@ -34,7 +34,7 @@ class CRMStudentCaseKey(Document):
 
 	def _validate_inverse_link(self):
 		student = frappe.db.get_value(
-			"CRM Student",
+			"CRM Lead",
 			self.canonical_student,
 			["identity", "admission_year", "case_key"],
 			as_dict=True,

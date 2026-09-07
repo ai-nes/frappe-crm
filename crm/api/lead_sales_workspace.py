@@ -22,7 +22,6 @@ from frappe.utils.password import get_encryption_key
 
 from crm.fcrm.role_policy import capabilities_for_roles
 
-
 _MAX_PAGE_SIZE = 50
 _OPEN_ACTION_STATES = ("pending", "accepted", "in-progress", "requires-review", "deferred")
 _ACTION_STATUS_FILTERS = {
@@ -79,7 +78,7 @@ def _snapshot_definition():
 		"timezone": frappe.utils.get_system_timezone(),
 		"scope": "current_student_permission_scope",
 		"student_filters": "Current CRM Student permission scope derived from the session user",
-		"sla_filters": "Current CRM Student SLA Attempt scope inherited from CRM Student",
+		"sla_filters": "Current CRM Student SLA Attempt scope inherited from CRM Lead",
 	}
 
 
@@ -87,17 +86,18 @@ def _generated():
 	return str(now_datetime())
 
 
-def _count(doctype: str, filters=None) -> int:
+def _count(doctype: str, filters=None, *, ignore_permissions: bool = False) -> int:
 	rows = frappe.get_list(
 		doctype,
 		filters=filters or {},
 		fields=["count(name) as count"],
 		limit_page_length=1,
+		ignore_permissions=ignore_permissions,
 	)
 	return int(rows[0].get("count", 0)) if rows else 0
 
 
-def _grouped_count(doctype: str, field: str, filters=None):
+def _grouped_count(doctype: str, field: str, filters=None, *, ignore_permissions: bool = False):
 	"""Aggregate in the database without silently truncating team members."""
 	return frappe.get_list(
 		doctype,
@@ -106,6 +106,7 @@ def _grouped_count(doctype: str, field: str, filters=None):
 		group_by=field,
 		order_by="count desc",
 		limit_page_length=0,
+		ignore_permissions=ignore_permissions,
 	)
 
 
@@ -139,19 +140,23 @@ def get_team_dashboard() -> dict:
 	definition = _snapshot_definition()
 	workload = [
 		{"owner_staff": row.get("owner_staff") or None, "count": int(row.get("count", 0))}
-		for row in _grouped_count("CRM Student", "owner_staff")
+		for row in _grouped_count("CRM Lead", "owner_staff")
 	]
 	sla_buckets = [
 		{"status": row.get("status"), "count": int(row.get("count", 0))}
-		for row in _grouped_count("CRM Student SLA Attempt", "status")
+		for row in _grouped_count("CRM Student SLA Attempt", "status", ignore_permissions=True)
 	]
 	return {
 		"definition": definition,
 		"generated_at": _generated(),
 		"kpis": {
-			"active_students": _count("CRM Student", {"lifecycle_stage": ["not in", ["Lost"]]}),
-			"unassigned_students": _count("CRM Student", {"owner_staff": ["is", "not set"]}),
-			"breached_sla": _count("CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}),
+			"active_students": _count("CRM Lead", {"lifecycle_stage": ["not in", ["Lost"]]}),
+			"unassigned_students": _count("CRM Lead", {"owner_staff": ["is", "not set"]}),
+			"breached_sla": _count(
+				"CRM Student SLA Attempt",
+				{"status": ["in", ["breached", "escalated"]]},
+				ignore_permissions=True,
+			),
 		},
 		"workload": workload,
 		"sla_buckets": sla_buckets,
@@ -163,18 +168,33 @@ def get_member_performance(period: str | None = "30d") -> dict:
 	"""Return server-aggregated member measures; no paginated client roll-up."""
 	_require_team_oversee()
 	definition = _definition(period)
-	members = defaultdict(lambda: {"staff": None, "name": None, "students": 0, "current_actions": 0, "completed_actions": 0, "breached_sla": 0})
-	for row in _grouped_count("CRM Student", "owner_staff"):
+	members = defaultdict(
+		lambda: {
+			"staff": None,
+			"name": None,
+			"students": 0,
+			"current_actions": 0,
+			"completed_actions": 0,
+			"breached_sla": 0,
+		}
+	)
+	for row in _grouped_count("CRM Lead", "owner_staff"):
 		staff = row.get("owner_staff")
 		if staff:
 			members[staff]["staff"] = staff
 			members[staff]["students"] = int(row.get("count", 0))
-	for row in _grouped_count("CRM Action Item", "action_owner", {"state": ["in", list(_OPEN_ACTION_STATES)]}):
+	for row in _grouped_count(
+		"CRM Action Item", "action_owner", {"state": ["in", list(_OPEN_ACTION_STATES)]}
+	):
 		staff = row.get("action_owner")
 		if staff:
 			members[staff]["staff"] = staff
 			members[staff]["current_actions"] = int(row.get("count", 0))
-	for row in _grouped_count("CRM Action Item", "action_owner", _completed_action_date_filters(period) + [["state", "=", "completed"]]):
+	for row in _grouped_count(
+		"CRM Action Item",
+		"action_owner",
+		[*_completed_action_date_filters(period), ["state", "=", "completed"]],
+	):
 		staff = row.get("action_owner")
 		if staff:
 			members[staff]["staff"] = staff
@@ -182,16 +202,30 @@ def get_member_performance(period: str | None = "30d") -> dict:
 	# SLA attempts inherit current Student ownership.  Group in the database so
 	# every visible owner is counted rather than truncating after an arbitrary
 	# number of attempts.
-	for row in _grouped_count("CRM Student SLA Attempt", "owner_staff", {"status": ["in", ["breached", "escalated"]]}):
+	for row in _grouped_count(
+		"CRM Student SLA Attempt",
+		"owner_staff",
+		{"status": ["in", ["breached", "escalated"]]},
+		ignore_permissions=True,
+	):
 		staff = row.get("owner_staff")
 		if staff:
 			members[staff]["staff"] = staff
 			members[staff]["breached_sla"] = int(row.get("count", 0))
 	if members:
 		staff_names = list(members)
-		for staff in frappe.get_list("CRM Staff", filters={"name": ["in", staff_names]}, fields=["name", "full_name"], limit_page_length=0):
+		for staff in frappe.get_list(
+			"CRM Staff",
+			filters={"name": ["in", staff_names]},
+			fields=["name", "full_name"],
+			limit_page_length=0,
+		):
 			members[staff.name]["name"] = staff.get("full_name") or staff.name
-	return {"definition": definition, "generated_at": _generated(), "members": sorted(members.values(), key=lambda row: (row["name"] or row["staff"]))}
+	return {
+		"definition": definition,
+		"generated_at": _generated(),
+		"members": sorted(members.values(), key=lambda row: row["name"] or row["staff"]),
+	}
 
 
 @frappe.whitelist()
@@ -204,7 +238,18 @@ def list_team_actions(status: str = "open", cursor: str | None = None, page_size
 	rows = frappe.get_list(
 		"CRM Action Item",
 		filters=filters,
-		fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner"],
+		fields=[
+			"name",
+			"student",
+			"action",
+			"action_type",
+			"objective",
+			"state",
+			"execution_status",
+			"priority",
+			"due_at",
+			"action_owner",
+		],
 		order_by="due_at asc, creation asc, name asc",
 		start=start,
 		limit_page_length=page_size + 1,
@@ -214,12 +259,24 @@ def list_team_actions(status: str = "open", cursor: str | None = None, page_size
 	student_names = [row.student for row in page if row.get("student")]
 	students = {
 		row.name: row.get("student_name")
-		for row in frappe.get_list("CRM Student", filters={"name": ["in", student_names or ["__none__"]]}, fields=["name", "student_name"], limit_page_length=0)
+		for row in frappe.get_list(
+			"CRM Lead",
+			filters={"name": ["in", student_names or ["__none__"]]},
+			fields=["name", "student_name"],
+			limit_page_length=0,
+		)
 	}
 	return {
 		"definition": _definition(action_status=status),
 		"generated_at": _generated(),
-		"rows": [{**dict(row), "student_name": students.get(row.get("student")), "due_at": str(row.due_at) if row.get("due_at") else None} for row in page],
+		"rows": [
+			{
+				**dict(row),
+				"student_name": students.get(row.get("student")),
+				"due_at": str(row.due_at) if row.get("due_at") else None,
+			}
+			for row in page
+		],
 		"next_cursor": _encode_cursor(start + len(page), actor, status) if has_more else None,
 	}
 
@@ -234,9 +291,34 @@ def get_team_reports(period: str | None = "30d") -> dict:
 		"definition": definition,
 		"generated_at": _generated(),
 		"cards": [
-			{"key": "new_students", "label": _("New students"), "value": _count("CRM Student", period_filters), "description": _("Students created in the selected period within your current team scope.")},
-			{"key": "completed_actions", "label": _("Completed actions"), "value": _count("CRM Action Item", _completed_action_date_filters(period) + [["state", "=", "completed"]]), "description": _("CRM Actions completed in the selected period within your current team scope.")},
-			{"key": "breached_sla", "label": _("Breached SLA"), "value": _count("CRM Student SLA Attempt", period_filters + [["status", "in", ["breached", "escalated"]]]), "description": _("SLA attempts created in the selected period within your current Student scope.")},
+			{
+				"key": "new_students",
+				"label": _("New students"),
+				"value": _count("CRM Lead", period_filters),
+				"description": _("Students created in the selected period within your current team scope."),
+			},
+			{
+				"key": "completed_actions",
+				"label": _("Completed actions"),
+				"value": _count(
+					"CRM Action Item", [*_completed_action_date_filters(period), ["state", "=", "completed"]]
+				),
+				"description": _(
+					"CRM Actions completed in the selected period within your current team scope."
+				),
+			},
+			{
+				"key": "breached_sla",
+				"label": _("Breached SLA"),
+				"value": _count(
+					"CRM Student SLA Attempt",
+					[*period_filters, ["status", "in", ["breached", "escalated"]]],
+					ignore_permissions=True,
+				),
+				"description": _(
+					"SLA attempts created in the selected period within your current Student scope."
+				),
+			},
 		],
 	}
 
@@ -251,7 +333,7 @@ def get_readonly_sla_policies() -> dict:
 	visible_scopes = {
 		(row.get("branch"), row.get("owning_pool"))
 		for row in frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=["branch", "owning_pool"],
 			group_by="branch, owning_pool",
 			limit_page_length=0,
@@ -260,7 +342,19 @@ def get_readonly_sla_policies() -> dict:
 	policies = frappe.get_all(
 		"CRM Student SLA Policy",
 		filters={"status": "active"},
-		fields=["name", "policy_key", "policy_version", "status", "campus", "student_pool", "warning_minutes", "breach_minutes", "escalation_minutes", "effective_from", "effective_until"],
+		fields=[
+			"name",
+			"policy_key",
+			"policy_version",
+			"status",
+			"campus",
+			"student_pool",
+			"warning_minutes",
+			"breach_minutes",
+			"escalation_minutes",
+			"effective_from",
+			"effective_until",
+		],
 		order_by="policy_key asc, policy_version desc",
 		limit_page_length=0,
 	)
@@ -290,7 +384,9 @@ def _cursor_secret():
 
 
 def _encode_cursor(start: int, actor: str, status: str) -> str:
-	body = json.dumps({"start": start, "actor": actor, "status": status}, sort_keys=True, separators=(",", ":")).encode()
+	body = json.dumps(
+		{"start": start, "actor": actor, "status": status}, sort_keys=True, separators=(",", ":")
+	).encode()
 	signature = hmac.new(_cursor_secret(), body, hashlib.sha256).digest()
 	return f"{_urlsafe_encode(body)}.{_urlsafe_encode(signature)}"
 
@@ -302,7 +398,12 @@ def _decode_cursor(cursor: str, actor: str, status: str) -> int:
 		payload = json.loads(body)
 		if not hmac.compare_digest(signature, hmac.new(_cursor_secret(), body, hashlib.sha256).digest()):
 			raise ValueError
-		if payload.get("actor") != actor or payload.get("status") != status or not isinstance(payload.get("start"), int) or payload["start"] < 0:
+		if (
+			payload.get("actor") != actor
+			or payload.get("status") != status
+			or not isinstance(payload.get("start"), int)
+			or payload["start"] < 0
+		):
 			raise ValueError
 		return payload["start"]
 	except (AttributeError, TypeError, ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError):

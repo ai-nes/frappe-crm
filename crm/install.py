@@ -9,7 +9,22 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 
 from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
-from crm.patches.v1_0 import seed_reference_lookups
+from crm.patches.v1_0 import (
+	add_ai_capability_gateway_fields,
+	align_lead_mapping_contract,
+	seed_crm_action_type,
+	seed_crm_education_program,
+	seed_crm_permission_profiles,
+	seed_default_nba_decision_policy,
+	seed_master_data_governance,
+	seed_new_lead_role_profiles,
+	seed_reference_lookups,
+	seed_student_pools,
+	setup_crm_roles,
+	setup_crm_student_extended_permissions,
+)
+from crm.patches.v1_0.crm_action_current_slot_unique import execute as ensure_current_slot_unique
+from crm.patches.v1_0.migrate_to_canonical_crm_roles import execute_for_fresh_site
 
 CHATWOOT_CORS_ORIGIN = "https://app.chatwoot.com"
 # AI CRM is currently exposed directly from the EC2 host while its public
@@ -30,6 +45,23 @@ def before_install():
 
 
 def after_install(force=False):
+	# A fresh Frappe site marks every historical patch as complete. Keep the
+	# current runtime catalog and permission model explicit here so a new site
+	# has the same operational baseline as an upgraded site. Every routine is
+	# idempotent and only creates or reconciles records owned by CRM.
+	setup_crm_roles.execute()
+	execute_for_fresh_site()
+	add_ai_capability_gateway_fields.execute()
+	seed_reference_lookups.execute()
+	align_lead_mapping_contract.execute()
+	seed_crm_action_type.execute()
+	seed_crm_permission_profiles.execute()
+	seed_new_lead_role_profiles.execute()
+	seed_crm_education_program.execute()
+	setup_crm_student_extended_permissions.execute()
+	seed_master_data_governance.execute()
+	seed_student_pools.execute()
+	seed_default_nba_decision_policy.execute()
 	set_default_system_language()
 	add_chatwoot_cors_origin()
 	add_dashboard_cors_origin()
@@ -49,16 +81,18 @@ def after_install(force=False):
 
 
 def after_migrate():
-	"""Keep integration CORS origins present on every production migration."""
+	"""Keep runtime schema guards and integration origins active after every migration."""
+	ensure_current_slot_unique()
 	add_chatwoot_cors_origin()
 	add_dashboard_cors_origin()
 
 
 def set_default_system_language():
 	frappe.db.set_single_value("System Settings", "language", "vi")
-	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value("User", "Administrator", "language"):
+	if frappe.db.exists("User", "Administrator") and not frappe.db.get_value(
+		"User", "Administrator", "language"
+	):
 		frappe.db.set_value("User", "Administrator", "language", "vi")
-
 
 
 def complete_setup(_args: dict | None = None):
@@ -157,12 +191,12 @@ def sync_frappe_crm_workspace():
 
 def add_default_fields_layout(force=False):
 	quick_entry_layouts = {
-		"CRM Contact-Quick Entry": {
-			"doctype": "CRM Contact",
-			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"name":"section_parents","columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"name":"section_enrollment","columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]}]',
-		},
 		"CRM Student-Quick Entry": {
 			"doctype": "CRM Student",
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"name":"section_parents","columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"name":"admission_section","columns":[{"name":"col_academic","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"name":"section_enrollment","columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]}]',
+		},
+		"CRM Lead-Quick Entry": {
+			"doctype": "CRM Lead",
 			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["student_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","source","branch"]}]},{"name":"academic_section","columns":[{"name":"col_location","fields":["province","high_school","major"]},{"name":"col_admission","fields":["ward","admission_year","aspiration"]}]}]',
 		},
 		"Contact-Quick Entry": {
@@ -179,7 +213,7 @@ def add_default_fields_layout(force=False):
 		},
 		"CRM Person-Quick Entry": {
 			"doctype": "CRM Person",
-		"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
+			"layout": '[{"name":"details_section","columns":[{"name":"col_name","fields":["full_name","phone","email"]}]}]',
 		},
 		"FCRM Note-Quick Entry": {
 			"doctype": "FCRM Note",
@@ -192,21 +226,21 @@ def add_default_fields_layout(force=False):
 	}
 
 	sidebar_fields_layouts = {
-		"CRM Contact-Side Panel": {
-			"doctype": "CRM Contact",
-			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent","fields":["parent_name","parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_admission","fields":["province","high_school","major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll","fields":["source","branch"]}]}]',
-		},
 		"CRM Student-Side Panel": {
 			"doctype": "CRM Student",
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent","fields":["parent_name","parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_admission","fields":["province","high_school","major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll","fields":["source","branch"]}]}]',
+		},
+		"CRM Lead-Side Panel": {
+			"doctype": "CRM Lead",
 			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","phone","email","enrollment_status","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_admission","fields":["source","province","ward","high_school","major","aspiration","admission_year"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":true,"columns":[{"name":"col_scores","fields":["cohort_start_year","cohort_end_year","education_program","admission_method","graduation_score","transcript_score","english_converted_score","total_score"]}]}]',
 		},
 		"CRM High School-Side Panel": {
 			"doctype": "CRM High School",
-		"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
+			"layout": '[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_main","fields":["school_name","school_code","school_type","school_area"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_loc","fields":["province","ward"]}]},{"label":"Contact","name":"contact_section","opened":true,"columns":[{"name":"col_contact","fields":["address","phone","email"]}]}]',
 		},
 		"CRM Person-Side Panel": {
 			"doctype": "CRM Person",
-		"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
+			"layout": '[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email","notes"]}]}]',
 		},
 		"CRM Campaign-Side Panel": {
 			"doctype": "CRM Campaign",
@@ -223,17 +257,17 @@ def add_default_fields_layout(force=False):
 	}
 
 	data_fields_layouts = {
-		"CRM Contact-Data Fields": {
-			"doctype": "CRM Contact",
-			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_school","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":false,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":false,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
-		},
 		"CRM Student-Data Fields": {
 			"doctype": "CRM Student",
+			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["full_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","assigned_to","admission_year"]}]},{"label":"Parent Information","name":"section_parents","opened":true,"columns":[{"name":"col_parent1","fields":["parent_name"]},{"name":"col_parent2","fields":["parent_phone"]}]},{"label":"Student Profile","name":"section_academic","opened":true,"columns":[{"name":"col_school","fields":["province","high_school"]},{"name":"col_major","fields":["major","aspiration"]}]},{"label":"Enrollment Information","name":"section_enrollment","opened":true,"columns":[{"name":"col_enroll1","fields":["source"]},{"name":"col_enroll2","fields":["branch"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":false,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":false,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
+		},
+		"CRM Lead-Data Fields": {
+			"doctype": "CRM Lead",
 			"layout": '[{"name":"first_tab","sections":[{"label":"Details","name":"details_section","opened":true,"columns":[{"name":"col_main","fields":["student_name","phone","email"]},{"name":"col_status","fields":["enrollment_status","branch"]}]},{"label":"Admission","name":"admission_section","opened":true,"columns":[{"name":"col_location","fields":["source","province","high_school","major"]},{"name":"col_academic","fields":["ward","admission_year","aspiration"]}]},{"label":"Academic & Scores","name":"section_academic_history","opened":true,"columns":[{"name":"col_scores1","fields":["cohort_start_year","education_program","graduation_score","transcript_score"]},{"name":"col_scores2","fields":["cohort_end_year","admission_method","english_converted_score","total_score"]}]},{"label":"Results","name":"section_academic_tables","opened":true,"columns":[{"name":"col_tables","fields":["academic_results","language_certificates"]}]},{"label":"Notes","name":"notes_section","opened":true,"columns":[{"name":"col_notes","fields":["notes"]}]}]}]',
 		},
 		"CRM High School-Data Fields": {
 			"doctype": "CRM High School",
-		"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
+			"layout": '[{"name":"first_tab","sections":[{"label":"School Info","name":"school_section","opened":true,"columns":[{"name":"col_basic","fields":["school_name","school_code","school_type","school_area"]},{"name":"col_contact","fields":["address","phone","email"]}]},{"label":"Location","name":"location_section","opened":true,"columns":[{"name":"col_location","fields":["province","ward"]}]}]}]',
 		},
 	}
 
@@ -353,6 +387,7 @@ def add_default_lead_sources():
 		"Walk In",
 		"Facebook",
 		"Website",
+		"Promoter",
 	]
 
 	for source in lead_sources:
@@ -366,8 +401,8 @@ def add_default_lead_sources():
 
 def add_default_quick_filters():
 	quick_filters = {
-		"CRM Student": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
-		"CRM Contact": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
+		"CRM Lead": ["student_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
+		"CRM Student": ["full_name", "phone", "email", "enrollment_status", "assigned_to", "source"],
 		"CRM High School": ["province", "ward", "school_name"],
 		"Contact": ["status", "email_id", "phone"],
 		"Task": ["title", "priority", "assigned_to", "status", "due_date"],

@@ -23,8 +23,38 @@ incompatible changes require a major version and coordinated deployment.
 | School stakeholder endpoint `crm.api.school_domain.get_school_stakeholders` | frappe-crm | 1 | School Data panel | 2026-08-30 |
 | School-domain workbook import boundary | frappe-crm | unversioned module contract | External seed/import operator | 2026-08-30 |
 | Care-queue read-model `crm.api.student_worklist.list_action_queue` | frappe-crm | action-queue-row-v1 | crm-agents care queue / PH-06 frontend | 2026-09-01 |
+| Lead Sale lead list/detail read-model `crm.api.director_leads.get_director_leads` / `get_director_lead` | frappe-crm | lead-sale-read-v1 | dashboard-crm `/lead-sale/leads` | 2026-09-07 |
 | Current-Action claim command `crm.api.student_decision.claim_current_action` | frappe-crm | 1 | crm-agents care queue | 2026-09-01 |
 | CRM Action `risk_tier` policy field (`low\|mid\|high`, NOT NULL, Frappe-owned) | frappe-crm | 1 | crm-agents decision / PH-06 frontend | 2026-09-01 |
+
+The Lead Sale read model returns `leadCode` as the immutable, non-PII base identifier
+(`LD-YYYY-NNNNN`) and `studentId` separately. A school-qualified display value such as
+`LD-YYYY-SCHOOL-CODE-NNNNN` is presentation-only and must not replace `leadCode`.
+
+## Student–Lead relationship
+
+`CRM Lead` and `CRM Student` are independent records. Either one may be created or
+imported without creating or updating the other. An explicit Lead-to-Student conversion
+copies the server-defined Lead snapshot once, then sets the nullable, indexed
+`CRM Lead.student` link; subsequent edits do not synchronize between the records.
+Each Student may have many Leads from different acquisition sources, including Facebook,
+Zalo, Open Day, High School events, Website, and Referral. Conversion may use an
+independently imported Student when it is explicitly selected, and never auto-merges by
+phone, email, name, or identity. The conversion junction and legacy `CRM Student.student`
+field remain read-compatible during migration. The target ownership contract below
+supersedes this compatibility description for new admissions-core code.
+
+### Target admissions core
+
+The target model makes `CRM Lead` the intake/routing layer and `CRM Student` the
+canonical post-conversion care aggregate. A Lead may convert only when
+`id_number`, `high_school`, and `major` are present. New conversion results expose
+`lead_id`, `student_id`, and the idempotency receipt; `CRM Student.source_lead`
+stores the explicit origin. Core child records expose `crm_student` as the
+canonical Student link; `crm_contact` remains as a compatibility alias on
+Interaction/Evidence while the legacy Lead reference is still available during
+migration. New writes must populate the canonical Student link whenever the Lead
+has been converted.
 
 The `crm/api/agent_events.py` delivery worker reads the crm-agents
 `/api/v1/contract-manifest` with a short Frappe cache when the BFF contract

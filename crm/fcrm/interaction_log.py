@@ -1,6 +1,6 @@
 """Creates CRM Interaction records from the source events the admissions
 operating model considers meaningful lead touchpoints -- outgoing/incoming
-Communication, a completed Task, a Call Log entry, a CRM Contact
+Communication, a completed Task, a Call Log entry, a CRM Student
 lifecycle/assignment change, a Consent Event, and a CRM Marketing Engagement
 insert/status change (added to satisfy the
 operating model's "no customer activity outside Interaction" condition,
@@ -114,7 +114,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 # external_id off it would collapse distinct Stage Changed / Lead Assigned /
 # Lead Reassigned events on the same contact into a single deduplicated row,
 # destroying that history. Doctypes here never get an external_id.
-NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
+NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Student"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
 MAX_EXTERNAL_INTERACTION_TURNS = 200
 CHATWOOT_INTERACTION_TYPE = "MESSAGE"
@@ -236,9 +236,9 @@ def _source_matches_student(doctype, name, student, seen=None):
 			return False
 	except Exception:
 		return False
-	# A completed source may be linked directly to CRM Student. The name match is
+	# A completed source may be linked directly to CRM Lead. The name match is
 	# the same canonical identity boundary used for a CRM Contact relationship.
-	if doctype == "CRM Student":
+	if doctype == "CRM Lead":
 		return name == student
 	seen = seen or set()
 	key = (doctype, name)
@@ -250,7 +250,7 @@ def _source_matches_student(doctype, name, student, seen=None):
 		return doc.student == student
 	for fieldname in ("crm_contact", "contact", "customer", "party"):
 		contact = getattr(doc, fieldname, None)
-		if contact and frappe.db.exists("CRM Contact", contact):
+		if contact and frappe.db.exists("CRM Student", contact):
 			return contact_is_linked_to_student(contact, student)
 	ref_doctype = getattr(doc, "reference_doctype", None)
 	ref_name = getattr(doc, "reference_docname", None) or getattr(doc, "reference_name", None)
@@ -471,7 +471,7 @@ def _normalize_external_turns(value) -> list[dict]:
 
 def _external_target_matches(external_id: str) -> list[dict]:
 	matches = []
-	for doctype in ("CRM Student", "CRM Contact"):
+	for doctype in ("CRM Lead", "CRM Student"):
 		try:
 			meta = frappe.get_meta(doctype)
 			fieldnames = {field.fieldname for field in meta.fields}
@@ -492,9 +492,9 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 	student_id = _text(payload.get("student_id"))
 	contact_id = _text(payload.get("contact_id"))
 	external_target_id = _text(payload.get("target_external_id"))
-	if student_id and not frappe.db.exists("CRM Student", student_id):
+	if student_id and not frappe.db.exists("CRM Lead", student_id):
 		_interaction_fail("INVALID_TARGET", "The target Student does not exist.")
-	if contact_id and not frappe.db.exists("CRM Contact", contact_id):
+	if contact_id and not frappe.db.exists("CRM Student", contact_id):
 		_interaction_fail("INVALID_TARGET", "The target Contact does not exist.")
 	if student_id and contact_id:
 		linked_students = students_for_contact(contact_id)
@@ -517,7 +517,7 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 			"The external target does not resolve to exactly one CRM record.",
 		)
 	match = matches[0]
-	if match["doctype"] == "CRM Student":
+	if match["doctype"] == "CRM Lead":
 		return {"student": match["name"], "contact": None}
 	linked_students = students_for_contact(match["name"])
 	if len(linked_students) > 1:
@@ -532,11 +532,11 @@ def _assert_interaction_scope(target: dict, authority: dict):
 		return
 	if target.get("student"):
 		row = frappe.db.get_value(
-			"CRM Student", target["student"], ["branch", "owning_team", "owner_staff"], as_dict=True
+			"CRM Lead", target["student"], ["branch", "owning_team", "owner_staff"], as_dict=True
 		)
 	else:
 		row = frappe.db.get_value(
-			"CRM Contact", target.get("contact"), ["branch", "owning_team", "owner_staff"], as_dict=True
+			"CRM Student", target.get("contact"), ["branch", "owning_team", "owner_staff"], as_dict=True
 		)
 	if not row:
 		_interaction_fail("INVALID_TARGET", "The interaction target is no longer available.")
@@ -868,9 +868,9 @@ def satisfy_student_sla_from_interaction(doc, method=None):
 def _create_interaction_for_reference(
 	reference_doctype, reference_name, interaction_type, source_doc, summary=None, actor=None, outcome=None
 ):
-	if reference_doctype == "CRM Student":
+	if reference_doctype == "CRM Lead":
 		student, crm_contact = reference_name, None
-	elif reference_doctype == "CRM Contact":
+	elif reference_doctype == "CRM Student":
 		crm_contact = reference_name
 		students = students_for_contact(reference_name)
 		student = students[0] if len(students) == 1 else None
@@ -892,7 +892,7 @@ def _create_interaction_for_reference(
 def create_interaction_from_communication_insert(doc, method=None):
 	if doc.sent_or_received != "Sent":
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype not in ("CRM Student", "CRM Lead"):
 		return
 	try:
 		_create_interaction_for_reference(
@@ -908,7 +908,7 @@ def create_interaction_from_communication_update(doc, method=None):
 	# the initial insert as a reply creates a phantom Connected interaction.
 	if doc.is_new() or doc.flags.in_insert:
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype not in ("CRM Student", "CRM Lead"):
 		return
 
 	is_reply = doc.sent_or_received == "Received" and doc.has_value_changed("sent_or_received")
@@ -939,7 +939,7 @@ def create_interaction_from_task_update(doc, method=None):
 		return
 	if not doc.description:
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype not in ("CRM Student", "CRM Lead"):
 		return
 
 	try:
@@ -957,14 +957,14 @@ def create_interaction_from_task_update(doc, method=None):
 
 def create_interaction_from_note_insert(doc, method=None):
 	"""Record a Sale-authored FCRM Note as a scoped NOTE interaction."""
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype not in ("CRM Student", "CRM Lead"):
 		return
 
 	try:
 		create_interaction(
 			interaction_type="NOTE",
-			crm_contact=doc.reference_docname if doc.reference_doctype == "CRM Contact" else None,
-			student=doc.reference_docname if doc.reference_doctype == "CRM Student" else None,
+			crm_contact=doc.reference_docname if doc.reference_doctype == "CRM Student" else None,
+			student=doc.reference_docname if doc.reference_doctype == "CRM Lead" else None,
 			reference_doctype="FCRM Note",
 			reference_docname=doc.name,
 			actor=doc.owner,
@@ -979,7 +979,7 @@ def create_interaction_from_note_insert(doc, method=None):
 
 
 def create_interaction_from_call_log_insert(doc, method=None):
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype not in ("CRM Student", "CRM Lead"):
 		return
 
 	interaction_type = "PHONE_CALL"
@@ -1042,7 +1042,7 @@ def create_interaction_from_contact_update(doc, method=None):
 				interaction_type="SYSTEM_ACTIVITY",
 				crm_contact=doc.name,
 				student=doc.student,
-				reference_doctype="CRM Contact",
+				reference_doctype="CRM Student",
 				reference_docname=doc.name,
 				summary=f"Stage changed to {doc.lifecycle_stage}",
 			)
@@ -1056,7 +1056,7 @@ def create_interaction_from_contact_update(doc, method=None):
 				interaction_type=interaction_type,
 				crm_contact=doc.name,
 				student=doc.student,
-				reference_doctype="CRM Contact",
+				reference_doctype="CRM Student",
 				reference_docname=doc.name,
 				summary=f"{interaction_type}: {doc.owner_staff or 'Unassigned'}",
 			)

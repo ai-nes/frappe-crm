@@ -1,6 +1,7 @@
 from typing import ClassVar
 
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, ACTION_TYPE_METADATA, canonicalize_action_type
@@ -19,16 +20,59 @@ class CRMActionItem(Document):
 		"deferred": {"accepted", "superseded", "requires-review"},
 	}
 
-	_PROTECTED = frozenset({
-		"student", "state", "action", "action_type", "objective", "disposition", "source_context_revision",
-		"policy_context_version", "generation_idempotency_key", "producer_identity", "payload_digest", "evidence_references",
-		"action_revision", "current_slot", "risk_tier", "package_seed", "due_at", "revisit_at", "action_owner", "origin",
-		"description", "start_date",
-		"contact", "legacy_student_task", "legacy_generic_task", "legacy_task_deleted", "legacy_sales_action", "execution_status", "started_at",
-		"source_decision_event", "action_definition_digest",
-		"outcome_code", "outcome_evidence", "outcome_notes", "linked_interaction", "accepted_at", "completed_at",
-		"terminal_reason", "decision_reason", "decision_actor", "decision_at", "decision_revision",
-	})
+	_PROTECTED = frozenset(
+		{
+			"student",
+			"state",
+			"action",
+			"action_type",
+			"objective",
+			"disposition",
+			"source_context_revision",
+			"policy_context_version",
+			"generation_idempotency_key",
+			"producer_identity",
+			"payload_digest",
+			"evidence_references",
+			"action_revision",
+			"current_slot",
+			"risk_tier",
+			"package_seed",
+			"due_at",
+			"revisit_at",
+			"action_owner",
+			"origin",
+			"description",
+			"start_date",
+			"contact",
+			"legacy_student_task",
+			"legacy_generic_task",
+			"legacy_task_deleted",
+			"legacy_sales_action",
+			"execution_status",
+			"started_at",
+			"source_decision_event",
+			"action_definition_digest",
+			"outcome_code",
+			"outcome_evidence",
+			"outcome_notes",
+			"linked_interaction",
+			"accepted_at",
+			"completed_at",
+			"terminal_reason",
+			"decision_reason",
+			"decision_actor",
+			"decision_at",
+			"decision_revision",
+		}
+	)
+
+	def before_insert(self):
+		# MariaDB unique keys treat an empty Select value as a real value. Keep
+		# deferred and terminal work items NULL so the current-slot uniqueness
+		# boundary applies only to the one active item per Student.
+		if not self.get("current_slot"):
+			self.current_slot = None
 
 	def validate(self):
 		before = self.get_doc_before_save()
@@ -52,7 +96,9 @@ class CRMActionItem(Document):
 		if self.disposition != "ACT" and self.action:
 			frappe.throw("Non-ACT items cannot carry a CRM Action.", frappe.ValidationError)
 		seed_changed = not before or before.get("package_seed") != self.get("package_seed")
-		type_changed = bool(before) and (before.get("action") != self.get("action") or before.get("action_type") != self.get("action_type"))
+		type_changed = bool(before) and (
+			before.get("action") != self.get("action") or before.get("action_type") != self.get("action_type")
+		)
 		if seed_changed or type_changed:
 			from crm.fcrm.student_decision import compute_risk_tier
 
@@ -67,21 +113,30 @@ class CRMActionItem(Document):
 				if field == "current_slot" and entering_terminal:
 					continue
 				if before.get(field) != self.get(field):
-					frappe.throw("CRM Action Item fields require a controlled command.", frappe.PermissionError)
+					frappe.throw(
+						_("CRM Action Item fields require a controlled command."), frappe.PermissionError
+					)
 		if (
 			before
 			and before.state != self.state
 			and not getattr(frappe.flags, "crm_action_compatibility_command", False)
 			and self.state not in self.TRANSITIONS.get(before.state, set())
 		):
-			frappe.throw(f"Illegal CRM Action Item transition: {before.state} -> {self.state}", frappe.ValidationError)
+			frappe.throw(
+				f"Illegal CRM Action Item transition: {before.state} -> {self.state}", frappe.ValidationError
+			)
 
 
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
+
 	user = user or frappe.session.user
-	condition = student_scope("CRM Student", user=user)
-	return f"`tabCRM Action Item`.student in (select name from `tabCRM Student` where {condition})" if condition else None
+	condition = student_scope("CRM Lead", user=user)
+	return (
+		f"`tabCRM Action Item`.student in (select name from `tabCRM Lead` where {condition})"
+		if condition
+		else None
+	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -92,9 +147,12 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	if not student:
 		return False
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
-	condition = student_scope("CRM Student", user=user or frappe.session.user)
+
+	condition = student_scope("CRM Lead", user=user or frappe.session.user)
 	if condition is None:
 		return True
-	return bool(frappe.db.sql(
-		"select name from `tabCRM Student` where name = %s and (" + condition + ") limit 1", (student,)
-	))
+	return bool(
+		frappe.db.sql(
+			"select name from `tabCRM Lead` where name = %s and (" + condition + ") limit 1", (student,)
+		)
+	)

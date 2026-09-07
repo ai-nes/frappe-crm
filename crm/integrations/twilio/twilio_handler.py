@@ -196,7 +196,7 @@ def get_the_call_attender(owners, caller=None):
 	current_loggedin_users = get_active_loggedin_users(list(owners.keys()))
 
 	if len(current_loggedin_users) > 1 and caller:
-		assigned_crm_staff = frappe.db.get_value("CRM Contact", {"phone": caller}, "assigned_to")
+		assigned_crm_staff = frappe.db.get_value("CRM Student", {"phone": caller}, "assigned_to")
 		assigned_user = frappe.db.get_value("CRM Staff", assigned_crm_staff, "user") if assigned_crm_staff else None
 		for user in current_loggedin_users:
 			if user == assigned_user:

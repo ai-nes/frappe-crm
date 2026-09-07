@@ -41,13 +41,13 @@ describe('getProvinceScopedLinkFilters', () => {
     ).toEqual({ province: 'Ha Noi' })
   })
 
-  it('filters CRM High School by selected province name', () => {
+  it('filters CRM High School by selected province link', () => {
     expect(
       getProvinceScopedLinkFilters(
         { fieldtype: 'Link', options: 'CRM High School' },
         { province: 'Ha Noi' },
       ),
-    ).toEqual({ province_name: 'Ha Noi' })
+    ).toEqual({ province: 'Ha Noi' })
   })
 
   it('preserves existing filters when adding province scope', () => {
@@ -126,7 +126,7 @@ describe('getContextualLinkFilters', () => {
         { fieldtype: 'Link', options: 'CRM High School' },
         { province: 'Ha Noi', ward: '001 - Ha Noi' },
       ),
-    ).toEqual({ province_name: 'Ha Noi', ward_code: '001' })
+    ).toEqual({ province: 'Ha Noi', ward_code: '001' })
   })
 
   it('filters CRM High School by selected province and ward name', () => {
@@ -135,7 +135,7 @@ describe('getContextualLinkFilters', () => {
         { fieldtype: 'Link', options: 'CRM High School' },
         { province: 'Lam Dong', ward: 'Phuong Phu Thuy' },
       ),
-    ).toEqual({ province_name: 'Lam Dong', ward_name: 'Phuong Phu Thuy' })
+    ).toEqual({ province: 'Lam Dong', ward_name: 'Phuong Phu Thuy' })
   })
 })
 

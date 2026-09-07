@@ -33,12 +33,10 @@
  "module": "FCRM",
  "name": "CRM Action",
  "permissions": [
-  {"read":1,"role":"Sale"},
-  {"read":1,"role":"Lead Sale"},
-  {"read":1,"role":"Marketing"},
-  {"read":1,"role":"Promoter"},
-  {"read":1,"role":"Admissions Director"},
-  {"create":1,"delete":1,"export":1,"read":1,"role":"System Manager","write":1}
+   {"role":"Admissions Director","read":1},
+   {"role":"Lead Sale","read":1},
+   {"role":"Sale","read":1},
+   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
  ],
  "sort_field": "sort_order",
  "sort_order": "ASC"

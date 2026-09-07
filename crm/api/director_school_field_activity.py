@@ -527,10 +527,10 @@ def _apply_reported_leads(result: dict[str, dict[str, Any]], rows: list[dict[str
 
 
 def _load_attributed_students(student_ids: set[Any]) -> list[dict[str, Any]]:
-	if not student_ids or not _table_exists("CRM Student"):
+	if not student_ids or not _table_exists("CRM Lead"):
 		return []
 	return _fetch_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters={"name": ["in", list(student_ids)]},
 		fields=["name", "lifecycle_stage", "enrollment_status", "phone"],
 		allow_missing=True,
@@ -761,7 +761,7 @@ def _metric_status(value: float | None, target: float | None) -> str:
 
 
 def _load_total_prospects(year: str, scope: dict[str, Any]) -> int | None:
-	if not _table_exists("CRM Student"):
+	if not _table_exists("CRM Lead"):
 		return None
 	filters: dict[str, Any] = {"admission_year": year}
 	if scope.get("kind") == "campus":
@@ -777,7 +777,7 @@ def _load_total_prospects(year: str, scope: dict[str, Any]) -> int | None:
 			return 0
 		filters["high_school"] = ["in", [row["name"] for row in schools]]
 	rows = _fetch_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters=filters,
 		fields=["name", "lifecycle_stage"],
 		allow_missing=True,

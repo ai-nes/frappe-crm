@@ -15,6 +15,8 @@ class TestDirectorStudents(FrappeTestCase):
 			q="  Nguyen  ",
 			stage="counselling",
 			province="can-tho",
+			assignmentStatus="assigned",
+			lifecycleStatus="MQL",
 			sort="lastActivityAt",
 			order="asc",
 		)
@@ -28,6 +30,9 @@ class TestDirectorStudents(FrappeTestCase):
 				"query": "Nguyen",
 				"stage": "counselling",
 				"province": "can-tho",
+				"owner_id": None,
+				"assignment_status": "assigned",
+				"lifecycle_status": "MQL",
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -38,6 +43,8 @@ class TestDirectorStudents(FrappeTestCase):
 			{"page": "0"},
 			{"pageSize": "101"},
 			{"stage": "unknown"},
+			{"assignmentStatus": "unknown"},
+			{"lifecycleStatus": "unknown"},
 			{"sort": "name"},
 			{"order": "sideways"},
 			{"admissionYear": "2026.5"},
@@ -85,12 +92,15 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 
 		self.assertEqual(item["id"], "ENR-2026-00001")
-		self.assertEqual(item["code"], "CK-ID-2026")
+		self.assertEqual(item["code"], "HS-2026-HCM-000001")
 		self.assertEqual(item["initials"], "MA")
 		self.assertEqual(item["school"], "THPT Châu Văn Liêm")
 		self.assertEqual(item["province"], "Cần Thơ")
 		self.assertEqual(item["major"], "Trí tuệ nhân tạo")
 		self.assertEqual(item["stage"], "Tư vấn")
+		self.assertEqual(item["provinceId"], "P-1")
+		self.assertEqual(item["lifecycleStatus"], "MQL")
+		self.assertEqual(item["assignmentStatus"], "assigned")
 		self.assertEqual(item["stageCode"], "counselling")
 		self.assertEqual(item["score"], 82)
 		self.assertEqual(item["scoreDelta"], 13)
@@ -142,6 +152,8 @@ class TestDirectorStudents(FrappeTestCase):
 				q=" nguyen ",
 				stage="counselling",
 				province="can-tho",
+				assignmentStatus="assigned",
+				lifecycleStatus="MQL",
 				sort="score",
 				order="desc",
 			)
@@ -153,8 +165,38 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["meta"]["pageSize"], 1)
 		self.assertEqual(response["meta"]["totalPages"], 1)
 		self.assertFalse(response["meta"]["hasNextPage"])
-		self.assertEqual(response["meta"]["filters"], {"stage": "Tư vấn", "province": "Cần Thơ"})
+		self.assertEqual(
+			response["meta"]["filters"],
+			{
+				"stage": "Tư vấn",
+				"assignmentStatus": "assigned",
+				"lifecycleStatus": "MQL",
+				"province": "Cần Thơ",
+			},
+		)
 		self.assertEqual(response["meta"]["sort"], {"field": "score", "order": "desc"})
+
+	def test_student_filters_support_assignment_and_lifecycle_status(self):
+		query = director_students._parse_query(
+			assignmentStatus="Đã phân công",
+			lifecycle_status="applicant",
+			provinceId="01",
+		)
+
+		filters, or_filters = director_students._student_filters(query, "PROVINCE-01")
+
+		self.assertEqual(filters["owner_staff"], ["is", "set"])
+		self.assertEqual(filters["lifecycle_stage"], "Applicant")
+		self.assertEqual(filters["province"], "PROVINCE-01")
+		self.assertEqual(or_filters, [])
+
+		unassigned = director_students._parse_query(assignment_status="unassigned")
+		unassigned_filters, _ = director_students._student_filters(unassigned, None)
+		self.assertEqual(unassigned_filters["owner_staff"], ["is", "not set"])
+
+		all_statuses = director_students._parse_query(assignmentStatus="all", lifecycleStatus="all")
+		self.assertIsNone(all_statuses["assignment_status"])
+		self.assertIsNone(all_statuses["lifecycle_status"])
 
 	def test_stage_filters_keep_exploring_and_counselling_distinct(self):
 		exploring = director_students._parse_query(stage="exploring")
@@ -400,7 +442,7 @@ class TestDirectorStudents(FrappeTestCase):
 			)
 
 		get_list.assert_called_once_with(
-			"CRM Student",
+			"CRM Lead",
 			filters={"admission_year": "2026"},
 			or_filters=[],
 			fields=["count(name) as total"],

@@ -18,14 +18,14 @@ _DECISION_INFLUENCE = {"Unknown", "High", "Medium", "Low"}
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("write"):
 		frappe.throw(_("You do not have permission to update this Student's parent context."), frappe.PermissionError)
 	return doc
 
 
 def _ensure_contact_scope(contact: str, actor: str) -> None:
-	if not frappe.has_permission("CRM Contact", "read", contact, user=actor):
+	if not frappe.has_permission("CRM Student", "read", contact, user=actor):
 		frappe.throw(_("The parent Contact is outside your permitted scope."), frappe.PermissionError)
 
 
@@ -58,10 +58,10 @@ def record_parent_contact_authority(
 	expires_at=None,
 ) -> dict[str, Any]:
 	student_doc = _student_for_write(student)
-	if not frappe.db.exists("CRM Contact", contact):
+	if not frappe.db.exists("CRM Student", contact):
 		frappe.throw(_("The parent Contact does not exist."), frappe.ValidationError)
 	actor = _ensure_authorized_parent_reviewer(contact)
-	linked_student = frappe.db.get_value("CRM Contact", contact, "student")
+	linked_student = frappe.db.get_value("CRM Student", contact, "student")
 	if linked_student and linked_student != student_doc.name:
 		frappe.throw(_("The parent Contact is linked to a different Student."), frappe.ValidationError)
 	if decision_role not in _DECISION_ROLES or decision_influence not in _DECISION_INFLUENCE:

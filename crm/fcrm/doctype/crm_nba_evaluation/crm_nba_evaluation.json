@@ -4,9 +4,10 @@
  "creation": "2026-09-04 03:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["student", "trigger", "status", "disposition", "contract_version", "engine_revision", "evaluation_key", "context_revision", "context_digest", "eligible_set_revision", "eligible_set_digest", "library_digest", "decision_policy_revision", "decision_digest", "eligibility_digest", "timing_digest", "evaluation_clock", "run_generation", "lease_token", "lease_expires_at", "result_digest", "trace_digest", "evaluation_trace", "terminal_reason", "engine_revision_settled", "recommendation_count", "revisit_at", "reevaluation_trigger", "reevaluation_dispatched_at", "requested_by", "request_idempotency_key"],
+ "field_order": ["student", "crm_student", "trigger", "status", "disposition", "contract_version", "engine_revision", "evaluation_key", "context_revision", "context_digest", "eligible_set_revision", "eligible_set_digest", "library_digest", "decision_policy_revision", "decision_digest", "eligibility_digest", "timing_digest", "evaluation_clock", "run_generation", "lease_token", "lease_expires_at", "result_digest", "trace_digest", "evaluation_trace", "terminal_reason", "engine_revision_settled", "recommendation_count", "revisit_at", "reevaluation_trigger", "reevaluation_dispatched_at", "requested_by", "request_idempotency_key"],
  "fields": [
-  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1, "in_list_view": 1},
+  {"fieldname": "crm_student", "fieldtype": "Link", "label": "Canonical Student", "options": "CRM Student", "read_only": 1, "in_list_view": 1},
   {"fieldname": "trigger", "fieldtype": "Select", "label": "Trigger", "options": "manual\nautomatic", "default": "manual", "read_only": 1, "reqd": 1},
   {"default": "queued", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Run Status", "options": "queued\nrunning\ncompleted\nfailed\ndead_lettered", "read_only": 1, "reqd": 1},
   {"fieldname": "disposition", "fieldtype": "Data", "label": "Business Disposition", "read_only": 1},

@@ -19,7 +19,7 @@ from crm.patches.v1_0.migrate_campaign_event_to_many_to_many import (
 )
 class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 	"""Idempotency coverage for the Phase 5 backfill patch. The migration reads
-	the deprecated CRM Contact.crm_campaign / crm_event singular Link fields
+	the deprecated CRM Student.crm_campaign / crm_event singular Link fields
 	and creates CRM Campaign Touchpoint / CRM Event Participation rows,
 	skipping any (campaign, contact) / (event, contact) pair that already has
 	one -- see the frappe.db.exists guards in _migrate_campaigns/_migrate_events.
@@ -35,7 +35,7 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 		# by normal CRM Contact flows post-Phase-5).
 		self.contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Migrate Contact",
 				"phone": "0977000003",
 				"enrollment_status": "PROSPECT",
@@ -50,8 +50,8 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Marketing Engagement", filters={"crm_event": self.event}, pluck="name"):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
 		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name"):

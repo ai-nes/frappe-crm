@@ -1,5 +1,5 @@
 """
-Drop CRM Contact.crm_campaign / crm_event columns.
+Drop CRM Student.crm_campaign / crm_event columns.
 
 These were direct Link shortcuts superseded by CRM Marketing Engagement.
 The `migrate_campaign_event_to_many_to_many` patch backfills any remaining
@@ -9,7 +9,7 @@ legacy values before this patch runs (enforced by patches.txt ordering).
 import frappe
 
 COLUMNS = {
-	"CRM Contact": ["crm_campaign", "crm_event"],
+	"CRM Student": ["crm_campaign", "crm_event"],
 }
 
 

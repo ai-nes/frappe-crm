@@ -60,7 +60,7 @@ def _actor_scope(student: str, action: str) -> dict[str, Any]:
 		_fail("UNAUTHORIZED", _("Authentication is required."))
 	roles = frappe.get_roles(actor)
 	capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	if not student_doc.has_permission("read"):
 		_fail("OUT_OF_SCOPE", _("Student is outside your current scope."))
 	required = ACTION_CAPABILITIES.get(action)
@@ -197,7 +197,7 @@ def _call(student_doc, actor: str, data: dict[str, Any], *, success: bool, idemp
 			"duration": duration,
 			"start_time": frappe.utils.now_datetime(),
 			"end_time": frappe.utils.now_datetime() if success else None,
-			"reference_doctype": "CRM Student",
+			"reference_doctype": "CRM Lead",
 			"reference_docname": student_doc.name,
 			"caller": actor,
 		}
@@ -235,7 +235,7 @@ def _communication(student_doc, actor: str, data: dict[str, Any]):
 			"communication_medium": "Email",
 			"status": "Linked",
 			"sent_or_received": "Sent",
-			"reference_doctype": "CRM Student",
+			"reference_doctype": "CRM Lead",
 			"reference_name": student_doc.name,
 			"subject": summary,
 			"content": data.get("content") or summary,
@@ -304,7 +304,7 @@ def _structured_note(student_doc, actor: str, data: dict[str, Any]):
 		{
 			"doctype": "FCRM Note",
 			"content": content,
-			"reference_doctype": "CRM Student",
+			"reference_doctype": "CRM Lead",
 			"reference_docname": student_doc.name,
 		}
 	).insert(ignore_permissions=True)
@@ -341,7 +341,7 @@ def _dispatch(student_doc, actor: str, action: str, data: dict[str, Any], idempo
 		intent = frappe.get_doc({"doctype": "CRM Intent", "interaction": interaction, "intent_type": intent_type, "intent_role": "Dominant", "polarity": "Positive", "confidence": data.get("confidence"), "notes": data.get("target")}).insert(ignore_permissions=True)
 		return {"interaction": interaction, "intent": intent.name}
 	if action == "create_task":
-		task = frappe.get_doc({"doctype": "Task", "title": _required(data.get("title"), "title"), "description": data.get("description"), "priority": data.get("priority") or "Medium", "status": "Todo", "assigned_to": data.get("assigned_to") or actor, "due_date": data.get("due_date"), "student": student_doc.name, "reference_doctype": "CRM Student", "reference_docname": student_doc.name}).insert(ignore_permissions=True)
+		task = frappe.get_doc({"doctype": "Task", "title": _required(data.get("title"), "title"), "description": data.get("description"), "priority": data.get("priority") or "Medium", "status": "Todo", "assigned_to": data.get("assigned_to") or actor, "due_date": data.get("due_date"), "student": student_doc.name, "reference_doctype": "CRM Lead", "reference_docname": student_doc.name}).insert(ignore_permissions=True)
 		return {"task": task.name}
 	if action == "create_insight_note":
 		return _structured_note(student_doc, actor, data)
@@ -391,14 +391,14 @@ def perform_action(*, student: str, action: str, expected_revision: Any, idempot
 	savepoint = f"admissions_action_{frappe.generate_hash(length=8)}"
 	frappe.db.savepoint(savepoint)
 	try:
-		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (student,))
-		student_doc = frappe.get_doc("CRM Student", student)
+		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (student,))
+		student_doc = frappe.get_doc("CRM Lead", student)
 		current_revision = int(student_doc.get("engagement_revision") or 0)
 		if str(expected_revision) != str(current_revision):
 			_fail("STALE_REVISION", _("Student activity changed; reload before retrying."))
 		result = _dispatch(student_doc, scope["actor"], action, data, idempotency_key, correlation_id)
 		new_revision = current_revision + 1
-		frappe.db.set_value("CRM Student", student, "engagement_revision", new_revision, update_modified=False)
+		frappe.db.set_value("CRM Lead", student, "engagement_revision", new_revision, update_modified=False)
 		result.update({"status": "created", "student": student, "action": action, "revision": new_revision, "receipt": receipt.name, "correlation_id": correlation_id})
 		_finish_receipt(receipt, result)
 		return result
@@ -418,7 +418,7 @@ def set_attachment_visibility(*, student: str, file_name: str, is_private: Any, 
 	if not (scope["actor"] == "Administrator" or "System Manager" in scope["roles"] or "admissions.oversee" in scope["capabilities"]):
 		_fail("FORBIDDEN", _("Only an admissions supervisor may change document visibility."))
 	file_doc = frappe.get_doc("File", file_name)
-	if file_doc.attached_to_doctype != "CRM Student" or file_doc.attached_to_name != student:
+	if file_doc.attached_to_doctype != "CRM Lead" or file_doc.attached_to_name != student:
 		_fail("OUT_OF_SCOPE", _("File is not attached to this Student."))
 	private_value = str(is_private).strip().lower() not in {"0", "false", "no", "off", ""}
 	confirmation = str(confirm_public).strip().lower() in {"1", "true", "yes", "on"}

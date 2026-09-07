@@ -137,10 +137,10 @@ def seed(context: dict[str, Any]) -> dict[str, Any]:
 
 
 def _students_by_school(year: str, school_names: list[str]) -> dict[str, list[dict[str, Any]]]:
-	if not school_names or not frappe.db.table_exists("CRM Student"):
+	if not school_names or not frappe.db.table_exists("CRM Lead"):
 		return {}
 	rows = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"admission_year": year, "high_school": ["in", school_names]},
 		fields=["name", "high_school", "lifecycle_stage"],
 		order_by="high_school asc, creation asc, name asc",

@@ -10,12 +10,12 @@ DATA_FIELDS = '[{"name":"first_tab","sections":[{"label":"Details","name":"detai
 
 def execute():
 	layouts = {
-		"CRM Contact-Quick Entry": QUICK_ENTRY,
-		"CRM Contact-Side Panel": SIDE_PANEL,
-		"CRM Contact-Data Fields": DATA_FIELDS,
+		"CRM Student-Quick Entry": QUICK_ENTRY,
+		"CRM Student-Side Panel": SIDE_PANEL,
+		"CRM Student-Data Fields": DATA_FIELDS,
 	}
 	for name, layout in layouts.items():
 		if frappe.db.exists("Fields Layout", name):
 			frappe.db.set_value("Fields Layout", name, "layout", layout)
 
-	frappe.clear_cache(doctype="CRM Contact")
+	frappe.clear_cache(doctype="CRM Student")

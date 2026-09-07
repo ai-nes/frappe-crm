@@ -108,9 +108,9 @@ def persist_initial_package(task) -> dict:
 
 
 def _current_consent_is_valid(task, channel: str | None = None) -> bool:
-	if task.get("student") and frappe.db.get_value("CRM Student", task.student, "privacy_status") == "opted_out":
+	if task.get("student") and frappe.db.get_value("CRM Lead", task.student, "privacy_status") == "opted_out":
 		return False
-	if task.get("contact") and frappe.db.get_value("CRM Contact", task.contact, "is_opted_out"):
+	if task.get("contact") and frappe.db.get_value("CRM Student", task.contact, "is_opted_out"):
 		return False
 	if channel:
 		from crm.services.outreach_consent import current_outreach_consent_allows

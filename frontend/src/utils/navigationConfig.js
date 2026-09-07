@@ -190,7 +190,7 @@ const rawRoleNavigationTrees = {
     },
     {
       id: 'lead_assignment_overview',
-      label: 'Cơ chế phân bổ',
+      label: 'Phân bổ Lead',
       icon: 'settings-2',
       direct: true,
       to: 'Assignment Overview',
@@ -498,7 +498,7 @@ const rawRoleNavigationTrees = {
         },
         {
           id: 'mgr_cfg_distribution',
-          label: 'Cơ chế phân bổ',
+          label: 'Phân bổ Lead',
           direct: true,
           to: 'Assignment Overview',
         },
@@ -583,7 +583,7 @@ const rawRoleNavigationTrees = {
         },
         {
           id: 'adm_assignment_overview',
-          label: 'Cơ chế phân bổ',
+          label: 'Phân bổ Lead',
           direct: true,
           to: 'Assignment Overview',
         },

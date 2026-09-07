@@ -166,7 +166,7 @@ def get_document_activities(doctype: str, name: str):
 	# Admissions work items are canonical CRM Actions. Generic Task remains
 	# available to ordinary CRM records, but must not leak into Student/Contact
 	# admissions detail activity payloads.
-	tasks = [] if doctype in {"CRM Student", "CRM Contact"} else get_linked_tasks(doctype, name) + linked_calls.get("tasks", [])
+	tasks = [] if doctype in {"CRM Lead", "CRM Student"} else get_linked_tasks(doctype, name) + linked_calls.get("tasks", [])
 	attachments = get_attachments(doctype, name)
 
 	activities.sort(key=lambda x: x["creation"], reverse=True)
@@ -298,7 +298,7 @@ def get_linked_calls(doctype: str, name: str):
 		for call in _calls:
 			if call.get("link_doctype") == "FCRM Note":
 				notes.append(call.link_name)
-			elif call.get("link_doctype") == "Task" and doctype not in {"CRM Student", "CRM Contact"}:
+			elif call.get("link_doctype") == "Task" and doctype not in {"CRM Lead", "CRM Student"}:
 				tasks.append(call.link_name)
 
 		_calls = [call for call in _calls if call.get("link_doctype") not in ["FCRM Note", "Task"]]

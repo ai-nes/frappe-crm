@@ -1,4 +1,4 @@
-"""Shared lifecycle-stage logic for CRM Contact and CRM Student.
+"""Shared lifecycle-stage logic for CRM Contact and CRM Lead.
 
 Implements the long-term
 lifecycle track (Lead -> MQL -> Applicant -> Enrolled, with Lost as a

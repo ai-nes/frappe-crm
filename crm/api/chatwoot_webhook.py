@@ -191,7 +191,7 @@ def _assert_account(payload: dict[str, Any]) -> str:
 
 def _has_contact_mapping_field() -> bool:
 	try:
-		return bool(frappe.get_meta("CRM Contact").get_field("chatwoot_contact_id"))
+		return bool(frappe.get_meta("CRM Student").get_field("chatwoot_contact_id"))
 	except Exception:
 		return False
 
@@ -200,18 +200,18 @@ def _contact_names_by_email(email: str) -> set[str]:
 	names: set[str] = set()
 	for value in {email, email.casefold()}:
 		try:
-			names.update(frappe.get_all("CRM Contact", filters={"email": value}, pluck="name"))
+			names.update(frappe.get_all("CRM Student", filters={"email": value}, pluck="name"))
 		except Exception:
 			continue
 	return names
 
 
 def _contact_names_by_phone(phone: str) -> set[str]:
-	names = {row["name"] for row in get_docs_by_phone("CRM Contact", phone, "phone") if row.get("name")}
+	names = {row["name"] for row in get_docs_by_phone("CRM Student", phone, "phone") if row.get("name")}
 	if not names:
 		normalized = normalize_phone_for_lookup(phone)
 		try:
-			names.update(frappe.get_all("CRM Contact", filters={"phone": normalized}, pluck="name"))
+			names.update(frappe.get_all("CRM Student", filters={"phone": normalized}, pluck="name"))
 		except Exception:
 			pass
 	return names
@@ -220,14 +220,14 @@ def _contact_names_by_phone(phone: str) -> set[str]:
 def _bind_chatwoot_contact(contact_name: str, chatwoot_contact_id: str) -> None:
 	if not _has_contact_mapping_field():
 		return
-	current = frappe.db.get_value("CRM Contact", contact_name, "chatwoot_contact_id")
+	current = frappe.db.get_value("CRM Student", contact_name, "chatwoot_contact_id")
 	if current and str(current) != chatwoot_contact_id:
 		_fail("AMBIGUOUS_TARGET", "The CRM Contact is already linked to another Chatwoot contact.")
 	if current:
 		return
 	try:
 		frappe.db.set_value(
-			"CRM Contact",
+			"CRM Student",
 			contact_name,
 			"chatwoot_contact_id",
 			chatwoot_contact_id,
@@ -235,10 +235,10 @@ def _bind_chatwoot_contact(contact_name: str, chatwoot_contact_id: str) -> None:
 		)
 	except (frappe.UniqueValidationError, frappe.DuplicateEntryError):
 		mapped = frappe.get_all(
-			"CRM Contact", filters={"chatwoot_contact_id": chatwoot_contact_id}, pluck="name"
+			"CRM Student", filters={"chatwoot_contact_id": chatwoot_contact_id}, pluck="name"
 		)
 		if mapped != [contact_name]:
-			_fail("AMBIGUOUS_TARGET", "The Chatwoot contact is mapped to another CRM Contact.")
+			_fail("AMBIGUOUS_TARGET", "The Chatwoot contact is mapped to another CRM Student.")
 
 
 def resolve_contact(contact: dict[str, Any]) -> str:
@@ -252,7 +252,7 @@ def resolve_contact(contact: dict[str, Any]) -> str:
 		try:
 			candidates.update(
 				frappe.get_all(
-					"CRM Contact",
+					"CRM Student",
 					filters={"chatwoot_contact_id": chatwoot_contact_id},
 					pluck="name",
 				)
@@ -260,7 +260,7 @@ def resolve_contact(contact: dict[str, Any]) -> str:
 		except Exception:
 			pass
 	if len(candidates) > 1:
-		_fail("AMBIGUOUS_TARGET", "The Chatwoot contact maps to multiple CRM Contacts.")
+		_fail("AMBIGUOUS_TARGET", "The Chatwoot contact maps to multiple CRM Students.")
 	if candidates:
 		return next(iter(candidates))
 
@@ -273,7 +273,7 @@ def resolve_contact(contact: dict[str, Any]) -> str:
 	if len(candidates) != 1:
 		_fail(
 			"AMBIGUOUS_TARGET" if candidates else "INVALID_TARGET",
-			"The Chatwoot contact does not resolve to exactly one CRM Contact.",
+			"The Chatwoot contact does not resolve to exactly one CRM Student.",
 		)
 	contact_name = next(iter(candidates))
 	_bind_chatwoot_contact(contact_name, chatwoot_contact_id)

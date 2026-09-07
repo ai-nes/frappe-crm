@@ -31,19 +31,43 @@ AI_EXPOSURE_ADMIN_ROLE = "System Manager"
 _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 	{
 		# core admissions and CRM aggregates
-		"CRM Student", "CRM Contact", "CRM Person", "CRM Interaction", "CRM Intent",
-		"CRM Admission Application", "CRM Admission Offering", "CRM Admission Year",
-		"CRM Recommendation", "CRM Action", "CRM Action Item",
-		"CRM Student Assessment", "CRM Student Outcome", "CRM Student Payment",
+		"CRM Lead",
+		"CRM Student",
+		"CRM Person",
+		"CRM Interaction",
+		"CRM Intent",
+		"CRM Admission Application",
+		"CRM Admission Offering",
+		"CRM Admission Year",
+		"CRM Recommendation",
+		"CRM Action",
+		"CRM Action Item",
+		"CRM Student Assessment",
+		"CRM Student Outcome",
+		"CRM Student Payment",
+		# Compatibility alias used by the discovery contract while CRM Lead is
+		# being represented by CRM Student in the admissions data model.
+		"CRM Lead",
+		"CRM Company",
 		# admissions reference and organization
-		"CRM Campus", "CRM Department", "CRM Education Program", "CRM Major",
-		"CRM Intent Type", "CRM Interaction Type", "CRM Enrollment Status",
+		"CRM Campus",
+		"CRM Department",
+		"CRM Education Program",
+		"CRM Major",
+		"CRM Intent Type",
+		"CRM Interaction Type",
+		"CRM Enrollment Status",
 		"CRM Aspiration",
-		"CRM Lead Source", "CRM Staff", "CRM Team",
+		"CRM Lead Source",
+		"CRM Staff",
+		"CRM Team",
 		# marketing and campaign
-		"CRM Campaign", "CRM Marketing Engagement", "CRM Segment",
+		"CRM Campaign",
+		"CRM Marketing Engagement",
+		"CRM Segment",
 		# school operations
-		"CRM High School", "CRM School Contact",
+		"CRM High School",
+		"CRM School Contact",
 	}
 )
 
@@ -57,8 +81,18 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 # an independent grant.
 _STUDENT_OPERATIONAL_FIELDS = frozenset(
 	{
-		"name", "enrollment_status", "lifecycle_stage", "assigned_to", "owner_staff",
-		"owning_team", "latest_score", "branch", "source", "admission_year", "created", "modified",
+		"name",
+		"enrollment_status",
+		"lifecycle_stage",
+		"assigned_to",
+		"owner_staff",
+		"owning_team",
+		"latest_score",
+		"branch",
+		"source",
+		"admission_year",
+		"created",
+		"modified",
 	}
 )
 _STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"student_name", "phone", "email"})
@@ -96,6 +130,7 @@ def _session_rate_limit(*, limit: int, seconds: int):
 	produces a 417 before the endpoint runs.  This local wrapper keeps the
 	boundary per session user without trusting request parameters.
 	"""
+
 	def decorator(fn):
 		@wraps(fn)
 		def wrapper(*args, **kwargs):
@@ -117,6 +152,7 @@ def _session_rate_limit(*, limit: int, seconds: int):
 			return fn(*args, **kwargs)
 
 		return wrapper
+
 	return decorator
 
 
@@ -177,12 +213,10 @@ def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
 	# silently making crm_search return zero rows for records where it's
 	# unset regardless of query content.
 	declared_search_fields = [
-		name.strip()
-		for name in (getattr(meta, "search_fields", "") or "").split(",")
-		if name.strip()
+		name.strip() for name in (getattr(meta, "search_fields", "") or "").split(",") if name.strip()
 	]
 	declared_candidates = [name for name in declared_search_fields if name in set(search_candidates)]
-	if doctype == "CRM Student" and "student_name" in search_candidates:
+	if doctype == "CRM Lead" and "student_name" in search_candidates:
 		search_field = "student_name"
 	elif declared_candidates:
 		search_field = declared_candidates[0]
@@ -214,18 +248,15 @@ def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
 
 
 def _discovery_view(doctype: str, meta, grant: dict) -> tuple[dict, dict]:
-	field_by_name = {
-		getattr(df, "fieldname", ""): df for df in getattr(meta, "fields", ())
-	}
+	field_by_name = {getattr(df, "fieldname", ""): df for df in getattr(meta, "fields", ())}
 	readable = {
-		fieldname for fieldname in grant["fields"]
+		fieldname
+		for fieldname in grant["fields"]
 		if fieldname == "name"
 		or getattr(field_by_name.get(fieldname), "fieldtype", "Data") not in _DISCOVERY_HIDDEN_TYPES
 	}
 	query_policy = _discovery_query_policy(doctype, meta, readable)
-	operations = sorted(
-		operation for operation, policy in query_policy.items() if policy.get("enabled")
-	)
+	operations = sorted(operation for operation, policy in query_policy.items() if policy.get("enabled"))
 	catalog = {
 		"resource": doctype,
 		"label": str(getattr(meta, "label", None) or doctype),
@@ -238,11 +269,13 @@ def _discovery_view(doctype: str, meta, grant: dict) -> tuple[dict, dict]:
 		if fieldname == "name" and df is None:
 			readable_fields.append({"name": fieldname, "type": "Data", "label": "Name"})
 		elif df is not None:
-			readable_fields.append({
-				"name": fieldname,
-				"type": str(getattr(df, "fieldtype", "Data")),
-				"label": str(getattr(df, "label", None) or fieldname),
-			})
+			readable_fields.append(
+				{
+					"name": fieldname,
+					"type": str(getattr(df, "fieldtype", "Data")),
+					"label": str(getattr(df, "label", None) or fieldname),
+				}
+			)
 	description = {
 		"resource": doctype,
 		"readable_fields": readable_fields,
@@ -254,10 +287,7 @@ def _discovery_view(doctype: str, meta, grant: dict) -> tuple[dict, dict]:
 
 def _is_copilot_business_discovery_doctype(doctype: str, meta) -> bool:
 	"""Return whether a DocType is a standalone business discovery resource."""
-	return (
-		doctype in _COPILOT_BUSINESS_DISCOVERY_DOCTYPES
-		and not bool(getattr(meta, "istable", False))
-	)
+	return doctype in _COPILOT_BUSINESS_DISCOVERY_DOCTYPES and not bool(getattr(meta, "istable", False))
 
 
 def _build_discovery_contract(views: dict[str, tuple[object, dict]]) -> dict:
@@ -280,9 +310,7 @@ def _build_discovery_contract(views: dict[str, tuple[object, dict]]) -> dict:
 	for doctype, (meta, _grant) in sorted(views.items()):
 		if doctype not in descriptions:
 			continue
-		field_names = {
-			field["name"] for field in descriptions[doctype]["readable_fields"]
-		}
+		field_names = {field["name"] for field in descriptions[doctype]["readable_fields"]}
 		relations = []
 		for df in getattr(meta, "fields", ()):
 			if getattr(df, "fieldname", None) not in field_names:
@@ -316,7 +344,7 @@ def _safe_discovery_filters(raw_filters, policy: dict) -> list:
 	allowed = set(policy.get("filter_fields", ()))
 	validated = []
 	for item in filters:
-		if not isinstance(item, (list, tuple)) or len(item) != 3:
+		if not isinstance(item, list | tuple) or len(item) != 3:
 			frappe.throw(_("Discovery filter is invalid."), frappe.ValidationError)
 		fieldname, operator, value = item
 		if fieldname not in allowed or operator not in {"=", "in"}:
@@ -339,7 +367,7 @@ def _project_ai_fields(doctype: str, fields: list[str]) -> list[str]:
 	surface because CRM Student remains unexposed until the staged DTO
 	endpoint and raw delegated REST gate are complete.
 	"""
-	if doctype != "CRM Student":
+	if doctype != "CRM Lead":
 		return fields
 	allowed = _STUDENT_OPERATIONAL_FIELDS | _STUDENT_SALES_APPROVED_PII_FIELDS
 	return sorted(set(fields) & allowed)
@@ -349,14 +377,15 @@ def _student_projection_for_current_user() -> list[str]:
 	roles = frappe.get_roles()
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM Student data."), frappe.PermissionError)
-	meta = frappe.get_meta("CRM Student")
-	allowed_permlevels = set(get_permlevel_access("read", "CRM Student")) | {0}
+	meta = frappe.get_meta("CRM Lead")
+	allowed_permlevels = set(get_permlevel_access("read", "CRM Lead")) | {0}
 	permlevel_by_field = {df.fieldname: df.permlevel for df in meta.fields}
 	readable_columns = [
-		fieldname for fieldname in _doctype_columns(meta)
+		fieldname
+		for fieldname in _doctype_columns(meta)
 		if permlevel_by_field.get(fieldname, 0) in allowed_permlevels
 	]
-	return _project_ai_fields("CRM Student", readable_columns)
+	return _project_ai_fields("CRM Lead", readable_columns)
 
 
 def _safe_student_filters(raw_filters, allowed_fields: set[str]):
@@ -372,7 +401,7 @@ def _safe_student_filters(raw_filters, allowed_fields: set[str]):
 		frappe.throw(_("Student filters must be a list."), frappe.ValidationError)
 	validated = []
 	for item in filters:
-		if not isinstance(item, (list, tuple)) or len(item) != 3:
+		if not isinstance(item, list | tuple) or len(item) != 3:
 			frappe.throw(_("Student filter is invalid."), frappe.ValidationError)
 		fieldname, operator, value = item
 		if fieldname not in allowed_fields or operator not in {"=", "in"}:
@@ -389,11 +418,11 @@ def get_ai_student(name: str):
 	"""Return one row-scoped, role-projected CRM Student DTO for Copilot."""
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
-	doc = frappe.get_doc("CRM Student", name)
+	doc = frappe.get_doc("CRM Lead", name)
 	# Pass the loaded document—not merely its name—to Frappe's global resolver,
 	# so the registered Student ``has_permission`` hook evaluates row scope.
-	if not frappe.has_permission("CRM Student", ptype="read", doc=doc):
-		frappe.throw(_("You are not permitted to access this CRM Student."), frappe.PermissionError)
+	if not frappe.has_permission("CRM Lead", ptype="read", doc=doc):
+		frappe.throw(_("You are not permitted to access this CRM Lead."), frappe.PermissionError)
 	return {fieldname: doc.get(fieldname) for fieldname in fields}
 
 
@@ -411,7 +440,7 @@ def list_ai_students(filters=None, limit=20, offset=0):
 		frappe.throw(_("Student pagination is invalid."), frappe.ValidationError)
 	return {
 		"records": frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=fields,
 			filters=_safe_student_filters(filters, set(fields)),
 			start=offset,
@@ -423,7 +452,7 @@ def list_ai_students(filters=None, limit=20, offset=0):
 
 @frappe.whitelist()
 @_session_rate_limit(limit=60, seconds=60)
-def search_ai_students(query: str, filters=None, limit=20):
+def search_ai_students(query: str, filters: list | str | None = None, limit: int | str = 20):
 	"""Search projected Student contact fields in the caller's row scope.
 
 	Only callers whose real permlevel access already surfaces contact PII may
@@ -446,10 +475,12 @@ def search_ai_students(query: str, filters=None, limit=20):
 		frappe.throw(_("Student pagination is invalid."), frappe.ValidationError)
 	return {
 		"records": frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=fields,
 			filters=_safe_student_filters(filters, set(fields)),
-			or_filters=[[fieldname, "like", f"%{query}%"] for fieldname in ("student_name", "phone", "email")],
+			or_filters=[
+				[fieldname, "like", f"%{query}%"] for fieldname in ("student_name", "phone", "email")
+			],
 			page_length=limit,
 			order_by="modified desc, name asc",
 		),
@@ -463,12 +494,14 @@ def count_ai_students(filters=None):
 	get_session_role_flags()
 	fields = _student_projection_for_current_user()
 	rows = frappe.get_list(
-		"CRM Student",
+		"CRM Lead",
 		fields=["count(name) as count"],
 		filters=_safe_student_filters(filters, set(fields)),
 		page_length=1,
 	)
 	return {"count": int(rows[0].get("count", 0)) if rows else 0}
+
+
 def _resource_grant(doctype: str, meta, columns: list[str]):
 	"""Return one doctype's grant dict, `_NO_GRANT`, or `_COMPUTE_ERROR`.
 
@@ -488,9 +521,17 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 		# authenticated user; control-plane/audit doctypes stay excluded.
 		demo = (
 			doctype.startswith("CRM ")
-			and doctype not in {"CRM AI Capability Grant", "CRM Agent Event", "CRM Copilot Audit Event", "CRM Student Command Receipt", "CRM Student Decision Event"}
+			and doctype
+			not in {
+				"CRM AI Capability Grant",
+				"CRM Agent Event",
+				"CRM Copilot Audit Event",
+				"CRM Student Command Receipt",
+				"CRM Student Decision Event",
+			}
 			and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-			and resolve_copilot_profile(frappe.get_roles()) in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
+			and resolve_copilot_profile(frappe.get_roles())
+			in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
 		)
 		if demo:
 			fields = _project_ai_fields(doctype, list(columns))
@@ -516,7 +557,9 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 			"row_scoped": _row_scoped(doctype),
 		}
 	except Exception:
-		frappe.log_error(message=frappe.get_traceback(), title=f"capability_gateway: resource grant failed for {doctype}")
+		frappe.log_error(
+			message=frappe.get_traceback(), title=f"capability_gateway: resource grant failed for {doctype}"
+		)
 		return _COMPUTE_ERROR
 
 
@@ -561,17 +604,17 @@ def _staff_scope_fingerprint(user: str | None = None) -> list[tuple[str, str, st
 		ignore_permissions=True,
 		limit_page_length=1,
 	)
-	return sorted(
-		(row.name, str(row.campus or ""), str(row.modified))
-		for row in staff_scope
-	)
+	return sorted((row.name, str(row.campus or ""), str(row.modified)) for row in staff_scope)
 
 
 def _capability_revision_snapshot() -> tuple[list[str], str]:
 	"""Return the caller's roles and the revision that invalidates its manifest."""
 	roles = sorted(frappe.get_roles(frappe.session.user))
 	stamps = frappe.get_all(
-		"Role", filters={"name": ["in", roles]}, fields=["name", "modified"], ignore_permissions=True,
+		"Role",
+		filters={"name": ["in", roles]},
+		fields=["name", "modified"],
+		ignore_permissions=True,
 	)
 	fingerprint = sorted((row.name, str(row.modified)) for row in stamps)
 	scope_fingerprint = _staff_scope_fingerprint()
@@ -613,16 +656,12 @@ def validate_ai_exposed_change(doc, method=None):
 	can_manage = _can_manage_ai_exposure(frappe.get_roles())
 	if doc.is_new():
 		if doc.get("custom_ai_exposed") and not can_manage:
-			frappe.throw(
-				_("Only a System Manager may set custom_ai_exposed."), frappe.PermissionError
-			)
+			frappe.throw(_("Only a System Manager may set custom_ai_exposed."), frappe.PermissionError)
 		return
 	before = doc.get_doc_before_save()
 	old_value = bool(before.get("custom_ai_exposed")) if before else False
 	if bool(doc.get("custom_ai_exposed")) != old_value and not can_manage:
-		frappe.throw(
-			_("Only a System Manager may change custom_ai_exposed."), frappe.PermissionError
-		)
+		frappe.throw(_("Only a System Manager may change custom_ai_exposed."), frappe.PermissionError)
 
 
 @frappe.whitelist()
@@ -687,14 +726,15 @@ def get_capability_manifest():
 	# *published* roles here rather than weakening that boundary for real
 	# System Manager accounts. `copilot_profile` was already resolved above
 	# against the unfiltered roles, so this filtering cannot blank it out.
-	if (
-		"System Manager" in roles
-		and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
+	if "System Manager" in roles and frappe.conf.get("crm_agents_demo_full_access") in (
+		1,
+		"1",
+		True,
+		"true",
+		"True",
 	):
 		roles = [r for r in roles if r != "System Manager"]
-	cache_key = frappe.cache.make_key(
-		f"{_MANIFEST_CACHE_PREFIX}{frappe.session.user}:{capability_revision}"
-	)
+	cache_key = frappe.cache.make_key(f"{_MANIFEST_CACHE_PREFIX}{frappe.session.user}:{capability_revision}")
 	cached = frappe.cache().get_value(cache_key)
 	if isinstance(cached, dict):
 		return cached
@@ -766,10 +806,13 @@ def get_capability_manifest():
 	# The demo switch is runtime-configurable, so enabling it must not require
 	# a migration just to make the mutation proposal tool visible. The mutation
 	# endpoint independently rechecks this same flag and the authenticated role.
-	if (
-		frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-		and copilot_profile in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
-	):
+	if frappe.conf.get("crm_agents_demo_full_access") in (
+		1,
+		"1",
+		True,
+		"true",
+		"True",
+	) and copilot_profile in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}:
 		semantic_capabilities = sorted(set(semantic_capabilities) | {"action.crm_mutation"})
 
 	schema_version = _sha256_hex(sorted(schema_entries))
@@ -795,9 +838,7 @@ def get_capability_manifest():
 		"data_scopes": data_scopes,
 		"schema_version": schema_version,
 		"capability_version": capability_version,
-		"discovery": {
-			key: value for key, value in discovery.items() if key != "descriptions"
-		},
+		"discovery": {key: value for key, value in discovery.items() if key != "descriptions"},
 	}
 	frappe.cache().set_value(cache_key, result, expires_in_sec=_MANIFEST_CACHE_TTL_S)
 	return result
@@ -821,7 +862,10 @@ def _current_discovery_contract() -> dict:
 			if grant is not _NO_GRANT and grant is not _COMPUTE_ERROR:
 				views[doctype] = (meta, grant)
 		except Exception:
-			frappe.log_error(message=frappe.get_traceback(), title=f"capability_gateway: discovery lookup failed for {doctype}")
+			frappe.log_error(
+				message=frappe.get_traceback(),
+				title=f"capability_gateway: discovery lookup failed for {doctype}",
+			)
 	return _build_discovery_contract(views)
 
 
@@ -853,9 +897,7 @@ def get_ai_resource_catalog():
 def describe_ai_resource(resource: str, discovery_revision: str | None = None):
 	"""Describe one catalog resource, never a caller-selected hidden DocType."""
 	contract = _require_discovery_revision(discovery_revision)
-	if not isinstance(resource, str) or resource not in {
-		item["resource"] for item in contract["catalog"]
-	}:
+	if not isinstance(resource, str) or resource not in {item["resource"] for item in contract["catalog"]}:
 		frappe.throw(_("Resource is not available."), frappe.PermissionError)
 	return contract["descriptions"][resource]
 
@@ -871,7 +913,7 @@ def count_ai_resource(resource: str, filters=None, discovery_revision: str | Non
 	policy = description["query_policy"].get("count", {})
 	if not policy.get("enabled") or policy.get("count_mode") == "deny":
 		frappe.throw(_("Count is not available."), frappe.PermissionError)
-	if resource == "CRM Student":
+	if resource == "CRM Lead":
 		# Keep the temporary protected DTO path authoritative for Student while
 		# the generic-path parity/exit criteria are still pending.
 		return count_ai_students(filters=filters)

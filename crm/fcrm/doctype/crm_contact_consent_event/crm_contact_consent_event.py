@@ -68,7 +68,7 @@ class CRMContactConsentEvent(Document):
 
 
 def sync_contact_consent_flag(doc: "CRMContactConsentEvent", method: str | None = None):
-	"""after_insert hook: flips the matching snapshot flag on CRM Contact.
+	"""after_insert hook: flips the matching snapshot flag on CRM Student.
 
 	Uses frappe.db.set_value (not doc.save()) to avoid re-triggering Contact's own
 	validate/hook stack, and lets exceptions propagate so a failure rolls back the
@@ -87,16 +87,16 @@ def sync_contact_consent_flag(doc: "CRMContactConsentEvent", method: str | None 
 	else:
 		target_value = 1
 
-	current_value = frappe.db.get_value("CRM Contact", doc.contact, flag_field)
+	current_value = frappe.db.get_value("CRM Student", doc.contact, flag_field)
 	if current_value == target_value:
 		return
 
-	frappe.db.set_value("CRM Contact", doc.contact, flag_field, target_value, update_modified=False)
+	frappe.db.set_value("CRM Student", doc.contact, flag_field, target_value, update_modified=False)
 
 
 def sync_student_privacy_projection(doc: "CRMContactConsentEvent", method: str | None = None):
 	"""Project the latest Student consent state without mutating the append-only event."""
-	if not doc.student or not frappe.db.exists("CRM Student", doc.student):
+	if not doc.student or not frappe.db.exists("CRM Lead", doc.student):
 		return
 	latest = frappe.db.get_value(
 		"CRM Contact Consent Event",
@@ -116,7 +116,7 @@ def sync_student_privacy_projection(doc: "CRMContactConsentEvent", method: str |
 	values = {
 		"privacy_status": status,
 	}
-	frappe.db.set_value("CRM Student", doc.student, values, update_modified=False)
+	frappe.db.set_value("CRM Lead", doc.student, values, update_modified=False)
 	from crm.services.student_context import mark_student_context_changed
 
 	mark_student_context_changed(doc.student, "privacy_consent_changed")

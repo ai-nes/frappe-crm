@@ -28,8 +28,8 @@ from crm.fcrm.student_intake import StudentIntakeError
 class TestInteractionLogDispatch(FrappeTestCase):
 	def test_direct_student_reference_requires_the_same_student(self):
 		with patch("crm.fcrm.interaction_log.frappe.db.exists", return_value=True):
-			self.assertTrue(_source_matches_student("CRM Student", "STU-1", "STU-1"))
-			self.assertFalse(_source_matches_student("CRM Student", "STU-1", "STU-2"))
+			self.assertTrue(_source_matches_student("CRM Lead", "STU-1", "STU-1"))
+			self.assertFalse(_source_matches_student("CRM Lead", "STU-1", "STU-2"))
 
 	def test_external_interaction_replay_does_not_create_a_second_row(self):
 		payload = {
@@ -149,13 +149,13 @@ class TestInteractionLogDispatch(FrappeTestCase):
 	def _make_contact(self, name, phone):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 			}
 		)
 		contact.insert(ignore_permissions=True)
-		self.addCleanup(self._delete_if_exists, "CRM Contact", contact.name)
+		self.addCleanup(self._delete_if_exists, "CRM Student", contact.name)
 		return contact
 
 	def _task_interactions(self, task_name):
@@ -180,7 +180,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 				"communication_medium": "Email",
 				"sent_or_received": "Sent",
 				"subject": "_Test outreach subject",
-				"reference_doctype": "CRM Contact",
+				"reference_doctype": "CRM Student",
 				"reference_name": contact.name,
 			}
 		)
@@ -208,7 +208,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 				"communication_medium": "Email",
 				"sent_or_received": "Received",
 				"subject": "_Test inbound subject",
-				"reference_doctype": "CRM Contact",
+				"reference_doctype": "CRM Student",
 				"reference_name": contact.name,
 			}
 		)
@@ -231,7 +231,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 				"title": "_Test counseling task",
 				"description": "_Test discussed enrollment options",
 				"status": "Todo",
-				"reference_doctype": "CRM Contact",
+				"reference_doctype": "CRM Student",
 				"reference_docname": contact.name,
 			}
 		).insert(ignore_permissions=True)
@@ -258,7 +258,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 				"doctype": "Task",
 				"title": "_Test no description task",
 				"status": "Todo",
-				"reference_doctype": "CRM Contact",
+				"reference_doctype": "CRM Student",
 				"reference_docname": contact.name,
 			}
 		).insert(ignore_permissions=True)

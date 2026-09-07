@@ -31,7 +31,7 @@ def execute():
 
 def _migrate_campaigns():
 	created = 0
-	for row in frappe.db.get_all("CRM Contact", filters=[["crm_campaign", "is", "set"]], fields=["name", "student", "crm_campaign", "creation"]):
+	for row in frappe.db.get_all("CRM Student", filters=[["crm_campaign", "is", "set"]], fields=["name", "student", "crm_campaign", "creation"]):
 		if not row.student or frappe.db.exists(TARGET, {"engagement_kind": "campaign_touch", "crm_campaign": row.crm_campaign, "crm_contact": row.name}):
 			continue
 		_insert({
@@ -46,7 +46,7 @@ def _migrate_campaigns():
 
 def _migrate_events():
 	created = 0
-	for row in frappe.db.get_all("CRM Contact", filters=[["crm_event", "is", "set"]], fields=["name", "student", "crm_event", "creation"]):
+	for row in frappe.db.get_all("CRM Student", filters=[["crm_event", "is", "set"]], fields=["name", "student", "crm_event", "creation"]):
 		if not row.student or frappe.db.exists(TARGET, {"engagement_kind": "event_participation", "crm_event": row.crm_event, "crm_contact": row.name}):
 			continue
 		_insert({

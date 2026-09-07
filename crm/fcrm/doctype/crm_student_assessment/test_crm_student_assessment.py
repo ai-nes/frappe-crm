@@ -15,7 +15,7 @@ class TestCRMStudentAssessment(FrappeTestCase):
 	def _student(self, suffix):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": f"_Test Assessment {suffix}",
 				"phone": f"0987{suffix:06d}",
 				"enrollment_status": "NEW",
@@ -26,7 +26,7 @@ class TestCRMStudentAssessment(FrappeTestCase):
 			student.insert(ignore_permissions=True)
 		finally:
 			frappe.flags.student_intake_service = False
-		self.addCleanup(lambda: frappe.delete_doc("CRM Student", student.name, force=True))
+		self.addCleanup(lambda: frappe.delete_doc("CRM Lead", student.name, force=True))
 		return student
 
 	def _values(self, barrier="Information"):
@@ -93,4 +93,4 @@ class TestCRMStudentAssessment(FrappeTestCase):
 		)
 		self.assertEqual(second["revision"], first["revision"] + 1)
 		self.assertEqual(frappe.db.get_value("CRM Student Assessment", first["name"], "status"), "superseded")
-		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "primary_barrier"), "Family")
+		self.assertEqual(frappe.db.get_value("CRM Lead", student.name, "primary_barrier"), "Family")

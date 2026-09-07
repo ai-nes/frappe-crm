@@ -62,8 +62,8 @@ def test_empty_projection_has_stable_contract_and_source_marker():
 
 
 def test_migration_helpers_are_deterministic_and_redact_values():
-	assert provenance(source_doctype="CRM Student", source_name="STU-1") == provenance(
-		source_doctype="CRM Student", source_name="STU-1"
+	assert provenance(source_doctype="CRM Lead", source_name="STU-1") == provenance(
+		source_doctype="CRM Lead", source_name="STU-1"
 	)
 	profile = profile_rows([{"major": "CS"}, {"major": "CS"}, {"major": None}], ["major"])
 	assert profile["row_count"] == 3

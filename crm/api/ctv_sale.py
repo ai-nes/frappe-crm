@@ -226,7 +226,7 @@ def _load_students(target_staff: dict[str, Any] | None, warnings: list[str]) -> 
 	if target_staff:
 		filters["owner_staff"] = target_staff["name"]
 	rows = _get_list(
-		"CRM Student",
+		"CRM Lead",
 		filters=filters,
 		fields=STUDENT_FIELDS,
 		order_by="name asc",
@@ -243,7 +243,7 @@ def _load_contacts(student_ids: list[str], warnings: list[str]) -> list[dict[str
 	return [
 		dict(row)
 		for row in _get_list(
-			"CRM Contact",
+			"CRM Student",
 			filters={"student": ["in", student_ids]},
 			fields=CONTACT_FIELDS,
 			order_by="name asc",

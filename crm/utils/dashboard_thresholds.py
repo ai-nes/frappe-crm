@@ -2,7 +2,7 @@
 # Tunable by editing this constant only — no in-app CRUD UI in v1.
 
 SCORE_THRESHOLDS = {
-	"hot": 70,  # CRM Student.latest_score >= 70
+	"hot": 70,  # CRM Lead.latest_score >= 70
 	"warm": 40,  # 40 <= latest_score < 70
 	# below 40 == "cool"
 }

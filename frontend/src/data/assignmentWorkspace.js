@@ -8,6 +8,9 @@ export const assignmentWorkspaceMethods = Object.freeze({
   setRoutingEnabled: 'crm.api.assignment_control.set_routing_enabled',
   upsertStaffCapacity: 'crm.api.assignment_control.upsert_staff_capacity',
   readiness: `${API_PREFIX}get_setup_readiness`,
+  setup: `${API_PREFIX}get_setup_workspace`,
+  setupReference: `${API_PREFIX}create_setup_reference`,
+  teamCommand: `${API_PREFIX}apply_team_command`,
   batchImpact: `${API_PREFIX}get_assignment_batch_impact`,
   batchCommand: `${API_PREFIX}apply_assignment_batch_command`,
   staffContext: `${API_PREFIX}get_staff_context`,
@@ -40,8 +43,13 @@ export const assignmentWorkspaceWorkloadLabels = Object.freeze({
 })
 
 export const assignmentWorkspacePolicyLabels = Object.freeze({
-  round_robin: 'Luân phiên công bằng',
-  weighted_score: 'Chấm điểm có trọng số',
+  round_robin: 'Chia đều lần lượt',
+  weighted_score: 'Ưu tiên người phù hợp',
+})
+
+export const assignmentWorkspacePolicyDescriptions = Object.freeze({
+  round_robin: 'Lần lượt chuyển Lead cho người còn chỗ trống.',
+  weighted_score: 'Ưu tiên người còn chỗ trống và phù hợp với địa bàn.',
 })
 
 export function assignmentWorkspaceStatusTone(status) {
@@ -90,7 +98,11 @@ export function assignmentWorkspaceWorkloadLabel(workload) {
 }
 
 export function assignmentWorkspacePolicyLabel(strategy) {
-  return assignmentWorkspacePolicyLabels[strategy] || strategy || '—'
+  return assignmentWorkspacePolicyLabels[strategy] || 'Chưa xác định'
+}
+
+export function assignmentWorkspacePolicyDescription(strategy) {
+  return assignmentWorkspacePolicyDescriptions[strategy] || 'Chưa có mô tả.'
 }
 
 /**

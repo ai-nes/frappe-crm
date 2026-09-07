@@ -107,7 +107,7 @@ def generate_mock_draft(
 	contract (subject, body strings only) stable so a future provider can
 	swap in without touching callers.
 	"""
-	contact_full_name = frappe.db.get_value("CRM Contact", contact_name, "full_name") or contact_name
+	contact_full_name = frappe.db.get_value("CRM Student", contact_name, "full_name") or contact_name
 
 	template = PURPOSE_TEMPLATES.get(purpose, DEFAULT_TEMPLATE)
 	subject = template["subject"]

@@ -3,7 +3,7 @@
     <template #left-header>
       <ViewBreadcrumbs
         routeName="Assignment Overview"
-        :label="__('Cơ chế phân bổ')"
+        :label="__('Phân bổ Lead')"
       />
     </template>
     <template #right-header>
@@ -12,7 +12,10 @@
         :label="__('Làm mới')"
         iconLeft="refresh-cw"
         :loading="
-          overview.loading || readiness.loading || routingControl.loading
+          overview.loading ||
+          readiness.loading ||
+          routingControl.loading ||
+          setup.loading
         "
         @click="refresh"
       />
@@ -33,205 +36,83 @@
         <Button class="mt-3" :label="__('Thử lại')" @click="refresh" />
       </div>
 
-      <Tabs
-        v-model="tabIndex"
-        :tabs="workspaceTabs"
-        class="assignment-workspace-tabs flex flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-white shadow-sm [&_[role='tablist']]:overflow-x-auto [&_[role='tablist']]:px-4 [&_[role='tablist']]:sm:px-5 [&_[role='tablist']]:min-h-[52px] [&_[role='tablist']]:gap-6 [&_[role='tabpanel']:not([hidden])]:block"
+      <div
+        class="assignment-workspace-tabs flex flex-col overflow-hidden rounded-xl border border-outline-gray-2 bg-surface-white shadow-sm"
       >
-        <template #tab-panel="{ tab }">
-          <div v-if="tab.key === 'summary'" class="space-y-4 p-4 sm:p-5">
-            <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-5">
-              <div class="flex items-start gap-3">
-                <FeatherIcon
-                  name="compass"
-                  class="mt-0.5 size-5 shrink-0 text-blue-700"
-                  aria-hidden="true"
-                />
-                <div>
-                  <h2 class="font-semibold text-blue-950">
-                    {{ __('Bối cảnh phân công Lead tự động') }}
-                  </h2>
-                  <p class="mt-1 max-w-4xl text-sm leading-6 text-blue-900">
-                    {{
-                      __(
-                        'Lead mới đi vào Pool → policy xác định chiến lược → hệ thống kiểm tra Team, Staff active và capacity → chọn Sale → ghi nhận người phụ trách. Nếu thiếu địa bàn, policy hoặc capacity, Lead ở lại hàng chờ để xử lý an toàn.',
-                      )
-                    }}
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div
-              v-if="routingControl.data"
-              class="grid gap-4 md:grid-cols-2 xl:grid-cols-4"
-            >
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-4"
-              >
-                <p class="text-xs text-ink-gray-5">
-                  {{ __('Tự động phân công') }}
-                </p>
-                <p
-                  class="mt-2 text-lg font-semibold"
-                  :class="
-                    routingControl.data.enabled
-                      ? 'text-green-700'
-                      : 'text-ink-gray-8'
-                  "
-                >
-                  {{
-                    routingControl.data.enabled
-                      ? __('Đang bật')
-                      : __('Đang tắt')
-                  }}
-                </p>
-                <p class="mt-1 text-xs text-ink-gray-5">
-                  {{
-                    routingControl.data.ready_to_enable
-                      ? __('Sẵn sàng vận hành')
-                      : __('Còn mục cần setup')
-                  }}
-                </p>
-              </div>
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-4"
-              >
-                <p class="text-xs text-ink-gray-5">
-                  {{ __('Sale trong cân bằng tải') }}
-                </p>
-                <p class="mt-2 text-lg font-semibold text-ink-gray-9">
-                  {{ routingControl.data.summary?.eligible_staff || 0 }}
-                </p>
-                <p class="mt-1 text-xs text-ink-gray-5">
-                  {{ routingControl.data.summary?.capacity_configured || 0 }}
-                  {{ __('đã đặt capacity') }}
-                </p>
-              </div>
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-4"
-              >
-                <p class="text-xs text-ink-gray-5">{{ __('Lead đang giữ') }}</p>
-                <p class="mt-2 text-lg font-semibold text-ink-gray-9">
-                  {{ routingControl.data.summary?.active_leads || 0 }}
-                </p>
-                <p class="mt-1 text-xs text-ink-gray-5">
-                  {{ routingControl.data.summary?.remaining_capacity || 0 }}
-                  {{ __('chỗ còn trống') }}
-                </p>
-              </div>
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-4"
-              >
-                <p class="text-xs text-ink-gray-5">
-                  {{ __('Policy đang hiệu lực') }}
-                </p>
-                <p class="mt-2 text-lg font-semibold text-ink-gray-9">
-                  {{
-                    routingControl.data.policies?.filter(
-                      (policy) => policy.status === 'active',
-                    ).length || 0
-                  }}
-                </p>
-                <p class="mt-1 text-xs text-ink-gray-5">
-                  {{ __('Kiểm tra ở tab Chính sách') }}
-                </p>
-              </div>
-            </div>
-            <div class="grid gap-4 lg:grid-cols-2">
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-5"
-              >
-                <h3 class="font-semibold text-ink-gray-9">
-                  {{ __('Thứ tự setup') }}
-                </h3>
-                <ol class="mt-3 space-y-3 text-sm text-ink-gray-7">
-                  <li>
-                    <span
-                      class="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700"
-                      >1</span
-                    >{{
-                      __('Cấu hình Staff, Team và địa bàn trong Cây phân bổ.')
-                    }}
-                  </li>
-                  <li>
-                    <span
-                      class="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700"
-                      >2</span
-                    >{{ __('Đặt capacity cho từng Sale ở tab Cân bằng tải.') }}
-                  </li>
-                  <li>
-                    <span
-                      class="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700"
-                      >3</span
-                    >{{ __('Tạo và phê duyệt policy cho từng Pool.') }}
-                  </li>
-                  <li>
-                    <span
-                      class="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700"
-                      >4</span
-                    >{{ __('Kiểm tra sẵn sàng rồi bật tự động phân công.') }}
-                  </li>
-                </ol>
-              </div>
-              <div
-                class="rounded-xl border border-outline-gray-2 bg-surface-white p-5"
-              >
-                <h3 class="font-semibold text-ink-gray-9">
-                  {{ __('Quy tắc cân bằng tải') }}
-                </h3>
-                <ul class="mt-3 space-y-2 text-sm text-ink-gray-7">
-                  <li>• {{ __('Dưới 85%: có thể nhận Lead bình thường.') }}</li>
-                  <li>
-                    •
-                    {{
-                      __(
-                        'Từ 85% đến dưới 100%: hiển thị gần đầy; ưu tiên match trường nếu có.',
-                      )
-                    }}
-                  </li>
-                  <li>• {{ __('Từ 100%: không nhận thêm Lead tự động.') }}</li>
-                  <li>
-                    • {{ __('Chưa đặt capacity: không được bật routing mới.') }}
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
+        <div
+          role="tablist"
+          :aria-label="__('Phân bổ Lead')"
+          class="flex min-h-[52px] gap-6 overflow-x-auto border-b border-outline-gray-1 px-4 sm:px-5"
+        >
+          <button
+            v-for="(tab, index) in workspaceTabs"
+            :id="`assignment-tab-${tab.key}`"
+            :key="tab.key"
+            type="button"
+            role="tab"
+            :aria-selected="tabIndex === index"
+            :aria-controls="`assignment-panel-${tab.key}`"
+            class="shrink-0 border-b-2 border-transparent px-1 py-3 text-base text-ink-gray-5 transition hover:text-ink-gray-9 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+            :class="
+              tabIndex === index ? 'border-ink-gray-9 text-ink-gray-9' : ''
+            "
+            @click="tabIndex = index"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
 
-          <div v-else-if="tab.key === 'tree'" class="space-y-4 p-4 sm:p-5">
+        <div
+          v-for="(tab, index) in workspaceTabs"
+          v-show="tabIndex === index"
+          :id="`assignment-panel-${tab.key}`"
+          :key="`${tab.key}-panel`"
+          role="tabpanel"
+          :aria-labelledby="`assignment-tab-${tab.key}`"
+          tabindex="0"
+          class="flex flex-col overflow-auto"
+        >
+          <div v-if="tab.key === 'tree'" class="space-y-4 p-4 sm:p-5">
             <AssignmentOverviewFilters
               :model-value="filters"
               :schema="data?.filter_schema"
               @update:modelValue="applyFilters"
               @reset="resetFilters"
-            />
-            <div
-              v-if="canEditTopology && selectedSchoolRows.length"
-              class="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-violet-200 bg-violet-50/70 px-4 py-3 text-sm text-violet-950"
-              data-testid="assignment-batch-toolbar"
             >
-              <span class="font-medium">{{
-                __('Đã chọn {0} trường THPT', [selectedSchoolRows.length])
-              }}</span
-              ><Button
-                variant="solid"
-                :label="__('Thiết lập batch')"
-                iconLeft="copy"
-                data-testid="open-assignment-batch"
-                @click="batchOpen = true"
-              />
-            </div>
+              <template v-if="canManageSetup" #actions>
+                <button
+                  type="button"
+                  data-testid="open-assignment-setup-drawer"
+                  class="inline-flex min-h-9 min-w-9 items-center justify-center rounded-md text-ink-gray-6 hover:bg-surface-gray-2 hover:text-ink-gray-9 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  :aria-label="__('Các bước setup')"
+                  :title="__('Các bước setup')"
+                  @click="setupDrawerOpen = true"
+                >
+                  <FeatherIcon
+                    name="help-circle"
+                    class="size-4"
+                    aria-hidden="true"
+                  />
+                </button>
+              </template>
+            </AssignmentOverviewFilters>
+            <AssignmentSetupDrawer
+              v-model="setupDrawerOpen"
+              :data="setup.data"
+              :control="routingControl.data"
+              :loading="setup.loading"
+              :error="setup.error"
+              :can-manage="canConfigureSystem(currentUser)"
+              @refresh="refresh"
+              @navigate="handleSetupNavigate"
+            />
             <AssignmentOverviewTable
               :rows="normalizedRows"
               :loading="overview.loading"
               :next-cursor="nextCursor"
               :active-filter-count="activeFilterCount"
-              :selectable="canEditTopology"
-              :selected-school-ids="selectedSchoolIds"
-              @select="selectRow"
               @load-more="loadMore"
-              @toggle-school="toggleSchool"
-              @toggle-all-schools="toggleAllSchools"
+              @scope-change="loadAssignmentScope"
             />
             <p
               v-if="data?.warnings?.length"
@@ -246,6 +127,17 @@
             </p>
           </div>
 
+          <div v-else-if="tab.key === 'setup'" class="p-4 sm:p-5">
+            <AssignmentSetupPanel
+              :data="setup.data"
+              :control="routingControl.data"
+              :loading="setup.loading"
+              :error="setup.error"
+              :can-manage="canConfigureSystem(currentUser)"
+              @refresh="refresh"
+              @navigate="goToTab"
+            />
+          </div>
           <div v-else-if="tab.key === 'control'" class="p-4 sm:p-5">
             <AssignmentRoutingControlPanel
               :control="routingControl.data"
@@ -255,6 +147,7 @@
               :can-manage="canManageControl"
               @refresh="refreshControl"
               @toggle="toggleRouting"
+              @navigate="goToTab"
             />
           </div>
           <div v-else-if="tab.key === 'load'" class="p-4 sm:p-5">
@@ -312,46 +205,26 @@
               </div>
             </section>
           </div>
-        </template>
-      </Tabs>
+        </div>
+      </div>
     </div>
   </main>
-
-  <AssignmentDetailDrawer
-    :row="selectedRow"
-    :can-edit="canEditTopology"
-    @close="selectedRow = null"
-    @edit="openEditor"
-  />
-  <EditAssignmentModal
-    v-model="editOpen"
-    :row="editingRow"
-    :options="data?.edit_options"
-    @applied="handleApplied"
-  />
-  <BatchAssignmentModal
-    v-model="batchOpen"
-    :rows="selectedSchoolRows"
-    :options="data?.edit_options"
-    @applied="handleBatchApplied"
-  />
 </template>
 
 <script setup>
-import { Button, FeatherIcon, Tabs, createResource, toast } from 'frappe-ui'
+import { Button, FeatherIcon, createResource, toast } from 'frappe-ui'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import AssignmentOverviewFilters from '@/components/AssignmentWorkspace/AssignmentOverviewFilters.vue'
 import AssignmentOverviewTable from '@/components/AssignmentWorkspace/AssignmentOverviewTable.vue'
-import AssignmentDetailDrawer from '@/components/AssignmentWorkspace/AssignmentDetailDrawer.vue'
-import EditAssignmentModal from '@/components/AssignmentWorkspace/EditAssignmentModal.vue'
-import BatchAssignmentModal from '@/components/AssignmentWorkspace/BatchAssignmentModal.vue'
 import SetupReadinessPanel from '@/components/AssignmentWorkspace/SetupReadinessPanel.vue'
 import AssignmentRoutingControlPanel from '@/components/AssignmentWorkspace/AssignmentRoutingControlPanel.vue'
 import AssignmentLoadBalancePanel from '@/components/AssignmentWorkspace/AssignmentLoadBalancePanel.vue'
 import AssignmentPolicyPanel from '@/components/AssignmentWorkspace/AssignmentPolicyPanel.vue'
+import AssignmentSetupPanel from '@/components/AssignmentWorkspace/AssignmentSetupPanel.vue'
+import AssignmentSetupDrawer from '@/components/AssignmentWorkspace/AssignmentSetupDrawer.vue'
 import {
   assignmentWorkspaceFilterQuery,
   assignmentWorkspaceMethods,
@@ -369,19 +242,23 @@ const currentUser = computed(() => getUser() || {})
 const canViewReadiness = computed(() => canConfigureSystem(currentUser.value))
 const canManageControl = computed(() => canConfigureSystem(currentUser.value))
 const tabIndex = ref(0)
+const setupDrawerOpen = ref(false)
 const controlSaving = ref(false)
 const capacitySaving = ref(false)
-const workspaceTabs = [
-  { key: 'summary', name: 'summary', label: __('Tổng quan') },
-  { key: 'tree', name: 'tree', label: __('Cây phân bổ') },
-  { key: 'control', name: 'control', label: __('Điều khiển tự động') },
-  { key: 'load', name: 'load', label: __('Cân bằng tải') },
-  { key: 'policy', name: 'policy', label: __('Chính sách') },
-  { key: 'readiness', name: 'readiness', label: __('Kiểm tra sẵn sàng') },
-]
+const workspaceTabs = computed(() => [
+  { key: 'tree', name: 'tree', label: __('Sơ đồ phân bổ') },
+  ...(canManageSetup.value
+    ? [{ key: 'setup', name: 'setup', label: __('Thiết lập') }]
+    : []),
+  { key: 'load', name: 'load', label: __('Giới hạn nhận') },
+  { key: 'policy', name: 'policy', label: __('Cách chia Lead') },
+  { key: 'readiness', name: 'readiness', label: __('Kiểm tra') },
+  { key: 'control', name: 'control', label: __('Tự động') },
+])
 
 const overview = createAssignmentWorkspaceResource('overview')
 const readiness = createAssignmentWorkspaceResource('readiness')
+const setup = createAssignmentWorkspaceResource('setup')
 const routingControl = createAssignmentWorkspaceResource('routingControl')
 const routingToggle = createResource({
   url: assignmentWorkspaceMethods.setRoutingEnabled,
@@ -392,31 +269,19 @@ const capacityUpdate = createResource({
   method: 'POST',
 })
 const data = computed(() => overview.data)
+const canManageSetup = computed(() =>
+  Boolean(
+    data.value?.capabilities?.can_view_readiness ||
+      data.value?.capabilities?.can_edit_identity,
+  ),
+)
 const normalizedRows = computed(() =>
   normalizeAssignmentWorkspaceRows(rows.value),
 )
 const nextCursor = computed(() => data.value?.next_cursor || null)
-const canEditTopology = computed(() =>
-  Boolean(data.value?.capabilities?.can_edit_topology),
-)
 const rows = ref([])
-const selectedRow = ref(null)
-const editingRow = ref(null)
-const batchOpen = ref(false)
-const selectedSchoolIds = ref([])
-const selectedSchoolRows = computed(() =>
-  rows.value.filter(
-    (row) =>
-      row.level === 'high_school' &&
-      selectedSchoolIds.value.includes(row.high_school_id),
-  ),
-)
-const editOpen = computed({
-  get: () => Boolean(editingRow.value),
-  set: (value) => {
-    if (!value) editingRow.value = null
-  },
-})
+const topologyRows = ref([])
+const assignmentScope = ref(null)
 const filters = reactive({
   campus: route.query.campus || undefined,
   province: route.query.province || undefined,
@@ -440,9 +305,10 @@ const activeFilterCount = computed(
     ).length,
 )
 
-function requestParams(cursor) {
+function requestParams(cursor, scope = assignmentScope.value) {
+  const requestFilters = scope ? { ...filters, ...scope } : filters
   return {
-    filters: serializeAssignmentWorkspaceFilters(filters),
+    filters: serializeAssignmentWorkspaceFilters(requestFilters),
     limit: 100,
     cursor,
   }
@@ -453,9 +319,41 @@ async function reload({ append = false } = {}) {
     requestParams(append ? nextCursor.value : undefined),
   )
   const payload = result || overview.data
-  rows.value = append
-    ? [...rows.value, ...(payload?.rows || [])]
-    : payload?.rows || []
+  const payloadRows = payload?.rows || []
+  if (!assignmentScope.value) {
+    rows.value = append ? [...rows.value, ...payloadRows] : payloadRows
+    if (!append)
+      topologyRows.value = payloadRows.filter(
+        (row) => row.level !== 'high_school',
+      )
+    return
+  }
+
+  const scopedSchools = payloadRows.filter((row) => row.level === 'high_school')
+  const scopedTopology = payloadRows.filter(
+    (row) => row.level !== 'high_school',
+  )
+  const topology = append
+    ? rows.value.filter((row) => row.level !== 'high_school')
+    : topologyRows.value
+  const topologyById = new Map(
+    [...topology, ...scopedTopology].map((row) => [row.id, row]),
+  )
+  const existingSchools = append
+    ? rows.value.filter((row) => row.level === 'high_school')
+    : []
+  const schoolsById = new Map(
+    [...existingSchools, ...scopedSchools].map((row) => [row.id, row]),
+  )
+  rows.value = [...topologyById.values(), ...schoolsById.values()]
+}
+
+async function loadAssignmentScope(scope) {
+  assignmentScope.value = {
+    province: scope?.province || undefined,
+    zone: scope?.zone || undefined,
+  }
+  await reload()
 }
 
 async function refresh() {
@@ -464,6 +362,7 @@ async function refresh() {
     refreshControl(),
     canViewReadiness.value ? readiness.fetch() : Promise.resolve(),
   ])
+  if (canManageSetup.value) await setup.fetch()
 }
 
 async function refreshControl() {
@@ -473,7 +372,12 @@ async function refreshControl() {
 async function toggleRouting(payload) {
   controlSaving.value = true
   try {
-    await routingToggle.submit(payload)
+    await routingToggle.submit({
+      ...payload,
+      reason: payload.enabled
+        ? __('Bật phân công tự động từ màn hình Phân bổ Lead.')
+        : __('Tắt phân công tự động từ màn hình Phân bổ Lead.'),
+    })
     await refreshControl()
     toast.success(
       payload.enabled
@@ -494,9 +398,9 @@ async function saveCapacity(payload) {
   try {
     await capacityUpdate.submit(payload)
     await refreshControl()
-    toast.success(__('Đã cập nhật capacity.'))
+    toast.success(__('Đã cập nhật giới hạn Lead.'))
   } catch (error) {
-    toast.error(error?.messages?.[0] || __('Không thể cập nhật capacity.'))
+    toast.error(error?.messages?.[0] || __('Không thể cập nhật giới hạn Lead.'))
   } finally {
     capacitySaving.value = false
   }
@@ -507,15 +411,15 @@ async function applyFilters(next) {
     if (!(key in next)) delete filters[key]
   }
   Object.assign(filters, next)
+  assignmentScope.value = null
   await router.replace({ query: assignmentWorkspaceFilterQuery(filters) })
-  selectedSchoolIds.value = []
   await reload()
 }
 
 async function resetFilters() {
   for (const key of Object.keys(filters)) delete filters[key]
+  assignmentScope.value = null
   await router.replace({ query: {} })
-  selectedSchoolIds.value = []
   await reload()
 }
 
@@ -523,42 +427,14 @@ async function loadMore() {
   if (nextCursor.value) await reload({ append: true })
 }
 
-function selectRow(row) {
-  selectedRow.value = row
+function goToTab(key) {
+  const index = workspaceTabs.value.findIndex((tab) => tab.key === key)
+  if (index >= 0) tabIndex.value = index
 }
 
-function openEditor(row) {
-  selectedRow.value = null
-  editingRow.value = row
-}
-
-function toggleSchool(highSchoolId) {
-  if (!highSchoolId) return
-  const selected = new Set(selectedSchoolIds.value)
-  if (selected.has(highSchoolId)) selected.delete(highSchoolId)
-  else selected.add(highSchoolId)
-  selectedSchoolIds.value = [...selected]
-}
-
-function toggleAllSchools(ids) {
-  const selected = new Set(selectedSchoolIds.value)
-  const allSelected = ids.length && ids.every((id) => selected.has(id))
-  ids.forEach((id) => (allSelected ? selected.delete(id) : selected.add(id)))
-  selectedSchoolIds.value = [...selected]
-}
-
-async function handleApplied(result) {
-  editingRow.value = null
-  selectedRow.value = null
-  await refresh()
-  if (result?.conflict) return
-}
-
-async function handleBatchApplied(result) {
-  batchOpen.value = false
-  selectedSchoolIds.value = []
-  await refresh()
-  if (result?.conflict) return
+function handleSetupNavigate(tab) {
+  setupDrawerOpen.value = false
+  goToTab(tab)
 }
 
 function errorMessage(error) {

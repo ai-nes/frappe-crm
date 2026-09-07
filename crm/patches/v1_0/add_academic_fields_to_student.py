@@ -26,7 +26,7 @@ def execute():
 
 def _copy_contact_academic_fields_to_student():
 	for contact in frappe.get_all(
-		"CRM Contact",
+		"CRM Student",
 		filters={"student": ["!=", ""]},
 		fields=["name", "student", *ACADEMIC_FIELDS],
 	):
@@ -36,18 +36,18 @@ def _copy_contact_academic_fields_to_student():
 			if value not in (None, ""):
 				updates[fieldname] = value
 		if updates:
-			frappe.db.set_value("CRM Student", contact.student, updates, update_modified=False)
+			frappe.db.set_value("CRM Lead", contact.student, updates, update_modified=False)
 
 
 def _copy_contact_child_rows_to_student(child_doctype):
-	for contact in frappe.get_all("CRM Contact", filters={"student": ["!=", ""]}, fields=["name", "student"]):
-		existing = frappe.db.exists(child_doctype, {"parenttype": "CRM Student", "parent": contact.student})
+	for contact in frappe.get_all("CRM Student", filters={"student": ["!=", ""]}, fields=["name", "student"]):
+		existing = frappe.db.exists(child_doctype, {"parenttype": "CRM Lead", "parent": contact.student})
 		if existing:
 			continue
 
 		source_rows = frappe.get_all(
 			child_doctype,
-			filters={"parenttype": "CRM Contact", "parent": contact.name},
+			filters={"parenttype": "CRM Student", "parent": contact.name},
 			fields=["*"],
 			order_by="idx asc",
 		)
@@ -57,7 +57,7 @@ def _copy_contact_child_rows_to_student(child_doctype):
 				data.pop(fieldname, None)
 			data.update({
 				"doctype": child_doctype,
-				"parenttype": "CRM Student",
+				"parenttype": "CRM Lead",
 				"parent": contact.student,
 				"parentfield": _student_parentfield(child_doctype),
 			})
@@ -71,9 +71,9 @@ def _student_parentfield(child_doctype):
 
 
 def _drop_student_mobile_no_if_exists():
-	existing = {row[0] for row in frappe.db.sql("SHOW COLUMNS FROM `tabCRM Student`")}
+	existing = {row[0] for row in frappe.db.sql("SHOW COLUMNS FROM `tabCRM Lead`")}
 	if "mobile_no" in existing:
 		frappe.db.commit()
-		frappe.db.sql("ALTER TABLE `tabCRM Student` DROP COLUMN `mobile_no`")
+		frappe.db.sql("ALTER TABLE `tabCRM Lead` DROP COLUMN `mobile_no`")
 
-	frappe.clear_cache(doctype="CRM Student")
+	frappe.clear_cache(doctype="CRM Lead")
