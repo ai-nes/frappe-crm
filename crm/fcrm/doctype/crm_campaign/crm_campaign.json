@@ -80,13 +80,13 @@
    "options": "\nOn-Campus\nOff-Campus"
   },
   {
-   "default": "Draft",
+   "default": "DRAFT",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Draft\nApproved\nActive\nCompleted\nCancelled",
+   "options": "DRAFT\nUPCOMING\nACTIVE\nCLOSED",
    "reqd": 1
   },
   {

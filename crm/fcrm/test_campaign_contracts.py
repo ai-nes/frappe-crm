@@ -42,6 +42,14 @@ def test_campaign_has_one_to_many_lead_relationship():
 	assert stable_code["read_only"] == 1
 
 
+def test_campaign_statuses_are_canonical():
+	campaign = _load_doctype("crm_campaign")
+	status = next(field for field in campaign["fields"] if field["fieldname"] == "status")
+
+	assert status["default"] == "DRAFT"
+	assert status["options"].splitlines() == ["DRAFT", "UPCOMING", "ACTIVE", "CLOSED"]
+
+
 def test_dimension_key_is_stable_and_ignores_null_components():
 	assert canonical_dimension_key(
 		{"channel": "Search", "campus": "HN", "empty": None}

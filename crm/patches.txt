@@ -140,3 +140,4 @@ crm.patches.v1_0.link_leads_to_students
 crm.patches.v1_0.add_lead_code
 crm.patches.v1_0.admissions_core_lead_student
 crm.patches.v1_0.add_campaign_code
+crm.patches.v1_0.normalize_campaign_statuses

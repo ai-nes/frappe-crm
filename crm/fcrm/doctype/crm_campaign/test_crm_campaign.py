@@ -133,7 +133,7 @@ class TestCRMCampaign(FrappeTestCase):
 			}
 		)
 		campaign.insert(ignore_permissions=True)
-		self.assertEqual(campaign.status, "Draft")
+		self.assertEqual(campaign.status, "DRAFT")
 
 	def test_campaign_code_is_generated_and_immutable(self):
 		campus = self._make_campus("_Test Campaign Code Campus")
