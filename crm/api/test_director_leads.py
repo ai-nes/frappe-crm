@@ -169,6 +169,15 @@ class TestDirectorLeads(FrappeTestCase):
 				self.assertEqual(item["status"], label)
 				self.assertEqual(item["statusCode"], status)
 
+	def test_detail_mapping_includes_ward_label(self):
+		detail = director_leads._map_detail_row(
+			frappe._dict(name="LEAD-1", ward="WARD-1"),
+			lookups={"wards": {"WARD-1": "Phường An Cư"}},
+			event_titles=[],
+		)
+
+		self.assertEqual(detail["ward"], "Phường An Cư")
+
 	def test_contact_counts_merge_call_logs_and_interactions_without_duplicates(self):
 		rows = [
 			frappe._dict(name="LEAD-1"),

@@ -219,13 +219,26 @@ def can_read_full_lead_board(user=None) -> bool:
 	another Team -- the canonical team scope would otherwise hide exactly the
 	rows the operator just routed, the converted ones included.
 
-	This widens the read-only Lead projections in ``crm.api.director_leads``
-	only. ``get_permission_query_conditions``/``has_permission`` stay the single
-	authority for Lead CRUD, desk and REST resource access, and every command,
-	so no assignment, conversion or ownership rule changes with it.
+	This widens the Lead projection in ``crm.api.director_leads`` and aligns the
+	Lead Sale write check with that board. ``get_permission_query_conditions``
+	remains the list/read scope for ordinary access; Student, delete, and every
+	assignment, conversion, ownership, or lifecycle command keep their existing
+	checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
+
+
+def can_write_full_lead_board(user=None) -> bool:
+	"""Whether a Lead Sale may edit any Lead shown on the intake board.
+
+	Lead Sale is the intake/routing operator. The dashboard intentionally exposes
+	the whole Lead board to that profile, and its edit controls therefore need the
+	same mutation scope. This exception is limited to CRM Lead writes; Student,
+	read, delete, and ownership/lifecycle command permissions keep their existing
+	checks.
+	"""
+	return can_read_full_lead_board(user)
 
 
 def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
@@ -563,6 +576,8 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	# may create; this hook scopes existing rows only.
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
+	if permission_type == "write" and doc.doctype == "CRM Lead" and can_write_full_lead_board(user):
 		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)

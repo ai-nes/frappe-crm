@@ -15,6 +15,7 @@ from crm.api.team_management import (
 	_is_global,
 	_member_role,
 	_require_access,
+	_save_team,
 	get_team_management_workspace,
 )
 
@@ -86,6 +87,41 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 		self.assertEqual(args[:6], ("S-1", "T-2", "Sale", False, None, True))
 		self.assertEqual(args[6]["teams"], ["T-1", "T-2"])
 		self.assertEqual(args[6]["campuses"], ["C-1", "C-2"])
+
+	def test_new_team_is_inserted_before_selected_lead_pointer_is_validated(self):
+		class FakeTeam:
+			name = "T-2"
+			team_lead_staff = None
+
+			def insert(self, ignore_permissions=False):
+				self.lead_at_insert = self.team_lead_staff
+
+		team = FakeTeam()
+
+		def exists(doctype, *args, **kwargs):
+			return doctype == "CRM Campus"
+
+		with (
+			patch("crm.api.team_management.frappe.db.exists", side_effect=exists),
+			patch("crm.api.team_management.frappe.get_doc", return_value=team),
+			patch("crm.api.team_management._ensure_created_team_lead_membership") as ensure_lead,
+			patch("crm.api.team_management._team_revision", return_value="revision"),
+		):
+			result = _save_team(
+				None,
+				"New Team",
+				None,
+				"Sales",
+				"C-1",
+				None,
+				"S-1",
+				False,
+				{"profile": "lead_sales"},
+			)
+
+		self.assertEqual(team.lead_at_insert, None)
+		ensure_lead.assert_called_once_with(team, "S-1", {"profile": "lead_sales"})
+		self.assertEqual(result["teamId"], "T-2")
 
 	def test_workspace_has_stable_dashboard_contract(self):
 		workspace = get_team_management_workspace()

@@ -764,6 +764,7 @@ def _save_team(
 	team_id = _text(team_id, "team_id", required=False)
 	team_name = _text(team_name, "team_name")
 	campus = _text(campus, "campus")
+	team_lead_staff = _text(team_lead_staff, "team_lead_staff", required=False)
 	if not frappe.db.exists("CRM Campus", campus):
 		_error("CAMPUS_NOT_FOUND", "Cơ sở không tồn tại.")
 	if (
@@ -807,14 +808,19 @@ def _save_team(
 	doc.team_type = _text(team_type or "Sales", "team_type")
 	doc.campus = campus
 	doc.territory = _text(territory, "territory", required=False)
-	doc.team_lead_staff = _text(team_lead_staff, "team_lead_staff", required=False)
+	doc.team_lead_staff = team_lead_staff
 	doc.is_active = int(_bool(is_active, True))
 	if team_id:
 		doc.save(ignore_permissions=True)
 	else:
+		# CRM Team validates that its lead already has a membership. Create the
+		# Team without the pointer first; _save_membership sets the pointer after
+		# inserting the membership, so the DocType validation can pass.
+		selected_lead = doc.team_lead_staff
+		doc.team_lead_staff = None
 		doc.insert(ignore_permissions=True)
-		if doc.team_lead_staff:
-			_ensure_created_team_lead_membership(doc, doc.team_lead_staff, context)
+		if selected_lead:
+			_ensure_created_team_lead_membership(doc, selected_lead, context)
 	return {
 		"action": "team_setup",
 		"teamId": doc.name,
