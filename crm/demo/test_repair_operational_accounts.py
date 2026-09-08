@@ -125,6 +125,18 @@ class TestRepairOperationalAccounts(TestCase):
 		self.assertEqual([row.role for row in user.roles], ["Employee"])
 		self.assertTrue(user.saved)
 
+	def test_normalize_membership_functions_repairs_legacy_values(self):
+		staff = SimpleNamespace(
+			team_memberships=[
+				SimpleNamespace(function="CTV-Sale"),
+				SimpleNamespace(function="Sale"),
+			]
+		)
+
+		repair_operational_accounts._normalize_membership_functions(staff)
+
+		self.assertEqual([row.function for row in staff.team_memberships], ["CTV Sale", "Sale"])
+
 	def test_execute_repairs_all_accounts_atomically(self):
 		with (
 			patch.object(repair_operational_accounts, "_require_admin_context"),

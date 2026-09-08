@@ -33,6 +33,18 @@ GLOBAL_SCOPE_ROLES = frozenset({"Admissions Director"})
 TEAM_MEMBERSHIP_ROLES = frozenset({"Sale", "Lead Sale", "CTV Sale"})
 TEAM_SCOPED_PROFILES = frozenset({"sales", "lead_sales", "ctv_sale"})
 ROLE_TO_FUNCTION = {role: role for role in TEAM_MEMBERSHIP_ROLES}
+MEMBERSHIP_FUNCTION_ALIASES = {
+	"CTV-Sale": "CTV Sale",
+	"Counseller": "Sale",
+	"Sales User": "Sale",
+	"Sales Manager": "Lead Sale",
+	"Team Leader": "Lead Sale",
+	"Promoter-PR": "Promoter",
+	"Marketing Operator": "Marketing",
+	"Marketing Lead": "Marketing",
+	"Admissions Operations": "Admissions Director",
+	"Giám đốc Tuyển sinh": "Admissions Director",
+}
 LEGACY_ROLE_ALIASES = frozenset(ROLE_BACKFILL_SOURCES) | {"Lead Sales"}
 AUDIT_ROLE_NAMES = frozenset(
 	CANONICAL_SELECTABLE_ROLES
@@ -395,6 +407,14 @@ def _validate_staff_links(department: str | None, campus: str | None) -> None:
 		_error(_("CRM Department {0} does not belong to CRM Campus {1}.").format(department, campus))
 
 
+def _normalize_membership_functions(staff) -> None:
+	for membership in staff.team_memberships:
+		function = membership.get("function")
+		canonical_function = MEMBERSHIP_FUNCTION_ALIASES.get(function)
+		if canonical_function:
+			membership.function = canonical_function
+
+
 def _ensure_staff(user, account: dict[str, Any]):
 	full_name = account["full_name"] or user.full_name or user.name
 	staff_name = frappe.db.get_value("CRM Staff", {"user": account["email"]}, "name")
@@ -445,11 +465,13 @@ def _ensure_staff(user, account: dict[str, Any]):
 		staff.department = department
 		staff.campus = campus
 		staff.is_active = 1
+		_normalize_membership_functions(staff)
 		staff.save(ignore_permissions=True)
 	return staff, created
 
 
 def _ensure_membership(staff, account: dict[str, Any]) -> str | None:
+	_normalize_membership_functions(staff)
 	team_name = account["team"]
 	if not team_name:
 		return None
