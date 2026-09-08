@@ -10,6 +10,9 @@ province remain routing/contact context, not conversion gates. Only MATCHED and
 CREATED may be assigned; terminal resolutions close the Lead without invoking
 conversion. Successful handoff delegates conversion to the existing command
 and therefore remains fail-closed behind its rollout and integrity checks.
+
+A CLOSED Lead is not a dead end: reopen_lead sends a corrected record back to
+NEW and replays intake, so assignment never sees an unvalidated Lead.
 """
 
 from __future__ import annotations
@@ -327,6 +330,22 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		"target_student": target_student,
 		"validation": {"id_number": True, "high_school": True, "major": True},
 	}
+
+
+def reopen_lead(lead: str, reason: str | None = None) -> dict[str, Any]:
+	"""Reopen a CLOSED Lead so a corrected record can be routed again.
+
+	Assignment closes any Lead whose routing data cannot be resolved, and the
+	operator then fixes that data. The Lead goes back through intake instead of
+	jumping straight to PROCESSED: a record still missing CCCD, high school or
+	major closes again here rather than reaching assignment unvalidated.
+	"""
+	lead_doc = _load_lead(lead)
+	if _get_status(lead_doc) != "CLOSED":
+		_fail("INVALID_STATUS", "Only CLOSED Leads can be reopened.")
+	reason = _reason(reason) or "Mở lại hồ sơ để phân công lại."
+	update_processing_status(lead_doc.name, "NEW", reason)
+	return process_lead(lead_doc.name, reason=reason)
 
 
 def _scan_limit(limit: Any) -> int:

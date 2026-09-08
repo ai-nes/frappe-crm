@@ -145,6 +145,21 @@ def _close_invalid_assignment_lead(lead_name: str, reason: str) -> None:
 	)
 
 
+def _retryable_item(item) -> bool:
+	"""True when a failed item may be reset and run again.
+
+	A permanent error also closed its Lead, so the item stays untouched until an
+	operator reopens that Lead — their explicit statement that the routing data
+	behind the failure has been corrected.
+	"""
+	if item.status not in {"deferred", "manual_review", "failed"}:
+		return False
+	if item.error_code not in PERMANENT_ASSIGNMENT_ERROR_CODES:
+		return True
+	status = frappe.db.get_value("CRM Lead", item.lead, "processing_status")
+	return str(status or "").strip().upper() != "CLOSED"
+
+
 def _batch_item_lead(item):
 	"""Load one batch item's Lead, tolerating ownership this batch itself committed.
 
@@ -1269,10 +1284,7 @@ def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | Non
 	for item in batch.items:
 		if selected is not None and item.name not in selected:
 			continue
-		if (
-			item.status in {"deferred", "manual_review", "failed"}
-			and item.error_code not in PERMANENT_ASSIGNMENT_ERROR_CODES
-		):
+		if _retryable_item(item):
 			_reset_item(item)
 	batch.status = "ready"
 	_save_batch(batch)

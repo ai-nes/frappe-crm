@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 from unittest import TestCase
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import frappe
 
@@ -278,3 +278,34 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["ownerStaff"], "STAFF-NORTH")
 		self.assertEqual(result["function"], "Sale")
 		self.assertEqual(result["policyVersion"], "province-capacity-v1")
+
+	class _RetryItem:
+		"""Minimal stand-in for one batch child row."""
+
+		def __init__(self, status, error_code):
+			self.name = "ITEM-1"
+			self.lead = "HS-1"
+			self.status = status
+			self.error_code = error_code
+
+	def _is_retryable(self, item, processing_status):
+		frappe_stub = MagicMock()
+		frappe_stub.db.get_value.return_value = processing_status
+		with patch.object(lead_assignment_batch, "frappe", frappe_stub):
+			return lead_assignment_batch._retryable_item(item)
+
+	def test_retry_skips_permanent_failure_while_lead_stays_closed(self):
+		item = self._RetryItem("manual_review", "MISSING_PROVINCE")
+		self.assertFalse(self._is_retryable(item, "CLOSED"))
+
+	def test_retry_accepts_permanent_failure_once_lead_is_reopened(self):
+		item = self._RetryItem("manual_review", "MISSING_PROVINCE")
+		self.assertTrue(self._is_retryable(item, "PROCESSED"))
+
+	def test_retry_accepts_routing_review_failure_without_reopening(self):
+		item = self._RetryItem("manual_review", "NO_ELIGIBLE_RECIPIENT")
+		self.assertTrue(self._is_retryable(item, "PROCESSED"))
+
+	def test_retry_leaves_already_assigned_items_alone(self):
+		item = self._RetryItem("assigned", None)
+		self.assertFalse(self._is_retryable(item, "ASSIGNED"))

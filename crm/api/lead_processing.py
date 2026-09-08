@@ -23,6 +23,9 @@ from crm.fcrm.lead_processing import (
 	process_new_leads as _process_new_leads,
 )
 from crm.fcrm.lead_processing import (
+	reopen_lead as _reopen_lead,
+)
+from crm.fcrm.lead_processing import (
 	update_processing_status as _update_processing_status,
 )
 from crm.fcrm.student_conversion import StudentConversionError
@@ -51,6 +54,11 @@ def process_new_leads(admission_year: str | int | None = None, limit: str | int 
 @frappe.whitelist(methods=["POST"])
 def update_processing_status(lead: str, status: str, reason: str | None = None) -> dict:
 	return _run(_update_processing_status, lead=lead, status=status, reason=reason)
+
+
+@frappe.whitelist(methods=["POST"])
+def reopen_lead(lead: str, reason: str | None = None) -> dict:
+	return _run(_reopen_lead, lead=lead, reason=reason)
 
 
 @frappe.whitelist(methods=["GET", "POST"])
