@@ -56,3 +56,23 @@ class TestStudent360Dashboard(FrappeTestCase):
 		payload = analysis_run_read.get_student_360(student="STU-1")
 		self.assertEqual(payload["snapshot_status"], "STALE")
 		self.assertEqual(payload["analysis_status"], "IDLE")
+
+	@patch("crm.api.analysis_run_read._score", return_value={"items": [{"key": key, "value": None, "contributors": []} for key in ("fit", "interaction", "intent", "total")], "band": "LOW", "trend": {"direction": "FLAT", "delta": 0}, "explanation": {"text": "", "evidence_refs": []}})
+	@patch("crm.api.analysis_run_read._journal", return_value={"inbound": [], "outbound": []})
+	@patch("crm.api.analysis_run_read._snapshot", return_value={
+		"generated_at": "2026-09-05T01:00:00+00:00",
+		"advisory_signals": [], "risks": [], "opportunity_signals": [], "recent_changes": [],
+		"history_coverage": {"interaction_history": {"included_count": 1, "omitted_count": 0, "state": "available", "coverage_reason": None, "oldest_included": "2026-09-05", "newest_included": "2026-09-05"}},
+	})
+	@patch("crm.api.analysis_run_read._stages")
+	@patch("crm.api.analysis_run_read._source", return_value=("4", "current-digest"))
+	@patch("crm.api.analysis_run_read._student_scope", return_value="STU-1")
+	def test_v2_snapshot_advertises_schema_and_exposes_coverage(self, _scope, _source, stages, _snapshot, _journal, _score):
+		stages.side_effect = [
+			[{"name": "SNAP-1", "status": "completed", "expected_source_digest": "current-digest"}],
+			[{"name": "SNAP-1", "status": "completed", "expected_source_digest": "current-digest"}],
+		]
+		payload = analysis_run_read.get_student_360(student="STU-1")
+		self.assertEqual(payload["snapshot_schema_version"], "student-360-snapshot-v2")
+		self.assertIn("history_coverage", payload)
+		self.assertEqual(payload["history_coverage"]["interaction_history"]["state"], "available")

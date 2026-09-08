@@ -1,0 +1,31 @@
+{
+  "subject": {
+    "contract_version": "intelligence-reference-v1",
+    "kind": "student",
+    "subject_id": "STU-1",
+    "tenant_id": "site-a",
+    "admission_year": "2026",
+    "cohort": null
+  },
+  "evidence": {
+    "contract_version": "intelligence-reference-v1",
+    "evidence_id": "score:SC-1:7",
+    "source_kind": "score",
+    "source_id": "SC-1",
+    "source_revision": "7",
+    "status": "verified",
+    "freshness": "fresh",
+    "visibility": "source_scoped",
+    "observed_at": null,
+    "valid_at": null,
+    "coverage_id": null
+  },
+  "coverage": {
+    "contract_version": "intelligence-reference-v1",
+    "coverage_id": "student:STU-1:score-history",
+    "state": "available",
+    "included_count": 1,
+    "omitted_count": 0,
+    "reason": null
+  }
+}
