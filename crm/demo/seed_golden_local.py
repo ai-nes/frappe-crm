@@ -850,6 +850,8 @@ def _ensure_student_contact(
 		contact = frappe.db.get_value("CRM Student", {"email": profile["email"]}, "name")
 	values = {
 		"full_name": profile["student_name"],
+		"lead_code": frappe.db.get_value("CRM Lead", student, "lead_code") or student,
+		"source_lead": student,
 		"phone": profile["phone"],
 		"email": profile["email"],
 		"student": student,
@@ -890,7 +892,6 @@ def _ensure_student_contact(
 		else:
 			frappe.flags.student_conversion_service = previous
 	seed_showcase._ensure_consent_event(contact, "Granted")
-	seed_showcase._ensure_marketing_engagement(student, contact, context.get("campaign"), context.get("event"))
 	return contact
 
 
@@ -955,9 +956,12 @@ def _seed_student(
 	seed_golden._complete_student_profile(student, context)
 	frappe.db.commit()
 	_force_assignment(student, staff, team)
+	# CRM Lead remains the intake/ownership identity. All Student 360, NBA and
+	# interaction links use the canonical CRM Student created from that Lead.
+	contact = _ensure_student_contact(student, profile, context, staff, team, school)
 
 	interaction_1 = seed_golden._ensure_interaction(
-		student,
+		contact,
 		"website-form",
 		"Website Visit",
 		SEED_NOW - timedelta(days=8),
@@ -966,7 +970,7 @@ def _seed_student(
 		profile["interactions"][0],
 	)
 	interaction_2 = seed_golden._ensure_interaction(
-		student,
+		contact,
 		"initial-counseling",
 		"Counseling",
 		SEED_NOW - timedelta(days=6),
@@ -975,7 +979,7 @@ def _seed_student(
 		profile["interactions"][1],
 	)
 	interaction_3 = seed_golden._ensure_interaction(
-		student,
+		contact,
 		"follow-up",
 		"Connected",
 		SEED_NOW - timedelta(days=2),
@@ -983,17 +987,17 @@ def _seed_student(
 		"inbound",
 		profile["interactions"][2],
 	)
-	intent_1 = seed_golden._ensure_intent(student, interaction_2, *profile["intents"][0])
-	intent_2 = seed_golden._ensure_intent(student, interaction_3, *profile["intents"][1])
-	seed_golden._ensure_intent(student, interaction_3, *profile["intents"][2])
+	intent_1 = seed_golden._ensure_intent(contact, interaction_2, *profile["intents"][0])
+	intent_2 = seed_golden._ensure_intent(contact, interaction_3, *profile["intents"][1])
+	seed_golden._ensure_intent(contact, interaction_3, *profile["intents"][2])
 	file_name = seed_golden._ensure_file(student)
-	outcome = seed_golden._ensure_outcome(student, interaction_3, file_name)
+	outcome = seed_golden._ensure_outcome(student, contact, interaction_3, file_name)
 	application = seed_golden._ensure_application(student, context)
 	parent = seed_golden._ensure_parent(student, context, team, school)
-	attribution = seed_golden._ensure_attribution(student, context)
-	assessment = seed_golden._ensure_assessment(student, interaction_3, intent_2, application)
-	action = seed_golden._ensure_action(student, staff)
-	score = seed_golden._ensure_score(student)
+	attribution = seed_golden._ensure_attribution(student, contact, context)
+	assessment = seed_golden._ensure_assessment(contact, student, interaction_3, intent_2, application)
+	action = seed_golden._ensure_action(contact, staff)
+	score = seed_golden._ensure_score(contact)
 	frappe.db.commit()
 	return {
 		"student": student,
@@ -1002,7 +1006,7 @@ def _seed_student(
 		"owner_staff": staff,
 		"team": team,
 		"parent": parent,
-		"contact": _ensure_student_contact(student, profile, context, staff, team, school),
+		"contact": contact,
 		"application": application,
 		"assessment": assessment,
 		"action": action,
@@ -1015,45 +1019,12 @@ def _seed_student(
 
 
 def _ensure_ai_insight(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
-	from crm.api.ai_insight import upsert_ai_insight
+	from crm.demo import seed_golden
 
-	revision = int(frappe.db.get_value("CRM Lead", item["student"], "student_context_revision") or 0)
-	insight = profile["insight"]
-	interests = [
-		{
-			"dimension_code": code,
-			"label": label,
-			"trend": trend,
-			"stance": stance,
-			"interest_level": 5 if confidence >= 85 else 3,
-			"score": round(confidence / 100, 2),
-			"confidence": round(confidence / 100, 2),
-			"evidence": f"{profile['student_name']} — dữ liệu tư vấn tuyển sinh",
-		}
-		for code, label, trend, stance, confidence in insight["interests"]
-	]
-	risks = [
-		{
-			"label": label,
-			"severity": severity,
-			"evidence": f"{profile['student_name']} — assessment và trao đổi phụ huynh",
-		}
-		for label, severity in insight["risks"]
-	]
-	return upsert_ai_insight(
-		student=item["student"],
-		expected_context_revision=revision,
-		# Include the source revision so a rerun after the fixture refreshes the
-		# same insight instead of colliding with an earlier command receipt.
-		generation_idempotency_key=f"{NAMESPACE}:{profile['key']}:ai-insight:v5:r{revision}",
-		producer_identity="local-golden-seed",
-		ai_policy_version="phase2-ai-insight-v1",
-		ai_score=insight["score"],
-		ai_score_reason=profile["assessment_reason"],
-		ai_next_action=insight["next_action"],
-		ai_summary=f"{profile['student_name']} đã để lại nhu cầu rõ về {profile['major']}. Hồ sơ còn một số điểm cần được xác nhận trước khi chuyển bước tiếp theo.",
-		ai_detected_interests=interests,
-		ai_risk_flags=risks,
+	# Reuse the canonical writer: CRM AI Lead Insight keeps the Lead as its
+	# source identity while its aggregate/contact is the canonical CRM Student.
+	return seed_golden._ensure_ai_insight(
+		item["student"], item["contact"], item["interactions"]
 	)
 
 
@@ -1067,11 +1038,10 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 	from crm.api.intelligence_runs import request_student_analysis_run
 	from crm.fcrm import intelligence_runs
 
-	current_revision = int(
-		frappe.db.get_value("CRM Lead", item["student"], "student_context_revision") or 0
-	)
+	student = item["contact"]
+	current_revision = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
 	request = request_student_analysis_run(
-		item["student"],
+		student,
 		idempotency_key=f"{NAMESPACE}:{profile['key']}:analysis:v3:r{current_revision}",
 	)
 	run_id = request["run_id"]
@@ -1093,7 +1063,7 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 	if not claim.get("claimed"):
 		return {"run": run_id, "status": claim.get("status", "running")}
 	revision = str(claim["expected_source_revision"])
-	refs = [f"student:{item['student']}", f"interaction:{item['interactions'][-1]}"]
+	refs = [f"student:{student}", f"interaction:{item['interactions'][-1]}"]
 	if item.get("score"):
 		refs.append(f"score:{item['score']}")
 	claims = [
@@ -1126,14 +1096,14 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 				"title": "Ngành quan tâm đã được xác định",
 				"summary": f"Nguyện vọng hiện tại tập trung vào {profile['major']}.",
 				"confidence": "HIGH",
-				"evidence_refs": [f"student:{item['student']}"],
+				"evidence_refs": [f"student:{student}"],
 			},
 			{
 				"type": "readiness",
 				"title": "Hồ sơ đang trong giai đoạn cân nhắc",
 				"summary": "Một số thông tin tuyển sinh và trao đổi gia đình vẫn đang được hoàn thiện.",
 				"confidence": "MEDIUM",
-				"evidence_refs": [f"student:{item['student']}"],
+				"evidence_refs": [f"student:{student}"],
 			},
 		],
 		"risks": [
@@ -1142,7 +1112,7 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 				"severity": "MEDIUM",
 				"title": "Còn điểm cần xác nhận",
 				"summary": "Thông tin về quyết định cuối cùng và điều kiện tài chính chưa hoàn toàn rõ ràng.",
-				"evidence_refs": [f"student:{item['student']}"],
+				"evidence_refs": [f"student:{student}"],
 			}
 		],
 		"opportunity_signals": [
@@ -1182,9 +1152,10 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 
 def _ensure_nba(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
 	from crm.fcrm import nba_evaluations, nba_policy
+	student = item["contact"]
 
 	receipt = nba_evaluations.request_nba_evaluation(
-		student=item["student"],
+		student=student,
 		idempotency_key=f"{NAMESPACE}:{profile['key']}:nba",
 		force_reason="Local golden fixture for manual NBA walkthrough",
 	)
@@ -1202,7 +1173,7 @@ def _ensure_nba(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]
 	if not claim.get("claimed"):
 		return {"evaluation": evaluation, "status": claim.get("status", "running")}
 	eligible = nba_policy.eligible_action_set_for_student(
-		item["student"], actor="Administrator", now=SEED_NOW
+		student, actor="Administrator", now=SEED_NOW
 	)
 	preferred = ["ACTIVATE_WINBACK", "ADD_TAG", "ADVISE_CAREER", "CALL", "EMAIL"]
 	available = {row["code"]: row for row in eligible.get("actions") or []}
@@ -1232,7 +1203,7 @@ def _ensure_nba(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]
 				"score": {"total": round(max(0.45, 0.92 - rank * 0.11), 2)},
 				"confidence": round(max(0.55, 0.91 - rank * 0.08), 2),
 				"reason_codes": ["ENGAGE_OR_REENGAGE"],
-				"evidence_refs": [f"student:{item['student']}"],
+				"evidence_refs": [f"student:{student}"],
 				"explanation_facts": [
 					f"{profile['student_name']} có tín hiệu cần tiếp tục chăm sóc ở ưu tiên {rank}.",
 					f"Ngành quan tâm: {profile['major']}.",
@@ -1252,12 +1223,12 @@ def _ensure_nba(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]
 		disposition="RECOMMEND",
 		reason_codes=["ENGAGE_OR_REENGAGE"],
 		result_digest=_digest(recommendations),
-		trace_digest=_digest({"student": item["student"], "source": NAMESPACE}),
+		trace_digest=_digest({"student": student, "source": NAMESPACE}),
 		recommendations=recommendations,
 		trace_entries=[
 			{
 				"kind": "local_fixture",
-				"student": item["student"],
+				"student": student,
 				"recommendation_count": len(recommendations),
 			}
 		],
@@ -1392,6 +1363,22 @@ def verify() -> dict[str, Any]:
 		limit_page_length=0,
 	)
 	student_names = [row.name for row in rows]
+	from crm.fcrm.student_reference import canonical_student
+
+	canonical_names = []
+	for student_name in student_names:
+		canonical_name = canonical_student(student_name)
+		if canonical_name:
+			canonical_names.append(canonical_name)
+	canonical_linked_doctypes = {
+		"CRM Interaction",
+		"CRM Intent",
+		"CRM Student Outcome",
+		"CRM Score History",
+		"CRM Student Analysis Run",
+		"CRM NBA Evaluation",
+		"CRM Action Item",
+	}
 	counts = {}
 	for doctype, field in (
 		("CRM Student", "student"),
@@ -1409,7 +1396,8 @@ def verify() -> dict[str, Any]:
 		("CRM Student Guardian", "student"),
 		("CRM Parent Contact Authority", "student"),
 	):
-		counts[doctype] = frappe.db.count(doctype, {field: ["in", student_names]}) if student_names else 0
+		student_scope = canonical_names if doctype in canonical_linked_doctypes else student_names
+		counts[doctype] = frappe.db.count(doctype, {field: ["in", student_scope]}) if student_scope else 0
 	contact_names = (
 		frappe.get_all(
 			"CRM Student", filters={"student": ["in", student_names]}, pluck="name", limit_page_length=0
@@ -1424,7 +1412,7 @@ def verify() -> dict[str, Any]:
 	)
 	recommendations = frappe.get_all(
 		"CRM Recommendation",
-		filters={"target_id": ["in", student_names]} if student_names else {"name": "__none__"},
+		filters={"target_id": ["in", canonical_names]} if canonical_names else {"name": "__none__"},
 		fields=["name", "target_id", "rank", "decision_status", "execution_status", "action"],
 		order_by="target_id asc, rank asc",
 		limit_page_length=0,

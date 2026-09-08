@@ -120,7 +120,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Series",
-   "options": "ENR-.YYYY.-"
+   "options": "HS-.YYYY.-HCM-"
   },
   {
    "description": "Server-managed immutable identifier. Contains only the admission year and sequence; mutable Lead data is never encoded.",
@@ -783,7 +783,7 @@
  "module": "FCRM",
  "name": "CRM Lead",
  "naming_rule": "Naming Series",
- "naming_series_options": "ENR-.YYYY.-",
+ "naming_series_options": "HS-.YYYY.-HCM-",
  "owner": "Administrator",
  "permissions": [
    {"role":"Administrator","read":1,"write":1,"create":1,"delete":1},

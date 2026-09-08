@@ -72,11 +72,11 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "Lead")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
-	def test_lead_code_is_stable_and_separate_from_student_id(self):
+	def test_lead_code_is_stable_and_matches_the_unified_student_id(self):
 		lead = self._make_student_with_status("_Test Lead Code", "0981000088", "NEW")
 
-		self.assertRegex(lead.lead_code, r"^LD-\d{4}-\d{5,}$")
-		self.assertEqual(lead.lead_code, lead.name.replace("ENR-", "LD-", 1))
+		self.assertRegex(lead.name, r"^HS-\d{4}-[A-Z0-9]+-\d{6}$")
+		self.assertEqual(lead.lead_code, lead.name)
 
 		lead_name = lead.name
 		lead_code = lead.lead_code
@@ -87,21 +87,21 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(lead.name, lead_name)
 		self.assertEqual(lead.lead_code, lead_code)
 
-		lead.lead_code = "LD-2026-99999"
+		lead.lead_code = "HS-2026-HCM-999999"
 		with self.assertRaises(frappe.ValidationError):
 			lead.save(ignore_permissions=True)
 
-	def test_current_grade_change_advances_student_context_revision(self):
+	def test_current_grade_change_does_not_create_a_canonical_student_before_conversion(self):
 		if not frappe.get_meta("CRM Lead").has_field("current_grade"):
 			self.skipTest("CRM Student schema has not been migrated with current_grade")
 		student = self._make_student("_Test Grade Context Student")
-		initial_revision = int(student.student_context_revision or 0)
 
 		student.current_grade = "11"
 		student.save(ignore_permissions=True)
 		student.reload()
 
-		self.assertGreater(student.student_context_revision, initial_revision)
+		self.assertEqual(student.current_grade, "11")
+		self.assertFalse(frappe.db.exists("CRM Student", student.name))
 
 	def test_current_grade_is_optional_and_context_visible(self):
 		if not frappe.get_meta("CRM Lead").has_field("current_grade"):

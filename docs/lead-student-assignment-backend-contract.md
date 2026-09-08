@@ -54,6 +54,14 @@ xem được Student đã chuyển đổi và đã có người phụ trách tro
 mình quản lý, đồng thời nhìn thấy Sale/CTV Sale đang phụ trách. Phạm vi này không
 mở rộng sang Group khác và không tạo thêm endpoint riêng.
 
+Đối với `CRM Lead`, tài khoản `Lead Sale` được phép cập nhật các trường nghiệp vụ
+được mở qua `crm.api.lead.update_lead` trên toàn bộ bảng intake. `Sale` và `CTV Sale`
+chỉ được cập nhật Lead đang giao cho chính mình; các field server-managed và các
+thay đổi ownership/lifecycle/processing vẫn phải đi qua command tương ứng.
+
+Read-model chi tiết Lead trả `province` và `ward` dưới dạng nhãn hiển thị. Form tạo/cập
+nhật gửi mã Link tương ứng; danh sách xã/phường được BE lọc theo tỉnh đã chọn.
+
 Lead nguồn được trả dưới dạng metadata `sourceLead`, `processingStatus` và `resolution`;
 không dùng các field này để thay thế `student_stage`, `enrollment_status` hoặc
 `lifecycle_stage` của Student.
@@ -160,6 +168,7 @@ FE phải cho chọn `branch`; nếu không xác định được cơ sở, BE t
 
 ```text
 NEW / PENDING
+  │ bấm “Xử lý Lead” (process_new_leads)
   │
   ├─ thiếu CCCD / THPT / ngành
   │    └─ CLOSED / INVALID
@@ -169,7 +178,7 @@ NEW / PENDING
        └─ chưa có → CREATED
               ↓
           PROCESSED
-              ↓ bấm phân công batch
+              ↓ bấm “Phân công Lead”
           Team/Sale ownership thành công
               ↓
           ASSIGNED
@@ -241,8 +250,9 @@ Tất cả API trả dữ liệu trong `response.message` theo chuẩn Frappe.
 | `crm.api.lead_assignment_batch.import_leads_to_assignment_batch`  | POST | Tạo Lead mới từ rows/CSV và đưa vào batch `draft`; chưa phân công.                                        |
 | `crm.api.lead_assignment_batch.create_lead_assignment_batch`      | POST | Tạo batch từ các Lead đã có bằng `lead_ids`; chưa phân công.                                              |
 | `crm.api.lead_assignment_batch.preview_lead_assignment_batch`     | POST | Kiểm tra điều kiện và routing context, chuyển batch sang `ready`.                                         |
-| `crm.api.lead_assignment_batch.run_lead_assignment_batch`         | POST | Xử lý Lead, phân công và tự động chuyển Lead hợp lệ thành Student.                                        |
-| `crm.api.lead_assignment_batch.run_unassigned_lead_assignment`    | POST | Quét Lead chưa có owner, phân công rồi tự động chuyển Lead hợp lệ thành Student. Không lọc theo `source`. |
+| `crm.api.lead_assignment_batch.run_lead_assignment_batch`         | POST | Phân công Lead đã `PROCESSED` và tự động chuyển Lead hợp lệ thành Student.                                |
+| `crm.api.lead_assignment_batch.run_unassigned_lead_assignment`    | POST | Quét Lead đã `PROCESSED` mà chưa có owner, phân công rồi chuyển thành Student. Không lọc theo `source`.   |
+| `crm.api.lead_processing.process_new_leads`                       | POST | Quét toàn bộ Lead `NEW` (tuỳ chọn `admission_year`, `limit`) và chạy điều kiện dữ liệu cho từng Lead.     |
 | `crm.api.lead_assignment_batch.retry_lead_assignment_batch`       | POST | Chạy lại item lỗi/deferred/manual review.                                                                 |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch`         | GET  | Lấy chi tiết một batch và item.                                                                           |
 | `crm.api.lead_assignment_batch.list_lead_assignment_batches`      | GET  | Lấy lịch sử các batch.                                                                                    |
@@ -321,9 +331,11 @@ import/create batch
 
 Khi chạy:
 
-1. Lead `NEW` được BE đưa sang `PROCESSING`.
-2. Lead không hợp lệ thành `CLOSED / INVALID`, item thành `manual_review`.
-3. Lead hợp lệ thành `PROCESSED`.
+1. Lead còn ở `NEW` hoặc `PROCESSING` không được batch xử lý hộ: item thành
+   `manual_review` với error code `NOT_PROCESSED`. Bước xử lý là hành động riêng
+   (`process_new_leads`, nút “Xử lý Lead”).
+2. Lead đã `CLOSED` (gồm `CLOSED / INVALID`) cũng thành `manual_review`.
+3. Chỉ Lead `PROCESSED` với resolution `MATCHED` hoặc `CREATED` mới được phân công.
 4. BE tìm Team theo tỉnh của Lead rồi ghi Team/Sale ownership.
 5. Ghi ownership thành công đổi Lead thành `ASSIGNED`.
 6. BE gọi handoff ngay sau đó: tạo/enrich `CRM Student`, kiểm tra lại owner và đóng Lead.
@@ -422,7 +434,10 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 
 ### FE phải làm
 
-- Hiển thị một nút “Phân công Lead” để gọi `run_unassigned_lead_assignment`.
+- Hiển thị nút “Xử lý Lead” để gọi `process_new_leads` khi còn Lead `NEW`
+  (`meta.pendingNew` của `get_director_leads`), và chỉ đổi sang nút “Phân công Lead”
+  gọi `run_unassigned_lead_assignment` khi không còn Lead `NEW`.
+- Dùng đúng một tên “Phân công Lead” cho hành động phân công trên mọi màn hình.
 - Hiển thị trạng thái đang chạy, không có Lead cần xử lý và kết quả từng Lead.
 - Cho xem lịch sử các lần chạy nội bộ; mỗi lần chạy có status và summary.
 - Hiển thị kết quả từng item: đã phân công, chờ xử lý, cần bổ sung, lỗi.
@@ -473,7 +488,7 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 - Card tạo/import batch đã bỏ khỏi luồng chính; các API explicit batch vẫn giữ để đọc
   lịch sử và tương thích dữ liệu cũ.
 - Seed local `task seed-assignment-conversion` tạo 10 Lead hợp lệ, chưa có người phụ
-  trách; bấm “Phân công tự động” để tạo Student có owner.
+  trách; bấm “Xử lý Lead” rồi “Phân công Lead” để tạo Student có owner.
 
 ## References
 

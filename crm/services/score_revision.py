@@ -116,6 +116,8 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 	)
 	sequence = _next_stream_sequence("scoring")
 	event_id = frappe.generate_hash(length=32)
+	# The locked row above is authoritative. Avoid Frappe's transient Link-cache
+	# miss while this Student's initial insert is still completing.
 	change = frappe.get_doc(
 		{
 			"doctype": "CRM Student Revision Journal",
@@ -135,7 +137,7 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
 		}
-	).insert(ignore_permissions=True)
+	).insert(ignore_permissions=True, ignore_links=True)
 	if enqueue and frappe.conf.get("crm_agents_scoring_events_enabled", 0) not in (0, "0", False):
 		from crm.api.agent_events import record_score_input_event
 

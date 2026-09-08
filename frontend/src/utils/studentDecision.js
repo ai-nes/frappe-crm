@@ -97,14 +97,36 @@ export function transitionOptions(action) {
     .filter((transition) => transition.value)
 }
 
+// Fallback only -- the worklist API now sends {value, label} per outcome,
+// scoped to the action's own vocabulary. This map only kicks in if a caller
+// passes a bare code string with no backend label attached.
 export const admissionsOutcomeMap = {
-  NO_RESPONSE: 'Không nghe máy / Chưa kết nối',
-  INTEREST_INCREASED: 'Quan tâm cao / Muốn đăng ký xét tuyển',
-  NEEDS_MORE_INFORMATION: 'Cần gửi thêm thông tin ngành & học phí',
-  CALL_BACK_LATER: 'Hẹn gọi lại sau',
-  APPLICATION_STARTED: 'Bắt đầu nộp hồ sơ xét tuyển',
-  APPLICATION_COMPLETED: 'Đã hoàn tất hồ sơ xét tuyển',
-  NOT_INTERESTED: 'Không có nhu cầu xét tuyển',
+  NO_RESPONSE: 'Không phản hồi',
+  CALL_BACK_LATER: 'Hẹn liên hệ lại',
+  INTEREST_CONFIRMED: 'Xác nhận còn quan tâm',
+  INTEREST_INCREASED: 'Mức độ quan tâm tăng',
+  NEEDS_MORE_INFORMATION: 'Cần thêm thông tin',
+  DECISION_PENDING: 'Đang cân nhắc',
+  NOT_INTERESTED: 'Không còn quan tâm',
+  INFORMATION_DELIVERED: 'Đã cung cấp thông tin',
+  INVITATION_ACCEPTED: 'Đồng ý tham gia',
+  INVITATION_DECLINED: 'Từ chối tham gia',
+  ATTENDED: 'Đã tham gia',
+  NO_SHOW: 'Không tham gia',
+  APPLICATION_STARTED: 'Đã bắt đầu hồ sơ',
+  APPLICATION_IN_PROGRESS: 'Đang hoàn thiện hồ sơ',
+  APPLICATION_BLOCKED: 'Hồ sơ đang vướng',
+  APPLICATION_COMPLETED: 'Đã hoàn tất hồ sơ',
+  ENROLLMENT_CONFIRMED: 'Đã xác nhận nhập học',
+  PARENT_SUPPORTIVE: 'Phụ huynh đồng thuận',
+  PARENT_UNDECIDED: 'Phụ huynh đang cân nhắc',
+  PARENT_NOT_SUPPORTIVE: 'Phụ huynh chưa đồng thuận',
+  REENGAGED: 'Đã quan tâm trở lại',
+  NOT_READY: 'Chưa sẵn sàng',
+  LOST_CONFIRMED: 'Xác nhận không tiếp tục',
+  COMPLETED: 'Hoàn tất',
+  FAILED: 'Không hoàn thành',
+  CANCELLED: 'Đã hủy',
 }
 
 export const admissionsActionStatusMap = {

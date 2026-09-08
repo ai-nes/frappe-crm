@@ -18,6 +18,7 @@ from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.utils.effective import is_effective
+from crm.services.action_outcome import allowed_outcomes
 
 RECEIPT = "CRM Student Command Receipt"
 DECISION_EVENT = "CRM Student Decision Event"
@@ -25,7 +26,6 @@ RECOMMENDATION = "CRM Recommendation"
 CANONICAL_ACTION = "CRM Action Item"
 POLICY_VERSION = "phase6-v1"
 SCHEMA_VERSION = "phase6-v1"
-OUTCOMES = {"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER", "APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED", "success", "failed", "no_contact", "no_show"}
 ACTION_TRANSITIONS = {
 	"planned": {"in_progress", "cancelled"},
 	"accepted": {"in-progress", "cancelled", "deferred"},
@@ -1199,7 +1199,12 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 	target_state = {"in_progress": "in-progress", "completed": "completed", "failed": "requires-review", "cancelled": "cancelled"}[status]
 	if target_state not in ACTION_TRANSITIONS.get(previous, set()): _fail("INVALID_STATE", "Illegal Action transition.")
 	if status == "completed":
-		if outcome_code not in OUTCOMES: _fail("INVALID_INPUT", "A valid outcome_code is required when completing.")
+		action_code = action.get("action") or action.action_type
+		if outcome_code not in allowed_outcomes(action_code):
+			_fail(
+				"INVALID_INPUT",
+				f"outcome_code must be one of {sorted(allowed_outcomes(action_code))} for this action.",
+			)
 		_required(evidence, "evidence")
 		if not attempt_id:
 			_fail("ATTEMPT_REQUIRED", "A confirmed execution attempt is required before completion.")

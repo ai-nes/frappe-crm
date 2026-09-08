@@ -219,16 +219,29 @@ def can_read_full_lead_board(user=None) -> bool:
 	another Team -- the canonical team scope would otherwise hide exactly the
 	rows the operator just routed, the converted ones included.
 
-	This widens the read-only Lead projections in ``crm.api.director_leads``
-	only. ``get_permission_query_conditions``/``has_permission`` stay the single
-	authority for Lead CRUD, desk and REST resource access, and every command,
-	so no assignment, conversion or ownership rule changes with it.
+	This widens the Lead projection in ``crm.api.director_leads`` and aligns the
+	Lead Sale write check with that board. ``get_permission_query_conditions``
+	remains the list/read scope for ordinary access; Student, delete, and every
+	assignment, conversion, ownership, or lifecycle command keep their existing
+	checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
 
 
-def get_student_list_read_condition(user=None):
+def can_write_full_lead_board(user=None) -> bool:
+	"""Whether a Lead Sale may edit any Lead shown on the intake board.
+
+	Lead Sale is the intake/routing operator. The dashboard intentionally exposes
+	the whole Lead board to that profile, and its edit controls therefore need the
+	same mutation scope. This exception is limited to CRM Lead writes; Student,
+	read, delete, and ownership/lifecycle command permissions keep their existing
+	checks.
+	"""
+	return can_read_full_lead_board(user)
+
+
+def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	"""Return the list-only Student read scope for roles with assignment access.
 
 	Sale keeps the canonical assigned-only row scope for direct CRUD and detail
@@ -241,15 +254,22 @@ def get_student_list_read_condition(user=None):
 	dashboard scope, not a new endpoint or a new UI flow.
 
 	Other profiles return ``None`` so callers continue using the canonical
-	permission query hook unchanged.
+	permission query hook unchanged. ``doctype`` identifies the aggregate being
+	queried by the caller; the default remains the standalone CRM Student table,
+	while the dashboard projection may target CRM Lead.
 	"""
+	table_by_doctype = {
+		"CRM Student": "`tabCRM Student`",
+		"CRM Lead": "`tabCRM Lead`",
+	}
+	table = table_by_doctype[doctype]
 	user = user or frappe.session.user
 	profile = resolve_crm_profile(_get_policy_roles(user))
 	if profile == "lead_sales":
 		crm_staff_name = _get_crm_staff_name(user)
 		if not crm_staff_name:
 			return "1=0"
-		return _lead_sales_student_read_condition("`tabCRM Student`", crm_staff_name)
+		return _lead_sales_student_read_condition(table, crm_staff_name)
 	if profile != "sales":
 		return None
 
@@ -257,7 +277,6 @@ def get_student_list_read_condition(user=None):
 	if not crm_staff_name:
 		return "1=0"
 
-	table = "`tabCRM Student`"
 	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 	team_condition = _team_leader_condition(table, crm_staff_name)
 	return f"({own_condition} or {team_condition})"
@@ -557,6 +576,8 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	# may create; this hook scopes existing rows only.
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
+		return True
+	if permission_type == "write" and doc.doctype == "CRM Lead" and can_write_full_lead_board(user):
 		return True
 
 	condition = get_permission_query_conditions(doc.doctype, user=user)

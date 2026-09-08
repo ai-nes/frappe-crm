@@ -44,7 +44,7 @@
   {"fieldname":"execution_package_version","fieldtype":"Int","default":"0","read_only":1},
   {"fieldname":"execution_status","fieldtype":"Select","options":"planned\nin_progress\ncompleted\nfailed\ncancelled","default":"planned","read_only":1,"in_list_view":1},
   {"fieldname":"started_at","fieldtype":"Datetime","read_only":1},
-  {"fieldname":"outcome_code","fieldtype":"Select","options":"NO_RESPONSE\nINTEREST_INCREASED\nNEEDS_MORE_INFORMATION\nCALL_BACK_LATER\nAPPLICATION_STARTED\nAPPLICATION_COMPLETED\nNOT_INTERESTED","read_only":1},
+  {"fieldname":"outcome_code","fieldtype":"Select","options":"NO_RESPONSE\nCALL_BACK_LATER\nINTEREST_CONFIRMED\nINTEREST_INCREASED\nNEEDS_MORE_INFORMATION\nDECISION_PENDING\nNOT_INTERESTED\nINFORMATION_DELIVERED\nINVITATION_ACCEPTED\nINVITATION_DECLINED\nATTENDED\nNO_SHOW\nAPPLICATION_STARTED\nAPPLICATION_IN_PROGRESS\nAPPLICATION_BLOCKED\nAPPLICATION_COMPLETED\nENROLLMENT_CONFIRMED\nPARENT_SUPPORTIVE\nPARENT_UNDECIDED\nPARENT_NOT_SUPPORTIVE\nREENGAGED\nNOT_READY\nLOST_CONFIRMED\nCOMPLETED\nFAILED\nCANCELLED","read_only":1},
   {"fieldname":"outcome_evidence","fieldtype":"Small Text","read_only":1},
   {"fieldname":"outcome_notes","fieldtype":"Small Text","read_only":1},
   {"fieldname":"linked_interaction","fieldtype":"Link","options":"CRM Interaction","read_only":1},

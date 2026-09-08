@@ -106,6 +106,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			shared_conditions("CRM Lead", user=user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
 		)
+		lead_list_condition = get_student_list_read_condition(user=user, doctype="CRM Lead")
+		self.assertIn("`tabCRM Lead`.owner_staff", lead_list_condition)
+		self.assertNotIn("`tabCRM Student`", lead_list_condition)
 
 	def test_lead_sale_group_leader_reads_managed_group_students(self):
 		user, staff = self._make_user_and_staff(
@@ -163,6 +166,16 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			shared_conditions("CRM Lead", user=sale_user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(sale_staff)}",
 		)
+
+	def test_lead_sale_can_update_any_lead_on_the_full_intake_board(self):
+		user, staff = self._make_user_and_staff(
+			"_Test Scope Lead Board Editor", roles=["Lead Sale"], team=self._team, function="Lead Sale"
+		)
+		lead = frappe._dict(doctype="CRM Lead", name="_Test Lead Outside Own Team", owner_staff="OTHER-STAFF")
+
+		self.assertTrue(shared_has_permission(lead, user=user, ptype="write"))
+		self.assertTrue(can_read_full_lead_board(user=user))
+		self.assertIn(staff, shared_conditions("CRM Lead", user=user))
 
 	# --------------------------------------------------------------------- no staff
 

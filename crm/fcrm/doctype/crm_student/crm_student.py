@@ -6,6 +6,7 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
+from crm.fcrm.student_reference import hs_code_for_reference, next_hs_code
 from crm.fcrm.student_stage import SERVICE_FLAG as STUDENT_STAGE_SERVICE_FLAG
 from crm.fcrm.student_stage import validate_stage
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
@@ -26,6 +27,12 @@ class CRMStudent(Document):
 		# resolution (high_school/province). Disabled here, re-run at the end
 		# of validate() once those fields are resolved.
 		self.flags.ignore_links = True
+
+	def autoname(self):
+		"""Use the source Lead's HS ID, or allocate the next HS ID."""
+		self.name = hs_code_for_reference(self.get("source_lead"), self.get("admission_year")) or next_hs_code(
+			self.get("admission_year")
+		)
 
 	@staticmethod
 	def default_list_data():

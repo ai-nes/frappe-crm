@@ -480,6 +480,21 @@ class TestDirectorStudents(FrappeTestCase):
 			limit_page_length=1,
 		)
 
+	def test_sale_list_scope_uses_the_lead_projection_table(self):
+		condition = "`tabCRM Lead`.owner_staff = 'STAFF-1'"
+		with (
+			patch.object(director_students, "get_student_list_read_condition", return_value=condition) as get_condition,
+			patch.object(director_students.frappe.db, "sql", return_value=[{"name": "ENR-1"}]) as sql,
+		):
+			result = director_students._list_scope_student_ids()
+
+		self.assertEqual(result, ["ENR-1"])
+		get_condition.assert_called_once_with(doctype="CRM Lead")
+		sql.assert_called_once_with(
+			"select name from `tabCRM Lead` where (`tabCRM Lead`.owner_staff = 'STAFF-1')",
+			as_dict=True,
+		)
+
 	def test_student_zalo_messages_mapping(self):
 		interactions = [
 			frappe._dict(

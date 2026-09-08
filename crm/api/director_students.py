@@ -20,7 +20,12 @@ from crm.fcrm.permissions import (
 	get_student_list_read_condition,
 	has_student_dashboard_read_permission,
 )
-from crm.fcrm.student_reference import canonical_student, lead_for_student
+from crm.fcrm.student_reference import (
+	canonical_student,
+	hs_code_for_reference,
+	lead_for_reference,
+	lead_for_student,
+)
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -243,6 +248,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	student_id = _resolve_student_id(student_id)
 	if not student_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+	student_id = canonical_student(student_id) or student_id
 
 	try:
 		doc = frappe.get_doc("CRM Student", student_id)
@@ -348,6 +354,7 @@ def get_student_chatwoot_interactions(
 
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
+	canonical_id = canonical_id or canonical_student(lead_id) or lead_id
 	filters = {
 		"student": lead_id,
 		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
@@ -672,10 +679,10 @@ def _list_scope_student_ids() -> list[str] | None:
 	list condition only to expose rows that Sale may inspect before assigning;
 	all mutation commands perform their own ownership checks.
 	"""
-	condition = get_student_list_read_condition()
+	condition = get_student_list_read_condition(doctype="CRM Lead")
 	if condition is None:
 		return None
-	rows = frappe.db.sql(f"select name from `tabCRM Student` where ({condition})", as_dict=True)
+	rows = frappe.db.sql(f"select name from `tabCRM Lead` where ({condition})", as_dict=True)
 	return [row.get("name") for row in rows if row.get("name")]
 
 
@@ -929,15 +936,34 @@ def _latest_by_student(
 ) -> dict[str, Any]:
 	if not student_ids or not _table_exists(doctype):
 		return {}
-	query_filters = {"student": ["in", student_ids], **(filters or {})}
+	query_ids = _student_query_ids(student_ids)
+	query_filters = {"student": ["in", query_ids], **(filters or {})}
 	rows = frappe.get_all(
 		doctype, filters=query_filters, fields=fields, order_by=order_by, limit_page_length=0
 	)
+	requested_by_reference = {value: value for value in student_ids}
+	for value in student_ids:
+		canonical = canonical_student(value)
+		if canonical:
+			requested_by_reference[canonical] = value
 	result = {}
 	for row in rows:
-		if row.get("student") and row.get("student") not in result:
-			result[row.get("student")] = row
+		key = requested_by_reference.get(row.get("student"), row.get("student"))
+		if key and key not in result:
+			result[key] = row
 	return result
+
+
+def _student_query_ids(student_ids: list[str]) -> list[str]:
+	"""Include Lead and canonical Student IDs for migrated child doctypes."""
+	values: list[str] = []
+	seen: set[str] = set()
+	for value in student_ids:
+		for candidate in (value, canonical_student(value)):
+			if candidate and candidate not in seen:
+				seen.add(candidate)
+				values.append(candidate)
+	return values
 
 
 def _map_student_row(row, *, lookups=None, activity=None, action=None, score_history=None) -> dict[str, Any]:
@@ -1013,6 +1039,11 @@ def _profile_code(row) -> str:
 	Student name plus the admission cycle and the current HCM admissions branch.
 	"""
 	student_id = str(row.get("name") or "")
+	code = hs_code_for_reference(student_id, row.get("admission_year"))
+	if not code:
+		code = hs_code_for_reference(row.get("lead_code"), row.get("admission_year"))
+	if code:
+		return code
 	match = re.search(r"(?:ENR|CRMC)-(\d{4})-(\d+)$", student_id)
 	year = str(row.get("admission_year") or (match.group(1) if match else "2026"))
 	sequence = match.group(2)[-6:].zfill(6) if match else "000000"
@@ -1022,12 +1053,10 @@ def _profile_code(row) -> str:
 
 def _student_stage_value(row) -> str | None:
 	"""Read the canonical Student stage without fabricating a default."""
-	if row.get("student_stage"):
-		return row.get("student_stage")
-	student = row.get("student") or row.get("name")
-	if not student:
-		return None
-	return frappe.db.get_value("CRM Student", student, "student_stage")
+	student = canonical_student(row.get("student") or row.get("name"))
+	if student:
+		return frappe.db.get_value("CRM Student", student, "student_stage")
+	return row.get("student_stage") or None
 
 
 def _stage_descriptor(row) -> dict[str, str] | None:
@@ -1127,15 +1156,20 @@ def _confirmed_probabilities(student_ids: list[str]) -> list[float]:
 		return []
 	rows = frappe.get_all(
 		"CRM Student Assessment",
-		filters={"student": ["in", student_ids], "status": "confirmed"},
-		fields=["student", "enrollment_probability"],
+		filters={"status": "confirmed"},
+		or_filters=[
+			["crm_student", "in", _student_query_ids(student_ids)],
+			["student", "in", _student_query_ids(student_ids)],
+		],
+		fields=["student", "crm_student", "enrollment_probability"],
 		order_by="assessed_at desc, creation desc, name desc",
 		limit_page_length=0,
 	)
 	latest = {}
 	for row in rows:
-		if row.get("student") not in latest and row.get("enrollment_probability") is not None:
-			latest[row.get("student")] = float(row.get("enrollment_probability"))
+		student = row.get("crm_student") or row.get("student")
+		if student not in latest and row.get("enrollment_probability") is not None:
+			latest[student] = float(row.get("enrollment_probability"))
 	return list(latest.values())
 
 
@@ -1148,7 +1182,7 @@ def _count_due_actions(student_ids: list[str]) -> int:
 	rows = frappe.get_all(
 		"CRM Action Item",
 		filters={
-			"student": ["in", student_ids],
+			"student": ["in", _student_query_ids(student_ids)],
 			"state": ["in", list(ACTIVE_ACTION_STATES)],
 			"current_slot": "CURRENT",
 			"due_at": ["between", [start, end]],
@@ -1271,12 +1305,17 @@ def _assessment_history(
 ) -> list:
 	if not student_id or not _table_exists("CRM Student Assessment"):
 		return []
-	filters: dict[str, Any] = {"student": student_id}
+	student_ids = _student_query_ids([student_id])
+	filters: dict[str, Any] = {}
 	if exclude_rejected:
 		filters["status"] = ["!=", "rejected"]
 	return frappe.get_all(
 		"CRM Student Assessment",
 		filters=filters,
+		or_filters=[
+			["crm_student", "in", student_ids],
+			["student", "in", student_ids],
+		],
 		fields=ASSESSMENT_FIELDS,
 		order_by=order_by,
 		limit_page_length=limit_page_length,
@@ -1329,9 +1368,10 @@ def _build_probability_trend(assessments: list, interactions: list) -> list[dict
 def _student_interactions(student_id: str | None) -> list:
 	if not student_id or not _table_exists("CRM Interaction"):
 		return []
+	student_ids = _student_query_ids([student_id])
 	return frappe.get_all(
 		"CRM Interaction",
-		filters={"student": student_id},
+		filters={"student": ["in", student_ids]},
 		fields=[
 			"name",
 			"interaction_datetime",
@@ -1763,9 +1803,10 @@ def _contact_consent(student_id: str | None, privacy_status: str | None) -> dict
 	result = {"status": _privacy_status_label(privacy_status), "channels": [], "updatedAt": None}
 	if not student_id or not _table_exists("CRM Contact Consent Event"):
 		return result
+	student_ids = _student_query_ids([student_id])
 	rows = frappe.get_all(
 		"CRM Contact Consent Event",
-		filters={"student": student_id},
+		filters={"student": ["in", student_ids]},
 		fields=["event_type", "occurred_at", "scope"],
 		order_by="occurred_at desc, creation desc",
 		limit_page_length=1,
@@ -1832,9 +1873,10 @@ def _student_guardian(student_id: str | None) -> dict[str, Any]:
 	}
 	if not student_id or not _table_exists("CRM Student Guardian"):
 		return result
+	student_ids = _student_query_ids([student_id])
 	rows = frappe.get_all(
 		"CRM Student Guardian",
-		filters={"student": student_id, "is_active": 1},
+		filters={"student": ["in", student_ids], "is_active": 1},
 		fields=[
 			"contact",
 			"relationship",
@@ -1882,7 +1924,8 @@ def _student_guardian(student_id: str | None) -> dict[str, Any]:
 def _student_applications(student_id: str | None, admission_year: str | None) -> list:
 	if not student_id or not _table_exists("CRM Admission Application"):
 		return []
-	filters: dict[str, Any] = {"student": student_id}
+	student_ids = _student_query_ids([student_id])
+	filters: dict[str, Any] = {"student": ["in", student_ids]}
 	if admission_year:
 		filters["admission_year"] = admission_year
 	return frappe.get_all(

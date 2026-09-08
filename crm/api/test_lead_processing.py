@@ -28,3 +28,10 @@ class TestLeadProcessingAPI(FrappeTestCase):
 			status="PROCESSING",
 			reason="Đang xử lý thủ công",
 		)
+
+	def test_bulk_endpoint_forwards_scan_scope(self):
+		expected = {"summary": {"scanned": 2, "processed": 2}, "items": []}
+		with patch.object(lead_processing, "_process_new_leads", return_value=expected) as command:
+			self.assertEqual(lead_processing.process_new_leads("2026", 50), expected)
+
+		command.assert_called_once_with(admission_year="2026", limit=50)

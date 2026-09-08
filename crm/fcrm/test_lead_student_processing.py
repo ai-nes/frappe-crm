@@ -51,6 +51,46 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			_normalise_identifiers(invalid)
 		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
 
+	def test_bulk_scan_buckets_every_processing_outcome(self):
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		rows = [{"name": "LEAD-1"}, {"name": "LEAD-2"}, {"name": "LEAD-3"}]
+		outcomes = {
+			"LEAD-1": {"status": "PROCESSED", "resolution": "CREATED"},
+			"LEAD-2": {"status": "CLOSED", "resolution": "INVALID"},
+			"LEAD-3": lead_processing.LeadProcessingError("FORBIDDEN", "Not yours."),
+		}
+
+		def _process(name):
+			outcome = outcomes[name]
+			if isinstance(outcome, Exception):
+				raise outcome
+			return outcome
+
+		with (
+			patch.object(lead_processing.frappe, "get_all", return_value=rows) as scan,
+			patch.object(lead_processing.frappe.db, "savepoint"),
+			patch.object(lead_processing.frappe.db, "rollback"),
+			patch.object(lead_processing.frappe.db, "commit"),
+			patch.object(lead_processing, "process_lead", side_effect=_process),
+		):
+			result = lead_processing.process_new_leads(admission_year="2026")
+
+		self.assertEqual(scan.call_args.kwargs["filters"], {"processing_status": "NEW", "admission_year": "2026"})
+		self.assertEqual(
+			result["summary"],
+			{"scanned": 3, "processed": 1, "closed": 1, "skipped": 1, "failed": 0},
+		)
+
+	def test_bulk_scan_rejects_a_malformed_admission_year(self):
+		from crm.fcrm.lead_processing import LeadProcessingError, process_new_leads
+
+		with self.assertRaises(LeadProcessingError) as ctx:
+			process_new_leads(admission_year="20x6")
+		self.assertEqual(ctx.exception.code, "INVALID_INPUT")
+
 	def test_student_contact_stage_edges_are_forward_only(self):
 		from crm.fcrm.student_stage import StudentStageError, validate_transition
 

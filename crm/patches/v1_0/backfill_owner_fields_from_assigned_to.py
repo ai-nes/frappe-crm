@@ -64,16 +64,17 @@ def execute():
 	for doctype in DOCTYPES:
 		assigned_rows = frappe.get_all(
 			doctype,
-			filters={"assigned_to": ["is", "set"], "owner_staff": ["is", "not set"]},
-			fields=["name", "assigned_to"],
+			filters={"assigned_to": ["is", "set"]},
+			fields=["name", "assigned_to", "owner_staff", "owning_team"],
 		)
 		staff_names = {row.assigned_to for row in assigned_rows if row.assigned_to}
 		primary_teams = _primary_teams(staff_names)
 		assigned_updates = {}
 		for row in assigned_rows:
-			assigned_updates.setdefault(
-				(row.assigned_to, primary_teams.get(row.assigned_to)), []
-			).append(row.name)
+			owning_team = primary_teams.get(row.assigned_to)
+			if row.owner_staff == row.assigned_to and row.owning_team == owning_team:
+				continue
+			assigned_updates.setdefault((row.assigned_to, owning_team), []).append(row.name)
 		_bulk_set(doctype, assigned_updates)
 
 		unassigned_rows = frappe.get_all(

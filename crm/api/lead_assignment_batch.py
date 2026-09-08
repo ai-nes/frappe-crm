@@ -17,7 +17,12 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
-from crm.fcrm.lead_processing import assign_lead, handoff_lead, preview_lead, process_lead
+from crm.fcrm.lead_processing import (
+	_set_processing_values,
+	assign_lead,
+	handoff_lead,
+	preview_lead,
+)
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -38,6 +43,7 @@ RUNNABLE_STATUSES = {"draft", "ready", "completed_with_errors"}
 TERMINAL_ITEM_STATUSES = {"assigned", "skipped"}
 ROUTING_REVIEW_CODES = frozenset(
 	{
+		"NOT_PROCESSED",
 		"MISSING_PROVINCE",
 		"MISSING_CAMPUS",
 		"TEAM_NOT_FOUND_FOR_PROVINCE",
@@ -48,6 +54,17 @@ ROUTING_REVIEW_CODES = frozenset(
 		"TEAM_SCOPE_MISMATCH",
 		"MISSING_INPUT_QUEUE",
 		"MULTIPLE_INPUT_QUEUES",
+	}
+)
+PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
+	{
+		"INVALID_CURRENT_OWNERSHIP",
+		"MISSING_PROVINCE",
+		"MISSING_CAMPUS",
+		"TEAM_NOT_FOUND_FOR_PROVINCE",
+		"PROVINCE_MISMATCH",
+		"TEAM_PROVINCE_MISMATCH",
+		"TEAM_SCOPE_MISMATCH",
 	}
 )
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
@@ -114,6 +131,18 @@ def _lead(name: str):
 	doc = frappe.get_doc("CRM Lead", name)
 	_lead_permission(doc)
 	return doc
+
+
+def _close_invalid_assignment_lead(lead_name: str, reason: str) -> None:
+	"""Close a Lead that cannot ever be routed with its current data."""
+	_set_processing_values(
+		lead_name,
+		{
+			"processing_status": "CLOSED",
+			"resolution": "INVALID",
+			"resolution_reason": reason[:500],
+		},
+	)
 
 
 def _batch_item_lead(item):
@@ -397,6 +426,14 @@ def _preview_item(
 		_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
 		return
+	processing_status = str(lead.get("processing_status") or "NEW").upper()
+	if processing_status in {"NEW", "PROCESSING"}:
+		# preview_lead predicts what processing *would* decide for a NEW Lead, but
+		# the run no longer processes on the operator's behalf, so previewing it as
+		# assignable would promise an outcome the run cannot deliver.
+		_reset_item(item, status="manual_review", reason="NOT_PROCESSED")
+		item.error_code = "NOT_PROCESSED"
+		return
 	processing = preview_lead(lead.name)
 	item.reason = processing.get("reason") or processing.get("resolution") or "ready"
 	item.error_code = processing.get("error_code")
@@ -406,17 +443,19 @@ def _preview_item(
 		)
 		item.error_code = processing.get("error_code") or processing.get("resolution")
 		return
-	if processing.get("status") not in {"NEW", "PROCESSING", "PROCESSED"}:
+	if processing.get("status") != "PROCESSED":
 		_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 		item.error_code = "INVALID_PROCESSING_STATUS"
 		return
 	province = _canonical_province(lead.get("province"))
 	if not province:
-		_reset_item(item, status="manual_review", reason="MISSING_PROVINCE")
+		_close_invalid_assignment_lead(lead.name, "Lead bị đóng: thiếu tỉnh để xác định Team quản lý.")
+		_reset_item(item, status="failed", reason="MISSING_PROVINCE")
 		item.error_code = "MISSING_PROVINCE"
 		return
 	if not lead.get("branch"):
-		_reset_item(item, status="manual_review", reason="MISSING_CAMPUS")
+		_close_invalid_assignment_lead(lead.name, "Lead bị đóng: thiếu trường/campus để kiểm tra dữ liệu.")
+		_reset_item(item, status="failed", reason="MISSING_CAMPUS")
 		item.error_code = "MISSING_CAMPUS"
 		return
 	recipient = _resolve_batch_recipient(
@@ -477,7 +516,13 @@ def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
 			}:
 				code = str(exc).strip()
 			code = code or "PREVIEW_FAILED"
-			_reset_item(item, status="manual_review", reason=code)
+			if code in PERMANENT_ASSIGNMENT_ERROR_CODES:
+				_close_invalid_assignment_lead(item.lead, f"Lead bị đóng: {exc}")
+			_reset_item(
+				item,
+				status="failed" if code in PERMANENT_ASSIGNMENT_ERROR_CODES else "manual_review",
+				reason=code,
+			)
 			item.error_code = code
 	batch.status = "ready"
 
@@ -1007,22 +1052,17 @@ def run_lead_assignment_batch(batch_name: str):
 				item.completed_at = now_datetime()
 				_persist_item(item)
 				continue
-			if processing_status == "NEW":
-				processing = process_lead(lead.name)
-				if processing.get("status") == "CLOSED":
-					_reset_item(
-						item,
-						status="manual_review",
-						reason=processing.get("resolution") or "INVALID",
-					)
-					item.error_code = processing.get("resolution") or "INVALID"
-					item.execution_id = batch.execution_id
-					item.completed_at = now_datetime()
-					_save_batch(batch)
-					continue
-				lead = _batch_item_lead(item)
-				processing_status = str(lead.get("processing_status") or "NEW").upper()
-			elif processing_status == "CLOSED":
+			if processing_status in {"NEW", "PROCESSING"}:
+				# Intake processing is its own operator step ("Xử lý Lead"). A batch
+				# run assigns what has already been processed and never advances
+				# intake state on the operator's behalf.
+				_reset_item(item, status="manual_review", reason="NOT_PROCESSED")
+				item.error_code = "NOT_PROCESSED"
+				item.execution_id = batch.execution_id
+				item.completed_at = now_datetime()
+				_save_batch(batch)
+				continue
+			if processing_status == "CLOSED":
 				_reset_item(
 					item,
 					status="manual_review",
@@ -1033,9 +1073,7 @@ def run_lead_assignment_batch(batch_name: str):
 				item.completed_at = now_datetime()
 				_save_batch(batch)
 				continue
-			elif processing_status != "PROCESSED":
-				# PROCESSING records are not safe assignment inputs. Do not force
-				# them forward or overwrite their lifecycle state.
+			if processing_status != "PROCESSED":
 				_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 				item.error_code = "INVALID_PROCESSING_STATUS"
 				item.execution_id = batch.execution_id
@@ -1091,7 +1129,15 @@ def run_lead_assignment_batch(batch_name: str):
 			if not code and str(exc).strip() in ROUTING_REVIEW_CODES:
 				code = str(exc).strip()
 			code = code or "ROUTING_FAILED"
-			item.status = "manual_review" if code in ROUTING_REVIEW_CODES else "failed"
+			if code in PERMANENT_ASSIGNMENT_ERROR_CODES:
+				_close_invalid_assignment_lead(item.lead, f"Lead bị đóng: {exc}")
+			item.status = (
+				"failed"
+				if code in PERMANENT_ASSIGNMENT_ERROR_CODES
+				else "manual_review"
+				if code in ROUTING_REVIEW_CODES
+				else "failed"
+			)
 			item.reason = str(exc)
 			item.error_code = code
 			item.execution_id = batch.execution_id
@@ -1115,9 +1161,18 @@ def run_lead_assignment_batch(batch_name: str):
 
 
 def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
-	"""Return visible, unassigned Leads without considering their source."""
+	"""Return visible, processed Leads that still have no owner.
+
+	Lead source is not part of the selection rule because another system owns
+	intake. Processing state is, because "Xử lý Lead" is the operator step that
+	decides which Leads are assignable at all.
+	"""
 	rows = frappe.get_all(
 		"CRM Lead",
+		filters={
+			"processing_status": "PROCESSED",
+			"resolution": ["in", ["MATCHED", "CREATED"]],
+		},
 		fields=["name", "owner_staff", "assigned_to", "converted_student", "conversion_status"],
 		order_by="creation asc, name asc",
 		limit_page_length=MAX_BATCH_SIZE,
@@ -1141,7 +1196,7 @@ def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
 def _new_unassigned_lead_batch(lead_names: list[str]):
 	"""Create an internal audit batch for one manual scan."""
 	stamp = now_datetime().strftime("%Y%m%d-%H%M%S")
-	batch_name = f"Phân công tự động {stamp}"
+	batch_name = f"Phân công Lead {stamp}"
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
 		batch_name = f"{batch_name}-{uuid.uuid4().hex[:6]}"
 	batch = frappe.get_doc(
@@ -1171,17 +1226,18 @@ def _new_unassigned_lead_batch(lead_names: list[str]):
 
 @frappe.whitelist(methods=["POST"])
 def run_unassigned_lead_assignment():
-	"""Scan and assign all visible CRM Leads that do not have an owner.
+	"""Scan and assign every processed CRM Lead that does not have an owner.
 
-	This is the simple operator action used by dashboard-crm.  Lead source is
-	not part of the selection rule because another system owns Lead intake.
+	This is the simple operator action used by dashboard-crm. Leads still in
+	NEW must first go through "Xử lý Lead" (``process_new_leads``); this command
+	never advances intake state itself.
 	"""
 	actor_context = _require_access()
 	lead_names = _unassigned_lead_names(actor_context)
 	if not lead_names:
 		return {
 			"status": "no_work",
-			"message": "Không có Lead chưa được phân công.",
+			"message": "Không có Lead đã xử lý nào đang chờ phân công.",
 			"scanned": 0,
 			"batch": None,
 			"items": [],
@@ -1213,7 +1269,10 @@ def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | Non
 	for item in batch.items:
 		if selected is not None and item.name not in selected:
 			continue
-		if item.status in {"deferred", "manual_review", "failed"}:
+		if (
+			item.status in {"deferred", "manual_review", "failed"}
+			and item.error_code not in PERMANENT_ASSIGNMENT_ERROR_CODES
+		):
 			_reset_item(item)
 	batch.status = "ready"
 	_save_batch(batch)
@@ -1321,6 +1380,80 @@ def list_lead_assignment_batches(
 			"total": total,
 			"total_pages": total_pages,
 			"has_next_page": page < total_pages,
+		},
+	}
+
+
+@frappe.whitelist()
+def list_lead_assignment_history_items(
+	limit: int | str = 50,
+	page: int | str = 1,
+	status: str | None = None,
+	q: str | None = None,
+):
+	"""Return one flat history list across all assignment batches."""
+	try:
+		page_size = max(1, min(int(limit), 100))
+		page_number = max(1, int(page or 1))
+	except (TypeError, ValueError):
+		frappe.throw(_("Thông tin phân trang không hợp lệ."), frappe.ValidationError)
+	allowed_statuses = {"pending", "assigned", "deferred", "manual_review", "failed", "skipped"}
+	if status and status != "all" and status not in allowed_statuses:
+		frappe.throw(_("Trạng thái hồ sơ không hợp lệ."), frappe.ValidationError)
+	search = str(q or "").strip().casefold()
+	if len(search) > 140:
+		frappe.throw(_("Từ khóa tìm kiếm quá dài."), frappe.ValidationError)
+	batches = []
+	batch_page = 1
+	while True:
+		batch_response = list_lead_assignment_batches(limit=100, page=batch_page)
+		batches.extend(batch_response.get("items", []))
+		if not batch_response.get("pagination", {}).get("has_next_page"):
+			break
+		batch_page += 1
+	items = []
+	for batch_row in batches:
+		batch = frappe.get_doc(BATCH_DOCTYPE, batch_row["name"])
+		for item in batch.items:
+			serialized = _serialize_item(item)
+			serialized.update(
+				{
+					"batchId": batch.name,
+					"batchCreatedAt": str(batch.creation) if batch.creation else None,
+					"batchStatus": batch.status,
+				}
+			)
+			if status and status != "all" and serialized["status"] != status:
+				continue
+			if search:
+				searchable = " ".join(
+					str(serialized.get(field) or "")
+					for field in (
+						"studentName",
+						"leadId",
+						"phone",
+						"province",
+						"team",
+						"ownerStaff",
+						"reason",
+					)
+				).casefold()
+				if search not in searchable:
+					continue
+			items.append(serialized)
+	items.sort(key=lambda row: (row.get("batchCreatedAt") or "", row.get("id") or ""), reverse=True)
+	total = len(items)
+	start = (page_number - 1) * page_size
+	page_items = items[start : start + page_size]
+	total_pages = max(1, (total + page_size - 1) // page_size)
+	return {
+		"items": page_items,
+		"pagination": {
+			"page": page_number,
+			"page_size": page_size,
+			"total": total,
+			"total_pages": total_pages,
+			"has_next_page": page_number < total_pages,
 		},
 	}
 

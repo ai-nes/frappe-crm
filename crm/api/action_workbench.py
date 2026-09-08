@@ -87,6 +87,48 @@ def record_outcome(action, idempotency_key, expected_action_revision, expected_p
 	)
 
 
+@frappe.whitelist()
+def complete_action_manually(action, idempotency_key, expected_action_revision, expected_package_revision, outcome_code, outcome_evidence=None, outcome_notes=None):
+	"""Self-service completion for Actions with no provider dispatch (manual outcomes).
+
+	Creates and self-confirms a RECORD_OUTCOME execution attempt on the actor's
+	behalf, then records the outcome through the same command path as
+	``record_outcome``. Scoped strictly to the RECORD_OUTCOME operation so it can
+	never substitute for a CALL/EMAIL provider dispatch confirmation.
+	"""
+	if not action or not idempotency_key or not outcome_code:
+		frappe.throw("action, idempotency_key and outcome_code are required.", frappe.ValidationError)
+	from crm.services.action_execution import create_or_replay_attempt, transition_attempt
+
+	attempt = create_or_replay_attempt(
+		action, "RECORD_OUTCOME", idempotency_key, int(expected_action_revision), int(expected_package_revision)
+	)
+	attempt_id = attempt["attempt_id"]
+	status = attempt["status"]
+	if status == "pending":
+		status = transition_attempt(attempt_id, "queued")["status"]
+	if status == "queued":
+		attempt_doc = frappe.db.get_value("CRM Action Execution Attempt", attempt_id, "operation")
+		if attempt_doc != "RECORD_OUTCOME":
+			frappe.throw("Only manual RECORD_OUTCOME attempts may be self-confirmed.", frappe.PermissionError)
+		status = transition_attempt(attempt_id, "confirmed")["status"]
+	if status != "confirmed":
+		frappe.throw("Could not confirm the manual execution attempt.", frappe.ValidationError)
+
+	refs = (
+		[outcome_evidence]
+		if isinstance(outcome_evidence, str) and outcome_evidence.strip()
+		else (outcome_evidence if isinstance(outcome_evidence, list) and outcome_evidence else ["manual-confirmation"])
+	)
+	result = record_outcome(
+		action, idempotency_key, expected_action_revision, expected_package_revision,
+		outcome_code, evidence_refs=refs, attempt_id=attempt_id,
+	)
+	if outcome_notes:
+		frappe.db.set_value("CRM Action Item", action, "outcome_notes", str(outcome_notes)[:2000], update_modified=False)
+	return result
+
+
 @frappe.whitelist(allow_guest=False)
 def confirm_provider_event(attempt_id, provider_event_id, signature, raw_body):
 	from crm.services.action_execution import confirm_provider_event as confirm
