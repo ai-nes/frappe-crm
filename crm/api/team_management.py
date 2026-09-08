@@ -30,10 +30,9 @@ SUPPORTED_FUNCTIONS = ("Sale", "CTV Sale", "Lead Sale")
 TEAM_MANAGEMENT_READ_CAPABILITIES = frozenset(
 	{"system.configure", "admissions.oversee", "team.oversee", "student.execute"}
 )
-TEAM_MANAGEMENT_WRITE_CAPABILITIES = frozenset(
-	{"system.configure", "admissions.oversee", "team.oversee"}
-)
-TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES = frozenset({"sales", "lead_sales"})
+TEAM_MANAGEMENT_ALLOWED_PROFILES = frozenset({"sales", "ctv_sale", "lead_sales", "system_manager"})
+TEAM_MANAGEMENT_GLOBAL_PROFILES = frozenset({"lead_sales", "system_manager"})
+TEAM_MANAGEMENT_WRITE_PROFILES = frozenset({"sales", "lead_sales", "system_manager"})
 
 
 def _text(value, label, *, required=True, maximum=140):
@@ -60,28 +59,74 @@ def _error(code, message):
 
 
 def _is_global(context):
-	return bool(context.get("is_system_manager") or context.get("profile") in {"ceo", "admissions_director"})
+	return bool(context.get("is_system_manager") or context.get("profile") in TEAM_MANAGEMENT_GLOBAL_PROFILES)
 
 
-def _can_manage_leads(context):
-	return _is_global(context) or context.get("profile") in {"lead_sales", "sales"}
+def _can_manage_leads(context, *, team_id=None, group_id=None):
+	if _is_global(context):
+		return True
+	if team_id and not group_id:
+		group_id = frappe.db.get_value("CRM Team", team_id, "group")
+	return bool(group_id and _is_group_lead_for_group(context, group_id))
+
+
+def _is_group_lead_for_group(context, group_id):
+	return _is_global(context) or group_id in set(context.get("group_lead_groups") or [])
+
+
+def _can_manage_team(context, *, team_id=None, group_id=None):
+	if _is_global(context):
+		return True
+	if team_id:
+		team_group = frappe.db.get_value("CRM Team", team_id, "group")
+		if team_group:
+			if group_id and group_id != team_group:
+				return _is_group_lead_for_group(context, group_id) and _is_group_lead_for_group(
+					context, team_group
+				)
+			return _is_group_lead_for_group(context, team_group)
+	return bool(group_id and _is_group_lead_for_group(context, group_id))
+
+
+def _assert_team_lead_scope(team_id, context):
+	if _is_global(context):
+		return
+	if team_id not in set(context.get("team_lead_teams") or []):
+		frappe.throw(
+			_("Bạn chỉ được quản lý thành viên trong Team mình làm Trưởng nhóm."),
+			frappe.PermissionError,
+		)
+
+
+def _assert_member_write_scope(staff_id, context):
+	if _is_global(context):
+		return
+	managed_teams = set(context.get("team_lead_teams") or [])
+	member_teams = {row.team for row in _active_memberships() if row.staff == staff_id and row.team}
+	if not managed_teams.intersection(member_teams):
+		frappe.throw(
+			_("Bạn chỉ được cập nhật thành viên trong Team mình làm Trưởng nhóm."),
+			frappe.PermissionError,
+		)
 
 
 def _has_unrestricted_team_management_scope(context):
-	return _is_global(context) or context.get("profile") in TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES
+	return _is_global(context)
 
 
 def _require_access(*, write=False):
-	context = _actor_context(required_capabilities=TEAM_MANAGEMENT_READ_CAPABILITIES)
+	context = _actor_context(
+		required_capabilities=TEAM_MANAGEMENT_READ_CAPABILITIES,
+		allow_missing_staff=True,
+	)
+	if context.get("profile") not in TEAM_MANAGEMENT_ALLOWED_PROFILES:
+		frappe.throw(_("Bạn không có quyền xem quản lý đội ngũ."), frappe.PermissionError)
 	capabilities = set(context.get("capabilities") or [])
 	if not capabilities.intersection(TEAM_MANAGEMENT_READ_CAPABILITIES):
 		frappe.throw(_("Bạn không có quyền xem quản lý đội ngũ."), frappe.PermissionError)
-	if write and not (
-		capabilities.intersection(TEAM_MANAGEMENT_WRITE_CAPABILITIES)
-		or context.get("profile") in TEAM_MANAGEMENT_TEMPORARY_WRITE_PROFILES
-	):
+	if write and context.get("profile") not in TEAM_MANAGEMENT_WRITE_PROFILES:
 		frappe.throw(_("Bạn không có quyền thay đổi quản lý đội ngũ."), frappe.PermissionError)
-	return context
+	return _with_team_management_scope(context)
 
 
 def _team_in_scope(team_id, context):
@@ -100,8 +145,7 @@ def _assert_group_scope(group_id, context):
 		_error("GROUP_NOT_FOUND", "Nhóm quản lý không tồn tại.")
 	if _has_unrestricted_team_management_scope(context):
 		return
-	team_ids = frappe.get_all("CRM Team", filters={"group": group_id}, pluck="name")
-	if not set(team_ids).intersection(set(context.get("teams") or [])):
+	if group_id not in set(context.get("group_lead_groups") or []):
 		frappe.throw(_("Nhóm này không thuộc phạm vi quản lý của bạn."), frappe.PermissionError)
 
 
@@ -122,6 +166,73 @@ def _active_memberships():
 		limit_page_length=0,
 	)
 	return [row for row in rows if _date_active(row)]
+
+
+def _with_team_management_scope(context):
+	"""Attach Group Lead/Team Lead/member scope used by Team Management commands."""
+	context = dict(context)
+	context.update(
+		{
+			"group_lead_groups": [],
+			"group_lead_teams": [],
+			"team_lead_teams": [],
+			"member_teams": [],
+			"group_ids": [],
+			"is_group_lead": False,
+			"is_team_lead": False,
+		}
+	)
+	if _is_global(context):
+		return context
+
+	staff_id = context.get("staff")
+	if not staff_id:
+		context["teams"] = []
+		return context
+
+	memberships = _active_memberships()
+	member_teams = {row.team for row in memberships if row.staff == staff_id and row.team}
+	group_lead_groups = set(
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"group_lead_staff": staff_id},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	team_rows = frappe.get_all(
+		"CRM Team",
+		fields=["name", "group", "team_lead_staff", "campus"],
+		limit_page_length=0,
+	)
+	team_lead_teams = {row.name for row in team_rows if row.team_lead_staff == staff_id}
+	group_lead_teams = {row.name for row in team_rows if row.group in group_lead_groups}
+
+	if context.get("profile") == "ctv_sale":
+		group_lead_groups = set()
+		group_lead_teams = set()
+		team_lead_teams = set()
+
+	visible_teams = member_teams | group_lead_teams | team_lead_teams
+	visible_group_ids = group_lead_groups | {
+		row.group for row in team_rows if row.name in visible_teams and row.group
+	}
+	visible_campuses = set(context.get("campuses") or [])
+	visible_campuses.update(row.campus for row in team_rows if row.name in visible_teams and row.campus)
+	context.update(
+		{
+			"teams": sorted(visible_teams),
+			"member_teams": sorted(member_teams),
+			"group_lead_groups": sorted(group_lead_groups),
+			"group_lead_teams": sorted(group_lead_teams),
+			"team_lead_teams": sorted(team_lead_teams),
+			"group_ids": sorted(visible_group_ids),
+			"campuses": sorted(visible_campuses),
+			"is_group_lead": bool(group_lead_groups),
+			"is_team_lead": bool(team_lead_teams),
+		}
+	)
+	return context
 
 
 def _revision(payload):
@@ -271,6 +382,19 @@ def _read_workspace(context):
 		limit_page_length=0,
 	)
 	memberships = _active_memberships()
+
+	if not _is_global(context):
+		visible_team_ids = set(context.get("teams") or [])
+		visible_group_ids = set(context.get("group_ids") or [])
+		groups = [row for row in groups if row.name in visible_group_ids]
+		teams = [row for row in teams if row.name in visible_team_ids]
+		memberships = [row for row in memberships if row.team in visible_team_ids]
+		visible_staff_ids = {row.staff for row in memberships if row.staff}
+		visible_staff_ids.update(row.team_lead_staff for row in teams if row.team_lead_staff)
+		visible_staff_ids.update(row.group_lead_staff for row in groups if row.group_lead_staff)
+		if context.get("staff"):
+			visible_staff_ids.add(context["staff"])
+		staff = [row for row in staff if row.name in visible_staff_ids]
 
 	team_map = {row.name: row for row in teams}
 	staff_map = {row.name: row for row in staff}
@@ -471,10 +595,10 @@ def _read_workspace(context):
 		},
 		"permissions": {
 			"canManage": bool(
-				set(context.get("capabilities") or []).intersection(
-					{"system.configure", "admissions.oversee", "team.oversee"}
-				)
+				_is_global(context) or context.get("group_lead_groups") or context.get("team_lead_teams")
 			),
+			"canManageTeams": bool(_is_global(context) or context.get("group_lead_groups")),
+			"canManageMembers": bool(_is_global(context) or context.get("team_lead_teams")),
 			"canManageAll": _is_global(context),
 		},
 	}
@@ -588,9 +712,9 @@ def save_team_group(
 	correlation_id=None,
 ):
 	context = _require_access(write=True)
-	if not group_id and not _is_global(context):
+	if not _is_global(context):
 		frappe.throw(
-			_("Chỉ quản trị viên cấp Admissions mới được tạo Group."),
+			_("Chỉ Lead Sale mới được tạo hoặc thay đổi Group."),
 			frappe.PermissionError,
 		)
 	payload = {
@@ -642,7 +766,11 @@ def _save_team(
 	campus = _text(campus, "campus")
 	if not frappe.db.exists("CRM Campus", campus):
 		_error("CAMPUS_NOT_FOUND", "Cơ sở không tồn tại.")
-	if not _is_global(context) and campus not in set(context.get("campuses") or []):
+	if (
+		not _is_global(context)
+		and campus not in set(context.get("campuses") or [])
+		and not _can_manage_team(context, team_id=team_id, group_id=group_id)
+	):
 		frappe.throw(_("Cơ sở này không thuộc phạm vi quản lý của bạn."), frappe.PermissionError)
 	if group_id:
 		_assert_group_scope(group_id, context)
@@ -655,7 +783,9 @@ def _save_team(
 		_assert_team_scope(team_id, context)
 		doc = frappe.get_doc("CRM Team", team_id)
 		requested_lead = _text(team_lead_staff, "team_lead_staff", required=False)
-		if not _can_manage_leads(context) and requested_lead != (doc.team_lead_staff or None):
+		if not _can_manage_leads(context, team_id=team_id, group_id=group_id) and requested_lead != (
+			doc.team_lead_staff or None
+		):
 			frappe.throw(
 				_("Bạn không có quyền chọn hoặc thay đổi Trưởng nhóm."),
 				frappe.PermissionError,
@@ -664,7 +794,7 @@ def _save_team(
 		if frappe.db.exists("CRM Team", {"team_name": team_name}):
 			_error("TEAM_ALREADY_EXISTS", "Tên đội tư vấn đã tồn tại.")
 		doc = frappe.get_doc({"doctype": "CRM Team"})
-		if team_lead_staff and not _can_manage_leads(context):
+		if team_lead_staff and not _can_manage_leads(context, group_id=group_id):
 			frappe.throw(
 				_("Bạn không có quyền chọn Trưởng nhóm."),
 				frappe.PermissionError,
@@ -683,6 +813,8 @@ def _save_team(
 		doc.save(ignore_permissions=True)
 	else:
 		doc.insert(ignore_permissions=True)
+		if doc.team_lead_staff:
+			_ensure_created_team_lead_membership(doc, doc.team_lead_staff, context)
 	return {
 		"action": "team_setup",
 		"teamId": doc.name,
@@ -720,6 +852,11 @@ def save_team(
 	def apply():
 		if team_id and str(expected_revision or "") != _team_revision(team_id):
 			_error("STALE_TEAM_REVISION", "Đội đã thay đổi; hãy tải lại trước khi lưu.")
+		if not _can_manage_team(context, team_id=team_id, group_id=group_id):
+			frappe.throw(
+				_("Bạn chỉ được quản lý Team trong Group mình làm Trưởng nhóm."),
+				frappe.PermissionError,
+			)
 		return _save_team(
 			team_id,
 			team_name,
@@ -798,7 +935,7 @@ def _save_membership(
 	if function not in SUPPORTED_FUNCTIONS:
 		_error("FUNCTION_INVALID", "Vai trò nhân sự không được hỗ trợ.")
 	is_team_lead = _bool(is_team_lead)
-	if is_team_lead and not _can_manage_leads(context):
+	if is_team_lead and not _can_manage_leads(context, team_id=team_id):
 		frappe.throw(
 			_("Bạn không có quyền chọn Trưởng nhóm."),
 			frappe.PermissionError,
@@ -846,6 +983,22 @@ def _save_membership(
 	}
 
 
+def _ensure_created_team_lead_membership(team_doc, staff_id, context):
+	"""Add the selected lead to a newly created Team as its organizational lead."""
+	membership_context = dict(context)
+	membership_context["teams"] = sorted(set(context.get("teams") or []) | {team_doc.name})
+	membership_context["campuses"] = sorted(set(context.get("campuses") or []) | {team_doc.campus})
+	return _save_membership(
+		staff_id,
+		team_doc.name,
+		"Sale",
+		False,
+		None,
+		True,
+		membership_context,
+	)
+
+
 @frappe.whitelist(methods=["POST"])
 def add_team_member(
 	staff_id=None,
@@ -866,11 +1019,10 @@ def add_team_member(
 		"term": term,
 		"is_team_lead": _bool(is_team_lead),
 	}
-	return _command(
-		"membership_setup",
-		payload,
-		context,
-		lambda: _save_membership(
+
+	def apply():
+		_assert_team_lead_scope(team_id, context)
+		return _save_membership(
 			staff_id,
 			team_id,
 			function,
@@ -878,7 +1030,13 @@ def add_team_member(
 			term,
 			is_team_lead,
 			context,
-		),
+		)
+
+	return _command(
+		"membership_setup",
+		payload,
+		context,
+		apply,
 		idempotency_key=idempotency_key,
 		correlation_id=correlation_id,
 	)
@@ -908,6 +1066,8 @@ def move_team_member(
 	def apply():
 		source_team = _team_doc(source_team_id, context)
 		target_team = _team_doc(target_team_id, context)
+		_assert_team_lead_scope(source_team.name, context)
+		_assert_team_lead_scope(target_team.name, context)
 		if source_team.name == target_team.name:
 			_error("SAME_TEAM", "Team nguồn và Team đích phải khác nhau.")
 		if not target_team.is_active:
@@ -993,6 +1153,7 @@ def remove_team_member(
 	def apply():
 		staff_doc = _staff_doc(staff_id, context)
 		team_doc = _team_doc(team_id, context)
+		_assert_team_lead_scope(team_doc.name, context)
 		if expected_revision and expected_revision != _staff_revision(staff_id):
 			_error("STALE_STAFF_REVISION", "Nhân sự đã thay đổi; hãy tải lại trước khi lưu.")
 		membership = _find_active_membership(staff_doc, team_doc.name)
@@ -1043,11 +1204,6 @@ def change_team_lead(
 ):
 	"""Change the organizational Team leader without changing staff function."""
 	context = _require_access(write=True)
-	if not _can_manage_leads(context):
-		frappe.throw(
-			_("Bạn không có quyền chọn hoặc thay đổi Trưởng nhóm."),
-			frappe.PermissionError,
-		)
 	payload = {
 		"team_id": team_id,
 		"new_lead_staff": new_lead_staff,
@@ -1056,6 +1212,11 @@ def change_team_lead(
 
 	def apply():
 		team_doc = _team_doc(team_id, context)
+		if not _can_manage_leads(context, group_id=team_doc.group):
+			frappe.throw(
+				_("Chỉ Lead Sale hoặc Group Lead mới được đổi Trưởng nhóm."),
+				frappe.PermissionError,
+			)
 		if not team_doc.is_active:
 			_error("TEAM_INACTIVE", "Không thể đổi Trưởng nhóm trong Team đang ngừng hoạt động.")
 		if expected_revision and expected_revision != _team_revision(team_doc.name):
@@ -1132,6 +1293,7 @@ def update_team_member(
 
 	def apply():
 		staff_doc = _staff_doc(staff_id, context)
+		_assert_member_write_scope(staff_doc.name, context)
 		if expected_revision and expected_revision != _staff_revision(staff_id):
 			_error("STALE_STAFF_REVISION", "Nhân sự đã thay đổi; hãy tải lại trước khi lưu.")
 		staff_doc.full_name = full_name
