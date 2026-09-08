@@ -8,7 +8,8 @@ Implements the locked row-level data-scope matrix:
 The Sale and Lead Sale list projections are intentionally handled by dashboard
 APIs as separate read-only Group/Team/pool views because those profiles have
 assignment authority. Neither projection changes the canonical CRUD/detail
-scope.
+scope; the Lead Sale and full-visibility profiles use unrestricted dashboard
+readers where their list contract requires it.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.

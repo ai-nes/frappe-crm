@@ -17,6 +17,7 @@ from frappe import _
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.permissions import (
+	can_read_full_lead_board,
 	get_student_list_read_condition,
 	has_student_dashboard_read_permission,
 )
@@ -682,6 +683,8 @@ def _list_scope_student_ids() -> list[str] | None:
 	assigning; all mutation commands perform their own ownership checks. The
 	condition targets CRM Lead because Lead is the canonical routing projection.
 	"""
+	if can_read_full_lead_board():
+		return None
 	condition = get_student_list_read_condition(doctype="CRM Lead")
 	if condition is None:
 		return None
@@ -697,6 +700,13 @@ def _with_allowed_student_ids(
 	return {**filters, "name": ["in", allowed_student_ids]}
 
 
+def _student_list_reader(allowed_student_ids: list[str] | None):
+	"""Use an unrestricted reader for Lead Sale's full Student list."""
+	if allowed_student_ids is not None or can_read_full_lead_board():
+		return frappe.get_all
+	return frappe.get_list
+
+
 def _count_students(
 	filters: dict[str, Any],
 	or_filters: list[list[str]] | None = None,
@@ -706,7 +716,7 @@ def _count_students(
 	if allowed_student_ids is not None and not allowed_student_ids:
 		return 0
 	query_filters = _with_allowed_student_ids(filters, allowed_student_ids)
-	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	get_rows = _student_list_reader(allowed_student_ids)
 	rows = get_rows(
 		"CRM Student",
 		filters=query_filters,
@@ -735,7 +745,7 @@ def _fetch_student_rows(
 	field = SORT_FIELDS[query["sort"]]
 	if allowed_student_ids is not None and not allowed_student_ids:
 		return []
-	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	get_rows = _student_list_reader(allowed_student_ids)
 	rows = get_rows(
 		"CRM Student",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
@@ -758,7 +768,7 @@ def _fetch_computed_sort_rows(
 	"""Sort fields that live on related read models, then apply the page window."""
 	if allowed_student_ids is not None and not allowed_student_ids:
 		return []
-	get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+	get_rows = _student_list_reader(allowed_student_ids)
 	rows = get_rows(
 		"CRM Student",
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
@@ -1092,7 +1102,7 @@ def _build_summary(
 	if allowed_student_ids is not None and not allowed_student_ids:
 		rows = []
 	else:
-		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+		get_rows = _student_list_reader(allowed_student_ids)
 		rows = get_rows(
 			"CRM Student",
 			filters=_with_allowed_student_ids(
@@ -1132,7 +1142,7 @@ def _build_action_summary(
 	if allowed_student_ids is not None and not allowed_student_ids:
 		student_ids = []
 	else:
-		get_rows = frappe.get_all if allowed_student_ids is not None else frappe.get_list
+		get_rows = _student_list_reader(allowed_student_ids)
 		student_ids = [
 			row.get("name")
 			for row in get_rows(
