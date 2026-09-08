@@ -159,7 +159,7 @@ def _capacity(staff: str, at=None) -> dict[str, Any]:
 	limit = int((rows[0].get("max_active_students") if rows else 0) or 0)
 	active = (
 		frappe.db.count(
-			"CRM Lead", {"owner_staff": staff, "lifecycle_stage": ["not in", ["Lost", "Converted"]]}
+			"CRM Lead", {"owner_staff": staff, "processing_status": ["not in", ["CLOSED"]]}
 		)
 		if limit
 		else 0

@@ -5,12 +5,12 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from crm.api.lead_mapping import _normalize_lead_payload
 from crm.fcrm.role_policy import resolve_crm_profile
 
 _STUDENT_BASIC_FIELDS = frozenset(
 	{
 		"student_name",
-		"lead_status",
 		"phone",
 		"email",
 		"other_email",
@@ -37,6 +37,12 @@ _STUDENT_BASIC_FIELDS = frozenset(
 		"id_issued_place",
 	}
 )
+_STUDENT_WITH_LEAD_FIELDS = _STUDENT_BASIC_FIELDS | {
+	"source",
+	"assigned_to",
+	"description",
+	"campaign_code",
+}
 
 _SCHOOL_BASIC_FIELDS = frozenset(
 	{
@@ -59,7 +65,7 @@ _OPTION_DOCTYPES = frozenset({"CRM Lead", "CRM High School"})
 _OPTION_FIELD_TYPES = frozenset({"Link", "Select"})
 _DEFAULT_OPTION_LIMIT = 20
 _MAX_OPTION_LIMIT = 100
-_CTV_STUDENT_UPDATE_FIELDS = frozenset({"lead_status", "notes"})
+_CTV_STUDENT_UPDATE_FIELDS = frozenset({"notes"})
 
 
 def _parse_fields(fields: dict | str | None, allowed_fields: frozenset[str]) -> dict:
@@ -158,6 +164,88 @@ def _delete_document(doctype: str, name: str) -> dict:
 	doc.check_permission("delete")
 	frappe.delete_doc(doctype, doc.name)
 	return {"doctype": doctype, "name": doc.name, "deleted": True}
+
+
+def _student_values_from_lead(values: dict, source_lead: str, lead_code: str | None) -> dict:
+	student_fields = {field.fieldname for field in frappe.get_meta("CRM Student").fields}
+	student_values = {"doctype": "CRM Student", "source_lead": source_lead}
+	if lead_code and "lead_code" in student_fields:
+		student_values["lead_code"] = lead_code
+	for fieldname, value in values.items():
+		student_field = "full_name" if fieldname == "student_name" else fieldname
+		if student_field in student_fields and value not in (None, ""):
+			student_values[student_field] = value
+	return student_values
+
+
+def _create_student_with_lead(fields: dict | str | None) -> dict:
+	values = _parse_fields(fields, _STUDENT_WITH_LEAD_FIELDS)
+	lead_values, _tags, _events, assigned_user = _normalize_lead_payload(values)
+	converted_at = frappe.utils.now_datetime()
+
+	lead = frappe.get_doc({"doctype": "CRM Lead", **lead_values})
+	lead.check_permission("create")
+
+	savepoint = f"create_student_with_lead_{frappe.generate_hash(length=8)}"
+	frappe.db.savepoint(savepoint)
+	try:
+		lead.insert()
+		student_values = _student_values_from_lead(lead_values, lead.name, lead.get("lead_code"))
+		student_values.update({"student_stage": "New", "converted_at": converted_at})
+		student = frappe.get_doc(student_values)
+		student.check_permission("create")
+		student.insert()
+		lead_updates = {
+			"student": student.name,
+			"converted_student": student.name,
+			"converted_at": converted_at,
+			"processing_status": "CLOSED",
+			"resolution": "CREATED",
+			"resolution_reason": "CREATED handoff completed.",
+		}
+		for fieldname, value in lead_updates.items():
+			lead.set(fieldname, value)
+		frappe.db.set_value(
+			"CRM Lead",
+			lead.name,
+			lead_updates,
+			update_modified=False,
+		)
+	except Exception:
+		frappe.db.rollback(save_point=savepoint)
+		raise
+
+	return {
+		"doctype": "CRM Student",
+		"name": student.name,
+		"student": {
+			"doctype": "CRM Student",
+			"name": student.name,
+			"student_stage": student.get("student_stage") or "New",
+			"source_lead": lead.name,
+		},
+		"lead": {
+			"doctype": "CRM Lead",
+			"name": lead.name,
+			"processing_status": "CLOSED",
+			"resolution": "CREATED",
+			"student": student.name,
+		},
+		"created_fields": {
+			fieldname: student.get(fieldname)
+			for fieldname in (
+				"full_name",
+				"phone",
+				"email",
+				"province",
+				"ward",
+				"student_stage",
+				"source_lead",
+			)
+			if student.get(fieldname) not in (None, "")
+		},
+		"assigned_to_user": assigned_user,
+	}
 
 
 def _get_list_view_fields(doctype: str) -> list[str]:
@@ -282,13 +370,19 @@ def _get_link_options(
 
 @frappe.whitelist(methods=["POST"])
 def create_student(fields: dict | str | None = None) -> dict:
-	"""Create a CRM Student with basic profile fields."""
+	"""Legacy route that creates a CRM Lead; use create_student_with_lead for a real Student."""
 	return _create_document(
 		"CRM Lead",
 		fields,
 		_STUDENT_BASIC_FIELDS,
 		{"student_name"},
 	)
+
+
+@frappe.whitelist(methods=["POST"])
+def create_student_with_lead(fields: dict | str | None = None) -> dict:
+	"""Create a real CRM Student and its linked source CRM Lead atomically."""
+	return _create_student_with_lead(fields)
 
 
 @frappe.whitelist(methods=["POST"])

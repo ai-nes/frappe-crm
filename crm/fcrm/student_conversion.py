@@ -45,7 +45,6 @@ LEAD_TO_STUDENT_FIELDS = (
 	("id_number", "id_number"),
 	("id_issued_date", "id_issued_date"),
 	("id_issued_place", "id_issued_place"),
-	("enrollment_status", "enrollment_status"),
 	("assigned_to", "assigned_to"),
 	("owner_staff", "owner_staff"),
 	("owning_team", "owning_team"),
@@ -292,9 +291,7 @@ def _resolve_target_student(
 
 
 def _lead_is_converted(lead) -> bool:
-	return bool(
-		lead.get("converted_student") or str(lead.get("conversion_status") or "").casefold() == "converted"
-	)
+	return bool(lead.get("converted_student"))
 
 
 def _assert_lead_ownership_ready(lead) -> None:
@@ -440,8 +437,6 @@ def _link_lead_to_student(lead, contact, resolution: str):
 	updates = {
 		"student": contact.name,
 		"converted_student": contact.name,
-		"conversion_status": "Converted",
-		"lead_status": "Converted",
 		"converted_at": frappe.utils.now_datetime(),
 	}
 	fields = _fields(LEAD_DOCTYPE)

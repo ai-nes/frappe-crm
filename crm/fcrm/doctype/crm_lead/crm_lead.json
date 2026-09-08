@@ -11,12 +11,10 @@
  "field_order": [
   "naming_series",
   "lead_code",
-  "lead_status",
   "processing_status",
   "resolution",
   "resolution_reason",
   "matched_student",
-  "conversion_status",
   "conversion_blockers",
   "converted_student",
   "converted_at",
@@ -27,8 +25,6 @@
   "gender",
   "date_of_birth",
   "col_break_1",
-  "enrollment_status",
-  "lifecycle_stage",
   "assigned_to",
   "owner_staff",
   "owning_team",
@@ -107,14 +103,14 @@
   "import_source_id"
  ],
  "fields": [
- {
-  "default": "normal",
-  "fieldname": "assignment_priority",
-  "fieldtype": "Select",
-  "label": "Assignment Priority",
-  "options": "low\nnormal\nhigh\nurgent"
- },
- {
+  {
+   "default": "normal",
+   "fieldname": "assignment_priority",
+   "fieldtype": "Select",
+   "label": "Assignment Priority",
+   "options": "low\nnormal\nhigh\nurgent"
+  },
+  {
    "default": "ENR-.YYYY.-",
    "fieldname": "naming_series",
    "fieldtype": "Select",
@@ -130,15 +126,6 @@
    "label": "Lead Code",
    "read_only": 1,
    "unique": 1
-  },
-  {
-   "default": "New",
-   "fieldname": "lead_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Lead Status",
-   "options": "New\nWorking\nContacted\nNurturing\nQualified\nUnqualified\nConverted\nLost"
   },
   {
    "default": "NEW",
@@ -176,16 +163,6 @@
    "options": "CRM Student",
    "read_only": 1,
    "description": "Student selected during processing; copied to Converted Student during handoff."
-  },
-  {
-   "default": "Not Ready",
-   "fieldname": "conversion_status",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Conversion Status",
-   "options": "Not Ready\nReady\nConverted\nBlocked",
-   "read_only": 1
   },
   {
    "fieldname": "conversion_blockers",
@@ -249,27 +226,8 @@
    "fieldtype": "Column Break"
   },
   {
-   "default": "NEW",
-   "fieldname": "enrollment_status",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Enrollment Status",
-   "options": "CRM Enrollment Status"
-  },
-  {
-   "fieldname": "lifecycle_stage",
-   "fieldtype": "Select",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Lifecycle Stage",
-   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
+   "fieldname": "assigned_to",
    "read_only": 1,
-   "description": "Derived from Enrollment Status — long-term funnel position. Do not edit directly."
-  },
-  {
-    "fieldname": "assigned_to",
-    "read_only": 1,
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
@@ -772,7 +730,9 @@
  "index_web_pages_for_search": 1,
  "indexes": [
   {
-   "fields": ["campaign"],
+   "fields": [
+    "campaign"
+   ],
    "name": "crm_lead_campaign_idx",
    "unique": 0
   }
@@ -786,16 +746,66 @@
  "naming_series_options": "HS-.YYYY.-HCM-",
  "owner": "Administrator",
  "permissions": [
-   {"role":"Administrator","read":1,"write":1,"create":1,"delete":1},
-   {"role":"Admissions Director","read":1,"write":1,"create":1,"delete":1},
-   {"role":"CTV Sale","read":1,"write":1},
-   {"role":"Lead Marketing","read":1},
-   {"role":"Lead Promoter","read":1,"write":1,"create":1,"delete":1},
-   {"role":"Lead Sale","read":1,"write":1,"create":1,"delete":1},
-   {"role":"Marketing","read":1},
-   {"role":"Promoter","read":1,"create":1},
-   {"role":"Sale","read":1,"write":1,"create":1},
-   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
+  {
+   "role": "Administrator",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Admissions Director",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "CTV Sale",
+   "read": 1,
+   "write": 1
+  },
+  {
+   "role": "Lead Marketing",
+   "read": 1
+  },
+  {
+   "role": "Lead Promoter",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Lead Sale",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1
+  },
+  {
+   "role": "Marketing",
+   "read": 1
+  },
+  {
+   "role": "Promoter",
+   "read": 1,
+   "create": 1
+  },
+  {
+   "role": "Sale",
+   "read": 1,
+   "write": 1,
+   "create": 1
+  },
+  {
+   "role": "System Manager",
+   "read": 1,
+   "write": 1,
+   "create": 1,
+   "delete": 1,
+   "export": 1
+  }
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",

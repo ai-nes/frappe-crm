@@ -209,9 +209,8 @@ def _staff_capacity(staff: str, at=None) -> dict[str, int | None]:
 def active_lead_count(staff: str) -> int:
 	"""Count current ownership using the Lead assignment workflow state.
 
-	``lifecycle_stage`` is a separate admissions funnel and may be empty while a
-	Lead is already assigned. Assignment capacity must therefore use the
-	server-managed processing/conversion fields and treat missing processing
+	Assignment capacity uses processing status and the converted Student link,
+	and treats missing processing
 	status as an active legacy Lead, not as an SQL ``NULL NOT IN`` miss.
 	"""
 	if not staff:
@@ -222,7 +221,6 @@ def active_lead_count(staff: str) -> int:
 		from `tabCRM Lead`
 		where (owner_staff = %s or assigned_to = %s)
 			and coalesce(processing_status, 'NEW') <> 'CLOSED'
-			and coalesce(conversion_status, '') <> 'Converted'
 			and coalesce(converted_student, '') = ''
 		""",
 		(staff, staff),

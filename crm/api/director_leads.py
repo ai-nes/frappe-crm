@@ -44,8 +44,6 @@ LEAD_FIELDS = [
 	"phone",
 	"email",
 	"other_email",
-	"enrollment_status",
-	"lifecycle_stage",
 	"high_school",
 	"province",
 	"ward",
@@ -567,8 +565,8 @@ def _map_detail_row(
 	item = _map_lead_row(row, lookups=lookups)
 	return {
 		**item,
-		"lifecycleStatus": _status_label(row.get("enrollment_status"), lookups),
-		"lifecycleStatusCode": row.get("enrollment_status"),
+		"lifecycleStatus": _processing_status_label(row.get("processing_status")),
+		"lifecycleStatusCode": row.get("processing_status"),
 		"email": row.get("email") or "",
 		"secondaryEmail": row.get("other_email") or "",
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province") or "",

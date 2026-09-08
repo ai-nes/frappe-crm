@@ -66,7 +66,46 @@ Lead nguồn được trả dưới dạng metadata `sourceLead`, `processingSta
 không dùng các field này để thay thế `student_stage`, `enrollment_status` hoặc
 `lifecycle_stage` của Student.
 
-### 2.2. Hai nhóm status cần phân biệt
+### 2.2. API tạo nhanh Student kèm Lead nguồn
+
+Form tạo nhanh dùng endpoint:
+
+```text
+POST /api/method/crm.api.student_school.create_student_with_lead
+```
+
+Endpoint tạo một `CRM Lead` nguồn và một `CRM Student` thật trong cùng giao dịch,
+hoàn tất handoff ở stage `New`, sau đó liên kết hai bản ghi qua `CRM Student.source_lead`,
+`CRM Lead.student` và metadata conversion (`converted_student`, `converted_at`).
+Đây không phải endpoint tạo Lead cũ `create_student`; route cũ vẫn được giữ để tương
+thích ngược và vẫn tạo `CRM Lead`.
+
+Payload tối thiểu:
+
+```json
+{
+  "student_name": "Nguyễn Văn An",
+  "phone": "0901234567",
+  "id_number": "012345678901",
+  "province": "PROVINCE-001",
+  "ward": "WARD-001",
+  "high_school": "HIGH-SCHOOL-001",
+  "admission_year": "2026",
+  "source": "SOURCE-001",
+  "assigned_to": "CRM-STAFF-001"
+}
+```
+
+`student_name`, `phone`, `province`, `source` và `assigned_to` là bắt buộc. `id_number`,
+`ward`, `high_school` và `admission_year` được chuẩn hóa theo các Link master tương ứng;
+các field hồ sơ cơ bản khác có thể gửi thêm theo allowlist của endpoint. `lead_status` là
+tuỳ chọn và mặc định `New`; `student_stage` không nhận từ client và Student mới luôn bắt
+đầu ở `New`.
+
+Response trả về cả `student` và `lead`, cùng `source_lead`/`student` để FE cập nhật
+cache hoặc điều hướng sang bản ghi vừa tạo.
+
+### 2.3. Hai nhóm status cần phân biệt
 
 `CRM Lead.lead_status` là lifecycle CRM hiện có, còn `processing_status` là workflow
 server-managed của intake/assignment. FE không tự ghi hai field này.
