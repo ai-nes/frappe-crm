@@ -531,6 +531,15 @@ def record_nba_feedback(
 	effectiveness_index = _bounded_number(effectiveness_index, "effectiveness_index")
 	ai_confidence = _bounded_number(ai_confidence, "ai_confidence", minimum=0.0, maximum=1.0)
 	task = task or _feedback_task_for_outcome(outcome)
+	# A retried delivery for the same authoritative decision/outcome must not
+	# inflate the feedback loop. The pair is immutable in this DocType, so the
+	# existing row is the durable idempotency receipt.
+	existing = frappe.db.exists(
+		RECOMMENDATION_FEEDBACK_DOCTYPE,
+		{"recommendation": recommendation, "outcome": outcome, "feedback_source": feedback_source},
+	)
+	if existing:
+		return frappe.get_doc(RECOMMENDATION_FEEDBACK_DOCTYPE, existing)
 	return _service_insert(
 		{
 			"doctype": RECOMMENDATION_FEEDBACK_DOCTYPE,

@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import frappe
+
 from crm.fcrm.action_type_catalog import display_name_for_wire_action_code
+from crm.services.intelligence_refs import build_decision_ref, build_subject_ref
 
 
 def recommendation_view(
@@ -44,6 +47,25 @@ def recommendation_view(
 	timing = timing if isinstance(timing, dict) else {}
 
 	context = explanation.get("context")
+	decision_ref = None
+	if isinstance(target_id, str) and target_id:
+		kind = "student" if str(target_type or "").casefold() in {"student", "crm student", "lead", "crm lead"} else "school"
+		try:
+			expires = expires_at_iso if lifecycle_status not in {"completed", "cancelled", "rejected", "superseded"} else None
+			disposition = "recommend" if expires else "no_action"
+			decision_ref = build_decision_ref(
+				decision_id=recommendation_id,
+				domain="student_nba" if kind == "student" else "school_recommendation",
+				subject=build_subject_ref(kind, target_id, str(frappe.local.site or "frappe")),
+				disposition=disposition,
+				policy_revision="nba-recommendation-policy-v1",
+				evidence_refs=tuple(ai_payload.get("evidence_refs") or ()) if isinstance(ai_payload, dict) else (),
+				expires_at=expires,
+			)
+		except (TypeError, ValueError):
+			# A recommendation with malformed lineage stays visible in the legacy
+			# card, but it cannot masquerade as a governed DecisionRef.
+			decision_ref = None
 
 	return {
 		"id": recommendation_id,
@@ -66,4 +88,5 @@ def recommendation_view(
 			"decision": decision_status,
 			"execution": execution_status,
 		},
+		"decision_ref": decision_ref,
 	}

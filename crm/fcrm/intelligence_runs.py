@@ -31,6 +31,7 @@ TERMINAL = {"completed", "abstained", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
 STUDENT_360_POLICY_REVISION = "student-360-analysis-r3"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION = "student-360-snapshot-v1"
+STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 = "student-360-snapshot-v2"
 _STUDENT_ACTION_ADVICE = re.compile(
 	r"(?:\b(?:nên|hãy|ưu tiên|đề xuất|khuyến nghị)\b[^.\n]{0,80}"
 	 r"\b(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|theo dõi|thực hiện)\b"
@@ -202,18 +203,155 @@ def _public_report(value: Any, *, claims_visible: bool) -> dict[str, Any] | None
 			result.append(entry)
 		return result[:6]
 
+	recommendation_items = items(report.get("recommendations"), allowed_kinds={"recommendation", "opportunity"})
+	public_refs = _public_intelligence_refs(report.get("intelligence_refs"))
+	public_findings = _public_finding_refs(report.get("finding_refs"))
+	public_coverage = _public_coverage(report.get("coverage"))
+	if ("intelligence_refs" in report and public_refs is None) or ("finding_refs" in report and public_findings is None) or ("coverage" in report and public_coverage is None):
+		return None
 	return {
 		"title": report.get("title") if claims_visible and isinstance(report.get("title"), str) else None,
 		# A summary has no independently addressable reference in legacy rows;
 		# suppress it if no visible claim survives the same permission boundary.
 		"summary": report.get("summary") if claims_visible and isinstance(report.get("summary"), str) else None,
 		"risks": items(report.get("risks"), allowed_kinds={"risk"}),
-		"recommendations": items(report.get("recommendations"), allowed_kinds={"recommendation", "opportunity"}),
+		# Historical model recommendations have no governed DecisionRef and are
+		# therefore never rendered as an actionable candidate. Awareness
+		# opportunities remain visible in the legacy slot for compatibility.
+		"recommendations": [item for item in recommendation_items if item.get("kind") == "opportunity"],
+		"opportunity_signals": [item for item in recommendation_items if item.get("kind") == "opportunity"],
 		"missing_evidence": [str(item)[:240] for item in report.get("missing_evidence", []) if isinstance(item, str) and item.strip()][:12] if claims_visible else [],
 		"advisory_signals": [],
-		"opportunity_signals": [],
 		"recent_changes": [],
+		"intelligence_refs": public_refs or [],
+		"finding_refs": public_findings or [],
+		"coverage": public_coverage or [],
 	}
+
+
+def _public_history_coverage(value: Any) -> dict[str, Any] | None:
+	"""Validate and project runtime-owned Student history coverage metadata."""
+	if not isinstance(value, dict):
+		return None
+	section_names = {"score_history", "interaction_history", "applications", "guardian_signals"}
+	if set(value) != section_names:
+		return None
+	result: dict[str, Any] = {}
+	for name in section_names:
+		section = value.get(name)
+		if not isinstance(section, dict):
+			return None
+		required = {"included_count", "omitted_count", "state", "coverage_reason", "oldest_included", "newest_included"}
+		if set(section) != required:
+			return None
+		included = section.get("included_count")
+		omitted = section.get("omitted_count")
+		state = section.get("state")
+		if (isinstance(included, bool) or not isinstance(included, int) or not 0 <= included <= 20
+				or isinstance(omitted, bool) or not isinstance(omitted, int) or not 0 <= omitted <= 20
+				or state not in {"available", "missing", "unavailable", "truncated"}):
+			return None
+		reason = section.get("coverage_reason")
+		if reason is not None and (not isinstance(reason, str) or not reason.strip() or len(reason) > 80):
+			return None
+		if state == "truncated" and omitted == 0:
+			return None
+		if state != "truncated" and omitted:
+			return None
+		if state in {"missing", "unavailable", "truncated"} and not reason:
+			return None
+		if included == 0 and (section.get("oldest_included") or section.get("newest_included")):
+			return None
+		if any(value is not None and (not isinstance(value, str) or len(value) > 40) for value in (section.get("oldest_included"), section.get("newest_included"))):
+			return None
+		result[name] = {
+			"included_count": included,
+			"omitted_count": omitted,
+			"state": state,
+			"coverage_reason": reason,
+			"oldest_included": section.get("oldest_included"),
+			"newest_included": section.get("newest_included"),
+		}
+	return result
+
+
+def _public_intelligence_refs(value: Any) -> list[dict[str, Any]] | None:
+	"""Keep the additive lineage envelope bounded and opaque on the wire."""
+	if not isinstance(value, list) or len(value) > 16:
+		return None
+	result = []
+	for ref in value:
+		if not isinstance(ref, dict):
+			return None
+		if ref.get("contract_version") != "intelligence-reference-v1":
+			return None
+		subject = ref.get("subject")
+		if not isinstance(subject, dict) or subject.get("kind") not in {"student", "school"} or not subject.get("subject_id") or not subject.get("tenant_id"):
+			return None
+		if not all(isinstance(ref.get(key), str) and ref.get(key) for key in ("evidence_id", "source_kind", "source_id", "source_revision")):
+			return None
+		if ref.get("status") not in {"verified", "missing", "unavailable", "denied", "stale", "conflicting"}:
+			return None
+		if ref.get("freshness") not in {"fresh", "stale", "unknown"}:
+			return None
+		if ref.get("status") == "verified" and ref.get("freshness") == "stale":
+			return None
+		result.append({
+			"contract_version": "intelligence-reference-v1",
+			"evidence_id": str(ref["evidence_id"])[:180],
+			"subject": {"contract_version": "intelligence-reference-v1", "kind": subject["kind"], "subject_id": str(subject["subject_id"])[:180], "tenant_id": str(subject["tenant_id"])[:180]},
+			"source_kind": str(ref["source_kind"])[:80], "source_id": str(ref["source_id"])[:180], "source_revision": str(ref["source_revision"])[:180],
+			"status": ref["status"], "freshness": ref["freshness"], "visibility": ref.get("visibility") if ref.get("visibility") in {"shareable", "source_scoped"} else "source_scoped",
+			"observed_at": ref.get("observed_at"), "valid_at": ref.get("valid_at"), "coverage_id": ref.get("coverage_id"),
+		})
+	return result
+
+
+def _public_coverage(value: Any) -> list[dict[str, Any]] | None:
+	if not isinstance(value, list) or len(value) > 16:
+		return None
+	result = []
+	for item in value:
+		if not isinstance(item, dict) or item.get("contract_version") != "intelligence-reference-v1":
+			return None
+		if not isinstance(item.get("coverage_id"), str) or not item.get("coverage_id"):
+			return None
+		state = item.get("state")
+		if state not in {"available", "missing", "unavailable", "denied", "truncated", "conflicting"}:
+			return None
+		included, omitted = item.get("included_count", 0), item.get("omitted_count", 0)
+		if any(isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 1000 for value in (included, omitted)):
+			return None
+		if (state == "truncated" and omitted == 0) or (state != "truncated" and omitted):
+			return None
+		if state != "available" and not isinstance(item.get("reason"), str):
+			return None
+		result.append({"contract_version": "intelligence-reference-v1", "coverage_id": item["coverage_id"][:180], "state": state, "included_count": included, "omitted_count": omitted, "reason": item.get("reason")})
+	return result
+
+
+def _public_finding_refs(value: Any) -> list[dict[str, Any]] | None:
+	if not isinstance(value, list) or len(value) > 16:
+		return None
+	result = []
+	for item in value:
+		if not isinstance(item, dict) or item.get("contract_version") != "intelligence-reference-v1":
+			return None
+		subject = item.get("subject")
+		refs = item.get("evidence_refs")
+		if not isinstance(subject, dict) or subject.get("kind") not in {"student", "school"} or not subject.get("subject_id") or not subject.get("tenant_id"):
+			return None
+		if item.get("kind") not in {"fact", "derived_signal", "inference", "risk", "opportunity", "unknown"} or not isinstance(item.get("code"), str) or not item.get("code") or not isinstance(item.get("finding_id"), str) or not item.get("finding_id"):
+			return None
+		if not isinstance(refs, list) or not 1 <= len(refs) <= 8 or len(set(refs)) != len(refs) or any(not isinstance(ref, str) or ref.count(":") < 2 for ref in refs):
+			return None
+		if item.get("freshness") not in {"fresh", "stale", "unknown"}:
+			return None
+		confidence = item.get("confidence")
+		if confidence is not None and (isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= confidence <= 1):
+			return None
+		result.append({"contract_version": "intelligence-reference-v1", "finding_id": item["finding_id"][:180], "subject": subject, "kind": item["kind"], "code": item["code"][:100], "evidence_refs": refs[:8], "freshness": item["freshness"], "confidence": confidence})
+	return result
 
 
 def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, Any] | None:
@@ -224,8 +362,11 @@ def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, A
 	settled under the v1 contract.
 	"""
 	report = _parse_mapping(value)
-	allowed_keys = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
-	if not report or set(report) != allowed_keys or not claims_visible:
+	base_keys = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
+	v2_keys = base_keys | {"history_coverage", "intelligence_refs"}
+	full_v2_keys = v2_keys | {"finding_refs", "coverage"}
+	allowed_keys = (base_keys, base_keys | {"history_coverage"}, v2_keys, full_v2_keys)
+	if not report or not any(set(report) == keys for keys in allowed_keys) or not claims_visible:
 		return None
 	try:
 		_validate_student_awareness_report(report)
@@ -288,12 +429,29 @@ def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, A
 				result.append({"type": type_value, "summary": summary, "evidence_refs": evidence})
 		return result[:3]
 
-	return {
+	result = {
 		"advisory_signals": advisory(report.get("advisory_signals")),
 		"risks": findings(report.get("risks"), "severity", "code"),
 		"opportunity_signals": findings(report.get("opportunity_signals"), "strength", "code"),
 		"recent_changes": changes(report.get("recent_changes")),
 	}
+	if "history_coverage" in report:
+		result["history_coverage"] = _public_history_coverage(report.get("history_coverage"))
+		if result["history_coverage"] is None:
+			return None
+	if "intelligence_refs" in report:
+		result["intelligence_refs"] = _public_intelligence_refs(report.get("intelligence_refs"))
+		if result["intelligence_refs"] is None:
+			return None
+	if "finding_refs" in report:
+		result["finding_refs"] = _public_finding_refs(report.get("finding_refs"))
+		if result["finding_refs"] is None:
+			return None
+	if "coverage" in report:
+		result["coverage"] = _public_coverage(report.get("coverage"))
+		if result["coverage"] is None:
+			return None
+	return result
 
 
 def _public_stage(stage: dict[str, Any], *, student: bool) -> dict[str, Any]:
@@ -754,6 +912,34 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		],
 		"provenance_ids": [f"student:{student}"],
 	}
+	from crm.services.intelligence_refs import build_coverage, build_evidence_ref, build_subject_ref
+	subject = build_subject_ref("student", student, str(frappe.local.site or "frappe"))
+	coverage_specs = {
+		"score_history": len(student_360["signals"].get("score_history", [])),
+		"interaction_history": len(student_360["signals"].get("interaction_history", [])),
+		"applications": len(student_360["signals"].get("applications", [])),
+		"guardian_signals": len(student_360["signals"].get("guardian_signals", [])),
+	}
+	student_360["coverage"] = [
+		build_coverage(f"student:{student}:{name}", "available", count, 0)
+		for name, count in coverage_specs.items()
+	]
+	authority_refs = []
+	for raw in dict.fromkeys(student_360["provenance_ids"] + [
+		ref
+		for section in (student_360["signals"].get("score_history", []), student_360["signals"].get("interaction_history", []), student_360["signals"].get("applications", []), student_360["signals"].get("guardian_signals", []))
+		for item in section
+		for ref in item.get("provenance_ids", [])
+	]):
+		prefix, separator, source_id = str(raw).partition(":")
+		if separator and source_id:
+			coverage_name = {"score": "score_history", "interaction": "interaction_history", "application": "applications", "guardian": "guardian_signals"}.get(prefix)
+			authority_refs.append(build_evidence_ref(
+				f"{prefix}:{source_id}:{revision}", subject, prefix, source_id, str(revision),
+				freshness="fresh", visibility="source_scoped",
+				coverage_id=f"student:{student}:{coverage_name}" if coverage_name else None,
+			))
+	student_360["intelligence_refs"] = authority_refs
 	return {"student_360": student_360}
 
 
@@ -783,11 +969,28 @@ def service_evidence(run_type: str, run_id: str, stage_kind: str, stage_generati
 		)
 		run.db_set("status", _parent_status(run_type, run_id), update_modified=False)
 		return {"terminal": True, "status": "abstained", "reason": "superseded"}
-	evidence = (
-		_student_stage_evidence(target, revision)
-		if domain == "student"
-		else {"school": get_school_intelligence(target, str(run.get("admission_year") or "") or None)}
-	)
+	if domain == "student":
+		evidence = _student_stage_evidence(target, revision)
+	else:
+		from crm.services.intelligence_refs import build_coverage, build_evidence_ref, build_subject_ref
+		school = get_school_intelligence(target, str(run.get("admission_year") or "") or None)
+		subject = build_subject_ref("school", target, str(frappe.local.site or "frappe"), admission_year=str(run.get("admission_year") or "") or None)
+		raw_refs = list(school.get("provenance_ids") or [])
+		for section in (school.get("potential"), school.get("relationship"), school.get("segment")):
+			raw_refs.extend(item.get("source") for item in (section or {}).get("evidence", []) if item.get("source"))
+		for item in (school.get("activity_outcomes") or {}).get("records", []):
+			raw_refs.extend(item.get("provenance_ids") or [])
+		authority_refs = []
+		school["coverage"] = [build_coverage(f"school:{target}:aggregate", "available", len(raw_refs), 0)]
+		for raw in dict.fromkeys(raw_refs):
+			prefix, separator, source_id = str(raw).partition(":")
+			if separator and source_id:
+				authority_refs.append(build_evidence_ref(
+					f"{prefix}:{source_id}:{revision}", subject, prefix, source_id, str(revision),
+					freshness="fresh", visibility="source_scoped", coverage_id=f"school:{target}:aggregate",
+				))
+		school["intelligence_refs"] = authority_refs
+		evidence = {"school": school}
 	return {"run_id": run_id, "stage_kind": stage_kind, "source_revision": revision, "source_digest": digest, "target": target, "evidence": evidence}
 
 
@@ -909,9 +1112,13 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	if status == "completed" and not result_digest:
 		frappe.throw("Completed Analysis Run stages require a result digest.", frappe.ValidationError)
 	if status == "completed" and run_type == RUN_TYPES["student"]:
-		_validate_student_awareness_report(report)
+		student_target = frappe.db.get_value(run_type, run_id, "student")
+		_validate_student_awareness_report(report, expected_subject=student_target, expected_revision=str(expected_source_revision))
 		if any(claim.get("kind") == "recommendation" for claim in (claims or [])):
 			frappe.throw("Student 360 claims cannot contain recommendations.", frappe.ValidationError)
+	if status == "completed" and run_type == RUN_TYPES["school"]:
+		school_target = frappe.db.get_value(run_type, run_id, "high_school")
+		_validate_school_intelligence_refs(report, expected_subject=school_target, expected_revision=str(expected_source_revision))
 	report_json = json.dumps(report or {}, ensure_ascii=False, separators=(",", ":")) if report else None
 	terminal_reason = str(terminal_reason).strip() if terminal_reason is not None else None
 	if terminal_reason is not None and len(terminal_reason) > 500:
@@ -974,12 +1181,48 @@ def _validated_result_digest(result_digest: str | None) -> str | None:
 	return result_digest
 
 
-def _validate_student_awareness_report(report: Any) -> None:
+def _validate_student_awareness_report(report: Any, *, expected_subject: str | None = None, expected_revision: str | None = None) -> None:
 	if not isinstance(report, dict):
 		frappe.throw("Completed Student 360 requires a structured report.", frappe.ValidationError)
-	allowed_sections = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
-	if set(report) != allowed_sections:
-		frappe.throw("Student 360 report must use the v1 snapshot shape.", frappe.ValidationError)
+	base_sections = {"advisory_signals", "risks", "opportunity_signals", "recent_changes"}
+	coverage_sections = base_sections | {"history_coverage"}
+	v2_sections = coverage_sections | {"intelligence_refs"}
+	full_v2_sections = v2_sections | {"finding_refs", "coverage"}
+	allowed_sections = (base_sections, coverage_sections, v2_sections, full_v2_sections)
+	if not any(set(report) == sections for sections in allowed_sections):
+		frappe.throw("Student 360 report must use the v1 or v2 snapshot shape.", frappe.ValidationError)
+	if "history_coverage" in report and _public_history_coverage(report.get("history_coverage")) is None:
+		frappe.throw("Student 360 history coverage is invalid.", frappe.ValidationError)
+	if "intelligence_refs" in report and _public_intelligence_refs(report.get("intelligence_refs")) is None:
+		frappe.throw("Student 360 intelligence references are invalid.", frappe.ValidationError)
+	if "intelligence_refs" in report:
+		for ref in report["intelligence_refs"]:
+			subject = ref.get("subject") or {}
+			if expected_subject and subject.get("subject_id") != expected_subject:
+				frappe.throw("Student 360 intelligence reference subject mismatch.", frappe.ValidationError)
+			if expected_revision and str(ref.get("source_revision")) != str(expected_revision):
+				frappe.throw("Student 360 intelligence reference revision mismatch.", frappe.ValidationError)
+	if "finding_refs" in report and _public_finding_refs(report.get("finding_refs")) is None:
+		frappe.throw("Student 360 finding references are invalid.", frappe.ValidationError)
+	if "finding_refs" in report:
+		if "intelligence_refs" not in report:
+			frappe.throw("Student 360 findings require authoritative evidence references.", frappe.ValidationError)
+		authority_ids = {ref.get("evidence_id") for ref in report.get("intelligence_refs", [])}
+		from crm.services.intelligence_refs import finding_id as canonical_finding_id
+		for finding in report["finding_refs"]:
+			subject = finding.get("subject") or {}
+			if expected_subject and subject.get("subject_id") != expected_subject:
+				frappe.throw("Student 360 finding reference subject mismatch.", frappe.ValidationError)
+			if not set(finding.get("evidence_refs", [])).issubset(authority_ids):
+				frappe.throw("Student 360 finding references are outside authoritative evidence.", frappe.ValidationError)
+			canonical_id = canonical_finding_id(subject=finding["subject"], kind=finding["kind"], code=finding["code"], evidence_refs=finding["evidence_refs"])
+			if canonical_id != finding.get("finding_id"):
+				frappe.throw("Student 360 finding identity is invalid.", frappe.ValidationError)
+			for evidence_id in finding.get("evidence_refs", []):
+				if expected_revision and str(evidence_id).rsplit(":", 1)[-1] != str(expected_revision):
+					frappe.throw("Student 360 finding reference revision mismatch.", frappe.ValidationError)
+	if "coverage" in report and _public_coverage(report.get("coverage")) is None:
+		frappe.throw("Student 360 coverage references are invalid.", frappe.ValidationError)
 
 	def _refs(item: dict[str, Any]) -> list[str]:
 		refs = item.get("evidence_refs")
@@ -1007,7 +1250,9 @@ def _validate_student_awareness_report(report: Any) -> None:
 
 	def _items(key: str, limit: int, required: set[str], band: str | None = None, code: str | None = None) -> list[dict[str, Any]]:
 		items = report.get(key)
-		minimum = 3 if key == "advisory_signals" else 0
+		# Sparse evidence is a truthful terminal/readiness state. Cardinality must
+		# never force the model to manufacture three advisory findings.
+		minimum = 0
 		if not isinstance(items, list) or not minimum <= len(items) <= limit:
 			frappe.throw("Student 360 snapshot section is invalid.", frappe.ValidationError)
 		for item in items:
@@ -1074,3 +1319,39 @@ def _validate_student_awareness_claims(claims: list[dict[str, Any]]) -> None:
 	)
 	if _STUDENT_ACTION_ADVICE.search(visible_text):
 		frappe.throw("Student 360 claims cannot contain action advice.", frappe.ValidationError)
+
+
+def _validate_school_intelligence_refs(report: Any, *, expected_subject: str, expected_revision: str) -> None:
+	parsed = _parse_mapping(report)
+	if not parsed or "intelligence_refs" not in parsed:
+		return
+	refs = _public_intelligence_refs(parsed.get("intelligence_refs"))
+	if refs is None:
+		frappe.throw("School intelligence references are invalid.", frappe.ValidationError)
+	for ref in refs:
+		subject = ref.get("subject") or {}
+		if subject.get("kind") != "school" or subject.get("subject_id") != expected_subject:
+			frappe.throw("School intelligence reference subject mismatch.", frappe.ValidationError)
+		if str(ref.get("source_revision")) != str(expected_revision):
+			frappe.throw("School intelligence reference revision mismatch.", frappe.ValidationError)
+	if "finding_refs" in parsed and _public_finding_refs(parsed.get("finding_refs")) is None:
+		frappe.throw("School finding references are invalid.", frappe.ValidationError)
+	if "finding_refs" in parsed:
+		if "intelligence_refs" not in parsed:
+			frappe.throw("School findings require authoritative evidence references.", frappe.ValidationError)
+		authority_ids = {ref.get("evidence_id") for ref in parsed.get("intelligence_refs", [])}
+		from crm.services.intelligence_refs import finding_id as canonical_finding_id
+		for finding in parsed["finding_refs"]:
+			subject = finding.get("subject") or {}
+			if subject.get("kind") != "school" or subject.get("subject_id") != expected_subject:
+				frappe.throw("School finding reference subject mismatch.", frappe.ValidationError)
+			if not set(finding.get("evidence_refs", [])).issubset(authority_ids):
+				frappe.throw("School finding references are outside authoritative evidence.", frappe.ValidationError)
+			canonical_id = canonical_finding_id(subject=finding["subject"], kind=finding["kind"], code=finding["code"], evidence_refs=finding["evidence_refs"])
+			if canonical_id != finding.get("finding_id"):
+				frappe.throw("School finding identity is invalid.", frappe.ValidationError)
+			for evidence_id in finding.get("evidence_refs", []):
+				if str(evidence_id).rsplit(":", 1)[-1] != str(expected_revision):
+					frappe.throw("School finding reference revision mismatch.", frappe.ValidationError)
+	if "coverage" in parsed and _public_coverage(parsed.get("coverage")) is None:
+		frappe.throw("School coverage references are invalid.", frappe.ValidationError)
