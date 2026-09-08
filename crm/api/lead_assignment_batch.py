@@ -17,7 +17,7 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
-from crm.fcrm.lead_processing import assign_lead, handoff_lead, preview_lead, process_lead
+from crm.fcrm.lead_processing import assign_lead, handoff_lead, preview_lead
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -38,6 +38,7 @@ RUNNABLE_STATUSES = {"draft", "ready", "completed_with_errors"}
 TERMINAL_ITEM_STATUSES = {"assigned", "skipped"}
 ROUTING_REVIEW_CODES = frozenset(
 	{
+		"NOT_PROCESSED",
 		"MISSING_PROVINCE",
 		"MISSING_CAMPUS",
 		"TEAM_NOT_FOUND_FOR_PROVINCE",
@@ -397,6 +398,14 @@ def _preview_item(
 		_reset_item(item, status="skipped", reason="ALREADY_ASSIGNED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
 		return
+	processing_status = str(lead.get("processing_status") or "NEW").upper()
+	if processing_status in {"NEW", "PROCESSING"}:
+		# preview_lead predicts what processing *would* decide for a NEW Lead, but
+		# the run no longer processes on the operator's behalf, so previewing it as
+		# assignable would promise an outcome the run cannot deliver.
+		_reset_item(item, status="manual_review", reason="NOT_PROCESSED")
+		item.error_code = "NOT_PROCESSED"
+		return
 	processing = preview_lead(lead.name)
 	item.reason = processing.get("reason") or processing.get("resolution") or "ready"
 	item.error_code = processing.get("error_code")
@@ -406,7 +415,7 @@ def _preview_item(
 		)
 		item.error_code = processing.get("error_code") or processing.get("resolution")
 		return
-	if processing.get("status") not in {"NEW", "PROCESSING", "PROCESSED"}:
+	if processing.get("status") != "PROCESSED":
 		_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 		item.error_code = "INVALID_PROCESSING_STATUS"
 		return
@@ -1007,22 +1016,17 @@ def run_lead_assignment_batch(batch_name: str):
 				item.completed_at = now_datetime()
 				_persist_item(item)
 				continue
-			if processing_status == "NEW":
-				processing = process_lead(lead.name)
-				if processing.get("status") == "CLOSED":
-					_reset_item(
-						item,
-						status="manual_review",
-						reason=processing.get("resolution") or "INVALID",
-					)
-					item.error_code = processing.get("resolution") or "INVALID"
-					item.execution_id = batch.execution_id
-					item.completed_at = now_datetime()
-					_save_batch(batch)
-					continue
-				lead = _batch_item_lead(item)
-				processing_status = str(lead.get("processing_status") or "NEW").upper()
-			elif processing_status == "CLOSED":
+			if processing_status in {"NEW", "PROCESSING"}:
+				# Intake processing is its own operator step ("Xử lý Lead"). A batch
+				# run assigns what has already been processed and never advances
+				# intake state on the operator's behalf.
+				_reset_item(item, status="manual_review", reason="NOT_PROCESSED")
+				item.error_code = "NOT_PROCESSED"
+				item.execution_id = batch.execution_id
+				item.completed_at = now_datetime()
+				_save_batch(batch)
+				continue
+			if processing_status == "CLOSED":
 				_reset_item(
 					item,
 					status="manual_review",
@@ -1033,9 +1037,7 @@ def run_lead_assignment_batch(batch_name: str):
 				item.completed_at = now_datetime()
 				_save_batch(batch)
 				continue
-			elif processing_status != "PROCESSED":
-				# PROCESSING records are not safe assignment inputs. Do not force
-				# them forward or overwrite their lifecycle state.
+			if processing_status != "PROCESSED":
 				_reset_item(item, status="manual_review", reason="INVALID_PROCESSING_STATUS")
 				item.error_code = "INVALID_PROCESSING_STATUS"
 				item.execution_id = batch.execution_id
@@ -1115,9 +1117,18 @@ def run_lead_assignment_batch(batch_name: str):
 
 
 def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
-	"""Return visible, unassigned Leads without considering their source."""
+	"""Return visible, processed Leads that still have no owner.
+
+	Lead source is not part of the selection rule because another system owns
+	intake. Processing state is, because "Xử lý Lead" is the operator step that
+	decides which Leads are assignable at all.
+	"""
 	rows = frappe.get_all(
 		"CRM Lead",
+		filters={
+			"processing_status": "PROCESSED",
+			"resolution": ["in", ["MATCHED", "CREATED"]],
+		},
 		fields=["name", "owner_staff", "assigned_to", "converted_student", "conversion_status"],
 		order_by="creation asc, name asc",
 		limit_page_length=MAX_BATCH_SIZE,
@@ -1141,7 +1152,7 @@ def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
 def _new_unassigned_lead_batch(lead_names: list[str]):
 	"""Create an internal audit batch for one manual scan."""
 	stamp = now_datetime().strftime("%Y%m%d-%H%M%S")
-	batch_name = f"Phân công tự động {stamp}"
+	batch_name = f"Phân công Lead {stamp}"
 	if frappe.db.exists(BATCH_DOCTYPE, {"batch_name": batch_name}):
 		batch_name = f"{batch_name}-{uuid.uuid4().hex[:6]}"
 	batch = frappe.get_doc(
@@ -1171,17 +1182,18 @@ def _new_unassigned_lead_batch(lead_names: list[str]):
 
 @frappe.whitelist(methods=["POST"])
 def run_unassigned_lead_assignment():
-	"""Scan and assign all visible CRM Leads that do not have an owner.
+	"""Scan and assign every processed CRM Lead that does not have an owner.
 
-	This is the simple operator action used by dashboard-crm.  Lead source is
-	not part of the selection rule because another system owns Lead intake.
+	This is the simple operator action used by dashboard-crm. Leads still in
+	NEW must first go through "Xử lý Lead" (``process_new_leads``); this command
+	never advances intake state itself.
 	"""
 	actor_context = _require_access()
 	lead_names = _unassigned_lead_names(actor_context)
 	if not lead_names:
 		return {
 			"status": "no_work",
-			"message": "Không có Lead chưa được phân công.",
+			"message": "Không có Lead đã xử lý nào đang chờ phân công.",
 			"scanned": 0,
 			"batch": None,
 			"items": [],

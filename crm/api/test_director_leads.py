@@ -238,7 +238,8 @@ class TestDirectorLeads(FrappeTestCase):
 			patch.object(director_leads, "_require_access"),
 			patch.object(director_leads, "_resolve_status", return_value="NEW"),
 			patch.object(director_leads, "_resolve_resolution", return_value="MATCHED"),
-			patch.object(director_leads, "_count_leads", side_effect=[1, 8, 1, 1, 1]),
+			# total, totalAll, pendingNew, readyToAssign, then the campaign funnel.
+			patch.object(director_leads, "_count_leads", side_effect=[1, 8, 3, 2, 1, 1, 1]),
 			patch.object(director_leads, "_fetch_lead_rows", return_value=[row]),
 			patch.object(director_leads, "_load_lookups", return_value={"statuses": {"NEW": "Mới"}}),
 			patch.object(
@@ -261,6 +262,8 @@ class TestDirectorLeads(FrappeTestCase):
 		self.assertEqual(response["data"], [{"id": "LEAD-1", "status": "Mới"}])
 		self.assertEqual(response["meta"]["total"], 1)
 		self.assertEqual(response["meta"]["totalAll"], 8)
+		self.assertEqual(response["meta"]["pendingNew"], 3)
+		self.assertEqual(response["meta"]["readyToAssign"], 2)
 		self.assertEqual(response["meta"]["page"], 2)
 		self.assertEqual(response["meta"]["pageSize"], 1)
 		self.assertEqual(response["meta"]["totalPages"], 1)

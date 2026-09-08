@@ -93,13 +93,27 @@ def get_director_leads(
 	query["resolution"] = _resolve_resolution(query["resolution"])
 	filters, or_filters = _lead_filters(query)
 	total = _count_leads(filters, or_filters)
-	total_all = _count_leads(_year_filter(query["admission_year"]))
+	year_filter = _year_filter(query["admission_year"])
+	total_all = _count_leads(year_filter)
+	# The header actions ("Xử lý Lead" / "Phân công Lead") reflect the whole
+	# intake year, not the operator's current filter, so these two counts are
+	# deliberately measured outside `filters`.
+	pending_new = _count_leads({**year_filter, "processing_status": "NEW"})
+	ready_to_assign = _count_leads(
+		{
+			**year_filter,
+			"processing_status": "PROCESSED",
+			"resolution": ["in", ["MATCHED", "CREATED"]],
+		}
+	)
 	rows = _fetch_lead_rows(query, filters, or_filters)
 	lookups = _load_lookups(rows)
 
 	meta = {
 		"total": total,
 		"totalAll": total_all,
+		"pendingNew": pending_new,
+		"readyToAssign": ready_to_assign,
 		"page": query["page"],
 		"pageSize": query["page_size"],
 		"totalPages": _total_pages(total, query["page_size"]),

@@ -4,10 +4,12 @@ Run locally with::
 
     bench --site crm.localhost execute crm.demo.seed_assignment_conversion_scenarios.execute
 
-Twelve Leads are intake-complete: one click on ``Phân công tự động`` assigns an
-active Sale/CTV and immediately creates an owned ``CRM Student`` for each. The
-remaining eight carry exactly one defect apiece so the operator can see every
-non-assigning outcome of ``crm.api.lead_assignment_batch`` in the same run --
+Every Lead lands in ``NEW``, so the operator runs the two intake steps in order:
+``Xử lý Lead`` promotes the intake-complete ones to ``PROCESSED``, then
+``Phân công Lead`` assigns an active Sale/CTV and immediately creates an owned
+``CRM Student`` for each of the twelve valid ones. The remaining eight carry
+exactly one defect apiece so the operator can see every non-assigning outcome of
+``crm.api.lead_processing`` and ``crm.api.lead_assignment_batch`` --
 ``manual_review`` for an INVALID identifier gate, a DUPLICATE CCCD pair, a
 missing province, a missing campus and a province no Team manages.
 
@@ -448,7 +450,7 @@ def execute() -> dict[str, Any]:
 		"leads": seeded,
 		"message": (
 			f"Đã seed {len(seeded)} Lead ({len(happy)} hợp lệ, {len(seeded) - len(happy)} lỗi). "
-			"Bấm Phân công tự động: Lead hợp lệ tạo Student có người phụ trách, "
+			"Bấm Xử lý Lead rồi Phân công Lead: Lead hợp lệ tạo Student có người phụ trách, "
 			"Lead lỗi rơi vào cần xem xét thủ công."
 		),
 	}

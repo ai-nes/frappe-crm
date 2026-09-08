@@ -36,6 +36,7 @@ STATUS_DEFAULT_RESOLUTIONS = {
 	"CLOSED": "FAILED",
 }
 SERVICE_FLAG = "lead_processing_service"
+MAX_PROCESS_SCAN = 1000
 
 
 class LeadProcessingError(frappe.ValidationError):
@@ -325,6 +326,98 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		"lead": lead_doc.name,
 		"target_student": target_student,
 		"validation": {"id_number": True, "high_school": True, "major": True},
+	}
+
+
+def _scan_limit(limit: Any) -> int:
+	if limit in (None, ""):
+		return MAX_PROCESS_SCAN
+	try:
+		value = int(limit)
+	except (TypeError, ValueError):
+		_fail("INVALID_INPUT", "limit must be a number.")
+	return max(1, min(value, MAX_PROCESS_SCAN))
+
+
+def _pending_lead_filters(admission_year: Any) -> dict[str, Any]:
+	year = str(admission_year or "").strip()
+	if year and not (len(year) == 4 and year.isdigit()):
+		_fail("INVALID_INPUT", "admission_year must be a four-digit year.")
+	filters: dict[str, Any] = {"processing_status": "NEW"}
+	if year:
+		filters["admission_year"] = year
+	return filters
+
+
+def process_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str, Any]:
+	"""Process every NEW Lead the operator may write, in one scan.
+
+	This is the bulk twin of :func:`process_lead` and keeps the same gates: the
+	candidate scan is unfiltered by permission, but each Lead still passes the
+	row-level write check inside ``_load_lead``. Every Lead runs inside its own
+	savepoint so one failure cannot poison the rest of the scan.
+	"""
+	filters = _pending_lead_filters(admission_year)
+	rows = frappe.get_all(
+		"CRM Lead",
+		filters=filters,
+		fields=["name"],
+		order_by="creation asc, name asc",
+		limit_page_length=_scan_limit(limit),
+	)
+
+	summary = {"scanned": 0, "processed": 0, "closed": 0, "skipped": 0, "failed": 0}
+	items: list[dict[str, Any]] = []
+	for index, row in enumerate(rows):
+		name = row.get("name")
+		if not name:
+			continue
+		summary["scanned"] += 1
+		savepoint = f"lead_processing_scan_{index}"
+		frappe.db.savepoint(savepoint)
+		try:
+			result = process_lead(name)
+		except Exception as exc:
+			try:
+				frappe.db.rollback(save_point=savepoint)
+			except Exception:
+				pass
+			code = getattr(exc, "code", None) or "PROCESSING_FAILED"
+			# FORBIDDEN and INVALID_STATUS are ordinary scan outcomes: the Lead
+			# belongs to somebody else, or another operator just processed it.
+			summary["skipped" if code in {"FORBIDDEN", "NOT_FOUND", "INVALID_STATUS"} else "failed"] += 1
+			items.append(
+				{
+					"lead": name,
+					"status": None,
+					"resolution": None,
+					"errorCode": code,
+					"reason": str(exc),
+				}
+			)
+			continue
+		status = str(result.get("status") or "").upper()
+		if status == "PROCESSED":
+			summary["processed"] += 1
+		elif status == "CLOSED":
+			summary["closed"] += 1
+		else:
+			summary["skipped"] += 1
+		items.append(
+			{
+				"lead": name,
+				"status": status,
+				"resolution": result.get("resolution"),
+				"errorCode": None,
+				"reason": None,
+			}
+		)
+
+	frappe.db.commit()
+	return {
+		"summary": summary,
+		"items": items,
+		"admissionYear": filters.get("admission_year"),
 	}
 
 
