@@ -22,6 +22,7 @@ from crm.fcrm.permissions import (
 )
 from crm.fcrm.student_reference import (
 	canonical_student,
+	hs_code_for_reference,
 	lead_for_reference,
 	lead_for_student,
 )
@@ -247,6 +248,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	student_id = _resolve_student_id(student_id)
 	if not student_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
+	student_id = canonical_student(student_id) or student_id
 
 	try:
 		doc = frappe.get_doc("CRM Student", student_id)
@@ -268,7 +270,6 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
 	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
-	student_id = lead_for_reference(student_id) or student_id
 
 	try:
 		doc = frappe.get_doc("CRM Lead", lead_id)
@@ -340,7 +341,6 @@ def get_student_chatwoot_interactions(
 	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
 	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
-	student_id = lead_for_reference(student_id) or student_id
 
 	try:
 		doc = frappe.get_doc("CRM Lead", lead_id)
@@ -354,7 +354,7 @@ def get_student_chatwoot_interactions(
 
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
-	canonical_id = canonical_student(student_id) or student_id
+	canonical_id = canonical_id or canonical_student(lead_id) or lead_id
 	filters = {
 		"student": lead_id,
 		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
@@ -1039,6 +1039,11 @@ def _profile_code(row) -> str:
 	Student name plus the admission cycle and the current HCM admissions branch.
 	"""
 	student_id = str(row.get("name") or "")
+	code = hs_code_for_reference(student_id, row.get("admission_year"))
+	if not code:
+		code = hs_code_for_reference(row.get("lead_code"), row.get("admission_year"))
+	if code:
+		return code
 	match = re.search(r"(?:ENR|CRMC)-(\d{4})-(\d+)$", student_id)
 	year = str(row.get("admission_year") or (match.group(1) if match else "2026"))
 	sequence = match.group(2)[-6:].zfill(6) if match else "000000"
@@ -1049,11 +1054,9 @@ def _profile_code(row) -> str:
 def _student_stage_value(row) -> str | None:
 	"""Read the canonical Student stage without fabricating a default."""
 	student = canonical_student(row.get("student") or row.get("name"))
-	if not student and row.get("student_stage"):
-		return row.get("student_stage")
-	if not student:
-		return None
-	return frappe.db.get_value("CRM Student", student, "student_stage")
+	if student:
+		return frappe.db.get_value("CRM Student", student, "student_stage")
+	return row.get("student_stage") or None
 
 
 def _stage_descriptor(row) -> dict[str, str] | None:

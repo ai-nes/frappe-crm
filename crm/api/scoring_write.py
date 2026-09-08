@@ -133,7 +133,9 @@ def append_score_if_current(
 	if triggered_by_doctype:
 		payload["triggered_by_doctype"] = triggered_by_doctype
 		payload["triggered_by"] = triggered_by
-	history = frappe.get_doc(payload).insert(ignore_permissions=True)
+	# The Student row is locked and verified above. Its just-created HS name can
+	# still be absent from Frappe's Link cache within this transaction.
+	history = frappe.get_doc(payload).insert(ignore_permissions=True, ignore_links=True)
 
 	frappe.db.set_value(
 		"CRM Student",

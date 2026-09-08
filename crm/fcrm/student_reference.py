@@ -89,10 +89,9 @@ def lead_for_student(student: str | None) -> str | None:
 def lead_for_reference(value: str | None) -> str | None:
 	"""Resolve a public student reference to the authoritative CRM Lead.
 
-	The dashboard intentionally exposes ``HS-YYYY-HCM-NNNNNN`` while Frappe
-	keeps the Lead name (and the canonical CRM Student name) as internal IDs.
-	Accept the display form, the historical ``CRM HS-...`` form, and either
-	internal ID at API boundaries without changing stored foreign keys.
+	The Lead name, canonical CRM Student name, and public display value now all
+	use ``HS-YYYY-REGION-NNNNNN``. Accept historical ENR/LD/CRMC references at
+	API boundaries while keeping new stored foreign keys on the HS identifier.
 	"""
 	text = str(value or "").strip()
 	if not text:
@@ -124,8 +123,8 @@ def lead_for_reference(value: str | None) -> str | None:
 	normalized = hs_code_for_reference(text)
 	if not normalized:
 		return None
-	# Current Lead autonaming is ENR-YYYY-NNNNN. Keep this fast path for the
-	# stable public code, then scan only the admission cycle for older names.
+	# Keep this fast path for pre-cutover Lead names, then scan only the
+	# admission cycle for older records.
 	sequence = int(match.group("sequence"))
 	lead = f"ENR-{match.group('year')}-{sequence:05d}"
 	if match.group("region").upper() == "HCM" and frappe.db.exists("CRM Lead", lead):

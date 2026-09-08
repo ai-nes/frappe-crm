@@ -8,8 +8,8 @@ legacy duplicate, removes that duplicate through Frappe's merge path, then
 renames both aggregates to the same HS identifier.
 
 Raw historical links are still accepted at API boundaries, but no new
-applicant row is created with an ``ENR-``/``CRMC-`` identifier after this
-patch.
+applicant row is created with an ``ENR-``/``LD-``/``CRMC-`` identifier after
+this patch.
 """
 
 from __future__ import annotations

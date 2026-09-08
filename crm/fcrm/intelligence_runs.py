@@ -22,6 +22,7 @@ from crm.fcrm.analysis_runs import (
 )
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.school_intelligence import get_school_intelligence
+from crm.fcrm.scoring_projection import score_band
 
 SERVICE_USER_KEY = "crm_agents_service_user"
 RUN_TYPES = {"student": "CRM Student Analysis Run", "school": "CRM School Analysis Run"}
@@ -637,6 +638,12 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	for item in score_history:
 		item["scoring_date"] = str(item.get("scoring_date") or item.get("scoring_time") or "unknown")
 		item.pop("scoring_time", None)
+		# The model must reason from the same LOW/MEDIUM/HIGH bands the dashboard
+		# uses (`score_band`), not raw floats -- otherwise the numerically
+		# largest of several low components reads as a positive absolute signal.
+		item["fit_band"] = score_band(item.get("fit_score"))
+		item["engagement_band"] = score_band(item.get("engagement_score"))
+		item["intent_band"] = score_band(item.get("intent_score"))
 		contributors = []
 		try:
 			for detail in frappe.get_doc("CRM Score History", item.get("name")).get("details") or []:
@@ -699,8 +706,11 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 					"final_score": item.get("final_score"),
 					"score_change": item.get("score_change"),
 					"fit_score": item.get("fit_score"),
+					"fit_band": item.get("fit_band"),
 					"engagement_score": item.get("engagement_score"),
+					"engagement_band": item.get("engagement_band"),
 					"intent_score": item.get("intent_score"),
+					"intent_band": item.get("intent_band"),
 					"contributors": item.get("contributors") or [],
 					"provenance_ids": _ref("score", item),
 				}

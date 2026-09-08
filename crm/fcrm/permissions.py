@@ -256,7 +256,7 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 		crm_staff_name = _get_crm_staff_name(user)
 		if not crm_staff_name:
 			return "1=0"
-		return _lead_sales_student_read_condition("`tabCRM Student`", crm_staff_name)
+		return _lead_sales_student_read_condition(table, crm_staff_name)
 	if profile != "sales":
 		return None
 

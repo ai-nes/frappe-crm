@@ -134,3 +134,21 @@ class TestNoteApi(FrappeTestCase):
 		self.assertEqual(created["reference_docname"], student.name)
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["notes"][0]["reference_docname"], student.name)
+
+	def test_lead_note_crud_contract(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Lead Note API",
+				"phone": "0912345681",
+				"email": "lead-note-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		created = create_lead_note(lead.name, content="Ghi chú Lead")
+		self.assertEqual(created["reference_doctype"], "CRM Lead")
+		self.assertEqual(list_lead_notes(lead.name)["total"], 1)
+
+		updated = update_lead_note(created["name"], content="Ghi chú Lead đã cập nhật")
+		self.assertEqual(updated["content"], "Ghi chú Lead đã cập nhật")
+		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})

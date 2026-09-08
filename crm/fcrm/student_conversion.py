@@ -666,7 +666,11 @@ def convert_student(
 		previous = getattr(frappe.flags, SERVICE_FLAG, False)
 		setattr(frappe.flags, SERVICE_FLAG, True)
 		try:
-			conversion = frappe.get_doc(conversion_values).insert(ignore_permissions=True)
+			# ``contact`` was inserted or locked above in this transaction. Frappe's
+			# Link cache can still miss that just-created HS record at this boundary.
+			conversion = frappe.get_doc(conversion_values).insert(
+				ignore_permissions=True, ignore_links=True
+			)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
 		result = _result(
