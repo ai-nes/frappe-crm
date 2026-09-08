@@ -196,6 +196,8 @@ def get_director_students(
 	resolved_province = _resolve_province(query["province"]) if query["province"] else None
 	student_filters, or_filters = _student_filters(query, resolved_province)
 
+	# CRM Lead remains the routing projection for this list. This keeps the
+	# Student view aligned with the same active Group/Team/pool scope as Lead.
 	list_scope_student_ids = _list_scope_student_ids()
 	total = _count_students(
 		student_filters,
@@ -672,12 +674,13 @@ def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
 
 
 def _list_scope_student_ids() -> list[str] | None:
-	"""Return explicit IDs for the Sale list-only team/pool read scope.
+	"""Return explicit IDs for the session's Group/Team list-only read scope.
 
 	The normal CRM Student permission hook remains assigned-only for Sale so
 	direct CRUD/detail access cannot be widened. This endpoint uses the explicit
-	list condition only to expose rows that Sale may inspect before assigning;
-	all mutation commands perform their own ownership checks.
+	list condition only to expose rows that the session may inspect before
+	assigning; all mutation commands perform their own ownership checks. The
+	condition targets CRM Lead because Lead is the canonical routing projection.
 	"""
 	condition = get_student_list_read_condition(doctype="CRM Lead")
 	if condition is None:

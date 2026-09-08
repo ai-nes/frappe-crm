@@ -14,7 +14,7 @@ from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
-from crm.fcrm.permissions import can_read_full_lead_board
+from crm.fcrm.permissions import can_read_full_lead_board, get_student_list_read_condition
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
 MAX_PAGE_SIZE = 100
@@ -92,21 +92,27 @@ def get_director_leads(
 	query["status"] = _resolve_status(query["status"])
 	query["resolution"] = _resolve_resolution(query["resolution"])
 	filters, or_filters = _lead_filters(query)
-	total = _count_leads(filters, or_filters)
+	list_scope_lead_ids = _list_scope_lead_ids()
+	total = _count_leads(filters, or_filters, allowed_lead_ids=list_scope_lead_ids)
 	year_filter = _year_filter(query["admission_year"])
-	total_all = _count_leads(year_filter)
+	total_all = _count_leads(year_filter, allowed_lead_ids=list_scope_lead_ids)
 	# The header actions ("Xử lý Lead" / "Phân công Lead") reflect the whole
 	# intake year, not the operator's current filter, so these two counts are
 	# deliberately measured outside `filters`.
-	pending_new = _count_leads({**year_filter, "processing_status": "NEW"})
+	pending_new = _count_leads(
+		{**year_filter, "processing_status": "NEW"}, allowed_lead_ids=list_scope_lead_ids
+	)
 	ready_to_assign = _count_leads(
 		{
 			**year_filter,
 			"processing_status": "PROCESSED",
 			"resolution": ["in", ["MATCHED", "CREATED"]],
-		}
+		},
+		allowed_lead_ids=list_scope_lead_ids,
 	)
-	rows = _fetch_lead_rows(query, filters, or_filters)
+	rows = _fetch_lead_rows(
+		query, filters, or_filters, allowed_lead_ids=list_scope_lead_ids
+	)
 	lookups = _load_lookups(rows)
 
 	meta = {
@@ -127,7 +133,9 @@ def get_director_leads(
 		"asOf": _as_iso(frappe.utils.now_datetime()),
 	}
 	if query.get("campaign"):
-		meta["stats"] = _campaign_stats(filters, or_filters)
+		meta["stats"] = _campaign_stats(
+			filters, or_filters, allowed_lead_ids=list_scope_lead_ids
+		)
 
 	return {
 		"data": [_map_lead_row(row, lookups=lookups) for row in rows],
@@ -265,22 +273,49 @@ def _year_filter(admission_year: str | None) -> dict[str, Any]:
 	return {"admission_year": admission_year} if admission_year else {}
 
 
-def _lead_reader():
-	"""Return the row reader matching the caller's Lead board scope.
+def _list_scope_lead_ids() -> list[str] | None:
+	"""Return explicit Lead IDs for the session's Group/Team list scope."""
+	condition = get_student_list_read_condition(doctype="CRM Lead")
+	if condition is None:
+		return None
+	rows = frappe.db.sql(f"select name from `tabCRM Lead` where ({condition})", as_dict=True)
+	return [row.get("name") for row in rows if row.get("name")]
+
+
+def _lead_reader(allowed_lead_ids: list[str] | None = None):
+	"""Return the row reader matching the caller's Lead list/detail scope.
 
 	``frappe.get_list`` applies the canonical row scope, which hides a Lead as
-	soon as it is routed to another Team. The Lead Sale board is deliberately
-	whole-board (see ``can_read_full_lead_board``) so it reads through
-	``frappe.get_all``; both endpoints have already asserted the DocType read
-	grant in ``_require_access``.
+	soon as it is routed to another Team. A list scope resolved by
+	``_list_scope_lead_ids`` is applied explicitly and can therefore use
+	``frappe.get_all`` without widening visibility. The legacy no-argument path
+	remains available for detail compatibility; both endpoints have already
+	asserted the DocType read grant in ``_require_access``.
 	"""
+	if allowed_lead_ids is not None:
+		return frappe.get_all
 	return frappe.get_all if can_read_full_lead_board() else frappe.get_list
 
 
-def _count_leads(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
-	rows = _lead_reader()(
+def _with_allowed_lead_ids(
+	filters: dict[str, Any], allowed_lead_ids: list[str] | None
+) -> dict[str, Any]:
+	if allowed_lead_ids is None:
+		return filters
+	return {**filters, "name": ["in", allowed_lead_ids]}
+
+
+def _count_leads(
+	filters: dict[str, Any],
+	or_filters: list[list[str]] | None = None,
+	*,
+	allowed_lead_ids: list[str] | None = None,
+) -> int:
+	if allowed_lead_ids is not None and not allowed_lead_ids:
+		return 0
+	rows = _lead_reader(allowed_lead_ids)(
 		"CRM Lead",
-		filters=filters,
+		filters=_with_allowed_lead_ids(filters, allowed_lead_ids),
 		or_filters=or_filters or [],
 		fields=["count(name) as total"],
 		limit_page_length=1,
@@ -288,16 +323,23 @@ def _count_leads(filters: dict[str, Any], or_filters: list[list[str]] | None = N
 	return int(rows[0].get("total") or 0) if rows else 0
 
 
-def _campaign_stats(filters: dict[str, Any], or_filters: list[list[str]]) -> dict[str, int]:
+def _campaign_stats(
+	filters: dict[str, Any],
+	or_filters: list[list[str]],
+	*,
+	allowed_lead_ids: list[str] | None = None,
+) -> dict[str, int]:
 	"""Return the processing funnel for a campaign-filtered lead query."""
-	total = _count_leads(filters, or_filters)
+	total = _count_leads(filters, or_filters, allowed_lead_ids=allowed_lead_ids)
 	in_progress_filters = {
 		**filters,
 		"processing_status": ["in", ["PROCESSED", "ASSIGNED"]],
 	}
 	closed_filters = {**filters, "processing_status": "CLOSED"}
-	in_progress = _count_leads(in_progress_filters, or_filters)
-	closed = _count_leads(closed_filters, or_filters)
+	in_progress = _count_leads(
+		in_progress_filters, or_filters, allowed_lead_ids=allowed_lead_ids
+	)
+	closed = _count_leads(closed_filters, or_filters, allowed_lead_ids=allowed_lead_ids)
 	return {
 		"total": total,
 		"inProgress": in_progress,
@@ -306,10 +348,18 @@ def _campaign_stats(filters: dict[str, Any], or_filters: list[list[str]]) -> dic
 	}
 
 
-def _fetch_lead_rows(query: dict[str, Any], filters: dict[str, Any], or_filters: list[list[str]]) -> list:
-	return _lead_reader()(
+def _fetch_lead_rows(
+	query: dict[str, Any],
+	filters: dict[str, Any],
+	or_filters: list[list[str]],
+	*,
+	allowed_lead_ids: list[str] | None = None,
+) -> list:
+	if allowed_lead_ids is not None and not allowed_lead_ids:
+		return []
+	return _lead_reader(allowed_lead_ids)(
 		"CRM Lead",
-		filters=filters,
+		filters=_with_allowed_lead_ids(filters, allowed_lead_ids),
 		or_filters=or_filters,
 		fields=LEAD_FIELDS,
 		order_by=f"modified {query['order']}, name {query['order']}",

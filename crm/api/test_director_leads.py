@@ -245,6 +245,7 @@ class TestDirectorLeads(FrappeTestCase):
 		row = frappe._dict(name="LEAD-1", student_name="Nguyễn Minh An")
 		with (
 			patch.object(director_leads, "_require_access"),
+			patch.object(director_leads, "_list_scope_lead_ids", return_value=["LEAD-1"]),
 			patch.object(director_leads, "_resolve_status", return_value="NEW"),
 			patch.object(director_leads, "_resolve_resolution", return_value="MATCHED"),
 			# total, totalAll, pendingNew, readyToAssign, then the campaign funnel.
@@ -317,6 +318,26 @@ class TestDirectorLeads(FrappeTestCase):
 			self.assertIs(director_leads._lead_reader(), frappe.get_all)
 		with patch.object(director_leads, "can_read_full_lead_board", return_value=False):
 			self.assertIs(director_leads._lead_reader(), frappe.get_list)
+
+	def test_lead_list_scope_uses_the_shared_group_team_condition(self):
+		with (
+			patch.object(
+				director_leads,
+				"get_student_list_read_condition",
+				return_value="`tabCRM Lead`.owning_team in ('TEAM-1')",
+			),
+			patch.object(
+				director_leads.frappe.db,
+				"sql",
+				return_value=[frappe._dict(name="LEAD-1"), frappe._dict(name="LEAD-2")],
+			) as sql,
+		):
+			self.assertEqual(
+				director_leads._list_scope_lead_ids(),
+				["LEAD-1", "LEAD-2"],
+			)
+
+		sql.assert_called_once()
 
 	def test_detail_endpoint_serves_routed_lead_to_the_full_board_profile(self):
 		"""A Lead routed to another Team leaves the row scope but stays on the board."""
