@@ -1,15 +1,81 @@
 import uuid
+from unittest import TestCase
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.api import campaign as campaign_api
 from crm.api.campaign import (
 	create_campaign,
 	delete_campaign,
 	get_campaign,
+	get_public_campaigns,
 	list_campaigns,
 	update_campaign,
 )
+
+
+class TestPublicCampaignApi(TestCase):
+	def test_public_campaigns_filter_dates_and_paginate(self):
+		rows = [
+			{
+				"name": "Campaign 1",
+				"stable_code": "CAM-2026-00001",
+				"title": "Website 2026",
+				"campus": "HCM",
+				"status": "ACTIVE",
+				"start_date": "2026-09-01",
+				"end_date": "2026-09-30",
+			}
+		]
+		with (
+			patch.object(campaign_api.frappe, "get_all", return_value=rows) as get_all,
+			patch.object(campaign_api.frappe.db, "count", return_value=1) as count,
+		):
+			result = get_public_campaigns(
+				campaign_code="CAM-2026-00001",
+				startdate="2026-09-01",
+				enddate="2026-09-30",
+				start="10",
+				page_length="25",
+			)
+
+		self.assertEqual(result, {"total": 1, "start": 10, "page_length": 25, "campaigns": rows})
+		filters = [
+			["stable_code", "=", "CAM-2026-00001"],
+			["start_date", ">=", "2026-09-01"],
+			["end_date", "<=", "2026-09-30"],
+		]
+		self.assertEqual(get_all.call_args.kwargs["filters"], filters)
+		self.assertEqual(get_all.call_args.kwargs["fields"], list(campaign_api.PUBLIC_CAMPAIGN_FIELDS))
+		self.assertEqual(get_all.call_args.kwargs["limit_start"], 10)
+		self.assertEqual(get_all.call_args.kwargs["limit_page_length"], 25)
+		count.assert_called_once_with("CRM Campaign", filters=filters)
+
+	def test_public_campaigns_accept_snake_case_date_aliases(self):
+		with (
+			patch.object(campaign_api.frappe, "get_all", return_value=[]),
+			patch.object(campaign_api.frappe.db, "count", return_value=0),
+		):
+			result = get_public_campaigns(
+				start_date="2026-09-01",
+				end_date="2026-09-30",
+			)
+
+		self.assertEqual(result["total"], 0)
+
+	def test_public_campaigns_reject_invalid_dates_and_pagination(self):
+		with self.assertRaises(frappe.ValidationError):
+			get_public_campaigns(startdate="2026-10-01", enddate="2026-09-01")
+		with self.assertRaises(frappe.ValidationError):
+			get_public_campaigns(startdate="2026/09/01")
+		with self.assertRaises(frappe.ValidationError):
+			get_public_campaigns(page_length=101)
+
+	def test_public_campaigns_are_guest_whitelisted(self):
+		source = campaign_api.__loader__.get_source(campaign_api.__name__)
+		self.assertIn('@frappe.whitelist(allow_guest=True, methods=["GET"])', source)
 
 
 class TestCampaignApi(FrappeTestCase):

@@ -24,6 +24,7 @@ docker/.env.*
 !docker/.env.example
 docs/*
 !docs/team-management-assignment-audit.md
+!docs/group-team-list-scope-matrix.md
 # Keep local test evidence that is useful for review and handoff.
 !docs/test-evidence/
 !docs/test-evidence/lead-conversion-local-2026-09-07/

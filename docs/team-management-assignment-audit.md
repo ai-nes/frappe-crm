@@ -32,7 +32,8 @@ Người vận hành chỉ cần làm bốn việc:
 
 1. Tạo hoặc chọn Group và gắn một tỉnh.
 2. Chọn Trưởng Group cho Group.
-3. Tạo Team bên trong Group.
+3. Tạo Team bên trong Group và có thể chọn ngay Trưởng nhóm; backend tự thêm
+   người này vào Team.
 4. Chọn Trưởng nhóm cho từng Team và thêm các thành viên Sale/CTV.
 
 Team được coi là sẵn sàng khi:
@@ -70,10 +71,12 @@ thủ công.
 
 | Vai trò | Quyền |
 |---|---|
-| Admin/System Manager | Xem và quản lý tất cả Group, Team, trưởng nhóm, thành viên |
-| Lead Sale | Xem và chỉnh Trưởng Group/Trưởng nhóm, quản lý thành viên trong phạm vi |
-| Trưởng nhóm | Xem cấu trúc được cấp quyền và quản lý thành viên/Team trong phạm vi |
-| Sale/CTV | Xem Team và xử lý Lead được giao |
+| System Manager | Quyền kỹ thuật toàn cục đối với Group, Team, trưởng nhóm, thành viên |
+| Lead Sale | Toàn quyền quản lý tất cả Group, Team, trưởng nhóm, thành viên |
+| Sale là Group Lead | Xem Group của mình và quản lý các Team bên trong Group |
+| Sale là Team Lead | Xem Team của mình và quản lý thành viên trong Team |
+| Sale là member | Chỉ xem Team và thành viên trong Team của mình |
+| CTV Sale | Chỉ là member, chỉ xem Team và thành viên trong Team của mình |
 
 Việc chọn Trưởng nhóm là quyền tổ chức riêng. Không suy ra Trưởng nhóm từ
 function `Lead Sale`, `Sale` hoặc `CTV Sale`.
@@ -83,16 +86,16 @@ function `Lead Sale`, `Sale` hoặc `CTV Sale`.
 ### Quản lý Group/Team
 
 Các API đọc Group/Team yêu cầu một trong các capability `system.configure`,
-`admissions.oversee`, `team.oversee` hoặc `student.execute`; vì vậy Sale và CTV
-Sale có thể tải workspace để xem Team của mình. Tạm thời profile Sale và Lead
-Sale cũng được gọi các API ghi để chạy UI trước; đây chưa phải boundary bảo mật
-cuối cùng. Việc tạo Group mới vẫn dành cho hai profile được cấp phạm vi toàn
-cục và đầy đủ quyền đọc/ghi của workspace:
+`admissions.oversee`, `team.oversee` hoặc `student.execute`, đồng thời profile
+phải thuộc nhóm Team Management (`System Manager`, `Lead Sale`, `Sale`, `CTV Sale`).
+CEO/Director không còn quyền vào module này. Scope Group/Team/member được tính từ
+Group Lead, Team Lead và membership hiện hành của `CRM Staff`; CTV Sale luôn bị
+ép thành member ở module này.
 
-- CEO: role canonical `Administrator` (profile `ceo`), không bị giới hạn theo Team/Cơ sở.
-- Director: role canonical `Admissions Director` (profile `admissions_director`), không bị giới hạn theo Team/Cơ sở.
-
-Các kiểm tra nghiệp vụ và validation dữ liệu vẫn được áp dụng ở backend.
+Lead Sale/System Manager có quyền toàn cục. Sale là Group Lead chỉ được tạo/cập nhật
+Team trong Group của mình; Sale là Team Lead chỉ được thêm, chuyển, sửa hoặc gỡ
+member trong Team mình quản lý. Tạo/cập nhật Group chỉ dành cho Lead Sale/System
+Manager. Các kiểm tra nghiệp vụ và validation dữ liệu vẫn được áp dụng ở backend.
 
 | API | Mục đích |
 |---|---|
@@ -143,6 +146,7 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 
 - [ ] Admin tạo được Group có tỉnh từ danh mục Frappe.
 - [ ] Tạo được nhiều Team trong cùng Group.
+- [ ] Trưởng nhóm được chọn khi tạo Team sẽ tự động có membership trong Team đó.
 - [ ] Một Team có thể có nhiều Lead Sale, nhiều Sale và nhiều CTV.
 - [ ] Mỗi card Group hiển thị và cho phép chỉnh một Trưởng Group.
 - [ ] Trưởng nhóm được quản lý độc lập với function của thành viên.
@@ -154,3 +158,26 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 - [ ] Lead thiếu CCCD/THPT/ngành chuyển sang cần xử lý, không gán sai người.
 - [ ] Batch có thể tạo nhiều đợt và có trạng thái Hoàn tất hoặc Còn lỗi.
 - [ ] Dữ liệu Frappe cũ về Zone/Pool/Policy không bị xóa.
+
+## 8. Repair tài khoản vận hành trên production
+
+Hai endpoint workspace và lịch sử phân công yêu cầu tài khoản nghiệp vụ có:
+
+- Role chuẩn `Sale` hoặc `Lead Sale`.
+- Một `CRM Staff` đang hoạt động liên kết đúng với User.
+- `department` và `campus` hợp lệ; thêm `team` nếu tài khoản cần tham gia luồng
+  phân công.
+
+Nếu tài khoản đã đăng nhập được nhưng trả về `An active CRM Staff record is
+required.`, System Manager chạy command repair có tham số rõ ràng:
+
+```bash
+bench --site <site> execute crm.demo.repair_operational_accounts.execute --kwargs '{"accounts":[{"email":"sale@example.com","role":"Sale","department":"<department>","campus":"<campus>","team":"<sales-team>"},{"email":"lead@example.com","role":"Lead Sale","department":"<department>","campus":"<campus>","team":"<sales-team>","is_team_lead":true}]}'
+```
+
+`department`, `campus` và `team` phải là bản ghi đã tồn tại; command kiểm tra
+Team đang hoạt động, thuộc đúng campus và không tạo hai primary team. Có thể bỏ
+`team` để chỉ sửa identity Staff, nhưng tài khoản sẽ cần được gắn Team thủ công
+trước khi chạy routing. Command không đổi mật khẩu, không tự bật User bị disable,
+không sửa tài khoản `Administrator`/`System Manager`, và rollback toàn bộ nếu một
+tài khoản không hợp lệ.
