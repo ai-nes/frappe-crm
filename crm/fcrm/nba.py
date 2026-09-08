@@ -308,7 +308,7 @@ def ensure_nba_execution_for_attempt(
 		from crm.fcrm.doctype.crm_action_execution.crm_action_execution import TRANSITIONS
 
 		updates = {
-			key: value
+			key: (frappe.as_json(value) if isinstance(value, (dict, list)) else value)
 			for key, value in values.items()
 			if key not in {"recommendation", "task", "actor", "status"} and value is not None
 		}
@@ -365,9 +365,9 @@ def update_nba_execution(
 	if completed_at is not None:
 		values["completed_at"] = completed_at
 	if input_payload is not None:
-		values["input"] = input_payload
+		values["input"] = frappe.as_json(input_payload) if isinstance(input_payload, (dict, list)) else input_payload
 	if output is not None:
-		values["output"] = output
+		values["output"] = frappe.as_json(output) if isinstance(output, (dict, list)) else output
 	if error is not None:
 		values["error"] = str(error)[:2000]
 	if values:

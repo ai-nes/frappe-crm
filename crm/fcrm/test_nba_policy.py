@@ -79,7 +79,7 @@ def test_contact_action_requires_authoritative_consent_and_channel():
 	result = filter_eligible_actions(
 		[_row()],
 		now=NOW,
-		decision_context={"contactability": {"consent": True, "channels": ["EMAIL"]}},
+		decision_context={"student_stage": "Connected", "contactability": {"consent": True, "channels": ["EMAIL"]}},
 	)
 	assert result["actions"] == []
 	assert result["exclusions"] == [{"action": "CALL", "reason": "CHANNEL_NOT_ALLOWED"}]
@@ -90,6 +90,7 @@ def test_contact_action_fails_closed_when_recipient_is_ambiguous():
 		[_row()],
 		now=NOW,
 		decision_context={
+			"student_stage": "Connected",
 			"contactability": {
 				"consent": True,
 				"channels": ["CALL"],
@@ -101,7 +102,7 @@ def test_contact_action_fails_closed_when_recipient_is_ambiguous():
 	assert result["exclusions"] == [{"action": "CALL", "reason": "RECIPIENT_AMBIGUOUS"}]
 
 
-def test_terminal_lifecycle_blocks_contact_action_before_scoring():
+def test_missing_student_stage_fails_closed_even_with_legacy_lifecycle():
 	result = filter_eligible_actions(
 		[_row()],
 		now=NOW,
@@ -110,7 +111,7 @@ def test_terminal_lifecycle_blocks_contact_action_before_scoring():
 			"contactability": {"consent": True, "channels": ["CALL"]},
 		},
 	)
-	assert result["exclusions"] == [{"action": "CALL", "reason": "LIFECYCLE_TERMINAL"}]
+	assert result["exclusions"] == [{"action": "CALL", "reason": "STUDENT_STAGE_UNKNOWN"}]
 
 
 def test_terminal_student_stage_blocks_contact_action_before_scoring():
@@ -123,6 +124,19 @@ def test_terminal_student_stage_blocks_contact_action_before_scoring():
 		},
 	)
 	assert result["exclusions"] == [{"action": "CALL", "reason": "STUDENT_STAGE_TERMINAL"}]
+
+
+def test_live_student_stage_ignores_legacy_lifecycle_stage():
+	result = filter_eligible_actions(
+		[_row()],
+		now=NOW,
+		decision_context={
+			"student_stage": "Connected",
+			"lifecycle": {"stage": "enrolled"},
+			"contactability": {"consent": True, "channels": ["CALL"]},
+		},
+	)
+	assert [action["code"] for action in result["actions"]] == ["CALL"]
 
 
 def test_new_student_excludes_application_actions():
@@ -166,7 +180,7 @@ def test_parent_action_is_deferred_until_recipient_specific_consent_exists():
 	result = filter_eligible_actions(
 		[row],
 		now=NOW,
-		decision_context={"contactability": {"consent": True, "channels": ["CALL"]}},
+		decision_context={"student_stage": "Connected", "contactability": {"consent": True, "channels": ["CALL"]}},
 		parent_authority_channels={"CALL"},
 	)
 	assert result["actions"] == []

@@ -106,6 +106,9 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			shared_conditions("CRM Lead", user=user),
 			f"`tabCRM Lead`.owner_staff = {frappe.db.escape(staff)}",
 		)
+		lead_list_condition = get_student_list_read_condition(user=user, doctype="CRM Lead")
+		self.assertIn("`tabCRM Lead`.owner_staff", lead_list_condition)
+		self.assertNotIn("`tabCRM Student`", lead_list_condition)
 
 	def test_lead_sale_group_leader_reads_managed_group_students(self):
 		user, staff = self._make_user_and_staff(

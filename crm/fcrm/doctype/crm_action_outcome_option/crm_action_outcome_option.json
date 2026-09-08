@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "format:{action}-{outcome_code}-{dimension}",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["action", "outcome_code", "dimension", "effect_value", "label", "sort_order"],
+ "fields": [
+  {"fieldname": "action", "fieldtype": "Link", "options": "CRM Action", "reqd": 1, "in_list_view": 1, "label": "Action", "read_only": 1},
+  {"fieldname": "outcome_code", "fieldtype": "Data", "reqd": 1, "in_list_view": 1, "label": "Outcome Code", "read_only": 1},
+  {"fieldname": "dimension", "fieldtype": "Select", "options": "interest_disposition\napplication_assessment\nfollow_up\ncontact_attempt_signal\ndecision_status\nenrollment_assessment\nparent_disposition", "reqd": 1, "in_list_view": 1, "label": "Dimension", "read_only": 1},
+  {"fieldname": "effect_value", "fieldtype": "Data", "reqd": 1, "in_list_view": 1, "label": "Effect Value", "read_only": 1},
+  {"fieldname": "label", "fieldtype": "Data", "label": "Label"},
+  {"fieldname": "sort_order", "fieldtype": "Int", "default": "0", "label": "Sort Order", "non_negative": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Action Outcome Option",
+ "permissions": [
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Marketing"},
+  {"read": 1, "role": "Promoter"},
+  {"read": 1, "role": "Admissions Director"},
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}
+ ],
+ "sort_field": "sort_order",
+ "sort_order": "ASC"
+}

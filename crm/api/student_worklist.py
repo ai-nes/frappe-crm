@@ -16,6 +16,7 @@ from pymysql import MySQLError
 from crm.api.nba_recommendation_view import recommendation_view
 from crm.api.session import _get_policy_roles
 from crm.fcrm.student_reference import canonical_student
+from crm.services.action_outcome import OUTCOME_DISPLAY_NAMES, allowed_outcomes
 
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
@@ -105,9 +106,9 @@ def list_actions_for_record(doctype: str, name: str, page_size: int | str = 20) 
 	frappe.has_permission("CRM Action Item", "read", user=frappe.session.user, throw=True)
 	# `get_list` applies CRM Action Item's permission query conditions; `get_all`
 	# would allow a caller to probe another student's objective/evidence by name.
-	rows = frappe.get_list("CRM Action Item", filters={"student": student_id}, fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision"], order_by="creation desc", limit_page_length=page_size)
+	rows = frappe.get_list("CRM Action Item", filters={"student": student_id}, fields=["name", "student", "action", "action_type", "objective", "state", "execution_status", "priority", "due_at", "action_owner", "origin", "action_revision", "execution_package_version", "outcome_code", "linked_interaction"], order_by="creation desc", limit_page_length=page_size)
 	now = frappe.utils.now_datetime()
-	return {"items": [{"name": row.name, "student": row.student, "action": row.action, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
+	return {"items": [{"name": row.name, "student": row.student, "action": row.action, "action_type": row.action_type, "objective": row.objective, "state": row.state, "execution_status": row.execution_status, "priority": row.priority, "due_at": str(row.due_at) if row.due_at else None, "action_owner": row.action_owner, "origin": row.origin, "revision": int(row.action_revision or 1), "package_revision": int(row.execution_package_version or 0), "outcome": row.outcome_code, "outcome_codes": [{"value": code, "label": OUTCOME_DISPLAY_NAMES.get(code, code)} for code in sorted(allowed_outcomes(row.action or row.action_type))], "linked_interaction": row.linked_interaction, "permitted_transitions": sorted(_action_transitions(row.execution_status)), "is_today": bool(row.due_at and row.due_at.date() == now.date()), "is_overdue": bool(row.due_at and row.due_at < now and row.state not in {"completed", "cancelled", "rejected", "superseded"})} for row in rows], "policy_version": _POLICY_VERSION}
 
 
 @frappe.whitelist(methods=["GET"])
@@ -440,8 +441,8 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 			"assignee_staff": row.assignee_staff, "revision": int(row.action_revision or 1),
 			"overdue": bool(row.due_at and row.due_at < now), "linked_interaction": row.linked_interaction,
 			"outcome": row.outcome_code, "outcome_codes": [
-				"NO_RESPONSE", "INTEREST_INCREASED", "NEEDS_MORE_INFORMATION", "CALL_BACK_LATER",
-				"APPLICATION_STARTED", "APPLICATION_COMPLETED", "NOT_INTERESTED",
+				{"value": code, "label": OUTCOME_DISPLAY_NAMES.get(code, code)}
+				for code in sorted(allowed_outcomes(row.action or row.action_type))
 			], "permitted_transitions": sorted(_action_transitions(row.execution_status))})
 	return {"items": items, "next_cursor": _encode_action_cursor(rows[-1], frappe.session.user) if has_more and rows else None, "policy_version": _POLICY_VERSION}
 

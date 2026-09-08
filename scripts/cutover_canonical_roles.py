@@ -15,7 +15,6 @@ from crm.patches.v1_0.seed_new_lead_role_profiles import execute as seed_lead_pr
 from crm.patches.v1_0.setup_crm_permissions import apply_managed_docperms
 from crm.patches.v1_0.setup_crm_roles import create_roles
 
-
 CANONICAL_ROLES = frozenset(
 	{
 		"CTV Sale",
@@ -30,6 +29,10 @@ CANONICAL_ROLES = frozenset(
 	}
 )
 PLATFORM_ROLES = frozenset({"All", "Guest", "Desk User", "Website User", SYSTEM_MANAGER_ROLE})
+# Technical service identities are not selectable CRM business roles, but the
+# AI service principal must survive the business-role cleanup. Its least-
+# privilege permissions are provisioned by the service-identity seed.
+SERVICE_ROLES = frozenset({"AI Service"})
 LEGACY_ROLE_MAP = {
 	"Sales Manager": "Lead Sale",
 	"CTV Sale": "CTV Sale",
@@ -106,7 +109,7 @@ def _delete_role_references(role: str):
 
 def _remove_noncanonical_roles():
 	removed = []
-	keep = CANONICAL_ROLES | PLATFORM_ROLES
+	keep = CANONICAL_ROLES | PLATFORM_ROLES | SERVICE_ROLES
 	for row in _role_rows():
 		role = row.name
 		if role in keep:
@@ -157,7 +160,7 @@ def execute():
 def verify():
 	"""Fail if a non-platform role or profile remains in the live catalog."""
 	roles = {row.name for row in _role_rows()}
-	unexpected_roles = sorted(roles - CANONICAL_ROLES - PLATFORM_ROLES)
+	unexpected_roles = sorted(roles - CANONICAL_ROLES - PLATFORM_ROLES - SERVICE_ROLES)
 	profiles = set(frappe.get_all("CRM Permission Profile", pluck="role", limit_page_length=0))
 	unexpected_profiles = sorted(profiles - CANONICAL_ROLES)
 	if unexpected_roles or unexpected_profiles:
@@ -165,7 +168,7 @@ def verify():
 			f"Canonical role verification failed: roles={unexpected_roles}, profiles={unexpected_profiles}"
 		)
 	return {
-		"roles": sorted(roles & (CANONICAL_ROLES | PLATFORM_ROLES)),
+		"roles": sorted(roles & (CANONICAL_ROLES | PLATFORM_ROLES | SERVICE_ROLES)),
 		"profiles": sorted(profiles),
 		"legacy_roles": unexpected_roles,
 		"legacy_profiles": unexpected_profiles,

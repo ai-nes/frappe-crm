@@ -228,7 +228,7 @@ def can_read_full_lead_board(user=None) -> bool:
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
 
 
-def get_student_list_read_condition(user=None):
+def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	"""Return the list-only Student read scope for roles with assignment access.
 
 	Sale keeps the canonical assigned-only row scope for direct CRUD and detail
@@ -241,15 +241,22 @@ def get_student_list_read_condition(user=None):
 	dashboard scope, not a new endpoint or a new UI flow.
 
 	Other profiles return ``None`` so callers continue using the canonical
-	permission query hook unchanged.
+	permission query hook unchanged. ``doctype`` identifies the aggregate being
+	queried by the caller; the default remains the standalone CRM Student table,
+	while the dashboard projection may target CRM Lead.
 	"""
+	table_by_doctype = {
+		"CRM Student": "`tabCRM Student`",
+		"CRM Lead": "`tabCRM Lead`",
+	}
+	table = table_by_doctype[doctype]
 	user = user or frappe.session.user
 	profile = resolve_crm_profile(_get_policy_roles(user))
 	if profile == "lead_sales":
 		crm_staff_name = _get_crm_staff_name(user)
 		if not crm_staff_name:
 			return "1=0"
-		return _lead_sales_student_read_condition("`tabCRM Student`", crm_staff_name)
+		return _lead_sales_student_read_condition(table, crm_staff_name)
 	if profile != "sales":
 		return None
 
@@ -257,7 +264,6 @@ def get_student_list_read_condition(user=None):
 	if not crm_staff_name:
 		return "1=0"
 
-	table = "`tabCRM Student`"
 	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 	team_condition = _team_leader_condition(table, crm_staff_name)
 	return f"({own_condition} or {team_condition})"
