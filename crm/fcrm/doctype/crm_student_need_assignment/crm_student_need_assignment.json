@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "CRM Student Need Assignment",
+ "module": "FCRM",
+ "istable": 1,
+ "allow_rename": 0,
+ "permissions": [],
+ "field_order": ["need", "assigned_by", "assigned_at", "source"],
+ "fields": [
+  {"fieldname": "need", "fieldtype": "Link", "label": "Need", "options": "CRM Need", "reqd": 1},
+  {"fieldname": "assigned_by", "fieldtype": "Link", "label": "Assigned By", "options": "User", "read_only": 1},
+  {"fieldname": "assigned_at", "fieldtype": "Datetime", "label": "Assigned At", "read_only": 1},
+  {"fieldname": "source", "fieldtype": "Data", "label": "Source", "read_only": 1}
+ ]
+}

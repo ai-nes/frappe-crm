@@ -108,6 +108,23 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 				validate_transition(current, target)
 			self.assertEqual(ctx.exception.code, "INVALID_TRANSITION")
 
+	def test_legacy_enrollment_status_maps_to_the_student_stage_pipeline(self):
+		from crm.fcrm.student_stage import stage_from_enrollment_status
+
+		self.assertEqual(
+			{
+				status: stage_from_enrollment_status(status)
+				for status in ("NEW", "PROSPECT", "CONFIRMED", "ENROLLED", "REFUSED")
+			},
+			{
+				"NEW": "New",
+				"PROSPECT": "Attempting",
+				"CONFIRMED": "Qualified",
+				"ENROLLED": "Connected",
+				"REFUSED": "Disqualified",
+			},
+		)
+
 	def test_schema_contains_server_managed_workflow_fields(self):
 		root = Path(__file__).resolve().parents[1]
 		lead_schema = json.loads((root / "fcrm/doctype/crm_lead/crm_lead.json").read_text(encoding="utf-8"))
@@ -124,6 +141,8 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
 		self.assertEqual(student_fields["student_stage"]["default"], "New")
 		self.assertTrue(student_fields["student_stage"]["read_only"])
+		self.assertEqual(student_fields["enrollment_status"]["default"], "NEW")
+		self.assertTrue(student_fields["enrollment_status"]["hidden"])
 
 
 @unittest.skipIf(frappe is None, "Lead/Student workflow tests require a Frappe bench")

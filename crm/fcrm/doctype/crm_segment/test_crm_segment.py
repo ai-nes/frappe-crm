@@ -1,6 +1,7 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
+from typing import ClassVar
 from unittest.mock import patch
 
 import frappe
@@ -13,6 +14,7 @@ from crm.api.segment import (
 	preview_segment,
 	validate_segment_filters,
 )
+from crm.api.student_segment import transition_segment
 
 
 class TestCRMSegment(FrappeTestCase):
@@ -20,7 +22,7 @@ class TestCRMSegment(FrappeTestCase):
 	# enrollment_status on save, discarding a directly-assigned value — so
 	# _make_contact's convenience "lifecycle_stage" kwarg maps through this table
 	# to the enrollment status this site's seed data maps to that stage.
-	LIFECYCLE_STAGE_ENROLLMENT_STATUS = {
+	LIFECYCLE_STAGE_ENROLLMENT_STATUS: ClassVar[dict] = {
 		"Lead": "NEW",
 		"MQL": "PROSPECT",
 		"Applicant": "CONFIRMED",
@@ -35,12 +37,18 @@ class TestCRMSegment(FrappeTestCase):
 		# scope to this dedicated campus to avoid matching thousands of them.
 		self.test_branch = self._make_campus("_Test Segment Setup Campus")
 		self.contacts = []
-		self.contacts.append(self._make_contact("A", lifecycle_stage="Lead", is_opted_out=0, branch=self.test_branch))
-		self.contacts.append(self._make_contact("B", lifecycle_stage="MQL", is_opted_out=0, branch=self.test_branch))
+		self.contacts.append(
+			self._make_contact("A", lifecycle_stage="Lead", is_opted_out=0, branch=self.test_branch)
+		)
+		self.contacts.append(
+			self._make_contact("B", lifecycle_stage="MQL", is_opted_out=0, branch=self.test_branch)
+		)
 		self.contacts.append(
 			self._make_contact("C", lifecycle_stage="Applicant", is_opted_out=1, branch=self.test_branch)
 		)
-		self.contacts.append(self._make_contact("D", lifecycle_stage="Lost", is_opted_out=1, branch=self.test_branch))
+		self.contacts.append(
+			self._make_contact("D", lifecycle_stage="Lost", is_opted_out=1, branch=self.test_branch)
+		)
 
 	def tearDown(self):
 		frappe.set_user("Administrator")
@@ -48,17 +56,21 @@ class TestCRMSegment(FrappeTestCase):
 		# transaction before deleting the linked Student fixtures, otherwise a
 		# Frappe test connection can retain a row lock across teardown.
 		frappe.db.commit()
-		test_campaigns = frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name")
+		test_campaigns = frappe.db.get_all(
+			"CRM Campaign", filters={"title": ["like", "_Test%"]}, pluck="name"
+		)
 		if test_campaigns:
 			for name in frappe.db.get_all(
 				"CRM Marketing Engagement", filters={"crm_campaign": ["in", test_campaigns]}, pluck="name"
 			):
 				frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Segment", filters={"title": ["like", "_Test%"]}, pluck="name"):
-			frappe.delete_doc("CRM Segment", name, force=True)
+			frappe.db.delete("CRM Segment", {"name": name})
 		for name in test_campaigns:
 			frappe.delete_doc("CRM Campaign", name, force=True)
-		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campus", filters={"campus_name": ["like", "_Test%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campus", name, force=True)
 		# Attribution attach commits in batches.  Use a direct bulk delete after
 		# dependent touchpoints are gone; delete_doc's row-locking path can race
@@ -79,7 +91,9 @@ class TestCRMSegment(FrappeTestCase):
 
 	def _make_campaign(self, title, campus):
 		if frappe.db.exists("CRM Campaign", title):
-			for name in frappe.db.get_all("CRM Marketing Engagement", filters={"crm_campaign": title}, pluck="name"):
+			for name in frappe.db.get_all(
+				"CRM Marketing Engagement", filters={"crm_campaign": title}, pluck="name"
+			):
 				frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 			frappe.delete_doc("CRM Campaign", title, force=True)
 		doc = frappe.get_doc({"doctype": "CRM Campaign", "title": title, "campus": campus})
@@ -149,16 +163,28 @@ class TestCRMSegment(FrappeTestCase):
 		return doc.name
 
 	def _make_segment(self, title, filters):
-		doc = frappe.get_doc({"doctype": "CRM Segment", "title": title, "filters": filters})
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Segment",
+				"title": title,
+				"filters": filters,
+				"purpose": "Regression test",
+				"category": "admission_stage",
+			}
+		)
 		doc.insert(ignore_permissions=True)
-		return doc
+		transition_segment(doc.name, "active", doc.revision)
+		return doc.reload()
 
 	# ------------------------------------------------------------ OR-of-AND correctness
 
 	def test_two_group_or_of_and_matches_hand_built_query(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]},
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+				},
 				{
 					"logic": "AND",
 					"conditions": [
@@ -216,7 +242,12 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_non_allowlisted_field_rejected_at_save(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}],
+				}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			self._make_segment("_Test Segment Bad Field", filters)
@@ -225,7 +256,12 @@ class TestCRMSegment(FrappeTestCase):
 		"""The matcher itself must reject, not just Document.validate() — this is
 		what makes draft preview (which never calls validate()) safe."""
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}],
+				}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			get_matching_contact_names(filters)
@@ -242,7 +278,12 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_saved_segment_matches_seeded_contacts(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment MQL", filters)
 		matches = get_matching_contact_names(segment.filters)
@@ -253,7 +294,12 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_preview_draft_filters_matches_saved_segment(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Preview Draft", filters)
 
@@ -261,11 +307,18 @@ class TestCRMSegment(FrappeTestCase):
 		saved_result = preview_segment(segment=segment.name, page_length=50)
 
 		self.assertEqual(draft_result["total"], saved_result["total"])
-		self.assertEqual({c["name"] for c in draft_result["contacts"]}, {c["name"] for c in saved_result["contacts"]})
+		self.assertEqual(
+			{c["name"] for c in draft_result["contacts"]}, {c["name"] for c in saved_result["contacts"]}
+		)
 
 	def test_preview_draft_filters_rejects_non_allowlisted_field(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "email", "operator": "=", "value": "x@example.com"}],
+				}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			preview_segment(filters=filters)
@@ -296,7 +349,9 @@ class TestCRMSegment(FrappeTestCase):
 					}
 				]
 			}
-			segment = frappe.get_doc({"doctype": "CRM Segment", "title": "_Test Segment Private", "filters": filters})
+			segment = frappe.get_doc(
+				{"doctype": "CRM Segment", "title": "_Test Segment Private", "filters": filters}
+			)
 			segment.insert()
 			result = preview_segment(segment=segment.name)
 			self.assertGreaterEqual(result["total"], 1)
@@ -310,9 +365,16 @@ class TestCRMSegment(FrappeTestCase):
 
 		frappe.set_user(owner_email)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+				}
+			]
 		}
-		segment = frappe.get_doc({"doctype": "CRM Segment", "title": "_Test Segment Private2", "filters": filters})
+		segment = frappe.get_doc(
+			{"doctype": "CRM Segment", "title": "_Test Segment Private2", "filters": filters}
+		)
 		segment.insert()
 
 		frappe.set_user(other_email)
@@ -386,7 +448,12 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Reattach Campus")
 		campaign = self._make_campaign("_Test Segment Reattach Campaign", campus)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Reattach", filters)
 
@@ -422,7 +489,12 @@ class TestCRMSegment(FrappeTestCase):
 
 		segment.reload()
 		segment.filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lost"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lost"}],
+				}
+			]
 		}
 		segment.save()
 
@@ -576,8 +648,9 @@ class TestCRMSegment(FrappeTestCase):
 				raise frappe.ValidationError("Simulated batch failure")
 			return original_get_doc(*args, **kwargs)
 
-		with patch.object(segment_api, "ATTACH_BATCH_SIZE", 2), patch.object(
-			segment_api.frappe, "get_doc", side_effect=flaky_get_doc
+		with (
+			patch.object(segment_api, "ATTACH_BATCH_SIZE", 2),
+			patch.object(segment_api.frappe, "get_doc", side_effect=flaky_get_doc),
 		):
 			result = segment_api.attach_segment_to_campaign(segment.name, campaign)
 
@@ -611,21 +684,27 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_condition_operator_not_allowed_for_fieldtype_rejected(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "in", "value": [0]}]}]
+			"groups": [
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "in", "value": [0]}]}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			validate_segment_filters(filters)
 
 	def test_condition_in_operator_requires_nonempty_list(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "in", "value": []}]}]
+			"groups": [
+				{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "in", "value": []}]}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			validate_segment_filters(filters)
 
 	def test_condition_check_field_rejects_non_boolean_value(self):
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": "yes"}]}]
+			"groups": [
+				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": "yes"}]}
+			]
 		}
 		with self.assertRaises(frappe.ValidationError):
 			validate_segment_filters(filters)
@@ -666,7 +745,12 @@ class TestCRMSegment(FrappeTestCase):
 		campus = self._make_campus("_Test Segment Perm Campus")
 		campaign = self._make_campaign("_Test Segment Perm Campaign", campus)
 		filters = {
-			"groups": [{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}]}]
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+				}
+			]
 		}
 		segment = self._make_segment("_Test Segment Perm", filters)
 

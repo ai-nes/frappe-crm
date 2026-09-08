@@ -1,18 +1,25 @@
 import frappe
 from frappe.model.document import Document
 
-from crm.api.segment import validate_segment_filters
+from crm.fcrm.segment_lifecycle import validate_segment
 
 
 class CRMSegment(Document):
 	def validate(self):
-		self.filters = validate_segment_filters(self.filters)
+		validate_segment(self)
+
+	def before_rename(self, *args, **kwargs):
+		frappe.throw("Segment identifiers are immutable.", frappe.PermissionError)
 
 	def on_trash(self):
-		if frappe.db.exists("CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "crm_segment": self.name}):
+		if self.status != "draft":
+			frappe.throw("Archive published segments instead of deleting them.")
+		if frappe.db.exists(
+			"CRM Marketing Engagement", {"engagement_kind": "campaign_touch", "crm_segment": self.name}
+		):
 			frappe.throw(
 				frappe._(
-				"This Segment cannot be deleted because it has marketing engagement records "
+					"This Segment cannot be deleted because it has marketing engagement records "
 					"attached to it. Remove those references first."
 				)
 			)
@@ -36,7 +43,8 @@ def get_permission_query_conditions(user=None):
 	return f"""(`tabCRM Segment`.`is_public` = 1 OR `tabCRM Segment`.`owner` = {frappe.db.escape(user)})"""
 
 
-def has_permission(doc, user=None, permission_type=None):
+def has_permission(doc, user=None, permission_type=None, ptype=None):
+	permission_type = permission_type or ptype or "read"
 	user = user or frappe.session.user
 	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
 		return True

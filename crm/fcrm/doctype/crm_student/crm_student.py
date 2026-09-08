@@ -8,7 +8,7 @@ from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_st
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.student_reference import hs_code_for_reference, next_hs_code
 from crm.fcrm.student_stage import SERVICE_FLAG as STUDENT_STAGE_SERVICE_FLAG
-from crm.fcrm.student_stage import validate_stage
+from crm.fcrm.student_stage import stage_from_enrollment_status, validate_stage
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
 
 # Kept for the legacy anomaly report. Student creation itself is no longer
@@ -56,13 +56,6 @@ class CRMStudent(Document):
 				"width": "14rem",
 			},
 			{
-				"label": "Enrollment Status",
-				"type": "Link",
-				"key": "enrollment_status",
-				"options": "CRM Enrollment Status",
-				"width": "10rem",
-			},
-			{
 				"label": "Student Stage",
 				"type": "Data",
 				"key": "student_stage",
@@ -87,7 +80,6 @@ class CRMStudent(Document):
 			"full_name",
 			"phone",
 			"email",
-			"enrollment_status",
 			"student_stage",
 			"assigned_to",
 			"modified",
@@ -98,11 +90,13 @@ class CRMStudent(Document):
 	def default_kanban_settings():
 		return {
 			"title_field": "full_name",
-			"kanban_fields": '["name", "full_name", "phone", "email", "enrollment_status", "student_stage", "assigned_to"]',
+			"kanban_fields": '["name", "full_name", "phone", "email", "student_stage", "assigned_to"]',
 		}
 
 	def before_insert(self):
-		self.student_stage = self.get("student_stage") or "New"
+		self.student_stage = self.get("student_stage") or stage_from_enrollment_status(
+			self.get("enrollment_status")
+		)
 		self._normalize_shared_fields()
 		self._resolve_geo()
 		# Student is a post-conversion/care aggregate. Assignment is performed on
@@ -132,9 +126,10 @@ class CRMStudent(Document):
 
 	def on_update(self):
 		before = self.get_doc_before_save()
+		from crm.fcrm.student_classification import classification_changed
 		from crm.services.student_context import bump_student_context_revision, material_student_changed
 
-		if material_student_changed(self, before):
+		if material_student_changed(self, before) or classification_changed(self, before):
 			bump_student_context_revision(self.name, "student_material_change")
 		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
 
@@ -142,6 +137,9 @@ class CRMStudent(Document):
 			bump_score_input_revision(self.name, "student_field_scoring_change")
 
 	def validate(self):
+		from crm.fcrm.student_classification import validate_classifications
+
+		validate_classifications(self)
 		self.student_stage = self.get("student_stage") or "New"
 		validate_stage(self.student_stage)
 		self._normalize_shared_fields()

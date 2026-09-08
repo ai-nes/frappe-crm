@@ -1,0 +1,15 @@
+{
+ "doctype": "DocType",
+ "name": "CRM Student Tag Assignment",
+ "module": "FCRM",
+ "istable": 1,
+ "allow_rename": 0,
+ "permissions": [],
+ "field_order": ["tag", "assigned_by", "assigned_at", "source"],
+ "fields": [
+  {"fieldname": "tag", "fieldtype": "Link", "label": "Tag", "options": "CRM Tag", "reqd": 1},
+  {"fieldname": "assigned_by", "fieldtype": "Link", "label": "Assigned By", "options": "User", "read_only": 1},
+  {"fieldname": "assigned_at", "fieldtype": "Datetime", "label": "Assigned At", "read_only": 1},
+  {"fieldname": "source", "fieldtype": "Data", "label": "Source", "read_only": 1}
+ ]
+}

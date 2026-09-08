@@ -1,0 +1,33 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "hash",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["code", "label", "group_name", "description", "status", "revision"],
+ "fields": [
+  {"fieldname": "code", "fieldtype": "Data", "label": "Code", "reqd": 1, "unique": 1},
+  {"fieldname": "label", "fieldtype": "Data", "label": "Label", "reqd": 1},
+  {"fieldname": "group_name", "fieldtype": "Data", "label": "Group", "reqd": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "draft\nactive\ninactive\narchive", "default": "draft", "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "default": "0"}
+ ],
+ "index_web_pages_for_search": 0,
+ "module": "FCRM",
+ "name": "CRM Tag",
+ "permissions": [
+  {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Administrator", "read": 1, "write": 1, "create": 1, "delete": 1},
+  {"role": "Sale", "read": 1},
+  {"role": "Lead Sale", "read": 1},
+  {"role": "CTV Sale", "read": 1},
+  {"role": "Admissions Director", "read": 1},
+  {"role": "CRM Manager", "read": 1}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "label",
+ "track_changes": 1
+}

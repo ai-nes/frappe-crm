@@ -1,40 +1,14 @@
 import frappe
 from frappe import _
 
+from crm.fcrm.segment_rules import FIELDS as ALLOWED_SEGMENT_FIELDS
+from crm.fcrm.segment_rules import MAX_CONDITIONS as MAX_CONDITIONS_PER_GROUP
+from crm.fcrm.segment_rules import MAX_GROUPS, fail, validate_filters
+from crm.fcrm.segment_rules import OPERATORS as OPERATORS_BY_FIELDTYPE
 from crm.fcrm.student_attribution import record_campaign_touchpoint
 from crm.fcrm.student_contact_conversion import students_for_contact
+from crm.fcrm.student_segments import member_names, membership_query, preview
 
-# Single source of truth for which CRM Contact fields a Segment condition may
-# target. Every consumer (doctype validate, draft preview, saved preview,
-# attach) must route through validate_segment_filters()/get_matching_contact_names()
-# below so the allow-list can never be bypassed by a caller that skips
-# Document.validate() (e.g. draft preview).
-ALLOWED_SEGMENT_FIELDS = {
-	"lifecycle_stage": {
-		"label": "Lifecycle Stage",
-		"fieldtype": "Select",
-		"options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
-	},
-	"source": {"label": "Source", "fieldtype": "Link", "options": "CRM Lead Source"},
-	"platform": {"label": "Platform", "fieldtype": "Link", "options": "CRM Platform"},
-	"branch": {"label": "Branch", "fieldtype": "Link", "options": "CRM Campus"},
-	"province": {"label": "Province", "fieldtype": "Link", "options": "CRM Province"},
-	"quality_bucket": {
-		"label": "Lead Quality Bucket",
-		"fieldtype": "Select",
-		"options": "Hot\nWarm\nCool\nSai số\nKhông liên lạc được\nKhông quan tâm",
-	},
-	"is_opted_out": {"label": "Opted Out", "fieldtype": "Check"},
-}
-
-OPERATORS_BY_FIELDTYPE = {
-	"Select": ("=", "!=", "in", "not in"),
-	"Link": ("=", "!=", "in", "not in"),
-	"Check": ("=", "!="),
-}
-
-MAX_GROUPS = 10
-MAX_CONDITIONS_PER_GROUP = 20
 DEFAULT_PREVIEW_PAGE_LENGTH = 20
 MAX_PREVIEW_PAGE_LENGTH = 100
 ATTACH_BATCH_SIZE = 500
@@ -62,96 +36,11 @@ def get_segment_condition_fields():
 
 
 def validate_segment_filters(filters):
-	"""Raises frappe.throw on anything invalid. This is the single gate every
-	consumer of Segment rules must call before touching CRM Contact data.
-
-	Returns the normalized dict — callers must use the return value, since the
-	"filters" JSON field round-trips as a string (not a dict) once a Segment
-	doc is loaded from the database rather than freshly constructed."""
-	if isinstance(filters, str):
-		try:
-			filters = frappe.parse_json(filters)
-		except Exception:
-			frappe.throw(_("Segment filters must be valid JSON."))
-
-	if not isinstance(filters, dict):
-		frappe.throw(_("Segment filters must be a JSON object with a 'groups' list."))
-
-	groups = filters.get("groups")
-	if not groups or not isinstance(groups, list):
-		frappe.throw(_("Segment must include at least one filter group."))
-
-	if len(groups) > MAX_GROUPS:
-		frappe.throw(_("A Segment can have at most {0} filter groups.").format(MAX_GROUPS))
-
-	for group in groups:
-		if not isinstance(group, dict):
-			frappe.throw(_("Each filter group must be a JSON object."))
-
-		conditions = group.get("conditions")
-		if not conditions or not isinstance(conditions, list):
-			frappe.throw(_("Each filter group must include at least one condition."))
-
-		if len(conditions) > MAX_CONDITIONS_PER_GROUP:
-			frappe.throw(
-				_("Each filter group can have at most {0} conditions.").format(MAX_CONDITIONS_PER_GROUP)
-			)
-
-		for condition in conditions:
-			_validate_condition(condition)
-
-	return filters
-
-
-def _validate_condition(condition):
-	if not isinstance(condition, dict):
-		frappe.throw(_("Each condition must be a JSON object."))
-
-	field = condition.get("field")
-	operator = condition.get("operator")
-	value = condition.get("value")
-
-	if field not in ALLOWED_SEGMENT_FIELDS:
-		frappe.throw(_("Field '{0}' is not allowed in Segment conditions.").format(field))
-
-	fieldtype = ALLOWED_SEGMENT_FIELDS[field]["fieldtype"]
-	allowed_operators = OPERATORS_BY_FIELDTYPE[fieldtype]
-
-	if operator not in allowed_operators:
-		frappe.throw(_("Operator '{0}' is not allowed for field '{1}'.").format(operator, field))
-
-	if operator in ("in", "not in"):
-		if not isinstance(value, list) or not value:
-			frappe.throw(
-				_("Operator '{0}' requires a non-empty list value for field '{1}'.").format(operator, field)
-			)
-	else:
-		if value is None or value == "":
-			frappe.throw(_("Condition on field '{0}' is missing a value.").format(field))
-		if fieldtype == "Check" and value not in (0, 1, "0", "1", True, False):
-			frappe.throw(_("Field '{0}' only accepts 0 or 1.").format(field))
+	return validate_filters(filters)
 
 
 def get_matching_contact_names(filters):
-	"""OR-of-AND match: a contact qualifies if it satisfies every condition in
-	at least one group. Validates first, so zero groups / a zero-condition
-	group / a non-allow-listed field can never reach frappe.get_list — they
-	are rejected outright rather than silently matching everyone."""
-	filters = validate_segment_filters(filters)
-
-	names = set()
-	for group in filters["groups"]:
-		group_filters = _group_to_query_filters(group["conditions"])
-		names.update(frappe.get_list("CRM Student", filters=group_filters, pluck="name", limit_page_length=0))
-
-	return names
-
-
-def _group_to_query_filters(conditions):
-	# A group's "logic" key is round-tripped as-is but always treated as AND —
-	# OR-within-a-group isn't supported (each group is itself the AND side of
-	# the outer OR-of-AND model), so the key is currently unread here.
-	return [[condition["field"], condition["operator"], condition["value"]] for condition in conditions]
+	return {row[0] for row in frappe.db.sql(membership_query(filters=filters))}
 
 
 @frappe.whitelist()
@@ -163,39 +52,20 @@ def get_segment_fields():
 
 @frappe.whitelist()
 def preview_segment(segment=None, filters=None, start=0, page_length=20):
-	"""Count + a page of CRM Students matching either a saved Segment (by name)
-	or unsaved draft rules. Draft filters go through the exact same
-	validate_segment_filters()/get_matching_contact_names() gate as a saved
-	Segment, so allow-list rejection is identical on both paths."""
-	start = frappe.utils.cint(start)
-	page_length = min(frappe.utils.cint(page_length) or DEFAULT_PREVIEW_PAGE_LENGTH, MAX_PREVIEW_PAGE_LENGTH)
-
-	if segment:
-		doc = frappe.get_doc("CRM Segment", segment)
-		doc.check_permission("read")
-		filters_dict = doc.filters
-	elif filters:
-		filters_dict = frappe.parse_json(filters) if isinstance(filters, str) else filters
-	else:
-		frappe.throw(_("Provide either a saved segment name or draft filters to preview."))
-
-	matches = sorted(get_matching_contact_names(filters_dict))
-	total = len(matches)
-	page_names = matches[start : start + page_length]
-
-	contacts = (
+	result = preview(segment, filters, start, min(frappe.utils.cint(page_length) or 20, 100))
+	names = [row["name"] for row in result.pop("students")]
+	result["contacts"] = (
 		frappe.get_list(
 			"CRM Student",
-			filters=[["name", "in", page_names]],
+			filters={"name": ["in", names]},
 			fields=PREVIEW_CONTACT_FIELDS,
 			order_by="name asc",
-			limit_page_length=0,
+			limit_page_length=100,
 		)
-		if page_names
+		if names
 		else []
 	)
-
-	return {"total": total, "start": start, "page_length": page_length, "contacts": contacts}
+	return result
 
 
 @frappe.whitelist()
@@ -206,25 +76,28 @@ def attach_segment_to_campaign(segment, campaign):
 	segment afterward has no effect on rows already created here. Batched so
 	a single failing row only rolls back its own batch; earlier committed
 	batches and the idempotency guard make re-running safe."""
-	segment_doc = frappe.get_doc("CRM Segment", segment)
+	segment_doc = frappe.get_doc("CRM Segment", segment, for_update=True)
 	segment_doc.check_permission("read")
 	frappe.get_doc("CRM Campaign", campaign).check_permission("write")
 
-	matches = sorted(get_matching_contact_names(segment_doc.filters))
+	if segment_doc.status != "active":
+		fail("Only active segments can be attached to a campaign.", "INVALID_TRANSITION")
+	matches = sorted(member_names(segment_doc))
 
 	existing_by_contact = {}
 	if matches:
 		engagement_rows = frappe.db.get_all(
 			"CRM Marketing Engagement",
-			filters={"engagement_kind": "campaign_touch", "crm_campaign": campaign, "crm_contact": ["in", matches]},
+			filters={
+				"engagement_kind": "campaign_touch",
+				"crm_campaign": campaign,
+				"crm_contact": ["in", matches],
+			},
 			fields=["crm_contact", "source", "crm_segment"],
 		)
 		for row in engagement_rows:
 			existing_by_contact[row.crm_contact] = row
-	contact_students = {
-		contact: next(iter(students_for_contact(contact)), None)
-		for contact in matches
-	}
+	contact_students = {contact: next(iter(students_for_contact(contact)), None) for contact in matches}
 
 	to_insert = []
 	skipped_same_segment = 0
@@ -245,6 +118,18 @@ def attach_segment_to_campaign(segment, campaign):
 	for i in range(0, len(to_insert), ATTACH_BATCH_SIZE):
 		batch = to_insert[i : i + ATTACH_BATCH_SIZE]
 		try:
+			current = frappe.get_doc("CRM Segment", segment, for_update=True)
+			current.check_permission("read")
+			frappe.get_doc("CRM Campaign", campaign).check_permission("write")
+			if current.status != "active" or current.revision != segment_doc.revision:
+				fail("Segment changed during attachment; retry with current rules.", "REVISION_CONFLICT")
+			visible = set(
+				frappe.get_list(
+					"CRM Student", filters={"name": ["in", batch]}, pluck="name", limit_page_length=0
+				)
+			)
+			if visible != set(batch):
+				fail("Student scope changed during attachment.", "FORBIDDEN", permission=True)
 			for contact in batch:
 				student = contact_students.get(contact)
 				if not student:

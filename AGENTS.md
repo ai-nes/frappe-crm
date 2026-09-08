@@ -146,13 +146,9 @@ Không commit `node_modules`, `.env*`, credentials hoặc file sinh ra từ môi
 <!-- hs-skills:begin -->
 # HS Skills runtime instructions
 
-Shared skills are installed in `.agents/skills/`. Follow the project AGENTS.md instructions
-and use the installed skills when their descriptions match the task.
-Runtime support files are in `.agents/`; do not assume Claude-specific tools, paths, or
-environment variables are available.
-
+Shared skills are installed in `.agents/skills/`. Follow the project AGENTS.md instructions and use the installed skills when their descriptions match the task.
+Runtime support files are in `.agents/`; do not assume Claude-specific tools, paths, or environment variables are available.
 <!-- hs-skills:end -->
-
 <!-- CODEGRAPH_START -->
 ## CodeGraph
 
@@ -163,3 +159,4 @@ In repositories indexed by CodeGraph (a `.codegraph/` directory exists at the re
 
 If there is no `.codegraph/` directory, skip CodeGraph entirely — indexing is the user's decision.
 <!-- CODEGRAPH_END -->
+

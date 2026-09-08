@@ -10,6 +10,37 @@ STUDENT_STAGES = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
 TERMINAL_STAGES = frozenset({"Qualified", "Disqualified"})
 SERVICE_FLAG = "student_stage_service"
 
+# ``enrollment_status`` is retained only as a compatibility projection while
+# older CRM modules are being retired.  New workflows must use this funnel.
+LEGACY_ENROLLMENT_STATUS_TO_STUDENT_STAGE = {
+	"NEW": "New",
+	"PROSPECT": "Attempting",
+	"CONFIRMED": "Qualified",
+	"ENROLLED": "Connected",
+	"REFUSED": "Disqualified",
+	"FOLLOW_UP": "Attempting",
+	"CONVERTED": "Qualified",
+	"MỚI": "New",
+	"CÓ TRIỂN VỌNG": "Attempting",
+	"ĐÃ XÁC NHẬN": "Qualified",
+	"ĐÃ NHẬP HỌC": "Connected",
+	"TỪ CHỐI": "Disqualified",
+}
+STUDENT_STAGE_TO_LEGACY_ENROLLMENT_STATUS = {
+	"New": "NEW",
+	"Attempting": "PROSPECT",
+	"Connected": "ENROLLED",
+	"Qualified": "CONFIRMED",
+	"Disqualified": "REFUSED",
+}
+STUDENT_STAGE_TO_LEGACY_LIFECYCLE_STAGE = {
+	"New": "Lead",
+	"Attempting": "MQL",
+	"Connected": "Enrolled",
+	"Qualified": "Applicant",
+	"Disqualified": "Lost",
+}
+
 _NEXT_STAGES = {
 	"New": frozenset({"Attempting"}),
 	"Attempting": frozenset({"Connected"}),
@@ -52,6 +83,12 @@ def validate_transition(current: Any, target: Any) -> tuple[str, str]:
 	return current_stage, target_stage
 
 
+def stage_from_enrollment_status(status: Any) -> str:
+	"""Map a legacy enrollment status into the canonical contact funnel."""
+	value = str(status or "").strip()
+	return LEGACY_ENROLLMENT_STATUS_TO_STUDENT_STAGE.get(value.upper(), "New")
+
+
 def _load_student(student: str):
 	if not isinstance(student, str) or not student.strip():
 		_fail("INVALID_INPUT", "student is required.")
@@ -90,14 +127,17 @@ def set_student_stage(
 			frappe.db.set_value(
 				"CRM Student",
 				doc.name,
-				"student_stage",
-				target_stage,
+				{
+					"student_stage": target_stage,
+					"enrollment_status": STUDENT_STAGE_TO_LEGACY_ENROLLMENT_STATUS[target_stage],
+					"lifecycle_stage": STUDENT_STAGE_TO_LEGACY_LIFECYCLE_STAGE[target_stage],
+				},
 				update_modified=True,
 			)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
-		from crm.services.student_context import bump_student_context_revision
 		from crm.fcrm.nba_evaluations import mark_student_nba_dirty
+		from crm.services.student_context import bump_student_context_revision
 
 		change = bump_student_context_revision(
 			doc.name,
