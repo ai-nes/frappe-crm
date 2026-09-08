@@ -18,9 +18,11 @@ from crm.api.student_decision_context import (
 	_ENGAGEMENT_MAP,
 	_canonical_label,
 	_academic_projection,
+	_application_projection,
 	_contactability_projection,
 	_consent_scope_channels,
 	_days_to_deadline,
+	_days_to_deadline_from_date,
 	_intent_observation_count,
 	_interaction_recency,
 	_recent_actions,
@@ -144,6 +146,71 @@ class TestDecisionEvidenceSignals(FrappeTestCase):
 			return_value=[{"deadline": soon}],
 		):
 			self.assertEqual(_days_to_deadline("STU-1"), 2)
+
+	def test_deadline_binds_to_the_same_application_the_state_describes(self):
+		"""Counterexample for the producer bug: a student with two open
+		applications on different deadlines must not get one application's
+		completeness paired with the OTHER application's deadline.
+
+		Application A: most recently modified, missing a document, due in 40
+		days. Application B: older, complete, due in 6 days. Before the fix,
+		`application_state` came from A (via `_application_projection`'s
+		"prefer newest non-terminal" order) while `days_to_deadline` came from
+		an independent nearest-deadline query that picked B -- describing
+		neither application. After the fix, `days_to_deadline` is derived from
+		`_application_projection`'s own selected row, so both signals describe
+		application A.
+		"""
+		import frappe
+
+		today = frappe.utils.getdate()
+		deadline_a = frappe.utils.add_to_date(today, days=40)
+		deadline_b = frappe.utils.add_to_date(today, days=6)
+		row_a = {
+			"name": "APP-A",
+			"status": "Submitted",
+			"document_total": 3,
+			"document_completed": 2,
+			"deadline": deadline_a,
+			"modified": "2026-09-08 10:00:00",
+		}
+		row_b = {
+			"name": "APP-B",
+			"status": "Under Review",
+			"document_total": 3,
+			"document_completed": 3,
+			"deadline": deadline_b,
+			"modified": "2026-08-01 10:00:00",
+		}
+
+		# `_application_projection` orders by `modified desc` -- row_a wins.
+		with patch(
+			"crm.api.student_decision_context.frappe.get_all",
+			return_value=[row_a, row_b],
+		):
+			application = _application_projection("STU-1")
+
+		self.assertEqual(application["completeness"], "partial")
+		self.assertEqual(application["deadline"], deadline_a)
+
+		# Fixed behavior: days_to_deadline derives from the SAME row.
+		fixed_days = _days_to_deadline_from_date(application["deadline"], at=today)
+		self.assertEqual(fixed_days, 40)
+
+		# The bug this replaces: an independent nearest-deadline query (as
+		# `_days_to_deadline` still performs, standalone) would have picked
+		# row_b -- 6 days -- mismatched against application A's state above.
+		with patch(
+			"crm.api.student_decision_context.frappe.get_all",
+			return_value=[{"deadline": deadline_b}],
+		):
+			mismatched_days = _days_to_deadline("STU-1", at=today)
+		self.assertEqual(mismatched_days, 6)
+		self.assertNotEqual(
+			fixed_days,
+			mismatched_days,
+			"fixture is only meaningful if the two selections actually disagree",
+		)
 
 	def test_recent_actions_projects_canonical_semantic_fields_only(self):
 		rows = [

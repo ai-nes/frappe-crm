@@ -349,13 +349,28 @@ def _intent_observation_count(student: str, intent_type: str | None) -> int:
 	return frappe.db.count("CRM Intent", {"student": student, "intent_type": intent_type})
 
 
+def _days_to_deadline_from_date(deadline, *, at=None) -> int | None:
+	"""Whole days from ``at`` to ``deadline``. Negative once the deadline has passed."""
+	if not deadline:
+		return None
+	delta = frappe.utils.getdate(deadline) - frappe.utils.getdate(at or frappe.utils.now_datetime())
+	return delta.days
+
+
 def _days_to_deadline(student: str, *, at=None) -> int | None:
 	"""Whole days until the nearest open admission-application deadline.
 
 	A hard "why now" signal and the override the WAIT pre-check needs: a looming
 	cut-off outranks "we spoke recently". Only non-terminal applications count;
-	an already Enrolled/Lost/Withdrawn row carries no live obligation. Negative
-	when the deadline is already past.
+	an already Enrolled/Lost/Withdrawn row carries no live obligation.
+
+	Kept as a standalone nearest-deadline query for direct callers/tests. The
+	student-context assembler does NOT call this: it derives days-to-deadline
+	from ``_application_projection``'s own selected row instead, so the
+	deadline shown always describes the same application as
+	``application_state`` (a student with two open applications on different
+	deadlines must never get one application's completeness paired with the
+	other's deadline).
 	"""
 	rows = frappe.get_all(
 		"CRM Admission Application",
@@ -369,10 +384,9 @@ def _days_to_deadline(student: str, *, at=None) -> int | None:
 		limit_page_length=1,
 		ignore_permissions=True,
 	)
-	if not rows or not rows[0].get("deadline"):
+	if not rows:
 		return None
-	delta = frappe.utils.getdate(rows[0]["deadline"]) - frappe.utils.getdate(at or frappe.utils.now_datetime())
-	return delta.days
+	return _days_to_deadline_from_date(rows[0].get("deadline"), at=at)
 
 
 def _recent_actions(student: str) -> list[dict]:
@@ -546,7 +560,11 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"academic": academic,
 		"contactability": contactability,
 		"parent_authority": {"valid": bool(parent_authority_is_valid(student))},
-		"days_to_deadline": _days_to_deadline(student, at=evaluated_at),
+		# Sourced from the application row `_application_projection` selected
+		# above, not an independent nearest-deadline query -- keeps
+		# `application_state` and `days_to_deadline` describing the same
+		# application (see `_days_to_deadline`'s docstring).
+		"days_to_deadline": _days_to_deadline_from_date(application.get("deadline"), at=evaluated_at),
 	}
 	allowed_actions = context["allowed_action_types"]
 	parent_authorized = parent_authority_is_valid(student)
