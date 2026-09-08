@@ -5,11 +5,12 @@ admissions lifecycle and conversion commands:
 
     NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
-CCCD, high school, and major are required before resolution. Phone, email, and
-province remain routing/contact context, not conversion gates. Only MATCHED and
-CREATED may be assigned; terminal resolutions close the Lead without invoking
-conversion. Successful handoff delegates conversion to the existing command
-and therefore remains fail-closed behind its rollout and integrity checks.
+Phone, province, high school, and major are required before resolution. CCCD
+remains optional and is used for duplicate/Student matching when present. Only
+MATCHED and CREATED may be assigned; terminal resolutions close the Lead without
+invoking conversion. Successful handoff delegates conversion to the existing
+command and therefore remains fail-closed behind its rollout and integrity
+checks.
 
 A CLOSED Lead is not a dead end: reopen_lead sends a corrected record back to
 NEW and replays intake, so assignment never sees an unvalidated Lead.
@@ -82,10 +83,15 @@ def _normalise_identifiers(lead) -> dict[str, str]:
 	email = normalize_email(lead.get("email"))
 	province = _normalise_province(lead.get("province"))
 	blockers = conversion_blockers(lead)
-	if not id_number:
-		blockers = [*blockers] if "missing_id_number" in blockers else [*blockers, "missing_id_number"]
+	if not phone and "missing_phone" not in blockers:
+		blockers = [*blockers, "missing_phone"]
+	if not province and "missing_province" not in blockers:
+		blockers = [*blockers, "missing_province"]
 	if blockers:
-		_fail("IDENTIFIER_GATE_FAILED", "CCCD, trường THPT và ngành quan tâm là bắt buộc trước khi xử lý.")
+		_fail(
+			"IDENTIFIER_GATE_FAILED",
+			"Số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm là bắt buộc trước khi xử lý.",
+		)
 	return {
 		"id_number": id_number,
 		"high_school": high_school,
@@ -93,6 +99,15 @@ def _normalise_identifiers(lead) -> dict[str, str]:
 		"phone": phone or "",
 		"email": email or "",
 		"province": province,
+	}
+
+
+def _processing_validation(lead) -> dict[str, bool]:
+	return {
+		"phone": bool(normalize_phone(lead.get("phone"))),
+		"province": bool(_normalise_province(lead.get("province"))),
+		"high_school": bool(str(lead.get("high_school") or "").strip()),
+		"major": bool(str(lead.get("major") or "").strip()),
 	}
 
 
@@ -189,7 +204,7 @@ def preview_lead(lead: str) -> dict[str, Any]:
 		"resolution": resolution,
 		"lead": lead_doc.name,
 		"target_student": target_student,
-		"validation": {"id_number": True, "high_school": True, "major": True},
+		"validation": _processing_validation(lead_doc),
 	}
 
 
@@ -279,17 +294,13 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 	try:
 		identifiers = _normalise_identifiers(lead_doc)
 	except LeadProcessingError:
-		validation = {
-			"id_number": bool(normalize_national_id(lead_doc.get("id_number"))),
-			"high_school": bool(str(lead_doc.get("high_school") or "").strip()),
-			"major": bool(str(lead_doc.get("major") or "").strip()),
-		}
+		validation = _processing_validation(lead_doc)
 		_set_processing_values(
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
 				"resolution": "INVALID",
-				"resolution_reason": "Thiếu CCCD, trường THPT hoặc ngành quan tâm.",
+				"resolution_reason": "Thiếu số điện thoại, tỉnh/thành phố, trường THPT hoặc ngành quan tâm.",
 			},
 		)
 		return {
@@ -328,7 +339,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		"resolution": final_resolution,
 		"lead": lead_doc.name,
 		"target_student": target_student,
-		"validation": {"id_number": True, "high_school": True, "major": True},
+		"validation": _processing_validation(lead_doc),
 	}
 
 
@@ -337,8 +348,9 @@ def reopen_lead(lead: str, reason: str | None = None) -> dict[str, Any]:
 
 	Assignment closes any Lead whose routing data cannot be resolved, and the
 	operator then fixes that data. The Lead goes back through intake instead of
-	jumping straight to PROCESSED: a record still missing CCCD, high school or
-	major closes again here rather than reaching assignment unvalidated.
+	jumping straight to PROCESSED: a record still missing phone, province, high
+	school, or major closes again here rather than reaching assignment
+	unvalidated.
 	"""
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) != "CLOSED":

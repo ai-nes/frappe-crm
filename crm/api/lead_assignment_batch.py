@@ -68,7 +68,108 @@ PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
 	}
 )
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
-	{"student_name", "phone", "province", "high_school", "major", "id_number", "source"}
+	{"student_name", "phone", "province", "high_school", "major", "source"}
+)
+
+LEAD_ASSIGNMENT_WORKFLOW_CONNECTIONS = (
+	{"source": "input", "target": "validation", "label": None},
+	{"source": "validation", "target": "classification", "label": "Đủ dữ liệu"},
+	{"source": "classification", "target": "matching", "label": "Đủ thông tin tuyến"},
+	{
+		"source": "classification",
+		"target": "review",
+		"label": "Cần bổ sung / duplicate",
+	},
+	{"source": "matching", "target": "assignment", "label": "Có quy tắc và sức chứa"},
+	{"source": "matching", "target": "review", "label": "Tạm hoãn hoặc lỗi"},
+	{"source": "review", "target": "assignment", "label": "Sau khi xử lý lại"},
+)
+
+LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
+	(
+		"input",
+		{
+			"title": "Bước 1 · Tiếp nhận Lead",
+			"description": "Lead đã được hệ thống nhận diện để phân công",
+			"detail": "Hệ thống lấy các Lead đã qua bước Xử lý Lead mà chưa có người phụ trách.",
+			"rules": [
+				"Mỗi lần chạy có kết quả riêng để theo dõi.",
+				"Thông tin gốc được giữ lại để đối chiếu.",
+				"Nguồn tiếp nhận Lead nằm ngoài màn hình này.",
+			],
+			"tone": "blue",
+		},
+	),
+	(
+		"validation",
+		{
+			"title": "Bước 2 · Kiểm tra điều kiện",
+			"description": "Số điện thoại · Tỉnh · Trường THPT · Ngành quan tâm",
+			"detail": "Điều kiện dữ liệu được kiểm tra ở bước Xử lý Lead; đợt phân công chỉ nhận Lead đã đạt.",
+			"rules": [
+				"Hồ sơ thiếu trường bắt buộc được giữ lại để người dùng xử lý.",
+				"Hệ thống không tự bổ sung hoặc suy đoán thông tin.",
+				"Đợt chỉ chuyển sang trạng thái đã kiểm tra khi hệ thống hoàn tất bước này.",
+			],
+			"tone": "neutral",
+		},
+	),
+	(
+		"classification",
+		{
+			"title": "Bước 3 · Xác định kết quả xử lý",
+			"description": "MATCHED · CREATED · DUPLICATE",
+			"detail": "Hệ thống xác định kết quả xử lý của từng Lead.",
+			"rules": [
+				"Kết quả MATCHED, CREATED hoặc DUPLICATE do hệ thống quyết định.",
+				"Người dùng không tự thay đổi kết quả xử lý.",
+				"Thông tin gốc của từng Lead vẫn được hiển thị để kiểm tra.",
+			],
+			"tone": "blue",
+		},
+	),
+	(
+		"matching",
+		{
+			"title": "Bước 4 · Tìm Team theo tỉnh",
+			"description": "Tỉnh · Team phụ trách · Sức chứa",
+			"detail": "Hệ thống tìm các Team đang phụ trách tỉnh của Lead rồi chọn Team có Sale/CTV phù hợp.",
+			"rules": [
+				"Tỉnh của Lead được dùng làm căn cứ tìm Team.",
+				"Một tỉnh có thể có nhiều Team cùng phụ trách.",
+				"Team không có người đang hoạt động sẽ không được chọn.",
+			],
+			"tone": "primary",
+		},
+	),
+	(
+		"review",
+		{
+			"title": "Ngoại lệ cần xử lý",
+			"description": "Cần kiểm tra · Tạm hoãn · Lỗi xử lý",
+			"detail": "Các hồ sơ chưa thể phân công được đưa vào danh sách cần kiểm tra hoặc xử lý lại.",
+			"rules": [
+				"Hồ sơ cần kiểm tra phải được bổ sung hoặc xác nhận lại.",
+				"Hồ sơ tạm hoãn có thể được xử lý lại khi điều kiện thay đổi.",
+				"Hồ sơ lỗi hiển thị mã lỗi và nguyên nhân do hệ thống trả về.",
+			],
+			"tone": "warning",
+		},
+	),
+	(
+		"assignment",
+		{
+			"title": "Bước 5 · Ghi nhận người phụ trách",
+			"description": "Team · Sale/CTV · Tải hiện tại",
+			"detail": "Kết quả phân công được lưu cùng Team, tỉnh, Sale/CTV và tải tại thời điểm chọn.",
+			"rules": [
+				"Lead Sale chỉ quản lý Team, không được nhận Lead.",
+				"Sale và CTV Sale được chọn theo tải hiện tại và giới hạn nhận.",
+				"Sau khi phân công, có thể xem lại lý do và người được chọn.",
+			],
+			"tone": "success",
+		},
+	),
 )
 
 
@@ -687,6 +788,149 @@ def _serialize_item(item) -> dict[str, Any]:
 	}
 
 
+def _batch_summary(batch) -> dict[str, int]:
+	_count_items(batch)
+	return {
+		"total": batch.total_count,
+		"valid": max(0, batch.total_count - batch.manual_review_count),
+		"invalid": batch.manual_review_count,
+		"pending": sum(item.status == "pending" for item in batch.items),
+		"assigned": batch.assigned_count,
+		"deferred": batch.deferred_count,
+		"manualReview": batch.manual_review_count,
+		"failed": batch.failed_count,
+		"skipped": sum(item.status == "skipped" for item in batch.items),
+	}
+
+
+def _serialize_batch_header(batch) -> dict[str, Any]:
+	return {
+		"id": batch.name,
+		"batchName": batch.batch_name,
+		"description": batch.description,
+		"status": batch.status,
+		"itemCount": batch.total_count,
+		"summary": _batch_summary(batch),
+		"createdAt": str(batch.get("creation")) if batch.get("creation") else None,
+		"updatedAt": str(batch.get("modified")) if batch.get("modified") else None,
+		"previewedAt": str(batch.get("previewed_at")) if batch.get("previewed_at") else None,
+		"completedAt": str(batch.get("completed_at")) if batch.get("completed_at") else None,
+	}
+
+
+def _workflow_metrics(summary: dict[str, int], step_id: str) -> dict[str, int]:
+	attention = summary["deferred"] + summary["manualReview"]
+	if step_id == "input":
+		return {
+			"processedCount": summary["total"],
+			"successCount": summary["total"],
+			"warningCount": summary["invalid"],
+			"errorCount": 0,
+		}
+	if step_id == "validation":
+		return {
+			"processedCount": summary["total"],
+			"successCount": summary["valid"],
+			"warningCount": summary["invalid"],
+			"errorCount": 0,
+		}
+	if step_id == "classification":
+		return {
+			"processedCount": summary["valid"],
+			"successCount": max(0, summary["valid"] - summary["failed"]),
+			"warningCount": attention,
+			"errorCount": summary["failed"],
+		}
+	if step_id == "matching":
+		return {
+			"processedCount": summary["valid"],
+			"successCount": summary["assigned"],
+			"warningCount": attention,
+			"errorCount": summary["failed"],
+		}
+	if step_id == "review":
+		return {
+			"processedCount": attention + summary["failed"],
+			"successCount": 0,
+			"warningCount": attention,
+			"errorCount": summary["failed"],
+		}
+	return {
+		"processedCount": summary["total"],
+		"successCount": summary["assigned"],
+		"warningCount": attention,
+		"errorCount": summary["failed"],
+	}
+
+
+def _workflow_status(batch_status: str | None, step_id: str, summary: dict[str, int]) -> str:
+	if not batch_status:
+		return "idle"
+	attention_count = summary["deferred"] + summary["manualReview"] + summary["failed"]
+	has_lead = summary["total"] > 0
+	if batch_status == "draft":
+		if step_id == "input":
+			return "success" if has_lead else "idle"
+		if step_id == "validation" and has_lead:
+			return "running"
+		return "idle"
+	if batch_status == "ready":
+		if step_id in {"input", "validation", "classification", "matching"}:
+			return "success"
+		return "warning" if step_id == "review" and attention_count else "idle"
+	if batch_status == "running":
+		if step_id in {"input", "validation", "classification", "matching"}:
+			return "success"
+		if step_id == "assignment":
+			return "running"
+		return "warning" if step_id == "review" and attention_count else "idle"
+	if batch_status == "completed":
+		return "success"
+	if batch_status == "completed_with_errors":
+		if step_id == "review":
+			return "warning"
+		if step_id == "assignment" and summary["assigned"] == 0:
+			return "error"
+		return "success"
+	if batch_status == "cancelled":
+		if step_id == "assignment":
+			return "error"
+		return "success" if step_id == "input" else "idle"
+	return "idle"
+
+
+def _serialize_assignment_workflow(batch=None) -> dict[str, Any]:
+	summary = (
+		_batch_summary(batch)
+		if batch
+		else {
+			"total": 0,
+			"valid": 0,
+			"invalid": 0,
+			"pending": 0,
+			"assigned": 0,
+			"deferred": 0,
+			"manualReview": 0,
+			"failed": 0,
+			"skipped": 0,
+		}
+	)
+	return {
+		"hasRun": bool(batch),
+		"batch": _serialize_batch_header(batch) if batch else None,
+		"connections": list(LEAD_ASSIGNMENT_WORKFLOW_CONNECTIONS),
+		"steps": [
+			{
+				"id": step_id,
+				**definition,
+				"status": _workflow_status(batch.status if batch else None, step_id, summary),
+				"metrics": _workflow_metrics(summary, step_id),
+			}
+			for step_id, definition in LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS
+		],
+	}
+
+
 def _serialize_batch(batch) -> dict[str, Any]:
 	_count_items(batch)
 	return {
@@ -702,17 +946,7 @@ def _serialize_batch(batch) -> dict[str, Any]:
 		"executionId": batch.execution_id,
 		"startedAt": str(batch.started_at) if batch.started_at else None,
 		"completedAt": str(batch.completed_at) if batch.completed_at else None,
-		"summary": {
-			"total": batch.total_count,
-			"valid": max(0, batch.total_count - batch.manual_review_count),
-			"invalid": batch.manual_review_count,
-			"pending": sum(item.status == "pending" for item in batch.items),
-			"assigned": batch.assigned_count,
-			"deferred": batch.deferred_count,
-			"manualReview": batch.manual_review_count,
-			"failed": batch.failed_count,
-			"skipped": sum(item.status == "skipped" for item in batch.items),
-		},
+		"summary": _batch_summary(batch),
 		"items": [_serialize_item(item) for item in batch.items],
 	}
 
@@ -835,7 +1069,6 @@ def _create_batch_import_lead(row: dict[str, Any], actor_context: dict[str, Any]
 	for fieldname, label in (
 		("student_name", "Họ và tên"),
 		("phone", "Di động"),
-		("id_number", "CCCD"),
 		("province", "Tỉnh/Thành phố"),
 		("high_school", "Trường THPT"),
 		("major", "Ngành quan tâm"),
@@ -1299,6 +1532,24 @@ def get_lead_assignment_batch(batch_name: str):
 	if batch.pool:
 		_pool(batch.pool, None, actor_context)
 	return _serialize_batch(batch)
+
+
+@frappe.whitelist()
+def get_lead_assignment_workflow(batch_name: str | None = None):
+	"""Return the workflow projection from the latest or selected DB batch."""
+	actor_context = _require_read_access()
+	batch = None
+	if batch_name:
+		batch = frappe.get_doc(BATCH_DOCTYPE, batch_name)
+		if batch.pool:
+			_pool(batch.pool, None, actor_context)
+	else:
+		latest = list_lead_assignment_batches(limit=1, page=1, page_size=1)
+		latest_row = (latest.get("items") or [None])[0]
+		if latest_row:
+			batch = frappe.get_doc(BATCH_DOCTYPE, latest_row["name"])
+
+	return _serialize_assignment_workflow(batch)
 
 
 @frappe.whitelist()

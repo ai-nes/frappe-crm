@@ -180,10 +180,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"major": "Business Administration",
 		"id": "075303000015",
 		"defect": {
-			"code": "INVALID_MISSING_ID_NUMBER",
+			"code": "INVALID_MISSING_PHONE",
 			"expected": "manual_review",
-			"note": "Thiếu CCCD → xử lý Lead trả INVALID.",
-			"fields": {"id_number": None},
+			"note": "Thiếu số điện thoại → xử lý Lead trả INVALID.",
+			"fields": {"phone": None},
 		},
 	},
 	{

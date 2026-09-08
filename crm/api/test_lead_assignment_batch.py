@@ -86,6 +86,45 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			"PROVINCE:PROVINCE-HCM",
 		)
 
+	def test_assignment_workflow_maps_latest_batch_summary_to_steps(self):
+		class WorkflowBatch(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+		batch = WorkflowBatch(
+			name="BATCH-1",
+			batch_name="Phân công Lead 1",
+			description="Scan Lead chưa có người phụ trách",
+			status="completed_with_errors",
+			items=[
+				frappe._dict(status="assigned"),
+				frappe._dict(status="manual_review"),
+				frappe._dict(status="failed"),
+			],
+			creation="2026-09-08 10:00:00",
+			modified="2026-09-08 10:01:00",
+			previewed_at=None,
+			completed_at="2026-09-08 10:01:00",
+		)
+
+		workflow = lead_assignment_batch._serialize_assignment_workflow(batch)
+		steps = {step["id"]: step for step in workflow["steps"]}
+
+		self.assertTrue(workflow["hasRun"])
+		self.assertEqual(workflow["batch"]["summary"]["total"], 3)
+		self.assertEqual(steps["validation"]["metrics"]["successCount"], 2)
+		self.assertEqual(steps["review"]["metrics"]["processedCount"], 2)
+		self.assertEqual(steps["review"]["status"], "warning")
+		self.assertEqual(steps["assignment"]["metrics"]["successCount"], 1)
+
+	def test_assignment_workflow_without_batch_is_idle_and_empty(self):
+		workflow = lead_assignment_batch._serialize_assignment_workflow()
+
+		self.assertFalse(workflow["hasRun"])
+		self.assertIsNone(workflow["batch"])
+		self.assertTrue(all(step["status"] == "idle" for step in workflow["steps"]))
+		self.assertTrue(all(step["metrics"]["processedCount"] == 0 for step in workflow["steps"]))
+
 	def test_apply_result_keeps_routing_reason_and_capacity_fields(self):
 		item = SimpleNamespace(
 			name="ITEM-1",
@@ -222,6 +261,14 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(rows[0]["high_school"], "THPT A")
 		self.assertEqual(rows[0]["major"], "Công nghệ thông tin")
 		self.assertEqual(rows[0]["id_number"], "012345678901")
+
+	def test_batch_import_accepts_missing_optional_cccd(self):
+		rows = lead_assignment_batch._parse_batch_import_rows(
+			None,
+			"Họ và tên,Số điện thoại,Tỉnh/Thành phố,Trường THPT,Ngành quan tâm,Nguồn\n"
+			"Nguyễn Văn A,0900000000,Ho Chi Minh City,THPT A,Công nghệ thông tin,Website\n",
+		)
+		self.assertNotIn("id_number", rows[0])
 
 	def test_province_selection_uses_all_eligible_teams_and_current_load(self):
 		teams = [

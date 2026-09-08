@@ -255,8 +255,14 @@ Tất cả API trả dữ liệu trong `response.message` theo chuẩn Frappe.
 | `crm.api.lead_processing.process_new_leads`                       | POST | Quét toàn bộ Lead `NEW` (tuỳ chọn `admission_year`, `limit`) và chạy điều kiện dữ liệu cho từng Lead.     |
 | `crm.api.lead_assignment_batch.retry_lead_assignment_batch`       | POST | Chạy lại item lỗi/deferred/manual review.                                                                 |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch`         | GET  | Lấy chi tiết một batch và item.                                                                           |
+| `crm.api.lead_assignment_batch.get_lead_assignment_workflow`      | GET  | Lấy snapshot workflow và metrics từ batch được chọn hoặc batch gần nhất trong DB.                         |
 | `crm.api.lead_assignment_batch.list_lead_assignment_batches`      | GET  | Lấy lịch sử các batch.                                                                                    |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch_options` | GET  | Lấy option pool nội bộ nếu cần kiểm tra quyền; không cần hiển thị cho người dùng thường.                  |
+
+`get_lead_assignment_workflow` nhận tùy chọn `batch_name`. Nếu không truyền, API lấy
+batch gần nhất trong phạm vi quyền của người dùng. Response trả `batch.summary`,
+`steps` (status và metrics của từng bước) và `connections`; các giá trị này được tính
+từ các bản ghi batch/item đã lưu, không phải số liệu mặc định do frontend dựng.
 
 ### 5.4. Import batch
 

@@ -23,11 +23,10 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			{"MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED"},
 		)
 
-	def test_identifier_gate_requires_cccd_high_school_and_major(self):
+	def test_identifier_gate_requires_phone_province_high_school_and_major(self):
 		from crm.fcrm.lead_processing import LeadProcessingError, _normalise_identifiers
 
 		valid = {
-			"id_number": " 012345678901 ",
 			"high_school": " THPT A ",
 			"major": " Công nghệ thông tin ",
 			"email": " Student@Example.com ",
@@ -37,7 +36,7 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertEqual(
 			_normalise_identifiers(valid),
 			{
-				"id_number": "012345678901",
+				"id_number": None,
 				"high_school": "thpt a",
 				"major": "công nghệ thông tin",
 				"email": "student@example.com",
@@ -46,7 +45,7 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			},
 		)
 
-		invalid = {"id_number": "", "high_school": None, "major": None}
+		invalid = {"phone": "", "province": "", "high_school": None, "major": None}
 		with self.assertRaises(LeadProcessingError) as ctx:
 			_normalise_identifiers(invalid)
 		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
@@ -78,7 +77,9 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		):
 			result = lead_processing.process_new_leads(admission_year="2026")
 
-		self.assertEqual(scan.call_args.kwargs["filters"], {"processing_status": "NEW", "admission_year": "2026"})
+		self.assertEqual(
+			scan.call_args.kwargs["filters"], {"processing_status": "NEW", "admission_year": "2026"}
+		)
 		self.assertEqual(
 			result["summary"],
 			{"scanned": 3, "processed": 1, "closed": 1, "skipped": 1, "failed": 0},
@@ -159,7 +160,8 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 
 		self.assertEqual(result["status"], "CLOSED")
 		self.assertEqual(result["resolution"], "INVALID")
-		self.assertFalse(result["validation"]["id_number"])
+		self.assertTrue(result["validation"]["phone"])
+		self.assertFalse(result["validation"]["province"])
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
 
 	def test_status_command_persists_every_supported_status(self):
@@ -198,15 +200,14 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		self.assertTrue(province)
 		self.assertTrue(high_school)
 		self.assertTrue(major)
-		lead = self._new_lead(
-			"Created", province=province, id_number="012345678901", high_school=high_school, major=major
-		)
+		lead = self._new_lead("Created", province=province, high_school=high_school, major=major)
 		result = process_lead(lead.name)
 
 		self.assertEqual(result["status"], "PROCESSED")
 		self.assertEqual(result["resolution"], "CREATED")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "CREATED")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "PROCESSED")
+		self.assertNotIn("id_number", result["validation"])
 
 	def test_student_stage_command_advances_one_edge(self):
 		from crm.fcrm.student_stage import set_student_stage
