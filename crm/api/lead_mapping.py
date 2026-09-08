@@ -41,6 +41,8 @@ PUBLIC_LEAD_LIST_FIELDS = (
 	"phone",
 	"email",
 	"major",
+	"province",
+	"ward",
 	"lead_status",
 	"campaign",
 	"creation",

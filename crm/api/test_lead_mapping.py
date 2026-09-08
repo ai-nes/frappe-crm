@@ -234,6 +234,8 @@ class TestLeadMappingContract(TestCase):
 				"phone": "0900000001",
 				"email": "an@example.com",
 				"major": "Software Engineering",
+				"province": "Hồ Chí Minh",
+				"ward": "Phường Bến Nghé",
 				"lead_status": "New",
 				"campaign": "Campaign 1",
 				"creation": "2026-09-15 12:30:00",
