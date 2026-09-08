@@ -23,18 +23,26 @@ capabilities and organization scope from the authenticated Frappe identity.
   other non-global profiles still require Department and Campus.
 - Preserved password, enabled state and privileged accounts. Repair remains
   transactional and fails closed.
+- Normalized legacy `CTV-Sale` (and other known legacy membership functions)
+  before saving existing Staff records, preventing Frappe Select validation
+  failures during repair.
 
 ## Verification
 
 - Ruff format/check passed.
 - Python compile passed.
-- Seven focused unit tests passed with a minimal Frappe stub.
-- Docker/Frappe integration was unavailable on the host because Docker Desktop
-  was not running; production smoke test remains a deployment step.
+- The first production repair attempt rolled back atomically when it found the
+  legacy `CTV-Sale` child value; no partial repair remained.
+- CI Docker build/push and EC2 deploy passed for commit `78c3dc1`.
+- Production audit found 43 accounts and repaired 25 affected accounts.
+- Follow-up production audit: 43 healthy, 0 blocking issues, 0 warnings.
+- Direct read-only API smoke passed for `sale@gmail.com` and
+  `leadsale@gmail.com` on assignment history and team management.
+- Production `bench run-tests` was intentionally not enabled because the site
+  has `allow_tests` disabled; no production configuration was changed for
+  testing.
 
 ## Next
 
-Deploy the code, run the read-only audit on the production site, repair only
-explicitly approved mappings using existing Department/Campus/Team records,
-then test fresh sessions for assignment history, student assignment and team
-management.
+Users should sign out and sign in again, then refresh the dashboard pages so
+their browser sessions pick up the repaired CRM Staff identity.
