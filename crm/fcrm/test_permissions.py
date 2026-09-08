@@ -142,6 +142,13 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			self.assertIn(frappe.db.escape(team.name), condition)
 			self.assertIn("owner_staff is not null", condition)
 			self.assertIn("assigned_to is not null", condition)
+			self.assertIn("owner_staff is null", condition)
+			self.assertIn("assigned_to is null", condition)
+
+			lead_condition = get_student_list_read_condition(user=user, doctype="CRM Lead")
+			self.assertIn(frappe.db.escape(province.name), lead_condition)
+			self.assertIn("owner_staff is null", lead_condition)
+			self.assertIn("assigned_to is null", lead_condition)
 			# The canonical CRUD scope remains unchanged because this user has no
 			# child Team Membership row.
 			self.assertEqual(shared_conditions("CRM Student", user=user), "1=0")
@@ -151,8 +158,8 @@ class TestSharedScopingPermissions(FrappeTestCase):
 			frappe.delete_doc("CRM Team Group", group.name, force=True)
 			frappe.delete_doc("CRM Province", province.name, force=True)
 
-	def test_lead_board_read_is_whole_board_for_lead_sale_only(self):
-		"""The Lead Sale board keeps a routed Lead visible; row scope is untouched."""
+	def test_lead_board_full_access_is_separate_from_group_team_list_scope(self):
+		"""Full-board compatibility is retained for detail/write checks only."""
 		lead_user, lead_staff = self._make_user_and_staff(
 			"_Test Scope Lead Board", roles=["Lead Sale"], team=self._team, function="Lead Sale"
 		)
