@@ -20,6 +20,7 @@ from crm.fcrm.lead_code import (
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS, SERVICE_FLAG
 from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
+from crm.fcrm.student_reference import next_hs_code
 from crm.fcrm.utils.geo_resolver import (
 	resolve_high_school_strict,
 	resolve_province,
@@ -47,6 +48,10 @@ class CRMLead(Document):
 		# resolvers ever get a chance to run. We disable it here and re-run it
 		# ourselves at the end of validate(), once geo fields are resolved.
 		self.flags.ignore_links = True
+
+	def autoname(self):
+		"""Use the single HS identifier for new Lead intake records."""
+		self.name = next_hs_code(self.get("admission_year"))
 
 	def before_insert(self):
 		# The code is server-managed; ignore any client/import value.
@@ -105,7 +110,7 @@ class CRMLead(Document):
 		if self.cohort_end_year:
 			self.cohort_start_year = int(self.cohort_end_year) - 3
 		if self.get("lead_code") and not is_valid_lead_code(self.lead_code):
-			frappe.throw(_("Lead Code must match LD-YYYY-NNNNN."), frappe.ValidationError)
+			frappe.throw(_("Student ID must match HS-YYYY-REGION-NNNNNN."), frappe.ValidationError)
 
 	def validate(self):
 		self._validate_processing_contract()

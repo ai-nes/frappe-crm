@@ -8,6 +8,7 @@ topology second, then twenty Lead -> Student chains.
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from crm.demo import (
 	school_domain_import,
 	seed_ctv_sale,
 	seed_demo,
+	seed_golden,
 	seed_lead_api_campaigns,
 	seed_lead_api_lookups,
 	seed_role_accounts,
@@ -90,6 +92,15 @@ LEAD_NAMES = (
 EVENT_TITLE = "Task Seed Open Day 2026"
 ADMISSION_METHOD = "TRANSCRIPT_REVIEW"
 PLATFORM_NAME = "Task Seed Website"
+
+# The task seed is the supported local reset path for the Sales dashboard. Its
+# records are consumed by the durable Student 360 and NBA runtimes, so their
+# feature gates must survive the temporary seed flags after a successful seed.
+LOCAL_AI_RUNTIME_CONFIG = {
+	"crm_intelligence_runs_enabled": 1,
+	"crm_intelligence_writer_epoch": 1,
+	"crm_nba_evaluation_runtime_enabled": 1,
+}
 
 
 def _key(*parts: Any) -> str:
@@ -1096,6 +1107,23 @@ def verify() -> dict[str, Any]:
 	}
 
 
+def _persist_local_ai_runtime_config() -> None:
+	"""Enable the runtimes required by the local task-seed walkthrough."""
+	from frappe.installer import update_site_config
+
+	for key, value in LOCAL_AI_RUNTIME_CONFIG.items():
+		frappe.conf[key] = value
+		update_site_config(key, value, validate=False)
+
+
+def _ensure_local_ai_service_identity() -> dict[str, Any]:
+	"""Restore the service principal used by inline 360/NBA execution."""
+	return seed_golden._ensure_service_identity(
+		os.environ.get("CRM_AGENTS_SERVICE_API_KEY"),
+		os.environ.get("CRM_AGENTS_SERVICE_API_SECRET"),
+	)
+
+
 def seed() -> dict[str, Any]:
 	"""Run the only supported local seed entrypoint."""
 	seed_showcase._assert_local_site()
@@ -1118,6 +1146,9 @@ def seed() -> dict[str, Any]:
 		frappe.db.commit()
 		verification = verify()
 
+	service_identity = _ensure_local_ai_service_identity()
+	_persist_local_ai_runtime_config()
+
 	result = {
 		"namespace": NAMESPACE,
 		"order": ["campaign_domain", "role_accounts", "leads", "students"],
@@ -1136,6 +1167,7 @@ def seed() -> dict[str, Any]:
 		},
 		"records": rows,
 		"verification": verification,
+		"service_identity": service_identity,
 	}
 	print(frappe.as_json(result))
 	return result

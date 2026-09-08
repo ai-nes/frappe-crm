@@ -46,9 +46,7 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 	def test_production_shaped_projection_produces_stable_mapped_envelope(self):
 		student = student_decision_context.frappe._dict(
 			student_context_revision=42,
-			lifecycle_stage="Qualified",
 			student_stage="Connected",
-			enrollment_status=None,
 			assessment_status="partial",
 			assessment_revision=7,
 			interest_level="high",
@@ -82,7 +80,7 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		}
 
 		def get_value(doctype, filters, fields, **kwargs):
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return student
 			if doctype == "CRM Intent":
 				return student_decision_context.frappe._dict(

@@ -1,6 +1,8 @@
+from crm.demo import seed_task
 from crm.demo.seed_task import (
 	EXPECTED_PROVINCE_COUNT,
 	LEAD_COUNT,
+	LOCAL_AI_RUNTIME_CONFIG,
 	SCHOOLS_PER_PROVINCE,
 	build_lead_profiles,
 	owner_account_for_index,
@@ -38,3 +40,19 @@ def test_owner_rotation_excludes_lead_sales_from_direct_ownership():
 	owners = [owner_account_for_index(index)["function"] for index in range(LEAD_COUNT)]
 
 	assert owners == ["CTV Sale", "Sale"] * (LEAD_COUNT // 2)
+
+
+def test_task_seed_persists_ai_runtime_gates_after_seed(monkeypatch):
+	config = {}
+	writes = []
+
+	monkeypatch.setattr(seed_task.frappe, "conf", config)
+	monkeypatch.setattr(
+		"frappe.installer.update_site_config",
+		lambda key, value, validate=False: writes.append((key, value, validate)),
+	)
+
+	seed_task._persist_local_ai_runtime_config()
+
+	assert config == LOCAL_AI_RUNTIME_CONFIG
+	assert writes == [(key, value, False) for key, value in LOCAL_AI_RUNTIME_CONFIG.items()]

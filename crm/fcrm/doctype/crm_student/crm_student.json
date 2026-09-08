@@ -101,7 +101,7 @@
    "fieldtype": "Select",
    "hidden": 1,
    "label": "Series",
-   "options": "CRMC-.YYYY.-"
+   "options": "HS-.YYYY.-HCM-"
   },
   {
    "fieldname": "full_name",
@@ -665,7 +665,7 @@
  "module": "FCRM",
  "name": "CRM Student",
  "naming_rule": "Naming Series",
- "naming_series_options": "CRMC-.YYYY.-",
+ "naming_series_options": "HS-.YYYY.-HCM-",
  "owner": "Administrator",
  "permissions": [
    {"role":"Administrator","read":1,"write":1,"create":1,"delete":1},

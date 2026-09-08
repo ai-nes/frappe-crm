@@ -942,6 +942,7 @@ def create_interaction_from_note_insert(doc, method=None):
 		create_interaction(
 			interaction_type="NOTE",
 			student=doc.reference_docname,
+			crm_contact=doc.reference_docname,
 			reference_doctype="FCRM Note",
 			reference_docname=doc.name,
 			actor=doc.owner,

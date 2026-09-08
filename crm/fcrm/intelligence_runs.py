@@ -28,7 +28,7 @@ RUN_TYPES = {"student": "CRM Student Analysis Run", "school": "CRM School Analys
 STAGES = {"student": ("student_360",), "school": ("school_360",)}
 TERMINAL = {"completed", "abstained", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
-STUDENT_360_POLICY_REVISION = "student-360-analysis-r2"
+STUDENT_360_POLICY_REVISION = "student-360-analysis-r3"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION = "student-360-snapshot-v1"
 _STUDENT_ACTION_ADVICE = re.compile(
 	r"(?:\b(?:nên|hãy|ưu tiên|đề xuất|khuyến nghị)\b[^.\n]{0,80}"
@@ -125,14 +125,14 @@ def _student_360_analysis_input(evidence: dict[str, Any]) -> dict[str, Any]:
 	return {
 		"policy_revision": STUDENT_360_POLICY_REVISION,
 		"student_state": {key: signals.get(key) for key in (
-			"lifecycle_stage", "study_stage", "assessment_status", "interest", "fit",
+			"student_stage", "study_stage", "assessment_status",
+			"interest", "fit",
 			"primary_barrier", "intent_type", "intent_polarity", "sla_state", "score",
 		)},
 		"score_history": signals.get("score_history") or [],
 		"verified_interactions": signals.get("interaction_history") or [],
 		"applications": signals.get("applications") or [],
 		"guardian_signals": signals.get("guardian_signals") or [],
-		"lifecycle_history": signals.get("lifecycle_history") or [],
 	}
 
 
@@ -607,7 +607,7 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	row = frappe.db.get_value(
 		"CRM Student", student,
 		[
-			"lifecycle_stage", "enrollment_status", "current_grade", "study_stage",
+			"student_stage", "current_grade", "study_stage",
 			"assessment_status", "interest_level", "fit_level", "primary_barrier",
 			"latest_score", "sla_evidence_state", "score_input_revision", "applied_score_input_revision",
 		],
@@ -671,15 +671,14 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	guardians = _rows("CRM Student Guardian", [
 		"relationship", "decision_role", "involvement", "preferred_channel", "is_active",
 	], 8, "creation desc, name desc")
-	lifecycle = _rows("CRM Student Lifecycle Event", [
-		"from_stage", "to_stage", "transition_kind", "occurred_at",
-	], 20, "occurred_at desc, creation desc, name desc")
 	# This is evidence, not a conclusion: the AI handler must derive and label
 	# any inference/uncertainty it publishes.  No name, phone, email, notes,
 	# free-form interaction text, or recipient data crosses this boundary.
 	student_360 = {
 		"signals": {
-			"lifecycle_stage": row.get("lifecycle_stage") or row.get("enrollment_status"),
+			# This is the only CRM stage axis used by Student 360.  Never infer it
+			# from legacy lifecycle data or the academic study stage.
+			"student_stage": row.get("student_stage"),
 			"study_stage": row.get("study_stage") or row.get("current_grade"),
 			"assessment_status": row.get("assessment_status"),
 			"interest": row.get("interest_level"),
@@ -734,15 +733,13 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 				 "preferred_channel": item.get("preferred_channel"), "is_active": item.get("is_active"), "provenance_ids": _ref("guardian", item)}
 				for item in guardians
 			],
-			"lifecycle_history": [
-				{"from_stage": item.get("from_stage"), "to_stage": item.get("to_stage"), "transition_kind": item.get("transition_kind"),
-				 "occurred_at": item.get("occurred_at"), "provenance_ids": _ref("lifecycle", item)}
-				for item in lifecycle
-			],
 		},
 		"unknowns": [
 			key for key, value in row.items()
-			if key in {"assessment_status", "interest_level", "fit_level", "primary_barrier", "latest_score"}
+			if key in {
+				"student_stage", "assessment_status", "interest_level", "fit_level",
+				"primary_barrier", "latest_score",
+			}
 			and value in (None, "")
 		],
 		"provenance_ids": [f"student:{student}"],

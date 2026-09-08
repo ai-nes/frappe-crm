@@ -1433,7 +1433,7 @@ def _ensure_outcome(student: str, contact: str, interaction: str, evidence_file:
 	existing = frappe.db.get_value("CRM Student Outcome", {"source_key": source_key}, "name")
 	if existing:
 		return existing
-	receipt = _insert_command_receipt("interaction_outcome", "outcome-primary", contact)
+	receipt = _insert_command_receipt("interaction_outcome", "outcome-primary", student, contact)
 	revision = int(frappe.db.get_value("CRM Lead", student, "engagement_revision") or 0)
 	event = frappe.get_doc(
 		{
@@ -1648,22 +1648,26 @@ def _ensure_parent(student: str, context: dict[str, Any], team: str, high_school
 
 
 def _ensure_marketing_engagement(
-	contact: str, key_suffix: str, values: dict[str, Any], idempotency_key: str, correlation_id: str
+	student: str,
+	contact: str,
+	key_suffix: str,
+	values: dict[str, Any],
+	idempotency_key: str,
+	correlation_id: str,
 ) -> str | None:
 	"""Write ``CRM Marketing Engagement`` directly.
 
 	``student_attribution.record_campaign_touchpoint``/``record_event_participation``
-	still insert their raw ``student`` argument into ``CRM Marketing Engagement.student``,
-	a field the CRM Student split repointed to ``CRM Student`` -- so the service calls
-	now raise ``LinkValidationError`` for a Lead-stage fixture. This mirrors ``_record``
-	in that module with the Student anchor fixed.
+	still insert their raw ``student`` argument into the legacy Lead-typed
+	``CRM Marketing Engagement.student`` field. Keep that source identity and
+	store the canonical CRM Student in ``crm_contact``.
 	"""
 	if frappe.db.exists("CRM Marketing Engagement", {"idempotency_key": idempotency_key}):
 		return None
 	command_kind = {"campaign_touch": "campaign_touchpoint", "event_participation": "event_participation"}[
 		values["engagement_kind"]
 	]
-	receipt = _insert_command_receipt(command_kind, key_suffix, None, contact)
+	receipt = _insert_command_receipt(command_kind, key_suffix, student, contact)
 	previous = getattr(frappe.flags, "student_attribution_service", False)
 	frappe.flags.student_attribution_service = True
 	try:
@@ -1671,7 +1675,8 @@ def _ensure_marketing_engagement(
 			frappe.get_doc(
 				{
 					"doctype": "CRM Marketing Engagement",
-					"student": contact,
+					"student": student,
+					"crm_contact": contact,
 					"actor": OWNER_USER,
 					"command_receipt": receipt,
 					"idempotency_key": idempotency_key,
@@ -1686,9 +1691,10 @@ def _ensure_marketing_engagement(
 		frappe.flags.student_attribution_service = previous
 
 
-def _ensure_attribution(contact: str, context: dict[str, Any]) -> dict[str, Any]:
+def _ensure_attribution(student: str, contact: str, context: dict[str, Any]) -> dict[str, Any]:
 	campaign_key = _key("campaign", "open-day")
 	_ensure_marketing_engagement(
+		student,
 		contact,
 		"campaign-open-day",
 		{
@@ -1705,6 +1711,7 @@ def _ensure_attribution(contact: str, context: dict[str, Any]) -> dict[str, Any]
 	)
 	event_key = _key("event", "campus-visit")
 	_ensure_marketing_engagement(
+		student,
 		contact,
 		"event-campus-visit",
 		{
@@ -1728,26 +1735,33 @@ def _ensure_assessment(contact: str, student: str, interaction: str, intent: str
 	"""Write ``CRM Student Assessment`` directly.
 
 	``student_assessment.record_student_assessment`` still resolves ``student``
-	against ``CRM Lead`` and projects the result back onto ``CRM Lead`` only --
-	the doctype's ``student`` field was repointed to ``CRM Student`` by the
-	split, so the raw Lead insert now raises ``LinkValidationError``. This
-	mirrors that function's insert + ``_project`` mirroring, targeting the
-	CRM Student contact.
+	against ``CRM Lead``. Keep that source identity in ``student`` and persist
+	the canonical CRM Student in ``crm_student`` for 360 readers.
 	"""
 	existing = frappe.db.get_value(
-		"CRM Student Assessment", {"student": contact, "status": "confirmed"}, "name"
+		"CRM Student Assessment", {"crm_student": contact, "status": "confirmed"}, "name"
 	)
+	if not existing:
+		existing = frappe.db.get_value(
+			"CRM Student Assessment", {"student": student, "status": "confirmed"}, "name"
+		)
 	if existing:
 		return existing
 	evidence = [f"CRM Interaction:{interaction}", f"CRM Intent:{intent}"]
 	if application:
 		evidence.append(f"CRM Admission Application:{application}")
 	spec = _ACTIVE["assessment"]
-	revision = int(frappe.db.get_value("CRM Student Assessment", {"student": contact}, "max(assessment_revision)") or 0) + 1
+	revision = int(
+		frappe.db.get_value(
+			"CRM Student Assessment", {"crm_student": contact}, "max(assessment_revision)"
+		)
+		or 0
+	) + 1
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Student Assessment",
-			"student": contact,
+			"student": student,
+			"crm_student": contact,
 			"assessment_revision": revision,
 			"status": "confirmed",
 			"assessment_source": "manual",
@@ -1857,6 +1871,8 @@ def _ensure_student_contact(
 		contact = frappe.db.get_value("CRM Student", {"email": profile_email}, "name")
 	values = {
 		"full_name": _ACTIVE["student_name"],
+		"lead_code": frappe.db.get_value("CRM Lead", student, "lead_code") or student,
+		"source_lead": student,
 		"phone": _ACTIVE["student_phone"],
 		"email": profile_email,
 		"student": student,
@@ -1943,7 +1959,7 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 	existing_name = frappe.db.get_value(
 		"CRM AI Lead Insight", {"generation_idempotency_key": idempotency_key}, "name"
 	)
-	receipt = _insert_command_receipt("ai_insight", f"ai-insight-{contact}-r{revision}", contact)
+	receipt = _insert_command_receipt("ai_insight", f"ai-insight-{contact}-r{revision}", student, contact)
 	values = {
 		"contact": contact,
 		"student": student,
@@ -2218,7 +2234,7 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 	walked = _ensure_lifecycle(student, outcome, intent_dominant, evidence_file)
 	application = _ensure_application(student, context)
 	parent = _ensure_parent(student, context, team, high_school)
-	attribution = _ensure_attribution(student_record, context)
+	attribution = _ensure_attribution(student, student_record, context)
 	assessment = _ensure_assessment(student_record, student, interaction_latest, intent_dominant, application)
 	action = _ensure_action(student_record, owner_staff)
 	score = _ensure_score(student_record)

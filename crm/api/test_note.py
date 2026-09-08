@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -113,3 +115,22 @@ class TestNoteApi(FrappeTestCase):
 		updated = update_lead_note(created["name"], content="Ghi chú Lead đã cập nhật")
 		self.assertEqual(updated["content"], "Ghi chú Lead đã cập nhật")
 		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})
+
+	def test_display_student_reference_is_resolved_at_note_boundary(self):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "Display Reference Student",
+				"email": "display-reference@example.com",
+				"stage": "Interested",
+			}
+		).insert(ignore_permissions=True)
+		display_code = "HS-2026-HCM-000021"
+
+		with patch("crm.api.note.canonical_student", return_value=student.name):
+			created = create_note("CRM Student", display_code, content="Display code note")
+			listed = list_notes("CRM Student", display_code)
+
+		self.assertEqual(created["reference_docname"], student.name)
+		self.assertEqual(listed["total"], 1)
+		self.assertEqual(listed["notes"][0]["reference_docname"], student.name)

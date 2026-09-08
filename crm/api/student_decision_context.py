@@ -11,14 +11,13 @@ from crm.fcrm.interaction_semantics import resolve_interaction_type
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.scoring_policy import get_active_policy
 from crm.fcrm.student_contact_conversion import contacts_for_student
+from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 from crm.services.sales_action_policy import allowed_generation_actions, parent_authority_is_valid
 from crm.services.student_context import snapshot_hash
 from crm.services.student_next_task_policy import _journey_label, choose_next_task_policy
 
 _STUDENT_FIELDS = [
 	"name",
-	"enrollment_status",
-	"lifecycle_stage",
 	"student_stage",
 	"major",
 	"current_grade",
@@ -501,9 +500,6 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		"returned_revision": revision,
 		"policy_version": "student-next-task-v2",
 		"eligibility": {"student": True},
-		"lifecycle": {
-			"stage": row.lifecycle_stage or row.enrollment_status,
-		},
 		"student_stage": row.student_stage,
 		"study": {
 			"current_grade": row.current_grade,
@@ -554,8 +550,8 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	}
 	allowed_actions = context["allowed_action_types"]
 	parent_authorized = parent_authority_is_valid(student)
-	stage = context["lifecycle"]["stage"]
-	eligible = str(stage or "").casefold() not in {"lost", "enrolled", "đã xác nhận", "closed"}
+	stage = context["student_stage"]
+	eligible = stage in STUDENT_STAGES and stage not in TERMINAL_STAGES
 	action, objective, actionable = choose_next_task_policy(
 		intent.get("intent_type"),
 		stage,
@@ -565,11 +561,11 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 	)
 	context["eligibility"]["student"] = eligible
 	context["eligibility"]["actionable"] = actionable
-	context["lifecycle"].update(
+	context.update(
 		{
 			"next_task_action": action,
 			"next_task_objective": objective,
-			"stage_label": _journey_label(stage),
+			"student_stage_label": _journey_label(stage),
 			"days_to_deadline": context["days_to_deadline"],
 		}
 	)

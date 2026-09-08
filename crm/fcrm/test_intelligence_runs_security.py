@@ -42,8 +42,18 @@ class TestIntelligenceRunSecurity(unittest.TestCase):
 		self.assertEqual((revision_a, revision_b), ("9", "9"))
 		self.assertNotEqual(digest_a, digest_b)
 
+	def test_student_source_digest_binds_student_stage(self):
+		first = {"signals": {"student_stage": "New"}, "provenance_ids": ["student:STU-1"]}
+		second = {"signals": {"student_stage": "Connected"}, "provenance_ids": ["student:STU-1"]}
+		with patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=9), patch(
+			"crm.fcrm.intelligence_runs._student_stage_evidence", side_effect=[{"student_360": first}, {"student_360": second}]
+		):
+			_, digest_a = intelligence_runs._source("student", "STU-1")
+			_, digest_b = intelligence_runs._source("student", "STU-1")
+		self.assertNotEqual(digest_a, digest_b)
+
 	def test_student_stage_evidence_is_minimized_and_uses_resolvable_provenance(self):
-		row = {"lifecycle_stage": "Qualified", "interest_level": "High", "fit_level": "High", "score_input_revision": 9, "applied_score_input_revision": 9}
+		row = {"student_stage": "Connected", "interest_level": "High", "fit_level": "High", "score_input_revision": 9, "applied_score_input_revision": 9}
 		with patch(
 			"crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row
 		), patch("crm.fcrm.intelligence_runs.frappe.get_all", return_value=[]), patch(
@@ -52,6 +62,7 @@ class TestIntelligenceRunSecurity(unittest.TestCase):
 			evidence = intelligence_runs._student_stage_evidence("STU-1", "9")
 		self.assertEqual(set(evidence), {"student_360"})
 		self.assertEqual(evidence["student_360"]["provenance_ids"], ["student:STU-1"])
+		self.assertEqual(evidence["student_360"]["signals"]["student_stage"], "Connected")
 		self.assertNotIn("student_name", str(evidence))
 		self.assertNotIn("phone", str(evidence))
 

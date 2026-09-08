@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.student_reference import canonical_student
 
 ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
 
@@ -30,12 +31,19 @@ def _validated_content(content):
 	return content
 
 
-def _check_reference_access(reference_doctype, reference_docname, permission_type):
+def _resolve_reference(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Notes are only supported for CRM Student and CRM Student."), frappe.ValidationError)
-	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
+		frappe.throw(_("Notes are only supported for CRM Lead and CRM Student."), frappe.ValidationError)
+	resolved_name = reference_docname
+	if reference_doctype == "CRM Student":
+		resolved_name = canonical_student(reference_docname) or reference_docname
+	reference_doc = frappe.get_doc(reference_doctype, resolved_name)
 	reference_doc.check_permission(permission_type)
-	return reference_doc
+	return resolved_name, reference_doc
+
+
+def _check_reference_access(reference_doctype, reference_docname, permission_type):
+	return _resolve_reference(reference_doctype, reference_docname, permission_type)[1]
 
 
 def _with_owner_full_name(note):
@@ -49,23 +57,27 @@ def _with_owner_full_name(note):
 
 @frappe.whitelist()
 def list_notes(reference_doctype, reference_docname, search=None, start=0, page_length=20):
-	"""List FCRM Notes attached to one CRM Student or CRM Student.
+	"""List FCRM Notes attached to one CRM Lead or CRM Student.
 
 	Requires read access to that student/contact. Optional search matches content.
 	"""
-	_check_reference_access(reference_doctype, reference_docname, "read")
+	resolved_name, _ = _resolve_reference(reference_doctype, reference_docname, "read")
 
-	filters = {"reference_doctype": reference_doctype, "reference_docname": reference_docname}
-	or_filters = None
+	# Keep legacy notes addressable while writing all new notes against the
+	# canonical Student.name. This is a compatibility boundary, not a second
+	# source of truth.
+	reference_names = list(dict.fromkeys([reference_docname, resolved_name]))
+	filters = {
+		"reference_doctype": reference_doctype,
+		"reference_docname": ["in", reference_names],
+	}
 	if search:
-		like = f"%{search}%"
-		or_filters = [["content", "like", like]]
+		filters["content"] = ["like", f"%{search}%"]
 
 	result = paged_list(
 		"FCRM Note",
 		FIELDS,
 		filters=filters,
-		or_filters=or_filters,
 		start=start,
 		page_length=page_length,
 		order_by="modified desc",
@@ -85,14 +97,14 @@ def get_note(name):
 
 @frappe.whitelist(methods=["POST"])
 def create_note(reference_doctype, reference_docname, content=None):
-	"""Create an FCRM Note on a CRM Student or CRM Student. Requires read
+	"""Create an FCRM Note on a CRM Lead or CRM Student. Requires read
 	access to that student/contact and create access to FCRM Note.
 	"""
-	_check_reference_access(reference_doctype, reference_docname, "read")
+	resolved_name, _ = _resolve_reference(reference_doctype, reference_docname, "read")
 	doc = frappe.new_doc("FCRM Note")
 	doc.content = _validated_content(content or "")
 	doc.reference_doctype = reference_doctype
-	doc.reference_docname = reference_docname
+	doc.reference_docname = resolved_name
 	doc.insert()
 	return _with_owner_full_name(doc)
 
