@@ -131,7 +131,7 @@ if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" 
     echo "Seeding curated demo dataset (first run; set CRM_SEED_DEMO=0 to skip)..."
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_demo_config || true
     bench --site crm.localhost execute crm.demo.seed_showcase.ensure_local_integrity_keys || true
-    if bench --site crm.localhost execute crm.demo.seed_golden_local.seed; then
+    if bench --site crm.localhost execute crm.demo.seed_task.seed; then
         bench --site crm.localhost execute crm.operations_cutover_canonical_roles.execute || true
         bench --site crm.localhost execute crm.operations_reconcile_account_roles.apply || true
         touch "sites/crm.localhost/.demo-seeded"
