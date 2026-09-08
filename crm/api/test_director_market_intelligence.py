@@ -10,6 +10,17 @@ from crm.api import director_market_intelligence as market
 
 
 class TestDirectorMarketIntelligence(FrappeTestCase):
+	def test_primary_source_is_limited_to_priority_provinces(self):
+		with patch.object(market, "_permission_rows", return_value=([], False)) as permission_rows:
+			market._load_sources("2026")
+
+		province_call = permission_rows.call_args_list[0]
+		self.assertEqual(province_call.args[0], "CRM Province")
+		self.assertEqual(
+			province_call.kwargs["filters"],
+			{"province_code": ["in", list(market.PRIORITY_PROVINCE_CODES)]},
+		)
+
 	def test_school_limit_defaults_to_five(self):
 		with (
 			patch.object(market, "resolve_admission_year", return_value="2026"),

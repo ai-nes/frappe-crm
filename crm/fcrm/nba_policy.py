@@ -33,7 +33,6 @@ EXCLUSION_REASONS: frozenset[str] = frozenset(
 		"OUT_OF_SCOPE",
 		"UNKNOWN_CODE",
 		"NO_OPPORTUNITY_MAPPING",
-		"LIFECYCLE_TERMINAL",
 		"STUDENT_STAGE_TERMINAL",
 		"STUDENT_STAGE_UNKNOWN",
 		"STUDENT_STAGE_NOT_ALLOWED",
@@ -195,9 +194,6 @@ def filter_eligible_actions(
 	student_stage = str((decision_context or {}).get("student_stage") or "")
 	student_stage_valid = student_stage in STUDENT_STAGES
 	student_stage_terminal = student_stage in TERMINAL_STAGES
-	lifecycle = (decision_context or {}).get("lifecycle") or {}
-	stage = str(lifecycle.get("stage") or "").casefold()
-	terminal_lifecycle = stage in {"lost", "enrolled", "đã xác nhận", "closed", "withdrawn"}
 	contactability = (decision_context or {}).get("contactability") or {}
 	consent = contactability.get("consent") if isinstance(contactability, Mapping) else None
 	channels = {
@@ -247,14 +243,14 @@ def filter_eligible_actions(
 		if uses_student_stage and not student_stage_valid:
 			exclusions.append({"action": code, "reason": "STUDENT_STAGE_UNKNOWN"})
 			continue
+		if decision_context is not None and not uses_student_stage:
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_UNKNOWN"})
+			continue
 		if uses_student_stage and student_stage_terminal:
 			exclusions.append({"action": code, "reason": "STUDENT_STAGE_TERMINAL"})
 			continue
 		if uses_student_stage and category not in _STAGE_ALLOWED_CATEGORIES.get(student_stage, frozenset()):
 			exclusions.append({"action": code, "reason": "STUDENT_STAGE_NOT_ALLOWED"})
-			continue
-		if decision_context is not None and terminal_lifecycle:
-			exclusions.append({"action": code, "reason": "LIFECYCLE_TERMINAL"})
 			continue
 		channel = str(snapshot["default_channel"] or "NONE").upper()
 		# Parent-recipient consent is introduced with the dedicated authority

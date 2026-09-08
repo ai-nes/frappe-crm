@@ -20,6 +20,24 @@ from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
+from crm.services.action_outcome import (
+	CONTACT_ATTEMPT_FAILURE_VALUE,
+	CONTACT_ATTEMPT_RESET_VALUE,
+	DECISION_STATUS_REOPEN_TRIGGERS,
+	DIMENSION_REDUCERS,
+	derive_decision_effects,
+)
+
+# Dimensions that don't persist across unrelated intervening outcomes: only
+# the single most recent completed action's own effects can set them. If that
+# newest action didn't touch the dimension, it resets to unknown/none even if
+# an older action set it -- see DIMENSION_REDUCERS for why (a stale
+# "please call back" must not stay sticky forever once newer, unrelated work
+# has happened since). decision_status is handled separately below -- it has
+# per-value lifecycle semantics, not one uniform rule.
+_RESET_TO_NEWEST_ROW_DIMENSIONS = frozenset(
+	dim for dim, reducer in DIMENSION_REDUCERS.items() if reducer == "latest_or_reset"
+)
 
 # Cost/risk/effort bands have no CRM Action source column yet. The wire contract
 # requires the keys, so they are emitted as "unknown" and the action carries
@@ -38,26 +56,111 @@ __all__ = [
 _DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 
 
-def _recent_outcomes_by_category(recent_actions: list) -> dict:
-	"""Latest ``outcome_code`` per action category, not just the single most
-	recent action overall.
+# Durable dimension-scoped history, deliberately not the UI-facing
+# ``recent_actions`` projection (hard-limited to the last 5 actions of any
+# type -- too narrow for a dimension like interest_disposition to survive
+# unrelated actions recorded afterwards). Large enough that an older closing
+# signal isn't silently lost to intervening administrative actions; tune
+# against real volume once observed.
+_DECISION_EFFECT_LOOKBACK_LIMIT = 50
 
-	A domain's own closing signal (an APPLICATION-category
-	``APPLICATION_COMPLETED``, a CONTACT-category ``NOT_INTERESTED``) must stay
-	visible to the kernel until a newer action in that *same* domain
-	supersedes it -- it must never be erased just because a newer action was
-	logged in an unrelated domain (e.g. a follow-up CALL superseding an
-	earlier CHECK_APPLICATION completion in the projection's single most
-	recent row).
+
+def _decision_effect_signals(student: str) -> dict:
+	"""Fold Decision Effects over durable outcome history, keyed by dimension.
+
+	Each dimension folds independently with its own reducer (see
+	``crm.services.action_outcome.DIMENSION_REDUCERS``): ``latest`` dimensions
+	take the newest row that produced an effect for that dimension --
+	unrelated outcomes in between never erase it. ``latest_or_reset``
+	dimensions (``follow_up``) only ever come from the single most recent
+	completed action -- if that newest action's outcome doesn't touch the
+	dimension, it is unknown/none even if an older action set it, so a stale
+	"please call back" can't stay sticky forever. ``decision_status`` has its
+	own per-value lifecycle (see ``_fold_decision_status``): "pending" behaves
+	like ``latest_or_reset``, "not_ready" and "lost" persist like ``latest``
+	but are cleared by specific reopening outcomes
+	(``DECISION_STATUS_REOPEN_TRIGGERS``). ``contact_attempt_signal`` counts a
+	*consecutive* run of "failed" effects, stopping (and not counting) as soon
+	as a "succeeded" effect is seen, newest first.
 	"""
+	rows = frappe.get_all(
+		"CRM Action Item",
+		filters={"student": student, "execution_status": "completed"},
+		fields=["action", "action_type", "outcome_code", "revisit_at"],
+		order_by="completed_at desc",
+		limit_page_length=_DECISION_EFFECT_LOOKBACK_LIMIT,
+		ignore_permissions=True,
+	)
 	result: dict = {}
-	for row in recent_actions:
-		category = row.get("action_category")
+	contact_failures = 0
+	contact_streak_open = True
+	is_newest_completed_row = True
+	decision_status_resolved = False
+	decision_status_blocked: dict[str, bool] = {"not_ready": False, "lost": False}
+	for row in rows:
+		action_code = row.get("action") or row.get("action_type")
 		outcome_code = row.get("outcome_code")
-		if not category or not outcome_code or category in result:
+		if not outcome_code:
 			continue
-		result[category] = outcome_code
+		effects = derive_decision_effects(action_code, outcome_code)
+		if not decision_status_resolved:
+			decision_status_resolved = _fold_decision_status(
+				result, effects, outcome_code, is_newest_completed_row, decision_status_blocked
+			)
+		for effect in effects:
+			if effect.dimension == "decision_status":
+				continue
+			if effect.dimension == "contact_attempt_signal":
+				if not contact_streak_open:
+					continue
+				if effect.value == CONTACT_ATTEMPT_RESET_VALUE:
+					contact_streak_open = False
+				elif effect.value == CONTACT_ATTEMPT_FAILURE_VALUE:
+					contact_failures += 1
+				continue
+			if effect.dimension in _RESET_TO_NEWEST_ROW_DIMENSIONS:
+				if not is_newest_completed_row:
+					continue
+			elif effect.dimension in result:
+				continue
+			payload = {"value": effect.value}
+			if effect.dimension == "follow_up" and row.get("revisit_at"):
+				payload["revisit_at"] = str(row["revisit_at"])
+			result[effect.dimension] = payload
+		is_newest_completed_row = False
+	result["contact_attempt_signal"] = {"consecutive_failures": contact_failures}
 	return result
+
+
+def _fold_decision_status(
+	result: dict,
+	effects: tuple,
+	outcome_code: str,
+	is_newest_completed_row: bool,
+	blocked: dict[str, bool],
+) -> bool:
+	"""Apply one row's contribution to the decision_status lifecycle.
+
+	Returns True once decision_status is resolved (a value was set, or a
+	terminal/semi-sticky value was found but blocked by an earlier-seen
+	reopening trigger) -- the caller stops calling this once resolved.
+	"""
+	decision_effect = next((e for e in effects if e.dimension == "decision_status"), None)
+	if decision_effect is not None:
+		value = decision_effect.value
+		if value == "pending":
+			if is_newest_completed_row:
+				result["decision_status"] = {"value": "pending"}
+			return True
+		if value in ("not_ready", "lost"):
+			if not blocked[value]:
+				result["decision_status"] = {"value": value}
+			return True
+		return True
+	for value, reopen_outcomes in DECISION_STATUS_REOPEN_TRIGGERS.items():
+		if outcome_code in reopen_outcomes:
+			blocked[value] = True
+	return False
 
 
 def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict:
@@ -70,7 +173,7 @@ def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict
 	}
 
 
-def _shape_context(projection: Mapping, *, now: datetime) -> dict:
+def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	intent = projection.get("intent") or {}
 	interaction = projection.get("interaction") or {}
 	assessment = projection.get("assessment") or {}
@@ -118,9 +221,10 @@ def _shape_context(projection: Mapping, *, now: datetime) -> dict:
 			"valid": bool((projection.get("parent_authority") or {}).get("valid")),
 		},
 		"work_in_flight": [row.get("action_type") for row in projection.get("recent_actions") or []],
-		# Domain-scoped outcome history, structured input for the kernel's
-		# opportunity suppression -- see `_recent_outcomes_by_category`.
-		"recent_outcomes": _recent_outcomes_by_category(projection.get("recent_actions") or []),
+		# Decision Effects folded per dimension over durable outcome history --
+		# see `_decision_effect_signals`. Structured input for the kernel's
+		# opportunity suppression, not a raw outcome_code passthrough.
+		"decision_effects": _decision_effect_signals(student),
 		# Owner capacity has no approved scenario in v1. Preserve the member for
 		# historical replay while emitting explicit unknown rather than inferring
 		# workload from action rows or assignments.
@@ -278,7 +382,7 @@ def build_nba_evaluation_input(
 	eligible_set = _shape_eligible_action_set(eligible, timezone=timezone)
 	return assemble_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
-		_shape_context(projection, now=moment),
+		_shape_context(projection, student=student, now=moment),
 		eligible_set,
 		_shape_policies(decision, eligible, eligible_set, canonical_digest(timing)),
 		now=moment,

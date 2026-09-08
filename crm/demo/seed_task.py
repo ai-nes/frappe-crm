@@ -8,6 +8,7 @@ topology second, then twenty Lead -> Student chains.
 
 from __future__ import annotations
 
+import os
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
@@ -18,6 +19,7 @@ from crm.demo import (
 	school_domain_import,
 	seed_ctv_sale,
 	seed_demo,
+	seed_golden,
 	seed_lead_api_campaigns,
 	seed_lead_api_lookups,
 	seed_role_accounts,
@@ -90,6 +92,15 @@ LEAD_NAMES = (
 EVENT_TITLE = "Task Seed Open Day 2026"
 ADMISSION_METHOD = "TRANSCRIPT_REVIEW"
 PLATFORM_NAME = "Task Seed Website"
+
+# The task seed is the supported local reset path for the Sales dashboard. Its
+# records are consumed by the durable Student 360 and NBA runtimes, so their
+# feature gates must survive the temporary seed flags after a successful seed.
+LOCAL_AI_RUNTIME_CONFIG = {
+	"crm_intelligence_runs_enabled": 1,
+	"crm_intelligence_writer_epoch": 1,
+	"crm_nba_evaluation_runtime_enabled": 1,
+}
 
 
 def _key(*parts: Any) -> str:
@@ -500,7 +511,18 @@ def _complete_lead(lead: str, profile: dict[str, Any], context: dict[str, Any]) 
 
 
 def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
+	from crm.fcrm.lead_processing import mark_lead_assigned, process_lead
 	from crm.fcrm.student_ownership import change_student_ownership
+
+	lead_doc = frappe.get_doc("CRM Lead", lead)
+	processing_status = str(lead_doc.get("processing_status") or "NEW").upper()
+	if processing_status == "NEW":
+		process_lead(
+			lead,
+			reason="Unified task seed: kiểm tra dữ liệu trước khi phân công Lead.",
+		)
+		lead_doc = frappe.get_doc("CRM Lead", lead)
+		processing_status = str(lead_doc.get("processing_status") or "NEW").upper()
 
 	current = frappe.db.get_value(
 		"CRM Lead",
@@ -509,6 +531,8 @@ def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
 		as_dict=True,
 	)
 	if current.owner_staff == staff and current.owning_team == team:
+		if processing_status == "PROCESSED":
+			mark_lead_assigned(lead, reason="Unified task seed: ownership đã sẵn sàng.")
 		return
 	if not current.owning_pool and not current.owner_staff:
 		raise frappe.ValidationError(f"Lead {lead} has no canonical pool before owner assignment.")
@@ -525,15 +549,24 @@ def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
 		_internal_actor="Administrator",
 		_commit=False,
 	)
+	mark_lead_assigned(lead, reason="Unified task seed: phân công Lead hoàn tất.")
 
 
 def _ensure_contact(
-	lead: str, profile: dict[str, Any], context: dict[str, Any], staff: str, team: str
+	student: str, lead: str, profile: dict[str, Any], context: dict[str, Any], staff: str, team: str
 ) -> str:
+	"""Enrich the canonical Student created by Lead conversion.
+
+	A task-seed lead and its Student deliberately share one HS identifier.  Do
+	not create a provisional Student here: ``_ensure_conversion`` owns that
+
+	identity boundary and every downstream fixture must target its result.
+	"""
 	school = profile["school"]
 	parent = profile["parent"]
-	contact = frappe.db.get_value("CRM Lead", lead, "student")
-	contact = contact or frappe.db.get_value("CRM Student", {"email": profile["student_email"]}, "name")
+	contact = str(student or "").strip()
+	if not contact or not frappe.db.exists("CRM Student", contact):
+		frappe.throw("Task seed requires the canonical converted CRM Student.")
 	values = {
 		"full_name": profile["student_name"],
 		"phone": profile["student_phone"],
@@ -546,7 +579,6 @@ def _ensure_contact(
 		"student": lead,
 		"student_identity": frappe.db.get_value("CRM Lead", lead, "identity"),
 		"enrollment_status": context["enrollment_status"],
-		"lifecycle_stage": "Lead",
 		"student_stage": "Connected",
 		"readiness_level": "Level 2 - Đang so sánh",
 		"quality_bucket": "Warm",
@@ -580,12 +612,7 @@ def _ensure_contact(
 	previous = frappe.flags.get("student_conversion_service")
 	frappe.flags.student_conversion_service = True
 	try:
-		if contact:
-			frappe.db.set_value("CRM Student", contact, values, update_modified=False)
-		else:
-			contact = (
-				frappe.get_doc({"doctype": "CRM Student", **values}).insert(ignore_permissions=True).name
-			)
+		frappe.db.set_value("CRM Student", contact, values, update_modified=False)
 	finally:
 		if previous is None:
 			frappe.flags.pop("student_conversion_service", None)
@@ -951,7 +978,13 @@ def _ensure_conversion(lead: str, profile: dict[str, Any]) -> str:
 		idempotency_key=_key("conversion", profile["key"]),
 		correlation_id=_key("conversion-correlation", profile["key"]),
 	)
-	return result["contact"]
+	student = result["contact"]
+	# The next fixture writes Link-bearing records (score/action) against this
+	# Student. Persist the conversion boundary first so Frappe cannot reuse a
+	# negative Link-cache entry from before the Student was created.
+	frappe.db.commit()
+	frappe.clear_document_cache("CRM Student", student)
+	return student
 
 
 def _ensure_action(student: str, lead: str, staff: str, interaction: str, profile: dict[str, Any]) -> str:
@@ -994,7 +1027,8 @@ def _seed_one(
 	lead = _submit_lead(profile, context, accounts["pool"])
 	_complete_lead(lead, profile, context)
 	_assign_lead(lead, owner_staff, accounts["team"], profile["key"])
-	contact = _ensure_contact(lead, profile, context, owner_staff, accounts["team"])
+	converted_student = _ensure_conversion(lead, profile)
+	contact = _ensure_contact(converted_student, lead, profile, context, owner_staff, accounts["team"])
 	interactions = _ensure_interactions(contact, profile, owner["email"])
 	intents = _ensure_intents(contact, interactions, profile)
 	application = _ensure_application(lead, profile, {**context, "campaign": profile["campaign"]})
@@ -1006,7 +1040,6 @@ def _seed_one(
 		{**context, "campaign": profile["campaign"]},
 	)
 	assessment = _ensure_assessment(lead, interactions, intents, profile, application)
-	converted_student = _ensure_conversion(lead, profile)
 	score = _ensure_score(converted_student, profile)
 	action = _ensure_action(converted_student, lead, owner_staff, interactions[2], profile)
 	return {
@@ -1096,6 +1129,23 @@ def verify() -> dict[str, Any]:
 	}
 
 
+def _persist_local_ai_runtime_config() -> None:
+	"""Enable the runtimes required by the local task-seed walkthrough."""
+	from frappe.installer import update_site_config
+
+	for key, value in LOCAL_AI_RUNTIME_CONFIG.items():
+		frappe.conf[key] = value
+		update_site_config(key, value, validate=False)
+
+
+def _ensure_local_ai_service_identity() -> dict[str, Any]:
+	"""Restore the service principal used by inline 360/NBA execution."""
+	return seed_golden._ensure_service_identity(
+		os.environ.get("CRM_AGENTS_SERVICE_API_KEY"),
+		os.environ.get("CRM_AGENTS_SERVICE_API_SECRET"),
+	)
+
+
 def seed() -> dict[str, Any]:
 	"""Run the only supported local seed entrypoint."""
 	seed_showcase._assert_local_site()
@@ -1118,6 +1168,9 @@ def seed() -> dict[str, Any]:
 		frappe.db.commit()
 		verification = verify()
 
+	service_identity = _ensure_local_ai_service_identity()
+	_persist_local_ai_runtime_config()
+
 	result = {
 		"namespace": NAMESPACE,
 		"order": ["campaign_domain", "role_accounts", "leads", "students"],
@@ -1136,6 +1189,7 @@ def seed() -> dict[str, Any]:
 		},
 		"records": rows,
 		"verification": verification,
+		"service_identity": service_identity,
 	}
 	print(frappe.as_json(result))
 	return result

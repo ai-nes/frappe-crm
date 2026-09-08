@@ -41,6 +41,7 @@ services:
       dockerfile: frappe.Dockerfile
     user: root
     command: bash /workspace/docker/init.sh
+    restart: unless-stopped
     environment:
       SHELL: /bin/bash
       # Vite/Rollup needs more than Node's default ~2 GiB heap for this app.

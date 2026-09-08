@@ -60,9 +60,10 @@ const availableTransitions = computed(() => (props.action?.permittedTransitions 
 
 const outcomeOptions = computed(() => (props.action?.outcomeCodes || []).map((outcome) => {
   const code = typeof outcome === 'string' ? outcome : (outcome.value || outcome.name)
+  const backendLabel = typeof outcome === 'object' ? outcome.label : null
   return {
     value: code,
-    label: formatOutcomeLabel(code) || __(code),
+    label: backendLabel || formatOutcomeLabel(code) || __(code),
   }
 }))
 

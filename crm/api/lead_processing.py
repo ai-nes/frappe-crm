@@ -20,6 +20,9 @@ from crm.fcrm.lead_processing import (
 	process_lead as _process_lead,
 )
 from crm.fcrm.lead_processing import (
+	process_new_leads as _process_new_leads,
+)
+from crm.fcrm.lead_processing import (
 	update_processing_status as _update_processing_status,
 )
 from crm.fcrm.student_conversion import StudentConversionError
@@ -38,6 +41,11 @@ def _run(command, **kwargs):
 @frappe.whitelist(methods=["POST"])
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict:
 	return _run(_process_lead, lead=lead, resolution=resolution, reason=reason)
+
+
+@frappe.whitelist(methods=["POST"])
+def process_new_leads(admission_year: str | int | None = None, limit: str | int | None = None) -> dict:
+	return _run(_process_new_leads, admission_year=admission_year, limit=limit)
 
 
 @frappe.whitelist(methods=["POST"])

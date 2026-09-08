@@ -105,6 +105,8 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 	)
 	sequence = _next_stream_sequence("context")
 	event_id = event_id or frappe.generate_hash(length=32)
+	# The locked row above is authoritative. Avoid Frappe's transient Link-cache
+	# miss while this Student's initial insert is still completing.
 	change = frappe.get_doc(
 		{
 			"doctype": "CRM Student Revision Journal",
@@ -124,7 +126,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
 		}
-	).insert(ignore_permissions=True)
+	).insert(ignore_permissions=True, ignore_links=True)
 	result = {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}
 	return result
 

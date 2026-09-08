@@ -24,6 +24,10 @@ _PAGE_SIZE = 500
 _MAX_ROWS = 20_000
 _SNAPSHOT_ORDER = "snapshot_date desc, recorded_at desc, revision desc, modified desc, name desc"
 _SOURCE_ERRORS = (frappe.PermissionError, frappe.DoesNotExistError, QueryDeadlockError, QueryTimeoutError, MySQLError)
+# The Director market map is intentionally scoped to the seven active provinces
+# configured by the dashboard. Keep this scope in the backend so every metric
+# in the response uses the same source-of-truth boundary.
+PRIORITY_PROVINCE_CODES = ("56", "66", "68", "75", "79", "80", "82")
 
 
 class MarketPrimarySourceUnavailable(RuntimeError):
@@ -51,7 +55,9 @@ def _load_sources(admission_year: str):
 	failed = set()
 	try:
 		provinces, provinces_capped = _permission_rows(
-			"CRM Province", fields=["name", "province_code", "province_name", "region"]
+			"CRM Province",
+			filters={"province_code": ["in", list(PRIORITY_PROVINCE_CODES)]},
+			fields=["name", "province_code", "province_name", "region"],
 		)
 		schools, schools_capped = _permission_rows(
 			"CRM High School",
