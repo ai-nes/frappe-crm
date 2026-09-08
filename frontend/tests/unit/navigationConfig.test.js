@@ -130,7 +130,7 @@ describe('navigationConfig', () => {
     expect(
       resolveUserNavigationRole({
         crm_profile: 'lead_sales',
-        role: 'Lead Sales',
+        role: 'Lead Sale',
       }),
     ).toBe('lead_sales')
   })

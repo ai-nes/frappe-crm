@@ -17,4 +17,5 @@ class TestCRMAssignmentControlSchema(TestCase):
 
 	def test_routing_switch_requires_capacity_by_default(self):
 		self.assertEqual(self.fields["routing_enabled"]["default"], "0")
+		self.assertEqual(self.fields["assignment_mode"]["default"], "manual_batch")
 		self.assertEqual(self.fields["capacity_required"]["default"], "1")

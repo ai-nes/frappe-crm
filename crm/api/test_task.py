@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -30,7 +30,7 @@ class TestTaskApi(FrappeTestCase):
 	def test_task_crud_is_scoped_to_reference(self):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "Task API Contact",
 				"email": "task-api-contact@example.com",
 				"stage": "Interested",
@@ -38,17 +38,17 @@ class TestTaskApi(FrappeTestCase):
 		).insert(ignore_permissions=True)
 
 		created = create_task(
-			"CRM Contact",
+			"CRM Student",
 			contact.name,
 			"Initial task",
 			description="Follow up",
 			priority="High",
 			status="Todo",
 		)
-		self.assertEqual(created["reference_doctype"], "CRM Contact")
+		self.assertEqual(created["reference_doctype"], "CRM Student")
 		self.assertEqual(created["reference_docname"], contact.name)
 
-		listed = list_tasks("CRM Contact", contact.name)
+		listed = list_tasks("CRM Student", contact.name)
 		self.assertEqual(listed["total"], 1)
 		self.assertEqual(listed["tasks"][0]["name"], created["name"])
 
@@ -101,6 +101,21 @@ class TestTaskApi(FrappeTestCase):
 			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
 		)
 
+	def test_legacy_lead_reference_resolves_to_canonical_student(self):
+		lead = frappe._dict(name="LEAD-1")
+		with (
+			patch.object(task_api, "_check_reference_access", return_value=lead) as check_reference,
+			patch.object(task_api, "canonical_student", return_value="STU-1"),
+		):
+			self.assertEqual(task_api._action_target("CRM Lead", "LEAD-1"), ("STU-1", None))
+
+		check_reference.assert_has_calls(
+			[
+				call("CRM Lead", "LEAD-1", "read"),
+				call("CRM Student", "STU-1", "read"),
+			]
+		)
+
 	def test_student_task_assignee_accepts_user_and_staff_values(self):
 		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
 
@@ -142,7 +157,7 @@ class TestTaskApi(FrappeTestCase):
 		action = frappe._dict(
 			doctype="CRM Action Item",
 			name="ACT-TASK-SCOPE",
-			student="ENR-2026-00001",
+			student="STU-2026-00001",
 			contact="CRM-CONTACT-001",
 			objective="Scoped task",
 			state="pending",
@@ -179,7 +194,7 @@ class TestTaskApi(FrappeTestCase):
 				"_permission_condition",
 				side_effect=[
 					"student_scope.owner_staff = 'STAFF-001'",
-					"contact_scope.owner_staff = 'STAFF-001'",
+					"legacy_lead_scope.owner_staff = 'STAFF-001'",
 				],
 			),
 			patch.object(frappe, "get_roles", return_value=["Sale"]),
@@ -187,15 +202,15 @@ class TestTaskApi(FrappeTestCase):
 			condition = task_api.get_permission_query_conditions("sale@example.com")
 
 		self.assertIn("EXISTS", condition)
+		self.assertIn("`tabCRM Lead`", condition)
 		self.assertIn("`tabCRM Student`", condition)
-		self.assertIn("`tabCRM Contact`", condition)
 		self.assertIn("`tabTask`.reference_doctype", condition)
 
 	def test_task_has_permission_checks_reference_scope(self):
 		doc = frappe._dict(
 			doctype="Task",
 			reference_doctype="CRM Student",
-			reference_docname="ENR-2026-00001",
+			reference_docname="STU-2026-00001",
 			name="TASK-00001",
 		)
 		with (
@@ -204,7 +219,7 @@ class TestTaskApi(FrappeTestCase):
 		):
 			self.assertTrue(task_api.has_permission(doc, user="sale@example.com", ptype="write"))
 
-		check_reference.assert_called_once_with("CRM Student", "ENR-2026-00001", "read")
+		check_reference.assert_called_once_with("CRM Student", "STU-2026-00001", "read")
 
 	@patch("crm.api.task._require_sales_task_access", return_value="Administrator")
 	@patch("crm.api.task._aggregate_tasks_sql", return_value=("SELECT 1", []))
@@ -222,10 +237,10 @@ class TestTaskApi(FrappeTestCase):
 				due_date="2999-09-05 10:00:00",
 				assigned_to="Administrator",
 				assigned_to_name="Administrator",
-				student="ENR-2026-00001",
+				student="STU-2026-00001",
 				student_name="Test Student",
 				reference_doctype="CRM Student",
-				reference_docname="ENR-2026-00001",
+				reference_docname="STU-2026-00001",
 				linked_interaction=None,
 				action=None,
 				action_type=None,

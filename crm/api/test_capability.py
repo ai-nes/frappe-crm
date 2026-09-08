@@ -33,10 +33,10 @@ class TestAiExposureAuthority(FrappeTestCase):
 		"""PII is gated only by real permlevel access (`fields` already reflects
 		that), not by a second role-identity check -- the same fields the role
 		already sees in the CRM desk UI."""
-		fields = ["name", "student_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
+		fields = ["name", "full_name", "phone", "email", "date_of_birth", "id_number", "latest_score"]
 		self.assertEqual(
 			_project_ai_fields("CRM Student", fields),
-			["email", "latest_score", "name", "phone", "student_name"],
+			["email", "full_name", "latest_score", "name", "phone"],
 		)
 
 	def test_student_projection_excludes_fields_outside_the_operational_pii_ceiling(self):
@@ -103,7 +103,7 @@ class TestCanonicalRoleManifestIdentities(FrappeTestCase):
 	def test_real_canonical_identities_publish_their_own_manifest_role(self):
 		from crm.api.capability import get_capability_manifest
 
-		for role in ("Sale", "Lead Sale", "Marketing", "Admissions Director"):
+		for role in ("Sale", "Lead Sale", "Marketing", "Admissions Director", "Administrator"):
 			with self.subTest(role=role):
 				frappe.set_user(self._user(role))
 				manifest = get_capability_manifest()

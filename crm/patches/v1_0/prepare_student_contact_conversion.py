@@ -91,10 +91,10 @@ def build_report(rows: Iterable[dict]) -> dict:
 def _legacy_rows():
 	if frappe is None:
 		raise RuntimeError("Phase 8 migration requires a Frappe bench")
-	rows = frappe.db.get_all("CRM Contact", filters={"student": ["is", "set"]}, fields=["name", "student", "student_identity"])
+	rows = frappe.db.get_all("CRM Student", filters={"student": ["is", "set"]}, fields=["name", "student", "student_identity"])
 	for row in rows:
 		student = frappe.db.get_value(
-			"CRM Student",
+			"CRM Lead",
 			row.get("student"),
 			["name", "identity", "case_key", "lifecycle_stage", "intake_integrity_state"],
 			as_dict=True,
@@ -126,7 +126,7 @@ def _legacy_rows():
 		row["contact_record"] = {"student_identity": row.get("student_identity")}
 		row["existing_identity_contacts"] = (
 			frappe.db.get_all(
-				"CRM Contact",
+				"CRM Student",
 				filters={"student_identity": student.identity},
 				pluck="name",
 				ignore_permissions=True,
@@ -162,9 +162,9 @@ IDENTITY_UNIQUE_INDEX = "crm_contact_student_identity_uniq"
 
 def _add_unique_identity_index() -> bool:
 	"""Install the post-reconciliation identity fence idempotently."""
-	if not frappe.db.table_exists("CRM Contact"):
+	if not frappe.db.table_exists("CRM Student"):
 		return False
-	physical = "tabCRM Contact"
+	physical = "tabCRM Student"
 	if frappe.db.sql(f"SHOW INDEX FROM `{physical}` WHERE Key_name = %s", IDENTITY_UNIQUE_INDEX):
 		return True
 	duplicates = frappe.db.sql(
@@ -215,7 +215,7 @@ def _apply_rows(rows: list[dict], report: dict) -> tuple[list[str], list[str]]:
 		frappe.flags.contact_migration_service = True
 		frappe.flags.student_contact_conversion_service = True
 		try:
-			frappe.db.set_value("CRM Contact", row.get("name"), "student_identity", identity, update_modified=False)
+			frappe.db.set_value("CRM Student", row.get("name"), "student_identity", identity, update_modified=False)
 			receipt_key = "legacy-conversion:" + hashlib.sha256(f"{row.get('student')}:{row.get('name')}".encode()).hexdigest()
 			receipt = frappe.get_doc(
 				{

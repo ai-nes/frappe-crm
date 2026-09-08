@@ -21,13 +21,13 @@ class TestStudentContactConversionReaderInventory(unittest.TestCase):
 	def test_readers_do_not_query_legacy_contact_student_directly(self):
 		for relative in READER_FILES:
 			text = (ROOT / relative).read_text(encoding="utf-8")
-			self.assertNotIn('get_value("CRM Contact", {"student":', text, relative)
-			self.assertNotIn('get_all("CRM Contact", filters={"student":', text, relative)
+			self.assertNotIn('get_value("CRM Student", {"student":', text, relative)
+			self.assertNotIn('get_all("CRM Student", filters={"student":', text, relative)
 
 	def test_resolver_is_the_only_legacy_fallback_boundary(self):
 		resolver = (ROOT / "fcrm/student_contact_conversion.py").read_text(encoding="utf-8")
-		self.assertIn('get_value("CRM Contact", {"student": student}', resolver)
-		self.assertIn('get_value("CRM Contact", contact, "student")', resolver)
+		self.assertIn('get_value("CRM Student", {"student": student}', resolver)
+		self.assertIn('get_value("CRM Student", contact, "student")', resolver)
 
 	def test_conversion_service_keeps_contact_reads_behind_scope_checks(self):
 		conversion = (ROOT / "fcrm/student_conversion.py").read_text(encoding="utf-8")

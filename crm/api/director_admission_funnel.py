@@ -358,7 +358,7 @@ def _load_students(admission_year: str, scope: dict[str, Any]) -> list[dict[str,
 	if scope.get("branch"):
 		filters["branch"] = scope["branch"]
 	return _fetch_rows(
-		"CRM Student",
+		"CRM Lead",
 		filters=filters,
 		fields=STUDENT_FIELDS,
 		order_by="creation asc, name asc",

@@ -1163,7 +1163,7 @@ msgstr "Trạng thái giao tiếp CRM"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-msgid "CRM Contacts"
+msgid "CRM Students"
 msgstr "Hồ sơ"
 
 #. Name of a DocType
@@ -1777,7 +1777,7 @@ msgstr "Kết nối ERPNext với Frappe CRM"
 msgid "Connect your Email"
 msgstr "Kết nối Email của bạn"
 
-#. Label of the contact (Link) field in DocType 'CRM Contacts'
+#. Label of the contact (Link) field in DocType 'CRM Students'
 #. Label of the contact (Link) field in DocType 'CRM Deal'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -2780,7 +2780,7 @@ msgstr "Đang chỉnh sửa Sự kiện"
 msgid "Editing Row {0}"
 msgstr "Đang chỉnh sửa Hàng {0}"
 
-#. Label of the email (Data) field in DocType 'CRM Contacts'
+#. Label of the email (Data) field in DocType 'CRM Students'
 #. Label of the email (Data) field in DocType 'Invitation'
 #. Label of the email (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3585,7 +3585,7 @@ msgstr "Từ người dùng"
 msgid "Fulfilled"
 msgstr "Đã thực hiện"
 
-#. Label of the full_name (Data) field in DocType 'CRM Contacts'
+#. Label of the full_name (Data) field in DocType 'CRM Students'
 #. Label of the lead_name (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
@@ -3604,7 +3604,7 @@ msgstr "Chuyển đổi phễu"
 msgid "GMT+5:30"
 msgstr "GMT+5:30"
 
-#. Label of the gender (Link) field in DocType 'CRM Contacts'
+#. Label of the gender (Link) field in DocType 'CRM Students'
 #. Label of the gender (Link) field in DocType 'CRM Deal'
 #. Label of the gender (Link) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -4073,7 +4073,7 @@ msgstr "ERPNext có được cài đặt trên một site khác không?"
 msgid "Is Group"
 msgstr "Là nhóm"
 
-#. Label of the is_primary (Check) field in DocType 'CRM Contacts'
+#. Label of the is_primary (Check) field in DocType 'CRM Students'
 #. Label of the is_primary (Check) field in DocType 'Telephony Phone'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/telephony_phone/telephony_phone.json
@@ -4713,7 +4713,7 @@ msgstr "Thiếu các trường bắt buộc: {0}"
 msgid "Mobile App Installation"
 msgstr "Cài đặt Ứng dụng di động"
 
-#. Label of the mobile_no (Data) field in DocType 'CRM Contacts'
+#. Label of the mobile_no (Data) field in DocType 'CRM Students'
 #. Label of the mobile_no (Data) field in DocType 'CRM Lead'
 #. Label of the mobile_no (Data) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -5569,7 +5569,7 @@ msgstr "Người"
 msgid "Personal Mobile No."
 msgstr "Số Di động Cá nhân"
 
-#. Label of the phone (Data) field in DocType 'CRM Contacts'
+#. Label of the phone (Data) field in DocType 'CRM Students'
 #. Label of the phone (Data) field in DocType 'CRM Lead'
 #. Option for the 'Device' (Select) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -8575,7 +8575,7 @@ msgstr "Thêm trường THPT"
 msgid "CRM High School"
 msgstr "Trường THPT"
 
-msgid "CRM Contact"
+msgid "CRM Student"
 msgstr "Hồ sơ"
 
 msgid "Portal Page"
@@ -8748,7 +8748,7 @@ msgstr "Trạng thái tuyển sinh"
 msgid "Enrollment Date"
 msgstr "Ngày nhập học"
 
-msgid "Converted to CRM Contact"
+msgid "Converted to CRM Student"
 msgstr "Đã chuyển thành Liên hệ"
 
 msgid "Links"
@@ -8880,7 +8880,7 @@ msgstr "Các bên liên quan"
 msgid "Campaigns"
 msgstr "Chiến dịch"
 
-#. Lead Status options - CRM Contact
+#. Lead Status options - CRM Student
 msgid "New"
 msgstr "Mới"
 
@@ -8926,14 +8926,14 @@ msgstr "Lead nhắc lại"
 msgid "Duplicate Lead"
 msgstr "Lead trùng"
 
-#. Aspiration options - CRM Contact / CRM Student
+#. Aspiration options - CRM Student / CRM Lead
 msgid "Undecided"
 msgstr "Đang suy nghĩ"
 
 msgid "Not Applying to FPT"
 msgstr "Không đăng ký FPT"
 
-#. Field labels - CRM Contact / CRM Student
+#. Field labels - CRM Student / CRM Lead
 msgid "Lead Status"
 msgstr "Tình trạng thí sinh"
 
@@ -9020,7 +9020,7 @@ msgstr "Lịch nghỉ lễ"
 msgid "Student"
 msgstr "Học sinh"
 
-#. Toast and error messages — CRM Student
+#. Toast and error messages — CRM Lead
 msgid "Conversion failed"
 msgstr "Chuyển đổi thất bại"
 
@@ -9055,10 +9055,10 @@ msgstr "Di động"
 msgid "Create Contact"
 msgstr "Tạo hồ sơ"
 
-msgid "New CRM Student"
+msgid "New CRM Lead"
 msgstr "Thêm học sinh"
 
-msgid "New CRM Contact"
+msgid "New CRM Student"
 msgstr "Thêm hồ sơ"
 
 #. Dashboard chart labels
@@ -9156,7 +9156,7 @@ msgid "Convert student to contact"
 msgstr "Chuyển học sinh thành Liên hệ"
 
 #. Help center article names
-msgid "CRM Student"
+msgid "CRM Lead"
 msgstr "Học sinh"
 
 msgid "CRM Campaign"
@@ -9213,7 +9213,7 @@ msgstr "Kết quả học tập"
 msgid "CRM Student Language Certificate"
 msgstr "Chứng chỉ ngoại ngữ"
 
-#. CRM Contact — custom fields (English msgid → Vietnamese msgstr)
+#. CRM Student — custom fields (English msgid → Vietnamese msgstr)
 
 msgid "Parent Information"
 msgstr "Thông tin phụ huynh"
@@ -9887,7 +9887,7 @@ msgstr "Không hoạt động"
 msgid "Expired"
 msgstr "Hết hiệu lực"
 
-#. CRM Student — new fields (v2 field redesign)
+#. CRM Lead — new fields (v2 field redesign)
 
 msgid "Date of Birth"
 msgstr "Ngày sinh"

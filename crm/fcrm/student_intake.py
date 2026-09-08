@@ -751,7 +751,7 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 	student_name = _text(result.get("student"))
 	if student_name:
 		student = frappe.db.get_value(
-			"CRM Student", student_name, ["branch", "owning_team", "owner_staff"], as_dict=True
+			"CRM Lead", student_name, ["branch", "owning_team", "owner_staff"], as_dict=True
 		)
 		if not student:
 			_fail("UNAUTHORIZED", "The replay target is no longer available in the current scope.")
@@ -1030,7 +1030,7 @@ def _create_case(
 		_fail("REVIEW_REQUIRED", "Admission cycle is required before a Student case can be created.")
 	pool = _resolve_case_pool(pool, campus)
 	values = {
-		"doctype": "CRM Student",
+		"doctype": "CRM Lead",
 		"student_name": candidate.get("name") or "Unnamed Student",
 		"phone": candidate.get("phone"),
 		"email": candidate.get("email"),
@@ -1086,7 +1086,7 @@ def _create_case(
 				flags.student_intake_service = previous
 
 	with service_context():
-		student = frappe.get_doc({"doctype": "CRM Student", **_supported_values("CRM Student", values)})
+		student = frappe.get_doc({"doctype": "CRM Lead", **_supported_values("CRM Lead", values)})
 		student.insert(ignore_permissions=True)
 	initial_owner = _text(payload.get("assigned_to"))
 	if initial_owner:
@@ -1097,12 +1097,15 @@ def _create_case(
 			correlation_id,
 			_text(payload.get("_intake_actor_user")),
 		)
-	from crm.fcrm.student_feature_flags import enabled
+	from crm.fcrm.student_feature_flags import (
+		automatic_assignment_on_create_enabled,
+		enabled,
+	)
 	from crm.fcrm.student_routing import enqueue_student_routing, route_pool_owned_student
 
 	# A Sale's manual intake is now staff-owned through the canonical ownership
 	# command. Only pool-owned cases are eligible for the routing worker.
-	if not initial_owner:
+	if not initial_owner and automatic_assignment_on_create_enabled():
 		if enabled("synchronous_routing"):
 			route_pool_owned_student(student.name, trigger="pool_entry")
 		elif _doctype_exists("CRM Student Routing Request"):
@@ -1570,7 +1573,7 @@ def _review_scope(doc, authority: dict[str, Any]):
 	if not student:
 		return True
 	try:
-		student_doc = frappe.get_doc("CRM Student", student)
+		student_doc = frappe.get_doc("CRM Lead", student)
 	except Exception:
 		return False
 	if authority.get("profile") in {"platform_superuser", "admissions_director", "signed_ingress"}:

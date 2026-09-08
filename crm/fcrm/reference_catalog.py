@@ -329,6 +329,14 @@ REFERENCE_CATALOG: Final[dict[str, tuple[dict, ...]]] = {
 			"stage_order": 6,
 			"sort_order": 60,
 		},
+		{
+			"code": "FOLLOW_UP",
+			"display_name": "Hẹn liên hệ sau",
+			"stage_category": "open",
+			"lifecycle_stage": "Lead",
+			"stage_order": 2,
+			"sort_order": 25,
+		},
 	),
 	"CRM Admission Method": (
 		{"code": "COMBINED", "display_name": "Xét tuyển kết hợp", "sort_order": 10},

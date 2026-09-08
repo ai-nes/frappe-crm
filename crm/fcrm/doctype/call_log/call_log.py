@@ -5,7 +5,11 @@ import frappe
 from frappe import _, generate_hash
 from frappe.model.document import Document
 
-from crm.integrations.api import get_contact_by_phone_number, get_recording_url_path
+from crm.integrations.api import (
+	ensure_call_log_read_access,
+	get_contact_by_phone_number,
+	get_recording_url_path,
+)
 from crm.utils import seconds_to_duration
 
 
@@ -190,9 +194,23 @@ def parse_call_log(call):
 	return call
 
 
+def _get_permitted_linked_doc(doctype: str, name: str | None):
+	"""Return one linked document only when the current user can list/read it."""
+	if not name:
+		return None
+
+	rows = frappe.get_list(
+		doctype,
+		filters={"name": name},
+		fields=["*"],
+		limit_page_length=1,
+	)
+	return rows[0] if rows else None
+
+
 @frappe.whitelist()
 def get_call_log(name: str):
-	call = frappe.get_cached_doc(
+	call_doc = frappe.get_cached_doc(
 		"Call Log",
 		name,
 		fields=[
@@ -213,7 +231,9 @@ def get_call_log(name: str):
 			"reference_docname",
 			"creation",
 		],
-	).as_dict()
+	)
+	ensure_call_log_read_access(call_doc)
+	call = call_doc.as_dict()
 
 	call = parse_call_log(call)
 
@@ -221,11 +241,11 @@ def get_call_log(name: str):
 	tasks = []
 
 	if call.get("note"):
-		note = frappe.get_cached_doc("FCRM Note", call.get("note")).as_dict()
-		notes.append(note)
+		if note := _get_permitted_linked_doc("FCRM Note", call.get("note")):
+			notes.append(note)
 
 	if call.get("reference_doctype") and call.get("reference_docname"):
-		if call.get("reference_doctype") == "CRM Contact":
+		if call.get("reference_doctype") == "CRM Student":
 			call["_crm_contact"] = call.get("reference_docname")
 		elif call.get("reference_doctype") == "Contact":
 			call["_contact"] = call.get("reference_docname")
@@ -233,12 +253,12 @@ def get_call_log(name: str):
 	if call.get("links"):
 		for link in call.get("links"):
 			if link.get("link_doctype") == "Task":
-				task = frappe.get_cached_doc("Task", link.get("link_name")).as_dict()
-				tasks.append(task)
+				if task := _get_permitted_linked_doc("Task", link.get("link_name")):
+					tasks.append(task)
 			elif link.get("link_doctype") == "FCRM Note":
-				note = frappe.get_cached_doc("FCRM Note", link.get("link_name")).as_dict()
-				notes.append(note)
-			elif link.get("link_doctype") == "CRM Contact":
+				if note := _get_permitted_linked_doc("FCRM Note", link.get("link_name")):
+					notes.append(note)
+			elif link.get("link_doctype") == "CRM Student":
 				call["_crm_contact"] = link.get("link_name")
 			elif link.get("link_doctype") == "Contact":
 				call["_contact"] = link.get("link_name")
@@ -267,15 +287,15 @@ def create_contact_from_call_log(call_log: str | dict, contact_details: str | di
 	if not call_doc.has_permission("write"):
 		frappe.throw(_("You are not permitted to update this call log."), frappe.PermissionError)
 
-	if not frappe.has_permission("CRM Contact", "create"):
+	if not frappe.has_permission("CRM Student", "create"):
 		frappe.throw(_("You are not permitted to create CRM contacts."), frappe.PermissionError)
 
 	contact_details_data = frappe.parse_json(contact_details or {})
 	if contact_details_data and not isinstance(contact_details_data, dict):
 		frappe.throw(_("Invalid contact details supplied."), frappe.ValidationError)
 
-	contact = frappe.new_doc("CRM Contact")
-	meta = frappe.get_meta("CRM Contact")
+	contact = frappe.new_doc("CRM Student")
+	meta = frappe.get_meta("CRM Student")
 	valid_fieldnames = [df.fieldname for df in meta.fields]
 
 	sanitized_details = {
@@ -298,7 +318,7 @@ def create_contact_from_call_log(call_log: str | dict, contact_details: str | di
 	contact.update(sanitized_details)
 	contact.insert()
 
-	call_doc.link_with_reference_doc("CRM Contact", contact.name)
+	call_doc.link_with_reference_doc("CRM Student", contact.name)
 	call_doc.save()
 
 	return contact.name

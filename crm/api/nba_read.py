@@ -15,20 +15,19 @@ from crm.api._pagination import paged_list
 
 RECOMMENDATION_LIST_FIELDS = [
 	"name",
-	"student",
-	"rule_key",
+	"target_id",
+	"action",
 	"priority",
-	"status",
+	"lifecycle_status",
 	"decision_status",
 	"execution_status",
-	"lifecycle_status",
-	"recommended_action",
 	"channel",
 	"confidence",
 	"expected_impact",
+	"rank",
+	"evaluation",
 	"expires_at",
-	"revisit_at",
-	"created_at",
+	"recommended_at",
 	"modified",
 ]
 
@@ -99,21 +98,23 @@ def _get(doctype, name):
 
 @frappe.whitelist()
 def list_recommendations(student=None, status=None, decision_status=None, execution_status=None, start=0, page_length=20):
-	"""List CRM Recommendation rows (NBA advice). Filter by student, status,
-	decision_status, or execution_status; paginated, newest first.
+	"""List CRM Recommendation rows (NBA advice). Filter by student, status
+	(lifecycle_status), decision_status, or execution_status; paginated, newest
+	first. ``student``/``status`` are the stable API parameter names; the
+	underlying CRM Recommendation fields are ``target_id``/``lifecycle_status``.
 	"""
 	filters = {}
 	if student:
-		filters["student"] = student
+		filters["target_id"] = student
 	if status:
-		filters["status"] = status
+		filters["lifecycle_status"] = status
 	if decision_status:
 		filters["decision_status"] = decision_status
 	if execution_status:
 		filters["execution_status"] = execution_status
 	return paged_list(
 		"CRM Recommendation", RECOMMENDATION_LIST_FIELDS,
-		filters=filters, start=start, page_length=page_length, order_by="created_at desc",
+		filters=filters, start=start, page_length=page_length, order_by="recommended_at desc",
 	)
 
 

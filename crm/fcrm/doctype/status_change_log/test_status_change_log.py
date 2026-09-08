@@ -25,7 +25,7 @@ class _StubDoc:
 
 class TestGetStatusField(FrappeTestCase):
 	def test_uses_hook_override_when_field_exists(self):
-		doc = _StubDoc("CRM Contact", ["enrollment_status", "status", "stage"])
+		doc = _StubDoc("CRM Student", ["enrollment_status", "status", "stage"])
 		self.assertEqual(get_status_field(doc), "enrollment_status")
 
 	def test_falls_back_to_stage_when_no_hook_registered(self):
@@ -41,10 +41,10 @@ class TestGetStatusField(FrappeTestCase):
 		self.assertIsNone(get_status_field(doc))
 
 	def test_ignores_hook_override_when_field_missing_from_doctype(self):
-		# Hook says "enrollment_status" for CRM Contact, but this stub doesn't have
+		# Hook says "enrollment_status" for CRM Student, but this stub doesn't have
 		# that field — must fall back to stage/status rather than returning a
 		# nonexistent fieldname.
-		doc = _StubDoc("CRM Contact", ["stage"])
+		doc = _StubDoc("CRM Student", ["stage"])
 		self.assertEqual(get_status_field(doc), "stage")
 
 
@@ -76,8 +76,8 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 			self._statuses[status_name] = status_name
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"phone": ["like", "090000%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"phone": ["like", "090000%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for status_name in self._statuses:
 			if frappe.db.exists("CRM Enrollment Status", status_name):
 				frappe.delete_doc("CRM Enrollment Status", status_name, force=True)
@@ -85,7 +85,7 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 	def _make_contact(self, phone, enrollment_status):
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Status Contact",
 				"phone": phone,
 				"enrollment_status": enrollment_status,
@@ -148,7 +148,7 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		# add_status_change_log must backfill an open row instead of indexing into
 		# the (still empty) child table.
 		contact = self._make_contact("0900000005", "")
-		frappe.db.delete("Status Change Log", {"parent": contact.name, "parenttype": "CRM Contact"})
+		frappe.db.delete("Status Change Log", {"parent": contact.name, "parenttype": "CRM Student"})
 		contact.reload()
 		self.assertEqual(len(contact.status_change_log), 0)
 

@@ -30,31 +30,27 @@ class TestScoringWrite(FrappeTestCase):
 
 	def _delete_test_students(self):
 		for student in frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test SW%"]}, pluck="name"
+			"CRM Student", filters={"full_name": ["like", "_Test SW%"]}, pluck="name"
 		):
 			for history in frappe.db.get_all("CRM Score History", filters={"student": student}, pluck="name"):
 				frappe.delete_doc("CRM Score History", history, force=True)
 			frappe.delete_doc("CRM Student", student, force=True)
 
 	def _make_student(self, name="_Test SW Student"):
-		for student in frappe.db.get_all("CRM Student", filters={"student_name": name}, pluck="name"):
+		for student in frappe.db.get_all("CRM Student", filters={"full_name": name}, pluck="name"):
 			for history in frappe.db.get_all("CRM Score History", filters={"student": student}, pluck="name"):
 				frappe.delete_doc("CRM Score History", history, force=True)
 			frappe.delete_doc("CRM Student", student, force=True)
 		student = frappe.get_doc(
 			{
 				"doctype": "CRM Student",
-				"student_name": name,
+				"full_name": name,
 				"phone": "0981100001",
 				"email": f"{name.lower().replace(' ', '.')}@example.com",
 				"enrollment_status": "CONFIRMED",
 			}
 		)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = False
+		student.insert(ignore_permissions=True)
 		return student
 
 	def _make_template(self, name="_Test SW Template"):

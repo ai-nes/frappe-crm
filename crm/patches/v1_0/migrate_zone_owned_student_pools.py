@@ -8,12 +8,12 @@ from crm.fcrm.student_ownership import change_student_ownership
 
 def execute():
 	for student in frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		filters={"owner_staff": ["is", "not set"], "owning_pool": ["is", "set"]},
 		fields=["name", "branch", "owning_pool", "ownership_revision"],
 		limit_page_length=0,
 	):
-		doc = frappe.get_doc("CRM Student", student.name)
+		doc = frappe.get_doc("CRM Lead", student.name)
 		geo = resolve_student_zone(doc)
 		mapping = zone_team_pool(geo.get("zone"), doc.branch) if geo.get("zone") else None
 		if not mapping or mapping.get("pool") == doc.owning_pool:

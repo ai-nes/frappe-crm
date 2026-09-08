@@ -5,7 +5,7 @@ import frappe
 from crm.utils import get_phone_lookup_terms
 
 
-PHONE_LOOKUP_DOCTYPES = {"CRM Student", "CRM Contact"}
+PHONE_LOOKUP_DOCTYPES = {"CRM Lead", "CRM Student"}
 
 
 def normalize_resource_phone_filters():

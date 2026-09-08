@@ -6,10 +6,14 @@
 tuple ordering the CAS write layer
 (`crm.api.scoring_write.append_score_if_current`) already uses."""
 
+import hashlib
+import json
+import pathlib
 from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
+from crm.fcrm.nba_canonical import canonical_digest
 from crm.api.student_decision_context import (
 	_ENGAGEMENT_MAP,
 	_canonical_label,
@@ -21,6 +25,11 @@ from crm.api.student_decision_context import (
 	_interaction_recency,
 	_recent_actions,
 	_score_projection,
+)
+
+
+_CURRENT_GPA_FIXTURE = (
+	pathlib.Path(__file__).parents[1] / "fcrm" / "test_fixtures" / "nba-producer-phase00" / "gpa-current.json"
 )
 
 
@@ -163,10 +172,12 @@ class TestDecisionEvidenceSignals(FrappeTestCase):
 			projected[0],
 			{
 				"action_type": "CALL",
+				"action_category": "CONTACT",
 				"state": "completed",
 				"execution_status": "done",
 				"disposition": "ACT",
 				"at": "2026-08-28 09:00:00",
+				"outcome_code": None,
 			},
 		)
 		self.assertIsNone(projected[1]["at"])
@@ -215,6 +226,36 @@ class TestDecisionEvidenceSignals(FrappeTestCase):
 			result = _academic_projection("STU-1")
 		self.assertIsNone(result["gpa"])
 		self.assertEqual(result["quality"], "conflicting")
+
+	def test_academic_projection_prefers_student_rows_before_contact_fallback(self):
+		raw = _CURRENT_GPA_FIXTURE.read_bytes()
+		fixture = json.loads(raw)
+		self.assertEqual(canonical_digest(fixture), "7df0d91b50db479d106e038f919e29d54b93d68c4c2cf4364de7bcfd2fb17132")
+		self.assertEqual(hashlib.sha256(raw).hexdigest(), "bef5af2e221d388e0bbea9bf62294be9384306a74387ab5a69f0eba4c73ba674")
+		student_row = {"name": "GPA-STU", "school_year": "2025-2026", "grade": "12", "gpa": 8.8, "modified": "2026-06-01 09:00:00", "idx": 1}
+		contact_row = {"name": "GPA-CON", "school_year": "2025-2026", "grade": "12", "gpa": 9.4, "modified": "2026-06-02", "idx": 1}
+
+		def get_all(_doctype, **kwargs):
+			return [student_row] if kwargs["filters"]["parent"] == "STU-1" else [contact_row]
+
+		with patch("crm.api.student_decision_context.frappe.get_all", side_effect=get_all), patch(
+			"crm.api.student_decision_context.contacts_for_student", return_value=["CON-1"]
+		) as contacts:
+			result = _academic_projection("STU-1")
+
+		self.assertEqual({key: result[key] for key in fixture["academic"]}, fixture["academic"])
+		self.assertEqual(result["evidence_ref"], fixture["evidence_refs"][0])
+		contacts.assert_not_called()
+
+	def test_academic_projection_rejects_ambiguous_contact_fallback(self):
+		with patch("crm.api.student_decision_context.frappe.get_all", return_value=[]), patch(
+			"crm.api.student_decision_context.contacts_for_student", return_value=["CON-1", "CON-2"]
+		):
+			result = _academic_projection("STU-1")
+
+		self.assertIsNone(result["gpa"])
+		self.assertEqual(result["quality"], "unknown")
+		self.assertEqual(result["source_revision"], "ambiguous_contact")
 
 	def test_contactability_merges_student_and_legacy_contact_events(self):
 		student_event = {

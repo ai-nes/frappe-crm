@@ -15,9 +15,9 @@ class TestCRMIntent(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test Intent Trash%"]}, pluck="name"
+			"CRM Lead", filters={"student_name": ["like", "_Test Intent Trash%"]}, pluck="name"
 		):
-			frappe.delete_doc("CRM Student", name, force=True)
+			frappe.delete_doc("CRM Lead", name, force=True)
 
 	def _ensure_master_data(self):
 		if not frappe.db.exists("CRM Interaction Type", "OUTREACH"):
@@ -32,7 +32,7 @@ class TestCRMIntent(FrappeTestCase):
 	def _make_student(self):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": "_Test Intent Trash Student",
 				"phone": "0901234599",
 			}
@@ -69,9 +69,9 @@ class TestCRMIntent(FrappeTestCase):
 			}
 		)
 		intent.insert(ignore_permissions=True)
-		before_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		before_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 
 		frappe.delete_doc("CRM Intent", intent.name, force=True)
 
-		after_revision = frappe.db.get_value("CRM Student", student.name, "score_input_revision") or 0
+		after_revision = frappe.db.get_value("CRM Lead", student.name, "score_input_revision") or 0
 		self.assertGreater(after_revision, before_revision)

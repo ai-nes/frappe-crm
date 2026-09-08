@@ -12,7 +12,13 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import add_to_date, now_datetime
 
-from crm.fcrm.student_decision import StudentDecisionError, create_manual_action, decide_recommendation
+from crm.api.task import get_task, list_sales_tasks
+from crm.fcrm.student_decision import (
+	StudentDecisionError,
+	create_manual_action,
+	decide_recommendation,
+	transition_action,
+)
 from crm.fcrm.test_permissions import TestSharedScopingPermissions
 
 
@@ -32,6 +38,24 @@ class TestRecommendationDecision(FrappeTestCase):
 		frappe.set_user("Administrator")
 		frappe.db.delete("CRM Student Decision Event", {"student": self._student.name})
 		for name in frappe.db.get_all(
+			"CRM Action Execution Attempt",
+			filters={
+				"action": [
+					"in",
+					frappe.db.get_all(
+						"CRM Action Item", filters={"student": self._student.name}, pluck="name"
+					)
+					or [""],
+				]
+			},
+			pluck="name",
+		):
+			frappe.delete_doc("CRM Action Execution Attempt", name, force=True)
+		for name in frappe.db.get_all(
+			"CRM Interaction", filters={"student": self._student.name}, pluck="name"
+		):
+			frappe.delete_doc("CRM Interaction", name, force=True)
+		for name in frappe.db.get_all(
 			"CRM Action Item", filters={"student": self._student.name}, pluck="name"
 		):
 			frappe.delete_doc("CRM Action Item", name, force=True)
@@ -44,7 +68,7 @@ class TestRecommendationDecision(FrappeTestCase):
 		):
 			frappe.delete_doc("CRM NBA Evaluation", name, force=True)
 		frappe.db.delete("CRM Student Command Receipt", {"target_student": self._student.name})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Staff", self._sale_staff, force=True)
 		frappe.delete_doc("User", self._sale_user, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
@@ -52,16 +76,14 @@ class TestRecommendationDecision(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
 			student.insert(ignore_permissions=True)
 		finally:
 			frappe.flags.student_intake_service = previous
-		frappe.db.set_value(
-			"CRM Student", student.name, "owner_staff", self._sale_staff, update_modified=False
-		)
+		frappe.db.set_value("CRM Lead", student.name, "owner_staff", self._sale_staff, update_modified=False)
 		return student
 
 	def _make_evaluation(self):
@@ -82,7 +104,7 @@ class TestRecommendationDecision(FrappeTestCase):
 			{
 				"doctype": "CRM Recommendation",
 				"recommendation_id": "REC-" + frappe.generate_hash(length=18),
-				"target_type": "CRM Student",
+				"target_type": "CRM Lead",
 				"target_id": self._student.name,
 				"action": action,
 				"purpose": "Call the family about the offer.",
@@ -130,6 +152,16 @@ class TestRecommendationDecision(FrappeTestCase):
 		self.assertEqual(len(tasks), 1)
 		task = frappe.get_doc("CRM Action Item", tasks[0])
 		self.assertEqual(task.state, "accepted")
+		self.assertEqual(task.objective, "Gọi điện")
+		self.assertEqual(task.description, rec.reason)
+		task_dto = get_task(result["action"])
+		self.assertEqual(task_dto["title"], "Gọi điện")
+		self.assertEqual(task_dto["description"], rec.reason)
+		task_row = next(
+			row for row in list_sales_tasks(page_length=100)["tasks"] if row["name"] == result["action"]
+		)
+		self.assertEqual(task_row["title"], "Gọi điện")
+		self.assertEqual(task_row["description"], rec.reason)
 		self.assertEqual(task.source_decision_event, result["event"])
 		self.assertEqual(
 			task.action_definition_digest, frappe.db.get_value("CRM Action", "CALL", "definition_digest")
@@ -417,3 +449,91 @@ class TestRecommendationDecision(FrappeTestCase):
 				idempotency_key=f"late-{sibling.name}",
 			)
 		self.assertEqual(ctx.exception.code, "INVALID_STATE")
+
+	def _confirm_attempt(self, task_name):
+		revision = frappe.db.get_value("CRM Action Item", task_name, "action_revision")
+		return frappe.get_doc(
+			{
+				"doctype": "CRM Action Execution Attempt",
+				"action": task_name,
+				"actor": "Administrator",
+				"operation": "execute",
+				"idempotency_key": frappe.generate_hash(length=16),
+				"request_fingerprint": frappe.generate_hash(length=16),
+				"status": "confirmed",
+				"action_revision": revision,
+				"package_revision": 0,
+				"created_at": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+
+	def test_completing_a_call_action_creates_interaction_and_closes_recommendation(self):
+		rec = self._make_recommendation(action="CALL")
+		result = decide_recommendation(
+			rec.name, expected_revision=0, operation="ACCEPT", idempotency_key=f"acc-{rec.name}"
+		)
+		task_name = result["action"]
+		transition_action(
+			task_name,
+			expected_revision=frappe.db.get_value("CRM Action Item", task_name, "action_revision"),
+			status="in_progress",
+			idempotency_key=f"start-{task_name}",
+		)
+		attempt = self._confirm_attempt(task_name)
+		with patch("frappe.enqueue") as enqueue:
+			transition_action(
+				task_name,
+				expected_revision=frappe.db.get_value("CRM Action Item", task_name, "action_revision"),
+				status="completed",
+				idempotency_key=f"complete-{task_name}",
+				outcome_code="NEEDS_MORE_INFORMATION",
+				evidence="Phu huynh muon biet hoc bong",
+				attempt_id=attempt.name,
+			)
+		reevaluation_calls = [
+			call
+			for call in enqueue.call_args_list
+			if call.args and call.args[0] == "crm.api.agent_events.record_domain_reevaluation_trigger"
+		]
+		self.assertEqual(len(reevaluation_calls), 1)
+		self.assertEqual(reevaluation_calls[0].kwargs.get("student"), self._student.name)
+		self.assertEqual(reevaluation_calls[0].kwargs.get("trigger"), "action_outcome_recorded")
+
+		task = frappe.get_doc("CRM Action Item", task_name)
+		self.assertTrue(task.linked_interaction)
+		interaction = frappe.get_doc("CRM Interaction", task.linked_interaction)
+		self.assertEqual(interaction.outcome, "Follow Up Needed")
+		self.assertEqual(interaction.reference_doctype, "CRM Action Item")
+		self.assertEqual(interaction.reference_docname, task_name)
+		self.assertEqual(interaction.channel, "CALL")
+
+		rec.reload()
+		self.assertEqual(rec.lifecycle_status, "completed")
+
+	def test_completing_an_internal_action_creates_no_interaction(self):
+		result = create_manual_action(
+			self._student.name,
+			"REQUEST_SUPERVISOR_REVIEW",
+			"Escalate for manager review",
+			idempotency_key=f"manual-{self._student.name}",
+		)
+		task_name = result["action"]
+		transition_action(
+			task_name,
+			expected_revision=frappe.db.get_value("CRM Action Item", task_name, "action_revision"),
+			status="in_progress",
+			idempotency_key=f"start-{task_name}",
+		)
+		attempt = self._confirm_attempt(task_name)
+		with patch("frappe.enqueue"):
+			transition_action(
+				task_name,
+				expected_revision=frappe.db.get_value("CRM Action Item", task_name, "action_revision"),
+				status="completed",
+				idempotency_key=f"complete-{task_name}",
+				outcome_code="NEEDS_MORE_INFORMATION",
+				evidence="Da chuyen cho quan ly xem xet",
+				attempt_id=attempt.name,
+			)
+		task = frappe.get_doc("CRM Action Item", task_name)
+		self.assertFalse(task.linked_interaction)

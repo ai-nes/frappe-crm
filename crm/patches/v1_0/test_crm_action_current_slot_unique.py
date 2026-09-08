@@ -36,13 +36,13 @@ class TestCRMActionCurrentSlotUnique(FrappeTestCase):
 			"CRM Action Item", filters={"student": self._student.name}, pluck="name"
 		):
 			frappe.delete_doc("CRM Action Item", name, force=True)
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		frappe.delete_doc("CRM Department", self._department, force=True)
 		frappe.delete_doc("CRM Campus", self._campus, force=True)
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:

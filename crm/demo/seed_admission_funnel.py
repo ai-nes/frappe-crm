@@ -114,7 +114,7 @@ def _load_showcase_students(context: dict[str, Any]) -> list[dict[str, Any]]:
 	return [
 		dict(row)
 		for row in frappe.get_all(
-			"CRM Student",
+			"CRM Lead",
 			filters=filters,
 			fields=[
 				"name",
@@ -167,7 +167,7 @@ def _refresh_snapshot_dates(students: list[dict[str, Any]], as_of: datetime) -> 
 		created_at = snapshot_datetime(as_of, index)
 		modified_at = created_at + timedelta(days=1, hours=index % 8)
 		frappe.db.set_value(
-			"CRM Student",
+			"CRM Lead",
 			student,
 			{"creation": created_at, "modified": modified_at},
 			update_modified=False,

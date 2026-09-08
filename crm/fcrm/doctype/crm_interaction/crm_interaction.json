@@ -12,6 +12,7 @@
   "naming_series",
   "student",
   "crm_contact",
+  "crm_student",
   "column_break_1",
   "interaction_type",
   "interaction_datetime",
@@ -52,7 +53,7 @@
    "options": "INTX-.YYYY.-"
   },
   {
-   "description": "Either Student or CRM Contact must be set (enforced in validate) -- not required alone, since most interactions happen before a lead is promoted to Student.",
+   "description": "Student is the canonical AI-analysis target. Raw CRM Leads must qualify and convert before an interaction can be analyzed.",
    "fieldname": "student",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -65,8 +66,15 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Contact",
-   "options": "CRM Contact"
+   "label": "CRM Student",
+   "options": "CRM Student"
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_1",
@@ -354,7 +362,7 @@
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "student,crm_contact,summary",
+ "search_fields": "student,crm_student,crm_contact,summary",
  "sort_field": "interaction_datetime",
  "sort_order": "DESC",
  "states": [],

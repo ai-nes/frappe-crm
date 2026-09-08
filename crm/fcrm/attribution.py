@@ -215,8 +215,8 @@ def get_campaign_progression_rollups():
 
 
 def _student_for_contact(contact):
-	if not frappe.db.exists("CRM Contact", contact):
-		frappe.throw(f"CRM Contact {contact} does not exist")
+	if not frappe.db.exists("CRM Student", contact):
+		frappe.throw(f"CRM Student {contact} does not exist")
 	students = students_for_contact(contact)
 	if len(students) != 1:
 		return None
@@ -334,8 +334,8 @@ def get_campaign_names_by_last_touch(campaign):
 
 @frappe.whitelist()
 def get_contact_attribution(contact):
-	if not frappe.db.exists("CRM Contact", contact):
-		frappe.throw(f"CRM Contact {contact} does not exist")
+	if not frappe.db.exists("CRM Student", contact):
+		frappe.throw(f"CRM Student {contact} does not exist")
 	students = students_for_contact(contact)
 	if len(students) == 1:
 		projection = get_student_attribution(students[0])

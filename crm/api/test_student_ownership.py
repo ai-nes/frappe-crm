@@ -19,6 +19,33 @@ from crm.fcrm.student_ownership import (
 
 
 class TestStudentOwnershipContract(FrappeTestCase):
+	def test_linked_student_scope_follows_current_lead_assignment(self):
+		updates = {
+			"owner_staff": "STAFF-CTV",
+			"owning_team": None,
+			"owning_pool": None,
+			"assigned_to": "STAFF-CTV",
+		}
+		with (
+			patch.object(student_ownership_domain.frappe.db, "get_value", return_value="CRMC-1") as get_value,
+			patch.object(student_ownership_domain.frappe.db, "exists", return_value=True),
+			patch.object(
+				student_ownership_domain,
+				"_doctype_fields",
+				return_value={*updates, "ownership_revision"},
+			),
+			patch.object(student_ownership_domain.frappe.db, "set_value") as set_value,
+		):
+			student_ownership_domain._sync_linked_student_ownership("ENR-1", updates, 7)
+
+		get_value.assert_called_once_with("CRM Lead", "ENR-1", "student")
+		set_value.assert_called_once_with(
+			"CRM Student",
+			"CRMC-1",
+			{**updates, "ownership_revision": 7},
+			update_modified=True,
+		)
+
 	def test_only_sale_and_managers_receive_ownership_capability(self):
 		for roles in ({"Sale"}, {"Lead Sale"}, {"Admissions Director"}):
 			with self.subTest(roles=roles):
@@ -102,6 +129,58 @@ class TestStudentOwnershipContract(FrappeTestCase):
 
 
 class TestStudentOwnershipAPI(FrappeTestCase):
+	def test_lead_sale_fairness_report_is_scoped_to_its_team_staff(self):
+		frappe.set_user("lead-sale@example.com")
+		try:
+			with (
+				patch.object(frappe, "get_roles", return_value=["Lead Sale"]),
+				patch.object(
+					student_lead_operations_api,
+					"_team_staff_scope",
+					return_value={"STAFF-SALE"},
+				),
+				patch.object(
+					student_lead_operations_api,
+					"fairness_summary",
+					return_value={"counts": {}},
+				) as fairness_summary,
+			):
+				student_lead_operations_api.fairness_report_read(zone="ZONE-1")
+			fairness_summary.assert_called_once_with(
+				zone="ZONE-1", since=None, until=None, staff_scope={"STAFF-SALE"}
+			)
+		finally:
+			frappe.set_user("Administrator")
+
+	def test_student_management_reports_reject_sale_and_ctv(self):
+		for role in ("Sale", "CTV Sale"):
+			with self.subTest(role=role), patch.object(frappe, "get_roles", return_value=[role]):
+				frappe.set_user(f"{role.lower().replace(' ', '-')}@example.com")
+				try:
+					with self.assertRaises(frappe.PermissionError):
+						student_lead_operations_api.fairness_report_read()
+					with self.assertRaises(frappe.PermissionError):
+						student_lead_operations_api.open_ctv_batch_command("STAFF-1", "TEAM-1")
+				finally:
+					frappe.set_user("Administrator")
+
+	def test_ctv_batch_command_requires_the_authenticated_ctv_owner(self):
+		frappe.set_user("ctv@example.com")
+		try:
+			with (
+				patch.object(frappe, "get_roles", return_value=["CTV Sale"]),
+				patch.object(
+					frappe.db,
+					"get_value",
+					return_value=frappe._dict(name="STAFF-CTV", is_active=1),
+				),
+				patch.object(frappe, "get_all", return_value=[]),
+			):
+				with self.assertRaises(frappe.PermissionError):
+					student_lead_operations_api.open_ctv_batch_command("STAFF-OTHER", "TEAM-1")
+		finally:
+			frappe.set_user("Administrator")
+
 	def test_manager_reassign_remains_restricted_to_manager_profiles(self):
 		frappe.set_user("sale@example.com")
 		try:

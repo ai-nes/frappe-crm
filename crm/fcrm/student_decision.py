@@ -251,12 +251,14 @@ _RECEIPT_KIND_BUCKET = {
 
 def _new_receipt(kind, actor, student, key, fingerprint, scope, correlation_id):
 	command_key = _command_key(kind, actor, key)
+	canonical_student = frappe.db.get_value("CRM Student", student, "student") or student
 	return frappe.get_doc({"doctype": RECEIPT, "receipt_key": command_key, "command_key": command_key,
 		# The receipt DocType predates CRM Action and has no Action enum yet;
 		# reuse its governed student-decision bucket without exposing a legacy
 		# writer or creating a second receipt schema.
 		"command_kind": _RECEIPT_KIND_BUCKET.get(kind, "interaction_outcome"),
-		"request_fingerprint": fingerprint, "outcome": "pending", "target_student": student,
+		"request_fingerprint": fingerprint, "outcome": "pending", "target_student": canonical_student,
+		"target_contact": student,
 		"actor": actor, "scope_snapshot": scope, "policy_version": POLICY_VERSION,
 		"schema_version": SCHEMA_VERSION, "correlation_token": correlation_id, "request_received_at": now_datetime()}).insert(ignore_permissions=True)
 
@@ -474,7 +476,11 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 	canonical_type = None
 	definition_digest = None
 	if accepting:
-		from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+		from crm.fcrm.action_type_catalog import (
+			action_category,
+			canonicalize_action_type,
+			display_name_for_wire_action_code,
+		)
 		from crm.fcrm.action_type_registry import is_available_action_type
 		from crm.fcrm.student_contact_conversion import contact_for_student
 		from crm.services.sales_action_policy import parent_contact_for_student
@@ -541,12 +547,17 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 			if is_parent_action
 			else contact_for_student(student_name)
 		)
-		# A new Lead is a governed CRM Student before it becomes a CRM Contact.
+		# A new Lead is a governed CRM Student before it becomes a CRM Student.
 		# Non-parent care actions can therefore be accepted against the Student
 		# directly. Parent actions remain fail-closed because they require a
 		# verified parent recipient and authority.
 		if is_parent_action and not action_contact:
 			_fail("FORBIDDEN", "A unique governed parent recipient is required for this Action.")
+		task_title = (
+			display_name_for_wire_action_code(canonical_type or action_type)
+			or doc.purpose
+			or doc.reason
+		)
 		canonical = frappe.get_doc(
 			{
 				"doctype": CANONICAL_ACTION,
@@ -558,7 +569,8 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 				"action": canonical_type,
 				"action_type": action_category(canonical_type) if canonical_type else None,
 				"action_definition_digest": definition_digest,
-				"objective": doc.purpose or doc.reason,
+				"objective": task_title,
+				"description": doc.reason,
 				"disposition": "ACT" if canonical_type else "MONITOR",
 				"state": "accepted",
 				"priority": applied_delta.get("priority") or doc.priority or "medium",
@@ -1208,6 +1220,9 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 		if status == "in_progress": action.started_at = now_datetime()
 		if status == "completed":
 			action.completed_at = now_datetime(); action.outcome_code = outcome_code; action.outcome_evidence = str(evidence)[:2000]; action.outcome_notes = evidence if isinstance(evidence, str) else None; action.linked_interaction = linked_interaction
+			if not action.linked_interaction:
+				from crm.fcrm.interaction_log import create_interaction_for_completed_action
+				action.linked_interaction = create_interaction_for_completed_action(action)
 		if status in {"failed", "cancelled"}: action.terminal_reason = reason
 		action.save(ignore_permissions=True)
 		from crm.fcrm.nba import record_nba_outcome_for_action, sync_nba_recommendation_for_action
@@ -1235,6 +1250,18 @@ def _transition_canonical_action(name: str, expected_revision: Any, status: str,
 			context_revision = change["revision"]
 			from crm.services.admission_event_policy import admit_action_outcome
 			admit_action_outcome(student=action.student, revision=context_revision, source_event=change["change"], source_reference=action.name)
+		if status == "completed":
+			if action.get("recommendation"):
+				frappe.db.set_value(
+					"CRM Recommendation", action.get("recommendation"), "lifecycle_status", "completed", update_modified=False
+				)
+			frappe.enqueue(
+				"crm.api.agent_events.record_domain_reevaluation_trigger",
+				queue="short",
+				enqueue_after_commit=True,
+				student=action.student,
+				trigger="action_outcome_recorded",
+			)
 		event = _event(f"action.{status}", action.student, action.get("recommendation"), action.name, actor, scope, receipt, correlation_id, action.action_revision, {"status": status, "from_state": previous, "outcome_code": outcome_code, "progress": progress, "context_revision": context_revision, "reason": reason})
 		_outbox("action.outcome_recorded.v1", action)
 		result = {"status": status, "action": action.name, "student": action.student, "revision": action.action_revision, "event": event.name, "receipt": receipt.name, "nba_outcome": nba_outcome.name if nba_outcome else None}

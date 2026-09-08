@@ -11,6 +11,7 @@
  "field_order": [
   "naming_series",
   "student",
+  "crm_student",
   "score_template",
   "source_score_input_revision",
   "policy_revision",
@@ -48,6 +49,14 @@
    "label": "Student",
    "options": "CRM Student",
    "reqd": 1
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
   },
   {
    "fieldname": "score_template",
@@ -152,7 +161,7 @@
    "fieldname": "triggered_by_doctype",
    "fieldtype": "Select",
    "label": "Triggered By (Doctype)",
-   "options": "\nCRM Interaction\nCRM Lead",
+   "options": "\nCRM Interaction\nCRM Student",
    "description": "Source doctype that triggered this score calculation"
   },
   {

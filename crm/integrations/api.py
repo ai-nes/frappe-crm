@@ -1,6 +1,6 @@
 import os
 import re
-from urllib.parse import quote, urlencode, urljoin
+from urllib.parse import quote, urlencode, urljoin, urlparse
 
 import frappe
 import requests
@@ -21,6 +21,77 @@ def _worldfone_config(name: str, default: str = "") -> str:
 	config_key = f"crm_worldfone_{name}"
 	env_key = f"WORLDFONE_{name.upper()}"
 	return str(frappe.conf.get(config_key) or os.getenv(env_key) or default).strip()
+
+
+def ensure_call_log_read_access(call_log) -> None:
+	"""Require access to a Call Log and its linked CRM record."""
+	if not call_log.has_permission("read"):
+		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
+
+	reference_doctype = str(call_log.get("reference_doctype") or "").strip()
+	reference_docname = str(call_log.get("reference_docname") or "").strip()
+	if not reference_doctype or not reference_docname:
+		return
+	try:
+		reference_doc = frappe.get_doc(reference_doctype, reference_docname)
+	except frappe.DoesNotExistError:
+		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
+	if not reference_doc.has_permission("read"):
+		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
+
+
+def _recording_host(value: str) -> str | None:
+	try:
+		parsed = urlparse(value if "://" in value else f"https://{value}")
+		return parsed.hostname.lower().rstrip(".") if parsed.hostname else None
+	except ValueError:
+		return None
+
+
+def _recording_allowed_hosts(telephony_medium: str, is_worldfone_call: bool) -> set[str]:
+	hosts: set[str] = set()
+	if is_worldfone_call or telephony_medium == "Manual":
+		worldfone_host = _recording_host(_worldfone_config("base_url", _WORLDFONE_BASE_URL))
+		if worldfone_host:
+			hosts.add(worldfone_host)
+	elif telephony_medium == "Twilio":
+		hosts.add("api.twilio.com")
+	elif telephony_medium == "Exotel":
+		try:
+			exotel_host = _recording_host(str(frappe.get_single("Exotel Settings").subdomain or ""))
+		except Exception:
+			exotel_host = None
+		if exotel_host:
+			hosts.add(exotel_host)
+
+	extra_hosts = str(
+		frappe.conf.get("crm_recording_allowed_hosts")
+		or os.getenv("CRM_RECORDING_ALLOWED_HOSTS")
+		or ""
+	)
+	hosts.update(
+		host
+		for host in (_recording_host(item.strip()) for item in extra_hosts.split(","))
+		if host
+	)
+	return hosts
+
+
+def _recording_url_allowed(url: str, telephony_medium: str, is_worldfone_call: bool) -> bool:
+	try:
+		parsed = urlparse(url)
+		port = parsed.port
+	except ValueError:
+		return False
+	if (
+		parsed.scheme != "https"
+		or parsed.username
+		or parsed.password
+		or port not in (None, 443)
+	):
+		return False
+	host = parsed.hostname.lower().rstrip(".") if parsed.hostname else ""
+	return bool(host and host in _recording_allowed_hosts(telephony_medium, is_worldfone_call))
 
 
 def build_worldfone_recording_url(calluuid: str | None) -> str | None:
@@ -303,7 +374,7 @@ def get_contact_reference_from_number(number: str):
 		doctype = "Contact"
 		docname = contact.get("name")
 		if contact.get("crm_contact"):
-			doctype = "CRM Contact"
+			doctype = "CRM Student"
 			docname = contact.get("crm_contact")
 		return docname, doctype
 	return None, None
@@ -327,6 +398,7 @@ def get_recording_url(call_log_name: str):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 
 	log = frappe.get_doc("Call Log", call_log_name)
+	ensure_call_log_read_access(log)
 	recording_url = str(log.recording_url or "").strip()
 	is_worldfone_call = _is_worldfone_call(
 		log.name,
@@ -340,8 +412,18 @@ def get_recording_url(call_log_name: str):
 		frappe.throw(_("Recording URL not found"), frappe.DoesNotExistError)
 
 	telephony_medium = log.telephony_medium or ("Manual" if is_worldfone_call else "")
+	if not _recording_url_allowed(recording_url, telephony_medium, is_worldfone_call):
+		frappe.throw(_("Recording provider is not allowed"), frappe.DoesNotExistError)
 	auth = _get_recording_credentials(telephony_medium)
-	with requests.get(recording_url, auth=auth, stream=True, timeout=10) as r:
+	with requests.get(
+		recording_url,
+		auth=auth,
+		stream=True,
+		timeout=10,
+		allow_redirects=False,
+	) as r:
+		if 300 <= r.status_code < 400:
+			frappe.throw(_("Recording provider redirect is not allowed"), frappe.DoesNotExistError)
 		r.raise_for_status()
 		response = Response()
 		response.data = r.content
@@ -362,7 +444,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 		.replace("+", "")
 	)
 
-	CRMContact = frappe.qb.DocType("CRM Contact")
+	CRMContact = frappe.qb.DocType("CRM Student")
 	normalized_phone = Replace(
 		Replace(Replace(Replace(Replace(CRMContact.phone, " ", ""), "-", ""), "(", ""), ")", ""), "+", ""
 	)
@@ -383,7 +465,7 @@ def get_contact(phone_number: str, country: str = "IN", exact_match: bool = Fals
 	for contact in crm_contacts:
 		if are_same_phone_number(contact.mobile_no, phone_number, country, validate=not exact_match):
 			contact["crm_contact"] = contact.name
-			contact["doctype"] = "CRM Contact"
+			contact["doctype"] = "CRM Student"
 			return contact
 
 	Contact = frappe.qb.DocType("Contact")

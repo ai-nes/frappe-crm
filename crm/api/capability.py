@@ -7,7 +7,7 @@ from functools import wraps
 import frappe
 from frappe import _
 
-from crm.api.session import get_session_role_flags, resolve_copilot_profile
+from crm.api.session import _get_policy_roles, get_session_role_flags, resolve_copilot_profile
 from crm.fcrm.doctype.fields_layout.fields_layout import get_permlevel_access
 
 OPERATIONS = ("read", "write", "create", "delete")
@@ -21,6 +21,9 @@ _DISCOVERY_SEARCH_TYPES = frozenset({"Data", "Small Text", "Text", "Long Text"})
 _DISCOVERY_HIDDEN_TYPES = frozenset({"Password", "Secret"})
 ROLE_MATRIX_EPOCH = "crm-roles-v1"
 AI_EXPOSURE_ADMIN_ROLE = "System Manager"
+_COPILOT_DEMO_PROFILES = frozenset(
+	{"Sale", "Marketing", "CTV Sale", "Lead Sale", "Admissions Director", "Administrator"}
+)
 
 # Business-facing resources advertised to Copilot. The catalog stays limited to
 # the day-to-day admissions/CRM entities a sales user reasons about directly.
@@ -32,7 +35,6 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 	{
 		# core admissions and CRM aggregates
 		"CRM Student",
-		"CRM Contact",
 		"CRM Person",
 		"CRM Interaction",
 		"CRM Intent",
@@ -45,9 +47,6 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 		"CRM Student Assessment",
 		"CRM Student Outcome",
 		"CRM Student Payment",
-		# Compatibility alias used by the discovery contract while CRM Lead is
-		# being represented by CRM Student in the admissions data model.
-		"CRM Lead",
 		"CRM Company",
 		# admissions reference and organization
 		"CRM Campus",
@@ -95,7 +94,7 @@ _STUDENT_OPERATIONAL_FIELDS = frozenset(
 		"modified",
 	}
 )
-_STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"student_name", "phone", "email"})
+_STUDENT_SALES_APPROVED_PII_FIELDS = frozenset({"full_name", "phone", "email"})
 
 # The session contract is the sole authority for Copilot eligibility. Do not
 # add a broader local allowlist here: that would let an unsupported role obtain
@@ -116,6 +115,12 @@ def _is_capability_gateway_user(session_flags: dict) -> bool:
 	Manager exclusion, so a bare Administrator/System Manager demo login
 	can drive Copilot without seeding a canonical operating-role account.
 	"""
+	# ``Administrator`` is a selectable CRM CEO profile, but Frappe also marks
+	# it as a control-plane flag for backward compatibility. Keep the explicit
+	# CRM profile authoritative so a CEO account is not blocked by the separate
+	# System Manager demo gate.
+	if session_flags.get("crm_profile") == "ceo":
+		return True
 	if session_flags.get("is_system_manager", False):
 		return frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
 	return bool(session_flags.get("is_crm_user"))
@@ -216,8 +221,8 @@ def _discovery_query_policy(doctype: str, meta, readable: set[str]) -> dict:
 		name.strip() for name in (getattr(meta, "search_fields", "") or "").split(",") if name.strip()
 	]
 	declared_candidates = [name for name in declared_search_fields if name in set(search_candidates)]
-	if doctype == "CRM Student" and "student_name" in search_candidates:
-		search_field = "student_name"
+	if doctype == "CRM Student" and "full_name" in search_candidates:
+		search_field = "full_name"
 	elif declared_candidates:
 		search_field = declared_candidates[0]
 	else:
@@ -374,7 +379,7 @@ def _project_ai_fields(doctype: str, fields: list[str]) -> list[str]:
 
 
 def _student_projection_for_current_user() -> list[str]:
-	roles = frappe.get_roles()
+	roles = _get_policy_roles()
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM Student data."), frappe.PermissionError)
 	meta = frappe.get_meta("CRM Student")
@@ -479,7 +484,7 @@ def search_ai_students(query: str, filters: list | str | None = None, limit: int
 			fields=fields,
 			filters=_safe_student_filters(filters, set(fields)),
 			or_filters=[
-				[fieldname, "like", f"%{query}%"] for fieldname in ("student_name", "phone", "email")
+				[fieldname, "like", f"%{query}%"] for fieldname in ("full_name", "phone", "email")
 			],
 			page_length=limit,
 			order_by="modified desc, name asc",
@@ -530,8 +535,7 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 				"CRM Student Decision Event",
 			}
 			and frappe.conf.get("crm_agents_demo_full_access") in (1, "1", True, "true", "True")
-			and resolve_copilot_profile(frappe.get_roles())
-			in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}
+			and resolve_copilot_profile(_get_policy_roles()) in _COPILOT_DEMO_PROFILES
 		)
 		if demo:
 			fields = _project_ai_fields(doctype, list(columns))
@@ -565,7 +569,7 @@ def _resource_grant(doctype: str, meta, columns: list[str]):
 
 def _capability_grants(roles: list[str]) -> tuple[list[str], list[str]]:
 	"""Union `custom_ai_capability_grants` rows across the caller's OWN roles
-	only — `roles` is always `frappe.get_roles()`'s own result, never
+	only — `roles` is always the current session's server-derived result, never
 	caller-supplied, so this is a self-scoped read, not a privilege
 	escalation. `ignore_permissions=True` is required because Frappe's child
 	table permission check is normally derived from the parent `Role`
@@ -609,7 +613,7 @@ def _staff_scope_fingerprint(user: str | None = None) -> list[tuple[str, str, st
 
 def _capability_revision_snapshot() -> tuple[list[str], str]:
 	"""Return the caller's roles and the revision that invalidates its manifest."""
-	roles = sorted(frappe.get_roles(frappe.session.user))
+	roles = sorted(_get_policy_roles(frappe.session.user))
 	stamps = frappe.get_all(
 		"Role",
 		filters={"name": ["in", roles]},
@@ -672,7 +676,7 @@ def get_current_roles():
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	if not _is_capability_gateway_user(get_session_role_flags()):
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
-	return {"roles": sorted(frappe.get_roles(frappe.session.user))}
+	return {"roles": sorted(_get_policy_roles(frappe.session.user))}
 
 
 @frappe.whitelist()
@@ -812,7 +816,7 @@ def get_capability_manifest():
 		True,
 		"true",
 		"True",
-	) and copilot_profile in {"Sale", "Marketing", "Lead Sale", "Admissions Director"}:
+	) and copilot_profile in _COPILOT_DEMO_PROFILES:
 		semantic_capabilities = sorted(set(semantic_capabilities) | {"action.crm_mutation"})
 
 	schema_version = _sha256_hex(sorted(schema_entries))
@@ -847,7 +851,7 @@ def get_capability_manifest():
 def _current_discovery_contract() -> dict:
 	"""Rebuild the principal-scoped discovery view for named read endpoints."""
 	get_session_role_flags()
-	roles = sorted(frappe.get_roles())
+	roles = sorted(_get_policy_roles())
 	if resolve_copilot_profile(roles) is None:
 		frappe.throw(_("You are not permitted to access CRM resources."), frappe.PermissionError)
 	exposed = sorted(frappe.get_all("DocType", pluck="name", ignore_permissions=True))

@@ -250,18 +250,18 @@ def execute() -> dict[str, Any]:
 		seed_showcase.ensure_local_integrity_keys()
 		seed_showcase.ensure_demo_config()
 		student = frappe.db.get_value(
-			"CRM Student", {"email": seed_student_detail.STUDENT_EMAIL}, "name"
+			"CRM Lead", {"email": seed_student_detail.STUDENT_EMAIL}, "name"
 		)
 		if not student:
 			seed_student_detail.execute()
 			student = frappe.db.get_value(
-				"CRM Student", {"email": seed_student_detail.STUDENT_EMAIL}, "name"
+				"CRM Lead", {"email": seed_student_detail.STUDENT_EMAIL}, "name"
 			)
 		if not student:
 			frappe.throw("Student detail fixture did not resolve.", frappe.ValidationError)
 		else:
 			seed_student_detail.verify()
-		school = frappe.db.get_value("CRM Student", student, "high_school")
+		school = frappe.db.get_value("CRM Lead", student, "high_school")
 		if not school:
 			frappe.throw("Student detail fixture has no linked high school.", frappe.ValidationError)
 
@@ -279,7 +279,7 @@ def execute() -> dict[str, Any]:
 
 	from crm.api.intelligence_runs import request_school_analysis_run, request_student_analysis_run
 
-	student_revision = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
+	student_revision = int(frappe.db.get_value("CRM Lead", student, "student_context_revision") or 0)
 	school_revision = int(frappe.db.get_value("CRM High School", school, "intelligence_revision") or 0)
 	quiesced_student_runs = _quiesce_stale_runs("student", student, student_revision)
 	quiesced_school_runs = _quiesce_stale_runs("school", school, school_revision)

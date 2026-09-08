@@ -129,8 +129,8 @@ before_uninstall = "crm.uninstall.before_uninstall"
 # Permissions evaluated in scripted ways
 
 permission_query_conditions = {
-	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.get_permission_query_conditions",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.get_permission_query_conditions",
+	"CRM Lead": "crm.fcrm.doctype.crm_lead.crm_lead.get_permission_query_conditions",
 	"CRM Student Routing Request": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Ownership Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
@@ -172,8 +172,8 @@ permission_query_conditions = {
 
 has_permission = {
 	"File": "crm.fcrm.file_permissions.has_permission",
-	"CRM Contact": "crm.fcrm.doctype.crm_contact.crm_contact.has_permission",
 	"CRM Student": "crm.fcrm.doctype.crm_student.crm_student.has_permission",
+	"CRM Lead": "crm.fcrm.doctype.crm_lead.crm_lead.has_permission",
 	"CRM Student Routing Request": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Ownership Event": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Lifecycle Event": "crm.fcrm.permissions.has_operational_record_permission",
@@ -228,8 +228,8 @@ override_doctype_class = {
 # growing a hardcoded chain of field names per adopter.
 
 status_change_log_field = {
-	"CRM Contact": "enrollment_status",
 	"CRM Student": "enrollment_status",
+	"CRM Lead": "enrollment_status",
 }
 
 # Document Events
@@ -243,15 +243,16 @@ doc_events = {
 	"Contact": {
 		"validate": ["crm.api.contact.validate"],
 	},
-	"CRM Contact": {
+	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
 	},
-	"CRM Student": {
+	"CRM Lead": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
 		"on_update": ["crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography"],
 	},
 	"CRM Interaction": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"after_insert": [
 			"crm.fcrm.interaction_log.satisfy_student_sla_from_interaction",
 			"crm.services.admission_event_policy.admit_interaction",
@@ -263,7 +264,11 @@ doc_events = {
 			"crm.api.agent_events.dispatch_interaction_domain_reevaluation",
 		],
 	},
+	"CRM Interaction Evidence": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
 	"CRM Intent": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"after_insert": [
 			"crm.services.admission_event_policy.admit_intent",
 			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
@@ -272,6 +277,18 @@ doc_events = {
 			"crm.services.admission_event_policy.admit_intent",
 			"crm.api.agent_events.dispatch_intent_domain_reevaluation",
 		],
+	},
+	"CRM Score History": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Student Analysis Run": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Student Assessment": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM NBA Evaluation": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 	},
 	"CRM High School Annual Snapshot": {
 		"after_insert": ["crm.fcrm.school_intelligence_revision.mark_school_intelligence_changed"],
@@ -345,8 +362,15 @@ doc_events = {
 		"on_trash": ["crm.fcrm.doctype.crm_student_privacy_request.crm_student_privacy_request.on_trash"],
 	},
 	"Task": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_task_update"],
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
+	},
+	"CRM Action Item": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
+	},
+	"CRM Admission Application": {
+		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 	},
 	"Call Log": {
 		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
@@ -372,7 +396,7 @@ doc_events = {
 # Consumer-side enforcement is required because retiring a Link target does
 # not cause Frappe to revalidate existing consumer writes automatically.
 for _governed_consumer_doctype in (
-	"CRM Contact", "CRM Platform", "CRM Student", "CRM Campaign Spend",
+	"CRM Student", "CRM Platform", "CRM Lead", "CRM Campaign Spend",
 	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
 	"CRM Staff", "CRM Academic Year Line", "CRM Student Pool", "CRM Student Routing Request",
 	"CRM Student SLA Attempt", "CRM Team",
@@ -391,9 +415,10 @@ scheduler_events = {
 		"crm.api.agent_events.reconcile_score_input_v1",
 		"crm.fcrm.nba_evaluations.reconcile",
 		"crm.fcrm.nba_evaluations.reconcile_due_reevaluations",
+		"crm.fcrm.nba_evaluations.reconcile_dirty_students",
 	],
 	"daily": [
-		"crm.fcrm.doctype.crm_student.enrollment_transition.reconcile_enrollment_transitions",
+		"crm.fcrm.doctype.crm_lead.enrollment_transition.reconcile_enrollment_transitions",
 		"crm.fcrm.master_data_governance.expire_break_glass_requests",
 	],
 	"cron": {
@@ -401,7 +426,8 @@ scheduler_events = {
 		"*/5 * * * *": ["crm.api.sla.recompute_sla_statuses"],
 		"* * * * *": [
 			"crm.fcrm.master_data_governance.apply_effective_changes",
-			"crm.fcrm.student_routing.process_pending_routing_requests",
+			# Assignment runs explicitly from a Lead batch. Keep routing requests
+			# for audit/compatibility, but do not execute them in the background.
 			"crm.fcrm.student_sla.process_due_sla_attempts",
 			"crm.fcrm.student_sla.process_pending_sla_deliveries",
 			"crm.fcrm.student_lead_operations.recall_expired_ctv_batches",

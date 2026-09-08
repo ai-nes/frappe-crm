@@ -7,7 +7,9 @@ Implements the locked row-level data-scope matrix:
 
 The Sale student-list projection is intentionally handled by the dashboard API
 as a separate read-only team/pool view because Sale has ownership-assignment
-authority. It does not change this canonical CRUD/detail scope.
+authority. Lead Sale also uses the existing dashboard projection to see assigned
+Students across the active Teams in Groups they lead. Neither projection
+changes the canonical CRUD/detail scope.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -23,7 +25,6 @@ from crm.fcrm.role_policy import (
 	delete_requires_ownership_for_roles,
 	resolve_crm_profile,
 )
-from crm.fcrm.student_feature_flags import enabled
 
 # Compatibility export for lifecycle.py only. Row-level Student/Contact access
 # no longer reads this set; it resolves the canonical policy below.
@@ -154,7 +155,6 @@ def get_permission_query_conditions(doctype, user=None):
 		user = frappe.session.user
 	if user == frappe.conf.get("crm_agents_service_user") and doctype in {
 		"CRM Student",
-		"CRM Contact",
 		"CRM Intent Type",
 	}:
 		# The configured crm-agents identity is a service capability, not a
@@ -162,17 +162,15 @@ def get_permission_query_conditions(doctype, user=None):
 		# boundary and must be able to read bounded analysis inputs/catalogues.
 		return None
 
-	roles = set(frappe.get_roles(user))
+	roles = set(_get_policy_roles(user))
 	if user == "Administrator" or "System Manager" in roles:
 		return None
 	scope = _effective_case_scope(roles, doctype, user=user)
-	# Full-visibility roles must not be narrowed by the converted-Contact
-	# compatibility projection below. The scope policy is authoritative; the
-	# conversion junction only constrains roles with a narrower Student scope.
+	# CRM Lead and CRM Student are independent aggregates, so both always use
+	# the same authoritative scope policy. Conversion history is not a
+	# permission boundary for standalone Student records.
 	if scope == "all":
 		return None
-	if doctype == "CRM Contact" and enabled("conversion_read"):
-		return _contact_conversion_condition(user, roles, scope)
 	if scope == "deny":
 		return "1=0"
 
@@ -193,7 +191,16 @@ def get_permission_query_conditions(doctype, user=None):
 		return _team_leader_condition(table, crm_staff_name)
 
 	if scope in {"team_and_team_pool", "team_members_and_own_team_pool"}:
-		return _team_leader_condition(table, crm_staff_name)
+		team_condition = _team_leader_condition(table, crm_staff_name)
+		# Lead Sale must be able to see every Lead that has not been assigned
+		# yet. Intake is owned by another system, so an unassigned Lead may not
+		# have owning_team populated and cannot be discovered through the old
+		# team-pool condition alone. Keep the existing team scope as well so
+		# already-routed records remain visible to their team leader.
+		if doctype == "CRM Lead":
+			unassigned_condition = f"({table}.owner_staff is null and {table}.assigned_to is null)"
+			return f"({unassigned_condition} or {team_condition})"
+		return team_condition
 
 	if scope in {"campus_assigned", "campus_assigned_contact"}:
 		return _campus_condition(table, crm_staff_name)
@@ -204,6 +211,23 @@ def get_permission_query_conditions(doctype, user=None):
 	return "1=0"
 
 
+def can_read_full_lead_board(user=None) -> bool:
+	"""Whether this profile reads the whole Lead intake board, not one team slice.
+
+	Lead Sale routes Leads into every province's Team, so the board it works
+	from must keep showing a Lead after a batch commits ownership to a Sale on
+	another Team -- the canonical team scope would otherwise hide exactly the
+	rows the operator just routed, the converted ones included.
+
+	This widens the read-only Lead projections in ``crm.api.director_leads``
+	only. ``get_permission_query_conditions``/``has_permission`` stay the single
+	authority for Lead CRUD, desk and REST resource access, and every command,
+	so no assignment, conversion or ownership rule changes with it.
+	"""
+	user = user or frappe.session.user
+	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
+
+
 def get_student_list_read_condition(user=None):
 	"""Return the list-only Student read scope for roles with assignment access.
 
@@ -211,11 +235,22 @@ def get_student_list_read_condition(user=None):
 	operations, but the student list must expose the Sale's team and team pool so
 	the user can choose a target for an ownership assignment. The assignment
 	command still enforces its own authorization and ownership revision checks.
+
+	Lead Sale additionally sees assigned Students in active Teams belonging to
+	active Groups led by the current CRM Staff. This is the existing Student
+	dashboard scope, not a new endpoint or a new UI flow.
+
 	Other profiles return ``None`` so callers continue using the canonical
 	permission query hook unchanged.
 	"""
 	user = user or frappe.session.user
-	if resolve_crm_profile(frappe.get_roles(user)) != "sales":
+	profile = resolve_crm_profile(_get_policy_roles(user))
+	if profile == "lead_sales":
+		crm_staff_name = _get_crm_staff_name(user)
+		if not crm_staff_name:
+			return "1=0"
+		return _lead_sales_student_read_condition("`tabCRM Student`", crm_staff_name)
+	if profile != "sales":
 		return None
 
 	crm_staff_name = _get_crm_staff_name(user)
@@ -226,6 +261,28 @@ def get_student_list_read_condition(user=None):
 	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
 	team_condition = _team_leader_condition(table, crm_staff_name)
 	return f"({own_condition} or {team_condition})"
+
+
+def has_student_dashboard_read_permission(doc, user=None):
+	"""Check existing Student dashboard/detail visibility for Lead Sale.
+
+	This helper is deliberately separate from ``has_student_list_read_permission``
+	because the latter is also used by ownership commands. The Group-level
+	visibility is therefore not accidentally reused as a mutation grant.
+	"""
+	user = user or frappe.session.user
+	if resolve_crm_profile(_get_policy_roles(user)) != "lead_sales":
+		return bool(doc.has_permission("read"))
+
+	condition = get_student_list_read_condition(user)
+	if condition == "1=0" or not getattr(doc, "name", None):
+		return False
+	return bool(
+		frappe.db.sql(
+			f"select name from `tabCRM Student` where name = %s and ({condition}) limit 1",
+			(doc.name,),
+		)
+	)
 
 
 def has_student_list_read_permission(doc, user=None):
@@ -255,15 +312,15 @@ def get_interaction_permission_query_conditions(user=None, doctype=None):
 	hook, its DocType-level role grants (e.g. Sale, Marketing) were the only
 	access check, so any role with a channel-based read grant could see every
 	student's interactions regardless of assignment.  This always derives from
-	the same Student/Contact scope as CRM Student/CRM Contact: never from
+	the same Student/Contact scope as CRM Lead/CRM Student: never from
 	channel, interaction_type, or role alone. A pre-conversion (student is
-	null) interaction falls back to the linked CRM Contact's scope.
+	null) interaction falls back to the linked CRM Student's scope.
 	"""
 	if doctype != "CRM Interaction":
 		return "1=0"
 	user = user or frappe.session.user
 	student_condition = get_permission_query_conditions("CRM Student", user=user)
-	contact_condition = get_permission_query_conditions("CRM Contact", user=user)
+	contact_condition = get_permission_query_conditions("CRM Student", user=user)
 	table = "`tabCRM Interaction`"
 
 	def _student_clause():
@@ -283,7 +340,7 @@ def get_interaction_permission_query_conditions(user=None, doctype=None):
 			return None
 		return (
 			f"{table}.student is null and {table}.crm_contact in "
-			f"(select `tabCRM Contact`.name from `tabCRM Contact` where ({contact_condition}))"
+			f"(select `tabCRM Student`.name from `tabCRM Student` where ({contact_condition}))"
 		)
 
 	if student_condition is None and contact_condition is None:
@@ -310,10 +367,10 @@ def _has_interaction_create_permission(doc, user=None) -> bool:
 			return False
 		return has_permission(frappe.get_doc("CRM Student", doc.student), user=user)
 	if doc.get("crm_contact"):
-		contact = frappe.db.exists("CRM Contact", doc.crm_contact)
+		contact = frappe.db.exists("CRM Student", doc.crm_contact)
 		if not contact:
 			return False
-		return has_permission(frappe.get_doc("CRM Contact", doc.crm_contact), user=user)
+		return has_permission(frappe.get_doc("CRM Student", doc.crm_contact), user=user)
 	# Neither target is set -- nothing to scope against; deny rather than
 	# silently allow an orphaned interaction to bypass row scope.
 	return False
@@ -527,8 +584,21 @@ def _effective_case_scope(roles, doctype, *, user):
 
 
 def _delete_requires_ownership(user):
-	roles = set(frappe.get_roles(user))
+	roles = set(_get_policy_roles(user))
 	return delete_requires_ownership_for_roles(roles, administrator=user == "Administrator")
+
+
+def _get_policy_roles(user=None):
+	"""Return the role set used by both session and row-scope authorization.
+
+	Frappe omits an explicitly assigned ``Administrator`` role from its raw role
+	list for normal users.  The session contract restores that role so it can
+	represent the CRM CEO profile; row-level permission checks must use the same
+	normalized role set or CEO accounts are denied despite their DocPerm grant.
+	"""
+	from crm.api.session import _get_policy_roles as get_policy_roles
+
+	return get_policy_roles(user)
 
 
 def _user_owns_or_is_assigned_to(doc, user):
@@ -542,39 +612,6 @@ def _user_owns_or_is_assigned_to(doc, user):
 		return True
 	crm_staff_name = _get_crm_staff_name(user)
 	return bool(crm_staff_name) and doc.get("assigned_to") == crm_staff_name
-
-
-def _contact_conversion_condition(user, roles, scope):
-	"""Expose Contacts only through currently visible converted Student cases.
-
-	Contact owner/team fields are mutable compatibility projections and therefore
-	never form a permission boundary.  System Manager/Administrator retain the
-	explicit platform exception; every other profile must have a visible Student
-	case in the immutable conversion junction.
-	"""
-	if user == "Administrator" or "System Manager" in roles:
-		return None
-	if scope == "deny":
-		return "1=0"
-	if not frappe.db.exists("DocType", "CRM Student Contact Conversion"):
-		return "1=0"
-	student_condition = get_permission_query_conditions("CRM Student", user=user)
-	contact_table = "`tabCRM Contact`"
-	conversion_table = "`tabCRM Student Contact Conversion`"
-	if student_condition is None:
-		return f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion)"
-	if student_condition == "1=0":
-		return "1=0"
-	# The nested query aliases CRM Student as ``student``.  Conditions returned
-	# by the shared scope builder use the fully-qualified table name, which is
-	# valid at the top level but becomes an unknown table reference inside this
-	# join unless it is rebound to the alias.
-	student_condition = student_condition.replace("`tabCRM Student`", "student")
-	return (
-		f"{contact_table}.name in (select conversion.contact from {conversion_table} conversion "
-		"inner join `tabCRM Student` student on student.name = conversion.student "
-		f"where ({student_condition}))"
-	)
 
 
 def _cached(cache_key, loader):
@@ -636,7 +673,7 @@ def _primary_team(staff_name):
 
 
 def derive_owner_fields(assigned_to):
-	"""Compute (owner_staff, owning_team) for an *assigned* CRM Contact/Student.
+	"""Compute (owner_staff, owning_team) for an *assigned* CRM Student/Student.
 	owner_staff simply echoes assigned_to; owning_team is the staff's primary team
 	membership (falling back to their first team if none is marked primary).
 	Called from CRMContact/CRMStudent.validate() so these two fields — not
@@ -697,6 +734,55 @@ def _team_leader_condition(table, crm_staff_name):
 	if not parts:
 		return "1=0"
 	return "(" + " or ".join(parts) + ")"
+
+
+def _lead_sales_student_read_condition(table, crm_staff_name):
+	"""Add Group-level Student visibility to the existing Team scope."""
+	parts = []
+	team_condition = _team_leader_condition(table, crm_staff_name)
+	if team_condition != "1=0":
+		parts.append(team_condition)
+
+	group_ids = _get_groups_led_by_staff(crm_staff_name)
+	if group_ids:
+		teams = frappe.get_all(
+			"CRM Team",
+			filters={"group": ["in", group_ids], "is_active": 1},
+			pluck="name",
+		)
+		if teams:
+			team_parts = []
+			team_clause = _in_clause(f"{table}.owning_team", teams)
+			if team_clause:
+				team_parts.append(team_clause)
+			staff_in_teams = frappe.get_all(
+				"CRM Team Membership",
+				filters={"team": ["in", teams], "parenttype": "CRM Staff"},
+				pluck="parent",
+			)
+			staff_clause = _in_clause(f"{table}.owner_staff", staff_in_teams)
+			if staff_clause:
+				team_parts.append(staff_clause)
+			if team_parts:
+				assigned_clause = (
+					f"{table}.owner_staff is not null and {table}.assigned_to is not null"
+				)
+				parts.append(f"({assigned_clause} and ({' or '.join(team_parts)}))")
+
+	if not parts:
+		return "1=0"
+	return "(" + " or ".join(parts) + ")"
+
+
+def _get_groups_led_by_staff(crm_staff_name):
+	return _cached(
+		f"crm_staff_led_groups::{crm_staff_name}",
+		lambda: frappe.get_all(
+			"CRM Team Group",
+			filters={"group_lead_staff": crm_staff_name, "is_active": 1},
+			pluck="name",
+		),
+	)
 
 
 def _campus_condition(table, crm_staff_name):

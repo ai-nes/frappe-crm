@@ -16,8 +16,8 @@ export const canonicalRoleOptions = [
     description: 'Marketing / Offline Marketing role for school relationship activities.',
   },
   {
-    value: 'Lead Sales',
-    label: 'Lead Sales',
+    value: 'Lead Sale',
+    label: 'Lead Sale',
     description:
       'Can access Frappe-granted admissions operations for sales leads.',
   },
@@ -183,7 +183,7 @@ export function canAccessSalesTaskWorkbench(user) {
   const allowedRoles = [
     'Sale',
     'CTV Sale',
-    'Lead Sales',
+    'Lead Sale',
     'CTV-Sale',
     'Sales User',
     'Sales Manager',

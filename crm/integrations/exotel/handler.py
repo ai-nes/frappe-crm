@@ -213,7 +213,7 @@ def link(contact_number, call_log):
 		doctype = "Contact"
 		docname = contact.get("name")
 		if contact.get("crm_contact"):
-			doctype = "CRM Contact"
+			doctype = "CRM Student"
 			docname = contact.get("crm_contact")
 		call_log.link_with_reference_doc(doctype, docname)
 

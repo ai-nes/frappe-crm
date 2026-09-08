@@ -61,7 +61,7 @@ def evaluate_admission_event(*, student: str, revision: int, source_event: str,
 
 
 def _student_for(doc):
-	return doc.get("student") or (frappe.db.get_value("CRM Contact", doc.get("crm_contact"), "student") if doc.get("crm_contact") else None)
+	return doc.get("student") or (frappe.db.get_value("CRM Student", doc.get("crm_contact"), "student") if doc.get("crm_contact") else None)
 
 
 def admit_interaction(doc, method=None):

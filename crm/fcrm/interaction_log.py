@@ -1,6 +1,6 @@
 """Creates CRM Interaction records from the source events the admissions
 operating model considers meaningful lead touchpoints -- outgoing/incoming
-Communication, a completed Task, a Call Log entry, a CRM Contact
+Communication, a completed Task, a Call Log entry, a CRM Student
 lifecycle/assignment change, a Consent Event, and a CRM Marketing Engagement
 insert/status change (added to satisfy the
 operating model's "no customer activity outside Interaction" condition,
@@ -81,6 +81,29 @@ EVENT_PARTICIPATION_STATUS_TO_INTERACTION_TYPE = {
 	# since it's the doc's initial state rather than a has_value_changed transition.
 }
 
+# A completed CRM Action Item is only a genuine parent/student touchpoint when
+# its underlying CRM Action has a real contact channel; an internal action
+# (default_channel NONE) never produces an Interaction.
+ACTION_CHANNEL_TO_INTERACTION_TYPE = {
+	"CALL": "PHONE_CALL",
+	"EMAIL": "OUTREACH",
+	"MESSAGE": "MESSAGE",
+}
+
+# CRM Action Item.outcome_code (7 admissions-specific values) mapped onto the
+# CRM Interaction.outcome enum (7 generic CRM values). Deliberately not a
+# 1:1 identity map -- the two vocabularies describe different things and stay
+# separate; this is the one explicit, auditable translation between them.
+ACTION_OUTCOME_TO_INTERACTION_OUTCOME = {
+	"NO_RESPONSE": "No Response",
+	"INTEREST_INCREASED": "Captured",
+	"NEEDS_MORE_INFORMATION": "Follow Up Needed",
+	"CALL_BACK_LATER": "Follow Up Needed",
+	"APPLICATION_STARTED": "Resolved",
+	"APPLICATION_COMPLETED": "Converted",
+	"NOT_INTERESTED": "Resolved",
+}
+
 # Attribution is evidence, not an admissions engagement.  In particular, an
 # event registration/check-in must not close Student SLA or create outcomes.
 SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
@@ -91,7 +114,7 @@ SLA_SOURCE_DOCTYPES = {"Call Log", "Communication", "Task", "WhatsApp Message"}
 # external_id off it would collapse distinct Stage Changed / Lead Assigned /
 # Lead Reassigned events on the same contact into a single deduplicated row,
 # destroying that history. Doctypes here never get an external_id.
-NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Contact"}
+NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Student"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
 MAX_EXTERNAL_INTERACTION_TURNS = 200
 CHATWOOT_INTERACTION_TYPE = "MESSAGE"
@@ -213,8 +236,8 @@ def _source_matches_student(doctype, name, student, seen=None):
 			return False
 	except Exception:
 		return False
-	# A completed source may be linked directly to CRM Student. The name match is
-	# the same canonical identity boundary used for a CRM Contact relationship.
+	# Only CRM Student is an AI-analysis identity. A raw CRM Lead is intake
+	# data and must never manufacture an analyzed interaction.
 	if doctype == "CRM Student":
 		return name == student
 	seen = seen or set()
@@ -227,7 +250,7 @@ def _source_matches_student(doctype, name, student, seen=None):
 		return doc.student == student
 	for fieldname in ("crm_contact", "contact", "customer", "party"):
 		contact = getattr(doc, fieldname, None)
-		if contact and frappe.db.exists("CRM Contact", contact):
+		if contact and frappe.db.exists("CRM Student", contact):
 			return contact_is_linked_to_student(contact, student)
 	ref_doctype = getattr(doc, "reference_doctype", None)
 	ref_name = getattr(doc, "reference_docname", None) or getattr(doc, "reference_name", None)
@@ -448,7 +471,7 @@ def _normalize_external_turns(value) -> list[dict]:
 
 def _external_target_matches(external_id: str) -> list[dict]:
 	matches = []
-	for doctype in ("CRM Student", "CRM Contact"):
+	for doctype in ("CRM Student",):
 		try:
 			meta = frappe.get_meta(doctype)
 			fieldnames = {field.fieldname for field in meta.fields}
@@ -471,20 +494,16 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 	external_target_id = _text(payload.get("target_external_id"))
 	if student_id and not frappe.db.exists("CRM Student", student_id):
 		_interaction_fail("INVALID_TARGET", "The target Student does not exist.")
-	if contact_id and not frappe.db.exists("CRM Contact", contact_id):
-		_interaction_fail("INVALID_TARGET", "The target Contact does not exist.")
+	if contact_id and not frappe.db.exists("CRM Student", contact_id):
+		_interaction_fail("INVALID_TARGET", "The target Student does not exist.")
 	if student_id and contact_id:
-		linked_students = students_for_contact(contact_id)
-		if linked_students and student_id not in linked_students:
-			_interaction_fail("AMBIGUOUS_TARGET", "Student and Contact resolve to different identities.")
-		return {"student": student_id, "contact": contact_id}
+		if student_id != contact_id:
+			_interaction_fail("AMBIGUOUS_TARGET", "Student targets resolve to different identities.")
+		return {"student": student_id, "contact": None}
 	if student_id:
 		return {"student": student_id, "contact": None}
 	if contact_id:
-		linked_students = students_for_contact(contact_id)
-		if len(linked_students) > 1:
-			_interaction_fail("AMBIGUOUS_TARGET", "The Contact is linked to multiple Students.")
-		return {"student": linked_students[0] if linked_students else None, "contact": contact_id}
+		return {"student": contact_id, "contact": None}
 	if not external_target_id:
 		_interaction_fail("INVALID_TARGET", "A target is required.")
 	matches = _external_target_matches(external_target_id)
@@ -494,12 +513,7 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 			"The external target does not resolve to exactly one CRM record.",
 		)
 	match = matches[0]
-	if match["doctype"] == "CRM Student":
-		return {"student": match["name"], "contact": None}
-	linked_students = students_for_contact(match["name"])
-	if len(linked_students) > 1:
-		_interaction_fail("AMBIGUOUS_TARGET", "The external Contact is linked to multiple Students.")
-	return {"student": linked_students[0] if linked_students else None, "contact": match["name"]}
+	return {"student": match["name"], "contact": None}
 
 
 def _assert_interaction_scope(target: dict, authority: dict):
@@ -507,14 +521,9 @@ def _assert_interaction_scope(target: dict, authority: dict):
 		"scope_all"
 	):
 		return
-	if target.get("student"):
-		row = frappe.db.get_value(
-			"CRM Student", target["student"], ["branch", "owning_team", "owner_staff"], as_dict=True
-		)
-	else:
-		row = frappe.db.get_value(
-			"CRM Contact", target.get("contact"), ["branch", "owning_team", "owner_staff"], as_dict=True
-		)
+	row = frappe.db.get_value(
+		"CRM Student", target.get("student"), ["branch", "owning_team", "owner_staff"], as_dict=True
+	)
 	if not row:
 		_interaction_fail("INVALID_TARGET", "The interaction target is no longer available.")
 	campuses = set(authority.get("campus_scope") or [])
@@ -737,11 +746,7 @@ def create_interaction(
 	episode_state=None,
 ):
 	if not student and crm_contact:
-		students = students_for_contact(crm_contact)
-		# A Contact can belong to multiple historical cases.  Source events that
-		# need one Student must provide the Student explicitly; do not silently
-		# choose a latest/first case.
-		student = students[0] if len(students) == 1 else None
+		student = crm_contact
 
 	if not student and not crm_contact:
 		return None
@@ -847,10 +852,6 @@ def _create_interaction_for_reference(
 ):
 	if reference_doctype == "CRM Student":
 		student, crm_contact = reference_name, None
-	elif reference_doctype == "CRM Contact":
-		crm_contact = reference_name
-		students = students_for_contact(reference_name)
-		student = students[0] if len(students) == 1 else None
 	else:
 		return None
 
@@ -869,7 +870,7 @@ def _create_interaction_for_reference(
 def create_interaction_from_communication_insert(doc, method=None):
 	if doc.sent_or_received != "Sent":
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype != "CRM Student":
 		return
 	try:
 		_create_interaction_for_reference(
@@ -885,7 +886,7 @@ def create_interaction_from_communication_update(doc, method=None):
 	# the initial insert as a reply creates a phantom Connected interaction.
 	if doc.is_new() or doc.flags.in_insert:
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	is_reply = doc.sent_or_received == "Received" and doc.has_value_changed("sent_or_received")
@@ -916,7 +917,7 @@ def create_interaction_from_task_update(doc, method=None):
 		return
 	if not doc.description:
 		return
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	try:
@@ -934,14 +935,13 @@ def create_interaction_from_task_update(doc, method=None):
 
 def create_interaction_from_note_insert(doc, method=None):
 	"""Record a Sale-authored FCRM Note as a scoped NOTE interaction."""
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	try:
 		create_interaction(
 			interaction_type="NOTE",
-			crm_contact=doc.reference_docname if doc.reference_doctype == "CRM Contact" else None,
-			student=doc.reference_docname if doc.reference_doctype == "CRM Student" else None,
+			student=doc.reference_docname,
 			reference_doctype="FCRM Note",
 			reference_docname=doc.name,
 			actor=doc.owner,
@@ -956,7 +956,7 @@ def create_interaction_from_note_insert(doc, method=None):
 
 
 def create_interaction_from_call_log_insert(doc, method=None):
-	if doc.reference_doctype not in ("CRM Contact", "CRM Student"):
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	interaction_type = "PHONE_CALL"
@@ -973,6 +973,39 @@ def create_interaction_from_call_log_insert(doc, method=None):
 		frappe.log_error(title="CRM Interaction creation failed (Call Log insert)")
 
 
+def create_interaction_for_completed_action(action) -> str | None:
+	"""Create the CRM Interaction a completed CRM Action Item represents.
+
+	Only actions with a real contact channel (CALL/EMAIL/MESSAGE) are genuine
+	touchpoints; an internal action (default_channel NONE) returns None.
+	Caller is responsible for persisting the returned name onto
+	``action.linked_interaction`` -- this never writes the Action Item itself.
+	"""
+	if not action.get("action"):
+		return None
+	default_channel = frappe.db.get_value("CRM Action", action.action, "default_channel")
+	interaction_type = ACTION_CHANNEL_TO_INTERACTION_TYPE.get(default_channel)
+	if not interaction_type:
+		return None
+	try:
+		return create_interaction(
+			interaction_type=interaction_type,
+			student=action.student,
+			crm_contact=action.get("contact"),
+			reference_doctype="CRM Action Item",
+			reference_docname=action.name,
+			actor=frappe.session.user,
+			summary=action.get("objective") or action.get("action_type") or interaction_type,
+			notes=action.get("outcome_notes"),
+			outcome=ACTION_OUTCOME_TO_INTERACTION_OUTCOME.get(action.get("outcome_code")),
+			channel=default_channel,
+			direction="outbound",
+		)
+	except Exception:
+		frappe.log_error(title="CRM Interaction creation failed (Action Item completion)")
+		return None
+
+
 def create_interaction_from_contact_update(doc, method=None):
 	# See create_interaction_from_task_update -- on_update fires during insert
 	# too, after is_new() has already flipped to False; flags.in_insert is the
@@ -984,9 +1017,8 @@ def create_interaction_from_contact_update(doc, method=None):
 		try:
 			create_interaction(
 				interaction_type="SYSTEM_ACTIVITY",
-				crm_contact=doc.name,
-				student=doc.student,
-				reference_doctype="CRM Contact",
+				student=doc.name,
+				reference_doctype="CRM Student",
 				reference_docname=doc.name,
 				summary=f"Stage changed to {doc.lifecycle_stage}",
 			)
@@ -998,9 +1030,8 @@ def create_interaction_from_contact_update(doc, method=None):
 		try:
 			create_interaction(
 				interaction_type=interaction_type,
-				crm_contact=doc.name,
-				student=doc.student,
-				reference_doctype="CRM Contact",
+				student=doc.name,
+				reference_doctype="CRM Student",
 				reference_docname=doc.name,
 				summary=f"{interaction_type}: {doc.owner_staff or 'Unassigned'}",
 			)
@@ -1016,8 +1047,7 @@ def create_interaction_from_consent_event(doc, method=None):
 	try:
 		create_interaction(
 			interaction_type=interaction_type,
-			student=doc.student,
-			crm_contact=doc.contact,
+			student=doc.contact,
 			reference_doctype="CRM Contact Consent Event",
 			reference_docname=doc.name,
 			actor=doc.created_by,

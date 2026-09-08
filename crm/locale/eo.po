@@ -1039,7 +1039,7 @@ msgstr "crwdns152831:0crwdne152831:0"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-msgid "CRM Contacts"
+msgid "CRM Students"
 msgstr "crwdns152833:0crwdne152833:0"
 
 #. Name of a DocType
@@ -1653,7 +1653,7 @@ msgstr "crwdns200070:0crwdne200070:0"
 msgid "Connect your Email"
 msgstr "crwdns196210:0crwdne196210:0"
 
-#. Label of the contact (Link) field in DocType 'CRM Contacts'
+#. Label of the contact (Link) field in DocType 'CRM Students'
 #. Label of the contact (Link) field in DocType 'CRM Deal'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -2648,7 +2648,7 @@ msgstr "crwdns196338:0crwdne196338:0"
 msgid "Editing Row {0}"
 msgstr "crwdns153165:0{0}crwdne153165:0"
 
-#. Label of the email (Data) field in DocType 'CRM Contacts'
+#. Label of the email (Data) field in DocType 'CRM Students'
 #. Label of the email (Data) field in DocType 'Invitation'
 #. Label of the email (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3453,7 +3453,7 @@ msgstr "crwdns153289:0crwdne153289:0"
 msgid "Fulfilled"
 msgstr "crwdns153291:0crwdne153291:0"
 
-#. Label of the full_name (Data) field in DocType 'CRM Contacts'
+#. Label of the full_name (Data) field in DocType 'CRM Students'
 #. Label of the lead_name (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
@@ -3472,7 +3472,7 @@ msgstr "crwdns156388:0crwdne156388:0"
 msgid "GMT+5:30"
 msgstr "crwdns158866:0crwdne158866:0"
 
-#. Label of the gender (Link) field in DocType 'CRM Contacts'
+#. Label of the gender (Link) field in DocType 'CRM Students'
 #. Label of the gender (Link) field in DocType 'CRM Deal'
 #. Label of the gender (Link) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3941,7 +3941,7 @@ msgstr "crwdns153383:0crwdne153383:0"
 msgid "Is Group"
 msgstr "crwdns153385:0crwdne153385:0"
 
-#. Label of the is_primary (Check) field in DocType 'CRM Contacts'
+#. Label of the is_primary (Check) field in DocType 'CRM Students'
 #. Label of the is_primary (Check) field in DocType 'Telephony Phone'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/telephony_phone/telephony_phone.json
@@ -4581,7 +4581,7 @@ msgstr "crwdns196548:0{0}crwdne196548:0"
 msgid "Mobile App Installation"
 msgstr "crwdns196550:0crwdne196550:0"
 
-#. Label of the mobile_no (Data) field in DocType 'CRM Contacts'
+#. Label of the mobile_no (Data) field in DocType 'CRM Students'
 #. Label of the mobile_no (Data) field in DocType 'CRM Lead'
 #. Label of the mobile_no (Data) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -5437,7 +5437,7 @@ msgstr "crwdns153703:0crwdne153703:0"
 msgid "Personal Mobile No."
 msgstr "crwdns199042:0crwdne199042:0"
 
-#. Label of the phone (Data) field in DocType 'CRM Contacts'
+#. Label of the phone (Data) field in DocType 'CRM Students'
 #. Label of the phone (Data) field in DocType 'CRM Lead'
 #. Option for the 'Device' (Select) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json

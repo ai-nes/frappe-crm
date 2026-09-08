@@ -2,6 +2,7 @@
 # See license.txt
 
 import uuid
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -12,8 +13,10 @@ from crm.integrations.api import (
 	get_contact_by_phone_number,
 	get_contact_reference_from_number,
 	get_integrations,
+	get_recording_url,
 	get_user_default_calling_medium,
 	is_call_integration_enabled,
+	_recording_url_allowed,
 	set_default_calling_medium,
 )
 
@@ -76,6 +79,23 @@ class TestIntegrations(FrappeTestCase):
 	def test_get_integrations_rejects_unsupported_type(self):
 		with self.assertRaises(frappe.ValidationError):
 			get_integrations("email")
+
+	def test_recording_url_allowlist(self):
+		self.assertTrue(_recording_url_allowed("https://api.twilio.com/recording.mp3", "Twilio", False))
+		self.assertFalse(_recording_url_allowed("https://example.com/recording.mp3", "Twilio", False))
+		self.assertFalse(_recording_url_allowed("http://api.twilio.com/recording.mp3", "Twilio", False))
+
+	def test_recording_proxy_requires_call_log_read_permission(self):
+		call_log = frappe._dict(
+			name="CALL-PRIVATE-1",
+			has_permission=lambda permission: False,
+		)
+		with (
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe, "get_doc", return_value=call_log),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				get_recording_url("CALL-PRIVATE-1")
 
 	def test_get_user_default_calling_medium_no_agent(self):
 		if frappe.db.exists("Telephony Agent", frappe.session.user):
@@ -214,7 +234,7 @@ class TestIntegrations(FrappeTestCase):
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["crm_contact"], contact.name)
-		self.assertEqual(result["doctype"], "CRM Contact")
+		self.assertEqual(result["doctype"], "CRM Student")
 
 	def test_get_contact_by_phone_number_finds_contact(self):
 		contact = frappe.get_doc(
@@ -244,7 +264,7 @@ class TestIntegrations(FrappeTestCase):
 		docname, doctype = get_contact_reference_from_number("0912345700")
 
 		self.assertEqual(docname, contact.name)
-		self.assertEqual(doctype, "CRM Contact")
+		self.assertEqual(doctype, "CRM Student")
 
 	def test_get_contact_reference_from_number_returns_contact(self):
 		contact = frappe.get_doc(
@@ -312,7 +332,7 @@ def create_test_call_log(**kwargs):
 
 def create_test_crm_contact(**kwargs):
 	data = {
-		"doctype": "CRM Contact",
+		"doctype": "CRM Student",
 		"full_name": "Phone Lookup Contact",
 		"phone": "0912345000",
 		"email": f"lookup-{uuid.uuid4().hex[:8]}@example.com",

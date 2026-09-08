@@ -68,10 +68,10 @@ class TestMasterDataGovernance(FrappeTestCase):
 		self.assertEqual(
 			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Lead Source"]["consumers"]},
 			{
-				("CRM Contact", "source"),
+				("CRM Student", "source"),
 				("CRM Platform", "lead_source"),
 				("CRM Campaign Spend", "lead_source"),
-				("CRM Student", "source"),
+				("CRM Lead", "source"),
 			},
 		)
 
@@ -100,8 +100,8 @@ class TestMasterDataGovernance(FrappeTestCase):
 		contact = self._make_contact("_Test Gov Impact Contact", "0981113301", platform=platform_name)
 
 		usage = check_impact("CRM Platform", platform_name)
-		self.assertEqual(usage.get("CRM Contact.platform"), 1)
-		frappe.delete_doc("CRM Contact", contact, force=True)
+		self.assertEqual(usage.get("CRM Student.platform"), 1)
+		frappe.delete_doc("CRM Student", contact, force=True)
 
 	# ------------------------------------------------------------- propose_change
 
@@ -310,7 +310,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 
 	def _make_contact(self, name, phone, platform=None):
 		payload = {
-			"doctype": "CRM Contact",
+			"doctype": "CRM Student",
 			"full_name": name,
 			"phone": phone,
 			"enrollment_status": "PROSPECT",
@@ -321,8 +321,8 @@ class TestMasterDataGovernance(FrappeTestCase):
 		doc.insert(ignore_permissions=True)
 		self.addCleanup(
 			lambda: (
-				frappe.delete_doc("CRM Contact", doc.name, force=True)
-				if frappe.db.exists("CRM Contact", doc.name)
+				frappe.delete_doc("CRM Student", doc.name, force=True)
+				if frappe.db.exists("CRM Student", doc.name)
 				else None
 			)
 		)

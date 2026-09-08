@@ -39,7 +39,7 @@ class CRMProvince(Document):
 				self.province_name
 			),
 		)
-		for doctype in ("CRM Contact", "CRM High School", "CRM Student"):
+		for doctype in ("CRM Student", "CRM High School", "CRM Lead"):
 			block_delete_if_has_children(
 				self,
 				doctype,

@@ -43,7 +43,7 @@
   },
   {"default": "0", "fieldname": "revision", "fieldtype": "Int", "hidden": 1, "label": "Revision", "read_only": 1, "reqd": 1},
   {"fieldname": "review_type", "fieldtype": "Select", "in_list_view": 1, "label": "Review Type", "options": "identity_conflict\nduplicate_case\nmalformed_identifier\nmissing_admission_cycle\nownership_topology\nlegacy_contact_origin", "read_only": 1, "reqd": 1},
-  {"fieldname": "candidate_student", "fieldtype": "Link", "in_list_view": 1, "label": "Candidate Student", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "candidate_student", "fieldtype": "Link", "in_list_view": 1, "label": "Candidate Student", "options": "CRM Lead", "read_only": 1},
   {"fieldname": "proposed_student_name", "fieldtype": "Data", "label": "Proposed Student Name", "read_only": 1},
   {"fieldname": "proposed_identity", "fieldtype": "Link", "label": "Proposed Identity", "options": "CRM Student Identity", "read_only": 1},
   {"fieldname": "proposed_campus", "fieldtype": "Link", "label": "Proposed Campus", "options": "CRM Campus", "read_only": 1},
@@ -56,7 +56,7 @@
   {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference", "read_only": 1},
   {"fieldname": "correlation_token", "fieldtype": "Data", "hidden": 1, "label": "Correlation Token", "read_only": 1},
   {"fieldname": "decision_at", "fieldtype": "Datetime", "label": "Decision At", "read_only": 1},
-  {"fieldname": "resulting_student", "fieldtype": "Link", "label": "Resulting Student", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "resulting_student", "fieldtype": "Link", "label": "Resulting Student", "options": "CRM Lead", "read_only": 1},
   {"default": "operational", "fieldname": "reason_sensitivity", "fieldtype": "Select", "label": "Reason Sensitivity", "options": "operational\nrestricted", "read_only": 1},
   {"default": "0", "fieldname": "legal_hold", "fieldtype": "Check", "label": "Legal Hold", "read_only": 1}
  ],

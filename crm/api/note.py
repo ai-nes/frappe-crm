@@ -1,4 +1,4 @@
-"""CRUD API for FCRM Note, scoped to CRM Student / CRM Contact.
+"""CRUD API for FCRM Note, scoped to CRM Lead / CRM Student.
 
 FCRM Note itself carries only global role permissions (no
 permission_query_conditions/has_permission hook), so a plain
@@ -13,14 +13,26 @@ from frappe import _
 
 from crm.api._pagination import paged_list
 
-ALLOWED_REFERENCE_DOCTYPES = {"CRM Student", "CRM Contact"}
+ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
 
 FIELDS = ["name", "content", "reference_doctype", "reference_docname", "owner", "creation", "modified"]
 
 
+def _validated_content(content):
+	if not isinstance(content, str):
+		frappe.throw(_("Note content must be text."), frappe.ValidationError)
+
+	content = content.strip()
+	if not content:
+		frappe.throw(_("Note content cannot be empty."), frappe.ValidationError)
+	if len(content) > 20000:
+		frappe.throw(_("Note content cannot exceed 20,000 characters."), frappe.ValidationError)
+	return content
+
+
 def _check_reference_access(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Notes are only supported for CRM Student and CRM Contact."), frappe.ValidationError)
+		frappe.throw(_("Notes are only supported for CRM Student and CRM Student."), frappe.ValidationError)
 	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
 	reference_doc.check_permission(permission_type)
 	return reference_doc
@@ -37,7 +49,7 @@ def _with_owner_full_name(note):
 
 @frappe.whitelist()
 def list_notes(reference_doctype, reference_docname, search=None, start=0, page_length=20):
-	"""List FCRM Notes attached to one CRM Student or CRM Contact.
+	"""List FCRM Notes attached to one CRM Student or CRM Student.
 
 	Requires read access to that student/contact. Optional search matches content.
 	"""
@@ -73,12 +85,12 @@ def get_note(name):
 
 @frappe.whitelist(methods=["POST"])
 def create_note(reference_doctype, reference_docname, content=None):
-	"""Create an FCRM Note on a CRM Student or CRM Contact. Requires read
+	"""Create an FCRM Note on a CRM Student or CRM Student. Requires read
 	access to that student/contact and create access to FCRM Note.
 	"""
 	_check_reference_access(reference_doctype, reference_docname, "read")
 	doc = frappe.new_doc("FCRM Note")
-	doc.content = content
+	doc.content = _validated_content(content or "")
 	doc.reference_doctype = reference_doctype
 	doc.reference_docname = reference_docname
 	doc.insert()
@@ -96,7 +108,7 @@ def update_note(name, content=None):
 	doc.check_permission("write")
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 	if content is not None:
-		doc.content = content
+		doc.content = _validated_content(content)
 	doc.save()
 	return _with_owner_full_name(doc)
 
@@ -111,3 +123,42 @@ def delete_note(name):
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 	doc.delete()
 	return {"deleted": name}
+
+
+@frappe.whitelist()
+def list_lead_notes(lead_id, search=None, start=0, page_length=20):
+	"""List notes attached to one CRM Lead through the Lead detail contract."""
+	return list_notes("CRM Lead", lead_id, search=search, start=start, page_length=page_length)
+
+
+@frappe.whitelist()
+def get_lead_note(name):
+	"""Get one note attached to a CRM Lead."""
+	doc = get_note(name)
+	if doc.get("reference_doctype") != "CRM Lead":
+		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	return doc
+
+
+@frappe.whitelist(methods=["POST"])
+def create_lead_note(lead_id, content=None):
+	"""Create a note attached to a CRM Lead."""
+	return create_note("CRM Lead", lead_id, content=content)
+
+
+@frappe.whitelist(methods=["POST", "PUT"])
+def update_lead_note(name, content=None):
+	"""Update a note attached to a CRM Lead."""
+	doc = get_note(name)
+	if doc.get("reference_doctype") != "CRM Lead":
+		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	return update_note(name, content=content)
+
+
+@frappe.whitelist(methods=["DELETE", "POST"])
+def delete_lead_note(name):
+	"""Delete a note attached to a CRM Lead."""
+	doc = get_note(name)
+	if doc.get("reference_doctype") != "CRM Lead":
+		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	return delete_note(name)

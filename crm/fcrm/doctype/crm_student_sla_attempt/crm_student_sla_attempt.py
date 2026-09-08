@@ -18,7 +18,7 @@ class CRMStudentSLAAttempt(Document):
 	def default_list_data():
 		"""Provide the first-visit columns required by the shared list API."""
 		columns = [
-			{"label": "Student", "type": "Link", "key": "student", "options": "CRM Student", "width": "16rem"},
+			{"label": "Student", "type": "Link", "key": "student", "options": "CRM Lead", "width": "16rem"},
 			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
 			{"label": "Status", "type": "Select", "key": "status", "width": "10rem"},
 			{"label": "Warning At", "type": "Datetime", "key": "warning_at", "width": "11rem"},

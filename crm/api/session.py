@@ -1,5 +1,6 @@
 import frappe
 from frappe import _
+from frappe.utils import getdate, today
 
 from crm.fcrm.role_policy import (
 	ADMINISTRATOR_ROLE,
@@ -111,6 +112,189 @@ def _session_role_flags(roles):
 	}
 
 
+def _get_my_team_memberships(user=None):
+	"""Return the current user's business role and role inside each Team.
+
+	``CRM Staff.team_memberships.function`` is the business function (Sale,
+	CTV Sale, or Lead Sale).  ``CRM Team.team_lead_staff`` is the source of
+	truth for the organisational role, so the same person can be a Lead Sale
+	and a Team member in one Team or a Sale and a Team lead in another.
+	"""
+	user = user or frappe.session.user
+	staff_id = frappe.db.get_value("CRM Staff", {"user": user}, "name")
+	if not staff_id:
+		return []
+
+	memberships = frappe.get_all(
+		"CRM Team Membership",
+		filters={"parent": staff_id, "parenttype": "CRM Staff"},
+		fields=[
+			"name",
+			"team",
+			"function",
+			"term",
+			"effective_from",
+			"effective_until",
+			"is_primary",
+		],
+		order_by="is_primary desc, team asc, name asc",
+		limit_page_length=0,
+	)
+
+	today_date = getdate(today())
+	active_memberships = [
+		row
+		for row in memberships
+		if (not row.effective_from or getdate(row.effective_from) <= today_date)
+		and (not row.effective_until or getdate(row.effective_until) >= today_date)
+	]
+	team_ids = sorted({row.team for row in active_memberships if row.team})
+	if not team_ids:
+		return []
+
+	teams = frappe.get_all(
+		"CRM Team",
+		filters={"name": ["in", team_ids], "is_active": 1},
+		fields=["name", "team_name", "group", "team_lead_staff"],
+		limit_page_length=0,
+	)
+	team_map = {row.name: row for row in teams}
+	group_ids = sorted({row.group for row in teams if row.group})
+	groups = frappe.get_all(
+		"CRM Team Group",
+		filters={"name": ["in", group_ids], "is_active": 1},
+		fields=["name", "group_name", "province"],
+		limit_page_length=0,
+	) if group_ids else []
+	group_map = {row.name: row for row in groups}
+
+	result = []
+	for membership in active_memberships:
+		team = team_map.get(membership.team)
+		if not team:
+			continue
+		group = group_map.get(team.group)
+		is_team_lead = team.team_lead_staff == staff_id
+		result.append(
+			{
+				"id": membership.name,
+				"team_id": team.name,
+				"team_name": team.team_name or team.name,
+				"group_id": group.name if group else None,
+				"group_name": group.group_name if group else None,
+				"province_id": group.province if group else None,
+				"role": membership.function,
+				"function": membership.function,
+				"membership_role": "Trưởng nhóm" if is_team_lead else "Thành viên",
+				"team_role": "team_lead" if is_team_lead else "member",
+				"is_team_lead": is_team_lead,
+				"is_primary": bool(membership.is_primary),
+				"term": membership.term or None,
+			}
+		)
+	return result
+
+
+def _get_my_managed_group_members(user=None):
+	"""Return members in Groups where the current user leads at least one Team."""
+	user = user or frappe.session.user
+	staff_id = frappe.db.get_value("CRM Staff", {"user": user}, "name")
+	if not staff_id:
+		return []
+
+	led_teams = frappe.get_all(
+		"CRM Team",
+		filters={"team_lead_staff": staff_id, "is_active": 1},
+		fields=["name", "team_name", "group", "team_lead_staff"],
+		limit_page_length=0,
+	)
+	group_ids = sorted({row.group for row in led_teams if row.group})
+	if not group_ids:
+		return []
+
+	groups = frappe.get_all(
+		"CRM Team Group",
+		filters={"name": ["in", group_ids], "is_active": 1},
+		fields=["name", "group_name", "province"],
+		limit_page_length=0,
+	)
+	group_map = {row.name: row for row in groups}
+	managed_group_ids = set(group_map)
+	if not managed_group_ids:
+		return []
+
+	teams = frappe.get_all(
+		"CRM Team",
+		filters={"group": ["in", list(managed_group_ids)], "is_active": 1},
+		fields=["name", "team_name", "group", "team_lead_staff"],
+		limit_page_length=0,
+	)
+	team_map = {row.name: row for row in teams}
+	team_ids = sorted(team_map)
+	if not team_ids:
+		return []
+
+	memberships = frappe.get_all(
+		"CRM Team Membership",
+		filters={"team": ["in", team_ids], "parenttype": "CRM Staff"},
+		fields=[
+			"name",
+			"parent as staff",
+			"team",
+			"function",
+			"term",
+			"effective_from",
+			"effective_until",
+			"is_primary",
+		],
+		limit_page_length=0,
+	)
+	today_date = getdate(today())
+	active_memberships = [
+		row
+		for row in memberships
+		if (not row.effective_from or getdate(row.effective_from) <= today_date)
+		and (not row.effective_until or getdate(row.effective_until) >= today_date)
+	]
+	staff_ids = sorted({row.staff for row in active_memberships if row.staff})
+	staff_rows = frappe.get_all(
+		"CRM Staff",
+		filters={"name": ["in", staff_ids], "is_active": 1},
+		fields=["name", "full_name", "user"],
+		limit_page_length=0,
+	) if staff_ids else []
+	staff_map = {row.name: row for row in staff_rows}
+
+	result = []
+	for membership in active_memberships:
+		staff = staff_map.get(membership.staff)
+		team = team_map.get(membership.team)
+		if not staff or not team:
+			continue
+		group = group_map.get(team.group)
+		is_team_lead = team.team_lead_staff == staff.name
+		result.append(
+			{
+				"id": membership.name,
+				"staff_id": staff.name,
+				"full_name": staff.full_name or staff.name,
+				"email": staff.user,
+				"team_id": team.name,
+				"team_name": team.team_name or team.name,
+				"group_id": group.name,
+				"group_name": group.group_name,
+				"province_id": group.province,
+				"role": membership.function,
+				"function": membership.function,
+				"membership_role": "Trưởng nhóm" if is_team_lead else "Thành viên",
+				"team_role": "team_lead" if is_team_lead else "member",
+				"is_team_lead": is_team_lead,
+				"is_primary": bool(membership.is_primary),
+			}
+		)
+	return result
+
+
 def _get_policy_roles(user=None):
 	"""Return Frappe roles plus an explicitly assigned Administrator profile.
 
@@ -213,6 +397,8 @@ def me():
 		"crm_capability_details": flags["crm_capability_details"],
 		"permission": flags["crm_capabilities"],
 		"permission_details": flags["crm_capability_details"],
+		"crm_team_memberships": _get_my_team_memberships(),
+		"crm_managed_group_members": _get_my_managed_group_members(),
 		# The cross-origin SPA has no server-rendered page to read frappe.boot
 		# from, so hand it the CSRF token it must send as `X-Frappe-CSRF-Token`
 		# on write requests (production enforces CSRF; dev sets ignore_csrf).

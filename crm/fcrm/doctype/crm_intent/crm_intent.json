@@ -12,6 +12,7 @@
   "naming_series",
   "interaction",
   "student",
+  "crm_student",
   "column_break_1",
   "intent_type",
   "intent_role",
@@ -45,6 +46,14 @@
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
    "options": "CRM Student",
    "read_only": 1
   },

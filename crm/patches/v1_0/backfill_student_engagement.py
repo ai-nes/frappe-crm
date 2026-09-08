@@ -83,7 +83,7 @@ def _load_rows() -> tuple[list[Any], list[Any]]:
 	if frappe is None:
 		raise RuntimeError("The Phase 5 migration requires a Frappe bench")
 	students = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		fields=["name", "enrollment_status", "lifecycle_stage"],
 		order_by="name asc",
 	)
@@ -114,7 +114,7 @@ def apply_deterministic_lifecycle_projection() -> dict[str, Any]:
 			continue
 		if item["classification"] not in {"explicit", "status_metadata"}:
 			continue
-		frappe.db.set_value("CRM Student", item["student"], "lifecycle_stage", item["mapped_stage"], update_modified=False)
+		frappe.db.set_value("CRM Lead", item["student"], "lifecycle_stage", item["mapped_stage"], update_modified=False)
 		updated.append(item["student"])
 	report["dry_run"] = False
 	report["projection_updates_applied"] = updated

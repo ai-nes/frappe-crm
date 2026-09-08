@@ -87,5 +87,16 @@ def test_kernel_policy_snapshot_requires_all_three_weights_and_knobs():
 	snapshot = kernel_policy_snapshot(row)
 	assert snapshot["component_weights"]["opportunity_fit"] == 0.45
 	assert set(snapshot["component_weights"]) == {"opportunity_fit", "urgency", "effectiveness_index"}
+	assert canonical_digest(snapshot) == "5f583345a805d72e4bd19ff7fb898bc27d04f512fc6e673dbd51ac6105ac57be"
 	with pytest.raises(ValueError):
 		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "component_weights": {"intent": 1.0}}})
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "unreviewed_knob": 1}})
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "score_threshold": True}})
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "top_n_cap": 3.5}})
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "score_threshold": float("nan")}})
+	with pytest.raises(ValueError):
+		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "recent_contact_days": -1}})

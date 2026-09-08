@@ -8,7 +8,7 @@
  "field_order": ["snapshot_id", "student", "captured_at", "province", "ward", "high_school", "source", "change_reason"],
  "fields": [
   {"fieldname": "snapshot_id", "fieldtype": "Data", "hidden": 1, "label": "Snapshot ID", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Lead", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "read_only": 1, "reqd": 1},
   {"fieldname": "captured_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Captured At", "read_only": 1, "reqd": 1},
   {"fieldname": "province", "fieldtype": "Link", "options": "CRM Province", "label": "Province", "read_only": 1},
   {"fieldname": "ward", "fieldtype": "Link", "options": "CRM Ward", "label": "Ward", "read_only": 1},

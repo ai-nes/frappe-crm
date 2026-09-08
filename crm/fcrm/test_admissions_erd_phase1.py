@@ -122,6 +122,39 @@ def test_canonical_admission_and_dashboard_facts_have_declared_grain():
 		assert has_index or has_unique_field
 
 
+def test_target_lead_and_student_boundaries_are_explicit():
+	lead = _fields(_meta("crm_lead"))
+	student = _fields(_meta("crm_student"))
+
+	assert {
+		"lead_code",
+		"lead_status",
+		"conversion_status",
+		"conversion_blockers",
+		"converted_student",
+		"id_number",
+		"high_school",
+		"major",
+	} <= set(lead)
+	assert {"source_lead", "converted_at", "id_number", "high_school", "major"} <= set(student)
+
+
+def test_core_child_records_expose_canonical_student_links():
+	for doctype in (
+		"crm_interaction",
+		"crm_interaction_evidence",
+		"crm_intent",
+		"crm_score_history",
+		"crm_student_analysis_run",
+		"crm_student_assessment",
+		"crm_nba_evaluation",
+		"task",
+		"crm_action_item",
+		"crm_admission_application",
+	):
+		assert "crm_student" in _fields(_meta(doctype)), doctype
+
+
 def test_high_school_snapshot_preserves_legacy_ne_fields_and_adds_fact_metrics():
 	fields = _fields(_meta("crm_high_school_annual_snapshot"))
 	assert {"ne_target", "ne_actual", "ne_actual_semantics"} <= set(fields)

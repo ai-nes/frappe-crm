@@ -1,9 +1,11 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-"""Tests for Phase 3 auto-assignment routing (crm/api/routing.py), exercised both
-directly against pick_team_for_campus/pick_round_robin_staff and end-to-end through
-CRM Contact.before_insert -> route_new_lead."""
+"""Compatibility tests for the retired campus-only routing surface.
+
+New assignment is explicit and batch-driven; these tests ensure old callers do
+not silently mutate a Lead or Student anymore.
+"""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -16,8 +18,8 @@ class TestRouting(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test Routing%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test Routing%"]}, pluck="name"):
@@ -92,7 +94,7 @@ class TestRouting(FrappeTestCase):
 	def _make_contact(self, name, phone, branch):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 				"branch": branch,
@@ -127,7 +129,7 @@ class TestRouting(FrappeTestCase):
 		contact = self._make_contact("_Test Routing No Staff Contact", "0921111101", campus)
 
 		self.assertFalse(contact.assigned_to)
-		self.assertTrue(frappe.db.exists("CRM Contact", contact.name))
+		self.assertTrue(frappe.db.exists("CRM Student", contact.name))
 
 	def test_no_active_staff_because_all_inactive_leaves_contact_unassigned(self):
 		campus = self._make_campus("_Test Routing All Inactive Campus")
@@ -142,16 +144,17 @@ class TestRouting(FrappeTestCase):
 
 	# ------------------------------------------------------------------- routing
 
-	def test_route_new_lead_assigns_matching_active_staff(self):
+	def test_route_new_lead_does_not_assign_implicitly(self):
 		campus = self._make_campus("_Test Routing Match Campus")
 		team = self._make_team("_Test Routing Match Team", campus)
 		department = self._make_department("_Test Routing Match Dept", campus)
-		staff = self._make_staff("_Test Routing Match Staff", campus, department, team)
+		self._make_staff("_Test Routing Match Staff", campus, department, team)
 
 		contact = self._make_contact("_Test Routing Match Contact", "0921111103", campus)
 		contact.reload()
 
-		self.assertEqual(contact.assigned_to, staff)
+		self.assertFalse(contact.assigned_to)
+		self.assertEqual(route_new_lead(contact)["reason"], "BATCH_REQUIRED")
 
 	def test_route_new_lead_noop_when_already_assigned(self):
 		campus = self._make_campus("_Test Routing Preassigned Campus")
@@ -161,7 +164,7 @@ class TestRouting(FrappeTestCase):
 
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test Routing Preassigned Contact",
 				"phone": "0921111104",
 				"branch": campus,
@@ -176,14 +179,14 @@ class TestRouting(FrappeTestCase):
 
 	def test_route_new_lead_noop_when_no_branch(self):
 		contact = frappe.get_doc(
-			{"doctype": "CRM Contact", "full_name": "_Test Routing No Branch Contact", "phone": "0921111105"}
+			{"doctype": "CRM Student", "full_name": "_Test Routing No Branch Contact", "phone": "0921111105"}
 		)
 		route_new_lead(contact)
 		self.assertFalse(contact.assigned_to)
 
 	# ---------------------------------------------------- scenario: round robin
 
-	def test_round_robin_rotates_between_two_staff_across_two_contacts(self):
+	def test_round_robin_helpers_are_not_used_by_new_record_creation(self):
 		campus = self._make_campus("_Test Routing RR Campus")
 		team = self._make_team("_Test Routing RR Team", campus)
 		department = self._make_department("_Test Routing RR Dept", campus)
@@ -192,21 +195,19 @@ class TestRouting(FrappeTestCase):
 		staff_a = self._make_staff(
 			"_Test Routing RR Staff A", campus, department, team, last_routed_at="2020-01-01 00:00:00"
 		)
-		staff_b = self._make_staff(
+		self._make_staff(
 			"_Test Routing RR Staff B", campus, department, team, last_routed_at="2024-01-01 00:00:00"
 		)
 
 		contact_1 = self._make_contact("_Test Routing RR Contact 1", "0921111106", campus)
-		contact_1.reload()
-		self.assertEqual(contact_1.assigned_to, staff_a)
-
-		# After routing contact_1 to staff_a, staff_a.last_routed_at is now the
-		# most recent — so the second lead must go to staff_b instead.
 		contact_2 = self._make_contact("_Test Routing RR Contact 2", "0921111107", campus)
+		contact_1.reload()
 		contact_2.reload()
-		self.assertEqual(contact_2.assigned_to, staff_b)
+		self.assertFalse(contact_1.assigned_to)
+		self.assertFalse(contact_2.assigned_to)
+		self.assertEqual(pick_round_robin_staff(team), staff_a)
 
-	def test_mark_staff_routed_updates_last_routed_at(self):
+	def test_record_creation_does_not_touch_legacy_route_timestamp(self):
 		campus = self._make_campus("_Test Routing Mark Campus")
 		team = self._make_team("_Test Routing Mark Team", campus)
 		department = self._make_department("_Test Routing Mark Dept", campus)
@@ -218,4 +219,4 @@ class TestRouting(FrappeTestCase):
 		self._make_contact("_Test Routing Mark Contact", "0921111108", campus)
 
 		after = frappe.db.get_value("CRM Staff", staff, "last_routed_at")
-		self.assertTrue(after)
+		self.assertEqual(after, before)

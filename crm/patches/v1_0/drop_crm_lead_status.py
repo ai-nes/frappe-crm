@@ -8,9 +8,9 @@ import frappe
 
 
 LAYOUTS = (
-	"CRM Contact-Quick Entry",
-	"CRM Contact-Side Panel",
-	"CRM Contact-Data Fields",
+	"CRM Student-Quick Entry",
+	"CRM Student-Side Panel",
+	"CRM Student-Data Fields",
 )
 
 
@@ -44,16 +44,16 @@ def execute() -> None:
 		frappe.delete_doc("DocType", "CRM Lead Status", force=True, ignore_permissions=True)
 	frappe.db.sql_ddl("DROP TABLE IF EXISTS `tabCRM Lead Status`")
 
-	if frappe.db.table_exists("CRM Contact"):
-		columns = {row[0] for row in frappe.db.sql("SHOW COLUMNS FROM `tabCRM Contact`")}
+	if frappe.db.table_exists("CRM Student"):
+		columns = {row[0] for row in frappe.db.sql("SHOW COLUMNS FROM `tabCRM Student`")}
 		if "lead_status" in columns:
-			frappe.db.sql_ddl("ALTER TABLE `tabCRM Contact` DROP COLUMN `lead_status`")
+			frappe.db.sql_ddl("ALTER TABLE `tabCRM Student` DROP COLUMN `lead_status`")
 
 	_remove_contact_layout_field()
 	# The workspace source changed together with the retired vocabularies, but
 	# upgrades do not run install hooks. Reload it here so old CRM Term/Lead
 	# Status links cannot remain in Desk metadata.
 	frappe.reload_doc("fcrm", "Workspace", "Frappe CRM", force=True)
-	frappe.clear_cache(doctype="CRM Contact")
+	frappe.clear_cache(doctype="CRM Student")
 	if not getattr(frappe.flags, "in_test", False):
 		frappe.db.commit()

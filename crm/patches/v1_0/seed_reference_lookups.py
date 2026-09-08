@@ -34,15 +34,15 @@ LOOKUP_CONSUMERS = {
 	"stakeholder_role": (("CRM School Stakeholder", "stakeholder_role"),),
 	"activity_type": (("CRM School Activity", "activity_type"),),
 	"major_group": (("CRM Major", "major_group"),),
-	"aspiration": (("CRM Contact", "aspiration"), ("CRM Student", "aspiration")),
+	"aspiration": (("CRM Student", "aspiration"), ("CRM Lead", "aspiration")),
 	"region": (
 		("CRM Province", "region"),
 		("CRM Territory", "region"),
 		("CRM Planning Scope", "region"),
 	),
-	"enrollment_status": (("CRM Contact", "enrollment_status"), ("CRM Student", "enrollment_status")),
+	"enrollment_status": (("CRM Student", "enrollment_status"), ("CRM Lead", "enrollment_status")),
 	"admission_method": (
-		("CRM Student", "admission_method"),
+		("CRM Lead", "admission_method"),
 		("CRM Admission Offering", "admission_method"),
 		("CRM Admission Application", "admission_method"),
 	),

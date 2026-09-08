@@ -22,7 +22,7 @@ LEGACY_PROFILE_FIELDS = {
 	"CRM Campus": ("campus_code", "province"),
 	"CRM Major": ("major_code", "major_name"),
 	"CRM Campaign": ("stable_code", "title", "platform"),
-	"CRM Student": ("admission_year", "branch", "major", "high_school"),
+	"CRM Lead": ("admission_year", "branch", "major", "high_school"),
 	"CRM Ward": ("ward_code", "province"),
 }
 PROVENANCE_FIELDS = (

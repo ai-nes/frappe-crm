@@ -8,13 +8,13 @@ from crm.fcrm.admission_application_migration import application_backfill_decisi
 
 
 def execute():
-	if not frappe.db.exists("DocType", "CRM Admission Application") or not frappe.db.exists("DocType", "CRM Student"):
+	if not frappe.db.exists("DocType", "CRM Admission Application") or not frappe.db.exists("DocType", "CRM Lead"):
 		return {"mode": "skipped", "reason": "doctype_unavailable"}
 	if not frappe.db.exists("DocType", "CRM Admission Offering") or not frappe.db.exists("DocType", "CRM Student Case Key"):
 		return {"mode": "blocked", "reason": "canonical_offering_or_case_key_unavailable"}
 
 	rows = frappe.get_all(
-		"CRM Student",
+		"CRM Lead",
 		fields=["name", "case_key", "admission_year", "major", "branch", "admission_method", "enrollment_status"],
 		limit_page_length=0,
 		ignore_permissions=True,

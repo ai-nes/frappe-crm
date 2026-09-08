@@ -14,6 +14,7 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category
+from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 from crm.fcrm.nba_canonical import (
 	action_definition_snapshot,
 	canonical_digest,
@@ -33,6 +34,9 @@ EXCLUSION_REASONS: frozenset[str] = frozenset(
 		"UNKNOWN_CODE",
 		"NO_OPPORTUNITY_MAPPING",
 		"LIFECYCLE_TERMINAL",
+		"STUDENT_STAGE_TERMINAL",
+		"STUDENT_STAGE_UNKNOWN",
+		"STUDENT_STAGE_NOT_ALLOWED",
 		"CHANNEL_NOT_ALLOWED",
 		"RECIPIENT_AMBIGUOUS",
 		"PARENT_AUTHORITY_MISSING",
@@ -75,6 +79,14 @@ _ACTION_OPPORTUNITIES: dict[str, tuple[str, ...]] = {
 			"SEND_APPLICATION_CHECKLIST", "REMIND_APPLICATION_DEADLINE",
 		)
 	},
+}
+
+_STAGE_ALLOWED_CATEGORIES: dict[str, frozenset[str]] = {
+	"New": frozenset({"CONTACT", "INFORMATION", "ENGAGEMENT"}),
+	"Attempting": frozenset({"CONTACT", "INFORMATION", "ENGAGEMENT", "RECOVERY"}),
+	"Connected": frozenset({
+		"CONTACT", "INFORMATION", "ENGAGEMENT", "APPLICATION", "CONVERSION", "PARENT", "RECOVERY"
+	}),
 }
 
 
@@ -179,6 +191,10 @@ def filter_eligible_actions(
 	exclusions: list[dict] = []
 	roles = {str(r) for r in actor_roles} if actor_roles is not None else None
 	decision_context = decision_context if isinstance(decision_context, Mapping) else None
+	uses_student_stage = decision_context is not None and "student_stage" in decision_context
+	student_stage = str((decision_context or {}).get("student_stage") or "")
+	student_stage_valid = student_stage in STUDENT_STAGES
+	student_stage_terminal = student_stage in TERMINAL_STAGES
 	lifecycle = (decision_context or {}).get("lifecycle") or {}
 	stage = str(lifecycle.get("stage") or "").casefold()
 	terminal_lifecycle = stage in {"lost", "enrolled", "đã xác nhận", "closed", "withdrawn"}
@@ -228,13 +244,22 @@ def filter_eligible_actions(
 		if not opportunities:
 			exclusions.append({"action": code, "reason": "NO_OPPORTUNITY_MAPPING"})
 			continue
+		if uses_student_stage and not student_stage_valid:
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_UNKNOWN"})
+			continue
+		if uses_student_stage and student_stage_terminal:
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_TERMINAL"})
+			continue
+		if uses_student_stage and category not in _STAGE_ALLOWED_CATEGORIES.get(student_stage, frozenset()):
+			exclusions.append({"action": code, "reason": "STUDENT_STAGE_NOT_ALLOWED"})
+			continue
 		if decision_context is not None and terminal_lifecycle:
 			exclusions.append({"action": code, "reason": "LIFECYCLE_TERMINAL"})
 			continue
 		channel = str(snapshot["default_channel"] or "NONE").upper()
-		# Parent outreach needs recipient-specific consent as well as authority.
-		# That contactability model is introduced in Phase 04; until then exclude
-		# every parent action rather than borrowing the student's consent.
+		# Parent-recipient consent is introduced with the dedicated authority
+		# projection in phase 04. Until then, do not borrow the student's consent
+		# to make a parent action executable.
 		if decision_context is not None and category == "PARENT":
 			exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
 			continue
@@ -357,15 +382,34 @@ def kernel_policy_snapshot(row: Mapping[str, object]) -> dict:
 	missing = [key for key in _KERNEL_POLICY_REQUIRED if key not in raw]
 	if missing:
 		raise ValueError(f"kernel_policy is missing: {sorted(missing)}")
+	unexpected = sorted(set(raw) - set(_KERNEL_POLICY_REQUIRED))
+	if unexpected:
+		raise ValueError(f"kernel_policy has unexpected fields: {unexpected}")
 	weights = raw["component_weights"]
 	if not isinstance(weights, Mapping) or set(weights) != {"opportunity_fit", "urgency", "effectiveness_index"}:
 		raise ValueError("kernel_policy.component_weights must contain the three kernel weights.")
+	if not isinstance(raw.get("revision"), str) or not raw["revision"]:
+		raise ValueError("kernel_policy revision must be a non-empty string.")
+	integer_fields = {
+		"top_n_cap", "recommendation_ttl_seconds", "recent_contact_days",
+		"cooling_contact_days", "deadline_horizon_days",
+	}
+	decimal_fields = {
+		"score_threshold", "confidence_floor", "contact_pressure_penalty",
+		"redundancy_penalty", "diversity_group_penalty",
+	}
+	if any(isinstance(raw[key], bool) or not isinstance(raw[key], int) for key in integer_fields):
+		raise ValueError("kernel_policy integer values must be integers.")
+	if any(isinstance(raw[key], bool) or not isinstance(raw[key], (int, float)) for key in decimal_fields):
+		raise ValueError("kernel_policy decimal values must be numeric.")
+	if any(isinstance(weights.get(key), bool) or not isinstance(weights.get(key), (int, float)) for key in weights):
+		raise ValueError("kernel_policy weights must be numeric.")
 	try:
 		weights = {key: float(weights[key]) for key in sorted(weights)}
 		if any(not math.isfinite(value) or value < 0 for value in weights.values()) or abs(sum(weights.values()) - 1.0) > 1e-9:
 			raise ValueError
-		return {
-			"revision": str(raw["revision"]),
+		snapshot = {
+			"revision": raw["revision"],
 			"score_threshold": float(raw["score_threshold"]),
 			"confidence_floor": float(raw["confidence_floor"]),
 			"top_n_cap": int(raw["top_n_cap"]),
@@ -378,6 +422,19 @@ def kernel_policy_snapshot(row: Mapping[str, object]) -> dict:
 			"diversity_group_penalty": float(raw["diversity_group_penalty"]),
 			"deadline_horizon_days": int(raw["deadline_horizon_days"]),
 		}
+		if snapshot["top_n_cap"] < 1 or snapshot["recommendation_ttl_seconds"] < 1:
+			raise ValueError
+		if any(snapshot[key] < 0 for key in ("recent_contact_days", "cooling_contact_days", "deadline_horizon_days")):
+			raise ValueError
+		if any(
+			not math.isfinite(snapshot[key]) or not 0.0 <= snapshot[key] <= 1.0
+			for key in (
+				"score_threshold", "confidence_floor", "contact_pressure_penalty",
+				"redundancy_penalty", "diversity_group_penalty",
+			)
+		):
+			raise ValueError
+		return snapshot
 	except (TypeError, ValueError, OverflowError) as exc:
 		raise ValueError("kernel_policy contains invalid numeric values.") from exc
 
@@ -504,8 +561,17 @@ def eligible_action_set_for_student(
 	"""
 	import frappe
 
-	if not service_authorized and not frappe.has_permission("CRM Student", "read", student, throw=False):
-		frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
+	if not service_authorized:
+		from crm.fcrm.permissions import has_permission as has_student_permission
+
+		student_doc = frappe.get_doc("CRM Student", student)
+		permitted = has_student_permission(
+			student_doc,
+			user=frappe.session.user,
+			permission_type="read",
+		)
+		if not permitted:
+			frappe.throw("Student is outside the actor's scope.", frappe.PermissionError)
 
 	evaluated_at = now or frappe.utils.now_datetime()
 	catalog_rows = frappe.get_all(
@@ -588,7 +654,6 @@ def get_active_decision_policy() -> dict:
 		"conflict_key_fields": json_string_list(row.get("conflict_key_fields")),
 		"diversity_rule": row.get("diversity_rule") or "none",
 		"decision_policy": kernel,
-		"policy_digest": kernel_digest,
 	}
 
 

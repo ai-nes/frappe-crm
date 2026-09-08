@@ -125,7 +125,7 @@ def reset() -> dict[str, Any]:
 		team = seed_staff._ensure_fixture_sales_team(context["campus"])
 		pool = seed_staff._ensure_fixture_student_pool(team)
 		students = frappe.get_all(
-			"CRM Student",
+			"CRM Lead",
 			filters={"import_source_id": ["in", list(_fixture_source_ids())]},
 			fields=["name", "import_source_id", "branch", "ownership_revision"],
 			limit_page_length=0,

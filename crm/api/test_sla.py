@@ -26,8 +26,8 @@ class TestSlaStartedAt(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SLA%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test SLA%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test SLA%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test SLA%"]}, pluck="name"):
@@ -89,7 +89,7 @@ class TestSlaStartedAt(FrappeTestCase):
 		staff = self._make_staff("_Test SLA Staff", campus, department, team)
 
 		contact = frappe.get_doc(
-			{"doctype": "CRM Contact", "full_name": "_Test SLA Contact", "phone": "0922222201"}
+			{"doctype": "CRM Student", "full_name": "_Test SLA Contact", "phone": "0922222201"}
 		)
 		contact.insert(ignore_permissions=True)
 		self.assertFalse(contact.sla_started_at)
@@ -97,7 +97,7 @@ class TestSlaStartedAt(FrappeTestCase):
 		contact.assigned_to = staff
 		contact._track_sla_start()
 		frappe.db.set_value(
-			"CRM Contact",
+			"CRM Student",
 			contact.name,
 			{"assigned_to": staff, "sla_started_at": contact.sla_started_at},
 			update_modified=False,
@@ -114,7 +114,7 @@ class TestSlaStartedAt(FrappeTestCase):
 
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test SLA Reassign Contact",
 				"phone": "0922222202",
 				"assigned_to": staff_a,
@@ -127,7 +127,7 @@ class TestSlaStartedAt(FrappeTestCase):
 
 		# Ownership updates are command-owned in production; model the persisted
 		# reassignment without bypassing that document guard in this unit test.
-		frappe.db.set_value("CRM Contact", contact.name, "assigned_to", staff_b, update_modified=False)
+		frappe.db.set_value("CRM Student", contact.name, "assigned_to", staff_b, update_modified=False)
 		contact.reload()
 
 		self.assertEqual(contact.sla_started_at, first_sla_started_at)
@@ -141,20 +141,20 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 		frappe.set_user("Administrator")
 
 	def tearDown(self):
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test SLA Recompute%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test SLA Recompute%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 
 	def _make_contact(self, name, phone, sla_started_at, enrollment_status="NEW"):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
 				"enrollment_status": enrollment_status,
 			}
 		)
 		contact.insert(ignore_permissions=True)
-		frappe.db.set_value("CRM Contact", contact.name, "sla_started_at", sla_started_at, update_modified=False)
+		frappe.db.set_value("CRM Student", contact.name, "sla_started_at", sla_started_at, update_modified=False)
 		return contact.name
 
 	def test_recompute_marks_on_time_within_warning_window(self):
@@ -164,7 +164,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 			add_to_date(now_datetime(), minutes=-1),
 		)
 		recompute_sla_statuses()
-		self.assertEqual(frappe.db.get_value("CRM Contact", name, "sla_status"), ON_TIME)
+		self.assertEqual(frappe.db.get_value("CRM Student", name, "sla_status"), ON_TIME)
 
 	def test_recompute_marks_warning_between_thresholds(self):
 		name = self._make_contact(
@@ -173,7 +173,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 			add_to_date(now_datetime(), minutes=-(SLA_WARNING_MINUTES + 5)),
 		)
 		recompute_sla_statuses()
-		self.assertEqual(frappe.db.get_value("CRM Contact", name, "sla_status"), WARNING)
+		self.assertEqual(frappe.db.get_value("CRM Student", name, "sla_status"), WARNING)
 
 	def test_recompute_marks_breach_past_breach_threshold(self):
 		name = self._make_contact(
@@ -182,12 +182,12 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 			add_to_date(now_datetime(), minutes=-(SLA_BREACH_MINUTES + 5)),
 		)
 		recompute_sla_statuses()
-		self.assertEqual(frappe.db.get_value("CRM Contact", name, "sla_status"), BREACH)
+		self.assertEqual(frappe.db.get_value("CRM Student", name, "sla_status"), BREACH)
 
 	def test_recompute_skips_contacts_with_no_sla_started_at(self):
 		contact = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": "_Test SLA Recompute Unassigned",
 				"phone": "0922222304",
 				"enrollment_status": "NEW",
@@ -198,7 +198,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 
 		recompute_sla_statuses()
 
-		self.assertFalse(frappe.db.get_value("CRM Contact", contact.name, "sla_status"))
+		self.assertFalse(frappe.db.get_value("CRM Student", contact.name, "sla_status"))
 
 	def test_recompute_skips_contacts_outside_open_status_bucket(self):
 		# "Đã nhập học" maps to stage_category "enrolled" (per seeded CRM
@@ -211,4 +211,4 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 			enrollment_status="ENROLLED",
 		)
 		recompute_sla_statuses()
-		self.assertNotEqual(frappe.db.get_value("CRM Contact", name, "sla_status"), BREACH)
+		self.assertNotEqual(frappe.db.get_value("CRM Student", name, "sla_status"), BREACH)

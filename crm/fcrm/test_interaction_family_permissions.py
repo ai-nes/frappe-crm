@@ -49,13 +49,13 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		for name in interactions:
 			frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in frappe.db.get_all(
-			"CRM Student", filters={"student_name": ["like", "_Test IFP%"]}, pluck="name"
+			"CRM Lead", filters={"student_name": ["like", "_Test IFP%"]}, pluck="name"
+		):
+			frappe.delete_doc("CRM Lead", name, force=True)
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"full_name": ["like", "_Test IFP%"]}, pluck="name"
 		):
 			frappe.delete_doc("CRM Student", name, force=True)
-		for name in frappe.db.get_all(
-			"CRM Contact", filters={"full_name": ["like", "_Test IFP%"]}, pluck="name"
-		):
-			frappe.delete_doc("CRM Contact", name, force=True)
 		for name in frappe.db.get_all(
 			"CRM Staff", filters={"full_name": ["like", "%_Test IFP%"]}, pluck="name"
 		):
@@ -78,7 +78,7 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		return TestSharedScopingPermissions._make_user_and_staff(self, prefix, roles=roles)
 
 	def _make_student(self, name, owner_staff=None):
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": "0900000000"})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": "0900000000"})
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:
@@ -110,17 +110,17 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 	def test_agent_event_scope_follows_student_for_operational_aggregates(self):
 		user, _staff = self._make_user_and_staff("_Test IFP Event Scope", ["Sale"])
 		condition = get_student_projection_permission_query_conditions(doctype="CRM Agent Event", user=user)
-		self.assertIn("aggregate_doctype = 'CRM Student'", condition)
+		self.assertIn("aggregate_doctype = 'CRM Lead'", condition)
 		self.assertIn("aggregate_doctype = 'CRM Action Item'", condition)
 		self.assertIn("aggregate_doctype = 'CRM Student Decision Event'", condition)
-		self.assertIn("tabCRM Student", condition)
+		self.assertIn("tabCRM Lead", condition)
 
 	def test_marketing_role_uses_case_scope_not_channel(self):
 		# Marketing has a campus-scoped case policy. Interaction visibility must
 		# inherit that case scope and must never be granted solely by channel.
 		user, _staff = self._make_user_and_staff("_Test IFP Marketing", ["Marketing"])
 		condition = get_interaction_permission_query_conditions(user=user, doctype="CRM Interaction")
-		self.assertIn("tabCRM Student", condition)
+		self.assertIn("tabCRM Lead", condition)
 		self.assertNotIn("interaction_type", condition)
 		self.assertNotIn("channel", condition)
 
@@ -179,7 +179,7 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 		try:
 			user, staff = self._make_user_and_staff("_Test IFP Contact Sale", ["Sale"])
 			contact = frappe.get_doc(
-				{"doctype": "CRM Contact", "full_name": "_Test IFP Contact", "phone": "0900000099"}
+				{"doctype": "CRM Student", "full_name": "_Test IFP Contact", "phone": "0900000099"}
 			)
 			contact.insert(ignore_permissions=True)
 			contact.db_set("owner_staff", staff)
@@ -243,7 +243,7 @@ class TestInteractionFamilyPermissions(FrappeTestCase):
 
 		user, staff = self._make_user_and_staff("_Test IFP Intent Contact Sale", ["Sale"])
 		contact = frappe.get_doc(
-			{"doctype": "CRM Contact", "full_name": "_Test IFP Intent Contact", "phone": "0900000098"}
+			{"doctype": "CRM Student", "full_name": "_Test IFP Intent Contact", "phone": "0900000098"}
 		)
 		contact.insert(ignore_permissions=True)
 		contact.db_set("owner_staff", staff)

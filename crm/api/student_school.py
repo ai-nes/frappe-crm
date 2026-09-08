@@ -5,11 +5,15 @@ from __future__ import annotations
 import frappe
 from frappe import _
 
+from crm.fcrm.role_policy import resolve_crm_profile
+
 _STUDENT_BASIC_FIELDS = frozenset(
 	{
 		"student_name",
+		"lead_status",
 		"phone",
 		"email",
+		"other_email",
 		"gender",
 		"date_of_birth",
 		"province",
@@ -21,6 +25,8 @@ _STUDENT_BASIC_FIELDS = frozenset(
 		"major",
 		"aspiration",
 		"advertising_channel",
+		"conversion_potential",
+		"segments",
 		"admission_year",
 		"alt_name",
 		"alt_phone",
@@ -49,10 +55,11 @@ _SCHOOL_BASIC_FIELDS = frozenset(
 	}
 )
 _SCHOOL_CREATE_FIELDS = _SCHOOL_BASIC_FIELDS | {"school_code"}
-_OPTION_DOCTYPES = frozenset({"CRM Student", "CRM High School"})
+_OPTION_DOCTYPES = frozenset({"CRM Lead", "CRM High School"})
 _OPTION_FIELD_TYPES = frozenset({"Link", "Select"})
 _DEFAULT_OPTION_LIMIT = 20
 _MAX_OPTION_LIMIT = 100
+_CTV_STUDENT_UPDATE_FIELDS = frozenset({"lead_status", "notes"})
 
 
 def _parse_fields(fields: dict | str | None, allowed_fields: frozenset[str]) -> dict:
@@ -94,6 +101,19 @@ def _update_document(doctype: str, name: str, fields: dict, allowed_fields: froz
 		frappe.throw(_("Document name is required."), frappe.ValidationError)
 
 	values = _parse_fields(fields, allowed_fields)
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	profile = (
+		resolve_crm_profile(frappe.get_roles(actor))
+		if actor not in {None, "Guest", "None", "Administrator"}
+		else None
+	)
+	if doctype == "CRM Lead" and profile == "ctv_sale":
+		unauthorized_fields = set(values) - _CTV_STUDENT_UPDATE_FIELDS
+		if unauthorized_fields:
+			frappe.throw(
+				_("CTV Sale may only update: {0}.").format(", ".join(sorted(_CTV_STUDENT_UPDATE_FIELDS))),
+				frappe.PermissionError,
+			)
 	doc = frappe.get_doc(doctype, name.strip())
 	doc.check_permission("write")
 
@@ -264,7 +284,7 @@ def _get_link_options(
 def create_student(fields: dict | str | None = None) -> dict:
 	"""Create a CRM Student with basic profile fields."""
 	return _create_document(
-		"CRM Student",
+		"CRM Lead",
 		fields,
 		_STUDENT_BASIC_FIELDS,
 		{"student_name"},
@@ -285,7 +305,7 @@ def create_school(fields: dict | str | None = None) -> dict:
 @frappe.whitelist(methods=["GET"])
 def get_student(name: str) -> dict:
 	"""Get one Student with the fields marked ``in_list_view`` in its DocType."""
-	return _get_document("CRM Student", name)
+	return _get_document("CRM Lead", name)
 
 
 @frappe.whitelist(methods=["GET"])
@@ -412,12 +432,12 @@ def get_field_options(
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_student(name: str, fields: dict | str | None = None) -> dict:
-	"""Partially update basic profile fields on one CRM Student.
+	"""Partially update basic profile fields on one CRM Lead.
 
 	Request fields: ``name`` and a non-empty ``fields`` object. The response
 	contains the document name and the normalized values that were updated.
 	"""
-	return _update_document("CRM Student", name, fields, _STUDENT_BASIC_FIELDS)
+	return _update_document("CRM Lead", name, fields, _STUDENT_BASIC_FIELDS)
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
@@ -433,7 +453,7 @@ def update_school(name: str, fields: dict | str | None = None) -> dict:
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_student(name: str) -> dict:
 	"""Delete one CRM Student after checking delete permission and links."""
-	return _delete_document("CRM Student", name)
+	return _delete_document("CRM Lead", name)
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])

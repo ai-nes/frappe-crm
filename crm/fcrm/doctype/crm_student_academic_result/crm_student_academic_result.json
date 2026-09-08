@@ -44,7 +44,7 @@
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Student Academic Result",
- "parenttype": "CRM Contact",
+ "parenttype": "CRM Student",
  "owner": "Administrator",
  "permissions": [],
  "row_format": "Dynamic",

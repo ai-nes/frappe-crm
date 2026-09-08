@@ -23,13 +23,18 @@ docker/.env
 docker/.env.*
 !docker/.env.example
 docs/*
+!docs/team-management-assignment-audit.md
+# Keep local test evidence that is useful for review and handoff.
+!docs/test-evidence/
+!docs/test-evidence/lead-conversion-local-2026-09-07/
+!docs/test-evidence/lead-conversion-local-2026-09-07/*
 plans/*
 crm/migration/id_maps/*.json
 crm/migration/fixtures/*.csv
 
 # Cache files
 .ck.json
+.codegraph/
 .mcp.json.claude/
 .codex/
 .agents/
-

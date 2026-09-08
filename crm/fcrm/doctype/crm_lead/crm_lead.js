@@ -23,7 +23,7 @@ async function loadWardCode(frm) {
 	}
 }
 
-frappe.ui.form.on("CRM Student", {
+frappe.ui.form.on("CRM Lead", {
 	setup(frm) {
 		// Enrollment Status is a dedicated lookup; this field must not expose intent,
 		// aspiration, or lost-reason terms as valid enrollment statuses.

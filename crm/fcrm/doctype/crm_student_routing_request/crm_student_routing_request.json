@@ -5,7 +5,7 @@
   {"fieldname": "request_key", "fieldtype": "Data", "label": "Request Key", "read_only": 1, "reqd": 1, "unique": 1},
   {"default": "pending", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "pending\nleased\ndeferred\napplied\nfailed\nsuperseded", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "reqd": 1},
-  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
   {"fieldname": "ownership_revision", "fieldtype": "Int", "label": "Ownership Revision", "read_only": 1, "reqd": 1},
   {"fieldname": "pool_revision_key", "fieldtype": "Data", "label": "Pool Revision Key", "read_only": 1, "reqd": 1},
   {"fieldname": "campus", "fieldtype": "Link", "label": "Campus", "options": "CRM Campus", "read_only": 1, "reqd": 1},

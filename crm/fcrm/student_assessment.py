@@ -23,9 +23,16 @@ ASSESSMENT_POLICY_VERSION = "student-360-assessment-v1"
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("write"):
 		frappe.throw(_("You do not have permission to assess this Student."), frappe.PermissionError)
+	actor = frappe.session.user
+	roles = set(frappe.get_roles(actor))
+	if actor != "Administrator" and not ({"System Manager", "Admissions Director"} & roles):
+		if not frappe.has_permission("CRM Student Assessment", "create", user=actor):
+			frappe.throw(
+				_("You do not have permission to write Student assessments."), frappe.PermissionError
+			)
 	return doc
 
 
@@ -48,7 +55,7 @@ def _current(student: str, statuses=("confirmed", "proposed")):
 def _next_revision(student: str) -> int:
 	# Serialize revision allocation against the Student row so concurrent
 	# commands cannot observe the same max revision.
-	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name = %s FOR UPDATE", (student,))
+	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name = %s FOR UPDATE", (student,))
 	return int(frappe.db.get_value("CRM Student Assessment", {"student": student}, "max(assessment_revision)") or 0) + 1
 
 
@@ -94,7 +101,7 @@ def _project(student: str, assessment) -> None:
 		"fit_level": assessment.fit,
 		"primary_barrier": assessment.primary_barrier,
 	}
-	frappe.db.set_value("CRM Student", student, values, update_modified=False)
+	frappe.db.set_value("CRM Lead", student, values, update_modified=False)
 	mark_student_context_changed(student, "student_360_assessment_changed")
 
 
@@ -242,7 +249,7 @@ def serialize_assessment(doc) -> dict[str, Any]:
 
 
 def get_student_assessment_context(student: str) -> dict[str, Any]:
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	if not doc.has_permission("read"):
 		frappe.throw(_("You do not have permission to view this Student."), frappe.PermissionError)
 	current = _current(student, ("confirmed",))

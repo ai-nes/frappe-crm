@@ -28,7 +28,7 @@ def record_transition(student, old_status, new_status, occurred_at=None, actor=N
 def set_enrollment_status(doc, new_value, actor=None, source=None):
 	"""Set a Student status and route its audit event through ``record_transition``."""
 	if isinstance(doc, str):
-		doc = frappe.get_doc("CRM Student", doc)
+		doc = frappe.get_doc("CRM Lead", doc)
 	old_value = doc.enrollment_status
 	if old_value == new_value:
 		return doc
@@ -85,7 +85,7 @@ def _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor,
 	key = _transition_key(student, old_status, new_status, occurred_at, source)
 	if frappe.db.exists(DOCTYPE, {"idempotency_key": key}):
 		return
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	old_stage = get_lifecycle_stage(old_status)
 	new_stage = get_lifecycle_stage(new_status) or student_doc.get("lifecycle_stage") or "Lead"
 	receipt, key = _transition_receipt(student, old_status, new_status, occurred_at, actor, source)

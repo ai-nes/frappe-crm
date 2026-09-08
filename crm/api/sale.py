@@ -317,7 +317,7 @@ def _load_students(
 	return [
 		dict(row)
 		for row in _get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters={
 				"owner_staff": staff["name"],
 				"admission_year": admission_year,
@@ -338,7 +338,7 @@ def _load_contacts(student_ids: list[str], warnings: list[str]) -> list[dict[str
 	return [
 		dict(row)
 		for row in _get_list(
-			"CRM Contact",
+			"CRM Student",
 			filters={"student": ["in", student_ids]},
 			fields=CONTACT_FIELDS,
 			order_by="name asc",

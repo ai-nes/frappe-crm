@@ -23,7 +23,7 @@ class TestCRMPlatform(FrappeTestCase):
 		if frappe.db.exists("CRM Lead Source", "_Test Platform Source"):
 			frappe.delete_doc("CRM Lead Source", "_Test Platform Source", force=True)
 
-	def _make_platform(self, name="_Test Platform", sub_channel=None):
+	def _make_platform(self, name="_Test Platform", sub_channel=None, channel_url=None):
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Platform",
@@ -33,6 +33,8 @@ class TestCRMPlatform(FrappeTestCase):
 		)
 		if sub_channel is not None:
 			doc.sub_channel = sub_channel
+		if channel_url is not None:
+			doc.channel_url = channel_url
 		doc.insert(ignore_permissions=True)
 		return doc
 
@@ -86,3 +88,10 @@ class TestCRMPlatform(FrappeTestCase):
 	def test_sub_channel_optional(self):
 		doc = self._make_platform("_Test Platform No Sub Channel")
 		self.assertIn(doc.sub_channel, (None, ""))
+
+	def test_channel_url_is_stored(self):
+		doc = self._make_platform(
+			"_Test Platform URL",
+			channel_url="https://www.facebook.com/faip.crm",
+		)
+		self.assertEqual(doc.channel_url, "https://www.facebook.com/faip.crm")

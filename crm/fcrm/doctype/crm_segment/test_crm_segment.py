@@ -30,8 +30,8 @@ class TestCRMSegment(FrappeTestCase):
 
 	def setUp(self):
 		frappe.set_user("Administrator")
-		# Real imported CRM Contacts overwhelmingly sit at lifecycle_stage="Lead"
-		# (see docs/CRM Contact.csv import), so any test matching on "Lead" must
+		# Real imported CRM Students overwhelmingly sit at lifecycle_stage="Lead"
+		# (see docs/CRM Student.csv import), so any test matching on "Lead" must
 		# scope to this dedicated campus to avoid matching thousands of them.
 		self.test_branch = self._make_campus("_Test Segment Setup Campus")
 		self.contacts = []
@@ -63,10 +63,10 @@ class TestCRMSegment(FrappeTestCase):
 		# Attribution attach commits in batches.  Use a direct bulk delete after
 		# dependent touchpoints are gone; delete_doc's row-locking path can race
 		# the test connection's just-committed batch and make teardown flaky.
-		frappe.db.delete("CRM Student", {"student_name": ["like", "_Test Segment%"]})
+		frappe.db.delete("CRM Lead", {"student_name": ["like", "_Test Segment%"]})
 		frappe.db.commit()
-		for name in frappe.db.get_all("CRM Contact", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
-			frappe.delete_doc("CRM Contact", name, force=True)
+		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
+			frappe.delete_doc("CRM Student", name, force=True)
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
 
@@ -119,7 +119,7 @@ class TestCRMSegment(FrappeTestCase):
 			kwargs["enrollment_status"] = self.LIFECYCLE_STAGE_ENROLLMENT_STATUS[lifecycle_stage]
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Contact",
+				"doctype": "CRM Student",
 				"full_name": f"_Test Segment {suffix}",
 				"phone": phone,
 				**kwargs,
@@ -130,11 +130,11 @@ class TestCRMSegment(FrappeTestCase):
 
 	def _make_student(self, suffix, phone):
 		student_name = f"_Test Segment {suffix} Student"
-		if frappe.db.exists("CRM Student", student_name):
-			frappe.delete_doc("CRM Student", student_name, force=True)
+		if frappe.db.exists("CRM Lead", student_name):
+			frappe.delete_doc("CRM Lead", student_name, force=True)
 		doc = frappe.get_doc(
 			{
-				"doctype": "CRM Student",
+				"doctype": "CRM Lead",
 				"student_name": student_name,
 				"phone": phone,
 				"enrollment_status": "PROSPECT",
@@ -172,14 +172,14 @@ class TestCRMSegment(FrappeTestCase):
 
 		expected = set(
 			frappe.get_list(
-				"CRM Contact",
+				"CRM Student",
 				filters=[["name", "in", self.contacts]],
 				or_filters=[["lifecycle_stage", "=", "Lead"]],
 				pluck="name",
 			)
 		) | set(
 			frappe.get_list(
-				"CRM Contact",
+				"CRM Student",
 				filters=[
 					["name", "in", self.contacts],
 					["lifecycle_stage", "=", "Applicant"],
@@ -444,7 +444,7 @@ class TestCRMSegment(FrappeTestCase):
 				"reference_name": campaign,
 				"crm_campaign": campaign,
 				"crm_contact": self.contacts[0],
-				"student": frappe.db.get_value("CRM Contact", self.contacts[0], "student"),
+				"student": frappe.db.get_value("CRM Student", self.contacts[0], "student"),
 				"source": "Manual",
 			}
 		).insert(ignore_permissions=True)

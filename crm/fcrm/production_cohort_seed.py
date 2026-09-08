@@ -193,7 +193,7 @@ def _payload(index: int, topology: dict[str, Any]) -> tuple[dict[str, Any], dict
 
 
 def _save_extended_fields(student: str, meta: dict[str, Any], payload: dict[str, Any], index: int) -> None:
-    doc = frappe.get_doc("CRM Student", student)
+    doc = frappe.get_doc("CRM Lead", student)
     values = {
         "import_source_id": f"{NAMESPACE}:{meta['key']}",
         "admission_method": meta["method"],
@@ -225,7 +225,7 @@ def _save_extended_fields(student: str, meta: dict[str, Any], payload: dict[str,
 def _ensure_owner(student: str, meta: dict[str, Any], topology: dict[str, Any]) -> None:
     if meta["stage"] == "Lost":
         return
-    doc = frappe.get_doc("CRM Student", student)
+    doc = frappe.get_doc("CRM Lead", student)
     if doc.owner_staff == meta["owner"]:
         return
     from crm.fcrm.student_ownership import change_student_ownership
@@ -309,7 +309,7 @@ def _ensure_application(student: str, meta: dict[str, Any], topology: dict[str, 
         return False
     from crm.fcrm.admission_application import create_application
 
-    doc = frappe.get_doc("CRM Student", student)
+    doc = frappe.get_doc("CRM Lead", student)
     result = create_application(
         student=student,
         expected_revision=int(doc.engagement_revision or 0),
@@ -365,7 +365,7 @@ def seed(count: int = COUNT, namespace: str = NAMESPACE) -> dict[str, Any]:
         payload, meta = _payload(index, topology)
         source_id = meta["key"]
         try:
-            student = frappe.db.get_value("CRM Student", {"import_source_id": f"{namespace}:{source_id}"}, "name")
+            student = frappe.db.get_value("CRM Lead", {"import_source_id": f"{namespace}:{source_id}"}, "name")
             replayed = bool(student)
             if not student:
                 intake = submit_intake(
@@ -401,7 +401,7 @@ def seed(count: int = COUNT, namespace: str = NAMESPACE) -> dict[str, Any]:
 
 def verify(namespace: str = NAMESPACE) -> dict[str, Any]:
     rows = frappe.get_all(
-        "CRM Student",
+        "CRM Lead",
         filters={"import_source_id": ["like", namespace + ":%"]},
         fields=["name", "lifecycle_stage", "enrollment_status", "major", "source", "high_school", "province", "ward", "owner_staff", "email"],
         order_by="name asc",

@@ -165,7 +165,7 @@ const roleOptions = computed(() => {
 const roleMap = {
   Sale: __('Sale'),
   Marketing: __('Marketing'),
-  'Lead Sales': __('Lead Sales'),
+  'Lead Sale': __('Lead Sale'),
   'Admissions Director': __('Admissions Director'),
   'System Manager': __('Admin'),
 }

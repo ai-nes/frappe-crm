@@ -47,7 +47,7 @@ def get_pipeline_summary() -> dict:
 	if staff_campus:
 		student_filters["branch"] = staff_campus
 	students = frappe.get_list(
-		"CRM Student",
+		"CRM Lead",
 		filters=student_filters,
 		fields=["name", "enrollment_status", "source", "branch"],
 		limit_page_length=500,

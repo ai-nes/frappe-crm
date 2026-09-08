@@ -126,7 +126,7 @@ def _update_receipt(receipt, result: dict[str, Any], *, outcome: str = "created"
 
 
 def _student(name: str):
-	student = frappe.get_doc("CRM Student", _required(name, "student"))
+	student = frappe.get_doc("CRM Lead", _required(name, "student"))
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
@@ -150,7 +150,7 @@ def _verify_linked_records(student: str, interaction: str | None, source_doctype
 		if not source_doc.has_permission("read"):
 			_fail("OUT_OF_SCOPE", "The source evidence is outside the Student scope.")
 		linked_student = source_doc.get("student")
-		if not linked_student and source_doc.get("reference_doctype") == "CRM Student":
+		if not linked_student and source_doc.get("reference_doctype") == "CRM Lead":
 			linked_student = source_doc.get("reference_docname")
 		if not linked_student and source_doc.get("crm_contact"):
 			students = students_for_contact(source_doc.get("crm_contact"))
@@ -172,9 +172,9 @@ def _verify_evidence(student: str, references: list[dict[str, str]]):
 		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
 			_fail("OUT_OF_SCOPE", "A referenced evidence record is outside your scope.")
 		linked_student = doc.get("student")
-		if not linked_student and doc.get("reference_doctype") == "CRM Student":
+		if not linked_student and doc.get("reference_doctype") == "CRM Lead":
 			linked_student = doc.get("reference_docname")
-		if not linked_student and doc.get("attached_to_doctype") == "CRM Student":
+		if not linked_student and doc.get("attached_to_doctype") == "CRM Lead":
 			linked_student = doc.get("attached_to_name")
 		if not linked_student and doc.get("interaction"):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
@@ -184,7 +184,7 @@ def _verify_evidence(student: str, references: list[dict[str, str]]):
 
 def _lock_student(name: str):
 	try:
-		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -206,7 +206,7 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 		doc = frappe.get_doc(payload)
 	if doc.get("student") not in (None, "", student):
 		_fail("INVALID_CONTINUITY", "Next action belongs to a different Student.")
-	if doc.get("reference_doctype") == "CRM Student" and doc.get("reference_docname") not in (None, "", student):
+	if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname") not in (None, "", student):
 		_fail("INVALID_CONTINUITY", "Next action references a different Student.")
 	if is_existing:
 		if not doc.has_permission("write"):
@@ -216,7 +216,7 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 	doc.student = student
 	if interaction:
 		doc.linked_interaction = interaction
-	doc.reference_doctype = "CRM Student"
+	doc.reference_doctype = "CRM Lead"
 	doc.reference_docname = student
 	if assignee:
 		doc.assigned_to = assignee
@@ -359,7 +359,7 @@ def record_outcome(
 			if next_task:
 				updates.update({"next_follow_up_date": next_task.due_date, "next_follow_up_action": next_task.title})
 			frappe.db.set_value("CRM Interaction", interaction, updates, update_modified=False)
-		frappe.db.set_value("CRM Student", student, "engagement_revision", current_revision + 1, update_modified=False)
+		frappe.db.set_value("CRM Lead", student, "engagement_revision", current_revision + 1, update_modified=False)
 		result = {"status": "created", "event": event.name, "student": student, "revision": current_revision + 1, "receipt": receipt.name}
 		_update_receipt(receipt, result)
 		return result

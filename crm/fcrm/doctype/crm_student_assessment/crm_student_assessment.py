@@ -101,12 +101,12 @@ def on_doctype_update():
 def get_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
-	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
+	student_condition = get_student_permission_query_conditions("CRM Lead", user=user)
 	if student_condition is None:
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	return "`tabCRM Student Assessment`.student in (select `tabCRM Student`.name from `tabCRM Student` where ({0}))".format(student_condition)
+	return "`tabCRM Student Assessment`.student in (select `tabCRM Lead`.name from `tabCRM Lead` where ({0}))".format(student_condition)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -122,8 +122,8 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 			return bool(
 				user == "Administrator"
 				or "System Manager" in roles
-				or ("Admissions Director" in roles and has_student_permission(frappe.get_doc("CRM Student", student), user=user, permission_type="write"))
+				or ("Admissions Director" in roles and has_student_permission(frappe.get_doc("CRM Lead", student), user=user, permission_type="write"))
 			)
-		return has_student_permission(frappe.get_doc("CRM Student", student), user=user, permission_type="read")
+		return has_student_permission(frappe.get_doc("CRM Lead", student), user=user, permission_type="read")
 	except Exception:
 		return False

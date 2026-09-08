@@ -159,7 +159,7 @@ def _capacity(staff: str, at=None) -> dict[str, Any]:
 	limit = int((rows[0].get("max_active_students") if rows else 0) or 0)
 	active = (
 		frappe.db.count(
-			"CRM Student", {"owner_staff": staff, "lifecycle_stage": ["not in", ["Lost", "Converted"]]}
+			"CRM Lead", {"owner_staff": staff, "lifecycle_stage": ["not in", ["Lost", "Converted"]]}
 		)
 		if limit
 		else 0
@@ -261,7 +261,11 @@ def score_member(member: dict[str, Any], student, policy=None) -> dict[str, Any]
 
 
 def fairness_report(
-	*, zone: str | None = None, since: date | None = None, until: date | None = None
+	*,
+	zone: str | None = None,
+	since: date | None = None,
+	until: date | None = None,
+	staff_scope: set[str] | None = None,
 ) -> dict[str, Any]:
 	since = since or date.today().replace(day=1)
 	until = until or date.today()
@@ -272,11 +276,13 @@ def fairness_report(
 	rows = _rows(
 		"CRM Student Ownership Event", filters, ["next_owner_staff", "event_at", "reason", "student"]
 	)
+	if staff_scope is not None:
+		rows = [row for row in rows if row.get("next_owner_staff") in staff_scope]
 	if zone:
 		student_ids = []
 		for student_name in {r.get("student") for r in rows if r.get("student")}:
 			try:
-				student = frappe.get_doc("CRM Student", student_name)
+				student = frappe.get_doc("CRM Lead", student_name)
 				if resolve_student_zone(student).get("zone") == zone:
 					student_ids.append(student_name)
 			except Exception:
@@ -293,7 +299,7 @@ def fairness_report(
 		if str(row.get("reason") or "").lower().startswith(("manager", "transfer")):
 			transferred[staff] = transferred.get(staff, 0) + 1
 		try:
-			student = frappe.get_doc("CRM Student", row.student)
+			student = frappe.get_doc("CRM Lead", row.student)
 			score = float(student.get("latest_score") or 0)
 			quality.setdefault(staff, []).append(score)
 		except Exception:

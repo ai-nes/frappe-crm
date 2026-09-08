@@ -18,6 +18,7 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 		"email",
 		"enrollment_status",
 		"lifecycle_stage",
+		"student_stage",
 		"assigned_to",
 		"owner_staff",
 		"owning_team",
@@ -50,6 +51,7 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 		"id_issued_date",
 		"id_issued_place",
 		"notes",
+		"academic_results",
 	}
 )
 
@@ -135,6 +137,13 @@ def material_student_changed(doc, before=None) -> bool:
 
 
 def mark_student_context_changed(student: str, reason: str) -> dict | None:
+	if not student:
+		return None
+	# Parent/contact commands still receive the canonical CRM Lead identifier,
+	# while the revision journal belongs to the post-conversion CRM Student.
+	# Resolve that boundary here so all callers keep one consistent contract.
+	if not frappe.db.exists("CRM Student", student):
+		student = frappe.db.get_value("CRM Lead", student, "student")
 	if not student:
 		return None
 	return bump_student_context_revision(student, reason)

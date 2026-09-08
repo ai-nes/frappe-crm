@@ -3,7 +3,7 @@ import frappe
 
 def execute():
 	for fieldname in ("mobile_no", "email"):
-		_drop_unique_indexes("CRM Student", fieldname)
+		_drop_unique_indexes("CRM Lead", fieldname)
 
 	frappe.db.commit()
 

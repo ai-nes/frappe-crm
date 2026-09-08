@@ -7,6 +7,13 @@ from crm.api import director_students
 
 
 class TestDirectorStudents(FrappeTestCase):
+	def test_student_projection_fields_match_crm_student_schema(self):
+		available_fields = {field.fieldname for field in frappe.get_meta("CRM Student").fields}
+		available_fields.update({"name", "creation", "modified"})
+		missing_fields = set(director_students.STUDENT_FIELDS) - available_fields
+
+		self.assertEqual(missing_fields, set())
+
 	def test_query_normalization_accepts_contract_values(self):
 		query = director_students._parse_query(
 			admissionYear="2026",
@@ -15,6 +22,8 @@ class TestDirectorStudents(FrappeTestCase):
 			q="  Nguyen  ",
 			stage="counselling",
 			province="can-tho",
+			assignmentStatus="assigned",
+			lifecycleStatus="MQL",
 			sort="lastActivityAt",
 			order="asc",
 		)
@@ -29,6 +38,8 @@ class TestDirectorStudents(FrappeTestCase):
 				"stage": "counselling",
 				"province": "can-tho",
 				"owner_id": None,
+				"assignment_status": "assigned",
+				"lifecycle_status": "MQL",
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -39,6 +50,8 @@ class TestDirectorStudents(FrappeTestCase):
 			{"page": "0"},
 			{"pageSize": "101"},
 			{"stage": "unknown"},
+			{"assignmentStatus": "unknown"},
+			{"lifecycleStatus": "unknown"},
 			{"sort": "name"},
 			{"order": "sideways"},
 			{"admissionYear": "2026.5"},
@@ -51,6 +64,7 @@ class TestDirectorStudents(FrappeTestCase):
 		row = frappe._dict(
 			{
 				"name": "ENR-2026-00001",
+				"student": "CRMC-2026-00001",
 				"student_name": "Nguyễn Minh An",
 				"case_key": "CK-ID-2026",
 				"high_school": "HS-1",
@@ -86,12 +100,16 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 
 		self.assertEqual(item["id"], "ENR-2026-00001")
+		self.assertEqual(item["studentId"], "CRMC-2026-00001")
 		self.assertEqual(item["code"], "HS-2026-HCM-000001")
 		self.assertEqual(item["initials"], "MA")
 		self.assertEqual(item["school"], "THPT Châu Văn Liêm")
 		self.assertEqual(item["province"], "Cần Thơ")
 		self.assertEqual(item["major"], "Trí tuệ nhân tạo")
 		self.assertEqual(item["stage"], "Tư vấn")
+		self.assertEqual(item["provinceId"], "P-1")
+		self.assertEqual(item["lifecycleStatus"], "MQL")
+		self.assertEqual(item["assignmentStatus"], "assigned")
 		self.assertEqual(item["stageCode"], "counselling")
 		self.assertEqual(item["score"], 82)
 		self.assertEqual(item["scoreDelta"], 13)
@@ -143,6 +161,8 @@ class TestDirectorStudents(FrappeTestCase):
 				q=" nguyen ",
 				stage="counselling",
 				province="can-tho",
+				assignmentStatus="assigned",
+				lifecycleStatus="MQL",
 				sort="score",
 				order="desc",
 			)
@@ -154,8 +174,56 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["meta"]["pageSize"], 1)
 		self.assertEqual(response["meta"]["totalPages"], 1)
 		self.assertFalse(response["meta"]["hasNextPage"])
-		self.assertEqual(response["meta"]["filters"], {"stage": "Tư vấn", "province": "Cần Thơ"})
+		self.assertEqual(
+			response["meta"]["filters"],
+			{
+				"stage": "Tư vấn",
+				"assignmentStatus": "assigned",
+				"lifecycleStatus": "MQL",
+				"province": "Cần Thơ",
+			},
+		)
 		self.assertEqual(response["meta"]["sort"], {"field": "score", "order": "desc"})
+
+	def test_student_filters_support_assignment_and_lifecycle_status(self):
+		query = director_students._parse_query(
+			assignmentStatus="Đã phân công",
+			lifecycle_status="applicant",
+			provinceId="01",
+		)
+
+		filters, or_filters = director_students._student_filters(query, "PROVINCE-01")
+
+		self.assertEqual(filters["owner_staff"], ["is", "set"])
+		self.assertEqual(filters["lifecycle_stage"], "Applicant")
+		self.assertEqual(filters["province"], "PROVINCE-01")
+		self.assertEqual(or_filters, [])
+
+		unassigned = director_students._parse_query(assignment_status="unassigned")
+		unassigned_filters, _ = director_students._student_filters(unassigned, None)
+		self.assertEqual(unassigned_filters["owner_staff"], ["is", "set"])
+		self.assertEqual(unassigned_filters["name"], "__student_without_owner__")
+
+		all_statuses = director_students._parse_query(assignmentStatus="all", lifecycleStatus="all")
+		self.assertIsNone(all_statuses["assignment_status"])
+		self.assertIsNone(all_statuses["lifecycle_status"])
+
+	def test_student_filters_match_dashboard_display_code(self):
+		query = director_students._parse_query(
+			admissionYear="2026",
+			q="HS-2026-HCM-000018",
+		)
+		with patch.object(
+			director_students.frappe,
+			"get_all",
+			return_value=[
+				frappe._dict(name="ENR-2026-000018", admission_year="2026"),
+				frappe._dict(name="ENR-2026-000019", admission_year="2026"),
+			],
+		):
+			_filters, or_filters = director_students._student_filters(query, None)
+
+		self.assertIn(["name", "in", ["ENR-2026-000018"]], or_filters)
 
 	def test_stage_filters_keep_exploring_and_counselling_distinct(self):
 		exploring = director_students._parse_query(stage="exploring")
@@ -171,6 +239,7 @@ class TestDirectorStudents(FrappeTestCase):
 	def test_detail_projection_contains_contract_sections(self):
 		row = frappe._dict(
 			name="ENR-1",
+			student="CRMC-1",
 			student_name="Nguyễn Minh An",
 			phone="0900000000",
 			email="an@example.com",
@@ -196,6 +265,7 @@ class TestDirectorStudents(FrappeTestCase):
 			"lastActivityAt": "2026-08-31T09:56:00+07:00",
 			"nextAction": "Gọi phụ huynh về học phí",
 			"owner": "Trần Quốc Bảo",
+			"revision": 4,
 			"source": "Career Talk 28/05",
 			"priority": "Cao",
 		}
@@ -223,7 +293,9 @@ class TestDirectorStudents(FrappeTestCase):
 			response = director_students._build_student_360(row, item)
 
 		self.assertEqual(response["student"]["phone"], "0900000000")
+		self.assertEqual(response["student"]["studentId"], "CRMC-1")
 		self.assertEqual(response["student"]["email"], "an@example.com")
+		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
 		self.assertEqual(response["student"]["verificationStatus"], "Đã xác thực")
@@ -469,6 +541,59 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
 
+	def test_display_code_resolves_against_students_not_leads(self):
+		"""The display code is built from the Student name, so no Lead can match it."""
+		captured = {}
+
+		def fake_get_all(doctype, **kwargs):
+			captured["doctype"] = doctype
+			captured["filters"] = kwargs.get("filters")
+			return [frappe._dict(name="CRMC-2026-00063", admission_year="2026")]
+
+		with patch.object(director_students.frappe, "get_all", side_effect=fake_get_all):
+			names = director_students._display_code_student_ids("HS-2026-HCM-000063", "2026")
+
+		self.assertEqual(names, ["CRMC-2026-00063"])
+		self.assertEqual(captured["doctype"], "CRM Student")
+		self.assertEqual(captured["filters"]["admission_year"], "2026")
+		self.assertEqual(captured["filters"]["name"], ["like", "%63"])
+
+	def test_display_code_ignores_students_of_another_sequence(self):
+		with patch.object(
+			director_students.frappe,
+			"get_all",
+			return_value=[frappe._dict(name="CRMC-2026-00163", admission_year="2026")],
+		):
+			self.assertEqual(director_students._display_code_student_ids("HS-2026-HCM-000063", "2026"), [])
+
+	def test_student_call_records_degrade_when_call_log_read_is_denied(self):
+		"""Sale has no Call Log grant; the 360 detail must still render."""
+		row = frappe._dict(student_name="Nguyễn Minh An", phone="0901234412")
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students.frappe, "get_list", side_effect=frappe.PermissionError),
+		):
+			calls = director_students._student_call_records("CRMC-2026-00063", [], row, None)
+
+		self.assertEqual(calls, [])
+
+	def test_call_note_projection_extracts_transcript_and_summary(self):
+		result = director_students._call_note_projection(
+			"""
+			<p>[AI_CALL_SUMMARY_V1]</p>
+			{&quot;summary&quot;:&quot;Lead quan tâm học phí &amp; học bổng.&quot;,&quot;key_points&quot;:[]}
+			<p>[/AI_CALL_SUMMARY_V1]</p>
+			<p>[TRANSCRIPT]</p>
+			[00:01] TƯ VẤN VIÊN: Em quan tâm ngành thiết kế.
+			<br>[00:08] HỌC SINH: Dạ, em muốn biết thêm học phí.
+			<p>[/TRANSCRIPT]</p>
+			"""
+		)
+
+		self.assertEqual(result["summary"], "Lead quan tâm học phí & học bổng.")
+		self.assertIn("TƯ VẤN VIÊN: Em quan tâm ngành thiết kế.", result["transcript"])
+		self.assertIn("HỌC SINH: Dạ, em muốn biết thêm học phí.", result["transcript"])
+
 	def test_student_call_records_build_worldfone_proxy_from_calluuid(self):
 		call_log = frappe._dict(
 			name="1788077950.625384",
@@ -488,7 +613,7 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 		with (
 			patch.object(director_students, "_table_exists", return_value=True),
-			patch.object(director_students.frappe, "get_all", return_value=[call_log]),
+			patch.object(director_students.frappe, "get_list", return_value=[call_log]),
 			patch.dict(
 				director_students.frappe.conf,
 				{"crm_worldfone_secret": "test-secret"},
@@ -506,6 +631,54 @@ class TestDirectorStudents(FrappeTestCase):
 			calls[0]["recordingUrl"],
 			"/api/method/crm.integrations.api.get_recording_url?call_log_name=1788077950.625384",
 		)
+		self.assertFalse(calls[0]["summaryAvailable"])
+
+	def test_student_call_records_include_transcript_from_linked_note(self):
+		call_log = frappe._dict(
+			name="CALL-TRANSCRIPT-1",
+			type="Outgoing",
+			status="Completed",
+			from_number="0901234412",
+			to="1200",
+			duration=48,
+			start_time="2026-08-30 16:20:58",
+			creation="2026-08-30 16:20:58",
+			recording_url=None,
+			telephony_medium="Manual",
+			medium="Worldfone",
+			caller="Administrator",
+			receiver=None,
+			note="NOTE-TRANSCRIPT-1",
+		)
+		note = frappe._dict(
+			name="NOTE-TRANSCRIPT-1",
+			content=(
+				"[AI_CALL_SUMMARY_V1]\nsummary: Quan tâm học phí.\n[/AI_CALL_SUMMARY_V1]\n"
+				"[TRANSCRIPT]\nTƯ VẤN VIÊN: Em cần tư vấn.\n[/TRANSCRIPT]"
+			),
+		)
+
+		def get_list(doctype, **kwargs):
+			return [call_log] if doctype == "Call Log" else [note]
+
+		with (
+			patch.object(
+				director_students,
+				"_table_exists",
+				side_effect=lambda doctype: doctype in {"Call Log", "FCRM Note"},
+			),
+			patch.object(director_students.frappe, "get_list", side_effect=get_list),
+		):
+			calls = director_students._student_call_records(
+				"ENR-1",
+				[],
+				frappe._dict(student_name="Student Demo", phone="0901234412"),
+				{},
+			)
+
+		self.assertEqual(calls[0]["summary"], "Quan tâm học phí.")
+		self.assertTrue(calls[0]["summaryAvailable"])
+		self.assertEqual(calls[0]["transcript"], "TƯ VẤN VIÊN: Em cần tư vấn.")
 
 	def test_get_student_interactions_endpoint(self):
 		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
@@ -522,6 +695,37 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["zalo_messages"], [])
 		self.assertEqual(result["calls"], [])
 		self.assertEqual(result["total_interactions"], 0)
+
+	def test_get_student_interactions_resolves_canonical_student_id(self):
+		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_activity_target",
+				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+			),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students.frappe, "has_permission", return_value=True),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_guardian", return_value={}),
+		):
+			result = director_students.get_student_interactions("CRMC-1")
+
+		self.assertEqual(result["student_id"], "CRMC-1")
+		self.assertEqual(result["zalo_messages"], [])
+		self.assertEqual(result["calls"], [])
+
+	def test_get_lead_call_logs_endpoint(self):
+		with patch.object(
+			director_students,
+			"get_student_interactions",
+			return_value={"student_id": "LEAD-1", "calls": [{"id": "CALL-1"}]},
+		):
+			result = director_students.get_lead_call_logs("LEAD-1")
+
+		self.assertEqual(result, {"lead_id": "LEAD-1", "calls": [{"id": "CALL-1"}], "total": 1})
 
 	def test_student_zalo_messages_include_chatwoot_interactions(self):
 		messages = director_students._student_zalo_messages(
@@ -567,16 +771,22 @@ class TestDirectorStudents(FrappeTestCase):
 
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_activity_target",
+				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+			),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students.frappe, "has_permission", return_value=True),
 			patch.object(director_students.frappe, "get_list", side_effect=get_list),
 			patch.object(director_students, "_student_guardian", return_value={}),
 			patch.object(
 				director_students, "_student_zalo_messages", return_value=[{"id": "INTX-CHATWOOT-2"}]
 			),
 		):
-			result = director_students.get_student_chatwoot_interactions("ENR-1", page="2", page_size="1")
+			result = director_students.get_student_chatwoot_interactions("CRMC-1", page="2", page_size="1")
 
-		self.assertEqual(result["student_id"], "ENR-1")
+		self.assertEqual(result["student_id"], "CRMC-1")
 		self.assertEqual(result["data"], rows)
 		self.assertEqual(result["zalo_messages"], [{"id": "INTX-CHATWOOT-2"}])
 		self.assertEqual(result["meta"], {"page": 2, "page_size": 1, "total": 3, "has_next_page": True})

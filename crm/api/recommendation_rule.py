@@ -16,6 +16,7 @@ from crm.fcrm.recommendation_rule_constraints import (
 	evaluate_conditions,
 	normalize_conditions,
 	normalize_stop_conditions,
+	has_legacy_stage_condition,
 	validate_rule_settings,
 )
 
@@ -137,7 +138,7 @@ def _student_context(context: dict[str, Any]) -> dict[str, Any]:
 	context = dict(context)
 	student = context.get("student")
 	if isinstance(student, str):
-		student_doc = frappe.get_doc("CRM Student", student)
+		student_doc = frappe.get_doc("CRM Lead", student)
 		student_doc.check_permission("read")
 		context["student"] = student_doc.as_dict()
 	return context
@@ -197,6 +198,15 @@ def get_rule(name: str):
 @frappe.whitelist(methods=["POST"])
 def create_rule(**values):
 	values = _normalise_values(values)
+	try:
+		if has_legacy_stage_condition(values.get("conditions")):
+			frappe.throw(
+				_("New Recommendation Rules must use student.student_stage."),
+				frappe.ValidationError,
+				title="LEGACY_STAGE_CONDITION",
+			)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 	# A rule without an event is an intentional manual rule. The DocType's
 	# historical default is ``event`` for persisted records, so make the API
 	# default explicit before inserting rather than asking non-technical users
@@ -280,6 +290,15 @@ def publish_rule(name: str, expected_version: int | str | None = None):
 			title="STALE_RULE_VERSION",
 		)
 	_validate_action_for_publish(doc.action)
+	try:
+		if has_legacy_stage_condition(doc.conditions):
+			frappe.throw(
+				_("Convert lifecycle/status conditions to student.student_stage before publishing."),
+				frappe.ValidationError,
+				title="LEGACY_STAGE_CONDITION",
+			)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 	previous = getattr(frappe.flags, "recommendation_rule_publish", False)
 	previous_lifecycle = getattr(frappe.flags, "recommendation_rule_lifecycle", False)
 	frappe.flags.recommendation_rule_publish = True
@@ -346,6 +365,15 @@ def preview_rule(rule: Any = None, context: Any = None):
 	if not isinstance(context_values, dict):
 		frappe.throw(_("context must be a JSON object."), frappe.ValidationError)
 	rule_values = _normalise_values(rule_values)
+	try:
+		if has_legacy_stage_condition(rule_values.get("conditions")):
+			frappe.throw(
+				_("Preview requires a student.student_stage condition."),
+				frappe.ValidationError,
+				title="LEGACY_STAGE_CONDITION",
+			)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 	trigger_type = rule_values.get("trigger_type") or (
 		"manual" if not rule_values.get("trigger_event") else "event"
 	)

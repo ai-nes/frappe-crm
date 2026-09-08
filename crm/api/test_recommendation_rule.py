@@ -73,7 +73,7 @@ class TestRecommendationRuleApi(FrappeTestCase):
 	def _conditions():
 		return {
 			"all": [
-				{"field": "student.lifecycle_stage", "operator": "equals", "value": "Lead"},
+				{"field": "student.student_stage", "operator": "equals", "value": "New"},
 				{"field": "student.latest_score", "operator": "gte", "value": 70},
 			],
 			"any": [],
@@ -189,13 +189,14 @@ class TestRecommendationRuleApi(FrappeTestCase):
 	def test_rule_preview_and_condition_metadata(self):
 		preview = preview_rule(
 			rule={"action_code": self.action.code, "conditions": self._conditions(), "priority": "high"},
-			context={"student": {"lifecycle_stage": "Lead", "latest_score": 82}},
+			context={"student": {"student_stage": "New", "latest_score": 82}},
 		)
 		self.assertTrue(preview["eligible"])
 		self.assertEqual(preview["action"]["code"], self.action.code)
 
 		metadata = list_condition_fields()
-		self.assertTrue(any(field["field"] == "student.lifecycle_stage" for field in metadata["fields"]))
+		self.assertTrue(any(field["field"] == "student.student_stage" for field in metadata["fields"]))
+		self.assertFalse(any(field["field"] == "student.lifecycle_stage" for field in metadata["fields"]))
 
 	def test_draft_rule_can_be_deleted(self):
 		rule_key = f"test_delete_rule_{uuid.uuid4().hex[:10]}"

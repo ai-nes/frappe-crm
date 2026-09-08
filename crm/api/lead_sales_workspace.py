@@ -78,7 +78,7 @@ def _snapshot_definition():
 		"timezone": frappe.utils.get_system_timezone(),
 		"scope": "current_student_permission_scope",
 		"student_filters": "Current CRM Student permission scope derived from the session user",
-		"sla_filters": "Current CRM Student SLA Attempt scope inherited from CRM Student",
+		"sla_filters": "Current CRM Student SLA Attempt scope inherited from CRM Lead",
 	}
 
 
@@ -140,7 +140,7 @@ def get_team_dashboard() -> dict:
 	definition = _snapshot_definition()
 	workload = [
 		{"owner_staff": row.get("owner_staff") or None, "count": int(row.get("count", 0))}
-		for row in _grouped_count("CRM Student", "owner_staff")
+		for row in _grouped_count("CRM Lead", "owner_staff")
 	]
 	sla_buckets = [
 		{"status": row.get("status"), "count": int(row.get("count", 0))}
@@ -150,8 +150,8 @@ def get_team_dashboard() -> dict:
 		"definition": definition,
 		"generated_at": _generated(),
 		"kpis": {
-			"active_students": _count("CRM Student", {"lifecycle_stage": ["not in", ["Lost"]]}),
-			"unassigned_students": _count("CRM Student", {"owner_staff": ["is", "not set"]}),
+			"active_students": _count("CRM Lead", {"lifecycle_stage": ["not in", ["Lost"]]}),
+			"unassigned_students": _count("CRM Lead", {"owner_staff": ["is", "not set"]}),
 			"breached_sla": _count(
 				"CRM Student SLA Attempt",
 				{"status": ["in", ["breached", "escalated"]]},
@@ -178,7 +178,7 @@ def get_member_performance(period: str | None = "30d") -> dict:
 			"breached_sla": 0,
 		}
 	)
-	for row in _grouped_count("CRM Student", "owner_staff"):
+	for row in _grouped_count("CRM Lead", "owner_staff"):
 		staff = row.get("owner_staff")
 		if staff:
 			members[staff]["staff"] = staff
@@ -260,7 +260,7 @@ def list_team_actions(status: str = "open", cursor: str | None = None, page_size
 	students = {
 		row.name: row.get("student_name")
 		for row in frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			filters={"name": ["in", student_names or ["__none__"]]},
 			fields=["name", "student_name"],
 			limit_page_length=0,
@@ -294,7 +294,7 @@ def get_team_reports(period: str | None = "30d") -> dict:
 			{
 				"key": "new_students",
 				"label": _("New students"),
-				"value": _count("CRM Student", period_filters),
+				"value": _count("CRM Lead", period_filters),
 				"description": _("Students created in the selected period within your current team scope."),
 			},
 			{
@@ -333,7 +333,7 @@ def get_readonly_sla_policies() -> dict:
 	visible_scopes = {
 		(row.get("branch"), row.get("owning_pool"))
 		for row in frappe.get_list(
-			"CRM Student",
+			"CRM Lead",
 			fields=["branch", "owning_pool"],
 			group_by="branch, owning_pool",
 			limit_page_length=0,

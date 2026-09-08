@@ -503,7 +503,7 @@ def _parent_context(student: str) -> list[dict[str, Any]]:
 		for row in rows:
 			if not _can_read_record("CRM Parent Contact Authority", row.get("name")):
 				continue
-			if row.get("contact") and not _can_read_record("CRM Contact", row.get("contact")):
+			if row.get("contact") and not _can_read_record("CRM Student", row.get("contact")):
 				continue
 			if row.get("revoked_at") or (row.get("expires_at") and row.get("expires_at") <= now) or (row.get("effective_at") and row.get("effective_at") > now):
 				continue

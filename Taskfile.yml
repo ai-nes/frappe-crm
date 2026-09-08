@@ -83,75 +83,24 @@ tasks:
       - task: cache
 
   seed:
-    desc: Seed bộ dữ liệu CRM golden local — 4 học sinh, assignment, SLA, AI và NBA
-    # The local fixture is deterministic and uses the current Student contracts.
+    desc: Seed bộ dữ liệu CRM liên kết thực tế — 7 tỉnh, 35 trường, role accounts, 20 Lead và 20 Student
     cmds:
-      # Persist the rollout flags + fixture password so the Student Detail
-      # workflow stays enabled after seeding (list lives in seed_showcase).
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_demo_config"
-      # The Student intake and command-receipt services require durable local
-      # HMAC keys. Bootstrap only missing keys; never overwrite a rotated key.
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.ensure_local_integrity_keys"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden_local.seed"
-      # Keep fresh/local sites on the same canonical role catalog and account
-      # assignment policy as production after demo accounts are created.
-      - "{{.EXEC}} {{.BENCH}} execute crm.operations_cutover_canonical_roles.execute"
-      - "{{.EXEC}} {{.BENCH}} execute crm.operations_reconcile_account_roles.apply"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_task.seed"
 
-  seed-school-domain-demo:
-    desc: Xóa business demo rồi import toàn bộ trường canonical
+  seed-assignment-scenarios:
+    desc: Local only — xóa Lead/Student và seed lại 20 Lead để test phân công
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.school_domain_import.seed_school_seed --kwargs \"{'dry_run': False, 'commit_policy': 'all'}\""
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_scenarios.execute"
 
-  seed-fresh:
-    desc: Reset site (reinstall) + migrate + seed demo — dùng khi muốn làm lại từ đầu
-    prompt: Reinstall site crm.localhost (xoá toàn bộ data). Tiếp tục?
+  seed-assignment-conversion:
+    desc: Local only — seed 10 Lead hợp lệ để bấm phân công và tạo Student có owner
     cmds:
-      - "{{.EXEC}} {{.BENCH}} reinstall --yes --admin-password admin --mariadb-root-password 123"
-      - "{{.EXEC}} {{.BENCH}} migrate"
-      - task: seed
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.verify"
+      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_conversion_scenarios.execute"
 
   extract-school-json:
     desc: Trích các field cần cho school-domain seed từ Excel sang JSON gọn
     cmds:
       - python -X utf8 -m crm.demo.extract_school_domain_json
-
-  seed-roles:
-    desc: 1 tài khoản test cho mỗi canonical role (mật khẩu 12345@) — đã nằm trong `task seed`
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_role_accounts.execute"
-
-  seed-ctv-sale:
-    desc: Tạo tài khoản CTV Sale ctvsale@gmail.com (123456) + 3 học sinh được phân công sẵn
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_ctv_sale.execute"
-
-  seed-sale:
-    desc: Tạo tài khoản Sale sale@gmail.com (123456) + 3 học sinh được phân công sẵn
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_sale.execute"
-
-  seed-lead-sales:
-    desc: Tạo tài khoản Lead Sales leadsale@gmail.com (123456) + 3 học sinh trong pool team
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.execute"
-
-  seed-lead-sales-reset:
-    desc: Reset 3 học sinh Lead Sales về pool và tạo routing request mới để chạy lại pipeline
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_lead_sales.reset"
-
-  seed-reset:
-    desc: Xoá business rows của bộ demo CRM (giữ lại audit/receipt/ledger)
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_showcase.reset"
-
-  seed-verify:
-    desc: Kiểm tra 5 học sinh golden, 2 trường THPT và liên kết dữ liệu
-    cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_golden.verify"
 
   pull:
     desc: Sau git pull — deps + migrate + clear-cache + restart + seed lại demo data
@@ -160,7 +109,7 @@ tasks:
       - task: migrate
       - task: cache
       - task: restart
-      # seed_showcase.execute idempotent — chạy lại để data khớp bản vừa pull.
+      # seed_task.seed idempotent — chạy lại để data khớp bản vừa pull.
       # Không đụng site (không reinstall); bỏ qua bước này: task pull-fast.
       - task: seed
 

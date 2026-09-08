@@ -2,6 +2,7 @@
 # See license.txt
 
 import uuid
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -54,29 +55,29 @@ class TestCallLog(FrappeTestCase):
 		contact = create_test_crm_contact()
 		call = create_test_call_log()
 
-		self.assertFalse(call.has_link("CRM Contact", contact.name))
+		self.assertFalse(call.has_link("CRM Student", contact.name))
 
-		call.link_with_reference_doc("CRM Contact", contact.name)
-		self.assertTrue(call.has_link("CRM Contact", contact.name))
+		call.link_with_reference_doc("CRM Student", contact.name)
+		self.assertTrue(call.has_link("CRM Student", contact.name))
 
 	def test_link_with_reference_doc(self):
 		contact = create_test_crm_contact()
 		call = create_test_call_log()
 
-		call.link_with_reference_doc("CRM Contact", contact.name)
+		call.link_with_reference_doc("CRM Student", contact.name)
 		call.save()
 
-		self.assertTrue(call.has_link("CRM Contact", contact.name))
+		self.assertTrue(call.has_link("CRM Student", contact.name))
 		self.assertEqual(len(call.links), 1)
-		self.assertEqual(call.links[0].link_doctype, "CRM Contact")
+		self.assertEqual(call.links[0].link_doctype, "CRM Student")
 		self.assertEqual(call.links[0].link_name, contact.name)
 
 	def test_link_with_reference_doc_duplicate_prevention(self):
 		contact = create_test_crm_contact()
 		call = create_test_call_log()
 
-		call.link_with_reference_doc("CRM Contact", contact.name)
-		call.link_with_reference_doc("CRM Contact", contact.name)
+		call.link_with_reference_doc("CRM Student", contact.name)
+		call.link_with_reference_doc("CRM Student", contact.name)
 		call.save()
 
 		self.assertEqual(len(call.links), 1)
@@ -153,7 +154,7 @@ class TestCallLog(FrappeTestCase):
 	def test_get_call_log_with_reference_crm_contact(self):
 		contact = create_test_crm_contact()
 		call = create_test_call_log(
-			reference_doctype="CRM Contact",
+			reference_doctype="CRM Student",
 			reference_docname=contact.name,
 		)
 
@@ -177,6 +178,54 @@ class TestCallLog(FrappeTestCase):
 		self.assertEqual(len(result["_tasks"]), 1)
 		self.assertEqual(result["_tasks"][0]["name"], task.name)
 
+	def test_get_call_log_skips_linked_note_without_read_permission(self):
+		note = frappe.get_doc(
+			{
+				"doctype": "FCRM Note",
+				"content": "Private transcript",
+			}
+		).insert(ignore_permissions=True)
+		call = create_test_call_log(note=note.name)
+
+		with patch(
+			"crm.fcrm.doctype.call_log.call_log.frappe.get_list",
+			return_value=[],
+		) as get_list:
+			result = get_call_log(call.name)
+
+		self.assertEqual(result["_notes"], [])
+		get_list.assert_called_once_with(
+			"FCRM Note",
+			filters={"name": note.name},
+			fields=["*"],
+			limit_page_length=1,
+		)
+
+	def test_get_call_log_skips_linked_task_without_read_permission(self):
+		call = create_test_call_log()
+		task = frappe.get_doc(
+			{
+				"doctype": "Task",
+				"title": "Private follow up",
+			}
+		).insert(ignore_permissions=True)
+		call.link_with_reference_doc("Task", task.name)
+		call.save()
+
+		with patch(
+			"crm.fcrm.doctype.call_log.call_log.frappe.get_list",
+			return_value=[],
+		) as get_list:
+			result = get_call_log(call.name)
+
+		self.assertEqual(result["_tasks"], [])
+		get_list.assert_called_once_with(
+			"Task",
+			filters={"name": task.name},
+			fields=["*"],
+			limit_page_length=1,
+		)
+
 	def test_create_contact_from_call_log_basic(self):
 		call = create_test_call_log(type="Incoming", from_number="+84912345678")
 
@@ -185,20 +234,20 @@ class TestCallLog(FrappeTestCase):
 			contact_details=frappe.as_json({"full_name": "John Doe"}),
 		)
 
-		self.assertTrue(frappe.db.exists("CRM Contact", contact_name))
-		contact = frappe.get_doc("CRM Contact", contact_name)
+		self.assertTrue(frappe.db.exists("CRM Student", contact_name))
+		contact = frappe.get_doc("CRM Student", contact_name)
 		self.assertEqual(contact.full_name, "John Doe")
 		self.assertEqual(contact.phone, "0912345678")
 
 		call.reload()
-		self.assertTrue(call.has_link("CRM Contact", contact_name))
+		self.assertTrue(call.has_link("CRM Student", contact_name))
 
 	def test_create_contact_from_call_log_no_details(self):
 		call = create_test_call_log(type="Incoming", from_number="+84987654321")
 
 		contact_name = create_contact_from_call_log(call_log=frappe.as_json({"name": call.name}))
 
-		contact = frappe.get_doc("CRM Contact", contact_name)
+		contact = frappe.get_doc("CRM Student", contact_name)
 		self.assertTrue(contact.full_name.startswith("Contact from call"))
 		self.assertEqual(contact.phone, "0987654321")
 
@@ -254,8 +303,8 @@ def create_test_call_log(**kwargs):
 
 def create_test_crm_contact(**kwargs):
 	data = {
-		"doctype": "CRM Contact",
-		"full_name": "Test CRM Contact",
+		"doctype": "CRM Student",
+		"full_name": "Test CRM Student",
 		"email": f"contact-{uuid.uuid4().hex[:8]}@example.com",
 		"stage": "Interested",
 	}

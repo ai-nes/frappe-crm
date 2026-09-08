@@ -242,7 +242,7 @@ def build_student_values(
 	admission_year = int(context["admission_year"])
 	key = str(scenario["key"])
 	values = {
-		"doctype": "CRM Student",
+		"doctype": "CRM Lead",
 		"student_name": scenario["student_name"],
 		"email": scenario["email"],
 		"phone": scenario["phone"],
@@ -319,11 +319,11 @@ def seed_bulk_students(
 				assigned_to=assigned_to,
 			)
 			import_source_id = values["import_source_id"]
-			existing = frappe.db.get_value("CRM Student", {"import_source_id": import_source_id}, "name")
+			existing = frappe.db.get_value("CRM Lead", {"import_source_id": import_source_id}, "name")
 			if not existing:
-				existing = frappe.db.get_value("CRM Student", {"email": values["email"]}, "name")
+				existing = frappe.db.get_value("CRM Lead", {"email": values["email"]}, "name")
 			if existing:
-				existing_source = frappe.db.get_value("CRM Student", existing, "import_source_id")
+				existing_source = frappe.db.get_value("CRM Lead", existing, "import_source_id")
 				legacy_source = f"{LEGACY_BULK_IMPORT_NAMESPACE}:{scenario['key']}"
 				if existing_source not in {import_source_id, legacy_source}:
 					raise ValueError(f"student email is already owned by another seed row: {values['email']}")
@@ -377,7 +377,7 @@ def stage_for_status(status_by_stage: Mapping[str, str] | None, status_name: str
 
 def _update_existing_student(frappe, name: str, values: Mapping[str, Any]) -> None:
 	"""Repair a previous bulk row while respecting Student service guards."""
-	doc = frappe.get_doc("CRM Student", name)
+	doc = frappe.get_doc("CRM Lead", name)
 	for key, value in values.items():
 		if key != "doctype":
 			setattr(doc, key, value)

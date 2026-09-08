@@ -32,7 +32,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 		for run in self._runs:
 			frappe.db.delete("CRM Analysis Run Stage", {"parent_run": run})
 			frappe.db.delete(_RUN_TYPE, {"name": run})
-		frappe.delete_doc("CRM Student", self._student.name, force=True)
+		frappe.delete_doc("CRM Lead", self._student.name, force=True)
 		if self._prev_service_user is None:
 			frappe.conf.pop(intelligence_runs.SERVICE_USER_KEY, None)
 		else:
@@ -40,7 +40,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
+		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
 		previous = getattr(frappe.flags, "student_intake_service", False)
 		frappe.flags.student_intake_service = True
 		try:

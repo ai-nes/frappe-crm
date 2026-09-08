@@ -24,6 +24,7 @@ DEFAULTS = {
 	# default while the broad role-workspace rollout remains opt-in.
 	"director_analytics_read": True,
 }
+ASSIGNMENT_MODES = frozenset({"manual_batch", "automatic_on_create"})
 ALIASES = {
 	"context_read": "context",
 	"engagement_write": "engagement",
@@ -54,6 +55,31 @@ def enabled(feature: str, default: bool | None = None) -> bool:
 	alias_key = f"crm_student_{ALIASES.get(feature, feature)}_enabled"
 	value = conf.get(key, conf.get(alias_key, default))
 	return value not in (0, "0", False, "false", "False", None)
+
+
+def assignment_mode() -> str:
+	"""Return the server-owned assignment execution mode.
+
+	The core Lead refactor defaults to explicit batches.  The automatic-on-create
+	value is retained only as a controlled compatibility option while old intake
+	callers are migrated; it is not a background-worker switch.
+	"""
+	default = "manual_batch"
+	try:
+		if frappe.db.exists("DocType", "CRM Assignment Control"):
+			stored = frappe.db.get_single_value("CRM Assignment Control", "assignment_mode")
+			if stored in ASSIGNMENT_MODES:
+				return stored
+	except Exception:
+		pass
+	conf = getattr(frappe, "conf", {})
+	value = conf.get("crm_assignment_mode", default)
+	return value if value in ASSIGNMENT_MODES else default
+
+
+def automatic_assignment_on_create_enabled() -> bool:
+	"""Whether a compatibility intake path may route immediately."""
+	return enabled("routing") and assignment_mode() == "automatic_on_create"
 
 
 def context_read_enabled() -> bool:

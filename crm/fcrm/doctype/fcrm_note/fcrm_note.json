@@ -21,7 +21,7 @@
    "label": "Content"
   },
   {
-   "default": "CRM Contact",
+   "default": "CRM Student",
    "fieldname": "reference_doctype",
    "fieldtype": "Link",
    "label": "Reference Document Type",

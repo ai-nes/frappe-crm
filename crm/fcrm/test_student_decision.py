@@ -48,13 +48,8 @@ class TestDecideStudentTask(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Student", "student_name": name, "phone": phone})
-		previous_flag = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous_flag
+		student = frappe.get_doc({"doctype": "CRM Student", "full_name": name, "phone": phone})
+		student.insert(ignore_permissions=True)
 		return student
 
 	def _make_task(self, *, disposition="ACT", action_type="CALL", current_slot=None):

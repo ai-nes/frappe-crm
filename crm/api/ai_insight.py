@@ -363,12 +363,12 @@ def _lock_student(student: str):
 def _lock_contact_for_student(student: str) -> str:
 	contacts = list(dict.fromkeys(contact for contact in contacts_for_student(student) if contact))
 	if not contacts:
-		_fail("CONTACT_REQUIRED", "The Student has no linked CRM Contact.")
+		_fail("CONTACT_REQUIRED", "The Student has no linked CRM Student.")
 	if len(contacts) > 1:
-		_fail("AMBIGUOUS_CONTACT", "The Student has more than one linked CRM Contact.")
+		_fail("AMBIGUOUS_CONTACT", "The Student has more than one linked CRM Student.")
 	contact = contacts[0]
 	row = frappe.db.sql(
-		"SELECT name FROM `tabCRM Contact` WHERE name = %s FOR UPDATE",
+		"SELECT name FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(contact,),
 		as_dict=True,
 	)

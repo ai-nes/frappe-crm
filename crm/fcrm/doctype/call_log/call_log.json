@@ -121,7 +121,7 @@
    "options": "User"
   },
   {
-   "default": "CRM Contact",
+   "default": "CRM Student",
    "fieldname": "reference_doctype",
    "fieldtype": "Link",
    "label": "Reference Document Type",
@@ -205,6 +205,10 @@
   {
    "read": 1,
    "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "CTV Sale"
   },
   {
    "read": 1,

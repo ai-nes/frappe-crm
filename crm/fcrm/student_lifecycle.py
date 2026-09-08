@@ -9,8 +9,8 @@ from typing import Any
 import frappe
 
 from crm.fcrm.qualification import (
-	MEANINGFUL_OUTCOMES,
 	EVIDENCE_DOCTYPES,
+	MEANINGFUL_OUTCOMES,
 	QUALIFICATION_POLICY_VERSION,
 	QualificationValidationError,
 	normalize_evidence,
@@ -53,6 +53,29 @@ def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str
 	if "lifecycle.lost" in capabilities:
 		targets.append({"stage": LOST_STAGE, "label": LOST_STAGE, "requires_reason": True})
 	return targets
+
+
+def get_lifecycle_stages() -> dict[str, Any]:
+	"""Return the canonical lifecycle stages available to Student clients."""
+	_actor()
+	stages = [
+		{
+			"stage": stage,
+			"label": stage,
+			"order": order,
+			"is_terminal": False,
+		}
+		for order, stage in enumerate(ACTIVE_STAGES)
+	]
+	stages.append(
+		{
+			"stage": LOST_STAGE,
+			"label": LOST_STAGE,
+			"order": len(ACTIVE_STAGES),
+			"is_terminal": True,
+		}
+	)
+	return {"stages": stages, "policy_version": POLICY_VERSION}
 
 
 def validate_transition(current_stage: str, target_stage: str, *, reason: str | None = None, evidence: Any = None, outcome_code: str | None = None, capabilities: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
@@ -111,7 +134,7 @@ def _capabilities(actor: str):
 
 
 def _student(name: str):
-	student = frappe.get_doc("CRM Student", name)
+	student = frappe.get_doc("CRM Lead", name)
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
@@ -130,9 +153,9 @@ def _verify_evidence(student: str, references: list[dict[str, str]], *, outcome_
 		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
 			_fail("OUT_OF_SCOPE", "A referenced qualification record is outside your scope.")
 		linked_student = doc.get("student")
-		if not linked_student and doc.get("reference_doctype") == "CRM Student":
+		if not linked_student and doc.get("reference_doctype") == "CRM Lead":
 			linked_student = doc.get("reference_docname")
-		if not linked_student and doc.get("attached_to_doctype") == "CRM Student":
+		if not linked_student and doc.get("attached_to_doctype") == "CRM Lead":
 			linked_student = doc.get("attached_to_name")
 		if not linked_student and doc.get("interaction"):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
@@ -229,7 +252,7 @@ def _status_for_stage(stage: str) -> str | None:
 
 def _lock(name: str):
 	try:
-		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -311,9 +334,9 @@ def request_transition(
 		status = _status_for_stage(transition["to_stage"])
 		if status:
 			updates["enrollment_status"] = status
-		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
-		from crm.services.student_context import bump_student_context_revision
+		frappe.db.set_value("CRM Lead", student, updates, update_modified=False)
 		from crm.services.admission_event_policy import admit_lifecycle_transition
+		from crm.services.student_context import bump_student_context_revision
 		context_change = bump_student_context_revision(
 			student, "lifecycle_transition", enqueue=False,
 			event_id=f"lifecycle:{event.name}",

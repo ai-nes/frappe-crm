@@ -257,7 +257,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "student_context_or_redacted_endpoint",
 	},
 	"admissions_case": {
-		"doctypes": ("CRM Student", "CRM Contact"),
+		"doctypes": ("CRM Lead", "CRM Student"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "rwc",
@@ -322,6 +322,9 @@ CANONICAL_PERMISSION_MATRIX = {
 			"lead_sales": "r",
 			"marketing": "rwcdx",
 			"admissions_director": "rx",
+		},
+		"per_doctype_permissions": {
+			"CRM Campaign": {"lead_sales": "rwc"},
 		},
 		"row_scope": "marketing_owned_record",
 	},
@@ -578,7 +581,7 @@ def case_scope_for_roles(roles, doctype, *, administrator=False):
 		_warn_missing_permission_profile(role)
 		return "deny"
 	scope = profile["row_scope"]
-	if scope == "campus_assigned_contact" and doctype != "CRM Contact":
+	if scope == "campus_assigned_contact" and doctype != "CRM Student":
 		return "deny"
 	return scope
 
@@ -619,7 +622,7 @@ def _hardcoded_case_scope_for_roles(roles, doctype):
 	if not overlay:
 		return "deny"
 	scope = LEGACY_COMPATIBILITY_OVERLAYS[overlay]["row_scope"]
-	if scope == "campus_assigned_contact" and doctype != "CRM Contact":
+	if scope == "campus_assigned_contact" and doctype != "CRM Student":
 		return "deny"
 	if scope == "all_cases":
 		return "all"

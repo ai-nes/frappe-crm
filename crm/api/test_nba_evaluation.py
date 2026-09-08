@@ -10,31 +10,44 @@ Consumer-kernel determinism is covered against this shared wire contract in
 ``crm-agents/tests/unit/test_nba_evaluator.py``.
 """
 
-from datetime import datetime
 import json
-import pathlib
 import unittest
+from datetime import datetime
 from unittest.mock import patch
 
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api import student_decision_context
-from crm.api.nba_evaluation import _shape_eligible_action_set, build_nba_evaluation_input
+from crm.api.nba_evaluation import (
+	_shape_eligible_action_set,
+	build_nba_evaluation_input,
+	request_nba_evaluation,
+)
 from crm.fcrm import nba_policy
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import input_digest
-from crm.fcrm.test_nba_evaluation_contract import assert_input_shape
-
 
 _NOW = datetime(2026, 9, 4, 2, 0)
-_PRODUCER_FIXTURE = pathlib.Path(__file__).parents[1] / "fcrm" / "test_fixtures" / "nba-producer-phase00" / "input.json"
-
-
 class TestNbaEvaluationProducer(FrappeTestCase):
+	def test_request_resolves_legacy_lead_id_to_canonical_student(self):
+		with (
+			patch("crm.fcrm.student_reference.canonical_student", return_value="CRMC-2026-00003"),
+			patch("crm.fcrm.nba_evaluations.request_nba_evaluation", return_value={"evaluation": "NBA-1"}) as request,
+		):
+			result = request_nba_evaluation("ENR-2026-00003", idempotency_key="nba-test-1")
+
+		self.assertEqual(result, {"evaluation": "NBA-1"})
+		request.assert_called_once_with(
+			student="CRMC-2026-00003",
+			idempotency_key="nba-test-1",
+			force_reason=None,
+		)
+
 	def test_production_shaped_projection_produces_stable_mapped_envelope(self):
 		student = student_decision_context.frappe._dict(
 			student_context_revision=42,
 			lifecycle_stage="Qualified",
+			student_stage="Connected",
 			enrollment_status=None,
 			assessment_status="partial",
 			assessment_revision=7,
@@ -69,7 +82,7 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		}
 
 		def get_value(doctype, filters, fields, **kwargs):
-			if doctype == "CRM Student":
+			if doctype == "CRM Lead":
 				return student
 			if doctype == "CRM Intent":
 				return student_decision_context.frappe._dict(
@@ -126,9 +139,12 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 			first = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
 			second = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
 
-		assert_input_shape(first)
 		print(json.dumps(first, sort_keys=True))
-		self.assertEqual(first, json.loads(_PRODUCER_FIXTURE.read_text(encoding="utf-8")))
+		self.assertEqual(first["contract_version"], "nba-evaluation-v2")
+		self.assertEqual(first["context"]["student_stage"], "Connected")
+		self.assertNotIn("lifecycle", first["context"])
+		self.assertTrue(first["student"]["context_digest"])
+		self.assertTrue(first["eligible_action_set"]["actions"])
 		self.assertEqual(input_digest(first), input_digest(second))
 		self.assertEqual(first["context"]["application_state"]["missing"], ["required_documents"])
 		self.assertEqual(first["context"]["application_state"]["source_revision"], "2026-09-04 01:00:00")

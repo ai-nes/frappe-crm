@@ -1,4 +1,4 @@
-"""Immutable Student-to-Contact conversion relationship."""
+"""Immutable Lead-to-Student conversion relationship."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ def on_doctype_update():
 
 
 class CRMStudentContactConversion(Document):
-	"""Append-only junction; the conversion command is its only writer."""
+	"""Append-only Lead-to-Student junction; the command is its only writer."""
 
 	def before_validate(self):
 		if self.is_new() and not _service_write_enabled():
@@ -56,8 +56,15 @@ class CRMStudentContactConversion(Document):
 		self._validate_relationship()
 
 	def _validate_relationship(self):
+		if self.lead and self.lead != self.student:
+			frappe.throw("Conversion Lead alias does not match the legacy Student field.", frappe.ValidationError)
+		if self.canonical_student and self.canonical_student != self.contact:
+			frappe.throw(
+				"Conversion canonical Student alias does not match the Contact field.",
+				frappe.ValidationError,
+			)
 		student = frappe.db.get_value(
-			"CRM Student",
+			"CRM Lead",
 			self.student,
 			["identity", "case_key"],
 			as_dict=True,
@@ -82,7 +89,7 @@ class CRMStudentContactConversion(Document):
 		if _value(case_key, "canonical_student") != self.student:
 			frappe.throw("Conversion Student is not canonical for the Case Key.", frappe.ValidationError)
 
-		contact_identity = frappe.db.get_value("CRM Contact", self.contact, "student_identity")
+		contact_identity = frappe.db.get_value("CRM Student", self.contact, "student_identity")
 		if not contact_identity:
 			frappe.throw("The conversion Contact must have a resolved Student Identity.", frappe.ValidationError)
 		if contact_identity != self.student_identity:
@@ -95,14 +102,14 @@ class CRMStudentContactConversion(Document):
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as student_conditions
 
-	condition = student_conditions("CRM Student", user=user)
+	condition = student_conditions("CRM Lead", user=user)
 	if condition is None:
 		return None
 	if condition == "1=0":
 		return "1=0"
 	return (
-		f"`tab{CONVERSION_DOCTYPE}`.`student` in (select `tabCRM Student`.`name` "
-		f"from `tabCRM Student` where ({condition}))"
+		f"`tab{CONVERSION_DOCTYPE}`.`student` in (select `tabCRM Lead`.`name` "
+		f"from `tabCRM Lead` where ({condition}))"
 	)
 
 
@@ -110,4 +117,4 @@ def has_permission(doc, user=None, permission_type=None):
 	student = doc.get("student")
 	if not student:
 		return False
-	return bool(frappe.has_permission("CRM Student", "read", student, user=user))
+	return bool(frappe.has_permission("CRM Lead", "read", student, user=user))

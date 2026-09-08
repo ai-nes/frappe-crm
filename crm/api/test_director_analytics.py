@@ -57,9 +57,9 @@ class TestDirectorAnalytics(FrappeTestCase):
 			response = role_workspaces.get_workspace_summary("director-overview", "overview")
 		self.assertEqual(response["contractStatus"], "unavailable")
 		self.assertEqual(response["kpis"], [])
-		self.assertEqual(response["definition"]["sources"], ["CRM Student"])
+		self.assertEqual(response["definition"]["sources"], ["CRM Lead"])
 		self.assertEqual(response["scopeLabel"], director_analytics.DIRECTOR_SCOPE_LABEL)
-		self.assertEqual(response["snapshotContext"]["watermarks"], {"CRM Student": "unreleased"})
+		self.assertEqual(response["snapshotContext"]["watermarks"], {"CRM Lead": "unreleased"})
 
 	def test_director_facade_is_unavailable_when_director_canary_is_disabled(self):
 		with (
@@ -77,7 +77,7 @@ class TestDirectorAnalytics(FrappeTestCase):
 			"definitionVersion": director_analytics.DIRECTOR_DEFINITION_VERSION,
 			"timezone": "Asia/Ho_Chi_Minh",
 			"asOf": "2026-08-28 00:00:00",
-			"watermarks": {"CRM Student": "2026-08-28 00:00:00"},
+			"watermarks": {"CRM Lead": "2026-08-28 00:00:00"},
 		}
 		with patch("crm.api.role_workspaces.get_encryption_key", return_value="test-key"):
 			snapshot = role_workspaces._mint_snapshot(
@@ -97,7 +97,7 @@ class TestDirectorAnalytics(FrappeTestCase):
 			"definitionVersion": director_analytics.DIRECTOR_DEFINITION_VERSION,
 			"timezone": "Asia/Ho_Chi_Minh",
 			"asOf": "2026-08-28 00:00:00",
-			"watermarks": {"CRM Student": "2026-08-28 00:00:00"},
+			"watermarks": {"CRM Lead": "2026-08-28 00:00:00"},
 		}
 		with patch("crm.api.role_workspaces.get_encryption_key", return_value="test-key"):
 			snapshot = role_workspaces._mint_snapshot(

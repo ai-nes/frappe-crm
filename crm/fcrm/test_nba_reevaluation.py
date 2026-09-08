@@ -71,6 +71,11 @@ if FrappeTestCase is not None:
 			frappe.db.delete("CRM Recommendation", {"target_id": self.student})
 			frappe.db.delete("CRM NBA Evaluation", {"student": self.student})
 			frappe.db.delete("CRM Agent Event", {"aggregate_doctype": "CRM NBA Evaluation"})
+			frappe.db.set_value("CRM Student", self.student, "nba_dirty_since", None, update_modified=False)
+			frappe.db.commit()
+
+		def _set_dirty(self, student, value):
+			frappe.db.set_value("CRM Student", student, "nba_dirty_since", value, update_modified=False)
 			frappe.db.commit()
 
 		def _completed_wait(self, *, revisit_at, trigger=None):
@@ -161,11 +166,11 @@ if FrappeTestCase is not None:
 			self.assertEqual(second["due"], 0)
 			self.assertEqual(second["dispatched"], 0)
 
-		def test_domain_event_dispatches_a_pure_event_name_wait(self):
-			"""A WAIT with no ``revisit_at`` is never picked up by the time-based
-			reconciler; the domain-event admission path fires and stamps it."""
+		def test_domain_event_dispatches_a_wait_with_a_different_trigger_name(self):
+			"""A dirty sweep considers every unstamped WAIT boundary, regardless
+			of the domain event name that originally created it."""
 			name = self._completed_wait(revisit_at=None, trigger="inbound_reply")
-			result = nba_evaluations.request_domain_reevaluation(self.student, trigger_reason="inbound_reply")
+			result = nba_evaluations.request_domain_reevaluation(self.student, trigger_reason="interaction")
 
 			self.assertTrue(result["enabled"])
 			self.assertIsNotNone(result["created"])
@@ -173,6 +178,123 @@ if FrappeTestCase is not None:
 			self.assertEqual(result["matched_waits"], 1)
 			self.assertTrue(frappe.db.get_value(nba_evaluations.DOCTYPE, name, "reevaluation_dispatched_at"))
 			self.assertEqual(len(self._automatic_runs()), 1)
+
+		def test_mark_student_nba_dirty_preserves_the_earliest_timestamp(self):
+			first = add_to_date(now_datetime(), minutes=-10)
+			second = add_to_date(now_datetime(), minutes=10)
+
+			with patch("crm.fcrm.nba_evaluations.now_datetime", side_effect=[first, second]):
+				self.assertTrue(nba_evaluations.mark_student_nba_dirty(self.student))
+				self.assertTrue(nba_evaluations.mark_student_nba_dirty(self.student))
+
+			self.assertEqual(
+				frappe.db.get_value("CRM Student", self.student, "nba_dirty_since"),
+				first,
+			)
+
+		def test_mark_student_nba_dirty_is_disabled_by_the_runtime_flag(self):
+			previous = frappe.conf.get("crm_nba_evaluation_runtime_enabled")
+			frappe.conf["crm_nba_evaluation_runtime_enabled"] = 0
+			try:
+				self.assertFalse(nba_evaluations.mark_student_nba_dirty(self.student))
+				self.assertIsNone(
+					frappe.db.get_value("CRM Student", self.student, "nba_dirty_since")
+				)
+			finally:
+				if previous is None:
+					frappe.conf.pop("crm_nba_evaluation_runtime_enabled", None)
+				else:
+					frappe.conf["crm_nba_evaluation_runtime_enabled"] = previous
+
+		def test_reconcile_dirty_students_dispatches_and_clears_marker(self):
+			self._set_dirty(self.student, add_to_date(now_datetime(), minutes=-5))
+
+			result = nba_evaluations.reconcile_dirty_students()
+
+			self.assertEqual(result, {"dispatched": 1, "dirty": 1, "enabled": True})
+			self.assertIsNone(frappe.db.get_value("CRM Student", self.student, "nba_dirty_since"))
+			self.assertEqual(len(self._automatic_runs()), 1)
+
+		def test_reconcile_dirty_students_leaves_marker_when_dispatch_fails(self):
+			dirty_since = add_to_date(now_datetime(), minutes=-5)
+			self._set_dirty(self.student, dirty_since)
+
+			with patch.object(
+				nba_evaluations,
+				"request_domain_reevaluation",
+				side_effect=RuntimeError("dispatch failed"),
+			):
+				result = nba_evaluations.reconcile_dirty_students()
+
+			self.assertEqual(result, {"dispatched": 0, "dirty": 1, "enabled": True})
+			self.assertEqual(
+				frappe.db.get_value("CRM Student", self.student, "nba_dirty_since"),
+				dirty_since,
+			)
+
+		def test_reconcile_dirty_students_rolls_back_only_the_failed_student(self):
+			students = frappe.get_all("CRM Student", pluck="name", limit_page_length=2)
+			if len(students) < 2:
+				self.skipTest("per-student rollback coverage requires two CRM Students")
+			first, second = students
+			self._set_dirty(first, add_to_date(now_datetime(), minutes=-20))
+			self._set_dirty(second, add_to_date(now_datetime(), minutes=-10))
+
+			def dispatch(student, **kwargs):
+				if student == second:
+					raise RuntimeError("dispatch failed")
+				return {"enabled": True, "created": "NBAEVAL-1", "coalesced": False, "matched_waits": 0}
+
+			try:
+				with patch.object(nba_evaluations, "request_domain_reevaluation", side_effect=dispatch):
+					result = nba_evaluations.reconcile_dirty_students(limit=2)
+
+				self.assertEqual(result, {"dispatched": 1, "dirty": 2, "enabled": True})
+				self.assertIsNone(frappe.db.get_value("CRM Student", first, "nba_dirty_since"))
+				self.assertIsNotNone(frappe.db.get_value("CRM Student", second, "nba_dirty_since"))
+			finally:
+				self._set_dirty(first, None)
+				self._set_dirty(second, None)
+
+		def test_reconcile_dirty_students_processes_oldest_first(self):
+			students = frappe.get_all("CRM Student", pluck="name", limit_page_length=2)
+			if len(students) < 2:
+				self.skipTest("oldest-first coverage requires two CRM Students")
+			oldest, newest = students
+			oldest_at = add_to_date(now_datetime(), minutes=-20)
+			newest_at = add_to_date(now_datetime(), minutes=-10)
+			self._set_dirty(oldest, oldest_at)
+			self._set_dirty(newest, newest_at)
+			seen = []
+
+			try:
+				with patch.object(
+					nba_evaluations,
+					"request_domain_reevaluation",
+					side_effect=lambda student, **kwargs: seen.append(student)
+					or {"enabled": True, "created": None, "coalesced": True, "matched_waits": 0},
+				):
+					result = nba_evaluations.reconcile_dirty_students(limit=2)
+			finally:
+				self._set_dirty(oldest, None)
+				self._set_dirty(newest, None)
+
+			self.assertEqual(result["dirty"], 2)
+			self.assertEqual(seen, [oldest, newest])
+
+		def test_reconcile_dirty_students_is_disabled_by_the_runtime_flag(self):
+			self._set_dirty(self.student, add_to_date(now_datetime(), minutes=-5))
+			previous = frappe.conf.get("crm_nba_evaluation_runtime_enabled")
+			frappe.conf["crm_nba_evaluation_runtime_enabled"] = 0
+			try:
+				result = nba_evaluations.reconcile_dirty_students()
+			finally:
+				if previous is None:
+					frappe.conf.pop("crm_nba_evaluation_runtime_enabled", None)
+				else:
+					frappe.conf["crm_nba_evaluation_runtime_enabled"] = previous
+
+			self.assertEqual(result, {"dispatched": 0, "dirty": 0, "enabled": False})
 
 		def test_domain_event_burst_for_one_student_coalesces_to_one_run(self):
 			"""A second domain event for the same student while the first
@@ -270,7 +392,7 @@ if FrappeTestCase is not None:
 				if (
 					doctype == nba_evaluations.DOCTYPE
 					and isinstance(filters, dict)
-					and "reevaluation_trigger" in filters
+					and "revisit_at" in filters
 				):
 					order.append("matched_waits_read")
 				return original_get_all(doctype, *args, **kwargs)

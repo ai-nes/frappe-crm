@@ -11,7 +11,7 @@ class CRMInteractionEvidence(Document):
 
 	def validate(self):
 		if not self.student and not self.crm_contact:
-			frappe.throw("Evidence must be linked to a Student or CRM Contact.")
+			frappe.throw("Evidence must be linked to a Student or CRM Student.")
 		if not self.content or not str(self.content).strip():
 			frappe.throw("Evidence content is required.")
 		if not self.evidence_digest or len(self.evidence_digest) != 64:

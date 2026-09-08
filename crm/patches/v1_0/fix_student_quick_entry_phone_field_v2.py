@@ -4,10 +4,10 @@ import frappe
 
 
 def execute():
-	if not frappe.db.exists("Fields Layout", "CRM Student-Quick Entry"):
+	if not frappe.db.exists("Fields Layout", "CRM Lead-Quick Entry"):
 		return
 
-	layout_doc = frappe.get_doc("Fields Layout", "CRM Student-Quick Entry")
+	layout_doc = frappe.get_doc("Fields Layout", "CRM Lead-Quick Entry")
 	if not layout_doc.layout:
 		return
 
@@ -33,4 +33,4 @@ def execute():
 			replace_in_columns(section.get("columns", []))
 
 	if dirty:
-		frappe.db.set_value("Fields Layout", "CRM Student-Quick Entry", "layout", json.dumps(parsed), update_modified=False)
+		frappe.db.set_value("Fields Layout", "CRM Lead-Quick Entry", "layout", json.dumps(parsed), update_modified=False)

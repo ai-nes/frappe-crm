@@ -163,19 +163,19 @@ def _ensure_interaction_type(name: str) -> str:
 
 
 def _resolve_student() -> str:
-	student = frappe.db.exists("CRM Student", STUDENT_ID)
+	student = frappe.db.exists("CRM Lead", STUDENT_ID)
 	if student:
 		return student
-	student = frappe.db.get_value("CRM Student", {"email": STUDENT_EMAIL}, "name")
+	student = frappe.db.get_value("CRM Lead", {"email": STUDENT_EMAIL}, "name")
 	if student:
 		return student
-	student = frappe.db.get_value("CRM Student", {"student_name": STUDENT_NAME}, "name")
+	student = frappe.db.get_value("CRM Lead", {"student_name": STUDENT_NAME}, "name")
 	if student:
 		return student
 
 	doc = frappe.get_doc(
 		{
-			"doctype": "CRM Student",
+			"doctype": "CRM Lead",
 			"student_name": STUDENT_NAME,
 			"phone": "0908000176",
 			"email": STUDENT_EMAIL,
@@ -187,7 +187,7 @@ def _resolve_student() -> str:
 
 
 def _set_student_profile(student: str) -> None:
-	doc = frappe.get_doc("CRM Student", student)
+	doc = frappe.get_doc("CRM Lead", student)
 	values: dict[str, Any] = {
 		"student_name": STUDENT_NAME,
 		"phone": "0908000176",
@@ -320,9 +320,9 @@ def _ensure_assessment(student: str, interaction: str, spec: dict[str, Any]) -> 
 
 
 def _ensure_consent_and_parent(student: str) -> dict[str, str | None]:
-	student_doc = frappe.get_doc("CRM Student", student)
+	student_doc = frappe.get_doc("CRM Lead", student)
 	contact_email = "phu.huynh.giauyen@example.test"
-	contact = frappe.db.get_value("CRM Contact", {"email": contact_email}, "name")
+	contact = frappe.db.get_value("CRM Student", {"email": contact_email}, "name")
 	if not contact:
 		previous = frappe.flags.get("student_conversion_service")
 		frappe.flags.student_conversion_service = True
@@ -330,7 +330,7 @@ def _ensure_consent_and_parent(student: str) -> dict[str, str | None]:
 			contact = (
 				frappe.get_doc(
 					{
-						"doctype": "CRM Contact",
+						"doctype": "CRM Student",
 						"full_name": "Nguyễn Thị Hương",
 						"phone": "0908000177",
 						"email": contact_email,
