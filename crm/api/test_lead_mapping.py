@@ -234,14 +234,24 @@ class TestLeadMappingContract(TestCase):
 				"phone": "0900000001",
 				"email": "an@example.com",
 				"major": "Software Engineering",
+				"high_school": "SCHOOL-1",
+				"province": "PROVINCE-1",
+				"ward": "WARD-1",
 				"lead_status": "New",
 				"campaign": "Campaign 1",
 				"creation": "2026-09-15 12:30:00",
 			}
 		]
+		province_rows = [{"name": "PROVINCE-1", "province_name": "Khánh Hòa"}]
+		ward_rows = [{"name": "WARD-1", "ward_name": "Khánh Hòa"}]
+		school_rows = [{"name": "SCHOOL-1", "school_name": "THPT Nguyễn Văn An"}]
 		with (
 			patch.object(lead_mapping, "_resolve_campaign_code", return_value="Campaign 1"),
-			patch.object(lead_mapping.frappe, "get_all", return_value=rows) as get_all,
+			patch.object(
+				lead_mapping.frappe,
+				"get_all",
+				side_effect=[rows, province_rows, ward_rows, school_rows],
+			) as get_all,
 			patch.object(lead_mapping.frappe.db, "count", return_value=3) as count,
 		):
 			result = get_public_leads(
@@ -252,16 +262,25 @@ class TestLeadMappingContract(TestCase):
 				page_length="25",
 			)
 
-		self.assertEqual(result, {"total": 3, "start": 10, "page_length": 25, "leads": rows})
+		expected_leads = [
+			{
+				**rows[0],
+				"high_school": "THPT Nguyễn Văn An",
+				"province": "Khánh Hòa",
+				"ward": "Khánh Hòa",
+			}
+		]
+		self.assertEqual(result, {"total": 3, "start": 10, "page_length": 25, "leads": expected_leads})
 		filters = [
 			["campaign", "=", "Campaign 1"],
 			["creation", ">=", "2026-09-01 00:00:00"],
 			["creation", "<", "2026-10-01 00:00:00"],
 		]
-		self.assertEqual(get_all.call_args.kwargs["filters"], filters)
-		self.assertEqual(get_all.call_args.kwargs["fields"], list(lead_mapping.PUBLIC_LEAD_LIST_FIELDS))
-		self.assertEqual(get_all.call_args.kwargs["limit_start"], 10)
-		self.assertEqual(get_all.call_args.kwargs["limit_page_length"], 25)
+		lead_query = get_all.call_args_list[0]
+		self.assertEqual(lead_query.kwargs["filters"], filters)
+		self.assertEqual(lead_query.kwargs["fields"], list(lead_mapping.PUBLIC_LEAD_LIST_FIELDS))
+		self.assertEqual(lead_query.kwargs["limit_start"], 10)
+		self.assertEqual(lead_query.kwargs["limit_page_length"], 25)
 		count.assert_called_once_with("CRM Lead", filters=filters)
 
 	def test_public_leads_accept_snake_case_date_aliases(self):

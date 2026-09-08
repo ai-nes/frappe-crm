@@ -322,6 +322,7 @@ def _load_lookups(rows: list) -> dict[str, Any]:
 	return {
 		"schools": _lookup_map("CRM High School", {row.get("high_school") for row in rows}, "school_name"),
 		"provinces": _lookup_map("CRM Province", {row.get("province") for row in rows}, "province_name"),
+		"wards": _lookup_map("CRM Ward", {row.get("ward") for row in rows}, "ward_name"),
 		"majors": _lookup_map("CRM Major", {row.get("major") for row in rows}, "major_name"),
 		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
 		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
@@ -519,6 +520,7 @@ def _map_detail_row(
 		"email": row.get("email") or "",
 		"secondaryEmail": row.get("other_email") or "",
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province") or "",
+		"ward": lookups.get("wards", {}).get(row.get("ward")) or row.get("ward") or "",
 		"interestedMajor": lookups.get("majors", {}).get(row.get("major")) or row.get("major") or "",
 		"adChannel": row.get("advertising_channel") or "",
 		"segments": _segments(row.get("segments")),

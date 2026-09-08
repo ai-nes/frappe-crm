@@ -54,6 +54,14 @@ xem được Student đã chuyển đổi và đã có người phụ trách tro
 mình quản lý, đồng thời nhìn thấy Sale/CTV Sale đang phụ trách. Phạm vi này không
 mở rộng sang Group khác và không tạo thêm endpoint riêng.
 
+Đối với `CRM Lead`, tài khoản `Lead Sale` được phép cập nhật các trường nghiệp vụ
+được mở qua `crm.api.lead.update_lead` trên toàn bộ bảng intake. `Sale` và `CTV Sale`
+chỉ được cập nhật Lead đang giao cho chính mình; các field server-managed và các
+thay đổi ownership/lifecycle/processing vẫn phải đi qua command tương ứng.
+
+Read-model chi tiết Lead trả `province` và `ward` dưới dạng nhãn hiển thị. Form tạo/cập
+nhật gửi mã Link tương ứng; danh sách xã/phường được BE lọc theo tỉnh đã chọn.
+
 Lead nguồn được trả dưới dạng metadata `sourceLead`, `processingStatus` và `resolution`;
 không dùng các field này để thay thế `student_stage`, `enrollment_status` hoặc
 `lifecycle_stage` của Student.

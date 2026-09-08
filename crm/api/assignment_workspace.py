@@ -172,7 +172,7 @@ def _roles_for_user(user):
 		return []
 
 
-def _actor_context(*, required_capabilities=None):
+def _actor_context(*, required_capabilities=None, allow_missing_staff=False):
 	actor = getattr(frappe.session, "user", None)
 	if not actor or actor == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.AuthenticationError)
@@ -191,9 +191,7 @@ def _actor_context(*, required_capabilities=None):
 		"admissions.oversee",
 		"student.routing.read",
 	}
-	if not profile or not capabilities.intersection(
-		required_capabilities
-	):
+	if not profile or not capabilities.intersection(required_capabilities):
 		frappe.throw(_("You are not permitted to access assignment setup."), frappe.PermissionError)
 
 	staff = None
@@ -203,15 +201,19 @@ def _actor_context(*, required_capabilities=None):
 		staff = frappe.db.get_value(
 			"CRM Staff", {"user": actor, "is_active": 1}, ["name", "campus"], as_dict=True
 		)
-		if not staff:
+		if not staff and not (allow_missing_staff and profile == "lead_sales"):
 			frappe.throw(_("An active CRM Staff record is required."), frappe.PermissionError)
-		membership_rows = _safe_get_all(
-			"CRM Team Membership",
-			["parent as staff", "team", "function", "is_primary", "effective_from", "effective_until"],
-			{"parent": staff.name, "parenttype": "CRM Staff"},
+		membership_rows = (
+			_safe_get_all(
+				"CRM Team Membership",
+				["parent as staff", "team", "function", "is_primary", "effective_from", "effective_until"],
+				{"parent": staff.name, "parenttype": "CRM Staff"},
+			)
+			if staff
+			else []
 		)
 		team_names = {row.team for row in membership_rows if row.get("team") and _date_active(row)}
-		campus_names = {staff.campus} if staff.campus else set()
+		campus_names = {staff.campus} if staff and staff.campus else set()
 		for team in _safe_get_all("CRM Team", ["name", "campus"], {"name": ["in", list(team_names)]}):
 			if team.get("campus"):
 				campus_names.add(team.campus)

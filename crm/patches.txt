@@ -157,3 +157,5 @@ crm.patches.v1_0.repair_converted_lead_processing_status
 crm.patches.v1_0.repair_assignment_batch_audit
 crm.patches.v1_0.seed_crm_action_outcome_option
 crm.patches.v1_0.unify_student_hs_identifiers
+crm.patches.v1_0.repair_lead_edit_permissions
+crm.patches.v1_0.repair_lead_ownership_projections

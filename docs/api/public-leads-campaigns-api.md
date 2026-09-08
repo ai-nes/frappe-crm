@@ -54,6 +54,9 @@ phải giống nhau.
         "phone": "0901234567",
         "email": "an@example.com",
         "major": "Software Engineering",
+        "high_school": "THPT Nguyễn Du",
+        "province": "Hồ Chí Minh",
+        "ward": "Phường Bến Nghé",
         "lead_status": "New",
         "campaign": "Lead API 2026 - Website",
         "creation": "2026-09-15 12:30:00"
@@ -64,9 +67,12 @@ phải giống nhau.
 ```
 
 Public Lead response gồm `name`, `lead_code`, `student_name`, `phone`, `email`,
-`major`, `lead_status`, `campaign` và `creation`. Vì `phone` và `email` là dữ
-liệu cá nhân, bên tích hợp phải bảo vệ campaign code và endpoint; các field
-ownership như `owner_staff` và `assigned_to` vẫn không được trả về.
+`major`, `high_school`, `province`, `ward`, `lead_status`, `campaign` và
+`creation`. Các field `high_school`, `province` và `ward` trả về tên hiển thị
+(`school_name`, `province_name`, `ward_name`), không trả raw Link/docname. Vì
+`phone` và `email` là dữ liệu cá nhân, bên tích hợp phải bảo vệ campaign code và
+endpoint; các field ownership như `owner_staff` và `assigned_to` vẫn không được
+trả về.
 
 ### Phân trang và sắp xếp
 

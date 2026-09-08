@@ -41,12 +41,20 @@ PUBLIC_LEAD_LIST_FIELDS = (
 	"phone",
 	"email",
 	"major",
+	"high_school",
+	"province",
+	"ward",
 	"lead_status",
 	"campaign",
 	"creation",
 )
 MAX_PUBLIC_LEAD_PAGE_LENGTH = 100
 _PUBLIC_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_PUBLIC_LEAD_LINK_LABELS = {
+	"province": ("CRM Province", "province_name"),
+	"ward": ("CRM Ward", "ward_name"),
+	"high_school": ("CRM High School", "school_name"),
+}
 
 
 class LeadMappingError(frappe.ValidationError):
@@ -851,6 +859,36 @@ def _public_lookup_response(
 	return {"items": items, "total": len(items)}
 
 
+def _get_public_link_label_map(doctype: str, values: set[str], label_field: str) -> dict[str, Any]:
+	if not values:
+		return {}
+	rows = frappe.get_all(
+		doctype,
+		filters={"name": ["in", sorted(values)]},
+		fields=["name", label_field],
+		limit_page_length=0,
+	)
+	return {row.get("name"): row.get(label_field) for row in rows}
+
+
+def _normalize_public_lead_links(rows: list[Any]) -> list[dict[str, Any]]:
+	label_maps = {}
+	for fieldname, (doctype, label_field) in _PUBLIC_LEAD_LINK_LABELS.items():
+		values = {row.get(fieldname) for row in rows if row.get(fieldname)}
+		label_maps[fieldname] = _get_public_link_label_map(doctype, values, label_field)
+
+	normalized_rows = []
+	for row in rows:
+		lead = dict(row)
+		for fieldname, labels in label_maps.items():
+			value = lead.get(fieldname)
+			label = labels.get(value)
+			if label:
+				lead[fieldname] = label
+		normalized_rows.append(lead)
+	return normalized_rows
+
+
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 @rate_limit(limit=120, seconds=60)
 def get_public_provinces() -> dict[str, Any]:
@@ -967,7 +1005,7 @@ def get_public_leads(
 		"total": frappe.db.count("CRM Lead", filters=filters),
 		"start": start,
 		"page_length": page_length,
-		"leads": [dict(row) for row in rows],
+		"leads": _normalize_public_lead_links(rows),
 	}
 
 
