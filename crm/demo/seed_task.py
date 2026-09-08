@@ -511,7 +511,7 @@ def _complete_lead(lead: str, profile: dict[str, Any], context: dict[str, Any]) 
 
 
 def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
-	from crm.fcrm.lead_processing import mark_lead_assigned, process_lead
+	from crm.fcrm.lead_processing import ADVANCING_RESOLUTIONS, mark_lead_assigned, process_lead
 	from crm.fcrm.student_ownership import change_student_ownership
 
 	lead_doc = frappe.get_doc("CRM Lead", lead)
@@ -523,6 +523,13 @@ def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
 		)
 		lead_doc = frappe.get_doc("CRM Lead", lead)
 		processing_status = str(lead_doc.get("processing_status") or "NEW").upper()
+	resolution = str(lead_doc.get("resolution") or "PENDING").upper()
+	if processing_status not in {"PROCESSED", "ASSIGNED", "CLOSED"}:
+		raise frappe.ValidationError(
+			f"Lead {lead} must be processed before owner assignment; current status is {processing_status}."
+		)
+	if processing_status == "CLOSED" and resolution not in ADVANCING_RESOLUTIONS:
+		raise frappe.ValidationError(f"Lead {lead} is closed with a non-assignable resolution: {resolution}.")
 
 	current = frappe.db.get_value(
 		"CRM Lead",
@@ -530,7 +537,11 @@ def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
 		["owner_staff", "owning_team", "owning_pool", "ownership_revision"],
 		as_dict=True,
 	)
-	if current.owner_staff == staff and current.owning_team == team:
+	# Owner assignment uses XOR topology: an owner target deliberately clears
+	# owning_team and owning_pool.  A CLOSED Lead with an advancing resolution
+	# is already converted, so it must remain CLOSED on an idempotent rerun.
+	owner_is_current = current.owner_staff == staff and not current.owning_team and not current.owning_pool
+	if owner_is_current:
 		if processing_status == "PROCESSED":
 			mark_lead_assigned(lead, reason="Unified task seed: ownership đã sẵn sàng.")
 		return
@@ -549,7 +560,8 @@ def _assign_lead(lead: str, staff: str, team: str, key: str) -> None:
 		_internal_actor="Administrator",
 		_commit=False,
 	)
-	mark_lead_assigned(lead, reason="Unified task seed: phân công Lead hoàn tất.")
+	if processing_status == "PROCESSED":
+		mark_lead_assigned(lead, reason="Unified task seed: phân công Lead hoàn tất.")
 
 
 def _ensure_contact(
