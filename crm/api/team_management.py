@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
+import unicodedata
 import uuid
 from collections import defaultdict
 
@@ -26,6 +28,10 @@ from crm.api.assignment_workspace import (
 from crm.fcrm.team_routing import team_routing_readiness
 
 RECIPIENT_FUNCTIONS = {"Sale", "CTV Sale"}
+# Ký tự loại Team dùng ở đoạn cuối của team_code.
+TEAM_TYPE_LETTERS = {"Sales": "S", "Marketing": "M", "Admissions Operations": "O"}
+# NFKD không tách được Đ/đ, phải map tay trước khi bỏ dấu.
+D_STROKE = str.maketrans({"Đ": "D", "đ": "d"})
 SUPPORTED_FUNCTIONS = ("Sale", "CTV Sale", "Lead Sale")
 TEAM_MANAGEMENT_READ_CAPABILITIES = frozenset(
 	{"system.configure", "admissions.oversee", "team.oversee", "student.execute"}
@@ -352,6 +358,88 @@ def _member_role(function):
 	}.get(function, "SALE")
 
 
+def _code_map(doctype, fieldname):
+	"""Return ``{name: code}``.
+
+	Dùng cho các mã sinh theo quy tắc (``team_code``, ``group_code``) lẫn các mã
+	địa lý đã có sẵn (``campus_code``, ``territory_code``). Map rỗng khi cột chưa
+	migrate, nên workspace vẫn render với code ``None`` thay vì lỗi.
+	"""
+	if not frappe.db.has_column(doctype, fieldname):
+		return {}
+	return {
+		row.name: row.get(fieldname)
+		for row in frappe.get_all(doctype, fields=["name", fieldname], limit_page_length=0)
+		if row.get(fieldname)
+	}
+
+
+def _province_geo_map():
+	"""Return ``{province: {code, name, regionCode, regionName}}``.
+
+	``CRM Region`` is autonamed by ``code`` (MB/MT/MN), nên link value của
+	``CRM Province.region`` chính là mã vùng miền.
+	"""
+	regions = {
+		row.name: row.display_name
+		for row in frappe.get_all("CRM Region", fields=["name", "display_name"], limit_page_length=0)
+	}
+	return {
+		row.name: {
+			"code": row.province_code,
+			"name": row.province_name,
+			"regionCode": row.region,
+			"regionName": regions.get(row.region),
+		}
+		for row in frappe.get_all(
+			"CRM Province",
+			fields=["name", "province_name", "province_code", "region"],
+			limit_page_length=0,
+		)
+	}
+
+
+def _code_segment(value):
+	"""Chuẩn hoá một đoạn mã: bỏ dấu, viết hoa, bỏ ký tự phân cách.
+
+	``VN_DONG_NAI`` → ``DONGNAI``; ``Biên Hòa`` → ``BIENHOA``; ``Thủ Đức`` →
+	``THUDUC``. ``Đ``/``đ`` phải thay tay trước khi bỏ dấu vì NFKD không tách
+	được chúng, để nguyên thì ``encode("ascii")`` xoá luôn phụ âm đầu.
+	"""
+	folded = str(value or "").translate(D_STROKE)
+	folded = unicodedata.normalize("NFKD", folded).encode("ascii", "ignore").decode()
+	return re.sub(r"[^A-Z0-9]", "", folded.upper())
+
+
+def _derive_group_code(geo):
+	"""``{region}-{province}`` — ví dụ ``MN-DONGNAI``.
+
+	Cả hai đoạn đều suy từ dữ liệu sẵn có nên không cần field lưu riêng. Trả
+	``None`` khi Group chưa gắn tỉnh, hoặc tỉnh chưa gắn vùng miền.
+	"""
+	if not geo:
+		return None
+	region = _code_segment(geo.get("regionCode"))
+	province = _code_segment((geo.get("code") or "").replace("VN_", "", 1))
+	if not region or not province:
+		return None
+	return f"{region}-{province}"
+
+
+def _derive_team_code(group_code, area_code, team_type):
+	"""``{group_code}-{area}-{type}`` — ví dụ ``MN-DONGNAI-BIENHOA-S``.
+
+	Trả ``None`` khi thiếu Group hoặc ``area_code``: bỏ đoạn khu vực sẽ khiến mọi
+	Team cùng loại trong một Group trùng mã, mà mã trùng thì không định danh được
+	Team nào.
+	"""
+	area = _code_segment(area_code)
+	if not group_code or not area:
+		return None
+	letter = TEAM_TYPE_LETTERS.get(team_type) or _code_segment(team_type)[:1] or "S"
+	return f"{group_code}-{area}-{letter}"
+
+
 def _read_workspace(context):
 	groups = frappe.get_all(
 		"CRM Team Group",
@@ -359,19 +447,22 @@ def _read_workspace(context):
 		order_by="group_name asc, name asc",
 		limit_page_length=0,
 	)
+	team_fields = [
+		"name",
+		"team_name",
+		"group",
+		"team_type",
+		"campus",
+		"territory",
+		"team_lead_staff",
+		"is_active",
+		"modified",
+	]
+	if frappe.db.has_column("CRM Team", "area_code"):
+		team_fields.append("area_code")
 	teams = frappe.get_all(
 		"CRM Team",
-		fields=[
-			"name",
-			"team_name",
-			"group",
-			"team_type",
-			"campus",
-			"territory",
-			"team_lead_staff",
-			"is_active",
-			"modified",
-		],
+		fields=team_fields,
 		order_by="team_name asc, name asc",
 		limit_page_length=0,
 	)
@@ -382,6 +473,14 @@ def _read_workspace(context):
 		limit_page_length=0,
 	)
 	memberships = _active_memberships()
+	team_codes = _code_map("CRM Team", "team_code")
+	group_codes = _code_map("CRM Team Group", "group_code")
+	province_geo = _province_geo_map()
+	campus_codes = _code_map("CRM Campus", "campus_code")
+	territory_codes = _code_map("CRM Territory", "territory_code")
+	group_province = {row.name: row.province for row in groups}
+	for row in groups:
+		group_codes.setdefault(row.name, _derive_group_code(province_geo.get(row.province)))
 
 	if not _is_global(context):
 		visible_team_ids = set(context.get("teams") or [])
@@ -480,10 +579,23 @@ def _read_workspace(context):
 			{
 				"id": team.name,
 				"name": team.team_name,
+				"code": team_codes.get(team.name)
+				or _derive_team_code(group_codes.get(team.group), team.get("area_code"), team.team_type),
+				"teamCode": team_codes.get(team.name)
+				or _derive_team_code(group_codes.get(team.group), team.get("area_code"), team.team_type),
 				"groupId": team.group,
+				"groupCode": group_codes.get(team.group),
 				"teamType": team.team_type,
+				"areaCode": team.get("area_code"),
+				"provinceId": group_province.get(team.group),
+				"provinceCode": province_geo.get(group_province.get(team.group), {}).get("code"),
+				"provinceName": province_geo.get(group_province.get(team.group), {}).get("name"),
+				"regionCode": province_geo.get(group_province.get(team.group), {}).get("regionCode"),
+				"regionName": province_geo.get(group_province.get(team.group), {}).get("regionName"),
 				"campusId": team.campus,
+				"campusCode": campus_codes.get(team.campus),
 				"territoryId": team.territory,
+				"territoryCode": territory_codes.get(team.territory),
 				"leadId": lead_id,
 				"memberIds": sorted({row.staff for row in team_members}),
 				"memberCount": len({row.staff for row in team_members}),
@@ -543,14 +655,14 @@ def _read_workspace(context):
 			{
 				"id": group.name,
 				"name": group.group_name,
+				"code": group_codes.get(group.name),
+				"groupCode": group_codes.get(group.name),
 				"groupLeadId": group.group_lead_staff,
 				"provinceId": group.province,
-				"provinceCode": frappe.db.get_value("CRM Province", group.province, "province_code")
-				if group.province
-				else None,
-				"provinceName": frappe.db.get_value("CRM Province", group.province, "province_name")
-				if group.province
-				else None,
+				"provinceCode": province_geo.get(group.province, {}).get("code"),
+				"provinceName": province_geo.get(group.province, {}).get("name"),
+				"regionCode": province_geo.get(group.province, {}).get("regionCode"),
+				"regionName": province_geo.get(group.province, {}).get("regionName"),
 				"teamIds": [team["id"] for team in group_teams],
 				"teamCount": len(group_teams),
 				"memberCount": len(group_member_ids),
@@ -560,7 +672,10 @@ def _read_workspace(context):
 		)
 
 	campuses = frappe.get_all(
-		"CRM Campus", fields=["name", "campus_name"], order_by="campus_name asc, name asc"
+		"CRM Campus",
+		fields=["name", "campus_name"],
+		order_by="campus_name asc, name asc",
+		limit_page_length=0,
 	)
 	provinces = frappe.get_all(
 		"CRM Province",
@@ -582,12 +697,21 @@ def _read_workspace(context):
 		"teams": team_rows,
 		"members": member_rows,
 		"options": {
-			"campuses": [{"id": row.name, "label": row.campus_name or row.name} for row in campuses],
+			"campuses": [
+				{
+					"id": row.name,
+					"label": row.campus_name or row.name,
+					"code": campus_codes.get(row.name),
+				}
+				for row in campuses
+			],
 			"provinces": [
 				{
 					"id": row.name,
 					"label": row.province_name or row.name,
 					"code": row.province_code,
+					"regionCode": province_geo.get(row.name, {}).get("regionCode"),
+					"regionName": province_geo.get(row.name, {}).get("regionName"),
 				}
 				for row in provinces
 			],
@@ -755,6 +879,7 @@ def _save_team(
 	team_name,
 	group_id,
 	team_type,
+	area_code,
 	campus,
 	territory,
 	team_lead_staff,
@@ -806,6 +931,16 @@ def _save_team(
 	elif not team_id and _bool(is_active, True):
 		_error("GROUP_REQUIRED", "Team mới đang hoạt động phải thuộc một Group.")
 	doc.team_type = _text(team_type or "Sales", "team_type")
+	if area_code is not None:
+		doc.area_code = _code_segment(_text(area_code, "area_code", required=False)) or None
+	team_area = getattr(doc, "area_code", None)
+	if team_area and doc.group:
+		clash = frappe.db.exists(
+			"CRM Team",
+			{"group": doc.group, "area_code": team_area, "name": ["!=", doc.name or ""]},
+		)
+		if clash:
+			_error("AREA_CODE_TAKEN", "Mã khu vực này đã được dùng cho một Team khác trong Group.")
 	doc.campus = campus
 	doc.territory = _text(territory, "territory", required=False)
 	doc.team_lead_staff = team_lead_staff
@@ -834,6 +969,7 @@ def save_team(
 	team_name=None,
 	group_id=None,
 	team_type="Sales",
+	area_code=None,
 	campus=None,
 	territory=None,
 	team_lead_staff=None,
@@ -848,6 +984,7 @@ def save_team(
 		"team_name": team_name,
 		"group_id": group_id,
 		"team_type": team_type,
+		"area_code": area_code,
 		"campus": campus,
 		"territory": territory,
 		"team_lead_staff": team_lead_staff,
@@ -868,6 +1005,7 @@ def save_team(
 			team_name,
 			group_id,
 			team_type,
+			area_code,
 			campus,
 			territory,
 			team_lead_staff,

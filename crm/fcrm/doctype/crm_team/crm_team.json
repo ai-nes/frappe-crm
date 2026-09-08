@@ -12,6 +12,7 @@
   "team_name",
   "group",
   "team_type",
+  "area_code",
   "column_break_1",
   "campus",
   "territory",
@@ -44,6 +45,15 @@
    "label": "Team Type",
    "options": "Sales\nMarketing\nAdmissions Operations",
    "reqd": 1
+  },
+  {
+   "description": "Mã khu vực phụ trách, viết liền không dấu (BIENHOA, QUAN1). Dùng làm đoạn địa bàn trong team_code.",
+   "fieldname": "area_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Area Code",
+   "length": 32
   },
   {
    "fieldname": "column_break_1",
