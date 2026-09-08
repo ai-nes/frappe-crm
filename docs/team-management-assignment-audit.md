@@ -154,3 +154,26 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 - [ ] Lead thiếu CCCD/THPT/ngành chuyển sang cần xử lý, không gán sai người.
 - [ ] Batch có thể tạo nhiều đợt và có trạng thái Hoàn tất hoặc Còn lỗi.
 - [ ] Dữ liệu Frappe cũ về Zone/Pool/Policy không bị xóa.
+
+## 8. Repair tài khoản vận hành trên production
+
+Hai endpoint workspace và lịch sử phân công yêu cầu tài khoản nghiệp vụ có:
+
+- Role chuẩn `Sale` hoặc `Lead Sale`.
+- Một `CRM Staff` đang hoạt động liên kết đúng với User.
+- `department` và `campus` hợp lệ; thêm `team` nếu tài khoản cần tham gia luồng
+  phân công.
+
+Nếu tài khoản đã đăng nhập được nhưng trả về `An active CRM Staff record is
+required.`, System Manager chạy command repair có tham số rõ ràng:
+
+```bash
+bench --site <site> execute crm.demo.repair_operational_accounts.execute --kwargs '{"accounts":[{"email":"sale@example.com","role":"Sale","department":"<department>","campus":"<campus>","team":"<sales-team>"},{"email":"lead@example.com","role":"Lead Sale","department":"<department>","campus":"<campus>","team":"<sales-team>","is_team_lead":true}]}'
+```
+
+`department`, `campus` và `team` phải là bản ghi đã tồn tại; command kiểm tra
+Team đang hoạt động, thuộc đúng campus và không tạo hai primary team. Có thể bỏ
+`team` để chỉ sửa identity Staff, nhưng tài khoản sẽ cần được gắn Team thủ công
+trước khi chạy routing. Command không đổi mật khẩu, không tự bật User bị disable,
+không sửa tài khoản `Administrator`/`System Manager`, và rollback toàn bộ nếu một
+tài khoản không hợp lệ.
