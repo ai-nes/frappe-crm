@@ -130,13 +130,11 @@ class CRMLead(Document):
 			frappe.throw(_("A NEW Lead must have PENDING resolution."), frappe.ValidationError)
 		if status == "PROCESSING" and resolution != "PENDING":
 			frappe.throw(_("A Lead in PROCESSING must have PENDING resolution."), frappe.ValidationError)
-		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"MATCHED", "CREATED"}:
+		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"PENDING", "MATCHED", "CREATED"}:
 			frappe.throw(
-				_("Only MATCHED or CREATED Leads can be PROCESSED or ASSIGNED."),
+				_("A processed or assigned Lead must have a pending processing result."),
 				frappe.ValidationError,
 			)
-		if status == "CLOSED" and resolution == "PENDING":
-			frappe.throw(_("A CLOSED Lead must have a resolution."), frappe.ValidationError)
 
 	def _update_conversion_readiness(self):
 		"""Keep the Lead's pre-conversion readiness projection server-managed."""

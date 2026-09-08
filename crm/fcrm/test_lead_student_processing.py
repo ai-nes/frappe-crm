@@ -178,10 +178,12 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		result = process_lead(lead.name)
 
 		self.assertEqual(result["status"], "CLOSED")
-		self.assertEqual(result["resolution"], "INVALID")
+		self.assertEqual(result["resolution"], "PENDING")
+		self.assertEqual(result["processing_outcome"], "INVALID")
 		self.assertTrue(result["validation"]["phone"])
 		self.assertFalse(result["validation"]["province"])
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "PENDING")
 
 	def test_status_command_persists_every_supported_status(self):
 		from crm.fcrm.lead_processing import update_processing_status
@@ -189,9 +191,9 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		expected_resolutions = {
 			"NEW": "PENDING",
 			"PROCESSING": "PENDING",
-			"PROCESSED": "CREATED",
-			"ASSIGNED": "CREATED",
-			"CLOSED": "FAILED",
+			"PROCESSED": "PENDING",
+			"ASSIGNED": "PENDING",
+			"CLOSED": "PENDING",
 		}
 
 		for status, resolution in expected_resolutions.items():
@@ -210,7 +212,7 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 					resolution,
 				)
 
-	def test_valid_gate_classifies_new_student_path(self):
+	def test_valid_gate_processes_without_creating_a_student_result(self):
 		from crm.fcrm.lead_processing import process_lead
 
 		province = frappe.db.get_value("CRM Province", {}, "name")
@@ -223,10 +225,65 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		result = process_lead(lead.name)
 
 		self.assertEqual(result["status"], "PROCESSED")
-		self.assertEqual(result["resolution"], "CREATED")
-		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "CREATED")
+		self.assertEqual(result["resolution"], "PENDING")
+		self.assertEqual(result["processing_outcome"], "CREATED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "PENDING")
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "PROCESSED")
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": lead.phone}))
 		self.assertNotIn("id_number", result["validation"])
+
+	def test_duplicate_leads_without_cccd_keep_one_canonical_record(self):
+		from crm.fcrm.lead_processing import (
+			_candidate_rows,
+			_classify_resolution_details,
+			_duplicate_match_type,
+			_eligible_lead_duplicate,
+			_normalise_identifiers,
+			process_lead,
+		)
+
+		province = frappe.db.get_value("CRM Province", {}, "name")
+		high_school = frappe.db.get_value("CRM High School", {}, "name")
+		major = frappe.db.get_value("CRM Major", {}, "name")
+		values = {"province": province, "high_school": high_school, "major": major}
+		primary = self._new_lead("DuplicatePrimary", phone="0981000101", **values)
+		copy = self._new_lead("DuplicateCopy", phone="0981000101", **values)
+		third = self._new_lead("DuplicateThird", phone="0981000101", **values)
+		identifiers = _normalise_identifiers(copy)
+		candidates = _candidate_rows("CRM Lead", identifiers, exclude=copy.name)
+		self.assertEqual(len(candidates), 2)
+		for candidate in candidates:
+			self.assertTrue(_eligible_lead_duplicate(candidate))
+			self.assertEqual(
+				_duplicate_match_type(identifiers, candidate),
+				"PHONE_PROVINCE_SCHOOL_MAJOR",
+			)
+		classification = _classify_resolution_details(copy, identifiers)
+		self.assertEqual(classification["resolution"], "DUPLICATE", classification)
+
+		# The newer copies are processed first to prove canonical selection does
+		# not depend on scan order. None of these Leads has a CCCD.
+		copy_result = process_lead(copy.name)
+		third_result = process_lead(third.name)
+		primary_result = process_lead(primary.name)
+
+		for duplicate_result in (copy_result, third_result):
+			self.assertEqual(duplicate_result["status"], "CLOSED")
+			self.assertEqual(duplicate_result["resolution"], "PENDING")
+			self.assertEqual(duplicate_result["processing_outcome"], "DUPLICATE")
+			self.assertIn(primary.name, duplicate_result["reason"])
+		self.assertEqual(primary_result["status"], "PROCESSED")
+		self.assertEqual(primary_result["resolution"], "PENDING")
+		self.assertEqual(primary_result["processing_outcome"], "CREATED")
+		self.assertEqual(
+			frappe.db.get_value("CRM Lead", primary.name, "processing_status"),
+			"PROCESSED",
+		)
+		for duplicate in (copy, third):
+			self.assertEqual(
+				frappe.db.get_value("CRM Lead", duplicate.name, "processing_status"),
+				"CLOSED",
+			)
 
 	def test_student_stage_command_advances_one_edge(self):
 		from crm.fcrm.student_stage import set_student_stage

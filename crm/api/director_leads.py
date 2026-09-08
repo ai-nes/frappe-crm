@@ -34,6 +34,15 @@ RESOLUTION_LABELS = {
 	"SPAM": "Spam",
 	"FAILED": "Thất bại",
 }
+PROCESSING_STATUS_ORDER = (
+	"CASE processing_status "
+	"WHEN 'NEW' THEN 1 "
+	"WHEN 'PROCESSING' THEN 2 "
+	"WHEN 'PROCESSED' THEN 3 "
+	"WHEN 'ASSIGNED' THEN 4 "
+	"WHEN 'CLOSED' THEN 5 "
+	"ELSE 99 END"
+)
 
 LEAD_FIELDS = [
 	"name",
@@ -104,7 +113,6 @@ def get_director_leads(
 		{
 			**year_filter,
 			"processing_status": "PROCESSED",
-			"resolution": ["in", ["MATCHED", "CREATED"]],
 		},
 		allowed_lead_ids=list_scope_lead_ids,
 	)
@@ -362,10 +370,15 @@ def _fetch_lead_rows(
 		filters=_with_allowed_lead_ids(filters, allowed_lead_ids),
 		or_filters=or_filters,
 		fields=LEAD_FIELDS,
-		order_by=f"modified {query['order']}, name {query['order']}",
+		order_by=_lead_order_by(query["order"]),
 		limit_start=(query["page"] - 1) * query["page_size"],
 		limit_page_length=query["page_size"],
 	)
+
+
+def _lead_order_by(order: str) -> str:
+	"""Keep the list grouped by workflow status before applying recency."""
+	return f"{PROCESSING_STATUS_ORDER} asc, modified {order}, name {order}"
 
 
 def _load_lookups(rows: list) -> dict[str, Any]:
@@ -761,7 +774,7 @@ def _processing_status_label(value: Any) -> str:
 
 def _result_code(value: Any) -> str:
 	result = str(value or "").strip().upper()
-	return "" if result in {"", "PENDING"} else result
+	return result or "PENDING"
 
 
 def _user_label(user: Any) -> str:

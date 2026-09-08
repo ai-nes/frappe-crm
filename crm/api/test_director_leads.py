@@ -59,6 +59,14 @@ class TestDirectorLeads(FrappeTestCase):
 				with self.assertRaises(frappe.ValidationError):
 					resolver(value)
 
+	def test_lead_order_groups_status_before_recency(self):
+		self.assertEqual(
+			director_leads._lead_order_by("desc"),
+			"CASE processing_status WHEN 'NEW' THEN 1 WHEN 'PROCESSING' THEN 2 "
+			"WHEN 'PROCESSED' THEN 3 WHEN 'ASSIGNED' THEN 4 WHEN 'CLOSED' THEN 5 "
+			"ELSE 99 END asc, modified desc, name desc",
+		)
+
 	def test_lead_filters_search_expected_fields_and_status(self):
 		query = director_leads._parse_query(
 			admission_year="2026",

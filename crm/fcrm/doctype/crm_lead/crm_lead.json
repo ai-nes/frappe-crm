@@ -147,14 +147,14 @@
    "label": "Resolution",
    "options": "PENDING\nMATCHED\nCREATED\nDUPLICATE\nINVALID\nSPAM\nFAILED",
    "read_only": 1,
-   "description": "Server-managed resolution assigned during Lead processing."
+   "description": "Server-managed processing result. It remains PENDING until a separate conversion workflow completes."
   },
   {
    "fieldname": "resolution_reason",
    "fieldtype": "Small Text",
    "label": "Resolution Reason",
    "read_only": 1,
-   "description": "PII-safe explanation for the Lead processing resolution."
+   "description": "PII-safe explanation for the processing or routing decision."
   },
   {
    "fieldname": "matched_student",

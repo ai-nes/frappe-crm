@@ -22,10 +22,14 @@ class TestSeedAssignmentConversionScenarios(TestCase):
 			self.assertTrue(row["major"])
 			self.assertTrue(row["id"])
 
-	def test_twelve_leads_are_conversion_ready_and_eight_carry_one_defect(self):
-		happy = [row for row in SCENARIOS if "defect" not in row]
+	def test_thirteen_leads_are_assignable_and_eight_carry_one_defect(self):
+		happy = [
+			row
+			for row in SCENARIOS
+			if "defect" not in row or row["defect"]["expected"] == "assigned"
+		]
 		defects = [row for row in SCENARIOS if "defect" in row]
-		self.assertEqual(len(happy), 12)
+		self.assertEqual(len(happy), 14)
 		self.assertEqual(len(defects), 8)
 		self.assertEqual(
 			{row["defect"]["code"] for row in defects},
@@ -41,7 +45,7 @@ class TestSeedAssignmentConversionScenarios(TestCase):
 			},
 		)
 		for row in defects:
-			self.assertEqual(row["defect"]["expected"], "manual_review")
+			self.assertIn(row["defect"]["expected"], {"manual_review", "assigned"})
 			self.assertTrue(row["defect"]["note"])
 
 	def test_duplicate_pair_collapses_onto_one_national_id(self):

@@ -32,7 +32,7 @@ gọi API và hiển thị kết quả; không tự tính Team, Zone, Sale hoặ
 | Đối tượng     | Ý nghĩa                                                                                            |
 | ------------- | -------------------------------------------------------------------------------------------------- |
 | `CRM Lead`    | Một lần tiếp nhận/form submission trước khi Sale hoàn tất xử lý. Đây là record được đưa vào batch. |
-| `CRM Student` | Hồ sơ canonical sau khi Lead được handoff thành công. Một Student có thể có nhiều Lead.            |
+| `CRM Student` | Hồ sơ canonical sau khi có thao tác chuyển đổi Lead riêng. Một Student có thể có nhiều Lead.            |
 | `CRM Contact` | Không phải target chính của batch hiện tại. Không tạo Contact riêng trong bước phân công.          |
 
 Quan hệ nghiệp vụ:
@@ -44,7 +44,7 @@ Quan hệ nghiệp vụ:
 Không được chặn Lead mới chỉ vì trùng phone/email. Việc phân loại trùng được thực hiện
 ở bước processing.
 
-Trang danh sách học sinh chỉ đọc `CRM Student` thật đã được tạo hoặc enrich qua handoff
+Trang danh sách học sinh chỉ đọc `CRM Student` thật đã được tạo hoặc enrich qua thao tác chuyển đổi riêng
 (có `source_lead` và `converted_at`) và phải có `owner_staff`, `assigned_to` cùng
 `owning_team` hợp lệ. Lead `ASSIGNED`
 chưa handoff chỉ xuất hiện ở màn hình Lead/cần xử lý, không được chiếu như Student.
@@ -117,11 +117,11 @@ server-managed của intake/assignment. FE không tự ghi hai field này.
 |                     | `PROCESSED`       | Đã qua điều kiện dữ liệu, chưa chắc đã có Sale.                  |
 |                     | `ASSIGNED`        | Ownership Team/Sale đã ghi thành công.                           |
 |                     | `CLOSED`          | Lead invalid/duplicate hoặc đã handoff thành công.               |
-| `resolution`        | `PENDING`         | Chưa phân loại.                                                  |
+| `resolution`        | `PENDING`         | Chưa có kết quả; giữ nguyên trong toàn bộ bước xử lý và phân công. |
 |                     | `MATCHED`         | Khớp một Student đã có.                                          |
-|                     | `CREATED`         | Chưa có Student phù hợp; tạo Student ngay sau khi ghi ownership. |
-|                     | `DUPLICATE`       | Trùng Lead/Student không thể tự quyết định duy nhất.             |
-|                     | `INVALID`         | Thiếu dữ liệu bắt buộc.                                          |
+|                     | `CREATED`         | Kết quả của thao tác chuyển đổi riêng: tạo Student mới.          |
+|                     | `DUPLICATE`       | Kết quả chuyển đổi khi không xác định được một Student duy nhất. |
+|                     | `INVALID`         | Kết quả legacy của luồng cũ; gate thiếu dữ liệu mới dùng PENDING. |
 |                     | `SPAM` / `FAILED` | Kết quả kết thúc do xử lý thủ công hoặc lỗi nghiệp vụ.           |
 
 Các field server-managed liên quan:
@@ -144,18 +144,18 @@ ownership_revision
 
 ### 3.1. Điều kiện để Lead được xử lý
 
-Ba field bắt buộc là:
+Bốn điều kiện bắt buộc để Lead được xử lý là:
 
 ```text
-CCCD          → CRM Lead.id_number
+Số điện thoại → CRM Lead.phone
+Tỉnh/thành    → CRM Lead.province
 Trường THPT   → CRM Lead.high_school
 Ngành quan tâm → CRM Lead.major
 ```
 
-Phone, email và tỉnh/thành là dữ liệu liên hệ/routing. Chúng không thay thế ba điều
-kiện trên.
+CCCD và email không phải gate của luồng xử lý/phân công hiện tại.
 
-Nếu thiếu hoặc CCCD không hợp lệ, BE trả kết quả `CLOSED / INVALID` và không phân công.
+Nếu thiếu một trong bốn điều kiện, BE đóng Lead với `CLOSED / PENDING` và không phân công.
 
 ### 3.2. Field bắt buộc khi import vào batch
 
@@ -165,7 +165,7 @@ API import batch yêu cầu các cột sau:
 | -------------- | -------------- | ----------------------------------------------------------- |
 | `student_name` | Họ và tên      | Có                                                          |
 | `phone`        | Số điện thoại  | Có                                                          |
-| `id_number`    | CCCD           | Có                                                          |
+| `id_number`    | CCCD           | Không                                                       |
 | `province`     | Tỉnh/Thành phố | Có                                                          |
 | `high_school`  | Trường THPT    | Có                                                          |
 | `major`        | Ngành quan tâm | Có                                                          |
@@ -209,41 +209,45 @@ FE phải cho chọn `branch`; nếu không xác định được cơ sở, BE t
 NEW / PENDING
   │ bấm “Xử lý Lead” (process_new_leads)
   │
-  ├─ thiếu CCCD / THPT / ngành
-  │    └─ CLOSED / INVALID
+  ├─ thiếu số điện thoại / tỉnh / THPT / ngành
+  │    └─ CLOSED / PENDING
   │
-  └─ đủ dữ liệu
-       ├─ Student đã có → MATCHED
-       └─ chưa có → CREATED
-              ↓
-          PROCESSED
+  └─ đủ 4 điều kiện
+       └─ PROCESSED / PENDING
               ↓ bấm “Phân công Lead”
           Team/Sale ownership thành công
               ↓
-          ASSIGNED
-              ↓ tự động handoff trong cùng lần chạy
-          Student New + Lead CLOSED
+          ASSIGNED / PENDING
 ```
 
-`CREATED` ở bước `PROCESSED` là quyết định tạo Student sau khi hệ thống ghi ownership.
-Khi nút phân công chạy thành công, BE gọi handoff ngay trong cùng item; vì vậy kết quả
-cuối cùng là Student đã được insert với owner và Lead đã `CLOSED`.
+Xử lý và phân công chỉ cập nhật trạng thái, Team và Sale/CTV phụ trách. Kết quả vẫn là
+`PENDING` (“Chưa có kết quả”) và không tạo hoặc cập nhật `CRM Student`.
+Việc chuyển đổi Lead thành Student là thao tác riêng, sau khi người dùng chủ động thực hiện.
 
-BE chỉ gọi `crm.api.lead_processing.handoff_lead` sau khi Lead đã `ASSIGNED`, trong
-cùng lần chạy phân công. Lead `CLOSED / INVALID`, `CLOSED / DUPLICATE` và Lead không
-được gán owner không được tạo Student. Nếu một Lead đã có `converted_student` từ dữ
-liệu cũ, BE không tạo thêm Student.
+Lead `CLOSED` do thiếu dữ liệu hoặc lỗi routing không được phân công. Nếu một Lead đã có
+`converted_student` từ dữ liệu cũ, BE không tạo thêm Student.
 
-### 4.1. Quy tắc MATCHED/DUPLICATE
+### 4.1. Quy tắc phát hiện trùng và giữ Lead đại diện
 
-BE xử lý theo thứ tự:
+CCCD không phải dữ liệu bắt buộc của Lead mới. BE chỉ dùng CCCD khi bản ghi có sẵn;
+quy tắc chính vẫn hoạt động với bốn gate đầu vào. Các trường hợp được kiểm tra:
 
-1. Chuẩn hóa CCCD và tìm `CRM Student` theo CCCD.
-2. Nếu không có CCCD match, fallback theo `phone + email + province`.
-3. Một Student duy nhất → `MATCHED`, lưu `CRM Lead.matched_student`.
-4. Nhiều Student phù hợp → `DUPLICATE / CLOSED`.
-5. Không có Student nhưng có Lead trùng → `DUPLICATE / CLOSED`.
-6. Không có match → `CREATED / PROCESSED`.
+1. `phone + province + high_school + major` giống nhau: trùng hồ sơ nghiệp vụ.
+2. `phone + email + province` giống nhau: fallback tương thích khi thông tin trường/ngành
+   giữa hai lần gửi không đồng nhất.
+3. `id_number` giống nhau: tín hiệu định danh mạnh khi Lead có CCCD.
+4. Một Lead khớp nhiều Student: trùng đích không xác định, không được tự chọn Student.
+5. Chỉ trùng số điện thoại: không tự đóng vì có thể là số dùng chung trong gia đình.
+
+Với các trường hợp 1–3, BE gom các Lead hợp lệ thành một nhóm và chọn đúng một Lead
+đại diện theo thứ tự: Lead đã `ASSIGNED`, Lead đã `PROCESSED`, sau đó Lead có thời điểm
+tạo sớm nhất. Lead đại diện tiếp tục `PROCESSED / PENDING`; các bản sao còn lại là
+`CLOSED / PENDING`, kèm `resolution_reason` trỏ tới Lead được giữ lại. Vì vậy nhóm N
+Lead trùng luôn giữ lại 1 Lead và đóng N−1 bản sao.
+
+Trường hợp 4 vẫn `CLOSED / PENDING` để người vận hành xác định đúng Student đích.
+Trường hợp không trùng và không có Student phù hợp là `PROCESSED / PENDING`; kết quả
+`MATCHED`/`CREATED` chỉ xuất hiện ở thao tác chuyển đổi Student riêng.
 
 Student đã ở trạng thái đóng/lost không tự tạo bản ghi mới nếu Lead có thể chứng minh
 đúng cùng một Student bằng CCCD hoặc bộ fallback `phone + email + province`; khi đó
@@ -289,19 +293,31 @@ Tất cả API trả dữ liệu trong `response.message` theo chuẩn Frappe.
 | `crm.api.lead_assignment_batch.import_leads_to_assignment_batch`  | POST | Tạo Lead mới từ rows/CSV và đưa vào batch `draft`; chưa phân công.                                        |
 | `crm.api.lead_assignment_batch.create_lead_assignment_batch`      | POST | Tạo batch từ các Lead đã có bằng `lead_ids`; chưa phân công.                                              |
 | `crm.api.lead_assignment_batch.preview_lead_assignment_batch`     | POST | Kiểm tra điều kiện và routing context, chuyển batch sang `ready`.                                         |
-| `crm.api.lead_assignment_batch.run_lead_assignment_batch`         | POST | Phân công Lead đã `PROCESSED` và tự động chuyển Lead hợp lệ thành Student.                                |
-| `crm.api.lead_assignment_batch.run_unassigned_lead_assignment`    | POST | Quét Lead đã `PROCESSED` mà chưa có owner, phân công rồi chuyển thành Student. Không lọc theo `source`.   |
+| `crm.api.lead_assignment_batch.run_lead_assignment_batch`         | POST | Phân công Lead đã `PROCESSED`, chỉ ghi Team và Sale/CTV phụ trách.                                         |
+| `crm.api.lead_assignment_batch.run_unassigned_lead_assignment`    | POST | Quét Lead đã `PROCESSED` mà chưa có owner rồi phân công. Không tạo Student và không lọc theo `source`.   |
 | `crm.api.lead_processing.process_new_leads`                       | POST | Quét toàn bộ Lead `NEW` (tuỳ chọn `admission_year`, `limit`) và chạy điều kiện dữ liệu cho từng Lead.     |
 | `crm.api.lead_assignment_batch.retry_lead_assignment_batch`       | POST | Chạy lại item lỗi/deferred/manual review.                                                                 |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch`         | GET  | Lấy chi tiết một batch và item.                                                                           |
-| `crm.api.lead_assignment_batch.get_lead_assignment_workflow`      | GET  | Lấy snapshot workflow và metrics từ batch được chọn hoặc batch gần nhất trong DB.                         |
+| `crm.api.lead_assignment_batch.get_lead_assignment_workflow`      | GET  | Lấy workflow và metrics từ trạng thái Lead hiện tại hoặc batch được chọn.                                  |
 | `crm.api.lead_assignment_batch.list_lead_assignment_batches`      | GET  | Lấy lịch sử các batch.                                                                                    |
+| `crm.api.lead_assignment_batch.list_lead_assignment_history_items` | GET  | Lấy danh sách hồ sơ theo trạng thái, gồm cả Lead `CLOSED` cần người vận hành kiểm tra; hỗ trợ lọc `lead_ids`. |
 | `crm.api.lead_assignment_batch.get_lead_assignment_batch_options` | GET  | Lấy option pool nội bộ nếu cần kiểm tra quyền; không cần hiển thị cho người dùng thường.                  |
 
-`get_lead_assignment_workflow` nhận tùy chọn `batch_name`. Nếu không truyền, API lấy
-batch gần nhất trong phạm vi quyền của người dùng. Response trả `batch.summary`,
-`steps` (status và metrics của từng bước) và `connections`; các giá trị này được tính
-từ các bản ghi batch/item đã lưu, không phải số liệu mặc định do frontend dựng.
+`get_lead_assignment_workflow` nhận tùy chọn `batch_name`. Nếu không truyền, API
+tổng hợp trạng thái Lead hiện tại với item của các batch trong phạm vi quyền, khử
+trùng theo Lead để không làm mất các hồ sơ đã rời scope sau khi được phân công. Nếu
+truyền `batch_name`, API trả projection của đúng batch đó để xem lịch sử. Response có
+`hasRun`, `hasData`, `summary` (tổng số `assigned`, `manualReview`, `pending` và các
+trạng thái khác), `pendingCount`, `steps` và `connections`; các giá trị được tính ở
+backend từ DB. Khi `pendingCount = 0`, nút phân công Lead trên giao diện phải bị vô
+hiệu hóa.
+
+`list_lead_assignment_history_items` tổng hợp item từ các batch và các Lead đang
+`CLOSED` trong DB. Các Lead `CLOSED` được trả về với `status = manual_review`, không
+có `batchId`, để người vận hành vẫn nhìn thấy đúng số hồ sơ cần xử lý dù chúng không
+còn nằm trong một batch audit. Payload có thể truyền `lead_ids` (chuỗi phân tách bằng
+dấu phẩy hoặc mảng) để chỉ trả về một tập Lead cụ thể và mở trực tiếp hàng đợi đó trên
+giao diện.
 
 ### 5.4. Import batch
 
@@ -379,13 +395,12 @@ Khi chạy:
 1. Lead còn ở `NEW` hoặc `PROCESSING` không được batch xử lý hộ: item thành
    `manual_review` với error code `NOT_PROCESSED`. Bước xử lý là hành động riêng
    (`process_new_leads`, nút “Xử lý Lead”).
-2. Lead đã `CLOSED` (gồm `CLOSED / INVALID`) cũng thành `manual_review`.
-3. Chỉ Lead `PROCESSED` với resolution `MATCHED` hoặc `CREATED` mới được phân công.
+2. Lead đã `CLOSED` cũng thành `manual_review`.
+3. Chỉ Lead `PROCESSED / PENDING` chưa có owner mới được phân công.
 4. BE tìm Team theo tỉnh của Lead rồi ghi Team/Sale ownership.
 5. Ghi ownership thành công đổi Lead thành `ASSIGNED`.
-6. BE gọi handoff ngay sau đó: tạo/enrich `CRM Student`, kiểm tra lại owner và đóng Lead.
-7. Item chỉ thành `assigned` khi cả ownership và Student đều thành công.
-8. Không có Team hoặc Sale/CTV đủ điều kiện thì Lead giữ `PROCESSED`, item thành
+6. Item thành `assigned` sau khi ownership được ghi thành công; kết quả Lead vẫn `PENDING`.
+7. Không có Team hoặc Sale/CTV đủ điều kiện thì Lead giữ `PROCESSED`, item thành
    `manual_review` hoặc `deferred`.
 
 Mỗi item thành công phải được ghi bền vững là `assigned` cùng Team, Sale, lý do,
@@ -409,8 +424,8 @@ Pool/Policy/Zone:
 4. Chỉ giữ Team có trưởng nhóm tổ chức và có Sale/CTV Sale đang hoạt động.
 5. Chọn Sale/CTV có tải thấp nhất và còn giới hạn nhận nếu có.
 
-Trường THPT vẫn là field nghiệp vụ bắt buộc của Lead và phục vụ bước chuyển sang
-Student, nhưng không còn là khóa để người vận hành mapping Team trong batch.
+Trường THPT và ngành quan tâm là field nghiệp vụ bắt buộc để xử lý Lead. Chúng không
+phải là khóa để người vận hành mapping Team trong batch.
 
 Các kết quả routing được trả ở item:
 
@@ -437,16 +452,16 @@ field này có thể để trống trong lúc Lead đã được phân công.
 sử, nhưng không phải dữ liệu setup của Lead batch mới. Mã
 `policyVersion = province-capacity-v1` chỉ dùng để truy vết kết quả.
 
-## 7. Handoff trong luồng phân công
+## 7. Chuyển đổi Lead thành Student (luồng riêng)
 
-Đây là bước backend tự gọi sau khi chọn được owner. API vẫn được giữ để retry hoặc
-cho các luồng nội bộ cần handoff riêng:
+Đây không phải bước backend tự gọi sau khi chọn owner. API được giữ cho thao tác chuyển
+đổi riêng hoặc các luồng nội bộ cần handoff:
 
 ```text
 POST crm.api.lead_processing.handoff_lead
 ```
 
-Điều kiện:
+Điều kiện tối thiểu:
 
 ```text
 processing_status = ASSIGNED
@@ -494,8 +509,8 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 
 - Không tự ghi `processing_status`, `resolution`, `owner_staff`, `owning_team`.
 - Không tự tính hoặc tự chọn Sale/Team/Zone.
-- Không tạo CRM Student ở bước nhập Lead. Khi phân công thành công, BE tự handoff;
-  FE không cần gọi thêm API conversion.
+- Không tạo CRM Student ở bước nhập Lead, xử lý hoặc phân công. FE chỉ gọi API conversion
+  khi người dùng chủ động chuyển đổi.
 - Không gọi worker; nút trên dashboard là điểm kích hoạt duy nhất.
 - Không dùng `lead_status` để thay thế `processing_status`.
 - Không hardcode dữ liệu tỉnh, trường, ngành, nguồn.
@@ -504,7 +519,7 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 
 | Error code                                                    | Cách hiển thị đề xuất                                   |
 | ------------------------------------------------------------- | ------------------------------------------------------- |
-| `IDENTIFIER_GATE_FAILED`                                      | Lead thiếu CCCD, trường THPT hoặc ngành quan tâm.       |
+| `IDENTIFIER_GATE_FAILED`                                      | Lead thiếu số điện thoại, tỉnh, trường THPT hoặc ngành quan tâm. |
 | `INVALID_ID_NUMBER`                                           | CCCD phải gồm 9 hoặc 12 chữ số.                         |
 | `INVALID_LOOKUP` / `INVALID_PROVINCE` / `INVALID_HIGH_SCHOOL` | Chọn lại dữ liệu từ danh sách Frappe.                   |
 | `MISSING_CAMPUS`                                              | Bổ sung cơ sở cho Lead hoặc cấu hình cơ sở mặc định.    |
@@ -532,8 +547,8 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
   “Phân công Lead”.
 - Card tạo/import batch đã bỏ khỏi luồng chính; các API explicit batch vẫn giữ để đọc
   lịch sử và tương thích dữ liệu cũ.
-- Seed local `task seed-assignment-conversion` tạo 10 Lead hợp lệ, chưa có người phụ
-  trách; bấm “Xử lý Lead” rồi “Phân công Lead” để tạo Student có owner.
+- Seed local `task seed-assignment-conversion` tạo Lead để kiểm tra luồng; bấm “Xử lý Lead”
+  rồi “Phân công Lead” chỉ ghi trạng thái và owner, không tạo Student.
 
 ## References
 

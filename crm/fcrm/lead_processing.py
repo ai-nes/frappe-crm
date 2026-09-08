@@ -5,12 +5,11 @@ admissions lifecycle and conversion commands:
 
     NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
-Phone, province, high school, and major are required before resolution. CCCD
-remains optional and is used for duplicate/Student matching when present. Only
-MATCHED and CREATED may be assigned; terminal resolutions close the Lead without
-invoking conversion. Successful handoff delegates conversion to the existing
-command and therefore remains fail-closed behind its rollout and integrity
-checks.
+Phone, province, high school, and major are the only required processing gates.
+CCCD remains optional and is used for duplicate/Student matching when present.
+Processing and assignment only update the Lead status and ownership; neither
+step creates a CRM Student. The explicit handoff command remains the separate
+Lead-to-Student conversion boundary.
 
 A CLOSED Lead is not a dead end: reopen_lead sends a corrected record back to
 NEW and replays intake, so assignment never sees an unvalidated Lead.
@@ -35,9 +34,9 @@ TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
 STATUS_DEFAULT_RESOLUTIONS = {
 	"NEW": "PENDING",
 	"PROCESSING": "PENDING",
-	"PROCESSED": "CREATED",
-	"ASSIGNED": "CREATED",
-	"CLOSED": "FAILED",
+	"PROCESSED": "PENDING",
+	"ASSIGNED": "PENDING",
+	"CLOSED": "PENDING",
 }
 SERVICE_FLAG = "lead_processing_service"
 MAX_PROCESS_SCAN = 1000
@@ -129,53 +128,173 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 			filters.append({fieldname: identifiers[fieldname]})
 	if not filters:
 		return []
+	fields = ["name", "id_number", "high_school", "major", "phone", "email", "province", "creation"]
+	if doctype == "CRM Lead":
+		fields.extend(
+			[
+				"lead_code",
+				"processing_status",
+				"resolution",
+				"owner_staff",
+				"assigned_to",
+				"student",
+				"converted_student",
+			]
+		)
 	rows = frappe.get_all(
 		doctype,
 		or_filters=filters,
-		fields=["name", "id_number", "high_school", "major", "phone", "email", "province"],
+		fields=fields,
 		limit_page_length=0,
 		ignore_permissions=True,
 	)
 	return [row for row in rows if not exclude or row.get("name") != exclude]
 
 
-def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | None]:
-	"""Classify by CCCD first, with contact fields as a compatibility fallback."""
-	student_matches = _candidate_rows("CRM Student", identifiers)
-	exact_students = []
-	for row in student_matches:
-		candidate = _normalise_row(row)
-		if identifiers["id_number"] and candidate["id_number"] == identifiers["id_number"]:
-			exact_students.append(row)
-		elif (
-			candidate["phone"]
-			and candidate["email"]
-			and candidate["province"]
-			and candidate["phone"] == identifiers["phone"]
-			and candidate["email"] == identifiers["email"]
-			and candidate["province"] == identifiers["province"]
-		):
-			exact_students.append(row)
-	if len(exact_students) == 1:
-		return "MATCHED", exact_students[0].get("name")
-	if len(exact_students) > 1:
-		return "DUPLICATE", None
+_DUPLICATE_MATCH_LABELS = {
+	"NATIONAL_ID": "CCCD",
+	"PHONE_EMAIL_PROVINCE": "số điện thoại, email và tỉnh/thành phố",
+	"PHONE_PROVINCE_SCHOOL_MAJOR": "số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm",
+}
 
-	lead_matches = _candidate_rows("CRM Lead", identifiers, exclude=lead.name)
-	for row in lead_matches:
-		row_identifiers = _normalise_row(row)
-		if identifiers["id_number"] and row_identifiers["id_number"] == identifiers["id_number"]:
-			return "DUPLICATE", None
-		if (
-			row_identifiers["phone"]
-			and row_identifiers["email"]
-			and row_identifiers["province"]
-			and row_identifiers["phone"] == identifiers["phone"]
-			and row_identifiers["email"] == identifiers["email"]
-			and row_identifiers["province"] == identifiers["province"]
-		):
-			return "DUPLICATE", None
-	return "CREATED", None
+
+def _duplicate_match_type(identifiers: dict[str, str], candidate: Any) -> str | None:
+	row = _normalise_row(candidate)
+	if identifiers["id_number"] and row["id_number"] == identifiers["id_number"]:
+		return "NATIONAL_ID"
+	if (
+		identifiers["phone"]
+		and identifiers["email"]
+		and identifiers["province"]
+		and row["phone"] == identifiers["phone"]
+		and row["email"] == identifiers["email"]
+		and row["province"] == identifiers["province"]
+	):
+		return "PHONE_EMAIL_PROVINCE"
+	if (
+		identifiers["phone"]
+		and identifiers["province"]
+		and row["high_school"]
+		and row["major"]
+		and row["phone"] == identifiers["phone"]
+		and row["province"] == identifiers["province"]
+		and row["high_school"] == identifiers["high_school"]
+		and row["major"] == identifiers["major"]
+	):
+		return "PHONE_PROVINCE_SCHOOL_MAJOR"
+	return None
+
+
+def _valid_lead_candidate(row: Any) -> bool:
+	identifiers = _normalise_row(row)
+	return all(
+		(
+			identifiers["phone"],
+			identifiers["province"],
+			identifiers["high_school"],
+			identifiers["major"],
+		)
+	)
+
+
+def _eligible_lead_duplicate(row: Any) -> bool:
+	status = str(row.get("processing_status") or "NEW").strip().upper()
+	if status == "CLOSED" and not row.get("student") and not row.get("converted_student"):
+		return False
+	return _valid_lead_candidate(row)
+
+
+def _canonical_lead_rank(row: Any) -> tuple[int, str, str, str]:
+	status = str(row.get("processing_status") or "NEW").strip().upper()
+	if status == "ASSIGNED" or row.get("owner_staff") or row.get("assigned_to"):
+		status_rank = 0
+	elif status == "PROCESSED":
+		status_rank = 1
+	elif status == "PROCESSING":
+		status_rank = 2
+	else:
+		status_rank = 3
+	return (
+		status_rank,
+		str(row.get("creation") or ""),
+		str(row.get("lead_code") or ""),
+		str(row.get("name") or ""),
+	)
+
+
+def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str, Any]:
+	"""Classify Student matches and Lead duplicates without closing every copy."""
+	student_matches = _candidate_rows("CRM Student", identifiers)
+	student_matches = [
+		row for row in student_matches if _duplicate_match_type(identifiers, row)
+	]
+	if len(student_matches) > 1:
+		return {
+			"resolution": "DUPLICATE",
+			"target_student": None,
+			"duplicate_type": "MULTIPLE_STUDENTS",
+			"reason": (
+				"Đã đóng hồ sơ vì có nhiều hồ sơ Student trùng thông tin; "
+				"cần người vận hành xác định đúng hồ sơ đích."
+			),
+		}
+
+	lead_matches = []
+	for row in _candidate_rows("CRM Lead", identifiers, exclude=lead.name):
+		if not _eligible_lead_duplicate(row):
+			continue
+		match_type = _duplicate_match_type(identifiers, row)
+		if match_type:
+			lead_matches.append((row, match_type))
+
+	current = {
+		"name": lead.name,
+		"lead_code": lead.get("lead_code"),
+		"creation": lead.get("creation"),
+		"processing_status": _get_status(lead),
+		"owner_staff": lead.get("owner_staff"),
+		"assigned_to": lead.get("assigned_to"),
+	}
+	if lead_matches:
+		canonical, match_type = min(
+			[(row, matched_type) for row, matched_type in lead_matches] + [(current, None)],
+			key=lambda entry: _canonical_lead_rank(entry[0]),
+		)
+		if canonical.get("name") != lead.name:
+			label = _DUPLICATE_MATCH_LABELS.get(match_type or "NATIONAL_ID", "thông tin định danh")
+			return {
+				"resolution": "DUPLICATE",
+				"target_student": None,
+				"duplicate_of": canonical.get("name"),
+				"duplicate_type": match_type,
+				"reason": (
+					f"Đã đóng hồ sơ vì trùng {label} với Lead {canonical.get('name')}. "
+					"Hệ thống giữ lại Lead đại diện để tiếp tục xử lý."
+				),
+			}
+		label = _DUPLICATE_MATCH_LABELS.get(lead_matches[0][1], "thông tin định danh")
+		return {
+			"resolution": "MATCHED" if len(student_matches) == 1 else "CREATED",
+			"target_student": student_matches[0].get("name") if student_matches else None,
+			"duplicate_type": lead_matches[0][1],
+			"reason": (
+				f"Đã giữ lại Lead này làm hồ sơ đại diện; phát hiện Lead trùng theo {label}. "
+				"Hồ sơ được tiếp tục xử lý và phân công."
+			),
+		}
+
+	if len(student_matches) == 1:
+		return {
+			"resolution": "MATCHED",
+			"target_student": student_matches[0].get("name"),
+			"reason": "Đã giữ lại Lead để phân công; có một hồ sơ Student phù hợp để xử lý khi chuyển đổi.",
+		}
+	return {"resolution": "CREATED", "target_student": None}
+
+
+def _classify_resolution(lead, identifiers: dict[str, str]) -> tuple[str, str | None]:
+	classification = _classify_resolution_details(lead, identifiers)
+	return classification["resolution"], classification.get("target_student")
 
 
 def preview_lead(lead: str) -> dict[str, Any]:
@@ -193,17 +312,24 @@ def preview_lead(lead: str) -> dict[str, Any]:
 	except LeadProcessingError as exc:
 		return {
 			"status": "CLOSED",
-			"resolution": "INVALID",
+			"resolution": "PENDING",
 			"lead": lead_doc.name,
 			"reason": str(exc),
 			"error_code": exc.code,
+			"processing_outcome": "INVALID",
 		}
-	resolution, target_student = _classify_resolution(lead_doc, identifiers)
+	classification = _classify_resolution_details(lead_doc, identifiers)
 	return {
-		"status": "PROCESSED" if resolution in ADVANCING_RESOLUTIONS else "CLOSED",
-		"resolution": resolution,
+		"status": "PROCESSED"
+		if classification["resolution"] in ADVANCING_RESOLUTIONS
+		else "CLOSED",
+		"resolution": "PENDING",
 		"lead": lead_doc.name,
-		"target_student": target_student,
+		"target_student": classification.get("target_student"),
+		"processing_outcome": classification["resolution"],
+		"duplicateOf": classification.get("duplicate_of"),
+		"duplicateType": classification.get("duplicate_type"),
+		"reason": classification.get("reason"),
 		"validation": _processing_validation(lead_doc),
 	}
 
@@ -236,10 +362,8 @@ def _get_resolution(lead) -> str:
 
 
 def _resolution_for_status(status: str, current_resolution: str) -> str:
-	if status in {"NEW", "PROCESSING"}:
+	if status in {"NEW", "PROCESSING", "PROCESSED", "ASSIGNED"}:
 		return "PENDING"
-	if status in {"PROCESSED", "ASSIGNED"} and current_resolution in ADVANCING_RESOLUTIONS:
-		return current_resolution
 	if status == "CLOSED" and current_resolution in RESOLUTIONS[1:]:
 		return current_resolution
 	return STATUS_DEFAULT_RESOLUTIONS[status]
@@ -282,14 +406,12 @@ def update_processing_status(lead: str, status: str, reason: str | None = None) 
 
 
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict[str, Any]:
-	"""Validate a NEW Lead and assign one of the business resolutions."""
+	"""Validate a NEW Lead without producing a conversion result."""
 	lead_doc = _load_lead(lead)
 	_lock_lead(lead_doc.name)
 	lead_doc = _load_lead(lead_doc.name)
 	if _get_status(lead_doc) != "NEW":
 		_fail("INVALID_STATUS", "Only NEW Leads can enter processing.")
-	_set_processing_values(lead_doc.name, {"processing_status": "PROCESSING"})
-	lead_doc = _load_lead(lead_doc.name)
 
 	try:
 		identifiers = _normalise_identifiers(lead_doc)
@@ -299,46 +421,55 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
-				"resolution": "INVALID",
-				"resolution_reason": "Thiếu số điện thoại, tỉnh/thành phố, trường THPT hoặc ngành quan tâm.",
+				"resolution": "PENDING",
+				"resolution_reason": (
+					"Đã đóng hồ sơ vì thiếu số điện thoại, tỉnh/thành phố, "
+					"trường THPT hoặc ngành quan tâm."
+				),
 			},
 		)
 		return {
 			"status": "CLOSED",
-			"resolution": "INVALID",
+			"resolution": "PENDING",
 			"lead": lead_doc.name,
+			"processing_outcome": "INVALID",
 			"validation": validation,
 		}
 
 	requested_resolution = str(resolution or "").strip().upper() or None
-	if requested_resolution and requested_resolution not in RESOLUTIONS[1:]:
-		_fail("INVALID_RESOLUTION", "Resolution must be one of the six supported values.")
-	classified_resolution, target_student = _classify_resolution(lead_doc, identifiers)
-	final_resolution = requested_resolution or classified_resolution
-	if (
-		final_resolution in {"MATCHED", "CREATED"}
-		and requested_resolution
-		and requested_resolution != classified_resolution
-	):
-		_fail("RESOLUTION_CONFLICT", "Requested resolution does not match identifier classification.")
-
-	status = "PROCESSED" if final_resolution in ADVANCING_RESOLUTIONS else "CLOSED"
+	if requested_resolution and requested_resolution != "PENDING":
+		_fail("INVALID_RESOLUTION", "Kết quả xử lý Lead luôn là Chưa có kết quả.")
+	classification = _classify_resolution_details(lead_doc, identifiers)
+	classified_resolution = classification["resolution"]
+	target_student = classification.get("target_student")
+	status = "PROCESSED" if classified_resolution in ADVANCING_RESOLUTIONS else "CLOSED"
+	processing_reason = _reason(reason)
+	if not processing_reason:
+		processing_reason = (
+			"Đã kiểm tra đủ 4 điều kiện; chờ phân công."
+			if status == "PROCESSED"
+			else classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
+		)
 	_set_processing_values(
 		lead_doc.name,
 		{
 			"processing_status": status,
-			"resolution": final_resolution,
-			"resolution_reason": _reason(reason) or f"Resolution: {final_resolution}.",
+			"resolution": "PENDING",
+			"resolution_reason": processing_reason,
 			"phone": identifiers["phone"],
 			"email": identifiers["email"],
-			**({"matched_student": target_student} if target_student else {}),
+			"matched_student": target_student,
 		},
 	)
 	return {
 		"status": status,
-		"resolution": final_resolution,
+		"resolution": "PENDING",
 		"lead": lead_doc.name,
 		"target_student": target_student,
+		"processing_outcome": classified_resolution,
+		"duplicate_of": classification.get("duplicate_of"),
+		"duplicate_type": classification.get("duplicate_type"),
+		"reason": processing_reason,
 		"validation": _processing_validation(lead_doc),
 	}
 
@@ -440,7 +571,9 @@ def process_new_leads(admission_year: Any = None, limit: Any = None) -> dict[str
 				"status": status,
 				"resolution": result.get("resolution"),
 				"errorCode": None,
-				"reason": None,
+				"reason": result.get("reason"),
+				"duplicateOf": result.get("duplicate_of"),
+				"duplicateType": result.get("duplicate_type"),
 			}
 		)
 
@@ -456,16 +589,16 @@ def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
 	"""Mark a successfully owned Lead as ASSIGNED without writing ownership twice."""
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) == "ASSIGNED":
-		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": _get_resolution(lead_doc)}
-	if _get_status(lead_doc) != "PROCESSED" or _get_resolution(lead_doc) not in ADVANCING_RESOLUTIONS:
+		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": "PENDING"}
+	if _get_status(lead_doc) != "PROCESSED":
 		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
 	if not lead_doc.get("owner_staff") and not lead_doc.get("assigned_to"):
 		_fail("OWNER_REQUIRED", "Lead ownership must be written before marking it assigned.")
-	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED"})
+	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED", "resolution": "PENDING"})
 	return {
 		"status": "ASSIGNED",
 		"lead": lead_doc.name,
-		"resolution": _get_resolution(lead_doc),
+		"resolution": "PENDING",
 		"reason": reason,
 	}
 
@@ -481,8 +614,8 @@ def assign_lead(
 ) -> dict[str, Any]:
 	"""Assign a processed Lead to a Sale and then move it to ASSIGNED."""
 	lead_doc = _load_lead(lead)
-	if _get_status(lead_doc) != "PROCESSED" or _get_resolution(lead_doc) not in ADVANCING_RESOLUTIONS:
-		_fail("INVALID_STATUS", "Only MATCHED or CREATED Leads in PROCESSED can be assigned.")
+	if _get_status(lead_doc) != "PROCESSED":
+		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
 	owner_staff = _required(owner_staff, "owner_staff")
 	target_team_id = _required(target_team_id, "target_team_id")
 	idempotency_key = _required(idempotency_key, "idempotency_key")
@@ -506,7 +639,10 @@ def assign_lead(
 			_enqueue_routing=False,
 			_skip_sla=True,
 		)
-		_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED"})
+		_set_processing_values(
+			lead_doc.name,
+			{"processing_status": "ASSIGNED", "resolution": "PENDING"},
+		)
 		frappe.db.commit()
 	except (StudentOwnershipError, LeadProcessingError):
 		frappe.db.rollback()
@@ -517,7 +653,7 @@ def assign_lead(
 
 	return {
 		"status": "ASSIGNED",
-		"resolution": _get_resolution(lead_doc),
+		"resolution": "PENDING",
 		"lead": lead_doc.name,
 		"ownership": ownership,
 	}
@@ -539,8 +675,15 @@ def handoff_lead(
 	"""
 	lead_doc = _load_lead(lead, internal_service=_internal_service)
 	resolution = _get_resolution(lead_doc)
-	if _get_status(lead_doc) != "ASSIGNED" or resolution not in ADVANCING_RESOLUTIONS:
-		_fail("INVALID_STATUS", "Only assigned MATCHED or CREATED Leads can be handed off.")
+	if _get_status(lead_doc) != "ASSIGNED":
+		_fail("INVALID_STATUS", "Only assigned Leads can be handed off.")
+	if resolution == "PENDING":
+		identifiers = _normalise_identifiers(lead_doc)
+		resolution, classified_target = _classify_resolution(lead_doc, identifiers)
+		if classified_target and not target_student:
+			target_student = classified_target
+	if resolution not in ADVANCING_RESOLUTIONS:
+		_fail("INVALID_STATUS", "Lead này chưa đủ điều kiện để chuyển đổi Student.")
 	idempotency_key = _required(idempotency_key, "idempotency_key")
 	correlation_id = _required(correlation_id or frappe.generate_hash(length=20), "correlation_id")
 	if expected_lifecycle_revision in (None, ""):
@@ -573,6 +716,7 @@ def handoff_lead(
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
+				"resolution": resolution,
 				"resolution_reason": f"{resolution} handoff completed.",
 			},
 		)
