@@ -9,9 +9,9 @@
 |---|---|---|---|
 | Lead Sale | Toàn bộ Lead | Toàn bộ Student | Theo quyền Lead Sale hiện hành |
 | Director/CEO/Admin/System Manager | Toàn bộ Lead | Toàn bộ Student | Theo quyền hệ thống |
-| Team Lead | Lead thuộc Team mình dẫn và pool của Team | Student đã convert và assigned trong Team; Student chưa assign bị loại bởi invariant của API | Theo quyền ghi của bản thân/Team |
+| Team Lead (Sale/CTV) | Lead thuộc Team mình dẫn và pool của Team | Student đã convert và assigned trong Team; Student chưa assign bị loại bởi invariant của API | Theo quyền ghi của bản thân/Team |
 | Sale member | Lead được giao cho mình; được xem Lead trong Team/pool để phục vụ phân công | Student đã convert và assigned trong Team/pool scope | Chỉ bản ghi được phép ghi |
-| CTV Sale | Bản ghi được giao cho mình | Bản ghi được giao cho mình | Theo quyền CTV hiện hành |
+| CTV Sale member | Lead được giao cho mình; được xem Lead trong Team/pool | Student đã convert và assigned trong Team/pool scope | Theo quyền CTV hiện hành |
 
 Nếu một nhân sự đồng thời có nhiều membership hoặc vai trò, scope là hợp của các
 phạm vi hợp lệ. Scope được tính từ session, không tin vào `ownerId` do client gửi.

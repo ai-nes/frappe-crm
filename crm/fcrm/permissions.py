@@ -242,10 +242,10 @@ def can_write_full_lead_board(user=None) -> bool:
 def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	"""Return the list-only Student read scope for roles with assignment access.
 
-	Sale keeps the canonical assigned-only row scope for direct CRUD and detail
-	operations, but the student list must expose the Sale's team and team pool so
-	the user can choose a target for an ownership assignment. The assignment
-	command still enforces its own authorization and ownership revision checks.
+	Sale and CTV Sale keep the canonical assigned-only row scope for direct CRUD
+	and detail operations, but their list projection exposes their Team and team
+	pool. The assignment command still enforces its own authorization and
+	ownership revision checks.
 
 	Lead Sale additionally sees assigned Students in active Teams belonging to
 	active Groups led by the current CRM Staff. This is the existing Student
@@ -268,7 +268,7 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 		if not crm_staff_name:
 			return "1=0"
 		return _lead_sales_student_read_condition(table, crm_staff_name, doctype=doctype)
-	if profile != "sales":
+	if profile not in {"sales", "ctv_sale"}:
 		return None
 
 	crm_staff_name = _get_crm_staff_name(user)
