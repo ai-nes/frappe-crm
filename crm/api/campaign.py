@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import re
+from datetime import date
 from typing import Any
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 
 from crm.api._pagination import paged_list
 
@@ -62,6 +65,27 @@ WRITABLE_FIELDS = [
 	"notes",
 ]
 
+PUBLIC_CAMPAIGN_FIELDS = (
+	"name",
+	"stable_code",
+	"title",
+	"campus",
+	"campaign_type",
+	"event_type",
+	"status",
+	"start_date",
+	"end_date",
+	"platform",
+	"channel_boundary",
+	"channel_type",
+	"channel_url",
+	"utm_source",
+	"utm_medium",
+	"utm_campaign",
+)
+MAX_PUBLIC_CAMPAIGN_PAGE_LENGTH = 100
+_PUBLIC_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
 
 def _set_writable_fields(doc: Any, values: dict[str, Any]) -> None:
 	for fieldname in WRITABLE_FIELDS:
@@ -76,6 +100,41 @@ def _set_date_filter(filters: dict[str, Any], fieldname: str, date_from: Any, da
 		filters[fieldname] = [">=", date_from]
 	elif date_to:
 		filters[fieldname] = ["<=", date_to]
+
+
+def _parse_public_date(value: Any, fieldname: str) -> date | None:
+	value = str(value or "").strip()
+	if not value:
+		return None
+	if not _PUBLIC_DATE_PATTERN.fullmatch(value):
+		frappe.throw(_("{0} must use YYYY-MM-DD format.").format(fieldname), frappe.ValidationError)
+	try:
+		return date.fromisoformat(value)
+	except ValueError:
+		frappe.throw(_("{0} must be a valid date.").format(fieldname), frappe.ValidationError)
+
+
+def _coalesce_public_date(primary: Any, alias: Any, fieldname: str) -> str | None:
+	primary = str(primary or "").strip()
+	alias = str(alias or "").strip()
+	if primary and alias and primary != alias:
+		frappe.throw(_("Only one value may be provided for {0}.").format(fieldname), frappe.ValidationError)
+	return primary or alias or None
+
+
+def _parse_public_int(
+	value: Any, fieldname: str, *, default: int, minimum: int, maximum: int | None = None
+) -> int:
+	if value in (None, ""):
+		return default
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError):
+		frappe.throw(_("{0} must be an integer.").format(fieldname), frappe.ValidationError)
+	if parsed < minimum or (maximum is not None and parsed > maximum):
+		bounds = f"{minimum} and {maximum}" if maximum is not None else f"at least {minimum}"
+		frappe.throw(_("{0} must be between {1}.").format(fieldname, bounds), frappe.ValidationError)
+	return parsed
 
 
 @frappe.whitelist()
@@ -150,6 +209,58 @@ def list_campaigns(
 	)
 	rows = result.pop("rows")
 	return {**result, "campaigns": rows}
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_campaigns(
+	campaign_code: str | None = None,
+	startdate: str | None = None,
+	enddate: str | None = None,
+	start_date: str | None = None,
+	end_date: str | None = None,
+	start: int | str = 0,
+	page_length: int | str = 20,
+) -> dict[str, Any]:
+	"""Return public campaign metadata with optional date filtering."""
+	start_value = _parse_public_date(
+		_coalesce_public_date(startdate, start_date, "startdate/start_date"), "startdate"
+	)
+	end_value = _parse_public_date(_coalesce_public_date(enddate, end_date, "enddate/end_date"), "enddate")
+	if start_value and end_value and start_value > end_value:
+		frappe.throw(_("startdate cannot be greater than enddate."), frappe.ValidationError)
+
+	start = _parse_public_int(start, "start", default=0, minimum=0)
+	page_length = _parse_public_int(
+		page_length,
+		"page_length",
+		default=20,
+		minimum=1,
+		maximum=MAX_PUBLIC_CAMPAIGN_PAGE_LENGTH,
+	)
+
+	filters: list[list[Any]] = []
+	if campaign_code not in (None, ""):
+		filters.append(["stable_code", "=", str(campaign_code).strip()])
+	if start_value:
+		filters.append(["start_date", ">=", str(start_value)])
+	if end_value:
+		filters.append(["end_date", "<=", str(end_value)])
+
+	rows = frappe.get_all(
+		"CRM Campaign",
+		filters=filters,
+		fields=list(PUBLIC_CAMPAIGN_FIELDS),
+		order_by="start_date asc, stable_code asc, name asc",
+		limit_start=start,
+		limit_page_length=page_length,
+	)
+	return {
+		"total": frappe.db.count("CRM Campaign", filters=filters),
+		"start": start,
+		"page_length": page_length,
+		"campaigns": [dict(row) for row in rows],
+	}
 
 
 @frappe.whitelist()

@@ -14,6 +14,7 @@ import json
 import re
 import unicodedata
 from collections.abc import Iterable
+from datetime import date, timedelta
 from typing import Any
 
 import frappe
@@ -33,6 +34,16 @@ from crm.fcrm.utils.geo_resolver import (
 MAX_IMPORT_ROWS = 1000
 _PHONE_PATTERN = re.compile(r"0\d{9}")
 _CONVERSION_POTENTIALS = ("High", "Medium", "Low", "Unknown")
+PUBLIC_LEAD_LIST_FIELDS = (
+	"name",
+	"lead_code",
+	"student_name",
+	"lead_status",
+	"campaign",
+	"creation",
+)
+MAX_PUBLIC_LEAD_PAGE_LENGTH = 100
+_PUBLIC_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class LeadMappingError(frappe.ValidationError):
@@ -58,6 +69,41 @@ def _text(value: Any) -> str | None:
 		return None
 	value = str(value).strip()
 	return value or None
+
+
+def _parse_public_int(
+	value: Any, fieldname: str, *, default: int, minimum: int, maximum: int | None = None
+) -> int:
+	if value in (None, ""):
+		return default
+	try:
+		parsed = int(value)
+	except (TypeError, ValueError):
+		_fail("INVALID_PAGINATION", f"{fieldname} phải là số nguyên.")
+	if parsed < minimum or (maximum is not None and parsed > maximum):
+		bounds = f"{minimum} và {maximum}" if maximum is not None else f"ít nhất {minimum}"
+		_fail("INVALID_PAGINATION", f"{fieldname} phải nằm trong khoảng {bounds}.")
+	return parsed
+
+
+def _parse_public_date(value: Any, fieldname: str) -> date | None:
+	value = _text(value)
+	if not value:
+		return None
+	if not _PUBLIC_DATE_PATTERN.fullmatch(value):
+		_fail("INVALID_DATE", f"{fieldname} phải có định dạng YYYY-MM-DD.")
+	try:
+		return date.fromisoformat(value)
+	except ValueError:
+		_fail("INVALID_DATE", f"{fieldname} không phải là ngày hợp lệ.")
+
+
+def _coalesce_public_date(primary: Any, alias: Any, fieldname: str) -> str | None:
+	primary = _text(primary)
+	alias = _text(alias)
+	if primary and alias and primary != alias:
+		_fail("INVALID_DATE", f"Chỉ được gửi một giá trị cho {fieldname}.")
+	return primary or alias
 
 
 def _normalize_header(value: Any) -> str:
@@ -869,6 +915,57 @@ def get_public_majors() -> dict[str, Any]:
 		limit_page_length=0,
 	)
 	return _public_lookup_response(rows, "major_name", "major_code", ("degree_name", "major_group"))
+
+
+@frappe.whitelist(allow_guest=True, methods=["GET"])
+@rate_limit(limit=120, seconds=60)
+def get_public_leads(
+	campaign_code: str | None = None,
+	startdate: str | None = None,
+	enddate: str | None = None,
+	start_date: str | None = None,
+	end_date: str | None = None,
+	start: int | str = 0,
+	page_length: int | str = 20,
+) -> dict[str, Any]:
+	"""Return a public, non-sensitive Lead list scoped to one campaign code."""
+	campaign_name = _resolve_campaign_code(campaign_code)
+	start_value = _parse_public_date(
+		_coalesce_public_date(startdate, start_date, "startdate/start_date"), "startdate"
+	)
+	end_value = _parse_public_date(_coalesce_public_date(enddate, end_date, "enddate/end_date"), "enddate")
+	if start_value and end_value and start_value > end_value:
+		_fail("INVALID_DATE", "startdate không được lớn hơn enddate.")
+
+	start = _parse_public_int(start, "start", default=0, minimum=0)
+	page_length = _parse_public_int(
+		page_length,
+		"page_length",
+		default=20,
+		minimum=1,
+		maximum=MAX_PUBLIC_LEAD_PAGE_LENGTH,
+	)
+
+	filters: list[list[Any]] = [["campaign", "=", campaign_name]]
+	if start_value:
+		filters.append(["creation", ">=", f"{start_value} 00:00:00"])
+	if end_value:
+		filters.append(["creation", "<", f"{end_value + timedelta(days=1)} 00:00:00"])
+
+	rows = frappe.get_all(
+		"CRM Lead",
+		filters=filters,
+		fields=list(PUBLIC_LEAD_LIST_FIELDS),
+		order_by="creation desc, name desc",
+		limit_start=start,
+		limit_page_length=page_length,
+	)
+	return {
+		"total": frappe.db.count("CRM Lead", filters=filters),
+		"start": start,
+		"page_length": page_length,
+		"leads": [dict(row) for row in rows],
+	}
 
 
 def _parse_csv_rows(
