@@ -17,7 +17,12 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
-from crm.fcrm.lead_processing import assign_lead, handoff_lead, preview_lead
+from crm.fcrm.lead_processing import (
+	_set_processing_values,
+	assign_lead,
+	handoff_lead,
+	preview_lead,
+)
 from crm.fcrm.student_assignment import (
 	ENRICHMENT_QUEUE,
 	MANUAL_QUEUE,
@@ -49,6 +54,17 @@ ROUTING_REVIEW_CODES = frozenset(
 		"TEAM_SCOPE_MISMATCH",
 		"MISSING_INPUT_QUEUE",
 		"MULTIPLE_INPUT_QUEUES",
+	}
+)
+PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
+	{
+		"INVALID_CURRENT_OWNERSHIP",
+		"MISSING_PROVINCE",
+		"MISSING_CAMPUS",
+		"TEAM_NOT_FOUND_FOR_PROVINCE",
+		"PROVINCE_MISMATCH",
+		"TEAM_PROVINCE_MISMATCH",
+		"TEAM_SCOPE_MISMATCH",
 	}
 )
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
@@ -115,6 +131,18 @@ def _lead(name: str):
 	doc = frappe.get_doc("CRM Lead", name)
 	_lead_permission(doc)
 	return doc
+
+
+def _close_invalid_assignment_lead(lead_name: str, reason: str) -> None:
+	"""Close a Lead that cannot ever be routed with its current data."""
+	_set_processing_values(
+		lead_name,
+		{
+			"processing_status": "CLOSED",
+			"resolution": "INVALID",
+			"resolution_reason": reason[:500],
+		},
+	)
 
 
 def _batch_item_lead(item):
@@ -421,11 +449,13 @@ def _preview_item(
 		return
 	province = _canonical_province(lead.get("province"))
 	if not province:
-		_reset_item(item, status="manual_review", reason="MISSING_PROVINCE")
+		_close_invalid_assignment_lead(lead.name, "Lead bị đóng: thiếu tỉnh để xác định Team quản lý.")
+		_reset_item(item, status="failed", reason="MISSING_PROVINCE")
 		item.error_code = "MISSING_PROVINCE"
 		return
 	if not lead.get("branch"):
-		_reset_item(item, status="manual_review", reason="MISSING_CAMPUS")
+		_close_invalid_assignment_lead(lead.name, "Lead bị đóng: thiếu trường/campus để kiểm tra dữ liệu.")
+		_reset_item(item, status="failed", reason="MISSING_CAMPUS")
 		item.error_code = "MISSING_CAMPUS"
 		return
 	recipient = _resolve_batch_recipient(
@@ -486,7 +516,13 @@ def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
 			}:
 				code = str(exc).strip()
 			code = code or "PREVIEW_FAILED"
-			_reset_item(item, status="manual_review", reason=code)
+			if code in PERMANENT_ASSIGNMENT_ERROR_CODES:
+				_close_invalid_assignment_lead(item.lead, f"Lead bị đóng: {exc}")
+			_reset_item(
+				item,
+				status="failed" if code in PERMANENT_ASSIGNMENT_ERROR_CODES else "manual_review",
+				reason=code,
+			)
 			item.error_code = code
 	batch.status = "ready"
 
@@ -1093,7 +1129,15 @@ def run_lead_assignment_batch(batch_name: str):
 			if not code and str(exc).strip() in ROUTING_REVIEW_CODES:
 				code = str(exc).strip()
 			code = code or "ROUTING_FAILED"
-			item.status = "manual_review" if code in ROUTING_REVIEW_CODES else "failed"
+			if code in PERMANENT_ASSIGNMENT_ERROR_CODES:
+				_close_invalid_assignment_lead(item.lead, f"Lead bị đóng: {exc}")
+			item.status = (
+				"failed"
+				if code in PERMANENT_ASSIGNMENT_ERROR_CODES
+				else "manual_review"
+				if code in ROUTING_REVIEW_CODES
+				else "failed"
+			)
 			item.reason = str(exc)
 			item.error_code = code
 			item.execution_id = batch.execution_id
@@ -1225,7 +1269,10 @@ def retry_lead_assignment_batch(batch_name: str, item_ids: list[str] | str | Non
 	for item in batch.items:
 		if selected is not None and item.name not in selected:
 			continue
-		if item.status in {"deferred", "manual_review", "failed"}:
+		if (
+			item.status in {"deferred", "manual_review", "failed"}
+			and item.error_code not in PERMANENT_ASSIGNMENT_ERROR_CODES
+		):
 			_reset_item(item)
 	batch.status = "ready"
 	_save_batch(batch)
@@ -1333,6 +1380,80 @@ def list_lead_assignment_batches(
 			"total": total,
 			"total_pages": total_pages,
 			"has_next_page": page < total_pages,
+		},
+	}
+
+
+@frappe.whitelist()
+def list_lead_assignment_history_items(
+	limit: int | str = 50,
+	page: int | str = 1,
+	status: str | None = None,
+	q: str | None = None,
+):
+	"""Return one flat history list across all assignment batches."""
+	try:
+		page_size = max(1, min(int(limit), 100))
+		page_number = max(1, int(page or 1))
+	except (TypeError, ValueError):
+		frappe.throw(_("Thông tin phân trang không hợp lệ."), frappe.ValidationError)
+	allowed_statuses = {"pending", "assigned", "deferred", "manual_review", "failed", "skipped"}
+	if status and status != "all" and status not in allowed_statuses:
+		frappe.throw(_("Trạng thái hồ sơ không hợp lệ."), frappe.ValidationError)
+	search = str(q or "").strip().casefold()
+	if len(search) > 140:
+		frappe.throw(_("Từ khóa tìm kiếm quá dài."), frappe.ValidationError)
+	batches = []
+	batch_page = 1
+	while True:
+		batch_response = list_lead_assignment_batches(limit=100, page=batch_page)
+		batches.extend(batch_response.get("items", []))
+		if not batch_response.get("pagination", {}).get("has_next_page"):
+			break
+		batch_page += 1
+	items = []
+	for batch_row in batches:
+		batch = frappe.get_doc(BATCH_DOCTYPE, batch_row["name"])
+		for item in batch.items:
+			serialized = _serialize_item(item)
+			serialized.update(
+				{
+					"batchId": batch.name,
+					"batchCreatedAt": str(batch.creation) if batch.creation else None,
+					"batchStatus": batch.status,
+				}
+			)
+			if status and status != "all" and serialized["status"] != status:
+				continue
+			if search:
+				searchable = " ".join(
+					str(serialized.get(field) or "")
+					for field in (
+						"studentName",
+						"leadId",
+						"phone",
+						"province",
+						"team",
+						"ownerStaff",
+						"reason",
+					)
+				).casefold()
+				if search not in searchable:
+					continue
+			items.append(serialized)
+	items.sort(key=lambda row: (row.get("batchCreatedAt") or "", row.get("id") or ""), reverse=True)
+	total = len(items)
+	start = (page_number - 1) * page_size
+	page_items = items[start : start + page_size]
+	total_pages = max(1, (total + page_size - 1) // page_size)
+	return {
+		"items": page_items,
+		"pagination": {
+			"page": page_number,
+			"page_size": page_size,
+			"total": total,
+			"total_pages": total_pages,
+			"has_next_page": page_number < total_pages,
 		},
 	}
 
