@@ -13,6 +13,7 @@ from crm.fcrm.intelligence_runs import (
 	RUN_TYPES,
 	STUDENT_360_POLICY_REVISION,
 	STUDENT_360_SNAPSHOT_SCHEMA_VERSION,
+	STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2,
 	_public_stage,
 	_source,
 	request_run,
@@ -116,4 +117,10 @@ def get_student_360(student: str, request: bool = False, refresh: bool = False) 
 	displayed = displayed or {}
 	score = _score(student)
 	items = {item["key"]: item for item in score["items"]}
-	return {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}
+	is_v2 = bool(displayed.get("history_coverage") or displayed.get("intelligence_refs"))
+	payload = {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 if is_v2 else STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}
+	if displayed.get("history_coverage"):
+		payload["history_coverage"] = displayed["history_coverage"]
+	if displayed.get("intelligence_refs"):
+		payload["intelligence_refs"] = displayed["intelligence_refs"]
+	return payload

@@ -7,6 +7,8 @@ from typing import Any
 
 import frappe
 
+from crm.services.intelligence_refs import build_decision_ref, build_subject_ref
+
 
 SCHOOL360_CONTRACT_VERSION = "school360.overview.read:v1"
 SCHOOL360_POLICY_VERSION = "school360-read-v1"
@@ -469,6 +471,18 @@ def get_school_recommendation_context(high_school: str, use_case: str) -> dict[s
 		"issued_at": now.isoformat(),
 		"expires_at": expires_at.isoformat(),
 	}
+	subject_ref = build_subject_ref("school", high_school, str(frappe.local.site or "frappe"))
+	def decision_ref(disposition: str, *, evidence_refs: list[str] = (), reason: str | None = None):
+		return build_decision_ref(
+			decision_id=f"school:{high_school}:{base['context_id']}",
+			domain="school_recommendation",
+			subject=subject_ref,
+			disposition=disposition,
+			policy_revision=RECOMMENDATION_POLICY_REVISION,
+			evidence_refs=evidence_refs,
+			expires_at=base["expires_at"] if disposition == "recommend" else None,
+			abstention_reason=reason,
+		).copy()
 	potential = intelligence.get("potential", {}) if isinstance(intelligence, dict) else {}
 	relationship = intelligence.get("relationship", {}) if isinstance(intelligence, dict) else {}
 	missing: list[str] = []
@@ -492,7 +506,9 @@ def get_school_recommendation_context(high_school: str, use_case: str) -> dict[s
 	if base["freshness"] != "fresh":
 		missing.append("fresh_current_snapshot")
 	if missing:
-		return {**base, "disposition": "REVIEW" if "school_relationship" not in missing else "ABSTAIN", "candidates": [], "missing_evidence": missing, "abstention_reason": "Insufficient or non-current evidence for a governed candidate."}
+		disposition = "REVIEW" if "school_relationship" not in missing else "ABSTAIN"
+		reason = "Insufficient or non-current evidence for a governed candidate."
+		return {**base, "disposition": disposition, "decision_ref": decision_ref("review" if disposition == "REVIEW" else "abstain", reason=reason).copy(), "candidates": [], "missing_evidence": missing, "abstention_reason": reason}
 
 	# Ordered policy table: only this server-side order is exposed to the consumer.
 	policy = {
@@ -520,5 +536,6 @@ def get_school_recommendation_context(high_school: str, use_case: str) -> dict[s
 		"source_data_revision": source_revision,
 		"dto_revision": RECOMMENDATION_DTO_REVISION,
 		"expires_at": base["expires_at"],
+		"decision_ref": decision_ref("recommend", evidence_refs=[f"school:{high_school}:{source_revision}", f"source:{source_revision}:{source_revision}"]).copy(),
 	}
-	return {**base, "disposition": "RECOMMEND", "candidates": [candidate], "missing_evidence": [], "abstention_reason": None}
+	return {**base, "disposition": "RECOMMEND", "decision_ref": candidate["decision_ref"], "candidates": [candidate], "missing_evidence": [], "abstention_reason": None}

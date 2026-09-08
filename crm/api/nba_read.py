@@ -12,6 +12,7 @@ in crm.api.action_type, and for CRM Action in crm.api.action.
 import frappe
 
 from crm.api._pagination import paged_list
+from crm.services.intelligence_refs import build_outcome_ref, build_subject_ref
 
 RECOMMENDATION_LIST_FIELDS = [
 	"name",
@@ -220,4 +221,16 @@ def list_action_outcomes(execution=None, recommendation=None, action=None, stude
 @frappe.whitelist()
 def get_action_outcome(name):
 	"""Get one CRM Action Outcome by name."""
-	return _get("CRM Action Outcome", name)
+	row = _get("CRM Action Outcome", name)
+	student = row.get("student")
+	if student:
+		row["outcome_ref"] = build_outcome_ref(
+			outcome_id=str(row.get("outcome_id") or row.get("name")),
+			subject=build_subject_ref("student", str(student), str(frappe.local.site or "frappe")),
+			kind="verified_outcome",
+			status=str(row.get("outcome_type") or "recorded"),
+			source_revision=str(row.get("name") or "outcome"),
+			decision_id=str(row.get("recommendation")) if row.get("recommendation") else None,
+			verified=True,
+		)
+	return row
