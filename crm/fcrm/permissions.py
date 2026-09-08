@@ -5,11 +5,10 @@ Implements the locked row-level data-scope matrix:
 - Lead Sale              -> own team(s) + own team's unassigned pool
 - System Manager / CRM Manager / Administrator / Admissions Director -> full
 
-The Sale student-list projection is intentionally handled by the dashboard API
-as a separate read-only team/pool view because Sale has ownership-assignment
-authority. Lead Sale also uses the existing dashboard projection to see assigned
-Students across the active Teams in Groups they lead. Neither projection
-changes the canonical CRUD/detail scope.
+The Sale and Lead Sale list projections are intentionally handled by dashboard
+APIs as separate read-only Group/Team/pool views because those profiles have
+assignment authority. Neither projection changes the canonical CRUD/detail
+scope.
 
 One doctype-parameterized function is used for both CRM Contact and CRM Student so the two
 doctypes can never drift into the two inconsistent mechanisms they had before this phase.
@@ -212,18 +211,17 @@ def get_permission_query_conditions(doctype, user=None):
 
 
 def can_read_full_lead_board(user=None) -> bool:
-	"""Whether this profile reads the whole Lead intake board, not one team slice.
+	"""Whether this profile keeps full-board compatibility for Lead detail/write.
 
 	Lead Sale routes Leads into every province's Team, so the board it works
-	from must keep showing a Lead after a batch commits ownership to a Sale on
-	another Team -- the canonical team scope would otherwise hide exactly the
-	rows the operator just routed, the converted ones included.
+	from must keep allowing detail and routing writes after a batch commits
+	ownership to a Sale on another Team. The LeadList API applies the explicit
+	Group/Team scope separately, so this compatibility flag no longer widens
+	list visibility.
 
-	This widens the Lead projection in ``crm.api.director_leads`` and aligns the
-	Lead Sale write check with that board. ``get_permission_query_conditions``
-	remains the list/read scope for ordinary access; Student, delete, and every
-	assignment, conversion, ownership, or lifecycle command keep their existing
-	checks.
+	The flag still aligns the Lead Sale write check with detail access; Student,
+	delete, and every assignment, conversion, ownership, or lifecycle command keep
+	their existing checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
@@ -232,11 +230,10 @@ def can_read_full_lead_board(user=None) -> bool:
 def can_write_full_lead_board(user=None) -> bool:
 	"""Whether a Lead Sale may edit any Lead shown on the intake board.
 
-	Lead Sale is the intake/routing operator. The dashboard intentionally exposes
-	the whole Lead board to that profile, and its edit controls therefore need the
-	same mutation scope. This exception is limited to CRM Lead writes; Student,
-	read, delete, and ownership/lifecycle command permissions keep their existing
-	checks.
+	Lead Sale is the intake/routing operator. Detail and routing writes retain the
+	full-board compatibility scope, while LeadList itself is Group/Team scoped.
+	This exception is limited to CRM Lead writes; Student, read, delete, and
+	ownership/lifecycle command permissions keep their existing checks.
 	"""
 	return can_read_full_lead_board(user)
 
@@ -269,7 +266,7 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 		crm_staff_name = _get_crm_staff_name(user)
 		if not crm_staff_name:
 			return "1=0"
-		return _lead_sales_student_read_condition(table, crm_staff_name)
+		return _lead_sales_student_read_condition(table, crm_staff_name, doctype=doctype)
 	if profile != "sales":
 		return None
 
@@ -757,8 +754,8 @@ def _team_leader_condition(table, crm_staff_name):
 	return "(" + " or ".join(parts) + ")"
 
 
-def _lead_sales_student_read_condition(table, crm_staff_name):
-	"""Add Group-level Student visibility to the existing Team scope."""
+def _lead_sales_student_read_condition(table, crm_staff_name, *, doctype="CRM Student"):
+	"""Add Group-level Team and pool visibility to the existing Team scope."""
 	parts = []
 	team_condition = _team_leader_condition(table, crm_staff_name)
 	if team_condition != "1=0":
@@ -789,6 +786,26 @@ def _lead_sales_student_read_condition(table, crm_staff_name):
 					f"{table}.owner_staff is not null and {table}.assigned_to is not null"
 				)
 				parts.append(f"({assigned_clause} and ({' or '.join(team_parts)}))")
+			if team_clause:
+				parts.append(
+					f"({table}.owner_staff is null and {table}.assigned_to is null and {team_clause})"
+				)
+
+			# Lead intake without a Team is still visible to the Group Lead when
+			# its province belongs to one of the managed Groups. Student rows keep
+			# their existing converted/assigned invariant in the API filters.
+			if doctype == "CRM Lead":
+				group_provinces = frappe.get_all(
+					"CRM Team Group",
+					filters={"name": ["in", group_ids], "is_active": 1},
+					pluck="province",
+				)
+				province_clause = _in_clause(f"{table}.province", group_provinces)
+				if province_clause:
+					parts.append(
+						f"({table}.owner_staff is null and {table}.assigned_to is null and "
+						f"{province_clause})"
+					)
 
 	if not parts:
 		return "1=0"
