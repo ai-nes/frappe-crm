@@ -321,6 +321,7 @@ class TestDirectorLeads(FrappeTestCase):
 
 	def test_lead_list_scope_uses_the_shared_group_team_condition(self):
 		with (
+			patch.object(director_leads, "can_read_full_lead_board", return_value=False),
 			patch.object(
 				director_leads,
 				"get_student_list_read_condition",
@@ -338,6 +339,15 @@ class TestDirectorLeads(FrappeTestCase):
 			)
 
 		sql.assert_called_once()
+
+	def test_lead_sale_list_scope_is_unrestricted(self):
+		with (
+			patch.object(director_leads, "can_read_full_lead_board", return_value=True),
+			patch.object(director_leads, "get_student_list_read_condition") as get_condition,
+		):
+			self.assertIsNone(director_leads._list_scope_lead_ids())
+
+		get_condition.assert_not_called()
 
 	def test_detail_endpoint_serves_routed_lead_to_the_full_board_profile(self):
 		"""A Lead routed to another Team leaves the row scope but stays on the board."""

@@ -275,6 +275,8 @@ def _year_filter(admission_year: str | None) -> dict[str, Any]:
 
 def _list_scope_lead_ids() -> list[str] | None:
 	"""Return explicit Lead IDs for the session's Group/Team list scope."""
+	if can_read_full_lead_board():
+		return None
 	condition = get_student_list_read_condition(doctype="CRM Lead")
 	if condition is None:
 		return None
