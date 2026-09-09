@@ -2,10 +2,9 @@
 # See license.txt
 
 """Dispatcher-level coverage for crm/fcrm/interaction_log.py -- exercises the
-doc_events wired in hooks.py (Communication after_insert/on_update, Task
-on_update, Call Log after_insert) by inserting/saving the real source
-doctypes and asserting on the CRM Interaction rows they create, including the
-duplicate-guard scenarios.
+doc_events wired in hooks.py (Communication after_insert/on_update and Task
+on_update) by inserting/saving the real source doctypes and asserting on the
+CRM Interaction rows they create, including the duplicate-guard scenarios.
 
 Pure create_interaction()/CRMInteraction.validate() unit coverage, consent
 event mapping, and cleanup-on-delete live in
@@ -21,7 +20,13 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.interaction_log import _source_matches_student, ingest_external_interaction
+from crm.fcrm.interaction_log import (
+	_ensure_interaction_evidence,
+	_external_interaction_matches,
+	_source_matches_student,
+	ingest_external_interaction,
+	normalize_external_interaction_payload,
+)
 from crm.fcrm.student_intake import StudentIntakeError
 
 
@@ -81,6 +86,7 @@ class TestInteractionLogDispatch(FrappeTestCase):
 						"student": "STU-1",
 						"crm_contact": None,
 						"notes": payload["turns"][0]["content"],
+						"interaction_type": "MESSAGE",
 						"channel": "facebook",
 						"direction": "inbound",
 						"interaction_datetime": "2026-08-29 09:00:00",
@@ -97,6 +103,206 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		self.assertEqual(second, result)
 		create.assert_called_once()
 		self.assertEqual(create.call_args.kwargs["interaction_type"], "MESSAGE")
+
+	def test_external_call_uses_phone_call_interaction_type(self):
+		from crm.fcrm.interaction_log import ingest_external_interaction
+
+		payload = {
+			"source_namespace": "voice-provider",
+			"source_record_id": "call-1",
+			"idempotency_key": "call:voice-provider:evt-1:final:1",
+			"student_id": "STU-1",
+			"channel": "phone",
+			"direction": "inbound",
+			"evidence_kind": "call",
+			"evidence_state": "final",
+			"conversation_id": "call-1",
+			"turns": [{"speaker_role": "student", "content": "Need tuition details"}],
+			"occurred_at": "2026-08-29 09:00:00",
+		}
+		result = {
+			"outcome": "created",
+			"interaction": "INT-CALL-1",
+			"student": "STU-1",
+			"contact": None,
+			"receipt": "REC-CALL-1",
+		}
+		authority = {
+			"actor_user": "sales@example.com",
+			"actor_staff": "STAFF-1",
+			"profile": "sales",
+			"campus_scope": ["HCM"],
+			"team_scope": ["TEAM-1"],
+		}
+
+		with (
+			patch("crm.fcrm.student_intake._resolve_authority", return_value=authority),
+			patch("crm.fcrm.student_intake._receipt_replay", return_value=None),
+			patch("crm.fcrm.student_intake._persist_receipt", return_value=result),
+			patch(
+				"crm.fcrm.interaction_log._resolve_external_interaction_target",
+				return_value={"student": "STU-1", "contact": None},
+			),
+			patch("crm.fcrm.interaction_log._assert_interaction_scope"),
+			patch("crm.fcrm.interaction_log._ensure_interaction_evidence", return_value=["EVID-CALL-1"]),
+			patch("crm.fcrm.interaction_log._ensure_interaction_analysis_run", return_value="IAR-CALL-1"),
+			patch("crm.fcrm.interaction_log.create_interaction", return_value="INT-CALL-1") as create,
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(
+				frappe.db,
+				"get_value",
+				side_effect=[
+					None,
+					{
+						"name": "INT-CALL-1",
+						"student": "STU-1",
+						"crm_contact": None,
+						"interaction_type": "PHONE_CALL",
+						"channel": "phone",
+						"direction": "inbound",
+						"interaction_datetime": "2026-08-29 09:00:00",
+						"conversation_id": "call-1",
+						"agent_id": None,
+						"source_revision": 1,
+					},
+				],
+			),
+		):
+			ingest_external_interaction(payload)
+
+		self.assertEqual(create.call_args.kwargs["interaction_type"], "PHONE_CALL")
+
+	def test_call_log_after_insert_dispatcher_is_disabled_for_canonical_intake(self):
+		from crm import hooks as crm_hooks
+
+		self.assertNotIn("after_insert", crm_hooks.doc_events["Call Log"])
+
+	def test_final_call_seals_existing_interaction_when_revision_is_unchanged(self):
+		payload = {
+			"source_namespace": "voice-provider",
+			"source_record_id": "call-finalize-1",
+			"idempotency_key": "call:voice-provider:evt-finalize:final:1",
+			"student_id": "STU-1",
+			"channel": "phone",
+			"direction": "inbound",
+			"evidence_kind": "call",
+			"evidence_state": "final",
+			"conversation_id": "call-finalize-1",
+			"turns": [{"speaker_role": "student", "content": "Need tuition details"}],
+			"occurred_at": "2026-08-29 09:00:00",
+		}
+		authority = {
+			"actor_user": "sales@example.com",
+			"actor_staff": "STAFF-1",
+			"profile": "sales",
+			"campus_scope": ["HCM"],
+			"team_scope": ["TEAM-1"],
+		}
+		existing = {
+			"name": "INT-CALL-FINALIZE-1",
+			"student": "STU-1",
+			"crm_contact": None,
+			"interaction_type": "PHONE_CALL",
+			"channel": "phone",
+			"direction": "inbound",
+			"interaction_datetime": "2026-08-29 09:00:00",
+			"conversation_id": "call-finalize-1",
+			"agent_id": None,
+			"source_revision": 1,
+		}
+
+		with (
+			patch("crm.fcrm.student_intake._resolve_authority", return_value=authority),
+			patch("crm.fcrm.student_intake._receipt_replay", return_value=None),
+			patch("crm.fcrm.student_intake._persist_receipt", return_value={}),
+			patch(
+				"crm.fcrm.interaction_log._resolve_external_interaction_target",
+				return_value={"student": "STU-1", "contact": None},
+			),
+			patch("crm.fcrm.interaction_log._assert_interaction_scope"),
+			patch("crm.fcrm.interaction_log._ensure_interaction_evidence", return_value=["EVID-CALL-1"]),
+			patch("crm.fcrm.interaction_log._ensure_interaction_analysis_run", return_value="IAR-CALL-1"),
+			patch("crm.fcrm.interaction_log.create_interaction") as create,
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe.db, "get_value", return_value=existing),
+			patch.object(frappe.db, "set_value") as set_value,
+		):
+			ingest_external_interaction(payload)
+
+		create.assert_not_called()
+		interaction_update = next(
+			call for call in set_value.call_args_list if call.args[0] == "CRM Interaction"
+		)
+		self.assertEqual(interaction_update.args[1], "INT-CALL-FINALIZE-1")
+		self.assertEqual(interaction_update.args[2]["source_revision"], 1)
+		self.assertEqual(interaction_update.args[2]["evidence"], "EVID-CALL-1")
+		self.assertEqual(interaction_update.args[2]["episode_key"], "call-finalize-1")
+		self.assertEqual(interaction_update.args[2]["episode_state"], "sealed")
+
+	def test_draft_call_evidence_can_be_finalized_at_the_same_revision(self):
+		payload = {
+			"source_namespace": "voice-provider",
+			"source_record_id": "call-evidence-1",
+			"source_revision": 1,
+			"evidence_state": "final",
+			"evidence_kind": "call",
+			"occurred_at": "2026-08-29 09:00:00",
+			"turns": [{"speaker_role": "student", "content": "Updated transcript"}],
+		}
+
+		with (
+			patch.object(frappe.db, "get_value", side_effect=["EVID-CALL-2", {
+				"evidence_digest": "a" * 64,
+				"evidence_state": "draft",
+				"evidence_kind": "call",
+			}]),
+			patch.object(frappe.db, "set_value") as set_value,
+		):
+			names = _ensure_interaction_evidence(payload, {"student": "STU-1", "contact": None})
+
+		self.assertEqual(names, ["EVID-CALL-2"])
+		self.assertEqual(set_value.call_args.args[0:2], ("CRM Interaction Evidence", "EVID-CALL-2"))
+		self.assertEqual(set_value.call_args.args[2]["evidence_state"], "final")
+		self.assertEqual(set_value.call_args.args[2]["content"], "Updated transcript")
+
+	def test_call_evidence_requires_the_phone_channel(self):
+		payload = {
+			"source_namespace": "voice-provider",
+			"source_record_id": "call-email-1",
+			"idempotency_key": "call-email-1",
+			"student_id": "STU-1",
+			"channel": "email",
+			"direction": "inbound",
+			"evidence_kind": "call",
+			"turns": [{"speaker_role": "student", "content": "Invalid channel"}],
+			"occurred_at": "2026-08-29 09:00:00",
+		}
+
+		with self.assertRaises(StudentIntakeError) as context:
+			normalize_external_interaction_payload(payload)
+
+		self.assertEqual(context.exception.code, "INVALID_INPUT")
+
+	def test_external_interaction_match_rejects_a_different_interaction_type(self):
+		record = {
+			"student": "STU-1",
+			"crm_contact": None,
+			"interaction_type": "MESSAGE",
+			"channel": "phone",
+			"direction": "inbound",
+			"interaction_datetime": "2026-08-29 09:00:00",
+			"conversation_id": "call-1",
+			"agent_id": None,
+		}
+		payload = {
+			"channel": "phone",
+			"direction": "inbound",
+			"occurred_at": "2026-08-29 09:00:00",
+			"conversation_id": "call-1",
+			"agent_id": None,
+		}
+
+		self.assertFalse(_external_interaction_matches(record, {"student": "STU-1", "contact": None}, payload, "PHONE_CALL"))
 
 	def test_configured_service_user_has_only_interaction_authority(self):
 		from crm.fcrm.student_intake import INTERACTION_CAPABILITY, SUBMIT_CAPABILITY, _resolve_authority
