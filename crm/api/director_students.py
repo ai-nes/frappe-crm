@@ -280,28 +280,35 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and Call Logs) for a CRM Student."""
 	_require_access()
-	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
+	requested_id, activity_id, canonical_id = _resolve_activity_target(student_id)
 	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", lead_id)
+		doc = frappe.get_doc("CRM Lead", activity_id)
 	except frappe.DoesNotExistError:
-		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+		canonical_id = canonical_id or canonical_student(activity_id)
+		if not canonical_id:
+			_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+		try:
+			doc = frappe.get_doc("CRM Student", canonical_id)
+			activity_id = canonical_id
+		except frappe.DoesNotExistError:
+			_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
-	interactions = _student_interactions(lead_id)
-	guardian = _student_guardian(lead_id)
+	row = _normalize_student_row(frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS}))
+	interactions = _student_interactions(activity_id)
+	guardian = _student_guardian(activity_id)
 	if not guardian.get("name") and row.get("alt_name"):
 		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
 
-	zalo_messages = _student_zalo_messages(lead_id, interactions, row, guardian)
-	calls = _student_call_records(lead_id, interactions, row, guardian)
+	zalo_messages = _student_zalo_messages(activity_id, interactions, row, guardian)
+	calls = _student_call_records(activity_id, interactions, row, guardian)
 
 	return {
 		"student_id": requested_id,
@@ -1623,9 +1630,10 @@ def _student_call_records(
 
 	if _table_exists("Call Log"):
 		try:
+			activity_ids = _student_query_ids([student_id])
 			call_logs = frappe.get_list(
 				"Call Log",
-				filters={"reference_docname": student_id},
+				filters={"reference_docname": ["in", activity_ids]},
 				or_filters=[
 					{"reference_doctype": "CRM Student"},
 					{"reference_doctype": "CRM Lead"},
