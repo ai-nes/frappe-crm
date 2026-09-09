@@ -30,13 +30,26 @@ class TestCRMStudentPrivacyRequest(FrappeTestCase):
 		finally:
 			frappe.flags.student_intake_service = False
 		self.addCleanup(lambda: frappe.delete_doc("CRM Lead", student.name, force=True))
-		return student
+		canonical = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "_Test Privacy Student",
+				"phone": "0987000091",
+				"student_stage": "New",
+				"student": student.name,
+			}
+		)
+		canonical.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("CRM Student", canonical.name, force=True))
+		return canonical
 
 	def test_privacy_request_is_command_only_and_resolvable(self):
 		student = self._student()
 		request = open_privacy_request(student.name, "access", details="Please provide a copy of the record.")
 		self.assertEqual(request["status"], "open")
-		resolved = resolve_privacy_request(request["name"], "completed", "Exported the permitted Student 360 record.")
+		resolved = resolve_privacy_request(
+			request["name"], "completed", "Exported the permitted Student 360 record."
+		)
 		self.assertEqual(resolved["status"], "completed")
 		self.assertEqual(resolved["resolved_by"], "Administrator")
 
@@ -69,7 +82,7 @@ class TestCRMStudentPrivacyRequest(FrappeTestCase):
 			granted_at=None,
 		)
 		sync_student_privacy_projection(event)
-		self.assertEqual(frappe.db.get_value("CRM Lead", student.name, "privacy_status"), "opted_out")
+		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "privacy_status"), "opted_out")
 
 	def test_privacy_context_reads_consent_and_retention_from_canonical_event(self):
 		occurred_at = datetime(2026, 8, 30, 9, 0, 0)

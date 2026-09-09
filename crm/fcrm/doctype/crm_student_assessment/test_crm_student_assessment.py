@@ -27,7 +27,18 @@ class TestCRMStudentAssessment(FrappeTestCase):
 		finally:
 			frappe.flags.student_intake_service = False
 		self.addCleanup(lambda: frappe.delete_doc("CRM Lead", student.name, force=True))
-		return student
+		canonical = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": f"_Test Assessment {suffix}",
+				"phone": f"0987{suffix:06d}",
+				"student_stage": "New",
+				"student": student.name,
+			}
+		)
+		canonical.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("CRM Student", canonical.name, force=True))
+		return canonical
 
 	def _values(self, barrier="Information"):
 		return {
@@ -52,7 +63,9 @@ class TestCRMStudentAssessment(FrappeTestCase):
 		student.reload()
 		self.assertFalse(student.assessment_status)
 
-		confirmed = confirm_student_assessment(proposal["name"], reason="Staff verified the interaction evidence.")
+		confirmed = confirm_student_assessment(
+			proposal["name"], reason="Staff verified the interaction evidence."
+		)
 		self.assertEqual(confirmed["status"], "confirmed")
 		student.reload()
 		self.assertEqual(student.assessment_status, "confirmed")
@@ -93,4 +106,4 @@ class TestCRMStudentAssessment(FrappeTestCase):
 		)
 		self.assertEqual(second["revision"], first["revision"] + 1)
 		self.assertEqual(frappe.db.get_value("CRM Student Assessment", first["name"], "status"), "superseded")
-		self.assertEqual(frappe.db.get_value("CRM Lead", student.name, "primary_barrier"), "Family")
+		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "primary_barrier"), "Family")

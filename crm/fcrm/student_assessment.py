@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_student_assessment.crm_student_assessment import (
 	LEVELS,
 	parse_evidence,
 )
+from crm.fcrm.student_reference import canonical_student
 from crm.services.student_context import mark_student_context_changed
 
 ASSESSMENT_POLICY_VERSION = "student-360-assessment-v1"
@@ -23,7 +24,10 @@ ASSESSMENT_POLICY_VERSION = "student-360-assessment-v1"
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Lead", student)
+	canonical = canonical_student(student)
+	if not canonical:
+		frappe.throw(_("A canonical CRM Student is required for assessment."), frappe.ValidationError)
+	doc = frappe.get_doc("CRM Student", canonical)
 	if not doc.has_permission("write"):
 		frappe.throw(_("You do not have permission to assess this Student."), frappe.PermissionError)
 	actor = frappe.session.user
@@ -41,11 +45,26 @@ def _current(student: str, statuses=("confirmed", "proposed")):
 		"CRM Student Assessment",
 		{"student": student, "status": ["in", list(statuses)]},
 		[
-			"name", "student", "assessment_revision", "status", "assessment_source",
-			"assessed_at", "policy_version", "model_version", "interest",
-			"interest_confidence", "fit", "fit_confidence", "primary_barrier",
-			"barrier_confidence", "reason", "evidence_references", "supersedes",
-			"confirmed_by", "confirmed_at", "override_reason",
+			"name",
+			"student",
+			"assessment_revision",
+			"status",
+			"assessment_source",
+			"assessed_at",
+			"policy_version",
+			"model_version",
+			"interest",
+			"interest_confidence",
+			"fit",
+			"fit_confidence",
+			"primary_barrier",
+			"barrier_confidence",
+			"reason",
+			"evidence_references",
+			"supersedes",
+			"confirmed_by",
+			"confirmed_at",
+			"override_reason",
 		],
 		order_by="assessment_revision desc, creation desc",
 		as_dict=True,
@@ -55,8 +74,14 @@ def _current(student: str, statuses=("confirmed", "proposed")):
 def _next_revision(student: str) -> int:
 	# Serialize revision allocation against the Student row so concurrent
 	# commands cannot observe the same max revision.
-	frappe.db.sql("SELECT name FROM `tabCRM Lead` WHERE name = %s FOR UPDATE", (student,))
-	return int(frappe.db.get_value("CRM Student Assessment", {"student": student}, "max(assessment_revision)") or 0) + 1
+	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name = %s FOR UPDATE", (student,))
+	return (
+		int(
+			frappe.db.get_value("CRM Student Assessment", {"student": student}, "max(assessment_revision)")
+			or 0
+		)
+		+ 1
+	)
 
 
 def _decode(value: Any):
@@ -101,7 +126,7 @@ def _project(student: str, assessment) -> None:
 		"fit_level": assessment.fit,
 		"primary_barrier": assessment.primary_barrier,
 	}
-	frappe.db.set_value("CRM Lead", student, values, update_modified=False)
+	frappe.db.set_value("CRM Student", student, values, update_modified=False)
 	mark_student_context_changed(student, "student_360_assessment_changed")
 
 
@@ -146,9 +171,15 @@ def record_student_assessment(
 			or "System Manager" in roles
 			or (configured_service_user and actor == configured_service_user)
 		):
-			frappe.throw(_("System assessments must be submitted by the configured assessment service."), frappe.PermissionError)
+			frappe.throw(
+				_("System assessments must be submitted by the configured assessment service."),
+				frappe.PermissionError,
+			)
 	if source == "system" and confirm:
-		frappe.throw(_("System assessments require human confirmation before becoming current."), frappe.ValidationError)
+		frappe.throw(
+			_("System assessments require human confirmation before becoming current."),
+			frappe.ValidationError,
+		)
 	reason = str(reason or "").strip()
 	if not reason:
 		frappe.throw(_("An explainable assessment reason is required."), frappe.ValidationError)
@@ -184,7 +215,9 @@ def record_student_assessment(
 	return serialize_assessment(doc)
 
 
-def confirm_student_assessment(name: str, *, override: dict[str, Any] | None = None, reason: str | None = None) -> dict[str, Any]:
+def confirm_student_assessment(
+	name: str, *, override: dict[str, Any] | None = None, reason: str | None = None
+) -> dict[str, Any]:
 	doc = frappe.get_doc("CRM Student Assessment", name)
 	_student_for_write(doc.student)
 	if doc.status != "proposed":
@@ -192,7 +225,14 @@ def confirm_student_assessment(name: str, *, override: dict[str, Any] | None = N
 	override = override or {}
 	override_changed = False
 	if override:
-		for key in ("interest", "fit", "primary_barrier", "interest_confidence", "fit_confidence", "barrier_confidence"):
+		for key in (
+			"interest",
+			"fit",
+			"primary_barrier",
+			"interest_confidence",
+			"fit_confidence",
+			"barrier_confidence",
+		):
 			if key in override and str(override.get(key)) != str(doc.get(key)):
 				override_changed = True
 		data = _validate_values(
@@ -214,7 +254,9 @@ def confirm_student_assessment(name: str, *, override: dict[str, Any] | None = N
 	doc.status = "confirmed"
 	doc.confirmed_by = frappe.session.user
 	doc.confirmed_at = now_datetime()
-	doc.override_reason = ((str(reason or "").strip()[:2000] or None) if override_changed else doc.override_reason)
+	doc.override_reason = (
+		(str(reason or "").strip()[:2000] or None) if override_changed else doc.override_reason
+	)
 	doc.flags.student_assessment_command = True
 	doc.save(ignore_permissions=True)
 	_supersede_current(doc.student, exclude=doc.name)
@@ -249,7 +291,10 @@ def serialize_assessment(doc) -> dict[str, Any]:
 
 
 def get_student_assessment_context(student: str) -> dict[str, Any]:
-	doc = frappe.get_doc("CRM Lead", student)
+	canonical = canonical_student(student)
+	if not canonical:
+		frappe.throw(_("A canonical CRM Student is required for assessment."), frappe.ValidationError)
+	doc = frappe.get_doc("CRM Student", canonical)
 	if not doc.has_permission("read"):
 		frappe.throw(_("You do not have permission to view this Student."), frappe.PermissionError)
 	current = _current(student, ("confirmed",))
@@ -262,9 +307,15 @@ def get_student_assessment_context(student: str) -> dict[str, Any]:
 		limit_page_length=20,
 	)
 	return {
-		"current": serialize_assessment(frappe.get_doc("CRM Student Assessment", current.name)) if current else None,
-		"pending": serialize_assessment(frappe.get_doc("CRM Student Assessment", pending.name)) if pending else None,
-		"history": [serialize_assessment(frappe.get_doc("CRM Student Assessment", row.name)) for row in history],
+		"current": serialize_assessment(frappe.get_doc("CRM Student Assessment", current.name))
+		if current
+		else None,
+		"pending": serialize_assessment(frappe.get_doc("CRM Student Assessment", pending.name))
+		if pending
+		else None,
+		"history": [
+			serialize_assessment(frappe.get_doc("CRM Student Assessment", row.name)) for row in history
+		],
 		"student_context_revision": int(doc.get("student_context_revision") or 0),
 		"policy_version": ASSESSMENT_POLICY_VERSION,
 	}

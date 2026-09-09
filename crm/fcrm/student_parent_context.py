@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
+from crm.fcrm.student_reference import canonical_student
 from crm.services.student_context import mark_student_context_changed
 
 _DECISION_ROLES = {"Unknown", "Primary decision maker", "Influencer", "Information only"}
@@ -18,9 +19,11 @@ _DECISION_INFLUENCE = {"Unknown", "High", "Medium", "Low"}
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Lead", student)
+	doc = frappe.get_doc("CRM Student", canonical_student(student) or student)
 	if not doc.has_permission("write"):
-		frappe.throw(_("You do not have permission to update this Student's parent context."), frappe.PermissionError)
+		frappe.throw(
+			_("You do not have permission to update this Student's parent context."), frappe.PermissionError
+		)
 	return doc
 
 
@@ -60,19 +63,31 @@ def record_parent_contact_authority(
 	student_doc = _student_for_write(student)
 	if not frappe.db.exists("CRM Student", contact):
 		frappe.throw(_("The parent Contact does not exist."), frappe.ValidationError)
-	actor = _ensure_authorized_parent_reviewer(contact)
+	_ensure_authorized_parent_reviewer(contact)
 	linked_student = frappe.db.get_value("CRM Student", contact, "student")
 	if linked_student and linked_student != student_doc.name:
 		frappe.throw(_("The parent Contact is linked to a different Student."), frappe.ValidationError)
 	if decision_role not in _DECISION_ROLES or decision_influence not in _DECISION_INFLUENCE:
-		frappe.throw(_("Parent decision context contains an invalid role or influence."), frappe.ValidationError)
-	if not str(relationship_type or "").strip() or not str(lawful_basis or "").strip() or not str(proof_reference or "").strip():
-		frappe.throw(_("relationship_type, lawful_basis and proof_reference are required."), frappe.ValidationError)
+		frappe.throw(
+			_("Parent decision context contains an invalid role or influence."), frappe.ValidationError
+		)
+	if (
+		not str(relationship_type or "").strip()
+		or not str(lawful_basis or "").strip()
+		or not str(proof_reference or "").strip()
+	):
+		frappe.throw(
+			_("relationship_type, lawful_basis and proof_reference are required."), frappe.ValidationError
+		)
 	try:
 		channels = json.loads(allowed_channels) if isinstance(allowed_channels, str) else allowed_channels
 	except (TypeError, ValueError):
 		channels = None
-	if not isinstance(channels, list) or not channels or any(not str(channel).strip() for channel in channels):
+	if (
+		not isinstance(channels, list)
+		or not channels
+		or any(not str(channel).strip() for channel in channels)
+	):
 		frappe.throw(_("At least one allowed parent-contact channel is required."), frappe.ValidationError)
 	flags = frappe.flags
 	previous = getattr(flags, "student_parent_context_service", False)
@@ -89,7 +104,9 @@ def record_parent_contact_authority(
 				"decision_influence": decision_influence,
 				"concerns": str(concerns or "").strip()[:2000] or None,
 				"lawful_basis": str(lawful_basis).strip()[:140],
-				"allowed_channels": json.dumps([str(channel).strip()[:80] for channel in channels], ensure_ascii=False),
+				"allowed_channels": json.dumps(
+					[str(channel).strip()[:80] for channel in channels], ensure_ascii=False
+				),
 				"effective_at": effective_at or now_datetime(),
 				"expires_at": expires_at,
 				"proof_reference": str(proof_reference).strip()[:500],
@@ -119,7 +136,12 @@ def revoke_parent_contact_authority(name: str, *, evidence: str) -> dict[str, An
 	student = _student_for_write(doc.student)
 	_ensure_contact_scope(doc.contact, actor)
 	if doc.revoked_at:
-		return {"name": doc.name, "student": doc.student, "revoked_at": str(doc.revoked_at), "status": "already_revoked"}
+		return {
+			"name": doc.name,
+			"student": doc.student,
+			"revoked_at": str(doc.revoked_at),
+			"status": "already_revoked",
+		}
 	if not str(evidence or "").strip():
 		frappe.throw(_("Revocation evidence is required."), frappe.ValidationError)
 	# Revocation is a command update; the original relationship facts remain immutable.

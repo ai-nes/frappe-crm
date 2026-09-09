@@ -257,7 +257,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "student_context_or_redacted_endpoint",
 	},
 	"admissions_case": {
-		"doctypes": ("CRM Lead", "CRM Student"),
+		"doctypes": ("CRM Lead", "CRM Student", "CRM Student Admission Profile", "CRM Student Document"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "rwc",
@@ -340,7 +340,7 @@ CANONICAL_PERMISSION_MATRIX = {
 		"row_scope": "marketing_governed_mutation",
 	},
 	"governed_admissions": {
-		"doctypes": ("CRM Campus",),
+		"doctypes": ("CRM Campus", "CRM Admission Profile Template", "CRM Document Type"),
 		"permissions": {
 			"system_manager": "rwcdx",
 			"sales": "r",
@@ -350,8 +350,21 @@ CANONICAL_PERMISSION_MATRIX = {
 		},
 		"per_doctype_permissions": {
 			"CRM Campus": {"admissions_director": "rwc"},
+			"CRM Admission Profile Template": {"admissions_director": "rwc"},
+			"CRM Document Type": {"admissions_director": "rwc"},
 		},
 		"row_scope": "campus_is_not_team_scope",
+	},
+	"sensitive_admissions": {
+		"doctypes": ("CRM Student Payment Account",),
+		"permissions": {
+			"system_manager": "rwcdx",
+			"sales": "-",
+			"lead_sales": "-",
+			"marketing": "-",
+			"admissions_director": "rwc",
+		},
+		"row_scope": "assigned",
 	},
 	"decision_action": {
 		"doctypes": ("CRM Recommendation", "CRM Action", "CRM Action Item", "CRM Student Decision Event"),

@@ -55,6 +55,8 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Admission Application": "student",
 	"CRM Student Payment": "student",
 	"CRM Revenue Recognition": "student",
+	"CRM Student Admission Profile": "student",
+	"CRM Student Payment Account": "student",
 }
 
 
@@ -783,9 +785,7 @@ def _lead_sales_student_read_condition(table, crm_staff_name, *, doctype="CRM St
 			if staff_clause:
 				team_parts.append(staff_clause)
 			if team_parts:
-				assigned_clause = (
-					f"{table}.owner_staff is not null and {table}.assigned_to is not null"
-				)
+				assigned_clause = f"{table}.owner_staff is not null and {table}.assigned_to is not null"
 				parts.append(f"({assigned_clause} and ({' or '.join(team_parts)}))")
 			if team_clause:
 				parts.append(
@@ -804,8 +804,7 @@ def _lead_sales_student_read_condition(table, crm_staff_name, *, doctype="CRM St
 				province_clause = _in_clause(f"{table}.province", group_provinces)
 				if province_clause:
 					parts.append(
-						f"({table}.owner_staff is null and {table}.assigned_to is null and "
-						f"{province_clause})"
+						f"({table}.owner_staff is null and {table}.assigned_to is null and {province_clause})"
 					)
 
 	if not parts:

@@ -3,6 +3,7 @@ from frappe import _
 from frappe.model.document import Document
 
 from crm.fcrm.admissions_migration import stable_fingerprint
+from crm.fcrm.student_reference import canonical_student
 
 
 class CRMStudentPayment(Document):
@@ -26,6 +27,7 @@ class CRMStudentPayment(Document):
 	)
 
 	def before_validate(self):
+		self.student = canonical_student(self.student) or self.student
 		if not self.transaction_key and self.payment_reference:
 			self.transaction_key = self.payment_reference
 		if not self.business_period:
@@ -55,6 +57,15 @@ class CRMStudentPayment(Document):
 			)
 
 	def validate(self):
+		if self.payment_type not in {
+			"booking_fee",
+			"enrollment_fee",
+			"supplemental_enrollment_fee",
+			"tuition_fee",
+			"refund",
+			"other",
+		}:
+			frappe.throw(_("Payment type is invalid."), frappe.ValidationError)
 		if float(self.amount or 0) < 0:
 			frappe.throw(_("Payment amount cannot be negative."), frappe.ValidationError)
 		if not self.idempotency_fingerprint:

@@ -26,7 +26,7 @@ class TestStudentContactConversionReaderInventory(unittest.TestCase):
 
 	def test_resolver_is_the_only_legacy_fallback_boundary(self):
 		resolver = (ROOT / "fcrm/student_contact_conversion.py").read_text(encoding="utf-8")
-		self.assertIn('get_value("CRM Student", {"student": student}', resolver)
+		self.assertIn('get_value("CRM Student", {"student": lead or student}', resolver)
 		self.assertIn('get_value("CRM Student", contact, "student")', resolver)
 
 	def test_conversion_service_keeps_contact_reads_behind_scope_checks(self):

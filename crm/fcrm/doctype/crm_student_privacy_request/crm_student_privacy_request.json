@@ -7,7 +7,7 @@
  "field_order": ["naming_series", "student", "contact", "request_type", "status", "requested_at", "requested_by", "details", "resolved_at", "resolved_by", "resolution", "evidence_reference"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "SPR-.YYYY.-", "options": "SPR-.YYYY.-"},
-  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Lead", "reqd": 1, "read_only": 1, "in_list_view": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "reqd": 1, "read_only": 1, "in_list_view": 1},
   {"fieldname": "contact", "fieldtype": "Link", "options": "CRM Student", "read_only": 1},
   {"fieldname": "request_type", "fieldtype": "Select", "options": "access\nrectification\nerasure\nrestriction\nobjection\nwithdraw_consent", "reqd": 1, "in_list_view": 1},
   {"fieldname": "status", "fieldtype": "Select", "options": "open\nin_progress\ncompleted\nrejected", "default": "open", "reqd": 1, "in_list_view": 1},

@@ -2,17 +2,23 @@ import frappe
 from frappe.model.document import Document
 
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
+from crm.fcrm.student_reference import canonical_student
 
 
 class CRMMarketingEngagement(Document):
 	def before_validate(self):
+		if self.student:
+			self.student = canonical_student(self.student) or self.student
 		if (
 			self.is_new()
 			and not getattr(frappe.flags, "student_attribution_service", False)
 			and not getattr(frappe.flags, "student_attribution_migration", False)
 			and not getattr(frappe.flags, "in_test", False)
 		):
-			frappe.throw("Marketing engagement must be recorded through the Student attribution command.", frappe.PermissionError)
+			frappe.throw(
+				"Marketing engagement must be recorded through the Student attribution command.",
+				frappe.PermissionError,
+			)
 		if self.engagement_kind == "event_participation":
 			if not self.actor:
 				self.actor = frappe.session.user
@@ -27,7 +33,10 @@ class CRMMarketingEngagement(Document):
 		if not self.engagement_kind:
 			frappe.throw("Engagement kind is required.")
 		if not self.is_new() and not getattr(frappe.flags, "in_test", False):
-			frappe.throw("Marketing engagement evidence is append-only; create a superseding correction instead.", frappe.PermissionError)
+			frappe.throw(
+				"Marketing engagement evidence is append-only; create a superseding correction instead.",
+				frappe.PermissionError,
+			)
 		if not self.student:
 			frappe.throw("Student is required for new attribution evidence.")
 		if self.crm_contact and not contact_is_linked_to_student(self.crm_contact, self.student):
@@ -42,9 +51,18 @@ class CRMMarketingEngagement(Document):
 				frappe.throw("Event engagement requires an event reference.")
 			if not self.status:
 				frappe.throw("Event engagement requires status.")
-			if self.is_new() and not self.supersedes and frappe.db.exists(
-				"CRM Marketing Engagement",
-				{"engagement_kind": "event_participation", "crm_event": self.crm_event, "crm_contact": self.crm_contact, "student": self.student},
+			if (
+				self.is_new()
+				and not self.supersedes
+				and frappe.db.exists(
+					"CRM Marketing Engagement",
+					{
+						"engagement_kind": "event_participation",
+						"crm_event": self.crm_event,
+						"crm_contact": self.crm_contact,
+						"student": self.student,
+					},
+				)
 			):
 				frappe.throw("This contact already has a participation record for this event.")
 		else:
@@ -52,16 +70,40 @@ class CRMMarketingEngagement(Document):
 
 	def on_trash(self):
 		if not getattr(frappe.flags, "in_test", False):
-			frappe.throw("Marketing engagement evidence is append-only and cannot be deleted.", frappe.PermissionError)
+			frappe.throw(
+				"Marketing engagement evidence is append-only and cannot be deleted.", frappe.PermissionError
+			)
 
 	@staticmethod
 	def default_list_data():
 		columns = [
 			{"label": "Kind", "type": "Select", "key": "engagement_kind", "width": "10rem"},
-			{"label": "Campaign", "type": "Link", "key": "crm_campaign", "options": "CRM Campaign", "width": "14rem"},
+			{
+				"label": "Campaign",
+				"type": "Link",
+				"key": "crm_campaign",
+				"options": "CRM Campaign",
+				"width": "14rem",
+			},
 			{"label": "Event", "type": "Link", "key": "crm_event", "options": "CRM Event", "width": "14rem"},
-			{"label": "Contact", "type": "Link", "key": "crm_contact", "options": "CRM Student", "width": "14rem"},
+			{
+				"label": "Contact",
+				"type": "Link",
+				"key": "crm_contact",
+				"options": "CRM Student",
+				"width": "14rem",
+			},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "engagement_kind", "crm_campaign", "crm_event", "crm_contact", "status", "touched_at", "registered_at", "modified"]
+		rows = [
+			"name",
+			"engagement_kind",
+			"crm_campaign",
+			"crm_event",
+			"crm_contact",
+			"status",
+			"touched_at",
+			"registered_at",
+			"modified",
+		]
 		return {"columns": columns, "rows": rows}

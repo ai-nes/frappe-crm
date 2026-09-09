@@ -68,7 +68,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Student",
-   "options": "CRM Lead",
+   "options": "CRM Student",
    "read_only": 1
   },
   {

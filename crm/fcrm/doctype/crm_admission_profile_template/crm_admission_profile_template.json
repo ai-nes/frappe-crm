@@ -1,0 +1,37 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "template_code", "template_name", "profile_type", "status", "version", "education_program", "admission_method", "description", "document_types"],
+ "fields": [
+  {"default": "APT-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "options": "APT-.YYYY.-"},
+  {"fieldname": "template_code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Template Code", "reqd": 1, "unique": 1},
+  {"fieldname": "template_name", "fieldtype": "Data", "in_list_view": 1, "label": "Template Name", "reqd": 1},
+  {"default": "academic_admission", "fieldname": "profile_type", "fieldtype": "Select", "in_list_view": 1, "label": "Profile Type", "options": "academic_admission\nenrollment", "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nActive\nArchived", "reqd": 1},
+  {"default": "1", "fieldname": "version", "fieldtype": "Int", "label": "Version", "reqd": 1},
+  {"fieldname": "education_program", "fieldtype": "Link", "label": "Education Program", "options": "CRM Education Program"},
+  {"fieldname": "admission_method", "fieldtype": "Link", "label": "Admission Method", "options": "CRM Admission Method"},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "document_types", "fieldtype": "Table", "label": "Document Types", "options": "CRM Profile Template Document Type"}
+ ],
+ "indexes": [{"fields": ["status", "template_code"], "name": "crm_admission_profile_template_status_code_idx", "unique": 0}],
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Admission Profile Template",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "template_code,template_name,status",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "template_name"
+}

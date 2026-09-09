@@ -181,3 +181,13 @@ def canonical_student(value: str | None) -> str | None:
 		return value
 	lead = lead_for_reference(value)
 	return student_for_lead(lead)
+
+
+def get_canonical_student_doc(reference: str | None, *, allow_legacy_lead: bool = True):
+	"""Load Student first, with an explicit Lead fallback for old adapters."""
+	student = canonical_student(reference)
+	if student:
+		return frappe.get_doc("CRM Student", student)
+	if allow_legacy_lead and reference and frappe.db.exists("CRM Lead", reference):
+		return frappe.get_doc("CRM Lead", reference)
+	return None

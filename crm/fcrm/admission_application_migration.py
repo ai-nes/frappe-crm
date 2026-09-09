@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from crm.fcrm.admissions_canonical_contracts import canonical_attempt_key
+from crm.fcrm.admissions_canonical_contracts import canonical_application_attempt_key
 from crm.fcrm.admissions_migration import provenance
 
 
@@ -20,8 +20,6 @@ def application_backfill_decision(
 	if not year:
 		return {"outcome": "review", "reason": "missing_admission_year", "student": student.get("name")}
 	if offerings is not None:
-		if not student.get("case_key"):
-			return {"outcome": "review", "reason": "missing_case_key", "student": student.get("name")}
 		if not student.get("admission_method"):
 			return {"outcome": "review", "reason": "missing_admission_method", "student": student.get("name")}
 		candidates = [
@@ -40,8 +38,8 @@ def application_backfill_decision(
 				"student": student.get("name"),
 			}
 		offering = candidates[0]
-		source_reference = f"CRM Lead:{student.get('name')}"
-		attempt_key = canonical_attempt_key(student["case_key"], offering["name"], source_reference)
+		source_reference = f"CRM Student:{student.get('name')}"
+		attempt_key = canonical_application_attempt_key(student["name"], offering["name"], source_reference)
 	else:
 		offering = None
 		source_reference = None
@@ -50,7 +48,6 @@ def application_backfill_decision(
 		"student": student.get("name"),
 		**(
 			{
-				"case_key": student["case_key"],
 				"offering": offering["name"],
 				"application_attempt_key": attempt_key,
 			}
@@ -66,7 +63,7 @@ def application_backfill_decision(
 		"status": "Enrolled" if student.get("resolution") == "CREATED" else "Draft",
 	}
 	metadata = provenance(
-		source_doctype="CRM Lead",
+		source_doctype="CRM Student",
 		source_name=str(student.get("name")),
 		source_reference=source_reference,
 		**values,

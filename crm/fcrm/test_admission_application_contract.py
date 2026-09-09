@@ -27,10 +27,9 @@ def test_application_backfill_is_idempotent_by_provenance_fingerprint():
 	assert second["outcome"] == "existing"
 
 
-def test_canonical_application_backfill_requires_one_exact_offering_and_case_key():
+def test_canonical_application_backfill_uses_student_without_case_key():
 	student = {
 		"name": "STU-1",
-		"case_key": "CK-ID-1-2026",
 		"admission_year": "2026",
 		"major": "M-1",
 		"branch": "HN",
@@ -51,10 +50,7 @@ def test_canonical_application_backfill_requires_one_exact_offering_and_case_key
 
 	assert decision["outcome"] == "migrated"
 	assert decision["values"]["offering"] == "OFF-1"
-	assert decision["values"]["case_key"] == "CK-ID-1-2026"
-	assert (
-		application_backfill_decision({**student, "case_key": ""}, offerings=offerings)["outcome"] == "review"
-	)
+	assert "case_key" not in decision["values"]
 	assert (
 		application_backfill_decision(student, offerings=[*offerings, {**offerings[0], "name": "OFF-2"}])[
 			"reason"

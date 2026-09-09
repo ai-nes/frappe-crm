@@ -40,8 +40,14 @@ LEAD_TO_STUDENT_FIELDS = (
 	("phone", "phone"),
 	("email", "email"),
 	("other_email", "other_email"),
+	("other_phone", "other_phone"),
 	("gender", "gender"),
 	("date_of_birth", "date_of_birth"),
+	("birth_place", "birth_place"),
+	("ethnicity", "ethnicity"),
+	("religion", "religion"),
+	("nationality", "nationality"),
+	("alt_address", "contact_address"),
 	("id_number", "id_number"),
 	("id_issued_date", "id_issued_date"),
 	("id_issued_place", "id_issued_place"),
@@ -56,12 +62,18 @@ LEAD_TO_STUDENT_FIELDS = (
 	("study_stage", "study_stage"),
 	("major", "major"),
 	("aspiration", "aspiration"),
+	("education_program", "education_program"),
 	("branch", "branch"),
 	("campaign", "campaign"),
 	("source", "source"),
-	("parent_name", "parent_name"),
-	("parent_phone", "parent_phone"),
+	("alt_name", "parent_name"),
+	("alt_phone", "parent_phone"),
+	("graduation_score", "graduation_score"),
+	("transcript_score", "transcript_score"),
+	("english_converted_score", "english_converted_score"),
+	("total_score", "total_score"),
 	("notes", "notes"),
+	("identity", "student_identity"),
 )
 
 
@@ -122,9 +134,7 @@ def _actor_scope() -> dict[str, Any]:
 	roles = sorted(frappe.get_roles(actor))
 	administrator = actor == "Administrator"
 	system_manager = "System Manager" in roles
-	capabilities = set(
-		capabilities_for_roles(roles, administrator=administrator)
-	)
+	capabilities = set(capabilities_for_roles(roles, administrator=administrator))
 	if not (administrator or system_manager) and CAPABILITY not in capabilities:
 		_fail("FORBIDDEN", "You are not permitted to convert this Student.")
 	return {
@@ -202,7 +212,7 @@ def _receipt_values(
 		"command_kind": "conversion",
 		"request_fingerprint": fingerprint,
 		"outcome": "pending",
-		"target_student": student,
+		"target_student": contact,
 		"target_case_key": case_key,
 		"target_contact": contact,
 		"actor": actor,
@@ -228,6 +238,7 @@ def _insert_receipt(**kwargs):
 def _complete_receipt(receipt, result: dict[str, Any], outcome: str):
 	updates = {
 		"outcome": outcome,
+		"target_student": result.get("target_student"),
 		"result_json": _canonical_json(result),
 		"completed_at": frappe.utils.now_datetime(),
 		"retention_until": technical_retention_until("receipt"),
@@ -535,7 +546,9 @@ def convert_student(
 	if expected_lifecycle_revision in (None, ""):
 		_fail("INVALID_INPUT", "expected_lifecycle_revision is required.")
 	correlation_id = _required(correlation_id or frappe.generate_hash(length=20), "correlation_id")
-	target_student_name = str(target_student).strip() if target_student and str(target_student).strip() else None
+	target_student_name = (
+		str(target_student).strip() if target_student and str(target_student).strip() else None
+	)
 	payload = {
 		"student": student_name,
 		"expected_lifecycle_revision": str(expected_lifecycle_revision),
@@ -664,9 +677,7 @@ def convert_student(
 		try:
 			# ``contact`` was inserted or locked above in this transaction. Frappe's
 			# Link cache can still miss that just-created HS record at this boundary.
-			conversion = frappe.get_doc(conversion_values).insert(
-				ignore_permissions=True, ignore_links=True
-			)
+			conversion = frappe.get_doc(conversion_values).insert(ignore_permissions=True, ignore_links=True)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
 		result = _result(

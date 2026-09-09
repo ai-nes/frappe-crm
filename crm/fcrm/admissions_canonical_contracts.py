@@ -71,6 +71,17 @@ def canonical_attempt_key(case_key: str, offering: str, source_reference: str) -
 	return f"ATT-{digest}"
 
 
+def canonical_application_attempt_key(student: str, offering: str, source_reference: str) -> str:
+	"""Return the immutable identity of one canonical Student application attempt."""
+	student_value = str(student or "").strip()
+	offering_value = str(offering or "").strip()
+	source_value = str(source_reference or "").strip()
+	if not student_value or not offering_value or not source_value:
+		raise ValueError("student, offering and source_reference are required")
+	digest = hashlib.sha256(f"{student_value}|{offering_value}|{source_value}".encode()).hexdigest()
+	return f"ATT-{digest}"
+
+
 def validate_offering(values: dict[str, Any]) -> dict[str, Any]:
 	"""Validate the catalog identity and effective interval of an offering."""
 

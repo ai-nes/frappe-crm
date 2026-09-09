@@ -17,8 +17,14 @@
   "phone",
   "email",
   "other_email",
+  "other_phone",
   "gender",
   "date_of_birth",
+  "birth_place",
+  "ethnicity",
+  "religion",
+  "nationality",
+  "contact_address",
   "id_number",
   "id_issued_date",
   "id_issued_place",
@@ -47,6 +53,7 @@
   "col_break_profile",
   "major",
   "aspiration",
+  "education_program",
   "section_enrollment",
   "campaign",
   "source",
@@ -90,6 +97,8 @@
   "transcript_score",
   "english_converted_score",
   "total_score",
+  "academic_results",
+  "language_certificates",
   "section_notes",
   "notes",
   "potential",
@@ -156,6 +165,12 @@
    "options": "Email"
   },
   {
+   "fieldname": "other_phone",
+   "fieldtype": "Data",
+   "label": "Other Phone",
+   "options": "Phone"
+  },
+  {
    "fieldname": "gender",
    "fieldtype": "Select",
    "label": "Gender",
@@ -165,6 +180,32 @@
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
    "label": "Date of Birth"
+  },
+  {
+   "fieldname": "birth_place",
+   "fieldtype": "Data",
+   "label": "Birth Place"
+  },
+  {
+   "fieldname": "ethnicity",
+   "fieldtype": "Data",
+   "label": "Ethnicity"
+  },
+  {
+   "fieldname": "religion",
+   "fieldtype": "Data",
+   "label": "Religion",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "nationality",
+   "fieldtype": "Data",
+   "label": "Nationality"
+  },
+  {
+   "fieldname": "contact_address",
+   "fieldtype": "Small Text",
+   "label": "Contact Address"
   },
   {
    "fieldname": "id_number",
@@ -353,6 +394,13 @@
    "in_standard_filter": 1,
    "label": "Aspiration",
    "options": "CRM Aspiration"
+  },
+  {
+   "fieldname": "education_program",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Education Program",
+   "options": "CRM Education Program"
   },
   {
    "fieldname": "col_break_profile",
@@ -634,6 +682,18 @@
    "fieldname": "total_score",
    "fieldtype": "Float",
    "label": "Total Score"
+  },
+  {
+   "fieldname": "academic_results",
+   "fieldtype": "Table",
+   "label": "Academic Results",
+   "options": "CRM Student Academic Result"
+  },
+  {
+   "fieldname": "language_certificates",
+   "fieldtype": "Table",
+   "label": "Language Certificates",
+   "options": "CRM Student Language Certificate"
   },
   {
    "fieldname": "section_notes",
