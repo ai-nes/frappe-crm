@@ -69,5 +69,5 @@
    {"role":"Sale","read":1},
    {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
  ],
- "sort_field":"creation", "sort_order":"DESC", "track_changes": 1
+ "sort_field":"creation", "sort_order":"DESC"
 }
