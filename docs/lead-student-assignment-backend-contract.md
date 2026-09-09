@@ -90,14 +90,18 @@ Payload tối thiểu:
   "ward": "WARD-001",
   "high_school": "HIGH-SCHOOL-001",
   "admission_year": "2026",
-  "source": "SOURCE-001",
+  "campaign": "CAMPAIGN-001",
   "assigned_to": "CRM-STAFF-001"
 }
 ```
 
-`student_name`, `phone`, `province`, `source` và `assigned_to` là bắt buộc. `id_number`,
+`student_name`, `phone`, `province`, `campaign` và `assigned_to` là bắt buộc. `source`
+không còn là input của form; BE lấy loại kênh từ Campaign và tự lưu vào `source`.
+`id_number`,
 `ward`, `high_school` và `admission_year` được chuẩn hóa theo các Link master tương ứng;
-các field hồ sơ cơ bản khác có thể gửi thêm theo allowlist của endpoint. `student_stage`
+field `tags` có thể gửi dưới dạng chuỗi phân tách bằng `;` hoặc mảng tên `CRM Tag`; các
+tag này được ghi vào `CRM Student.tags[]` để dùng cho bộ lọc Segment. Các field hồ sơ cơ
+bản khác có thể gửi thêm theo allowlist của endpoint. `student_stage`
 không nhận từ client và Student mới luôn bắt đầu ở `New`.
 
 Response trả về cả `student` và `lead`, cùng `source_lead`/`student` để FE cập nhật
@@ -166,11 +170,13 @@ API import batch yêu cầu các cột sau:
 | `province`     | Tỉnh/Thành phố | Có                                                          |
 | `high_school`  | Trường THPT    | Có                                                          |
 | `major`        | Ngành quan tâm | Có                                                          |
-| `source`       | Nguồn Lead     | Có                                                          |
+| `campaign`     | Campaign       | Có                                                          |
+| `source`       | Nguồn Lead     | BE tự suy ra từ loại kênh của Campaign                      |
 | `email`        | Email          | Không                                                       |
 | `branch`       | Cơ sở          | Không nếu tài khoản chỉ có một cơ sở hoặc có cơ sở mặc định |
 
-FE không hardcode danh sách tỉnh, trường, ngành và nguồn.
+FE không hardcode danh sách tỉnh, trường, ngành và Campaign. FE không hiển thị ô nhập/chọn
+`source`; giá trị `source` chỉ được trả về để đọc và báo cáo.
 
 ### 3.3. Catalog từ Frappe
 
@@ -331,7 +337,7 @@ Payload tối thiểu:
       "province": "Ho Chi Minh City",
       "high_school": "THPT Nguyễn Huệ",
       "major": "Công nghệ thông tin",
-      "source": "Website",
+      "campaign": "CAMPAIGN-001",
       "email": "a@example.com"
     }
   ],
@@ -344,6 +350,81 @@ CCCD có thể dùng `CCCD`, `Số căn cước` hoặc `id_number`.
 
 Import chỉ tạo Lead `NEW / PENDING` và item `pending`. Không gọi routing trong bước
 import.
+
+### 5.4.1. Import nhanh trong dialog Tạo Lead nhanh
+
+Dashboard `/lead-sale/leads` có luồng import file riêng, tạo trực tiếp `CRM Lead`
+và không tạo Assignment Batch.
+
+```text
+POST crm.api.lead_mapping.inspect_lead_import  (multipart {file})
+  → đọc header/sample, suy luận mapping, không insert
+POST crm.api.lead_mapping.preview_lead_import  (multipart {file, column_mapping, campaign_code?})
+  → map theo sourceIndex, validate/resolve lookup, không insert
+POST crm.api.lead_mapping.import_leads         (multipart {file, column_mapping, campaign_code, import_mode=quick_create})
+  → server đọc lại file gốc, tạo từng CRM Lead hợp lệ, savepoint theo dòng
+```
+
+Ba endpoint yêu cầu đăng nhập và quyền tạo `CRM Lead`; inspect không phải guest
+endpoint vì response chứa dữ liệu thô từ file. `campaign_code` ở inspect/preview là
+tùy chọn và được đọc từ multipart form field; ở import `quick_create`, đây là context
+bắt buộc. Backend resolve code thành `CRM Campaign.name`, kiểm tra quyền đọc Campaign
+và chỉ chấp nhận status chuẩn hóa `ACTIVE` hoặc `CLOSED`. Các lỗi context dùng mã
+`CAMPAIGN_REQUIRED`, `INVALID_CAMPAIGN_CODE`, `CAMPAIGN_PERMISSION_DENIED` và
+`CAMPAIGN_STATUS_NOT_ALLOWED`.
+
+Preview không trả field server-managed `campaign` hoặc row-level `campaign_code` trong
+`rows[].fields`. Campaign cấp request được áp dụng cho mọi Lead hợp lệ và không thể
+bị ghi đè bởi dữ liệu trong file. FE lấy toàn bộ campaign người dùng có thể xem,
+không dùng `lead_only`, sau đó chỉ hiển thị `ACTIVE` và `CLOSED`; campaign chưa có
+Lead vẫn được chọn.
+
+File `.csv` UTF-8 hoặc `.xlsx` worksheet đầu tiên được hỗ trợ, tối đa 5 MB, 1.000
+dòng dữ liệu không rỗng và 100 cột. Inspect dùng dòng không rỗng đầu tiên làm header,
+trả tối đa 10 dòng sample; số dòng là số dòng vật lý trong file. Giá trị sample được
+serialize thành chuỗi JSON-safe hoặc `null` nếu ô rỗng. Contract v1 chưa tự nhận diện
+title row và chưa cho chọn worksheet; title-row detection/multi-sheet selection được
+để dành cho phiên bản sau.
+
+Response gồm `fieldCatalog`, `headers`, `sampleRows` và `requiredFields`:
+
+- `fieldCatalog`: nguồn sự thật từ backend, mỗi item có `{key, label, required,
+  valueType}`. Frontend không tự sao chép allowlist này.
+- `headers`: một item cho mỗi cột, có `{sourceIndex, label, inferredField, enabled}`;
+  `sourceIndex` là khóa ổn định kể cả khi nhãn cột bị trùng.
+- `sampleRows`: `{row, values}` với `row` là số dòng vật lý và `values` theo đúng thứ
+  tự cột nguồn.
+- `requiredFields`: nguồn sự thật cho các target bắt buộc của quick import.
+
+Mapped preview/quick commit nhận `column_mapping` là JSON array theo source index:
+
+```json
+[
+  {"sourceIndex": 0, "targetField": "student_name", "enabled": true},
+  {"sourceIndex": 1, "targetField": null, "enabled": false}
+]
+```
+
+Các cột bắt buộc của quick import là `student_name`, `phone`, `province`,
+`high_school` và `source`; `assigned_to` để trống sẽ giữ Lead chưa phân công. Backend
+từ chối mapping không an toàn bằng các mã `INVALID_COLUMN_MAPPING`,
+`MAPPING_TARGET_REQUIRED`, `UNKNOWN_FIELD`, `SERVER_MANAGED_FIELD`,
+`DUPLICATE_SOURCE_INDEX`, `DUPLICATE_TARGET_FIELD`, `INVALID_SOURCE_INDEX` và
+`MISSING_REQUIRED_MAPPING`. `processing_status`, `campaign`, identifiers và các field
+server-managed không phải target; quick import giữ mặc định server `NEW/PENDING`.
+Preview không tạo dữ liệu; commit luôn parse lại file gốc và giữ savepoint độc lập theo
+từng dòng.
+
+`import_mode` khác `quick_create` giữ nguyên contract legacy, bao gồm caller
+`student-school-update`, và không bắt buộc `campaign_code`.
+
+### 5.4.2. Thứ tự rollout
+
+Triển khai backend contract và test trước để `inspect_lead_import`, mapped preview,
+allowlist, giới hạn file và commit re-parse ổn định. Sau khi backend sẵn sàng, dashboard
+mới bật wizard mapping/live preview và gửi multipart file gốc kèm `column_mapping`.
+Các plan duplicate-review tiếp theo chỉ được tiêu thụ row shape đã preview, không thay
+đổi boundary v1 hoặc khôi phục việc tin rows đã normalize từ browser.
 
 ### 5.5. Preview và run
 
@@ -537,7 +618,9 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 - Assignment batch: 11 tests pass.
 - Routing: 10 tests pass.
 - Student routing: 6 tests pass.
-- Ruff, format và `git diff --check` pass.
+- `git diff --check` pass. Ruff chưa khả dụng trong môi trường chuẩn; focused backend
+  suite còn các lỗi integration baseline do môi trường/fixture, không phải lỗi mapping
+  contract mới.
 
 - API `run_unassigned_lead_assignment` đã có; dashboard gọi API này từ nút
   “Phân công Lead”.

@@ -62,6 +62,7 @@ LEAD_FIELDS = [
 	"major",
 	"aspiration",
 	"source",
+	"campaign",
 	"advertising_channel",
 	"conversion_potential",
 	"segments",
@@ -569,6 +570,7 @@ def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, An
 		"statusCode": row.get("processing_status"),
 		"result": _result_code(row.get("resolution")),
 		"source": lookups.get("sources", {}).get(row.get("source")) or row.get("source") or "",
+		"campaign": row.get("campaign") or "",
 		"owner": lookups.get("owners", {}).get(owner_key) or owner_key or "Chưa phân công",
 	}
 	contact_count = lookups.get("contact_counts", {}).get(str(row.get("name")), {})

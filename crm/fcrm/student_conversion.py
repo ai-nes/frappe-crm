@@ -57,6 +57,7 @@ LEAD_TO_STUDENT_FIELDS = (
 	("major", "major"),
 	("aspiration", "aspiration"),
 	("branch", "branch"),
+	("campaign", "campaign"),
 	("source", "source"),
 	("parent_name", "parent_name"),
 	("parent_phone", "parent_phone"),

@@ -7,6 +7,7 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
+from crm.fcrm.campaign_source import sync_campaign_source
 from crm.fcrm.conversion_readiness import conversion_readiness
 from crm.fcrm.lead_code import (
 	is_valid_lead_code,
@@ -101,6 +102,7 @@ class CRMLead(Document):
 			frappe.throw(_("Student ID must match HS-YYYY-REGION-NNNNNN."), frappe.ValidationError)
 
 	def validate(self):
+		sync_campaign_source(self)
 		self._validate_processing_contract()
 		self._validate_phone_format()
 		self._validate_conversion_potential()

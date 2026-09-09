@@ -372,7 +372,9 @@ doc_events = {
 		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
 	},
 	"Call Log": {
-		"after_insert": ["crm.fcrm.interaction_log.create_interaction_from_call_log_insert"],
+		# Provider calls are canonicalized by ai-crm /api/v1/calls/ingest and
+		# crm.api.interaction_intake. Keep Call Log as an operational record only;
+		# registering the legacy after_insert dispatcher would create duplicates.
 		"on_trash": ["crm.fcrm.interaction_log.clear_interaction_reference"],
 	},
 	# Canonical marketing evidence emits attribution interactions. Student-first

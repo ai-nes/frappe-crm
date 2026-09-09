@@ -1,18 +1,20 @@
 """Creates CRM Interaction records from the source events the admissions
 operating model considers meaningful lead touchpoints -- outgoing/incoming
-Communication, a completed Task, a Call Log entry, a CRM Student
-lifecycle/assignment change, a Consent Event, and a CRM Marketing Engagement
-insert/status change (added to satisfy the
+Communication, a completed Task, a CRM Student lifecycle/assignment change,
+a Consent Event, and a CRM Marketing Engagement insert/status change (added to satisfy the
 operating model's "no customer activity outside Interaction" condition,
 which a bare Touchpoint insert previously violated). Each dispatcher below
 is wired via hooks.py doc_events and fires only on the specific
 has_value_changed transition each guard checks explicitly -- do not loosen
-these into a generic "on every save" check.
+these into a generic "on every save" check. Provider calls enter through the
+canonical interaction intake; legacy Call Log rows remain readable but are not
+an automatic Interaction source.
 
 Dispatchers are skipped while `frappe.flags.in_patch` is set, so migration
 patches that backfill historical records (e.g. converting existing singular
-CRM Contact campaign/event fields into CRM Marketing Engagement rows) don't flood the interaction timeline with
-present-dated interactions for years-old activity.
+CRM Contact campaign/event fields into CRM Marketing Engagement rows) don't
+flood the interaction timeline with present-dated interactions for years-old
+activity.
 """
 
 import hashlib
@@ -118,6 +120,10 @@ NON_DEDUPABLE_REFERENCE_DOCTYPES = {"CRM Student"}
 MAX_EXTERNAL_INTERACTION_CONTENT_BYTES = 60_000
 MAX_EXTERNAL_INTERACTION_TURNS = 200
 CHATWOOT_INTERACTION_TYPE = "MESSAGE"
+EXTERNAL_INTERACTION_TYPE_BY_EVIDENCE_KIND = {
+	"message": CHATWOOT_INTERACTION_TYPE,
+	"call": "PHONE_CALL",
+}
 
 
 def external_id_for(reference_doctype, reference_docname, interaction_type):
@@ -193,6 +199,8 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 		_interaction_fail("INVALID_INPUT", "channel is not supported.")
 	if not direction:
 		_interaction_fail("INVALID_INPUT", "direction must be inbound or outbound.")
+	if evidence_kind == "call" and channel != "phone":
+		_interaction_fail("INVALID_INPUT", "Call evidence must use the phone channel.")
 
 	turns = _normalize_external_turns(payload.get("turns"))
 	occurred_at = payload.get("occurred_at")
@@ -291,10 +299,11 @@ def _interaction_target_matches(target: dict, student: str | None, contact: str 
 	return target.get("student") == student and target.get("contact") == contact
 
 
-def _external_interaction_matches(record, target: dict, payload: dict) -> bool:
+def _external_interaction_matches(record, target: dict, payload: dict, interaction_type: str) -> bool:
 	value = record.get
 	return (
 		_interaction_target_matches(target, value("student"), value("crm_contact"))
+		and _text(value("interaction_type")) == interaction_type
 		and _text(value("channel")) == payload["channel"]
 		and _text(value("direction")) == payload["direction"]
 		and _text(value("interaction_datetime")) == payload["occurred_at"]
@@ -322,10 +331,47 @@ def _ensure_interaction_evidence(payload: dict, target: dict) -> list[str]:
 		digest = _evidence_digest(turn["content"])
 		existing = frappe.db.get_value("CRM Interaction Evidence", {"external_event_key": key}, "name")
 		if existing:
-			stored = frappe.db.get_value("CRM Interaction Evidence", existing, "evidence_digest")
-			if stored != digest:
+			stored = frappe.db.get_value(
+				"CRM Interaction Evidence",
+				existing,
+				["evidence_digest", "evidence_state", "evidence_kind"],
+				as_dict=True,
+			)
+			if not stored:
+				_interaction_fail("STALE_SOURCE_REVISION", "The evidence revision is unavailable.")
+			if stored.get("evidence_kind") != payload["evidence_kind"]:
+				_interaction_fail(
+					"IDEMPOTENCY_KEY_REUSED", "The evidence revision was reused with another evidence kind."
+				)
+			if stored.get("evidence_digest") != digest and (
+				stored.get("evidence_state") != "draft" or payload["evidence_state"] == "draft"
+			):
 				_interaction_fail(
 					"IDEMPOTENCY_KEY_REUSED", "The evidence revision was reused with another body."
+				)
+			if stored.get("evidence_digest") != digest:
+				frappe.db.set_value(
+					"CRM Interaction Evidence",
+					existing,
+					{
+						"evidence_digest": digest,
+						"evidence_state": payload["evidence_state"],
+						"actor_role": turn["speaker_role"],
+						"occurred_at": turn.get("occurred_at") or payload["occurred_at"],
+						"content": turn["content"],
+					},
+					update_modified=False,
+				)
+			elif (
+				payload["evidence_state"] != "draft"
+				and stored.get("evidence_state") != payload["evidence_state"]
+			):
+				frappe.db.set_value(
+					"CRM Interaction Evidence",
+					existing,
+					"evidence_state",
+					payload["evidence_state"],
+					update_modified=False,
 				)
 			evidence_names.append(existing)
 			continue
@@ -550,7 +596,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 	authority = _resolve_authority(INTERACTION_CAPABILITY, signed_context=signed_context)
 	target = _resolve_external_interaction_target(payload)
 	_assert_interaction_scope(target, authority)
-	interaction_type = CHATWOOT_INTERACTION_TYPE if payload["source_namespace"] == "chatwoot" else "MESSAGE"
+	interaction_type = EXTERNAL_INTERACTION_TYPE_BY_EVIDENCE_KIND[payload["evidence_kind"]]
 	if not frappe.db.exists(
 		"CRM Interaction Type", {"name": interaction_type, "enabled": 1}
 	):
@@ -597,11 +643,12 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 			"conversation_id",
 			"agent_id",
 			"source_revision",
+			"interaction_type",
 		],
 		as_dict=True,
 	)
 	if existing:
-		if not _external_interaction_matches(existing, target, payload):
+		if not _external_interaction_matches(existing, target, payload, interaction_type):
 			_interaction_fail(
 				"IDEMPOTENCY_KEY_REUSED",
 				"The external interaction key was already used with another message.",
@@ -612,7 +659,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 			_interaction_fail(
 				"STALE_SOURCE_REVISION", "The interaction already has a newer evidence revision."
 			)
-		if payload["source_revision"] > stored_revision:
+		if payload["source_revision"] > stored_revision or payload["evidence_state"] != "draft":
 			frappe.db.set_value(
 				"CRM Interaction",
 				interaction_name,
@@ -662,10 +709,11 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 				"conversation_id",
 				"agent_id",
 				"source_revision",
+				"interaction_type",
 			],
 			as_dict=True,
 		)
-		if not stored or not _external_interaction_matches(stored, target, payload):
+		if not stored or not _external_interaction_matches(stored, target, payload, interaction_type):
 			_interaction_fail(
 				"IDEMPOTENCY_KEY_REUSED",
 				"The external interaction key was already used with another message.",
@@ -957,6 +1005,7 @@ def create_interaction_from_note_insert(doc, method=None):
 
 
 def create_interaction_from_call_log_insert(doc, method=None):
+	"""Legacy Call Log dispatcher retained for compatibility, but not registered."""
 	if doc.reference_doctype != "CRM Student":
 		return
 

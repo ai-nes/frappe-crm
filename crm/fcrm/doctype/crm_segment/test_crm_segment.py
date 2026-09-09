@@ -258,6 +258,48 @@ class TestCRMSegment(FrappeTestCase):
 
 		self.assertEqual(matches & set(self.contacts), expected & set(self.contacts))
 
+	def test_nested_and_or_logic_matches_expected_contacts(self):
+		filters = {
+			"logic": "AND",
+			"groups": [
+				{
+					"logic": "OR",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						{"field": "potential", "operator": "=", "value": "LOW"},
+					],
+				},
+				{
+					"logic": "OR",
+					"conditions": [
+						{"field": "intent", "operator": "=", "value": "HIGH"},
+						{"field": "intent", "operator": "=", "value": "MEDIUM"},
+					],
+				},
+			],
+		}
+
+		matches = set(get_matching_contact_names(filters)) & set(self.contacts)
+
+		self.assertEqual(matches, {self.contacts[0], self.contacts[2]})
+
+	def test_inner_or_logic_matches_classification_condition_branch(self):
+		filters = {
+			"groups": [
+				{
+					"logic": "OR",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						{"field": "tag", "operator": "in", "value": [self.segment_tag]},
+					],
+				}
+			]
+		}
+
+		matches = set(get_matching_contact_names(filters)) & set(self.contacts)
+
+		self.assertEqual(matches, {self.contacts[0]})
+
 	# ------------------------------------------------------------ zero-groups / zero-condition
 
 	def test_zero_groups_rejected_not_all_matches(self):

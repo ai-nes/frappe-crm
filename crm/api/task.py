@@ -17,6 +17,8 @@ from frappe.model.db_query import DatabaseQuery
 from frappe.utils import get_datetime, now_datetime
 
 from crm.api._pagination import paged_list
+from crm.fcrm.action_type_catalog import canonicalize_action_type
+from crm.fcrm.action_type_registry import is_available_action_type
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.segment_action_item import (
 	create_segment_action_item,
@@ -35,6 +37,7 @@ ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student", "CRM Segment"}
 FIELDS = [
 	"name",
 	"title",
+	"action_code",
 	"description",
 	"student",
 	"segment",
@@ -500,6 +503,15 @@ def _priority_to_task(priority):
 	return str(priority).capitalize() if priority else priority
 
 
+def _task_action_code(action_code):
+	"""Normalize and validate the action code exposed by the Task API."""
+	value = str(action_code or "CREATE_TASK").strip().upper()
+	code = canonicalize_action_type(value)
+	if not is_available_action_type(code):
+		frappe.throw(_("Unsupported Task action code."), frappe.ValidationError)
+	return code
+
+
 def _action_reference(action):
 	"""Return the canonical Student reference pair for an Action Item."""
 	if action.get("segment"):
@@ -771,8 +783,10 @@ def create_task(
 	status=None,
 	due_date=None,
 	linked_interaction=None,
+	action_code=None,
 ):
 	"""Create a Task-shaped CRM Action Item for Students or Segments."""
+	action_code = _task_action_code(action_code)
 	if reference_doctype == "CRM Segment":
 		result = create_segment_action_item(
 			reference_docname,
@@ -783,6 +797,7 @@ def create_task(
 			due_at=due_date,
 			assignee_staff=_assigned_staff_for_user(assigned_to) if assigned_to else None,
 			linked_interaction=linked_interaction,
+			action_code=action_code,
 			initial_state=_task_status_to_action_state(status, default="pending"),
 			idempotency_key=_compatibility_key("create", reference_docname),
 		)
@@ -805,6 +820,7 @@ def create_task(
 		doc.status = status
 		doc.due_date = due_date
 		doc.linked_interaction = linked_interaction
+		doc.action_code = action_code
 		doc.reference_doctype = reference_doctype
 		doc.reference_docname = reference_docname
 		doc.insert()
@@ -813,7 +829,7 @@ def create_task(
 	result = create_manual_action(
 		student=student,
 		contact=contact,
-		action_type="CREATE_TASK",
+		action_type=action_code,
 		objective=title,
 		description=description,
 		start_date=start_date,

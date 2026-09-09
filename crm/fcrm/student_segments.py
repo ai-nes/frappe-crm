@@ -63,6 +63,14 @@ def member_names(doc):
 	return [row[0] for row in frappe.db.sql(query)]
 
 
+def member_count(doc):
+	"""Return the permission-scoped audience size for a saved Segment."""
+	if not doc.get("filters") and not (doc.segment_type == "static" and doc.snapshot_at):
+		return 0
+	query = membership_query(doc)
+	return frappe.db.sql(f"SELECT COUNT(*) FROM ({query}) members")[0][0]
+
+
 def preview(segment=None, filters=None, start=0, page_length=20):
 	start = integer(start, "start")
 	page_length = integer(page_length, "page_length", maximum=100)

@@ -68,6 +68,7 @@ SERVER_MANAGED_FIELDS = frozenset(
 		"modified_by",
 		"lead_code",
 		"lead_id",
+		"source",
 		"processing_status",
 		"resolution",
 		"resolution_reason",

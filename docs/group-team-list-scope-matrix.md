@@ -36,7 +36,9 @@ chỉ được dùng cho full-list profile hoặc sau khi backend đã tạo exp
 projection trước khi truy vấn `CRM Student` đối với Sale/CTV. Lead Sale và
 Director/CEO dùng unrestricted reader để xem toàn bộ Student. Bộ lọc Student vẫn
 chỉ hiển thị bản ghi đã convert, đã có owner và đã được assign; đây là invariant
-của màn hình Student, không phải lỗ hổng scope.
+của màn hình Student, không phải lỗ hổng scope. Kết quả được nhóm theo
+`student_stage` theo thứ tự `New` → `Attempting` → `Connected` → `Qualified` /
+`Disqualified`; tiêu chí sort được yêu cầu chỉ áp dụng bên trong từng nhóm.
 
 ## 3. Quy tắc dữ liệu
 
