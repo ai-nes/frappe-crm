@@ -56,6 +56,7 @@ services:
       CRM_AGENTS_DELEGATION_ISSUER: ${CRM_AGENTS_DELEGATION_ISSUER:-http://crm.localhost:8001}
       CRM_E2E_FIXTURE_RUN_ID: ${CRM_E2E_FIXTURE_RUN_ID:-}
       CRM_AGENTS_DEMO_FULL_ACCESS: ${CRM_AGENTS_DEMO_FULL_ACCESS:-0}
+      CRM_NBA_ENGINE_REVISION: ${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}
       # Frappe API key/secret the crm-agents container authenticates its
       # service account with. golden_seed wires these onto system@gmail.com so
       # non-chat analysis calls keep working after a reinstall.

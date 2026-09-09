@@ -47,6 +47,10 @@ if [ ! -d "sites/${SITE_NAME}" ]; then
 fi
 
 bench use "${SITE_NAME}"
+# Keep the Frappe producer aligned with the only engine revision currently
+# supported by the NBA kernel.  The value can be overridden by the container
+# environment during a deliberate revision rollout.
+bench --site "${SITE_NAME}" set-config crm_nba_engine_revision "${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}"
 # install-app is idempotent (no-op if already installed), so this stays safe
 # to run on every deploy rather than only when the site is first created.
 bench --site "${SITE_NAME}" install-app dfp_external_storage
