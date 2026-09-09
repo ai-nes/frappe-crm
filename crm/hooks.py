@@ -228,8 +228,7 @@ override_doctype_class = {
 # growing a hardcoded chain of field names per adopter.
 
 status_change_log_field = {
-	"CRM Student": "enrollment_status",
-	"CRM Lead": "enrollment_status",
+	"CRM Student": "student_stage",
 }
 
 # Document Events

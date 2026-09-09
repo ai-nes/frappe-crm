@@ -15,9 +15,9 @@ def classify_student_topology(student: dict, pools: list[dict] | None = None) ->
 	valid only when the service can resolve exactly one active Student Pool for
 	the Student's Campus and that Team (or an explicit ``owning_pool`` link).
 	"""
-	status = str(student.get("enrollment_status") or "").casefold()
-	stage = str(student.get("lifecycle_stage") or "").casefold()
-	if status in {"lost", "converted"} or stage in {"lost", "converted"}:
+	status = str(student.get("student_stage") or student.get("enrollment_status") or "").casefold()
+	stage = str(student.get("student_stage") or student.get("lifecycle_stage") or "").casefold()
+	if status in {"disqualified", "lost", "converted"} or stage in {"disqualified", "lost", "converted"}:
 		return "terminal"
 	owner = bool(student.get("owner_staff") or student.get("assigned_to"))
 	pool_signal = student.get("owning_pool") or student.get("owning_team")

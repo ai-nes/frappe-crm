@@ -101,6 +101,27 @@ class TestTaskApi(FrappeTestCase):
 			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
 		)
 
+	def test_segment_task_crud_uses_segment_reference(self):
+		segment = frappe.get_doc({"doctype": "CRM Segment", "title": "Task API Segment"}).insert(
+			ignore_permissions=True
+		)
+
+		created = create_task("CRM Segment", segment.name, "Review segment audience", status="Todo")
+		self.assertTrue(frappe.db.exists("CRM Action Item", created["name"]))
+		self.assertFalse(frappe.db.exists("Task", created["name"]))
+		self.assertEqual(frappe.db.get_value("CRM Action Item", created["name"], "segment"), segment.name)
+		self.assertEqual(created["reference_doctype"], "CRM Segment")
+		self.assertEqual(created["reference_docname"], segment.name)
+
+		listed = list_tasks("CRM Segment", segment.name)
+		self.assertEqual(listed["total"], 1)
+		self.assertEqual(listed["tasks"][0]["name"], created["name"])
+
+		updated = update_task(created["name"], title="Review updated segment")
+		self.assertEqual(updated["title"], "Review updated segment")
+		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
+		self.assertTrue(frappe.db.get_value("CRM Action Item", created["name"], "legacy_task_deleted"))
+
 	def test_legacy_lead_reference_resolves_to_canonical_student(self):
 		lead = frappe._dict(name="LEAD-1")
 		with (
@@ -195,6 +216,7 @@ class TestTaskApi(FrappeTestCase):
 				side_effect=[
 					"student_scope.owner_staff = 'STAFF-001'",
 					"legacy_lead_scope.owner_staff = 'STAFF-001'",
+					"segment_scope.owner = 'sale@example.com'",
 				],
 			),
 			patch.object(frappe, "get_roles", return_value=["Sale"]),
@@ -204,6 +226,7 @@ class TestTaskApi(FrappeTestCase):
 		self.assertIn("EXISTS", condition)
 		self.assertIn("`tabCRM Lead`", condition)
 		self.assertIn("`tabCRM Student`", condition)
+		self.assertIn("`tabCRM Segment`", condition)
 		self.assertIn("`tabTask`.reference_doctype", condition)
 
 	def test_task_has_permission_checks_reference_scope(self):

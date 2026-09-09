@@ -144,13 +144,13 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test SLA Recompute%"]}, pluck="name"):
 			frappe.delete_doc("CRM Student", name, force=True)
 
-	def _make_contact(self, name, phone, sla_started_at, enrollment_status="NEW"):
+	def _make_contact(self, name, phone, sla_started_at, student_stage="New"):
 		contact = frappe.get_doc(
 			{
 				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
-				"enrollment_status": enrollment_status,
+				"student_stage": student_stage,
 			}
 		)
 		contact.insert(ignore_permissions=True)
@@ -190,7 +190,7 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 				"doctype": "CRM Student",
 				"full_name": "_Test SLA Recompute Unassigned",
 				"phone": "0922222304",
-				"enrollment_status": "NEW",
+				"student_stage": "New",
 			}
 		)
 		contact.insert(ignore_permissions=True)
@@ -201,14 +201,13 @@ class TestRecomputeSlaStatuses(FrappeTestCase):
 		self.assertFalse(frappe.db.get_value("CRM Student", contact.name, "sla_status"))
 
 	def test_recompute_skips_contacts_outside_open_status_bucket(self):
-		# "Đã nhập học" maps to stage_category "enrolled" (per seeded CRM
-		# Enrollment Status data) — closed leads must not get a live SLA
+		# Connected is a terminal Student stage — closed students must not get a live SLA
 		# status even if sla_started_at is old enough to breach.
 		name = self._make_contact(
 			"_Test SLA Recompute Closed",
 			"0922222305",
 			add_to_date(now_datetime(), minutes=-(SLA_BREACH_MINUTES + 5)),
-			enrollment_status="ENROLLED",
+			student_stage="Connected",
 		)
 		recompute_sla_statuses()
 		self.assertNotEqual(frappe.db.get_value("CRM Student", name, "sla_status"), BREACH)

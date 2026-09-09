@@ -532,7 +532,7 @@ def _load_attributed_students(student_ids: set[Any]) -> list[dict[str, Any]]:
 	return _fetch_rows(
 		"CRM Lead",
 		filters={"name": ["in", list(student_ids)]},
-		fields=["name", "lifecycle_stage", "enrollment_status", "phone"],
+		fields=["name", "processing_status", "resolution", "phone"],
 		allow_missing=True,
 	)
 
@@ -779,10 +779,10 @@ def _load_total_prospects(year: str, scope: dict[str, Any]) -> int | None:
 	rows = _fetch_rows(
 		"CRM Lead",
 		filters=filters,
-		fields=["name", "lifecycle_stage"],
+		fields=["name", "processing_status", "resolution"],
 		allow_missing=True,
 	)
-	return len([row for row in rows if str(row.get("lifecycle_stage") or "") != "Lost"])
+	return len([row for row in rows if str(row.get("processing_status") or "") != "CLOSED"])
 
 
 def _load_device_sync(warnings: list[str]) -> tuple[dict[str, Any] | None, str]:
@@ -833,11 +833,11 @@ def _to_vnd(amount: float, unit: str | None) -> float:
 
 
 def _is_qualified(row: dict[str, Any]) -> bool:
-	return str(row.get("lifecycle_stage") or "").casefold() in {"mql", "applicant", "enrolled"}
+	return str(row.get("processing_status") or "").casefold() in {"processing", "processed", "assigned"} or row.get("resolution") == "CREATED"
 
 
 def _is_enrolled(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("lifecycle_stage") or "").casefold() == "enrolled":
+	if str(student.get("resolution") or "").casefold() == "created":
 		return True
 	return any(str(row.get("status") or "").casefold() == "enrolled" for row in applications)
 

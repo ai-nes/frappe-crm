@@ -41,8 +41,8 @@ class TestDirectorDashboard(FrappeTestCase):
 	def test_application_statuses_are_projected_into_pipeline_stages(self):
 		records = director_dashboard._build_student_records(
 			[
-				{"name": "STU-1", "lifecycle_stage": "MQL", "enrollment_status": "Có triển vọng"},
-				{"name": "STU-2", "lifecycle_stage": "Applicant", "enrollment_status": "Đã nộp hồ sơ"},
+				{"name": "STU-1", "processing_status": "processing"},
+				{"name": "STU-2", "processing_status": "processed"},
 			],
 			[
 				{"student": "STU-1", "status": "Accepted"},
@@ -54,16 +54,16 @@ class TestDirectorDashboard(FrappeTestCase):
 		self.assertIn("enrolled", records[1]["stages"])
 		self.assertEqual(director_dashboard._stage_counts(records)["enrolled"], 1)
 
-	def test_vietnamese_enrollment_status_is_normalized_before_stage_mapping(self):
+	def test_vietnamese_processing_status_is_normalized_before_stage_mapping(self):
 		records = director_dashboard._build_student_records(
-			[{"name": "STU-1", "enrollment_status": "Đã trúng tuyển"}], []
+			[{"name": "STU-1", "processing_status": "Đã trúng tuyển"}], []
 		)
 
 		self.assertIn("accepted", records[0]["stages"])
 
 	def test_interaction_evidence_keeps_engaged_distinct_from_qualified(self):
 		records = director_dashboard._build_student_records(
-			[{"name": "STU-1", "lifecycle_stage": "Lead", "enrollment_status": "Mới"}],
+			[{"name": "STU-1", "processing_status": "new"}],
 			[],
 			interactions=[{"student": "STU-1"}],
 		)
@@ -140,24 +140,24 @@ class TestDirectorDashboard(FrappeTestCase):
 		students = [
 			{
 				"name": "STU-1",
-				"lifecycle_stage": "Lead",
-				"enrollment_status": "Mới",
+				"processing_status": "NEW",
+				"resolution": "PENDING",
 				"creation": "2026-08-30 10:00:00",
 				"province": "P-1",
 				"source": "SRC-1",
 			},
 			{
 				"name": "STU-2",
-				"lifecycle_stage": "Applicant",
-				"enrollment_status": "Đã nộp hồ sơ",
+				"processing_status": "PROCESSED",
+				"resolution": "PENDING",
 				"creation": "2026-08-29 10:00:00",
 				"province": "P-1",
 				"source": "SRC-2",
 			},
 			{
 				"name": "STU-3",
-				"lifecycle_stage": "Enrolled",
-				"enrollment_status": "Đã nhập học",
+				"processing_status": "PROCESSED",
+				"resolution": "CREATED",
 				"creation": "2026-08-28 10:00:00",
 				"enrollment_date": "2026-08-28",
 				"province": "P-2",

@@ -9,7 +9,7 @@ from crm.fcrm.action_type_registry import is_available_action_type
 
 
 class CRMActionItem(Document):
-	"""Student-scoped work item created from a CRM Action catalog row."""
+	"""Student- or Segment-scoped work item created from a CRM Action row."""
 
 	TERMINAL: ClassVar = {"completed", "cancelled", "superseded", "rejected"}
 	TRANSITIONS: ClassVar = {
@@ -23,6 +23,7 @@ class CRMActionItem(Document):
 	_PROTECTED = frozenset(
 		{
 			"student",
+			"segment",
 			"state",
 			"action",
 			"action_type",
@@ -76,6 +77,15 @@ class CRMActionItem(Document):
 
 	def validate(self):
 		before = self.get_doc_before_save()
+		if bool(self.get("student")) == bool(self.get("segment")):
+			frappe.throw(
+				_("CRM Action Item must reference exactly one Student or Segment."),
+				frappe.ValidationError,
+			)
+		if self.get("segment") and self.get("current_slot"):
+			frappe.throw(
+				_("Segment Action Items cannot occupy a Student current slot."), frappe.ValidationError
+			)
 		selected_action = canonicalize_action_type(self.get("action"))
 		legacy_action = self.get("action_type")
 		if selected_action:
@@ -128,15 +138,32 @@ class CRMActionItem(Document):
 
 
 def get_permission_query_conditions(user=None):
+	from crm.fcrm.doctype.crm_segment.crm_segment import (
+		get_permission_query_conditions as segment_scope,
+	)
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope
 
 	user = user or frappe.session.user
-	condition = student_scope("CRM Student", user=user)
-	return (
-		f"`tabCRM Action Item`.student in (select name from `tabCRM Student` where {condition})"
-		if condition
-		else None
-	)
+	student_condition = student_scope("CRM Student", user=user)
+	segment_condition = segment_scope(user=user)
+	student_clause = None
+	segment_clause = None
+	if student_condition is None:
+		student_clause = "`tabCRM Action Item`.student is not null"
+	elif student_condition != "1=0":
+		student_clause = (
+			f"`tabCRM Action Item`.student in (select name from `tabCRM Student` where {student_condition})"
+		)
+	if segment_condition is None or segment_condition == "":
+		segment_clause = "`tabCRM Action Item`.segment is not null"
+	elif segment_condition != "1=0":
+		segment_clause = (
+			f"`tabCRM Action Item`.segment in (select name from `tabCRM Segment` where {segment_condition})"
+		)
+	clauses = [clause for clause in (student_clause, segment_clause) if clause]
+	if not clauses:
+		return "1=0"
+	return "(" + " or ".join(clauses) + ")"
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -144,6 +171,13 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	if permission_type == "create" and not getattr(doc, "name", None):
 		return True
 	student = doc.get("student") if isinstance(doc, dict) else getattr(doc, "student", None)
+	segment = doc.get("segment") if isinstance(doc, dict) else getattr(doc, "segment", None)
+	if segment and not student:
+		try:
+			frappe.get_doc("CRM Segment", segment).check_permission(permission_type or "read")
+		except (frappe.DoesNotExistError, frappe.PermissionError):
+			return False
+		return True
 	if not student:
 		return False
 	from crm.fcrm.permissions import get_permission_query_conditions as student_scope

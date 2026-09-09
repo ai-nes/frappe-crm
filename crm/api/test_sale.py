@@ -11,9 +11,9 @@ from crm.api import sale
 class TestSaleOverview(FrappeTestCase):
 	def test_pipeline_and_status_are_built_from_one_scoped_student_set(self):
 		students = [
-			{"name": "STU-1", "student_name": "Một", "lifecycle_stage": "MQL"},
-			{"name": "STU-2", "student_name": "Hai", "lifecycle_stage": "Applicant"},
-			{"name": "STU-3", "student_name": "Ba", "lifecycle_stage": "Enrolled"},
+			{"name": "STU-1", "student_name": "Một", "processing_status": "PROCESSING", "resolution": "PENDING"},
+			{"name": "STU-2", "student_name": "Hai", "processing_status": "PROCESSED", "resolution": "PENDING"},
+			{"name": "STU-3", "student_name": "Ba", "processing_status": "PROCESSED", "resolution": "CREATED"},
 		]
 		contacts = [
 			{"student": "STU-1", "quality_bucket": "High Intent"},

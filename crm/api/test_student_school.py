@@ -53,7 +53,8 @@ class TestStudentSchoolApi(TestCase):
 		lead.name = "HS-2026-HCM-000001"
 		lead.get.side_effect = lambda fieldname: {
 			"lead_code": "HS-2026-HCM-000001",
-			"lead_status": "New",
+			"processing_status": "NEW",
+			"resolution": "PENDING",
 		}.get(fieldname)
 		student = Mock()
 		student.doctype = "CRM Student"
@@ -75,7 +76,7 @@ class TestStudentSchoolApi(TestCase):
 			fields=[
 				Mock(fieldname="full_name"),
 				Mock(fieldname="phone"),
-				Mock(fieldname="enrollment_status"),
+				Mock(fieldname="student_stage"),
 				Mock(fieldname="source_lead"),
 			]
 		)
@@ -88,7 +89,7 @@ class TestStudentSchoolApi(TestCase):
 			{
 				"student_name": "Nguyen Van B",
 				"phone": "0900000001",
-				"enrollment_status": "NEW",
+				"student_stage": "New",
 			},
 			[],
 			[],
@@ -144,7 +145,7 @@ class TestStudentSchoolApi(TestCase):
 			{
 				"student_name": "Nguyen Van B",
 				"phone": "0900000001",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
 			},
 			[],
 			[],
@@ -537,7 +538,7 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": "_Update API Student",
 				"phone": "0981000077",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
 			}
 		).insert(ignore_permissions=True)
 

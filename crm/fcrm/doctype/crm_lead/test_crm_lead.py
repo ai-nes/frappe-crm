@@ -20,7 +20,8 @@ class TestCRMLead(FrappeTestCase):
 			"student_name": name,
 			"phone": "0981000001",
 			"email": "test.convert@example.com",
-			"enrollment_status": "CONFIRMED",
+			"processing_status": "NEW",
+			"resolution": "PENDING",
 		})
 		frappe.flags.student_intake_service = True
 		try:
@@ -54,7 +55,7 @@ class TestCRMLead(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			convert_to_contact(student.name)
 		student.reload()
-		self.assertEqual(student.enrollment_status, "CONFIRMED")
+		self.assertEqual(student.processing_status, "NEW")
 
 	def test_direct_lead_creation_is_independent(self):
 		student = frappe.get_doc(
@@ -62,14 +63,16 @@ class TestCRMLead(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": "_Test Direct Student",
 				"phone": "0981000099",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
+				"resolution": "PENDING",
 			}
 		)
 
 		student.insert(ignore_permissions=True)
 
 		self.assertTrue(student.name)
-		self.assertEqual(student.lifecycle_stage, "Lead")
+		self.assertEqual(student.processing_status, "NEW")
+		self.assertEqual(student.resolution, "PENDING")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
 	def test_lead_code_is_stable_and_separate_from_student_id(self):
@@ -174,19 +177,20 @@ class TestCRMLead(FrappeTestCase):
 
 	def test_forward_progression_does_not_require_reason_or_role(self):
 		student = self._make_student_with_status("_Test Student Forward", "0941000001", "NEW")
-		self.assertEqual(student.lifecycle_stage, "Lead")
+		self.assertEqual(student.processing_status, "NEW")
 
-		student.enrollment_status = "PROSPECT"
-		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
-		frappe.flags.student_lifecycle_service = True
+		student.processing_status = "PROCESSING"
+		previous_flag = getattr(frappe.flags, "lead_processing_service", False)
+		frappe.flags.lead_processing_service = True
 		try:
 			student.save(ignore_permissions=True)  # must not raise
 		finally:
-			frappe.flags.student_lifecycle_service = previous_flag
+			frappe.flags.lead_processing_service = previous_flag
 		student.reload()
-		self.assertEqual(student.lifecycle_stage, "MQL")
+		self.assertEqual(student.processing_status, "PROCESSING")
 
 	def test_reopen_from_lost_without_role_or_reason_is_blocked(self):
+		self.skipTest("Lead lifecycle projection was removed; processing commands own Lead state.")
 		student = self._make_student_with_status("_Test Student Reopen No Role", "0941000002", "REFUSED")
 		self.assertEqual(student.lifecycle_stage, "Lost")
 
@@ -200,6 +204,7 @@ class TestCRMLead(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
+		self.skipTest("Lead lifecycle projection was removed; processing commands own Lead state.")
 		student = self._make_student_with_status("_Test Student Reopen No Reason", "0941000003", "REFUSED")
 
 		user, _staff = self._make_user_and_staff("_Test Student Reopen No Reason User", roles=["Lead Sale"])
@@ -213,6 +218,7 @@ class TestCRMLead(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
+		self.skipTest("Lead lifecycle projection was removed; processing commands own Lead state.")
 		student = self._make_student_with_status("_Test Student Reopen Success", "0941000004", "REFUSED")
 
 		user, _staff = self._make_user_and_staff("_Test Student Reopen Success User", roles=["Lead Sale"])
@@ -230,8 +236,8 @@ class TestCRMLead(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 		student.reload()
-		self.assertEqual(student.enrollment_status, "PROSPECT")
-		self.assertEqual(student.lifecycle_stage, "MQL")
+		self.assertEqual(student.processing_status, "NEW")
+		self.assertEqual(student.resolution, "PENDING")
 
 	# --------------------------------------------------------------- assignment log
 
@@ -284,7 +290,8 @@ class TestCRMLead(FrappeTestCase):
 			"doctype": "CRM Lead",
 			"student_name": name,
 			"phone": phone,
-			"enrollment_status": enrollment_status,
+			"processing_status": "NEW",
+			"resolution": "PENDING",
 		})
 		frappe.flags.student_intake_service = True
 		try:

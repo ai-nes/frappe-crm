@@ -4,9 +4,11 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.student_privacy import open_privacy_request, resolve_privacy_request
-from crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event import sync_student_privacy_projection
+from crm.fcrm.doctype.crm_contact_consent_event.crm_contact_consent_event import (
+	sync_student_privacy_projection,
+)
 from crm.fcrm.student_context import _privacy_context
+from crm.fcrm.student_privacy import open_privacy_request, resolve_privacy_request
 
 
 class TestCRMStudentPrivacyRequest(FrappeTestCase):
@@ -19,7 +21,7 @@ class TestCRMStudentPrivacyRequest(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": "_Test Privacy Student",
 				"phone": "0987000091",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
 			}
 		)
 		frappe.flags.student_intake_service = True

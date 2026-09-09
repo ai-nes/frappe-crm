@@ -3,7 +3,8 @@ from unittest.mock import patch
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.audit import get_lead_audit_logs, get_student_audit_logs
+from crm.api.audit import get_lead_audit_logs, get_segment_audit_logs, get_student_audit_logs
+from crm.api.task import create_task
 
 
 class TestStudentAuditApi(FrappeTestCase):
@@ -76,35 +77,29 @@ class TestStudentAuditApi(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": "Audit Status Student",
 				"phone": "0912345680",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
 			}
 		).insert(ignore_permissions=True)
 
-		previous_flag = getattr(frappe.flags, "student_lifecycle_service", False)
-		frappe.flags.student_lifecycle_service = True
+		previous_flag = getattr(frappe.flags, "lead_processing_service", False)
+		frappe.flags.lead_processing_service = True
 		try:
-			student.enrollment_status = "PROSPECT"
+			student.processing_status = "PROCESSING"
 			student.save(ignore_permissions=True, ignore_version=False)
 		finally:
-			frappe.flags.student_lifecycle_service = previous_flag
+			frappe.flags.lead_processing_service = previous_flag
 
 		result = get_student_audit_logs(student.name, page_length=100)
 		status_log = next(
 			log
 			for log in result["logs"]
-			if log.get("source") == "Status Change Log" and log.get("event_type") == "status_changed"
+			if log.get("source") == "Version" and log.get("event_type") == "processing_status_changed"
 		)
 
-		self.assertEqual(status_log["category"], "status")
-		self.assertEqual(status_log["fieldname"], "enrollment_status")
-		self.assertEqual(status_log["metadata"]["old_code"], "NEW")
-		self.assertEqual(status_log["metadata"]["new_code"], "PROSPECT")
-
-		initial_status_log = next(
-			log for log in result["logs"] if log.get("event_type") == "status_initialized"
-		)
-		self.assertEqual(initial_status_log["new_value"], "Mới")
-		self.assertEqual(initial_status_log["metadata"]["new_code"], "NEW")
+		self.assertEqual(status_log["category"], "processing")
+		self.assertEqual(status_log["fieldname"], "processing_status")
+		self.assertEqual(status_log["old_value"], "NEW")
+		self.assertEqual(status_log["new_value"], "PROCESSING")
 
 	def test_student_audit_includes_related_activity_records(self):
 		suffix = frappe.generate_hash(length=8)
@@ -225,3 +220,24 @@ class TestStudentAuditApi(FrappeTestCase):
 
 		self.assertEqual(result["student"], "CRMC-AUDIT-1")
 		self.assertTrue(result["logs"])
+
+	def test_segment_audit_returns_segment_creation_and_field_changes(self):
+		segment = frappe.get_doc({"doctype": "CRM Segment", "title": "Audit API Segment"}).insert(
+			ignore_permissions=True
+		)
+
+		segment.title = "Updated Audit API Segment"
+		segment.save(ignore_permissions=True, ignore_version=False)
+		create_task("CRM Segment", segment.name, "Review segment audience")
+
+		result = get_segment_audit_logs(segment.name, page_length=100)
+		updated = next(
+			log for log in result["logs"] if log["action"] == "updated" and log["fieldname"] == "title"
+		)
+
+		self.assertEqual(result["segment"], segment.name)
+		self.assertIn("created", [log["action"] for log in result["logs"]])
+		self.assertEqual(updated["old_value"], "Audit API Segment")
+		self.assertEqual(updated["new_value"], "Updated Audit API Segment")
+		self.assertTrue(any(log["source"] == "CRM Action Item" for log in result["logs"]))
+		self.assertTrue(result["read_only"])

@@ -129,7 +129,7 @@ class TestDirectorAnalytics(FrappeTestCase):
 			patch.object(
 				director_analytics.frappe.db,
 				"get_all",
-				return_value=[frappe._dict(lifecycle_stage="Enrolled", value=2)],
+				return_value=[frappe._dict(student_stage="Connected", value=2)],
 			),
 			patch.object(director_analytics.frappe.db, "get_value", return_value="2026-08-28 00:00:00"),
 		):
@@ -148,7 +148,7 @@ class TestDirectorAnalytics(FrappeTestCase):
 			student_name="A",
 			branch="Campus A",
 			major=None,
-			lifecycle_stage="Lead",
+			student_stage="New",
 			owner_staff=None,
 			owning_team=None,
 			modified="2026-08-28",
@@ -175,7 +175,7 @@ class TestDirectorAnalytics(FrappeTestCase):
 			patch.object(
 				director_analytics.frappe.db,
 				"get_all",
-				return_value=[frappe._dict(lifecycle_stage="Enrolled", value=2)],
+				return_value=[frappe._dict(student_stage="Connected", value=2)],
 			),
 			patch.object(director_analytics.frappe.db, "get_value", return_value="2026-08-28"),
 		):

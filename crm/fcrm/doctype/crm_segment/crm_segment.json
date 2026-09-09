@@ -9,6 +9,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "segment_code",
   "title",
   "is_public",
   "column_break_1",
@@ -23,6 +24,16 @@
   "category"
  ],
  "fields": [
+  {
+   "description": "Server-managed immutable identifier in SEG-{YYMMDD}-{SHORT_ID} format. Legacy codes remain supported.",
+   "fieldname": "segment_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Segment Code",
+   "read_only": 1,
+   "unique": 1
+  },
   {
    "fieldname": "title",
    "fieldtype": "Data",
@@ -163,7 +174,7 @@
  ],
  "quick_entry": 0,
  "row_format": "Dynamic",
- "search_fields": "title",
+ "search_fields": "title,segment_code",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],

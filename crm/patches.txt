@@ -167,3 +167,9 @@ crm.patches.v1_0.backfill_quick_created_students
 crm.patches.v1_0.separate_lead_codes_from_student_ids
 crm.patches.v1_0.synchronize_lead_codes_with_student_codes
 crm.patches.v1_0.backfill_lead_internal_ids
+crm.patches.v1_0.drop_redundant_lead_student_status_fields
+crm.patches.v1_0.restore_canonical_status_layouts
+crm.patches.v1_0.normalize_canonical_status_layouts
+crm.patches.v1_0.backfill_segment_code
+crm.patches.v1_0.ensure_campaign_code_format
+crm.patches.v1_0.migrate_segment_code_to_short_id

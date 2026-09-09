@@ -1,10 +1,23 @@
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
+from crm.fcrm.segment_code import generate_segment_code
 from crm.fcrm.segment_lifecycle import validate_segment
 
 
 class CRMSegment(Document):
+	def before_insert(self):
+		self.segment_code = generate_segment_code(
+			frappe.session.user or self.owner,
+			frappe.utils.now_datetime(),
+		)
+
+	def before_save(self):
+		before = self.get_doc_before_save()
+		if before and before.get("segment_code") != self.get("segment_code"):
+			frappe.throw(_("Segment Code is immutable after creation."), frappe.ValidationError)
+
 	def validate(self):
 		validate_segment(self)
 
@@ -27,12 +40,13 @@ class CRMSegment(Document):
 	@staticmethod
 	def default_list_data():
 		columns = [
+			{"label": "Segment Code", "type": "Data", "key": "segment_code", "width": "16rem"},
 			{"label": "Title", "type": "Data", "key": "title", "width": "16rem"},
 			{"label": "Public", "type": "Check", "key": "is_public", "width": "6rem"},
 			{"label": "Owner", "type": "Link", "key": "owner", "options": "User", "width": "12rem"},
 			{"label": "Last Modified", "type": "Datetime", "key": "modified", "width": "8rem"},
 		]
-		rows = ["name", "title", "is_public", "owner", "modified"]
+		rows = ["name", "segment_code", "title", "is_public", "owner", "modified"]
 		return {"columns": columns, "rows": rows}
 
 

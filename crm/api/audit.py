@@ -1,4 +1,4 @@
-"""Read-only audit history APIs for CRM Student records."""
+"""Read-only audit history APIs for CRM records."""
 
 import json
 from typing import Any
@@ -13,8 +13,6 @@ DEFAULT_PAGE_LENGTH = 50
 MAX_PAGE_LENGTH = 100
 
 FIELD_AUDIT_METADATA = {
-	"enrollment_status": {"event_type": "status_changed", "category": "status"},
-	"lifecycle_stage": {"event_type": "lifecycle_changed", "category": "lifecycle"},
 	"student_stage": {"event_type": "student_stage_changed", "category": "status"},
 	"processing_status": {"event_type": "processing_status_changed", "category": "processing"},
 	"resolution": {"event_type": "resolution_changed", "category": "processing"},
@@ -25,7 +23,6 @@ FIELD_AUDIT_METADATA = {
 	"owning_pool": {"event_type": "pool_changed", "category": "assignment"},
 	"converted_student": {"event_type": "conversion_changed", "category": "conversion"},
 	"converted_at": {"event_type": "conversion_changed", "category": "conversion"},
-	"conversion_status": {"event_type": "conversion_changed", "category": "conversion"},
 }
 
 
@@ -424,6 +421,8 @@ def _status_change_logs(student: str, doctype: str = STUDENT_DOCTYPE) -> list[di
 		return []
 	doc = frappe.get_doc(doctype, student)
 	logs = []
+	fieldname = "student_stage" if doctype == "CRM Student" else "processing_status"
+	field_label = "Student Stage" if doctype == "CRM Student" else "Processing Status"
 	for index, row in enumerate(doc.get("status_change_log") or []):
 		from_code = row.get("from")
 		to_code = row.get("to")
@@ -435,10 +434,10 @@ def _status_change_logs(student: str, doctype: str = STUDENT_DOCTYPE) -> list[di
 					event_id=f"status-initial:{row_name}",
 					doctype=doctype,
 					docname=student,
-					fieldname="enrollment_status",
-					field_label="Enrollment Status",
+					fieldname=fieldname,
+					field_label=field_label,
 					old_value=None,
-					new_value=_display_value("CRM Enrollment Status", from_code, "display_name"),
+					new_value=from_code,
 					owner=row.get("log_owner") or doc.get("owner"),
 					occurred_at=row.get("from_date") or doc.get("creation"),
 					source="Status Change Log",
@@ -459,10 +458,10 @@ def _status_change_logs(student: str, doctype: str = STUDENT_DOCTYPE) -> list[di
 				event_id=f"status:{row_name}",
 				doctype=doctype,
 				docname=student,
-				fieldname="enrollment_status",
-				field_label="Enrollment Status",
-				old_value=_display_value("CRM Enrollment Status", from_code, "display_name"),
-				new_value=_display_value("CRM Enrollment Status", to_code, "display_name"),
+				fieldname=fieldname,
+				field_label=field_label,
+				old_value=from_code,
+				new_value=to_code,
 				owner=row.get("log_owner") or doc.get("owner"),
 				occurred_at=row.get("to_date") or row.get("from_date") or doc.get("modified"),
 				source="Status Change Log",
@@ -823,6 +822,7 @@ def _task_logs(
 ) -> list[dict[str, Any]]:
 	lead_names = {name for doctype, name in references if doctype == "CRM Lead"}
 	student_names = {name for doctype, name in references if doctype == "CRM Student"}
+	segment_names = {name for doctype, name in references if doctype == "CRM Segment"}
 	logs: list[dict[str, Any]] = []
 	task_fields = [
 		"name",
@@ -844,7 +844,12 @@ def _task_logs(
 		rows: list[dict[str, Any]] = []
 		rows.extend(_rows_for_field_values("Task", "student", lead_names, task_fields))
 		rows.extend(_rows_for_field_values("Task", "crm_student", student_names, task_fields))
-		rows.extend(_rows_for_references("Task", references, task_fields))
+		legacy_task_references = [
+			(reference_doctype, reference_name)
+			for reference_doctype, reference_name in references
+			if reference_doctype != "CRM Segment"
+		]
+		rows.extend(_rows_for_references("Task", legacy_task_references, task_fields))
 		if linked_names:
 			rows.extend(
 				_safe_get_list(
@@ -870,12 +875,14 @@ def _task_logs(
 			"created_at",
 			"completed_at",
 			"student",
+			"segment",
 			"crm_student",
 			"creation",
 			"modified",
 		]
 		rows = []
 		rows.extend(_rows_for_field_values("CRM Action Item", "student", student_names, action_fields))
+		rows.extend(_rows_for_field_values("CRM Action Item", "segment", segment_names, action_fields))
 		rows.extend(_rows_for_field_values("CRM Action Item", "crm_student", student_names, action_fields))
 		logs.extend(_task_row_logs("CRM Action Item", rows))
 	return logs
@@ -1050,16 +1057,16 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 				event_id=f"lifecycle:{source_name}",
 				doctype="CRM Student",
 				docname=row.get("student") or "",
-				fieldname="lifecycle_stage",
-				field_label="Lifecycle Stage",
+				fieldname="student_stage",
+				field_label="Student Stage",
 				old_value=row.get("from_stage"),
 				new_value=row.get("to_stage"),
 				owner=row.get("actor"),
 				occurred_at=row.get("occurred_at"),
 				source="Lifecycle Event",
 				source_name=source_name,
-				event_type="lifecycle_changed",
-				category="lifecycle",
+				event_type="student_stage_changed",
+				category="status",
 				reason=row.get("reason"),
 				metadata={"transition_kind": row.get("transition_kind")},
 			)
@@ -1444,3 +1451,31 @@ def get_lead_audit_logs(
 	"""Return the read-only audit history for one CRM Lead."""
 	result = get_student_audit_logs(lead_id, start=start, page_length=page_length)
 	return {**result, "lead_id": result["student"]}
+
+
+@frappe.whitelist()
+def get_segment_audit_logs(
+	segment: str,
+	start: int | str | None = 0,
+	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
+) -> dict[str, Any]:
+	"""Return the read-only audit history for one CRM Segment."""
+	requested_segment = str(segment or "").strip()
+	if not requested_segment or not frappe.db.exists("CRM Segment", requested_segment):
+		frappe.throw(_("Segment not found"), frappe.DoesNotExistError)
+	if not frappe.has_permission("CRM Segment", "read", requested_segment):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	start = _parse_pagination(start, 0, "start")
+	page_length = _parse_pagination(page_length, DEFAULT_PAGE_LENGTH, "page_length", minimum=1)
+	page_length = min(page_length, MAX_PAGE_LENGTH)
+	logs = get_audit_logs_for_document(requested_segment, doctype="CRM Segment")
+
+	return {
+		"segment": requested_segment,
+		"logs": logs[start : start + page_length],
+		"total": len(logs),
+		"start": start,
+		"page_length": page_length,
+		"read_only": True,
+	}

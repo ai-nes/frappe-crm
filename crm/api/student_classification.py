@@ -190,7 +190,7 @@ def _result(doc):
 	return {
 		"student": doc.name,
 		"modified": str(doc.modified),
-		"admission_stage": doc.enrollment_status,
+		"admission_stage": doc.student_stage,
 		"potential": doc.potential,
 		"intent": doc.intent,
 		"needs": [_assignment(row, "need") for row in doc.get("needs", [])],

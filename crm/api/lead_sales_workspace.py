@@ -150,7 +150,7 @@ def get_team_dashboard() -> dict:
 		"definition": definition,
 		"generated_at": _generated(),
 		"kpis": {
-			"active_students": _count("CRM Lead", {"lifecycle_stage": ["not in", ["Lost"]]}),
+			"active_students": _count("CRM Lead", {"processing_status": ["!=", "CLOSED"]}),
 			"unassigned_students": _count("CRM Lead", {"owner_staff": ["is", "not set"]}),
 			"breached_sla": _count(
 				"CRM Student SLA Attempt",

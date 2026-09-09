@@ -46,14 +46,35 @@ def list_segments(status=None, category=None, start=0, page_length=20):
 	filters = {k: v for k, v in {"status": status, "category": category}.items() if v}
 	start = integer(start, "start")
 	page_length = integer(page_length, "page_length", maximum=100) or 20
-	return frappe.get_list(
+	segments = frappe.get_list(
 		"CRM Segment",
 		filters=filters,
-		fields=["name", "title", "status", "category", "segment_type", "responsible_user", "revision"],
+		fields=[
+			"name",
+			"segment_code",
+			"title",
+			"purpose",
+			"filters",
+			"status",
+			"category",
+			"segment_type",
+			"responsible_user",
+			"revision",
+			"owner",
+			"creation",
+			"modified",
+		],
 		order_by="modified desc, name asc",
 		limit_start=start,
 		limit_page_length=page_length,
 	)
+	for segment in segments:
+		segment["member_count"] = (
+			service.preview(segment=segment["name"], start=0, page_length=1)["total"]
+			if segment.get("filters")
+			else 0
+		)
+	return segments
 
 
 @frappe.whitelist()

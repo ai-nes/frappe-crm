@@ -33,18 +33,12 @@ LEAD_STATUS_GROUPS = {
 }
 LEAD_QUALITY_GROUPS = {"invalid": "Sai số", "duplicate": "Lead trùng", "unknown": "Chưa phân loại"}
 PRIMARY_ATTRIBUTION_RULE = "first_touch_weight_confidence_earliest_v1"
-# Exact historical labels are retained for installations with legacy lookup rows.
 LEAD_STATUS_ALIASES = {
-	"new": {"NEW", "Mới"},
-	"in_progress": {"PROSPECT", "CONFIRMED", "Hẹn liên hệ sau", "Đang suy nghĩ", "Lead nhắc lại",
-		"Có triển vọng", "Có triển vọng (quan tâm)"},
-	"no_response": {"NO_RESPONSE", "UNCONTACTABLE", "Không nghe máy lần 1", "Không nghe máy lần 2",
-		"Không nghe máy lần 3", "Không liên lạc được"},
-	"disqualified": {"REFUSED", "NOT_INTERESTED", "Không quan tâm", "Không triển vọng",
-		"Không đủ tài chính", "Sai đối tượng"},
-	"converted": {"CONVERTED", "ENROLLED", "Đã chuyển đổi", "Đã nhập học"},
-	"invalid": {"WRONG_NUMBER", "INVALID", "Sai số"},
-	"duplicate": {"DUPLICATE", "Lead trùng"},
+	"new": {"NEW"},
+	"in_progress": {"PROCESSING", "PROCESSED", "ASSIGNED"},
+	"converted": {"CREATED"},
+	"disqualified": {"INVALID", "SPAM", "FAILED"},
+	"duplicate": {"DUPLICATE"},
 }
 FUNNEL_STAGES = (
 	("impressions", "Impressions"),
@@ -191,33 +185,24 @@ def _primary_attributions(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any
 
 
 def _lead_status_group(code: str, status: dict[str, Any]) -> str:
-	status_codes = {str(value) for value in (code, status.get("code")) if value}
-	display_name = status.get("display_name")
-	for group, aliases in LEAD_STATUS_ALIASES.items():
-		if status_codes & aliases or display_name in aliases:
-			return group
-	# Metadata supports custom canonical statuses without guessing from free text.
-	if status.get("stage_category") == "enrolled":
+	resolution = str(status.get("resolution") or code or "").upper()
+	processing = str(status.get("processing_status") or "").upper()
+	if resolution == "CREATED":
 		return "converted"
-	if status.get("stage_category") == "lost":
+	if resolution == "DUPLICATE":
+		return "duplicate"
+	if resolution in {"INVALID", "SPAM", "FAILED"}:
 		return "disqualified"
-	if status.get("lifecycle_stage") == "Lead":
+	if processing == "NEW":
 		return "new"
-	if status.get("lifecycle_stage") in {"MQL", "Applicant"}:
+	if processing in LEAD_STATUS_ALIASES["in_progress"]:
 		return "in_progress"
-	if status.get("lifecycle_stage") == "Enrolled":
-		return "converted"
-	if status.get("lifecycle_stage") == "Lost":
-		return "disqualified"
 	return "unknown"
 
 
 def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
 	"""Load one permission-scoped cohort; unavailable optional tables yield no lead metrics."""
-	if not all(
-		frappe.db.table_exists(doctype)
-		for doctype in ("CRM Campaign Attribution", "CRM Lead", "CRM Enrollment Status")
-	):
+	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Lead")):
 		return None
 	attributions = frappe.get_all(
 		"CRM Campaign Attribution",
@@ -260,16 +245,14 @@ def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
 		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
 		filters["owning_team"] = ["in", teams or [""]]
 	students = frappe.get_list("CRM Lead", filters=filters,
-		fields=["name", "lead_code", "student_name", "high_school", "enrollment_status", "owner_staff", "source", "modified"],
+		fields=["name", "lead_code", "student_name", "high_school", "processing_status", "resolution", "owner_staff", "source", "modified"],
 		limit_page_length=0)
-	statuses = {row["name"]: row for row in frappe.get_all("CRM Enrollment Status",
-		fields=["name", "display_name", "stage_category", "lifecycle_stage"], limit_page_length=0)}
 	grouped = defaultdict(list)
 	for student in students:
 		row = dict(student)
-		code = str(row.get("enrollment_status") or "")
-		status = statuses.get(code, {})
-		row.update(statusCode=code, status=status.get("display_name") or code,
+		code = str(row.get("processing_status") or "")
+		status = {"processing_status": code, "resolution": row.get("resolution")}
+		row.update(statusCode=code, status=code or "Unknown",
 			statusGroup=_lead_status_group(code, status))
 		grouped[primary[row["name"]]["campaign"]].append(row)
 	return dict(grouped)
@@ -277,10 +260,7 @@ def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
 
 def _load_campaign_lead_page(year, date_from, date_to, campus, channel, scope, campaign_id, status_group, page, page_size):
 	"""Load one page from the campaign cohort instead of slicing a full student list in Python."""
-	if not all(
-		frappe.db.table_exists(doctype)
-		for doctype in ("CRM Campaign Attribution", "CRM Lead", "CRM Enrollment Status")
-	):
+	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Lead")):
 		return None
 	attributions = frappe.get_all(
 		"CRM Campaign Attribution",
@@ -330,43 +310,26 @@ def _load_campaign_lead_page(year, date_from, date_to, campus, channel, scope, c
 	if scope.get("territory"):
 		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
 		filters["owning_team"] = ["in", teams or [""]]
-	statuses = {
-		row["name"]: row
-		for row in frappe.get_all(
-			"CRM Enrollment Status",
-			fields=["name", "display_name", "stage_category", "lifecycle_stage"],
-			limit_page_length=0,
-		)
-	}
-	if status_group != "all":
-		group_codes = [
-			code for code, status in statuses.items() if _lead_status_group(code, status) == status_group
-		]
-		if status_group == "unknown":
-			known_codes = [
-				code
-				for code, status in statuses.items()
-				if _lead_status_group(code, status) in {*LEAD_STATUS_GROUPS, *LEAD_QUALITY_GROUPS}
-			]
-			filters["enrollment_status"] = ["not in", known_codes or ["__none__"]]
-		else:
-			filters["enrollment_status"] = ["in", group_codes or ["__none__"]]
-
-	total = frappe.db.count("CRM Lead", filters)
-	rows = frappe.get_list(
+	all_rows = frappe.get_list(
 		"CRM Lead",
 		filters=filters,
-		fields=["name", "lead_code", "student_name", "high_school", "enrollment_status", "owner_staff", "source", "modified"],
+		fields=["name", "lead_code", "student_name", "high_school", "processing_status", "resolution", "owner_staff", "source", "modified"],
 		order_by="modified desc, name asc",
-		limit_start=(page - 1) * page_size,
-		limit_page_length=page_size,
+		limit_page_length=0,
 	)
+	if status_group != "all":
+		all_rows = [
+			row for row in all_rows
+			if _lead_status_group(str(row.get("processing_status") or ""), dict(row)) == status_group
+		]
+	total = len(all_rows)
+	rows = all_rows[(page - 1) * page_size : page * page_size]
 	for row in rows:
-		code = str(row.get("enrollment_status") or "")
-		status = statuses.get(code, {})
+		code = str(row.get("processing_status") or "")
+		status = dict(row)
 		row.update(
 			statusCode=code,
-			status=status.get("display_name") or code,
+			status=code or "Unknown",
 			statusGroup=_lead_status_group(code, status),
 		)
 	return {"rows": rows, "total": total}

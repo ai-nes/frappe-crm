@@ -59,8 +59,8 @@ OPERATION_ORDER = ("overdue-tasks", "missing-documents")
 STUDENT_FIELDS = [
 	"name",
 	"student_name",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"admission_year",
 	"interest_level",
 	"fit_level",
@@ -70,8 +70,7 @@ STUDENT_FIELDS = [
 CONTACT_FIELDS = [
 	"name",
 	"student",
-	"enrollment_status",
-	"lifecycle_stage",
+	"student_stage",
 	"readiness_level",
 	"quality_bucket",
 	"is_verified_lead",
@@ -321,7 +320,7 @@ def _load_students(
 			filters={
 				"owner_staff": staff["name"],
 				"admission_year": admission_year,
-				"lifecycle_stage": ["!=", "Lost"],
+				"processing_status": ["!=", "CLOSED"],
 			},
 			fields=STUDENT_FIELDS,
 			order_by="name asc",
@@ -763,9 +762,9 @@ def _is_consulted(
 ) -> bool:
 	if any(_is_consulted_interaction(row) for row in interactions):
 		return True
-	if any(_fold(row.get("enrollment_status")) in {"dang tu van", "da tu van"} for row in contacts):
+	if any(str(row.get("student_stage") or "") in {"Connected", "Qualified"} for row in contacts):
 		return True
-	return str(student.get("lifecycle_stage") or "") in {"Applicant", "Enrolled"} or any(
+	return str(student.get("resolution") or "") == "CREATED" or any(
 		_fold(row.get("status")) in {"submitted", "under review", "accepted", "enrolled"}
 		for row in applications
 	)
@@ -774,7 +773,7 @@ def _is_consulted(
 def _is_interested(
 	student: dict[str, Any], contacts: list[dict[str, Any]], interactions: list[dict[str, Any]]
 ) -> bool:
-	if _fold(student.get("lifecycle_stage")) == "mql":
+	if any(str(row.get("student_stage") or "") in {"Attempting", "Connected", "Qualified"} for row in contacts):
 		return True
 	if _fold(student.get("interest_level")) in {"high", "medium"}:
 		return True
@@ -783,7 +782,7 @@ def _is_interested(
 	for row in contacts:
 		text = " ".join(
 			_fold(row.get(field))
-			for field in ("readiness_level", "quality_bucket", "enrollment_status")
+			for field in ("readiness_level", "quality_bucket", "student_stage")
 		)
 		if any(
 			token in text
@@ -794,8 +793,6 @@ def _is_interested(
 
 
 def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("lifecycle_stage") or "") == "Applicant":
-		return True
 	return any(
 		_fold(row.get("status")) in {"submitted", "under review"} or _student_has_missing_documents([row])
 		for row in applications
@@ -803,16 +800,13 @@ def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, A
 
 
 def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if _fold(student.get("enrollment_status")) in {"da xac nhan", "da trung tuyen", "confirmed"}:
+	if str(student.get("resolution") or "") == "CREATED":
 		return True
 	return any(_fold(row.get("status")) == "accepted" for row in applications)
 
 
 def _is_admitted(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if (
-		str(student.get("lifecycle_stage") or "") == "Enrolled"
-		or _fold(student.get("enrollment_status")) in {"da nhap hoc", "enrolled", "converted"}
-	):
+	if str(student.get("resolution") or "") == "CREATED":
 		return True
 	return any(_fold(row.get("status")) == "enrolled" for row in applications)
 

@@ -28,7 +28,7 @@ class TestSeedAssignmentConversionScenarios(TestCase):
 			if "defect" not in row or row["defect"]["expected"] == "assigned"
 		]
 		defects = [row for row in SCENARIOS if "defect" in row]
-		self.assertEqual(len(happy), 14)
+		self.assertEqual(len(happy), 15)
 		self.assertEqual(len(defects), 8)
 		self.assertEqual(
 			{row["defect"]["code"] for row in defects},

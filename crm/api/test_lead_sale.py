@@ -131,14 +131,16 @@ class TestLeadSaleOverview(FrappeTestCase):
 			{
 				"name": "STU-1",
 				"student_name": "Một",
-				"lifecycle_stage": "MQL",
+				"processing_status": "PROCESSING",
+				"resolution": "PENDING",
 				"owner_staff": "STAFF-1",
 				"creation": "2026-09-05 08:00:00",
 			},
 			{
 				"name": "STU-2",
 				"student_name": "Hai",
-				"lifecycle_stage": "Lead",
+				"processing_status": "NEW",
+				"resolution": "PENDING",
 				"owner_staff": None,
 				"creation": "2026-09-04 08:00:00",
 			},

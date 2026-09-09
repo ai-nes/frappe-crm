@@ -1042,7 +1042,6 @@ def _create_case(
 		"identity": identity,
 		"intake_integrity_state": "resolved",
 		"ownership_revision": 0,
-		"enrollment_status": payload.get("enrollment_status") or "NEW",
 		"source": payload.get("source"),
 		"advertising_channel": payload.get("advertising_channel"),
 		"current_grade": payload.get("current_grade"),

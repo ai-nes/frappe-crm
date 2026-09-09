@@ -10,10 +10,10 @@
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
-  {"fieldname": "from_stage", "fieldtype": "Select", "in_list_view": 1, "label": "From Stage", "options": "Lead\nMQL\nApplicant\nEnrolled\nLost", "read_only": 1},
-  {"fieldname": "to_stage", "fieldtype": "Select", "in_list_view": 1, "label": "To Stage", "options": "Lead\nMQL\nApplicant\nEnrolled\nLost", "read_only": 1, "reqd": 1},
+  {"fieldname": "from_stage", "fieldtype": "Select", "in_list_view": 1, "label": "From Stage", "options": "New\nAttempting\nConnected\nQualified\nDisqualified", "read_only": 1},
+  {"fieldname": "to_stage", "fieldtype": "Select", "in_list_view": 1, "label": "To Stage", "options": "New\nAttempting\nConnected\nQualified\nDisqualified", "read_only": 1, "reqd": 1},
   {"fieldname": "transition_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Transition Kind", "options": "forward\nlost\nreopen\noverride", "read_only": 1, "reqd": 1},
-  {"fieldname": "prior_active_stage", "fieldtype": "Select", "label": "Prior Active Stage", "options": "Lead\nMQL\nApplicant\nEnrolled\nLost", "read_only": 1},
+  {"fieldname": "prior_active_stage", "fieldtype": "Select", "label": "Prior Active Stage", "options": "New\nAttempting\nConnected\nQualified\nDisqualified", "read_only": 1},
   {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "read_only": 1},
   {"fieldname": "evidence_references", "fieldtype": "JSON", "label": "Evidence References", "read_only": 1},
   {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "read_only": 1, "reqd": 1},

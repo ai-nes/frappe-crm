@@ -57,24 +57,19 @@ def _resolve_campus(campus: str | None) -> str:
 	frappe.throw("Cần có ít nhất một CRM Campus trước khi seed Campaign.", frappe.ValidationError)
 
 
-def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str]:
+def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str, str]:
 	code = spec["code"]
 	title = spec["title"]
 
 	existing = frappe.db.get_value("CRM Campaign", {"stable_code": code}, ["name", "title"], as_dict=True)
 	if existing:
-		return existing.name, False, existing.title
+		existing_code = frappe.db.get_value("CRM Campaign", existing.name, "stable_code")
+		return existing.name, False, existing.title, existing_code
 
 	existing_name = frappe.db.get_value("CRM Campaign", {"title": title}, "name")
 	if existing_name:
 		existing_code = frappe.db.get_value("CRM Campaign", existing_name, "stable_code")
-		if existing_code and existing_code != code:
-			frappe.throw(
-				f"Campaign {title!r} đã có code khác: {existing_code}.",
-				frappe.ValidationError,
-			)
-		frappe.db.set_value("CRM Campaign", existing_name, "stable_code", code, update_modified=False)
-		return existing_name, False, title
+		return existing_name, False, title, existing_code
 
 	doc = frappe.get_doc(
 		{
@@ -91,12 +86,7 @@ def _ensure_campaign(spec: dict[str, Any], campus: str) -> tuple[str, bool, str]
 		}
 	).insert(ignore_permissions=True)
 
-	if frappe.db.exists("CRM Campaign", {"stable_code": code, "name": ["!=", doc.name]}):
-		frappe.throw(f"Campaign code {code} bị trùng sau khi tạo Campaign.", frappe.ValidationError)
-	if doc.stable_code != code:
-		frappe.db.set_value("CRM Campaign", doc.name, "stable_code", code, update_modified=False)
-		doc.stable_code = code
-	return doc.name, True, title
+	return doc.name, True, title, doc.stable_code
 
 
 def execute(
@@ -109,9 +99,9 @@ def execute(
 	created = 0
 	campaigns = []
 	for spec in specs:
-		name, was_created, title = _ensure_campaign(spec, resolved_campus)
+		name, was_created, title, code = _ensure_campaign(spec, resolved_campus)
 		created += int(was_created)
-		campaigns.append({"name": name, "code": spec["code"], "title": title})
+		campaigns.append({"name": name, "code": code, "title": title})
 
 	if not getattr(frappe.flags, "in_test", False):
 		frappe.db.commit()

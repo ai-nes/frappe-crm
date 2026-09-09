@@ -16,12 +16,19 @@ import frappe
 
 NAMESPACE = "fcas-diverse-cohort-100-v1"
 COUNT = 100
-STAGE_STATUSES = {
-    "Lead": "Mới",
-    "MQL": "Có triển vọng",
-    "Applicant": "Đã xác nhận",
-    "Enrolled": "Đã nhập học",
-    "Lost": "Từ chối",
+STAGE_PROCESSING = {
+    "Lead": "NEW",
+    "MQL": "PROCESSING",
+    "Applicant": "PROCESSED",
+    "Enrolled": "CLOSED",
+    "Lost": "CLOSED",
+}
+STAGE_RESOLUTION = {
+    "Lead": "PENDING",
+    "MQL": "PENDING",
+    "Applicant": "MATCHED",
+    "Enrolled": "CREATED",
+    "Lost": "INVALID",
 }
 STAGE_COUNTS = (("Lead", 40), ("MQL", 25), ("Applicant", 20), ("Enrolled", 10), ("Lost", 5))
 MAJOR_ORDER = (
@@ -66,6 +73,18 @@ def _stage(index: int) -> str:
         if index < cursor:
             return name
     return "Lost"
+
+
+def _verified_stage(row: dict[str, Any]) -> str:
+    if row.get("resolution") == "CREATED":
+        return "Enrolled"
+    if row.get("resolution") == "INVALID":
+        return "Lost"
+    return {
+        "NEW": "Lead",
+        "PROCESSING": "MQL",
+        "PROCESSED": "Applicant",
+    }.get(str(row.get("processing_status") or ""), "Lead")
 
 
 def _school_rows() -> list[dict[str, Any]]:
@@ -115,10 +134,8 @@ def _topology() -> dict[str, Any]:
         raise RuntimeError("Không có CRM Staff hợp lệ trong Sales Team để phân công cohort.")
     sources = set(frappe.get_all("CRM Lead Source", pluck="name", limit_page_length=0))
     majors = set(frappe.get_all("CRM Major", pluck="name", limit_page_length=0))
-    statuses = set(frappe.get_all("CRM Term", filters={"name": ["in", list(STAGE_STATUSES.values())]}, pluck="name"))
     missing = [name for name in MAJOR_ORDER if name not in majors]
     missing += [name for name in SOURCE_ORDER if name not in sources]
-    missing += [name for name in STAGE_STATUSES.values() if name not in statuses]
     if missing:
         raise RuntimeError("Thiếu master canonical: " + ", ".join(sorted(set(missing))))
     return {
@@ -164,7 +181,8 @@ def _payload(index: int, topology: dict[str, Any]) -> tuple[dict[str, Any], dict
         "campus": topology["campus"],
         "branch": topology["campus"],
         "owning_team": topology["pool"],
-        "enrollment_status": STAGE_STATUSES[stage],
+        "processing_status": STAGE_PROCESSING[stage],
+        "resolution": STAGE_RESOLUTION[stage],
         "source": source,
         "high_school": school["name"],
         "province": school["province"],
@@ -196,6 +214,8 @@ def _save_extended_fields(student: str, meta: dict[str, Any], payload: dict[str,
     doc = frappe.get_doc("CRM Lead", student)
     values = {
         "import_source_id": f"{NAMESPACE}:{meta['key']}",
+        "processing_status": STAGE_PROCESSING[meta["stage"]],
+        "resolution": STAGE_RESOLUTION[meta["stage"]],
         "admission_method": meta["method"],
         "advertising_channel": ("Biểu mẫu Facebook" if index % 4 == 0 else "Zalo OA" if index % 4 == 1 else "Ngày hội tư vấn" if index % 4 == 2 else "Tư vấn qua website"),
         "cohort_start_year": int(payload["admission_year"]),
@@ -403,7 +423,7 @@ def verify(namespace: str = NAMESPACE) -> dict[str, Any]:
     rows = frappe.get_all(
         "CRM Lead",
         filters={"import_source_id": ["like", namespace + ":%"]},
-        fields=["name", "lifecycle_stage", "enrollment_status", "major", "source", "high_school", "province", "ward", "owner_staff", "email"],
+        fields=["name", "processing_status", "resolution", "major", "source", "high_school", "province", "ward", "owner_staff", "email"],
         order_by="name asc",
         limit_page_length=0,
     )
@@ -424,7 +444,7 @@ def verify(namespace: str = NAMESPACE) -> dict[str, Any]:
         "namespace": namespace,
         "students": len(rows),
         "unique_emails": len({row.email for row in rows if row.email}),
-        "stages": {stage: sum(1 for row in rows if row.lifecycle_stage == stage) for stage, _ in STAGE_COUNTS},
+        "stages": {stage: sum(1 for row in rows if _verified_stage(row) == stage) for stage, _ in STAGE_COUNTS},
         "majors": {major: sum(1 for row in rows if row.major == major) for major in MAJOR_ORDER},
         "sources": {source: sum(1 for row in rows if row.source == source) for source in SOURCE_ORDER},
         "owners": len({row.owner_staff for row in rows if row.owner_staff}),

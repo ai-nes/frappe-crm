@@ -15,6 +15,7 @@ class TestSeedLeadAPICampaigns(FrappeTestCase):
 			{
 				"doctype": "CRM Campus",
 				"campus_name": f"_Test Lead API Campaign Campus {self.suffix}",
+				"campus_code": "TEST-LEAD-API",
 			}
 		).insert(ignore_permissions=True)
 		self.specs = tuple(
@@ -44,7 +45,13 @@ class TestSeedLeadAPICampaigns(FrappeTestCase):
 
 		self.assertEqual(first["created"], 4)
 		self.assertEqual(second["created"], 0)
-		self.assertEqual([row["code"] for row in first["campaigns"]], [spec["code"] for spec in self.specs])
+		self.assertTrue(
+			all(row["code"].startswith("CMP-TEST-LEAD-API-") for row in first["campaigns"])
+		)
+		self.assertEqual(
+			[row["code"] for row in first["campaigns"]],
+			[row["code"] for row in second["campaigns"]],
+		)
 		self.assertEqual(
 			frappe.db.count("CRM Campaign", {"title": ["like", f"_Test Lead API Campaign {self.suffix}%"]}),
 			4,

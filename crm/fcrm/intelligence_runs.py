@@ -23,6 +23,7 @@ from crm.fcrm.analysis_runs import (
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.school_intelligence import get_school_intelligence
 from crm.fcrm.scoring_projection import score_band
+from crm.fcrm.student_stage import STUDENT_STAGES
 
 SERVICE_USER_KEY = "crm_agents_service_user"
 RUN_TYPES = {"student": "CRM Student Analysis Run", "school": "CRM School Analysis Run"}
@@ -32,6 +33,7 @@ ACTIVE = {"queued", "running"}
 STUDENT_360_POLICY_REVISION = "student-360-analysis-r3"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION = "student-360-snapshot-v1"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 = "student-360-snapshot-v2"
+MAX_STUDENT_INTELLIGENCE_REFS = 16
 _STUDENT_ACTION_ADVICE = re.compile(
 	r"(?:\b(?:nên|hãy|ưu tiên|đề xuất|khuyến nghị)\b[^.\n]{0,80}"
 	 r"\b(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|theo dõi|thực hiện)\b"
@@ -136,6 +138,34 @@ def _student_360_analysis_input(evidence: dict[str, Any]) -> dict[str, Any]:
 		"applications": signals.get("applications") or [],
 		"guardian_signals": signals.get("guardian_signals") or [],
 	}
+
+
+def _canonical_student_stage(value: Any) -> str | None:
+	"""Keep only the current Student stage contract at the AI boundary."""
+	stage = str(value or "").strip()
+	return stage if stage in STUDENT_STAGES else None
+
+
+def _bounded_provenance_refs(
+	primary_ref: str,
+	sections: tuple[list[str], ...],
+	limit: int,
+) -> list[str]:
+	"""Select bounded, deterministic lineage refs while retaining each section."""
+	refs = [primary_ref]
+	queues = [list(dict.fromkeys(section)) for section in sections]
+	while len(refs) < limit:
+		added = False
+		for queue in queues:
+			if not queue:
+				continue
+			refs.append(queue.pop(0))
+			added = True
+			if len(refs) >= limit:
+				break
+		if not added:
+			break
+	return refs
 
 
 def _lock_target(domain: str, target: str) -> None:
@@ -839,11 +869,12 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	# This is evidence, not a conclusion: the AI handler must derive and label
 	# any inference/uncertainty it publishes.  No name, phone, email, notes,
 	# free-form interaction text, or recipient data crosses this boundary.
+	student_stage = _canonical_student_stage(row.get("student_stage"))
 	student_360 = {
 		"signals": {
 			# This is the only CRM stage axis used by Student 360.  Never infer it
 			# from legacy lifecycle data or the academic study stage.
-			"student_stage": row.get("student_stage"),
+			"student_stage": student_stage,
 			"study_stage": row.get("study_stage") or row.get("current_grade"),
 			"assessment_status": row.get("assessment_status"),
 			"interest": row.get("interest_level"),
@@ -903,7 +934,14 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 			],
 		},
 		"unknowns": [
-			key for key, value in row.items()
+			key for key, value in {
+				"student_stage": student_stage,
+				"assessment_status": row.get("assessment_status"),
+				"interest_level": row.get("interest_level"),
+				"fit_level": row.get("fit_level"),
+				"primary_barrier": row.get("primary_barrier"),
+				"latest_score": row.get("latest_score"),
+			}.items()
 			if key in {
 				"student_stage", "assessment_status", "interest_level", "fit_level",
 				"primary_barrier", "latest_score",
@@ -914,23 +952,46 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	}
 	from crm.services.intelligence_refs import build_coverage, build_evidence_ref, build_subject_ref
 	subject = build_subject_ref("student", student, str(frappe.local.site or "frappe"))
-	coverage_specs = {
-		"score_history": len(student_360["signals"].get("score_history", [])),
-		"interaction_history": len(student_360["signals"].get("interaction_history", [])),
-		"applications": len(student_360["signals"].get("applications", [])),
-		"guardian_signals": len(student_360["signals"].get("guardian_signals", [])),
-	}
+	history_sections = tuple(
+		(
+			name,
+			student_360["signals"].get(name, []),
+		)
+		for name in ("score_history", "interaction_history", "applications", "guardian_signals")
+	)
+	raw_refs = _bounded_provenance_refs(
+		f"student:{student}",
+		(
+			[
+				ref
+				for item in rows
+				for ref in item.get("provenance_ids", [])
+			]
+			for _, rows in history_sections
+		),
+		MAX_STUDENT_INTELLIGENCE_REFS,
+	)
+	selected_refs = set(raw_refs)
+	for name, rows in history_sections:
+		student_360["signals"][name] = [
+			item
+			for item in rows
+			if any(ref in selected_refs for ref in item.get("provenance_ids", []))
+		]
 	student_360["coverage"] = [
-		build_coverage(f"student:{student}:{name}", "available", count, 0)
-		for name, count in coverage_specs.items()
+		build_coverage(
+			f"student:{student}:{name}",
+			"truncated" if len(student_360["signals"][name]) < len(rows) else "available",
+			len(student_360["signals"][name]),
+			len(rows) - len(student_360["signals"][name]),
+			reason="student_evidence_ref_limit"
+			if len(student_360["signals"][name]) < len(rows)
+			else None,
+		)
+		for name, rows in history_sections
 	]
 	authority_refs = []
-	for raw in dict.fromkeys(student_360["provenance_ids"] + [
-		ref
-		for section in (student_360["signals"].get("score_history", []), student_360["signals"].get("interaction_history", []), student_360["signals"].get("applications", []), student_360["signals"].get("guardian_signals", []))
-		for item in section
-		for ref in item.get("provenance_ids", [])
-	]):
+	for raw in raw_refs:
 		prefix, separator, source_id = str(raw).partition(":")
 		if separator and source_id:
 			coverage_name = {"score": "score_history", "interaction": "interaction_history", "application": "applications", "guardian": "guardian_signals"}.get(prefix)

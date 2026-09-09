@@ -79,7 +79,7 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			["LD-1", "LD-2"],
 		)
 
-	def test_live_closed_lead_is_serialized_for_manual_review(self):
+	def test_live_closed_lead_with_routing_error_is_serialized_for_manual_review(self):
 		item = lead_assignment_batch._serialize_live_review_item(
 			frappe._dict(
 				name="LEAD-CLOSED-1",
@@ -117,10 +117,10 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			)
 		)
 
-		self.assertEqual(item["missingFields"], ["Tỉnh", "Trường THPT"])
+		self.assertEqual(item["missingFields"], ["Tỉnh"])
 		self.assertEqual(
 			item["reason"],
-			"Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố, Thiếu trường THPT.",
+			"Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố.",
 		)
 
 	def test_queue_for_zone_preserves_province_queue_identity(self):
@@ -181,7 +181,13 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				return_value=[
 					frappe._dict(name="LEAD-1", processing_status="PROCESSED", owner_staff=None, assigned_to=None),
 					frappe._dict(name="LEAD-2", processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None),
-					frappe._dict(name="LEAD-3", processing_status="CLOSED", owner_staff=None, assigned_to=None),
+					frappe._dict(
+						name="LEAD-3",
+						processing_status="CLOSED",
+						resolution="INVALID",
+						owner_staff=None,
+						assigned_to=None,
+					),
 				],
 			),
 			patch.object(
@@ -199,10 +205,10 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertTrue(workflow["hasData"])
 		self.assertEqual(workflow["pendingCount"], 1)
 		self.assertEqual(summary["total"], 3)
-		self.assertEqual(summary["valid"], 2)
+		self.assertEqual(summary["valid"], 3)
 		self.assertEqual(summary["pending"], 1)
 		self.assertEqual(summary["assigned"], 1)
-		self.assertEqual(summary["invalid"], 1)
+		self.assertEqual(summary["invalid"], 0)
 		self.assertEqual(steps["classification"]["status"], "success")
 		self.assertEqual(steps["matching"]["status"], "running")
 		self.assertEqual(steps["review"]["status"], "warning")
@@ -213,10 +219,10 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			"assigned",
 		)
 
-	def test_history_status_projects_closed_lead_to_manual_review(self):
+	def test_history_status_projects_closed_lead_to_skipped(self):
 		self.assertEqual(
-			lead_assignment_batch._effective_history_item_status("pending", "CLOSED"),
-			"manual_review",
+			lead_assignment_batch._effective_history_item_status("pending", "CLOSED", "DUPLICATE"),
+			"skipped",
 		)
 
 	def test_history_status_keeps_routing_attention_state_for_open_lead(self):
@@ -236,7 +242,9 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			"LEAD-ASSIGNED": frappe._dict(
 				processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None
 			),
-			"LEAD-REVIEW": frappe._dict(processing_status="CLOSED", owner_staff=None, assigned_to=None),
+			"LEAD-REVIEW": frappe._dict(
+				processing_status="CLOSED", resolution="DUPLICATE", owner_staff=None, assigned_to=None
+			),
 		}
 		with (
 			patch.object(
@@ -255,9 +263,10 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			summary = lead_assignment_batch._processing_workflow_summary()
 
 		self.assertEqual(summary["total"], 2)
-		self.assertEqual(summary["valid"], 1)
+		self.assertEqual(summary["valid"], 2)
 		self.assertEqual(summary["assigned"], 1)
-		self.assertEqual(summary["manualReview"], 1)
+		self.assertEqual(summary["manualReview"], 0)
+		self.assertEqual(summary["skipped"], 1)
 
 	def test_apply_result_keeps_routing_reason_and_capacity_fields(self):
 		item = SimpleNamespace(

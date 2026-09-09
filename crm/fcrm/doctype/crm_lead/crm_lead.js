@@ -25,12 +25,6 @@ async function loadWardCode(frm) {
 
 frappe.ui.form.on("CRM Lead", {
 	setup(frm) {
-		// Enrollment Status is a dedicated lookup; this field must not expose intent,
-		// aspiration, or lost-reason terms as valid enrollment statuses.
-		frm.set_query("enrollment_status", () => ({
-			filters: { enabled: 1 },
-		}))
-
 		frm.set_query("aspiration", () => ({
 			filters: { enabled: 1, code: ["in", ["NV1", "NV2", "NV3"]] },
 		}))

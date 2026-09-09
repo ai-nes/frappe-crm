@@ -32,13 +32,14 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 
 		self.assertEqual(reason, "Đã đóng hồ sơ vì trùng CCCD với một Lead khác.")
 
-	def test_identifier_gate_requires_phone_province_high_school_and_major(self):
+	def test_identifier_gate_requires_name_phone_and_province(self):
 		from crm.fcrm.lead_processing import (
 			LeadProcessingError,
 			_normalise_identifiers,
 		)
 
 		valid = {
+			"student_name": " Nguyễn Văn A ",
 			"high_school": " THPT A ",
 			"major": " Công nghệ thông tin ",
 			"email": " Student@Example.com ",
@@ -48,6 +49,7 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertEqual(
 			_normalise_identifiers(valid),
 			{
+				"student_name": "nguyễn văn a",
 				"high_school": "thpt a",
 				"major": "công nghệ thông tin",
 				"email": "student@example.com",
@@ -61,11 +63,15 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			_normalise_identifiers(invalid)
 		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
 
+		valid_without_school = {**valid, "student_name": "Nguyễn Văn A", "high_school": None}
+		self.assertEqual(_normalise_identifiers(valid_without_school)["student_name"], "nguyễn văn a")
+
 	def test_cccd_never_matches_two_leads_before_student_conversion(self):
 		from crm.fcrm.lead_processing import _duplicate_match_type, _normalise_identifiers
 
 		identifiers = _normalise_identifiers(
 			{
+				"student_name": "Nguyễn Văn A",
 				"id_number": "079300000001",
 				"phone": "0901000001",
 				"province": "Hà Nội",
@@ -178,8 +184,8 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
 		self.assertEqual(student_fields["student_stage"]["default"], "New")
 		self.assertTrue(student_fields["student_stage"]["read_only"])
-		self.assertEqual(student_fields["enrollment_status"]["default"], "NEW")
-		self.assertTrue(student_fields["enrollment_status"]["hidden"])
+		self.assertNotIn("enrollment_status", student_fields)
+		self.assertNotIn("lifecycle_stage", student_fields)
 
 
 @unittest.skipIf(frappe is None, "Lead/Student workflow tests require a Frappe bench")
@@ -203,7 +209,7 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 			"student_name": f"_Test Processing {suffix}",
 			"phone": f"0981000{len(suffix):03d}",
 			"email": f"processing-{suffix.lower()}@example.com",
-			"enrollment_status": "NEW",
+			"processing_status": "NEW",
 			**values,
 		}
 		return frappe.get_doc(payload).insert(ignore_permissions=True)
@@ -215,12 +221,12 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		result = process_lead(lead.name)
 
 		self.assertEqual(result["status"], "CLOSED")
-		self.assertEqual(result["resolution"], "PENDING")
+		self.assertEqual(result["resolution"], "INVALID")
 		self.assertEqual(result["processing_outcome"], "INVALID")
 		self.assertTrue(result["validation"]["phone"])
 		self.assertFalse(result["validation"]["province"])
 		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
-		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "PENDING")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "INVALID")
 
 	def test_status_command_persists_every_supported_status(self):
 		from crm.fcrm.lead_processing import update_processing_status
@@ -293,7 +299,7 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 			self.assertTrue(_eligible_lead_duplicate(candidate))
 			self.assertEqual(
 				_duplicate_match_type(identifiers, candidate),
-				"PHONE_PROVINCE_SCHOOL_MAJOR",
+				"PHONE_PROVINCE",
 			)
 		classification = _classify_resolution_details(copy, identifiers)
 		self.assertEqual(classification["resolution"], "DUPLICATE", classification)

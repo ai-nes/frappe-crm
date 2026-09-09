@@ -10,8 +10,31 @@ STUDENT_STAGES = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
 TERMINAL_STAGES = frozenset({"Qualified", "Disqualified"})
 SERVICE_FLAG = "student_stage_service"
 
-# ``enrollment_status`` is retained only as a compatibility projection while
-# older CRM modules are being retired.  New workflows must use this funnel.
+# Presentation/reporting helpers.  These keep old dashboard labels available
+# without persisting a second lifecycle/status field on CRM Student.
+STUDENT_STAGE_TO_LIFECYCLE_LABEL = {
+	"New": "Lead",
+	"Attempting": "MQL",
+	"Connected": "Enrolled",
+	"Qualified": "Applicant",
+	"Disqualified": "Lost",
+}
+
+
+def lifecycle_label_for_stage(stage: Any) -> str | None:
+	return STUDENT_STAGE_TO_LIFECYCLE_LABEL.get(str(stage or "").strip())
+
+
+def is_active_stage(stage: Any) -> bool:
+	return str(stage or "New").strip() not in {"Connected", "Disqualified"}
+
+
+def is_enrolled_stage(stage: Any) -> bool:
+	return str(stage or "").strip() == "Connected"
+
+# Kept as a migration compatibility helper for historical patches.  Student
+# records no longer persist enrollment_status or lifecycle_stage; new code uses
+# student_stage exclusively.
 LEGACY_ENROLLMENT_STATUS_TO_STUDENT_STAGE = {
 	"NEW": "New",
 	"PROSPECT": "Attempting",
@@ -19,7 +42,7 @@ LEGACY_ENROLLMENT_STATUS_TO_STUDENT_STAGE = {
 	"ENROLLED": "Connected",
 	"REFUSED": "Disqualified",
 	"FOLLOW_UP": "Attempting",
-	"CONVERTED": "Qualified",
+	"CONVERTED": "Connected",
 	"MỚI": "New",
 	"CÓ TRIỂN VỌNG": "Attempting",
 	"ĐÃ XÁC NHẬN": "Qualified",
@@ -127,11 +150,8 @@ def set_student_stage(
 			frappe.db.set_value(
 				"CRM Student",
 				doc.name,
-				{
-					"student_stage": target_stage,
-					"enrollment_status": STUDENT_STAGE_TO_LEGACY_ENROLLMENT_STATUS[target_stage],
-					"lifecycle_stage": STUDENT_STAGE_TO_LEGACY_LIFECYCLE_STAGE[target_stage],
-				},
+				"student_stage",
+				target_stage,
 				update_modified=True,
 			)
 		finally:

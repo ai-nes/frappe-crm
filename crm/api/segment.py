@@ -18,7 +18,7 @@ PREVIEW_CONTACT_FIELDS = [
 	"full_name",
 	"phone",
 	"email",
-	"lifecycle_stage",
+	"student_stage",
 	"source",
 	"platform",
 	"branch",

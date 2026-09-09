@@ -113,4 +113,4 @@ class TestStudentRoutingSLAContracts(TestCase):
 			classify_student_topology({"owner_staff": "STAFF-1", "owning_team": "POOL-1"}),
 			"dual_owner_pool",
 		)
-		self.assertEqual(classify_student_topology({"enrollment_status": "Lost"}), "terminal")
+		self.assertEqual(classify_student_topology({"student_stage": "Disqualified"}), "terminal")

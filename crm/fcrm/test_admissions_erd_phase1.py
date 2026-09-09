@@ -128,8 +128,8 @@ def test_target_lead_and_student_boundaries_are_explicit():
 
 	assert {
 		"lead_code",
-		"lead_status",
-		"conversion_status",
+		"processing_status",
+		"resolution",
 		"conversion_blockers",
 		"converted_student",
 		"id_number",

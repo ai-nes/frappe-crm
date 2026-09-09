@@ -1,4 +1,4 @@
-"""Compatibility API that records enrollment status changes as lifecycle events."""
+"""Compatibility API that records Student stage changes as lifecycle events."""
 
 from __future__ import annotations
 
@@ -7,7 +7,11 @@ import json
 
 import frappe
 
-from crm.fcrm.lifecycle import get_lifecycle_stage, lifecycle_rank
+from crm.fcrm.student_stage import (
+	STUDENT_STAGES,
+	set_student_stage,
+	stage_from_enrollment_status,
+)
 
 DOCTYPE = "CRM Student Lifecycle Event"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
@@ -15,47 +19,41 @@ FAILURE_LOG_TITLE = "CRM Student Lifecycle Event enrollment transition failed"
 FAILURE_METRIC_CACHE_KEY = "crm_enrollment_transition_record_failures"
 
 
-def record_transition(student, old_status, new_status, occurred_at=None, actor=None, source=None):
-	"""Record one status change in the typed lifecycle event stream."""
-	if old_status == new_status:
+def record_transition(student, old_stage, new_stage, occurred_at=None, actor=None, source=None):
+	"""Record one Student stage change in the typed event stream."""
+	if old_stage == new_stage:
 		return None
 	occurred_at = occurred_at or frappe.utils.now_datetime()
 	actor = actor or getattr(frappe.session, "user", None) or "Administrator"
 
-	_run_in_savepoint(lambda: _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor, source))
+	_run_in_savepoint(lambda: _insert_lifecycle_event(student, old_stage, new_stage, occurred_at, actor, source))
 
 
 def set_enrollment_status(doc, new_value, actor=None, source=None):
-	"""Set a Student status and route its audit event through ``record_transition``."""
+	"""Compatibility wrapper; callers must now provide a canonical Student stage."""
 	if isinstance(doc, str):
-		doc = frappe.get_doc("CRM Lead", doc)
-	old_value = doc.enrollment_status
-	if old_value == new_value:
-		return doc
-	doc.db_set("enrollment_status", new_value)
-	record_transition(doc.name, old_value, new_value, actor=actor, source=source or "set_enrollment_status")
-	return doc
+		doc = frappe.get_doc("CRM Student", doc)
+	target = new_value if new_value in STUDENT_STAGES else stage_from_enrollment_status(new_value)
+	set_student_stage(doc.name, target, _internal_service=True)
+	return frappe.get_doc("CRM Student", doc.name)
 
 
 def _transition_kind(old_stage, new_stage):
-	if new_stage == "Lost":
+	if new_stage == "Disqualified":
 		return "lost"
-	if old_stage == "Lost" and new_stage != "Lost":
+	if old_stage == "Disqualified" and new_stage != "Disqualified":
 		return "reopen"
-	old_rank, new_rank = lifecycle_rank(old_stage), lifecycle_rank(new_stage)
-	if old_rank is not None and new_rank is not None and new_rank < old_rank:
-		return "override"
 	return "forward"
 
 
-def _transition_key(student, old_status, new_status, occurred_at, source):
+def _transition_key(student, old_stage, new_stage, occurred_at, source):
 	return hashlib.sha256(
-		f"enrollment-transition|{student}|{old_status or ''}|{new_status}|{occurred_at}|{source or ''}".encode()
+		f"student-stage-transition|{student}|{old_stage or ''}|{new_stage}|{occurred_at}|{source or ''}".encode()
 	).hexdigest()
 
 
-def _transition_receipt(student, old_status, new_status, occurred_at, actor, source):
-	key = _transition_key(student, old_status, new_status, occurred_at, source)
+def _transition_receipt(student, old_stage, new_stage, occurred_at, actor, source):
+	key = _transition_key(student, old_stage, new_stage, occurred_at, source)
 	existing = frappe.db.get_value(RECEIPT_DOCTYPE, {"command_key": key}, "name")
 	if existing:
 		return existing, key
@@ -70,7 +68,7 @@ def _transition_receipt(student, old_status, new_status, occurred_at, actor, sou
 			"outcome": "created",
 			"target_student": student,
 			"actor": actor,
-			"scope_snapshot": {"source": source or "enrollment_status"},
+			"scope_snapshot": {"source": source or "student_stage"},
 			"policy_version": "enrollment-transition-v1",
 			"schema_version": "enrollment-transition-v1",
 			"correlation_token": key,
@@ -81,17 +79,14 @@ def _transition_receipt(student, old_status, new_status, occurred_at, actor, sou
 	return receipt.name, key
 
 
-def _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor, source):
-	key = _transition_key(student, old_status, new_status, occurred_at, source)
+def _insert_lifecycle_event(student, old_stage, new_stage, occurred_at, actor, source):
+	key = _transition_key(student, old_stage, new_stage, occurred_at, source)
 	if frappe.db.exists(DOCTYPE, {"idempotency_key": key}):
 		return
-	student_doc = frappe.get_doc("CRM Lead", student)
-	old_stage = get_lifecycle_stage(old_status)
-	new_stage = get_lifecycle_stage(new_status) or student_doc.get("lifecycle_stage") or "Lead"
-	receipt, key = _transition_receipt(student, old_status, new_status, occurred_at, actor, source)
+	receipt, key = _transition_receipt(student, old_stage, new_stage, occurred_at, actor, source)
 	evidence = {
-		"old_enrollment_status": old_status,
-		"new_enrollment_status": new_status,
+		"old_stage": old_stage,
+		"new_stage": new_stage,
 		"source": source,
 		"occurred_at": str(occurred_at),
 	}
@@ -103,10 +98,10 @@ def _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor,
 			"from_stage": old_stage,
 			"to_stage": new_stage,
 			"transition_kind": _transition_kind(old_stage, new_stage),
-			"reason": source or "enrollment_status_changed",
+			"reason": source or "student_stage_changed",
 			"evidence_references": json.dumps(evidence, sort_keys=True),
 			"actor": actor,
-			"actor_scope": json.dumps({"source": source or "enrollment_status"}),
+			"actor_scope": json.dumps({"source": source or "student_stage"}),
 			"occurred_at": occurred_at,
 			"command_receipt": receipt,
 			"idempotency_key": key,

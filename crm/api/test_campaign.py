@@ -21,7 +21,7 @@ class TestPublicCampaignApi(TestCase):
 		rows = [
 			{
 				"name": "Campaign 1",
-				"stable_code": "CAM-2026-00001",
+				"stable_code": "CMP-HCM-260901-K7M2",
 				"title": "Website 2026",
 				"campus": "HCM",
 				"status": "ACTIVE",
@@ -34,7 +34,7 @@ class TestPublicCampaignApi(TestCase):
 			patch.object(campaign_api.frappe.db, "count", return_value=1) as count,
 		):
 			result = get_public_campaigns(
-				campaign_code="CAM-2026-00001",
+				campaign_code="CMP-HCM-260901-K7M2",
 				startdate="2026-09-01",
 				enddate="2026-09-30",
 				start="10",
@@ -43,7 +43,7 @@ class TestPublicCampaignApi(TestCase):
 
 		self.assertEqual(result, {"total": 1, "start": 10, "page_length": 25, "campaigns": rows})
 		filters = [
-			["stable_code", "=", "CAM-2026-00001"],
+			["stable_code", "=", "CMP-HCM-260901-K7M2"],
 			["start_date", ">=", "2026-09-01"],
 			["end_date", "<=", "2026-09-30"],
 		]
@@ -99,7 +99,11 @@ class TestCampaignApi(FrappeTestCase):
 
 	def _make_campus(self):
 		campus = frappe.get_doc(
-			{"doctype": "CRM Campus", "campus_name": f"_Test Campaign API Campus {self._suffix}"}
+			{
+				"doctype": "CRM Campus",
+				"campus_name": f"_Test Campaign API Campus {self._suffix}",
+				"campus_code": "TEST-API",
+			}
 		)
 		campus.insert(ignore_permissions=True)
 		return campus.name
@@ -154,11 +158,11 @@ class TestCampaignApi(FrappeTestCase):
 	def test_campaign_code_is_server_managed(self):
 		created = self._create_campaign(stable_code="CUSTOM-CODE")
 
-		self.assertRegex(created["stable_code"], r"^CAM-\d{4}-\d{5,}$")
+		self.assertRegex(created["stable_code"], r"^CMP-TEST-API-\d{6}-[A-HJ-NP-Z2-9]{4}$")
 		self.assertNotEqual(created["stable_code"], "CUSTOM-CODE")
 
 		with self.assertRaises(frappe.ValidationError):
-			update_campaign(created["name"], stable_code="CAM-2026-99999")
+			update_campaign(created["name"], stable_code="CMP-TEST-API-260909-K7M2")
 
 		self.assertEqual(get_campaign(name=created["name"])["stable_code"], created["stable_code"])
 

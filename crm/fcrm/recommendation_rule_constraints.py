@@ -28,20 +28,6 @@ CONDITION_FIELDS = {
 		"operators": ("equals", "not_equals", "in", "not_in"),
 		"options": STUDENT_STAGES,
 	},
-	"student.lifecycle_stage": {
-		"label": "Lifecycle Stage",
-		"type": "select",
-		"operators": ("equals", "not_equals", "in", "not_in"),
-		"options": ("Lead", "MQL", "Applicant", "Enrolled", "Lost"),
-		"deprecated": True,
-	},
-	"student.enrollment_status": {
-		"label": "Enrollment Status",
-		"type": "link",
-		"options_doctype": "CRM Enrollment Status",
-		"operators": ("equals", "not_equals", "in", "not_in"),
-		"deprecated": True,
-	},
 	"student.study_stage": {
 		"label": "Study Stage",
 		"type": "select",
@@ -122,7 +108,7 @@ _NUMERIC_OPERATORS = frozenset({"gt", "gte", "lt", "lte"})
 _LIST_OPERATORS = frozenset({"in", "not_in"})
 _EMPTY_OPERATORS = frozenset({"is_empty", "not_empty"})
 _SCALAR_OPERATORS = frozenset({"equals", "not_equals"})
-LEGACY_STAGE_CONDITION_FIELDS = frozenset({"student.lifecycle_stage", "student.enrollment_status"})
+LEGACY_STAGE_CONDITION_FIELDS = frozenset()
 
 
 def parse_json(value: Any, field: str, default: Any):

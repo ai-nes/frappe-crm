@@ -51,7 +51,9 @@ class TestAttribution(FrappeTestCase):
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-ATTR"}
+		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
@@ -82,7 +84,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": f"{name} Student",
 				"phone": phone,
-				"enrollment_status": "PROSPECT",
+				"processing_status": "NEW",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -96,7 +98,7 @@ class TestAttribution(FrappeTestCase):
 				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
-				"enrollment_status": "PROSPECT",
+				"student_stage": "New",
 				"student": student.name,
 			}
 		)

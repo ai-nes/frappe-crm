@@ -25,8 +25,8 @@ TEAM_MEMBER_FIELDS = ["name", "full_name", "user", "is_active"]
 STUDENT_FIELDS = [
 	"name",
 	"student_name",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"admission_year",
 	"owner_staff",
 	"assigned_to",
@@ -378,7 +378,7 @@ def _load_students(scope: dict[str, Any], year: str, warnings: list[str]) -> lis
 			dict(row)
 			for row in frappe.get_list(
 				"CRM Lead",
-				filters={"admission_year": year, "lifecycle_stage": ["!=", "Lost"]},
+				filters={"admission_year": year, "processing_status": ["!=", "CLOSED"]},
 				or_filters=[
 					["owner_staff", "in", staff_ids],
 					["owning_team", "in", team_ids],

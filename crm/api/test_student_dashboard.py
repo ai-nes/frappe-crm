@@ -36,7 +36,9 @@ class TestStudentDashboardEvents(FrappeTestCase):
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-STUDENT"}
+		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
@@ -53,7 +55,7 @@ class TestStudentDashboardEvents(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": name,
 				"phone": phone,
-				"enrollment_status": "PROSPECT",
+				"processing_status": "NEW",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)

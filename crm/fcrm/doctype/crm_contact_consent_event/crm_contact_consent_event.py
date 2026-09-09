@@ -95,13 +95,20 @@ def sync_contact_consent_flag(doc: "CRMContactConsentEvent", method: str | None 
 
 
 def sync_student_privacy_projection(doc: "CRMContactConsentEvent", method: str | None = None):
-	"""Project the latest Student consent state without mutating the append-only event."""
+	"""Project the latest consent state without mutating the append-only event."""
 	student = doc.contact or doc.student
-	if not student or not frappe.db.exists("CRM Student", student):
+	if not student:
 		return
+	if frappe.db.exists("CRM Student", student):
+		target_doctype = "CRM Student"
+	elif frappe.db.exists("CRM Lead", student):
+		target_doctype = "CRM Lead"
+	else:
+		return
+	link_field = "contact" if doc.contact else "student"
 	latest = frappe.db.get_value(
 		"CRM Contact Consent Event",
-		{"contact": student},
+		{link_field: student},
 		"name",
 		order_by="occurred_at desc, creation desc",
 	)
@@ -117,7 +124,7 @@ def sync_student_privacy_projection(doc: "CRMContactConsentEvent", method: str |
 	values = {
 		"privacy_status": status,
 	}
-	frappe.db.set_value("CRM Student", student, values, update_modified=False)
+	frappe.db.set_value(target_doctype, student, values, update_modified=False)
 	from crm.services.student_context import mark_student_context_changed
 
 	mark_student_context_changed(student, "privacy_consent_changed")

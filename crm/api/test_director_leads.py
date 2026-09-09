@@ -124,7 +124,6 @@ class TestDirectorLeads(FrappeTestCase):
 				"student_name": "Nguyễn Minh An",
 				"phone": "0900000000",
 				"high_school": "HS-1",
-				"enrollment_status": "NEW",
 				"owner_staff": "STAFF-1",
 				"source": "SRC-1",
 				"creation": "2026-09-07 10:00:00",
@@ -412,17 +411,17 @@ class TestDirectorLeads(FrappeTestCase):
 				return_value=[
 					{
 						"event_id": "status:1",
-						"category": "status",
-						"event_type": "status_changed",
-						"fieldname": "enrollment_status",
-						"field_label": "Enrollment Status",
-						"old_value": "Mới",
-						"new_value": "Có triển vọng",
-						"metadata": {"old_code": "NEW", "new_code": "PROSPECT"},
+						"category": "processing",
+						"event_type": "processing_status_changed",
+						"fieldname": "processing_status",
+						"field_label": "Processing Status",
+						"old_value": "NEW",
+						"new_value": "PROCESSING",
+						"metadata": {"old_code": "NEW", "new_code": "PROCESSING"},
 						"owner": "Administrator",
 						"owner_full_name": "Administrator",
 						"occurred_at": "2026-09-07 11:00:00",
-						"source": "Status Change Log",
+						"source": "Version",
 					}
 				],
 			),
@@ -431,7 +430,7 @@ class TestDirectorLeads(FrappeTestCase):
 			entries = director_leads._lead_log(doc, lookups={}, event_entries=[])
 
 		self.assertEqual(len(entries), 1)
-		self.assertEqual(entries[0]["title"], "Cập nhật tình trạng Lead")
-		self.assertIn('từ "Mới" sang "Có triển vọng"', entries[0]["content"])
-		self.assertEqual(entries[0]["event_type"], "status_changed")
-		self.assertEqual(entries[0]["metadata"]["new_code"], "PROSPECT")
+		self.assertEqual(entries[0]["title"], "Cập nhật xử lý Lead")
+		self.assertIn('từ "NEW" sang "PROCESSING"', entries[0]["content"])
+		self.assertEqual(entries[0]["event_type"], "processing_status_changed")
+		self.assertEqual(entries[0]["metadata"]["new_code"], "PROCESSING")

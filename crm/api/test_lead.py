@@ -11,11 +11,11 @@ class TestLeadCrudApi(TestCase):
 	def setUp(self):
 		self.meta = SimpleNamespace(
 			fields=[
-				SimpleNamespace(fieldname="lead_status", fieldtype="Select", read_only=0),
+				SimpleNamespace(fieldname="processing_status", fieldtype="Select", read_only=1),
+				SimpleNamespace(fieldname="resolution", fieldtype="Select", read_only=1),
 				SimpleNamespace(fieldname="student_name", fieldtype="Data", read_only=0),
 				SimpleNamespace(fieldname="phone", fieldtype="Data", read_only=0),
 				SimpleNamespace(fieldname="notes", fieldtype="Text", read_only=0),
-				SimpleNamespace(fieldname="enrollment_status", fieldtype="Link", read_only=0),
 				SimpleNamespace(fieldname="lead_code", fieldtype="Data", read_only=1),
 				SimpleNamespace(fieldname="status_change_log", fieldtype="Table", read_only=1),
 				SimpleNamespace(fieldname="section_identity", fieldtype="Section Break", read_only=0),
@@ -32,14 +32,14 @@ class TestLeadCrudApi(TestCase):
 			) as paged_list,
 		):
 			result = lead_api.list_leads(
-				filters='{"lead_status": "New"}',
+				filters='{"processing_status": "NEW"}',
 				search="An",
 				order_by="modified desc",
 			)
 
 		self.assertEqual(result["leads"], [{"name": "LEAD-1"}])
 		self.assertEqual(result["total"], 1)
-		self.assertEqual(paged_list.call_args.kwargs["filters"], {"lead_status": "New"})
+		self.assertEqual(paged_list.call_args.kwargs["filters"], {"processing_status": "NEW"})
 		self.assertEqual(len(paged_list.call_args.kwargs["or_filters"]), len(lead_api.SEARCH_FIELDS))
 		self.assertEqual(paged_list.call_args.kwargs["order_by"], "modified desc, name desc")
 
@@ -59,10 +59,10 @@ class TestLeadCrudApi(TestCase):
 			with self.assertRaises(frappe.ValidationError):
 				lead_api._validate_payload({"unknown": "value"}, operation="create")
 
-	def test_update_rejects_lifecycle_field_and_empty_payload(self):
+	def test_update_rejects_processing_field_and_empty_payload(self):
 		with patch.object(lead_api.frappe, "get_meta", return_value=self.meta):
-			with self.assertRaises(frappe.PermissionError):
-				lead_api._validate_payload({"enrollment_status": "PROSPECT"}, operation="update")
+			with self.assertRaises(frappe.ValidationError):
+				lead_api._validate_payload({"processing_status": "PROCESSING"}, operation="update")
 			with self.assertRaises(frappe.ValidationError):
 				lead_api.update_lead("LEAD-1", fields={})
 

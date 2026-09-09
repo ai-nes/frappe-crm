@@ -25,8 +25,8 @@ class _StubDoc:
 
 class TestGetStatusField(FrappeTestCase):
 	def test_uses_hook_override_when_field_exists(self):
-		doc = _StubDoc("CRM Student", ["enrollment_status", "status", "stage"])
-		self.assertEqual(get_status_field(doc), "enrollment_status")
+		doc = _StubDoc("CRM Student", ["student_stage", "status", "stage"])
+		self.assertEqual(get_status_field(doc), "student_stage")
 
 	def test_falls_back_to_stage_when_no_hook_registered(self):
 		doc = _StubDoc("CRM Lead", ["stage", "status"])
@@ -41,7 +41,7 @@ class TestGetStatusField(FrappeTestCase):
 		self.assertIsNone(get_status_field(doc))
 
 	def test_ignores_hook_override_when_field_missing_from_doctype(self):
-		# Hook says "enrollment_status" for CRM Student, but this stub doesn't have
+		# Hook says "student_stage" for CRM Student, but this stub doesn't have
 		# that field — must fall back to stage/status rather than returning a
 		# nonexistent fieldname.
 		doc = _StubDoc("CRM Student", ["stage"])
@@ -82,16 +82,18 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 			if frappe.db.exists("CRM Enrollment Status", status_name):
 				frappe.delete_doc("CRM Enrollment Status", status_name, force=True)
 
-	def _make_contact(self, phone, enrollment_status):
+	def _make_contact(self, phone, student_stage):
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Student",
 				"full_name": "_Test Status Contact",
 				"phone": phone,
-				"enrollment_status": enrollment_status,
+				"student_stage": student_stage,
 			}
 		)
 		doc.insert(ignore_permissions=True)
+		if not student_stage:
+			frappe.db.set_value("CRM Student", doc.name, "student_stage", "", update_modified=False)
 		# validate() derives owner_staff/owning_team via db_set-free assignment on the
 		# in-memory doc, but reload to pick up server-side defaults (status_change_log)
 		# consistently with the rest of this test module's pattern.
@@ -99,47 +101,47 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		return doc
 
 	def test_status_change_appends_log_row(self):
-		contact = self._make_contact("0900000001", "TEST_STATUS_A")
+		contact = self._make_contact("0900000001", "New")
 		self.assertEqual(len(contact.status_change_log), 1)
 		self.assertEqual(contact.status_change_log[0].to, "")
 
-		contact.enrollment_status = "TEST_STATUS_B"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Attempting"
+		self._save_stage(contact)
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 2)
 		closed_row = contact.status_change_log[0]
-		self.assertEqual(closed_row.get("from"), "TEST_STATUS_A")
-		self.assertEqual(closed_row.to, "TEST_STATUS_B")
+		self.assertEqual(closed_row.get("from"), "New")
+		self.assertEqual(closed_row.to, "Attempting")
 		open_row = contact.status_change_log[1]
-		self.assertEqual(open_row.get("from"), "TEST_STATUS_B")
+		self.assertEqual(open_row.get("from"), "Attempting")
 		self.assertEqual(open_row.to, "")
 
 	def test_no_status_change_does_not_append_new_row(self):
-		contact = self._make_contact("0900000002", "TEST_STATUS_A")
+		contact = self._make_contact("0900000002", "New")
 		self.assertEqual(len(contact.status_change_log), 1)
 
 		contact.full_name = "_Test Status Contact Renamed"
-		contact.save(ignore_permissions=True)
+		self._save_stage(contact)
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 1)
-		self.assertEqual(contact.status_change_log[0].get("from"), "TEST_STATUS_A")
+		self.assertEqual(contact.status_change_log[0].get("from"), "New")
 		self.assertEqual(contact.status_change_log[0].to, "")
 
 	def test_multiple_status_changes_each_append(self):
-		contact = self._make_contact("0900000003", "TEST_STATUS_A")
+		contact = self._make_contact("0900000003", "New")
 
-		contact.enrollment_status = "TEST_STATUS_B"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Attempting"
+		self._save_stage(contact)
 		contact.reload()
 
-		contact.enrollment_status = "TEST_STATUS_C"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Connected"
+		self._save_stage(contact)
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 3)
-		self.assertEqual(contact.status_change_log[-1].get("from"), "TEST_STATUS_C")
+		self.assertEqual(contact.status_change_log[-1].get("from"), "Connected")
 		self.assertEqual(contact.status_change_log[-1].to, "")
 
 	def test_status_change_on_record_with_empty_log_and_blank_previous_status(self):
@@ -152,20 +154,28 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		contact.reload()
 		self.assertEqual(len(contact.status_change_log), 0)
 
-		contact.enrollment_status = "TEST_STATUS_A"
-		contact.save(ignore_permissions=True)  # must not raise IndexError
+		contact.student_stage = "Attempting"
+		self._save_stage(contact)  # must not raise IndexError
 		contact.reload()
 
 		self.assertEqual(len(contact.status_change_log), 2)
 		closed_row = contact.status_change_log[0]
 		self.assertEqual(closed_row.get("from"), "")
-		self.assertEqual(closed_row.to, "TEST_STATUS_A")
+		self.assertEqual(closed_row.to, "Attempting")
 		open_row = contact.status_change_log[1]
-		self.assertEqual(open_row.get("from"), "TEST_STATUS_A")
+		self.assertEqual(open_row.get("from"), "Attempting")
 		self.assertEqual(open_row.to, "")
 
+	def _save_stage(self, contact):
+		previous_flag = getattr(frappe.flags, "student_stage_service", False)
+		frappe.flags.student_stage_service = True
+		try:
+			contact.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_stage_service = previous_flag
+
 	def test_log_status_change_failure_never_blocks_contact_save(self):
-		contact = self._make_contact("0900000004", "TEST_STATUS_A")
+		contact = self._make_contact("0900000004", "New")
 
 		def _boom(doc):
 			raise RuntimeError("simulated status log failure")
@@ -175,11 +185,11 @@ class TestStatusChangeLogViaCRMContact(FrappeTestCase):
 		patched = scl_module.add_status_change_log
 		scl_module.add_status_change_log = _boom
 		try:
-			contact.enrollment_status = "TEST_STATUS_B"
+			contact.student_stage = "Attempting"
 			# Must not raise even though the status log helper blows up.
-			contact.save(ignore_permissions=True)
+			self._save_stage(contact)
 		finally:
 			scl_module.add_status_change_log = patched
 
 		contact.reload()
-		self.assertEqual(contact.enrollment_status, "TEST_STATUS_B")
+		self.assertEqual(contact.student_stage, "Attempting")

@@ -5,13 +5,14 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.api import student_classification as labels
 from crm.api import student_segment as segments
-from crm.fcrm.segment_rules import validate_filters
+from crm.fcrm.segment_rules import student_scope_or_filters, validate_filters
 
 
 class TestStudentSegment(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
 		frappe.db.savepoint("classification_test")
+		self.need = self.term()
 		self.campus = frappe.get_doc(
 			{"doctype": "CRM Campus", "campus_name": "Classification " + frappe.generate_hash(length=8)}
 		).insert()
@@ -21,11 +22,25 @@ class TestStudentSegment(FrappeTestCase):
 				"full_name": "Classification Test",
 				"branch": self.campus.name,
 				"phone": "0019827364",
-				"enrollment_status": "NEW",
+				"student_stage": "New",
+				"intent": "LOW",
 			}
 		).insert()
+		labels.update_classifications(
+			self.student.name,
+			{"intent": "LOW", "needs": [self.need.name]},
+			str(self.student.modified),
+		)
+		self.student.reload()
 		self.rules = {
-			"groups": [{"conditions": [{"field": "branch", "operator": "=", "value": self.campus.name}]}]
+			"groups": [
+				{
+					"conditions": [
+						{"field": "intent", "operator": "=", "value": "LOW"},
+						{"field": "need", "operator": "in", "value": [self.need.name]},
+					]
+				}
+			]
 		}
 
 	def tearDown(self):
@@ -87,6 +102,37 @@ class TestStudentSegment(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			segments.transition_segment(doc.name, "active", doc.revision)
 
+	def test_list_includes_member_count_for_complete_and_incomplete_segments(self):
+		complete = self.group()
+		incomplete = segments.create_segment({"title": "Incomplete list"})
+		rows = {row["name"]: row for row in segments.list_segments()}
+
+		self.assertEqual(rows[complete.name]["member_count"], 1)
+		self.assertEqual(rows[incomplete.name]["member_count"], 0)
+		self.assertEqual(rows[complete.name]["segment_code"], complete.segment_code)
+
+	def test_segment_code_uses_date_and_short_id_without_user_pii(self):
+		first = self.group()
+		second = segments.create_segment({"title": "Classification group second"})
+
+		self.assertRegex(first.segment_code, r"^SEG-\d{6}-[A-Z0-9]{6}$")
+		self.assertRegex(second["segment_code"], r"^SEG-\d{6}-[A-Z0-9]{6}$")
+		self.assertNotEqual(first.segment_code, second["segment_code"])
+
+		stored = frappe.get_doc("CRM Segment", first.name)
+		stored.segment_code = "SEG-260909-Administrator-999"
+		with self.assertRaises(frappe.ValidationError):
+			stored.save(ignore_permissions=True)
+
+	def test_filter_group_name_round_trips_through_segment(self):
+		self.rules["groups"][0]["name"] = "Học sinh cần tư vấn học phí"
+		doc = self.group()
+
+		stored_filters = doc.filters if isinstance(doc.filters, dict) else frappe.parse_json(doc.filters)
+		self.assertEqual(stored_filters["groups"][0]["name"], "Học sinh cần tư vấn học phí")
+		preview = segments.preview_segment(segment=doc.name)
+		self.assertEqual(preview["total"], 1)
+
 	def test_incomplete_draft_and_raw_lifecycle_bypass(self):
 		doc = segments.create_segment({"title": "Incomplete"})
 		with self.assertRaises(frappe.ValidationError):
@@ -106,11 +152,59 @@ class TestStudentSegment(FrappeTestCase):
 		self.assign(potential="LOW")
 		self.assertEqual(segments.preview_segment(segment=doc.name)["total"], 0)
 
+	def test_student_stage_is_an_allowed_segment_filter(self):
+		self.rules["groups"][0]["conditions"] = [{"field": "student_stage", "operator": "=", "value": "New"}]
+		doc = self.group()
+
+		expected = len(
+			frappe.get_list(
+				"CRM Student",
+				filters={"student_stage": "New"},
+				or_filters=student_scope_or_filters(),
+				limit_page_length=0,
+			)
+		)
+		self.assertEqual(segments.preview_segment(segment=doc.name)["total"], expected)
+
+	def test_parent_only_contacts_are_not_segment_members(self):
+		parent = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "Phụ huynh Classification Test",
+				"branch": self.campus.name,
+				"phone": "0019827365",
+				"student_stage": "New",
+				"decision_maker": "Parent",
+			}
+		).insert()
+		student_count_before_parent = len(
+			frappe.get_list(
+				"CRM Student",
+				filters={"student_stage": "New"},
+				or_filters=student_scope_or_filters(),
+				limit_page_length=0,
+			)
+		)
+		self.rules["groups"][0]["conditions"] = [{"field": "student_stage", "operator": "=", "value": "New"}]
+
+		preview = segments.preview_segment(filters=self.rules)
+
+		self.assertEqual(preview["total"], student_count_before_parent)
+		student_names = [row["name"] for row in preview["students"]]
+		self.assertIn(self.student.name, student_names)
+		self.assertNotIn(parent.name, student_names)
+
+	def test_get_fields_exposes_student_stage_metadata(self):
+		fields = {field["fieldname"]: field for field in segments.get_fields()}
+
+		self.assertEqual(fields["student_stage"]["fieldtype"], "Select")
+		self.assertEqual(fields["student_stage"]["options"].splitlines()[0], "New")
+
 	def test_static_capture_is_fixed_and_reactivation_preserves_members(self):
 		doc = self.group(segment_type="static")
 		doc = segments.transition_segment(doc.name, "active", 0)
 		self.assertEqual(frappe.db.count("CRM Segment Member", {"segment": doc.name}), 1)
-		frappe.db.set_value("CRM Student", self.student.name, "branch", None)
+		frappe.db.set_value("CRM Student", self.student.name, "intent", None)
 		self.assertEqual(segments.preview_segment(segment=doc.name)["total"], 1)
 		doc = segments.transition_segment(doc.name, "inactive", doc.revision)
 		doc = segments.transition_segment(doc.name, "active", doc.revision)
@@ -120,7 +214,7 @@ class TestStudentSegment(FrappeTestCase):
 				doc.name,
 				{
 					"filters": {
-						"groups": [{"conditions": [{"field": "intent", "operator": "=", "value": "LOW"}]}]
+						"groups": [{"conditions": [{"field": "intent", "operator": "=", "value": "HIGH"}]}]
 					}
 				},
 				doc.revision,
@@ -138,7 +232,7 @@ class TestStudentSegment(FrappeTestCase):
 	def test_admin_can_manage_need_and_tag_without_erasing_assignments(self):
 		need, tag = self.term(), self.term("tag")
 		result = self.assign(needs=[need.name], tags=[tag.name], potential="HIGH", intent="LOW")
-		self.assertEqual(result["admission_stage"], "NEW")
+		self.assertEqual(result["admission_stage"], "New")
 		self.assertEqual(result["potential"], "HIGH")
 		self.assertEqual(result["intent"], "LOW")
 		self.assertEqual(result["needs"][0]["assigned_by"], "Administrator")
@@ -156,12 +250,11 @@ class TestStudentSegment(FrappeTestCase):
 	def test_multiple_needs_and_tag_rules(self):
 		a, b, tag = self.term(), self.term(), self.term("tag")
 		self.assign(needs=[a.name, b.name], tags=[tag.name])
-		self.rules["groups"][0]["conditions"].extend(
-			[
-				{"field": "need", "operator": "in", "value": [a.name, b.name]},
-				{"field": "tag", "operator": "in", "value": [tag.name]},
-			]
-		)
+		self.rules["groups"][0]["conditions"] = [
+			{"field": "intent", "operator": "=", "value": "LOW"},
+			{"field": "need", "operator": "in", "value": [a.name, b.name]},
+			{"field": "tag", "operator": "in", "value": [tag.name]},
+		]
 		self.assertEqual(segments.preview_segment(filters=self.rules)["total"], 1)
 		self.rules["groups"][0]["conditions"][-1]["operator"] = "not in"
 		self.assertEqual(segments.preview_segment(filters=self.rules)["total"], 0)
@@ -280,23 +373,34 @@ class TestStudentSegment(FrappeTestCase):
 			with self.subTest(code=code), self.assertRaises(frappe.ValidationError):
 				labels.create_tag({"code": code, "label": code, "group_name": "Test"})
 
-	def test_numeric_or_deduplication_and_pagination(self):
-		frappe.db.set_value("CRM Student", self.student.name, "latest_score", 75)
-		self.rules["groups"][0]["conditions"].append({"field": "latest_score", "operator": ">=", "value": 70})
+	def test_or_deduplication_and_pagination(self):
+		self.assign(potential="HIGH")
+		self.rules["groups"][0]["conditions"].append({"field": "potential", "operator": "=", "value": "HIGH"})
 		self.rules["groups"] *= 2
 		result = segments.preview_segment(filters=self.rules, start=0, page_length=1)
 		self.assertEqual(result["total"], 1)
+		self.assertEqual(
+			result["total_students"],
+			len(
+				frappe.get_list(
+					"CRM Student",
+					fields=["name"],
+					or_filters=student_scope_or_filters(),
+					limit_page_length=0,
+				)
+			),
+		)
 		self.assertEqual(result["students"][0]["name"], self.student.name)
 		self.assertEqual(segments.preview_segment(filters=self.rules, start=1)["students"], [])
 		for value in (-1, "abc", True):
 			with self.assertRaises(frappe.ValidationError):
 				segments.preview_segment(filters=self.rules, start=value)
 
-	def test_malformed_logic_and_numeric_values(self):
-		for value in (float("nan"), float("inf"), 10**500, "70", True):
+	def test_malformed_logic_and_level_values(self):
+		for value in ("VIP", 70, True):
 			with self.subTest(value=str(value)[:20]), self.assertRaises(frappe.ValidationError):
 				validate_filters(
-					{"groups": [{"conditions": [{"field": "latest_score", "operator": ">", "value": value}]}]}
+					{"groups": [{"conditions": [{"field": "potential", "operator": "=", "value": value}]}]}
 				)
 		self.rules["groups"][0]["logic"] = "OR"
 		with self.assertRaises(frappe.ValidationError):

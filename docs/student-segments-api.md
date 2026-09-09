@@ -3,26 +3,29 @@
 ## Business sources and scope
 
 Source: `FAIP - Quy định về Tags và Segments.pdf`, supplemented by the retained formal
-FAIP Segment & Tag specification and the supplied Need/Tag trees. Backend only.
+FAIP Segment & Tag specification and the supplied Need/Tag trees. The Frappe API is the
+source of truth for the dashboard integration.
 
 A **Segment** is a saved group of Students selected by criteria. Its `category` is one
 of `admission_stage`, `potential`, `intent`, `need`; its `segment_type` is independently
 `dynamic` or `static`. Category describes the business use of the group. Overlapping
 saved groups do not create additional classifications on the Student.
 
-Student classification has four axes:
+Segment filters intentionally expose five business dimensions:
 
-| Axis | Authoritative data | Cardinality |
+| Filter field | Authoritative data | Cardinality |
 |---|---|---|
-| Admission Stage | Existing `CRM Student.enrollment_status` | One current value; existing lifecycle/Version history |
-| Potential | New `potential`: HIGH / MEDIUM / LOW | Zero or one; unset means unknown |
-| Intent | New `intent`: HIGH / MEDIUM / LOW | Zero or one, independent of Potential |
+| Student Stage | `CRM Student.student_stage`: New / Attempting / Connected / Qualified / Disqualified | Zero or one; server-managed |
+| Potential | `CRM Student.potential`: HIGH / MEDIUM / LOW | Zero or one; unset means unknown |
+| Intent | `CRM Student.intent`: HIGH / MEDIUM / LOW | Zero or one, independent of Potential |
 | Need | `needs` rows referencing `CRM Need` | Multiple |
+| Tag | `tags` rows referencing `CRM Tag` | Multiple |
 
-Tags are contextual labels in the separate `CRM Tag` dictionary. They
-are not a fifth Segment category. Need is a business requirement, not an executable
-Task. No automatic scoring thresholds or AI writes are introduced. Existing
-`interest_level`, `fit_level` and `student_stage` keep their current meanings.
+Need and Tag are contextual classifications in separate dictionaries; they are filter
+fields, not additional Segment categories. No automatic scoring thresholds or AI writes are introduced. Existing
+`interest_level` and `fit_level` keep their current meanings. `student_stage` remains
+server-managed by the existing recruitment lifecycle workflow and is only read by
+Segment filters.
 Admission Stage edits continue through existing enrollment workflows; the classification
 API does not create a competing stage writer or add illustrative stage names to the catalog.
 
@@ -51,16 +54,26 @@ Changes use Frappe Version history and invalidate the Student context revision.
 | Method | Arguments | Result |
 |---|---|---|
 | `get_fields` | none | Approved fields, types, options and operators |
-| `create_segment` | `data` object | Segment document, status draft, revision 0 |
-| `get_segment` | `name` | Authorized Segment metadata, no member IDs |
-| `list_segments` | optional status, category, start=0, page_length=20 | Authorized metadata array |
+| `create_segment` | `data` object | Segment document, status draft, revision 0, and server-generated `segment_code` |
+| `get_segment` | `name` | Authorized Segment metadata including `segment_code`, no member IDs |
+| `list_segments` | optional status, category, start=0, page_length=20 | Authorized metadata array with `segment_code` and `member_count` |
 | `update_segment` | name, data, expected_revision | Updated document |
 | `transition_segment` | name, status, expected_revision | Updated document |
-| `preview_segment` | segment **or** filters, start=0, page_length=20 | `{total,start,page_length,students}` |
+| `preview_segment` | segment **or** filters, start=0, page_length=20 | `{total,total_students,start,page_length,students}`; `total` is the filtered count, `total_students` is the permission-scoped Student population, and rows include identity, stage, major, owner and the five classification values |
+| `get_segment_audit_logs` | segment, start=0, page_length=50 | Read-only create/update/delete and related activity history for the Segment |
 | `delete_segment` | name, expected_revision | `{name,deleted:true}`; unused drafts only |
 
+The Segment detail Task tab uses the existing Task-shaped API with
+`reference_doctype="CRM Segment"` and the Segment name as `reference_docname`.
+The API persists these rows as `CRM Action Item` records linked through the
+`segment` field; it never creates Frappe `Task` records. They are separate from
+Student-scoped `CRM Action Item` records, and access follows the Segment's permissions.
+
 Editable fields: title, purpose, responsible_user (enabled User), category, segment_type,
-is_public, filters. Owner, revision and snapshot metadata are server-controlled.
+is_public, filters. `segment_code` is generated once on creation in the format
+`SEG-YYMMDD-{SHORT_ID}`; `SHORT_ID` is a six-character uppercase alphanumeric
+identifier. Legacy codes containing the creator username remain read-compatible.
+The code is immutable and unique. Owner, revision and snapshot metadata are server-controlled.
 Revision checks and commands lock the document; stale edits fail rather than overwrite.
 Title max 140, purpose max 2000. Drafts may be incomplete. Activation requires category,
 business purpose, enabled responsible user and valid nonempty filters.
@@ -80,7 +93,9 @@ create another group for a new snapshot. Membership still intersects current acc
 
 ## Rules
 
-Outer OR, inner AND, at most 10 groups and 20 conditions per group. Empty groups,
+Outer OR, inner AND, at most 10 groups and 20 conditions per group. Each group may
+include a display `name` (at most 140 characters); missing names default to `Nhóm N`.
+Empty groups,
 unknown fields/operators, unsupported logic, malformed JSON and non-finite numbers fail.
 Numeric operators: `= != > >= < <=`. Select/Link: `= != in not in`. Check: `= !=`.
 Need/Tag: `in` means has any listed term; `not in` means has none. Multiple conditions
@@ -96,7 +111,7 @@ be active to query history.
   "category": "need",
   "segment_type": "dynamic",
   "filters": {
-    "groups": [{"logic": "AND", "conditions": [
+    "groups": [{"logic": "AND", "name": "Học sinh cần tư vấn học phí", "conditions": [
       {"field": "potential", "operator": "=", "value": "HIGH"},
       {"field": "intent", "operator": "=", "value": "LOW"},
       {"field": "need", "operator": "in", "value": ["<tuition-term-name>"]}
@@ -105,10 +120,8 @@ be active to query history.
 }
 ```
 
-Numeric fields: latest_score, graduation_score, transcript_score, total_score.
-Other approved fields: lifecycle_stage, enrollment_status, source, platform, branch,
-province, major, admission_year, quality_bucket, is_opted_out, potential, intent, need, tag.
-No arbitrary SQL, arbitrary Student fields or Tag-as-free-text predicates.
+Approved filter fields are only `student_stage`, `potential`, `intent`, `need` and `tag`. No arbitrary SQL,
+arbitrary Student fields or Tag-as-free-text predicates are allowed.
 New previews require page_length 1–100 and nonnegative integer start. COUNT and ordered
 pagination run in SQL; overlapping OR groups are deduplicated in SQL.
 
@@ -173,11 +186,12 @@ copied into their matching separate dictionary/assignment records; no auto-activ
 
 Legacy `crm.api.segment` helper names and preview `{contacts}` envelope are preserved;
 legacy page_length remains clamped to 100. Legacy saved rules now obey explicit AND/OR
-validation and the expanded allowlist. Campaign attach rechecks active state/revision and
+validation and the five-field allowlist. Campaign attach rechecks active state/revision and
 permissions each batch. It preserves existing idempotency and historical engagements.
 The existing attribution boundary still skips standalone Students without a linked legacy
 Lead (`skipped_unresolved_student`); this feature does not migrate campaign attribution.
 
 Local-only remnants of the earlier, superseded implementation (CRM Student Segment,
 CRM Student Need and old columns) are not dropped or consumed. They are not part of this
-contract. No destructive data reset is required. No frontend files are changed.
+contract. No destructive data reset is required. The main dashboard consumes these methods
+through its Segment API service and query hooks; it does not keep a parallel mock store.

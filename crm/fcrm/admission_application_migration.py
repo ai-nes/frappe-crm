@@ -63,7 +63,7 @@ def application_backfill_decision(
 		"major": student.get("major"),
 		"campus": student.get("branch"),
 		"admission_method": student.get("admission_method"),
-		"status": "Enrolled" if student.get("enrollment_status") == "ENROLLED" else "Draft",
+		"status": "Enrolled" if student.get("resolution") == "CREATED" else "Draft",
 	}
 	metadata = provenance(
 		source_doctype="CRM Lead",
