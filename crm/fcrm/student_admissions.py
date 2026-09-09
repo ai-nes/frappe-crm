@@ -14,8 +14,8 @@ from typing import Any
 import frappe
 from frappe import _
 
-from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.record_retention import technical_retention_until
+from crm.fcrm.role_policy import capabilities_for_roles
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 COMMAND_KIND = "admissions_action"
@@ -204,9 +204,9 @@ def _call(student_doc, actor: str, data: dict[str, Any], *, success: bool, idemp
 	).insert(ignore_permissions=True)
 	interaction = frappe.db.get_value("CRM Interaction", {"reference_doctype": "Call Log", "reference_docname": call.name}, "name")
 	if not interaction:
-		# The Call Log document hook normally creates this row.  If hooks are
-		# disabled during a migration/test, use the same canonical helper and
-		# reference fields so the fallback cannot create an unlinked duplicate.
+		# Admissions actions retain their legacy Call Log record for operational
+		# reporting, then create the linked interaction explicitly. Provider calls
+		# use the canonical ai-crm interaction intake instead of this path.
 		from crm.fcrm.interaction_log import create_interaction
 		interaction = create_interaction(
 			interaction_type="PHONE_CALL",
