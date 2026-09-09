@@ -18,11 +18,14 @@ Segment filters intentionally expose five business dimensions:
 | Student Stage | `CRM Student.student_stage`: New / Attempting / Connected / Qualified / Disqualified | Zero or one; server-managed |
 | Potential | `CRM Student.potential`: HIGH / MEDIUM / LOW | Zero or one; unset means unknown |
 | Intent | `CRM Student.intent`: HIGH / MEDIUM / LOW | Zero or one, independent of Potential |
-| Need | `needs` rows referencing `CRM Need` | Multiple |
+| Need | `needs` rows referencing `CRM Need`, or `CRM Action Item -> CRM Action -> CRM Need` | Multiple |
 | Tag | `tags` rows referencing `CRM Tag` | Multiple |
 
 Need and Tag are contextual classifications in separate dictionaries; they are filter
-fields, not additional Segment categories. No automatic scoring thresholds or AI writes are introduced. Existing
+fields, not additional Segment categories. Each CRM Action links to one detailed CRM
+Need, and the same Need may be linked to many Actions. The Need Group is only used to
+validate that link (`CONTACT` → `NEED_CONTACT`, etc.); `INTERNAL` Actions do not map
+to a Need. No automatic scoring thresholds or AI writes are introduced. Existing
 `interest_level` and `fit_level` keep their current meanings. `student_stage` remains
 server-managed by the existing recruitment lifecycle workflow and is only read by
 Segment filters.

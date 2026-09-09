@@ -16,6 +16,7 @@ class Task(Document):
 		from frappe.types import DF
 
 		assigned_to: DF.Link | None
+		action_code: DF.Data | None
 		description: DF.TextEditor | None
 		due_date: DF.Datetime | None
 		name: DF.Int | None
@@ -97,6 +98,7 @@ class Task(Document):
 		rows = [
 			"name",
 			"title",
+			"action_code",
 			"description",
 			"assigned_to",
 			"due_date",

@@ -99,6 +99,99 @@ class TestRecommendationRuleApi(FrappeTestCase):
 		self.assertEqual(payload["allowed_actors"], ["Sale"])
 		self.assertEqual(payload["allowed_time_slots"], ["6-12"])
 
+	def _ensure_need(self, code, group):
+		if not frappe.db.exists("CRM Need Group", group):
+			frappe.get_doc(
+				{
+					"doctype": "CRM Need Group",
+					"code": group,
+					"label": group,
+					"status": "draft",
+					"sort_order": 999,
+				}
+			).insert(ignore_permissions=True)
+		if not frappe.db.exists("CRM Need", {"code": code}):
+			return frappe.get_doc(
+				{
+					"doctype": "CRM Need",
+					"code": code,
+					"label": code,
+					"group": group,
+					"group_name": group,
+					"status": "draft",
+				}
+			).insert(ignore_permissions=True).name
+		return frappe.db.get_value("CRM Need", {"code": code}, "name")
+
+	def test_action_can_reference_one_need_and_need_can_be_reused(self):
+		need = self._ensure_need("TEST_ACTION_NEED_INFORMATION", "NEED_INFORMATION")
+		first_code = f"TEST_NEED_ACTION_{uuid.uuid4().hex[:8].upper()}"
+		second_code = f"TEST_NEED_ACTION_{uuid.uuid4().hex[:8].upper()}"
+		common = {
+			"display_name": "Need-aware action",
+			"action_type": "INFORMATION",
+			"purpose": "Test action-to-need mapping",
+			"default_channel": "NONE",
+			"allowed_actors": ["Sale"],
+			"allowed_time_slots": [],
+			"requires_approval": 0,
+			"auto_execute": 0,
+			"execution_type": "MANUAL",
+			"ai_allowed": 0,
+			"enabled": 1,
+			"sort_order": 999,
+			"need": need,
+		}
+		first = create_action(code=first_code, **common)
+		second = create_action(
+			code=second_code, **{**common, "display_name": "Another need-aware action"}
+		)
+
+		self.assertEqual(first["need"], need)
+		self.assertEqual(second["need"], need)
+
+	def test_action_rejects_need_from_another_group(self):
+		need = self._ensure_need("TEST_ACTION_NEED_CONTACT", "NEED_CONTACT")
+		code = f"TEST_BAD_NEED_ACTION_{uuid.uuid4().hex[:8].upper()}"
+		with self.assertRaises(frappe.ValidationError):
+			create_action(
+				code=code,
+				display_name="Invalid need mapping",
+				action_type="INFORMATION",
+				purpose="Must reject a mismatched Need Group",
+				default_channel="NONE",
+				allowed_actors=["Sale"],
+				allowed_time_slots=[],
+				requires_approval=0,
+				auto_execute=0,
+				execution_type="MANUAL",
+				ai_allowed=0,
+				enabled=1,
+				sort_order=999,
+				need=need,
+			)
+
+	def test_internal_action_rejects_need(self):
+		need = self._ensure_need("TEST_ACTION_NEED_INTERNAL_REJECTED", "NEED_INFORMATION")
+		code = f"TEST_INTERNAL_NEED_ACTION_{uuid.uuid4().hex[:8].upper()}"
+		with self.assertRaises(frappe.ValidationError):
+			create_action(
+				code=code,
+				display_name="Invalid internal need mapping",
+				action_type="INTERNAL",
+				purpose="Internal actions do not address a Student Need",
+				default_channel="NONE",
+				allowed_actors=["Sale"],
+				allowed_time_slots=[],
+				requires_approval=0,
+				auto_execute=0,
+				execution_type="MANUAL",
+				ai_allowed=0,
+				enabled=1,
+				sort_order=999,
+				need=need,
+			)
+
 	def test_action_api_handles_frappe_dict_rows(self):
 		payload = _api_payload(
 			frappe._dict(

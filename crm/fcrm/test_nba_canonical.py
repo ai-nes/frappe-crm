@@ -72,6 +72,11 @@ def test_action_definition_snapshot_parses_json_actor_string():
 	assert snap["allowed_actors"] == ["Lead Sale", "Sale"]
 
 
+def test_action_definition_snapshot_includes_need_identity():
+	snapshot = action_definition_snapshot({"code": "CALL", "need": "NEED-001"})
+	assert snapshot["need"] == "NEED-001"
+
+
 def test_time_text_normalises_timedelta_and_short_strings():
 	assert time_text(timedelta(hours=9)) == "09:00:00"
 	assert time_text(timedelta(hours=17, minutes=30)) == "17:30:00"

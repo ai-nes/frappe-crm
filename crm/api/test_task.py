@@ -101,17 +101,52 @@ class TestTaskApi(FrappeTestCase):
 			created["name"], {row["name"] for row in list_tasks("CRM Student", student)["tasks"]}
 		)
 
+	def test_student_task_creation_uses_requested_action_code(self):
+		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
+
+		created = create_task(
+			"CRM Student",
+			student,
+			"Call the student back",
+			action_code="call_back",
+		)
+
+		self.assertEqual(created["action_code"], "CALL_BACK")
+		self.assertEqual(
+			frappe.db.get_value("CRM Action Item", created["name"], "action"),
+			"CALL_BACK",
+		)
+		self.assertEqual(delete_task(created["name"]), {"deleted": created["name"]})
+
+	def test_student_task_creation_rejects_unknown_action_code(self):
+		student = frappe.get_all("CRM Student", fields=["name"], limit_page_length=1)[0].name
+
+		with self.assertRaises(frappe.ValidationError):
+			create_task(
+				"CRM Student",
+				student,
+				"Invalid task type",
+				action_code="NOT_A_REAL_ACTION",
+			)
+
 	def test_segment_task_crud_uses_segment_reference(self):
 		segment = frappe.get_doc({"doctype": "CRM Segment", "title": "Task API Segment"}).insert(
 			ignore_permissions=True
 		)
 
-		created = create_task("CRM Segment", segment.name, "Review segment audience", status="Todo")
+		created = create_task(
+			"CRM Segment",
+			segment.name,
+			"Review segment audience",
+			status="Todo",
+			action_code="CREATE_NOTE",
+		)
 		self.assertTrue(frappe.db.exists("CRM Action Item", created["name"]))
 		self.assertFalse(frappe.db.exists("Task", created["name"]))
 		self.assertEqual(frappe.db.get_value("CRM Action Item", created["name"], "segment"), segment.name)
 		self.assertEqual(created["reference_doctype"], "CRM Segment")
 		self.assertEqual(created["reference_docname"], segment.name)
+		self.assertEqual(created["action_code"], "CREATE_NOTE")
 
 		listed = list_tasks("CRM Segment", segment.name)
 		self.assertEqual(listed["total"], 1)

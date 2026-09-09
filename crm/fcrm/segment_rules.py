@@ -147,17 +147,36 @@ def _condition_filter(condition):
 
 def _classification_predicate(condition):
 	values = ",".join(frappe.db.escape(v) for v in condition["value"])
-	negation = "NOT " if condition["operator"] == "not in" else ""
 	assignment_table = (
 		"CRM Student Need Assignment" if condition["field"] == "need" else "CRM Student Tag Assignment"
 	)
 	parent_field = "needs" if condition["field"] == "need" else "tags"
-	return (
-		f"{negation}EXISTS (SELECT 1 FROM `tab{assignment_table}` c "
+	assignment_predicate = (
+		f"EXISTS (SELECT 1 FROM `tab{assignment_table}` c "
 		"WHERE c.parent = allowed.name AND c.parenttype = 'CRM Student' "
 		f"AND c.parentfield = '{parent_field}' "
 		f"AND c.{condition['field']} IN ({values}))"
 	)
+	if condition["field"] != "need":
+		return (
+			f"NOT {assignment_predicate}"
+			if condition["operator"] == "not in"
+			else assignment_predicate
+		)
+
+	# A Need may be addressed by many Actions. Keep the existing direct
+	# assignment source and add the canonical Action Item chain as a second
+	# source so older records remain queryable while newly generated work items
+	# can drive the same Segment filter.
+	action_predicate = (
+		"EXISTS (SELECT 1 FROM `tabCRM Action Item` action_item "
+		"INNER JOIN `tabCRM Action` action ON action.name = action_item.action "
+		"WHERE action_item.student = allowed.name "
+		"AND COALESCE(action_item.legacy_task_deleted, 0) = 0 "
+		f"AND action.need IN ({values}))"
+	)
+	matched = f"({assignment_predicate} OR {action_predicate})"
+	return f"NOT {matched}" if condition["operator"] == "not in" else matched
 
 
 def _condition_query(condition):
