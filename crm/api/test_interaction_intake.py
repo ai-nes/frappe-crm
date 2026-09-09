@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.interaction_intake import _interaction_response, _normalize_interaction_payload
