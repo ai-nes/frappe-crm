@@ -58,6 +58,20 @@ a backward-compatible `processingStatus` alias, `contactNoAnswer`,
 Contact counters are permission-aware batch projections from Lead-linked Call Logs and
 phone-call Interactions; Call Log references are de-duplicated.
 
+## Canonical provider call ingest
+
+The provider sends a signed event to `crm-agents` (`ai-crm`) at
+`POST /api/v1/calls/ingest`. The adapter maps it to the shared Frappe
+`crm.api.interaction_intake.submit_interaction` command with `evidence_kind="call"`,
+`channel="phone"`, and the provider call ID as both the source record and
+conversation identity. Frappe stores the durable call in `CRM Interaction`
+(`interaction_type="PHONE_CALL"`) and its `CRM Interaction Evidence`; final
+events enqueue one `CRM Interaction Analysis Run`.
+
+`Call Log` remains an operational telephony record for legacy/UI compatibility,
+but its `after_insert` dispatcher is disabled so the canonical provider path
+cannot create a duplicate Interaction.
+
 ## Student–Lead relationship
 
 `CRM Lead` and `CRM Student` are independent records. Either one may be created or
