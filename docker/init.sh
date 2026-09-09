@@ -93,6 +93,11 @@ if [ ! -d "sites/crm.localhost" ]; then
     bench --site crm.localhost set-config server_script_enabled 1
 fi
 
+# Keep the Frappe producer aligned with the only engine revision currently
+# supported by the NBA kernel.  The value can be overridden by the container
+# environment during a deliberate revision rollout.
+bench --site crm.localhost set-config crm_nba_engine_revision "${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}"
+
 # Keep the BFF and fixture reset contract in the server-side site config. The
 # browser only sees same-origin CRM methods; these values never enter Vite.
 if [ -n "${CRM_AGENTS_URL:-}" ]; then
