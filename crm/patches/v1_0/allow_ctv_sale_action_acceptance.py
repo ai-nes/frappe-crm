@@ -23,9 +23,8 @@ def execute():
 		return
 
 	changed = _add_ctv_sale_to_canonical_actions()
-	if changed and frappe.db.table_exists("CRM Action Definition Revision"):
-		# Keep the immutable control-plane history in sync with the actor-list
-		# change. The patch is ordered after add_nba_control_plane.
+	if changed:
+		# Keep the current Action default in sync with the actor-list change.
 		from crm.patches.v1_0.add_nba_control_plane import _backfill_actions
 
 		_backfill_actions()

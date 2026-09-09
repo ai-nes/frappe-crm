@@ -20,6 +20,7 @@ from frappe.tests.utils import FrappeTestCase
 from crm.api import student_decision_context
 from crm.api.nba_evaluation import (
 	_shape_eligible_action_set,
+	_shape_context,
 	build_nba_evaluation_input,
 	request_nba_evaluation,
 )
@@ -198,3 +199,51 @@ class TestShapeEligibleActionSetTiming(unittest.TestCase):
 	def test_missing_slots_field_stays_unconstrained(self):
 		shaped = _shape_eligible_action_set(self._eligible(None), timezone="Asia/Ho_Chi_Minh")
 		self.assertEqual(shaped["actions"][0]["normalized_timing_domain"], {})
+
+
+class TestShapeContextSemantics(unittest.TestCase):
+	def test_r3_decision_signals_are_carried_into_kernel_context(self):
+		signals = {
+			"schema_revision": "nba-decision-signals-v1",
+			"coverage": "complete",
+			"observations": [{"need_code": "RESOLVE_MAJOR_UNCERTAINTY"}],
+		}
+		projection = {
+			"student_stage": "Connected",
+			"intent": {},
+			"interaction": {},
+			"assessment": {},
+			"application": {},
+			"score": {},
+			"academic": {},
+			"contactability": {},
+			"parent_authority": {},
+			"recent_actions": [],
+			"evidence_refs": ["interaction-analysis:INTX-1:1"],
+			"decision_signals": signals,
+		}
+
+		with patch("crm.api.nba_evaluation._decision_effect_signals", return_value={}):
+			context = _shape_context(projection, student="CRM-Student-1", now=_NOW)
+
+		self.assertEqual(context["decision_signals"], signals)
+
+	def test_r2_projection_without_signals_keeps_field_absent(self):
+		projection = {
+			"student_stage": "Connected",
+			"intent": {},
+			"interaction": {},
+			"assessment": {},
+			"application": {},
+			"score": {},
+			"academic": {},
+			"contactability": {},
+			"parent_authority": {},
+			"recent_actions": [],
+			"evidence_refs": [],
+		}
+
+		with patch("crm.api.nba_evaluation._decision_effect_signals", return_value={}):
+			context = _shape_context(projection, student="CRM-Student-1", now=_NOW)
+
+		self.assertNotIn("decision_signals", context)

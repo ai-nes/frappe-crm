@@ -41,7 +41,7 @@ def execute():
 	# The digest/revision is part of the NBA control plane and must describe the
 	# normalized actor set, otherwise an action can pass the role check while its
 	# immutable definition snapshot still advertises the legacy role.
-	if changed and frappe.db.exists("DocType", "CRM Action Definition Revision"):
+	if changed:
 		from crm.patches.v1_0.add_nba_control_plane import _backfill_actions
 
 		_backfill_actions()

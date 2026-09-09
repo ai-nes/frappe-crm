@@ -10,6 +10,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.interaction_semantics import (
+	INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
 	INTELLIGENCE_SUMMARY_MAX_CHARS,
 	InteractionContractError,
 	validate_intelligence,
@@ -149,6 +150,7 @@ def settle_interaction_analysis_result(
 	policy_revision: str,
 	model_revision: str,
 	result_digest: str,
+	contract_version: str | None = None,
 	intent: dict[str, Any] | None = None,
 	decision_signals: dict[str, Any] | None = None,
 	terminal_reason: str | None = None,
@@ -173,6 +175,12 @@ def settle_interaction_analysis_result(
 	model_revision = _require_text(model_revision, "model_revision")
 	parsed_intent = _parse_intent(intent)
 	parsed_signals = _parse_decision_signals(decision_signals)
+	if contract_version not in {None, INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION}:
+		frappe.throw("Interaction analysis contract version is invalid.", frappe.ValidationError)
+	if decision_signals is not None and contract_version != INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION:
+		frappe.throw("Decision signals require interaction-analysis-v2.", frappe.ValidationError)
+	if decision_signals is None and contract_version == INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION:
+		frappe.throw("Interaction-analysis-v2 requires decision signals.", frappe.ValidationError)
 	# Additive, non-digest-bound: validated but never folded into result_digest,
 	# so an omitted block keeps the byte-identical legacy digest contract.
 	parsed_intelligence = _parse_intelligence(intelligence, state=state)
@@ -330,9 +338,11 @@ def settle_interaction_analysis_result(
 					or evidence.student != interaction_target.student
 					or evidence.crm_contact != interaction_target.crm_contact
 					or int(evidence.source_revision or 0) != expected_source_revision
-					or evidence.evidence_digest != expected_source_digest
 					or evidence.actor_role != "student"
 				):
+					# ``evidence_digest`` fingerprints one labelled turn; the
+					# parent ``source_digest`` fingerprints the complete revision.
+					# Revision/interaction identity is the cross-row fence here.
 					frappe.throw("Decision signal evidence is outside this analysis revision.", frappe.PermissionError)
 	if parsed_intent:
 		semantic_key, refs = parsed_intent
@@ -350,9 +360,10 @@ def settle_interaction_analysis_result(
 				or evidence.student != interaction_target.student
 				or evidence.crm_contact != interaction_target.crm_contact
 				or int(evidence.source_revision or 0) != expected_source_revision
-				or evidence.evidence_digest != expected_source_digest
 				or evidence.actor_role != "student"
 			):
+				# ``evidence_digest`` is per turn, whereas ``source_digest`` is
+				# the digest of the complete labelled revision.
 				frappe.throw(
 					"Intent evidence reference is outside this analysis revision.", frappe.PermissionError
 				)

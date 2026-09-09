@@ -448,6 +448,7 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	application = projection.get("application") or {}
 	score = projection.get("score") or {}
 	academic = projection.get("academic") or {}
+	decision_signals = projection.get("decision_signals")
 	academic_signal = {
 		"gpa": academic.get("gpa"),
 		"quality": academic.get("quality") or "unknown",
@@ -455,7 +456,7 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	}
 	if academic.get("quality") == "current" and academic.get("evidence_ref"):
 		academic_signal["evidence_ref"] = str(academic["evidence_ref"])
-	return {
+	context = {
 		"student_stage": projection.get("student_stage"),
 		"intent": {"type": intent.get("type"), "polarity": intent.get("polarity")},
 		"engagement": {
@@ -504,6 +505,12 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 			"conflicts": [],
 		},
 	}
+	# R3's validated semantic projection is part of the signed kernel context.
+	# Keep the field absent for r2 inputs so historical input digests remain
+	# byte-identical; never reconstruct signals from raw interaction text here.
+	if isinstance(decision_signals, Mapping):
+		context["decision_signals"] = dict(decision_signals)
+	return context
 
 
 def _require_hex64(value: object, label: str) -> str:

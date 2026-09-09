@@ -23,7 +23,7 @@ MODULES = {
 	),
 	"CRM Engagement": (
 		"CRM Interaction", "CRM Recommendation",
-		"CRM Action", "CRM Action Revision", "CRM Agent Event", "Call Log", "FCRM Note", "Task",
+		"CRM Action", "CRM Agent Event", "Call Log", "FCRM Note", "Task",
 	),
 	"CRM Marketing": (
 		"CRM Lead Source", "CRM Platform", "CRM Campaign", "CRM Campaign Spend",

@@ -302,11 +302,7 @@ def _latest_safe_package(doc, revision: int) -> dict:
 	action_code = doc.get("action") or doc.action_type
 	if not revision or action_code not in _SAFE_PACKAGE_KEYS:
 		return {}
-	rows = frappe.get_all(
-		"CRM Action Revision", filters={"action": doc.name, "revision": revision},
-		fields=["package"], limit_page_length=1,
-	)
-	value = rows[0].package if rows else doc.package_seed
+	value = doc.package_seed
 	if isinstance(value, str):
 		value = frappe.parse_json(value) if value else {}
 	if not isinstance(value, dict):

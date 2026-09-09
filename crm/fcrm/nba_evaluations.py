@@ -1014,20 +1014,19 @@ def commit_nba_evaluation_result(
 # Post-commit explanation (best effort, outside the commit fence)
 # --------------------------------------------------------------------------- #
 _RATIONALE_SOURCES = frozenset({"model", "fallback_absent"})
-# WHAT the sale must do (action.title) + WHAT GOAL to achieve (objective) +
-# WHY this action rather than another (why_this_action) + at most a few
-# grounded facts (context) -- the NBA boundary. ``action`` is a kernel-owned
-# nested object (echoed, not chosen, by the render pass); ``objective``,
-# ``why_this_action`` and ``context`` are the model's bounded prose. The work
-# item's name lives only once, nested under ``action.title`` -- never
-# model-authored, never duplicated at the top level -- always overridden
-# here with the action's own canonical Vietnamese display name from the
-# action type catalog, regardless of what the caller sent, so the
-# sale-facing work item name can never drift from the single source of
-# truth Frappe owns. No execution-content field (message copy, CTAs,
-# retry/channel-switch guidance) belongs here -- that is a Template / Sales
-# Playbook / future NBA Evaluation concern, not this Recommendation.
-_EXPLANATION_STR_FIELDS = ("objective", "why_this_action")
+# WHAT the sale must do (the model-authored ``title``) + WHAT GOAL to achieve
+# (``objective``) + WHY this action rather than another (``why_this_action``) +
+# at most a few grounded facts (``context``) -- the NBA boundary. ``action``
+# is a kernel-owned nested object (echoed, not chosen, by the render pass);
+# ``title``, ``objective``, ``why_this_action`` and ``context`` are the
+# model's bounded prose. ``action.title`` is separately overridden here with
+# the action's canonical Vietnamese display name from the action type catalog,
+# regardless of what the caller sent, so the generic action label cannot drift
+# from the Frappe-owned source of truth. No execution-content field (message
+# copy, CTAs, retry/channel-switch guidance) belongs here -- that is a
+# Template / Sales Playbook / future NBA Evaluation concern, not this
+# Recommendation.
+_EXPLANATION_STR_FIELDS = ("title", "objective", "why_this_action")
 _EXPLANATION_TOP_FIELDS = frozenset(_EXPLANATION_STR_FIELDS) | {"action", "context"}
 _EXPLANATION_STR_MAX_CHARS = 500
 _EXPLANATION_LIST_MAX_ITEMS = 3

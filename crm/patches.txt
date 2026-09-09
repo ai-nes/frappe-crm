@@ -11,6 +11,7 @@ crm.patches.v1_0.rename_non_admission_doctypes_without_crm_prefix
 crm.patches.v1_0.simplify_school_domain_schema
 crm.patches.v1_0.rename_crm_action_to_action_item
 crm.patches.v1_0.rename_student_contact_doctypes
+crm.patches.v1_0.consolidate_action_revisions
 
 [post_model_sync]
 # Patches added in this section will be executed after doctypes are migrated

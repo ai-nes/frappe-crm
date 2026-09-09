@@ -22,10 +22,6 @@ import frappe
 from crm.fcrm.action_constraints import defaults_for_action
 from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA
 from crm.fcrm.nba_canonical import action_definition_snapshot, canonical_digest
-from crm.patches.v1_0.add_nba_control_plane import (
-	_ensure_revision_row,
-	_revision_digest_conflict,
-)
 
 _FIELDS = [
 	"name",
@@ -69,13 +65,10 @@ def execute():
 		digest = canonical_digest(snapshot)
 		revision = max(int(row.get("definition_revision") or 0), 1)
 		if row.get("definition_digest") != digest:
-			if _revision_digest_conflict(row["name"], revision, digest):
-				revision += 1
 			updates["definition_digest"] = digest
 			updates["definition_revision"] = revision
 
 		frappe.db.set_value("CRM Action", row["name"], updates, update_modified=False)
-		_ensure_revision_row(row["name"], revision, digest, snapshot)
 
 	if not getattr(frappe.flags, "in_test", False):
 		frappe.db.commit()

@@ -609,6 +609,7 @@ if FrappeTestCase is not None:
 
 		def _explanation(self, **overrides):
 			base = {
+				"title": "Gọi lại xác nhận quan tâm",
 				"action": {"code": "ACT-CALL", "title": "ACT-CALL"},
 				"objective": "Xác nhận học viên còn cân nhắc học phí không.",
 				"why_this_action": (
@@ -629,10 +630,10 @@ if FrappeTestCase is not None:
 			)
 			self.assertEqual(result["status"], "set")
 			stored = frappe.parse_json(frappe.db.get_value("CRM Recommendation", rec.name, "explanation"))
-			# `action.title` is never trusted from the caller -- always the
-			# catalog's own display name for the action code, here "Gọi điện"
-			# for CALL. There is no top-level `title` duplicate.
-			self.assertNotIn("title", stored)
+			# The work-item title is model-authored and retained at the
+			# top level; `action.title` is never trusted from the caller --
+			# it is always the catalog's own display name for the action code.
+			self.assertEqual(stored["title"], explanation["title"])
 			self.assertEqual(stored["action"]["title"], "Gọi điện")
 			self.assertEqual(stored["context"], explanation["context"])
 			self.assertEqual(frappe.db.get_value("CRM Recommendation", rec.name, "rationale_source"), "model")

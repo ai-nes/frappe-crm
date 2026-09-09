@@ -87,23 +87,6 @@ def persist_initial_package(task) -> dict:
 	package = render_initial_package(task)
 	action_code = task.get("action") or task.action_type
 	validate_execution_package("EMAIL" if action_code == "SEND_EMAIL" else action_code, package)
-	revision = int(task.execution_package_version or 0) + 1
-	frappe.get_doc(
-		{
-			"doctype": "CRM Action Revision",
-			"action": task.name,
-			"revision": revision,
-			"package_type": "CallScriptV1"
-			if action_code == "CALL"
-			else "EmailPackageV1"
-			if action_code in {"EMAIL", "SEND_EMAIL"}
-			else "Generic",
-			"package": package,
-			"author": frappe.session.user,
-			"reason": "generated",
-			"created_at": now_datetime(),
-		}
-	).insert(ignore_permissions=True)
 	return package
 
 
@@ -147,27 +130,11 @@ def edit_action_package(
 	if edit_operation["state"] != "allowed":
 		frappe.throw("Action edit is not currently permitted.", frappe.PermissionError)
 	current = _json_object(task.package_seed)
-	if task.execution_package_version:
-		rows = frappe.get_all("CRM Action Revision", filters={"action": task.name, "revision": int(task.execution_package_version)}, fields=["package"], limit_page_length=1)
-		if rows:
-			current = _json_object(rows[0].package)
 	package = {**current, **changes}
 	policy_code = "EMAIL" if action_code == "SEND_EMAIL" else action_code
 	validate_execution_package(policy_code, package)
 	validate_action_command(policy_code, student=task.student, inputs={"objective": task.objective, "package": package}, actor_roles=set(frappe.get_roles(frappe.session.user)))
 	new_revision = int(expected_package_revision) + 1
-	frappe.get_doc(
-		{
-			"doctype": "CRM Action Revision",
-			"action": task.name,
-			"revision": new_revision,
-			"package_type": "EmailPackageV1",
-			"package": package,
-			"author": frappe.session.user,
-			"reason": reason,
-			"created_at": now_datetime(),
-		}
-	).insert(ignore_permissions=True)
 	# `db.set_value` bypasses the controller, so the Frappe-owned risk tier is
 	# re-derived here in the same write -- a package edit must never leave a
 	# stale tier the client could have influenced. The tier is monotonic: an

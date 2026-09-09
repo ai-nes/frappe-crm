@@ -1,10 +1,9 @@
-"""Introduce the additive NBA control-plane columns and their revision log.
+"""Introduce the additive NBA control-plane columns.
 
 Adds ``definition_revision`` / ``definition_digest`` / ``effective_from`` /
 ``effective_to`` to ``tabCRM Action`` and ``policy_revision`` / ``policy_digest``
 / ``effective_from`` / ``effective_to`` to ``tabCRM Timing Policy``, then
-backfills a deterministic snapshot digest for every row and records one
-immutable ``CRM Action Definition Revision`` per Action revision. Seeds a single
+backfills a deterministic snapshot digest for every row. Seeds a single
 conservative active ``default`` NBA Decision Policy when none exists.
 
 Idempotent: every column add is guarded on ``information_schema`` and every
@@ -17,7 +16,6 @@ Rollback:
   ``ALTER TABLE `tabCRM Timing Policy` DROP COLUMN `policy_revision`,
     DROP COLUMN `policy_digest`, DROP COLUMN `effective_from`,
     DROP COLUMN `effective_to`;``
-  ``DROP TABLE `tabCRM Action Definition Revision`;``
   ``DROP TABLE `tabCRM NBA Decision Policy`;``
 """
 
@@ -43,19 +41,13 @@ _TIMING_COLUMNS = {
 	"effective_from": "datetime(6) NULL",
 	"effective_to": "datetime(6) NULL",
 }
-_REVISION_INDEX = "crm_action_definition_revision_action_revision_uniq"
 
 
 def execute():
 	if not frappe.db.table_exists("CRM Action"):
 		return
 
-	for doctype in (
-		"crm_action",
-		"crm_timing_policy",
-		"crm_action_definition_revision",
-		"crm_nba_decision_policy",
-	):
+	for doctype in ("crm_action", "crm_timing_policy", "crm_nba_decision_policy"):
 		frappe.reload_doc("fcrm", "doctype", doctype)
 
 	_add_columns("tabCRM Action", _ACTION_COLUMNS)
@@ -66,7 +58,6 @@ def execute():
 	if frappe.db.table_exists("CRM Timing Policy"):
 		_backfill_timing_policies()
 
-	_add_revision_unique_index()
 	_seed_default_decision_policy()
 
 	if not frappe.flags.in_test:
@@ -121,39 +112,10 @@ def _backfill_actions() -> None:
 		if not row.get("effective_from"):
 			updates["effective_from"] = row.get("creation")
 		if row.get("definition_digest") != digest:
-			# A revision row is immutable. If one already exists for this revision
-			# with a different digest, the snapshot genuinely changed since it was
-			# recorded, so advance to a new revision rather than leaving the log
-			# out of sync with the column.
-			if _revision_digest_conflict(row["name"], revision, digest):
-				revision += 1
 			updates["definition_digest"] = digest
 			updates["definition_revision"] = revision
 		if updates:
 			frappe.db.set_value("CRM Action", row["name"], updates, update_modified=False)
-		_ensure_revision_row(row["name"], revision, digest, snapshot)
-
-
-def _revision_digest_conflict(action: str, revision: int, digest: str) -> bool:
-	existing = frappe.db.get_value(
-		"CRM Action Definition Revision", {"action": action, "revision": revision}, "digest"
-	)
-	return existing is not None and existing != digest
-
-
-def _ensure_revision_row(action: str, revision: int, digest: str, snapshot: dict) -> None:
-	if frappe.db.exists("CRM Action Definition Revision", {"action": action, "revision": revision}):
-		return
-	frappe.get_doc(
-		{
-			"doctype": "CRM Action Definition Revision",
-			"action": action,
-			"revision": revision,
-			"digest": digest,
-			"snapshot": snapshot,
-			"created_at": frappe.utils.now_datetime(),
-		}
-	).insert(ignore_permissions=True)
 
 
 def _backfill_timing_policies() -> None:
@@ -188,21 +150,6 @@ def _backfill_timing_policies() -> None:
 			updates["policy_revision"] = revision
 		if updates:
 			frappe.db.set_value("CRM Timing Policy", row["name"], updates, update_modified=False)
-
-
-def _add_revision_unique_index() -> None:
-	table = "tabCRM Action Definition Revision"
-	if not frappe.db.table_exists("CRM Action Definition Revision"):
-		return
-	existing = frappe.db.sql(
-		"SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() "
-		"AND table_name = %s AND index_name = %s LIMIT 1",
-		(table, _REVISION_INDEX),
-	)
-	if not existing:
-		frappe.db.sql_ddl(
-			f"ALTER TABLE `{table}` ADD UNIQUE INDEX `{_REVISION_INDEX}` (`action`, `revision`)"
-		)
 
 
 def _seed_default_decision_policy() -> None:

@@ -113,12 +113,12 @@ _EXPECTED_DIGESTS = {
 }
 # Raw file bytes.
 _EXPECTED_RAW_SHA256 = {
-	"input-recommend.json": "0fe69af1990c490e24afb4ebae1e2322bf0690383be237b4241295f32121d078",
-	"result-recommend.json": "9213d3d1a0d150090004645a2747204dd3b0d2b63cfdfd7085a79845daf4ac51",
-	"result-wait.json": "456c9d0b3cc809a41766b3680b045513be8eaffe10f2e1ee80b62c322c0ffa9c",
-	"result-unknown-major.json": "34b38fd98c8ceea64883c1f26ebda6b79cea733264ed2fa8d1fa714e7b388835",
-	"result-action-outside-eligible-set.json": "6216e0e8548d58e59022d3cab93461c8d9470c1a86567f56f1e0ae8b5ab0eeee",
-	"result-duplicate-recommendation-key.json": "9687586cab1727f651fdb1afee430a2cab8ce6069cf3e5e1ea1dec5fc391ad86",
+	"input-recommend.json": "c76e9296ab2990f354b5c0101ba26cea5cc72a65e8fca526596df43d93d3ce0a",
+	"result-recommend.json": "81db8d68e2bb29fc0f78763a51fad7a5b74797548020ae3b59229c96807cb385",
+	"result-wait.json": "5af53bbfcc8950d38d9540cedcd1b0f9781869ef53ffaa6ffced8acb957e7fc6",
+	"result-unknown-major.json": "9d6cadf88f2cf071e876644e4a3346993dbc2168971d17142027bc68df0c49d9",
+	"result-action-outside-eligible-set.json": "0a8153411a957ad9070c74aecb4d2084bd3526f9f0db1a55d0172a7dcfe1dcec",
+	"result-duplicate-recommendation-key.json": "b1d8aade831b97d404d64c5c51f7a26432e462cb7de58dfd2b4c8bb3ec12561b",
 }
 
 

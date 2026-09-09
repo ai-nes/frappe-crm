@@ -105,3 +105,27 @@ class TestInteractionIntakeContract(FrappeTestCase):
 		)
 
 		self.assertEqual(response["analysis_run"], "IAR-1")
+
+	@patch("crm.fcrm.interaction_analysis.settle_interaction_analysis_result")
+	def test_settlement_endpoint_forwards_semantic_contract_version(self, settle):
+		from crm.api.interaction_intake import settle_interaction_analysis_result
+
+		settle.return_value = {"result": "IRES-1"}
+		signals = {"schema_revision": "nba-decision-signals-v1", "observations": []}
+		response = settle_interaction_analysis_result(
+			run_id="IAR-1",
+			stage_generation=0,
+			lease_token="lease",
+			expected_source_revision=1,
+			expected_source_digest="a" * 64,
+			state="unknown",
+			policy_revision="interaction-analysis-v2",
+			model_revision="model-r1",
+			result_digest="b" * 64,
+			contract_version="interaction-analysis-v2",
+			decision_signals=signals,
+		)
+
+		self.assertEqual(response, {"result": "IRES-1"})
+		self.assertEqual(settle.call_args.kwargs["contract_version"], "interaction-analysis-v2")
+		self.assertEqual(settle.call_args.kwargs["decision_signals"], signals)

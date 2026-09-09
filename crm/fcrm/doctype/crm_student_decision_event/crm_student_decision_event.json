@@ -14,7 +14,7 @@
   {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "recommendation", "fieldtype": "Link", "in_list_view": 1, "label": "Recommendation", "options": "CRM Recommendation", "read_only": 1},
   {"fieldname": "action", "fieldtype": "Link", "in_list_view": 1, "label": "Action", "options": "CRM Action Item", "read_only": 1},
-  {"fieldname": "action_definition_revision", "fieldtype": "Link", "label": "Action Definition Revision", "options": "CRM Action Definition Revision", "read_only": 1},
+  {"fieldname": "action_definition_revision", "fieldtype": "Int", "label": "Action Definition Revision", "read_only": 1, "non_negative": 1},
   {"fieldname": "action_definition_digest", "fieldtype": "Data", "label": "Action Definition Digest", "read_only": 1},
   {"default": "0", "fieldname": "manual_override", "fieldtype": "Check", "label": "Manual Override", "read_only": 1},
   {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1, "reqd": 1},

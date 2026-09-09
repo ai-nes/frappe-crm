@@ -1,6 +1,6 @@
 import frappe
 from frappe.model.document import Document
-from frappe.utils import get_datetime, now_datetime
+from frappe.utils import get_datetime
 
 from crm.fcrm.action_constraints import validate_action_config
 from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA, is_valid_configuration_code
@@ -59,6 +59,7 @@ class CRMAction(Document):
 			)
 		except ValueError as exc:
 			frappe.throw(str(exc), frappe.ValidationError)
+		self.sync_definition_revision()
 
 	def on_trash(self):
 		if _has_references(self.code):
@@ -69,31 +70,26 @@ class CRMAction(Document):
 
 	def _snapshot(self) -> dict:
 		row = self.as_dict()
-		row["category"] = ACTION_TYPE_METADATA[self.code]["category"]
+		row["category"] = ACTION_TYPE_METADATA.get(self.code, {}).get("category") or self.action_type
 		return action_definition_snapshot(row)
 
 	def sync_definition_revision(self) -> bool:
-		"""Recompute the definition snapshot; on a change, bump revision and log it.
+		"""Recompute and persist the canonical definition on the Action row.
 
-		Returns whether a new revision was written. Nothing calls this on save
-		yet -- the control-plane patch owns the first population.
+		The Action row is now the sole source of the current definition. Historical
+		revision rows are migrated by the consolidation patch and are not written at
+		runtime.
 		"""
 		snapshot = self._snapshot()
 		digest = canonical_digest(snapshot)
-		if digest == (self.definition_digest or ""):
+		previous_digest = self.definition_digest or ""
+		if digest == previous_digest:
 			return False
 		self.definition_digest = digest
-		self.definition_revision = int(self.definition_revision or 0) + 1
-		frappe.get_doc(
-			{
-				"doctype": "CRM Action Definition Revision",
-				"action": self.name,
-				"revision": self.definition_revision,
-				"digest": digest,
-				"snapshot": snapshot,
-				"created_at": now_datetime(),
-			}
-		).insert(ignore_permissions=True)
+		current_revision = max(int(self.definition_revision or 0), 1)
+		# The first population of an unversioned/default row is revision 1. A
+		# later definition change advances the scalar fence monotonically.
+		self.definition_revision = current_revision if not previous_digest else current_revision + 1
 		return True
 
 

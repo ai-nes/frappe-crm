@@ -14,7 +14,6 @@ ACTION_ITEM_DOCTYPE = "CRM Action Item"
 ACTION_REFERENCE_DOCTYPES = (
 	"CRM Action Execution Attempt",
 	"CRM Action Execution",
-	"CRM Action Revision",
 	"CRM Action Outcome",
 	"CRM Student Dispatch Receipt",
 	"CRM Student Decision Event",

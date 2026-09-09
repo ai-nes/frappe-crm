@@ -1,18 +1,10 @@
-"""Add the atomic Action Revision uniqueness fence used by Workbench edits."""
-import frappe
+"""Retain the historical patch slot after action-package history removal."""
 
 
 def execute():
-	if not frappe.db.exists("DocType", "CRM Action Revision"):
-		return
-	rows = frappe.db.sql(
-		"""select action, revision, min(name) keep_name from `tabCRM Action Revision`
-		where action is not null group by action, revision having count(*) > 1""",
-		as_dict=True,
-	)
-	if rows:
-		frappe.throw("CRM Action Revision has duplicate action/revision rows; resolve them before enabling the unique fence.")
-	index = "crm_action_revision_action_revision_uniq"
-	existing = frappe.db.sql("show indexes from `tabCRM Action Revision` where Key_name=%s", index)
-	if not existing:
-		frappe.db.sql(f"alter table `tabCRM Action Revision` add unique index `{index}` (`action`, `revision`)")
+	"""Retired with the temporary action-package history table.
+
+	The patch remains in the historical patch list so fresh benches can replay
+	the list; the consolidation patch owns the data migration and table drop.
+	"""
+	return None
