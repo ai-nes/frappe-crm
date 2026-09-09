@@ -26,6 +26,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
+from crm.fcrm.campaign_source import resolve_campaign_reference
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.utils import normalize_phone_for_lookup
 
@@ -164,6 +165,7 @@ PROVENANCE_ALLOWED_KEYS = frozenset(
 		"idempotency_key",
 		"captured_at",
 		"lead_source",
+		"campaign",
 		"campaign_code",
 		"event_code",
 		"province_code",
@@ -1029,6 +1031,12 @@ def _create_case(
 	if not admission_year:
 		_fail("REVIEW_REQUIRED", "Admission cycle is required before a Student case can be created.")
 	pool = _resolve_case_pool(pool, campus)
+	campaign_reference = _text(payload.get("campaign") or payload.get("campaign_code"))
+	campaign = resolve_campaign_reference(campaign_reference)
+	if campaign_reference and not campaign:
+		_fail("INVALID_INPUT", f"Không tìm thấy Campaign: {campaign_reference}.")
+	if payload.get("source_namespace") == "crm.manual_intake" and not campaign:
+		_fail("REQUIRED_FIELD", "Campaign là bắt buộc cho intake thủ công.")
 	values = {
 		"doctype": "CRM Lead",
 		"student_name": candidate.get("name") or "Unnamed Student",
@@ -1042,7 +1050,8 @@ def _create_case(
 		"identity": identity,
 		"intake_integrity_state": "resolved",
 		"ownership_revision": 0,
-		"source": payload.get("source"),
+		"source": payload.get("source") if not campaign else None,
+		"campaign": campaign,
 		"advertising_channel": payload.get("advertising_channel"),
 		"current_grade": payload.get("current_grade"),
 		"study_stage": payload.get("study_stage"),

@@ -111,6 +111,66 @@ class TestStudentSegment(FrappeTestCase):
 		self.assertEqual(rows[incomplete.name]["member_count"], 0)
 		self.assertEqual(rows[complete.name]["segment_code"], complete.segment_code)
 
+	def test_get_segment_by_code_returns_the_authorized_segment(self):
+		segment = self.group()
+
+		result = segments.get_segment_by_code(segment.segment_code)
+
+		self.assertEqual(result["name"], segment.name)
+		self.assertEqual(result["segment_code"], segment.segment_code)
+
+		with self.assertRaises(frappe.DoesNotExistError):
+			segments.get_segment_by_code("SEG-260909-NOTFOUND")
+
+	def test_segment_analysis_returns_summary_attention_and_overlap(self):
+		stage_segment = self.group(title="New students")
+		stage_segment = segments.transition_segment(stage_segment.name, "active", stage_segment.revision)
+		intent_segment = self.group(title="Low intent")
+		intent_segment = segments.transition_segment(intent_segment.name, "active", intent_segment.revision)
+		empty_need = self.term()
+		empty_segment = segments.create_segment(
+			{
+				"title": "High potential empty",
+				"purpose": "Find high-potential students",
+				"category": "need",
+				"filters": {
+					"groups": [
+						{
+							"conditions": [
+								{
+									"field": "need",
+									"operator": "in",
+									"value": [empty_need.name],
+								}
+							]
+						}
+					]
+				},
+			}
+		)
+		empty_segment = segments.transition_segment(empty_segment["name"], "active", empty_segment["revision"])
+
+		result = segments.get_segment_analysis(
+			[stage_segment.segment_code, intent_segment.segment_code]
+		)
+		cells = {
+			(row["row_segment_code"], row["column_segment_code"]): row["count"]
+			for row in result["overlap"]["cells"]
+		}
+
+		self.assertGreaterEqual(result["summary"]["total"], 3)
+		self.assertGreaterEqual(result["summary"]["active"], 3)
+		self.assertIn(
+			empty_segment["segment_code"],
+			{row["segment_code"] for row in result["attention"]},
+		)
+		self.assertEqual(cells[(stage_segment.segment_code, intent_segment.segment_code)], 1)
+		self.assertEqual(cells[(intent_segment.segment_code, stage_segment.segment_code)], 1)
+
+	def test_segment_analysis_rejects_more_than_five_selected_segments(self):
+		with self.assertRaises(frappe.ValidationError):
+			segments.get_segment_analysis([f"SEG-260909-{index:06d}" for index in range(6)])
+
 	def test_segment_code_uses_date_and_short_id_without_user_pii(self):
 		first = self.group()
 		second = segments.create_segment({"title": "Classification group second"})
@@ -259,6 +319,60 @@ class TestStudentSegment(FrappeTestCase):
 		self.rules["groups"][0]["conditions"][-1]["operator"] = "not in"
 		self.assertEqual(segments.preview_segment(filters=self.rules)["total"], 0)
 
+	def test_student_tag_crud_and_grouped_catalog(self):
+		first = self.term("tag")
+		replacement = self.term("tag")
+
+		self.student.reload()
+		result = labels.add_student_tag(self.student.name, first.name, str(self.student.modified))
+		self.assertEqual([row["term"] for row in result["tags"]], [first.name])
+
+		self.student.reload()
+		result = labels.update_student_tag(
+			self.student.name,
+			first.name,
+			replacement.name,
+			str(self.student.modified),
+		)
+		self.assertEqual([row["term"] for row in result["tags"]], [replacement.name])
+
+		self.student.reload()
+		result = labels.remove_student_tag(self.student.name, replacement.name, str(self.student.modified))
+		self.assertEqual(result["tags"], [])
+
+		groups = labels.list_tag_groups()
+		test_group = next(group for group in groups if group["group_name"] == "Test")
+		test_tag_names = {tag["name"] for tag in test_group["tags"]}
+		self.assertIn(first.name, test_tag_names)
+		self.assertIn("label", test_group["tags"][0])
+
+	def test_classification_group_crud_and_reference_guard(self):
+		code = "TEST_GROUP_" + frappe.generate_hash(length=8).upper()
+		group = labels.create_tag_group({"code": code, "label": "Test group"})
+		self.assertEqual(group["status"], "draft")
+
+		group = labels.update_tag_group(group["name"], {"label": "Renamed group"}, group["revision"])
+		group = labels.transition_tag_group(group["name"], "active", group["revision"])
+		self.assertEqual(group["label"], "Renamed group")
+		self.assertTrue(any(row["name"] == group["name"] for row in labels.list_tag_group_definitions()))
+
+		tag = labels.create_tag(
+			{
+				"code": "TEST_GROUP_TAG_" + frappe.generate_hash(length=8).upper(),
+				"label": "Test group tag",
+				"group": group["name"],
+			}
+		)
+		with self.assertRaises(frappe.ValidationError):
+			labels.delete_tag_group(group["name"], group["revision"])
+		labels.delete_tag(tag["name"], tag["revision"])
+
+		empty_group = labels.create_need_group(
+			{"code": "EMPTY_GROUP_" + frappe.generate_hash(length=8).upper(), "label": "Empty group"}
+		)
+		labels.delete_need_group(empty_group["name"], empty_group["revision"])
+		self.assertFalse(frappe.db.exists("CRM Need Group", empty_group["name"]))
+
 	def test_reject_wrong_kind_duplicates_and_inactive_terms(self):
 		tag = self.term("tag")
 		draft = self.term(status="draft")
@@ -402,9 +516,30 @@ class TestStudentSegment(FrappeTestCase):
 				validate_filters(
 					{"groups": [{"conditions": [{"field": "potential", "operator": "=", "value": value}]}]}
 				)
-		self.rules["groups"][0]["logic"] = "OR"
+		self.rules["logic"] = "INVALID"
 		with self.assertRaises(frappe.ValidationError):
 			validate_filters(self.rules)
+		self.rules.pop("logic")
+		self.rules["groups"][0]["logic"] = "INVALID"
+		with self.assertRaises(frappe.ValidationError):
+			validate_filters(self.rules)
+
+	def test_nested_logic_is_normalized_and_preserved(self):
+		filters = {
+			"logic": "AND",
+			"groups": [
+				{
+					"logic": "OR",
+					"conditions": [
+						{"field": "intent", "operator": "=", "value": "LOW"},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+					],
+				}
+			],
+		}
+
+		self.assertEqual(validate_filters(filters)["logic"], "AND")
+		self.assertEqual(validate_filters(filters)["groups"][0]["logic"], "OR")
 
 	def test_only_draft_can_be_deleted(self):
 		doc = self.group()

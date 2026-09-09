@@ -156,6 +156,7 @@ class TestDirectorLeads(FrappeTestCase):
 				"statusCode": "ASSIGNED",
 				"result": "MATCHED",
 				"source": "Website",
+				"campaign": "",
 				"owner": "Trần Quốc Bảo",
 				"contactNoAnswer": 0,
 				"contactSuccess": 0,

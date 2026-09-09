@@ -48,6 +48,7 @@
   "major",
   "aspiration",
   "section_enrollment",
+  "campaign",
   "source",
   "platform",
   "col_break_enrollment",
@@ -93,7 +94,6 @@
   "notes",
   "potential",
   "intent",
-  "classifications",
   "needs",
   "tags"
  ],
@@ -364,11 +364,22 @@
    "label": "Enrollment Information"
   },
   {
+   "description": "Campaign attribution inherited from the source Lead or set by a trusted server workflow.",
+   "fieldname": "campaign",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Campaign",
+   "options": "CRM Campaign",
+   "read_only": 1
+  },
+  {
+   "description": "Server-managed from the linked Campaign Channel Type.",
    "fieldname": "source",
    "fieldtype": "Link",
    "in_standard_filter": 1,
    "label": "Source",
-   "options": "CRM Lead Source"
+   "options": "CRM Lead Source",
+   "read_only": 1
   },
   {
    "fieldname": "platform",
@@ -645,13 +656,6 @@
    "fieldtype": "Select",
    "label": "Intent",
    "options": "\nHIGH\nMEDIUM\nLOW"
-  },
-  {
-   "fieldname": "classifications",
-   "fieldtype": "Table",
-   "label": "Needs and Tags",
-   "options": "CRM Student Classification",
-   "hidden": 1
   },
   {
    "fieldname": "needs",

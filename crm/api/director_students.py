@@ -27,6 +27,7 @@ from crm.fcrm.student_reference import (
 	lead_for_reference,
 	lead_for_student,
 )
+from crm.fcrm.student_stage import STUDENT_STAGES
 from crm.integrations.api import get_recording_url_path
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
@@ -35,10 +36,7 @@ ASSIGNMENT_STATUSES = {
 	"assigned": {"label": "Đã phân công"},
 	"unassigned": {"label": "Chưa phân công"},
 }
-LIFECYCLE_STATUSES = {
-	stage: {"label": stage}
-	for stage in ("New", "Attempting", "Connected", "Qualified", "Disqualified")
-}
+LIFECYCLE_STATUSES = {stage: {"label": stage} for stage in STUDENT_STAGES}
 LIFECYCLE_STATUS_ALIASES = {
 	"Lead": "New",
 	"MQL": "Attempting",
@@ -117,11 +115,18 @@ SORT_FIELDS = {
 	"lastActivityAt": "modified",
 	"nextActionDueAt": "modified",
 }
+STUDENT_STAGE_ORDER = (
+	"CASE student_stage "
+	+ " ".join(f"WHEN '{stage}' THEN {rank}" for rank, stage in enumerate(STUDENT_STAGES, start=1))
+	+ " ELSE 99 END"
+)
+STUDENT_STAGE_RANK = {stage: rank for rank, stage in enumerate(STUDENT_STAGES, start=1)}
 STUDENT_FIELDS = [
 	"name",
 	"full_name",
 	"lead_code",
 	"source_lead",
+	"campaign",
 	"phone",
 	"email",
 	"gender",
@@ -765,11 +770,16 @@ def _fetch_student_rows(
 		filters=_with_allowed_student_ids(filters, allowed_student_ids),
 		or_filters=or_filters,
 		fields=STUDENT_FIELDS,
-		order_by=f"{field} {query['order']}, name {query['order']}",
+		order_by=_student_order_by(field, query["order"]),
 		limit_start=(query["page"] - 1) * query["page_size"],
 		limit_page_length=query["page_size"],
 	)
 	return _normalize_student_rows(rows)
+
+
+def _student_order_by(sort_field: str, order: str) -> str:
+	"""Keep the list grouped by Student workflow stage before applying the requested sort."""
+	return f"{STUDENT_STAGE_ORDER} asc, {sort_field} {order}, name {order}"
 
 
 def _fetch_computed_sort_rows(
@@ -825,8 +835,13 @@ def _fetch_computed_sort_rows(
 	present.sort(key=lambda entry: (entry[0], entry[1]), reverse=query["order"] == "desc")
 	missing.sort(key=lambda entry: entry[1])
 	sorted_rows = [entry[2] for entry in present + missing]
+	sorted_rows.sort(key=_student_stage_rank)
 	start = (query["page"] - 1) * query["page_size"]
 	return sorted_rows[start : start + query["page_size"]]
+
+
+def _student_stage_rank(row) -> int:
+	return STUDENT_STAGE_RANK.get(str(row.get("student_stage") or "").strip(), 99)
 
 
 def _sort_related_value(sort_field: str, related) -> int | str | None:
@@ -1036,6 +1051,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"processingStatus": row.get("processing_status"),
 		"resolution": row.get("resolution"),
 		"sourceLead": row.get("source_lead"),
+		"campaign": row.get("campaign"),
 		"recordType": "student",
 		"assignmentStatus": "assigned"
 		if row.get("owner_staff") or row.get("assigned_to")
@@ -2058,7 +2074,7 @@ def _acquisition(row, item):
 	return {
 		"firstTouch": source,
 		"sourceGroup": _source_group(source),
-		"campaign": "",
+		"campaign": row.get("campaign") or "",
 		"capturedAt": None,
 		"attributionModel": "CRM Student source",
 		"consent": "",

@@ -12,6 +12,8 @@ from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboar
 from crm.patches.v1_0 import (
 	add_ai_capability_gateway_fields,
 	align_lead_mapping_contract,
+	migrate_classification_groups,
+	retire_legacy_classification_doctypes,
 	seed_crm_action_type,
 	seed_crm_education_program,
 	seed_crm_permission_profiles,
@@ -61,6 +63,8 @@ def after_install(force=False):
 	seed_crm_education_program.execute()
 	setup_crm_student_extended_permissions.execute()
 	upgrade_student_segments.execute()
+	migrate_classification_groups.execute()
+	retire_legacy_classification_doctypes.execute()
 	seed_master_data_governance.execute()
 	seed_student_pools.execute()
 	seed_default_nba_decision_policy.execute()

@@ -56,7 +56,9 @@ Changes use Frappe Version history and invalidate the Student context revision.
 | `get_fields` | none | Approved fields, types, options and operators |
 | `create_segment` | `data` object | Segment document, status draft, revision 0, and server-generated `segment_code` |
 | `get_segment` | `name` | Authorized Segment metadata including `segment_code`, no member IDs |
+| `get_segment_by_code` | `segment_code` | Authorized Segment metadata resolved by its immutable `segment_code`, no member IDs |
 | `list_segments` | optional status, category, start=0, page_length=20 | Authorized metadata array with `segment_code` and `member_count` |
+| `get_segment_analysis` | optional `selected_segment_codes` JSON array, max 5 | Permission-scoped status summary, segment audience counts, overlap cells, and active empty segments |
 | `update_segment` | name, data, expected_revision | Updated document |
 | `transition_segment` | name, status, expected_revision | Updated document |
 | `preview_segment` | segment **or** filters, start=0, page_length=20 | `{total,total_students,start,page_length,students}`; `total` is the filtered count, `total_students` is the permission-scoped Student population, and rows include identity, stage, major, owner and the five classification values |
@@ -93,8 +95,9 @@ create another group for a new snapshot. Membership still intersects current acc
 
 ## Rules
 
-Outer OR, inner AND, at most 10 groups and 20 conditions per group. Each group may
-include a display `name` (at most 140 characters); missing names default to `Nhóm N`.
+Outer and inner logic can each be `AND` or `OR`, at most 10 groups and 20 conditions
+per group. Each group may include a display `name` (at most 140 characters); missing
+names default to `Nhóm N`.
 Empty groups,
 unknown fields/operators, unsupported logic, malformed JSON and non-finite numbers fail.
 Numeric operators: `= != > >= < <=`. Select/Link: `= != in not in`. Check: `= !=`.
@@ -111,6 +114,7 @@ be active to query history.
   "category": "need",
   "segment_type": "dynamic",
   "filters": {
+    "logic": "OR",
     "groups": [{"logic": "AND", "name": "Học sinh cần tư vấn học phí", "conditions": [
       {"field": "potential", "operator": "=", "value": "HIGH"},
       {"field": "intent", "operator": "=", "value": "LOW"},
@@ -123,23 +127,34 @@ be active to query history.
 Approved filter fields are only `student_stage`, `potential`, `intent`, `need` and `tag`. No arbitrary SQL,
 arbitrary Student fields or Tag-as-free-text predicates are allowed.
 New previews require page_length 1–100 and nonnegative integer start. COUNT and ordered
-pagination run in SQL; overlapping OR groups are deduplicated in SQL.
+pagination run in SQL; overlapping branches are deduplicated in SQL.
 
 ## Need/Tag methods — `crm.api.student_classification`
 
 | Method | Arguments | Result |
 |---|---|---|
-| `list_needs` / `list_tags` | status=active, start=0, page_length=50 | Separate dictionary arrays |
-| `create_need` / `create_tag` | data: code, label, group_name, description optional | Draft dictionary record |
+| `list_needs` / `list_tags` | status=active, start=0, page_length=50 | Separate dictionary arrays with tag/need details |
+| `list_tag_groups` | status=active, start=0, page_length=100 | Tag groups, each containing its detailed Tag records |
+| `create_need` / `create_tag` | data: code, label, group (or legacy group_name), description optional | Draft dictionary record |
 | `update_need` / `update_tag` | name, data, expected_revision | Updated dictionary record |
 | `transition_need` / `transition_tag` | name, status, expected_revision | Updated dictionary record |
 | `delete_need` / `delete_tag` | name, expected_revision | Deletes unused, unreferenced draft only |
+| `list_need_groups` / `list_tag_group_definitions` | status=active, start=0, page_length=100 | Group master records |
+| `create_need_group` / `create_tag_group` | data: code, label, description, sort_order optional | Draft group master record |
+| `update_need_group` / `update_tag_group` | name, data, expected_revision | Updated group master record |
+| `transition_need_group` / `transition_tag_group` | name, status, expected_revision | Updated group master record |
+| `delete_need_group` / `delete_tag_group` | name, expected_revision | Deletes an unused, unreferenced draft group only |
 | `get_classifications` | student (canonical CRM Student name) | Student classification projection |
 | `update_classifications` | student, data, expected_modified | Updated projection |
+| `add_student_tag` | student, tag, expected_modified | Adds one active Tag to the Student; repeated adds are idempotent |
+| `remove_student_tag` | student, tag, expected_modified | Removes one Tag; removing an absent Tag is idempotent |
+| `update_student_tag` | student, tag, new_tag, expected_modified | Replaces one assigned Tag with another active Tag |
 
-Need and Tag records each use the same four lifecycle statuses and transitions as Segment.
-Code is immutable uppercase ASCII `[A-Z][A-Z0-9_]*`, max 100. Admin can change label,
-group_name and description within the relevant dictionary.
+Need, Tag, Need Group and Tag Group records each use the same four lifecycle statuses and
+transitions as Segment. Codes are immutable uppercase ASCII `[A-Z][A-Z0-9_]*`, max 100.
+Admin can change labels, descriptions and sort order. Need/Tag records link to their
+respective group DocType; `group_name` remains a read-compatible legacy mirror in API
+payloads. A group cannot be deleted while it contains Need/Tag records.
 Reserved Stage/level codes and Potential/Intent/Admission Stage tag codes are rejected;
 admins must also review naming meaningfully so tags do not duplicate structured fields.
 Archive is read-only. Deactivation never silently removes an existing Student assignment.
@@ -167,9 +182,17 @@ Projection: `{student,modified,admission_stage,potential,intent,needs,tags}`. Ne
 to `CRM Need`; Tag rows link to `CRM Tag`, each with assigned_by, assigned_at and source.
 Use list_needs/list_tags with all statuses to render historical assignments.
 
-The former shared `CRM Classification Term` and `CRM Student Classification` records are
-legacy migration sources only. New code uses separate `CRM Need`, `CRM Tag`,
-`CRM Student Need Assignment`, and `CRM Student Tag Assignment` records.
+`list_tag_groups` returns an array shaped as
+`[{"group_name": "<group>", "tags": [<Tag record>, ...]}]`; each Tag record includes
+`name`, `code`, `label`, `group_name`, `description`, `status`, and `revision`.
+Student Tag CRUD requires the current `modified` value as `expected_modified`, checks the
+Student write permission, and preserves assignment provenance. Updating a Student Tag
+means replacing its assignment; editing the shared Tag definition remains the separate
+`update_tag` operation.
+
+The former shared classification records have been migrated and retired. New code uses
+separate `CRM Need`, `CRM Tag`, `CRM Student Need Assignment`, and
+`CRM Student Tag Assignment` records.
 
 ## Migration and compatibility
 
@@ -182,7 +205,8 @@ snapshots have a unique (segment,student) constraint. Reruns preserve admin-edit
 dictionary records.
 35 template terms from the supplied trees are seeded as draft: 23 Needs, 12 Tags. Admin
 must activate desired records before staff assignment. Existing shared classifications are
-copied into their matching separate dictionary/assignment records; no auto-activation occurs.
+copied into their matching separate dictionary/assignment records before the legacy
+DocTypes and hidden Student field are removed; no auto-activation occurs.
 
 Legacy `crm.api.segment` helper names and preview `{contacts}` envelope are preserved;
 legacy page_length remains clamped to 100. Legacy saved rules now obey explicit AND/OR

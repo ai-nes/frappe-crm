@@ -1,5 +1,23 @@
 """Initial controlled vocabulary from the supplied FAIP Need/Tag trees."""
 
+GROUP_CATALOG = {
+	"need": {
+		"NEED_CONTACT": "Cần liên hệ",
+		"NEED_INFORMATION": "Cần thông tin",
+		"NEED_ENGAGEMENT": "Cần tương tác",
+		"NEED_APPLICATION": "Cần hỗ trợ hồ sơ",
+		"NEED_CONVERSION": "Cần hỗ trợ chuyển đổi",
+		"NEED_PARENT": "Cần hỗ trợ phụ huynh",
+		"NEED_RECOVERY": "Cần phục hồi",
+	},
+	"tag": {
+		"ATTENTION": "Cần chú ý",
+		"RELATIONSHIP": "Quan hệ",
+		"CONTEXT": "Bối cảnh",
+		"OPERATIONAL": "Vận hành",
+	},
+}
+
 CATALOG = {
 	"need": {
 		"NEED_CONTACT": "FIRST_CONTACT FOLLOW_UP CALLBACK",
@@ -26,7 +44,18 @@ def seed_catalog():
 		return
 	for kind, groups in CATALOG.items():
 		doctype = "CRM Need" if kind == "need" else "CRM Tag"
-		for group, codes in groups.items():
+		group_doctype = "CRM Need Group" if kind == "need" else "CRM Tag Group"
+		for sort_order, (group, codes) in enumerate(groups.items(), start=1):
+			if not frappe.db.exists(group_doctype, group):
+				frappe.get_doc(
+					{
+						"doctype": group_doctype,
+						"code": group,
+						"label": GROUP_CATALOG[kind][group],
+						"status": "draft",
+						"sort_order": sort_order * 10,
+					}
+				).insert(ignore_permissions=True)
 			for code in codes.split():
 				if not frappe.db.exists(doctype, {"code": code}):
 					frappe.get_doc(
@@ -34,6 +63,7 @@ def seed_catalog():
 							"doctype": doctype,
 							"code": code,
 							"label": code.replace("_", " ").title(),
+							"group": group,
 							"group_name": group,
 							"status": "draft",
 						}

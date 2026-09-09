@@ -71,7 +71,7 @@ PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
 	}
 )
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
-	{"student_name", "phone", "province", "high_school", "major", "source"}
+	{"student_name", "phone", "province", "high_school", "major"}
 )
 HISTORY_STATUS_PRIORITY = {
 	"assigned": 0,
@@ -1274,12 +1274,14 @@ def _create_batch_import_lead(row: dict[str, Any], actor_context: dict[str, Any]
 		("province", "Tỉnh/Thành phố"),
 		("high_school", "Trường THPT"),
 		("major", "Ngành quan tâm"),
-		("source", "Nguồn"),
 	):
 		if not str(row.get(fieldname) or "").strip():
 			frappe.throw(_("{0} là bắt buộc.").format(label), frappe.ValidationError)
-	# Batch import is an authenticated internal intake flow. Campaign attribution
-	# is optional here; public lead intake keeps its stricter campaign contract.
+	if not str(row.get("campaign") or row.get("campaign_code") or row.get("source") or "").strip():
+		frappe.throw(
+			_("Campaign là bắt buộc; source chỉ được giữ cho file import legacy."),
+			frappe.ValidationError,
+		)
 	values = lead_mapping._normalize_public_lead_payload(
 		{**row, "branch": _default_campus(row, actor_context)},
 		require_campaign=False,

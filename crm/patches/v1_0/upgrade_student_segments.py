@@ -17,8 +17,8 @@ def execute():
 	frappe.db.add_index("CRM Segment Member", ["student", "segment"])
 	frappe.db.add_index("CRM Student Need Assignment", ["need", "parent"])
 	frappe.db.add_index("CRM Student Tag Assignment", ["tag", "parent"])
-	frappe.db.add_index("CRM Need", ["status", "group_name"])
-	frappe.db.add_index("CRM Tag", ["status", "group_name"])
+	frappe.db.add_index("CRM Need", ["status", "group"])
+	frappe.db.add_index("CRM Tag", ["status", "group"])
 	from crm.fcrm.classification_catalog import seed_catalog
 
 	seed_catalog()
@@ -36,11 +36,15 @@ def _migrate_legacy_classifications():
 	):
 		doctype = "CRM Need" if term.kind == "need" else "CRM Tag"
 		if not frappe.db.exists(doctype, {"code": term.code}):
+			from crm.patches.v1_0.migrate_classification_groups import ensure_group_for_value
+
+			group_code = ensure_group_for_value(term.kind, term.group_name)
 			new_term = frappe.get_doc(
 				{
 					"doctype": doctype,
 					"code": term.code,
 					"label": term.label,
+					"group": group_code,
 					"group_name": term.group_name,
 					"description": term.description,
 					"status": term.status,
