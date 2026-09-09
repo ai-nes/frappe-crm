@@ -150,8 +150,8 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"major": "Digital Marketing",
 		"defect": {
 			"code": "INVALID_MISSING_HIGH_SCHOOL",
-			"expected": "manual_review",
-			"note": "Thiếu trường THPT → xử lý Lead đóng hồ sơ.",
+			"expected": "assigned",
+			"note": "Thiếu trường THPT nhưng Lead vẫn hợp lệ → được phân công theo tỉnh.",
 			"fields": {"high_school": None},
 		},
 	},

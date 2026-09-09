@@ -23,7 +23,6 @@ from typing import Any
 
 import frappe
 
-from crm.fcrm.conversion_readiness import conversion_blockers
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
 from crm.fcrm.student_intake import normalize_email, normalize_phone
 from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
@@ -90,12 +89,15 @@ def _normalise_province(value: Any) -> str:
 
 
 def _normalise_identifiers(lead) -> dict[str, str]:
+	student_name = " ".join(str(lead.get("student_name") or "").strip().split()).casefold()
 	high_school = " ".join(str(lead.get("high_school") or "").strip().split()).casefold()
 	major = " ".join(str(lead.get("major") or "").strip().split()).casefold()
 	phone = normalize_phone(lead.get("phone"))
 	email = normalize_email(lead.get("email"))
 	province = _normalise_province(lead.get("province"))
-	blockers = conversion_blockers(lead)
+	blockers = []
+	if not student_name:
+		blockers.append("missing_name")
 	if not phone and "missing_phone" not in blockers:
 		blockers = [*blockers, "missing_phone"]
 	if not province and "missing_province" not in blockers:
@@ -103,9 +105,10 @@ def _normalise_identifiers(lead) -> dict[str, str]:
 	if blockers:
 		_fail(
 			"IDENTIFIER_GATE_FAILED",
-			"Số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm là bắt buộc trước khi xử lý.",
+			"Họ và tên, số điện thoại và tỉnh/thành phố là bắt buộc trước khi xử lý.",
 		)
 	return {
+		"student_name": student_name,
 		"high_school": high_school,
 		"major": major,
 		"phone": phone or "",
@@ -116,10 +119,9 @@ def _normalise_identifiers(lead) -> dict[str, str]:
 
 def _processing_validation(lead) -> dict[str, bool]:
 	return {
+		"student_name": bool(str(lead.get("student_name") or "").strip()),
 		"phone": bool(normalize_phone(lead.get("phone"))),
 		"province": bool(_normalise_province(lead.get("province"))),
-		"high_school": bool(str(lead.get("high_school") or "").strip()),
-		"major": bool(str(lead.get("major") or "").strip()),
 	}
 
 
@@ -133,6 +135,8 @@ def _processing_validation_issues(lead) -> list[str]:
 		return lead.get(fieldname) or lead.get(camel_name)
 
 	issues = []
+	if not str(value("student_name") or "").strip():
+		issues.append("Thiếu họ và tên")
 	phone = str(value("phone") or "").strip()
 	if not phone:
 		issues.append("Thiếu số điện thoại")
@@ -140,10 +144,6 @@ def _processing_validation_issues(lead) -> list[str]:
 		issues.append("Số điện thoại không hợp lệ")
 	if not str(value("province") or "").strip():
 		issues.append("Thiếu tỉnh/thành phố")
-	if not str(value("high_school") or "").strip():
-		issues.append("Thiếu trường THPT")
-	if not str(value("major") or "").strip():
-		issues.append("Thiếu ngành quan tâm")
 	return issues
 
 
@@ -154,6 +154,9 @@ def _processing_validation_reason(lead) -> str | None:
 
 def _normalise_row(row: Any) -> dict[str, str]:
 	return {
+		"student_name": " ".join(
+			str(row.get("student_name") or row.get("full_name") or "").strip().split()
+		).casefold(),
 		"high_school": " ".join(str(row.get("high_school") or "").strip().split()).casefold(),
 		"major": " ".join(str(row.get("major") or "").strip().split()).casefold(),
 		"phone": normalize_phone(row.get("phone")) or "",
@@ -173,6 +176,7 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 	if doctype == "CRM Lead":
 		fields.extend(
 			[
+				"student_name",
 				"lead_code",
 				"processing_status",
 				"resolution",
@@ -182,6 +186,8 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 				"converted_student",
 			]
 		)
+	else:
+		fields.append("full_name")
 	rows = frappe.get_all(
 		doctype,
 		or_filters=filters,
@@ -193,8 +199,7 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 
 
 _DUPLICATE_MATCH_LABELS = {
-	"PHONE_EMAIL_PROVINCE": "số điện thoại, email và tỉnh/thành phố",
-	"PHONE_PROVINCE_SCHOOL_MAJOR": "số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm",
+	"PHONE_PROVINCE": "số điện thoại và tỉnh/thành phố",
 }
 
 
@@ -202,24 +207,11 @@ def _duplicate_match_type(identifiers: dict[str, str], candidate: Any) -> str | 
 	row = _normalise_row(candidate)
 	if (
 		identifiers["phone"]
-		and identifiers["email"]
 		and identifiers["province"]
 		and row["phone"] == identifiers["phone"]
-		and row["email"] == identifiers["email"]
 		and row["province"] == identifiers["province"]
 	):
-		return "PHONE_EMAIL_PROVINCE"
-	if (
-		identifiers["phone"]
-		and identifiers["province"]
-		and row["high_school"]
-		and row["major"]
-		and row["phone"] == identifiers["phone"]
-		and row["province"] == identifiers["province"]
-		and row["high_school"] == identifiers["high_school"]
-		and row["major"] == identifiers["major"]
-	):
-		return "PHONE_PROVINCE_SCHOOL_MAJOR"
+		return "PHONE_PROVINCE"
 	return None
 
 
@@ -229,8 +221,6 @@ def _valid_lead_candidate(row: Any) -> bool:
 		(
 			identifiers["phone"],
 			identifiers["province"],
-			identifiers["high_school"],
-			identifiers["major"],
 		)
 	)
 
@@ -287,6 +277,7 @@ def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str,
 
 	current = {
 		"name": lead.name,
+		"student_name": lead.get("student_name"),
 		"lead_code": lead.get("lead_code"),
 		"creation": lead.get("creation"),
 		"processing_status": _get_status(lead),
@@ -299,7 +290,7 @@ def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str,
 			key=lambda entry: _canonical_lead_rank(entry[0]),
 		)
 		if canonical.get("name") != lead.name:
-			label = _DUPLICATE_MATCH_LABELS.get(match_type or "PHONE_PROVINCE_SCHOOL_MAJOR", "thông tin Lead")
+			label = _DUPLICATE_MATCH_LABELS.get(match_type or "PHONE_NAME_PROVINCE", "thông tin Lead")
 			return {
 				"resolution": "DUPLICATE",
 				"target_student": None,
@@ -460,13 +451,13 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
-				"resolution": "PENDING",
+				"resolution": "INVALID",
 				"resolution_reason": processing_reason or "Đã đóng hồ sơ vì dữ liệu xử lý không hợp lệ.",
 			},
 		)
 		return {
 			"status": "CLOSED",
-			"resolution": "PENDING",
+			"resolution": "INVALID",
 			"lead": lead_doc.name,
 			"processing_outcome": "INVALID",
 			"validation": validation,
@@ -483,7 +474,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 	processing_reason = _reason(reason)
 	if not processing_reason:
 		processing_reason = (
-			"Đã kiểm tra đủ 4 điều kiện; chờ phân công."
+			"Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố; chờ phân công."
 			if status == "PROCESSED"
 			else classification.get("reason") or "Đã đóng hồ sơ vì thông tin bị trùng với hồ sơ khác."
 		)

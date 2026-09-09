@@ -73,6 +73,14 @@ PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
 	{"student_name", "phone", "province", "high_school", "major", "source"}
 )
+HISTORY_STATUS_PRIORITY = {
+	"assigned": 0,
+	"skipped": 1,
+	"failed": 2,
+	"manual_review": 3,
+	"deferred": 4,
+	"pending": 5,
+}
 
 LEAD_ASSIGNMENT_WORKFLOW_CONNECTIONS = (
 	{"source": "input", "target": "validation", "label": None},
@@ -107,7 +115,7 @@ LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
 		"validation",
 		{
 			"title": "Bước 2 · Kiểm tra điều kiện",
-			"description": "Số điện thoại · Tỉnh · Trường THPT · Ngành quan tâm",
+			"description": "Họ và tên · Số điện thoại · Tỉnh/thành phố",
 			"detail": "Điều kiện dữ liệu được kiểm tra ở bước Xử lý Lead; đợt phân công chỉ nhận Lead đã đạt.",
 			"rules": [
 				"Hồ sơ thiếu trường bắt buộc được đóng ngay trong bước Xử lý Lead.",
@@ -124,8 +132,9 @@ LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
 			"description": "Đã xử lý · Chưa có kết quả",
 			"detail": "Lead đạt đủ bốn điều kiện và được giữ nguyên kết quả để chờ các bước nghiệp vụ tiếp theo.",
 			"rules": [
-				"Bốn điều kiện gồm số điện thoại, tỉnh, trường THPT và ngành quan tâm.",
-				"Lead không đạt điều kiện sẽ được đóng và vẫn giữ kết quả chưa có.",
+				"Ba điều kiện bắt buộc gồm họ và tên, số điện thoại và tỉnh/thành phố.",
+				"Thiếu trường THPT hoặc ngành quan tâm vẫn được xem là Lead hợp lệ.",
+				"Lead thiếu điều kiện bắt buộc sẽ bị loại và chỉ giữ lại lý do.",
 				"Bước xử lý không tạo hồ sơ Student.",
 				"Thông tin gốc của từng Lead vẫn được hiển thị để kiểm tra.",
 			],
@@ -149,11 +158,11 @@ LEAD_ASSIGNMENT_WORKFLOW_STEP_DEFINITIONS = (
 	(
 		"review",
 		{
-			"title": "Ngoại lệ cần xử lý",
-			"description": "Cần kiểm tra · Tạm hoãn · Lỗi xử lý",
-			"detail": "Các hồ sơ chưa thể phân công được đưa vào danh sách cần kiểm tra hoặc xử lý lại.",
+			"title": "Cần lưu ý",
+			"description": "Bổ sung · Trùng · Phân tuyến",
+			"detail": "Các Lead không thể tiếp tục trong luồng phân công được lưu lại để xem nguyên nhân.",
 			"rules": [
-				"Hồ sơ đã đóng cần được mở lại sau khi bổ sung dữ liệu.",
+				"Hồ sơ đã bị loại chỉ hiển thị lý do, không tiếp tục xử lý trong luồng này.",
 				"Hồ sơ tạm hoãn có thể được xử lý lại khi điều kiện thay đổi.",
 				"Lỗi phân tuyến hiển thị nguyên nhân dễ hiểu để người vận hành xử lý.",
 			],
@@ -539,7 +548,7 @@ def _preview_item(
 		item.error_code = "NOT_PROCESSED"
 		return
 	processing = preview_lead(lead.name)
-	item.reason = processing.get("reason") or "Đã kiểm tra đủ 4 điều kiện."
+	item.reason = processing.get("reason") or "Đã kiểm tra đủ họ tên, số điện thoại và tỉnh/thành phố."
 	item.error_code = processing.get("error_code")
 	if processing.get("status") == "CLOSED":
 		_reset_item(
@@ -775,7 +784,7 @@ def _effective_history_item_status(
 	if current_status == "ASSIGNED":
 		return "assigned"
 	if current_status == "CLOSED":
-		if str(resolution or "").strip().upper() in {"DUPLICATE", "SPAM"}:
+		if str(resolution or "").strip().upper() in {"DUPLICATE", "INVALID", "SPAM"}:
 			return "skipped"
 		return "manual_review"
 	return item_status
@@ -783,6 +792,7 @@ def _effective_history_item_status(
 
 def _live_review_missing_fields(lead) -> list[str]:
 	issue_labels = {
+		"Thiếu họ và tên": "Họ và tên",
 		"Thiếu số điện thoại": "Số điện thoại",
 		"Số điện thoại không hợp lệ": "Số điện thoại",
 		"Thiếu tỉnh/thành phố": "Tỉnh",
@@ -805,6 +815,7 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 		if high_school
 		else None
 	)
+	is_terminal = resolution in {"DUPLICATE", "INVALID", "SPAM"}
 	return {
 		"id": lead.get("lead_id") or lead.name,
 		"leadId": lead.get("lead_id") or lead.name,
@@ -820,9 +831,9 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 		"major": lead.get("major"),
 		"source": lead.get("source"),
 		"branch": lead.get("branch"),
-		"status": "manual_review",
+		"status": "skipped" if is_terminal else "manual_review",
 		"reason": reason,
-		"errorCode": "DUPLICATE" if resolution == "DUPLICATE" else "LEAD_CLOSED",
+		"errorCode": resolution if resolution in {"DUPLICATE", "INVALID", "SPAM", "FAILED"} else "LEAD_CLOSED",
 		"missingFields": _live_review_missing_fields(lead),
 		"routingTier": None,
 		"queue": None,
@@ -848,10 +859,9 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 
 
 def _live_closed_leads(lead_ids: set[str] | None = None) -> list[dict[str, Any]]:
-	# Only unresolved validation/routing defects belong in the live review queue.
-	# Terminal outcomes such as a Lead duplicate are already closed and must not
-	# be offered an operator "Xử lý" action again.
-	filters: dict[str, Any] = {"processing_status": "CLOSED", "resolution": "PENDING"}
+	# Closed Leads remain visible for audit and reason lookup. Terminal outcomes
+	# are projected as skipped and must not be offered an operator "Xử lý" action.
+	filters: dict[str, Any] = {"processing_status": "CLOSED"}
 	if lead_ids:
 		filters["name"] = ["in", sorted(lead_ids)]
 	return frappe.get_list(
@@ -948,9 +958,9 @@ def _workflow_metrics(summary: dict[str, int], step_id: str) -> dict[str, int]:
 		}
 	if step_id == "review":
 		return {
-			"processedCount": attention + summary["failed"],
+			"processedCount": attention + summary["failed"] + summary["skipped"],
 			"successCount": 0,
-			"warningCount": attention,
+			"warningCount": attention + summary["skipped"],
 			"errorCount": summary["failed"],
 		}
 	return {
@@ -997,7 +1007,7 @@ def _processing_workflow_summary() -> dict[str, int]:
 					frappe.db.get_value(
 						"CRM Lead",
 						lead_id,
-						["processing_status", "owner_staff", "assigned_to"],
+						["processing_status", "resolution", "owner_staff", "assigned_to"],
 						as_dict=True,
 					)
 					or {}
@@ -1005,6 +1015,7 @@ def _processing_workflow_summary() -> dict[str, int]:
 				latest_by_lead[lead_id] = _effective_history_item_status(
 					item.status,
 					lead_state.get("processing_status"),
+					lead_state.get("resolution"),
 				)
 		if not batch_response.get("pagination", {}).get("has_next_page"):
 			break
@@ -1013,7 +1024,7 @@ def _processing_workflow_summary() -> dict[str, int]:
 	rows = frappe.get_list(
 		"CRM Lead",
 		filters={"processing_status": ["in", ["PROCESSED", "ASSIGNED", "CLOSED"]]},
-		fields=["name", "processing_status", "owner_staff", "assigned_to"],
+		fields=["name", "processing_status", "resolution", "owner_staff", "assigned_to"],
 		limit_page_length=0,
 	)
 	summary = _empty_workflow_summary()
@@ -1026,7 +1037,7 @@ def _processing_workflow_summary() -> dict[str, int]:
 		status = str(row.get("processing_status") or "").strip().upper()
 		has_owner = bool(row.get("owner_staff") or row.get("assigned_to"))
 		latest_by_lead[lead_id] = (
-			"manual_review"
+			_effective_history_item_status("pending", status, row.get("resolution"))
 			if status == "CLOSED"
 			else "assigned"
 			if status == "ASSIGNED" or has_owner
@@ -1046,7 +1057,9 @@ def _processing_workflow_summary() -> dict[str, int]:
 
 
 def _workflow_status(batch_status: str | None, step_id: str, summary: dict[str, int]) -> str:
-	attention_count = summary["deferred"] + summary["manualReview"] + summary["failed"]
+	attention_count = (
+		summary["deferred"] + summary["manualReview"] + summary["failed"] + summary["skipped"]
+	)
 	has_lead = summary["total"] > 0
 	if not batch_status:
 		if not has_lead:
@@ -1839,7 +1852,7 @@ def list_lead_assignment_history_items(
 		page_number = max(1, int(page or 1))
 	except (TypeError, ValueError):
 		frappe.throw(_("Thông tin phân trang không hợp lệ."), frappe.ValidationError)
-	allowed_statuses = {"pending", "assigned", "deferred", "manual_review", "failed", "skipped"}
+	allowed_statuses = {"pending", "assigned", "deferred", "manual_review", "failed", "skipped", "issues"}
 	if status and status != "all" and status not in allowed_statuses:
 		frappe.throw(_("Trạng thái hồ sơ không hợp lệ."), frappe.ValidationError)
 	search = str(q or "").strip().casefold()
@@ -1877,7 +1890,14 @@ def list_lead_assignment_history_items(
 		lead_id = str(serialized.get("leadId") or "")
 		if selected_public_lead_ids is not None and lead_id not in selected_public_lead_ids:
 			return
-		if status and status != "all" and serialized["status"] != status:
+		if status == "issues" and serialized["status"] not in {
+			"skipped",
+			"manual_review",
+			"deferred",
+			"failed",
+		}:
+			return
+		if status and status not in {"all", "issues"} and serialized["status"] != status:
 			return
 		if search:
 			searchable = " ".join(
@@ -1914,6 +1934,7 @@ def list_lead_assignment_history_items(
 			continue
 		include_item(_serialize_live_review_item(lead))
 	items.sort(key=lambda row: (row.get("batchCreatedAt") or "", row.get("id") or ""), reverse=True)
+	items.sort(key=lambda row: HISTORY_STATUS_PRIORITY.get(row.get("status"), 99))
 	total = len(items)
 	start = (page_number - 1) * page_size
 	page_items = items[start : start + page_size]
