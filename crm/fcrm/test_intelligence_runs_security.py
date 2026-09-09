@@ -63,8 +63,83 @@ class TestIntelligenceRunSecurity(unittest.TestCase):
 		self.assertEqual(set(evidence), {"student_360"})
 		self.assertEqual(evidence["student_360"]["provenance_ids"], ["student:STU-1"])
 		self.assertEqual(evidence["student_360"]["signals"]["student_stage"], "Connected")
+		self.assertNotIn("enrollment_status", evidence["student_360"]["signals"])
+		self.assertNotIn("lifecycle_stage", evidence["student_360"]["signals"])
 		self.assertNotIn("student_name", str(evidence))
 		self.assertNotIn("phone", str(evidence))
+
+	def test_student_evidence_stage_rejects_removed_status_values(self):
+		self.assertEqual(intelligence_runs._canonical_student_stage("Connected"), "Connected")
+		self.assertIsNone(intelligence_runs._canonical_student_stage("Converted"))
+
+	def test_student_intelligence_refs_are_bounded_and_keep_each_evidence_section(self):
+		refs = intelligence_runs._bounded_provenance_refs(
+			"student:STU-1",
+			(
+				[f"score:S-{index}" for index in range(12)],
+				[f"interaction:I-{index}" for index in range(20)],
+				[f"application:A-{index}" for index in range(8)],
+				[f"guardian:G-{index}" for index in range(8)],
+			),
+			intelligence_runs.MAX_STUDENT_INTELLIGENCE_REFS,
+		)
+		self.assertEqual(len(refs), intelligence_runs.MAX_STUDENT_INTELLIGENCE_REFS)
+		self.assertEqual(len(refs), len(set(refs)))
+		self.assertEqual(refs[0], "student:STU-1")
+		self.assertEqual(
+			{ref.split(":", 1)[0] for ref in refs[1:]},
+			{"score", "interaction", "application", "guardian"},
+		)
+
+	def test_student_evidence_history_and_authority_refs_share_one_bound(self):
+		row = {
+			"student_stage": "Connected",
+			"score_input_revision": 9,
+			"applied_score_input_revision": 9,
+		}
+		rows_by_doctype = {
+			"CRM Score History": [
+				{"name": f"S-{index}", "scoring_time": "2026-01-01"}
+				for index in range(12)
+			],
+			"CRM Interaction": [
+				{
+					"name": f"I-{index}",
+					"interaction_datetime": "2026-01-01",
+					"source_verified": 1,
+				}
+				for index in range(20)
+			],
+			"CRM Intent": [],
+			"CRM Admission Application": [{"name": f"A-{index}"} for index in range(8)],
+			"CRM Student Guardian": [{"name": f"G-{index}"} for index in range(8)],
+		}
+
+		def fake_get_all(doctype, **_kwargs):
+			return rows_by_doctype[doctype]
+
+		with (
+			patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row),
+			patch("crm.fcrm.intelligence_runs.frappe.get_all", side_effect=fake_get_all),
+			patch("crm.fcrm.intelligence_runs.frappe.get_doc", return_value={"details": []}),
+			patch("crm.fcrm.intelligence_runs.frappe.db.table_exists", return_value=True),
+		):
+			payload = intelligence_runs._student_stage_evidence("STU-1", "9")["student_360"]
+
+		sections = ("score_history", "interaction_history", "applications", "guardian_signals")
+		signal_refs = {
+			ref
+			for section in sections
+			for item in payload["signals"][section]
+			for ref in item["provenance_ids"]
+		}
+		authority_ids = {ref["evidence_id"] for ref in payload["intelligence_refs"]}
+		self.assertEqual(
+			[len(payload["signals"][section]) for section in sections],
+			[4, 4, 4, 3],
+		)
+		self.assertLessEqual(len(authority_ids), intelligence_runs.MAX_STUDENT_INTELLIGENCE_REFS)
+		self.assertTrue({f"{ref}:9" for ref in signal_refs}.issubset(authority_ids))
 
 	def test_school_activity_outcome_provenance_resolves_to_its_activity(self):
 		with patch("crm.fcrm.intelligence_runs.frappe.db.exists", return_value=True), patch(
