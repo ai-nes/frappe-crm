@@ -604,6 +604,53 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
 
+	def test_student_call_records_deduplicate_call_log_and_canonical_interaction(self):
+		call_log = frappe._dict(
+			name="CALL-1",
+			type="Incoming",
+			status="Completed",
+			from_number="0901234412",
+			to="1200",
+			duration=45,
+			start_time="2026-08-30 16:20:58",
+			creation="2026-08-30 16:20:58",
+			recording_url=None,
+			telephony_medium="Manual",
+			medium="Worldfone",
+			caller=None,
+			receiver=None,
+			note=None,
+		)
+		interactions = [
+			frappe._dict(
+				name="INT-CALL-1",
+				channel="phone",
+				interaction_type="PHONE_CALL",
+				source_record_id="CALL-1",
+				evidence="EVIDENCE-1",
+				interaction_datetime="2026-08-30 16:20:58",
+				direction="inbound",
+				outcome="Connected",
+				summary="Tư vấn học phí",
+				notes="Đã phân tích cuộc gọi.",
+			)
+		]
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students.frappe, "get_list", return_value=[call_log]),
+		):
+			calls = director_students._student_call_records(
+				"ENR-1",
+				interactions,
+				frappe._dict(student_name="Student Demo", phone="0901234412"),
+				{},
+			)
+
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0]["id"], "CALL-1")
+		self.assertEqual(calls[0]["interactionId"], "INT-CALL-1")
+		self.assertEqual(calls[0]["evidenceId"], "EVIDENCE-1")
+
 	def test_display_code_resolves_against_students_not_leads(self):
 		"""The display code is built from the Student name, so no Lead can match it."""
 		captured = {}

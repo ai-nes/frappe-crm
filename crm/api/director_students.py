@@ -1419,6 +1419,8 @@ def _student_interactions(student_id: str | None) -> list:
 			"actor",
 			"crm_contact",
 			"conversation_id",
+			"source_record_id",
+			"evidence",
 			"reference_doctype",
 			"reference_docname",
 		],
@@ -1606,6 +1608,18 @@ def _student_call_records(
 
 	calls: list[dict[str, Any]] = []
 	seen_call_ids: set[str] = set()
+	canonical_calls_by_source_id: dict[str, Any] = {}
+	for ix in interactions:
+		source_record_id = str(ix.get("source_record_id") or "").strip()
+		channel = _fold(ix.get("channel") or "")
+		interaction_type = _fold(ix.get("interaction_type") or "")
+		if source_record_id and (
+			"call" in channel
+			or "phone" in channel
+			or "call" in interaction_type
+			or "phone" in interaction_type
+		):
+			canonical_calls_by_source_id[source_record_id] = ix
 
 	if _table_exists("Call Log"):
 		try:
@@ -1642,7 +1656,9 @@ def _student_call_records(
 			call_logs = []
 		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
-			seen_call_ids.add(cl.get("name"))
+			call_log_id = str(cl.get("name") or "").strip()
+			seen_call_ids.add(call_log_id)
+			canonical = canonical_calls_by_source_id.get(call_log_id)
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
 			duration_secs = int(cl.get("duration") or 0)
 			status_fold = _fold(cl.get("status") or "")
@@ -1678,6 +1694,12 @@ def _student_call_records(
 			calls.append(
 				{
 					"id": str(cl.get("name")),
+					"interactionId": str(canonical.get("name")) if canonical else None,
+					"evidenceId": (
+						str(canonical.get("evidence"))
+						if canonical and canonical.get("evidence")
+						else None
+					),
 					"time": _format_activity_time(cl.get("start_time") or cl.get("creation")),
 					"direction": direction,
 					"outcome": outcome,
@@ -1715,10 +1737,14 @@ def _student_call_records(
 		ref_doc = ix.get("reference_docname")
 		if ix.get("reference_doctype") == "Call Log" and ref_doc in seen_call_ids:
 			continue
-		if ix.get("name") in seen_call_ids:
+		source_record_id = str(ix.get("source_record_id") or "").strip()
+		if source_record_id and source_record_id in seen_call_ids:
+			continue
+		interaction_id = str(ix.get("name") or "").strip()
+		if interaction_id in seen_call_ids:
 			continue
 
-		seen_call_ids.add(ix.get("name"))
+		seen_call_ids.add(interaction_id)
 		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
 		actor_name = _user_name(ix.get("actor"), fallback=staff_name)
 
@@ -1749,7 +1775,9 @@ def _student_call_records(
 
 		calls.append(
 			{
-				"id": str(ix.get("name")),
+				"id": interaction_id,
+				"interactionId": interaction_id,
+				"evidenceId": str(ix.get("evidence")) if ix.get("evidence") else None,
 				"time": _format_activity_time(ix.get("interaction_datetime")),
 				"direction": direction,
 				"outcome": outcome,
