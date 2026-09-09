@@ -1,3 +1,7 @@
+import json
+from datetime import date
+from io import BytesIO
+from types import SimpleNamespace
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -9,7 +13,9 @@ from crm.api.lead_mapping import (
 	LeadMappingError,
 	_normalize_public_lead_payload,
 	_parse_csv_rows,
+	_parse_import_file,
 	_parse_public_payload,
+	_resolve_assignment,
 	create_public_lead,
 	get_public_high_schools,
 	get_public_leads,
@@ -20,7 +26,467 @@ from crm.api.lead_mapping import (
 )
 
 
+def _quick_import_row(**overrides):
+	row = {
+		"student_name": "Nguyễn Văn An",
+		"phone": "0900000000",
+		"province": "Ho Chi Minh City",
+		"high_school": "High School 1",
+		"source": "Promoter",
+		"assigned_to": None,
+	}
+	row.update(overrides)
+	return row
+
+
 class TestLeadMappingContract(TestCase):
+	def test_inspect_csv_preserves_arbitrary_headers_duplicate_labels_and_samples(self):
+		upload = SimpleNamespace(
+			filename="arbitrary.csv",
+			read=lambda: b"\nName,Phone,Phone,Unknown\nAn,0900000000,0900000001,extra\n",
+		)
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+		):
+			result = lead_mapping.inspect_lead_import()
+
+		self.assertEqual(
+			result["headers"],
+			[
+				{"sourceIndex": 0, "label": "Name", "inferredField": None, "enabled": False},
+				{"sourceIndex": 1, "label": "Phone", "inferredField": "phone", "enabled": True},
+				{"sourceIndex": 2, "label": "Phone", "inferredField": "phone", "enabled": True},
+				{"sourceIndex": 3, "label": "Unknown", "inferredField": None, "enabled": False},
+			],
+		)
+		self.assertEqual(
+			result["sampleRows"], [{"row": 3, "values": ["An", "0900000000", "0900000001", "extra"]}]
+		)
+		self.assertEqual(
+			result["requiredFields"], ["student_name", "phone", "province", "high_school", "source"]
+		)
+
+	def test_inspect_xlsx_returns_json_safe_samples_and_physical_rows(self):
+		from openpyxl import Workbook
+
+		workbook = Workbook()
+		worksheet = workbook.active
+		worksheet.append([])
+		worksheet.append(["Họ và tên", "Ngày", "Điểm"])
+		worksheet.append(["An", date(2026, 9, 9), 9.5])
+		worksheet.append(["B", None, 10])
+		content = BytesIO()
+		workbook.save(content)
+		upload = SimpleNamespace(filename="arbitrary.xlsx", read=lambda: content.getvalue())
+
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+		):
+			result = lead_mapping.inspect_lead_import()
+
+		self.assertEqual(result["sampleRows"][0], {"row": 3, "values": ["An", "2026-09-09", "9.5"]})
+		self.assertEqual(result["sampleRows"][1], {"row": 4, "values": ["B", None, "10"]})
+		self.assertLessEqual(len(result["sampleRows"]), lead_mapping.MAX_IMPORT_SAMPLE_ROWS)
+
+	def test_inspect_rejects_without_lead_create_permission_before_reading_file(self):
+		upload = SimpleNamespace(filename="arbitrary.csv", read=lambda: b"Name\nAn\n")
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=False),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(lead_mapping, "_uploaded_import_file") as uploaded_file,
+			self.assertRaises(LeadMappingError) as context,
+		):
+			lead_mapping.inspect_lead_import()
+
+		self.assertEqual(context.exception.code, "FORBIDDEN")
+		uploaded_file.assert_not_called()
+
+	def test_mapped_preview_requires_unique_required_targets_and_rejects_server_fields(self):
+		upload = SimpleNamespace(filename="arbitrary.csv", read=lambda: b"Name,Other\nAn,value\n")
+		base_form = {
+			"column_mapping": json.dumps([{"sourceIndex": 0, "targetField": "student_name", "enabled": True}])
+		}
+		for mapping, expected_code in (
+			(base_form["column_mapping"], "MISSING_REQUIRED_MAPPING"),
+			(
+				json.dumps(
+					[
+						{"sourceIndex": 0, "targetField": "student_name", "enabled": True},
+						{"sourceIndex": 1, "targetField": "student_name", "enabled": True},
+					]
+				),
+				"DUPLICATE_TARGET_FIELD",
+			),
+			(
+				json.dumps([{"sourceIndex": 0, "targetField": "campaign", "enabled": True}]),
+				"SERVER_MANAGED_FIELD",
+			),
+		):
+			with self.subTest(expected_code=expected_code):
+				with (
+					patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+					patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+					patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+					patch.object(
+						lead_mapping.frappe,
+						"form_dict",
+						{**base_form, "column_mapping": mapping},
+						create=True,
+					),
+				):
+					with self.assertRaises(LeadMappingError) as context:
+						lead_mapping.preview_lead_import.__wrapped__()
+
+				self.assertEqual(context.exception.code, expected_code)
+
+	def test_mapped_preview_uses_source_indexes_and_ignores_disabled_columns(self):
+		upload = SimpleNamespace(
+			filename="arbitrary.csv",
+			read=lambda: b"Name,Phone,Province,School,Source,Ignore\n"
+			b"An,0900000000,HCM,School 1,Promoter,not imported\n",
+		)
+		mapping = [
+			{"sourceIndex": 0, "targetField": "student_name", "enabled": True},
+			{"sourceIndex": 1, "targetField": "phone", "enabled": True},
+			{"sourceIndex": 2, "targetField": "province", "enabled": True},
+			{"sourceIndex": 3, "targetField": "high_school", "enabled": True},
+			{"sourceIndex": 4, "targetField": "source", "enabled": True},
+			{"sourceIndex": 5, "targetField": "email", "enabled": False},
+		]
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(
+				lead_mapping.frappe,
+				"form_dict",
+				{"column_mapping": json.dumps(mapping)},
+				create=True,
+			),
+			patch.object(
+				lead_mapping,
+				"_normalize_lead_payload",
+				return_value=(
+					{"student_name": "An", "phone": "0900000000", "province": "PROVINCE-1"},
+					[],
+					[],
+					None,
+				),
+			) as normalize_payload,
+		):
+			result = lead_mapping.preview_lead_import.__wrapped__()
+
+		self.assertEqual(result["rows"][0]["row"], 2)
+		self.assertEqual(
+			result["mappedFields"], ["student_name", "phone", "province", "high_school", "source"]
+		)
+		self.assertEqual(result["ignoredColumns"], [{"sourceIndex": 5, "label": "Ignore"}])
+		normalize_payload.assert_called_once_with(
+			{
+				"student_name": "An",
+				"phone": "0900000000",
+				"province": "HCM",
+				"high_school": "School 1",
+				"source": "Promoter",
+			},
+			allow_unassigned=True,
+			require_import_fields=True,
+			campaign_name=None,
+		)
+
+	def test_quick_multipart_commit_reparses_original_file_and_mapping(self):
+		upload = SimpleNamespace(
+			filename="arbitrary.csv",
+			read=lambda: b"Name,Phone,Province,School,Source\nAn,0900000000,HCM,School 1,Promoter\n",
+		)
+		mapping = [
+			{"sourceIndex": 0, "targetField": "student_name", "enabled": True},
+			{"sourceIndex": 1, "targetField": "phone", "enabled": True},
+			{"sourceIndex": 2, "targetField": "province", "enabled": True},
+			{"sourceIndex": 3, "targetField": "high_school", "enabled": True},
+			{"sourceIndex": 4, "targetField": "source", "enabled": True},
+		]
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(
+				lead_mapping.frappe, "form_dict", {"column_mapping": json.dumps(mapping)}, create=True
+			),
+			patch.object(lead_mapping, "_resolve_quick_import_campaign", return_value="Campaign 1"),
+			patch.object(lead_mapping, "_parse_import_rows") as legacy_parser,
+			patch.object(lead_mapping, "_create_lead", return_value={"name": "LEAD-1"}) as create_lead,
+		):
+			result = lead_mapping.import_leads.__wrapped__(
+				import_mode="quick_create", campaign_code="CAM-2026-00001"
+			)
+
+		self.assertEqual(result["created"], 1)
+		self.assertEqual(result["filename"], "arbitrary.csv")
+		legacy_parser.assert_not_called()
+		create_lead.assert_called_once_with(
+			{
+				"student_name": "An",
+				"phone": "0900000000",
+				"province": "HCM",
+				"high_school": "School 1",
+				"source": "Promoter",
+			},
+			allow_unassigned=True,
+			require_import_fields=True,
+			campaign_name="Campaign 1",
+		)
+
+	def test_parse_import_file_accepts_template_xlsx_headers(self):
+		from openpyxl import Workbook
+
+		workbook = Workbook()
+		worksheet = workbook.active
+		worksheet.append(["Họ và tên", "Di động", "Tỉnh/Thành Phố", "Trường THPT", "Nguồn", "Ngành quan tâm"])
+		worksheet.append(
+			[
+				"Nguyễn Văn An",
+				"0900000000",
+				"Hồ Chí Minh",
+				"THPT Nguyễn Huệ",
+				"Promoter",
+				"Kỹ thuật phần mềm",
+			]
+		)
+		content = BytesIO()
+		workbook.save(content)
+
+		rows = _parse_import_file(content.getvalue(), "lead-template.xlsx")
+
+		self.assertEqual(rows[0]["student_name"], "Nguyễn Văn An")
+		self.assertEqual(rows[0]["major"], "Kỹ thuật phần mềm")
+
+	def test_parse_import_file_accepts_formatted_template_rows_and_ignores_status(self):
+		from openpyxl import Workbook
+
+		workbook = Workbook()
+		worksheet = workbook.active
+		worksheet.append([])
+		worksheet.append(["Mẫu import Lead"])
+		worksheet.append(["Xóa dòng ví dụ trước khi import"])
+		worksheet.append(
+			[
+				"Họ và tên",
+				"Di động",
+				"Tỉnh/Thành Phố",
+				"Trường THPT",
+				"Tình trạng Lead",
+				"Nguồn",
+				"Giao cho",
+				"Nguyện vọng vào FPT",
+				"Mô tả",
+				"Năm tuyển sinh",
+				"Ngành quan tâm",
+			]
+		)
+		worksheet.append(
+			[
+				"Nguyễn Văn An",
+				"0900000000",
+				"Hồ Chí Minh",
+				"THPT Nguyễn Huệ",
+				"Mới",
+				"Promoter",
+				None,
+				"Kỹ thuật phần mềm",
+				"Quan tâm học bổng",
+				2026,
+				"Kỹ thuật phần mềm",
+			]
+		)
+		content = BytesIO()
+		workbook.save(content)
+
+		rows = _parse_import_file(content.getvalue(), "lead-template.xlsx")
+
+		self.assertEqual(rows[0]["student_name"], "Nguyễn Văn An")
+		self.assertEqual(rows[0]["description"], "Quan tâm học bổng")
+		self.assertNotIn("enrollment_status", rows[0])
+
+	def test_parse_import_file_allows_optional_major_for_quick_import_file(self):
+		rows = _parse_import_file(
+			"Họ và tên,Di động,Tỉnh/Thành Phố,Trường THPT,Nguồn\n"
+			"An,0900000000,Hà Nội,THPT Chu Văn An,Promoter",
+			"leads.csv",
+		)
+
+		self.assertEqual(rows[0]["student_name"], "An")
+		self.assertNotIn("major", rows[0])
+
+	def test_parse_import_file_rejects_server_managed_campaign_column(self):
+		with self.assertRaises(LeadMappingError) as context:
+			_parse_import_file(
+				"Họ và tên,Di động,Tỉnh/Thành Phố,Trường THPT,Nguồn,Campaign\n"
+				"An,0900000000,Hà Nội,THPT Chu Văn An,Promoter,CAM-2026-00001",
+				"leads.csv",
+			)
+
+		self.assertEqual(context.exception.code, "UNKNOWN_FIELD")
+
+	def test_uploaded_import_file_reads_at_most_configured_limit(self):
+		read_sizes = []
+		stream = SimpleNamespace(
+			read=lambda size: (
+				read_sizes.append(size),
+				b"x" * (lead_mapping.MAX_IMPORT_FILE_BYTES + 1),
+			)[1]
+		)
+		upload = SimpleNamespace(filename="leads.csv", stream=stream)
+		with (
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			self.assertRaises(LeadMappingError) as context,
+		):
+			lead_mapping._uploaded_import_file()
+
+		self.assertEqual(context.exception.code, "FILE_TOO_LARGE")
+		self.assertEqual(read_sizes, [lead_mapping.MAX_IMPORT_FILE_BYTES + 1])
+
+	def test_normalize_quick_import_allows_missing_optional_fields(self):
+		fake_frappe = SimpleNamespace(
+			db=SimpleNamespace(exists=lambda *_args, **_kwargs: True),
+			as_json=lambda value: value,
+		)
+		with (
+			patch.object(lead_mapping, "frappe", fake_frappe),
+			patch.object(lead_mapping, "_resolve_province", return_value="PROVINCE-1"),
+			patch.object(lead_mapping, "_resolve_source", return_value="Promoter"),
+			patch.object(lead_mapping, "resolve_high_school_strict", return_value="SCHOOL-1"),
+			patch.object(lead_mapping, "_resolve_assignment", return_value=(None, None, None)),
+			patch.object(lead_mapping, "_current_admission_year", return_value=None),
+		):
+			values, _tags, _events, _assigned_user = lead_mapping._normalize_lead_payload(
+				{
+					"student_name": "An",
+					"phone": "0900000000",
+					"province": "Hà Nội",
+					"high_school": "THPT Chu Văn An",
+					"source": "Promoter",
+				},
+				allow_unassigned=True,
+				require_import_fields=True,
+			)
+
+		self.assertIsNone(values["major"])
+		self.assertIsNone(values["aspiration"])
+		self.assertIsNone(values["admission_year"])
+
+	def test_resolve_assignment_allows_blank_owner_only_for_quick_import(self):
+		self.assertEqual(_resolve_assignment(None, allow_unassigned=True), (None, None, None))
+
+		with patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")):
+			with self.assertRaises(LeadMappingError) as context:
+				_resolve_assignment(None)
+
+		self.assertEqual(context.exception.code, "ASSIGNED_TO_REQUIRED")
+
+	def test_quick_import_owner_must_be_a_staff_name(self):
+		fake_frappe = SimpleNamespace(
+			session=SimpleNamespace(user="Administrator"),
+			db=SimpleNamespace(
+				get_value=lambda _doctype, _filters, *_args, **_kwargs: {
+					"name": "CTV Sale",
+					"user": "ctv@example.com",
+					"is_active": 1,
+					"campus": "HCM",
+				}
+				if isinstance(_filters, dict)
+				else None
+			),
+		)
+		with patch.object(lead_mapping, "frappe", fake_frappe):
+			with self.assertRaises(LeadMappingError) as context:
+				_resolve_assignment("ctv@example.com", require_staff_name=True)
+
+		self.assertEqual(context.exception.code, "ASSIGNED_TO_REQUIRED")
+
+	def test_preview_import_does_not_create_leads(self):
+		upload = SimpleNamespace(
+			filename="leads.csv",
+			read=lambda: (
+				"Họ và tên,Di động,Tỉnh/Thành Phố,Trường THPT,Nguồn,Ngành quan tâm\n"
+				"Nguyễn Văn An,0900000000,Hồ Chí Minh,THPT Nguyễn Huệ,Promoter,Kỹ thuật phần mềm"
+			).encode(),
+		)
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(lead_mapping.frappe, "form_dict", {}, create=True),
+			patch.object(
+				lead_mapping,
+				"_normalize_lead_payload",
+				return_value=(
+					{
+						"student_name": "Nguyễn Văn An",
+						"phone": "0900000000",
+						"province": "Ho Chi Minh City",
+						"high_school": "High School 1",
+						"source": "Promoter",
+						"major": "Software Engineering",
+						"assigned_to": None,
+					},
+					[],
+					[],
+					None,
+				),
+			),
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			result = lead_mapping.preview_lead_import.__wrapped__()
+
+		self.assertEqual(result["valid"], 1)
+		self.assertEqual(result["failed"], 0)
+		self.assertIsNone(result["rows"][0]["fields"]["assigned_to"])
+		self.assertNotIn("campaign", result["rows"][0]["fields"])
+		create_lead.assert_not_called()
+
+	def test_quick_import_creates_direct_leads_without_routing_blank_owner(self):
+		row = {
+			"student_name": "Nguyễn Văn An",
+			"phone": "0900000000",
+			"province": "Ho Chi Minh City",
+			"high_school": "High School 1",
+			"source": "Promoter",
+			"major": "Software Engineering",
+			"assigned_to": None,
+		}
+		fake_frappe = SimpleNamespace(
+			session=SimpleNamespace(user="Administrator"),
+			has_permission=lambda *_args, **_kwargs: True,
+			db=SimpleNamespace(
+				get_value=lambda *_args, **_kwargs: {"name": "Campaign 1", "status": "ACTIVE"},
+				savepoint=lambda _name: None,
+			),
+		)
+		with (
+			patch.object(lead_mapping, "frappe", fake_frappe),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+			patch.object(lead_mapping, "_create_lead", return_value={"name": "LEAD-1"}) as create_lead,
+			patch.object(lead_mapping, "route_new_lead") as route,
+		):
+			result = lead_mapping.import_leads.__wrapped__(
+				rows=[row], import_mode="quick_create", campaign_code="CAM-2026-00001"
+			)
+
+		self.assertEqual(result["created"], 1)
+		create_lead.assert_called_once_with(
+			row,
+			allow_unassigned=True,
+			require_import_fields=True,
+			campaign_name="Campaign 1",
+		)
+		route.assert_not_called()
+
 	def test_split_multi_value_deduplicates_csv_values(self):
 		self.assertEqual(
 			split_multi_value("Segment A; Segment B\nSegment A"),
@@ -335,6 +801,257 @@ class TestLeadMappingContract(TestCase):
 			)
 
 		self.assertIsNone(values["campaign"])
+
+
+class TestLeadImportCampaignContext(TestCase):
+	def test_quick_import_requires_campaign_context(self):
+		row = _quick_import_row()
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			with self.assertRaises(LeadMappingError) as context:
+				lead_mapping.import_leads.__wrapped__(rows=[row], import_mode="quick_create")
+
+		self.assertEqual(context.exception.code, "CAMPAIGN_REQUIRED")
+		create_lead.assert_not_called()
+
+	def test_quick_import_accepts_active_and_closed_campaigns_without_existing_leads(self):
+		campaign_code = "CAM-2026-00001"
+		for status in ("ACTIVE", "CLOSED"):
+			with self.subTest(status=status):
+				row = _quick_import_row()
+				campaign = SimpleNamespace(name="Campaign 1", status=status)
+				with (
+					patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+					patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+					patch.object(
+						lead_mapping.frappe.db,
+						"get_value",
+						return_value={"name": campaign.name, "status": status},
+					) as campaign_lookup,
+					patch.object(lead_mapping.frappe.db, "count", return_value=0),
+					patch.object(lead_mapping.frappe.db, "savepoint"),
+					patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+					patch.object(
+						lead_mapping, "_create_lead", return_value={"name": "LEAD-1"}
+					) as create_lead,
+				):
+					result = lead_mapping.import_leads.__wrapped__(
+						rows=[row], import_mode="quick_create", campaign_code=f" {campaign_code.lower()} "
+					)
+
+				self.assertEqual(result["created"], 1)
+				campaign_lookup.assert_called_once_with(
+					"CRM Campaign",
+					{"stable_code": campaign_code},
+					["name", "status"],
+					as_dict=True,
+				)
+				create_lead.assert_called_once_with(
+					row,
+					allow_unassigned=True,
+					require_import_fields=True,
+					campaign_name=campaign.name,
+				)
+
+	def test_quick_import_rejects_draft_and_upcoming_campaigns(self):
+		row = _quick_import_row()
+		for status in ("DRAFT", "UPCOMING"):
+			with self.subTest(status=status):
+				campaign = SimpleNamespace(name="Campaign 1", status=status)
+				with (
+					patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+					patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+					patch.object(
+						lead_mapping.frappe.db,
+						"get_value",
+						return_value={"name": campaign.name, "status": status},
+					),
+					patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+					patch.object(lead_mapping, "_create_lead") as create_lead,
+				):
+					with self.assertRaises(LeadMappingError) as context:
+						lead_mapping.import_leads.__wrapped__(
+							rows=[row], import_mode="quick_create", campaign_code="CAM-2026-00001"
+						)
+
+				self.assertEqual(context.exception.code, "CAMPAIGN_STATUS_NOT_ALLOWED")
+				create_lead.assert_not_called()
+
+	def test_quick_import_requires_campaign_read_permission(self):
+		row = _quick_import_row()
+
+		def has_permission(*args, **kwargs):
+			doctype = kwargs.get("doctype") or (args[0] if args else None)
+			permission = kwargs.get("ptype") or kwargs.get("permission_type")
+			if permission is None and len(args) > 1:
+				permission = args[1]
+			return not (doctype == "CRM Campaign" and permission == "read")
+
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(
+				lead_mapping.frappe, "has_permission", side_effect=has_permission
+			) as permission_check,
+			patch.object(
+				lead_mapping.frappe.db,
+				"get_value",
+				return_value={"name": "Campaign 1", "status": "ACTIVE"},
+			),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			with self.assertRaises(LeadMappingError) as context:
+				lead_mapping.import_leads.__wrapped__(
+					rows=[row], import_mode="quick_create", campaign_code="CAM-2026-00001"
+				)
+
+		self.assertEqual(context.exception.code, "CAMPAIGN_PERMISSION_DENIED")
+		self.assertIn(
+			("CRM Campaign", "read", "Campaign 1"),
+			[call.args for call in permission_check.call_args_list],
+		)
+		create_lead.assert_not_called()
+
+	def test_quick_import_applies_one_campaign_to_every_row_and_ignores_row_override(self):
+		selected_code = "CAM-2026-00001"
+		rows = [
+			_quick_import_row(student_name="First"),
+			_quick_import_row(student_name="Second", campaign_code="CAM-2026-00002"),
+		]
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(
+				lead_mapping.frappe.db,
+				"get_value",
+				return_value={"name": "Campaign 1", "status": "ACTIVE"},
+			),
+			patch.object(lead_mapping.frappe.db, "savepoint"),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=rows),
+			patch.object(
+				lead_mapping,
+				"_create_lead",
+				side_effect=[{"name": "LEAD-1"}, {"name": "LEAD-2"}],
+			) as create_lead,
+		):
+			result = lead_mapping.import_leads.__wrapped__(
+				rows=rows, import_mode="quick_create", campaign_code=selected_code
+			)
+
+		self.assertEqual(result["created"], 2)
+		created_rows = [call.args[0] for call in create_lead.call_args_list]
+		self.assertEqual(
+			[row.get("campaign_code") for row in created_rows],
+			[None, "CAM-2026-00002"],
+		)
+		self.assertEqual(
+			[call.kwargs["campaign_name"] for call in create_lead.call_args_list],
+			["Campaign 1", "Campaign 1"],
+		)
+		self.assertTrue(all("campaign" not in row for row in created_rows))
+
+	def test_preview_reads_campaign_code_from_multipart_form_dict(self):
+		upload = SimpleNamespace(filename="leads.csv", read=lambda: b"ignored")
+		row = _quick_import_row(campaign_code="CAM-2026-00002")
+		campaign = SimpleNamespace(name="Campaign 1", status="ACTIVE")
+		normalized_fields = {
+			"student_name": "First",
+			"campaign": campaign.name,
+			"campaign_code": "CAM-2026-00001",
+		}
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(
+				lead_mapping.frappe,
+				"form_dict",
+				{"campaign_code": " CAM-2026-00001 "},
+				create=True,
+			),
+			patch.object(
+				lead_mapping,
+				"_resolve_quick_import_campaign",
+				return_value=campaign.name,
+			) as resolve_campaign,
+			patch.object(lead_mapping, "_parse_import_file", return_value=[row]),
+			patch.object(
+				lead_mapping,
+				"_normalize_lead_payload",
+				return_value=(normalized_fields, [], [], None),
+			) as normalize_payload,
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			result = lead_mapping.preview_lead_import.__wrapped__()
+
+		self.assertEqual(result["valid"], 1)
+		resolve_campaign.assert_called_once_with(" CAM-2026-00001 ")
+		self.assertNotIn("campaign_code", normalize_payload.call_args.args[0])
+		self.assertNotIn("campaign", result["rows"][0]["fields"])
+		self.assertNotIn("campaign_code", result["rows"][0]["fields"])
+		create_lead.assert_not_called()
+
+	def test_quick_import_rechecks_campaign_status_after_preview(self):
+		upload = SimpleNamespace(filename="leads.csv", read=lambda: b"ignored")
+		campaign = SimpleNamespace(name="Campaign 1", status="ACTIVE")
+		row = _quick_import_row()
+		status = {"value": "ACTIVE"}
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe, "request", SimpleNamespace(files={"file": upload})),
+			patch.object(lead_mapping.frappe, "form_dict", {"campaign_code": "CAM-2026-00001"}, create=True),
+			patch.object(
+				lead_mapping.frappe.db,
+				"get_value",
+				side_effect=lambda *_args, **_kwargs: {
+					"name": campaign.name,
+					"status": status["value"],
+				},
+			),
+			patch.object(lead_mapping.frappe.db, "savepoint"),
+			patch.object(lead_mapping, "_parse_import_file", return_value=[row]),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+			patch.object(
+				lead_mapping,
+				"_normalize_lead_payload",
+				return_value=({"student_name": "First"}, [], [], None),
+			),
+			patch.object(lead_mapping, "_create_lead") as create_lead,
+		):
+			preview = lead_mapping.preview_lead_import.__wrapped__()
+			self.assertEqual(preview["valid"], 1)
+
+			status["value"] = "DRAFT"
+			with self.assertRaises(LeadMappingError) as context:
+				lead_mapping.import_leads.__wrapped__(
+					rows=[row], import_mode="quick_create", campaign_code="CAM-2026-00001"
+				)
+
+		self.assertEqual(context.exception.code, "CAMPAIGN_STATUS_NOT_ALLOWED")
+		create_lead.assert_not_called()
+
+	def test_legacy_import_does_not_require_campaign_context(self):
+		row = _quick_import_row(assigned_to="staff@example.com")
+		with (
+			patch.object(lead_mapping.frappe, "session", SimpleNamespace(user="Administrator")),
+			patch.object(lead_mapping.frappe, "has_permission", return_value=True),
+			patch.object(lead_mapping.frappe.db, "savepoint"),
+			patch.object(lead_mapping, "_parse_import_rows", return_value=[row]),
+			patch.object(lead_mapping, "_create_lead", return_value={"name": "LEAD-1"}) as create_lead,
+		):
+			result = lead_mapping.import_leads.__wrapped__(rows=[row], import_mode="legacy")
+
+		self.assertEqual(result["created"], 1)
+		create_lead.assert_called_once()
+		self.assertEqual(create_lead.call_args.args[0], row)
+		self.assertFalse(create_lead.call_args.kwargs["allow_unassigned"])
+		self.assertFalse(create_lead.call_args.kwargs["require_import_fields"])
+		self.assertIsNone(create_lead.call_args.kwargs.get("campaign_name"))
 
 
 class TestLeadMappingIntegration(FrappeTestCase):
