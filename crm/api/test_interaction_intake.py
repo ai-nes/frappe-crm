@@ -3,10 +3,32 @@ from unittest.mock import patch
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.interaction_intake import _interaction_response, _normalize_interaction_payload
-from crm.fcrm.student_intake import StudentIntakeError
+from crm.fcrm.student_intake import StudentIntakeError, _receipt_target_values
 
 
 class TestInteractionIntakeContract(FrappeTestCase):
+	def test_canonical_student_targets_the_receipt_student_link(self):
+		with patch.object(
+			frappe.db,
+			"exists",
+			side_effect=lambda doctype, name: doctype == "CRM Student" and name == "HS-2026-HCM-002284",
+		):
+			self.assertEqual(
+				_receipt_target_values({"student": "HS-2026-HCM-002284", "contact": None}),
+				{"target_student": None, "target_contact": "HS-2026-HCM-002284"},
+			)
+
+	def test_legacy_lead_targets_the_receipt_target_student_link(self):
+		with patch.object(
+			frappe.db,
+			"exists",
+			side_effect=lambda doctype, name: doctype == "CRM Lead" and name == "LEAD-1",
+		):
+			self.assertEqual(
+				_receipt_target_values({"student": "LEAD-1", "contact": None}),
+				{"target_student": "LEAD-1", "target_contact": None},
+			)
+
 	def test_interaction_payload_requires_canonical_identity_and_labelled_turns(self):
 		payload = _normalize_interaction_payload(
 			{
