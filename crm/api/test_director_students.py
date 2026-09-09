@@ -827,6 +827,27 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["zalo_messages"], [])
 		self.assertEqual(result["calls"], [])
 
+	def test_get_student_interactions_accepts_standalone_canonical_student(self):
+		doc = frappe._dict(name="CRMC-1", full_name="Nguyễn Minh An", phone="0901234412")
+		doc.has_permission = lambda permission_type: permission_type == "read"
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_activity_target",
+				return_value=("CRMC-1", "CRMC-1", "CRMC-1"),
+			),
+			patch.object(director_students.frappe, "get_doc", side_effect=[frappe.DoesNotExistError, doc]),
+			patch.object(director_students.frappe, "has_permission", return_value=True),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_guardian", return_value={}),
+		):
+			result = director_students.get_student_interactions("CRMC-1")
+
+		self.assertEqual(result["student_id"], "CRMC-1")
+		self.assertEqual(result["calls"], [])
+		self.assertEqual(result["total_interactions"], 0)
+
 	def test_get_lead_call_logs_endpoint(self):
 		with patch.object(
 			director_students,
