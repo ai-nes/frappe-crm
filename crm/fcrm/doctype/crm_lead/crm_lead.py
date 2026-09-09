@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 
 import frappe
 from frappe import _
@@ -49,6 +50,7 @@ class CRMLead(Document):
 		self.name = next_hs_code(self.get("admission_year"))
 
 	def before_insert(self):
+		self.lead_id = uuid.uuid4().hex
 		# The code is server-managed; ignore any client/import value.
 		self.lead_code = None
 		self.processing_status = "NEW"
@@ -245,14 +247,16 @@ class CRMLead(Document):
 	def _ensure_lead_code(self):
 		if self.get("lead_code"):
 			return
+		mirrored_code = lead_code_from_name(self.name)
+		if mirrored_code:
+			self.lead_code = mirrored_code
+			return
 		year = lead_code_year(
 			self.get("admission_year"),
 			self.get("creation"),
 			frappe.utils.now_datetime().year,
 		)
-		code = lead_code_from_name(self.name)
-		if not code:
-			code = next_lead_code(year)
+		code = next_lead_code(year)
 		while frappe.db.exists("CRM Lead", {"lead_code": code, "name": ["!=", self.name]}):
 			code = next_lead_code(year)
 		self.lead_code = code

@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
 from crm.fcrm.permissions import can_read_full_lead_board, get_student_list_read_condition
 
@@ -46,6 +47,7 @@ PROCESSING_STATUS_ORDER = (
 
 LEAD_FIELDS = [
 	"name",
+	"lead_id",
 	"lead_code",
 	"processing_status",
 	"resolution",
@@ -68,6 +70,8 @@ LEAD_FIELDS = [
 	"owner_staff",
 	"assigned_to",
 	"student",
+	"matched_student",
+	"converted_student",
 	"creation",
 	"modified",
 ]
@@ -157,8 +161,9 @@ def get_director_lead(lead_id: str) -> dict[str, Any]:
 	if not lead_id:
 		_raise_api_error("INVALID_LEAD_ID", "leadId không được để trống.", frappe.ValidationError, 400)
 
+	lead_name = resolve_lead_name(lead_id)
 	try:
-		doc = frappe.get_doc("CRM Lead", lead_id)
+		doc = frappe.get_doc("CRM Lead", lead_name)
 	except frappe.DoesNotExistError:
 		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
 
@@ -167,7 +172,7 @@ def get_director_lead(lead_id: str) -> dict[str, Any]:
 
 	row = frappe._dict({field: doc.get(field) for field in LEAD_FIELDS})
 	lookups = _load_lookups([row])
-	event_entries, event_titles = _event_projection(lead_id, lookups)
+	event_entries, event_titles = _event_projection(lead_name, lookups)
 	return {
 		"lead": _map_detail_row(row, lookups=lookups, event_titles=event_titles),
 		"log": _lead_log(doc, lookups=lookups, event_entries=event_entries),
@@ -545,10 +550,17 @@ def _resolution_options() -> list[dict[str, str]]:
 def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, Any]:
 	lookups = lookups or {}
 	owner_key = row.get("owner_staff") or row.get("assigned_to")
+	student_id = row.get("converted_student") or row.get("matched_student") or row.get("student")
+	student_code = (
+		frappe.db.get_value("CRM Student", student_id, "name") if student_id else None
+	)
+	lead_id = row.get("lead_id") or row.get("name")
 	item = {
-		"id": row.get("name"),
+		"id": lead_id,
+		"leadId": lead_id,
 		"leadCode": row.get("lead_code"),
-		"studentId": row.get("name"),
+		"studentCode": student_code,
+		"studentId": student_id,
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
 		"phone": row.get("phone") or "",

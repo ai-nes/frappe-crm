@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import frappe
 
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import (
 	LeadProcessingError,
 )
@@ -43,7 +44,7 @@ def _run(command, **kwargs):
 
 @frappe.whitelist(methods=["POST"])
 def process_lead(lead: str, resolution: str | None = None, reason: str | None = None) -> dict:
-	return _run(_process_lead, lead=lead, resolution=resolution, reason=reason)
+	return _run(_process_lead, lead=resolve_lead_name(lead), resolution=resolution, reason=reason)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -53,17 +54,17 @@ def process_new_leads(admission_year: str | int | None = None, limit: str | int 
 
 @frappe.whitelist(methods=["POST"])
 def update_processing_status(lead: str, status: str, reason: str | None = None) -> dict:
-	return _run(_update_processing_status, lead=lead, status=status, reason=reason)
+	return _run(_update_processing_status, lead=resolve_lead_name(lead), status=status, reason=reason)
 
 
 @frappe.whitelist(methods=["POST"])
 def reopen_lead(lead: str, reason: str | None = None) -> dict:
-	return _run(_reopen_lead, lead=lead, reason=reason)
+	return _run(_reopen_lead, lead=resolve_lead_name(lead), reason=reason)
 
 
 @frappe.whitelist(methods=["GET", "POST"])
 def preview_lead(lead: str) -> dict:
-	return _run(_preview_lead, lead=lead)
+	return _run(_preview_lead, lead=resolve_lead_name(lead))
 
 
 @frappe.whitelist(methods=["POST"])

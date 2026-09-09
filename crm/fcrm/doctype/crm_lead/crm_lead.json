@@ -11,6 +11,7 @@
  "field_order": [
   "naming_series",
   "lead_code",
+  "lead_id",
   "processing_status",
   "resolution",
   "resolution_reason",
@@ -124,6 +125,14 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Lead Code",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "lead_id",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Lead ID",
    "read_only": 1,
    "unique": 1
   },

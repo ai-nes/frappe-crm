@@ -6,7 +6,8 @@ admissions lifecycle and conversion commands:
     NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
 Phone, province, high school, and major are the only required processing gates.
-CCCD remains optional and is used for duplicate/Student matching when present.
+Lead duplicate matching uses only Lead-owned identifiers and routing data;
+CCCD belongs to the later Student profile and is never read here.
 Processing and assignment only update the Lead status and ownership; neither
 step creates a CRM Student. The explicit handoff command remains the separate
 Lead-to-Student conversion boundary.
@@ -17,13 +18,14 @@ NEW and replays intake, so assignment never sees an unvalidated Lead.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import frappe
 
 from crm.fcrm.conversion_readiness import conversion_blockers
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
-from crm.fcrm.student_intake import normalize_email, normalize_national_id, normalize_phone
+from crm.fcrm.student_intake import normalize_email, normalize_phone
 from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
 
@@ -70,12 +72,24 @@ def _reason(value: Any) -> str | None:
 	return _required(value, "reason", max_length=500)
 
 
+def _operator_lead_reason(value: Any) -> str | None:
+	"""Keep Lead reasons readable without exposing pre-conversion identifiers."""
+	reason = _reason(value)
+	if not reason:
+		return None
+	return re.sub(
+		r"\bLead\s+(?:HS|LEAD)[-_][A-Z0-9_-]+",
+		"một Lead khác",
+		reason,
+		flags=re.IGNORECASE,
+	)
+
+
 def _normalise_province(value: Any) -> str:
 	return " ".join(str(value or "").strip().split()).casefold()
 
 
 def _normalise_identifiers(lead) -> dict[str, str]:
-	id_number = normalize_national_id(lead.get("id_number"))
 	high_school = " ".join(str(lead.get("high_school") or "").strip().split()).casefold()
 	major = " ".join(str(lead.get("major") or "").strip().split()).casefold()
 	phone = normalize_phone(lead.get("phone"))
@@ -92,7 +106,6 @@ def _normalise_identifiers(lead) -> dict[str, str]:
 			"Số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm là bắt buộc trước khi xử lý.",
 		)
 	return {
-		"id_number": id_number,
 		"high_school": high_school,
 		"major": major,
 		"phone": phone or "",
@@ -110,9 +123,37 @@ def _processing_validation(lead) -> dict[str, bool]:
 	}
 
 
+def _processing_validation_issues(lead) -> list[str]:
+	"""Return operator-facing reasons for every failed processing gate."""
+
+	def value(fieldname: str) -> Any:
+		camel_name = "".join(
+			part.capitalize() if index else part for index, part in enumerate(fieldname.split("_"))
+		)
+		return lead.get(fieldname) or lead.get(camel_name)
+
+	issues = []
+	phone = str(value("phone") or "").strip()
+	if not phone:
+		issues.append("Thiếu số điện thoại")
+	elif not normalize_phone(phone):
+		issues.append("Số điện thoại không hợp lệ")
+	if not str(value("province") or "").strip():
+		issues.append("Thiếu tỉnh/thành phố")
+	if not str(value("high_school") or "").strip():
+		issues.append("Thiếu trường THPT")
+	if not str(value("major") or "").strip():
+		issues.append("Thiếu ngành quan tâm")
+	return issues
+
+
+def _processing_validation_reason(lead) -> str | None:
+	issues = _processing_validation_issues(lead)
+	return f"Đã đóng hồ sơ vì: {', '.join(issues)}." if issues else None
+
+
 def _normalise_row(row: Any) -> dict[str, str]:
 	return {
-		"id_number": normalize_national_id(row.get("id_number")) or "",
 		"high_school": " ".join(str(row.get("high_school") or "").strip().split()).casefold(),
 		"major": " ".join(str(row.get("major") or "").strip().split()).casefold(),
 		"phone": normalize_phone(row.get("phone")) or "",
@@ -123,12 +164,12 @@ def _normalise_row(row: Any) -> dict[str, str]:
 
 def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str | None = None) -> list[Any]:
 	filters = []
-	for fieldname in ("id_number", "phone", "email"):
+	for fieldname in ("phone", "email"):
 		if identifiers[fieldname]:
 			filters.append({fieldname: identifiers[fieldname]})
 	if not filters:
 		return []
-	fields = ["name", "id_number", "high_school", "major", "phone", "email", "province", "creation"]
+	fields = ["name", "high_school", "major", "phone", "email", "province", "creation"]
 	if doctype == "CRM Lead":
 		fields.extend(
 			[
@@ -152,7 +193,6 @@ def _candidate_rows(doctype: str, identifiers: dict[str, str], *, exclude: str |
 
 
 _DUPLICATE_MATCH_LABELS = {
-	"NATIONAL_ID": "CCCD",
 	"PHONE_EMAIL_PROVINCE": "số điện thoại, email và tỉnh/thành phố",
 	"PHONE_PROVINCE_SCHOOL_MAJOR": "số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm",
 }
@@ -160,8 +200,6 @@ _DUPLICATE_MATCH_LABELS = {
 
 def _duplicate_match_type(identifiers: dict[str, str], candidate: Any) -> str | None:
 	row = _normalise_row(candidate)
-	if identifiers["id_number"] and row["id_number"] == identifiers["id_number"]:
-		return "NATIONAL_ID"
 	if (
 		identifiers["phone"]
 		and identifiers["email"]
@@ -261,14 +299,14 @@ def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str,
 			key=lambda entry: _canonical_lead_rank(entry[0]),
 		)
 		if canonical.get("name") != lead.name:
-			label = _DUPLICATE_MATCH_LABELS.get(match_type or "NATIONAL_ID", "thông tin định danh")
+			label = _DUPLICATE_MATCH_LABELS.get(match_type or "PHONE_PROVINCE_SCHOOL_MAJOR", "thông tin Lead")
 			return {
 				"resolution": "DUPLICATE",
 				"target_student": None,
 				"duplicate_of": canonical.get("name"),
 				"duplicate_type": match_type,
 				"reason": (
-					f"Đã đóng hồ sơ vì trùng {label} với Lead {canonical.get('name')}. "
+					f"Đã đóng Lead này vì trùng {label} với một Lead khác. "
 					"Hệ thống giữ lại Lead đại diện để tiếp tục xử lý."
 				),
 			}
@@ -417,15 +455,13 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		identifiers = _normalise_identifiers(lead_doc)
 	except LeadProcessingError:
 		validation = _processing_validation(lead_doc)
+		processing_reason = _processing_validation_reason(lead_doc)
 		_set_processing_values(
 			lead_doc.name,
 			{
 				"processing_status": "CLOSED",
 				"resolution": "PENDING",
-				"resolution_reason": (
-					"Đã đóng hồ sơ vì thiếu số điện thoại, tỉnh/thành phố, "
-					"trường THPT hoặc ngành quan tâm."
-				),
+				"resolution_reason": processing_reason or "Đã đóng hồ sơ vì dữ liệu xử lý không hợp lệ.",
 			},
 		)
 		return {
@@ -434,6 +470,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 			"lead": lead_doc.name,
 			"processing_outcome": "INVALID",
 			"validation": validation,
+			"validation_issues": _processing_validation_issues(lead_doc),
 		}
 
 	requested_resolution = str(resolution or "").strip().upper() or None
@@ -454,7 +491,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 		lead_doc.name,
 		{
 			"processing_status": status,
-			"resolution": "PENDING",
+			"resolution": classified_resolution if status == "CLOSED" else "PENDING",
 			"resolution_reason": processing_reason,
 			"phone": identifiers["phone"],
 			"email": identifiers["email"],
@@ -463,7 +500,7 @@ def process_lead(lead: str, resolution: str | None = None, reason: str | None = 
 	)
 	return {
 		"status": status,
-		"resolution": "PENDING",
+		"resolution": classified_resolution if status == "CLOSED" else "PENDING",
 		"lead": lead_doc.name,
 		"target_student": target_student,
 		"processing_outcome": classified_resolution,

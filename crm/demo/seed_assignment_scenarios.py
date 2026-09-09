@@ -146,7 +146,6 @@ def _insert_lead(spec: dict[str, Any], source: str, index: int) -> str:
 			"student_name": spec["name"],
 			"phone": spec["phone"],
 			"email": email,
-			"id_number": spec.get("id"),
 			"province": province,
 			"high_school": school,
 			"major": major,

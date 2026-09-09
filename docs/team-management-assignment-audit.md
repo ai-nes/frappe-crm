@@ -63,9 +63,9 @@ Backend không nhận Team do người vận hành chọn trong luồng thông t
 được tìm tự động từ Group có cùng tỉnh với Lead. Nếu một tỉnh có nhiều Team,
 engine xét tất cả Team đủ điều kiện rồi chọn ứng viên có tải thấp nhất.
 
-Trường THPT, CCCD và ngành quan tâm vẫn bắt buộc để kiểm tra Lead và phục vụ
-bước handoff sang Student; chúng không được dùng để bắt người dùng setup mapping
-thủ công.
+Số điện thoại, tỉnh/thành phố, trường THPT và ngành quan tâm là các điều kiện
+bắt buộc để kiểm tra Lead. CCCD chỉ được cập nhật ở hồ sơ Student sau khi
+convert, không thuộc dữ liệu hoặc tiêu chí duplicate của Lead.
 
 ## 4. Quyền thao tác
 
@@ -155,7 +155,8 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 - [ ] Lead có tỉnh sẽ tự tìm Team thuộc Group của tỉnh đó.
 - [ ] Preview hiển thị từng Lead sẽ vào Team/Sale/CTV nào.
 - [ ] Run lưu người được chọn, Team, tỉnh, lý do và tải hiện tại.
-- [ ] Lead thiếu CCCD/THPT/ngành chuyển sang cần xử lý, không gán sai người.
+- [ ] Lead thiếu số điện thoại/tỉnh/THPT/ngành chuyển sang cần xử lý, không gán sai người.
+- [ ] Lead trùng theo điều kiện Lead được đóng tự động và không xuất hiện lại trong hàng cần xử lý.
 - [ ] Batch có thể tạo nhiều đợt và có trạng thái Hoàn tất hoặc Còn lỗi.
 - [ ] Dữ liệu Frappe cũ về Zone/Pool/Policy không bị xóa.
 

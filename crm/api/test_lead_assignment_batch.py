@@ -99,7 +99,29 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(item["batchId"], "")
 		self.assertEqual(item["leadId"], "LEAD-CLOSED-1")
 		self.assertEqual(item["missingFields"], ["Tỉnh"])
-		self.assertEqual(item["reason"], "Lead bị đóng: thiếu tỉnh.")
+		self.assertEqual(item["reason"], "Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố.")
+
+	def test_live_closed_lead_reason_lists_only_actual_missing_fields(self):
+		item = lead_assignment_batch._serialize_live_review_item(
+			frappe._dict(
+				name="LEAD-CLOSED-2",
+				student_name="Hà Tuấn Kiệt",
+				phone="0903000014",
+				province=None,
+				high_school=None,
+				major="MAJOR-1",
+				resolution="PENDING",
+				resolution_reason=(
+					"Đã đóng hồ sơ vì thiếu số điện thoại, tỉnh/thành phố, trường THPT hoặc ngành quan tâm."
+				),
+			)
+		)
+
+		self.assertEqual(item["missingFields"], ["Tỉnh", "Trường THPT"])
+		self.assertEqual(
+			item["reason"],
+			"Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố, Thiếu trường THPT.",
+		)
 
 	def test_queue_for_zone_preserves_province_queue_identity(self):
 		lead = {"province": "PROVINCE-HCM"}
@@ -157,9 +179,9 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				lead_assignment_batch.frappe,
 				"get_list",
 				return_value=[
-					frappe._dict(processing_status="PROCESSED", owner_staff=None, assigned_to=None),
-					frappe._dict(processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None),
-					frappe._dict(processing_status="CLOSED", owner_staff=None, assigned_to=None),
+					frappe._dict(name="LEAD-1", processing_status="PROCESSED", owner_staff=None, assigned_to=None),
+					frappe._dict(name="LEAD-2", processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None),
+					frappe._dict(name="LEAD-3", processing_status="CLOSED", owner_staff=None, assigned_to=None),
 				],
 			),
 			patch.object(

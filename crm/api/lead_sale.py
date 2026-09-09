@@ -42,6 +42,17 @@ ASSIGNMENT_SORTS = {"receivedAt", "name", "status", "owner", "matchScore"}
 ASSIGNMENT_ORDERS = {"asc", "desc"}
 ASSIGNMENT_PIPELINE_REQUEST_STATUSES = {"pending", "deferred"}
 ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV Sale"}
+ASSIGNMENT_REASON_LABELS = {
+	"TEAM_NOT_FOUND_FOR_PROVINCE": "Chưa có Team đang phụ trách tỉnh của Lead.",
+	"TEAM_NOT_FOUND": "Không tìm thấy Team nhận hồ sơ hoặc Team đã ngừng hoạt động.",
+	"NO_ELIGIBLE_RECIPIENT": "Team đã xác định nhưng chưa có Sale/CTV đủ điều kiện nhận Lead.",
+	"TEAM_NOT_READY": "Team chưa sẵn sàng nhận Lead.",
+	"MISSING_PROVINCE": "Chưa có tỉnh của Lead nên chưa thể xác định Team.",
+	"MISSING_CAMPUS": "Chưa có trường/cơ sở của Lead để kiểm tra dữ liệu.",
+	"STALE_ZONE_MAPPING": "Cấu hình khu vực đã thay đổi, cần thực hiện phân công lại.",
+	"STALE_OWNERSHIP_REVISION": "Thông tin người phụ trách đã thay đổi, cần thực hiện lại.",
+}
+UNKNOWN_ASSIGNMENT_REASON = "Không thể hoàn tất phân công tự động. Vui lòng kiểm tra cấu hình Team."
 ASSIGNMENT_STUDENT_FIELDS = [
 	"name",
 	"student_name",
@@ -902,11 +913,13 @@ def _assignment_reason(
 	row: dict[str, Any], status: str, event: dict[str, Any] | None, routing: dict[str, Any] | None
 ) -> str | None:
 	if event and event.get("reason"):
-		return str(event["reason"])
+		reason = str(event["reason"])
+		return ASSIGNMENT_REASON_LABELS.get(reason, UNKNOWN_ASSIGNMENT_REASON if re.fullmatch(r"[A-Z][A-Z0-9_]+", reason) else reason)
 	if status == "missing_data":
 		return "Thiếu khu vực để xác định người phụ trách."
 	if status == "error":
-		return str(routing.get("last_error_code") or "Không thể hoàn tất phân công tự động.") if routing else "Không thể hoàn tất phân công tự động."
+		code = str(routing.get("last_error_code") or "") if routing else ""
+		return ASSIGNMENT_REASON_LABELS.get(code, UNKNOWN_ASSIGNMENT_REASON)
 	if status == "no_match":
 		return "Không có Sale đạt ngưỡng phù hợp tối thiểu."
 	return None

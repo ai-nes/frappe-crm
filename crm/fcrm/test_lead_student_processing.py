@@ -23,8 +23,20 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			{"MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED"},
 		)
 
+	def test_operator_reason_does_not_expose_pre_conversion_lead_identifier(self):
+		from crm.fcrm.lead_processing import _operator_lead_reason
+
+		reason = _operator_lead_reason(
+			"Đã đóng hồ sơ vì trùng CCCD với Lead HS-2026-HCM-000019."
+		)
+
+		self.assertEqual(reason, "Đã đóng hồ sơ vì trùng CCCD với một Lead khác.")
+
 	def test_identifier_gate_requires_phone_province_high_school_and_major(self):
-		from crm.fcrm.lead_processing import LeadProcessingError, _normalise_identifiers
+		from crm.fcrm.lead_processing import (
+			LeadProcessingError,
+			_normalise_identifiers,
+		)
 
 		valid = {
 			"high_school": " THPT A ",
@@ -36,7 +48,6 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertEqual(
 			_normalise_identifiers(valid),
 			{
-				"id_number": None,
 				"high_school": "thpt a",
 				"major": "công nghệ thông tin",
 				"email": "student@example.com",
@@ -49,6 +60,32 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		with self.assertRaises(LeadProcessingError) as ctx:
 			_normalise_identifiers(invalid)
 		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
+
+	def test_cccd_never_matches_two_leads_before_student_conversion(self):
+		from crm.fcrm.lead_processing import _duplicate_match_type, _normalise_identifiers
+
+		identifiers = _normalise_identifiers(
+			{
+				"id_number": "079300000001",
+				"phone": "0901000001",
+				"province": "Hà Nội",
+				"high_school": "THPT A",
+				"major": "Data Science",
+			}
+		)
+		self.assertNotIn("id_number", identifiers)
+		self.assertIsNone(
+			_duplicate_match_type(
+				identifiers,
+				{
+					"id_number": "079300000001",
+					"phone": "0901000002",
+					"province": "Hà Nội",
+					"high_school": "THPT A",
+					"major": "Data Science",
+				},
+			)
+		)
 
 	def test_bulk_scan_buckets_every_processing_outcome(self):
 		from unittest.mock import patch
@@ -269,9 +306,10 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 
 		for duplicate_result in (copy_result, third_result):
 			self.assertEqual(duplicate_result["status"], "CLOSED")
-			self.assertEqual(duplicate_result["resolution"], "PENDING")
+			self.assertEqual(duplicate_result["resolution"], "DUPLICATE")
 			self.assertEqual(duplicate_result["processing_outcome"], "DUPLICATE")
-			self.assertIn(primary.name, duplicate_result["reason"])
+			self.assertIn("trùng", duplicate_result["reason"])
+			self.assertNotIn(primary.name, duplicate_result["reason"])
 		self.assertEqual(primary_result["status"], "PROCESSED")
 		self.assertEqual(primary_result["resolution"], "PENDING")
 		self.assertEqual(primary_result["processing_outcome"], "CREATED")

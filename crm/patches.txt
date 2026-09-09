@@ -164,3 +164,6 @@ crm.patches.v1_0.backfill_team_area_code
 crm.patches.v1_0.upgrade_student_segments
 crm.patches.v1_0.backfill_student_stage
 crm.patches.v1_0.backfill_quick_created_students
+crm.patches.v1_0.separate_lead_codes_from_student_ids
+crm.patches.v1_0.synchronize_lead_codes_with_student_codes
+crm.patches.v1_0.backfill_lead_internal_ids

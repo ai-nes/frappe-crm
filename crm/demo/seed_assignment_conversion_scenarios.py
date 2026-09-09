@@ -37,10 +37,10 @@ POOL_PREFIX = "Hàng chờ phân công"
 # manages, so routing can only answer TEAM_NOT_FOUND_FOR_PROVINCE.
 UNMANAGED_PROVINCE = "Hà Nội"
 
-# The duplicate pair starts with different identifiers so intake can create both
-# Leads. The second record is then stamped with the primary's CCCD to exercise
-# the duplicate resolver without making CCCD a processing gate.
-DUPLICATE_ID = "079303000019"
+# The duplicate pair starts with different phone numbers so intake can create
+# both Leads. The resubmission is then stamped with the primary phone to
+# exercise the Lead duplicate resolver without inventing a CCCD on a Lead.
+DUPLICATE_PHONE = "0903000019"
 
 SCENARIOS: tuple[dict[str, Any], ...] = (
 	# --- Happy path: 12 intake-complete Leads, 6 per province ------------------
@@ -50,7 +50,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Chuyên Lê Hồng Phong",
 		"major": "Software Engineering",
-		"id": "079303000001",
 	},
 	{
 		"name": "Trần Gia Hân",
@@ -58,7 +57,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Thượng Hiền",
 		"major": "Artificial Intelligence",
-		"id": "079303000002",
 	},
 	{
 		"name": "Lê Hoàng Nam",
@@ -66,7 +64,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Gia Định",
 		"major": "Data Science",
-		"id": "079303000003",
 	},
 	{
 		"name": "Phạm Khánh Linh",
@@ -74,7 +71,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Hữu Huân",
 		"major": "Digital Marketing",
-		"id": "079303000004",
 	},
 	{
 		"name": "Võ Đức Anh",
@@ -82,7 +78,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Thủ Đức",
 		"major": "Business Administration",
-		"id": "079303000005",
 	},
 	{
 		"name": "Ngô Bảo Ngọc",
@@ -90,7 +85,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Chuyên Lê Hồng Phong",
 		"major": "Data Science",
-		"id": "079303000011",
 	},
 	{
 		"name": "Đặng Quốc Bảo",
@@ -98,7 +92,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Ngô Quyền",
 		"major": "Software Engineering",
-		"id": "075303000006",
 	},
 	{
 		"name": "Bùi Thanh Trúc",
@@ -106,7 +99,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trấn Biên",
 		"major": "Artificial Intelligence",
-		"id": "075303000007",
 	},
 	{
 		"name": "Hoàng Minh Khang",
@@ -114,7 +106,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Data Science",
-		"id": "075303000008",
 	},
 	{
 		"name": "Đỗ Quỳnh Anh",
@@ -122,7 +113,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Bình Sơn",
 		"major": "Digital Marketing",
-		"id": "075303000009",
 	},
 	{
 		"name": "Phan Nhật Vy",
@@ -130,7 +120,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trảng Bom",
 		"major": "Business Administration",
-		"id": "075303000010",
 	},
 	{
 		"name": "Trịnh Gia Bảo",
@@ -138,7 +127,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Thống Nhất",
 		"major": "Software Engineering",
-		"id": "075303000012",
 	},
 	# --- Defect path: 8 Leads, one failure mode each ---------------------------
 	{
@@ -147,7 +135,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Gia Định",
 		"major": "Data Science",
-		"id": "079303000013",
 		"defect": {
 			"code": "INVALID_MISSING_MAJOR",
 			"expected": "manual_review",
@@ -161,7 +148,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Thủ Đức",
 		"major": "Digital Marketing",
-		"id": "079303000014",
 		"defect": {
 			"code": "INVALID_MISSING_HIGH_SCHOOL",
 			"expected": "manual_review",
@@ -175,7 +161,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Ngô Quyền",
 		"major": "Business Administration",
-		"id": "075303000015",
 		"defect": {
 			"code": "INVALID_MISSING_PHONE",
 			"expected": "manual_review",
@@ -189,7 +174,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trấn Biên",
 		"major": "Software Engineering",
-		"id": "075303000016",
 		"defect": {
 			"code": "MISSING_PROVINCE",
 			"expected": "manual_review",
@@ -203,7 +187,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Thượng Hiền",
 		"major": "Artificial Intelligence",
-		"id": "079303000017",
 		"defect": {
 			"code": "MISSING_CAMPUS",
 			"expected": "assigned",
@@ -217,7 +200,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Hữu Huân",
 		"major": "Data Science",
-		"id": "079303000018",
 		"defect": {
 			"code": "TEAM_NOT_FOUND_FOR_PROVINCE",
 			"expected": "manual_review",
@@ -231,7 +213,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Digital Marketing",
-		"id": DUPLICATE_ID,
 		"defect": {
 			"code": "DUPLICATE_PRIMARY",
 			"expected": "assigned",
@@ -245,12 +226,11 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Digital Marketing",
-		"id": "075303000020",
 		"defect": {
 			"code": "DUPLICATE_RESUBMIT",
 			"expected": "manual_review",
-			"note": "Nộp lại cùng CCCD → chỉ bản sao đóng, bản gốc được giữ lại.",
-			"fields": {"id_number": DUPLICATE_ID},
+			"note": "Trùng số điện thoại với Lead đã xử lý → Lead nộp lại được đóng tự động.",
+			"fields": {"phone": DUPLICATE_PHONE},
 		},
 	},
 )
@@ -362,7 +342,6 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 		# identity roots intake looks up, so a scenario keeps the same pair even
 		# when the fixture is reordered or extended.
 		"email": f"local.assignment.conversion.{spec['phone']}@example.test",
-		"id_number": spec["id"],
 		"campus": CAMPUS,
 		"owning_team": pool,
 		"admission_year": ADMISSION_YEAR,

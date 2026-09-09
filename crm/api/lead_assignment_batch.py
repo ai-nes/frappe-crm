@@ -17,7 +17,11 @@ from frappe.utils import getdate, now_datetime, today
 
 from crm.api import lead_mapping
 from crm.api.assignment_workspace import _actor_context
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import (
+	_operator_lead_reason,
+	_processing_validation_issues,
+	_processing_validation_reason,
 	_set_processing_values,
 	assign_lead,
 	preview_lead,
@@ -227,6 +231,7 @@ def _lead_permission(lead) -> None:
 
 
 def _lead(name: str):
+	name = resolve_lead_name(name)
 	if not frappe.db.exists("CRM Lead", name):
 		frappe.throw(_("Không tìm thấy Lead: {0}.").format(name), frappe.ValidationError)
 	doc = frappe.get_doc("CRM Lead", name)
@@ -678,48 +683,64 @@ def _serialize_item(item) -> dict[str, Any]:
 		frappe.db.get_value(
 			"CRM Lead",
 			item.lead,
-			["processing_status", "owner_staff", "assigned_to"],
+			["processing_status", "resolution", "owner_staff", "assigned_to"],
 			as_dict=True,
 		)
 		or {}
 	)
 	processing_status = lead_state.get("processing_status")
 	lead_owner = lead_state.get("owner_staff") or lead_state.get("assigned_to")
-	item_status = _effective_history_item_status(item.status, processing_status)
+	item_status = _effective_history_item_status(
+		item.status, processing_status, lead_state.get("resolution")
+	)
 	lead = (
 		frappe.db.get_value(
 			"CRM Lead",
 			item.lead,
 			[
 				"student_name",
+				"lead_id",
+				"lead_code",
 				"phone",
-				"id_number",
 				"email",
 				"province",
 				"high_school",
 				"major",
 				"source",
 				"branch",
+				"student",
+				"matched_student",
+				"converted_student",
 			],
 			as_dict=True,
 		)
 		or {}
 	)
+	student_id = lead.get("converted_student") or lead.get("matched_student") or lead.get("student")
+	student_code = frappe.db.get_value("CRM Student", student_id, "name") if student_id else None
+	high_school = lead.get("high_school")
+	high_school_label = (
+		frappe.db.get_value("CRM High School", high_school, "school_name")
+		if high_school
+		else None
+	)
 	return {
 		"id": item.name,
-		"lead": item.lead,
-		"leadId": item.lead,
+		"leadId": lead.get("lead_id") or item.lead,
+		"leadCode": lead.get("lead_code"),
+		"studentCode": student_code,
+		"studentId": student_id,
 		"studentName": lead.get("student_name") or item.lead,
 		"phone": lead.get("phone"),
-		"idNumber": lead.get("id_number"),
 		"email": lead.get("email"),
 		"province": lead.get("province"),
-		"highSchool": lead.get("high_school"),
+		"highSchool": high_school,
+		"highSchoolLabel": high_school_label or high_school,
 		"major": lead.get("major"),
 		"source": lead.get("source"),
 		"branch": lead.get("branch"),
 		"status": item_status,
-		"reason": item.reason,
+		"reason": _operator_lead_reason(item.reason),
 		"errorCode": item.error_code,
 		"routingTier": item.routing_tier,
 		"queue": item.queue,
@@ -741,7 +762,9 @@ def _serialize_item(item) -> dict[str, Any]:
 	}
 
 
-def _effective_history_item_status(item_status: str, processing_status: str | None) -> str:
+def _effective_history_item_status(
+	item_status: str, processing_status: str | None, resolution: str | None = None
+) -> str:
 	"""Project a batch item using the current Lead state.
 
 	The batch row is an audit snapshot, while ownership and processing status on
@@ -752,34 +775,48 @@ def _effective_history_item_status(item_status: str, processing_status: str | No
 	if current_status == "ASSIGNED":
 		return "assigned"
 	if current_status == "CLOSED":
+		if str(resolution or "").strip().upper() in {"DUPLICATE", "SPAM"}:
+			return "skipped"
 		return "manual_review"
 	return item_status
 
 
 def _live_review_missing_fields(lead) -> list[str]:
-	fields = (
-		("phone", "Số điện thoại"),
-		("province", "Tỉnh"),
-		("high_school", "Trường THPT"),
-		("major", "Ngành quan tâm"),
-	)
-	return [label for fieldname, label in fields if not str(lead.get(fieldname) or "").strip()]
+	issue_labels = {
+		"Thiếu số điện thoại": "Số điện thoại",
+		"Số điện thoại không hợp lệ": "Số điện thoại",
+		"Thiếu tỉnh/thành phố": "Tỉnh",
+		"Thiếu trường THPT": "Trường THPT",
+		"Thiếu ngành quan tâm": "Ngành quan tâm",
+	}
+	return [label for issue in _processing_validation_issues(lead) if (label := issue_labels.get(issue))]
 
 
 def _serialize_live_review_item(lead) -> dict[str, Any]:
 	"""Project a currently closed Lead into the operator's review queue."""
 	resolution = lead.get("resolution") or "PENDING"
-	reason = lead.get("resolution_reason") or "Hồ sơ đang đóng và cần kiểm tra lại."
+	reason = _operator_lead_reason(lead.get("resolution_reason")) or "Lead đang đóng và cần kiểm tra lại."
+	validation_reason = _processing_validation_reason(lead)
+	if resolution == "PENDING" and validation_reason:
+		reason = validation_reason
+	high_school = lead.get("high_school")
+	high_school_label = (
+		frappe.db.get_value("CRM High School", high_school, "school_name")
+		if high_school
+		else None
+	)
 	return {
-		"id": lead.name,
-		"lead": lead.name,
-		"leadId": lead.name,
+		"id": lead.get("lead_id") or lead.name,
+		"leadId": lead.get("lead_id") or lead.name,
+		"leadCode": lead.get("lead_code"),
+		"studentCode": lead.get("converted_student") or lead.get("matched_student") or lead.get("student"),
+		"studentId": lead.get("converted_student") or lead.get("matched_student") or lead.get("student"),
 		"studentName": lead.get("student_name") or lead.name,
 		"phone": lead.get("phone"),
-		"idNumber": lead.get("id_number"),
 		"email": lead.get("email"),
 		"province": lead.get("province"),
-		"highSchool": lead.get("high_school"),
+		"highSchool": high_school,
+		"highSchoolLabel": high_school_label or high_school,
 		"major": lead.get("major"),
 		"source": lead.get("source"),
 		"branch": lead.get("branch"),
@@ -811,7 +848,10 @@ def _serialize_live_review_item(lead) -> dict[str, Any]:
 
 
 def _live_closed_leads(lead_ids: set[str] | None = None) -> list[dict[str, Any]]:
-	filters: dict[str, Any] = {"processing_status": "CLOSED"}
+	# Only unresolved validation/routing defects belong in the live review queue.
+	# Terminal outcomes such as a Lead duplicate are already closed and must not
+	# be offered an operator "Xử lý" action again.
+	filters: dict[str, Any] = {"processing_status": "CLOSED", "resolution": "PENDING"}
 	if lead_ids:
 		filters["name"] = ["in", sorted(lead_ids)]
 	return frappe.get_list(
@@ -819,9 +859,10 @@ def _live_closed_leads(lead_ids: set[str] | None = None) -> list[dict[str, Any]]
 		filters=filters,
 		fields=[
 			"name",
+			"lead_id",
+			"lead_code",
 			"student_name",
 			"phone",
-			"id_number",
 			"email",
 			"province",
 			"high_school",
@@ -833,6 +874,7 @@ def _live_closed_leads(lead_ids: set[str] | None = None) -> list[dict[str, Any]]
 			"ownership_revision",
 			"matched_student",
 			"converted_student",
+			"student",
 			"processing_status",
 			"resolution",
 			"resolution_reason",
@@ -977,6 +1019,8 @@ def _processing_workflow_summary() -> dict[str, int]:
 	summary = _empty_workflow_summary()
 	for row in rows:
 		lead_id = str(row.get("name") or "").strip()
+		if not lead_id:
+			continue
 		if lead_id in latest_by_lead:
 			continue
 		status = str(row.get("processing_status") or "").strip().upper()
@@ -1802,6 +1846,17 @@ def list_lead_assignment_history_items(
 	if len(search) > 140:
 		frappe.throw(_("Từ khóa tìm kiếm quá dài."), frappe.ValidationError)
 	selected_lead_ids = set(_parse_list(lead_ids, "lead_ids")) if lead_ids else None
+	selected_lead_names = (
+		{resolve_lead_name(value) for value in selected_lead_ids} if selected_lead_ids else None
+	)
+	selected_public_lead_ids = (
+		{
+			frappe.db.get_value("CRM Lead", name, "lead_id") or name
+			for name in selected_lead_names
+		}
+		if selected_lead_names
+		else None
+	)
 	batches = []
 	batch_page = 1
 	while True:
@@ -1814,8 +1869,13 @@ def list_lead_assignment_history_items(
 	seen_lead_ids: set[str] = set()
 
 	def include_item(serialized: dict[str, Any]) -> None:
+		if serialized.get("status") == "manual_review" and serialized.get("resolution") == "PENDING":
+			validation_reason = _processing_validation_reason(serialized)
+			if validation_reason:
+				serialized["reason"] = validation_reason
+				serialized["missingFields"] = _live_review_missing_fields(serialized)
 		lead_id = str(serialized.get("leadId") or "")
-		if selected_lead_ids is not None and lead_id not in selected_lead_ids:
+		if selected_public_lead_ids is not None and lead_id not in selected_public_lead_ids:
 			return
 		if status and status != "all" and serialized["status"] != status:
 			return
@@ -1849,8 +1909,8 @@ def list_lead_assignment_history_items(
 			)
 			seen_lead_ids.add(str(serialized.get("leadId") or ""))
 			include_item(serialized)
-	for lead in _live_closed_leads(selected_lead_ids):
-		if lead.name in seen_lead_ids:
+	for lead in _live_closed_leads(selected_lead_names):
+		if (lead.get("lead_id") or lead.name) in seen_lead_ids:
 			continue
 		include_item(_serialize_live_review_item(lead))
 	items.sort(key=lambda row: (row.get("batchCreatedAt") or "", row.get("id") or ""), reverse=True)

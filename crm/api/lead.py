@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.lead_identity import resolve_lead_name
 
 DOCTYPE = "CRM Lead"
 MAX_PAGE_LENGTH = 100
@@ -66,6 +67,7 @@ SERVER_MANAGED_FIELDS = frozenset(
 		"modified",
 		"modified_by",
 		"lead_code",
+		"lead_id",
 		"processing_status",
 		"resolution",
 		"resolution_reason",
@@ -226,7 +228,7 @@ def _parse_filters(value: Any) -> dict[str, Any]:
 def _validate_name(name: Any) -> str:
 	if not isinstance(name, str) or not name.strip():
 		frappe.throw(_("Lead name is required."), frappe.ValidationError)
-	return name
+	return resolve_lead_name(name)
 
 
 def _api_payload(doc: Any) -> dict[str, Any]:
