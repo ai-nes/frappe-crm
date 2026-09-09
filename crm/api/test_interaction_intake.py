@@ -29,6 +29,29 @@ class TestInteractionIntakeContract(FrappeTestCase):
 		self.assertEqual(payload["channel"], "facebook")
 		self.assertEqual(payload["direction"], "inbound")
 
+	def test_timezone_aware_datetimes_are_normalized_for_datetime_fields(self):
+		payload = _normalize_interaction_payload(
+			{
+				"source_namespace": "worldfone",
+				"source_record_id": "call-42",
+				"idempotency_key": "call-42",
+				"student_id": "STU-1",
+				"channel": "phone",
+				"direction": "inbound",
+				"turns": [
+					{
+						"speaker_role": "student",
+						"content": "Hello",
+						"occurred_at": "2026-08-29T09:00:00+07:00",
+					}
+				],
+				"occurred_at": "2026-08-29T09:00:00+07:00",
+			}
+		)
+
+		self.assertEqual(payload["occurred_at"], "2026-08-29 02:00:00")
+		self.assertEqual(payload["turns"][0]["occurred_at"], "2026-08-29 02:00:00")
+
 	def test_unknown_channel_and_caller_authority_are_rejected(self):
 		for payload in (
 			{
