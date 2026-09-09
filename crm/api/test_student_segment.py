@@ -559,3 +559,5 @@ class TestStudentSegment(FrappeTestCase):
 		doc.save()
 		seed_catalog()
 		self.assertEqual(frappe.db.get_value("CRM Tag", name, "label"), "Custom admin label")
+		self.assertEqual(frappe.db.get_value("CRM Tag", name, "status"), "active")
+		self.assertEqual(frappe.db.get_value("CRM Tag Group", "ATTENTION", "status"), "active")

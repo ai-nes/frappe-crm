@@ -178,3 +178,4 @@ crm.patches.v1_0.ensure_campaign_code_format
 crm.patches.v1_0.migrate_segment_code_to_short_id
 crm.patches.v1_0.backfill_crm_action_need_definition
 crm.patches.v1_0.seed_crm_action_need_mapping
+crm.patches.v1_0.activate_classification_catalog

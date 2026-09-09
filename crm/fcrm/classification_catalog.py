@@ -1,5 +1,7 @@
 """Initial controlled vocabulary from the supplied FAIP Need/Tag trees."""
 
+import frappe
+
 GROUP_CATALOG = {
 	"need": {
 		"NEED_CONTACT": "Cần liên hệ",
@@ -37,9 +39,19 @@ CATALOG = {
 }
 
 
-def seed_catalog():
-	import frappe
+def _activate_if_draft(doctype, name):
+	if frappe.db.get_value(doctype, name, "status") != "draft":
+		return
+	revision = frappe.db.get_value(doctype, name, "revision") or 0
+	frappe.db.set_value(
+		doctype,
+		name,
+		{"status": "active", "revision": int(revision) + 1},
+		update_modified=False,
+	)
 
+
+def seed_catalog():
 	if not frappe.db.exists("DocType", "CRM Need") or not frappe.db.exists("DocType", "CRM Tag"):
 		return
 	for kind, groups in CATALOG.items():
@@ -56,6 +68,7 @@ def seed_catalog():
 						"sort_order": sort_order * 10,
 					}
 				).insert(ignore_permissions=True)
+			_activate_if_draft(group_doctype, group)
 			for code in codes.split():
 				if not frappe.db.exists(doctype, {"code": code}):
 					frappe.get_doc(
@@ -68,3 +81,5 @@ def seed_catalog():
 							"status": "draft",
 						}
 					).insert(ignore_permissions=True)
+				_term_name = frappe.db.get_value(doctype, {"code": code}, "name")
+				_activate_if_draft(doctype, _term_name)

@@ -206,8 +206,8 @@ campaign references are preserved. New category/purpose are not fabricated for o
 Indexes cover status/type, Need/Tag status/group and separate assignment term/parent;
 snapshots have a unique (segment,student) constraint. Reruns preserve admin-edited
 dictionary records.
-35 template terms from the supplied trees are seeded as draft: 23 Needs, 12 Tags. Admin
-must activate desired records before staff assignment. Existing shared classifications are
+35 template terms from the supplied trees are seeded as active: 23 Needs, 12 Tags. They are
+available for staff assignment immediately. Existing shared classifications are
 copied into their matching separate dictionary/assignment records before the legacy
 DocTypes and hidden Student field are removed; no auto-activation occurs.
 
