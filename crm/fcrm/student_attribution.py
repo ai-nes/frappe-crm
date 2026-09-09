@@ -218,7 +218,7 @@ def _metrics(rows):
 	metrics = {"students": len(students), "lead": 0, "mql": 0, "applicant": 0, "enrolled": 0, "lost": 0}
 	if not students:
 		return metrics
-	for row in frappe.db.get_all("CRM Lead", filters={"name": ["in", list(students)]}, fields=["enrollment_status"]):
+	for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(students)]}, fields=["enrollment_status"]):
 		status = (row.enrollment_status or "").lower()
 		if "mql" in status:
 			metrics["mql"] += 1

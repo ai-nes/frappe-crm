@@ -223,6 +223,18 @@ def _ensure_staff(spec: dict[str, str], campus: str, department: str) -> str:
 def _ensure_catalog_province(province_name: str) -> str:
 	province = frappe.db.exists("CRM Province", province_name)
 	if not province:
+		# The assignment fixture keeps legacy English labels, while the current
+		# province catalog may already contain the Vietnamese canonical label.
+		# Reuse that row so existing Cluster/Zone parents are never re-parented.
+		from crm.api.lead_mapping import _resolve_province
+
+		try:
+			province = _resolve_province(province_name)
+		except frappe.ValidationError:
+			province = None
+		if province and frappe.db.exists("CRM Province", province):
+			return province
+	if not province:
 		province = (
 			frappe.get_doc(
 				{
@@ -403,7 +415,7 @@ def _ensure_assignment_catalogs() -> dict[str, Any]:
 
 
 def _ensure_group(fixture: dict[str, Any], staff_by_email: dict[str, str]) -> str:
-	province = frappe.db.exists("CRM Province", fixture["province"])
+	province = _ensure_catalog_province(fixture["province"])
 	if not province:
 		frappe.throw(f"Thiếu tỉnh {fixture['province']} để seed Group.", frappe.ValidationError)
 	group_name = frappe.db.exists("CRM Team Group", fixture["name"])
@@ -566,7 +578,9 @@ def _catalog_summary(provinces: tuple[str, ...]) -> dict[str, Any]:
 		"provinces": [
 			{
 				"name": province,
-				"schools": frappe.db.count("CRM High School", {"province": province}),
+				"schools": frappe.db.count(
+					"CRM High School", {"province": _ensure_catalog_province(province)}
+				),
 			}
 			for province in provinces
 		],

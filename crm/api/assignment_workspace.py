@@ -439,7 +439,7 @@ def _grouped_students():
 	try:
 		return frappe.get_list(
 			"CRM Lead",
-			filters={"lifecycle_stage": ["not in", ["Lost"]]},
+			filters={"processing_status": ["not in", ["CLOSED"]]},
 			fields=[
 				"branch",
 				"high_school",
@@ -2344,7 +2344,7 @@ def _student_count_for_schools(schools):
 		_safe_get_all(
 			"CRM Lead",
 			["name"],
-			{"high_school": ["in", list(schools)], "lifecycle_stage": ["not in", ["Lost"]]},
+			{"high_school": ["in", list(schools)], "processing_status": ["not in", ["CLOSED"]]},
 		)
 	)
 

@@ -106,6 +106,91 @@ class TestStudentAuditApi(FrappeTestCase):
 		self.assertEqual(initial_status_log["new_value"], "Mới")
 		self.assertEqual(initial_status_log["metadata"]["new_code"], "NEW")
 
+	def test_student_audit_includes_related_activity_records(self):
+		suffix = frappe.generate_hash(length=8)
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": f"Audit Related Student {suffix}",
+				"phone": "0912345690",
+				"email": f"audit-related-{suffix}@example.com",
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Comment",
+				"comment_type": "Comment",
+				"reference_doctype": "CRM Lead",
+				"reference_name": lead.name,
+				"content": "Phụ huynh đã phản hồi qua bình luận.",
+			}
+		).insert(ignore_permissions=True)
+		note = frappe.get_doc(
+			{
+				"doctype": "FCRM Note",
+				"reference_doctype": "CRM Lead",
+				"reference_docname": lead.name,
+				"content": "Ghi chú tư vấn tuyển sinh.",
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Communication",
+				"communication_type": "Communication",
+				"communication_medium": "Email",
+				"sent_or_received": "Received",
+				"subject": "Email follow-up",
+				"content": "Nội dung email follow-up.",
+				"reference_doctype": "CRM Lead",
+				"reference_name": lead.name,
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Call Log",
+				"id": f"audit-{suffix}",
+				"type": "Outgoing",
+				"status": "Completed",
+				"from": "+84901111111",
+				"to": "+84902222222",
+				"reference_doctype": "CRM Lead",
+				"reference_docname": lead.name,
+				"note": note.name,
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Task",
+				"title": "Audit follow-up task",
+				"description": "Gọi lại cho phụ huynh.",
+				"status": "Todo",
+				"priority": "Medium",
+				"assigned_to": "Administrator",
+				"reference_doctype": "CRM Lead",
+				"reference_docname": lead.name,
+			}
+		).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": "audit-related.txt",
+				"file_url": "https://example.com/audit-related.txt",
+				"attached_to_doctype": "CRM Lead",
+				"attached_to_name": lead.name,
+			}
+		).insert(ignore_permissions=True)
+
+		result = get_student_audit_logs(lead.name, page_length=100)
+		logs = result["logs"]
+
+		self.assertTrue(any(log["source"] == "Comment" and log.get("content") for log in logs))
+		self.assertTrue(any(log["source"] == "Communication" and log.get("subject") for log in logs))
+		self.assertTrue(any(log["source"] == "File" for log in logs))
+		self.assertTrue(any(log["source"] == "Call Log" for log in logs))
+		self.assertTrue(any(log["source"] == "FCRM Note" and log.get("content") for log in logs))
+		self.assertTrue(any(log["source"] == "Task" and log.get("subject") for log in logs))
+		self.assertEqual(len(logs), result["total"])
+
 	def test_lead_audit_contract_exposes_lead_id(self):
 		lead = frappe.get_doc(
 			{

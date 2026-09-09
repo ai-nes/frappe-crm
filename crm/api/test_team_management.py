@@ -112,6 +112,7 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 				"New Team",
 				None,
 				"Sales",
+				None,
 				"C-1",
 				None,
 				"S-1",
@@ -156,6 +157,10 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 			)
 		for group in workspace["groups"]:
 			self.assertIn("groupLeadId", group)
+			self.assertIn("groupCode", group)
+		for team in workspace["teams"]:
+			self.assertIn("teamCode", team)
+			self.assertIn("groupCode", team)
 
 	def test_member_role_and_initials_are_normalized_for_dashboard(self):
 		self.assertEqual(_member_role("Sale"), "SALE")

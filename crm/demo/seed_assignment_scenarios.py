@@ -36,7 +36,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 	{"name": "Đỗ Quỳnh Anh", "phone": "0902000010", "province": "Đồng Nai", "school": "THPT Bình Sơn", "major": "Digital Marketing", "id": "075302000010"},
 	{"name": "Phan Nhật Vy", "phone": "0902000011", "province": "Đồng Nai", "school": "THPT Trảng Bom", "major": "Business Administration", "id": "075302000011"},
 	{"name": "Lý Thanh Tâm", "phone": "0902000012", "province": "Đồng Nai", "school": "THPT Thống Nhất", "major": "Graphic Design", "id": "075302000012"},
-	{"name": "Nguyễn Khải Nam", "phone": "0902000013", "province": "Ho Chi Minh City", "school": "THPT Gia Định", "major": "Data Science", "id": None, "case": "missing_cccd"},
+	{"name": "Nguyễn Khải Nam", "phone": None, "province": "Ho Chi Minh City", "school": "THPT Gia Định", "major": "Data Science", "id": "079302000013", "case": "missing_phone"},
 	{"name": "Vũ Ngọc Hà", "phone": "0902000014", "province": "Ho Chi Minh City", "school": None, "major": "Artificial Intelligence", "id": "079302000014", "case": "missing_high_school"},
 	{"name": "Phạm Tuấn Kiệt", "phone": "0902000015", "province": "Đồng Nai", "school": "THPT Long Thành", "major": None, "id": "075302000015", "case": "missing_major"},
 	{"name": "Lê Bảo Ngọc", "phone": "0902000016", "province": None, "school": "THPT Nguyễn Thượng Hiền", "major": "Software Engineering", "id": "079302000016", "case": "missing_province"},
@@ -128,6 +128,10 @@ def _active_source() -> str:
 def _lookup(doctype: str, value: str | None, fieldname: str) -> str | None:
 	if not value:
 		return None
+	if doctype == "CRM Province":
+		from crm.api.lead_mapping import _resolve_province
+
+		return _resolve_province(value)
 	return frappe.db.get_value(doctype, {fieldname: value}, "name") or value
 
 
@@ -142,7 +146,6 @@ def _insert_lead(spec: dict[str, Any], source: str, index: int) -> str:
 			"student_name": spec["name"],
 			"phone": spec["phone"],
 			"email": email,
-			"id_number": spec.get("id"),
 			"province": province,
 			"high_school": school,
 			"major": major,
@@ -184,8 +187,8 @@ def execute() -> dict[str, Any]:
 		"source": source,
 		"lead_names": lead_names,
 		"cases": {
-			"valid_rows_before_duplicate_resolution": 14,
-			"invalid_missing_cccd_school_major": 3,
+			"valid_rows_before_duplicate_resolution": 13,
+			"invalid_missing_phone_school_major": 3,
 			"manual_review_missing_province": 2,
 			"duplicate_pair": 2,
 		},

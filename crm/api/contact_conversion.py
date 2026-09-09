@@ -50,7 +50,7 @@ def get_student_conversion_context(student: str):
 	write_enabled = enabled("conversion_write")
 	roles = frappe.get_roles(actor)
 	capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
-	stage = doc.get("lifecycle_stage") or "Lead"
+	stage = "Enrolled" if doc.get("resolution") == "CREATED" else "Lead"
 	return {
 		"student": student,
 		"stage": stage,

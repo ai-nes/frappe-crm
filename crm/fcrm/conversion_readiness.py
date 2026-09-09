@@ -6,7 +6,8 @@ from collections.abc import Mapping
 from typing import Any
 
 REQUIRED_CONVERSION_FIELDS = (
-	("id_number", "missing_id_number"),
+	("phone", "missing_phone"),
+	("province", "missing_province"),
 	("high_school", "missing_high_school"),
 	("major", "missing_major"),
 )

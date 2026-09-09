@@ -51,7 +51,8 @@ the call has a transcript, the dashboard may trigger the STT summary backfill.
 
 List rows expose the Form Submission Status enum (sourced from
 `CRM Lead.processing_status`) through
-`status`/`statusCode`, the `result` value from `resolution` (`""` while pending),
+`status`/`statusCode`, the `result` value from `resolution` (`"PENDING"` while the
+processing/assignment workflow has no result),
 a backward-compatible `processingStatus` alias, `contactNoAnswer`,
 `contactSuccess`, and ISO-8601 `createdAt`.
 Contact counters are permission-aware batch projections from Lead-linked Call Logs and
@@ -73,8 +74,9 @@ supersedes this compatibility description for new admissions-core code.
 ### Target admissions core
 
 The target model makes `CRM Lead` the intake/routing layer and `CRM Student` the
-canonical post-conversion care aggregate. A Lead may convert only when
-`id_number`, `high_school`, and `major` are present. New conversion results expose
+canonical post-conversion care aggregate. The intake/assignment workflow requires
+`phone`, `province`, `high_school`, and `major`; `id_number` is optional at intake.
+New conversion results expose
 `lead_id`, `student_id`, and the idempotency receipt; `CRM Student.source_lead`
 stores the explicit origin. Core child records expose `crm_student` as the
 canonical Student link; `crm_contact` remains as a compatibility alias on

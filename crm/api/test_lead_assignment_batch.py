@@ -79,12 +79,185 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 			["LD-1", "LD-2"],
 		)
 
+	def test_live_closed_lead_is_serialized_for_manual_review(self):
+		item = lead_assignment_batch._serialize_live_review_item(
+			frappe._dict(
+				name="LEAD-CLOSED-1",
+				student_name="Nguyễn Văn A",
+				phone="0900000000",
+				province=None,
+				high_school="SCHOOL-1",
+				major="MAJOR-1",
+				resolution="PENDING",
+				resolution_reason="Lead bị đóng: thiếu tỉnh.",
+				modified="2026-09-09 10:00:00",
+				creation="2026-09-09 09:00:00",
+			)
+		)
+
+		self.assertEqual(item["status"], "manual_review")
+		self.assertEqual(item["batchId"], "")
+		self.assertEqual(item["leadId"], "LEAD-CLOSED-1")
+		self.assertEqual(item["missingFields"], ["Tỉnh"])
+		self.assertEqual(item["reason"], "Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố.")
+
+	def test_live_closed_lead_reason_lists_only_actual_missing_fields(self):
+		item = lead_assignment_batch._serialize_live_review_item(
+			frappe._dict(
+				name="LEAD-CLOSED-2",
+				student_name="Hà Tuấn Kiệt",
+				phone="0903000014",
+				province=None,
+				high_school=None,
+				major="MAJOR-1",
+				resolution="PENDING",
+				resolution_reason=(
+					"Đã đóng hồ sơ vì thiếu số điện thoại, tỉnh/thành phố, trường THPT hoặc ngành quan tâm."
+				),
+			)
+		)
+
+		self.assertEqual(item["missingFields"], ["Tỉnh", "Trường THPT"])
+		self.assertEqual(
+			item["reason"],
+			"Đã đóng hồ sơ vì: Thiếu tỉnh/thành phố, Thiếu trường THPT.",
+		)
+
 	def test_queue_for_zone_preserves_province_queue_identity(self):
 		lead = {"province": "PROVINCE-HCM"}
 		self.assertEqual(
 			lead_assignment_batch._queue_for_zone(lead, {"tier": 3}),
 			"PROVINCE:PROVINCE-HCM",
 		)
+
+	def test_assignment_workflow_maps_latest_batch_summary_to_steps(self):
+		class WorkflowBatch(SimpleNamespace):
+			def get(self, key, default=None):
+				return getattr(self, key, default)
+
+		batch = WorkflowBatch(
+			name="BATCH-1",
+			batch_name="Phân công Lead 1",
+			description="Scan Lead chưa có người phụ trách",
+			status="completed_with_errors",
+			items=[
+				frappe._dict(status="assigned"),
+				frappe._dict(status="manual_review"),
+				frappe._dict(status="failed"),
+			],
+			creation="2026-09-08 10:00:00",
+			modified="2026-09-08 10:01:00",
+			previewed_at=None,
+			completed_at="2026-09-08 10:01:00",
+		)
+
+		workflow = lead_assignment_batch._serialize_assignment_workflow(batch)
+		steps = {step["id"]: step for step in workflow["steps"]}
+
+		self.assertTrue(workflow["hasRun"])
+		self.assertTrue(workflow["hasData"])
+		self.assertEqual(workflow["pendingCount"], 0)
+		self.assertEqual(workflow["batch"]["summary"]["total"], 3)
+		self.assertEqual(steps["validation"]["metrics"]["successCount"], 2)
+		self.assertEqual(steps["review"]["metrics"]["processedCount"], 2)
+		self.assertEqual(steps["review"]["status"], "warning")
+		self.assertEqual(steps["assignment"]["metrics"]["successCount"], 1)
+
+	def test_assignment_workflow_without_batch_is_idle_and_empty(self):
+		workflow = lead_assignment_batch._serialize_assignment_workflow()
+
+		self.assertFalse(workflow["hasRun"])
+		self.assertFalse(workflow["hasData"])
+		self.assertEqual(workflow["pendingCount"], 0)
+		self.assertIsNone(workflow["batch"])
+		self.assertTrue(all(step["status"] == "idle" for step in workflow["steps"]))
+		self.assertTrue(all(step["metrics"]["processedCount"] == 0 for step in workflow["steps"]))
+
+	def test_assignment_workflow_projects_current_processed_leads(self):
+		with (
+			patch.object(
+				lead_assignment_batch.frappe,
+				"get_list",
+				return_value=[
+					frappe._dict(name="LEAD-1", processing_status="PROCESSED", owner_staff=None, assigned_to=None),
+					frappe._dict(name="LEAD-2", processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None),
+					frappe._dict(name="LEAD-3", processing_status="CLOSED", owner_staff=None, assigned_to=None),
+				],
+			),
+			patch.object(
+				lead_assignment_batch,
+				"list_lead_assignment_batches",
+				return_value={"items": [], "pagination": {"has_next_page": False}},
+			),
+		):
+			summary = lead_assignment_batch._processing_workflow_summary()
+
+		workflow = lead_assignment_batch._serialize_assignment_workflow(summary=summary)
+		steps = {step["id"]: step for step in workflow["steps"]}
+
+		self.assertFalse(workflow["hasRun"])
+		self.assertTrue(workflow["hasData"])
+		self.assertEqual(workflow["pendingCount"], 1)
+		self.assertEqual(summary["total"], 3)
+		self.assertEqual(summary["valid"], 2)
+		self.assertEqual(summary["pending"], 1)
+		self.assertEqual(summary["assigned"], 1)
+		self.assertEqual(summary["invalid"], 1)
+		self.assertEqual(steps["classification"]["status"], "success")
+		self.assertEqual(steps["matching"]["status"], "running")
+		self.assertEqual(steps["review"]["status"], "warning")
+
+	def test_history_status_follows_live_assigned_lead(self):
+		self.assertEqual(
+			lead_assignment_batch._effective_history_item_status("pending", "ASSIGNED"),
+			"assigned",
+		)
+
+	def test_history_status_projects_closed_lead_to_manual_review(self):
+		self.assertEqual(
+			lead_assignment_batch._effective_history_item_status("pending", "CLOSED"),
+			"manual_review",
+		)
+
+	def test_history_status_keeps_routing_attention_state_for_open_lead(self):
+		self.assertEqual(
+			lead_assignment_batch._effective_history_item_status("failed", "PROCESSED"),
+			"failed",
+		)
+
+	def test_workflow_summary_keeps_assigned_history_after_scope_changes(self):
+		batch = SimpleNamespace(
+			items=[
+				frappe._dict(lead="LEAD-ASSIGNED", status="pending"),
+				frappe._dict(lead="LEAD-REVIEW", status="manual_review"),
+			]
+		)
+		lead_states = {
+			"LEAD-ASSIGNED": frappe._dict(
+				processing_status="ASSIGNED", owner_staff="SALE-1", assigned_to=None
+			),
+			"LEAD-REVIEW": frappe._dict(processing_status="CLOSED", owner_staff=None, assigned_to=None),
+		}
+		with (
+			patch.object(
+				lead_assignment_batch,
+				"list_lead_assignment_batches",
+				return_value={"items": [{"name": "BATCH-1"}], "pagination": {"has_next_page": False}},
+			),
+			patch.object(lead_assignment_batch.frappe, "get_doc", return_value=batch),
+			patch.object(
+				lead_assignment_batch.frappe.db,
+				"get_value",
+				side_effect=lambda _doctype, name, _fields, **_kwargs: lead_states[name],
+			),
+			patch.object(lead_assignment_batch.frappe, "get_list", return_value=[]),
+		):
+			summary = lead_assignment_batch._processing_workflow_summary()
+
+		self.assertEqual(summary["total"], 2)
+		self.assertEqual(summary["valid"], 1)
+		self.assertEqual(summary["assigned"], 1)
+		self.assertEqual(summary["manualReview"], 1)
 
 	def test_apply_result_keeps_routing_reason_and_capacity_fields(self):
 		item = SimpleNamespace(
@@ -149,38 +322,9 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["scanned"], 2)
 		self.assertEqual(result["trigger"], "unassigned_leads")
 
-	def test_handoff_assigned_lead_uses_revision_and_batch_idempotency(self):
-		lead = frappe._dict(name="LEAD-1", lifecycle_revision=7)
-		conversion = {"status": "CLOSED", "student": "STUDENT-1"}
-		with (
-			patch.object(lead_assignment_batch.frappe, "get_doc", return_value=lead),
-			patch.object(lead_assignment_batch, "handoff_lead", return_value=conversion) as handoff,
-		):
-			result = lead_assignment_batch._handoff_assigned_lead("LEAD-1", "BATCH-1", "ITEM-1", "EXEC-1")
-
-		self.assertEqual(result, conversion)
-		# The batch authorized its operator already; the conversion runs as an
-		# internal service because the committed owner may sit outside that scope.
-		handoff.assert_called_once_with(
-			lead="LEAD-1",
-			expected_lifecycle_revision=7,
-			idempotency_key="lead-assignment-conversion:BATCH-1:ITEM-1:7",
-			correlation_id="EXEC-1:ITEM-1:conversion",
-			_internal_service=True,
-		)
-
-	def test_converted_student_id_reads_handoff_envelope_and_command_result(self):
-		self.assertEqual(
-			lead_assignment_batch._converted_student_id(
-				{"status": "CLOSED", "student": "STUDENT-1", "conversion": {"target_student": "STUDENT-1"}}
-			),
-			"STUDENT-1",
-		)
-		self.assertEqual(
-			lead_assignment_batch._converted_student_id({"conversion": {"student_id": "STUDENT-2"}}),
-			"STUDENT-2",
-		)
-		self.assertEqual(lead_assignment_batch._converted_student_id({}), "—")
+	def test_assignment_batch_has_no_student_handoff_helper(self):
+		self.assertFalse(hasattr(lead_assignment_batch, "_handoff_assigned_lead"))
+		self.assertFalse(hasattr(lead_assignment_batch, "_converted_student_id"))
 
 	def test_batch_recipient_forwards_in_run_load_overrides(self):
 		batch = self._BatchScope()
@@ -222,6 +366,14 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(rows[0]["high_school"], "THPT A")
 		self.assertEqual(rows[0]["major"], "Công nghệ thông tin")
 		self.assertEqual(rows[0]["id_number"], "012345678901")
+
+	def test_batch_import_accepts_missing_optional_cccd(self):
+		rows = lead_assignment_batch._parse_batch_import_rows(
+			None,
+			"Họ và tên,Số điện thoại,Tỉnh/Thành phố,Trường THPT,Ngành quan tâm,Nguồn\n"
+			"Nguyễn Văn A,0900000000,Ho Chi Minh City,THPT A,Công nghệ thông tin,Website\n",
+		)
+		self.assertNotIn("id_number", rows[0])
 
 	def test_province_selection_uses_all_eligible_teams_and_current_load(self):
 		teams = [

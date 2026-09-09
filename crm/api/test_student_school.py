@@ -8,6 +8,7 @@ from frappe.tests.utils import FrappeTestCase
 from crm.api.student_school import (
 	create_school,
 	create_student,
+	create_student_with_lead,
 	delete_school,
 	delete_student,
 	get_field_options,
@@ -46,6 +47,130 @@ class _FakeDocument:
 
 
 class TestStudentSchoolApi(TestCase):
+	def _linked_create_mocks(self, *, student_insert_error=None):
+		lead = Mock()
+		lead.doctype = "CRM Lead"
+		lead.name = "HS-2026-HCM-000001"
+		lead.get.side_effect = lambda fieldname: {
+			"lead_code": "HS-2026-HCM-000001",
+			"lead_status": "New",
+		}.get(fieldname)
+		student = Mock()
+		student.doctype = "CRM Student"
+		student.name = "HS-2026-HCM-000001"
+		student.get.side_effect = lambda fieldname: {
+			"full_name": "Nguyen Van B",
+			"phone": "0900000001",
+			"student_stage": "New",
+			"source_lead": "HS-2026-HCM-000001",
+		}.get(fieldname)
+		if student_insert_error:
+			student.insert.side_effect = student_insert_error
+
+		lead_meta = Mock()
+		lead_meta.get_field.return_value.options = (
+			"New\nWorking\nContacted\nQualified\nUnqualified\nConverted\nLost"
+		)
+		student_meta = Mock(
+			fields=[
+				Mock(fieldname="full_name"),
+				Mock(fieldname="phone"),
+				Mock(fieldname="enrollment_status"),
+				Mock(fieldname="source_lead"),
+			]
+		)
+		return lead, student, lead_meta, student_meta
+
+	@patch("crm.api.student_school._normalize_lead_payload")
+	def test_create_student_with_lead_creates_and_links_real_student(self, normalize):
+		lead, student, _lead_meta, student_meta = self._linked_create_mocks()
+		normalize.return_value = (
+			{
+				"student_name": "Nguyen Van B",
+				"phone": "0900000001",
+				"enrollment_status": "NEW",
+			},
+			[],
+			[],
+			"sales@example.com",
+		)
+		with (
+			patch.object(frappe, "get_meta", return_value=student_meta),
+			patch.object(frappe, "get_doc", side_effect=[lead, student]) as get_doc,
+			patch.object(frappe, "generate_hash", return_value="abc12345"),
+			patch.object(frappe.utils, "now_datetime", return_value="2026-09-09 10:00:00"),
+			patch.object(frappe.db, "savepoint"),
+			patch.object(frappe.db, "set_value") as set_value,
+		):
+			result = create_student_with_lead(
+				{
+					"student_name": "Nguyen Van B",
+					"phone": "0900000001",
+					"province": "PROVINCE-001",
+					"source": "Promoter",
+					"assigned_to": "sales@example.com",
+				}
+			)
+
+		self.assertEqual(result["doctype"], "CRM Student")
+		self.assertEqual(result["name"], student.name)
+		self.assertEqual(result["student"]["student_stage"], "New")
+		self.assertEqual(result["lead"]["student"], student.name)
+		student_values = get_doc.call_args_list[1].args[0]
+		self.assertEqual(student_values["student_stage"], "New")
+		self.assertIsNotNone(student_values["converted_at"])
+		set_value.assert_called_once_with(
+			"CRM Lead",
+			lead.name,
+			{
+				"student": student.name,
+				"converted_student": student.name,
+				"converted_at": student_values["converted_at"],
+				"processing_status": "CLOSED",
+				"resolution": "CREATED",
+				"resolution_reason": "CREATED handoff completed.",
+			},
+			update_modified=False,
+		)
+		self.assertEqual(lead.check_permission.call_args.args, ("create",))
+		self.assertEqual(student.check_permission.call_args.args, ("create",))
+
+	@patch("crm.api.student_school._normalize_lead_payload")
+	def test_create_student_with_lead_rolls_back_when_student_insert_fails(self, normalize):
+		lead, student, _lead_meta, student_meta = self._linked_create_mocks(
+			student_insert_error=RuntimeError("student insert failed")
+		)
+		normalize.return_value = (
+			{
+				"student_name": "Nguyen Van B",
+				"phone": "0900000001",
+				"enrollment_status": "NEW",
+			},
+			[],
+			[],
+			"sales@example.com",
+		)
+		with (
+			patch.object(frappe, "get_meta", return_value=student_meta),
+			patch.object(frappe, "get_doc", side_effect=[lead, student]),
+			patch.object(frappe, "generate_hash", return_value="abc12345"),
+			patch.object(frappe.utils, "now_datetime", return_value="2026-09-09 10:00:00"),
+			patch.object(frappe.db, "savepoint"),
+			patch.object(frappe.db, "rollback") as rollback,
+		):
+			with self.assertRaisesRegex(RuntimeError, "student insert failed"):
+				create_student_with_lead(
+					{
+						"student_name": "Nguyen Van B",
+						"phone": "0900000001",
+						"province": "PROVINCE-001",
+						"source": "Promoter",
+						"assigned_to": "sales@example.com",
+					}
+				)
+
+		rollback.assert_called_once()
+
 	def test_create_student_returns_created_fields(self):
 		doc = _FakeDocument("CRM Lead", "STU-NEW-001")
 		with patch.object(frappe, "new_doc", return_value=doc):
@@ -244,7 +369,7 @@ class TestStudentSchoolApi(TestCase):
 
 	def test_ctv_sale_can_only_update_note_and_status_fields(self):
 		with (
-			patch.object(frappe.session, "user", "ctv@example.com"),
+			patch.object(frappe, "session", Mock(user="ctv@example.com")),
 			patch.object(frappe, "get_roles", return_value=["CTV Sale"]),
 		):
 			with self.assertRaises(frappe.PermissionError):

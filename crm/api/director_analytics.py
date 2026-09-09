@@ -200,8 +200,8 @@ def _ready_response(kind, snapshot, workspace, view, filters, *, kpis=None, seri
 
 def _student_kpis(policy, filters):
 	student_filters = _student_filters(policy, filters)
-	total = frappe.db.count("CRM Lead", filters=student_filters)
-	stages = frappe.db.get_all("CRM Lead", filters=student_filters, fields=["lifecycle_stage", "count(name) as value"], group_by="lifecycle_stage")
+	total = frappe.db.count("CRM Student", filters=student_filters)
+	stages = frappe.db.get_all("CRM Student", filters=student_filters, fields=["lifecycle_stage", "count(name) as value"], group_by="lifecycle_stage")
 	child_suppressed = any(row.value < _PRIVACY_MINIMUM for row in stages)
 	visible_total = total if total >= _PRIVACY_MINIMUM and not child_suppressed else None
 	return [
@@ -211,7 +211,7 @@ def _student_kpis(policy, filters):
 
 
 def _student_series(policy, filters, dimension="lifecycle_stage"):
-	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=[f"{dimension} as label", "count(name) as value"], group_by=dimension, order_by=f"{dimension} asc")
+	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=[f"{dimension} as label", "count(name) as value"], group_by=dimension, order_by=f"{dimension} asc")
 	points = [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows]
 	return [{"metricId": "students.count", "definitionId": "students.count", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "points": points, "unit": "count"}]
 
@@ -256,7 +256,7 @@ def _sla_projection(policy, filters, dimension):
 def _forecast_series(policy, filters):
 	# Current Frappe projections do not retain an immutable eligible-cohort
 	# denominator.  Return lifecycle evidence, but withhold every forecast.
-	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=["lifecycle_stage as label", "count(name) as value"], group_by="lifecycle_stage")
+	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=["lifecycle_stage as label", "count(name) as value"], group_by="lifecycle_stage")
 	return [{"metricId": "funnel.current_state", "definitionId": "funnel.current_state", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Phân bổ hồ sơ hiện tại", "grain": "state_as_of", "points": [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows], "forecast": {"status": "insufficient_forecast_data", "horizonDays": 90, "methodVersion": "cohort-backtest-v1", "reason": "Lifecycle events do not yet prove six completed eligible cohorts and three rolling backtests."}}]
 
 
@@ -328,16 +328,16 @@ def get_series(policy, workspace, view, filters, snapshot):
 	return _response("series", snapshot, workspace, view, filters)
 
 
-_STUDENT_ROW_FIELDS = ["name", "student_name", "branch", "major", "lifecycle_stage", "owner_staff", "owning_team", "modified"]
+_STUDENT_ROW_FIELDS = ["name", "full_name as student_name", "branch", "major", "lifecycle_stage", "owner_staff", "owning_team", "modified"]
 
 
 def get_rows(policy, workspace, view, filters, snapshot, cursor=None):
 	if route_is_ready(workspace, view) and workspace != "director-records":
 		return _ready_response("rows", snapshot, workspace, view, filters, rows=[], row_schema=[])
-	if workspace != "director-records" or not _source_available("CRM Lead"):
+	if workspace != "director-records" or not _source_available("CRM Student"):
 		return _response("rows", snapshot, workspace, view, filters)
 	page_length = 50
-	rows = frappe.db.get_all("CRM Lead", filters=_student_filters(policy, filters), fields=_STUDENT_ROW_FIELDS, order_by="modified desc, name desc", limit_page_length=page_length)
+	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=_STUDENT_ROW_FIELDS, order_by="modified desc, name desc", limit_page_length=page_length)
 	# A logical destination is intentionally emitted instead of raw Contact links.
 	projected = [{key: row.get(key) for key in _STUDENT_ROW_FIELDS if key != "name"} | {"drillDown": {"kind": "student", "resolver": "crm.api.role_workspaces.resolve_workspace_row_detail", "token": mint_row_detail_token(policy, snapshot, row.name)}} for row in rows]
 	return _ready_response("rows", snapshot, workspace, view, filters, rows=projected, row_schema=[{"field": field, "redaction": "standard"} for field in _STUDENT_ROW_FIELDS if field != "name"], total=None)

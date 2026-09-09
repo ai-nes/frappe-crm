@@ -9,6 +9,22 @@ from crm.api import lead_sale
 
 
 class TestLeadSaleOverview(FrappeTestCase):
+	def test_assignment_reason_translates_routing_code(self):
+		reason = lead_sale._assignment_reason(
+			{}, "error", None, {"last_error_code": "TEAM_NOT_FOUND_FOR_PROVINCE"}
+		)
+
+		self.assertEqual(reason, "Chưa có Team đang phụ trách tỉnh của Lead.")
+		self.assertNotIn("TEAM_NOT_FOUND_FOR_PROVINCE", reason)
+
+	def test_assignment_reason_hides_unknown_routing_code(self):
+		reason = lead_sale._assignment_reason(
+			{}, "error", None, {"last_error_code": "UNKNOWN_ROUTING_CODE"}
+		)
+
+		self.assertNotIn("UNKNOWN_ROUTING_CODE", reason)
+		self.assertIn("kiểm tra cấu hình Team", reason)
+
 	@patch.object(lead_sale, "get_student_assignment_workspace")
 	def test_lead_workspace_alias_drops_frappe_cmd(self, get_workspace):
 		get_workspace.return_value = {"ok": True}

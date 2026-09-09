@@ -13,6 +13,7 @@ from frappe import _
 from frappe.utils import get_datetime
 
 from crm.api.audit import get_audit_logs_for_document
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS
 from crm.fcrm.permissions import can_read_full_lead_board, get_student_list_read_condition
 
@@ -34,9 +35,19 @@ RESOLUTION_LABELS = {
 	"SPAM": "Spam",
 	"FAILED": "Thất bại",
 }
+PROCESSING_STATUS_ORDER = (
+	"CASE processing_status "
+	"WHEN 'NEW' THEN 1 "
+	"WHEN 'PROCESSING' THEN 2 "
+	"WHEN 'PROCESSED' THEN 3 "
+	"WHEN 'ASSIGNED' THEN 4 "
+	"WHEN 'CLOSED' THEN 5 "
+	"ELSE 99 END"
+)
 
 LEAD_FIELDS = [
 	"name",
+	"lead_id",
 	"lead_code",
 	"processing_status",
 	"resolution",
@@ -44,8 +55,6 @@ LEAD_FIELDS = [
 	"phone",
 	"email",
 	"other_email",
-	"enrollment_status",
-	"lifecycle_stage",
 	"high_school",
 	"province",
 	"ward",
@@ -61,6 +70,8 @@ LEAD_FIELDS = [
 	"owner_staff",
 	"assigned_to",
 	"student",
+	"matched_student",
+	"converted_student",
 	"creation",
 	"modified",
 ]
@@ -106,7 +117,6 @@ def get_director_leads(
 		{
 			**year_filter,
 			"processing_status": "PROCESSED",
-			"resolution": ["in", ["MATCHED", "CREATED"]],
 		},
 		allowed_lead_ids=list_scope_lead_ids,
 	)
@@ -151,8 +161,9 @@ def get_director_lead(lead_id: str) -> dict[str, Any]:
 	if not lead_id:
 		_raise_api_error("INVALID_LEAD_ID", "leadId không được để trống.", frappe.ValidationError, 400)
 
+	lead_name = resolve_lead_name(lead_id)
 	try:
-		doc = frappe.get_doc("CRM Lead", lead_id)
+		doc = frappe.get_doc("CRM Lead", lead_name)
 	except frappe.DoesNotExistError:
 		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
 
@@ -161,7 +172,7 @@ def get_director_lead(lead_id: str) -> dict[str, Any]:
 
 	row = frappe._dict({field: doc.get(field) for field in LEAD_FIELDS})
 	lookups = _load_lookups([row])
-	event_entries, event_titles = _event_projection(lead_id, lookups)
+	event_entries, event_titles = _event_projection(lead_name, lookups)
 	return {
 		"lead": _map_detail_row(row, lookups=lookups, event_titles=event_titles),
 		"log": _lead_log(doc, lookups=lookups, event_entries=event_entries),
@@ -275,6 +286,8 @@ def _year_filter(admission_year: str | None) -> dict[str, Any]:
 
 def _list_scope_lead_ids() -> list[str] | None:
 	"""Return explicit Lead IDs for the session's Group/Team list scope."""
+	if can_read_full_lead_board():
+		return None
 	condition = get_student_list_read_condition(doctype="CRM Lead")
 	if condition is None:
 		return None
@@ -362,10 +375,15 @@ def _fetch_lead_rows(
 		filters=_with_allowed_lead_ids(filters, allowed_lead_ids),
 		or_filters=or_filters,
 		fields=LEAD_FIELDS,
-		order_by=f"modified {query['order']}, name {query['order']}",
+		order_by=_lead_order_by(query["order"]),
 		limit_start=(query["page"] - 1) * query["page_size"],
 		limit_page_length=query["page_size"],
 	)
+
+
+def _lead_order_by(order: str) -> str:
+	"""Keep the list grouped by workflow status before applying recency."""
+	return f"{PROCESSING_STATUS_ORDER} asc, modified {order}, name {order}"
 
 
 def _load_lookups(rows: list) -> dict[str, Any]:
@@ -532,10 +550,17 @@ def _resolution_options() -> list[dict[str, str]]:
 def _map_lead_row(row, *, lookups: dict[str, Any] | None = None) -> dict[str, Any]:
 	lookups = lookups or {}
 	owner_key = row.get("owner_staff") or row.get("assigned_to")
+	student_id = row.get("converted_student") or row.get("matched_student") or row.get("student")
+	student_code = (
+		frappe.db.get_value("CRM Student", student_id, "name") if student_id else None
+	)
+	lead_id = row.get("lead_id") or row.get("name")
 	item = {
-		"id": row.get("name"),
+		"id": lead_id,
+		"leadId": lead_id,
 		"leadCode": row.get("lead_code"),
-		"studentId": row.get("name"),
+		"studentCode": student_code,
+		"studentId": student_id,
 		"initials": _initials(row.get("student_name")),
 		"name": row.get("student_name") or row.get("name"),
 		"phone": row.get("phone") or "",
@@ -565,8 +590,8 @@ def _map_detail_row(
 	item = _map_lead_row(row, lookups=lookups)
 	return {
 		**item,
-		"lifecycleStatus": _status_label(row.get("enrollment_status"), lookups),
-		"lifecycleStatusCode": row.get("enrollment_status"),
+		"lifecycleStatus": _processing_status_label(row.get("processing_status")),
+		"lifecycleStatusCode": row.get("processing_status"),
 		"email": row.get("email") or "",
 		"secondaryEmail": row.get("other_email") or "",
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province") or "",
@@ -761,7 +786,7 @@ def _processing_status_label(value: Any) -> str:
 
 def _result_code(value: Any) -> str:
 	result = str(value or "").strip().upper()
-	return "" if result in {"", "PENDING"} else result
+	return result or "PENDING"
 
 
 def _user_label(user: Any) -> str:

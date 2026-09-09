@@ -76,12 +76,7 @@ EXECUTION_ATTEMPT_LIST_FIELDS = [
 
 OUTCOME_LIST_FIELDS = [
 	"name",
-	"outcome_id",
 	"execution",
-	"recommendation",
-	"action",
-	"student",
-	"attempt",
 	"outcome_type",
 	"outcome_value",
 	"success",
@@ -198,20 +193,49 @@ def get_action_execution_attempt(name):
 	return _get("CRM Action Execution Attempt", name)
 
 
+def _execution_names_for_outcome_filters(*, recommendation=None, action=None, student=None) -> list[str] | None:
+	"""Translate the legacy recommendation/action/student outcome filters into
+	an execution-name filter: ``CRM Action Outcome`` carries no student/action/
+	recommendation column of its own, only ``execution`` -> that links to
+	``CRM Action Execution`` -> ``task`` (``CRM Action Item``, which does carry
+	``student``/``action``).
+
+	Returns ``None`` when none of these filters were requested (caller skips
+	the join entirely); an empty list means the join matched nothing.
+	"""
+	if not (recommendation or action or student):
+		return None
+	execution_filters: dict = {}
+	if recommendation:
+		execution_filters["recommendation"] = recommendation
+	if student or action:
+		task_filters: dict = {}
+		if student:
+			task_filters["student"] = student
+		if action:
+			task_filters["action"] = action
+		tasks = frappe.get_all("CRM Action Item", filters=task_filters, pluck="name")
+		if not tasks:
+			return []
+		execution_filters["task"] = ["in", tasks]
+	return frappe.get_all("CRM Action Execution", filters=execution_filters, pluck="name")
+
+
 @frappe.whitelist()
 def list_action_outcomes(execution=None, recommendation=None, action=None, student=None, start=0, page_length=20):
 	"""List CRM Action Outcome rows (captured outcome evidence). Filter by
-	execution, recommendation, action, or student; paginated, newest first.
+	execution, recommendation, action, or student (resolved through the
+	execution/task join, since the outcome row itself only carries
+	``execution``); paginated, newest first.
 	"""
 	filters = {}
-	if execution:
+	joined = _execution_names_for_outcome_filters(recommendation=recommendation, action=action, student=student)
+	if joined is not None:
+		if execution and execution not in joined:
+			joined = []
+		filters["execution"] = ["in", joined]
+	elif execution:
 		filters["execution"] = execution
-	if recommendation:
-		filters["recommendation"] = recommendation
-	if action:
-		filters["action"] = action
-	if student:
-		filters["student"] = student
 	return paged_list(
 		"CRM Action Outcome", OUTCOME_LIST_FIELDS,
 		filters=filters, start=start, page_length=page_length, order_by="captured_at desc",
@@ -220,17 +244,33 @@ def list_action_outcomes(execution=None, recommendation=None, action=None, stude
 
 @frappe.whitelist()
 def get_action_outcome(name):
-	"""Get one CRM Action Outcome by name."""
+	"""Get one CRM Action Outcome by name, plus a resolvable ``OutcomeRef``
+	drill-down: execution -> task -> student, re-checking the caller's Frappe
+	read permission at each hop (the outcome/execution rows are readable by any
+	Sale-family role, but the student behind them may be outside this caller's
+	scope).
+	"""
 	row = _get("CRM Action Outcome", name)
-	student = row.get("student")
-	if student:
-		row["outcome_ref"] = build_outcome_ref(
-			outcome_id=str(row.get("outcome_id") or row.get("name")),
-			subject=build_subject_ref("student", str(student), str(frappe.local.site or "frappe")),
-			kind="verified_outcome",
-			status=str(row.get("outcome_type") or "recorded"),
-			source_revision=str(row.get("name") or "outcome"),
-			decision_id=str(row.get("recommendation")) if row.get("recommendation") else None,
-			verified=True,
-		)
+	execution_name = row.get("execution")
+	if not execution_name:
+		return row
+	execution = frappe.get_doc("CRM Action Execution", execution_name)
+	execution.check_permission("read")
+	task_name = execution.get("task")
+	if not task_name:
+		return row
+	task = frappe.get_doc("CRM Action Item", task_name)
+	task.check_permission("read")
+	student = task.get("student")
+	if not student:
+		return row
+	row["outcome_ref"] = build_outcome_ref(
+		outcome_id=str(row.get("name")),
+		subject=build_subject_ref("student", str(student), str(frappe.local.site or "frappe")),
+		kind="verified_outcome",
+		status=str(row.get("outcome_value") or row.get("outcome_type") or "recorded"),
+		source_revision=str(execution_name),
+		decision_id=str(execution.get("recommendation")) if execution.get("recommendation") else None,
+		verified=True,
+	)
 	return row

@@ -44,7 +44,8 @@ PUBLIC_LEAD_LIST_FIELDS = (
 	"high_school",
 	"province",
 	"ward",
-	"lead_status",
+	"processing_status",
+	"resolution",
 	"campaign",
 	"creation",
 )
@@ -166,9 +167,6 @@ _HEADER_ALIASES = {
 	"ma chien dich": "campaign_code",
 	"campaign code": "campaign_code",
 	"campaign_code": "campaign_code",
-	"tinh trang lead": "enrollment_status",
-	"lead status": "enrollment_status",
-	"enrollment status": "enrollment_status",
 	"giao cho": "assigned_to",
 	"assigned to": "assigned_to",
 	"chi nhanh": "branch",
@@ -205,7 +203,6 @@ _LEAD_FIELDS = frozenset(
 		"conversion_potential",
 		"source",
 		"campaign_code",
-		"enrollment_status",
 		"assigned_to",
 		"branch",
 		"tags",
@@ -257,9 +254,8 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 _PUBLIC_SERVER_MANAGED_FIELDS = frozenset(
 	{
 		"lead_code",
-		"lead_status",
-		"enrollment_status",
-		"conversion_status",
+		"processing_status",
+		"resolution",
 		"conversion_blockers",
 		"converted_student",
 		"converted_at",
@@ -400,13 +396,6 @@ def _resolve_campaign_code(value: Any) -> str:
 	return campaign
 
 
-def _resolve_status(value: Any) -> str:
-	status = _resolve_link("CRM Enrollment Status", value, ("code", "display_name"), "Tình trạng Lead")
-	if frappe.db.get_value("CRM Enrollment Status", status, "enabled") == 0:
-		_fail("INVALID_STATUS", "Tình trạng Lead đã bị tắt.")
-	return status
-
-
 def _resolve_assignment(value: Any) -> tuple[str, str, str | None]:
 	requested = _text(value)
 	actor = _text(getattr(frappe.session, "user", None))
@@ -479,7 +468,6 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 		_fail("REQUIRED_FIELD", "Nguồn là bắt buộc.")
 	source = _resolve_source(source_value)
 	campaign = _resolve_campaign_code(payload.get("campaign_code")) if payload.get("campaign_code") else None
-	status = _resolve_status(payload.get("enrollment_status") or "NEW")
 
 	high_school_value = _text(payload.get("high_school"))
 	high_school = resolve_high_school_strict(high_school_value, province) if high_school_value else None
@@ -552,7 +540,6 @@ def _normalize_lead_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], li
 		"conversion_potential": conversion_potential,
 		"source": source,
 		"campaign": campaign,
-		"enrollment_status": status,
 		"assigned_to": assigned_to,
 		"branch": branch,
 		"aspiration": aspiration,
@@ -768,8 +755,8 @@ def _create_lead(fields: dict[str, Any]) -> dict[str, Any]:
 			fieldname: doc.get(fieldname)
 			for fieldname in (
 				"lead_code",
-				"lead_status",
-				"conversion_status",
+				"processing_status",
+				"resolution",
 				"conversion_blockers",
 				"student_name",
 				"phone",
@@ -785,7 +772,6 @@ def _create_lead(fields: dict[str, Any]) -> dict[str, Any]:
 				"conversion_potential",
 				"source",
 				"campaign",
-				"enrollment_status",
 				"assigned_to",
 				"branch",
 				"aspiration",
@@ -814,8 +800,8 @@ def _create_public_lead(fields: dict[str, Any]) -> dict[str, Any]:
 		"name": doc.name,
 		"lead_code": doc.get("lead_code"),
 		"leadCode": doc.get("lead_code"),
-		"lead_status": doc.get("lead_status"),
-		"conversion_status": doc.get("conversion_status"),
+		"processing_status": doc.get("processing_status"),
+		"resolution": doc.get("resolution"),
 		"conversion_blockers": doc.get("conversion_blockers"),
 		"campaign": doc.get("campaign"),
 		"campaign_code": fields.get("campaign_code"),
@@ -1021,7 +1007,12 @@ def _parse_csv_rows(
 		_fail("INVALID_CSV", "CSV không có header.")
 	canonical_headers = {}
 	for header in reader.fieldnames:
-		canonical = _HEADER_ALIASES.get(_normalize_header(header))
+		normalized = _normalize_header(header)
+		if normalized in {
+			"tinh trang lead", "lead status", "conversion status", "enrollment status", "lifecycle stage"
+		}:
+			_fail("UNKNOWN_FIELD", f"Unsupported field: {header}.")
+		canonical = _HEADER_ALIASES.get(normalized)
 		if canonical:
 			canonical_headers[header] = canonical
 	missing = sorted(required_headers - set(canonical_headers.values()))

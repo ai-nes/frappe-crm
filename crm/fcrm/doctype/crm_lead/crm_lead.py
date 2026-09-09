@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 
 import frappe
 from frappe import _
@@ -7,10 +8,6 @@ from frappe.model.document import Document
 from frappe.utils import now_datetime
 
 from crm.fcrm.conversion_readiness import conversion_readiness
-from crm.fcrm.doctype.crm_lead.enrollment_transition import (
-	record_transition,
-	set_enrollment_status,
-)
 from crm.fcrm.lead_code import (
 	is_valid_lead_code,
 	lead_code_from_name,
@@ -18,7 +15,6 @@ from crm.fcrm.lead_code import (
 	next_lead_code,
 )
 from crm.fcrm.lead_processing import PROCESSING_STATUSES, RESOLUTIONS, SERVICE_FLAG
-from crm.fcrm.lifecycle import enforce_lifecycle_change_policy, get_lifecycle_stage
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.student_reference import next_hs_code
 from crm.fcrm.utils.geo_resolver import (
@@ -54,6 +50,7 @@ class CRMLead(Document):
 		self.name = next_hs_code(self.get("admission_year"))
 
 	def before_insert(self):
+		self.lead_id = uuid.uuid4().hex
 		# The code is server-managed; ignore any client/import value.
 		self.lead_code = None
 		self.processing_status = "NEW"
@@ -76,14 +73,6 @@ class CRMLead(Document):
 				_("Lead Code is immutable after creation."),
 				frappe.ValidationError,
 			)
-		if before and not getattr(frappe.flags, "student_lifecycle_service", False):
-			lifecycle_fields = ("enrollment_status", "lifecycle_stage")
-			if any(before.get(field) != self.get(field) for field in lifecycle_fields):
-				frappe.throw(
-					_("Student lifecycle changes must use the lifecycle transition command."),
-					frappe.PermissionError,
-					title=_("Lifecycle command required"),
-				)
 		if before and not getattr(frappe.flags, "student_ownership_service", False):
 			ownership_fields = ("assigned_to", "owner_staff", "owning_team", "owning_pool")
 			if any(before.get(field) != self.get(field) for field in ownership_fields):
@@ -127,7 +116,6 @@ class CRMLead(Document):
 			or not self.get_doc_before_save()
 		):
 			self._derive_owner_fields()
-		self._derive_lifecycle_stage()
 		if getattr(frappe.flags, "student_ownership_service", False):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
@@ -144,23 +132,17 @@ class CRMLead(Document):
 			frappe.throw(_("A NEW Lead must have PENDING resolution."), frappe.ValidationError)
 		if status == "PROCESSING" and resolution != "PENDING":
 			frappe.throw(_("A Lead in PROCESSING must have PENDING resolution."), frappe.ValidationError)
-		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"MATCHED", "CREATED"}:
+		if status in {"PROCESSED", "ASSIGNED"} and resolution not in {"PENDING", "MATCHED", "CREATED"}:
 			frappe.throw(
-				_("Only MATCHED or CREATED Leads can be PROCESSED or ASSIGNED."),
+				_("A processed or assigned Lead must have a pending processing result."),
 				frappe.ValidationError,
 			)
-		if status == "CLOSED" and resolution == "PENDING":
-			frappe.throw(_("A CLOSED Lead must have a resolution."), frappe.ValidationError)
 
 	def _update_conversion_readiness(self):
 		"""Keep the Lead's pre-conversion readiness projection server-managed."""
 		readiness = conversion_readiness(self)
 		if self.meta.has_field("conversion_blockers"):
 			self.conversion_blockers = json.dumps(readiness["blockers"], ensure_ascii=False)
-		if self.meta.has_field("conversion_status"):
-			self.conversion_status = (
-				"Converted" if self.get("student") or self.get("converted_student") else readiness["status"]
-			)
 
 	def _derive_owner_fields(self):
 		if self.assigned_to:
@@ -169,12 +151,6 @@ class CRMLead(Document):
 		self.owner_staff = None
 		if not self.owning_team:
 			self.owning_team = derive_unassigned_owning_team(frappe.session.user)
-
-	def _derive_lifecycle_stage(self):
-		before = self.get_doc_before_save()
-		before_enrollment_status = before.enrollment_status if before else None
-		self.lifecycle_stage = get_lifecycle_stage(self.enrollment_status)
-		enforce_lifecycle_change_policy(self, before_enrollment_status)
 
 	def _log_assignment_change(self):
 		before = self.get_doc_before_save()
@@ -258,29 +234,6 @@ class CRMLead(Document):
 				frappe.ValidationError,
 			)
 
-	def on_update(self):
-		self._log_enrollment_transition()
-
-	def _log_enrollment_transition(self):
-		# Fires on both insert and update (Frappe calls on_update after
-		# db_insert too) — the single hook-side entry point into
-		# record_transition(). Does NOT catch the db_set/db.set_value
-		# bypass paths (convert-to-contact, Contact-side edit) — those
-		# call set_enrollment_status() directly instead, since db_set
-		# skips this hook entirely.
-		before = self.get_doc_before_save()
-		if before is None:
-			# New student — get_doc_before_save() is only populated on the
-			# update path (load_doc_before_save runs before db_update, not
-			# before db_insert). Record the initial status so it isn't
-			# invisible in the log.
-			record_transition(self.name, None, self.enrollment_status, source="student_insert")
-			return
-
-		old_status = before.get("enrollment_status")
-		if old_status != self.enrollment_status:
-			record_transition(self.name, old_status, self.enrollment_status, source="student_save")
-
 	def _set_defaults(self):
 		if not self.admission_year:
 			current_year = str(frappe.utils.now_datetime().year)
@@ -294,14 +247,16 @@ class CRMLead(Document):
 	def _ensure_lead_code(self):
 		if self.get("lead_code"):
 			return
+		mirrored_code = lead_code_from_name(self.name)
+		if mirrored_code:
+			self.lead_code = mirrored_code
+			return
 		year = lead_code_year(
 			self.get("admission_year"),
 			self.get("creation"),
 			frappe.utils.now_datetime().year,
 		)
-		code = lead_code_from_name(self.name)
-		if not code:
-			code = next_lead_code(year)
+		code = next_lead_code(year)
 		while frappe.db.exists("CRM Lead", {"lead_code": code, "name": ["!=", self.name]}):
 			code = next_lead_code(year)
 		self.lead_code = code
@@ -354,13 +309,6 @@ class CRMLead(Document):
 				"width": "14rem",
 			},
 			{
-				"label": "Enrollment Status",
-				"type": "Link",
-				"key": "enrollment_status",
-				"options": "CRM Enrollment Status",
-				"width": "12rem",
-			},
-			{
 				"label": "Processing Status",
 				"type": "Data",
 				"key": "processing_status",
@@ -405,7 +353,6 @@ class CRMLead(Document):
 			"student_name",
 			"phone",
 			"email",
-			"enrollment_status",
 			"processing_status",
 			"resolution",
 			"assigned_to",

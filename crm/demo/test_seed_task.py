@@ -9,6 +9,16 @@ from crm.demo.seed_task import (
 )
 
 
+class _FakeLead:
+	name = "HS-2026-HCM-000101"
+
+	def __init__(self, processing_status, resolution):
+		self.values = {"processing_status": processing_status, "resolution": resolution}
+
+	def get(self, fieldname):
+		return self.values.get(fieldname)
+
+
 def _schools():
 	return [
 		{
@@ -60,7 +70,13 @@ def test_task_seed_persists_ai_runtime_gates_after_seed(monkeypatch):
 
 def test_seed_one_enriches_the_converted_student_before_creating_related_records(monkeypatch):
 	"""The task fixture must not create a pre-conversion duplicate Student."""
-	profile = {"key": "lead-01", "student_name": "Test Student", "campaign": "Campaign", "school": {"name": "School", "province": "HCM"}, "major": "SE"}
+	profile = {
+		"key": "lead-01",
+		"student_name": "Test Student",
+		"campaign": "Campaign",
+		"school": {"name": "School", "province": "HCM"},
+		"major": "SE",
+	}
 	context = {"campaign": "Campaign"}
 	accounts = {"staff_by_email": {"ctvsale@gmail.com": "CTV Staff"}, "team": "Team", "pool": "Pool"}
 	calls = []
@@ -68,7 +84,9 @@ def test_seed_one_enriches_the_converted_student_before_creating_related_records
 	monkeypatch.setattr(seed_task, "_submit_lead", lambda *_: "HS-2026-HCM-000101")
 	monkeypatch.setattr(seed_task, "_complete_lead", lambda *_: calls.append("complete"))
 	monkeypatch.setattr(seed_task, "_assign_lead", lambda *_: calls.append("assign"))
-	monkeypatch.setattr(seed_task, "_ensure_conversion", lambda *_: calls.append("convert") or "HS-2026-HCM-000101")
+	monkeypatch.setattr(
+		seed_task, "_ensure_conversion", lambda *_: calls.append("convert") or "HS-2026-HCM-000101"
+	)
 	monkeypatch.setattr(
 		seed_task,
 		"_ensure_contact",
@@ -87,3 +105,28 @@ def test_seed_one_enriches_the_converted_student_before_creating_related_records
 
 	assert calls == ["complete", "assign", "convert", ("contact", "HS-2026-HCM-000101")]
 	assert row["student"] == row["contact"] == "HS-2026-HCM-000101"
+
+
+def test_assign_lead_is_idempotent_for_a_converted_lead(monkeypatch):
+	lead = _FakeLead("CLOSED", "CREATED")
+	calls = []
+	monkeypatch.setattr(seed_task.frappe, "get_doc", lambda *_: lead)
+	monkeypatch.setattr(
+		seed_task.frappe.db,
+		"get_value",
+		lambda *_args, **_kwargs: seed_task.frappe._dict(
+			owner_staff="CTV Staff", owning_team=None, owning_pool=None, ownership_revision=1
+		),
+	)
+	monkeypatch.setattr(
+		"crm.fcrm.lead_processing.mark_lead_assigned",
+		lambda *_args, **_kwargs: calls.append("mark"),
+	)
+	monkeypatch.setattr(
+		"crm.fcrm.student_ownership.change_student_ownership",
+		lambda *_args, **_kwargs: calls.append("change"),
+	)
+
+	seed_task._assign_lead(lead.name, "CTV Staff", "Sales Team", "lead-01")
+
+	assert calls == []

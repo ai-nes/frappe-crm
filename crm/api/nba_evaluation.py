@@ -21,12 +21,15 @@ from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
 from crm.services.action_outcome import (
+	ACTION_EFFECT_OVERRIDES,
+	CATEGORY_OUTCOME_EFFECTS,
 	CONTACT_ATTEMPT_FAILURE_VALUE,
 	CONTACT_ATTEMPT_RESET_VALUE,
 	DECISION_STATUS_REOPEN_TRIGGERS,
 	DIMENSION_REDUCERS,
 	derive_decision_effects,
 )
+from crm.services.intelligence_refs import build_outcome_ref, build_subject_ref
 
 # Dimensions that don't persist across unrelated intervening outcomes: only
 # the single most recent completed action's own effects can set them. If that
@@ -59,108 +62,372 @@ _DEFAULT_TIMEZONE = "Asia/Ho_Chi_Minh"
 # Durable dimension-scoped history, deliberately not the UI-facing
 # ``recent_actions`` projection (hard-limited to the last 5 actions of any
 # type -- too narrow for a dimension like interest_disposition to survive
-# unrelated actions recorded afterwards). Large enough that an older closing
-# signal isn't silently lost to intervening administrative actions; tune
-# against real volume once observed.
-_DECISION_EFFECT_LOOKBACK_LIMIT = 50
+# unrelated actions recorded afterwards).
+#
+# Each dimension is resolved against only the outcome history that can
+# actually affect it (its own candidate outcome-code set), not one shared
+# window: a ``latest`` dimension query keeps paging, keyset-ordered on
+# ``(completed_at, name)``, until it either finds the newest affecting row or
+# genuinely exhausts the student's matching history -- never on a fixed
+# multi-dimension row budget that could silently drop a closing signal placed
+# beyond it. ``_DIMENSION_QUERY_BUDGET`` is a per-dimension safety valve
+# against a pathological history (e.g. thousands of rows sharing an outcome
+# code that a category mismatch keeps rejecting); hitting it marks that one
+# dimension's ``coverage`` "incomplete" instead of silently returning a
+# partial read as if it were authoritative.
+_DIMENSION_PAGE_SIZE = 50
+_DIMENSION_QUERY_BUDGET = 500
+
+# ``latest`` dimensions persist until an older row is found that set them.
+# Derived from the reducer table so a new ``latest`` dimension is covered
+# automatically.
+_LATEST_PERSIST_DIMENSIONS = frozenset(
+	dim for dim, reducer in DIMENSION_REDUCERS.items() if reducer == "latest"
+)
+
+
+_ACTION_OUTCOME_TYPE = "action_execution"
+
+
+def _immutable_outcome_refs_for_tasks(task_names: list[str]) -> dict[str, dict]:
+	"""Batch-resolve each task's immutable ``CRM Action Outcome``, if any.
+
+	A task with no linked ``CRM Action Execution``, or an execution with no
+	captured outcome yet (still in flight), is simply absent from the result --
+	the caller falls back to the legacy Task-only provenance for that row.
+	Two queries regardless of batch size, scoped to one page of tasks at a time
+	by the caller.
+	"""
+	if not task_names:
+		return {}
+	executions = frappe.get_all(
+		"CRM Action Execution",
+		filters={"task": ["in", task_names]},
+		fields=["name", "task", "recommendation"],
+		ignore_permissions=True,
+	)
+	if not executions:
+		return {}
+	execution_by_name = {row["name"]: row for row in executions}
+	outcomes = frappe.get_all(
+		"CRM Action Outcome",
+		filters={"execution": ["in", list(execution_by_name)], "outcome_type": _ACTION_OUTCOME_TYPE},
+		fields=["name", "execution", "outcome_value", "captured_at"],
+		ignore_permissions=True,
+	)
+	refs: dict[str, dict] = {}
+	for outcome in outcomes:
+		execution = execution_by_name.get(outcome["execution"])
+		if not execution or not execution.get("task"):
+			continue
+		refs[execution["task"]] = {
+			"outcome_name": outcome["name"],
+			"execution": outcome["execution"],
+			"recommendation": execution.get("recommendation"),
+			"outcome_value": outcome.get("outcome_value"),
+		}
+	return refs
+
+
+def _effect_provenance(
+	outcome_code: str,
+	action_ref: str | None,
+	occurred_at: str | None,
+	*,
+	student: str,
+	task: str | None,
+	immutable_ref: dict | None,
+) -> dict:
+	"""Drill-down/time-check metadata for one folded effect: which recorded
+	outcome shaped the dimension and when (authority time). ``action_ref`` is
+	the CRM Action link, never the category fallback -- a drill-down resolves it.
+
+	When the completing task has a linked immutable ``CRM Action Outcome``,
+	provenance carries a resolvable ``outcome_ref`` (``verified``) instead of
+	only the synthesized action+code pair. Otherwise (no ``CRM Action
+	Execution``/``CRM Action Outcome`` row for this task -- a legacy or
+	not-yet-executed completion) it is tagged ``legacy_task`` so a consumer
+	never mistakes it for a verified outcome.
+	"""
+	source: dict = {"outcome_code": outcome_code}
+	if action_ref:
+		source["action"] = action_ref
+	provenance: dict = {"source_outcome": source}
+	if occurred_at:
+		provenance["occurred_at"] = occurred_at
+	if immutable_ref:
+		provenance["source_kind"] = "verified_outcome"
+		provenance["outcome_ref"] = build_outcome_ref(
+			outcome_id=immutable_ref["outcome_name"],
+			subject=build_subject_ref("student", student, str(frappe.local.site or "frappe")),
+			kind="verified_outcome",
+			status=str(immutable_ref.get("outcome_value") or outcome_code),
+			source_revision=immutable_ref["execution"],
+			decision_id=immutable_ref.get("recommendation"),
+			verified=True,
+		)
+	elif task:
+		provenance["source_kind"] = "legacy_task"
+		provenance["task"] = task
+	return provenance
+
+
+def _dimension_codes(dimension: str) -> frozenset[str]:
+	"""Every outcome_code that can *ever* produce an effect on ``dimension``,
+	across every action category and per-action override -- used to scope the
+	SQL candidate set. A row whose code is in this set is not guaranteed to
+	affect the dimension (the same code means different things per category);
+	the caller still confirms with ``derive_decision_effects`` before
+	accepting it, and simply keeps paging past a false match.
+	"""
+	codes: set[str] = set()
+	for table in (*CATEGORY_OUTCOME_EFFECTS.values(), *ACTION_EFFECT_OVERRIDES.values()):
+		for code, effects in table.items():
+			if any(effect.dimension == dimension for effect in effects):
+				codes.add(code)
+	return frozenset(codes)
+
+
+def _keyset_completed_rows(
+	student: str, *, codes: frozenset[str] | None, after: tuple | None, limit: int = _DIMENSION_PAGE_SIZE
+) -> list[dict]:
+	"""One page of completed ``CRM Action Item`` rows for ``student``, newest
+	first, keyset-paginated on ``(completed_at, name)``.
+
+	Keyset (not OFFSET) pagination: a page boundary depends only on the last
+	row already seen, never on a shifting row count, so it can't repeat or
+	skip a row if history changes between pages. ``codes`` narrows the SQL
+	``WHERE`` to one dimension's candidate outcome codes when given (``None``
+	means "any completed row", used for the single newest-row probes).
+	"""
+	if codes is not None and not codes:
+		return []
+	conditions = ["student=%(student)s", "execution_status='completed'"]
+	values: dict = {"student": student, "limit": limit}
+	if codes is not None:
+		conditions.append("outcome_code in %(codes)s")
+		values["codes"] = tuple(codes)
+	if after is not None:
+		after_at, after_name = after
+		values["after_name"] = after_name
+		if after_at is None:
+			conditions.append("(completed_at is null and name < %(after_name)s)")
+		else:
+			values["after_at"] = after_at
+			conditions.append(
+				"(completed_at < %(after_at)s"
+				" or (completed_at = %(after_at)s and name < %(after_name)s)"
+				" or completed_at is null)"
+			)
+	where = " and ".join(conditions)
+	return frappe.db.sql(
+		f"""
+		select name, action, action_type, outcome_code, revisit_at, completed_at
+		from `tabCRM Action Item`
+		where {where}
+		order by completed_at desc, name desc
+		limit %(limit)s
+		""",
+		values,
+		as_dict=True,
+	)
+
+
+def _dimension_payload(effect, row: dict, student: str) -> dict:
+	task = row.get("name")
+	action_ref = row.get("action") or None
+	occurred_at = str(row["completed_at"]) if row.get("completed_at") else None
+	immutable_ref = _immutable_outcome_refs_for_tasks([task]).get(task) if task else None
+	return {
+		"value": effect.value,
+		**_effect_provenance(
+			row.get("outcome_code"), action_ref, occurred_at, student=student, task=task, immutable_ref=immutable_ref
+		),
+	}
+
+
+def _resolve_latest_dimension(student: str, dimension: str) -> tuple[dict | None, str]:
+	"""Newest row whose outcome actually affects ``dimension``, paging through
+	only that dimension's candidate outcome codes until found or the
+	student's matching history is genuinely exhausted.
+
+	Returns ``(payload, coverage)``: ``coverage`` is ``"known"`` once either a
+	match was found or an empty page proved there is nothing left to find,
+	and ``"incomplete"`` only if the per-dimension query budget ran out first
+	-- a real "we could not confirm" state, never presented as an authoritative
+	absence.
+	"""
+	codes = _dimension_codes(dimension)
+	after = None
+	examined = 0
+	while examined < _DIMENSION_QUERY_BUDGET:
+		page = _keyset_completed_rows(student, codes=codes, after=after)
+		if not page:
+			return None, "known"
+		for row in page:
+			examined += 1
+			action_code = row.get("action") or row.get("action_type")
+			effect = next(
+				(e for e in derive_decision_effects(action_code, row.get("outcome_code")) if e.dimension == dimension),
+				None,
+			)
+			if effect is not None:
+				return _dimension_payload(effect, row, student), "known"
+		after = (page[-1].get("completed_at"), page[-1]["name"])
+	return None, "incomplete"
+
+
+def _resolve_follow_up(student: str, newest_row: dict | None) -> tuple[dict | None, str]:
+	"""``follow_up`` only ever comes from the single most recent completed
+	action -- a stale "please call back" must not stay sticky forever once
+	newer, unrelated work has happened since.
+	"""
+	if not newest_row:
+		return None, "known"
+	action_code = newest_row.get("action") or newest_row.get("action_type")
+	effect = next(
+		(e for e in derive_decision_effects(action_code, newest_row.get("outcome_code")) if e.dimension == "follow_up"),
+		None,
+	)
+	if effect is None:
+		return None, "known"
+	payload = _dimension_payload(effect, newest_row, student)
+	if newest_row.get("revisit_at"):
+		payload["revisit_at"] = str(newest_row["revisit_at"])
+	return payload, "known"
+
+
+def _resolve_decision_status(student: str, newest_row: dict | None) -> tuple[dict | None, str]:
+	"""decision_status lifecycle: "pending" only from the single most recent
+	completed action (checked via ``newest_row``, shared with ``follow_up``);
+	"not_ready"/"lost" persist like a ``latest`` dimension but are cleared by a
+	more-recent reopening outcome (``DECISION_STATUS_REOPEN_TRIGGERS``), so the
+	scan tracks every reopen trigger it passes before reaching the blocked value.
+	"""
+	if newest_row:
+		action_code = newest_row.get("action") or newest_row.get("action_type")
+		pending = next(
+			(
+				e
+				for e in derive_decision_effects(action_code, newest_row.get("outcome_code"))
+				if e.dimension == "decision_status" and e.value == "pending"
+			),
+			None,
+		)
+		if pending is not None:
+			return _dimension_payload(pending, newest_row, student), "known"
+	reopen_codes = {code for codes in DECISION_STATUS_REOPEN_TRIGGERS.values() for code in codes}
+	codes = _dimension_codes("decision_status") | reopen_codes
+	after = None
+	examined = 0
+	blocked = {"not_ready": False, "lost": False}
+	while examined < _DIMENSION_QUERY_BUDGET:
+		page = _keyset_completed_rows(student, codes=codes, after=after)
+		if not page:
+			return None, "known"
+		for row in page:
+			examined += 1
+			action_code = row.get("action") or row.get("action_type")
+			outcome_code = row.get("outcome_code")
+			effects = derive_decision_effects(action_code, outcome_code)
+			decision_effect = next((e for e in effects if e.dimension == "decision_status"), None)
+			if decision_effect is not None:
+				if decision_effect.value in ("not_ready", "lost"):
+					if blocked[decision_effect.value]:
+						return None, "known"
+					return _dimension_payload(decision_effect, row, student), "known"
+				continue
+			for value, reopen_outcomes in DECISION_STATUS_REOPEN_TRIGGERS.items():
+				if outcome_code in reopen_outcomes:
+					blocked[value] = True
+		after = (page[-1].get("completed_at"), page[-1]["name"])
+	return None, "incomplete"
+
+
+def _resolve_contact_attempt_signal(student: str) -> tuple[dict, str]:
+	"""Count a *consecutive* run of "failed" contact effects, newest first,
+	stopping (and not counting) as soon as a "succeeded" effect is seen.
+	"""
+	codes = _dimension_codes("contact_attempt_signal")
+	after = None
+	examined = 0
+	failures = 0
+	last_failure_at: str | None = None
+	seen_failure = False
+
+	def _payload(coverage: str) -> dict:
+		signal: dict = {"consecutive_failures": failures}
+		if last_failure_at:
+			signal["occurred_at"] = last_failure_at
+		return signal
+
+	while examined < _DIMENSION_QUERY_BUDGET:
+		page = _keyset_completed_rows(student, codes=codes, after=after)
+		if not page:
+			return _payload("known"), "known"
+		for row in page:
+			examined += 1
+			action_code = row.get("action") or row.get("action_type")
+			effect = next(
+				(
+					e
+					for e in derive_decision_effects(action_code, row.get("outcome_code"))
+					if e.dimension == "contact_attempt_signal"
+				),
+				None,
+			)
+			if effect is None:
+				continue
+			if effect.value == CONTACT_ATTEMPT_RESET_VALUE:
+				return _payload("known"), "known"
+			if effect.value == CONTACT_ATTEMPT_FAILURE_VALUE:
+				failures += 1
+				if not seen_failure:
+					# Lock onto the newest failure row even when its
+					# ``completed_at`` is NULL, so an older failure's time
+					# never masquerades as the most recent one.
+					seen_failure = True
+					last_failure_at = str(row["completed_at"]) if row.get("completed_at") else None
+		after = (page[-1].get("completed_at"), page[-1]["name"])
+	return _payload("incomplete"), "incomplete"
 
 
 def _decision_effect_signals(student: str) -> dict:
-	"""Fold Decision Effects over durable outcome history, keyed by dimension.
-
-	Each dimension folds independently with its own reducer (see
-	``crm.services.action_outcome.DIMENSION_REDUCERS``): ``latest`` dimensions
-	take the newest row that produced an effect for that dimension --
-	unrelated outcomes in between never erase it. ``latest_or_reset``
-	dimensions (``follow_up``) only ever come from the single most recent
-	completed action -- if that newest action's outcome doesn't touch the
-	dimension, it is unknown/none even if an older action set it, so a stale
-	"please call back" can't stay sticky forever. ``decision_status`` has its
-	own per-value lifecycle (see ``_fold_decision_status``): "pending" behaves
-	like ``latest_or_reset``, "not_ready" and "lost" persist like ``latest``
-	but are cleared by specific reopening outcomes
-	(``DECISION_STATUS_REOPEN_TRIGGERS``). ``contact_attempt_signal`` counts a
-	*consecutive* run of "failed" effects, stopping (and not counting) as soon
-	as a "succeeded" effect is seen, newest first.
+	"""Resolve Decision Effects per dimension, each against only the outcome
+	history that can actually affect it (see ``crm.services.action_outcome.
+	DIMENSION_REDUCERS`` for the reducer each dimension uses). A dimension the
+	per-dimension query budget could not confirm is marked ``coverage:
+	"incomplete"`` under ``result["coverage"]`` -- the kernel must treat that
+	as unknown, never as "no signal", so a candidate depending on it can
+	abstain/drop rather than act on a missing-data assumption.
 	"""
-	rows = frappe.get_all(
-		"CRM Action Item",
-		filters={"student": student, "execution_status": "completed"},
-		fields=["action", "action_type", "outcome_code", "revisit_at"],
-		order_by="completed_at desc",
-		limit_page_length=_DECISION_EFFECT_LOOKBACK_LIMIT,
-		ignore_permissions=True,
-	)
 	result: dict = {}
-	contact_failures = 0
-	contact_streak_open = True
-	is_newest_completed_row = True
-	decision_status_resolved = False
-	decision_status_blocked: dict[str, bool] = {"not_ready": False, "lost": False}
-	for row in rows:
-		action_code = row.get("action") or row.get("action_type")
-		outcome_code = row.get("outcome_code")
-		if not outcome_code:
-			continue
-		effects = derive_decision_effects(action_code, outcome_code)
-		if not decision_status_resolved:
-			decision_status_resolved = _fold_decision_status(
-				result, effects, outcome_code, is_newest_completed_row, decision_status_blocked
-			)
-		for effect in effects:
-			if effect.dimension == "decision_status":
-				continue
-			if effect.dimension == "contact_attempt_signal":
-				if not contact_streak_open:
-					continue
-				if effect.value == CONTACT_ATTEMPT_RESET_VALUE:
-					contact_streak_open = False
-				elif effect.value == CONTACT_ATTEMPT_FAILURE_VALUE:
-					contact_failures += 1
-				continue
-			if effect.dimension in _RESET_TO_NEWEST_ROW_DIMENSIONS:
-				if not is_newest_completed_row:
-					continue
-			elif effect.dimension in result:
-				continue
-			payload = {"value": effect.value}
-			if effect.dimension == "follow_up" and row.get("revisit_at"):
-				payload["revisit_at"] = str(row["revisit_at"])
-			result[effect.dimension] = payload
-		is_newest_completed_row = False
-	result["contact_attempt_signal"] = {"consecutive_failures": contact_failures}
+	coverage: dict = {}
+	newest_rows = _keyset_completed_rows(student, codes=None, after=None, limit=1)
+	newest_row = newest_rows[0] if newest_rows else None
+
+	for dimension in _LATEST_PERSIST_DIMENSIONS:
+		payload, status = _resolve_latest_dimension(student, dimension)
+		if payload is not None:
+			result[dimension] = payload
+		coverage[dimension] = status
+
+	follow_up_payload, follow_up_status = _resolve_follow_up(student, newest_row)
+	if follow_up_payload is not None:
+		result["follow_up"] = follow_up_payload
+	coverage["follow_up"] = follow_up_status
+
+	decision_status_payload, decision_status_status = _resolve_decision_status(student, newest_row)
+	if decision_status_payload is not None:
+		result["decision_status"] = decision_status_payload
+	coverage["decision_status"] = decision_status_status
+
+	contact_payload, contact_status = _resolve_contact_attempt_signal(student)
+	result["contact_attempt_signal"] = contact_payload
+	coverage["contact_attempt_signal"] = contact_status
+
+	result["coverage"] = coverage
 	return result
-
-
-def _fold_decision_status(
-	result: dict,
-	effects: tuple,
-	outcome_code: str,
-	is_newest_completed_row: bool,
-	blocked: dict[str, bool],
-) -> bool:
-	"""Apply one row's contribution to the decision_status lifecycle.
-
-	Returns True once decision_status is resolved (a value was set, or a
-	terminal/semi-sticky value was found but blocked by an earlier-seen
-	reopening trigger) -- the caller stops calling this once resolved.
-	"""
-	decision_effect = next((e for e in effects if e.dimension == "decision_status"), None)
-	if decision_effect is not None:
-		value = decision_effect.value
-		if value == "pending":
-			if is_newest_completed_row:
-				result["decision_status"] = {"value": "pending"}
-			return True
-		if value in ("not_ready", "lost"):
-			if not blocked[value]:
-				result["decision_status"] = {"value": value}
-			return True
-		return True
-	for value, reopen_outcomes in DECISION_STATUS_REOPEN_TRIGGERS.items():
-		if outcome_code in reopen_outcomes:
-			blocked[value] = True
-	return False
 
 
 def _shape_student(projection: Mapping, *, now: datetime, timezone: str) -> dict:
@@ -330,7 +597,9 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 	}
 
 
-def _shape_policies(decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str) -> dict:
+def _shape_policies(
+	decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str, engine_revision: str
+) -> dict:
 	revision = eligible.get("revision") or 0
 	return {
 		"library_revision": f"action-library-r{revision}",
@@ -347,7 +616,17 @@ def _shape_policies(decision: Mapping, eligible: Mapping, eligible_set: Mapping,
 		"decision_policy": dict(decision.get("decision_policy") or {}),
 		"timing_revisions": [],
 		"timing_digest": _require_hex64(timing_digest, "timing_digest"),
+		# Kernel behaviour selector (see crm-agents' `evaluate`'s
+		# `_resolve_engine_revision`): folded into `policies_digest` ->
+		# `evaluation_key`, so a revision change earns a fresh identity instead
+		# of silently changing behaviour under an unchanged key. The caller
+		# resolves the value once per request and must reuse the exact same
+		# string for a replay identity check -- see `_stored_identity`.
+		"engine_revision": engine_revision,
 	}
+
+
+_DEFAULT_ENGINE_REVISION = "nba-engine-r2"
 
 
 def build_nba_evaluation_input(
@@ -357,6 +636,7 @@ def build_nba_evaluation_input(
 	actor: str | None = None,
 	now: datetime | None = None,
 	service_authorized: bool = False,
+	engine_revision: str | None = None,
 ) -> dict:
 	"""Assemble the NBA Evaluation v1 input for one student from live data.
 
@@ -364,9 +644,19 @@ def build_nba_evaluation_input(
 	``_require_agent_identity()``/``_service_only()`` on the current request --
 	see ``_projection``'s own docstring for why this bypasses the per-user
 	Student read check.
+
+	``engine_revision`` is the kernel behaviour selector a caller resolves once
+	up front (``crm.fcrm.nba_evaluations._engine_revision()`` for a fresh
+	request, or the run's own recorded ``engine_revision`` for a replay
+	identity check) and threads through unchanged; a caller with no revision
+	context of its own (e.g. the read-only evaluation-input inspector) falls
+	back to the live config default.
 	"""
 	moment = now or frappe.utils.now_datetime()
 	timezone = frappe.db.get_single_value("System Settings", "time_zone") or _DEFAULT_TIMEZONE
+	resolved_engine_revision = engine_revision or str(
+		frappe.conf.get("crm_nba_engine_revision") or _DEFAULT_ENGINE_REVISION
+	)
 
 	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized, at=moment)
 	eligible = nba_policy.eligible_action_set_for_student(
@@ -384,7 +674,7 @@ def build_nba_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
 		_shape_context(projection, student=student, now=moment),
 		eligible_set,
-		_shape_policies(decision, eligible, eligible_set, canonical_digest(timing)),
+		_shape_policies(decision, eligible, eligible_set, canonical_digest(timing), resolved_engine_revision),
 		now=moment,
 	)
 

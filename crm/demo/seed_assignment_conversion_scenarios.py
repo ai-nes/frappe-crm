@@ -6,12 +6,10 @@ Run locally with::
 
 Every Lead lands in ``NEW``, so the operator runs the two intake steps in order:
 ``Xử lý Lead`` promotes the intake-complete ones to ``PROCESSED``, then
-``Phân công Lead`` assigns an active Sale/CTV and immediately creates an owned
-``CRM Student`` for each of the twelve valid ones. The remaining eight carry
-exactly one defect apiece so the operator can see every non-assigning outcome of
-``crm.api.lead_processing`` and ``crm.api.lead_assignment_batch`` --
-``manual_review`` for an INVALID identifier gate, a DUPLICATE CCCD pair, a
-missing province, a missing campus and a province no Team manages.
+``Phân công Lead`` assigns an active Sale/CTV without creating a ``CRM Student``.
+The remaining defects are closed during processing or routing so the operator
+can see each non-assigning outcome of ``crm.api.lead_processing`` and
+``crm.api.lead_assignment_batch``.
 
 Every Lead -- defective ones included -- is submitted through the canonical
 intake command (``crm.fcrm.student_intake.submit_intake``) with valid data, then
@@ -28,7 +26,6 @@ from typing import Any
 import frappe
 
 from crm.demo import seed_assignment_scenarios, seed_team_management
-from crm.fcrm.student_feature_flags import enabled
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "local-assignment-conversion-20260908"
@@ -40,10 +37,10 @@ POOL_PREFIX = "Hàng chờ phân công"
 # manages, so routing can only answer TEAM_NOT_FOUND_FOR_PROVINCE.
 UNMANAGED_PROVINCE = "Hà Nội"
 
-# The CCCD the duplicate pair collapses onto. It is scenario 19's own value, so
-# `_classify_resolution` sees two Leads with one identifier and closes both as
-# DUPLICATE -- the shape a real double submission takes.
-DUPLICATE_ID = "079303000019"
+# The duplicate pair starts with different phone numbers so intake can create
+# both Leads. The resubmission is then stamped with the primary phone to
+# exercise the Lead duplicate resolver without inventing a CCCD on a Lead.
+DUPLICATE_PHONE = "0903000019"
 
 SCENARIOS: tuple[dict[str, Any], ...] = (
 	# --- Happy path: 12 intake-complete Leads, 6 per province ------------------
@@ -53,7 +50,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Chuyên Lê Hồng Phong",
 		"major": "Software Engineering",
-		"id": "079303000001",
 	},
 	{
 		"name": "Trần Gia Hân",
@@ -61,7 +57,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Thượng Hiền",
 		"major": "Artificial Intelligence",
-		"id": "079303000002",
 	},
 	{
 		"name": "Lê Hoàng Nam",
@@ -69,7 +64,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Gia Định",
 		"major": "Data Science",
-		"id": "079303000003",
 	},
 	{
 		"name": "Phạm Khánh Linh",
@@ -77,7 +71,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Hữu Huân",
 		"major": "Digital Marketing",
-		"id": "079303000004",
 	},
 	{
 		"name": "Võ Đức Anh",
@@ -85,7 +78,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Thủ Đức",
 		"major": "Business Administration",
-		"id": "079303000005",
 	},
 	{
 		"name": "Ngô Bảo Ngọc",
@@ -93,7 +85,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Chuyên Lê Hồng Phong",
 		"major": "Data Science",
-		"id": "079303000011",
 	},
 	{
 		"name": "Đặng Quốc Bảo",
@@ -101,7 +92,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Ngô Quyền",
 		"major": "Software Engineering",
-		"id": "075303000006",
 	},
 	{
 		"name": "Bùi Thanh Trúc",
@@ -109,7 +99,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trấn Biên",
 		"major": "Artificial Intelligence",
-		"id": "075303000007",
 	},
 	{
 		"name": "Hoàng Minh Khang",
@@ -117,7 +106,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Data Science",
-		"id": "075303000008",
 	},
 	{
 		"name": "Đỗ Quỳnh Anh",
@@ -125,7 +113,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Bình Sơn",
 		"major": "Digital Marketing",
-		"id": "075303000009",
 	},
 	{
 		"name": "Phan Nhật Vy",
@@ -133,7 +120,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trảng Bom",
 		"major": "Business Administration",
-		"id": "075303000010",
 	},
 	{
 		"name": "Trịnh Gia Bảo",
@@ -141,7 +127,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Thống Nhất",
 		"major": "Software Engineering",
-		"id": "075303000012",
 	},
 	# --- Defect path: 8 Leads, one failure mode each ---------------------------
 	{
@@ -150,11 +135,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Gia Định",
 		"major": "Data Science",
-		"id": "079303000013",
 		"defect": {
 			"code": "INVALID_MISSING_MAJOR",
 			"expected": "manual_review",
-			"note": "Thiếu ngành quan tâm → xử lý Lead trả INVALID.",
+			"note": "Thiếu ngành quan tâm → xử lý Lead đóng hồ sơ.",
 			"fields": {"major": None},
 		},
 	},
@@ -164,11 +148,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Thủ Đức",
 		"major": "Digital Marketing",
-		"id": "079303000014",
 		"defect": {
 			"code": "INVALID_MISSING_HIGH_SCHOOL",
 			"expected": "manual_review",
-			"note": "Thiếu trường THPT → xử lý Lead trả INVALID.",
+			"note": "Thiếu trường THPT → xử lý Lead đóng hồ sơ.",
 			"fields": {"high_school": None},
 		},
 	},
@@ -178,12 +161,11 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Ngô Quyền",
 		"major": "Business Administration",
-		"id": "075303000015",
 		"defect": {
-			"code": "INVALID_MISSING_ID_NUMBER",
+			"code": "INVALID_MISSING_PHONE",
 			"expected": "manual_review",
-			"note": "Thiếu CCCD → xử lý Lead trả INVALID.",
-			"fields": {"id_number": None},
+			"note": "Thiếu số điện thoại → xử lý Lead đóng hồ sơ.",
+			"fields": {"phone": None},
 		},
 	},
 	{
@@ -192,7 +174,6 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Trấn Biên",
 		"major": "Software Engineering",
-		"id": "075303000016",
 		"defect": {
 			"code": "MISSING_PROVINCE",
 			"expected": "manual_review",
@@ -206,11 +187,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Thượng Hiền",
 		"major": "Artificial Intelligence",
-		"id": "079303000017",
 		"defect": {
 			"code": "MISSING_CAMPUS",
-			"expected": "manual_review",
-			"note": "Không có cơ sở → batch dừng trước khi chọn người nhận.",
+			"expected": "assigned",
+			"note": "Không có cơ sở → vẫn phân công theo tỉnh.",
 			"fields": {"branch": None},
 		},
 	},
@@ -220,11 +200,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Ho Chi Minh City",
 		"school": "THPT Nguyễn Hữu Huân",
 		"major": "Data Science",
-		"id": "079303000018",
 		"defect": {
 			"code": "TEAM_NOT_FOUND_FOR_PROVINCE",
 			"expected": "manual_review",
-			"note": f"Tỉnh {UNMANAGED_PROVINCE} chưa có Team Sales nào quản lý.",
+			"note": f"Tỉnh {UNMANAGED_PROVINCE} chưa có Team Sales nào quản lý → Lead đóng khi phân công.",
 			"fields": {"province": UNMANAGED_PROVINCE},
 		},
 	},
@@ -234,11 +213,10 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Digital Marketing",
-		"id": DUPLICATE_ID,
 		"defect": {
 			"code": "DUPLICATE_PRIMARY",
-			"expected": "manual_review",
-			"note": "Bản ghi gốc của cặp trùng CCCD.",
+			"expected": "assigned",
+			"note": "Bản ghi đại diện được giữ lại để tiếp tục xử lý và phân công.",
 			"fields": {},
 		},
 	},
@@ -248,12 +226,11 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"province": "Đồng Nai",
 		"school": "THPT Long Thành",
 		"major": "Digital Marketing",
-		"id": "075303000020",
 		"defect": {
 			"code": "DUPLICATE_RESUBMIT",
 			"expected": "manual_review",
-			"note": "Nộp lại cùng CCCD → cả hai Lead đóng với resolution DUPLICATE.",
-			"fields": {"id_number": DUPLICATE_ID},
+			"note": "Trùng số điện thoại với Lead đã xử lý → Lead nộp lại được đóng tự động.",
+			"fields": {"phone": DUPLICATE_PHONE},
 		},
 	},
 )
@@ -265,6 +242,10 @@ def _assert_local_site() -> None:
 
 
 def _lookup(doctype: str, value: str, fieldname: str) -> str:
+	if doctype == "CRM Province":
+		from crm.api.lead_mapping import _resolve_province
+
+		return _resolve_province(value)
 	return frappe.db.get_value(doctype, {fieldname: value}, "name") or value
 
 
@@ -361,7 +342,6 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 		# identity roots intake looks up, so a scenario keeps the same pair even
 		# when the fixture is reordered or extended.
 		"email": f"local.assignment.conversion.{spec['phone']}@example.test",
-		"id_number": spec["id"],
 		"campus": CAMPUS,
 		"owning_team": pool,
 		"admission_year": ADMISSION_YEAR,
@@ -396,7 +376,7 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 	notes = (
 		f"Local defect {defect['code']}: {defect['note']} → {defect['expected']}."
 		if defect
-		else "Local happy-path: assignment creates an owned CRM Student."
+		else "Local happy-path: assignment assigns an owner without creating a CRM Student."
 	)
 	frappe.db.set_value(
 		"CRM Lead",
@@ -412,11 +392,6 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 def execute() -> dict[str, Any]:
 	"""Reset local Lead/Student rows and seed the 20-Lead assignment fixture."""
 	_assert_local_site()
-	if not enabled("conversion_write"):
-		frappe.throw(
-			"conversion_write đang tắt; hãy bật quyền ghi chuyển Lead → Student trước khi test.",
-			frappe.ValidationError,
-		)
 	frappe.set_user("Administrator")
 	seed_team_management.execute()
 	deleted = seed_assignment_scenarios._purge_business_data()
@@ -449,8 +424,9 @@ def execute() -> dict[str, Any]:
 		"pools": pools,
 		"leads": seeded,
 		"message": (
-			f"Đã seed {len(seeded)} Lead ({len(happy)} hợp lệ, {len(seeded) - len(happy)} lỗi). "
-			"Bấm Xử lý Lead rồi Phân công Lead: Lead hợp lệ tạo Student có người phụ trách, "
-			"Lead lỗi rơi vào cần xem xét thủ công."
+			f"Đã seed {len(seeded)} Lead ({len(happy)} hồ sơ có thể phân công, "
+			f"{len(seeded) - len(happy)} hồ sơ lỗi). "
+			"Bấm Xử lý Lead rồi Phân công Lead: hệ thống chỉ cập nhật trạng thái và người phụ trách, "
+			"không tạo hồ sơ Student."
 		),
 	}

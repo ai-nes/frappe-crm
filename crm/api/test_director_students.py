@@ -483,6 +483,7 @@ class TestDirectorStudents(FrappeTestCase):
 	def test_sale_list_scope_uses_the_lead_projection_table(self):
 		condition = "`tabCRM Lead`.owner_staff = 'STAFF-1'"
 		with (
+			patch.object(director_students, "can_read_full_lead_board", return_value=False),
 			patch.object(director_students, "get_student_list_read_condition", return_value=condition) as get_condition,
 			patch.object(director_students.frappe.db, "sql", return_value=[{"name": "ENR-1"}]) as sql,
 		):
@@ -494,6 +495,19 @@ class TestDirectorStudents(FrappeTestCase):
 			"select name from `tabCRM Lead` where (`tabCRM Lead`.owner_staff = 'STAFF-1')",
 			as_dict=True,
 		)
+
+	def test_lead_sale_student_list_scope_is_unrestricted(self):
+		with (
+			patch.object(director_students, "can_read_full_lead_board", return_value=True),
+			patch.object(director_students, "get_student_list_read_condition") as get_condition,
+		):
+			self.assertIsNone(director_students._list_scope_student_ids())
+
+		get_condition.assert_not_called()
+
+	def test_lead_sale_student_list_uses_unrestricted_reader(self):
+		with patch.object(director_students, "can_read_full_lead_board", return_value=True):
+			self.assertIs(director_students._student_list_reader(None), director_students.frappe.get_all)
 
 	def test_student_zalo_messages_mapping(self):
 		interactions = [

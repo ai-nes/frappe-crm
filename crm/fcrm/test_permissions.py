@@ -110,6 +110,20 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertIn("`tabCRM Lead`.owner_staff", lead_list_condition)
 		self.assertNotIn("`tabCRM Student`", lead_list_condition)
 
+	def test_ctv_student_list_scope_includes_team_pool_without_widening_crud_scope(self):
+		user, staff = self._make_user_and_staff(
+			"_Test Scope CTV List", roles=["CTV Sale"], team=self._team, function="CTV Sale"
+		)
+
+		list_condition = get_student_list_read_condition(user=user)
+
+		self.assertIn("owning_team", list_condition)
+		self.assertIn(staff, list_condition)
+		self.assertEqual(
+			shared_conditions("CRM Student", user=user),
+			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
+		)
+
 	def test_lead_sale_group_leader_reads_managed_group_students(self):
 		user, staff = self._make_user_and_staff(
 			"_Test Scope Group Leader", roles=["Lead Sale"], function="Lead Sale"

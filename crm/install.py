@@ -22,6 +22,7 @@ from crm.patches.v1_0 import (
 	seed_student_pools,
 	setup_crm_roles,
 	setup_crm_student_extended_permissions,
+	upgrade_student_segments,
 )
 from crm.patches.v1_0.crm_action_current_slot_unique import execute as ensure_current_slot_unique
 from crm.patches.v1_0.migrate_to_canonical_crm_roles import execute_for_fresh_site
@@ -59,6 +60,7 @@ def after_install(force=False):
 	seed_new_lead_role_profiles.execute()
 	seed_crm_education_program.execute()
 	setup_crm_student_extended_permissions.execute()
+	upgrade_student_segments.execute()
 	seed_master_data_governance.execute()
 	seed_student_pools.execute()
 	seed_default_nba_decision_policy.execute()

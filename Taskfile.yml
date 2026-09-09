@@ -93,7 +93,7 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_scenarios.execute"
 
   seed-assignment-conversion:
-    desc: Local only — seed 10 Lead hợp lệ để bấm phân công và tạo Student có owner
+    desc: Local only — seed Lead để test xử lý/phân công, không tạo Student
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.demo.seed_assignment_conversion_scenarios.execute"
 

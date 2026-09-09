@@ -58,14 +58,14 @@ class TestStudentConversionCommand(unittest.TestCase):
 				"student_name": "Mapped Lead",
 				"phone": "0911111199",
 				"email": "mapped@example.com",
-			"enrollment_status": "PROSPECT",
-			"source": "Website",
-			"latest_score": 98,
-			"student_context_revision": 7,
-			"notes": "Snapshot note",
-			"assigned_to": "STAFF-1",
-			"owner_staff": "STAFF-1",
-			"owning_team": "TEAM-1",
+				"enrollment_status": "PROSPECT",
+				"source": "Website",
+				"latest_score": 98,
+				"student_context_revision": 7,
+				"notes": "Snapshot note",
+				"assigned_to": "STAFF-1",
+				"owner_staff": "STAFF-1",
+				"owning_team": "TEAM-1",
 			}
 		)
 		identity = frappe._dict(name="ID-MAPPED")
@@ -89,15 +89,18 @@ class TestStudentConversionCommand(unittest.TestCase):
 		self.assertNotIn("_contacts_for_identity", source)
 		self.assertIn("target_student", source)
 
-	def test_conversion_uses_the_three_business_requirements(self):
+	def test_conversion_uses_the_four_business_requirements(self):
 		from crm.fcrm import student_conversion
 
 		source = Path(student_conversion.__file__).read_text(encoding="utf-8")
 		self.assertIn("conversion_readiness", source)
 		self.assertIn("CONVERSION_CONDITION_FAILED", source)
-		self.assertIn("missing_id_number", Path(
-			student_conversion.__file__).with_name("conversion_readiness.py"
-		).read_text(encoding="utf-8"))
+		self.assertIn(
+			"missing_phone",
+			Path(student_conversion.__file__)
+			.with_name("conversion_readiness.py")
+			.read_text(encoding="utf-8"),
+		)
 
 	def test_handoff_requires_matching_active_owner(self):
 		from crm.fcrm.student_conversion import (
@@ -129,5 +132,7 @@ class TestStudentConversionCommand(unittest.TestCase):
 		)
 
 		with self.assertRaises(StudentConversionError) as ctx:
-			_assert_student_ownership_ready(frappe._dict(assigned_to=None, owner_staff=None, owning_team=None))
+			_assert_student_ownership_ready(
+				frappe._dict(assigned_to=None, owner_staff=None, owning_team=None)
+			)
 		self.assertEqual(ctx.exception.code, "OWNER_REQUIRED")

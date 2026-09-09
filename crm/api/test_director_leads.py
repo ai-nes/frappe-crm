@@ -59,6 +59,14 @@ class TestDirectorLeads(FrappeTestCase):
 				with self.assertRaises(frappe.ValidationError):
 					resolver(value)
 
+	def test_lead_order_groups_status_before_recency(self):
+		self.assertEqual(
+			director_leads._lead_order_by("desc"),
+			"CASE processing_status WHEN 'NEW' THEN 1 WHEN 'PROCESSING' THEN 2 "
+			"WHEN 'PROCESSED' THEN 3 WHEN 'ASSIGNED' THEN 4 WHEN 'CLOSED' THEN 5 "
+			"ELSE 99 END asc, modified desc, name desc",
+		)
+
 	def test_lead_filters_search_expected_fields_and_status(self):
 		query = director_leads._parse_query(
 			admission_year="2026",
@@ -109,6 +117,7 @@ class TestDirectorLeads(FrappeTestCase):
 		row = frappe._dict(
 			{
 				"name": "LEAD-2026-00001",
+				"lead_id": "lead-internal-00001",
 				"lead_code": "LD-2026-00001",
 				"processing_status": "ASSIGNED",
 				"resolution": "MATCHED",
@@ -135,9 +144,11 @@ class TestDirectorLeads(FrappeTestCase):
 		self.assertEqual(
 			item,
 			{
-				"id": "LEAD-2026-00001",
+				"id": "lead-internal-00001",
+				"leadId": "lead-internal-00001",
 				"leadCode": "LD-2026-00001",
-				"studentId": "LEAD-2026-00001",
+				"studentCode": None,
+				"studentId": None,
 				"initials": "MA",
 				"name": "Nguyễn Minh An",
 				"phone": "0900000000",
@@ -153,6 +164,24 @@ class TestDirectorLeads(FrappeTestCase):
 				"createdAt": "2026-09-07T10:00:00+07:00",
 			},
 		)
+
+	def test_lead_row_mapping_uses_student_id_only_after_conversion(self):
+		with patch.object(director_leads.frappe.db, "get_value", return_value="HS-2026-HCM-000001"):
+			item = director_leads._map_lead_row(
+				frappe._dict(
+					{
+						"name": "HS-2026-HCM-000001",
+						"lead_id": "lead-internal-00002",
+						"lead_code": "LD-2026-HCM-000001",
+						"student_name": "Nguyễn Minh An",
+						"converted_student": "STU-2026-000001",
+					}
+				),
+			)
+
+		self.assertEqual(item["id"], "lead-internal-00002")
+		self.assertEqual(item["studentCode"], "HS-2026-HCM-000001")
+		self.assertEqual(item["studentId"], "STU-2026-000001")
 
 	def test_processing_status_mapping_matches_form_submission_enum(self):
 		for status, label in {
@@ -321,6 +350,7 @@ class TestDirectorLeads(FrappeTestCase):
 
 	def test_lead_list_scope_uses_the_shared_group_team_condition(self):
 		with (
+			patch.object(director_leads, "can_read_full_lead_board", return_value=False),
 			patch.object(
 				director_leads,
 				"get_student_list_read_condition",
@@ -338,6 +368,15 @@ class TestDirectorLeads(FrappeTestCase):
 			)
 
 		sql.assert_called_once()
+
+	def test_lead_sale_list_scope_is_unrestricted(self):
+		with (
+			patch.object(director_leads, "can_read_full_lead_board", return_value=True),
+			patch.object(director_leads, "get_student_list_read_condition") as get_condition,
+		):
+			self.assertIsNone(director_leads._list_scope_lead_ids())
+
+		get_condition.assert_not_called()
 
 	def test_detail_endpoint_serves_routed_lead_to_the_full_board_profile(self):
 		"""A Lead routed to another Team leaves the row scope but stays on the board."""

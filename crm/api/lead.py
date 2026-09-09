@@ -1,6 +1,6 @@
 """CRUD API for CRM Lead records.
 
-The Lead DocType owns validation, lifecycle transitions, ownership changes and
+The Lead DocType owns validation, ownership changes and
 processing commands. This module only exposes the ordinary CRUD boundary and
 keeps those server-managed workflows out of generic field updates.
 """
@@ -15,6 +15,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.lead_identity import resolve_lead_name
 
 DOCTYPE = "CRM Lead"
 MAX_PAGE_LENGTH = 100
@@ -24,15 +25,12 @@ NON_FILTERABLE_FIELD_TYPES = LAYOUT_FIELD_TYPES | {"Table", "Table MultiSelect"}
 LIST_FIELDS = [
 	"name",
 	"lead_code",
-	"lead_status",
 	"processing_status",
 	"resolution",
 	"student_name",
 	"phone",
 	"email",
 	"other_email",
-	"enrollment_status",
-	"lifecycle_stage",
 	"high_school",
 	"current_grade",
 	"study_stage",
@@ -69,15 +67,14 @@ SERVER_MANAGED_FIELDS = frozenset(
 		"modified",
 		"modified_by",
 		"lead_code",
+		"lead_id",
 		"processing_status",
 		"resolution",
 		"resolution_reason",
 		"matched_student",
-		"conversion_status",
 		"conversion_blockers",
 		"converted_student",
 		"converted_at",
-		"lifecycle_stage",
 		"assigned_to",
 		"owner_staff",
 		"owning_team",
@@ -108,7 +105,6 @@ SERVER_MANAGED_FIELDS = frozenset(
 	}
 )
 
-UPDATE_COMMAND_FIELDS = frozenset({"enrollment_status"})
 SEARCH_FIELDS = (
 	"name",
 	"lead_code",
@@ -209,14 +205,6 @@ def _validate_payload(values: dict[str, Any], *, operation: str) -> None:
 			frappe.ValidationError,
 		)
 
-	command_fields = sorted(set(values) & UPDATE_COMMAND_FIELDS)
-	if operation == "update" and command_fields:
-		frappe.throw(
-			_("Lifecycle changes must use the lifecycle transition command: {0}.").format(
-				", ".join(command_fields)
-			),
-			frappe.PermissionError,
-		)
 
 
 def _parse_filters(value: Any) -> dict[str, Any]:
@@ -240,7 +228,7 @@ def _parse_filters(value: Any) -> dict[str, Any]:
 def _validate_name(name: Any) -> str:
 	if not isinstance(name, str) or not name.strip():
 		frappe.throw(_("Lead name is required."), frappe.ValidationError)
-	return name
+	return resolve_lead_name(name)
 
 
 def _api_payload(doc: Any) -> dict[str, Any]:

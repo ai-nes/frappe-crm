@@ -72,11 +72,13 @@ class TestCRMLead(FrappeTestCase):
 		self.assertEqual(student.lifecycle_stage, "Lead")
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": "0981000099"}))
 
-	def test_lead_code_is_stable_and_matches_the_unified_student_id(self):
+	def test_lead_code_is_stable_and_separate_from_student_id(self):
 		lead = self._make_student_with_status("_Test Lead Code", "0981000088", "NEW")
 
 		self.assertRegex(lead.name, r"^HS-\d{4}-[A-Z0-9]+-\d{6}$")
-		self.assertEqual(lead.lead_code, lead.name)
+		self.assertRegex(lead.lead_code, r"^LD-\d{4}-[A-Z0-9]+-\d{6,}$")
+		self.assertEqual(lead.lead_code, lead.name.replace("HS-", "LD-", 1))
+		self.assertNotEqual(lead.lead_code, lead.name)
 
 		lead_name = lead.name
 		lead_code = lead.lead_code
