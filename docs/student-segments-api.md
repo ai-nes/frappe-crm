@@ -39,8 +39,15 @@ wrapper. Use POST for mutation methods. Standard Frappe permission and validatio
 apply; new business errors contain `INVALID_INPUT`, `REVISION_CONFLICT`,
 `INVALID_TRANSITION` or `FORBIDDEN` prefixes where applicable.
 
-Segment owners can manage their own groups within DocPerm. System Manager/Administrator
-can manage groups. `is_public` grants read visibility only, never write permission.
+Only System Manager/Administrator can create, edit or delete Segments (`create_segment`,
+`update_segment`, `transition_segment`, `delete_segment`). All other roles — including
+Sale and Lead Sale, who previously could manage their own groups — have read-only DocPerm
+access (`CRM Segment` permissions in `crm/fcrm/doctype/crm_segment/crm_segment.json`); the
+`has_permission` hook's owner-based write grant (`crm_segment.py`) can only restrict access
+further, never grant write beyond the DocPerm table, so it no longer has any effect for
+non-admin roles now that they lack `write`/`create`/`delete` in DocPerm. `is_public` grants
+read visibility only, never write permission, and is the mechanism non-owner roles use to
+see Segments created by an admin.
 Every member query, count, page, and campaign operation applies the caller's current
 canonical CRM Student scope and Frappe User Permissions. Public groups cannot expose
 out-of-scope Student IDs. Snapshot member records have no independent user permissions.
