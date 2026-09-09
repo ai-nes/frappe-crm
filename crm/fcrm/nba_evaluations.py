@@ -26,7 +26,7 @@ from crm.fcrm.permissions import has_permission as has_student_permission
 DOCTYPE = "CRM NBA Evaluation"
 TERMINAL = {"completed", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
-_ENGINE_REVISION_DEFAULT = "nba-engine-v0"
+_ENGINE_REVISION_DEFAULT = "nba-engine-r2"
 _IDENTITY_DIGEST_FIELDS = (
 	"context_digest",
 	"eligible_set_digest",
@@ -59,6 +59,10 @@ def _identity_from_envelope(envelope: dict) -> dict[str, Any]:
 	eligible = envelope["eligible_action_set"]
 	return {
 		"evaluation_key": envelope["evaluation_key"],
+		# Already folded into `evaluation_key` via `policies_digest` -- kept
+		# here too only for observability (receipts, debugging), never
+		# compared on its own in `_is_superseded`.
+		"engine_revision": policies.get("engine_revision"),
 		"context_revision": str(student["context_revision"]),
 		"context_digest": student["context_digest"],
 		"eligible_set_revision": str(eligible["set_revision"]),
@@ -126,21 +130,40 @@ def _request_clock():
 	return now_datetime().replace(second=0, microsecond=0)
 
 
-def _identity_for(student: str, clock, *, service_authorized: bool = False) -> tuple[dict, dict[str, Any]]:
+def _identity_for(
+	student: str, clock, *, service_authorized: bool = False, engine_revision: str | None = None
+) -> tuple[dict, dict[str, Any]]:
 	"""Build the evaluation input and its bound identity at a fixed clock.
 
 	``service_authorized=True`` must only be passed by a caller that already
 	ran ``_service_only()`` on the current request -- see ``_projection``'s
 	docstring in ``student_decision_context.py``.
+
+	``engine_revision`` is resolved once by the caller (``_engine_revision()``
+	for a fresh request, or the run's own recorded value for a replay identity
+	check via ``_stored_identity``) and passed through unchanged, never
+	re-derived here from the live config.
 	"""
-	envelope = build_nba_evaluation_input(student, now=clock, service_authorized=service_authorized)
+	envelope = build_nba_evaluation_input(
+		student, now=clock, service_authorized=service_authorized, engine_revision=engine_revision
+	)
 	return envelope, _identity_from_envelope(envelope)
 
 
 def _stored_identity(doc, *, service_authorized: bool = False) -> tuple[dict, dict[str, Any]]:
-	"""Recompute the live identity at the run's own recorded evaluation clock."""
+	"""Recompute the live identity at the run's own recorded evaluation clock,
+	under the engine revision the run was originally queued with.
+
+	Reusing ``doc.engine_revision`` here (instead of re-reading today's live
+	config default) is deliberate: a revision rollout between queueing and
+	this replay/dedup check must never make an in-flight or terminal run
+	spuriously look superseded just because the *default* moved on.
+	"""
 	return _identity_for(
-		doc.student, frappe.utils.get_datetime(doc.evaluation_clock), service_authorized=service_authorized
+		doc.student,
+		frappe.utils.get_datetime(doc.evaluation_clock),
+		service_authorized=service_authorized,
+		engine_revision=doc.engine_revision,
 	)
 
 
@@ -225,7 +248,13 @@ def _latest_terminal(student: str, evaluation_key: str):
 
 
 def _insert_evaluation(
-	student: str, identity: dict[str, Any], clock, key: str | None, *, trigger: str = "manual"
+	student: str,
+	identity: dict[str, Any],
+	clock,
+	key: str | None,
+	*,
+	trigger: str = "manual",
+	engine_revision: str | None = None,
 ):
 	values = {
 		"doctype": DOCTYPE,
@@ -234,7 +263,9 @@ def _insert_evaluation(
 		"status": "queued",
 		"run_generation": 0,
 		"contract_version": "nba-evaluation-v2",
-		"engine_revision": _engine_revision(),
+		# The exact same value the caller resolved for `identity` above, so the
+		# queued row and the identity it was computed from never disagree.
+		"engine_revision": engine_revision or identity.get("engine_revision") or _engine_revision(),
 		"evaluation_key": identity["evaluation_key"],
 		"context_revision": identity["context_revision"],
 		"context_digest": identity["context_digest"],
@@ -273,7 +304,8 @@ def request_nba_evaluation(
 	# The Student row is the mutex for button-click races on one identity.
 	frappe.db.sql("SELECT name FROM `tabCRM Student` WHERE name=%s FOR UPDATE", (student,))
 	clock = _request_clock()
-	_, identity = _identity_for(student, clock)
+	revision = _engine_revision()
+	_, identity = _identity_for(student, clock, engine_revision=revision)
 	evaluation_key = identity["evaluation_key"]
 
 	existing_key = frappe.db.get_value(
@@ -299,7 +331,7 @@ def request_nba_evaluation(
 			return _receipt(terminal.name)
 	_enforce_manual_quota(student)
 	try:
-		evaluation = _insert_evaluation(student, identity, clock, key)
+		evaluation = _insert_evaluation(student, identity, clock, key, engine_revision=revision)
 	except frappe.exceptions.DuplicateEntryError:
 		# A concurrent request with the same Idempotency-Key won the insert race
 		# after both passed the lookup above. Return its receipt rather than a 500.
@@ -1032,7 +1064,8 @@ def _request_automatic_nba_evaluation(
 	if on_locked:
 		on_locked()
 	clock = _request_clock()
-	_, identity = _identity_for(student, clock)
+	revision = _engine_revision()
+	_, identity = _identity_for(student, clock, engine_revision=revision)
 	evaluation_key = identity["evaluation_key"]
 	if _single_active(student, evaluation_key):
 		return None
@@ -1041,7 +1074,9 @@ def _request_automatic_nba_evaluation(
 		# time trigger only earns a fresh run once the identity (clock included)
 		# changes, which it does on the next quantised minute.
 		return None
-	evaluation = _insert_evaluation(student, identity, clock, None, trigger="automatic")
+	evaluation = _insert_evaluation(
+		student, identity, clock, None, trigger="automatic", engine_revision=revision
+	)
 	from crm.api.agent_events import record_nba_evaluation_event
 
 	record_nba_evaluation_event(evaluation)
