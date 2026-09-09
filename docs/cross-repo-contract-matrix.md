@@ -26,6 +26,7 @@ incompatible changes require a major version and coordinated deployment.
 | School-domain workbook import boundary | frappe-crm | unversioned module contract | External seed/import operator | 2026-08-30 |
 | Care-queue read-model `crm.api.student_worklist.list_action_queue` | frappe-crm | action-queue-row-v1 | crm-agents care queue / PH-06 frontend | 2026-09-01 |
 | Lead Sale lead list/detail read-model `crm.api.director_leads.get_director_leads` / `get_director_lead` | frappe-crm | lead-sale-read-v1 | dashboard-crm `/lead-sale/leads` | 2026-09-07 |
+| Admin Activity Log read API `crm.api.activity_log.get_activity_logs` | frappe-crm | activity-log-read-v1 | dashboard-crm `/director/admin/activity-logs` | 2026-09-10 |
 | Current-Action claim command `crm.api.student_decision.claim_current_action` | frappe-crm | 1 | crm-agents care queue | 2026-09-01 |
 | CRM Action `risk_tier` policy field (`low\|mid\|high`, NOT NULL, Frappe-owned) | frappe-crm | 1 | crm-agents decision / PH-06 frontend | 2026-09-01 |
 
