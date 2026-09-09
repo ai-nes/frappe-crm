@@ -18,6 +18,7 @@ from crm.api.student_decision_context import _projection, _require_agent_identit
 from crm.fcrm import nba_policy
 from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
+from crm.fcrm.nba_context import NBA_ENGINE_R3
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
 from crm.services.action_outcome import (
@@ -547,7 +548,9 @@ def _timing_domain_for_action(allowed_time_slots: object, timezone: str) -> dict
 	return {"timezone": timezone, "allowed_windows": windows}
 
 
-def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
+def _shape_eligible_action_set(
+	eligible: Mapping, *, timezone: str, include_semantics: bool = False
+) -> dict:
 	actions = []
 	wire_actions = []
 	for action in eligible.get("actions") or []:
@@ -556,40 +559,54 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 		action_id = nba_policy.wire_action_id(code)
 		revision = int(action.get("revision") or 1)
 		digest = _require_hex64(action.get("digest"), f"action_digest for {action_id}")
-		wire_actions.append({"action_id": action_id, "revision": revision, "digest": digest})
-		actions.append(
-			{
-				"action_id": action_id,
-				"action_revision": revision,
-				"action_digest": digest,
-				"action_code": code,
-				"group": (action.get("category") or action_category(code) or "general").lower(),
-				"purpose": action.get("purpose") or code,
-				"addresses_opportunities": list(action.get("addresses_opportunities") or []),
-				"allowed_channels": [channel] if channel not in (None, "NONE") else [],
-				"allowed_actors": list(action.get("allowed_actors") or []),
-				"execution_parameter_schema": {},
-				"default_parameters": {},
-				"hard_constraints": {
-					"requires_parent_authority": bool(
-						action.get("requires_parent_authority") or action.get("category") == "PARENT"
-					),
-					"academic": dict(action.get("academic_constraint") or {}),
-				},
-				"normalized_timing_domain": _timing_domain_for_action(
-					action.get("allowed_time_slots"), timezone
-				),
-				"metadata_state": "provisional",
-				"cost_band": _UNKNOWN_BAND,
-				"risk_band": _UNKNOWN_BAND,
-				"effort_band": _UNKNOWN_BAND,
-				"conflict_keys": [f"action:{code}"],
-			}
+		normalized_timing_domain = _timing_domain_for_action(
+			action.get("allowed_time_slots"), timezone
 		)
+		runtime_digest = (
+			canonical_digest({"normalized_timing_domain": normalized_timing_domain})
+			if include_semantics else None
+		)
+		wire_action = {"action_id": action_id, "revision": revision, "digest": digest}
+		if runtime_digest is not None:
+			wire_action["action_runtime_digest"] = runtime_digest
+		wire_actions.append(wire_action)
+		item = {
+			"action_id": action_id,
+			"action_revision": revision,
+			"action_digest": digest,
+			"action_code": code,
+			"group": (action.get("category") or action_category(code) or "general").lower(),
+			"purpose": action.get("purpose") or code,
+			"addresses_opportunities": list(action.get("addresses_opportunities") or []),
+			"allowed_channels": [channel] if channel not in (None, "NONE") else [],
+			"allowed_actors": list(action.get("allowed_actors") or []),
+			"execution_parameter_schema": {},
+			"default_parameters": {},
+			"hard_constraints": {
+				"requires_parent_authority": bool(
+					action.get("requires_parent_authority") or action.get("category") == "PARENT"
+				),
+				"academic": dict(action.get("academic_constraint") or {}),
+			},
+			"normalized_timing_domain": normalized_timing_domain,
+			"metadata_state": "provisional",
+			"cost_band": _UNKNOWN_BAND,
+			"risk_band": _UNKNOWN_BAND,
+			"effort_band": _UNKNOWN_BAND,
+			"conflict_keys": [f"action:{code}"],
+		}
+		if include_semantics:
+			item.update(_semantic_action_metadata(code))
+			item["action_runtime_digest"] = runtime_digest
+		actions.append(item)
+	semantic_digest = canonical_digest(
+		{str(item["action_id"]): _semantic_action_metadata(item.get("action_code")) for item in actions}
+	) if include_semantics else None
 	return {
 		"set_revision": int(eligible.get("revision") or 0),
-		"set_digest": nba_policy.eligible_set_digest(wire_actions),
+		"set_digest": nba_policy.eligible_set_digest(wire_actions, include_runtime=include_semantics),
 		"actions": actions,
+		**({"semantic_digest": semantic_digest} if include_semantics else {}),
 		"exclusions": sorted(
 			list(eligible.get("exclusions") or []),
 			key=lambda item: (str(item.get("action") or ""), str(item.get("reason") or "")),
@@ -597,13 +614,50 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 	}
 
 
+def _semantic_action_metadata(code: str | None) -> dict:
+	"""Stable r3 meaning for existing action codes; independent of action digest."""
+	default = {
+		"addresses_needs": [], "desired_outcomes": [], "collects_information": False, "readiness_target": "none"
+	}
+	metadata = {
+		"ADVISE_MAJOR": ("RESOLVE_MAJOR_UNCERTAINTY", "major_clarity"),
+		"COMPARE_MAJORS": ("RESOLVE_MAJOR_UNCERTAINTY", "major_clarity"),
+		"SEND_MAJOR_INFO": ("RESOLVE_MAJOR_UNCERTAINTY", "major_clarity"),
+		"SEND_MAJOR_VIDEO": ("RESOLVE_MAJOR_UNCERTAINTY", "major_clarity"),
+		"ADVISE_TUITION": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"SEND_TUITION_INFO": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"SEND_FINANCIAL_PLAN": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"ADVISE_SCHOLARSHIP": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"SEND_SCHOLARSHIP_INFO": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"ASSIST_APPLICATION_FEE": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"SEND_PARENT_TUITION": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"SEND_PARENT_SCHOLARSHIP": ("RESOLVE_FINANCIAL_UNCERTAINTY", "financial_clarity"),
+		"ADVISE_CAREER": ("UNDERSTAND_CAREER_OUTLOOK", "career_clarity"),
+		"SEND_CAREER_INFO": ("UNDERSTAND_CAREER_OUTLOOK", "career_clarity"),
+		"SEND_TRAINING_ROADMAP": ("UNDERSTAND_CAREER_OUTLOOK", "career_clarity"),
+		"SEND_PARENT_CAREER_INFO": ("UNDERSTAND_CAREER_OUTLOOK", "career_clarity"),
+	}
+	if code == "ASK_DECISION_REASON":
+		return {**default, "desired_outcomes": ["decision_clarity"], "collects_information": True}
+	need = metadata.get(str(code or ""))
+	if not need:
+		return default
+	return {**default, "addresses_needs": [need[0]], "desired_outcomes": [need[1]], "readiness_target": "advice"}
+
+
 def _shape_policies(
-	decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str, engine_revision: str
+	decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str, engine_revision: str,
+	semantic_digest: str | None = None,
 ) -> dict:
 	revision = eligible.get("revision") or 0
-	return {
+	library_digest = eligible_set["set_digest"]
+	if engine_revision == NBA_ENGINE_R3:
+		library_digest = canonical_digest(
+			{"action_set_digest": eligible_set["set_digest"], "semantic_digest": semantic_digest}
+		)
+	result = {
 		"library_revision": f"action-library-r{revision}",
-		"library_digest": eligible_set["set_digest"],
+		"library_digest": library_digest,
 		"eligibility_revision": "eligibility-reason-codes-v1",
 		# The eligibility contract the engine binds is the reason-code vocabulary,
 		# not one student's exclusion list; that list is per-evaluation data.
@@ -624,6 +678,9 @@ def _shape_policies(
 		# string for a replay identity check -- see `_stored_identity`.
 		"engine_revision": engine_revision,
 	}
+	if engine_revision == NBA_ENGINE_R3:
+		result["semantic_digest"] = _require_hex64(semantic_digest, "semantic_digest")
+	return result
 
 
 _DEFAULT_ENGINE_REVISION = "nba-engine-r2"
@@ -658,7 +715,13 @@ def build_nba_evaluation_input(
 		frappe.conf.get("crm_nba_engine_revision") or _DEFAULT_ENGINE_REVISION
 	)
 
-	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized, at=moment)
+	projection = _projection(
+		student,
+		int(minimum_revision),
+		service_authorized=service_authorized,
+		at=moment,
+		include_decision_signals=resolved_engine_revision == NBA_ENGINE_R3,
+	)
 	eligible = nba_policy.eligible_action_set_for_student(
 		student,
 		actor=actor,
@@ -669,12 +732,17 @@ def build_nba_evaluation_input(
 	decision = nba_policy.get_active_decision_policy()
 	timing = feasible_timing_domain({"trigger_type": "relative", "delay_value": 0}, now=moment)
 
-	eligible_set = _shape_eligible_action_set(eligible, timezone=timezone)
+	eligible_set = _shape_eligible_action_set(
+		eligible, timezone=timezone, include_semantics=resolved_engine_revision == NBA_ENGINE_R3
+	)
 	return assemble_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
 		_shape_context(projection, student=student, now=moment),
 		eligible_set,
-		_shape_policies(decision, eligible, eligible_set, canonical_digest(timing), resolved_engine_revision),
+		_shape_policies(
+			decision, eligible, eligible_set, canonical_digest(timing), resolved_engine_revision,
+			eligible_set.get("semantic_digest"),
+		),
 		now=moment,
 	)
 

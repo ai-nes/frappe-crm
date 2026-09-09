@@ -9,6 +9,13 @@ from typing import Any
 
 import frappe
 
+from crm.fcrm.interaction_semantics import (
+	INTELLIGENCE_SUMMARY_MAX_CHARS,
+	InteractionContractError,
+	validate_intelligence,
+)
+from crm.fcrm.nba_context import validate_decision_signals
+
 _STATES = {"no_intent", "intent_bearing", "unknown", "failed"}
 _LEASE_SECONDS = 120
 
@@ -50,6 +57,26 @@ def _parse_intent(value: Any) -> tuple[str, list[dict[str, str]]] | None:
 			)
 		parsed.append({key: _require_text(ref.get(key), f"intent.evidence_refs.{key}") for key in ref})
 	return semantic_key, parsed
+
+
+def _parse_decision_signals(value: Any) -> dict | None:
+	if value is None:
+		return None
+	try:
+		return validate_decision_signals(value)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+def _parse_intelligence(value: Any, *, state: str) -> dict | None:
+	"""Validate the additive, non-digest-bound conversation intelligence block."""
+	if value is None:
+		return None
+	try:
+		validate_intelligence(value, state=state)
+	except InteractionContractError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	return dict(value)
 
 
 def claim_interaction_analysis_run(*, run_id: str, stage_generation: int) -> dict:
@@ -123,7 +150,9 @@ def settle_interaction_analysis_result(
 	model_revision: str,
 	result_digest: str,
 	intent: dict[str, Any] | None = None,
+	decision_signals: dict[str, Any] | None = None,
 	terminal_reason: str | None = None,
+	intelligence: dict[str, Any] | None = None,
 ) -> dict:
 	"""Atomically persist one fenced result and exactly one score trigger."""
 	_service_only()
@@ -143,12 +172,17 @@ def settle_interaction_analysis_result(
 	policy_revision = _require_text(policy_revision, "policy_revision")
 	model_revision = _require_text(model_revision, "model_revision")
 	parsed_intent = _parse_intent(intent)
+	parsed_signals = _parse_decision_signals(decision_signals)
+	# Additive, non-digest-bound: validated but never folded into result_digest,
+	# so an omitted block keeps the byte-identical legacy digest contract.
+	parsed_intelligence = _parse_intelligence(intelligence, state=state)
+	if state == "failed" and parsed_signals and parsed_signals.get("observations"):
+		frappe.throw("Failed interaction analysis results cannot carry decision signals.", frappe.ValidationError)
 	if state == "intent_bearing" and parsed_intent is None:
 		frappe.throw("Intent-bearing results require an intent.", frappe.ValidationError)
 	if state != "intent_bearing" and parsed_intent is not None:
 		frappe.throw("Only intent-bearing results may include an intent.", frappe.ValidationError)
-	expected_result_digest = _canonical_digest(
-		{
+	digest_payload = {
 			"run_id": run_id,
 			"stage_generation": stage_generation,
 			"expected_source_revision": expected_source_revision,
@@ -158,7 +192,11 @@ def settle_interaction_analysis_result(
 			"model_revision": model_revision,
 			"intent": intent,
 		}
-	)
+	# Omitted signals retain the byte-identical legacy digest contract.  An
+	# explicit empty object is meaningful and is therefore bound to the digest.
+	if decision_signals is not None:
+		digest_payload["decision_signals"] = parsed_signals
+	expected_result_digest = _canonical_digest(digest_payload)
 	if result_digest != expected_result_digest:
 		frappe.throw("Interaction analysis result digest is invalid.", frappe.ValidationError)
 
@@ -212,11 +250,18 @@ def settle_interaction_analysis_result(
 			"evidence_refs",
 			"terminal_reason",
 			"intent",
+			"decision_signals",
 		],
 		as_dict=True,
 	)
 	if existing:
 		existing_refs = existing.evidence_refs
+		existing_signals = existing.decision_signals
+		if isinstance(existing_signals, str):
+			try:
+				existing_signals = json.loads(existing_signals)
+			except ValueError:
+				existing_signals = None
 		if isinstance(existing_refs, str):
 			try:
 				existing_refs = json.loads(existing_refs)
@@ -227,6 +272,8 @@ def settle_interaction_analysis_result(
 		if existing.intent:
 			existing_semantic_key = frappe.db.get_value("CRM Intent", existing.intent, "intent_type") or None
 		expected_semantic_key = parsed_intent[0] if parsed_intent else None
+		existing_signals = json.dumps(existing_signals, sort_keys=True, separators=(",", ":"))
+		expected_signals = json.dumps(parsed_signals, sort_keys=True, separators=(",", ":"))
 		if (
 			existing.analysis_run != run_id
 			or existing.stage != stage.name
@@ -239,12 +286,20 @@ def settle_interaction_analysis_result(
 			or (existing.terminal_reason or "") != (terminal_reason or "")[:500]
 			or bool(existing.intent) != bool(parsed_intent)
 			or existing_semantic_key != expected_semantic_key
+			or existing_signals != expected_signals
 		):
 			frappe.throw(
 				"Interaction analysis result digest conflicts with another settlement.",
 				frappe.ValidationError,
 			)
-		return {"result": existing.name, "replayed": True}
+		# First settlement wins. `intelligence` is outside the digest, so a
+		# re-run with a different summary/sentiment is intentionally not
+		# re-applied -- the persisted block reflects the first result.
+		return {
+			"result": existing.name,
+			"replayed": True,
+			"student": frappe.db.get_value("CRM Interaction", run.interaction, "student"),
+		}
 	if (
 		stage.status != "running"
 		or stage.lease_token != lease_token
@@ -260,6 +315,25 @@ def settle_interaction_analysis_result(
 	if not interaction_target:
 		frappe.throw("Interaction analysis target is unavailable.", frappe.DoesNotExistError)
 	student = interaction_target.student
+	if parsed_signals:
+		for observation in parsed_signals["observations"]:
+			for evidence_ref in observation["evidence_refs"]:
+				evidence = frappe.db.get_value(
+					"CRM Interaction Evidence", evidence_ref,
+					["interaction", "student", "crm_contact", "source_revision", "evidence_digest", "actor_role"],
+					as_dict=True,
+				)
+				if not evidence:
+					frappe.throw("Decision signal evidence reference is unavailable.", frappe.ValidationError)
+				if (
+					evidence.interaction != run.interaction
+					or evidence.student != interaction_target.student
+					or evidence.crm_contact != interaction_target.crm_contact
+					or int(evidence.source_revision or 0) != expected_source_revision
+					or evidence.evidence_digest != expected_source_digest
+					or evidence.actor_role != "student"
+				):
+					frappe.throw("Decision signal evidence is outside this analysis revision.", frappe.PermissionError)
 	if parsed_intent:
 		semantic_key, refs = parsed_intent
 		for ref in refs:
@@ -276,6 +350,7 @@ def settle_interaction_analysis_result(
 				or evidence.student != interaction_target.student
 				or evidence.crm_contact != interaction_target.crm_contact
 				or int(evidence.source_revision or 0) != expected_source_revision
+				or evidence.evidence_digest != expected_source_digest
 				or evidence.actor_role != "student"
 			):
 				frappe.throw(
@@ -300,13 +375,22 @@ def settle_interaction_analysis_result(
 			"policy_revision": policy_revision,
 			"model_revision": model_revision,
 			"evidence_refs": json.dumps(refs, sort_keys=True, separators=(",", ":")),
+			"decision_signals": json.dumps(parsed_signals, sort_keys=True, separators=(",", ":"))
+			if parsed_signals is not None else None,
 			"terminal_reason": (terminal_reason or "")[:500],
+			"conversation_summary": (parsed_intelligence or {}).get("summary", "")[
+				:INTELLIGENCE_SUMMARY_MAX_CHARS
+			],
 		}
 	).insert(ignore_permissions=True)
 	intent_name = None
 	if term:
+		# sentiment/readiness/concerns/entities hang off the CRM Intent row, so
+		# on a no_intent result only `conversation_summary` (on the result doc
+		# above) persists -- there is no intent row to carry the rest.
 		frappe.flags.interaction_analysis_result_service = True
 		try:
+			_intel = parsed_intelligence or {}
 			intent_doc = frappe.get_doc(
 				{
 					"doctype": "CRM Intent",
@@ -316,6 +400,10 @@ def settle_interaction_analysis_result(
 					"intent_role": "Dominant",
 					"confidence": 100,
 					"analysis_result": result.name,
+					"sentiment": _intel.get("sentiment") or None,
+					"readiness": _intel.get("readiness") or None,
+					"concerns": json.dumps(_intel.get("concerns") or [], separators=(",", ":")),
+					"entities": json.dumps(_intel.get("entities") or {}, sort_keys=True, separators=(",", ":")),
 				}
 			).insert(ignore_permissions=True)
 			intent_name = intent_doc.name
@@ -363,4 +451,10 @@ def settle_interaction_analysis_result(
 	from crm.api.interaction_read import publish_interaction_invalidation
 
 	publish_interaction_invalidation(event_id=result.name)
-	return {"result": result.name, "intent": intent_name, "score_change": score_change, "replayed": False}
+	return {
+		"result": result.name,
+		"intent": intent_name,
+		"score_change": score_change,
+		"replayed": False,
+		"student": student,
+	}

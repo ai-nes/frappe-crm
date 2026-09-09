@@ -20,7 +20,12 @@
   "importance",
   "confidence",
   "analysis_result",
-  "notes"
+  "notes",
+  "intelligence_section",
+  "sentiment",
+  "readiness",
+  "concerns",
+  "entities"
  ],
  "fields": [
   {
@@ -117,6 +122,37 @@
    "fieldname": "notes",
    "fieldtype": "Small Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "intelligence_section",
+   "fieldtype": "Section Break",
+   "label": "Conversation Intelligence"
+  },
+  {
+   "fieldname": "sentiment",
+   "fieldtype": "Select",
+   "label": "Sentiment",
+   "options": "\npositive\nneutral\nnegative\nmixed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "readiness",
+   "fieldtype": "Select",
+   "label": "Readiness",
+   "options": "\nready\nhesitant\nunknown",
+   "read_only": 1
+  },
+  {
+   "fieldname": "concerns",
+   "fieldtype": "JSON",
+   "label": "Concerns",
+   "read_only": 1
+  },
+  {
+   "fieldname": "entities",
+   "fieldtype": "JSON",
+   "label": "Entities",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,

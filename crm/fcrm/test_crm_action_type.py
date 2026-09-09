@@ -112,6 +112,17 @@ def test_action_defaults_are_compatible_with_action_master_constraints():
 		"Admissions Director",
 	}
 
+	# A recipient-facing action with no channel in its code still resolves to a
+	# concrete channel and carries the daytime contact windows.
+	advise = defaults_for_action("ADVISE_CAREER", "CONVERSION")
+	assert advise["default_channel"] == "CALL"
+	assert json.loads(advise["allowed_time_slots"]) == ["6-12", "12-18", "18-24"]
+
+	# An internal action stays NONE and unrestricted.
+	internal = defaults_for_action("CREATE_TASK", "INTERNAL")
+	assert internal["default_channel"] == "NONE"
+	assert json.loads(internal["allowed_time_slots"]) == []
+
 
 def test_action_constraints_reject_a_fixed_channel_mismatch():
 	defaults = defaults_for_action("SEND_EMAIL", "CONTACT")
@@ -164,9 +175,8 @@ def test_action_constraints_reject_conflicting_execution_configuration():
 def test_action_constraints_accept_allowed_time_slots_subset():
 	defaults = defaults_for_action("CALL", "CONTACT")
 
-	validate_action_config(
-		"CALL", "CONTACT", **defaults, enabled=1, allowed_time_slots=["6-12", "12-18", "18-24"]
-	)
+	assert set(json.loads(defaults["allowed_time_slots"])) == {"6-12", "12-18", "18-24"}
+	validate_action_config("CALL", "CONTACT", **defaults, enabled=1)
 
 
 def test_custom_action_codes_use_the_same_safe_configuration_contract():
@@ -189,7 +199,7 @@ def test_action_constraints_reject_unknown_time_slot():
 
 	try:
 		validate_action_config(
-			"CALL", "CONTACT", **defaults, enabled=1, allowed_time_slots=["0-6", "midnight"]
+			"CALL", "CONTACT", **{**defaults, "allowed_time_slots": ["0-6", "midnight"]}, enabled=1
 		)
 	except ValueError as exc:
 		assert "allowed_time_slots" in str(exc)

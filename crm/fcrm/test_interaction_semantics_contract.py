@@ -9,12 +9,14 @@ import unittest
 
 from crm.fcrm.interaction_semantics import (
 	CONTENT_HASH,
+	CONTRACT_VERSION,
 	DIRECT_TOUCHPOINT_TYPES,
 	FROZEN_CONTENT_HASH,
 	INTERACTION_TYPE_MAPPING,
 	KNOWN_WRITER_INTERACTION_TYPES,
 	OUTCOME_FIELD_MAPPING,
 	INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+	INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
 	INTERACTION_INTELLIGENCE_POLICY,
 	InteractionContractError,
 	SILENCE_WINDOW_SECONDS,
@@ -31,6 +33,38 @@ _FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "interaction-intel
 class TestInteractionSemanticsContract(unittest.TestCase):
 	def test_content_hash_matches_frozen_value(self):
 		self.assertEqual(CONTENT_HASH, FROZEN_CONTENT_HASH)
+		self.assertEqual(CONTRACT_VERSION, 4)
+
+	def test_analysis_result_decision_signals_are_optional_legacy_and_bounded_v2(self):
+		result = json.loads((_FIXTURES / "result-no-intent.json").read_text(encoding="utf-8"))
+		result["contract_version"] = INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION
+		result["decision_signals"] = {"schema_revision": "nba-decision-signals-v1", "observations": []}
+		validate_analysis_result(result)
+		result["decision_signals"]["observations"] = [{"raw": "must reject"}]
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(result)
+
+	def test_failed_result_cannot_carry_meaningful_decision_signals(self):
+		result = json.loads((_FIXTURES / "result-no-intent.json").read_text(encoding="utf-8"))
+		result["state"] = "failed"
+		result["contract_version"] = INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION
+		result["decision_signals"] = {
+			"schema_revision": "nba-decision-signals-v1",
+			"observations": [{
+				"need_code": "RESOLVE_MAJOR_UNCERTAINTY",
+				"status": "open",
+				"basis": "explicit",
+				"confidence": "high",
+				"blocks_progress": True,
+				"explicit_request": True,
+				"advice_readiness": "ready",
+				"application_readiness": "hesitant",
+				"parent_influence": "unknown",
+				"evidence_refs": ["EVID-1"],
+			}],
+		}
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(result)
 
 	def test_every_known_writer_type_has_a_mapping_entry(self):
 		unmapped = KNOWN_WRITER_INTERACTION_TYPES - set(INTERACTION_TYPE_MAPPING)
@@ -99,6 +133,38 @@ class TestInteractionSemanticsContract(unittest.TestCase):
 		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["evidence"]["raw_content_destinations"], "evidence_only")
 		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["service_auth"]["writer_boundary"], "existing_frappe_authenticated_api")
 		self.assertEqual(INTERACTION_INTELLIGENCE_POLICY["term"]["semantic_key"], "immutable")
+
+	def test_intelligence_block_is_additive_bounded_and_state_gated(self):
+		result = json.loads((_FIXTURES / "result-intent-bearing.json").read_text(encoding="utf-8"))
+		result["intelligence"] = {
+			"summary": "Học sinh hỏi học phí ngành AI; tư vấn viên gửi bảng học phí.",
+			"sentiment": "neutral",
+			"entities": {"program": ["AI"]},
+			"readiness": "hesitant",
+			"concerns": ["financial"],
+		}
+		validate_analysis_result(result)
+		# Omitting it keeps the legacy shape valid.
+		del result["intelligence"]
+		validate_analysis_result(result)
+		# Malformed shapes fail closed.
+		for bad in (
+			{"summary": "a\nb"},
+			{"summary": "x" * 601},
+			{"sentiment": "furious"},
+			{"entities": {"content": ["x"]}},
+			{"concerns": ["x" * 65]},
+			{"unexpected": "x"},
+		):
+			result["intelligence"] = {"summary": "ok", **bad}
+			with self.assertRaises(InteractionContractError):
+				validate_analysis_result(result)
+		# Not allowed on unknown/failed.
+		no_intent = json.loads((_FIXTURES / "result-no-intent.json").read_text(encoding="utf-8"))
+		no_intent["state"] = "unknown"
+		no_intent["intelligence"] = {"summary": "x"}
+		with self.assertRaises(InteractionContractError):
+			validate_analysis_result(no_intent)
 
 	def test_shared_fixtures_are_accepted(self):
 		intake = json.loads((_FIXTURES / "intake-final-message.json").read_text(encoding="utf-8"))

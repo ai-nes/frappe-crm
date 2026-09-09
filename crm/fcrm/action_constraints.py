@@ -32,6 +32,75 @@ FIXED_CHANNELS = {
 	"SEND_EMAIL": "EMAIL",
 }
 
+# Recipient-facing actions whose delivery channel is unambiguous from the
+# action's intent even though the code does not name a channel (unlike
+# FIXED_CHANNELS). Anything absent from both maps stays NONE -- an
+# internal-state, routing, or escalation action with no student/parent
+# recipient. An operator can still override any of these per row.
+DEFAULT_CHANNELS = {
+	# Advisor-led conversations
+	"ADVISE_MAJOR": "CALL",
+	"ADVISE_TUITION": "CALL",
+	"ADVISE_SCHOLARSHIP": "CALL",
+	"ADVISE_CAREER": "CALL",
+	"ADVISE_PARENT": "CALL",
+	"COMPARE_MAJORS": "CALL",
+	"COMPARE_CAMPUSES": "CALL",
+	"BOOK_1ON1_CONSULTATION": "CALL",
+	"BOOK_PARENT_CONSULTATION": "CALL",
+	"CONTACT_PARENT": "CALL",
+	"CHECK_APPLICATION": "CALL",
+	"CONFIRM_APPLICATION_RECEIVED": "CALL",
+	"ASSIST_APPLICATION_FEE": "CALL",
+	"REQUEST_MISSING_DOCUMENT": "CALL",
+	"GUIDE_NEXT_STEP": "CALL",
+	"FOLLOW_UP_SILENT_LEAD": "CALL",
+	"REENGAGE_LEAD": "CALL",
+	"ASK_DECISION_REASON": "CALL",
+	"SCHEDULE_LATER_FOLLOWUP": "CALL",
+	# Content and event invitations
+	"SEND_MAJOR_INFO": "EMAIL",
+	"SEND_PROGRAM_INFO": "EMAIL",
+	"SEND_TUITION_INFO": "EMAIL",
+	"SEND_SCHOLARSHIP_INFO": "EMAIL",
+	"SEND_PROMOTION_INFO": "EMAIL",
+	"SEND_ADMISSION_INFO": "EMAIL",
+	"SEND_DORM_INFO": "EMAIL",
+	"SEND_CAREER_INFO": "EMAIL",
+	"SEND_BROCHURE": "EMAIL",
+	"SEND_MAJOR_VIDEO": "EMAIL",
+	"SEND_RELEVANT_FAQ": "EMAIL",
+	"SEND_PERSONALIZED_CONTENT": "EMAIL",
+	"SEND_TESTIMONIAL": "EMAIL",
+	"SEND_APPLICATION_CHECKLIST": "EMAIL",
+	"SEND_OFFER": "EMAIL",
+	"SEND_OBJECTION_CONTENT": "EMAIL",
+	"SEND_PARENT_TUITION": "EMAIL",
+	"SEND_PARENT_SCHOLARSHIP": "EMAIL",
+	"SEND_PARENT_CAREER_INFO": "EMAIL",
+	"SEND_TRAINING_ROADMAP": "EMAIL",
+	"SEND_FINANCIAL_PLAN": "EMAIL",
+	"INVITE_OPEN_DAY": "EMAIL",
+	"INVITE_CAMPUS_TOUR": "EMAIL",
+	"INVITE_CAMPUS_VISIT": "EMAIL",
+	"INVITE_WEBINAR": "EMAIL",
+	"INVITE_WORKSHOP": "EMAIL",
+	"INVITE_CLASS_EXPERIENCE": "EMAIL",
+	"INVITE_STEM_EVENT": "EMAIL",
+	"INVITE_MOCK_TEST": "EMAIL",
+	"INVITE_PARENT_EVENT": "EMAIL",
+	# Short reminders
+	"REMIND_APPLICATION": "MESSAGE",
+	"REMIND_COMPLETE_APPLICATION": "MESSAGE",
+	"REMIND_APPLICATION_DEADLINE": "MESSAGE",
+	"REMIND_ENROLLMENT_DEADLINE": "MESSAGE",
+}
+
+# Daily windows any recipient-facing action may run in: morning through
+# evening, never overnight (the "0-6" slot). A NONE-channel action carries no
+# window restriction.
+CONTACT_TIME_SLOTS: tuple[str, ...] = ("6-12", "12-18", "18-24")
+
 MANAGER_ONLY_ACTIONS = frozenset(
 	{
 		"REASSIGN_ADVISOR",
@@ -74,8 +143,12 @@ def defaults_for_action(code: str, category: str) -> dict[str, Any]:
 	if ACTION_TYPE_METADATA[code]["category"] != category:
 		raise ValueError(f"CRM Action {code} does not belong to Action Type {category}.")
 	ai_allowed = category != "INTERNAL"
+	channel = FIXED_CHANNELS.get(code) or DEFAULT_CHANNELS.get(code, "NONE")
 	return {
-		"default_channel": FIXED_CHANNELS.get(code, "NONE"),
+		"default_channel": channel,
+		"allowed_time_slots": json.dumps(
+			list(CONTACT_TIME_SLOTS) if channel != "NONE" else [], ensure_ascii=False
+		),
 		"allowed_actors": json.dumps(_actors_for(code), ensure_ascii=False),
 		"requires_approval": int(code in APPROVAL_ACTIONS),
 		"auto_execute": 0,

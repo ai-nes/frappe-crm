@@ -18,11 +18,32 @@ import hashlib
 import json
 from collections.abc import Mapping
 
-CONTRACT_VERSION = 3
+from crm.fcrm.nba_context import validate_decision_signals
+
+CONTRACT_VERSION = 4
 
 INTERACTION_INTELLIGENCE_CONTRACT_VERSION = "interaction-intelligence-v1"
+INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION = "interaction-analysis-v2"
+DECISION_SIGNALS_SCHEMA_REVISION = "nba-decision-signals-v1"
 SILENCE_WINDOW_SECONDS = 15 * 60
 SUPPORTED_ANALYSIS_RESULT_STATES = frozenset({"no_intent", "intent_bearing", "unknown", "failed"})
+
+# Additive `intelligence` settlement block -- mirrors crm-agents'
+# app/contracts/interaction_semantics.py. Sits at the settlement payload top
+# level (sibling of `intent`), never inside the digest-bound envelope, so a
+# `no_intent` result can carry a summary and omitting the block reproduces the
+# exact legacy digest.
+INTELLIGENCE_SUMMARY_MAX_CHARS = 600
+INTELLIGENCE_SENTIMENTS = frozenset({"positive", "neutral", "negative", "mixed"})
+INTELLIGENCE_READINESS = frozenset({"ready", "hesitant", "unknown"})
+INTELLIGENCE_MAX_CONCERNS = 8
+INTELLIGENCE_STATES = frozenset({"intent_bearing", "no_intent"})
+_INTELLIGENCE_CONCERN_MAX_CHARS = 64
+_INTELLIGENCE_FIELDS = frozenset({"summary", "sentiment", "entities", "readiness", "concerns"})
+_INTELLIGENCE_MAX_ENTITY_TYPES = 12
+_INTELLIGENCE_MAX_ENTITY_VALUES = 12
+_INTELLIGENCE_ENTITY_STR_MAX_CHARS = 120
+_INTELLIGENCE_RESERVED_ENTITY_KEYS = frozenset({"content", "raw_content", "transcript", "quoted_text"})
 
 # Mirrored with crm-agents' app/contracts/interaction_semantics.py.  Phase 01
 # is intentionally data-only: Frappe remains the evidence owner and existing
@@ -55,6 +76,21 @@ INTERACTION_INTELLIGENCE_POLICY = {
 		"intent_bearing": "create_crm_intent",
 		"eligible_actor_roles": ("student",),
 	},
+	"intelligence": {
+		"placement": "settlement_payload_top_level_sibling_of_intent",
+		"digest_bound": False,
+		"states": ("intent_bearing", "no_intent"),
+		"fields": ("summary", "sentiment", "entities", "readiness", "concerns"),
+		"summary": "bounded_single_line_quote_free_model_prose",
+		"summary_max_chars": INTELLIGENCE_SUMMARY_MAX_CHARS,
+		"sentiment_values": tuple(sorted(INTELLIGENCE_SENTIMENTS)),
+		"readiness_values": tuple(sorted(INTELLIGENCE_READINESS)),
+		"max_concerns": INTELLIGENCE_MAX_CONCERNS,
+		"entities": "bounded_sanitized_string_map_reserved_keys_rejected",
+		"max_entity_types": _INTELLIGENCE_MAX_ENTITY_TYPES,
+		"max_entity_values": _INTELLIGENCE_MAX_ENTITY_VALUES,
+		"omitted_reproduces_legacy_digest": True,
+	},
 	"term": {
 		"semantic_key": "immutable",
 		"label": "mutable_display_only",
@@ -63,6 +99,11 @@ INTERACTION_INTELLIGENCE_POLICY = {
 	},
 	"compatibility": {
 		"supported_versions": (INTERACTION_INTELLIGENCE_CONTRACT_VERSION,),
+		"analysis_result_versions": (
+			INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+			INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
+		),
+		"decision_signals_schema_revision": DECISION_SIGNALS_SCHEMA_REVISION,
 		"unknown_version": "reject",
 		"same_version_additive_fields": "reject_at_boundary",
 	},
@@ -263,12 +304,14 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "873b67c10050aaab15dafd84cfc9bfd62a45febaf3a45d301bec684437699eb9"
+FROZEN_CONTENT_HASH = "ee6a9db7833f623c34e64db0ad657d657256eb2d76736dc3dab40e1cac9c9855"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(
 		{
 			"contract_version": CONTRACT_VERSION,
+			"analysis_result_contract_version": INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
+			"decision_signals_schema_revision": DECISION_SIGNALS_SCHEMA_REVISION,
 			"interaction_intelligence_policy": INTERACTION_INTELLIGENCE_POLICY,
 			"interaction_type_mapping": INTERACTION_TYPE_MAPPING,
 			"outcome_field_mapping": OUTCOME_FIELD_MAPPING,
@@ -350,6 +393,57 @@ def _reject_raw_content(value):
 			_reject_raw_content(child)
 
 
+def _validate_intelligence(block, *, state):
+	"""Validate the additive `intelligence` settlement block (mirror)."""
+	if state not in INTELLIGENCE_STATES:
+		raise InteractionContractError(
+			"intelligence is only valid on intent_bearing or no_intent results"
+		)
+	if not isinstance(block, Mapping):
+		raise InteractionContractError("intelligence must be an object")
+	_reject_unknown_fields(block, set(_INTELLIGENCE_FIELDS), "intelligence")
+	summary = block.get("summary", "")
+	if not isinstance(summary, str):
+		raise InteractionContractError("intelligence.summary must be a string")
+	if len(summary) > INTELLIGENCE_SUMMARY_MAX_CHARS:
+		raise InteractionContractError("intelligence.summary exceeds its length bound")
+	if "\n" in summary or "\r" in summary:
+		raise InteractionContractError("intelligence.summary must be a single line")
+	if "sentiment" in block and block["sentiment"] not in INTELLIGENCE_SENTIMENTS:
+		raise InteractionContractError("intelligence.sentiment is unsupported")
+	if "readiness" in block and block["readiness"] not in INTELLIGENCE_READINESS:
+		raise InteractionContractError("intelligence.readiness is unsupported")
+	entities = block.get("entities", {})
+	if not isinstance(entities, Mapping) or len(entities) > _INTELLIGENCE_MAX_ENTITY_TYPES:
+		raise InteractionContractError("intelligence.entities must be a bounded string map")
+	for key, values in entities.items():
+		if (
+			not isinstance(key, str)
+			or not key
+			or key.lower() in _INTELLIGENCE_RESERVED_ENTITY_KEYS
+			or not isinstance(values, (list, tuple))
+			or len(values) > _INTELLIGENCE_MAX_ENTITY_VALUES
+			or not all(
+				isinstance(value, str) and 0 < len(value) <= _INTELLIGENCE_ENTITY_STR_MAX_CHARS
+				for value in values
+			)
+		):
+			raise InteractionContractError("intelligence.entities must map strings to bounded string lists")
+	concerns = block.get("concerns", [])
+	if not isinstance(concerns, (list, tuple)) or len(concerns) > INTELLIGENCE_MAX_CONCERNS:
+		raise InteractionContractError("intelligence.concerns must be a bounded list")
+	if not all(
+		isinstance(concern, str) and 0 < len(concern) <= _INTELLIGENCE_CONCERN_MAX_CHARS
+		for concern in concerns
+	):
+		raise InteractionContractError("intelligence.concerns entries must be bounded strings")
+
+
+# Public name for cross-module callers (settlement handler); keep the private
+# alias so the mirror stays byte-comparable with the crm-agents contract.
+validate_intelligence = _validate_intelligence
+
+
 def _require_contract_version(payload):
 	if payload.get("contract_version") != INTERACTION_INTELLIGENCE_CONTRACT_VERSION:
 		raise InteractionContractError("unsupported interaction intelligence contract version")
@@ -414,13 +508,17 @@ def validate_analysis_result(payload):
 	"""Validate a bounded result that can reference, but never copy, evidence."""
 	if not isinstance(payload, Mapping):
 		raise InteractionContractError("analysis result must be an object")
-	_require_contract_version(payload)
+	if payload.get("contract_version") not in {
+		INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+		INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
+	}:
+		raise InteractionContractError("unsupported interaction intelligence contract version")
 	_reject_raw_content(payload)
 	_reject_unknown_fields(
 		payload,
 		{
 			"contract_version", "analysis_run_id", "episode_id", "source_revision", "source_digest", "state",
-			"model_revision", "policy_revision", "intent",
+			"model_revision", "policy_revision", "intent", "decision_signals", "intelligence",
 		},
 		"analysis result",
 	)
@@ -462,3 +560,17 @@ def validate_analysis_result(payload):
 				raise InteractionContractError("only student evidence can substantiate an intent")
 	elif intent is not None:
 		raise InteractionContractError("only intent_bearing results may carry an intent")
+	if payload.get("intelligence") is not None:
+		_validate_intelligence(payload["intelligence"], state=payload["state"])
+	decision_signals = payload.get("decision_signals")
+	if decision_signals is not None:
+		if payload.get("contract_version") != INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION:
+			raise InteractionContractError("decision_signals requires interaction-analysis-v2")
+		try:
+			validate_decision_signals(decision_signals)
+		except ValueError as exc:
+			raise InteractionContractError("invalid decision_signals") from exc
+		if payload["state"] == "failed" and decision_signals.get("observations"):
+			raise InteractionContractError("failed results cannot carry decision signals")
+	elif payload.get("contract_version") == INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION:
+		raise InteractionContractError("interaction-analysis-v2 requires decision_signals")

@@ -19,7 +19,11 @@ from crm.fcrm.action_type_catalog import is_valid_configuration_code
 LOOKUP_CONSUMERS: dict[str, tuple[tuple[str, str], ...]] = {
 	"CRM Lost Reason": (),
 	"CRM Campaign Type": (("CRM Campaign", "campaign_type"),),
-	"CRM Intent Type": (("CRM Intent", "intent_type"), ("CRM Score Signal", "intent_type")),
+	"CRM Intent Type": (
+		("CRM Intent", "intent_type"),
+		("CRM Score Signal", "intent_type"),
+		("CRM Intent Trajectory", "current_intent"),
+	),
 	"CRM Interaction Type": (
 		("CRM Interaction", "interaction_type"),
 		("CRM Score Signal", "interaction_term"),

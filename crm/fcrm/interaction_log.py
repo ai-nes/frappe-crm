@@ -287,14 +287,23 @@ def verify_sla_source(doctype, name, student):
 		return False
 
 
-def _interaction_target_matches(target: dict, student: str | None, contact: str | None) -> bool:
-	return target.get("student") == student and target.get("contact") == contact
+def _interaction_target_matches(target: dict, student: str | None) -> bool:
+	return target.get("student") == student
 
 
 def _external_interaction_matches(record, target: dict, payload: dict) -> bool:
+	# `_resolve_external_interaction_target` never returns a non-None "contact"
+	# (every branch resolves to {"student": ..., "contact": None}), so it is
+	# never a meaningful identity to re-check here. `record["crm_contact"]`
+	# specifically must not be compared against it: the `sync_canonical_student`
+	# before_validate hook (crm/fcrm/student_reference.py) backfills that field
+	# from the resolved canonical student on save, independent of what this
+	# caller supplied as target -- comparing it against target["contact"]
+	# (always None) made this check fail for essentially every student that
+	# has a same-coded CRM Lead, i.e. most real students.
 	value = record.get
 	return (
-		_interaction_target_matches(target, value("student"), value("crm_contact"))
+		_interaction_target_matches(target, value("student"))
 		and _text(value("channel")) == payload["channel"]
 		and _text(value("direction")) == payload["direction"]
 		and _text(value("interaction_datetime")) == payload["occurred_at"]
@@ -550,7 +559,7 @@ def ingest_external_interaction(payload: dict, *, signed_context: dict | None = 
 	authority = _resolve_authority(INTERACTION_CAPABILITY, signed_context=signed_context)
 	target = _resolve_external_interaction_target(payload)
 	_assert_interaction_scope(target, authority)
-	interaction_type = CHATWOOT_INTERACTION_TYPE if payload["source_namespace"] == "chatwoot" else "MESSAGE"
+	interaction_type = "PHONE_CALL" if payload["evidence_kind"] == "call" else "MESSAGE"
 	if not frappe.db.exists(
 		"CRM Interaction Type", {"name": interaction_type, "enabled": 1}
 	):

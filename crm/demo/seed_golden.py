@@ -1,4 +1,4 @@
-"""Canonical golden demo seed: four HCMC leads on one Sale account, full CRM chain.
+"""Canonical golden demo seed: six HCMC leads on one Sale account, full CRM chain.
 
 Run with::
 
@@ -11,13 +11,18 @@ it builds one integral, realistic dataset on top of a fresh site:
 * a real-looking HCMC assignment topology (cluster, two zones, two wards, three
   teams/pools) and the requested Sale account (``TARGET_EMAIL``) as the owner
   of every seeded lead;
-* four ``CRM Lead`` leads (Lead stage) spread across two zones/schools,
-  each with the complete raw CRM chain the admissions API and the AI features
-  read: consent + geography snapshot on intake, three interactions, three
-  intents, a qualification outcome, an admission application, parent
-  authority + guardian, marketing attribution, a confirmed assessment, a
-  score-history row, a lead Contact, an AI insight row, a completed Student
-  360 analysis run and three pending NBA recommendations.
+* six ``CRM Lead`` leads (Lead lifecycle stage) spread across two zones/schools,
+  each with the raw CRM chain the admissions API and the AI features read:
+  consent + geography snapshot on intake, interactions, intents, a
+  qualification outcome, an admission application, parent authority + guardian,
+  marketing attribution, a confirmed assessment, a score-history row, a lead
+  Contact, an AI insight row and a completed Student 360 analysis run.
+
+The six profiles carry NBA scenario knobs (``contact_stage``, ``consent_state``,
+``signal_profile``, ``recent_action``, ``expected_disposition``) so a real
+``nba-engine-r2`` kernel run against the dataset exercises every disposition
+(RECOMMEND / WAIT / NO_ACTION / ABSTAIN). ``_ensure_nba`` only *requests* the
+evaluation -- it never fabricates a result; ``crm-agents`` runs the kernel.
 
 This is the single golden dataset -- there is no parallel/local variant.
 """
@@ -576,8 +581,13 @@ def _profile_context(base: dict[str, Any], profile: dict[str, Any], ward: str) -
 
 _PROFILES: list[dict[str, Any]] = [
 	{
-		"key": "minh-anh",
-		"namespace": f"{NAMESPACE}:minh-anh",
+		"key": "s1-recommend",
+		"namespace": f"{NAMESPACE}:s1-recommend",
+		"contact_stage": "Connected",
+		"consent_state": "granted",
+		"signal_profile": "strong",
+		"recent_action": None,
+		"expected_disposition": "RECOMMEND",
 		"student_name": "Nguyễn Minh Anh",
 		"student_email": "nguyen.minh.anh.2008@gmail.com",
 		"student_phone": "0908123001",
@@ -652,8 +662,13 @@ _PROFILES: list[dict[str, Any]] = [
 		},
 	},
 	{
-		"key": "gia-huy",
-		"namespace": f"{NAMESPACE}:gia-huy",
+		"key": "s2-wait",
+		"namespace": f"{NAMESPACE}:s2-wait",
+		"contact_stage": "Connected",
+		"consent_state": "granted",
+		"signal_profile": "strong",
+		"recent_action": {"type": "CALL", "code": "CALL", "days_ago": 1, "category": "CONTACT"},
+		"expected_disposition": "WAIT",
 		"student_name": "Trần Gia Huy",
 		"student_email": "tran.gia.huy.2008@gmail.com",
 		"student_phone": "0908234002",
@@ -703,8 +718,8 @@ _PROFILES: list[dict[str, Any]] = [
 		},
 		"application": {"status": "Submitted", "document_completed": 4, "scholarship_percentage": 0},
 		"manual_action": {
-			"type": "CALL",
-			"title": "Gọi lại sau khi gửi bảng so sánh chương trình",
+			"type": "EMAIL",
+			"title": "Gửi lại bảng so sánh chương trình sau cuộc gọi gần nhất",
 			"priority": "medium",
 		},
 		"lost_reason": None,
@@ -734,8 +749,18 @@ _PROFILES: list[dict[str, Any]] = [
 		},
 	},
 	{
-		"key": "khanh-linh",
-		"namespace": f"{NAMESPACE}:khanh-linh",
+		"key": "s3-noaction-new",
+		"namespace": f"{NAMESPACE}:s3-noaction-new",
+		"contact_stage": "New",
+		"consent_state": "granted",
+		"signal_profile": "none",
+		"recent_action": None,
+		# A brand-new lead with no engagement signal: the kernel materialises
+		# candidates but none clear the score floor, so the disposition is
+		# ABSTAIN (below_score_threshold), not NO_ACTION. NO_ACTION is reserved
+		# for a terminal/unknown stage or a genuinely empty eligible set
+		# (see s5 / s6).
+		"expected_disposition": "ABSTAIN",
 		"student_name": "Lê Khánh Linh",
 		"student_email": "le.khanh.linh.2008@gmail.com",
 		"student_phone": "0908345003",
@@ -810,8 +835,17 @@ _PROFILES: list[dict[str, Any]] = [
 		},
 	},
 	{
-		"key": "nhat-minh",
-		"namespace": f"{NAMESPACE}:nhat-minh",
+		"key": "s4-abstain",
+		"namespace": f"{NAMESPACE}:s4-abstain",
+		# Early-funnel lead (New) with a thin, low-confidence signal set and a
+		# stalled Draft application. Candidates materialise but stay below the
+		# score floor -> ABSTAIN. Distinct from s3 (which carries no signal at
+		# all): s4 is the "weak partial signal" point on the same boundary.
+		"contact_stage": "New",
+		"consent_state": "granted",
+		"signal_profile": "weak",
+		"recent_action": None,
+		"expected_disposition": "ABSTAIN",
 		"student_name": "Phạm Nhật Minh",
 		"student_email": "pham.nhat.minh.2008@gmail.com",
 		"student_phone": "0908456004",
@@ -834,19 +868,19 @@ _PROFILES: list[dict[str, Any]] = [
 			"Gia đình đang cân đối học phí trước khi đặt lịch tư vấn tiếp theo.",
 		),
 		"intents": (
-			("Major Inquiry", "Dominant", 81),
-			("Tuition", "Support", 75),
-			("Enrollment Intent", "Support", 66),
+			("Major Inquiry", "Dominant", 44),
+			("Tuition", "Support", 38),
+			("Enrollment Intent", "Support", 35),
 		),
 		"outcome_next_action": "Gọi lại sau khi gia đình hoàn tất trao đổi ngân sách",
 		"assessment": {
-			"interest": "Medium",
-			"interest_confidence": 70,
-			"fit": "Medium",
-			"fit_confidence": 66,
+			"interest": "Low",
+			"interest_confidence": 40,
+			"fit": "Low",
+			"fit_confidence": 42,
 			"primary_barrier": "Cost",
-			"barrier_confidence": 81,
-			"enrollment_probability": 48,
+			"barrier_confidence": 55,
+			"enrollment_probability": 25,
 		},
 		"assessment_reason": (
 			"Học sinh có nhu cầu rõ về ngành nhưng gia đình chưa chốt ngân sách; cần "
@@ -885,12 +919,183 @@ _PROFILES: list[dict[str, Any]] = [
 			"risks": [("Ngân sách chưa được xác nhận", "High")],
 		},
 	},
+	{
+		"key": "s5-consent",
+		"namespace": f"{NAMESPACE}:s5-consent",
+		"contact_stage": "Connected",
+		"consent_state": "revoked",
+		"signal_profile": "strong",
+		"recent_action": None,
+		"expected_disposition": "NO_ACTION",
+		"student_name": "Đỗ Thảo Vy",
+		"student_email": "do.thao.vy.2008@gmail.com",
+		"student_phone": "0908567005",
+		"gender": "Nữ",
+		"date_of_birth": "2008-06-30",
+		"id_number": "079308063057",
+		"id_issued_date": "2024-06-21",
+		"major": "Business Administration",
+		"school": "THPT Gia Định",
+		"school_code": "HCM-GD",
+		"zone": "central",
+		"source": "FPTU Open Day",
+		"advertising_channel": "Facebook Ads - Học bổng 2026",
+		"target_stage": "Lead",
+		"outcome_code": "connected",
+		"notes": "Đã trao đổi tư vấn nhưng phụ huynh yêu cầu ngừng nhận liên hệ tiếp thị.",
+		"interactions": (
+			"Đăng ký nhận thông tin ngành Quản trị kinh doanh qua landing page.",
+			"Đã tư vấn qua điện thoại về chương trình và học phí.",
+			"Phụ huynh đề nghị tạm dừng nhận thông tin cho tới khi gia đình chủ động liên hệ lại.",
+		),
+		"intents": (
+			("Major Inquiry", "Dominant", 84),
+			("Tuition", "Support", 80),
+			("Environment", "Support", 72),
+		),
+		"outcome_next_action": "Chờ gia đình chủ động liên hệ lại theo yêu cầu",
+		"assessment": {
+			"interest": "High",
+			"interest_confidence": 84,
+			"fit": "High",
+			"fit_confidence": 82,
+			"primary_barrier": "Cost",
+			"barrier_confidence": 70,
+			"enrollment_probability": 66,
+		},
+		"assessment_reason": (
+			"Học sinh phù hợp và quan tâm rõ, nhưng phụ huynh đã yêu cầu ngừng liên hệ "
+			"tiếp thị nên mọi kênh chủ động đều bị khoá."
+		),
+		"parent": {
+			"name": "Đỗ Văn Thành",
+			"email": "thanh.do.1979@gmail.com",
+			"phone": "0908567890",
+			"relationship": "Bố",
+			"address": "Quận Bình Thạnh, Thành phố Hồ Chí Minh",
+		},
+		"application": {"status": "Submitted", "document_completed": 4, "scholarship_percentage": 0},
+		"manual_action": {
+			"type": "EMAIL",
+			"title": "Ghi nhận yêu cầu ngừng liên hệ của phụ huynh",
+			"priority": "low",
+		},
+		"lost_reason": None,
+		"score": {
+			"fit": 32, "engagement": 21, "intent": 24, "negative": -6, "final": 71,
+			"details": [
+				{"category": "Fit", "signal": "Grade 12, quan tâm ngành Business Administration", "score": 32},
+				{"category": "Engagement", "signal": "Tư vấn điện thoại + landing page", "score": 21},
+				{"category": "Intent", "signal": "Major inquiry + tuition", "score": 24},
+				{"category": "Negative", "signal": "Phụ huynh yêu cầu ngừng liên hệ", "score": -6},
+			],
+		},
+		"insight": {
+			"score": 71,
+			"next_action": "Chờ gia đình chủ động liên hệ lại theo yêu cầu",
+			"interests": [
+				("CAREER", "Cơ hội nghề nghiệp ngành kinh doanh", "STABLE", "POSITIVE", 82),
+				("COST", "Học phí và phương án tài chính", "STABLE", "UNRESOLVED", 80),
+			],
+			"risks": [("Phụ huynh yêu cầu ngừng liên hệ tiếp thị", "High")],
+		},
+	},
+	{
+		"key": "s6-terminal",
+		"namespace": f"{NAMESPACE}:s6-terminal",
+		"contact_stage": "Qualified",
+		"consent_state": "granted",
+		"signal_profile": "strong",
+		"recent_action": None,
+		"expected_disposition": "NO_ACTION",
+		"student_name": "Vũ Hoàng Long",
+		"student_email": "vu.hoang.long.2008@gmail.com",
+		"student_phone": "0908678006",
+		"gender": "Nam",
+		"date_of_birth": "2008-09-12",
+		"id_number": "079308091268",
+		"id_issued_date": "2024-10-05",
+		"major": "Data Science",
+		"school": "THPT Marie Curie",
+		"school_code": "HCM-MC",
+		"zone": "east",
+		"source": "Facebook Lead Form",
+		"advertising_channel": "Facebook Lead Form - Data & AI",
+		"target_stage": "Lead",
+		"outcome_code": "qualified",
+		"notes": "Hồ sơ đã đủ điều kiện và được xác nhận, không cần thêm hành động tư vấn.",
+		"interactions": (
+			"Để lại thông tin qua Facebook Lead Form ngành Data Science.",
+			"Đã tư vấn đầy đủ về lộ trình học và điều kiện đầu vào.",
+			"Xác nhận nộp hồ sơ và hoàn tất điều kiện xét tuyển.",
+		),
+		"intents": (
+			("Major Inquiry", "Dominant", 90),
+			("Admission Process", "Support", 85),
+			("Scholarship", "Support", 70),
+		),
+		"outcome_next_action": "Không cần hành động thêm — hồ sơ đã đủ điều kiện",
+		"assessment": {
+			"interest": "High",
+			"interest_confidence": 92,
+			"fit": "High",
+			"fit_confidence": 90,
+			"primary_barrier": "Information",
+			"barrier_confidence": 40,
+			"enrollment_probability": 88,
+		},
+		"assessment_reason": (
+			"Học sinh đã hoàn tất điều kiện xét tuyển và được xác nhận đủ điều kiện."
+		),
+		"parent": {
+			"name": "Vũ Thị Hồng Nhung",
+			"email": "hongnhung.vu@gmail.com",
+			"phone": "0908678901",
+			"relationship": "Mẹ",
+			"address": "Thành phố Thủ Đức, Thành phố Hồ Chí Minh",
+		},
+		"application": {"status": "Under Review", "document_completed": 7, "scholarship_percentage": 40},
+		"manual_action": {
+			"type": "EMAIL",
+			"title": "Gửi thư xác nhận đủ điều kiện xét tuyển",
+			"priority": "low",
+		},
+		"lost_reason": None,
+		"score": {
+			"fit": 35, "engagement": 26, "intent": 29, "negative": -2, "final": 88,
+			"details": [
+				{"category": "Fit", "signal": "Grade 12, nền tảng Toán tốt, quan tâm Data Science", "score": 35},
+				{"category": "Engagement", "signal": "Facebook Lead Form + tư vấn đầy đủ lộ trình", "score": 26},
+				{"category": "Intent", "signal": "Major inquiry + admission process", "score": 29},
+				{"category": "Negative", "signal": "Không có rào cản đáng kể", "score": -2},
+			],
+		},
+		"insight": {
+			"score": 88,
+			"next_action": "Không cần hành động thêm — hồ sơ đã đủ điều kiện",
+			"interests": [
+				("CAREER", "Ứng dụng dữ liệu trong công việc", "INCREASING", "POSITIVE", 90),
+				("ENROLLMENT_READINESS", "Điều kiện đầu vào đã hoàn tất", "STABLE", "POSITIVE", 88),
+			],
+			"risks": [("Không có rủi ro nổi bật", "Low")],
+		},
+	},
 ]
 
 # Mutated by ``_run_student`` for the duration of one profile seed.
 _ACTIVE: dict[str, Any] = _PROFILES[0]
 
 _LIFECYCLE_ORDER = ["Lead", "MQL", "Applicant", "Enrolled"]
+
+# ``signal_profile`` -> day offsets (before ``SEED_NOW``) for the three seeded
+# interactions. ``strong`` keeps them inside the decision engine's cooling
+# window; ``weak`` pushes them well outside it so the candidates fall below the
+# score/confidence floor.
+_SIGNAL_INTERACTION_DAYS = {"strong": (8, 6, 2), "weak": (40, 35, 30)}
+
+# Student contact-stage funnel steps ``_ensure_student_stage`` walks one hop at
+# a time (``crm.fcrm.student_stage`` only allows single-step transitions).
+_STUDENT_STAGE_ORDER = ["New", "Attempting", "Connected", "Qualified"]
 
 
 # ---------------------------------------------------------------------------
@@ -1909,9 +2114,41 @@ def _ensure_student_contact(
 		else:
 			frappe.flags.student_conversion_service = previous
 	seed_showcase._ensure_consent_event(contact, "Granted")
+	if _ACTIVE.get("consent_state") == "revoked":
+		# An unscoped opt-out event revokes every channel in
+		# ``_contactability_projection`` -> ``consent=False, channels=[]``.
+		seed_showcase._ensure_consent_event(contact, "Opted Out")
+	_normalize_consent_events(contact, student)
 	# Campaign/event attribution is recorded once, by _ensure_attribution below,
 	# now that it targets this CRM Student directly -- not duplicated here.
 	return contact
+
+
+def _normalize_consent_events(contact: str, student: str) -> None:
+	"""Point every consent event for this identity at the canonical CRM Student.
+
+	``student_intake._persist_consent_grant`` records the grant with
+	``student=<CRM Lead>`` and ``seed_showcase._ensure_consent_event`` records
+	only ``contact=<CRM Student>``. Both consent readers --
+	``student_decision_context._contactability_projection`` (NBA) and
+	``student_context._privacy_context`` (Student 360) -- filter
+	``CRM Contact Consent Event`` by ``{"student": <canonical id>}`` where the
+	canonical id is the CRM Student. Translate the split-era rows to that id
+	directly, the same Lead -> CRM Student read translation the
+	``_patch_split_migration_gaps`` hooks apply for other migrated readers.
+	"""
+	names: set[str] = set()
+	for filters in ({"contact": contact}, {"student": student}, {"student": contact}):
+		names.update(
+			row["name"]
+			for row in frappe.get_all(
+				"CRM Contact Consent Event", filters=filters, fields=["name"], limit_page_length=0
+			)
+		)
+	for name in names:
+		frappe.db.set_value(
+			"CRM Contact Consent Event", name, "student", contact, update_modified=False
+		)
 
 
 def _digest(value: Any) -> str:
@@ -2119,82 +2356,105 @@ def _ensure_student_analysis(contact: str, interactions: list[str], score: str |
 	)
 
 
+def _ensure_student_stage(contact: str, target: str) -> str:
+	"""Walk the Student contact-stage funnel forward to ``target``.
+
+	``crm.fcrm.student_stage.set_student_stage`` validates one-step transitions
+	(``New -> Attempting -> Connected -> {Qualified, Disqualified}``), so step
+	one hop at a time. Idempotent: a no-op once the Student already sits at (or
+	past) the target.
+	"""
+	from crm.fcrm.student_stage import set_student_stage
+
+	if target not in _STUDENT_STAGE_ORDER:
+		frappe.throw(f"Unsupported golden contact_stage: {target}", frappe.ValidationError)
+	target_index = _STUDENT_STAGE_ORDER.index(target)
+	for _ in range(len(_STUDENT_STAGE_ORDER)):
+		current = frappe.db.get_value("CRM Student", contact, "student_stage") or "New"
+		if current not in _STUDENT_STAGE_ORDER:
+			return current
+		current_index = _STUDENT_STAGE_ORDER.index(current)
+		if current_index >= target_index:
+			return current
+		set_student_stage(contact, _STUDENT_STAGE_ORDER[current_index + 1], _internal_service=True)
+	return frappe.db.get_value("CRM Student", contact, "student_stage") or "New"
+
+
+def _ensure_recent_action(contact: str, student: str, spec: dict[str, Any], owner_staff: str) -> str:
+	"""Seed one COMPLETED ``CRM Action Item`` in the recent past.
+
+	Feeds the NBA producer's action-history / per-code cooldown projection
+	(``student_decision_context._recent_actions``, keyed on
+	``CRM Action Item.action`` and ``creation``). The row is created through the
+	governed ``create_manual_action`` command so it is schema-valid, then its
+	generation / execution / outcome timestamps are back-dated -- the command
+	always stamps "now".
+	"""
+	from crm.fcrm.student_decision import _command_key, create_manual_action
+
+	code = spec["code"]
+	idempotency_key = _key("recent-action", code)
+	command_key = _command_key("manual_action", "Administrator", idempotency_key)
+	when = SEED_NOW - timedelta(days=int(spec.get("days_ago", 1)))
+	name = frappe.db.get_value("CRM Action Item", {"generation_idempotency_key": command_key}, "name")
+	if not name:
+		# A settled historical action is itself a context change. Bump the
+		# context revision around the insert so this row never collides with the
+		# live manual action on the
+		# (student, source_context_revision, source_stage_key) unique index.
+		revision = int(frappe.db.get_value("CRM Student", contact, "student_context_revision") or 0)
+		frappe.db.set_value(
+			"CRM Student", contact, "student_context_revision", revision + 1, update_modified=False
+		)
+		result = create_manual_action(
+			contact,
+			code,
+			f"Đã liên hệ học sinh qua {spec.get('type', code)} (dữ liệu lịch sử demo).",
+			idempotency_key=idempotency_key,
+			due_at=when,
+			priority="medium",
+			assignee_staff=owner_staff,
+			initial_state="accepted",
+		)
+		frappe.db.set_value(
+			"CRM Student", contact, "student_context_revision", revision + 2, update_modified=False
+		)
+		name = result["action"]
+	frappe.db.set_value(
+		"CRM Action Item",
+		name,
+		{
+			"creation": when,
+			"created_at": when,
+			"accepted_at": when,
+			"started_at": when,
+			"completed_at": when,
+			"decision_at": when,
+			"current_slot": "",
+			"state": "completed",
+			"execution_status": "completed",
+			"outcome_code": "NO_RESPONSE",
+		},
+		update_modified=False,
+	)
+	return name
+
+
 def _ensure_nba(contact: str) -> dict[str, Any]:
-	from crm.fcrm import nba_evaluations, nba_policy
+	"""Request a real ``nba-engine-r2`` evaluation run -- no fabricated result.
+
+	The golden dataset exists to exercise the live decision kernel end to end, so
+	this only enqueues the run (via ``crm-agents``' claim/commit path) and never
+	claims or commits it here.
+	"""
+	from crm.fcrm import nba_evaluations
 
 	receipt = nba_evaluations.request_nba_evaluation(
 		student=contact,
 		idempotency_key=f"{_ns()}:nba",
-		force_reason="Golden fixture for manual NBA walkthrough",
+		force_reason="Golden fixture — real kernel run via crm-agents",
 	)
-	evaluation = receipt["evaluation"]
-	doc = frappe.get_doc("CRM NBA Evaluation", evaluation)
-	if doc.status == "completed":
-		return {
-			"evaluation": evaluation,
-			"status": doc.status,
-			"recommendations": frappe.db.count("CRM Recommendation", {"evaluation": evaluation}),
-		}
-	claim = nba_evaluations.claim_nba_evaluation(
-		evaluation=evaluation, run_generation=int(doc.run_generation or 0)
-	)
-	if not claim.get("claimed"):
-		return {"evaluation": evaluation, "status": claim.get("status", "running")}
-	eligible = nba_policy.eligible_action_set_for_student(contact, actor="Administrator", now=SEED_NOW)
-	preferred = ["ACTIVATE_WINBACK", "ADD_TAG", "ADVISE_CAREER", "CALL", "EMAIL"]
-	available = {row["code"]: row for row in eligible.get("actions") or []}
-	actions = [available[code] for code in preferred if code in available][:3]
-	if not actions:
-		actions = (eligible.get("actions") or [])[:3]
-	recommendations = []
-	for rank, action in enumerate(actions, start=1):
-		code = action["code"]
-		recommendations.append(
-			{
-				"recommendation_key": f"{_ns()}:recommendation:{rank}",
-				"rank": rank,
-				"action_ref": {
-					"action_id": f"ACT-{code}",
-					"action_revision": int(action["revision"]),
-					"action_digest": action["digest"],
-				},
-				"opportunity_refs": [],
-				"recommended_execution_params": {},
-				"recommended_timing": {
-					"earliest_at": None,
-					"latest_at": None,
-					"scheduled_at": (SEED_NOW + timedelta(hours=rank * 4)).isoformat(),
-					"timezone": "Asia/Ho_Chi_Minh",
-				},
-				"score": {"total": round(max(0.45, 0.92 - rank * 0.11), 2)},
-				"confidence": round(max(0.55, 0.91 - rank * 0.08), 2),
-				"reason_codes": ["ENGAGE_OR_REENGAGE"],
-				"evidence_refs": [f"student:{contact}"],
-				"explanation_facts": [
-					f"{_ACTIVE['student_name']} có tín hiệu cần tiếp tục chăm sóc ở ưu tiên {rank}.",
-					f"Ngành quan tâm: {_ACTIVE['major']}.",
-				],
-				"conflict_keys": [f"action:{code}"],
-				"expires_at": (SEED_NOW + timedelta(days=14)).isoformat(),
-			}
-		)
-	if not recommendations:
-		return {"evaluation": evaluation, "status": "abstained", "reason": "No eligible action catalog rows"}
-	return nba_evaluations.commit_nba_evaluation_result(
-		evaluation=evaluation,
-		run_generation=claim["run_generation"],
-		lease_token=claim["lease_token"],
-		engine_revision="golden-seed-nba-v1",
-		run_status="completed",
-		disposition="RECOMMEND",
-		reason_codes=["ENGAGE_OR_REENGAGE"],
-		result_digest=_digest(recommendations),
-		trace_digest=_digest({"student": contact, "source": NAMESPACE}),
-		recommendations=recommendations,
-		trace_entries=[
-			{"kind": "golden_fixture", "student": contact, "recommendation_count": len(recommendations)}
-		],
-	)
+	return {"evaluation": receipt["evaluation"], "status": "requested"}
 
 
 def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: str, team: str) -> dict[str, Any]:
@@ -2212,37 +2472,61 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 	student_record = _ensure_student_contact(student, context, owner_staff, team, high_school)
 	frappe.db.commit()
 
-	interaction_website = _ensure_interaction(
-		student_record, "website-form", "Website Visit", SEED_NOW - timedelta(days=8),
-		"Website", "inbound", _ACTIVE["interactions"][0],
-	)
-	interaction_counseling = _ensure_interaction(
-		student_record, "initial-counseling", "Counseling", SEED_NOW - timedelta(days=6),
-		"Phone", "outbound", _ACTIVE["interactions"][1],
-	)
-	interaction_latest = _ensure_interaction(
-		student_record, "follow-up", "Connected", SEED_NOW - timedelta(days=2),
-		"Phone", "inbound", _ACTIVE["interactions"][2],
-	)
-	intents = _ACTIVE["intents"]
-	intent_first = _ensure_intent(student_record, interaction_counseling, *intents[0])
-	intent_dominant = _ensure_intent(student_record, interaction_latest, *intents[1])
-	_ensure_intent(student_record, interaction_latest, *intents[2])
-
-	evidence_file = _ensure_file(student)
-	outcome = _ensure_outcome(student, student_record, interaction_latest, evidence_file)
-	walked = _ensure_lifecycle(student, outcome, intent_dominant, evidence_file)
-	application = _ensure_application(student, context)
-	parent = _ensure_parent(student, context, team, high_school)
-	attribution = _ensure_attribution(student, student_record, context)
-	assessment = _ensure_assessment(student_record, student, interaction_latest, intent_dominant, application)
-	action = _ensure_action(student_record, owner_staff)
-	score = _ensure_score(student_record)
+	# The NBA axis is the Student contact stage (New/Attempting/Connected/
+	# Qualified) -- distinct from the CRM Lead lifecycle stage, which stays
+	# "Lead" for every golden profile.
+	_ensure_student_stage(student_record, _ACTIVE.get("contact_stage", "Connected"))
 	frappe.db.commit()
 
-	interactions = [interaction_website, interaction_counseling, interaction_latest]
-	ai_insight = _ensure_ai_insight(student, student_record, interactions)
-	analysis = _ensure_student_analysis(student_record, interactions, score)
+	signal = _ACTIVE.get("signal_profile", "strong")
+	recent_spec = _ACTIVE.get("recent_action")
+
+	interactions: list[str] = []
+	intent_first = intent_dominant = None
+	outcome = assessment = score = application = None
+	ai_insight = analysis = None
+	walked: list[str] = []
+	parent = attribution = action = recent_action = None
+
+	if recent_spec:
+		recent_action = _ensure_recent_action(student_record, student, recent_spec, owner_staff)
+
+	if signal != "none":
+		days = _SIGNAL_INTERACTION_DAYS.get(signal, _SIGNAL_INTERACTION_DAYS["strong"])
+		interaction_website = _ensure_interaction(
+			student_record, "website-form", "Website Visit", SEED_NOW - timedelta(days=days[0]),
+			"Website", "inbound", _ACTIVE["interactions"][0],
+		)
+		interaction_counseling = _ensure_interaction(
+			student_record, "initial-counseling", "Counseling", SEED_NOW - timedelta(days=days[1]),
+			"Phone", "outbound", _ACTIVE["interactions"][1],
+		)
+		interaction_latest = _ensure_interaction(
+			student_record, "follow-up", "Connected", SEED_NOW - timedelta(days=days[2]),
+			"Phone", "inbound", _ACTIVE["interactions"][2],
+		)
+		interactions = [interaction_website, interaction_counseling, interaction_latest]
+		intents = _ACTIVE["intents"]
+		intent_first = _ensure_intent(student_record, interaction_counseling, *intents[0])
+		intent_dominant = _ensure_intent(student_record, interaction_latest, *intents[1])
+		_ensure_intent(student_record, interaction_latest, *intents[2])
+
+		evidence_file = _ensure_file(student)
+		outcome = _ensure_outcome(student, student_record, interaction_latest, evidence_file)
+		walked = _ensure_lifecycle(student, outcome, intent_dominant, evidence_file)
+		application = _ensure_application(student, context)
+		parent = _ensure_parent(student, context, team, high_school)
+		attribution = _ensure_attribution(student, student_record, context)
+		assessment = _ensure_assessment(
+			student_record, student, interaction_latest, intent_dominant, application
+		)
+		action = _ensure_action(student_record, owner_staff)
+		score = _ensure_score(student_record)
+		frappe.db.commit()
+
+		ai_insight = _ensure_ai_insight(student, student_record, interactions)
+		analysis = _ensure_student_analysis(student_record, interactions, score)
+
 	nba = _ensure_nba(student_record)
 	frappe.db.commit()
 
@@ -2252,6 +2536,10 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 		"student_name": frappe.db.get_value("CRM Lead", student, "student_name"),
 		"high_school": high_school,
 		"target_stage": _ACTIVE["target_stage"],
+		"contact_stage": frappe.db.get_value("CRM Student", student_record, "student_stage"),
+		"expected_disposition": _ACTIVE.get("expected_disposition"),
+		"signal_profile": signal,
+		"recent_action": recent_action,
 		"lifecycle_stage": frappe.db.get_value("CRM Lead", student, "lifecycle_stage"),
 		"lifecycle_walk": walked,
 		"owner_staff": owner_staff,
@@ -2532,6 +2820,7 @@ def verify() -> dict[str, Any]:
 	"""Read-only check that the golden dataset is present and coherent."""
 	_patch_split_migration_gaps()
 	from crm.api.student_context import get_student_context
+	from crm.api.student_decision_context import _contactability_projection
 
 	students = []
 	for profile in _PROFILES:
@@ -2540,27 +2829,53 @@ def verify() -> dict[str, Any]:
 			students.append({"variant": profile["key"], "seeded": False})
 			continue
 		contact = frappe.db.get_value("CRM Student", {"student": name}, "name")
-		ctx = get_student_context(contact, history_limit=50)
-		students.append(
-			{
-				"variant": profile["key"],
-				"seeded": True,
-				"student": name,
-				"contact": contact,
-				"stage": ctx["lifecycle"]["stage"],
-				"expected_stage": profile["target_stage"],
-				"stage_ok": ctx["lifecycle"]["stage"] == profile["target_stage"],
-				"latest_interaction": bool(ctx["latest_interaction"]),
-				"latest_outcome": bool(ctx["latest_outcome"]),
-				"assessment": bool(ctx["assessment"].get("current")),
-				"parent_context": len(ctx["parent_context"]),
-				"score_state": ctx["admissions_context"]["score"].get("state"),
-				"history_count": len(ctx["history"]),
-				"owner_staff": frappe.db.get_value("CRM Lead", name, "owner_staff"),
-				"ai_insight": frappe.db.exists("CRM AI Lead Insight", {"student": name}),
-				"recommendations": frappe.db.count("CRM Recommendation", {"target_id": contact}),
-			}
+		expected_stage = profile.get("contact_stage", "Connected")
+		contact_stage = frappe.db.get_value("CRM Student", contact, "student_stage") or "New"
+		try:
+			contactability = _contactability_projection(contact)
+		except Exception as exc:  # report, don't abort the whole check
+			contactability = {"consent": None, "recipient_bound": None, "error": str(exc)}
+		nba_row = frappe.db.get_value(
+			"CRM NBA Evaluation", {"student": contact}, ["name", "status", "disposition"], as_dict=True
 		)
+		try:
+			ctx = get_student_context(contact, history_limit=50)
+		except Exception as exc:  # the signal_profile="none" student carries almost no context
+			ctx = None
+			ctx_error = str(exc)
+		entry = {
+			"variant": profile["key"],
+			"seeded": True,
+			"student": name,
+			"contact": contact,
+			"contact_stage": contact_stage,
+			"expected_stage": expected_stage,
+			"stage_ok": contact_stage == expected_stage,
+			"expected_disposition": profile.get("expected_disposition"),
+			"consent": contactability.get("consent"),
+			"recipient_bound": contactability.get("recipient_bound"),
+			"nba_evaluation": nba_row.name if nba_row else None,
+			"nba_status": nba_row.status if nba_row else None,
+			"nba_disposition": nba_row.disposition if nba_row else None,
+			"owner_staff": frappe.db.get_value("CRM Lead", name, "owner_staff"),
+			"ai_insight": frappe.db.exists("CRM AI Lead Insight", {"student": name}),
+			"recommendations": frappe.db.count("CRM Recommendation", {"target_id": contact}),
+		}
+		if ctx is not None:
+			entry.update(
+				{
+					"lifecycle_stage": ctx["lifecycle"]["stage"],
+					"latest_interaction": bool(ctx["latest_interaction"]),
+					"latest_outcome": bool(ctx["latest_outcome"]),
+					"assessment": bool(ctx["assessment"].get("current")),
+					"parent_context": len(ctx["parent_context"]),
+					"score_state": ctx["admissions_context"]["score"].get("state"),
+					"history_count": len(ctx["history"]),
+				}
+			)
+		else:
+			entry["context_error"] = ctx_error
+		students.append(entry)
 
 	result = {
 		"ok": all(s.get("seeded") and s.get("stage_ok") for s in students),

@@ -5,7 +5,7 @@
  "autoname": "naming_series:",
  "naming_rule": "Naming Series",
  "naming_series_options": "IRES-.YYYY.-",
- "field_order": ["naming_series", "analysis_run", "stage", "state", "source_revision", "source_digest", "result_digest", "policy_revision", "model_revision", "intent", "evidence_refs", "terminal_reason"],
+ "field_order": ["naming_series", "analysis_run", "stage", "state", "source_revision", "source_digest", "result_digest", "policy_revision", "model_revision", "intent", "evidence_refs", "decision_signals", "terminal_reason", "conversation_summary"],
  "fields": [
   {"fieldname": "naming_series", "fieldtype": "Select", "options": "IRES-.YYYY.-", "hidden": 1},
   {"fieldname": "analysis_run", "fieldtype": "Link", "options": "CRM Interaction Analysis Run", "read_only": 1, "reqd": 1},
@@ -18,7 +18,9 @@
   {"fieldname": "model_revision", "fieldtype": "Data", "read_only": 1, "reqd": 1},
   {"fieldname": "intent", "fieldtype": "Link", "options": "CRM Intent", "read_only": 1},
   {"fieldname": "evidence_refs", "fieldtype": "JSON", "read_only": 1},
-  {"fieldname": "terminal_reason", "fieldtype": "Small Text", "read_only": 1}
+  {"fieldname": "decision_signals", "fieldtype": "JSON", "read_only": 1},
+  {"fieldname": "terminal_reason", "fieldtype": "Small Text", "read_only": 1},
+  {"fieldname": "conversation_summary", "fieldtype": "Small Text", "read_only": 1, "description": "Sales-facing Vietnamese skim summary; bounded single-line model prose, present for no_intent too. Never inside the digest-bound intent envelope."}
  ],
  "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Administrator"}],
  "sort_field": "creation",

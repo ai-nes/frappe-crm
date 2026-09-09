@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import re
-from datetime import timedelta
+from datetime import UTC, timedelta
+from zoneinfo import ZoneInfo
 
 import frappe
 
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.nba_canonical import canonical_digest
+from crm.fcrm.nba_context import DECISION_SIGNALS_SCHEMA_REVISION, validate_decision_signals
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.scoring_policy import get_active_policy
 from crm.fcrm.student_contact_conversion import contacts_for_student
@@ -425,6 +429,141 @@ def _recent_actions(student: str) -> list[dict]:
 	]
 
 
+def _decision_signals_projection(student: str, *, at=None) -> dict:
+	"""Project only current, revision-matched settled semantic observations."""
+	try:
+		interactions = frappe.get_all(
+			"CRM Interaction",
+			filters={"student": student},
+			fields=["name", "source_revision", "evidence_digest", "interaction_datetime"],
+			order_by="interaction_datetime desc, name desc",
+			limit_page_length=21,
+			ignore_permissions=True,
+		)
+		complete = len(interactions) <= 20
+		rows = interactions[:20]
+		if not rows:
+			return {"schema_revision": DECISION_SIGNALS_SCHEMA_REVISION, "observations": [], "coverage": "complete"}
+		interaction_names = [row["name"] for row in rows]
+		runs = frappe.get_all(
+			"CRM Interaction Analysis Run",
+			filters={"interaction": ["in", interaction_names]},
+			fields=["name", "interaction"],
+			ignore_permissions=True,
+			limit_page_length=0,
+		)
+		run_to_interaction = {run["name"]: run["interaction"] for run in runs}
+		if not run_to_interaction:
+			return {"schema_revision": DECISION_SIGNALS_SCHEMA_REVISION, "observations": [], "coverage": "unavailable"}
+		results = frappe.get_all(
+			"CRM Interaction Analysis Result",
+			filters={"analysis_run": ["in", list(run_to_interaction)]},
+			fields=["name", "analysis_run", "state", "creation", "source_revision", "source_digest", "model_revision", "decision_signals"],
+			order_by="creation desc, name desc",
+			ignore_permissions=True,
+			limit_page_length=401,
+		)
+		if len(results) > 400:
+			complete = False
+	except Exception:
+		return {"schema_revision": DECISION_SIGNALS_SCHEMA_REVISION, "observations": [], "coverage": "unavailable"}
+
+	latest_by_interaction = {}
+	for result in results:
+		interaction_name = run_to_interaction.get(result.get("analysis_run"))
+		if interaction_name and interaction_name not in latest_by_interaction:
+			latest_by_interaction[interaction_name] = result
+	observations = []
+	semantic_unavailable = False
+	try:
+		system_timezone = ZoneInfo(frappe.utils.get_system_timezone())
+	except Exception:
+		system_timezone = UTC
+	for interaction in rows:
+		interaction_name = interaction["name"]
+		result = latest_by_interaction.get(interaction_name)
+		if not result:
+			complete = False
+			semantic_unavailable = True
+			continue
+		# Intent classification and decision-signal extraction are independent.
+		# An ``unknown`` intent may still carry grounded need observations; only
+		# a failed analysis is unusable here.
+		if result.get("state") == "failed":
+			complete = False
+			semantic_unavailable = True
+			continue
+		if int(result.get("source_revision") or 0) != int(interaction.get("source_revision") or 0):
+			complete = False
+			semantic_unavailable = True
+			continue
+		if result.get("source_digest") != interaction.get("evidence_digest"):
+			complete = False
+			semantic_unavailable = True
+			continue
+		model_revision = str(result.get("model_revision") or "").strip()
+		if not model_revision:
+			complete = False
+			semantic_unavailable = True
+			continue
+		occurred = interaction.get("interaction_datetime")
+		if not occurred:
+			complete = False
+			semantic_unavailable = True
+			continue
+		occurred = frappe.utils.get_datetime(occurred)
+		if occurred.tzinfo is None:
+			occurred = occurred.replace(tzinfo=system_timezone)
+		occurred = occurred.astimezone(UTC)
+		raw = result.get("decision_signals")
+		if isinstance(raw, str):
+			try:
+				raw = json.loads(raw)
+			except ValueError:
+				complete = False
+				semantic_unavailable = True
+				continue
+		if not isinstance(raw, dict) or raw.get("schema_revision") != DECISION_SIGNALS_SCHEMA_REVISION:
+			complete = False
+			semantic_unavailable = True
+			continue
+		try:
+			raw = validate_decision_signals(raw)
+		except ValueError:
+			complete = False
+			semantic_unavailable = True
+			continue
+		for index, observation in enumerate(raw.get("observations") or []):
+			if not isinstance(observation, dict):
+				continue
+			stamped = dict(observation)
+			stamped.update({
+				"signal_id": canonical_digest({"result": result["name"], "index": index})[:32],
+				"source_interaction": interaction_name,
+				"source_revision": int(result["source_revision"]),
+				"source_digest": result["source_digest"],
+				"occurred_at": occurred.isoformat().replace("+00:00", "Z"),
+				"model_revision": model_revision,
+				"prompt_revision": DECISION_SIGNALS_SCHEMA_REVISION,
+			})
+			observations.append(stamped)
+			if len(observations) > 12:
+				complete = False
+				break
+		if len(observations) > 12:
+			break
+	if len(observations) > 12:
+		observations = observations[:12]
+	coverage = "complete" if complete else "partial"
+	if not observations and semantic_unavailable:
+		coverage = "unavailable"
+	return {
+		"schema_revision": DECISION_SIGNALS_SCHEMA_REVISION,
+		"observations": observations,
+		"coverage": coverage,
+	}
+
+
 def _score_projection(row: dict) -> dict:
 	"""Additive score evidence: `freshness` mirrors the same
 	(score_input_revision, policy_revision) tuple ordering
@@ -457,7 +596,14 @@ def _score_projection(row: dict) -> dict:
 	}
 
 
-def _projection(student: str, minimum_revision: int, *, service_authorized: bool = False, at=None) -> dict:
+def _projection(
+	student: str,
+	minimum_revision: int,
+	*,
+	service_authorized: bool = False,
+	at=None,
+	include_decision_signals: bool = False,
+) -> dict:
 	"""Build the bounded decision DTO.
 
 	``service_authorized`` is deliberately private and is only used by Frappe's
@@ -596,6 +742,13 @@ def _projection(student: str, minimum_revision: int, *, service_authorized: bool
 		context["evidence_refs"].append(str(academic["evidence_ref"]))
 	if action in {"PARENT_CONTACT", "CONTACT_PARENT"}:
 		context["evidence_refs"].append(f"student-context:revision:{revision}:parent-authority")
+	if include_decision_signals:
+		context["decision_signals"] = _decision_signals_projection(student, at=evaluated_at)
+		if context["decision_signals"]["observations"]:
+			context["evidence_refs"].extend(
+				f"interaction-analysis:{item['source_interaction']}:{item['source_revision']}"
+				for item in context["decision_signals"]["observations"]
+			)
 	hash_input = {key: value for key, value in context.items() if key not in {"student_id"}}
 	context["snapshot_hash"] = snapshot_hash(hash_input)
 	return context

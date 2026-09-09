@@ -14,12 +14,12 @@ from collections.abc import Iterable, Mapping
 from datetime import datetime
 
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CODES, action_category
-from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 from crm.fcrm.nba_canonical import (
 	action_definition_snapshot,
 	canonical_digest,
 	json_string_list,
 )
+from crm.fcrm.student_stage import STUDENT_STAGES, TERMINAL_STAGES
 
 EXCLUSION_REASONS: frozenset[str] = frozenset(
 	{
@@ -440,7 +440,7 @@ def wire_action_id(code: str | None) -> str:
 	return f"ACT-{code}" if code else ""
 
 
-def eligible_set_digest(actions: list[dict]) -> str:
+def eligible_set_digest(actions: list[dict], *, include_runtime: bool = False) -> str:
 	"""Digest of the eligible set reduced to the wire ``{action_id, revision, digest}``.
 
 	Uses the same ``ACT-<CODE>`` identity the envelope emits so a consumer that
@@ -452,6 +452,10 @@ def eligible_set_digest(actions: list[dict]) -> str:
 				"action_id": action.get("action_id") or wire_action_id(action.get("code")),
 				"revision": int(action.get("revision") or action.get("action_revision") or 1),
 				"digest": action.get("digest") or action.get("action_digest"),
+				**(
+					{"action_runtime_digest": action.get("action_runtime_digest")}
+					if include_runtime else {}
+				),
 			}
 			for action in actions
 		),

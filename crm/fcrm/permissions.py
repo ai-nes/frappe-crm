@@ -484,7 +484,7 @@ def get_student_projection_permission_query_conditions(user=None, doctype=None):
 	Global events (for example scoring-policy changes) remain unavailable through
 	the row-scoped event stream instead of becoming an unscoped side channel.
 	"""
-	if doctype not in {"CRM AI Lead Insight", "CRM Agent Event"}:
+	if doctype not in {"CRM AI Lead Insight", "CRM Agent Event", "CRM Intent Trajectory"}:
 		return "1=0"
 	user = user or frappe.session.user
 	student_condition = get_permission_query_conditions("CRM Student", user=user)
@@ -495,6 +495,8 @@ def get_student_projection_permission_query_conditions(user=None, doctype=None):
 	student_names = f"select `tabCRM Student`.name from `tabCRM Student` where ({student_condition})"
 	if doctype == "CRM AI Lead Insight":
 		return f"`tabCRM AI Lead Insight`.student in ({student_names})"
+	if doctype == "CRM Intent Trajectory":
+		return f"`tabCRM Intent Trajectory`.student in ({student_names})"
 	return (
 		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student' and "
 		f"`tabCRM Agent Event`.aggregate_name in ({student_names})) OR "
@@ -513,7 +515,11 @@ def has_student_projection_permission(doc, user=None, permission_type=None, ptyp
 	"""Apply the Student row scope to single projection records as well."""
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
-		student_name = doc.get("student") if doc.doctype == "CRM AI Lead Insight" else None
+		student_name = (
+			doc.get("student")
+			if doc.doctype in {"CRM AI Lead Insight", "CRM Intent Trajectory"}
+			else None
+		)
 		if doc.doctype == "CRM Agent Event" and doc.get("aggregate_doctype") == "CRM Student":
 			student_name = doc.get("aggregate_name")
 		if not student_name:

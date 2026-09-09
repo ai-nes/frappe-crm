@@ -10,7 +10,9 @@ their existing mutable projection. One evaluation may not hold two rows for the
 same kernel key.
 """
 
+import json
 import unittest
+from unittest.mock import patch
 
 try:
 	import frappe
@@ -254,6 +256,124 @@ if FrappeTestCase is not None:
 
 		def _action_items(self):
 			return frappe.db.count("CRM Action Item", {"student": self.student})
+
+		def test_r3_commit_rejects_tampered_frozen_action_reference(self):
+			doc = frappe._dict(
+				{
+					"engine_revision": "nba-engine-r3",
+					"eligible_set_digest": "d" * 64,
+					"eligible_action_snapshot": json.dumps(
+						{
+							"set_digest": "d" * 64,
+							"actions": [
+								{
+									"action_id": "ACT-ADVISE_MAJOR",
+									"action_revision": 3,
+									"action_digest": "a" * 64,
+									"action_runtime_digest": "c" * 64,
+								}
+							],
+						}
+					)
+				}
+			)
+			valid = {"action_ref": {"action_id": "ACT-ADVISE_MAJOR", "action_revision": 3, "action_digest": "a" * 64}}
+			nba_evaluations._validate_frozen_action_refs(doc, [valid])
+			for field, value in (
+				("action_id", "ACT-OTHER"),
+				("action_revision", 4),
+				("action_digest", "b" * 64),
+			):
+				tampered = {"action_ref": dict(valid["action_ref"], **{field: value})}
+				with self.assertRaises(frappe.ValidationError):
+					nba_evaluations._validate_frozen_action_refs(doc, [tampered])
+
+		def test_r3_commit_locks_and_rechecks_current_action_definition(self):
+			from crm.fcrm.nba_canonical import action_definition_snapshot, canonical_digest
+
+			current_definition = {
+				"name": "ACTION-1",
+				"code": "ADVISE_MAJOR",
+				"action_type": "CONVERSION",
+				"display_name": "Advise major",
+				"purpose": "Resolve major uncertainty",
+				"default_channel": "CALL",
+				"allowed_actors": ["Sale"],
+				"requires_approval": False,
+				"requires_parent_authority": False,
+				"academic_constraint": {},
+				"auto_execute": False,
+				"enabled": True,
+			}
+			action_ref = {
+				"action_id": "ACT-ADVISE_MAJOR",
+				"action_revision": 3,
+				"action_digest": canonical_digest(action_definition_snapshot(current_definition)),
+			}
+			with (
+				patch.object(frappe.db, "get_value", return_value="ACTION-1"),
+				patch.object(
+					frappe.db,
+					"sql",
+					return_value=[{**current_definition, "definition_revision": 3, "definition_digest": "stale"}],
+				) as locked,
+			):
+				self.assertEqual(
+					nba_evaluations._resolve_committed_action(action_ref, verify_frozen_definition=True),
+					"ACTION-1",
+				)
+				self.assertIn("FOR UPDATE", locked.call_args.args[0])
+
+			runtime_digest = canonical_digest({
+				"normalized_timing_domain": {
+					"timezone": "Asia/Ho_Chi_Minh",
+					"allowed_windows": [{"code": "6-12", "from": "06:00", "to": "12:00"}],
+				}
+			})
+			with (
+				patch.object(frappe.db, "get_value", return_value="ACTION-1"),
+				patch.object(frappe.db, "get_single_value", return_value="Asia/Ho_Chi_Minh"),
+				patch.object(
+					frappe.db,
+					"sql",
+					return_value=[{**current_definition, "allowed_time_slots": ["6-12"], "definition_revision": 3}],
+				),
+			):
+				self.assertEqual(
+					nba_evaluations._resolve_committed_action(
+						action_ref,
+						verify_frozen_definition=True,
+						expected_runtime_digest=runtime_digest,
+					),
+					"ACTION-1",
+				)
+
+			with (
+				patch.object(frappe.db, "get_value", return_value="ACTION-1"),
+				patch.object(frappe.db, "get_single_value", return_value="Asia/Ho_Chi_Minh"),
+				patch.object(
+					frappe.db,
+					"sql",
+					return_value=[{**current_definition, "allowed_time_slots": ["18-24"], "definition_revision": 3}],
+				),
+			):
+				with self.assertRaises(frappe.ValidationError):
+					nba_evaluations._resolve_committed_action(
+						action_ref,
+						verify_frozen_definition=True,
+						expected_runtime_digest=runtime_digest,
+					)
+
+			with (
+				patch.object(frappe.db, "get_value", return_value="ACTION-1"),
+				patch.object(
+					frappe.db,
+					"sql",
+					return_value=[{"name": "ACTION-1", "definition_revision": 4, "definition_digest": "b" * 64}],
+				),
+			):
+				with self.assertRaises(frappe.ValidationError):
+					nba_evaluations._resolve_committed_action(action_ref, verify_frozen_definition=True)
 
 		# --- valid RECOMMEND -------------------------------------------------- #
 		def test_recommend_writes_evaluation_and_top_n_rows_and_no_action_item(self):

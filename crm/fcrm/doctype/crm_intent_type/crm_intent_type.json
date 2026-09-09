@@ -8,11 +8,12 @@
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
- "field_order": ["code", "display_name", "importance", "enabled", "sort_order", "description"],
+ "field_order": ["code", "display_name", "importance", "funnel_stage", "enabled", "sort_order", "description"],
  "fields": [
   {"fieldname": "code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Code", "reqd": 1, "unique": 1},
   {"fieldname": "display_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Loại ý định", "reqd": 1, "translatable": 1},
   {"default": "Medium", "fieldname": "importance", "fieldtype": "Select", "in_list_view": 1, "label": "Importance", "options": "Medium\nHigh\nVery High", "reqd": 1},
+  {"fieldname": "funnel_stage", "fieldtype": "Select", "in_standard_filter": 1, "label": "Funnel Stage", "options": "\nawareness\ninterest\nconsideration\nobjection\nintent\nenrolled\nchurn_risk", "description": "Admissions funnel stage this intent maps to; blank is treated as unknown by the Intent Evolution engine."},
   {"default": "1", "fieldname": "enabled", "fieldtype": "Check", "in_list_view": 1, "label": "Enabled"},
   {"default": "0", "fieldname": "sort_order", "fieldtype": "Int", "in_list_view": 1, "label": "Sort Order", "non_negative": 1},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"}

@@ -87,13 +87,19 @@ def settle_interaction_analysis_result(
 	model_revision: str,
 	result_digest: str,
 	intent=None,
+	decision_signals=None,
 	terminal_reason: str | None = None,
+	intelligence=None,
 ) -> dict:
 	"""Service-only, fenced settlement for the canonical Interaction worker."""
 	from crm.fcrm.interaction_analysis import settle_interaction_analysis_result as settle
 
 	if isinstance(intent, str):
 		intent = frappe.parse_json(intent)
+	if isinstance(decision_signals, str):
+		decision_signals = frappe.parse_json(decision_signals)
+	if isinstance(intelligence, str):
+		intelligence = frappe.parse_json(intelligence)
 	return settle(
 		run_id=run_id,
 		stage_generation=int(stage_generation),
@@ -105,5 +111,7 @@ def settle_interaction_analysis_result(
 		model_revision=model_revision,
 		result_digest=result_digest,
 		intent=intent,
+		decision_signals=decision_signals,
 		terminal_reason=terminal_reason,
+		intelligence=intelligence,
 	)

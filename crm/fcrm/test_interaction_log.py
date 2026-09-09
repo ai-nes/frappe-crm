@@ -98,6 +98,85 @@ class TestInteractionLogDispatch(FrappeTestCase):
 		create.assert_called_once()
 		self.assertEqual(create.call_args.kwargs["interaction_type"], "MESSAGE")
 
+	def test_call_evidence_uses_the_phone_call_interaction_type_and_gates_analysis_on_state(self):
+		draft_payload = {
+			"source_namespace": "voice-provider",
+			"source_record_id": "call-1",
+			"idempotency_key": "call-1:1",
+			"student_id": "STU-1",
+			"channel": "phone",
+			"direction": "inbound",
+			"turns": [{"speaker_role": "student", "content": "Em muốn hỏi học phí"}],
+			"occurred_at": "2026-09-06 01:00:00",
+			"evidence_kind": "call",
+			"evidence_state": "draft",
+			"source_revision": 1,
+		}
+		final_payload = dict(draft_payload, evidence_state="final", source_revision=2)
+		authority = {
+			"actor_user": "sales@example.com",
+			"actor_staff": "STAFF-1",
+			"profile": "sales",
+			"campus_scope": ["HCM"],
+			"team_scope": ["TEAM-1"],
+		}
+
+		with (
+			patch("crm.fcrm.student_intake._resolve_authority", return_value=authority),
+			patch("crm.fcrm.student_intake._receipt_replay", return_value=None),
+			patch("crm.fcrm.student_intake._assert_replay_scope"),
+			patch("crm.fcrm.student_intake._persist_receipt", side_effect=lambda *_a, **kw: kw.get("result")),
+			patch(
+				"crm.fcrm.interaction_log._resolve_external_interaction_target",
+				return_value={"student": "STU-1", "contact": None},
+			),
+			patch("crm.fcrm.interaction_log._assert_interaction_scope"),
+			patch("crm.fcrm.interaction_log._ensure_interaction_evidence", return_value=["EVID-1"]),
+			patch("crm.fcrm.interaction_log._ensure_interaction_analysis_run", return_value="IAR-1") as ensure_run,
+			patch("crm.fcrm.interaction_log.create_interaction", return_value="INT-CALL-1") as create,
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(
+				frappe.db,
+				"get_value",
+				side_effect=[
+					None,
+					{
+						"name": "INT-CALL-1",
+						"student": "STU-1",
+						"crm_contact": None,
+						"channel": "phone",
+						"direction": "inbound",
+						"interaction_datetime": "2026-09-06 01:00:00",
+						"conversation_id": None,
+						"agent_id": None,
+						"source_revision": 1,
+					},
+					{
+						"name": "INT-CALL-1",
+						"student": "STU-1",
+						"crm_contact": None,
+						"channel": "phone",
+						"direction": "inbound",
+						"interaction_datetime": "2026-09-06 01:00:00",
+						"conversation_id": None,
+						"agent_id": None,
+						"source_revision": 1,
+					},
+				],
+			),
+		):
+			ingest_external_interaction(draft_payload)
+			# Asserted mid-context, not just after both calls: a total count of 1
+			# at the end would also pass if the gate were inverted (run on draft,
+			# skipped on final), so the draft/final split must each be checked.
+			self.assertEqual(ensure_run.call_count, 0, "draft evidence must not trigger an analysis run")
+
+			ingest_external_interaction(final_payload)
+			self.assertEqual(ensure_run.call_count, 1, "final evidence must trigger exactly one analysis run")
+
+		create.assert_called_once()
+		self.assertEqual(create.call_args.kwargs["interaction_type"], "PHONE_CALL")
+
 	def test_configured_service_user_has_only_interaction_authority(self):
 		from crm.fcrm.student_intake import INTERACTION_CAPABILITY, SUBMIT_CAPABILITY, _resolve_authority
 

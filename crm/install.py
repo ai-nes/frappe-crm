@@ -12,6 +12,7 @@ from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboar
 from crm.patches.v1_0 import (
 	add_ai_capability_gateway_fields,
 	align_lead_mapping_contract,
+	assign_intent_type_funnel_stage,
 	seed_crm_action_type,
 	seed_crm_education_program,
 	seed_crm_permission_profiles,
@@ -53,6 +54,7 @@ def after_install(force=False):
 	execute_for_fresh_site()
 	add_ai_capability_gateway_fields.execute()
 	seed_reference_lookups.execute()
+	assign_intent_type_funnel_stage.execute()
 	align_lead_mapping_contract.execute()
 	seed_crm_action_type.execute()
 	seed_crm_permission_profiles.execute()

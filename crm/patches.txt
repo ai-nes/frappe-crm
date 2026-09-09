@@ -159,3 +159,5 @@ crm.patches.v1_0.seed_crm_action_outcome_option
 crm.patches.v1_0.unify_student_hs_identifiers
 crm.patches.v1_0.repair_lead_edit_permissions
 crm.patches.v1_0.repair_lead_ownership_projections
+crm.patches.v1_0.backfill_crm_action_channel_defaults
+crm.patches.v1_0.assign_intent_type_funnel_stage
