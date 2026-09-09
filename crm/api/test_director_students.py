@@ -14,6 +14,38 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(missing_fields, set())
 
+	def test_student_order_groups_stage_before_requested_sort(self):
+		self.assertEqual(
+			director_students._student_order_by("latest_score", "desc"),
+			"CASE student_stage WHEN 'New' THEN 1 WHEN 'Attempting' THEN 2 "
+			"WHEN 'Connected' THEN 3 WHEN 'Qualified' THEN 4 WHEN 'Disqualified' THEN 5 "
+			"ELSE 99 END asc, latest_score desc, name desc",
+		)
+
+	def test_computed_student_sort_keeps_workflow_stage_order(self):
+		rows = [
+			frappe._dict(name="QUALIFIED", student_stage="Qualified"),
+			frappe._dict(name="NEW", student_stage="New"),
+			frappe._dict(name="CONNECTED", student_stage="Connected"),
+			frappe._dict(name="ATTEMPTING", student_stage="Attempting"),
+			frappe._dict(name="DISQUALIFIED", student_stage="Disqualified"),
+		]
+		query = {"sort": "priority", "order": "asc", "page": 1, "page_size": 10}
+
+		with (
+			patch.object(
+				director_students, "_student_list_reader", return_value=lambda *args, **kwargs: rows
+			),
+			patch.object(director_students, "_normalize_student_rows", side_effect=lambda value: value),
+			patch.object(director_students, "_latest_by_student", return_value={}),
+		):
+			result = director_students._fetch_computed_sort_rows(query, {}, [])
+
+		self.assertEqual(
+			[row["name"] for row in result],
+			["NEW", "ATTEMPTING", "CONNECTED", "QUALIFIED", "DISQUALIFIED"],
+		)
+
 	def test_query_normalization_accepts_contract_values(self):
 		query = director_students._parse_query(
 			admissionYear="2026",
@@ -249,6 +281,7 @@ class TestDirectorStudents(FrappeTestCase):
 			admission_year="2026",
 			student_stage="Attempting",
 			assessment_status="confirmed",
+			campaign="Campaign 1",
 		)
 		item = {
 			"id": "ENR-1",
@@ -299,6 +332,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
 		self.assertEqual(response["student"]["verificationStatus"], "Đã xác thực")
+		self.assertEqual(response["acquisition"]["campaign"], "Campaign 1")
 		self.assertEqual(response["insight"]["priorityThreshold"], 70)
 		self.assertEqual(
 			set(response),

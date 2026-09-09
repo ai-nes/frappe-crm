@@ -22,6 +22,7 @@ _STUDENT_BASIC_FIELDS = frozenset(
 		"current_grade",
 		"study_stage",
 		"branch",
+		"campaign",
 		"major",
 		"aspiration",
 		"advertising_channel",
@@ -42,6 +43,7 @@ _STUDENT_WITH_LEAD_FIELDS = _STUDENT_BASIC_FIELDS | {
 	"assigned_to",
 	"description",
 	"campaign_code",
+	"tags",
 }
 
 _SCHOOL_BASIC_FIELDS = frozenset(
@@ -180,7 +182,7 @@ def _student_values_from_lead(values: dict, source_lead: str, lead_code: str | N
 
 def _create_student_with_lead(fields: dict | str | None) -> dict:
 	values = _parse_fields(fields, _STUDENT_WITH_LEAD_FIELDS)
-	lead_values, _tags, _events, assigned_user = _normalize_lead_payload(values)
+	lead_values, tags, _events, assigned_user = _normalize_lead_payload(values)
 	converted_at = frappe.utils.now_datetime()
 
 	lead = frappe.get_doc({"doctype": "CRM Lead", **lead_values})
@@ -192,6 +194,8 @@ def _create_student_with_lead(fields: dict | str | None) -> dict:
 		lead.insert()
 		student_values = _student_values_from_lead(lead_values, lead.name, lead.get("lead_code"))
 		student_values.update({"student_stage": "New", "converted_at": converted_at})
+		if tags:
+			student_values["tags"] = [{"tag": tag} for tag in tags]
 		student = frappe.get_doc(student_values)
 		student.check_permission("create")
 		student.insert()
@@ -223,6 +227,8 @@ def _create_student_with_lead(fields: dict | str | None) -> dict:
 			"name": student.name,
 			"student_stage": student.get("student_stage") or "New",
 			"source_lead": lead.name,
+			"campaign": student.get("campaign"),
+			"source": student.get("source"),
 		},
 		"lead": {
 			"doctype": "CRM Lead",
@@ -241,6 +247,8 @@ def _create_student_with_lead(fields: dict | str | None) -> dict:
 				"ward",
 				"student_stage",
 				"source_lead",
+				"campaign",
+				"source",
 			)
 			if student.get(fieldname) not in (None, "")
 		},

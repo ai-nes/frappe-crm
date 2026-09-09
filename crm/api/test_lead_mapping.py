@@ -519,6 +519,15 @@ class TestLeadMappingContract(TestCase):
 		self.assertEqual(context.exception.code, "CSV_MISSING_HEADERS")
 		self.assertIn("assigned_to", str(context.exception))
 
+	def test_parse_csv_rows_accepts_campaign_header_without_source(self):
+		rows = _parse_csv_rows(
+			"Họ và Tên,Di động,Tỉnh/Thành Phố,Campaign,Giao cho\n"
+			"Nguyễn Văn An,0900000000,Hồ Chí Minh,Campaign 1,sales@example.com"
+		)
+
+		self.assertEqual(rows[0]["campaign"], "Campaign 1")
+		self.assertNotIn("source", rows[0])
+
 	def test_public_payload_rejects_server_managed_fields(self):
 		with self.assertRaises(LeadMappingError) as context:
 			_parse_public_payload({"student_name": "An", "processing_status": "PROCESSED"})

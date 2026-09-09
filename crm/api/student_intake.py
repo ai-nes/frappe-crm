@@ -40,6 +40,7 @@ _CONTACT_FIELD_MAP = {
 	"major_code": "major",
 	"study_stage": "study_stage",
 	"lead_source": "source",
+	"campaign": "campaign",
 	"campaign_code": "campaign_code",
 	"event_code": "event_code",
 	"captured_at": "captured_at",

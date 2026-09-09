@@ -12,8 +12,6 @@ def classification_changed(doc, before):
 		any(doc.get(field) != before.get(field) for field in ("potential", "intent"))
 		or {row.need for row in doc.get("needs", [])} != {row.need for row in before.get("needs", [])}
 		or {row.tag for row in doc.get("tags", [])} != {row.tag for row in before.get("tags", [])}
-		or {row.term for row in doc.get("classifications", [])}
-		!= {row.term for row in before.get("classifications", [])}
 	)
 
 
@@ -44,19 +42,3 @@ def validate_classifications(doc):
 	_validate_level(doc, "intent")
 	_validate_assignments(doc, "needs", "CRM Need", "need", "Need")
 	_validate_assignments(doc, "tags", "CRM Tag", "tag", "Tag")
-	# Keep the hidden legacy field valid while old local data is migrated. New
-	# callers must use needs/tags and cannot use this field to bypass term status.
-	legacy_rows = doc.get("classifications", [])
-	if len(legacy_rows) > 100:
-		fail("Legacy Student classifications cannot contain more than 100 terms.")
-	before = doc.get_doc_before_save()
-	previous_legacy = {row.term: row for row in (before.get("classifications", []) if before else [])}
-	for row in legacy_rows:
-		term = frappe.get_doc("CRM Classification Term", row.term, for_update=True)
-		if row.term not in previous_legacy and term.status != "active":
-			fail("Only active legacy terms can be assigned to Students.")
-		old = previous_legacy.get(row.term)
-		row.kind = term.kind
-		row.assigned_by = old.assigned_by if old else frappe.session.user
-		row.assigned_at = old.assigned_at if old else frappe.utils.now_datetime()
-		row.source = old.source if old else "legacy"

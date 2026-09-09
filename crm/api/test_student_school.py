@@ -91,7 +91,7 @@ class TestStudentSchoolApi(TestCase):
 				"phone": "0900000001",
 				"student_stage": "New",
 			},
-			[],
+			["TAG-ONE", "TAG-TWO"],
 			[],
 			"sales@example.com",
 		)
@@ -110,6 +110,7 @@ class TestStudentSchoolApi(TestCase):
 					"province": "PROVINCE-001",
 					"source": "Promoter",
 					"assigned_to": "sales@example.com",
+					"tags": ["TAG-ONE", "TAG-TWO"],
 				}
 			)
 
@@ -119,6 +120,10 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(result["lead"]["student"], student.name)
 		student_values = get_doc.call_args_list[1].args[0]
 		self.assertEqual(student_values["student_stage"], "New")
+		self.assertEqual(
+			student_values["tags"],
+			[{"tag": "TAG-ONE"}, {"tag": "TAG-TWO"}],
+		)
 		self.assertIsNotNone(student_values["converted_at"])
 		set_value.assert_called_once_with(
 			"CRM Lead",

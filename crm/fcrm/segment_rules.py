@@ -25,6 +25,7 @@ OPERATORS = {
 }
 MAX_GROUPS = 10
 MAX_CONDITIONS = 20
+FILTER_LOGIC = ("AND", "OR")
 
 
 def student_scope_or_filters():
@@ -71,8 +72,9 @@ def validate_filters(filters):
 			fail("Segment filters must be valid JSON.")
 	if not isinstance(filters, dict) or set(filters) - {"groups", "logic"}:
 		fail("Segment filters must be an object containing groups.")
-	if filters.get("logic", "OR") != "OR":
-		fail("The outer Segment logic must be OR.")
+	logic = filters.get("logic", "OR")
+	if logic not in FILTER_LOGIC:
+		fail("The outer Segment logic must be AND or OR.")
 	groups = filters.get("groups")
 	if not isinstance(groups, list) or not 1 <= len(groups) <= MAX_GROUPS:
 		fail(f"Segment requires 1 to {MAX_GROUPS} non-empty filter groups.")
@@ -80,14 +82,15 @@ def validate_filters(filters):
 	for index, group in enumerate(groups):
 		if not isinstance(group, dict) or set(group) - {"logic", "name", "conditions"}:
 			fail("Each group may include a name and must contain conditions and optional AND logic.")
-		if group.get("logic", "AND") != "AND":
-			fail("Each group must use AND logic.")
+		group_logic = group.get("logic", "AND")
+		if group_logic not in FILTER_LOGIC:
+			fail("Each group logic must be AND or OR.")
 		conditions = group.get("conditions")
 		if not isinstance(conditions, list) or not 1 <= len(conditions) <= MAX_CONDITIONS:
 			fail(f"Each group requires 1 to {MAX_CONDITIONS} conditions.")
 		name = bounded_text(group.get("name"), "group name", optional=True) or f"Nhóm {index + 1}"
-		result.append({"logic": "AND", "name": name, "conditions": [_condition(c) for c in conditions]})
-	return {"groups": result}
+		result.append({"logic": group_logic, "name": name, "conditions": [_condition(c) for c in conditions]})
+	return {"logic": logic, "groups": result}
 
 
 def _condition(condition):
@@ -127,48 +130,117 @@ def _condition(condition):
 	return {"field": field, "operator": operator, "value": value}
 
 
-def scoped_rule_query(filters):
-	"""UNION DB-generated, permission-checked SELECTs; never interpolate user SQL.
+def _visible_student_query():
+	return frappe.get_list(
+		"CRM Student",
+		fields=["name"],
+		or_filters=student_scope_or_filters(),
+		limit_page_length=0,
+		order_by="",
+		run=False,
+	)
 
-	Every branch uses Frappe's field sanitization, DocPerm, permission hooks and
-	User Permissions. UNION deduplicates overlapping groups at the database.
-	"""
-	filters = validate_filters(filters)
-	queries = []
-	for group in filters["groups"]:
-		conditions = [
-			[c["field"], c["operator"], c["value"]]
-			for c in group["conditions"]
-			if c["field"] not in ("need", "tag")
-		]
-		query = frappe.get_list(
+
+def _condition_filter(condition):
+	return [condition["field"], condition["operator"], condition["value"]]
+
+
+def _classification_predicate(condition):
+	values = ",".join(frappe.db.escape(v) for v in condition["value"])
+	assignment_table = (
+		"CRM Student Need Assignment" if condition["field"] == "need" else "CRM Student Tag Assignment"
+	)
+	parent_field = "needs" if condition["field"] == "need" else "tags"
+	assignment_predicate = (
+		f"EXISTS (SELECT 1 FROM `tab{assignment_table}` c "
+		"WHERE c.parent = allowed.name AND c.parenttype = 'CRM Student' "
+		f"AND c.parentfield = '{parent_field}' "
+		f"AND c.{condition['field']} IN ({values}))"
+	)
+	if condition["field"] != "need":
+		return (
+			f"NOT {assignment_predicate}"
+			if condition["operator"] == "not in"
+			else assignment_predicate
+		)
+
+	# A Need may be addressed by many Actions. Keep the existing direct
+	# assignment source and add the canonical Action Item chain as a second
+	# source so older records remain queryable while newly generated work items
+	# can drive the same Segment filter.
+	action_predicate = (
+		"EXISTS (SELECT 1 FROM `tabCRM Action Item` action_item "
+		"INNER JOIN `tabCRM Action` action ON action.name = action_item.action "
+		"WHERE action_item.student = allowed.name "
+		"AND COALESCE(action_item.legacy_task_deleted, 0) = 0 "
+		f"AND action.need IN ({values}))"
+	)
+	matched = f"({assignment_predicate} OR {action_predicate})"
+	return f"NOT {matched}" if condition["operator"] == "not in" else matched
+
+
+def _condition_query(condition):
+	if condition["field"] not in ("need", "tag"):
+		return frappe.get_list(
 			"CRM Student",
 			fields=["name"],
-			filters=conditions,
+			filters=[_condition_filter(condition)],
 			or_filters=student_scope_or_filters(),
 			limit_page_length=0,
 			order_by="",
 			run=False,
 		)
-		predicates = []
-		for condition in group["conditions"]:
-			if condition["field"] not in ("need", "tag"):
-				continue
-			values = ",".join(frappe.db.escape(v) for v in condition["value"])
-			negation = "NOT " if condition["operator"] == "not in" else ""
-			assignment_table = (
-				"CRM Student Need Assignment"
-				if condition["field"] == "need"
-				else "CRM Student Tag Assignment"
-			)
-			assignment_field = condition["field"]
-			predicates.append(
-				f"{negation}EXISTS (SELECT 1 FROM `tab{assignment_table}` c "
-				"WHERE c.parent = allowed.name AND c.parenttype = 'CRM Student' "
-				f"AND c.parentfield = '{'needs' if condition['field'] == 'need' else 'tags'}' "
-				f"AND c.{assignment_field} IN ({values}))"
-			)
-		if predicates:
-			query = f"SELECT allowed.name FROM ({query}) allowed WHERE " + " AND ".join(predicates)
-		queries.append(f"({query})")
-	return " UNION ".join(queries)
+
+	query = _visible_student_query()
+	return f"SELECT allowed.name FROM ({query}) allowed WHERE {_classification_predicate(condition)}"
+
+
+def _group_query(group):
+	conditions = group["conditions"]
+	if group["logic"] == "OR":
+		return " UNION ".join(f"({query})" for query in map(_condition_query, conditions))
+
+	student_conditions = [
+		_condition_filter(condition)
+		for condition in conditions
+		if condition["field"] not in ("need", "tag")
+	]
+	query = frappe.get_list(
+		"CRM Student",
+		fields=["name"],
+		filters=student_conditions,
+		or_filters=student_scope_or_filters(),
+		limit_page_length=0,
+		order_by="",
+		run=False,
+	)
+	predicates = [
+		_classification_predicate(condition)
+		for condition in conditions
+		if condition["field"] in ("need", "tag")
+	]
+	if predicates:
+		query = f"SELECT allowed.name FROM ({query}) allowed WHERE " + " AND ".join(predicates)
+	return query
+
+
+def scoped_rule_query(filters):
+	"""Build permission-checked queries for nested AND/OR segment rules.
+
+	Every condition branch uses Frappe's field sanitization, DocPerm, permission
+	hooks and User Permissions. UNION and inner joins implement the selected
+	logic while keeping overlapping results deduplicated.
+	"""
+	filters = validate_filters(filters)
+	queries = [_group_query(group) for group in filters["groups"]]
+	if filters["logic"] == "OR":
+		return " UNION ".join(f"({query})" for query in queries)
+
+	query = queries[0]
+	for index, group_query in enumerate(queries[1:], start=1):
+		query = (
+			f"SELECT current.name FROM ({query}) current "
+			f"INNER JOIN ({group_query}) required_{index} "
+			f"ON required_{index}.name = current.name"
+		)
+	return query

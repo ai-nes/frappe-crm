@@ -25,6 +25,7 @@ from frappe.rate_limiter import rate_limit
 
 from crm.api.routing import route_new_lead
 from crm.fcrm.campaign_code import is_valid_campaign_code
+from crm.fcrm.campaign_source import resolve_campaign_reference as resolve_campaign_name
 from crm.fcrm.student_attribution import record_event_participation
 from crm.fcrm.student_intake import normalize_national_id
 from crm.fcrm.utils.geo_resolver import (
@@ -175,6 +176,9 @@ _HEADER_ALIASES = {
 	"conversion potential": "conversion_potential",
 	"nguon": "source",
 	"source": "source",
+	"chien dich": "campaign",
+	"campaign": "campaign",
+	"campaign name": "campaign",
 	"ma chien dich": "campaign_code",
 	"campaign code": "campaign_code",
 	"campaign_code": "campaign_code",
@@ -213,6 +217,7 @@ _LEAD_FIELDS = frozenset(
 		"admission_year",
 		"conversion_potential",
 		"source",
+		"campaign",
 		"campaign_code",
 		"assigned_to",
 		"branch",
@@ -226,7 +231,8 @@ _LEAD_FIELDS = frozenset(
 		"alt_address",
 	}
 )
-_CSV_REQUIRED_HEADERS = frozenset({"student_name", "phone", "province", "source", "assigned_to"})
+_CSV_REQUIRED_HEADERS = frozenset({"student_name", "phone", "province", "assigned_to"})
+_CSV_ATTRIBUTION_HEADERS = frozenset({"campaign", "campaign_code", "source"})
 _QUICK_IMPORT_REQUIRED_HEADERS = frozenset(
 	{"student_name", "phone", "province", "high_school", "source"}
 )
@@ -292,6 +298,7 @@ _PUBLIC_LEAD_FIELDS = frozenset(
 		"gender",
 		"date_of_birth",
 		"source",
+		"campaign",
 		"campaign_code",
 		"advertising_channel",
 		"import_source_id",
@@ -338,8 +345,7 @@ _PUBLIC_SERVER_MANAGED_FIELDS = frozenset(
 		"identity",
 		"case_key",
 		"student",
-		"campaign",
-	}
+}
 )
 
 
@@ -498,6 +504,16 @@ def _current_admission_year() -> str | None:
 	return frappe.db.get_value("CRM Admission Year", {"year_name": current_year}, "name")
 
 
+def _resolve_campaign_reference(value: Any) -> str:
+	reference = _text(value)
+	if not reference:
+		_fail("REQUIRED_FIELD", "campaign hoặc campaign_code là bắt buộc.")
+	campaign = resolve_campaign_name(reference)
+	if campaign:
+		return campaign
+	return _resolve_campaign_code(reference)
+
+
 def _resolve_assignment(
 	value: Any, *, allow_unassigned: bool = False, require_staff_name: bool = False
 ) -> tuple[str | None, str | None, str | None]:
@@ -588,13 +604,24 @@ def _normalize_lead_payload(
 		else None
 	)
 
+	campaign_value = payload.get("campaign") or payload.get("campaign_code")
+	campaign = _resolve_campaign_reference(campaign_value) if campaign_value else None
 	source_value = _text(payload.get("source"))
-	if not source_value:
-		_fail("REQUIRED_FIELD", "Nguồn là bắt buộc.")
-	source = _resolve_source(source_value)
-	campaign = campaign_name or (
-		_resolve_campaign_code(payload.get("campaign_code")) if payload.get("campaign_code") else None
-	)
+	if campaign_name:
+		# Import Lead nhanh: campaign cấp request là nguồn sự thật, không để dữ liệu
+		# trong file ghi đè.
+		campaign = campaign_name
+	if require_import_fields:
+		# Import nhanh vẫn yêu cầu Nguồn và lưu Nguồn cùng với Campaign.
+		if not source_value:
+			_fail("REQUIRED_FIELD", "Nguồn là bắt buộc.")
+		source = _resolve_source(source_value)
+	else:
+		# Legacy: campaign attribution ưu tiên; giữ path source-only nhưng không để
+		# source cũ ghi đè Campaign đã liên kết.
+		source = _resolve_source(source_value) if source_value and not campaign else None
+		if not source and not campaign:
+			_fail("REQUIRED_FIELD", "campaign hoặc nguồn là bắt buộc.")
 
 	high_school_value = _text(payload.get("high_school"))
 	high_school = resolve_high_school_strict(high_school_value, province) if high_school_value else None
@@ -711,11 +738,15 @@ def _normalize_public_lead_payload(
 	name = _text(payload.get("student_name"))
 	if not name:
 		_fail("REQUIRED_FIELD", "Họ và tên là bắt buộc.")
-	campaign = (
-		_resolve_campaign_code(payload.get("campaign_code"))
-		if require_campaign or payload.get("campaign_code")
-		else None
-	)
+	campaign_value = payload.get("campaign") or payload.get("campaign_code")
+	if campaign_value:
+		campaign = _resolve_campaign_reference(campaign_value)
+	elif require_campaign:
+		# Keep the public API error explicit for existing integrations that send
+		# campaign_code rather than the internal Campaign document name.
+		campaign = _resolve_campaign_code(payload.get("campaign_code"))
+	else:
+		campaign = None
 
 	phone_value = _text(payload.get("phone"))
 	phone = _normalize_phone(phone_value) if phone_value else None
@@ -750,7 +781,9 @@ def _normalize_public_lead_payload(
 	)
 
 	source_value = _text(payload.get("source"))
-	source = _resolve_source(source_value) if source_value else None
+	# Public Campaign intake derives source in the CRM Lead controller. The
+	# source field remains accepted here only for backward-compatible envelopes.
+	source = _resolve_source(source_value) if source_value and not campaign else None
 	major_value = _text(payload.get("major"))
 	major = (
 		_resolve_link("CRM Major", major_value, ("major_name", "major_code"), "Ngành quan tâm")
@@ -1456,6 +1489,8 @@ def _parse_csv_rows(
 		required_headers,
 		reject_server_managed=required_headers != _QUICK_IMPORT_REQUIRED_HEADERS,
 	)
+	if not _CSV_ATTRIBUTION_HEADERS.intersection(canonical_headers.values()):
+		_fail("CSV_MISSING_HEADERS", "CSV cần cột Campaign (hoặc campaign_code).")
 	rows = []
 	for row in reader:
 		mapped = {

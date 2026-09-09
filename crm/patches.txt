@@ -146,6 +146,7 @@ crm.patches.v1_0.backfill_student_intelligence_projection
 crm.patches.v1_0.backfill_student_ai_links
 crm.patches.v1_0.backfill_student_admission_decision_links
 crm.patches.v1_0.seed_campaign_channel_type
+crm.patches.v1_0.seed_campaign_channel_sources
 crm.patches.v1_0.add_nba_student_dirty_marker
 crm.patches.v1_0.allow_ctv_sale_action_item_read
 crm.patches.v1_0.add_team_group_management
@@ -162,6 +163,8 @@ crm.patches.v1_0.repair_lead_ownership_projections
 crm.patches.v1_0.backfill_province_region
 crm.patches.v1_0.backfill_team_area_code
 crm.patches.v1_0.upgrade_student_segments
+crm.patches.v1_0.migrate_classification_groups
+crm.patches.v1_0.retire_legacy_classification_doctypes
 crm.patches.v1_0.backfill_student_stage
 crm.patches.v1_0.backfill_quick_created_students
 crm.patches.v1_0.separate_lead_codes_from_student_ids
@@ -173,3 +176,6 @@ crm.patches.v1_0.normalize_canonical_status_layouts
 crm.patches.v1_0.backfill_segment_code
 crm.patches.v1_0.ensure_campaign_code_format
 crm.patches.v1_0.migrate_segment_code_to_short_id
+crm.patches.v1_0.backfill_crm_action_need_definition
+crm.patches.v1_0.seed_crm_action_need_mapping
+crm.patches.v1_0.activate_classification_catalog

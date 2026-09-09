@@ -3,6 +3,11 @@ from frappe.model.document import Document
 from frappe.utils import get_datetime, now_datetime
 
 from crm.fcrm.action_constraints import validate_action_config
+from crm.fcrm.action_need import (
+	ACTION_NEED_CODE_BY_ACTION,
+	need_group_for_action_category,
+	need_group_matches_action,
+)
 from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA, is_valid_configuration_code
 from crm.fcrm.nba_canonical import action_definition_snapshot, canonical_digest
 
@@ -24,6 +29,7 @@ class CRMAction(Document):
 			)
 		if not self.action_type or not frappe.db.exists("CRM Action Type", self.action_type):
 			frappe.throw("CRM Action Type must exist before creating an Action.", frappe.ValidationError)
+		self._validate_need_mapping()
 		if frappe.utils.cint(self.enabled) and not frappe.utils.cint(
 			frappe.db.get_value("CRM Action Type", self.action_type, "enabled")
 		):
@@ -59,6 +65,37 @@ class CRMAction(Document):
 			)
 		except ValueError as exc:
 			frappe.throw(str(exc), frappe.ValidationError)
+
+	def _validate_need_mapping(self):
+		if not self.need:
+			return
+		if self.code in ACTION_NEED_CODE_BY_ACTION:
+			mapped_need_code = ACTION_NEED_CODE_BY_ACTION[self.code]
+			if not mapped_need_code:
+				frappe.throw(
+					"Internal CRM Actions cannot be linked to a Student Need.",
+					frappe.ValidationError,
+				)
+			need_code = frappe.db.get_value("CRM Need", self.need, "code")
+			if need_code != mapped_need_code:
+				frappe.throw(
+					f"CRM Action {self.code} must reference Need {mapped_need_code}.",
+					frappe.ValidationError,
+				)
+			return
+		need_group = frappe.db.get_value("CRM Need", self.need, "group")
+		if not need_group:
+			frappe.throw("CRM Action Need must reference an existing CRM Need.", frappe.ValidationError)
+		expected_group = need_group_for_action_category(self.action_type)
+		if not need_group_matches_action(self.action_type, need_group):
+			if expected_group:
+				frappe.throw(
+					f"CRM Action Need must belong to Need Group {expected_group}.",
+					frappe.ValidationError,
+				)
+			frappe.throw(
+				"Internal CRM Actions cannot be linked to a Student Need.", frappe.ValidationError
+			)
 
 	def on_trash(self):
 		if _has_references(self.code):

@@ -111,6 +111,7 @@ def action_definition_snapshot(row: Mapping[str, Any]) -> dict:
 		"code": _text(row.get("code")),
 		"display_name": _text(row.get("display_name")),
 		"category": _text(category),
+		"need": _text(row.get("need")),
 		"purpose": _text(row.get("purpose")),
 		"default_channel": _text(row.get("default_channel")) or "NONE",
 		"allowed_actors": _actor_list(row.get("allowed_actors")),

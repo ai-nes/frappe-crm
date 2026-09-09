@@ -10,7 +10,8 @@ import frappe
 from frappe import _
 from frappe.utils import now_datetime
 
-from crm.fcrm.action_type_catalog import action_category
+from crm.fcrm.action_type_catalog import action_category, canonicalize_action_type
+from crm.fcrm.action_type_registry import is_available_action_type
 from crm.fcrm.student_decision import POLICY_VERSION, compute_risk_tier
 
 CANONICAL_ACTION = "CRM Action Item"
@@ -99,6 +100,7 @@ def create_segment_action_item(
 	due_at: Any = None,
 	assignee_staff: str | None = None,
 	linked_interaction: str | None = None,
+	action_code: str | None = None,
 	initial_state: str | None = None,
 	idempotency_key: str,
 ):
@@ -108,12 +110,16 @@ def create_segment_action_item(
 	objective = _required(title, "objective")[:500]
 	priority = _priority(priority)
 	state = _state(initial_state)
+	action_code = canonicalize_action_type(str(action_code or SEGMENT_ACTION_TYPE).strip().upper())
+	if not is_available_action_type(action_code):
+		frappe.throw(_("Unsupported Task action code."), frappe.ValidationError)
 	_validate_assignee(assignee_staff)
 	command_key = _required(idempotency_key, "idempotency_key")
 	payload = {
 		"segment": segment_doc.name,
 		"title": objective,
 		"description": description,
+		"action_code": action_code,
 		"start_date": start_date,
 		"priority": priority,
 		"due_at": due_at,
@@ -128,8 +134,8 @@ def create_segment_action_item(
 			"doctype": CANONICAL_ACTION,
 			"segment": segment_doc.name,
 			"origin": "manual",
-			"action": SEGMENT_ACTION_TYPE,
-			"action_type": action_category(SEGMENT_ACTION_TYPE),
+			"action": action_code,
+			"action_type": action_category(action_code),
 			"objective": objective,
 			"description": description,
 			"start_date": start_date,
@@ -137,7 +143,7 @@ def create_segment_action_item(
 			"state": state,
 			"execution_status": _execution_status(state),
 			"priority": priority,
-			"risk_tier": compute_risk_tier(SEGMENT_ACTION_TYPE),
+			"risk_tier": compute_risk_tier(action_code),
 			"due_at": due_at,
 			"action_owner": assignee_staff,
 			"source_context_revision": 0,

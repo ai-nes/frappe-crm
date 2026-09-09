@@ -99,6 +99,7 @@ def _backfill_actions() -> None:
 			"code",
 			"display_name",
 			"action_type",
+			"need",
 			"purpose",
 			"default_channel",
 			"allowed_actors",

@@ -4,6 +4,7 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
+from crm.fcrm.campaign_source import sync_student_campaign_source
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.student_reference import hs_code_for_reference, next_hs_code
 from crm.fcrm.student_stage import SERVICE_FLAG as STUDENT_STAGE_SERVICE_FLAG
@@ -132,6 +133,7 @@ class CRMStudent(Document):
 	def validate(self):
 		from crm.fcrm.student_classification import validate_classifications
 
+		sync_student_campaign_source(self)
 		validate_classifications(self)
 		self.student_stage = self.get("student_stage") or "New"
 		validate_stage(self.student_stage)

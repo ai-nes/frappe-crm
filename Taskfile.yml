@@ -52,6 +52,11 @@ tasks:
       - python scripts/validate_doctype_json.py
       - "{{.EXEC}} {{.BENCH}} migrate"
 
+  seed-segment:
+    desc: Seed and activate canonical Need/Tag groups and terms
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.classification_catalog.seed_catalog"
+
   workspace:
     desc: Sync Desk workspace Frappe CRM
     aliases: [sync-workspace]

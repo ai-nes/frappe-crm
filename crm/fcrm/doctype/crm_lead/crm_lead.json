@@ -413,10 +413,12 @@
    "label": "Registration Step"
   },
   {
+   "description": "Server-managed from the linked Campaign Channel Type.",
    "fieldname": "source",
    "fieldtype": "Link",
    "label": "Source",
-   "options": "CRM Lead Source"
+   "options": "CRM Lead Source",
+   "read_only": 1
   },
   {
    "fieldname": "advertising_channel",

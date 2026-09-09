@@ -90,14 +90,18 @@ Payload tối thiểu:
   "ward": "WARD-001",
   "high_school": "HIGH-SCHOOL-001",
   "admission_year": "2026",
-  "source": "SOURCE-001",
+  "campaign": "CAMPAIGN-001",
   "assigned_to": "CRM-STAFF-001"
 }
 ```
 
-`student_name`, `phone`, `province`, `source` và `assigned_to` là bắt buộc. `id_number`,
+`student_name`, `phone`, `province`, `campaign` và `assigned_to` là bắt buộc. `source`
+không còn là input của form; BE lấy loại kênh từ Campaign và tự lưu vào `source`.
+`id_number`,
 `ward`, `high_school` và `admission_year` được chuẩn hóa theo các Link master tương ứng;
-các field hồ sơ cơ bản khác có thể gửi thêm theo allowlist của endpoint. `student_stage`
+field `tags` có thể gửi dưới dạng chuỗi phân tách bằng `;` hoặc mảng tên `CRM Tag`; các
+tag này được ghi vào `CRM Student.tags[]` để dùng cho bộ lọc Segment. Các field hồ sơ cơ
+bản khác có thể gửi thêm theo allowlist của endpoint. `student_stage`
 không nhận từ client và Student mới luôn bắt đầu ở `New`.
 
 Response trả về cả `student` và `lead`, cùng `source_lead`/`student` để FE cập nhật
@@ -166,11 +170,13 @@ API import batch yêu cầu các cột sau:
 | `province`     | Tỉnh/Thành phố | Có                                                          |
 | `high_school`  | Trường THPT    | Có                                                          |
 | `major`        | Ngành quan tâm | Có                                                          |
-| `source`       | Nguồn Lead     | Có                                                          |
+| `campaign`     | Campaign       | Có                                                          |
+| `source`       | Nguồn Lead     | BE tự suy ra từ loại kênh của Campaign                      |
 | `email`        | Email          | Không                                                       |
 | `branch`       | Cơ sở          | Không nếu tài khoản chỉ có một cơ sở hoặc có cơ sở mặc định |
 
-FE không hardcode danh sách tỉnh, trường, ngành và nguồn.
+FE không hardcode danh sách tỉnh, trường, ngành và Campaign. FE không hiển thị ô nhập/chọn
+`source`; giá trị `source` chỉ được trả về để đọc và báo cáo.
 
 ### 3.3. Catalog từ Frappe
 
@@ -331,7 +337,7 @@ Payload tối thiểu:
       "province": "Ho Chi Minh City",
       "high_school": "THPT Nguyễn Huệ",
       "major": "Công nghệ thông tin",
-      "source": "Website",
+      "campaign": "CAMPAIGN-001",
       "email": "a@example.com"
     }
   ],

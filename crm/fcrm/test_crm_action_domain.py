@@ -122,6 +122,7 @@ def test_action_master_and_work_item_expose_the_nba_links():
 		"code",
 		"display_name",
 		"action_type",
+		"need",
 		"purpose",
 		"default_channel",
 		"allowed_actors",
@@ -132,6 +133,10 @@ def test_action_master_and_work_item_expose_the_nba_links():
 	assert (
 		next(field for field in action["fields"] if field["fieldname"] == "action_type")["options"]
 		== "CRM Action Type"
+	)
+	assert (
+		next(field for field in action["fields"] if field["fieldname"] == "need")["options"]
+		== "CRM Need"
 	)
 	assert (
 		next(field for field in action_item["fields"] if field["fieldname"] == "action")["options"]
