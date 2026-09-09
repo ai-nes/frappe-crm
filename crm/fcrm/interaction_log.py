@@ -19,6 +19,7 @@ activity.
 
 import hashlib
 import json
+from datetime import timezone
 
 import frappe
 
@@ -147,6 +148,16 @@ def _text(value):
 	return value or None
 
 
+def _format_external_datetime(value):
+	"""Return an external datetime in MariaDB's timezone-naive format."""
+	parsed = frappe.utils.get_datetime(value)
+	if not parsed:
+		return None
+	if parsed.tzinfo:
+		parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+	return str(parsed)
+
+
 def normalize_external_interaction_payload(payload: dict) -> dict:
 	"""Validate and normalize the public interaction command shape."""
 	if not isinstance(payload, dict):
@@ -207,12 +218,11 @@ def normalize_external_interaction_payload(payload: dict) -> dict:
 	if not occurred_at:
 		_interaction_fail("INVALID_INPUT", "occurred_at is required.")
 	try:
-		parsed_occurred_at = frappe.utils.get_datetime(occurred_at)
+		occurred_at = _format_external_datetime(occurred_at)
 	except (TypeError, ValueError):
 		_interaction_fail("INVALID_INPUT", "occurred_at must be a valid datetime.")
-	if not parsed_occurred_at:
+	if not occurred_at:
 		_interaction_fail("INVALID_INPUT", "occurred_at must be a valid datetime.")
-	occurred_at = str(parsed_occurred_at)
 
 	if not student_id and not contact_id and not external_target_id:
 		_interaction_fail("INVALID_INPUT", "A Student, Contact or external target is required.")
@@ -506,8 +516,10 @@ def _normalize_external_turns(value) -> list[dict]:
 		occurred_at = _text(turn.get("occurred_at"))
 		if occurred_at:
 			try:
-				occurred_at = str(frappe.utils.get_datetime(occurred_at))
+				occurred_at = _format_external_datetime(occurred_at)
 			except (TypeError, ValueError):
+				_interaction_fail("INVALID_INPUT", f"turns[{index}].occurred_at must be a valid datetime.")
+			if not occurred_at:
 				_interaction_fail("INVALID_INPUT", f"turns[{index}].occurred_at must be a valid datetime.")
 		turns.append({"speaker_role": role, "content": body.strip(), "occurred_at": occurred_at})
 	if len(json.dumps(turns, ensure_ascii=False).encode("utf-8")) > MAX_EXTERNAL_INTERACTION_CONTENT_BYTES:
