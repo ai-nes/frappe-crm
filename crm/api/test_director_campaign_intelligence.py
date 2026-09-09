@@ -127,18 +127,24 @@ class TestDirectorCampaignIntelligence(FrappeTestCase):
 		]
 		self.assertEqual(director_campaign_intelligence._primary_attributions(rows)["STU-1"]["name"], "ATT-3")
 
-	def test_status_catalog_and_legacy_groups_keep_quality_separate(self):
-		from crm.fcrm.reference_catalog import REFERENCE_CATALOG
-
-		for status in REFERENCE_CATALOG["CRM Enrollment Status"]:
-			with self.subTest(status=status["code"]):
-				self.assertIn(director_campaign_intelligence._lead_status_group(status["code"], status),
-					director_campaign_intelligence.LEAD_STATUS_GROUPS)
-		for code, expected in [("Không nghe máy lần 3", "no_response"), ("Sai số", "invalid"),
-			("Lead trùng", "duplicate"), ("Lead nhắc lại", "in_progress"), ("UNMAPPED", "unknown")]:
-			self.assertEqual(director_campaign_intelligence._lead_status_group(code, {}), expected)
-		self.assertEqual(director_campaign_intelligence._lead_status_group("CUSTOM", {
-			"display_name": "Không liên lạc được", "stage_category": "lost"}), "no_response")
+	def test_canonical_processing_and_resolution_groups_keep_quality_separate(self):
+		cases = [
+			({"processing_status": "NEW", "resolution": "PENDING"}, "new"),
+			({"processing_status": "PROCESSING", "resolution": "PENDING"}, "in_progress"),
+			({"processing_status": "PROCESSED", "resolution": "PENDING"}, "in_progress"),
+			({"processing_status": "CLOSED", "resolution": "INVALID"}, "disqualified"),
+			({"processing_status": "CLOSED", "resolution": "DUPLICATE"}, "duplicate"),
+			({"processing_status": "PROCESSED", "resolution": "CREATED"}, "converted"),
+		]
+		for status, expected in cases:
+			with self.subTest(status=status):
+				self.assertEqual(
+					director_campaign_intelligence._lead_status_group(
+						status["processing_status"], status
+					),
+					expected,
+				)
+		self.assertEqual(director_campaign_intelligence._lead_status_group("UNMAPPED", {}), "unknown")
 
 	def test_counts_reconcile_quality_and_include_attribution_only_campaign(self):
 		leads = {"CAM-1": [{"statusGroup": "new"}, {"statusGroup": "converted"}, {"statusGroup": "duplicate"}]}
@@ -175,7 +181,7 @@ class TestDirectorCampaignIntelligence(FrappeTestCase):
 		with patch.object(frappe.db, "table_exists", return_value=True), \
 			patch.object(frappe, "get_all", side_effect=get_all) as all_query, \
 			patch.object(frappe, "get_list", side_effect=[[{"name": "C2"}],
-				[{"name": "S2", "lead_code": "LD-2026-00002", "enrollment_status": "NEW"}]]) as visible_query, \
+				[{"name": "S2", "lead_code": "LD-2026-00002", "processing_status": "NEW", "resolution": "PENDING"}]]) as visible_query, \
 			patch.object(frappe.db, "get_value", return_value="YEAR-2026"):
 			result = api._load_campaign_lead_rows("2026", date(2026, 8, 1), date(2026, 8, 31),
 				"CAMPUS-1", "CHANNEL-1", {"territory": "T1"})
@@ -200,7 +206,7 @@ class TestDirectorCampaignIntelligence(FrappeTestCase):
 			patch.object(frappe, "get_all", side_effect=get_all), \
 			patch.object(frappe, "get_list", side_effect=[
 				[{"name": "C1"}],
-				[{"name": "S1", "enrollment_status": "NEW"}],
+				[{"name": "S1", "processing_status": "NEW", "resolution": "PENDING"}],
 			]), \
 			patch.object(frappe.db, "get_value", return_value="YEAR-2026"):
 			result = api._load_campaign_lead_rows("2026", date(2026, 1, 1), date(2026, 12, 31), None, None,
@@ -230,7 +236,7 @@ class TestDirectorCampaignIntelligence(FrappeTestCase):
 
 	def test_drilldown_paginates_filtered_cohort_and_keeps_minimal_fields(self):
 		api = director_campaign_intelligence
-		rows = [{"name": f"S{i}", "lead_code": f"LD-2026-0000{i}", "student_name": f"Student {i}", "enrollment_status": "NEW",
+		rows = [{"name": f"S{i}", "lead_code": f"LD-2026-0000{i}", "student_name": f"Student {i}", "processing_status": "NEW", "resolution": "PENDING",
 			"status": "Mới", "statusCode": "NEW", "statusGroup": "new", "modified": "2026-08-01",
 			"phone": "SHOULD-NOT-LEAK", "email": "SHOULD-NOT-LEAK"} for i in range(3)]
 		with patch.object(api, "require_campaign_intelligence_access", return_value={}), \

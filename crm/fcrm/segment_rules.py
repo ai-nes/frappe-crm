@@ -6,36 +6,15 @@ import math
 import frappe
 
 FIELDS = {
+	"student_stage": {
+		"label": "Student Stage",
+		"fieldtype": "Select",
+		"options": "New\nAttempting\nConnected\nQualified\nDisqualified",
+	},
 	"potential": {"label": "Potential", "fieldtype": "Select", "options": "HIGH\nMEDIUM\nLOW"},
 	"intent": {"label": "Intent", "fieldtype": "Select", "options": "HIGH\nMEDIUM\nLOW"},
 	"need": {"label": "Need", "fieldtype": "Term", "options": "CRM Need"},
 	"tag": {"label": "Tag", "fieldtype": "Term", "options": "CRM Tag"},
-	"lifecycle_stage": {
-		"label": "Lifecycle Stage",
-		"fieldtype": "Select",
-		"options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
-	},
-	"enrollment_status": {
-		"label": "Enrollment Status",
-		"fieldtype": "Link",
-		"options": "CRM Enrollment Status",
-	},
-	"source": {"label": "Source", "fieldtype": "Link", "options": "CRM Lead Source"},
-	"platform": {"label": "Platform", "fieldtype": "Link", "options": "CRM Platform"},
-	"branch": {"label": "Branch", "fieldtype": "Link", "options": "CRM Campus"},
-	"province": {"label": "Province", "fieldtype": "Link", "options": "CRM Province"},
-	"major": {"label": "Major", "fieldtype": "Link", "options": "CRM Major"},
-	"admission_year": {"label": "Admission Year", "fieldtype": "Link", "options": "CRM Admission Year"},
-	"quality_bucket": {
-		"label": "Quality Bucket",
-		"fieldtype": "Select",
-		"options": "Hot\nWarm\nCool\nSai số\nKhông liên lạc được\nKhông quan tâm",
-	},
-	"is_opted_out": {"label": "Opted Out", "fieldtype": "Check"},
-	"latest_score": {"label": "Latest Score", "fieldtype": "Float"},
-	"graduation_score": {"label": "Graduation Score", "fieldtype": "Float"},
-	"transcript_score": {"label": "Transcript Score", "fieldtype": "Float"},
-	"total_score": {"label": "Total Score", "fieldtype": "Float"},
 }
 OPERATORS = {
 	"Term": ("in", "not in"),
@@ -46,6 +25,14 @@ OPERATORS = {
 }
 MAX_GROUPS = 10
 MAX_CONDITIONS = 20
+
+
+def student_scope_or_filters():
+	"""Keep parent-only CRM Student contacts out of student segments."""
+	return [
+		["decision_maker", "in", ["", "Student", "Both"]],
+		["decision_maker", "is", "not set"],
+	]
 
 
 def fail(message, code="INVALID_INPUT", *, permission=False):
@@ -90,15 +77,16 @@ def validate_filters(filters):
 	if not isinstance(groups, list) or not 1 <= len(groups) <= MAX_GROUPS:
 		fail(f"Segment requires 1 to {MAX_GROUPS} non-empty filter groups.")
 	result = []
-	for group in groups:
-		if not isinstance(group, dict) or set(group) - {"logic", "conditions"}:
-			fail("Each group must contain conditions and optional AND logic.")
+	for index, group in enumerate(groups):
+		if not isinstance(group, dict) or set(group) - {"logic", "name", "conditions"}:
+			fail("Each group may include a name and must contain conditions and optional AND logic.")
 		if group.get("logic", "AND") != "AND":
 			fail("Each group must use AND logic.")
 		conditions = group.get("conditions")
 		if not isinstance(conditions, list) or not 1 <= len(conditions) <= MAX_CONDITIONS:
 			fail(f"Each group requires 1 to {MAX_CONDITIONS} conditions.")
-		result.append({"logic": "AND", "conditions": [_condition(c) for c in conditions]})
+		name = bounded_text(group.get("name"), "group name", optional=True) or f"Nhóm {index + 1}"
+		result.append({"logic": "AND", "name": name, "conditions": [_condition(c) for c in conditions]})
 	return {"groups": result}
 
 
@@ -157,10 +145,10 @@ def scoped_rule_query(filters):
 			"CRM Student",
 			fields=["name"],
 			filters=conditions,
+			or_filters=student_scope_or_filters(),
 			limit_page_length=0,
 			order_by="",
 			run=False,
-			ignore_ifnull=True,
 		)
 		predicates = []
 		for condition in group["conditions"]:

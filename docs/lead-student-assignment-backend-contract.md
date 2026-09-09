@@ -63,8 +63,7 @@ Read-model chi tiết Lead trả `province` và `ward` dưới dạng nhãn hi�
 nhật gửi mã Link tương ứng; danh sách xã/phường được BE lọc theo tỉnh đã chọn.
 
 Lead nguồn được trả dưới dạng metadata `sourceLead`, `processingStatus` và `resolution`;
-không dùng các field này để thay thế `student_stage`, `enrollment_status` hoặc
-`lifecycle_stage` của Student.
+Student dùng `student_stage` làm trường stage duy nhất.
 
 ### 2.2. API tạo nhanh Student kèm Lead nguồn
 
@@ -98,17 +97,16 @@ Payload tối thiểu:
 
 `student_name`, `phone`, `province`, `source` và `assigned_to` là bắt buộc. `id_number`,
 `ward`, `high_school` và `admission_year` được chuẩn hóa theo các Link master tương ứng;
-các field hồ sơ cơ bản khác có thể gửi thêm theo allowlist của endpoint. `lead_status` là
-tuỳ chọn và mặc định `New`; `student_stage` không nhận từ client và Student mới luôn bắt
-đầu ở `New`.
+các field hồ sơ cơ bản khác có thể gửi thêm theo allowlist của endpoint. `student_stage`
+không nhận từ client và Student mới luôn bắt đầu ở `New`.
 
 Response trả về cả `student` và `lead`, cùng `source_lead`/`student` để FE cập nhật
 cache hoặc điều hướng sang bản ghi vừa tạo.
 
 ### 2.3. Hai nhóm status cần phân biệt
 
-`CRM Lead.lead_status` là lifecycle CRM hiện có, còn `processing_status` là workflow
-server-managed của intake/assignment. FE không tự ghi hai field này.
+`CRM Lead.processing_status` và `resolution` là workflow server-managed của
+intake/assignment. FE không tự ghi hai field này.
 
 | Field               | Giá trị           | Ý nghĩa                                                          |
 | ------------------- | ----------------- | ---------------------------------------------------------------- |
@@ -133,7 +131,6 @@ resolution_reason
 matched_student
 converted_student
 converted_at
-conversion_status
 owner_staff
 owning_team
 owning_pool
@@ -444,9 +441,8 @@ reason
 FE chỉ hiển thị các giá trị BE trả về. Không tính lại phần trăm tải hoặc tự chọn người.
 
 Tải hiện tại của một Sale/CTV là số Lead chưa `CLOSED`, chưa có
-`conversion_status = Converted` và chưa có `converted_student` mà người đó đang sở
-hữu (`owner_staff` hoặc `assigned_to`). Không dùng `lifecycle_stage` để tính tải vì
-field này có thể để trống trong lúc Lead đã được phân công.
+`resolution = CREATED` và chưa có `converted_student` mà người đó đang sở hữu
+(`owner_staff` hoặc `assigned_to`).
 
 `pool`, `zone` và policy cũ vẫn có thể xuất hiện trong contract để tương thích lịch
 sử, nhưng không phải dữ liệu setup của Lead batch mới. Mã
@@ -480,7 +476,7 @@ Kết quả thành công:
   `owning_team` đang hoạt động.
 - CRM Student được đưa về stage `New`.
 - Lead được `CLOSED`.
-- `converted_student` và `conversion_status = Converted` được ghi bởi BE.
+- `converted_student` và `resolution = CREATED` được ghi bởi BE.
 
 Handoff yêu cầu `idempotency_key` và `expected_lifecycle_revision` để chống xử lý lặp
 hoặc ghi đè dữ liệu mới.
@@ -512,7 +508,7 @@ Các endpoint conversion cũ cũng phải đi qua cùng điều kiện: Lead m�
 - Không tạo CRM Student ở bước nhập Lead, xử lý hoặc phân công. FE chỉ gọi API conversion
   khi người dùng chủ động chuyển đổi.
 - Không gọi worker; nút trên dashboard là điểm kích hoạt duy nhất.
-- Không dùng `lead_status` để thay thế `processing_status`.
+- Không tự ghi `processing_status` hoặc `resolution`.
 - Không hardcode dữ liệu tỉnh, trường, ngành, nguồn.
 
 ## 9. Error mapping tối thiểu

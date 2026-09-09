@@ -62,7 +62,9 @@ class TestMigrateCampaignEventToManyToMany(FrappeTestCase):
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-MIGRATE"}
+		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
 

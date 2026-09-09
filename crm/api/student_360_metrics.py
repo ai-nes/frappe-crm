@@ -20,7 +20,7 @@ def _students(filters: dict) -> list:
 	query = {key: value for key, value in (filters or {}).items() if key in allowed and value not in (None, "")}
 	fields = [
 			"name", "student_name", "phone", "high_school", "current_grade", "study_stage",
-			"source", "lifecycle_stage", "enrollment_status", "interest_level",
+			"source", "processing_status", "resolution", "interest_level",
 			"fit_level", "assessment_status", "assessment_revision",
 	]
 	rows, offset, page_size = [], 0, 1000
@@ -37,8 +37,7 @@ def _pct(numerator: int, denominator: int) -> float:
 
 
 def _is_enrolled(row) -> bool:
-	value = f"{row.get('lifecycle_stage') or ''} {row.get('enrollment_status') or ''}".casefold()
-	return "enroll" in value or "nhập học" in value
+	return str(row.get("resolution") or "").casefold() == "created"
 
 
 def _interactions(student_ids: list[str]) -> list:
@@ -123,7 +122,7 @@ def _campaign_costs(student_ids: list[str]) -> dict:
 
 	last_touch = get_last_touch_campaign_by_student(student_ids)
 	enrolled = Counter()
-	for row in frappe.get_list("CRM Lead", filters={"name": ["in", student_ids]}, fields=["name", "lifecycle_stage", "enrollment_status"], limit_page_length=0):
+	for row in frappe.get_list("CRM Lead", filters={"name": ["in", student_ids]}, fields=["name", "processing_status", "resolution"], limit_page_length=0):
 		if _is_enrolled(row) and last_touch.get(row.name):
 			enrolled[last_touch[row.name]] += 1
 	spend_rows = frappe.get_list("CRM Campaign Spend", fields=["crm_campaign", "amount"], filters={"crm_campaign": ["in", list(enrolled)]}, limit_page_length=0)

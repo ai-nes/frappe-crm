@@ -47,7 +47,7 @@ class TestScoringWrite(FrappeTestCase):
 				"full_name": name,
 				"phone": "0981100001",
 				"email": f"{name.lower().replace(' ', '.')}@example.com",
-				"enrollment_status": "CONFIRMED",
+				"student_stage": "Qualified",
 			}
 		)
 		student.insert(ignore_permissions=True)

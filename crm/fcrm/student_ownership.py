@@ -317,14 +317,9 @@ def _assert_actor_target_scope(actor: str, profile: str, team_name: str) -> list
 
 
 def _student_is_active(student) -> bool:
-	if student.get("lifecycle_stage") == "Lost":
-		return False
-	status = student.get("enrollment_status")
-	if status:
-		stage_category = _get_value("CRM Enrollment Status", status, "stage_category")
-		if stage_category in {"enrolled", "lost"}:
-			return False
-	return True
+	from crm.fcrm.student_stage import is_active_stage
+
+	return is_active_stage(student.get("student_stage"))
 
 
 def _validate_current_topology(

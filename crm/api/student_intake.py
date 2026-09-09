@@ -101,7 +101,6 @@ def _normalize_contact_payload(payload: dict[str, Any]) -> dict[str, Any]:
 		"advertising_channel",
 		"current_grade",
 		"study_stage",
-		"enrollment_status",
 		"gender",
 		"date_of_birth",
 		"alt_name",

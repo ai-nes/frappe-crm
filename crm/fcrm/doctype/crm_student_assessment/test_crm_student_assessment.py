@@ -18,7 +18,7 @@ class TestCRMStudentAssessment(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": f"_Test Assessment {suffix}",
 				"phone": f"0987{suffix:06d}",
-				"enrollment_status": "NEW",
+				"processing_status": "NEW",
 			}
 		)
 		frappe.flags.student_intake_service = True

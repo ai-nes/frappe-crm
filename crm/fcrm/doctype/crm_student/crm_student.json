@@ -28,8 +28,6 @@
   "chatwoot_contact_id",
   "col_break_1",
   "student_stage",
-  "enrollment_status",
-  "lifecycle_stage",
   "readiness_level",
   "quality_bucket",
   "is_verified_lead",
@@ -213,24 +211,6 @@
   {
    "fieldname": "col_break_1",
    "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "enrollment_status",
-   "fieldtype": "Link",
-   "hidden": 1,
-   "label": "Enrollment Status",
-   "options": "CRM Enrollment Status",
-   "default": "NEW",
-   "description": "Legacy compatibility projection. Use Student Stage."
-  },
-  {
-   "fieldname": "lifecycle_stage",
-   "fieldtype": "Select",
-   "hidden": 1,
-   "label": "Lifecycle Stage",
-   "options": "Lead\nMQL\nApplicant\nEnrolled\nLost",
-   "read_only": 1,
-   "description": "Legacy compatibility projection. Use Student Stage."
   },
   {
    "default": "New",

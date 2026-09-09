@@ -531,7 +531,7 @@ def _preview_item(
 ) -> None:
 	lead = _batch_item_lead(item)
 	_validate_batch_scope(batch, lead, actor_context)
-	if lead.get("converted_student") or lead.get("conversion_status") == "Converted":
+	if lead.get("converted_student") or lead.get("resolution") == "CREATED":
 		_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
 		item.ownership_revision = int(lead.get("ownership_revision") or 0)
 		return
@@ -1485,7 +1485,7 @@ def run_lead_assignment_batch(batch_name: str):
 			if processing_status == "ASSIGNED":
 				if (
 					lead.get("converted_student")
-					or str(lead.get("conversion_status") or "").casefold() == "converted"
+					or str(lead.get("resolution") or "").casefold() == "created"
 				):
 					_reset_item(item, status="skipped", reason="ALREADY_CONVERTED")
 					item.execution_id = batch.execution_id
@@ -1617,7 +1617,7 @@ def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
 		filters={
 			"processing_status": "PROCESSED",
 		},
-		fields=["name", "owner_staff", "assigned_to", "converted_student", "conversion_status"],
+		fields=["name", "owner_staff", "assigned_to", "converted_student", "resolution"],
 		order_by="creation asc, name asc",
 		limit_page_length=MAX_BATCH_SIZE,
 	)
@@ -1625,7 +1625,7 @@ def _unassigned_lead_names(actor_context: dict[str, Any]) -> list[str]:
 	for row in rows:
 		if row.get("owner_staff") or row.get("assigned_to") or row.get("converted_student"):
 			continue
-		if str(row.get("conversion_status") or "").casefold() == "converted":
+		if str(row.get("resolution") or "").casefold() == "created":
 			continue
 		# get_all is intentionally used for the candidate scan, but each Lead is
 		# still checked through the normal row permission boundary before use.

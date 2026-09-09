@@ -47,7 +47,7 @@
    "unique": 1
   },
   {
-   "description": "Server-managed immutable identifier in CAM-YYYY-NNNNN format.",
+   "description": "Server-managed immutable identifier in CMP-{CAMPUS_CODE}-{YYMMDD}-{TOKEN4} format.",
    "fieldname": "stable_code",
    "fieldtype": "Data",
    "in_list_view": 1,

@@ -184,8 +184,8 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
 		self.assertEqual(student_fields["student_stage"]["default"], "New")
 		self.assertTrue(student_fields["student_stage"]["read_only"])
-		self.assertEqual(student_fields["enrollment_status"]["default"], "NEW")
-		self.assertTrue(student_fields["enrollment_status"]["hidden"])
+		self.assertNotIn("enrollment_status", student_fields)
+		self.assertNotIn("lifecycle_stage", student_fields)
 
 
 @unittest.skipIf(frappe is None, "Lead/Student workflow tests require a Frappe bench")
@@ -209,7 +209,7 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 			"student_name": f"_Test Processing {suffix}",
 			"phone": f"0981000{len(suffix):03d}",
 			"email": f"processing-{suffix.lower()}@example.com",
-			"enrollment_status": "NEW",
+			"processing_status": "NEW",
 			**values,
 		}
 		return frappe.get_doc(payload).insert(ignore_permissions=True)

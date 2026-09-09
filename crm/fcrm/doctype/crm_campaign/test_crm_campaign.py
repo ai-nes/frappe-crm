@@ -26,7 +26,9 @@ class TestCRMCampaign(FrappeTestCase):
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-CAMPAIGN"}
+		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
@@ -147,13 +149,28 @@ class TestCRMCampaign(FrappeTestCase):
 		)
 		campaign.insert(ignore_permissions=True)
 
-		self.assertRegex(campaign.stable_code, r"^CAM-2026-\d{5,}$")
+		self.assertRegex(campaign.stable_code, r"^CMP-TEST-CAMPAIGN-\d{6}-[A-HJ-NP-Z2-9]{4}$")
 		code = campaign.stable_code
 		campaign.title = "_Test Campaign Code Renamed"
 		campaign.save(ignore_permissions=True)
 		campaign.reload()
 		self.assertEqual(campaign.stable_code, code)
 
-		campaign.stable_code = "CAM-2026-99999"
+		campaign.stable_code = "CMP-TEST-CAMPAIGN-260907-K7M2"
 		with self.assertRaises(frappe.ValidationError):
 			campaign.save(ignore_permissions=True)
+
+	def test_campaign_requires_campus_code(self):
+		campus = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": "_Test Campaign Missing Campus Code"}
+		).insert(ignore_permissions=True)
+		campaign = frappe.get_doc(
+			{
+				"doctype": "CRM Campaign",
+				"title": "_Test Campaign Missing Campus Code",
+				"campus": campus.name,
+			}
+		)
+
+		with self.assertRaises(frappe.ValidationError):
+			campaign.insert(ignore_permissions=True)

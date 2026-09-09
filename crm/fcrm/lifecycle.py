@@ -1,18 +1,14 @@
-"""Shared lifecycle-stage logic for CRM Contact and CRM Lead.
+"""Compatibility helpers for the canonical Student stage workflow.
 
-Implements the long-term
-lifecycle track (Lead -> MQL -> Applicant -> Enrolled, with Lost as a
-separate terminal branch) derived from the CRM Enrollment Status
-master (its `lifecycle_stage` field — see
-crm.fcrm.doctype.crm_enrollment_status), rather than from the day-to-day
-enrollment_status directly. This keeps the lifecycle projection from drifting:
-lifecycle_stage is a pure, read-only function of
-enrollment_status, recomputed on every save.
+The authoritative record fields are ``CRM Student.student_stage`` and
+``CRM Lead.processing_status``/``resolution``.  This module remains importable
+for older integrations, but it no longer reads or writes retired status fields.
 """
 
 import frappe
 
-from crm.fcrm.permissions import FULL_VISIBILITY_ROLES, _cached
+from crm.fcrm.permissions import FULL_VISIBILITY_ROLES
+from crm.fcrm.student_stage import lifecycle_label_for_stage, stage_from_enrollment_status
 
 # Forward order of the main track. "Lost" is a separate branch reachable
 # from any stage and is deliberately excluded from this ordering — entering
@@ -27,17 +23,13 @@ LOST_STAGE = "Lost"
 LIFECYCLE_OVERRIDE_ROLES = FULL_VISIBILITY_ROLES | {"Lead Sale"}
 
 
-def get_lifecycle_stage(enrollment_status):
-	if not enrollment_status:
-		return None
-	return _cached(
-		f"crm_enrollment_status_lifecycle_stage::{enrollment_status}",
-		lambda: _term_lifecycle_stage(enrollment_status),
-	) or None
-
-
-def _term_lifecycle_stage(enrollment_status):
-	return frappe.db.get_value("CRM Enrollment Status", enrollment_status, "lifecycle_stage") or ""
+def get_lifecycle_stage(value):
+	"""Return the historical lifecycle label for a canonical or legacy value."""
+	value = str(value or "").strip()
+	if value in LIFECYCLE_ORDER or value == LOST_STAGE:
+		return value
+	stage = stage_from_enrollment_status(value)
+	return lifecycle_label_for_stage(stage)
 
 
 def lifecycle_rank(stage):
@@ -64,24 +56,25 @@ def user_can_override_lifecycle(user):
 	return bool(roles & LIFECYCLE_OVERRIDE_ROLES)
 
 
-def enforce_lifecycle_change_policy(doc, before_enrollment_status):
-	"""Requires a reason and the right role whenever a save moves
-	lifecycle_stage backward, or reopens a lead that was previously Lost."""
-	before_stage = get_lifecycle_stage(before_enrollment_status)
-	after_stage = doc.lifecycle_stage
+def enforce_lifecycle_change_policy(doc, before_stage):
+	"""Require a reason and an override role for a backward stage change."""
+	before_stage = get_lifecycle_stage(before_stage)
+	after_stage = lifecycle_label_for_stage(doc.get("student_stage")) or doc.get("student_stage")
 	if not is_backward_or_reopen(before_stage, after_stage):
 		return
 
 	if not user_can_override_lifecycle(frappe.session.user):
 		frappe.throw(
 			frappe._(
-			"Only a Lead Sale user or Admissions Director may move a lead backward "
+				"Only a Lead Sale user or Admissions Director may move a Student backward "
 				"in its lifecycle or reopen it from Lost."
 			),
 			frappe.PermissionError,
 		)
-	if not doc.status_change_reason:
+	if not doc.get("status_change_reason"):
 		frappe.throw(
-			frappe._("Please provide a reason for moving this lead backward or reopening it from Lost."),
+			frappe._(
+				"Please provide a reason for moving this Student backward or reopening it from Lost."
+			),
 			title=frappe._("Reason required"),
 		)

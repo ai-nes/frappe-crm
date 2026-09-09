@@ -10,7 +10,7 @@ class TestDirectorRegionalPerformance(FrappeTestCase):
 	def test_province_builder_keeps_canonical_funnel_order_and_null_denominators(self):
 		as_of = datetime(2026, 8, 31, 10, tzinfo=director_regional_performance.LOCAL_TIMEZONE)
 		province = director_regional_performance._build_province(
-			"P-1", "Đắk Lắk", [{"lifecycle_stage": "Lead", "creation": "2026-08-01"}], [], None, None, as_of
+			"P-1", "Đắk Lắk", [{"processing_status": "NEW", "resolution": "PENDING", "creation": "2026-08-01"}], [], None, None, as_of
 		)
 
 		self.assertEqual(

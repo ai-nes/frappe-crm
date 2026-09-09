@@ -34,8 +34,8 @@ STUDENT_FIELDS = [
 	"aspiration",
 	"province",
 	"high_school",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"admission_year",
 	"creation",
 ]
@@ -390,14 +390,14 @@ def _enrich_student(row, lookups: dict[str, dict], evidence: dict[str, Any]) -> 
 	interactions = evidence.get("interactions", [])
 	applications = evidence.get("applications", [])
 	assessment = evidence.get("assessment") or {}
-	enrollment_status = _normalize_text(row.get("enrollment_status"))
-	lifecycle = _normalize_text(row.get("lifecycle_stage"))
+	processing_status = _normalize_text(row.get("processing_status"))
+	resolution = _normalize_text(row.get("resolution"))
 	application_statuses = {_normalize_text(item.get("status")) for item in applications}
 	qualified = assessment.get("status") == "confirmed" or bool(
 		application_statuses.intersection({"submitted", "under review", "accepted", "enrolled"})
 	)
-	enrolled = lifecycle == "enrolled" or enrollment_status in {"da nhap hoc", "enrolled"} or "enrolled" in application_statuses
-	counselling = lifecycle == "mql" or "tu van" in enrollment_status or "dang tu van" in enrollment_status
+	enrolled = resolution == "created" or "enrolled" in application_statuses
+	counselling = processing_status in {"processing", "assigned"}
 
 	return {
 		"gender_id": _gender_id(row.get("gender")),

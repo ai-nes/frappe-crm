@@ -35,7 +35,7 @@ def test_canonical_application_backfill_requires_one_exact_offering_and_case_key
 		"major": "M-1",
 		"branch": "HN",
 		"admission_method": "exam",
-		"enrollment_status": "NEW",
+		"resolution": "PENDING",
 	}
 	offerings = [
 		{

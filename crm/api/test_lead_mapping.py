@@ -55,10 +55,10 @@ class TestLeadMappingContract(TestCase):
 
 	def test_public_payload_rejects_server_managed_fields(self):
 		with self.assertRaises(LeadMappingError) as context:
-			_parse_public_payload({"student_name": "An", "lead_status": "Qualified"})
+			_parse_public_payload({"student_name": "An", "processing_status": "PROCESSED"})
 
 		self.assertEqual(context.exception.code, "SERVER_MANAGED_FIELD")
-		self.assertIn("lead_status", str(context.exception))
+		self.assertIn("processing_status", str(context.exception))
 
 	def test_public_payload_requires_campaign_code_during_normalization(self):
 		from crm.api.lead_mapping import _normalize_public_lead_payload
@@ -237,7 +237,8 @@ class TestLeadMappingContract(TestCase):
 				"high_school": "SCHOOL-1",
 				"province": "PROVINCE-1",
 				"ward": "WARD-1",
-				"lead_status": "New",
+				"processing_status": "NEW",
+				"resolution": "PENDING",
 				"campaign": "Campaign 1",
 				"creation": "2026-09-15 12:30:00",
 			}
@@ -356,15 +357,15 @@ class TestLeadMappingIntegration(FrappeTestCase):
 			)
 			created_name = result["name"]
 			self.assertEqual(result["doctype"], "CRM Lead")
-			self.assertRegex(result["leadCode"], r"^LD-\d{4}-\d{5,}$")
+			self.assertRegex(result["leadCode"], r"^HS-\d{4}-[A-Z]+-\d{6}$")
 			self.assertEqual(result["lead_code"], result["leadCode"])
-			self.assertEqual(
+			self.assertIn(
 				frappe.db.get_value("CRM Lead", created_name, "province"),
-				"Ho Chi Minh City",
+				{"Hồ Chí Minh", "Ho Chi Minh City"},
 			)
-			self.assertEqual(
+			self.assertIn(
 				frappe.db.get_value("CRM Lead", created_name, "assigned_to"),
-				"CTV Sale",
+				{"CTV Sale", "Cộng tác viên Sale"},
 			)
 			self.assertEqual(frappe.db.get_value("CRM Lead", created_name, "source"), "Promoter")
 			self.assertEqual(

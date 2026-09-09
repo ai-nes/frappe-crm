@@ -32,8 +32,8 @@ STUDENT_FIELDS = [
 	"name",
 	"admission_year",
 	"province",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"creation",
 	"enrollment_date",
 ]
@@ -338,23 +338,15 @@ def _count_month(rows: list[dict[str, Any]], month: datetime, field: str, predic
 
 
 def _is_enrolled(row: dict[str, Any]) -> bool:
-	return "enrolled" in _fold(row.get("lifecycle_stage")) or "nhap hoc" in _fold(
-		row.get("enrollment_status")
-	)
+	return _fold(row.get("resolution")) == "created"
 
 
 def _is_qualified(row: dict[str, Any]) -> bool:
-	return any(
-		token in _fold(f"{row.get('lifecycle_stage')} {row.get('enrollment_status')}")
-		for token in ("mql", "applicant", "qualified", "du dieu kien", "tu van", "nhap hoc")
-	)
+	return _fold(row.get("processing_status")) in {"processing", "processed", "assigned"} or _is_enrolled(row)
 
 
 def _is_counselling(row: dict[str, Any]) -> bool:
-	return any(
-		token in _fold(f"{row.get('lifecycle_stage')} {row.get('enrollment_status')}")
-		for token in ("applicant", "counselling", "tu van", "nhap hoc")
-	)
+	return _fold(row.get("processing_status")) in {"processing", "assigned"} or _is_enrolled(row)
 
 
 def _capabilities(

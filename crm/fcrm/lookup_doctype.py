@@ -35,10 +35,7 @@ LOOKUP_CONSUMERS: dict[str, tuple[tuple[str, str], ...]] = {
 		("CRM Territory", "region"),
 		("CRM Planning Scope", "region"),
 	),
-	"CRM Enrollment Status": (
-		("CRM Student", "enrollment_status"),
-		("CRM Lead", "enrollment_status"),
-	),
+	"CRM Enrollment Status": (),
 	"CRM Admission Method": (
 		("CRM Admission Offering", "admission_method"),
 		("CRM Admission Application", "admission_method"),

@@ -93,7 +93,7 @@ def _load_sources(admission_year: str):
 		lambda: _permission_rows(
 			"CRM Lead",
 			filters={"admission_year": admission_year},
-			fields=["name", "high_school", "province", "lifecycle_stage"],
+			fields=["name", "high_school", "province", "processing_status", "resolution"],
 			order_by="name asc",
 		),
 	)

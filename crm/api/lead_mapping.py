@@ -389,7 +389,11 @@ def _resolve_campaign_code(value: Any) -> str:
 	if not code:
 		_fail("REQUIRED_FIELD", "campaign_code là bắt buộc.")
 	if not is_valid_campaign_code(code):
-		_fail("INVALID_CAMPAIGN_CODE", "campaign_code phải có dạng CAM-YYYY-NNNNN.")
+		_fail(
+			"INVALID_CAMPAIGN_CODE",
+			"campaign_code phải có dạng CMP-{CAMPUS_CODE}-{YYMMDD}-{TOKEN4} "
+			"(hoặc mã legacy CAM-YYYY-NNNNN).",
+		)
 	campaign = frappe.db.get_value("CRM Campaign", {"stable_code": code}, "name")
 	if not campaign:
 		_fail("INVALID_CAMPAIGN_CODE", f"Không tìm thấy Campaign với code: {code}.")

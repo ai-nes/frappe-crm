@@ -19,13 +19,8 @@ ON_TIME = "Đúng SLA"
 WARNING = "Sắp quá hạn"
 BREACH = "Quá SLA"
 
-# Only leads still in an "open" enrollment_status bucket need a live SLA
-# clock — reuses CRM Enrollment Status.stage_category rather than
-# re-deriving the same open/enrolled/lost split a second way.
-_OPEN_STATUS_SUBQUERY = (
-	"enrollment_status in (select name from `tabCRM Enrollment Status` "
-	"where enabled = 1 and stage_category = 'open')"
-)
+# Only students still in an active stage need a live SLA clock.
+_OPEN_STATUS_SUBQUERY = "student_stage not in ('Connected', 'Disqualified')"
 
 
 def recompute_sla_statuses():

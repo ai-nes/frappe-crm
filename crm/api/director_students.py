@@ -37,7 +37,14 @@ ASSIGNMENT_STATUSES = {
 }
 LIFECYCLE_STATUSES = {
 	stage: {"label": stage}
-	for stage in ("Lead", "MQL", "Applicant", "Enrolled", "Lost")
+	for stage in ("New", "Attempting", "Connected", "Qualified", "Disqualified")
+}
+LIFECYCLE_STATUS_ALIASES = {
+	"Lead": "New",
+	"MQL": "Attempting",
+	"Applicant": "Qualified",
+	"Enrolled": "Connected",
+	"Lost": "Disqualified",
 }
 # Keep the canonical Chatwoot type and the legacy seeded type readable while
 # older CRM Interaction rows are being migrated to the canonical vocabulary.
@@ -50,17 +57,17 @@ _SUMMARY_BLOCK_RE = re.compile(
 _DISPLAY_CODE_RE = re.compile(r"HS-(?P<year>\d{4})-HCM-(?P<sequence>\d{6})$", re.IGNORECASE)
 
 STAGES = {
-	"interested": {"label": "Quan tâm", "lifecycle": "Lead"},
-	"exploring": {"label": "Tìm hiểu", "lifecycle": "MQL"},
-	"counselling": {"label": "Tư vấn", "lifecycle": "MQL"},
-	"applying": {"label": "Ứng tuyển", "lifecycle": "Applicant"},
-	"enrolled": {"label": "Nhập học", "lifecycle": "Enrolled"},
+	"interested": {"label": "Quan tâm", "student_stage": "New"},
+	"exploring": {"label": "Tìm hiểu", "student_stage": "Attempting"},
+	"counselling": {"label": "Tư vấn", "student_stage": "Attempting"},
+	"applying": {"label": "Ứng tuyển", "student_stage": "Qualified"},
+	"enrolled": {"label": "Nhập học", "student_stage": "Connected"},
 }
-STAGE_BY_LIFECYCLE = {
-	"Lead": {"code": "interested", "label": "Quan tâm"},
-	"MQL": {"code": "counselling", "label": "Tư vấn"},
-	"Applicant": {"code": "applying", "label": "Ứng tuyển"},
-	"Enrolled": {"code": "enrolled", "label": "Nhập học"},
+STAGE_BY_STUDENT_STAGE = {
+	"New": {"code": "interested", "label": "Quan tâm"},
+	"Attempting": {"code": "counselling", "label": "Tư vấn"},
+	"Qualified": {"code": "applying", "label": "Ứng tuyển"},
+	"Connected": {"code": "enrolled", "label": "Nhập học"},
 }
 PRIORITIES = {
 	"high": {"label": "Cao", "rank": 1},
@@ -124,8 +131,6 @@ STUDENT_FIELDS = [
 	"high_school",
 	"province",
 	"major",
-	"lifecycle_stage",
-	"enrollment_status",
 	"student_stage",
 	"latest_score",
 	"assessment_status",
@@ -422,6 +427,15 @@ def _parse_query(
 	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
 	assignment_value = _first_query_value(assignmentStatus, assignment_status)
 	lifecycle_value = _first_query_value(lifecycleStatus, lifecycle_status)
+	if lifecycle_value:
+		lifecycle_value = next(
+			(
+				canonical
+				for legacy, canonical in LIFECYCLE_STATUS_ALIASES.items()
+				if _fold(str(lifecycle_value)) in {_fold(legacy), _fold(canonical)}
+			),
+			lifecycle_value,
+		)
 	province_value = _first_query_value(province, provinceId, province_id)
 	normalized_assignment_status = _normalize_optional_enum(
 		assignment_value, ASSIGNMENT_STATUSES, "assignmentStatus"
@@ -439,7 +453,7 @@ def _parse_query(
 	if (
 		normalized_stage
 		and normalized_lifecycle_status
-		and STAGES[normalized_stage]["lifecycle"] != normalized_lifecycle_status
+		and STAGES[normalized_stage]["student_stage"] != normalized_lifecycle_status
 	):
 		frappe.throw(_("stage and lifecycleStatus must refer to the same lifecycle."), frappe.ValidationError)
 
@@ -575,9 +589,9 @@ def _student_filters(
 	if province:
 		filters["province"] = province
 	if query.get("lifecycle_status"):
-		filters["lifecycle_stage"] = query["lifecycle_status"]
+		filters["student_stage"] = query["lifecycle_status"]
 	if query["stage"]:
-		filters["lifecycle_stage"] = STAGES[query["stage"]]["lifecycle"]
+		filters["student_stage"] = STAGES[query["stage"]]["student_stage"]
 		if query["stage"] == "exploring":
 			filters["assessment_status"] = ["!=", "confirmed"]
 		elif query["stage"] == "counselling":
@@ -1018,7 +1032,6 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"provinceId": row.get("province"),
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
 		"stage": stage["label"] if stage else None,
-		"lifecycleStatus": row.get("lifecycle_stage"),
 		"studentStage": _student_stage_value(row),
 		"processingStatus": row.get("processing_status"),
 		"resolution": row.get("resolution"),
@@ -1068,26 +1081,18 @@ def _student_stage_value(row) -> str | None:
 	"""Read the canonical Student stage without fabricating a default."""
 	student = canonical_student(row.get("student") or row.get("name"))
 	if student:
-		return frappe.db.get_value("CRM Student", student, "student_stage")
+		stage = frappe.db.get_value("CRM Student", student, "student_stage")
+		if stage:
+			return stage
 	return row.get("student_stage") or None
 
 
 def _stage_descriptor(row) -> dict[str, str] | None:
-	lifecycle = str(row.get("lifecycle_stage") or "").strip()
-	if lifecycle == "MQL":
+	student_stage = str(_student_stage_value(row) or "").strip()
+	if student_stage == "Attempting":
 		stage_code = "counselling" if row.get("assessment_status") == "confirmed" else "exploring"
 		return {"code": stage_code, "label": STAGES[stage_code]["label"]}
-	if lifecycle in STAGE_BY_LIFECYCLE:
-		return STAGE_BY_LIFECYCLE[lifecycle]
-	status = str(row.get("enrollment_status") or "").strip()
-	status_map = {
-		"NEW": STAGE_BY_LIFECYCLE["Lead"],
-		"PROSPECT": STAGE_BY_LIFECYCLE["MQL"],
-		"CONFIRMED": STAGE_BY_LIFECYCLE["Applicant"],
-		"ENROLLED": STAGE_BY_LIFECYCLE["Enrolled"],
-		"CONVERTED": STAGE_BY_LIFECYCLE["Enrolled"],
-	}
-	return status_map.get(status)
+	return STAGE_BY_STUDENT_STAGE.get(student_stage)
 
 
 def _priority_descriptor(action) -> dict[str, Any] | None:

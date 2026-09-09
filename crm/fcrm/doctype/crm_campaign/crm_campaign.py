@@ -3,8 +3,9 @@ from frappe import _
 from frappe.model.document import Document
 
 from crm.fcrm.campaign_code import (
-	campaign_code_year,
+	campaign_code_date,
 	next_campaign_code,
+	normalize_campus_code,
 )
 
 
@@ -30,14 +31,20 @@ class CRMCampaign(Document):
 	def _ensure_campaign_code(self):
 		if self.get("stable_code"):
 			return
-		year = campaign_code_year(
-			self.get("start_date"),
-			self.get("creation"),
-			frappe.utils.now_datetime().year,
-		)
-		code = next_campaign_code(year)
+		campus_code = frappe.db.get_value("CRM Campus", self.get("campus"), "campus_code")
+		if not campus_code:
+			frappe.throw(
+				_("Campus Code is required before creating a Campaign."),
+				frappe.ValidationError,
+			)
+		try:
+			normalized_campus_code = normalize_campus_code(campus_code)
+		except ValueError as error:
+			frappe.throw(_(str(error)), frappe.ValidationError)
+		code_date = campaign_code_date(self.get("creation"), frappe.utils.now_datetime())
+		code = next_campaign_code(normalized_campus_code, code_date)
 		while frappe.db.exists("CRM Campaign", {"stable_code": code, "name": ["!=", self.name]}):
-			code = next_campaign_code(year)
+			code = next_campaign_code(normalized_campus_code, code_date)
 		self.stable_code = code
 
 	@staticmethod

@@ -6,7 +6,6 @@ import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.ai_insight import AIInsightError, ReadBackVerificationError, upsert_ai_insight
-from crm.services.student_context import bump_student_context_revision
 
 
 class TestAIInsightAPI(FrappeTestCase):
@@ -47,7 +46,7 @@ class TestAIInsightAPI(FrappeTestCase):
 				"student_name": f"_Test AI Insight {suffix}",
 				"phone": "0981123456",
 				"email": f"ai-insight-{suffix.lower()}@example.com",
-				"enrollment_status": "PROSPECT",
+				"processing_status": "NEW",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -63,7 +62,7 @@ class TestAIInsightAPI(FrappeTestCase):
 				"full_name": f"_Test AI Insight Contact {suffix}",
 				"phone": "0981123457",
 				"student": student.name,
-				"enrollment_status": "PROSPECT",
+				"student_stage": "New",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "contact_migration_service", False)
@@ -139,7 +138,9 @@ class TestAIInsightAPI(FrappeTestCase):
 	def test_stale_revision_is_a_settled_non_write(self):
 		student, _contact = self._make_pair("Stale")
 		baseline = int(student.get("student_context_revision") or 0)
-		bump_student_context_revision(student.name, "test_ai_insight_stale", enqueue=False)
+		frappe.db.set_value(
+			"CRM Lead", student.name, "student_context_revision", baseline + 1, update_modified=False
+		)
 
 		result = upsert_ai_insight(**self._payload(student, key="stale-generation", expected_context_revision=baseline))
 

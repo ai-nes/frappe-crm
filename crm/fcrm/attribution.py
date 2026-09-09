@@ -45,8 +45,28 @@ def _sort_key(touchpoint):
 
 def _touchpoints_for_student(student):
 	"""Raw Student evidence, chronologically ordered and including corrections."""
-	campaign_rows = frappe.db.get_all("CRM Marketing Engagement", filters={"student": student, "engagement_kind": "campaign_touch"}, fields=["name", "crm_campaign", "touched_at", "source", "supersedes"])
-	event_rows = frappe.db.get_all("CRM Marketing Engagement", filters={"student": student, "engagement_kind": "event_participation"}, fields=["name", "crm_event", "registered_at", "status", "supersedes"])
+	student_ids = [student]
+	lead_ids = set()
+	if frappe.db.exists("CRM Lead", student):
+		lead_ids.add(student)
+	if frappe.db.exists("CRM Student", student):
+		linked = frappe.db.get_value("CRM Student", student, ["source_lead", "student"], as_dict=True) or {}
+		lead_ids.update(value for value in (linked.get("source_lead"), linked.get("student")) if value)
+	for lead_id in lead_ids:
+		student_ids.extend(
+			frappe.db.get_all(
+				"CRM Student",
+				filters={},
+				pluck="name",
+				or_filters=[["source_lead", "=", lead_id], ["student", "=", lead_id]],
+				limit_page_length=0,
+			)
+		)
+		student_ids.append(lead_id)
+	student_ids = list(dict.fromkeys(student_ids))
+	filters = {"student": ["in", student_ids]}
+	campaign_rows = frappe.db.get_all("CRM Marketing Engagement", filters={**filters, "engagement_kind": "campaign_touch"}, fields=["name", "crm_campaign", "touched_at", "source", "supersedes"])
+	event_rows = frappe.db.get_all("CRM Marketing Engagement", filters={**filters, "engagement_kind": "event_participation"}, fields=["name", "crm_event", "registered_at", "status", "supersedes"])
 	campaign_superseded = _superseded_names("CRM Marketing Engagement", campaign_rows)
 	event_superseded = _superseded_names("CRM Marketing Engagement", event_rows)
 	event_campaigns = _event_campaigns(row.crm_event for row in event_rows)
@@ -81,7 +101,7 @@ def _touchpoints_for_student(student):
 
 def get_student_touchpoints(student):
 	"""All Student evidence, oldest first; unresolved Event campaigns are kept."""
-	if not frappe.db.exists("CRM Student", student):
+	if not frappe.db.exists("CRM Student", student) and not frappe.db.exists("CRM Lead", student):
 		frappe.throw(f"CRM Student {student} does not exist")
 	return _touchpoints_for_student(student)
 
@@ -191,9 +211,15 @@ def get_campaign_progression_rollups():
 	for student, campaign in get_last_touch_campaign_by_student().items():
 		students_by_campaign[campaign].add(student)
 	all_students = {student for values in students_by_campaign.values() for student in values}
+	from crm.fcrm.student_stage import lifecycle_label_for_stage
+
 	stages = {
-		row.name: (row.lifecycle_stage or row.enrollment_status or "Lead")
-		for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(all_students) or ["__none__"]]}, fields=["name", "lifecycle_stage", "enrollment_status"])
+		row.name: lifecycle_label_for_stage(row.student_stage) or "Lead"
+		for row in frappe.db.get_all(
+			"CRM Student",
+			filters={"name": ["in", list(all_students) or ["__none__"]]},
+			fields=["name", "student_stage"],
+		)
 	}
 	rollups = {}
 	for campaign, students in students_by_campaign.items():

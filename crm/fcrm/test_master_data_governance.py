@@ -313,7 +313,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 			"doctype": "CRM Student",
 			"full_name": name,
 			"phone": phone,
-			"enrollment_status": "PROSPECT",
+			"student_stage": "New",
 		}
 		if platform:
 			payload["platform"] = platform

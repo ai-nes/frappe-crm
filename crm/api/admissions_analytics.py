@@ -47,9 +47,9 @@ def get_pipeline_summary() -> dict:
 	if staff_campus:
 		student_filters["branch"] = staff_campus
 	students = frappe.get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters=student_filters,
-		fields=["name", "enrollment_status", "source", "branch"],
+		fields=["name", "student_stage", "source", "branch"],
 		limit_page_length=500,
 		order_by="name asc",
 	)
@@ -57,7 +57,7 @@ def get_pipeline_summary() -> dict:
 	if not student_ids:
 		return {
 			"cohort": "CRM-SCOPED", "total_students": 0,
-			"by_enrollment_status": {}, "by_source": {}, "by_campus": {},
+			"by_student_stage": {}, "by_source": {}, "by_campus": {},
 			"intent_count": 0, "interaction_count": 0,
 			"unresolved_interactions": 0, "active_actions": 0,
 			"actions_by_state": {},
@@ -83,7 +83,7 @@ def get_pipeline_summary() -> dict:
 	return {
 		"cohort": "CRM-SCOPED",
 		"total_students": len(students),
-		"by_enrollment_status": _count([row.enrollment_status for row in students]),
+		"by_student_stage": _count([row.student_stage for row in students]),
 		"by_source": _count([row.source for row in students]),
 		"by_campus": _count([row.branch for row in students]),
 		"intent_count": len(intents),

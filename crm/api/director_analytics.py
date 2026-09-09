@@ -95,6 +95,13 @@ DIRECTOR_ROUTE_READINESS = {
 	for menu_id, route in _ROUTES.items()
 }
 _PRIVACY_MINIMUM = 5
+_STAGE_ALIASES = {
+	"Lead": "New",
+	"MQL": "Attempting",
+	"Applicant": "Qualified",
+	"Enrolled": "Connected",
+	"Lost": "Disqualified",
+}
 
 # Multi-source readers remain partial until the storage layer supports an
 # immutable as-of query.  These fields are immutable opening attribution.
@@ -173,9 +180,13 @@ def _source_available(doctype):
 
 def _student_filters(policy, filters):
 	result = {"branch": ["in", list(policy.campuses)]}
-	for source, target in (("program", "major"), ("team", "owning_team"), ("lifecycle", "lifecycle_stage")):
+	for source, target in (("program", "major"), ("team", "owning_team"), ("lifecycle", "student_stage")):
 		if filters.get(source):
-			result[target] = ["in", filters[source]] if source == "lifecycle" and isinstance(filters[source], list) else filters[source]
+			if source == "lifecycle":
+				values = filters[source] if isinstance(filters[source], list) else [filters[source]]
+				result[target] = ["in", [_STAGE_ALIASES.get(value, value) for value in values]]
+			else:
+				result[target] = filters[source]
 	return result
 
 
@@ -201,16 +212,16 @@ def _ready_response(kind, snapshot, workspace, view, filters, *, kpis=None, seri
 def _student_kpis(policy, filters):
 	student_filters = _student_filters(policy, filters)
 	total = frappe.db.count("CRM Student", filters=student_filters)
-	stages = frappe.db.get_all("CRM Student", filters=student_filters, fields=["lifecycle_stage", "count(name) as value"], group_by="lifecycle_stage")
+	stages = frappe.db.get_all("CRM Student", filters=student_filters, fields=["student_stage", "count(name) as value"], group_by="student_stage")
 	child_suppressed = any(row.value < _PRIVACY_MINIMUM for row in stages)
 	visible_total = total if total >= _PRIVACY_MINIMUM and not child_suppressed else None
 	return [
 		{"metricId": "students.total", "definitionId": "students.total", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Students", "value": visible_total, "unit": "count", "nullReason": None if visible_total is not None else "privacy_suppressed"},
-		{"metricId": "students.enrolled", "definitionId": "students.enrolled", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Enrolled", "value": next((row.value for row in stages if row.lifecycle_stage == "Enrolled"), 0) if visible_total is not None else None, "unit": "count", "nullReason": None if visible_total is not None else "privacy_suppressed"},
+		{"metricId": "students.enrolled", "definitionId": "students.enrolled", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Enrolled", "value": next((row.value for row in stages if row.student_stage == "Connected"), 0) if visible_total is not None else None, "unit": "count", "nullReason": None if visible_total is not None else "privacy_suppressed"},
 	], stages
 
 
-def _student_series(policy, filters, dimension="lifecycle_stage"):
+def _student_series(policy, filters, dimension="student_stage"):
 	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=[f"{dimension} as label", "count(name) as value"], group_by=dimension, order_by=f"{dimension} asc")
 	points = [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows]
 	return [{"metricId": "students.count", "definitionId": "students.count", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "points": points, "unit": "count"}]
@@ -256,7 +267,7 @@ def _sla_projection(policy, filters, dimension):
 def _forecast_series(policy, filters):
 	# Current Frappe projections do not retain an immutable eligible-cohort
 	# denominator.  Return lifecycle evidence, but withhold every forecast.
-	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=["lifecycle_stage as label", "count(name) as value"], group_by="lifecycle_stage")
+	rows = frappe.db.get_all("CRM Student", filters=_student_filters(policy, filters), fields=["student_stage as label", "count(name) as value"], group_by="student_stage")
 	return [{"metricId": "funnel.current_state", "definitionId": "funnel.current_state", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Phân bổ hồ sơ hiện tại", "grain": "state_as_of", "points": [{"label": row.label or "Unspecified", "value": row.value if row.value >= _PRIVACY_MINIMUM else None, "suppressed": row.value < _PRIVACY_MINIMUM} for row in rows], "forecast": {"status": "insufficient_forecast_data", "horizonDays": 90, "methodVersion": "cohort-backtest-v1", "reason": "Lifecycle events do not yet prove six completed eligible cohorts and three rolling backtests."}}]
 
 
@@ -321,14 +332,14 @@ def get_series(policy, workspace, view, filters, snapshot):
 			return _unavailable_for("series", snapshot, workspace, view, filters, reason)
 		return _ready_response("series", snapshot, workspace, view, filters, series=[{"metricId": "reference.quota", "definitionId": "reference.quota", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Chỉ tiêu theo chi nhánh và ngành", "unit": "count", "points": [{"label": f"{row['campus']} · {row['major']}", "value": row.get("quota"), "suppressed": False} for row in rows if row.get("line_kind") == "quota"]}])
 	if workspace == "director-overview":
-		dimension = "branch" if view == "campus" else "major" if view == "program" else "lifecycle_stage"
+		dimension = "branch" if view == "campus" else "major" if view == "program" else "student_stage"
 		return _ready_response("series", snapshot, workspace, view, filters, series=_student_series(policy, filters, dimension))
 	if workspace == "director-people" and view in {"team-performance", "workload"}:
 		return _ready_response("series", snapshot, workspace, view, filters, series=_student_series(policy, filters, "owning_team"))
 	return _response("series", snapshot, workspace, view, filters)
 
 
-_STUDENT_ROW_FIELDS = ["name", "full_name as student_name", "branch", "major", "lifecycle_stage", "owner_staff", "owning_team", "modified"]
+_STUDENT_ROW_FIELDS = ["name", "full_name as student_name", "branch", "major", "student_stage", "owner_staff", "owning_team", "modified"]
 
 
 def get_rows(policy, workspace, view, filters, snapshot, cursor=None):

@@ -39,7 +39,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"province": "can-tho",
 				"owner_id": None,
 				"assignment_status": "assigned",
-				"lifecycle_status": "MQL",
+			"lifecycle_status": "Attempting",
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -70,7 +70,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"high_school": "HS-1",
 				"province": "P-1",
 				"major": "M-1",
-				"lifecycle_stage": "MQL",
+				"student_stage": "Attempting",
 				"assessment_status": "confirmed",
 				"latest_score": 82,
 				"owner_staff": "STAFF-1",
@@ -108,7 +108,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(item["major"], "Trí tuệ nhân tạo")
 		self.assertEqual(item["stage"], "Tư vấn")
 		self.assertEqual(item["provinceId"], "P-1")
-		self.assertEqual(item["lifecycleStatus"], "MQL")
+		self.assertEqual(item["studentStage"], "Attempting")
 		self.assertEqual(item["assignmentStatus"], "assigned")
 		self.assertEqual(item["stageCode"], "counselling")
 		self.assertEqual(item["score"], 82)
@@ -179,7 +179,7 @@ class TestDirectorStudents(FrappeTestCase):
 			{
 				"stage": "Tư vấn",
 				"assignmentStatus": "assigned",
-				"lifecycleStatus": "MQL",
+				"lifecycleStatus": "Attempting",
 				"province": "Cần Thơ",
 			},
 		)
@@ -195,7 +195,7 @@ class TestDirectorStudents(FrappeTestCase):
 		filters, or_filters = director_students._student_filters(query, "PROVINCE-01")
 
 		self.assertEqual(filters["owner_staff"], ["is", "set"])
-		self.assertEqual(filters["lifecycle_stage"], "Applicant")
+		self.assertEqual(filters["student_stage"], "Qualified")
 		self.assertEqual(filters["province"], "PROVINCE-01")
 		self.assertEqual(or_filters, [])
 
@@ -232,7 +232,7 @@ class TestDirectorStudents(FrappeTestCase):
 		exploring_filters, _ = director_students._student_filters(exploring, None)
 		counselling_filters, _ = director_students._student_filters(counselling, None)
 
-		self.assertEqual(exploring_filters["lifecycle_stage"], "MQL")
+		self.assertEqual(exploring_filters["student_stage"], "Attempting")
 		self.assertEqual(exploring_filters["assessment_status"], ["!=", "confirmed"])
 		self.assertEqual(counselling_filters["assessment_status"], "confirmed")
 
@@ -247,7 +247,7 @@ class TestDirectorStudents(FrappeTestCase):
 			date_of_birth="2007-07-20",
 			gender="Nữ",
 			admission_year="2026",
-			lifecycle_stage="MQL",
+			student_stage="Attempting",
 			assessment_status="confirmed",
 		)
 		item = {

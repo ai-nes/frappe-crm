@@ -218,8 +218,10 @@ def _metrics(rows):
 	metrics = {"students": len(students), "lead": 0, "mql": 0, "applicant": 0, "enrolled": 0, "lost": 0}
 	if not students:
 		return metrics
-	for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(students)]}, fields=["enrollment_status"]):
-		status = (row.enrollment_status or "").lower()
+	from crm.fcrm.student_stage import lifecycle_label_for_stage
+
+	for row in frappe.db.get_all("CRM Student", filters={"name": ["in", list(students)]}, fields=["student_stage"]):
+		status = (lifecycle_label_for_stage(row.student_stage) or "Lead").lower()
 		if "mql" in status:
 			metrics["mql"] += 1
 		elif "applicant" in status or "hồ sơ" in status:

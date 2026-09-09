@@ -63,11 +63,11 @@ class TestStudentLifecycleV2API(FrappeTestCase):
 			student_lifecycle.get_lifecycle_stages(),
 			{
 				"stages": [
-					{"stage": "Lead", "label": "Lead", "order": 0, "is_terminal": False},
-					{"stage": "MQL", "label": "MQL", "order": 1, "is_terminal": False},
-					{"stage": "Applicant", "label": "Applicant", "order": 2, "is_terminal": False},
-					{"stage": "Enrolled", "label": "Enrolled", "order": 3, "is_terminal": False},
-					{"stage": "Lost", "label": "Lost", "order": 4, "is_terminal": True},
+					{"stage": "New", "label": "New", "order": 0, "is_terminal": False},
+					{"stage": "Attempting", "label": "Attempting", "order": 1, "is_terminal": False},
+					{"stage": "Connected", "label": "Connected", "order": 2, "is_terminal": False},
+					{"stage": "Qualified", "label": "Qualified", "order": 3, "is_terminal": False},
+					{"stage": "Disqualified", "label": "Disqualified", "order": 4, "is_terminal": True},
 				],
 				"policy_version": "phase5-lifecycle-v1",
 			},

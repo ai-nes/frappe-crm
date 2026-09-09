@@ -7,8 +7,8 @@ database directly.
 
 Controlled CRM vocabularies are Frappe lookup DocTypes keyed by immutable
 UPPER_SNAKE `code` values with Vietnamese `display_name` labels. `CRM Term` is
-retired; both Contact and Student use the single `enrollment_status` axis, and
-the obsolete `lead_status` field is not part of the CRM contract.
+retired. Lead intake uses `processing_status` plus `resolution`; the canonical
+Student record uses `student_stage`.
 
 The current cross-repository versions and owners are recorded in
 [`cross-repo-contract-matrix.md`](cross-repo-contract-matrix.md). Changes to

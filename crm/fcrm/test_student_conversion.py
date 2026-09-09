@@ -58,7 +58,7 @@ class TestStudentConversionCommand(unittest.TestCase):
 				"student_name": "Mapped Lead",
 				"phone": "0911111199",
 				"email": "mapped@example.com",
-				"enrollment_status": "PROSPECT",
+				"processing_status": "NEW",
 				"source": "Website",
 				"latest_score": 98,
 				"student_context_revision": 7,

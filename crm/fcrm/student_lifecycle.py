@@ -25,9 +25,16 @@ RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 POLICY_VERSION = "phase5-lifecycle-v1"
 SCHEMA_VERSION = "phase5-v1"
 SERVICE_FLAG = "student_lifecycle_service"
-ACTIVE_STAGES = ("Lead", "MQL", "Applicant", "Enrolled")
+ACTIVE_STAGES = ("New", "Attempting", "Connected", "Qualified")
 LIFECYCLE_ORDER = ACTIVE_STAGES
-LOST_STAGE = "Lost"
+LOST_STAGE = "Disqualified"
+STAGE_ALIASES = {
+	"Lead": "New",
+	"MQL": "Attempting",
+	"Applicant": "Qualified",
+	"Enrolled": "Connected",
+	"Lost": "Disqualified",
+}
 FORWARD_EDGES = {stage: ACTIVE_STAGES[index + 1] for index, stage in enumerate(ACTIVE_STAGES[:-1])}
 
 
@@ -79,11 +86,11 @@ def get_lifecycle_stages() -> dict[str, Any]:
 
 
 def validate_transition(current_stage: str, target_stage: str, *, reason: str | None = None, evidence: Any = None, outcome_code: str | None = None, capabilities: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
-	current = (current_stage or "Lead").strip()
-	target = (target_stage or "").strip()
+	current = STAGE_ALIASES.get((current_stage or "New").strip(), (current_stage or "New").strip())
+	target = STAGE_ALIASES.get((target_stage or "").strip(), (target_stage or "").strip())
 	if target == "Reopen":
 		if current != LOST_STAGE:
-			_fail("INVALID_EDGE", "Reopen is only valid for a Lost Student.")
+			_fail("INVALID_EDGE", "Reopen is only valid for a Disqualified Student.")
 		if "lifecycle.reopen" not in capabilities:
 			_fail("FORBIDDEN", "You are not permitted to reopen this Student.")
 		if not str(reason or "").strip():
@@ -91,7 +98,7 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 		return {"from_stage": current, "to_stage": None, "transition_kind": "reopen", "reason": str(reason).strip(), "evidence": []}
 	if target == LOST_STAGE:
 		if current not in ACTIVE_STAGES:
-			_fail("INVALID_EDGE", "Lost can only be entered from an active lifecycle stage.")
+			_fail("INVALID_EDGE", "Disqualified can only be entered from an active Student stage.")
 		if "lifecycle.lost" not in capabilities:
 			_fail("FORBIDDEN", "You are not permitted to mark a Student Lost.")
 		if not str(reason or "").strip():
@@ -109,7 +116,7 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 		validated = validate_qualification_evidence(target, outcome_code, evidence, policy_version=QUALIFICATION_POLICY_VERSION)
 	except QualificationValidationError as exc:
 		_fail("INVALID_EVIDENCE", str(exc))
-	if target in {"MQL", "Applicant", "Enrolled"} and outcome_code in MEANINGFUL_OUTCOMES:
+	if target in {"Attempting", "Connected", "Qualified"} and outcome_code in MEANINGFUL_OUTCOMES:
 		if not any(
 			item["category"] == "outcome" and item["doctype"] == "CRM Student Outcome"
 			for item in normalize_evidence(evidence)
@@ -134,7 +141,7 @@ def _capabilities(actor: str):
 
 
 def _student(name: str):
-	student = frappe.get_doc("CRM Lead", name)
+	student = frappe.get_doc("CRM Student", name)
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
@@ -170,7 +177,7 @@ def _verify_evidence(student: str, references: list[dict[str, str]], *, outcome_
 
 
 def _stage(student) -> str:
-	return student.get("lifecycle_stage") or "Lead"
+	return student.get("student_stage") or "New"
 
 
 def _revision(student) -> int:
@@ -241,18 +248,9 @@ def _finish(receipt, result):
 		receipt.db_set("retention_until", technical_retention_until("receipt"), update_modified=False)
 
 
-def _status_for_stage(stage: str) -> str | None:
-	return frappe.db.get_value(
-		"CRM Enrollment Status",
-		{"lifecycle_stage": stage, "enabled": 1},
-		"name",
-		order_by="stage_order asc",
-	)
-
-
 def _lock(name: str):
 	try:
-		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -330,11 +328,8 @@ def request_transition(
 			}
 		).insert(ignore_permissions=True)
 		new_revision = revision + 1
-		updates = {"lifecycle_stage": transition["to_stage"], "lifecycle_revision": new_revision}
-		status = _status_for_stage(transition["to_stage"])
-		if status:
-			updates["enrollment_status"] = status
-		frappe.db.set_value("CRM Lead", student, updates, update_modified=False)
+		updates = {"student_stage": transition["to_stage"], "lifecycle_revision": new_revision}
+		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
 		from crm.services.admission_event_policy import admit_lifecycle_transition
 		from crm.services.student_context import bump_student_context_revision
 		context_change = bump_student_context_revision(

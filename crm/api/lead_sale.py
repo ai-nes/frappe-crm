@@ -69,7 +69,8 @@ ASSIGNMENT_STUDENT_FIELDS = [
 	"latest_score",
 	"ownership_revision",
 	"admission_year",
-	"lifecycle_stage",
+	"processing_status",
+	"resolution",
 ]
 ASSIGNMENT_WORKFLOW_CONNECTIONS = (
 	{"source": "input", "target": "validation", "label": None},
@@ -128,8 +129,8 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 STUDENT_FIELDS = [
 	"name",
 	"student_name",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"admission_year",
 	"owner_staff",
 	"assigned_to",
@@ -351,7 +352,7 @@ def _load_students(admission_year: str, warnings: list[str]) -> list[dict[str, A
 		dict(row)
 		for row in _get_list(
 			"CRM Lead",
-			filters={"admission_year": admission_year, "lifecycle_stage": ["!=", "Lost"]},
+			filters={"admission_year": admission_year, "processing_status": ["!=", "CLOSED"]},
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,
 			warnings=warnings,
@@ -779,7 +780,7 @@ def _assignment_load_students(
 		if not frappe.db.table_exists("CRM Lead"):
 			warnings.append("students.source_unavailable")
 			return []
-		filters = {"lifecycle_stage": ["!=", "Lost"]}
+		filters = {"processing_status": ["!=", "CLOSED"]}
 		if admission_year:
 			filters["admission_year"] = admission_year
 		return [

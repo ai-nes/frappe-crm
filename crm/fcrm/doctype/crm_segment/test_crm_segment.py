@@ -1,7 +1,6 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-from typing import ClassVar
 from unittest.mock import patch
 
 import frappe
@@ -14,40 +13,53 @@ from crm.api.segment import (
 	preview_segment,
 	validate_segment_filters,
 )
+from crm.api.student_classification import create_need, create_tag, transition_need, transition_tag
 from crm.api.student_segment import transition_segment
 
 
 class TestCRMSegment(FrappeTestCase):
-	# CRMContact._derive_lifecycle_stage() always recomputes lifecycle_stage from
-	# enrollment_status on save, discarding a directly-assigned value — so
-	# _make_contact's convenience "lifecycle_stage" kwarg maps through this table
-	# to the enrollment status this site's seed data maps to that stage.
-	LIFECYCLE_STAGE_ENROLLMENT_STATUS: ClassVar[dict] = {
-		"Lead": "NEW",
-		"MQL": "PROSPECT",
-		"Applicant": "CONFIRMED",
-		"Enrolled": "ENROLLED",
-		"Lost": "REFUSED",
-	}
-
 	def setUp(self):
 		frappe.set_user("Administrator")
-		# Real imported CRM Students overwhelmingly sit at lifecycle_stage="Lead"
-		# (see docs/CRM Student.csv import), so any test matching on "Lead" must
-		# scope to this dedicated campus to avoid matching thousands of them.
 		self.test_branch = self._make_campus("_Test Segment Setup Campus")
+		self.segment_need = self._make_term("need")
+		self.segment_tag = self._make_term("tag")
 		self.contacts = []
 		self.contacts.append(
-			self._make_contact("A", lifecycle_stage="Lead", is_opted_out=0, branch=self.test_branch)
+			self._make_contact(
+				"A",
+				potential="HIGH",
+				intent="HIGH",
+				branch=self.test_branch,
+				needs=[{"need": self.segment_need}],
+				tags=[{"tag": self.segment_tag}],
+			)
 		)
 		self.contacts.append(
-			self._make_contact("B", lifecycle_stage="MQL", is_opted_out=0, branch=self.test_branch)
+			self._make_contact(
+				"B",
+				potential="MEDIUM",
+				intent="MEDIUM",
+				branch=self.test_branch,
+				needs=[{"need": self.segment_need}],
+			)
 		)
 		self.contacts.append(
-			self._make_contact("C", lifecycle_stage="Applicant", is_opted_out=1, branch=self.test_branch)
+			self._make_contact(
+				"C",
+				potential="LOW",
+				intent="HIGH",
+				branch=self.test_branch,
+				needs=[{"need": self.segment_need}],
+			)
 		)
 		self.contacts.append(
-			self._make_contact("D", lifecycle_stage="Lost", is_opted_out=1, branch=self.test_branch)
+			self._make_contact(
+				"D",
+				potential="LOW",
+				intent="LOW",
+				branch=self.test_branch,
+				needs=[{"need": self.segment_need}],
+			)
 		)
 
 	def tearDown(self):
@@ -77,15 +89,28 @@ class TestCRMSegment(FrappeTestCase):
 		# the test connection's just-committed batch and make teardown flaky.
 		frappe.db.delete("CRM Lead", {"student_name": ["like", "_Test Segment%"]})
 		frappe.db.commit()
-		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
+		test_students = frappe.db.get_all(
+			"CRM Student", filters={"full_name": ["like", "_Test%"]}, pluck="name"
+		)
+		if test_students:
+			for doctype in ("CRM Student Need Assignment", "CRM Student Tag Assignment"):
+				frappe.db.delete(doctype, {"parent": ["in", test_students]})
+		for name in test_students:
 			frappe.delete_doc("CRM Student", name, force=True)
+		for doctype in ("CRM Need", "CRM Tag"):
+			for name in frappe.db.get_all(
+				doctype, filters={"code": ["like", "TEST_SEGMENT_%"]}, pluck="name"
+			):
+				frappe.db.delete(doctype, {"name": name})
 		for name in frappe.db.get_all("User", filters={"first_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("User", name, force=True)
 
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-SEGMENT"}
+		)
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
@@ -99,6 +124,21 @@ class TestCRMSegment(FrappeTestCase):
 		doc = frappe.get_doc({"doctype": "CRM Campaign", "title": title, "campus": campus})
 		doc.insert(ignore_permissions=True)
 		return doc.name
+
+	def _make_term(self, kind):
+		create = create_need if kind == "need" else create_tag
+		transition = transition_need if kind == "need" else transition_tag
+		term = create(
+			{
+				"code": f"TEST_SEGMENT_{kind.upper()}_{frappe.generate_hash(length=8).upper()}",
+				"label": f"Test Segment {kind}",
+				"group_name": "Test Segment",
+			}
+		)
+		return transition(term["name"], "active", term["revision"])["name"]
+
+	def _scope_condition(self, term=None):
+		return {"field": "need", "operator": "in", "value": [term or self.segment_need]}
 
 	def _make_user(self, prefix, roles=("Lead Sale",)):
 		email = f"{frappe.scrub(prefix)}@example.com"
@@ -128,9 +168,6 @@ class TestCRMSegment(FrappeTestCase):
 			kwargs["student"] = self._make_student(
 				suffix, f"09{str(40000000 + TestCRMSegment._next_test_phone).zfill(8)}"
 			)
-		lifecycle_stage = kwargs.pop("lifecycle_stage", None)
-		if lifecycle_stage:
-			kwargs["enrollment_status"] = self.LIFECYCLE_STAGE_ENROLLMENT_STATUS[lifecycle_stage]
 		doc = frappe.get_doc(
 			{
 				"doctype": "CRM Student",
@@ -151,7 +188,7 @@ class TestCRMSegment(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": student_name,
 				"phone": phone,
-				"enrollment_status": "PROSPECT",
+				"processing_status": "PROCESSING",
 			}
 		)
 		previous_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -183,13 +220,17 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
+					],
 				},
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Applicant"},
-						{"field": "is_opted_out", "operator": "=", "value": 1},
+						{"field": "potential", "operator": "=", "value": "LOW"},
+						{"field": "intent", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
 					],
 				},
 			]
@@ -200,7 +241,7 @@ class TestCRMSegment(FrappeTestCase):
 			frappe.get_list(
 				"CRM Student",
 				filters=[["name", "in", self.contacts]],
-				or_filters=[["lifecycle_stage", "=", "Lead"]],
+				or_filters=[["potential", "=", "HIGH"]],
 				pluck="name",
 			)
 		) | set(
@@ -208,8 +249,8 @@ class TestCRMSegment(FrappeTestCase):
 				"CRM Student",
 				filters=[
 					["name", "in", self.contacts],
-					["lifecycle_stage", "=", "Applicant"],
-					["is_opted_out", "=", 1],
+					["potential", "=", "LOW"],
+					["intent", "=", "HIGH"],
 				],
 				pluck="name",
 			)
@@ -268,7 +309,7 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_group_cap_enforced(self):
 		groups = [
-			{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 0}]}
+			{"logic": "AND", "conditions": [{"field": "potential", "operator": "=", "value": "HIGH"}]}
 			for _ in range(11)
 		]
 		with self.assertRaises(frappe.ValidationError):
@@ -281,7 +322,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "MEDIUM"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}
@@ -290,6 +334,19 @@ class TestCRMSegment(FrappeTestCase):
 		self.assertIn(self.contacts[1], matches)
 		self.assertNotIn(self.contacts[0], matches)
 
+	def test_tag_filter_matches_tag_assignments(self):
+		filters = {
+			"groups": [
+				{
+					"logic": "AND",
+					"conditions": [{"field": "tag", "operator": "in", "value": [self.segment_tag]}],
+				}
+			]
+		}
+		matches = get_matching_contact_names(filters)
+		self.assertIn(self.contacts[0], matches)
+		self.assertNotIn(self.contacts[1], matches)
+
 	# ------------------------------------------------------------ Phase 2: preview API + permissions
 
 	def test_preview_draft_filters_matches_saved_segment(self):
@@ -297,7 +354,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "MEDIUM"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}
@@ -326,8 +386,27 @@ class TestCRMSegment(FrappeTestCase):
 	def test_preview_pagination(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 0}]},
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 1}]},
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
+					],
+				},
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "MEDIUM"},
+						self._scope_condition(),
+					],
+				},
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "LOW"},
+						self._scope_condition(),
+					],
+				},
 			]
 		}
 		result = preview_segment(filters=filters, start=0, page_length=2)
@@ -343,8 +422,8 @@ class TestCRMSegment(FrappeTestCase):
 					{
 						"logic": "AND",
 						"conditions": [
-							{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-							{"field": "branch", "operator": "=", "value": self.test_branch},
+							{"field": "potential", "operator": "=", "value": "HIGH"},
+							self._scope_condition(),
 						],
 					}
 				]
@@ -368,7 +447,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}
@@ -394,8 +476,8 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": self.test_branch},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
 					],
 				}
 			]
@@ -423,8 +505,8 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": self.test_branch},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
 					],
 				}
 			]
@@ -451,7 +533,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "MQL"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "MEDIUM"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}
@@ -472,8 +557,8 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": self.test_branch},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
 					],
 				}
 			]
@@ -492,7 +577,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lost"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "LOW"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}
@@ -526,8 +614,8 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": self.test_branch},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
 					],
 				}
 			]
@@ -541,14 +629,17 @@ class TestCRMSegment(FrappeTestCase):
 	def test_delete_segment_with_touchpoints_is_blocked(self):
 		campus = self._make_campus("_Test Segment DeleteBlock Campus")
 		campaign = self._make_campaign("_Test Segment DeleteBlock Campaign", campus)
-		self._make_contact("DeleteBlock", lifecycle_stage="Lead", is_opted_out=0, branch=campus)
+		delete_need = self._make_term("need")
+		self._make_contact(
+			"DeleteBlock", potential="HIGH", intent="HIGH", branch=campus, needs=[{"need": delete_need}]
+		)
 		filters = {
 			"groups": [
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": campus},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(delete_need),
 					],
 				}
 			]
@@ -567,12 +658,18 @@ class TestCRMSegment(FrappeTestCase):
 		boundary between batches."""
 		campus = self._make_campus("_Test Segment Batch Campus")
 		campaign = self._make_campaign("_Test Segment Batch Campaign", campus)
+		batch_need = self._make_term("need")
 		extra_contacts = []
 		for i in range(6):
 			student = self._make_student(f"Batch{i}", f"09{str(20000000 + i).zfill(8)}")
 			extra_contacts.append(
 				self._make_contact(
-					f"Batch{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus, student=student
+					f"Batch{i}",
+					potential="HIGH",
+					intent="HIGH",
+					branch=campus,
+					student=student,
+					needs=[{"need": batch_need}],
 				)
 			)
 		filters = {
@@ -580,16 +677,15 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": campus},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(batch_need),
 					],
 				}
 			]
 		}
 		segment = self._make_segment("_Test Segment Batch", filters)
 		expected_matches = get_matching_contact_names(segment.filters)
-		# Scoped to this test's own campus so real/other contacts sharing
-		# lifecycle_stage="Lead" can't inflate the match count.
+		# The unique Need term scopes the query to this test's own contacts.
 		self.assertEqual(expected_matches, set(extra_contacts))
 
 		with patch.object(segment_api, "ATTACH_BATCH_SIZE", 2):
@@ -610,12 +706,18 @@ class TestCRMSegment(FrappeTestCase):
 		remaining rows without duplicating anything already committed."""
 		campus = self._make_campus("_Test Segment Fail Campus")
 		campaign = self._make_campaign("_Test Segment Fail Campaign", campus)
+		fail_need = self._make_term("need")
 		extra_contacts = []
 		for i in range(4):
 			student = self._make_student(f"Fail{i}", f"09{str(30000000 + i).zfill(8)}")
 			extra_contacts.append(
 				self._make_contact(
-					f"Fail{i}", lifecycle_stage="Lead", is_opted_out=0, branch=campus, student=student
+					f"Fail{i}",
+					potential="HIGH",
+					intent="HIGH",
+					branch=campus,
+					student=student,
+					needs=[{"need": fail_need}],
 				)
 			)
 		filters = {
@@ -623,16 +725,15 @@ class TestCRMSegment(FrappeTestCase):
 				{
 					"logic": "AND",
 					"conditions": [
-						{"field": "lifecycle_stage", "operator": "=", "value": "Lead"},
-						{"field": "branch", "operator": "=", "value": campus},
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(fail_need),
 					],
 				}
 			]
 		}
 		segment = self._make_segment("_Test Segment Fail", filters)
 		expected_matches = sorted(get_matching_contact_names(segment.filters))
-		# Scoped to this test's own campus so real/other contacts sharing
-		# lifecycle_stage="Lead" can't inflate the match count.
+		# The unique Need term scopes the query to this test's own contacts.
 		self.assertEqual(set(expected_matches), set(extra_contacts))
 		failing_contact = expected_matches[-1]
 
@@ -685,7 +786,7 @@ class TestCRMSegment(FrappeTestCase):
 	def test_condition_operator_not_allowed_for_fieldtype_rejected(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "in", "value": [0]}]}
+				{"logic": "AND", "conditions": [{"field": "potential", "operator": "is", "value": "HIGH"}]}
 			]
 		}
 		with self.assertRaises(frappe.ValidationError):
@@ -694,7 +795,7 @@ class TestCRMSegment(FrappeTestCase):
 	def test_condition_in_operator_requires_nonempty_list(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "lifecycle_stage", "operator": "in", "value": []}]}
+				{"logic": "AND", "conditions": [{"field": "potential", "operator": "in", "value": []}]}
 			]
 		}
 		with self.assertRaises(frappe.ValidationError):
@@ -703,7 +804,7 @@ class TestCRMSegment(FrappeTestCase):
 	def test_condition_check_field_rejects_non_boolean_value(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": "yes"}]}
+				{"logic": "AND", "conditions": [{"field": "potential", "operator": "=", "value": "yes"}]}
 			]
 		}
 		with self.assertRaises(frappe.ValidationError):
@@ -711,7 +812,7 @@ class TestCRMSegment(FrappeTestCase):
 
 	def test_condition_cap_enforced(self):
 		conditions = [
-			{"field": "is_opted_out", "operator": "=", "value": 0}
+			{"field": "potential", "operator": "=", "value": "HIGH"}
 			for _ in range(segment_api.MAX_CONDITIONS_PER_GROUP + 1)
 		]
 		filters = {"groups": [{"logic": "AND", "conditions": conditions}]}
@@ -724,6 +825,10 @@ class TestCRMSegment(FrappeTestCase):
 		fields = segment_api.get_segment_fields()
 		fieldnames = {f["fieldname"] for f in fields}
 		self.assertEqual(fieldnames, set(segment_api.ALLOWED_SEGMENT_FIELDS.keys()))
+		self.assertEqual(
+			fieldnames,
+			{"student_stage", "potential", "intent", "need", "tag"},
+		)
 
 	def test_preview_requires_segment_or_filters(self):
 		with self.assertRaises(frappe.ValidationError):
@@ -732,8 +837,20 @@ class TestCRMSegment(FrappeTestCase):
 	def test_preview_page_length_clamped_to_max(self):
 		filters = {
 			"groups": [
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 0}]},
-				{"logic": "AND", "conditions": [{"field": "is_opted_out", "operator": "=", "value": 1}]},
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
+					],
+				},
+				{
+					"logic": "AND",
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "LOW"},
+						self._scope_condition(),
+					],
+				},
 			]
 		}
 		result = preview_segment(filters=filters, page_length=segment_api.MAX_PREVIEW_PAGE_LENGTH + 50)
@@ -748,7 +865,10 @@ class TestCRMSegment(FrappeTestCase):
 			"groups": [
 				{
 					"logic": "AND",
-					"conditions": [{"field": "lifecycle_stage", "operator": "=", "value": "Lead"}],
+					"conditions": [
+						{"field": "potential", "operator": "=", "value": "HIGH"},
+						self._scope_condition(),
+					],
 				}
 			]
 		}

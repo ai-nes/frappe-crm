@@ -164,7 +164,7 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 		self.assertEqual(
 			count.call_args_list,
 			[
-				(("CRM Lead", {"lifecycle_stage": ["not in", ["Lost"]]}),),
+				(("CRM Lead", {"processing_status": ["!=", "CLOSED"]}),),
 				(("CRM Lead", {"owner_staff": ["is", "not set"]}),),
 				(
 					("CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}),

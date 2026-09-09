@@ -77,14 +77,15 @@ STATUS_TO_STAGE = {
 	"sai so": "lost",
 	"sai doi tuong": "lost",
 	"tu choi": "lost",
-	# CRM Enrollment Status codes (post CRM Term cutover) -- enrollment_status
-	# now stores the UPPER_SNAKE code, not the Vietnamese display label above.
 	"new": "prospect",
-	"prospect": "qualified",
-	"confirmed": "application",
-	"enrolled": "enrolled",
-	"converted": "enrolled",
-	"refused": "lost",
+	"processing": "counselling",
+	"processed": "qualified",
+	"assigned": "counselling",
+	"created": "enrolled",
+	"invalid": "lost",
+	"duplicate": "lost",
+	"spam": "lost",
+	"failed": "lost",
 }
 APPLICATION_TO_STAGE = {
 	"submitted": "application",
@@ -104,8 +105,8 @@ LIFECYCLE_EVENT_TO_STAGE = {
 STUDENT_FIELDS = [
 	"name",
 	"admission_year",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"branch",
 	"province",
 	"ward",
@@ -560,16 +561,13 @@ def _build_records(
 			stage_times["prospect"].append(created_at)
 
 		stages: set[str] = set()
-		status_stage = STATUS_TO_STAGE.get(_fold(row.get("enrollment_status")))
-		lifecycle_stage = LIFECYCLE_TO_STAGE.get(_fold(row.get("lifecycle_stage")))
+		status_stage = STATUS_TO_STAGE.get(_fold(row.get("processing_status")))
+		if _fold(row.get("resolution")) == "created":
+			status_stage = "enrolled"
 		if status_stage == "lost":
 			status_stage = None
-		if lifecycle_stage == "lost":
-			lifecycle_stage = None
 		if status_stage:
 			stages.add(status_stage)
-		if lifecycle_stage:
-			stages.add(lifecycle_stage)
 
 		for event in events_by_student.get(student_id, []):
 			stage = LIFECYCLE_EVENT_TO_STAGE.get(_fold(event.get("to_stage")))
@@ -609,20 +607,13 @@ def _build_records(
 					)
 					stage_times["enrolled"].append(application_enrolled_at)
 
-		for stage in {status_stage, lifecycle_stage}:
+		for stage in {status_stage}:
 			if stage and not stage_times.get(stage) and modified_at:
 				stage_times[stage].append(modified_at)
 
 		if not stages:
 			if (
-				_fold(row.get("enrollment_status"))
-				in {
-					"khong quan tam",
-					"sai so",
-					"sai doi tuong",
-					"tu choi",
-				}
-				or _fold(row.get("lifecycle_stage")) == "lost"
+				_fold(row.get("processing_status")) in {"invalid", "duplicate", "spam", "failed"}
 			):
 				continue
 			stages.add("prospect")

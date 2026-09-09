@@ -39,6 +39,7 @@ PROVINCE_NAME = "Ho Chi Minh City"
 WARD_CODE = "760"
 WARD_NAME = "Ben Nghe Ward"
 CAMPUS = "FPTU Ho Chi Minh Campus"
+CAMPUS_CODE = "FPTU-HCM"
 HIGH_SCHOOL = "Tran Dai Nghia High School for the Gifted"
 MAJOR = "Software Engineering"
 MAJOR_CODE = "SE"
@@ -385,12 +386,16 @@ def _ensure_ward(province):
 
 def _ensure_campus(province):
     if frappe.db.exists("CRM Campus", CAMPUS):
+        if not frappe.db.get_value("CRM Campus", CAMPUS, "campus_code"):
+            frappe.db.set_value("CRM Campus", CAMPUS, "campus_code", CAMPUS_CODE, update_modified=False)
         return CAMPUS
-    return _create_governed_additive_value(
+    campus = _create_governed_additive_value(
         "CRM Campus",
         CAMPUS,
         reason="Local admissions fixture campus for the HCMC recruitment cohort.",
     )
+    frappe.db.set_value("CRM Campus", campus, "campus_code", CAMPUS_CODE, update_modified=False)
+    return campus
 
 
 def _ensure_high_school(province):

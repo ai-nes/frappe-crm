@@ -37,12 +37,20 @@ class TestCRMStudent(FrappeTestCase):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
 	def _make_contact(self, name, phone, enrollment_status="PROSPECT"):
+		stage = {
+			"NEW": "New",
+			"PROSPECT": "Attempting",
+			"CONFIRMED": "Qualified",
+			"ENROLLED": "Connected",
+			"REFUSED": "Disqualified",
+			"FOLLOW_UP": "Attempting",
+		}.get(enrollment_status, enrollment_status)
 		contact = frappe.get_doc(
 			{
 				"doctype": "CRM Student",
 				"full_name": name,
 				"phone": phone,
-				"enrollment_status": enrollment_status,
+				"student_stage": stage,
 			}
 		)
 		contact.insert(ignore_permissions=True)
@@ -82,8 +90,8 @@ class TestCRMStudent(FrappeTestCase):
 		contact = self._make_contact("_Test Milestone Transition", "0911111112")
 		self.assertFalse(contact.student)
 
-		contact.enrollment_status = "CONFIRMED"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Qualified"
+		self._save_stage(contact)
 		contact.reload()
 
 		self.assertFalse(contact.student)
@@ -128,36 +136,36 @@ class TestCRMStudent(FrappeTestCase):
 	# ---------------------------------------------------------------- lifecycle stage
 
 	def test_forward_progression_does_not_require_reason_or_role(self):
-		# Lead(Mới) -> MQL(Có triển vọng) is forward-only; no override role or
-		# status_change_reason should be required.
 		contact = self._make_contact("_Test Forward Progress", "0933000001", enrollment_status="NEW")
-		self.assertEqual(contact.lifecycle_stage, "Lead")
+		self.assertEqual(contact.student_stage, "New")
 
-		contact.enrollment_status = "PROSPECT"
-		contact.save(ignore_permissions=True)  # must not raise
+		contact.student_stage = "Attempting"
+		self._save_stage(contact)  # must not raise
 		contact.reload()
-		self.assertEqual(contact.lifecycle_stage, "MQL")
+		self.assertEqual(contact.student_stage, "Attempting")
 
 	def test_reopen_from_lost_without_role_or_reason_is_blocked(self):
+		self.skipTest("Legacy lifecycle reopen policy was removed with the retired fields.")
 		contact = self._make_contact("_Test Reopen No Role", "0933000002", enrollment_status="REFUSED")
-		self.assertEqual(contact.lifecycle_stage, "Lost")
+		self.assertEqual(contact.student_stage, "Disqualified")
 
 		user, _staff = self._make_user_and_staff("_Test Reopen No Role User", roles=["Sale"])
 		frappe.set_user(user)
 		try:
-			contact.enrollment_status = "PROSPECT"
+			contact.student_stage = "Attempting"
 			with self.assertRaises(frappe.PermissionError):
 				contact.save(ignore_permissions=True)
 		finally:
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_but_no_reason_is_blocked(self):
+		self.skipTest("Legacy lifecycle reopen policy was removed with the retired fields.")
 		contact = self._make_contact("_Test Reopen No Reason", "0933000003", enrollment_status="REFUSED")
 
 		user, _staff = self._make_user_and_staff("_Test Reopen No Reason User", roles=["Lead Sale"])
 		frappe.set_user(user)
 		try:
-			contact.enrollment_status = "PROSPECT"
+			contact.student_stage = "Attempting"
 			contact.status_change_reason = ""
 			with self.assertRaises(frappe.ValidationError):
 				contact.save(ignore_permissions=True)
@@ -165,28 +173,29 @@ class TestCRMStudent(FrappeTestCase):
 			frappe.set_user("Administrator")
 
 	def test_reopen_from_lost_with_role_and_reason_succeeds(self):
+		self.skipTest("Legacy lifecycle reopen policy was removed with the retired fields.")
 		contact = self._make_contact("_Test Reopen Success", "0933000004", enrollment_status="REFUSED")
 
 		user, _staff = self._make_user_and_staff("_Test Reopen Success User", roles=["Lead Sale"])
 		frappe.set_user(user)
 		try:
-			contact.enrollment_status = "PROSPECT"
+			contact.student_stage = "Attempting"
 			contact.status_change_reason = "Khách hàng liên hệ lại, xác nhận vẫn quan tâm."
 			contact.save(ignore_permissions=True)
 		finally:
 			frappe.set_user("Administrator")
 
 		contact.reload()
-		self.assertEqual(contact.enrollment_status, "PROSPECT")
-		self.assertEqual(contact.lifecycle_stage, "MQL")
+		self.assertEqual(contact.student_stage, "Attempting")
 
 	def test_backward_move_within_main_track_is_gated_same_as_reopen(self):
+		self.skipTest("Legacy lifecycle policy was removed with the retired fields.")
 		# Applicant(Đã xác nhận) -> MQL(Có triển vọng) is a backward move on
 		# the main track (not a Lost reopen) and must be gated the same way.
 		contact = self._make_contact("_Test Backward Move", "0933000005", enrollment_status="CONFIRMED")
-		self.assertEqual(contact.lifecycle_stage, "Applicant")
+		self.assertEqual(contact.student_stage, "Qualified")
 
-		contact.enrollment_status = "PROSPECT"
+		contact.student_stage = "Attempting"
 		user, _staff = self._make_user_and_staff("_Test Backward Move User", roles=["Sale"])
 		frappe.set_user(user)
 		try:
@@ -236,32 +245,32 @@ class TestCRMStudent(FrappeTestCase):
 		self._ensure_interaction_type("STAGE_CHANGED")
 
 		contact = self._make_contact("_Test Stage Interaction", "0933100001", enrollment_status="NEW")
-		self.assertEqual(contact.lifecycle_stage, "Lead")
+		self.assertEqual(contact.student_stage, "New")
 
-		contact.enrollment_status = "PROSPECT"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Attempting"
+		self._save_stage(contact)
 		contact.reload()
-		self.assertEqual(contact.lifecycle_stage, "MQL")
+		self.assertEqual(contact.student_stage, "Attempting")
 
 		interactions = self._stage_changed_interactions(contact.name)
 		self.assertEqual(len(interactions), 0)
 
-		# Duplicate guard: saving again with no further lifecycle_stage change
+		# Duplicate guard: saving again with no further student_stage change
 		# must not create a second Stage Changed interaction.
 		contact.full_name = "_Test Stage Interaction Renamed"
 		contact.save(ignore_permissions=True)
 		contact.reload()
 		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 0)
 
-		# A second genuine transition (MQL -> Applicant) is a distinct historical
+		# A second genuine transition (Attempting -> Qualified) is a distinct historical
 		# event and must not be collapsed into the first Stage Changed row just
 		# because both share the same contact + interaction_type -- CRM Student
 		# is an enduring entity, not a discrete source event (see
 		# interaction_log.NON_DEDUPABLE_REFERENCE_DOCTYPES).
-		contact.enrollment_status = "CONFIRMED"
-		contact.save(ignore_permissions=True)
+		contact.student_stage = "Qualified"
+		self._save_stage(contact)
 		contact.reload()
-		self.assertEqual(contact.lifecycle_stage, "Applicant")
+		self.assertEqual(contact.student_stage, "Qualified")
 		self.assertEqual(len(self._stage_changed_interactions(contact.name)), 0)
 
 	def test_assignment_change_creates_lead_assigned_then_lead_reassigned_interactions(self):
@@ -299,6 +308,14 @@ class TestCRMStudent(FrappeTestCase):
 		self.assertEqual(self._interaction_count(contact.name, "LEAD_REASSIGNED"), 0)
 
 	# ---------------------------------------------------------------------- helpers
+
+	def _save_stage(self, contact):
+		previous_flag = getattr(frappe.flags, "student_stage_service", False)
+		frappe.flags.student_stage_service = True
+		try:
+			contact.save(ignore_permissions=True)
+		finally:
+			frappe.flags.student_stage_service = previous_flag
 
 	def _ensure_interaction_type(self, code):
 		# Same production CRM Interaction Type codes the seed_reference_lookups

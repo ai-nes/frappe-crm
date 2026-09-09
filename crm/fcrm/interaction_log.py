@@ -1014,14 +1014,14 @@ def create_interaction_from_contact_update(doc, method=None):
 	if doc.is_new() or doc.flags.in_insert:
 		return
 
-	if doc.has_value_changed("lifecycle_stage"):
+	if doc.has_value_changed("student_stage"):
 		try:
 			create_interaction(
 				interaction_type="SYSTEM_ACTIVITY",
 				student=doc.name,
 				reference_doctype="CRM Student",
 				reference_docname=doc.name,
-				summary=f"Stage changed to {doc.lifecycle_stage}",
+				summary=f"Student stage changed to {doc.student_stage}",
 			)
 		except Exception:
 			frappe.log_error(title="CRM Interaction creation failed (Contact stage change)")

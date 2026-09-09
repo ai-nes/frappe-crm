@@ -2,8 +2,8 @@
 
 Task DocType permissions grant the supported sales roles the required CRUD
 operations, while the permission hooks below add record-level checks on the
-referenced Student or Contact. A task can only be read or changed when the
-caller can see its parent record.
+referenced Student, Segment or Contact. A task can only be read or changed
+when the caller can see its parent record.
 
 The aggregate reader also lives here because it is the shared read path for
 Sales, CTV Sale and Lead Sale task workbenches.
@@ -18,6 +18,11 @@ from frappe.utils import get_datetime, now_datetime
 
 from crm.api._pagination import paged_list
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.segment_action_item import (
+	create_segment_action_item,
+	delete_segment_action_item,
+	update_segment_action_item,
+)
 from crm.fcrm.student_decision import (
 	create_manual_action,
 	delete_manual_action,
@@ -25,13 +30,14 @@ from crm.fcrm.student_decision import (
 )
 from crm.fcrm.student_reference import canonical_student
 
-ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
+ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student", "CRM Segment"}
 
 FIELDS = [
 	"name",
 	"title",
 	"description",
 	"student",
+	"segment",
 	"linked_interaction",
 	"priority",
 	"start_date",
@@ -160,8 +166,8 @@ def _permission_condition(doctype, alias, actor):
 	return condition.replace(f"`tab{doctype}`", alias)
 
 
-def _task_reference_scope_condition(student_condition, legacy_lead_condition):
-	"""Scope generic Task queries through canonical or legacy Student references."""
+def _task_reference_scope_condition(student_condition, legacy_lead_condition, segment_condition):
+	"""Scope generic Task queries through Student, Segment or legacy Lead references."""
 	task_table = "`tabTask`"
 	canonical_student_reference = (
 		f"CASE WHEN {task_table}.reference_doctype = 'CRM Student' "
@@ -171,6 +177,10 @@ def _task_reference_scope_condition(student_condition, legacy_lead_condition):
 		f"COALESCE(NULLIF({task_table}.student, ''), "
 		f"CASE WHEN {task_table}.reference_doctype = 'CRM Lead' "
 		f"THEN NULLIF({task_table}.reference_docname, '') END)"
+	)
+	segment_reference = (
+		f"CASE WHEN {task_table}.reference_doctype = 'CRM Segment' "
+		f"THEN NULLIF({task_table}.reference_docname, '') END"
 	)
 	return f"""(
 		EXISTS (
@@ -182,6 +192,11 @@ def _task_reference_scope_condition(student_condition, legacy_lead_condition):
 			SELECT 1 FROM `tabCRM Lead` legacy_lead_scope
 			WHERE legacy_lead_scope.name = {legacy_lead_reference}
 			AND ({legacy_lead_condition})
+		)
+		OR EXISTS (
+			SELECT 1 FROM `tabCRM Segment` segment_scope
+			WHERE segment_scope.name = {segment_reference}
+			AND ({segment_condition})
 		)
 	)"""
 
@@ -196,9 +211,10 @@ def get_permission_query_conditions(user=None):
 
 	student_condition = _permission_condition("CRM Student", "student_scope", actor)
 	legacy_lead_condition = _permission_condition("CRM Lead", "legacy_lead_scope", actor)
-	if student_condition == "1=0" and legacy_lead_condition == "1=0":
+	segment_condition = _permission_condition("CRM Segment", "segment_scope", actor)
+	if student_condition == "1=0" and legacy_lead_condition == "1=0" and segment_condition == "1=0":
 		return "1=0"
-	return _task_reference_scope_condition(student_condition, legacy_lead_condition)
+	return _task_reference_scope_condition(student_condition, legacy_lead_condition, segment_condition)
 
 
 def _has_task_reference_permission(doc):
@@ -444,10 +460,21 @@ def list_sales_tasks(
 
 def _check_reference_access(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
-		frappe.throw(_("Tasks are only supported for CRM Student or CRM Lead references."), frappe.ValidationError)
+		frappe.throw(
+			_("Tasks are only supported for CRM Student, CRM Lead or CRM Segment references."),
+			frappe.ValidationError,
+		)
 	reference_doc = frappe.get_doc(reference_doctype, reference_docname)
 	reference_doc.check_permission(permission_type)
 	return reference_doc
+
+
+def _reject_segment_legacy_task(reference_doctype):
+	if reference_doctype == "CRM Segment":
+		frappe.throw(
+			_("Segment action items must be stored as CRM Action Item records."),
+			frappe.ValidationError,
+		)
 
 
 def _task_status_to_action_state(status, *, default=None):
@@ -475,11 +502,15 @@ def _priority_to_task(priority):
 
 def _action_reference(action):
 	"""Return the canonical Student reference pair for an Action Item."""
+	if action.get("segment"):
+		return "CRM Segment", action.get("segment")
 	return "CRM Student", action.get("student") or action.get("contact")
 
 
 def _action_scope_reference(action):
 	"""Return the canonical permission scope for an Action Item."""
+	if action.get("segment"):
+		return "CRM Segment", action.get("segment")
 	return "CRM Student", action.get("student")
 
 
@@ -566,9 +597,15 @@ def _assigned_staff_for_user(user):
 def _action_target(reference_doctype, reference_docname):
 	"""Resolve a task reference to the canonical CRM Student name.
 
+	CRM Segment action items are handled by the Segment Action Item command path
+	and therefore do not resolve to a Student.
 	CRM Lead remains an accepted compatibility input during the migration window,
 	but every Action Item command receives the resolved CRM Student ID.
 	"""
+	if reference_doctype == "CRM Segment":
+		_check_reference_access("CRM Segment", reference_docname, "read")
+		return None, None
+
 	if reference_doctype == "CRM Student":
 		student = canonical_student(reference_docname)
 		if not student:
@@ -599,6 +636,7 @@ def _list_action_items(
 	*,
 	student=None,
 	contact=None,
+	segment=None,
 	reference_doctype=None,
 	reference_docname=None,
 ):
@@ -607,6 +645,8 @@ def _list_action_items(
 		filters["student"] = student
 	if contact:
 		filters["contact"] = contact
+	if segment:
+		filters["segment"] = segment
 	if status:
 		filters["state"] = _task_status_to_action_state(status)
 	or_filters = None
@@ -637,6 +677,7 @@ def _list_action_items(
 
 
 def _list_legacy_tasks(reference_doctype, reference_docname, search, status, start, page_length):
+	_reject_segment_legacy_task(reference_doctype)
 	filters = {"reference_doctype": reference_doctype, "reference_docname": reference_docname}
 	if status:
 		filters["status"] = status
@@ -668,7 +709,7 @@ def list_tasks(
 	start=0,
 	page_length=20,
 ):
-	"""List Task-shaped rows; Student-backed rows come from CRM Action Item."""
+	"""List Task-shaped rows; Student- and Segment-backed rows use CRM Action Item."""
 	if bool(reference_doctype) != bool(reference_docname):
 		frappe.throw(
 			_("reference_doctype and reference_docname must be supplied together."),
@@ -678,6 +719,16 @@ def list_tasks(
 		return _list_action_items(search, status, start, page_length)
 
 	student, contact = _action_target(reference_doctype, reference_docname)
+	if reference_doctype == "CRM Segment":
+		return _list_action_items(
+			search,
+			status,
+			start,
+			page_length,
+			segment=reference_docname,
+			reference_doctype="CRM Segment",
+			reference_docname=reference_docname,
+		)
 	if not student:
 		return _list_legacy_tasks(reference_doctype, reference_docname, search, status, start, page_length)
 	return _list_action_items(
@@ -703,6 +754,7 @@ def get_task(name):
 
 	doc = frappe.get_doc("Task", name)
 	doc.check_permission("read")
+	_reject_segment_legacy_task(doc.reference_doctype)
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 	return doc.as_dict()
 
@@ -720,7 +772,26 @@ def create_task(
 	due_date=None,
 	linked_interaction=None,
 ):
-	"""Create a Task-shaped CRM Action Item when the reference has a Student."""
+	"""Create a Task-shaped CRM Action Item for Students or Segments."""
+	if reference_doctype == "CRM Segment":
+		result = create_segment_action_item(
+			reference_docname,
+			title=title,
+			description=description,
+			priority=priority,
+			start_date=start_date,
+			due_at=due_date,
+			assignee_staff=_assigned_staff_for_user(assigned_to) if assigned_to else None,
+			linked_interaction=linked_interaction,
+			initial_state=_task_status_to_action_state(status, default="pending"),
+			idempotency_key=_compatibility_key("create", reference_docname),
+		)
+		return _action_item_to_task(
+			frappe.get_doc("CRM Action Item", result["action"]),
+			reference_doctype="CRM Segment",
+			reference_docname=reference_docname,
+		)
+
 	student, contact = _action_target(reference_doctype, reference_docname)
 	if not student:
 		# An unconverted legacy Lead cannot own a canonical Action Item. Keep the
@@ -777,6 +848,7 @@ def update_task(
 	if not action:
 		doc = frappe.get_doc("Task", name)
 		doc.check_permission("write")
+		_reject_segment_legacy_task(doc.reference_doctype)
 		_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 
 		values = {
@@ -798,6 +870,19 @@ def update_task(
 
 	scope_doctype, scope_docname = _action_scope_reference(action)
 	_check_reference_access(scope_doctype, scope_docname, "read")
+	if action.get("segment"):
+		result = update_segment_action_item(
+			name,
+			title=title,
+			description=description,
+			start_date=start_date,
+			priority=_priority_to_action(priority, default=None) if priority is not None else None,
+			due_at=due_date,
+			assignee_staff=_assigned_staff_for_user(assigned_to) if assigned_to is not None else None,
+			action_state=_task_status_to_action_state(status) if status is not None else None,
+			linked_interaction=linked_interaction,
+		)
+		return _action_item_to_task(frappe.get_doc("CRM Action Item", result["action"]))
 	update_manual_action(
 		name,
 		title=title,
@@ -820,11 +905,14 @@ def delete_task(name):
 	if action:
 		scope_doctype, scope_docname = _action_scope_reference(action)
 		_check_reference_access(scope_doctype, scope_docname, "read")
+		if action.get("segment"):
+			return delete_segment_action_item(name)
 		delete_manual_action(name, idempotency_key=_compatibility_key("delete", name))
 		return {"deleted": name}
 
 	doc = frappe.get_doc("Task", name)
 	doc.check_permission("delete")
+	_reject_segment_legacy_task(doc.reference_doctype)
 	_check_reference_access(doc.reference_doctype, doc.reference_docname, "read")
 	doc.delete()
 	return {"deleted": name}

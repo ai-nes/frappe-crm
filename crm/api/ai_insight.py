@@ -356,6 +356,15 @@ def _lock_student(student: str):
 		as_dict=True,
 	)
 	if not row:
+		# AI insight records still carry the immutable CRM Lead student link.
+		# Accept that identifier while the canonical Student projection is being
+		# migrated; the linked contact is locked separately below.
+		row = frappe.db.sql(
+			"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+			(student,),
+			as_dict=True,
+		)
+	if not row:
 		_fail("NOT_FOUND", "The Student does not exist.")
 	return row[0]
 

@@ -3,10 +3,25 @@
 import frappe
 
 from crm.fcrm.segment_lifecycle import lifecycle_command
-from crm.fcrm.segment_rules import fail, integer, scoped_rule_query
+from crm.fcrm.segment_rules import fail, integer, scoped_rule_query, student_scope_or_filters
 
 MAX_SNAPSHOT = 10000
 EDITABLE = {"title", "purpose", "responsible_user", "segment_type", "category", "is_public", "filters"}
+
+
+def visible_student_query():
+	return frappe.get_list(
+		"CRM Student",
+		fields=["name"],
+		or_filters=student_scope_or_filters(),
+		order_by="",
+		limit_page_length=0,
+		run=False,
+	)
+
+
+def visible_student_count():
+	return frappe.db.sql(f"SELECT COUNT(*) FROM ({visible_student_query()}) visible_students")[0][0]
 
 
 def payload(value, allowed):
@@ -34,9 +49,7 @@ def membership_query(doc=None, filters=None):
 	if doc:
 		doc.check_permission("read")
 		if doc.segment_type == "static" and doc.snapshot_at:
-			scope = frappe.get_list(
-				"CRM Student", fields=["name"], order_by="", limit_page_length=0, run=False
-			)
+			scope = visible_student_query()
 			return (
 				f"SELECT allowed.name FROM ({scope}) allowed INNER JOIN `tabCRM Segment Member` m "
 				f"ON m.student = allowed.name WHERE m.segment = {frappe.db.escape(doc.name)}"
@@ -70,14 +83,29 @@ def preview(segment=None, filters=None, start=0, page_length=20):
 		frappe.get_list(
 			"CRM Student",
 			filters={"name": ["in", names]},
-			fields=["name", "full_name", "enrollment_status", "potential", "intent"],
+			fields=[
+				"name",
+				"full_name",
+				"phone",
+				"student_stage",
+				"major",
+				"assigned_to",
+				"potential",
+				"intent",
+			],
 			order_by="name asc",
 			limit_page_length=page_length,
 		)
 		if names
 		else []
 	)
-	return {"total": total, "start": start, "page_length": page_length, "students": students}
+	return {
+		"total": total,
+		"total_students": visible_student_count(),
+		"start": start,
+		"page_length": page_length,
+		"students": students,
+	}
 
 
 def transition(name, status, expected_revision):

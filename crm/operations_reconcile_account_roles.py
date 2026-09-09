@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import frappe
 
-
 ROLE_BY_EMAIL = {
 	"duydt11@fpt.edu.vn": "Admissions Director",
 	"gianghh2@fpt.edu.vn": "Sale",
@@ -23,6 +22,10 @@ ROLE_BY_EMAIL = {
 	"tuyendtb@fpt.edu.vn": "Lead Sale",
 	"liinhkhanh1810@gmail.com": "CTV Sale",
 	"tuyensinhhcm@fpt.edu.vn": "CTV Sale",
+	# Keep the local demo supervisor aligned with seed_role_accounts. The
+	# reconciliation runs after the first demo seed and otherwise falls back to
+	# Sale for every account not listed here.
+	"leadsale@gmail.com": "Lead Sale",
 }
 
 CANONICAL_ROLES = frozenset(
@@ -46,7 +49,10 @@ PROTECTED_USERS = frozenset(
 
 def _set_roles(user: str, role: str) -> None:
 	for row in frappe.get_all(
-		"Has Role", filters={"parent": user, "parenttype": "User"}, fields=["name", "role"], limit_page_length=0
+		"Has Role",
+		filters={"parent": user, "parenttype": "User"},
+		fields=["name", "role"],
+		limit_page_length=0,
 	):
 		if row.role not in PLATFORM_ROLES and row.role != role:
 			frappe.db.delete("Has Role", {"name": row.name})
@@ -65,7 +71,10 @@ def _set_roles(user: str, role: str) -> None:
 def _normalize_protected_user(user: str) -> None:
 	"""Keep technical accounts on Administrator only (plus Frappe primitives)."""
 	for row in frappe.get_all(
-		"Has Role", filters={"parent": user, "parenttype": "User"}, fields=["name", "role"], limit_page_length=0
+		"Has Role",
+		filters={"parent": user, "parenttype": "User"},
+		fields=["name", "role"],
+		limit_page_length=0,
 	):
 		if row.role in CANONICAL_ROLES and row.role != "Administrator":
 			frappe.db.delete("Has Role", {"name": row.name})
@@ -109,4 +118,8 @@ def verify() -> dict:
 		""",
 		as_dict=True,
 	)
-	return {"users": rows, "protected": sorted(PROTECTED_USERS), "missing": [e for e in ROLE_BY_EMAIL if not frappe.db.exists("User", e)]}
+	return {
+		"users": rows,
+		"protected": sorted(PROTECTED_USERS),
+		"missing": [e for e in ROLE_BY_EMAIL if not frappe.db.exists("User", e)],
+	}

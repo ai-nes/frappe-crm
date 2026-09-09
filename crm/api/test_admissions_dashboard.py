@@ -36,7 +36,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 						"full_name": "_Test Dash Student",
 						"phone": "0981112223",
 						"source": "_Test Dash Source",
-						"enrollment_status": "PROSPECT",
+						"student_stage": "New",
 						"is_test_record": 0,
 						"readiness_level": "Level 2 - Đang so sánh",
 						"quality_bucket": "Hot",
@@ -299,7 +299,9 @@ class TestAdmissionsDashboard(FrappeTestCase):
 	def _make_campus_for_dash(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			self._delete_doc("CRM Campus", name)
-		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name})
+		doc = frappe.get_doc(
+			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-DASH"}
+		)
 		doc.insert(ignore_permissions=True)
 		self.addCleanup(lambda: self._delete_doc("CRM Campus", doc.name))
 		return doc.name
@@ -342,7 +344,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 				"doctype": "CRM Lead",
 				"student_name": "_Test Dash Student Anchor",
 				"phone": "0981112230",
-				"enrollment_status": "PROSPECT",
+				"processing_status": "NEW",
 			}
 		)
 		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
@@ -359,7 +361,7 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			"doctype": "CRM Student",
 			"full_name": name,
 			"phone": phone,
-			"enrollment_status": "PROSPECT",
+			"student_stage": "New",
 		}
 		if crm_campaign:
 			payload["crm_campaign"] = crm_campaign

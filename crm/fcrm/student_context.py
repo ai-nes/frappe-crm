@@ -365,7 +365,7 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 		lifecycle_context = get_lifecycle_context(student)
 	except Exception:
 		lifecycle_context = {
-			"current_stage": doc.get("lifecycle_stage") or "Lead",
+			"current_stage": doc.get("student_stage") or "New",
 			"revision": int(doc.get("lifecycle_revision") or 0),
 			"allowed_targets": [],
 			"capabilities": {},
@@ -452,7 +452,12 @@ def get_student_context(student: str, history_limit: int | str = 20, history_cur
 			"owning_pool": doc.get("owning_pool"),
 		},
 		"engagement_revision": int(doc.get("engagement_revision") or 0),
-		"lifecycle": {**lifecycle_context, "stage": lifecycle_context.get("current_stage") or doc.get("lifecycle_stage"), "enrollment_status": doc.get("enrollment_status"), "lost": next((item for item in history if item.get("to_stage") == "Lost"), None), "reopen": next((item for item in history if item.get("transition_kind") == "reopen"), None)},
+		"lifecycle": {
+			**lifecycle_context,
+			"stage": lifecycle_context.get("current_stage") or doc.get("student_stage") or "New",
+			"lost": next((item for item in history if item.get("to_stage") == "Disqualified"), None),
+			"reopen": next((item for item in history if item.get("transition_kind") == "reopen"), None),
+		},
 		"latest_interaction": latest_interaction,
 		"latest_outcome": _outcome(outcome_rows[0], student) if outcome_rows else None,
 		"next_action": _next_action(student, latest_interaction_name),

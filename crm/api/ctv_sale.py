@@ -25,7 +25,7 @@ CONNECTED_OUTCOMES = {"captured", "resolved", "converted", "connected"}
 TERMINAL_TASK_STATES = {"done", "canceled", "completed", "cancelled", "rejected", "superseded"}
 MANAGER_PROFILES = {"lead_sales"}
 
-STUDENT_FIELDS = ["name", "student_name", "lifecycle_stage", "enrollment_status", "modified"]
+STUDENT_FIELDS = ["name", "student_name", "processing_status", "resolution", "modified"]
 CONTACT_FIELDS = ["name", "student", "readiness_level", "next_follow_up"]
 INTERACTION_FIELDS = [
 	"name",
@@ -222,7 +222,7 @@ def _viewer(staff: dict[str, Any] | None, fallback_user: str) -> dict[str, str]:
 
 
 def _load_students(target_staff: dict[str, Any] | None, warnings: list[str]) -> list[dict[str, Any]]:
-	filters: dict[str, Any] = {"lifecycle_stage": ["!=", "Lost"]}
+	filters: dict[str, Any] = {"processing_status": ["!=", "CLOSED"]}
 	if target_staff:
 		filters["owner_staff"] = target_staff["name"]
 	rows = _get_list(
@@ -513,7 +513,7 @@ def _transfer_ids(students: list[dict[str, Any]], contacts: list[dict[str, Any]]
 	ids = {
 		str(row.get("name"))
 		for row in students
-		if str(row.get("lifecycle_stage") or "") in {"Applicant", "Enrolled"}
+		if str(row.get("resolution") or "") == "CREATED"
 	}
 	for row in contacts:
 		readiness = str(row.get("readiness_level") or "")

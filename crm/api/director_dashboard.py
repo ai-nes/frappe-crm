@@ -43,14 +43,15 @@ STATUS_TO_STAGE = {
 	"khong quan tam": "lost",
 	"sai so": "lost",
 	"tu choi": "lost",
-	# CRM Enrollment Status codes (post CRM Term cutover) -- enrollment_status
-	# now stores the UPPER_SNAKE code, not the Vietnamese display label above.
 	"new": "prospect",
-	"prospect": "qualified",
-	"confirmed": "accepted",
-	"enrolled": "enrolled",
-	"converted": "enrolled",
-	"refused": "lost",
+	"processing": "counselling",
+	"processed": "qualified",
+	"assigned": "counselling",
+	"created": "enrolled",
+	"invalid": "lost",
+	"duplicate": "lost",
+	"spam": "lost",
+	"failed": "lost",
 }
 APPLICATION_STAGE = {
 	"Submitted": "application",
@@ -153,8 +154,8 @@ KPI_DEFINITIONS = (
 STUDENT_FIELDS = [
 	"name",
 	"admission_year",
-	"lifecycle_stage",
-	"enrollment_status",
+	"processing_status",
+	"resolution",
 	"branch",
 	"province",
 	"ward",
@@ -583,25 +584,17 @@ def _build_student_records(
 		student_id = row.get("name")
 		if not student_id:
 			continue
-		status_stage = STATUS_TO_STAGE.get(_fold(row.get("enrollment_status")))
-		lifecycle = str(row.get("lifecycle_stage") or "").strip()
-		lifecycle_stage = {
-			"Lead": "prospect",
-			"MQL": "qualified",
-			"Applicant": "application",
-			"Enrolled": "enrolled",
-			"Lost": "lost",
-		}.get(lifecycle)
+		status_stage = STATUS_TO_STAGE.get(_fold(row.get("processing_status")))
+		if str(row.get("resolution") or "").casefold() == "created":
+			status_stage = "enrolled"
 		application_data = applications_by_student.get(student_id, {})
 		stages = set(application_data.get("stages", []))
 		if status_stage:
 			stages.add(status_stage)
-		if lifecycle_stage:
-			stages.add(lifecycle_stage)
 		if student_id in interaction_students:
 			stages.add("engaged")
 		stages.discard("lost")
-		if not stages and lifecycle == "Lost":
+		if not stages and status_stage == "lost":
 			continue
 		if not stages:
 			stages.add("prospect")

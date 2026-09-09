@@ -81,8 +81,7 @@ _COPILOT_BUSINESS_DISCOVERY_DOCTYPES = frozenset(
 _STUDENT_OPERATIONAL_FIELDS = frozenset(
 	{
 		"name",
-		"enrollment_status",
-		"lifecycle_stage",
+		"student_stage",
 		"assigned_to",
 		"owner_staff",
 		"owning_team",
