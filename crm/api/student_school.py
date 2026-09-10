@@ -327,12 +327,12 @@ def _create_student_with_lead(fields: dict | str | None) -> dict:
 		}
 		for fieldname, value in lead_updates.items():
 			lead.set(fieldname, value)
-		frappe.db.set_value(
-			"CRM Lead",
-			lead.name,
-			lead_updates,
-			update_modified=False,
-		)
+		previous_flag = getattr(frappe.flags, "lead_processing_service", False)
+		frappe.flags.lead_processing_service = True
+		try:
+			lead.save(ignore_permissions=True, ignore_version=False)
+		finally:
+			frappe.flags.lead_processing_service = previous_flag
 	except Exception:
 		frappe.db.rollback(save_point=savepoint)
 		raise

@@ -1,8 +1,13 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.audit import get_lead_audit_logs, get_segment_audit_logs, get_student_audit_logs
+from crm.api.student_school import create_student_with_lead
 from crm.api.task import create_task
+from crm.fcrm.lead_processing import update_processing_status
+from crm.fcrm.student_stage import set_student_stage
 
 
 class TestStudentAuditApi(FrappeTestCase):
@@ -98,6 +103,92 @@ class TestStudentAuditApi(FrappeTestCase):
 		self.assertEqual(status_log["fieldname"], "student_stage")
 		self.assertEqual(status_log["old_value"], "New")
 		self.assertEqual(status_log["new_value"], "Attempting")
+
+	def test_student_stage_command_is_audited(self):
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "Audit Stage Command Student",
+				"phone": "0912345691",
+				"student_stage": "New",
+			}
+		).insert(ignore_permissions=True)
+
+		baseline_revision = int(frappe.db.get_value("CRM Student", student.name, "student_context_revision") or 0)
+		transition = set_student_stage(student.name, "Attempting")
+
+		result = get_student_audit_logs(student.name, page_length=100)
+		status_log = next(
+			log
+			for log in result["logs"]
+			if log.get("source") == "Version"
+			and log.get("event_type") == "student_stage_changed"
+		)
+
+		self.assertEqual(status_log["fieldname"], "student_stage")
+		self.assertEqual(status_log["old_value"], "New")
+		self.assertEqual(status_log["new_value"], "Attempting")
+		current_revision = int(
+			frappe.db.get_value("CRM Student", student.name, "student_context_revision") or 0
+		)
+		self.assertEqual(current_revision, baseline_revision + 1)
+		self.assertEqual(transition["context_revision"], current_revision)
+
+	def test_lead_processing_command_is_audited(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Audit Processing Command Lead",
+				"phone": "0912345692",
+				"email": "audit-processing-command@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		update_processing_status(lead.name, "PROCESSING", reason="Manual audit regression test")
+
+		result = get_lead_audit_logs(lead.name, page_length=100)
+		status_log = next(
+			log
+			for log in result["logs"]
+			if log.get("source") == "Version" and log.get("fieldname") == "processing_status"
+		)
+
+		self.assertEqual(status_log["old_value"], "NEW")
+		self.assertEqual(status_log["new_value"], "PROCESSING")
+
+	def test_student_lead_handoff_audits_lead_processing_changes(self):
+		suffix = frappe.generate_hash(length=8)
+		with patch(
+			"crm.api.student_school._normalize_lead_payload",
+			return_value=(
+				{
+					"student_name": f"Audit Handoff Student {suffix}",
+					"phone": f"091234{len(suffix):04d}",
+					"email": f"audit-handoff-{suffix}@example.com",
+					"province": "Hà Nội",
+				},
+				[],
+				[],
+				None,
+			),
+		):
+			result = create_student_with_lead(
+				{
+					"student_name": f"Audit Handoff Student {suffix}",
+					"phone": f"091234{len(suffix):04d}",
+					"email": f"audit-handoff-{suffix}@example.com",
+				}
+			)
+
+		lead_result = get_lead_audit_logs(result["lead"]["name"], page_length=100)
+		status_log = next(
+			log
+			for log in lead_result["logs"]
+			if log.get("source") == "Version" and log.get("fieldname") == "processing_status"
+		)
+
+		self.assertEqual(status_log["old_value"], "NEW")
+		self.assertEqual(status_log["new_value"], "CLOSED")
 
 	def test_student_audit_includes_related_activity_records(self):
 		suffix = frappe.generate_hash(length=8)

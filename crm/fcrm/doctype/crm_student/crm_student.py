@@ -7,6 +7,7 @@ from frappe.utils import now_datetime
 from crm.fcrm.campaign_source import sync_student_campaign_source
 from crm.fcrm.permissions import derive_owner_fields, derive_unassigned_owning_team
 from crm.fcrm.student_reference import hs_code_for_reference, next_hs_code
+from crm.fcrm.student_stage import CONTEXT_SERVICE_FLAG as STUDENT_STAGE_CONTEXT_SERVICE_FLAG
 from crm.fcrm.student_stage import SERVICE_FLAG as STUDENT_STAGE_SERVICE_FLAG
 from crm.fcrm.student_stage import validate_stage
 from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_province
@@ -123,7 +124,9 @@ class CRMStudent(Document):
 		from crm.fcrm.student_classification import classification_changed
 		from crm.services.student_context import bump_student_context_revision, material_student_changed
 
-		if material_student_changed(self, before) or classification_changed(self, before):
+		if not getattr(self.flags, STUDENT_STAGE_CONTEXT_SERVICE_FLAG, False) and (
+			material_student_changed(self, before) or classification_changed(self, before)
+		):
 			bump_student_context_revision(self.name, "student_material_change")
 		from crm.services.score_revision import bump_score_input_revision, student_score_input_changed
 

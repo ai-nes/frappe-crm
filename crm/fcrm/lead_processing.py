@@ -399,10 +399,13 @@ def _resolution_for_status(status: str, current_resolution: str) -> str:
 
 
 def _set_processing_values(name: str, values: dict[str, Any]) -> None:
+	lead_doc = frappe.get_doc("CRM Lead", name)
 	previous = getattr(frappe.flags, SERVICE_FLAG, False)
 	setattr(frappe.flags, SERVICE_FLAG, True)
 	try:
-		frappe.db.set_value("CRM Lead", name, values, update_modified=True)
+		for fieldname, value in values.items():
+			lead_doc.set(fieldname, value)
+		lead_doc.save(ignore_permissions=True, ignore_version=False)
 	finally:
 		setattr(frappe.flags, SERVICE_FLAG, previous)
 

@@ -1,6 +1,6 @@
 import json
 from unittest import TestCase
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, call, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -101,7 +101,6 @@ class TestStudentSchoolApi(TestCase):
 			patch.object(frappe, "generate_hash", return_value="abc12345"),
 			patch.object(frappe.utils, "now_datetime", return_value="2026-09-09 10:00:00"),
 			patch.object(frappe.db, "savepoint"),
-			patch.object(frappe.db, "set_value") as set_value,
 		):
 			result = create_student_with_lead(
 				{
@@ -125,19 +124,17 @@ class TestStudentSchoolApi(TestCase):
 			[{"tag": "TAG-ONE"}, {"tag": "TAG-TWO"}],
 		)
 		self.assertIsNotNone(student_values["converted_at"])
-		set_value.assert_called_once_with(
-			"CRM Lead",
-			lead.name,
-			{
-				"student": student.name,
-				"converted_student": student.name,
-				"converted_at": student_values["converted_at"],
-				"processing_status": "CLOSED",
-				"resolution": "CREATED",
-				"resolution_reason": "CREATED handoff completed.",
-			},
-			update_modified=False,
+		lead.set.assert_has_calls(
+			[
+				call("student", student.name),
+				call("converted_student", student.name),
+				call("converted_at", student_values["converted_at"]),
+				call("processing_status", "CLOSED"),
+				call("resolution", "CREATED"),
+				call("resolution_reason", "CREATED handoff completed."),
+			]
 		)
+		lead.save.assert_called_once_with(ignore_permissions=True, ignore_version=False)
 		self.assertEqual(lead.check_permission.call_args.args, ("create",))
 		self.assertEqual(student.check_permission.call_args.args, ("create",))
 
