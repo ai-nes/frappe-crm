@@ -15,6 +15,7 @@ from crm.fcrm.doctype.crm_student_assessment.crm_student_assessment import (
 	LEVELS,
 	parse_evidence,
 )
+from crm.fcrm.student_reference import canonical_student
 from crm.services.student_context import mark_student_context_changed
 
 ASSESSMENT_POLICY_VERSION = "student-360-assessment-v1"
@@ -102,6 +103,9 @@ def _project(student: str, assessment) -> None:
 		"primary_barrier": assessment.primary_barrier,
 	}
 	frappe.db.set_value("CRM Lead", student, values, update_modified=False)
+	canonical = canonical_student(student)
+	if canonical:
+		frappe.db.set_value("CRM Student", canonical, values, update_modified=False)
 	mark_student_context_changed(student, "student_360_assessment_changed")
 
 
@@ -162,6 +166,7 @@ def record_student_assessment(
 		{
 			"doctype": "CRM Student Assessment",
 			"student": student_doc.name,
+			"crm_student": canonical_student(student_doc.name),
 			"assessment_revision": _next_revision(student_doc.name),
 			"status": "confirmed" if confirm or source == "manual" else "proposed",
 			"assessment_source": source,

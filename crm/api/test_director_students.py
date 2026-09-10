@@ -477,6 +477,38 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(guardian["name"], "Nguyễn Văn Minh")
 		self.assertEqual(guardian["preferredChannel"], "Phone")
 
+	def test_student_query_ids_include_source_lead_for_canonical_student(self):
+		with (
+			patch.object(director_students, "canonical_student", side_effect=lambda value: value),
+			patch.object(
+				director_students,
+				"lead_for_student",
+				side_effect=lambda value: "LEAD-1" if value == "STU-1" else None,
+			),
+		):
+			ids = director_students._student_query_ids(["STU-1"])
+
+		self.assertEqual(ids, ["STU-1", "LEAD-1"])
+
+	def test_contact_consent_reads_canonical_contact_events(self):
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students, "_student_query_ids", return_value=["LEAD-1", "STU-1"]),
+			patch.object(
+				director_students.frappe,
+				"get_all",
+				return_value=[
+					frappe._dict(
+						event_type="Granted", occurred_at="2026-09-10 09:40:00", scope="phone,email,zalo"
+					)
+				],
+			),
+		):
+			consent = director_students._contact_consent("STU-1", None)
+
+		self.assertEqual(consent["status"], "Đã đồng ý")
+		self.assertEqual(consent["channels"], ["Email", "Điện thoại", "Zalo"])
+
 	def test_assessment_confidence_uses_existing_confidence_fields(self):
 		assessment = frappe._dict(interest_confidence=80, fit_confidence=70, barrier_confidence=60)
 

@@ -1003,11 +1003,12 @@ def _latest_by_student(
 
 
 def _student_query_ids(student_ids: list[str]) -> list[str]:
-	"""Include Lead and canonical Student IDs for migrated child doctypes."""
+	"""Include both sides of a migrated Lead/Student identity boundary."""
 	values: list[str] = []
 	seen: set[str] = set()
 	for value in student_ids:
-		for candidate in (value, canonical_student(value)):
+		canonical = canonical_student(value)
+		for candidate in (value, canonical, lead_for_student(canonical)):
 			if candidate and candidate not in seen:
 				seen.add(candidate)
 				values.append(candidate)
@@ -1869,7 +1870,11 @@ def _contact_consent(student_id: str | None, privacy_status: str | None) -> dict
 	student_ids = _student_query_ids([student_id])
 	rows = frappe.get_all(
 		"CRM Contact Consent Event",
-		filters={"student": ["in", student_ids]},
+		filters={},
+		or_filters=[
+			["student", "in", student_ids],
+			["contact", "in", student_ids],
+		],
 		fields=["event_type", "occurred_at", "scope"],
 		order_by="occurred_at desc, creation desc",
 		limit_page_length=1,
@@ -1909,6 +1914,8 @@ def _consent_channels(scope: str | None) -> list[str]:
 		channels.append("Email")
 	if any(token in value for token in ("phone", "telephone", "dien thoai")):
 		channels.append("Điện thoại")
+	if "zalo" in value:
+		channels.append("Zalo")
 	return channels
 
 
