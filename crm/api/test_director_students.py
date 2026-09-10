@@ -275,7 +275,11 @@ class TestDirectorStudents(FrappeTestCase):
 			student_name="Nguyễn Minh An",
 			phone="0900000000",
 			email="an@example.com",
+			province="P-1",
+			ward="W-1",
 			current_grade="12",
+			study_stage="grade_12_h2",
+			aspiration="ASP-1",
 			date_of_birth="2007-07-20",
 			gender="Nữ",
 			admission_year="2026",
@@ -290,7 +294,9 @@ class TestDirectorStudents(FrappeTestCase):
 			"code": "ENR-1",
 			"school": "THPT Châu Văn Liêm",
 			"province": "Cần Thơ",
+			"ward": "Phường An Bình",
 			"major": "Trí tuệ nhân tạo",
+			"aspiration": "ASP-1",
 			"stage": "Tư vấn",
 			"score": 82,
 			"scoreDelta": 13,
@@ -329,6 +335,12 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["student"]["phone"], "0900000000")
 		self.assertEqual(response["student"]["studentId"], "CRMC-1")
 		self.assertEqual(response["student"]["email"], "an@example.com")
+		self.assertEqual(response["student"]["provinceId"], "P-1")
+		self.assertEqual(response["student"]["ward"], "Phường An Bình")
+		self.assertEqual(response["student"]["wardId"], "W-1")
+		self.assertEqual(response["student"]["currentGrade"], "12")
+		self.assertEqual(response["student"]["studyStage"], "grade_12_h2")
+		self.assertEqual(response["student"]["aspiration"], "ASP-1")
 		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
