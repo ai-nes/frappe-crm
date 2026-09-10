@@ -18,6 +18,7 @@ frontend/coverage
 
 .claude
 .pi
+.agents
 
 docker/.env
 docker/.env.*
