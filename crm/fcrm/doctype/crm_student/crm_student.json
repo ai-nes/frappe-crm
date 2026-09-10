@@ -50,6 +50,16 @@
   "parent_name",
   "col_break_parents",
   "parent_phone",
+  "parent_other_phone",
+  "parent_email",
+  "father_name",
+  "father_phone",
+  "father_email",
+  "father_occupation",
+  "mother_name",
+  "mother_phone",
+  "mother_email",
+  "mother_occupation",
   "section_academic",
   "high_school",
   "province",
@@ -390,6 +400,62 @@
    "fieldtype": "Data",
    "label": "Parent Phone",
    "options": "Phone"
+  },
+  {
+   "fieldname": "parent_other_phone",
+   "fieldtype": "Data",
+   "label": "Other Parent Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "parent_email",
+   "fieldtype": "Data",
+   "label": "Parent Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "father_name",
+   "fieldtype": "Data",
+   "label": "Father Name"
+  },
+  {
+   "fieldname": "father_phone",
+   "fieldtype": "Data",
+   "label": "Father Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "father_email",
+   "fieldtype": "Data",
+   "label": "Father Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "father_occupation",
+   "fieldtype": "Data",
+   "label": "Father Occupation"
+  },
+  {
+   "fieldname": "mother_name",
+   "fieldtype": "Data",
+   "label": "Mother Name"
+  },
+  {
+   "fieldname": "mother_phone",
+   "fieldtype": "Data",
+   "label": "Mother Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "mother_email",
+   "fieldtype": "Data",
+   "label": "Mother Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "mother_occupation",
+   "fieldtype": "Data",
+   "label": "Mother Occupation"
   },
   {
    "fieldname": "section_academic",

@@ -241,6 +241,10 @@ class CRMStudent(Document):
 			self.email = self.email.strip().lower()
 		if isinstance(self.other_email, str):
 			self.other_email = self.other_email.strip().lower()
+		for fieldname in ("parent_email", "father_email", "mother_email"):
+			value = self.get(fieldname)
+			if isinstance(value, str):
+				self.set(fieldname, value.strip().lower())
 		if isinstance(self.id_number, str):
 			self.id_number = self.id_number.strip()
 

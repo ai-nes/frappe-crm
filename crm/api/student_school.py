@@ -17,6 +17,16 @@ _STUDENT_BASIC_FIELDS = frozenset(
 		"email",
 		"other_email",
 		"other_phone",
+		"parent_other_phone",
+		"parent_email",
+		"father_name",
+		"father_phone",
+		"father_email",
+		"father_occupation",
+		"mother_name",
+		"mother_phone",
+		"mother_email",
+		"mother_occupation",
 		"gender",
 		"date_of_birth",
 		"birth_place",
@@ -47,6 +57,7 @@ _STUDENT_BASIC_FIELDS = frozenset(
 		"notes",
 	}
 )
+_STUDENT_PAYMENT_ACCOUNT_FIELDS = frozenset({"bank_name", "account_number", "account_holder"})
 _STUDENT_WITH_LEAD_FIELDS = _STUDENT_BASIC_FIELDS | {
 	"source",
 	"assigned_to",
@@ -86,6 +97,7 @@ _STUDENT_FIELD_ALIASES = {
 _STUDENT_CANONICAL_FIELDS = frozenset(
 	_STUDENT_FIELD_ALIASES.get(fieldname, fieldname) for fieldname in _STUDENT_BASIC_FIELDS
 )
+_PAYMENT_ACCOUNT_FIELD_ALIASES = {"account_holder": "account_holder_name"}
 
 
 def _canonical_student_fields(fields: dict | str | None) -> dict:
@@ -151,19 +163,7 @@ def _update_document(doctype: str, name: str, fields: dict, allowed_fields: froz
 		frappe.throw(_("Document name is required."), frappe.ValidationError)
 
 	values = _parse_fields(fields, allowed_fields)
-	actor = getattr(getattr(frappe, "session", None), "user", None)
-	profile = (
-		resolve_crm_profile(frappe.get_roles(actor))
-		if actor not in {None, "Guest", "None", "Administrator"}
-		else None
-	)
-	if doctype == "CRM Student" and profile == "ctv_sale":
-		unauthorized_fields = set(values) - _CTV_STUDENT_UPDATE_FIELDS
-		if unauthorized_fields:
-			frappe.throw(
-				_("CTV Sale may only update: {0}.").format(", ".join(sorted(_CTV_STUDENT_UPDATE_FIELDS))),
-				frappe.PermissionError,
-			)
+	_check_student_update_permission(doctype, values)
 	doc = frappe.get_doc(doctype, name.strip())
 	doc.check_permission("write")
 
@@ -175,6 +175,59 @@ def _update_document(doctype: str, name: str, fields: dict, allowed_fields: froz
 		"doctype": doctype,
 		"name": doc.name,
 		"updated_fields": {fieldname: doc.get(fieldname) for fieldname in values},
+	}
+
+
+def _check_student_update_permission(doctype: str, values: dict) -> None:
+	if doctype != "CRM Student":
+		return
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	profile = (
+		resolve_crm_profile(frappe.get_roles(actor))
+		if actor not in {None, "Guest", "None", "Administrator"}
+		else None
+	)
+	if profile == "ctv_sale":
+		unauthorized_fields = set(values) - _CTV_STUDENT_UPDATE_FIELDS
+		if unauthorized_fields:
+			frappe.throw(
+				_("CTV Sale may only update: {0}.").format(", ".join(sorted(_CTV_STUDENT_UPDATE_FIELDS))),
+				frappe.PermissionError,
+			)
+
+
+def _update_payment_account(name: str, fields: dict) -> dict:
+	"""Update the primary contact payment account without duplicating it on CRM Student."""
+	student = frappe.get_doc("CRM Student", name)
+	student.check_permission("write")
+	accounts = frappe.get_all(
+		"CRM Student Payment Account",
+		filters={"student": name},
+		fields=["name"],
+		order_by="is_primary desc, modified desc",
+		limit_page_length=1,
+	)
+	if accounts:
+		account = frappe.get_doc("CRM Student Payment Account", accounts[0]["name"])
+		account.check_permission("write")
+	else:
+		account = frappe.new_doc("CRM Student Payment Account")
+		account.student = name
+		account.account_purpose = "Other"
+		account.is_primary = 1
+		account.check_permission("create")
+
+	for fieldname, value in fields.items():
+		account.set(_PAYMENT_ACCOUNT_FIELD_ALIASES.get(fieldname, fieldname), value)
+	if accounts:
+		account.save()
+	else:
+		_validate_required_fields(fields, frozenset(_PAYMENT_ACCOUNT_FIELD_ALIASES))
+		account.insert()
+
+	return {
+		fieldname: account.get(_PAYMENT_ACCOUNT_FIELD_ALIASES.get(fieldname, fieldname))
+		for fieldname in fields
 	}
 
 
@@ -600,18 +653,33 @@ def get_field_options(
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_student(name: str, fields: dict | str | None = None) -> dict:
-	"""Partially update basic profile fields on one CRM Student.
+	"""Partially update Student profile and associated contact account fields.
 
 	Request fields: ``name`` and a non-empty ``fields`` object. The response
 	contains the document name and the normalized values that were updated.
 	"""
-	result = _update_document(
-		"CRM Student",
-		_resolve_student_name(name),
-		_canonical_student_fields(fields),
-		_STUDENT_CANONICAL_FIELDS,
-	)
-	result["updated_fields"] = _student_response_fields(result["updated_fields"])
+	values = _parse_fields(fields, _STUDENT_BASIC_FIELDS | _STUDENT_PAYMENT_ACCOUNT_FIELDS)
+	_check_student_update_permission("CRM Student", values)
+	student_name = _resolve_student_name(name)
+	student_values = {fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_BASIC_FIELDS}
+	payment_values = {
+		fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_PAYMENT_ACCOUNT_FIELDS
+	}
+	result = {
+		"doctype": "CRM Student",
+		"name": student_name,
+		"updated_fields": {},
+	}
+	if student_values:
+		student_result = _update_document(
+			"CRM Student",
+			student_name,
+			_canonical_student_fields(student_values),
+			_STUDENT_CANONICAL_FIELDS,
+		)
+		result["updated_fields"].update(_student_response_fields(student_result["updated_fields"]))
+	if payment_values:
+		result["updated_fields"].update(_update_payment_account(student_name, payment_values))
 	return result
 
 

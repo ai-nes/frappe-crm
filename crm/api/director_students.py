@@ -135,7 +135,12 @@ STUDENT_FIELDS = [
 	"student_context_revision",
 	"high_school",
 	"province",
+	"ward",
 	"major",
+	"aspiration",
+	"branch",
+	"platform",
+	"source",
 	"student_stage",
 	"latest_score",
 	"assessment_status",
@@ -148,19 +153,35 @@ STUDENT_FIELDS = [
 	"transcript_score",
 	"english_converted_score",
 	"total_score",
-	"source",
-	"aspiration",
-	"branch",
-	"ward",
+	"other_phone",
+	"other_email",
+	"birth_place",
+	"ethnicity",
+	"religion",
+	"nationality",
+	"id_number",
+	"id_issued_date",
+	"id_issued_place",
+	"contact_address",
 	"notes",
 	"owner_staff",
 	"assigned_to",
 	"admission_year",
+	"creation",
 	"modified",
 	"privacy_status",
 	"parent_name",
 	"parent_phone",
-	"contact_address",
+	"parent_other_phone",
+	"parent_email",
+	"father_name",
+	"father_phone",
+	"father_email",
+	"father_occupation",
+	"mother_name",
+	"mother_phone",
+	"mother_email",
+	"mother_occupation",
 	"education_program",
 	"decision_maker",
 	"preferred_contact_channel",
@@ -956,6 +977,16 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 		"aspirations": _lookup_map("CRM Aspiration", {row.get("aspiration") for row in rows}, "display_name"),
 		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
 		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
+		"campaigns": _lookup_map("CRM Campaign", {row.get("campaign") for row in rows}, "title"),
+		"platforms": _lookup_map(
+			"CRM Platform", {row.get("platform") for row in rows}, "platform_name"
+		),
+		"branches": _lookup_map(
+			"CRM Campus", {row.get("branch") for row in rows}, "campus_name"
+		),
+		"sourceLeads": _lookup_map(
+			"CRM Lead", {row.get("source_lead") for row in rows}, "student_name"
+		),
 	}
 
 
@@ -1050,12 +1081,16 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
 		"aspiration": lookups.get("aspirations", {}).get(row.get("aspiration")) or row.get("aspiration"),
 		"aspirationId": row.get("aspiration"),
+		"platform": lookups.get("platforms", {}).get(row.get("platform")) or row.get("platform"),
+		"branch": lookups.get("branches", {}).get(row.get("branch")) or row.get("branch"),
+		"sourceLead": row.get("source_lead"),
+		"sourceLeadLabel": lookups.get("sourceLeads", {}).get(row.get("source_lead"))
+		or row.get("source_lead"),
+		"campaign": lookups.get("campaigns", {}).get(row.get("campaign")) or row.get("campaign"),
 		"stage": stage["label"] if stage else None,
 		"studentStage": _student_stage_value(row),
 		"processingStatus": row.get("processing_status"),
 		"resolution": row.get("resolution"),
-		"sourceLead": row.get("source_lead"),
-		"campaign": row.get("campaign"),
 		"recordType": "student",
 		"assignmentStatus": "assigned" if row.get("owner_staff") or row.get("assigned_to") else "unassigned",
 		"score": _number(row.get("latest_score")),
@@ -1459,6 +1494,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"verificationStatus": _verification_status(row, assessment),
 			"contactConsent": _contact_consent(student_id, row.get("privacy_status")),
 			"lastUpdatedAt": _as_iso(row.get("modified")),
+			"profileDetails": _student_profile_details(row, item, _student_payment_account(student_id)),
 		},
 		"readiness": _readiness(row, item, guardian, applications, interactions),
 		"profile": _key_values(
@@ -1513,6 +1549,88 @@ def _build_student_360(row, item) -> dict[str, Any]:
 		"channelPerformance": channel_performance,
 		"zaloMessages": _student_zalo_messages(student_id, interactions, row, guardian),
 		"calls": _student_call_records(student_id, interactions, row, guardian),
+	}
+
+
+def _student_payment_account(student_id: str | None) -> dict[str, Any]:
+	result = {"bankName": None, "accountNumber": None, "accountHolder": None}
+	if not student_id or not _table_exists("CRM Student Payment Account"):
+		return result
+	if not frappe.has_permission("CRM Student Payment Account", "read"):
+		return result
+	accounts = frappe.get_all(
+		"CRM Student Payment Account",
+		filters={"student": student_id},
+		fields=["bank_name", "account_number", "account_holder_name"],
+		order_by="is_primary desc, modified desc",
+		limit_page_length=1,
+	)
+	if not accounts:
+		return result
+	account = accounts[0]
+	return {
+		"bankName": account.get("bank_name"),
+		"accountNumber": account.get("account_number"),
+		"accountHolder": account.get("account_holder_name"),
+	}
+
+
+def _student_profile_details(row, item, payment_account=None) -> dict[str, Any]:
+	"""Project every field rendered by the existing student profile cards."""
+	return {
+		"personal": {
+			"fullName": row.get("full_name") or row.get("student_name"),
+			"dateOfBirth": row.get("date_of_birth"),
+			"gender": row.get("gender"),
+			"idNumber": row.get("id_number"),
+			"birthPlace": row.get("birth_place"),
+			"ethnicity": row.get("ethnicity"),
+			"religion": row.get("religion"),
+			"nationality": row.get("nationality"),
+			"idIssuedDate": row.get("id_issued_date"),
+			"idIssuedPlace": row.get("id_issued_place"),
+			"phone": row.get("phone"),
+			"otherPhone": row.get("other_phone"),
+			"email": row.get("email"),
+			"otherEmail": row.get("other_email"),
+			"source": item.get("source"),
+			"campaign": item.get("campaign") or row.get("campaign"),
+			"owner": item.get("owner"),
+			"convertedFromLead": "Có" if row.get("source_lead") else "Không",
+			"sourceLead": item.get("sourceLeadLabel"),
+			"majorId": row.get("major"),
+			"major": item.get("major"),
+			"admissionYearId": row.get("admission_year"),
+			"admissionYear": row.get("admission_year"),
+			"branchId": row.get("branch"),
+			"branch": item.get("branch"),
+			"createdAt": _as_iso(row.get("creation")),
+			"modifiedAt": _as_iso(row.get("modified")),
+		},
+		"contact": {
+			"name": row.get("parent_name"),
+			"phone": row.get("parent_phone"),
+			"otherPhone": row.get("parent_other_phone"),
+			"email": row.get("parent_email"),
+			"bankName": (payment_account or {}).get("bankName"),
+			"accountNumber": (payment_account or {}).get("accountNumber"),
+			"accountHolder": (payment_account or {}).get("accountHolder"),
+			"fatherEmail": row.get("father_email"),
+			"fatherName": row.get("father_name"),
+			"fatherPhone": row.get("father_phone"),
+			"fatherOccupation": row.get("father_occupation"),
+			"motherPhone": row.get("mother_phone"),
+			"motherName": row.get("mother_name"),
+			"motherEmail": row.get("mother_email"),
+			"motherOccupation": row.get("mother_occupation"),
+		},
+		"address": {
+			"province": item.get("province"),
+			"provinceId": row.get("province"),
+			"ward": item.get("ward"),
+			"wardId": row.get("ward"),
+			"fullAddress": row.get("contact_address"),
+		},
 	}
 
 
