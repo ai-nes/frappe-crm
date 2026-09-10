@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from typing import Any
 
 RULE_SCHEMA_VERSION = "crm-rule-v1"
+VERSION_ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9._-]{1,63}$")
 MAX_CONDITION_DEPTH = 8
 MAX_CONDITION_NODES = 50
 MAX_TARGET_ACTIONS = 20
@@ -44,21 +45,14 @@ ACTION_PATTERN = re.compile(r"^[A-Z][A-Z0-9_-]{1,63}$")
 # deliberately not accepted from an administrator-edited JSON value.
 FACT_CATALOG = {
 	"student.stage": {"type": "string"},
-	"student.lifecycle_stage": {"type": "string"},
 	"student.is_opted_out": {"type": "boolean"},
 	"student.email_bounced": {"type": "boolean"},
 	"application.status": {"type": "string"},
 	"application.document_total": {"type": "number"},
 	"application.document_completed": {"type": "number"},
 	"application.deadline": {"type": "datetime"},
-	"interaction.has_new_content": {"type": "boolean"},
-	"interaction.last_analyzed_at": {"type": "datetime"},
-	"student_360.last_generated_at": {"type": "datetime"},
-	"student_360.source_revision": {"type": "number"},
-	"score.last_computed_at": {"type": "datetime"},
 	"score.source_revision": {"type": "number"},
 	"activity.last_contact_at": {"type": "datetime"},
-	"activity.contact_count_7d": {"type": "number"},
 	"requested_action.code": {"type": "string"},
 	"requested_action.category": {"type": "string"},
 	"requested_action.channel": {"type": "string"},
@@ -187,12 +181,43 @@ def _as_bool(value: Any) -> bool:
 	return bool(value)
 
 
+def normalize_rule_version_data(value: Mapping[str, Any]) -> dict:
+	if not isinstance(value, Mapping):
+		raise ValueError("CRM Rule Version data must be an object.")
+	version_id = _text(value.get("version_id"), "version_id", max_length=64).upper()
+	if not VERSION_ID_PATTERN.fullmatch(version_id):
+		raise ValueError("version_id must match ^[A-Z][A-Z0-9._-]{1,63}$.")
+	version_name = _text(value.get("version_name"), "version_name", max_length=140)
+	description = str(value.get("description") or "").strip()
+	if len(description) > 2000:
+		raise ValueError("description exceeds the maximum length.")
+	status = _text(value.get("status") or "draft", "status", max_length=20).lower()
+	if status not in STATUSES:
+		raise ValueError(f"status must be one of {sorted(STATUSES)}.")
+	try:
+		revision = max(int(value.get("revision") or 0), 0)
+	except (TypeError, ValueError) as exc:
+		raise ValueError("revision must be a non-negative integer.") from exc
+	return {
+		"version_id": version_id,
+		"version_name": version_name,
+		"description": description,
+		"status": status,
+		"is_active": _as_bool(value.get("is_active")),
+		"revision": revision,
+		"schema_version": RULE_SCHEMA_VERSION,
+	}
+
+
 def normalize_rule_data(value: Mapping[str, Any]) -> dict:
 	if not isinstance(value, Mapping):
 		raise ValueError("CRM Rule data must be an object.")
 	rule_id = _text(value.get("rule_id"), "rule_id", max_length=64).upper()
 	if not RULE_ID_PATTERN.fullmatch(rule_id):
 		raise ValueError("rule_id must match ^[A-Z][A-Z0-9_-]{2,63}$.")
+	rule_version = str(value.get("rule_version") or "").strip().upper()
+	if rule_version and not VERSION_ID_PATTERN.fullmatch(rule_version):
+		raise ValueError("rule_version must be a valid CRM Rule Version ID.")
 	rule_group = _text(value.get("rule_group"), "rule_group", max_length=80).upper()
 	rule_name = _text(value.get("rule_name"), "rule_name", max_length=140)
 	feature_scope = _text(value.get("feature_scope"), "feature_scope", max_length=40).lower()
@@ -223,6 +248,7 @@ def normalize_rule_data(value: Mapping[str, Any]) -> dict:
 		raise ValueError("revision must be a non-negative integer.") from exc
 
 	return {
+		"rule_version": rule_version,
 		"rule_id": rule_id,
 		"rule_group": rule_group,
 		"rule_name": rule_name,
@@ -244,6 +270,7 @@ def normalize_rule_data(value: Mapping[str, Any]) -> dict:
 def canonical_rule_payload(row: Mapping[str, Any]) -> dict:
 	"""Return the stable wire representation consumed by ``ai-crm``."""
 	data = normalize_rule_data(row)
+	data.pop("rule_version", None)
 	data.pop("status", None)
 	data.pop("enabled", None)
 	data["rule_digest"] = hashlib.sha256(
@@ -252,7 +279,11 @@ def canonical_rule_payload(row: Mapping[str, Any]) -> dict:
 	return data
 
 
-def active_rule_catalog(rows: list[Mapping[str, Any]], feature_scope: str | None = None) -> dict:
+def active_rule_catalog(
+	rows: list[Mapping[str, Any]],
+	feature_scope: str | None = None,
+	metadata: Mapping[str, Any] | None = None,
+) -> dict:
 	"""Build a deterministic, digest-bound catalog from published rows."""
 	items = []
 	for row in rows:
@@ -261,13 +292,20 @@ def active_rule_catalog(rows: list[Mapping[str, Any]], feature_scope: str | None
 			continue
 		items.append(payload)
 	items.sort(key=lambda item: (-item["priority"], item["rule_id"], item["revision"]))
-	digest = hashlib.sha256(
+	computed_digest = hashlib.sha256(
 		json.dumps(items, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
 	).hexdigest()
 	max_revision = max((item["revision"] for item in items), default=0)
+	metadata = metadata or {}
+	digest = str(metadata.get("ruleset_digest") or computed_digest)
+	ruleset_revision = str(
+		metadata.get("ruleset_revision") or f"crm-rule-set-r{max_revision}-{computed_digest[:12]}"
+	)
 	return {
 		"schema_version": RULE_SCHEMA_VERSION,
-		"ruleset_revision": f"crm-rule-set-r{max_revision}-{digest[:12]}",
+		"version_id": metadata.get("version_id"),
+		"version_name": metadata.get("version_name"),
+		"ruleset_revision": ruleset_revision,
 		"ruleset_digest": digest,
 		"feature_scope": feature_scope,
 		"rules": items,

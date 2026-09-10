@@ -4,6 +4,7 @@ from crm.fcrm.rule_engine import (
 	active_rule_catalog,
 	normalize_condition,
 	normalize_rule_data,
+	normalize_rule_version_data,
 	normalize_target_actions,
 )
 
@@ -88,3 +89,27 @@ def test_active_catalog_is_sorted_and_digest_bound():
 def test_rule_revision_must_be_a_non_negative_integer():
 	with pytest.raises(ValueError, match="revision"):
 		normalize_rule_data(_rule(revision="not-an-integer"))
+
+
+def test_rule_version_requires_non_empty_id_and_name():
+	with pytest.raises(ValueError, match="version_id is required"):
+		normalize_rule_version_data({"version_id": "", "version_name": "Rules"})
+	with pytest.raises(ValueError, match="version_name is required"):
+		normalize_rule_version_data({"version_id": "V1.0.0", "version_name": ""})
+
+
+def test_active_catalog_uses_published_version_metadata():
+	catalog = active_rule_catalog(
+		[_rule(rule_version="V2.0.0")],
+		feature_scope="nba",
+		metadata={
+			"version_id": "V2.0.0",
+			"version_name": "Current",
+			"ruleset_revision": "crm-rule-set-V2.0.0-r7-test",
+			"ruleset_digest": "a" * 64,
+		},
+	)
+
+	assert catalog["version_id"] == "V2.0.0"
+	assert catalog["ruleset_revision"] == "crm-rule-set-V2.0.0-r7-test"
+	assert catalog["ruleset_digest"] == "a" * 64

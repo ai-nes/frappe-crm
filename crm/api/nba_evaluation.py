@@ -448,6 +448,12 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	application = projection.get("application") or {}
 	score = projection.get("score") or {}
 	academic = projection.get("academic") or {}
+	interaction_at = interaction.get("at")
+	if isinstance(interaction_at, datetime):
+		interaction_at = interaction_at.isoformat()
+	application_deadline = application.get("deadline")
+	if isinstance(application_deadline, datetime):
+		application_deadline = application_deadline.isoformat()
 	academic_signal = {
 		"gpa": academic.get("gpa"),
 		"quality": academic.get("quality") or "unknown",
@@ -457,17 +463,29 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 		academic_signal["evidence_ref"] = str(academic["evidence_ref"])
 	return {
 		"student_stage": projection.get("student_stage"),
+		"student": {
+			"stage": projection.get("student_stage"),
+			"is_opted_out": bool(projection.get("is_opted_out")),
+			"email_bounced": bool(projection.get("email_bounced")),
+		},
 		"intent": {"type": intent.get("type"), "polarity": intent.get("polarity")},
 		"engagement": {
 			"state": interaction.get("outcome") or "unknown",
 			"last_contact_days": interaction.get("days_since"),
 		},
+		"interaction": {"at": interaction_at},
 		"application_state": {
+			"status": application.get("status"),
+			"document_total": application.get("document_total"),
+			"document_completed": application.get("document_completed"),
+			"deadline": application_deadline,
 			"completeness": application.get("completeness") or "unknown",
 			"missing": list(application.get("missing") or []),
 			"missing_count": int(application.get("missing_count") or 0),
 			"source_revision": application.get("source_revision") or "unknown",
 		},
+		"activity": {"last_contact_at": interaction_at},
+		"score": {"source_revision": score.get("current_revision")},
 		"academic": academic_signal,
 		"blockers": [assessment["primary_barrier"]] if assessment.get("primary_barrier") else [],
 		"deadlines": (
@@ -484,6 +502,8 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 			"consent": bool((projection.get("contactability") or {}).get("consent")),
 			"channels": list((projection.get("contactability") or {}).get("channels") or []),
 			"recipient_bound": (projection.get("contactability") or {}).get("recipient_bound") is not False,
+			"is_opted_out": bool(projection.get("is_opted_out")),
+			"email_bounced": bool(projection.get("email_bounced")),
 		},
 		"parent_authority": {
 			"valid": bool((projection.get("parent_authority") or {}).get("valid")),
@@ -629,13 +649,47 @@ def _shape_policies(
 
 
 def _active_rule_catalog(feature_scope: str) -> dict:
-	"""Read the published Frappe rule catalog without breaking old installs."""
+	"""Read the published rules from the single active CRM Rule Version."""
 	if not frappe.db.get_value("DocType", "CRM Rule", "name"):
 		return active_rule_catalog([], feature_scope=feature_scope)
+	if not frappe.db.get_value("DocType", "CRM Rule Version", "name"):
+		rows = frappe.get_all(
+			"CRM Rule",
+			filters={"status": "published", "enabled": 1},
+			fields=[
+				"rule_id",
+				"rule_group",
+				"rule_name",
+				"description",
+				"feature_scope",
+				"rule_type",
+				"gate_outcome",
+				"priority",
+				"action",
+				"target_actions",
+				"condition",
+				"revision",
+				"schema_version",
+			],
+			limit_page_length=1000,
+			order_by="priority desc, rule_id asc",
+		)
+		return active_rule_catalog(rows, feature_scope=feature_scope)
+	active_versions = frappe.get_all(
+		"CRM Rule Version",
+		filters={"is_active": 1, "status": "published"},
+		fields=["name", "version_id", "version_name", "ruleset_revision", "ruleset_digest"],
+		limit_page_length=2,
+		order_by="modified desc, name asc",
+	)
+	if len(active_versions) != 1:
+		return active_rule_catalog([], feature_scope=feature_scope)
+	version = active_versions[0]
 	rows = frappe.get_all(
 		"CRM Rule",
-		filters={"status": "published", "enabled": 1},
+		filters={"rule_version": version.name, "status": "published", "enabled": 1},
 		fields=[
+			"rule_version",
 			"rule_id",
 			"rule_group",
 			"rule_name",
@@ -653,7 +707,16 @@ def _active_rule_catalog(feature_scope: str) -> dict:
 		limit_page_length=1000,
 		order_by="priority desc, rule_id asc",
 	)
-	return active_rule_catalog(rows, feature_scope=feature_scope)
+	return active_rule_catalog(
+		rows,
+		feature_scope=feature_scope,
+		metadata={
+			"version_id": version.version_id,
+			"version_name": version.version_name,
+			"ruleset_revision": version.ruleset_revision,
+			"ruleset_digest": version.ruleset_digest,
+		},
+	)
 
 
 _DEFAULT_ENGINE_REVISION = "nba-engine-r2"

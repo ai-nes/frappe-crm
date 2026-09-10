@@ -1,0 +1,39 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:version_id",
+ "creation": "2026-09-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["version_id", "version_name", "description", "status", "is_active", "revision", "schema_version", "ruleset_revision", "ruleset_digest", "published_at", "published_by", "archive_reason"],
+ "fields": [
+  {"fieldname": "version_id", "fieldtype": "Data", "label": "Version ID", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "version_name", "fieldtype": "Data", "label": "Version Name", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "draft\npublished\narchived", "default": "draft", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "is_active", "fieldtype": "Check", "label": "Active", "default": "0", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "0", "read_only": 1, "non_negative": 1, "in_list_view": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "default": "crm-rule-v1", "read_only": 1},
+  {"fieldname": "ruleset_revision", "fieldtype": "Data", "label": "Ruleset Revision", "read_only": 1},
+  {"fieldname": "ruleset_digest", "fieldtype": "Data", "label": "Ruleset Digest", "read_only": 1},
+  {"fieldname": "published_at", "fieldtype": "Datetime", "label": "Published At", "read_only": 1},
+  {"fieldname": "published_by", "fieldtype": "Link", "label": "Published By", "options": "User", "read_only": 1},
+  {"fieldname": "archive_reason", "fieldtype": "Small Text", "label": "Archive Reason", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Rule Version",
+ "permissions": [
+  {"export": 1, "read": 1, "role": "Business Admin"},
+  {"export": 1, "read": 1, "role": "Admissions Director"},
+  {"export": 1, "read": 1, "role": "System Manager"},
+  {"read": 1, "role": "AI Service"}
+ ],
+ "quick_entry": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

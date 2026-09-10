@@ -184,3 +184,4 @@ crm.patches.v1_0.move_student_operational_state
 crm.patches.v1_0.rename_ai_lead_insight_to_student_insight
 crm.patches.v1_0.cleanup_legacy_ai_insight_tables
 crm.patches.v1_0.create_business_admin_role
+crm.patches.v1_0.migrate_crm_rule_versions

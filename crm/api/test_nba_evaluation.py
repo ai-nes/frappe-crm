@@ -56,6 +56,8 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 			score_input_revision=42,
 			applied_score_input_revision=42,
 			applied_policy_revision=1,
+			is_opted_out=0,
+			email_bounced=0,
 			sla_evidence_state=None,
 			sla_evidence_observed_at=None,
 		)
@@ -146,6 +148,12 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		self.assertEqual(input_digest(first), input_digest(second))
 		self.assertEqual(first["context"]["application_state"]["missing"], ["required_documents"])
 		self.assertEqual(first["context"]["application_state"]["source_revision"], "2026-09-04 01:00:00")
+		self.assertEqual(first["context"]["application_state"]["status"], "in progress")
+		self.assertEqual(first["context"]["application_state"]["document_total"], 2)
+		self.assertEqual(first["context"]["application_state"]["document_completed"], 1)
+		self.assertFalse(first["context"]["student"]["is_opted_out"])
+		self.assertFalse(first["context"]["student"]["email_bounced"])
+		self.assertEqual(first["context"]["score"]["source_revision"], 42)
 		self.assertEqual(first["context"]["engagement"]["state"], "cooling")
 		self.assertEqual(first["context"]["work_in_flight"], ["CALL"])
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["action_code"], "CALL")

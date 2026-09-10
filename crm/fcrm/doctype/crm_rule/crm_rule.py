@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import frappe
@@ -11,12 +12,17 @@ from crm.fcrm.rule_engine import normalize_rule_data
 
 
 class CRMRule(Document):
+	def autoname(self):
+		if self.get("rule_version") and self.get("rule_id"):
+			self.name = rule_document_name(self.rule_version, self.rule_id)
+
 	def validate(self):
 		try:
 			data = normalize_rule_data(
 				{
 					fieldname: self.get(fieldname)
 					for fieldname in (
+						"rule_version",
 						"rule_id",
 						"rule_group",
 						"rule_name",
@@ -36,12 +42,37 @@ class CRMRule(Document):
 			)
 		except ValueError as exc:
 			frappe.throw(str(exc), frappe.ValidationError)
+		if not data["rule_version"]:
+			frappe.throw("CRM Rule Version is required.", frappe.ValidationError)
 
 		before = self.get_doc_before_save()
 		if before and data["rule_id"] != str(before.rule_id or "").strip().upper():
 			frappe.throw("CRM Rule ID cannot be changed after creation.", frappe.ValidationError)
+		if before and data["rule_version"] != str(before.rule_version or "").strip():
+			frappe.throw("CRM Rule Version cannot be changed after creation.", frappe.ValidationError)
 		if self.is_new():
-			self.name = data["rule_id"]
+			version_status = frappe.db.get_value("CRM Rule Version", data["rule_version"], "status")
+			if not version_status:
+				frappe.throw("CRM Rule Version does not exist.", frappe.LinkValidationError)
+			if version_status != "draft":
+				frappe.throw("Rules can only be added to a draft CRM Rule Version.", frappe.PermissionError)
+			self.status = "draft"
+			self.enabled = 0
+			self.revision = 0
+			self.name = rule_document_name(data["rule_version"], data["rule_id"])
+		if frappe.db.exists(
+			"CRM Rule",
+			{"rule_version": data["rule_version"], "rule_id": data["rule_id"], "name": ["!=", self.name]},
+		):
+			frappe.throw("A CRM Rule with this ID already exists in the selected version.", frappe.DuplicateEntryError)
+		version_status = frappe.db.get_value("CRM Rule Version", data["rule_version"], "status")
+		if version_status in {"published", "archived"} and not getattr(
+			frappe.flags, "crm_rule_version_lifecycle", False
+		):
+			frappe.throw(
+				"Rules in published or archived versions are immutable. Clone the version to edit.",
+				frappe.PermissionError,
+			)
 		status = data["status"]
 		lifecycle_change = getattr(frappe.flags, "crm_rule_lifecycle", False)
 		publish_change = getattr(frappe.flags, "crm_rule_publish", False)
@@ -60,7 +91,9 @@ class CRMRule(Document):
 			)
 		if status == "published" and not data["enabled"]:
 			frappe.throw("A published CRM Rule must be enabled.", frappe.ValidationError)
-		if status == "published" and not publish_change:
+		if status == "published" and not (
+			publish_change or getattr(frappe.flags, "crm_rule_version_publish", False)
+		):
 			frappe.throw(
 				"Published CRM Rules must be changed through the publish API.",
 				frappe.PermissionError,
@@ -71,6 +104,7 @@ class CRMRule(Document):
 			)
 
 		self.rule_id = data["rule_id"]
+		self.rule_version = data["rule_version"]
 		self.status = status
 		self.enabled = int(data["enabled"])
 		self.rule_group = data["rule_group"]
@@ -87,8 +121,15 @@ class CRMRule(Document):
 		self.schema_version = data["schema_version"]
 
 	def on_trash(self):
-		if self.status != "draft":
+		version_status = frappe.db.get_value("CRM Rule Version", self.rule_version, "status")
+		if self.status != "draft" or version_status != "draft":
 			frappe.throw(
 				"Only draft CRM Rules can be deleted. Archive published rules instead.",
 				frappe.PermissionError,
-			)
+				)
+
+
+def rule_document_name(rule_version: str, rule_id: str) -> str:
+	key = f"{str(rule_version).strip().upper()}\x00{str(rule_id).strip().upper()}"
+	digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:12]
+	return f"CRM-RULE-{digest}-{str(rule_id).strip().upper()}"
