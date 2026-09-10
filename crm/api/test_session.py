@@ -129,6 +129,7 @@ class TestSessionRoleContract(FrappeTestCase):
 			({"Marketing"}, "marketing", "Marketing"),
 			({"Lead Sale"}, "lead_sales", "Lead Sale"),
 			({"Admissions Director"}, "admissions_director", "Admissions Director"),
+			({"Business Admin"}, "business_admin", "Business Admin"),
 		):
 			with self.subTest(roles=roles):
 				flags = _session_role_flags(roles)
@@ -157,6 +158,7 @@ class TestSessionRoleContract(FrappeTestCase):
 			frozenset({"student.execute", "recommendation.decide", "action.execute"}),
 		)
 		self.assertIn("system.configure", capabilities_for_roles({"System Manager"}))
+		self.assertEqual(capabilities_for_roles({"Business Admin"}), frozenset({"rule.manage"}))
 		self.assertEqual(capabilities_for_roles({"CRM Data Steward"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags({"Marketing", "CRM Data Steward"})

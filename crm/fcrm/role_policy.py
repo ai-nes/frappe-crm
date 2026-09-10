@@ -11,6 +11,7 @@ from __future__ import annotations
 POLICY_VERSION = "phase2-v1"
 SYSTEM_MANAGER_ROLE = "System Manager"
 ADMINISTRATOR_ROLE = "Administrator"
+BUSINESS_ADMIN_ROLE = "Business Admin"
 DESK_MANAGEMENT_ROLE_NAMES = (
 	"Workspace Manager",
 	"Dashboard Manager",
@@ -140,6 +141,7 @@ PROFILE_CAPABILITIES = {
 			"student.policy.approve",
 		}
 	),
+	"business_admin": frozenset({"rule.manage"}),
 	"ctv_sale": frozenset(
 		{
 			"student.execute",
@@ -176,6 +178,7 @@ CAPABILITY_METADATA = {
 	"lifecycle.transition": ("Chuyển giai đoạn", "Cập nhật giai đoạn tuyển sinh của hồ sơ."),
 	"outcome.record": ("Ghi nhận kết quả", "Ghi nhận kết quả của hành động hoặc phiên tư vấn."),
 	"recommendation.decide": ("Xử lý đề xuất", "Chấp nhận, từ chối hoặc quyết định trên đề xuất liên hệ."),
+	"rule.manage": ("Quản lý rule", "Tạo, chỉnh sửa, phát hành và lưu trữ CRM Rule."),
 	"roles.manage": ("Quản lý vai trò", "Quản lý vai trò và quyền truy cập người dùng."),
 	"school.activity.manage": (
 		"Quản lý hoạt động trường",
@@ -229,7 +232,7 @@ def capability_details(capabilities):
 
 
 CANONICAL_SELECTABLE_ROLES = frozenset(
-	{ADMINISTRATOR_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]}
+	{ADMINISTRATOR_ROLE, BUSINESS_ADMIN_ROLE, *PROFILE_LABELS.values(), *PROFILE_ROLE_ALIASES["marketing"]}
 )
 
 _PERMISSION_FLAGS = {
@@ -463,9 +466,12 @@ LEGACY_OVERLAY_IDS = frozenset(LEGACY_COMPATIBILITY_OVERLAYS)
 LEGACY_OVERLAY_ROLES = frozenset().union(
 	*(LEGACY_COMPATIBILITY_OVERLAYS[overlay]["roles"] for overlay in LEGACY_OVERLAY_IDS)
 )
+# Business Admin is a governance-only CRM identity, not an operating profile;
+# keep it out of case-scope/ownership profile aliases while still allowing the
+# CRM session and the rule-management capability to recognize it.
 CANONICAL_PROFILE_ROLES = frozenset().union(*PROFILE_ROLE_ALIASES.values())
 CRM_POLICY_ROLE_NAMES = tuple(sorted(CANONICAL_SELECTABLE_ROLES))
-CRM_BUSINESS_ROLES = CANONICAL_PROFILE_ROLES
+CRM_BUSINESS_ROLES = CANONICAL_PROFILE_ROLES | {BUSINESS_ADMIN_ROLE}
 CRM_ALLOWED_ROLES = CANONICAL_SELECTABLE_ROLES
 FRAMEWORK_ROLE_NAMES = frozenset({"All", "Guest", "Desk User", "Website User"})
 _MIGRATION_ROLE_NAMES = frozenset(
@@ -495,6 +501,8 @@ def resolve_crm_profile(roles) -> str | None:
 	):
 		return None
 	matches = [profile for profile, aliases in PROFILE_ROLE_ALIASES.items() if role_names & aliases]
+	if BUSINESS_ADMIN_ROLE in role_names:
+		return "business_admin" if not matches else None
 	return matches[0] if len(matches) == 1 else None
 
 

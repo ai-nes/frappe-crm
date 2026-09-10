@@ -4,6 +4,7 @@ from frappe.utils import getdate, today
 
 from crm.fcrm.role_policy import (
 	ADMINISTRATOR_ROLE,
+	BUSINESS_ADMIN_ROLE,
 	CRM_BUSINESS_ROLES,
 	POLICY_VERSION,
 	PROFILE_LABELS,
@@ -60,6 +61,8 @@ def get_crm_user_role(roles):
 	role_names = frozenset(roles)
 	role_state = classify_role_set(role_names)
 	profile = resolve_crm_profile(role_names)
+	if role_state == "canonical_profile" and profile == "business_admin":
+		return BUSINESS_ADMIN_ROLE, profile
 	if role_state == "canonical_profile" and profile:
 		return CRM_PROFILE_LABELS[profile], profile
 	if role_state == "system_manager":
@@ -103,7 +106,11 @@ def _session_role_flags(roles):
 		"is_crm_user": is_crm_user(role_names),
 		"crm_profile": profile,
 		# Compatibility field consumed by the local crm-agents gateway.
-		"crm_role": CRM_PROFILE_LABELS.get(profile, profile),
+		"crm_role": (
+			BUSINESS_ADMIN_ROLE
+			if profile == "business_admin"
+			else CRM_PROFILE_LABELS.get(profile, profile)
+		),
 		"crm_role_state": role_state,
 		"crm_capabilities": capabilities,
 		"crm_capability_details": capability_details(capabilities),

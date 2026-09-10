@@ -20,6 +20,7 @@ from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
+from crm.fcrm.rule_engine import active_rule_catalog
 from crm.services.action_outcome import (
 	ACTION_EFFECT_OVERRIDES,
 	CATEGORY_OUTCOME_EFFECTS,
@@ -623,7 +624,36 @@ def _shape_policies(
 		# resolves the value once per request and must reuse the exact same
 		# string for a replay identity check -- see `_stored_identity`.
 		"engine_revision": engine_revision,
+		"rule_engine": _active_rule_catalog("nba"),
 	}
+
+
+def _active_rule_catalog(feature_scope: str) -> dict:
+	"""Read the published Frappe rule catalog without breaking old installs."""
+	if not frappe.db.get_value("DocType", "CRM Rule", "name"):
+		return active_rule_catalog([], feature_scope=feature_scope)
+	rows = frappe.get_all(
+		"CRM Rule",
+		filters={"status": "published", "enabled": 1},
+		fields=[
+			"rule_id",
+			"rule_group",
+			"rule_name",
+			"description",
+			"feature_scope",
+			"rule_type",
+			"gate_outcome",
+			"priority",
+			"action",
+			"target_actions",
+			"condition",
+			"revision",
+			"schema_version",
+		],
+		limit_page_length=1000,
+		order_by="priority desc, rule_id asc",
+	)
+	return active_rule_catalog(rows, feature_scope=feature_scope)
 
 
 _DEFAULT_ENGINE_REVISION = "nba-engine-r2"
