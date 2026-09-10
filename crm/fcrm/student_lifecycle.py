@@ -22,8 +22,8 @@ from crm.fcrm.student_feature_flags import enabled
 
 LIFECYCLE_EVENT_DOCTYPE = "CRM Student Lifecycle Event"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
-POLICY_VERSION = "phase5-lifecycle-v1"
-SCHEMA_VERSION = "phase5-v1"
+POLICY_VERSION = "student-lifecycle"
+SCHEMA_VERSION = "student-lifecycle"
 SERVICE_FLAG = "student_lifecycle_service"
 ACTIVE_STAGES = ("Lead", "MQL", "Applicant", "Enrolled")
 LIFECYCLE_ORDER = ACTIVE_STAGES

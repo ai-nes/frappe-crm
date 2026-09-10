@@ -58,12 +58,12 @@ if FrappeTestCase is not None:
 			results = [
 				{
 					"name": "RES-NEW", "analysis_run": "RUN-NEW", "state": "unknown", "creation": observed_at,
-					"source_revision": 3, "source_digest": "a" * 64, "model_revision": "model-r1",
+					"source_revision": 3, "source_digest": "a" * 64, "model_revision": "model",
 					"decision_signals": {"schema_revision": "nba-decision-signals-v1", "observations": [self._observation()]},
 				},
 				{
 					"name": "RES-OLD", "analysis_run": "RUN-OLD", "state": "unknown", "creation": observed_at,
-					"source_revision": 1, "source_digest": "c" * 64, "model_revision": "model-r1",
+					"source_revision": 1, "source_digest": "c" * 64, "model_revision": "model",
 					"decision_signals": {"schema_revision": "nba-decision-signals-v1", "observations": [self._observation("EVID-OLD")]},
 				},
 			]
@@ -86,7 +86,7 @@ if FrappeTestCase is not None:
 			runs = [{"name": "RUN-00", "interaction": "INT-00"}]
 			results = [{
 				"name": "RES-00", "analysis_run": "RUN-00", "state": "unknown", "creation": observed_at,
-				"source_revision": 1, "source_digest": "a" * 64, "model_revision": "model-r1",
+				"source_revision": 1, "source_digest": "a" * 64, "model_revision": "model",
 				"decision_signals": {"schema_revision": "nba-decision-signals-v1", "observations": [self._observation()]},
 			}]
 			projected = self._run_projection(interactions=interactions, runs=runs, results=results)

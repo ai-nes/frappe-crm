@@ -1,4 +1,4 @@
-"""Whitelisted, flag-gated entry point for the Phase 9 audit read model."""
+"""Whitelisted, flag-gated entry point for the audit read model."""
 
 from __future__ import annotations
 

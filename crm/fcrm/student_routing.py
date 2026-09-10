@@ -416,7 +416,7 @@ def enqueue_student_routing(student: str, *, trigger: str = "pool_entry", correl
 		"route_trigger": trigger,
 		"correlation_token": correlation_id or str(uuid.uuid4()),
 		"idempotency_key": request_key,
-		"schema_version": "phase4-v1",
+		"schema_version": "student-routing",
 	}
 	policy = _active_policy(pool)
 	if policy:

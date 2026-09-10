@@ -23,7 +23,7 @@
   {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User","read_only":1},
   {"fieldname":"approved_at","fieldtype":"Datetime","label":"Approved At","read_only":1},
   {"fieldname":"break_glass_reason","fieldtype":"Small Text","label":"Break-glass Reason","read_only":1},
-  {"default":"phase7-v1","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","read_only":1,"reqd":1}
+  {"default":"student-sla","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","read_only":1,"reqd":1}
  ],
  "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Policy", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
 }

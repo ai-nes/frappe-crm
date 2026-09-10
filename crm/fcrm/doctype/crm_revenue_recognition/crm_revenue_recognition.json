@@ -23,7 +23,7 @@
   {"fieldname": "verification_status", "fieldtype": "Select", "label": "Verification Status", "options": "Pending\nVerified\nRejected", "default": "Pending", "reqd": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [{"fields": ["payment", "recognition_period", "revision"], "name": "crm_revenue_recognition_payment_period_idx", "unique": 0}, {"fields": ["application", "status", "recognition_period"], "name": "crm_revenue_recognition_reporting_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Revenue Recognition", "naming_rule": "Naming Series", "naming_series_options": "REV-.YYYY.-", "owner": "Administrator",

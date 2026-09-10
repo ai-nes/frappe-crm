@@ -18,7 +18,7 @@
   {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Forecast Value", "read_only": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [{"fields": ["scenario", "planning_scope", "metric_key", "period_start", "period_end", "revision"], "name": "crm_forecast_value_lookup_idx", "unique": 1}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Value", "naming_rule": "Naming Series", "naming_series_options": "FCV-.YYYY.-", "owner": "Administrator",

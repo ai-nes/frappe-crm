@@ -10,7 +10,7 @@ from crm.fcrm.admissions_canonical_contracts import validate_offering
 class CRMAdmissionOffering(Document):
 	def before_validate(self):
 		if not self.policy_version:
-			self.policy_version = "admissions-policy-v1"
+			self.policy_version = "admissions-policy"
 		if (
 			self.admission_year
 			and self.campus
@@ -22,7 +22,7 @@ class CRMAdmissionOffering(Document):
 				(self.admission_year, self.campus, self.major, self.admission_method, self.policy_version)
 			)
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 
 	def validate(self):
 		validate_offering(self.as_dict())

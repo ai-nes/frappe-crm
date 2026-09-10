@@ -61,7 +61,7 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 			sla_evidence_observed_at=None,
 		)
 		decision_policy = {
-			"revision": "nba-decision-policy-r1",
+			"revision": "nba-decision-policy",
 			"score_threshold": 0.35,
 			"confidence_floor": 0.45,
 			"top_n_cap": 3,

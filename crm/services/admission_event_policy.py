@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import frappe
 
-POLICY_VERSION = "admission-v1"
+POLICY_VERSION = "admission"
 TERMINAL_ACTION_STATUSES = {"completed", "failed", "cancelled"}
 INTERACTION_FIELDS = {"source_verified", "outcome"}
 INTENT_FIELDS = {"intent_type", "intent_role", "polarity", "confidence"}

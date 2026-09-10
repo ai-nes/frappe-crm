@@ -15,7 +15,7 @@ from typing import Any
 import frappe
 
 NAMESPACE = "crm-demo-showcase:director-admission-funnel"
-OFFERING_POLICY_VERSION = "director-funnel-demo-v1"
+OFFERING_POLICY = "director-funnel-demo"
 SNAPSHOT_STUDENT_COUNT = 50
 MAX_MQL_APPLICATIONS = 60
 FUNNEL_STAGES = frozenset({"MQL", "Applicant", "Enrolled"})
@@ -225,7 +225,7 @@ def _ensure_offering(row: dict[str, Any], context: dict[str, Any]) -> tuple[str,
 			"effective_from": f"{year}-01-01",
 			"effective_until": f"{year}-12-31",
 			"status": "Draft",
-			"policy_version": OFFERING_POLICY_VERSION,
+			"policy_version": OFFERING_POLICY,
 			"source_reference": f"{NAMESPACE}:offering:{method}",
 		}
 	).insert(ignore_permissions=True)

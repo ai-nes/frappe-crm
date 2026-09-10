@@ -126,7 +126,7 @@ class TestDirectorNextBestActionMappers(FrappeTestCase):
 				"subject": "Bước tiếp theo cho hồ sơ của bạn",
 				"body": "Nội dung thư",
 				"recipient_ref": "phuhuynh@example.com",
-				"template_version": "EmailPackageV1",
+				"template_version": "EmailPackage",
 			},
 		)
 		seed = nba._map_item(row, lookups, now)["packageSeed"]

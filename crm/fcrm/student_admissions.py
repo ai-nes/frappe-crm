@@ -19,8 +19,8 @@ from crm.fcrm.record_retention import technical_retention_until
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 COMMAND_KIND = "admissions_action"
-POLICY_VERSION = "phase1-admissions-action-v1"
-SCHEMA_VERSION = "phase1-v1"
+POLICY_VERSION = "student-admissions"
+SCHEMA_VERSION = "student-admissions"
 SERVICE_FLAG = "student_admissions_service"
 
 ACTION_CAPABILITIES = {

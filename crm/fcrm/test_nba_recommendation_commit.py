@@ -243,7 +243,7 @@ if FrappeTestCase is not None:
 				evaluation=claim["evaluation"],
 				run_generation=claim["run_generation"],
 				lease_token=claim["lease_token"],
-				engine_revision=claim.get("engine_revision") or "nba-engine-v0",
+				engine_revision=claim.get("engine_revision") or "nba-engine",
 				run_status="completed",
 				disposition="RECOMMEND",
 				result_digest="a" * 64,
@@ -257,10 +257,10 @@ if FrappeTestCase is not None:
 		def _action_items(self):
 			return frappe.db.count("CRM Action Item", {"student": self.student})
 
-		def test_r3_commit_rejects_tampered_frozen_action_reference(self):
+		def test_commit_rejects_tampered_frozen_action_reference(self):
 			doc = frappe._dict(
 				{
-					"engine_revision": "nba-engine-r3",
+					"engine_revision": "nba-engine",
 					"eligible_set_digest": "d" * 64,
 					"eligible_action_snapshot": json.dumps(
 						{
@@ -288,7 +288,7 @@ if FrappeTestCase is not None:
 				with self.assertRaises(frappe.ValidationError):
 					nba_evaluations._validate_frozen_action_refs(doc, [tampered])
 
-		def test_r3_commit_locks_and_rechecks_current_action_definition(self):
+		def test_commit_locks_and_rechecks_current_action_definition(self):
 			from crm.fcrm.nba_canonical import action_definition_snapshot, canonical_digest
 
 			current_definition = {
@@ -319,7 +319,7 @@ if FrappeTestCase is not None:
 				) as locked,
 			):
 				self.assertEqual(
-					nba_evaluations._resolve_committed_action(action_ref, verify_frozen_definition=True),
+					nba_evaluations._resolve_committed_action(action_ref),
 					"ACTION-1",
 				)
 				self.assertIn("FOR UPDATE", locked.call_args.args[0])
@@ -342,7 +342,6 @@ if FrappeTestCase is not None:
 				self.assertEqual(
 					nba_evaluations._resolve_committed_action(
 						action_ref,
-						verify_frozen_definition=True,
 						expected_runtime_digest=runtime_digest,
 					),
 					"ACTION-1",
@@ -360,7 +359,6 @@ if FrappeTestCase is not None:
 				with self.assertRaises(frappe.ValidationError):
 					nba_evaluations._resolve_committed_action(
 						action_ref,
-						verify_frozen_definition=True,
 						expected_runtime_digest=runtime_digest,
 					)
 
@@ -373,7 +371,7 @@ if FrappeTestCase is not None:
 				),
 			):
 				with self.assertRaises(frappe.ValidationError):
-					nba_evaluations._resolve_committed_action(action_ref, verify_frozen_definition=True)
+					nba_evaluations._resolve_committed_action(action_ref)
 
 		# --- valid RECOMMEND -------------------------------------------------- #
 		def test_recommend_writes_evaluation_and_top_n_rows_and_no_action_item(self):

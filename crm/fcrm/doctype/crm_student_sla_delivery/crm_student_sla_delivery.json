@@ -22,7 +22,7 @@
     {"default": "0", "fieldname": "attempt_count", "fieldtype": "Int", "label": "Attempt Count", "read_only": 1, "reqd": 1},
     {"fieldname": "delivered_at", "fieldtype": "Datetime", "label": "Delivered At", "read_only": 1},
     {"fieldname": "last_error_code", "fieldtype": "Data", "label": "Last Error Code", "read_only": 1},
-    {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1},
+    {"default": "student-sla", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1},
     {"fieldname": "attempts", "fieldtype": "Table", "label": "Delivery Attempts", "options": "CRM Student SLA Delivery Attempt", "read_only": 1}
   ],
   "index_web_pages_for_search": 0,

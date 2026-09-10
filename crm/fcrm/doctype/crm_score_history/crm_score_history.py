@@ -10,15 +10,6 @@ class CRMScoreHistory(Document):
 	def validate(self):
 		self._set_score_change()
 
-	def on_update(self):
-		frappe.db.set_value(
-			"CRM Student",
-			self.student,
-			"latest_score",
-			self.final_score or 0,
-			update_modified=False,
-		)
-
 	def _set_score_change(self):
 		if self.score_change is not None:
 			return

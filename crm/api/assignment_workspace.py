@@ -2416,8 +2416,8 @@ def _reserve_topology_receipt(*, command_key, fingerprint, actor, correlation_id
 				"outcome": "pending",
 				"actor": actor,
 				"scope_snapshot": json.dumps(context, sort_keys=True, default=str),
-				"policy_version": "assignment-workspace-v1",
-				"schema_version": "assignment-workspace-v1",
+				"policy_version": "assignment-workspace",
+				"schema_version": "assignment-workspace",
 				"correlation_token": correlation_id,
 				"request_received_at": now_datetime(),
 			}

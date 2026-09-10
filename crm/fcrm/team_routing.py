@@ -338,7 +338,7 @@ def select_province_recipient(
 			f"({winner['function']}, tải {winner['effectiveActive']}"
 			f"/{winner['capacity']['limit'] or 'không giới hạn'})."
 		),
-		"policyVersion": "province-capacity-v1",
+		"policyVersion": "province-capacity",
 	}
 
 

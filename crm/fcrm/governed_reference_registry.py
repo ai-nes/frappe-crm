@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 
-REGISTRY_REVISION = "P9-DEC-002"
+REGISTRY_REVISION = "governance-registry"
 
 
 def _refs(*values):

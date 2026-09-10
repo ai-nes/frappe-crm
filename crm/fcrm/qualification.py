@@ -13,8 +13,8 @@ from collections.abc import Iterable
 from datetime import date, datetime, timedelta
 from typing import Any
 
-QUALIFICATION_POLICY_VERSION = "phase5-qualification-v1"
-ENGAGEMENT_POLICY_VERSION = "phase5-engagement-v1"
+QUALIFICATION_POLICY_VERSION = "qualification"
+ENGAGEMENT_POLICY_VERSION = "student-engagement"
 MAX_WAITING_DAYS = 30
 
 # These are contract values, not labels from a mutable master.  Unknown values

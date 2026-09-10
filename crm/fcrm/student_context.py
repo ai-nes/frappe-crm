@@ -25,7 +25,7 @@ from crm.fcrm.student_lifecycle import get_lifecycle_context
 from crm.fcrm.attribution import get_student_attribution
 from crm.fcrm.student_contact_conversion import conversion_rows_for_student
 
-CONTEXT_POLICY_VERSION = "phase5-context-v1"
+CONTEXT_POLICY_VERSION = "student-context"
 MAX_HISTORY_LIMIT = 50
 DONE_TASK_STATUSES = {"done", "canceled", "cancelled", "completed"}
 

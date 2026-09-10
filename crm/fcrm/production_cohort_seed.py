@@ -14,7 +14,7 @@ from typing import Any
 import frappe
 
 
-NAMESPACE = "fcas-diverse-cohort-100-v1"
+NAMESPACE = "fcas-diverse-cohort-100"
 COUNT = 100
 STAGE_STATUSES = {
     "Lead": "Mới",
@@ -343,7 +343,7 @@ def _ensure_action(student: str, meta: dict[str, Any], topology: dict[str, Any],
         student,
         ("CALL", "COUNSELING", "MESSAGE")[index % 3],
         marker + f" tư vấn {meta['major']} và giải đáp rào cản học phí.",
-        f"{NAMESPACE}:action:v2:{meta['key']}",
+        f"{NAMESPACE}:action:{meta['key']}",
         due_at="2026-09-05 09:00:00",
         priority="high" if meta["stage"] == "Applicant" else "medium",
         assignee_staff=meta["owner"],

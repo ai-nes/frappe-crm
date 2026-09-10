@@ -84,7 +84,7 @@ class TestAIInsightAPI(FrappeTestCase):
 			"generation_idempotency_key": key,
 			"idempotency_key": key,
 			"producer_identity": "crm-agents:test",
-			"ai_policy_version": "test-policy-v1",
+			"ai_policy_version": "test-policy",
 			"ai_score": 72.5,
 			"ai_score_reason": "Strong program fit.",
 			"ai_next_action": "Call the student",
@@ -157,7 +157,7 @@ class TestAIInsightAPI(FrappeTestCase):
 				expected_context_revision=0,
 				generation_idempotency_key="invalid-field",
 				producer_identity="crm-agents:test",
-				ai_policy_version="test-policy-v1",
+				ai_policy_version="test-policy",
 				contact="CRM-CONT-1",
 			)
 		self.assertEqual(context.exception.code, "INVALID_FIELD")

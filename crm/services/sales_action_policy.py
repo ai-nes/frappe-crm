@@ -1,4 +1,4 @@
-"""Single Frappe-owned policy registry for v2 controlled actions."""
+"""Single Frappe-owned policy registry for controlled actions."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from crm.fcrm.action_constraints import DEFAULT_ACTION_ACTORS, TASK_ACCEPTOR_ROL
 from crm.fcrm.action_type_catalog import ACTION_TYPE_CATALOG, action_category
 from crm.fcrm.action_type_registry import available_action_types
 
-V2_ACTION_TYPES = tuple(available_action_types())
+ACTION_TYPES = tuple(available_action_types())
 
 ACTION_OPERATIONS = ("EDIT", "DISPATCH", "SCHEDULE", "ASSIGN", "RELEASE", "RECORD_OUTCOME")
 PARENT_CONTACT_ACTION_TYPES = frozenset({"PARENT_CONTACT", "CONTACT_PARENT"})
@@ -65,7 +65,7 @@ def policy_for(action_type: str) -> ActionPolicy:
 	try:
 		return ACTION_POLICIES[action_type]
 	except KeyError as exc:
-		raise ValueError(f"Unsupported v2 action type: {action_type}") from exc
+		raise ValueError(f"Unsupported action type: {action_type}") from exc
 
 
 def _parent_authority_is_valid(

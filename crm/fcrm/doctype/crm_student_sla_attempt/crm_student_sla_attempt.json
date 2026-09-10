@@ -44,7 +44,7 @@
   {"fieldname": "reset_approved_by", "fieldtype": "Link", "label": "Reset Approved By", "options": "User", "read_only": 1},
   {"fieldname": "reset_approved_at", "fieldtype": "Datetime", "label": "Reset Approved At", "read_only": 1},
   {"fieldname": "correlation_token", "fieldtype": "Data", "label": "Correlation Token", "read_only": 1, "reqd": 1},
-  {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
+  {"default": "student-sla", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
  ],
  "links": [],
  "module": "FCRM",

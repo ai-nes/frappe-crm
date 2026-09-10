@@ -699,7 +699,7 @@ def _ensure_assignment_policies(
 						"approved_by": "Administrator",
 						"approved_at": SEED_NOW,
 						"break_glass_reason": "Local golden Student 360 fixture",
-						"schema_version": "phase7-v1",
+						"schema_version": "student-routing",
 					}
 				).insert(ignore_permissions=True)
 			finally:
@@ -1042,7 +1042,7 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 	current_revision = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
 	request = request_student_analysis_run(
 		student,
-		idempotency_key=f"{NAMESPACE}:{profile['key']}:analysis:v3:r{current_revision}",
+		idempotency_key=f"{NAMESPACE}:{profile['key']}:analysis:r{current_revision}",
 	)
 	run_id = request["run_id"]
 	run = frappe.get_doc("CRM Student Analysis Run", run_id)
@@ -1143,7 +1143,7 @@ def _ensure_student_analysis(item: dict[str, Any], profile: dict[str, Any]) -> d
 		status="completed",
 		claims=claims,
 		policy_revision=intelligence_runs.STUDENT_360_POLICY_REVISION,
-		model_revision="local-golden-seed-v1",
+		model_revision="local-golden-seed",
 		result_digest=_digest(report),
 		report=report,
 	)
@@ -1218,7 +1218,7 @@ def _ensure_nba(item: dict[str, Any], profile: dict[str, Any]) -> dict[str, Any]
 		evaluation=evaluation,
 		run_generation=claim["run_generation"],
 		lease_token=claim["lease_token"],
-		engine_revision="local-golden-seed-nba-v1",
+		engine_revision="nba-engine",
 		run_status="completed",
 		disposition="RECOMMEND",
 		reason_codes=["ENGAGE_OR_REENGAGE"],

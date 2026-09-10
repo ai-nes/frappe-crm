@@ -17,7 +17,7 @@ class CRMPlanningScope(Document):
 
 	def before_validate(self):
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 		if self.effective_from and self.effective_until and self.effective_from > self.effective_until:
 			frappe.throw(_("Effective Until must not be before Effective From."), frappe.ValidationError)
 		values = self._scope_values()

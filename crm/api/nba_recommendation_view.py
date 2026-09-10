@@ -58,7 +58,7 @@ def recommendation_view(
 				domain="student_nba" if kind == "student" else "school_recommendation",
 				subject=build_subject_ref(kind, target_id, str(frappe.local.site or "frappe")),
 				disposition=disposition,
-				policy_revision="nba-recommendation-policy-v1",
+				policy_revision="nba-recommendation-policy",
 				evidence_refs=tuple(ai_payload.get("evidence_refs") or ()) if isinstance(ai_payload, dict) else (),
 				expires_at=expires,
 			)

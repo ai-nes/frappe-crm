@@ -682,7 +682,7 @@ def ensure_default_decision_policy() -> bool:
 			"score_weights": json.dumps({"confidence": 0.5, "impact": 0.5}, sort_keys=True),
 			"kernel_policy": json.dumps(
 				{
-					"revision": "nba-decision-policy-r1",
+					"revision": "nba-decision-policy",
 					"score_threshold": 0.35,
 					"confidence_floor": 0.45,
 					"top_n_cap": 3,

@@ -10,7 +10,7 @@ class CRMStudentEngagementEvent(Document):
 
 	def before_validate(self):
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 
 	def validate(self):
 		if self.is_new():

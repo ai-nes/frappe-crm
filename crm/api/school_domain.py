@@ -11,12 +11,12 @@ from crm.services.intelligence_refs import build_decision_ref, build_subject_ref
 
 
 SCHOOL360_CONTRACT_VERSION = "school360.overview.read:v1"
-SCHOOL360_POLICY_VERSION = "school360-read-v1"
-SCHOOL360_CONTRACT_REVISION = "school360-overview-r1"
+SCHOOL360_POLICY_VERSION = "school360-read"
+SCHOOL360_CONTRACT_REVISION = "school360-overview"
 RECOMMENDATION_CONTEXT_CONTRACT_VERSION = "school360.recommendation.context.read:v1"
-RECOMMENDATION_POLICY_VERSION = "school360-recommendation-v1"
-RECOMMENDATION_POLICY_REVISION = "school360-recommendation-policy-r1"
-RECOMMENDATION_DTO_REVISION = "school360-recommendation-dto-r1"
+RECOMMENDATION_POLICY_VERSION = "school360-recommendation"
+RECOMMENDATION_POLICY_REVISION = "school360-recommendation-policy"
+RECOMMENDATION_DTO_REVISION = "school360-recommendation-dto"
 RECOMMENDATION_ROLLOUT_CONFIG_KEY = "crm_agents_school360_recommendation_rollout"
 RECOMMENDATION_KILL_SWITCH_CONFIG_KEY = "crm_agents_school360_recommendation_kill_switch"
 RECOMMENDATION_GATE_REVISION_CONFIG_KEY = "crm_agents_school360_recommendation_gate_revision"

@@ -95,8 +95,8 @@ LOCAL_FLAGS = {
 	"crm_student_lifecycle_write_enabled": 1,
 	"crm_student_conversion_read_enabled": 1,
 	"crm_student_conversion_write_enabled": 1,
-	"crm_phase9_governance_write_enabled": 1,
-	"crm_phase9_audit_read_enabled": 1,
+	"crm_governance_write_enabled": 1,
+	"crm_audit_read_enabled": 1,
 }
 
 
@@ -169,7 +169,7 @@ def ensure_demo_config() -> dict:
 	_assert_local_site()
 	from frappe.installer import update_site_config
 
-	persisted = {**LOCAL_FLAGS, "crm_phase2_fixture_password": "123456"}
+	persisted = {**LOCAL_FLAGS, "crm_fixture_password": "123456"}
 	changed = []
 	for key, value in persisted.items():
 		if frappe.conf.get(key) != value:
@@ -1249,7 +1249,7 @@ def _enrollment_term(term_name: str) -> str:
 
 
 def _ensure_policies(campus: str, pool: str) -> None:
-	"""Seed one active + one draft + one retired routing and SLA policy each."""
+	"""Seed the current routing and SLA policy for the pool."""
 	from crm.api.student_policy import _service_save
 
 	now = now_datetime() - timedelta(minutes=1)
@@ -1258,31 +1258,15 @@ def _ensure_policies(campus: str, pool: str) -> None:
 	specs = (
 		{
 			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-routing",
 			"policy_version": 1,
 			"strategy": "round_robin",
 			"effective_from": now,
 			"status": "active",
 		},
 		{
-			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v2",
-			"policy_version": 2,
-			"strategy": "round_robin",
-			"effective_from": now,
-			"status": "draft",
-		},
-		{
-			"doctype": "CRM Student Routing Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-routing-v0",
-			"policy_version": 3,
-			"strategy": "round_robin",
-			"effective_from": now,
-			"status": "retired",
-		},
-		{
 			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v1",
+			"policy_key": f"{NAMESPACE}-{pool_key}-sla",
 			"policy_version": 1,
 			"warning_minutes": 15,
 			"breach_minutes": 30,
@@ -1293,39 +1277,13 @@ def _ensure_policies(campus: str, pool: str) -> None:
 			"effective_from": now,
 			"status": "active",
 		},
-		{
-			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v2",
-			"policy_version": 2,
-			"warning_minutes": 10,
-			"breach_minutes": 25,
-			"escalation_minutes": 40,
-			"pause_reasons": json.dumps([]),
-			"maximum_pause_minutes": 0,
-			"recipient_strategy": "owner_warning_lead_breach_director_escalation",
-			"effective_from": now,
-			"status": "draft",
-		},
-		{
-			"doctype": "CRM Student SLA Policy",
-			"policy_key": f"{NAMESPACE}-{pool_key}-sla-v0",
-			"policy_version": 3,
-			"warning_minutes": 20,
-			"breach_minutes": 40,
-			"escalation_minutes": 60,
-			"pause_reasons": json.dumps([]),
-			"maximum_pause_minutes": 0,
-			"recipient_strategy": "owner_warning_lead_breach_director_escalation",
-			"effective_from": now,
-			"status": "retired",
-		},
 	)
 	for spec in specs:
 		if frappe.db.exists(spec["doctype"], {"policy_key": spec["policy_key"]}):
 			continue
 		# Only one active policy may cover a Campus/Pool window (student_policy
 		# publication guard).  If the site already carries an active policy for
-		# this window, adopt it and seed only the draft/retired history rows.
+		# this window, leave it in place and do not create a second active policy.
 		if spec["status"] == "active" and frappe.db.exists(
 			spec["doctype"], {"campus": campus, "student_pool": pool, "status": "active"}
 		):
@@ -3624,7 +3582,7 @@ def _seed_governance(context: dict) -> dict:
 						"reference_docname": context["campus"],
 						"action": action,
 						"status": status,
-						"registry_revision": "P9-DEC-001",
+						"registry_revision": "governance-registry",
 						"reason": f"{NAMESPACE}: {FPTU_ADMISSIONS_CONTEXT}; {action} demo governance record",
 						"new_value": new_value,
 						"idempotency_key": key,

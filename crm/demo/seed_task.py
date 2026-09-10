@@ -746,7 +746,7 @@ def _ensure_offering(major: str, context: dict[str, Any]) -> str:
 				"effective_from": "2026-01-01",
 				"effective_until": "2026-12-31",
 				"status": "Draft",
-				"policy_version": "admissions-offering-v1",
+			"policy_version": "admissions-offering",
 				"source_reference": _key("offering-source", major),
 			}
 		).insert(ignore_permissions=True)

@@ -39,7 +39,7 @@ def _validate_text_list(value, field: str) -> None:
 
 
 def validate_execution_package(action_type: str, package: dict) -> None:
-	"""Validate a discriminated, versioned package; unknown types fail closed."""
+	"""Validate a discriminated execution package; unknown types fail closed."""
 	if action_type not in {"CALL", "EMAIL"}:
 		raise ValueError(f"No execution package is available for {action_type or 'unknown'}")
 	if not isinstance(package, dict):
@@ -74,7 +74,7 @@ def render_initial_package(task) -> dict:
 		}
 	if action_code in {"EMAIL", "SEND_EMAIL"}:
 		return {
-			"template_version": seed.get("template_version") or "EmailPackageV1",
+			"template_version": seed.get("template_version") or "EmailPackage",
 			"recipient_ref": seed.get("recipient_ref") or "Frappe-resolved",
 			"subject": seed.get("subject") or task.objective,
 			"body": seed.get("body") or task.objective,

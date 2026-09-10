@@ -32,7 +32,7 @@ LEAD_STATUS_GROUPS = {
 	"converted": "Đã chuyển đổi",
 }
 LEAD_QUALITY_GROUPS = {"invalid": "Sai số", "duplicate": "Lead trùng", "unknown": "Chưa phân loại"}
-PRIMARY_ATTRIBUTION_RULE = "first_touch_weight_confidence_earliest_v1"
+PRIMARY_ATTRIBUTION_RULE = "first_touch_weight_confidence_earliest"
 # Exact historical labels are retained for installations with legacy lookup rows.
 LEAD_STATUS_ALIASES = {
 	"new": {"NEW", "Mới"},
@@ -645,7 +645,7 @@ def _build_response(
 			"timezone": "Asia/Ho_Chi_Minh",
 			"scope": scope["id"],
 			"status": "partial" if warnings else "available",
-			"source": "CRM Campaign Performance Fact v1",
+			"source": "CRM Campaign Performance Fact",
 			"leadAttributionRule": PRIMARY_ATTRIBUTION_RULE,
 			"warnings": list(dict.fromkeys(warnings)),
 		},

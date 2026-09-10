@@ -22,7 +22,7 @@
   {"fieldname": "approved_at", "fieldtype": "Datetime", "label": "Approved At", "read_only": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [
   {"fields": ["admission_year", "campus", "major", "admission_method", "policy_version", "effective_from"], "name": "crm_offering_catalog_uniq", "unique": 1},

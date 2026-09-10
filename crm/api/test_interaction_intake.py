@@ -120,7 +120,7 @@ class TestInteractionIntakeContract(FrappeTestCase):
 			expected_source_digest="a" * 64,
 			state="unknown",
 			policy_revision="interaction-analysis-v2",
-			model_revision="model-r1",
+			model_revision="model",
 			result_digest="b" * 64,
 			contract_version="interaction-analysis-v2",
 			decision_signals=signals,

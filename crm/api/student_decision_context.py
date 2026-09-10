@@ -1,4 +1,4 @@
-"""Least-privilege, bounded Decision Context projection for crm-agents v2."""
+"""Least-privilege, bounded Decision Context projection for crm-agents."""
 
 from __future__ import annotations
 
@@ -658,7 +658,7 @@ def _projection(
 	context = {
 		"student_id": student,
 		"returned_revision": revision,
-		"policy_version": "student-next-task-v2",
+		"policy_version": "student-next-task",
 		"eligibility": {"student": True},
 		"student_stage": row.student_stage,
 		"study": {

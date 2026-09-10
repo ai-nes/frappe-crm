@@ -14,14 +14,24 @@ from crm.services.score_revision import bump_score_input_revision
 class TestScoringWrite(FrappeTestCase):
 	def setUp(self):
 		frappe.set_user("Administrator")
+		if not frappe.db.has_column("CRM Student", "applied_score_template"):
+			self.skipTest("CRM Student.applied_score_template requires bench migrate")
 		self._previous_conf = frappe.conf.get("crm_agents_service_user")
 		frappe.conf.crm_agents_service_user = "Administrator"
+		self._previous_active_templates = frappe.db.get_all(
+			"CRM Score Template", filters={"status": "Active"}, pluck="name"
+		)
+		for name in self._previous_active_templates:
+			frappe.db.set_value("CRM Score Template", name, "status", "Inactive", update_modified=False)
 
 	def tearDown(self):
 		if self._previous_conf is None:
 			frappe.conf.pop("crm_agents_service_user", None)
 		else:
 			frappe.conf.crm_agents_service_user = self._previous_conf
+		for name in getattr(self, "_previous_active_templates", []):
+			if frappe.db.exists("CRM Score Template", name):
+				frappe.db.set_value("CRM Score Template", name, "status", "Active", update_modified=False)
 		self._delete_test_students()
 		for name in frappe.db.get_all(
 			"CRM Score Template", filters={"template_name": ["like", "_Test SW%"]}, pluck="name"
@@ -57,6 +67,21 @@ class TestScoringWrite(FrappeTestCase):
 		doc = frappe.get_doc({"doctype": "CRM Score Template", "template_name": name, "status": "Inactive"})
 		doc.insert(ignore_permissions=True)
 		return doc.name
+
+	def _make_active_template(self, name="_Test SW Active Template"):
+		doc = frappe.get_doc(
+			{
+				"doctype": "CRM Score Template",
+				"template_name": name,
+				"status": "Active",
+				"fit_weight": 0.4,
+				"engagement_weight": 0.3,
+				"intent_weight": 0.3,
+			}
+		)
+		doc.insert(ignore_permissions=True)
+		doc.reload()
+		return doc
 
 	def _payload(self, student, template, **overrides):
 		payload = {
@@ -144,6 +169,134 @@ class TestScoringWrite(FrappeTestCase):
 		student.reload()
 		self.assertEqual(student.latest_score, 45.0)
 		self.assertEqual(student.applied_policy_revision, 2)
+
+	def test_components_are_recomputed_and_response_echoes_authoritative_values(self):
+		student = self._make_student("_Test SW Student Components")
+		template = self._make_active_template("_Test SW Active Components")
+		result = append_score_if_current(
+			**self._payload(
+				student.name,
+				template.name,
+				policy_revision=template.policy_revision,
+				policy_hash=template.policy_hash,
+				components={
+					"fit": 50,
+					"engagement": 30,
+					"intent": 60,
+					"negative": {"score": 0, "contributors": []},
+				},
+				expected_final_score=47,
+				expected_time_decay_factor=1,
+				expected_days_since=9999,
+			)
+		)
+		self.assertTrue(result["applied"])
+		self.assertEqual(result["final_score"], 47)
+		self.assertEqual(result["score_change"], 47)
+		self.assertEqual(result["time_decay_score"], 1)
+		student.reload()
+		self.assertEqual(student.latest_score, 47)
+		self.assertEqual(student.applied_score_template, template.name)
+
+	def test_component_validation_rejects_nan_and_positive_negative(self):
+		student = self._make_student("_Test SW Student Validation")
+		template = self._make_active_template("_Test SW Active Validation")
+		base = self._payload(
+			student.name,
+			template.name,
+			policy_revision=template.policy_revision,
+			policy_hash=template.policy_hash,
+			components={
+				"fit": 50,
+				"engagement": 30,
+				"intent": 60,
+				"negative": {"score": 0, "contributors": []},
+			},
+		)
+		with self.assertRaises(frappe.ValidationError):
+			append_score_if_current(**{**base, "components": {**base["components"], "fit": float("nan")}})
+		with self.assertRaises(frappe.ValidationError):
+			append_score_if_current(
+				**{
+					**base,
+					"components": {**base["components"], "negative": {"score": 5, "contributors": []}},
+				}
+			)
+		self.assertEqual(frappe.db.count("CRM Score History", {"student": student.name}), 0)
+
+	def test_template_switch_rebaselines_even_when_tuple_is_not_newer(self):
+		student = self._make_student("_Test SW Student Template Switch")
+		first = self._make_active_template("_Test SW Active First")
+		first_payload = self._payload(
+			student.name,
+			first.name,
+			policy_revision=first.policy_revision,
+			policy_hash=first.policy_hash,
+			components={
+				"fit": 10,
+				"engagement": 10,
+				"intent": 10,
+				"negative": {"score": 0, "contributors": []},
+			},
+		)
+		append_score_if_current(**first_payload)
+		first.status = "Inactive"
+		first.save(ignore_permissions=True)
+		second = self._make_active_template("_Test SW Active Second")
+		result = append_score_if_current(
+			**self._payload(
+				student.name,
+				second.name,
+				policy_revision=second.policy_revision,
+				policy_hash=second.policy_hash,
+				components={
+					"fit": 90,
+					"engagement": 90,
+					"intent": 90,
+					"negative": {"score": 0, "contributors": []},
+				},
+				source_score_input_revision=1,
+			)
+		)
+		self.assertTrue(result["applied"])
+		student.reload()
+		self.assertEqual(student.applied_score_template, second.name)
+		late_old_job = append_score_if_current(**first_payload)
+		self.assertTrue(late_old_job["failed"])
+		student.reload()
+		self.assertEqual(student.applied_score_template, second.name)
+
+	def test_null_template_stamp_rebaselines_an_old_tuple_after_migration(self):
+		student = self._make_student("_Test SW Student Null Template")
+		template = self._make_active_template("_Test SW Active Null Template")
+		frappe.db.set_value(
+			"CRM Student",
+			student.name,
+			{
+				"applied_score_input_revision": 50,
+				"applied_policy_revision": 50,
+				"applied_score_template": None,
+			},
+			update_modified=False,
+		)
+		result = append_score_if_current(
+			**self._payload(
+				student.name,
+				template.name,
+				policy_revision=template.policy_revision,
+				policy_hash=template.policy_hash,
+				components={
+					"fit": 40,
+					"engagement": 40,
+					"intent": 40,
+					"negative": {"score": 0, "contributors": []},
+				},
+				source_score_input_revision=1,
+			)
+		)
+		self.assertTrue(result["applied"])
+		student.reload()
+		self.assertEqual(student.applied_score_template, template.name)
 
 	def test_bump_score_input_revision_is_monotonic_per_student(self):
 		student = self._make_student("_Test SW Student Bump")

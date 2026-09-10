@@ -1,4 +1,4 @@
-"""Service-only boundary that assembles the NBA Evaluation v1 input envelope.
+"""Service-only boundary that assembles the current NBA Evaluation input envelope.
 
 The pure shaping and digest binding live in ``crm.fcrm.nba_evaluation_input``
 so they stay testable without a bench. This module gathers the live projection,
@@ -18,7 +18,7 @@ from crm.api.student_decision_context import _projection, _require_agent_identit
 from crm.fcrm import nba_policy
 from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
-from crm.fcrm.nba_context import NBA_ENGINE_R3
+from crm.fcrm.nba_context import NBA_ENGINE_NAME
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
 from crm.services.action_outcome import (
@@ -494,9 +494,9 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 		# see `_decision_effect_signals`. Structured input for the kernel's
 		# opportunity suppression, not a raw outcome_code passthrough.
 		"decision_effects": _decision_effect_signals(student),
-		# Owner capacity has no approved scenario in v1. Preserve the member for
-		# historical replay while emitting explicit unknown rather than inferring
-		# workload from action rows or assignments.
+		# Owner capacity has no approved source. Preserve the member while emitting
+		# explicit unknown rather than inferring workload from action rows or
+		# assignments.
 		"owner_capacity": {"owner": None, "open_tasks": None},
 		"evidence_refs": list(projection.get("evidence_refs") or []),
 		"signal_quality": {
@@ -505,9 +505,8 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 			"conflicts": [],
 		},
 	}
-	# R3's validated semantic projection is part of the signed kernel context.
-	# Keep the field absent for r2 inputs so historical input digests remain
-	# byte-identical; never reconstruct signals from raw interaction text here.
+	# The validated semantic projection is part of the signed kernel context.
+	# Never reconstruct signals from raw interaction text here.
 	if isinstance(decision_signals, Mapping):
 		context["decision_signals"] = dict(decision_signals)
 	return context
@@ -555,9 +554,7 @@ def _timing_domain_for_action(allowed_time_slots: object, timezone: str) -> dict
 	return {"timezone": timezone, "allowed_windows": windows}
 
 
-def _shape_eligible_action_set(
-	eligible: Mapping, *, timezone: str, include_semantics: bool = False
-) -> dict:
+def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 	actions = []
 	wire_actions = []
 	for action in eligible.get("actions") or []:
@@ -569,13 +566,9 @@ def _shape_eligible_action_set(
 		normalized_timing_domain = _timing_domain_for_action(
 			action.get("allowed_time_slots"), timezone
 		)
-		runtime_digest = (
-			canonical_digest({"normalized_timing_domain": normalized_timing_domain})
-			if include_semantics else None
-		)
+		runtime_digest = canonical_digest({"normalized_timing_domain": normalized_timing_domain})
 		wire_action = {"action_id": action_id, "revision": revision, "digest": digest}
-		if runtime_digest is not None:
-			wire_action["action_runtime_digest"] = runtime_digest
+		wire_action["action_runtime_digest"] = runtime_digest
 		wire_actions.append(wire_action)
 		item = {
 			"action_id": action_id,
@@ -602,18 +595,17 @@ def _shape_eligible_action_set(
 			"effort_band": _UNKNOWN_BAND,
 			"conflict_keys": [f"action:{code}"],
 		}
-		if include_semantics:
-			item.update(_semantic_action_metadata(code))
-			item["action_runtime_digest"] = runtime_digest
+		item.update(_semantic_action_metadata(code))
+		item["action_runtime_digest"] = runtime_digest
 		actions.append(item)
 	semantic_digest = canonical_digest(
 		{str(item["action_id"]): _semantic_action_metadata(item.get("action_code")) for item in actions}
-	) if include_semantics else None
+	)
 	return {
 		"set_revision": int(eligible.get("revision") or 0),
-		"set_digest": nba_policy.eligible_set_digest(wire_actions, include_runtime=include_semantics),
+		"set_digest": nba_policy.eligible_set_digest(wire_actions, include_runtime=True),
 		"actions": actions,
-		**({"semantic_digest": semantic_digest} if include_semantics else {}),
+		"semantic_digest": semantic_digest,
 		"exclusions": sorted(
 			list(eligible.get("exclusions") or []),
 			key=lambda item: (str(item.get("action") or ""), str(item.get("reason") or "")),
@@ -622,7 +614,7 @@ def _shape_eligible_action_set(
 
 
 def _semantic_action_metadata(code: str | None) -> dict:
-	"""Stable r3 meaning for existing action codes; independent of action digest."""
+	"""Stable semantic meaning for existing action codes; independent of action digest."""
 	default = {
 		"addresses_needs": [], "desired_outcomes": [], "collects_information": False, "readiness_target": "none"
 	}
@@ -656,41 +648,33 @@ def _shape_policies(
 	decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str, engine_revision: str,
 	semantic_digest: str | None = None,
 ) -> dict:
-	revision = eligible.get("revision") or 0
-	library_digest = eligible_set["set_digest"]
-	if engine_revision == NBA_ENGINE_R3:
-		library_digest = canonical_digest(
-			{"action_set_digest": eligible_set["set_digest"], "semantic_digest": semantic_digest}
-		)
+	library_digest = canonical_digest(
+		{"action_set_digest": eligible_set["set_digest"], "semantic_digest": semantic_digest}
+	)
 	result = {
-		"library_revision": f"action-library-r{revision}",
+		"library_revision": "action-library",
 		"library_digest": library_digest,
-		"eligibility_revision": "eligibility-reason-codes-v1",
+		"eligibility_revision": "eligibility-reason-codes",
 		# The eligibility contract the engine binds is the reason-code vocabulary,
 		# not one student's exclusion list; that list is per-evaluation data.
 		"eligibility_digest": canonical_digest({"reason_codes": sorted(nba_policy.EXCLUSION_REASONS)}),
 		"decision_revision": str(
 			(decision.get("decision_policy") or {}).get("revision")
-			or f"nba-decision-policy-r{decision.get('policy_revision') or 1}"
+			or "nba-decision-policy"
 		),
 		"decision_digest": _require_hex64(decision.get("policy_digest"), "decision_digest"),
 		"decision_policy": dict(decision.get("decision_policy") or {}),
 		"timing_revisions": [],
 		"timing_digest": _require_hex64(timing_digest, "timing_digest"),
-		# Kernel behaviour selector (see crm-agents' `evaluate`'s
-		# `_resolve_engine_revision`): folded into `policies_digest` ->
-		# `evaluation_key`, so a revision change earns a fresh identity instead
-		# of silently changing behaviour under an unchanged key. The caller
-		# resolves the value once per request and must reuse the exact same
-		# string for a replay identity check -- see `_stored_identity`.
+		# API observability field retained at the boundary; the implementation
+		# itself has one current behavior.
 		"engine_revision": engine_revision,
 	}
-	if engine_revision == NBA_ENGINE_R3:
-		result["semantic_digest"] = _require_hex64(semantic_digest, "semantic_digest")
+	result["semantic_digest"] = _require_hex64(semantic_digest, "semantic_digest")
 	return result
 
 
-_DEFAULT_ENGINE_REVISION = "nba-engine-r2"
+_DEFAULT_ENGINE_NAME = NBA_ENGINE_NAME
 
 
 def build_nba_evaluation_input(
@@ -702,32 +686,27 @@ def build_nba_evaluation_input(
 	service_authorized: bool = False,
 	engine_revision: str | None = None,
 ) -> dict:
-	"""Assemble the NBA Evaluation v1 input for one student from live data.
+	"""Assemble the current NBA Evaluation input for one student from live data.
 
 	``service_authorized`` must only be set by a caller that has already run
 	``_require_agent_identity()``/``_service_only()`` on the current request --
 	see ``_projection``'s own docstring for why this bypasses the per-user
 	Student read check.
 
-	``engine_revision`` is the kernel behaviour selector a caller resolves once
-	up front (``crm.fcrm.nba_evaluations._engine_revision()`` for a fresh
-	request, or the run's own recorded ``engine_revision`` for a replay
-	identity check) and threads through unchanged; a caller with no revision
-	context of its own (e.g. the read-only evaluation-input inspector) falls
-	back to the live config default.
+	``engine_revision`` remains an API-compatible observability argument. The
+	implementation always emits the single current engine identity; it is not a
+	behaviour selector.
 	"""
 	moment = now or frappe.utils.now_datetime()
 	timezone = frappe.db.get_single_value("System Settings", "time_zone") or _DEFAULT_TIMEZONE
-	resolved_engine_revision = engine_revision or str(
-		frappe.conf.get("crm_nba_engine_revision") or _DEFAULT_ENGINE_REVISION
-	)
+	resolved_engine_revision = _DEFAULT_ENGINE_NAME
 
 	projection = _projection(
 		student,
 		int(minimum_revision),
 		service_authorized=service_authorized,
 		at=moment,
-		include_decision_signals=resolved_engine_revision == NBA_ENGINE_R3,
+		include_decision_signals=True,
 	)
 	eligible = nba_policy.eligible_action_set_for_student(
 		student,
@@ -739,9 +718,7 @@ def build_nba_evaluation_input(
 	decision = nba_policy.get_active_decision_policy()
 	timing = feasible_timing_domain({"trigger_type": "relative", "delay_value": 0}, now=moment)
 
-	eligible_set = _shape_eligible_action_set(
-		eligible, timezone=timezone, include_semantics=resolved_engine_revision == NBA_ENGINE_R3
-	)
+	eligible_set = _shape_eligible_action_set(eligible, timezone=timezone)
 	return assemble_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
 		_shape_context(projection, student=student, now=moment),

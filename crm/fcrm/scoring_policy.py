@@ -7,8 +7,8 @@ Shared by the `CRM Score Template` controller (`before_save` recomputes its own
 policy_hash/revision) and `CRM Score Signal` (`on_update` re-saves every Active
 template referencing it, since the signal's own content — not the template's
 rows — is what changed) so both compute policy_hash from the same function,
-never a second ad hoc copy. `crm/api/scoring_policy.py` reads the already-
-resolved, already-versioned result for the crm-agents-facing endpoint.
+never a second ad hoc copy. Frappe's local scoring engine consumes the already-
+resolved, already-versioned result directly.
 """
 
 import hashlib
@@ -16,8 +16,7 @@ import json
 
 import frappe
 
-# Bump alongside app/contracts/scoring_events.py's contract_version conventions
-# for any wire-incompatible change to the resolved rule/negative-rule shape.
+# Bump when the internal resolved rule/negative-rule shape changes.
 POLICY_CONTRACT_VERSION = 1
 
 _SIGNAL_FIELDS = [

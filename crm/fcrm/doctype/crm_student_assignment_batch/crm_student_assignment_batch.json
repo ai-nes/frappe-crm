@@ -11,6 +11,6 @@
   {"default":"0","fieldname":"completed_count","fieldtype":"Int","label":"Completed Count"},
   {"fieldname":"items","fieldtype":"Table","label":"Batch Leads","options":"CRM Student Assignment Batch Item"},
   {"fieldname":"recall_reason","fieldtype":"Data","label":"Recall Reason"},
-  {"default":"phase7-v1","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","reqd":1}
+  {"default":"student-assignment","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","reqd":1}
  ], "module":"FCRM", "name":"CRM Student Assignment Batch", "naming_rule":"Expression", "permissions": []
 }

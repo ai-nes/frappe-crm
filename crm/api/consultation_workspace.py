@@ -70,7 +70,7 @@ def get_consultation_workspace(recommendation: str) -> dict:
 		domain="student_nba",
 		subject=build_subject_ref("student", student, str(frappe.local.site or "frappe")),
 		disposition="recommend" if status == "ready" else "review",
-		policy_revision=str(doc.get("decision_revision") or "nba-recommendation-policy-v1"),
+		policy_revision=str(doc.get("decision_revision") or "nba-recommendation-policy"),
 		evidence_refs=tuple(item["evidence_id"] for item in evidence),
 		expires_at=str(expires_at) if status == "ready" and expires_at else None,
 		abstention_reason=None if status == "ready" else f"consultation_{status}",

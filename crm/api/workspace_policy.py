@@ -20,7 +20,7 @@ from crm.fcrm.role_policy import (
 	resolve_crm_profile,
 )
 
-WORKSPACE_POLICY_REVISION = "role-workspace-v1"
+WORKSPACE_POLICY_REVISION = "role-workspace"
 
 # Backend copy of the label-free registry route contract.  The menu ID remains
 # the authorization source: a route is allowed only when one of this role's

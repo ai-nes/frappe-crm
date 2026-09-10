@@ -138,7 +138,7 @@ def _insert_event(attempt, event_type: str, *, actor: str, payload: dict[str, An
 		"idempotency_key": key,
 		"payload": json.dumps(payload or {}),
 		"event_at": now_datetime(),
-		"schema_version": "phase4-v1",
+		"schema_version": "student-sla",
 	}
 	with service_context():
 		doc = frappe.get_doc(values)
@@ -166,7 +166,7 @@ def _insert_delivery(attempt, event, recipient_role: str, due_at=None):
 				"idempotency_key": key,
 				"correlation_token": attempt.correlation_token,
 				"due_at": due_at or now_datetime(),
-				"schema_version": "phase4-v1",
+				"schema_version": "student-sla",
 			}
 		)
 		doc.insert(ignore_permissions=True)
@@ -265,7 +265,7 @@ def open_sla_for_assignment(
 		"opened_at": opened_at,
 		"total_paused_minutes": 0,
 		"correlation_token": correlation_token,
-		"schema_version": "phase4-v1",
+		"schema_version": "student-sla",
 	}
 	# These fields are additive and only included after their DocType migration.
 	try:
@@ -857,7 +857,7 @@ def process_pending_sla_deliveries(limit: int = 50) -> dict[str, int]:
 									"provider_submission_key": submission_key,
 									"outcome": "submitted",
 									"submitted_at": now_datetime(),
-									"schema_version": "phase4-v1",
+									"schema_version": "student-sla",
 								},
 							)
 							delivery.save(ignore_permissions=True)

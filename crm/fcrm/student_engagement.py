@@ -32,7 +32,7 @@ OUTCOME_DOCTYPE = "CRM Student Outcome"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 SERVICE_FLAG = "student_engagement_service"
 CAPABILITY = "outcome.record"
-SCHEMA_VERSION = "phase5-v1"
+SCHEMA_VERSION = "student-engagement"
 
 
 class StudentEngagementError(frappe.ValidationError):

@@ -18,7 +18,7 @@
   {"fieldname": "context_digest", "fieldtype": "Data", "label": "Context Digest", "length": 64, "read_only": 1},
   {"fieldname": "eligible_set_revision", "fieldtype": "Data", "label": "Eligible Set Revision", "read_only": 1},
   {"fieldname": "eligible_set_digest", "fieldtype": "Data", "label": "Eligible Set Digest", "length": 64, "read_only": 1},
-  {"description": "Immutable action references captured from the r3 evaluation input.", "fieldname": "eligible_action_snapshot", "fieldtype": "JSON", "label": "Eligible Action Snapshot", "read_only": 1},
+  {"description": "Immutable action references captured from the current evaluation input.", "fieldname": "eligible_action_snapshot", "fieldtype": "JSON", "label": "Eligible Action Snapshot", "read_only": 1},
   {"fieldname": "library_digest", "fieldtype": "Data", "label": "Library Digest", "length": 64, "read_only": 1},
   {"fieldname": "decision_policy_revision", "fieldtype": "Data", "label": "Decision Policy Revision", "read_only": 1},
   {"fieldname": "decision_digest", "fieldtype": "Data", "label": "Decision Digest", "length": 64, "read_only": 1},

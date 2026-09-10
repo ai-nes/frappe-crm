@@ -29,7 +29,7 @@ class CRMForecastValue(Document):
 		if not self.revision:
 			self.revision = 1
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 		if not self.idempotency_fingerprint:
 			self.idempotency_fingerprint = stable_fingerprint(
 				"forecast",

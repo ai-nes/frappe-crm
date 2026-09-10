@@ -29,8 +29,8 @@ IDENTITY_DOCTYPE = "CRM Student Identity"
 CASE_KEY_DOCTYPE = "CRM Student Case Key"
 SERVICE_FLAG = "student_conversion_service"
 CAPABILITY = "conversion.execute"
-POLICY_VERSION = "phase8-conversion-v1"
-SCHEMA_VERSION = "phase8-v1"
+POLICY_VERSION = "student-conversion"
+SCHEMA_VERSION = "student-conversion"
 
 # Only fields with the same business meaning on both records are copied. Lead
 # source attribution, scoring history, academic evidence, identity resolution,

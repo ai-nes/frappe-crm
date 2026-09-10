@@ -3,11 +3,9 @@
 `score_input_revision` is a narrower sibling of `student_context_revision`
 (`crm.services.student_context`): it increments only for facts the *currently
 active* scoring policy actually consumes, so an assignment/ownership change or
-any other non-scoring Student edit never triggers a rescore. Mirrors the same
-row-lock + global-sequence-journal + outbox pattern as
-`bump_student_context_revision`, on an independent revision counter and an
-independent outbox event type, so scoring cannot collide with or be starved by
-unrelated Student-context traffic.
+any other non-scoring Student edit never triggers a rescore. The revision
+journal remains the durable audit trail; the scoring job is now enqueued inside
+Frappe rather than sent to crm-agents over HTTP.
 """
 
 from __future__ import annotations
@@ -130,16 +128,16 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 			"actor_scope": {"source": "score_revision"},
 			"idempotency_key": event_id,
 			"correlation_id": event_id,
-			"policy_version": "score-input-v2",
-			"schema_version": "revision-journal-v1",
+			"policy_version": "score-input",
+			"schema_version": "revision-journal",
 			"payload": {"revision": revision},
 			"reason": reason,
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
 		}
 	).insert(ignore_permissions=True, ignore_links=True)
-	if enqueue and frappe.conf.get("crm_agents_scoring_events_enabled", 0) not in (0, "0", False):
-		from crm.api.agent_events import record_score_input_event
+	if enqueue:
+		from crm.fcrm.scoring_run import enqueue_score_student
 
-		record_score_input_event(student, revision, event_id=event_id)
+		enqueue_score_student(student, triggered_by="score_input_changed", revision=revision)
 	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}

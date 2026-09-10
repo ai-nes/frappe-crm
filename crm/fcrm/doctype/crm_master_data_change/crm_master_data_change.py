@@ -9,11 +9,12 @@ class CRMMasterDataChange(Document):
 
 	def validate(self):
 		from crm.fcrm.master_data_governance import GOVERNED_DOCTYPES
+		from crm.fcrm.governed_reference_registry import REGISTRY_REVISION
 		if self.reference_doctype not in GOVERNED_DOCTYPES:
 			frappe.throw(f"{self.reference_doctype} is not a governed master data type")
 		if self.change_kind == "break_glass" and not self.nonce_hash:
 			frappe.throw("Break-glass changes require nonce evidence.", frappe.ValidationError)
-		if self.registry_revision and self.registry_revision not in {"P9-DEC-001", "P9-DEC-002"}:
+		if self.registry_revision and self.registry_revision != REGISTRY_REVISION:
 			frappe.throw("Unknown governance registry revision")
 
 	def on_update(self):

@@ -13,7 +13,7 @@ CANONICAL_FIXTURE_USERS = {
 	"tran.quoc.duy@gmail.com": {"full_name": "Trần Quốc Duy", "role": "Admissions Director"},
 }
 
-FIXTURE_PASSWORD_SITE_CONFIG_KEY = "crm_phase2_fixture_password"
+FIXTURE_PASSWORD_SITE_CONFIG_KEY = "crm_fixture_password"
 FIXTURE_SALES_TEAM_NAME = "Tư vấn tuyển sinh TP.HCM"
 FIXTURE_STUDENT_POOL_NAME = "Nguồn tuyển sinh TP.HCM — Kỳ Thu 2026"
 FIXTURE_DEPARTMENT_NAME = "Tuyển sinh TP.HCM — Kỳ Thu 2026"

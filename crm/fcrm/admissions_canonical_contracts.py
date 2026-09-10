@@ -11,7 +11,7 @@ import re
 from datetime import date
 from typing import Any
 
-CANONICAL_SCHEMA_VERSION = "admissions-erd-v2"
+CANONICAL_SCHEMA_VERSION = "admissions-erd"
 OFFERING_STATUSES = frozenset({"Draft", "Pending Approval", "Active", "Closed", "Retired"})
 FUNNEL_GRAINS = frozenset({"Case", "Application"})
 SCOPE_FIELDS = ("region", "territory", "province", "team", "campus", "major")

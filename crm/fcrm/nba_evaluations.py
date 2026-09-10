@@ -23,13 +23,13 @@ from crm.api.nba_evaluation import _timing_domain_for_action, build_nba_evaluati
 from crm.fcrm.action_type_catalog import ACTION_TYPE_METADATA
 from crm.fcrm.intelligence_runs import _lease_now, _require_force_rerun_permission, _service_only
 from crm.fcrm.nba_canonical import action_definition_snapshot, canonical_digest
-from crm.fcrm.nba_context import NBA_ENGINE_R3
+from crm.fcrm.nba_context import NBA_ENGINE_NAME
 from crm.fcrm.permissions import has_permission as has_student_permission
 
 DOCTYPE = "CRM NBA Evaluation"
 TERMINAL = {"completed", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
-_ENGINE_REVISION_DEFAULT = "nba-engine-r2"
+_ENGINE_NAME = NBA_ENGINE_NAME
 _IDENTITY_DIGEST_FIELDS = (
 	"context_digest",
 	"eligible_set_digest",
@@ -92,7 +92,7 @@ def _bounded_hex64(value: object, label: str) -> str | None:
 # Frappe-facing helpers
 # --------------------------------------------------------------------------- #
 def _engine_revision() -> str:
-	return str(frappe.conf.get("crm_nba_engine_revision") or _ENGINE_REVISION_DEFAULT)
+	return _ENGINE_NAME
 
 
 def _lease_minutes() -> int:
@@ -623,12 +623,11 @@ def _as_list(value: object) -> list:
 def _resolve_committed_action(
 	action_ref: dict,
 	*,
-	verify_frozen_definition: bool = False,
 	expected_runtime_digest: str | None = None,
 ) -> str | None:
-	"""Map a wire action id to its row and optionally fence its definition.
+	"""Map a wire action id to its row and fence its current definition.
 
-	R3 recommendations carry the action revision/digest that the kernel saw.
+	Recommendations carry the action revision/digest that the kernel saw.
 	Locking and re-reading that definition immediately before inserting the
 	recommendation closes the gap between the earlier evaluation identity check
 	and commit-time persistence.
@@ -640,7 +639,7 @@ def _resolve_committed_action(
 	action_name = frappe.db.get_value("CRM Action", {"code": code}, "name") or frappe.db.get_value(
 		"CRM Action", code, "name"
 	)
-	if not action_name or not verify_frozen_definition:
+	if not action_name:
 		return action_name
 	rows = frappe.db.sql(
 		"SELECT name, code, action_type, display_name, purpose, default_channel, allowed_actors, "
@@ -658,12 +657,12 @@ def _resolve_committed_action(
 		expected_revision = int((action_ref or {}).get("action_revision"))
 		current_revision = int(current.get("definition_revision") or 0)
 	except (TypeError, ValueError):
-		frappe.throw("The r3 recommendation action revision is invalid.", frappe.ValidationError)
+		frappe.throw("The recommendation action revision is invalid.", frappe.ValidationError)
 	if (
 		current_revision != expected_revision
 	):
 		frappe.throw(
-			"The CRM Action definition changed after the r3 evaluation; recompute the recommendation.",
+			"The CRM Action definition changed after the evaluation; recompute the recommendation.",
 			frappe.ValidationError,
 		)
 	code = str(current.get("code") or "")
@@ -672,7 +671,7 @@ def _resolve_committed_action(
 	current_digest = canonical_digest(action_definition_snapshot(current))
 	if current_digest != str((action_ref or {}).get("action_digest") or ""):
 		frappe.throw(
-			"The CRM Action definition changed after the r3 evaluation; recompute the recommendation.",
+			"The CRM Action definition changed after the evaluation; recompute the recommendation.",
 			frappe.ValidationError,
 		)
 	if expected_runtime_digest is not None:
@@ -692,7 +691,7 @@ def _resolve_committed_action(
 		)
 		if runtime_digest != expected_runtime_digest:
 			frappe.throw(
-				"The CRM Action timing policy changed after the r3 evaluation; recompute the recommendation.",
+				"The CRM Action timing policy changed after the evaluation; recompute the recommendation.",
 				frappe.ValidationError,
 			)
 	return action_name
@@ -714,8 +713,8 @@ def _frozen_runtime_digest(doc, action_id: str) -> str | None:
 
 
 def _validate_frozen_action_refs(doc, recommendations: list[dict]) -> None:
-	"""Require r3 recommendations to match the evaluation's immutable action set."""
-	if doc.get("engine_revision") != NBA_ENGINE_R3 or not recommendations:
+	"""Require recommendations to match the immutable action set."""
+	if not recommendations:
 		return
 	raw = doc.get("eligible_action_snapshot")
 	if isinstance(raw, str):
@@ -724,23 +723,23 @@ def _validate_frozen_action_refs(doc, recommendations: list[dict]) -> None:
 		except (TypeError, ValueError):
 			raw = None
 	if not isinstance(raw, dict) or not isinstance(raw.get("actions"), list):
-		frappe.throw("The r3 evaluation has no frozen eligible action snapshot.", frappe.ValidationError)
+		frappe.throw("The evaluation has no frozen eligible action snapshot.", frappe.ValidationError)
 	if str(raw.get("set_digest") or "") != str(doc.get("eligible_set_digest") or ""):
-		frappe.throw("The r3 eligible action snapshot is inconsistent with the evaluation.", frappe.ValidationError)
+		frappe.throw("The eligible action snapshot is inconsistent with the evaluation.", frappe.ValidationError)
 	by_id = {}
 	for item in raw["actions"]:
 		if not isinstance(item, dict):
-			frappe.throw("The r3 eligible action snapshot is invalid.", frappe.ValidationError)
+			frappe.throw("The eligible action snapshot is invalid.", frappe.ValidationError)
 		action_id = str(item.get("action_id") or "")
 		if not action_id or action_id in by_id:
-			frappe.throw("The r3 eligible action snapshot has duplicate action ids.", frappe.ValidationError)
+			frappe.throw("The eligible action snapshot has duplicate action ids.", frappe.ValidationError)
 		if not re.fullmatch(r"[a-f0-9]{64}", str(item.get("action_runtime_digest") or "") ):
-			frappe.throw("The r3 eligible action snapshot is missing its timing digest.", frappe.ValidationError)
+			frappe.throw("The eligible action snapshot is missing its timing digest.", frappe.ValidationError)
 		by_id[action_id] = item
 	for recommendation in recommendations:
 		action_ref = recommendation.get("action_ref") or {}
 		if not isinstance(action_ref, dict):
-			frappe.throw("Every r3 recommendation requires an action reference.", frappe.ValidationError)
+			frappe.throw("Every recommendation requires an action reference.", frappe.ValidationError)
 		action_id = str(action_ref.get("action_id") or "")
 		frozen = by_id.get(action_id)
 		if not frozen:
@@ -975,14 +974,12 @@ def commit_nba_evaluation_result(
 		)
 		action_name = _resolve_committed_action(
 			rec.get("action_ref") or {},
-			verify_frozen_definition=doc.get("engine_revision") == NBA_ENGINE_R3,
-			expected_runtime_digest=(
-				_frozen_runtime_digest(doc, str((rec.get("action_ref") or {}).get("action_id") or ""))
-				if doc.get("engine_revision") == NBA_ENGINE_R3 else None
+			expected_runtime_digest=_frozen_runtime_digest(
+				doc, str((rec.get("action_ref") or {}).get("action_id") or "")
 			),
 		)
-		if doc.get("engine_revision") == NBA_ENGINE_R3 and not action_name:
-			frappe.throw("A frozen r3 recommendation action is no longer available.", frappe.ValidationError)
+		if not action_name:
+			frappe.throw("A frozen recommendation action is no longer available.", frappe.ValidationError)
 		if action_name:
 			row.action = action_name
 		# The custom ``owner`` field (the assigned CRM Staff, unknown until a

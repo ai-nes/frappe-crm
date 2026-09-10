@@ -20,7 +20,7 @@ it builds one integral, realistic dataset on top of a fresh site:
 
 The six profiles carry NBA scenario knobs (``contact_stage``, ``consent_state``,
 ``signal_profile``, ``recent_action``, ``expected_disposition``) so a real
-``nba-engine-r2`` kernel run against the dataset exercises every disposition
+``nba-engine`` kernel run against the dataset exercises every disposition
 (RECOMMEND / WAIT / NO_ACTION / ABSTAIN). ``_ensure_nba`` only *requests* the
 evaluation -- it never fabricates a result; ``crm-agents`` runs the kernel.
 
@@ -377,7 +377,7 @@ def _ensure_assignment_policies(campus: str, teams: dict[str, str], pools: dict[
 					"approved_by": "Administrator",
 					"approved_at": SEED_NOW,
 					"break_glass_reason": "Golden Student 360 fixture",
-					"schema_version": "phase7-v1",
+					"schema_version": "student-routing",
 				}
 			).insert(ignore_permissions=True)
 		finally:
@@ -1134,8 +1134,8 @@ def _seed_flags():
 		"crm_student_lifecycle_write_enabled": 1,
 		"crm_student_conversion_read_enabled": 1,
 		"crm_student_conversion_write_enabled": 1,
-		"crm_phase9_governance_write_enabled": 1,
-		"crm_phase9_audit_read_enabled": 1,
+		"crm_governance_write_enabled": 1,
+		"crm_audit_read_enabled": 1,
 		"crm_nba_evaluation_runtime_enabled": 1,
 		"crm_intelligence_runs_enabled": 1,
 		"crm_intelligence_writer_epoch": 1,
@@ -1971,8 +1971,8 @@ def _ensure_assessment(contact: str, student: str, interaction: str, intent: str
 			"status": "confirmed",
 			"assessment_source": "manual",
 			"assessed_at": SEED_NOW,
-			"policy_version": "student-360-assessment-v1",
-			"model_version": "golden-seed-2026.09",
+			"policy_version": "student-360-assessment",
+			"model_version": "golden-seed",
 			"interest": spec["interest"],
 			"interest_confidence": spec["interest_confidence"],
 			"fit": spec["fit"],
@@ -2185,7 +2185,7 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 		f"{_ACTIVE['student_name']} đã để lại nhu cầu rõ về {_ACTIVE['major']}. Hồ sơ còn một "
 		"số điểm cần được xác nhận trước khi chuyển bước tiếp theo."
 	)
-	idempotency_key = f"{_ns()}:ai-insight:v1:r{revision}"
+	idempotency_key = f"{_ns()}:ai-insight:r{revision}"
 	# upsert_ai_insight() is internally inconsistent for this schema: it locks the
 	# aggregate via `tabCRM Student` (request["student"] must be a CRM Student) but
 	# also writes that same value into CRM AI Lead Insight.student, a field left
@@ -2203,8 +2203,8 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 		"insight_type": "Conversation Summary",
 		"generated_at": SEED_NOW,
 		"ai_generated_at": SEED_NOW,
-		"ai_source_context_revision": revision,
-		"ai_policy_version": "phase2-ai-insight-v1",
+			"ai_source_context_revision": revision,
+		"ai_policy_version": "ai-insight",
 		"generation_idempotency_key": idempotency_key,
 		"producer_identity": "golden-seed",
 		"payload_digest": _digest({"contact": contact, "revision": revision}),
@@ -2249,7 +2249,7 @@ def _ensure_student_analysis(contact: str, interactions: list[str], score: str |
 	current_revision = int(frappe.db.get_value("CRM Student", contact, "student_context_revision") or 0)
 	request = request_student_analysis_run(
 		contact,
-		idempotency_key=f"{_ns()}:analysis:v1:r{current_revision}",
+		idempotency_key=f"{_ns()}:analysis:r{current_revision}",
 	)
 	run_id = request["run_id"]
 	run = frappe.get_doc("CRM Student Analysis Run", run_id)
@@ -2350,7 +2350,7 @@ def _ensure_student_analysis(contact: str, interactions: list[str], score: str |
 		status="completed",
 		claims=claims,
 		policy_revision=intelligence_runs.STUDENT_360_POLICY_REVISION,
-		model_revision="golden-seed-v1",
+		model_revision="golden-seed",
 		result_digest=_digest(report),
 		report=report,
 	)
@@ -2441,7 +2441,7 @@ def _ensure_recent_action(contact: str, student: str, spec: dict[str, Any], owne
 
 
 def _ensure_nba(contact: str) -> dict[str, Any]:
-	"""Request a real ``nba-engine-r2`` evaluation run -- no fabricated result.
+	"""Request a real ``nba-engine`` evaluation run -- no fabricated result.
 
 	The golden dataset exists to exercise the live decision kernel end to end, so
 	this only enqueues the run (via ``crm-agents``' claim/commit path) and never

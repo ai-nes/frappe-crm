@@ -35,7 +35,7 @@ def open_ctv_batch(staff: str, team: str, *, size: int, validity_hours: int = 24
 			"opened_at": now_datetime(),
 			"expires_at": add_to_date(now_datetime(), hours=validity_hours),
 			"batch_size": max(1, int(size)),
-			"schema_version": "phase7-v1",
+			"schema_version": "student-assignment",
 		}
 	)
 	batch.insert(ignore_permissions=True)

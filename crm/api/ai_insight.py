@@ -22,8 +22,8 @@ RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 INSIGHT_DOCTYPE = "CRM AI Lead Insight"
 ITEM_DOCTYPE = "CRM AI Lead Insight Item"
 COMMAND_KIND = "ai_insight"
-POLICY_VERSION = "phase2-ai-insight-v1"
-SCHEMA_VERSION = "phase2-v1"
+POLICY_VERSION = "ai-insight"
+SCHEMA_VERSION = "ai-insight"
 
 AI_FIELDS = frozenset(
 	{

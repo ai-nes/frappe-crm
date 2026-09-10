@@ -28,8 +28,8 @@
   {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "read_only": 1},
   {"fieldname": "correlation_id", "fieldtype": "Data", "hidden": 1, "label": "Correlation ID", "read_only": 1, "reqd": 1},
   {"fieldname": "idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Key", "read_only": 1, "reqd": 1},
-  {"default": "phase6-recommendation-action-v1", "fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
-  {"default": "phase6-v1", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
+  {"default": "student-decision", "fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
+  {"default": "student-decision", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
   {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Student Decision Event", "read_only": 1}
  ],
  "index_web_pages_for_search": 0,

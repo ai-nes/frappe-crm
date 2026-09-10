@@ -14,7 +14,7 @@ from frappe.utils import now_datetime, nowdate
 
 from crm.fcrm.admissions_migration import stable_fingerprint
 
-POLICY_VERSION = "school-intelligence-v1"
+POLICY_VERSION = "school-intelligence"
 CALCULATION_REVISION = 1
 RELATIONSHIP_STATES = frozenset({"New", "Active", "Dormant", "Do Not Contact"})
 POTENTIAL_STATES = frozenset({"High", "Medium", "Low", "Unknown"})

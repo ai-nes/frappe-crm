@@ -70,7 +70,7 @@ def test_score_weight_validation_rejects_non_numeric_values():
 def test_kernel_policy_snapshot_requires_all_three_weights_and_knobs():
 	row = {
 		"kernel_policy": {
-			"revision": "nba-decision-policy-r1",
+			"revision": "nba-decision-policy",
 			"score_threshold": 0.35,
 			"confidence_floor": 0.45,
 			"top_n_cap": 3,
@@ -87,7 +87,7 @@ def test_kernel_policy_snapshot_requires_all_three_weights_and_knobs():
 	snapshot = kernel_policy_snapshot(row)
 	assert snapshot["component_weights"]["opportunity_fit"] == 0.45
 	assert set(snapshot["component_weights"]) == {"opportunity_fit", "urgency", "effectiveness_index"}
-	assert canonical_digest(snapshot) == "5f583345a805d72e4bd19ff7fb898bc27d04f512fc6e673dbd51ac6105ac57be"
+	assert canonical_digest(snapshot) == "71d70c208d1094ab109d764b72ae0f261735ce841e825eb4baefc0e1647e37e0"
 	with pytest.raises(ValueError):
 		kernel_policy_snapshot({"kernel_policy": {**row["kernel_policy"], "component_weights": {"intent": 1.0}}})
 	with pytest.raises(ValueError):

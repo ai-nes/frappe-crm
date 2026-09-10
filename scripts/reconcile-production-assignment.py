@@ -40,7 +40,7 @@ SOURCE_POOL = "Nguồn tuyển sinh TP.HCM — Kỳ Thu 2026"
 DEPARTMENT_LABEL = "Phòng Tư vấn Tuyển sinh FPTU TP.HCM"
 TEAM_LABEL = "Đội Tư vấn Tuyển sinh FPTU TP.HCM"
 POOL_LABEL = "Hàng chờ Lead Tuyển sinh FPTU TP.HCM"
-POLICY_KEY = "lead-routing-fptu-hcm-v2"
+POLICY_KEY = "lead-routing-fptu-hcm"
 
 
 def _find_one(doctype, field, value):
@@ -243,7 +243,7 @@ def _ensure_policy(campus, pool, actions, *, apply):
 				"approved_by": "Administrator",
 				"approved_at": now_datetime(),
 				"break_glass_reason": "Cấu hình production cho phân công Lead tuyển sinh FPTU TP.HCM.",
-				"schema_version": "phase4-v1",
+				"schema_version": "student-routing",
 			}
 		)
 		if apply:

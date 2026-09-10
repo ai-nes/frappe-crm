@@ -135,7 +135,7 @@
    "read_only": 1
   },
   {
-   "default": "phase8-v1",
+   "default": "student-conversion",
    "fieldname": "policy_version",
    "fieldtype": "Data",
    "hidden": 1,
@@ -144,7 +144,7 @@
    "reqd": 1
   },
   {
-   "default": "phase8-v1",
+   "default": "student-conversion",
    "fieldname": "schema_version",
    "fieldtype": "Data",
    "hidden": 1,

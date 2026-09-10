@@ -160,7 +160,7 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertEqual(capabilities_for_roles({"CRM Data Steward"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags({"Marketing", "CRM Data Steward"})
-		self.assertEqual(POLICY_VERSION, "phase2-v1")
+		self.assertEqual(POLICY_VERSION, "crm-role-policy")
 
 	def test_canonical_sales_is_eligible_for_the_capability_gateway(self):
 		self.assertTrue(_is_capability_gateway_user(_session_role_flags({"Sale"})))

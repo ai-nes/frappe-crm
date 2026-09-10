@@ -19,7 +19,7 @@
   {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Territory Geography Assignment", "read_only": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [
   {"fields": ["territory", "geography_type", "geography", "effective_from", "revision"], "name": "crm_territory_geography_revision_uniq", "unique": 1},

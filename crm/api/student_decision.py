@@ -146,9 +146,9 @@ def write_canonical_action(
 			_("Candidate revision does not match expected context revision."), frappe.ValidationError
 		)
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
-		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
+		frappe.throw(_("Invalid disposition/action combination."), frappe.ValidationError)
 	if action_type and not is_available_action_type(action_type):
-		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+		frappe.throw(_("Unsupported action type."), frappe.ValidationError)
 	require_parent_contact_authority(action_type, student)
 	row = frappe.db.sql(
 		"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
@@ -405,9 +405,9 @@ def _insert_bundle_action(
 	action_type = canonicalize_action_type(candidate.get("action_type"))
 	disposition = candidate.get("disposition")
 	if disposition not in {"ACT", "MONITOR", "NURTURE"} or (disposition == "ACT") != bool(action_type):
-		frappe.throw(_("Invalid v2 disposition/action combination."), frappe.ValidationError)
+		frappe.throw(_("Invalid disposition/action combination."), frappe.ValidationError)
 	if action_type and not is_available_action_type(action_type):
-		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
+		frappe.throw(_("Unsupported action type."), frappe.ValidationError)
 	require_parent_contact_authority(action_type, student)
 	doc = {
 		"doctype": "CRM Action Item",

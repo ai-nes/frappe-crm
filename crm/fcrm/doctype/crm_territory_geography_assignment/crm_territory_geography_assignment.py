@@ -12,7 +12,7 @@ class CRMTerritoryGeographyAssignment(Document):
 		if not self.revision:
 			self.revision = 1
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 		if (
 			self.territory
 			and self.geography_type

@@ -94,7 +94,7 @@
    "label": "Idempotency Key",
    "read_only": 1,
    "unique": 1,
-   "description": "student:source_score_input_revision:policy_revision -- a duplicate append_score_if_current call for the same tuple returns this existing row instead of writing a second one."
+   "description": "student:source_score_input_revision:score_template:policy_revision -- a duplicate append_score_if_current call for the same template-scoped tuple returns this existing row instead of writing a second one."
   },
   {
    "fieldname": "scoring_time",

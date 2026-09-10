@@ -40,7 +40,7 @@ OWNERSHIP_EVENT_DOCTYPE = "CRM Student Ownership Event"
 RECEIPT_DOMAIN = "crm.receipt.command"
 RECEIPT_KEY_VERSION = "v1"
 OWNERSHIP_CAPABILITY = "student.ownership.manage"
-SCHEMA_VERSION = "phase3-v1"
+SCHEMA_VERSION = "student-ownership"
 
 
 class StudentOwnershipError(frappe.ValidationError):

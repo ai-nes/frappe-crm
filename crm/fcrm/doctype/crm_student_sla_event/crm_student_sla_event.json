@@ -16,7 +16,7 @@
     {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "reqd": 1, "unique": 1},
     {"fieldname": "payload", "fieldtype": "JSON", "label": "Approved Payload", "read_only": 1},
     {"fieldname": "event_at", "fieldtype": "Datetime", "label": "Event At", "read_only": 1, "reqd": 1},
-    {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
+    {"default": "student-sla", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
   ],
   "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Event", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
 }

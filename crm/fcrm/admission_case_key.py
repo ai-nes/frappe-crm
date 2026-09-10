@@ -61,8 +61,8 @@ def _write_receipt(
 		"target_student": student,
 		"target_case_key": case_key,
 		"actor": frappe.session.user,
-		"schema_version": "admissions-erd-v2",
-		"policy_version": "admissions-case-key-v1",
+		"schema_version": "admissions-erd",
+		"policy_version": "admissions-case-key",
 		"correlation_token": correlation_token or command_key,
 		"request_received_at": frappe.utils.now_datetime(),
 		"completed_at": frappe.utils.now_datetime(),
@@ -85,7 +85,7 @@ def _result(case_key: str, student: str, receipt, replayed: bool) -> dict[str, A
 		"student": student,
 		"receipt": receipt.name,
 		"replayed": replayed,
-		"schema_version": "admissions-erd-v2",
+		"schema_version": "admissions-erd",
 	}
 
 
@@ -161,7 +161,7 @@ def ensure_case_key(
 						"canonical_student": canonical_student,
 						"source_student": canonical_student,
 						"integrity_state": "resolved",
-						"schema_version": "admissions-erd-v2",
+						"schema_version": "admissions-erd",
 					}
 				).insert(ignore_permissions=True)
 			case_name = case.name

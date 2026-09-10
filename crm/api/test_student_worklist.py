@@ -286,7 +286,7 @@ class TestStudentNextBestAction(FrappeTestCase):
 		)
 		self.assertEqual(result["student_id"], "STU-2026-00042")
 		self.assertEqual(result["nba"]["name"], "ACT-2026-00128")
-		self.assertEqual(result["policy_version"], "worklist-v1")
+		self.assertEqual(result["policy_version"], "student-worklist")
 		self.assertEqual(calls[1][1]["order_by"], "creation desc, modified desc")
 		self.assertEqual(set(calls[1][1]["filters"]["state"][1]), {"completed", "cancelled", "rejected", "superseded"})
 		self.assertEqual(calls[1][1]["limit_page_length"], 1)

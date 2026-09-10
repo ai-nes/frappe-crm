@@ -107,13 +107,13 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 				"status": "applied",
 				"tier": 1,
 				"owner_staff": "STAFF-1",
-				"ownership": {"policy_version": "phase2-v1"},
+				"ownership": {"policy_version": "crm-role-policy"},
 			},
 			"EXEC-1",
 		)
 		self.assertEqual(item.status, "assigned")
 		self.assertEqual(item.owner_staff, "STAFF-1")
-		self.assertEqual(item.policy_version, "phase2-v1")
+		self.assertEqual(item.policy_version, "crm-role-policy")
 		self.assertIn("school_owner", item.reason)
 
 	def test_run_unassigned_returns_no_work_without_creating_a_batch(self):
@@ -277,4 +277,4 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["team"], "TEAM-NORTH")
 		self.assertEqual(result["ownerStaff"], "STAFF-NORTH")
 		self.assertEqual(result["function"], "Sale")
-		self.assertEqual(result["policyVersion"], "province-capacity-v1")
+		self.assertEqual(result["policyVersion"], "province-capacity")

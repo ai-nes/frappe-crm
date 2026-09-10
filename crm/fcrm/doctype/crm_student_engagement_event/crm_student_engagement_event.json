@@ -17,7 +17,7 @@
   {"fieldname": "source_name", "fieldtype": "Data", "hidden": 1, "label": "Source Name", "read_only": 1, "reqd": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1, "reqd": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
-  {"default": "admissions-erd-v2", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1}
+  {"default": "admissions-erd", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1}
  ],
  "indexes": [{"fields": ["student", "occurred_at", "event_type"], "name": "crm_student_engagement_event_student_time_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Engagement Event", "naming_rule": "Naming Series", "naming_series_options": "ENG-.YYYY.-", "owner": "Administrator",

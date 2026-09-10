@@ -87,12 +87,12 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 			{
 				"doctype": "CRM Admission Event Decision",
 				"decision_id": frappe.generate_hash(length=32),
-				"decision_key": f"admission-v1:{frappe.generate_hash(length=16)}",
+				"decision_key": f"admission:{frappe.generate_hash(length=16)}",
 				"source_event": "JRNL-PROV-1",
 				"event_type": "lifecycle_transition",
 				"student": self._student.name,
 				"candidate_revision": 4,
-				"policy_version": "admission-v1",
+				"policy_version": "admission",
 				"outcome": "admitted",
 				"reason": "enqueued",
 			}
@@ -105,7 +105,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 			admission_decision=decision.name,
 			admission_event="JRNL-PROV-1",
 			candidate_revision=4,
-			policy_revision="admission-v1",
+			policy_revision="admission",
 		)
 
 		result = intelligence_runs.execution(_RUN_TYPE, run.name)
@@ -114,7 +114,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 		self.assertEqual(result["admission_decision"], decision.name)
 		self.assertEqual(result["admission_event"], "JRNL-PROV-1")
 		self.assertEqual(result["candidate_revision"], "4")
-		self.assertEqual(result["policy_revision"], "admission-v1")
+		self.assertEqual(result["policy_revision"], "admission")
 		self.assertEqual([s["stage_kind"] for s in result["stages"]], ["student_360"])
 
 	def test_manual_run_execution_reports_no_admission_provenance(self):

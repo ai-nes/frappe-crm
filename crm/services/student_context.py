@@ -9,7 +9,7 @@ from datetime import datetime
 import frappe
 from frappe.utils import now_datetime
 
-CANONICAL_CONTEXT_POLICY_VERSION = "intelligence-run-nba-v1"
+CANONICAL_CONTEXT_POLICY_VERSION = "intelligence-run-nba"
 
 MATERIAL_STUDENT_FIELDS = frozenset(
 	{
@@ -120,7 +120,7 @@ def bump_student_context_revision(student: str, reason: str, *, enqueue: bool = 
 			"idempotency_key": event_id,
 			"correlation_id": event_id,
 			"policy_version": CANONICAL_CONTEXT_POLICY_VERSION,
-			"schema_version": "revision-journal-v1",
+			"schema_version": "revision-journal",
 			"payload": {"revision": revision},
 			"reason": reason,
 			"event_id": event_id,

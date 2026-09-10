@@ -36,7 +36,7 @@ STUDENT_STATUS_LABELS = {
 INTERVENTION_ORDER = ("unassigned", "not-contacted", "at-risk", "blocked")
 TERMINAL_TASK_STATUSES = {"Done", "Canceled"}
 
-ASSIGNMENT_POLICY_VERSION = "student-assignment-r1"
+ASSIGNMENT_POLICY_VERSION = "student-assignment"
 ASSIGNMENT_FILTERS = {"all", "assigned", "review", "no_match", "missing_data", "error"}
 ASSIGNMENT_SORTS = {"receivedAt", "name", "status", "owner", "matchScore"}
 ASSIGNMENT_ORDERS = {"asc", "desc"}

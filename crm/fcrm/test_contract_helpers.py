@@ -13,7 +13,7 @@ from crm.fcrm.governed_reference_registry import (
 class TestPhase9ContractHelpers(unittest.TestCase):
 	def test_registry_is_versioned_and_covers_governed_doctypes(self):
 		self.assertTrue(validate_registry())
-		self.assertEqual(REGISTRY_REVISION, "P9-DEC-002")
+		self.assertEqual(REGISTRY_REVISION, "governance-registry")
 		self.assertIn("CRM Lead Source", GOVERNED_REFERENCE_REGISTRY)
 
 	def test_reconciliation_classification_is_deterministic_and_redacted(self):

@@ -1,4 +1,4 @@
-"""Server-side rollout gates for Phase 9 governance and audit surfaces."""
+"""Server-side gates for governance and audit surfaces."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def enabled(feature: str, default: bool | None = None) -> bool:
 	if default is None:
 		default = DEFAULTS.get(feature, False)
 	conf = getattr(frappe, "conf", {}) or {}
-	value = conf.get(f"crm_phase9_{feature}_enabled", default)
+	value = conf.get(f"crm_{feature}_enabled", default)
 	return value not in (0, "0", False, "false", "False", None)
 
 

@@ -1,4 +1,4 @@
-"""Phase 9 command boundary for governed reference data.
+"""Command boundary for governed reference data.
 
 It protects public Frappe document APIs; direct SQL/privileged server writes
 remain deployment exceptions that must be reconciled during release operations.
@@ -24,13 +24,13 @@ BREAK_GLASS_MAX_MINUTES = 15
 
 
 def _require_write_enabled():
-	"""Keep rollout disabled outside tests until the Phase 9 canary is approved."""
+	"""Keep writes disabled outside tests until governance is explicitly enabled."""
 	if getattr(frappe.flags, "in_test", False):
 		return
 	from crm.fcrm.governance_audit_flags import governance_write_enabled
 
 	if not governance_write_enabled():
-		frappe.throw("Phase 9 governance writes are not enabled.", frappe.PermissionError)
+		frappe.throw("Governance writes are not enabled.", frappe.PermissionError)
 
 
 @contextmanager
@@ -504,7 +504,7 @@ def reject_change(change_log_name, reason=None):
 
 
 def apply_effective_changes():
-	"""Idempotent scheduler entry point; hook registration is Phase 9.5-owned."""
+	"""Idempotent scheduler entry point for effective governance changes."""
 	from crm.fcrm.governance_audit_flags import governance_write_enabled
 	if not governance_write_enabled() and not getattr(frappe.flags, "in_test", False):
 		return {"status": "disabled", "applied": 0}
@@ -541,7 +541,7 @@ def migrate_references(change_log_name):
 	_require_write_enabled()
 	from crm.fcrm.governance_audit_flags import migration_enabled
 	if not getattr(frappe.flags, "in_test", False) and not migration_enabled():
-		frappe.throw("Phase 9 governance migrations are not enabled.", frappe.PermissionError)
+		frappe.throw("Governance migrations are not enabled.", frappe.PermissionError)
 	change = frappe.get_doc("CRM Master Data Change", change_log_name)
 	if change.action != "Supersede" or change.status != "Applied":
 		frappe.throw("Only an applied supersession can migrate references.")

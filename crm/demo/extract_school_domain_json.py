@@ -84,7 +84,7 @@ def extract_school_seed(source=importer.DEFAULT_SCHOOL_SEED_XLSX_PATH, destinati
 	destination = Path(destination or importer.DEFAULT_SCHOOL_SEED_PATH)
 	report = importer.reconcile_school_seed(source)
 	payload = {
-		"schema": "crm-school-domain-input-v1",
+		"schema": "crm-school-domain-input",
 		"kind": "canonical_school_seed",
 		"source_file": source.name,
 		"source_sha256": _sha256(source),
@@ -129,7 +129,7 @@ def extract_ts_workbook(source=importer.DEFAULT_TS_XLSX_PATH, destination=None) 
 	finally:
 		workbook.close()
 	payload = {
-		"schema": "crm-school-domain-input-v1",
+		"schema": "crm-school-domain-input",
 		"kind": "ts_school_operations",
 		"source_file": source.name,
 		"source_sha256": _sha256(source),

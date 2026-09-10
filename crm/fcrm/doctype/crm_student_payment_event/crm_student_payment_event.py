@@ -24,7 +24,7 @@ class CRMStudentPaymentEvent(Document):
 		if not self.recorded_at:
 			self.recorded_at = frappe.utils.now_datetime()
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 
 	def validate(self):
 		if self.event_type not in {"Pending", "Received", "Failed", "Refunded", "Corrected"}:

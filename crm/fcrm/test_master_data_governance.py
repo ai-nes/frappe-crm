@@ -63,7 +63,7 @@ class TestMasterDataGovernance(FrappeTestCase):
 		)
 
 	def test_registry_is_versioned_and_has_concrete_consumers(self):
-		self.assertEqual(REGISTRY_REVISION, "P9-DEC-002")
+		self.assertEqual(REGISTRY_REVISION, "governance-registry")
 		self.assertNotIn("CRM Term", GOVERNED_REFERENCE_REGISTRY)
 		self.assertEqual(
 			{(item["doctype"], item["fieldname"]) for item in GOVERNED_REFERENCE_REGISTRY["CRM Lead Source"]["consumers"]},

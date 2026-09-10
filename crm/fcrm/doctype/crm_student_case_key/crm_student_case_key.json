@@ -104,7 +104,7 @@
    "read_only": 1
   },
   {
-   "default": "admissions-erd-v2",
+   "default": "admissions-erd",
    "fieldname": "schema_version",
    "fieldtype": "Data",
    "hidden": 1,

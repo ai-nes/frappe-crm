@@ -27,7 +27,7 @@ from crm.api.director_school_common import (
 from crm.api.nba_recommendation_view import recommendation_view
 
 LOCAL_TIMEZONE = ZoneInfo("Asia/Ho_Chi_Minh")
-POLICY_VERSION = "action-policy-2026.08"
+POLICY_VERSION = "action-policy"
 RESPONSE_WINDOW_HOURS = 8
 DEFAULT_CONFIDENCE = 70
 

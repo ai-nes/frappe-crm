@@ -21,7 +21,7 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.role_policy import capabilities_for_roles
 
-POLICY_VERSION = "P9-DEC-001"
+POLICY_VERSION = "critical-transition-audit"
 CURSOR_VERSION = "critical-transition-v1"
 MAX_PAGE_SIZE = 100
 SOURCE_FETCH_LIMIT = 250

@@ -271,6 +271,9 @@
    "label": "Next Follow-up Action"
   }
  ],
+ "indexes": [
+  {"fields": ["student", "interaction_datetime"], "name": "crm_interaction_student_time_idx", "unique": 0}
+ ],
  "index_web_pages_for_search": 1,
  "links": [],
  "modified": "2026-06-11 00:00:00.000000",

@@ -29,7 +29,7 @@ from frappe.utils import now_datetime
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.utils import normalize_phone_for_lookup
 
-POLICY_VERSION = "phase3-intake-v1"
+POLICY_VERSION = "student-intake"
 HMAC_VERSION = "v1"
 REVIEW_OPEN = "open"
 REVIEW_APPLIED = "applied"
@@ -153,7 +153,7 @@ def _json(value: Any) -> str:
 	return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
-PROVENANCE_SCHEMA_VERSION = "v1"
+PROVENANCE_SCHEMA_VERSION = "student-intake-provenance"
 MAX_PROVENANCE_BYTES = 4096
 PROVENANCE_ALLOWED_KEYS = frozenset(
 	{

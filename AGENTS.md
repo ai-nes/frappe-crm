@@ -50,6 +50,21 @@ công việc.
 - Python dùng `snake_case`, double quotes, tối đa 110 ký tự mỗi dòng và format/lint bằng
   Ruff theo `pyproject.toml`.
 
+### Versioning feature nội bộ
+
+- Mỗi feature nội bộ chỉ có một tên hiện tại, không gắn hậu tố `v1`/`v2` hoặc
+  `r1`/`r2`/`r3` vào tên feature, engine selector, policy, prompt, schema,
+  registry, seed hoặc runtime branch.
+- Chỉ giữ behavior mới nhất trong implementation hiện tại. Có thể retire/delete
+  branch, selector và registry nội bộ cũ; không thực hiện backfill hoặc migration
+  dữ liệu cũ nếu không được yêu cầu rõ ràng.
+- Versioning của API là ngoại lệ bắt buộc: giữ nguyên public API path, request/
+  response contract, wire schema, event contract và backward-compatibility adapter.
+  Input API legacy có thể được chuyển vào implementation nội bộ hiện tại.
+- Không xóa các numeric revision chỉ dùng làm metadata kỹ thuật cho CAS,
+  freshness, ordering, cursor pagination, crypto key rotation hoặc external/wire
+  protocol; các giá trị này không phải feature-version selector.
+
 ## Frontend chính — `../dashboard-crm`
 
 ### Stack và cấu trúc

@@ -20,8 +20,8 @@ from crm.services.action_outcome import OUTCOME_DISPLAY_NAMES, allowed_outcomes
 
 _MAX_PAGE_SIZE = 50
 _CURSOR_TTL_SECONDS = 300
-_POLICY_VERSION = "worklist-v1"
-_RECOMMENDATION_WORKLIST_POLICY_VERSION = "recommendation-worklist-v1"
+_POLICY_VERSION = "student-worklist"
+_RECOMMENDATION_WORKLIST_POLICY_VERSION = "recommendation-worklist"
 _NBA_TERMINAL_STATES = ("completed", "cancelled", "rejected", "superseded")
 _NBA_SOURCE_ERRORS = (QueryDeadlockError, QueryTimeoutError, MySQLError)
 
@@ -508,7 +508,7 @@ def _coerce_nba_datetime(value):
 
 
 def _encode_action_cursor(row, principal):
-	payload = {"principal": principal, "policy": "phase6-worklist-v1", "due": str(row.due_sort), "creation": str(row.creation), "name": row.name}
+	payload = {"principal": principal, "policy": "student-worklist", "due": str(row.due_sort), "creation": str(row.creation), "name": row.name}
 	body = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
 	signature = hmac.new(_cursor_secret(), body, hashlib.sha256).digest()
 	return f"{_urlsafe_encode(body)}.{_urlsafe_encode(signature)}"
@@ -522,7 +522,7 @@ def _decode_action_cursor(cursor, principal):
 		if not hmac.compare_digest(signature, hmac.new(_cursor_secret(), body, hashlib.sha256).digest()):
 			raise ValueError
 		payload = json.loads(body)
-		if payload.get("principal") != principal or payload.get("policy") != "phase6-worklist-v1":
+		if payload.get("principal") != principal or payload.get("policy") != "student-worklist":
 			raise ValueError
 		return str(payload["due"]), str(payload["creation"]), str(payload["name"])
 	except (AttributeError, TypeError, ValueError, UnicodeDecodeError, binascii.Error, json.JSONDecodeError):

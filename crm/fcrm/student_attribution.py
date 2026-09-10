@@ -20,8 +20,8 @@ from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 SERVICE_FLAG = "student_attribution_service"
 CAPABILITY = "attribution.manage"
-POLICY_VERSION = "phase7-attribution-v1"
-SCHEMA_VERSION = "phase7-v1"
+POLICY_VERSION = "student-attribution"
+SCHEMA_VERSION = "student-attribution"
 
 
 class StudentAttributionError(frappe.ValidationError):

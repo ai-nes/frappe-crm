@@ -13,7 +13,7 @@ APPLICATION_STATUSES = frozenset(
 class CRMAdmissionApplication(Document):
 	def before_validate(self):
 		if not self.schema_version:
-			self.schema_version = "admissions-erd-v2"
+			self.schema_version = "admissions-erd"
 		if self.offering and not self.admission_year:
 			offering = frappe.db.get_value(
 				"CRM Admission Offering",

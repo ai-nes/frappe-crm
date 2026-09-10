@@ -24,8 +24,8 @@ RECEIPT = "CRM Student Command Receipt"
 DECISION_EVENT = "CRM Student Decision Event"
 RECOMMENDATION = "CRM Recommendation"
 CANONICAL_ACTION = "CRM Action Item"
-POLICY_VERSION = "phase6-v1"
-SCHEMA_VERSION = "phase6-v1"
+POLICY_VERSION = "student-decision"
+SCHEMA_VERSION = "student-decision"
 ACTION_TRANSITIONS = {
 	"planned": {"in_progress", "cancelled"},
 	"accepted": {"in-progress", "cancelled", "deferred"},
@@ -219,7 +219,7 @@ def _fingerprint(payload):
 
 
 def _command_key(kind, actor, key):
-	return hashlib.sha256(f"phase6|{kind}|{actor}|{key}".encode()).hexdigest()
+	return hashlib.sha256(f"student-decision|{kind}|{actor}|{key}".encode()).hexdigest()
 
 
 def _replay(command_key, fingerprint):
@@ -575,7 +575,7 @@ def decide_recommendation(name: str, expected_revision: Any, status: str | None 
 				"state": "accepted",
 				"priority": applied_delta.get("priority") or doc.priority or "medium",
 				"source_context_revision": 0,
-				"policy_context_version": "nba-v1",
+				"policy_context_version": "nba",
 				"generation_idempotency_key": key,
 				"producer_identity": "frappe:recommendation",
 				"payload_digest": fingerprint,
@@ -655,7 +655,7 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 		_required(decision_reason, "decision_reason")
 	previous_state = doc.state
 	receipt = _new_receipt("action_decision", actor, doc.student, key, fingerprint, scope, correlation_id)
-	previous_flag = getattr(frappe.flags, "phase6_decision_command", False); frappe.flags.phase6_decision_command = True
+	previous_flag = getattr(frappe.flags, "student_decision_command", False); frappe.flags.student_decision_command = True
 	previous_action_flag = getattr(frappe.flags, "crm_action_command", False); frappe.flags.crm_action_command = True
 	try:
 		doc.state = {"accepted": "accepted", "rejected": "rejected", "deferred": "deferred"}[status]
@@ -667,14 +667,15 @@ def decide_student_task(name: str, expected_revision: Any, status: str, idempote
 		from crm.fcrm.nba import sync_nba_recommendation_for_action
 		sync_nba_recommendation_for_action(doc)
 		action = doc.name if status == "accepted" else None
-		# V2-native decisions are audited only via CRM Student Decision Event.
+		# Task-native decisions are audited only via CRM Student Decision Event.
 		# They must never be delivered through the legacy recommendation-decision
-		# outbox route: that would keep a V1 delivery path alive under a V2 event
+		# outbox route: that would keep a legacy delivery path alive under a
+		# current event
 		# name and risk retry/dead-letter traffic against the retired endpoint.
 		event = _event(f"action.{status}", doc.student, None, action, actor, scope, receipt, correlation_id, doc.decision_revision, {"status": status, "from_state": previous_state, "reason": decision_reason, "revisit_at": str(revisit_at) if revisit_at else None})
 		result = {"status": status, "action": action, "revision": doc.decision_revision, "event": event.name, "receipt": receipt.name}; _finish(receipt, result); return result
 	finally:
-		frappe.flags.phase6_decision_command = previous_flag
+		frappe.flags.student_decision_command = previous_flag
 		frappe.flags.crm_action_command = previous_action_flag
 
 

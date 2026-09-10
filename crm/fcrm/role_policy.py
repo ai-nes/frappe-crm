@@ -8,7 +8,7 @@ capability source.
 
 from __future__ import annotations
 
-POLICY_VERSION = "phase2-v1"
+POLICY_VERSION = "crm-role-policy"
 SYSTEM_MANAGER_ROLE = "System Manager"
 ADMINISTRATOR_ROLE = "Administrator"
 DESK_MANAGEMENT_ROLE_NAMES = (
@@ -41,9 +41,9 @@ PROFILE_LABELS = {
 	"ceo": "Administrator",
 }
 
-# Phase 9 removes raw Desk/API/import writes for governed lookups.  Creation,
+# Raw Desk/API/import writes are not allowed for governed lookups. Creation,
 # retirement and supersession are exposed only through master_data_governance.
-PHASE9_COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CRM Campus"})
+COMMAND_ONLY_DOCTYPES = frozenset({"CRM Lead Source", "CRM Platform", "CRM Campus"})
 
 PROFILE_ROLE_ALIASES = {
 	"sales": frozenset({"Sale"}),
@@ -673,7 +673,7 @@ def _hardcoded_managed_docperm_rows():
 					.get(profile, permission_set)
 				)
 				role = SYSTEM_MANAGER_ROLE if profile == "system_manager" else PROFILE_LABELS[profile]
-				if doctype in PHASE9_COMMAND_ONLY_DOCTYPES:
+				if doctype in COMMAND_ONLY_DOCTYPES:
 					permission_set = "r"
 				row = _docperm_row(role, permission_set)
 				if row:

@@ -19,7 +19,7 @@
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
   {"fieldname": "verification_status", "fieldtype": "Select", "label": "Verification Status", "options": "Pending\nVerified\nRejected", "default": "Pending", "reqd": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [
   {"fields": ["payment", "event_at"], "name": "crm_student_payment_event_timeline_idx", "unique": 0},

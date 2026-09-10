@@ -1,13 +1,11 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-"""Tests for policy_revision/policy_hash versioning on CRM Score Template,
-and the versioned crm-agents endpoint."""
+"""Tests for policy_revision/policy_hash versioning on CRM Score Template."""
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.scoring_policy import get_active_score_policy
 from crm.fcrm.scoring_policy import get_active_policy
 
 
@@ -118,7 +116,7 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		second_revision = frappe.db.get_value("CRM Score Template", template, "policy_revision")
 		self.assertEqual(second_revision, first_revision + 1)
 
-	def test_editing_active_template_records_policy_changed_event(self):
+	def test_editing_active_template_enqueues_frappe_rescore(self):
 		from unittest.mock import patch
 
 		signal = self._make_signal("_Test SP Signal F")
@@ -126,13 +124,11 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 
 		doc = frappe.get_doc("CRM Score Template", template)
 		doc.rules[0].penalty_amount = 9
-		with patch("crm.api.agent_events.record_agent_event") as mock_record:
+		with patch("frappe.enqueue") as mock_enqueue:
 			doc.save(ignore_permissions=True)
 
-		mock_record.assert_called_once()
-		args, _ = mock_record.call_args
-		self.assertEqual(args[0], "scoring.policy_changed.v1")
-		self.assertEqual(args[1].name, template)
+		mock_enqueue.assert_called_once()
+		self.assertEqual(mock_enqueue.call_args.args[0], "crm.fcrm.scoring_run.score_active_cohort")
 
 	def test_noop_save_on_active_template_does_not_record_event(self):
 		from unittest.mock import patch
@@ -141,10 +137,10 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		template = self._make_template("_Test SP Template G", signal)
 
 		doc = frappe.get_doc("CRM Score Template", template)
-		with patch("crm.api.agent_events.record_agent_event") as mock_record:
+		with patch("frappe.enqueue") as mock_enqueue:
 			doc.save(ignore_permissions=True)
 
-		mock_record.assert_not_called()
+		mock_enqueue.assert_not_called()
 
 	def test_editing_inactive_template_does_not_record_event(self):
 		from unittest.mock import patch
@@ -157,24 +153,13 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 
 		doc.reload()
 		doc.rules[0].penalty_amount = 12
-		with patch("crm.api.agent_events.record_agent_event") as mock_record:
+		with patch("frappe.enqueue") as mock_enqueue:
 			doc.save(ignore_permissions=True)
 
-		mock_record.assert_not_called()
+		mock_enqueue.assert_not_called()
 
 	def test_get_active_policy_none_when_no_active_template(self):
 		self.assertIsNone(get_active_policy())
-
-	def test_get_active_score_policy_returns_resolved_rules(self):
-		signal = self._make_signal("_Test SP Signal D")
-		self._make_template("_Test SP Template D", signal, penalty_amount=7)
-
-		result = get_active_score_policy()
-
-		self.assertIsNotNone(result["policy"])
-		self.assertEqual(result["policy"]["policy_revision"], 1)
-		self.assertEqual(len(result["policy"]["negative_rules"]), 1)
-		self.assertEqual(result["policy"]["negative_rules"][0]["penalty_amount"], 7)
 
 	def test_active_policy_observes_its_effective_window(self):
 		signal = self._make_signal("_Test SP Signal Window")
@@ -187,13 +172,3 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		self.assertIsNone(get_active_policy(as_of="2026-09-09 23:59:59"))
 		self.assertIsNotNone(get_active_policy(as_of="2026-09-10 00:00:00"))
 		self.assertIsNone(get_active_policy(as_of="2026-09-20 00:00:00"))
-
-	def test_get_active_score_policy_requires_service_identity(self):
-		frappe.conf.crm_agents_service_user = "service@example.com"
-		frappe.set_user("someone-else@example.com")
-
-		try:
-			with self.assertRaises(frappe.PermissionError):
-				get_active_score_policy()
-		finally:
-			frappe.set_user("Administrator")

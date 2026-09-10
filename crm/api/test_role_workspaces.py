@@ -54,7 +54,7 @@ class TestRoleWorkspaces(FrappeTestCase):
 	def test_snapshot_is_bound_to_actor_workspace_view_and_filters(self):
 		with patch("crm.api.role_workspaces.get_encryption_key", return_value="test-key"):
 			policy = frappe._dict(
-				actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset(), scope_version="scope-a"
+				actor="sales@example.com", revision="role-workspace", profile="sales", capabilities=frozenset(), scope_version="scope-a"
 			)
 			snapshot = role_workspaces._mint_snapshot(policy, "sales-urgent", "queue", {})
 			self.assertEqual(
@@ -74,7 +74,7 @@ class TestRoleWorkspaces(FrappeTestCase):
 
 	def test_badges_have_per_entry_snapshot_and_never_use_legacy_counts(self):
 		policy = frappe._dict(
-			actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset()
+			actor="sales@example.com", revision="role-workspace", profile="sales", capabilities=frozenset()
 		)
 		with (
 			patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=True),
@@ -90,7 +90,7 @@ class TestRoleWorkspaces(FrappeTestCase):
 		self.assertNotIn("legacyContactCount", badge)
 
 	def test_export_keeps_legacy_providers_migration_required(self):
-		policy = frappe._dict(actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset(), scope_version="scope-a")
+		policy = frappe._dict(actor="sales@example.com", revision="role-workspace", profile="sales", capabilities=frozenset(), scope_version="scope-a")
 		with (
 			patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=True),
 			patch("crm.api.role_workspaces.derive_workspace_policy", return_value=policy),
@@ -101,7 +101,7 @@ class TestRoleWorkspaces(FrappeTestCase):
 		self.assertIsNone(response["download"])
 
 	def test_director_canary_does_not_disable_sales_workspace_facade(self):
-		policy = frappe._dict(actor="sales@example.com", revision="role-workspace-v1", profile="sales", capabilities=frozenset(), scope_version="scope-a")
+		policy = frappe._dict(actor="sales@example.com", revision="role-workspace", profile="sales", capabilities=frozenset(), scope_version="scope-a")
 		with (
 			patch("crm.api.role_workspaces.role_workspace_read_enabled", return_value=True),
 			patch("crm.api.role_workspaces.director_analytics_read_enabled", return_value=False),

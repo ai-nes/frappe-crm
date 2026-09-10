@@ -51,7 +51,7 @@ def record_assessment(
 		source=source,
 		reason=reason or "",
 		evidence_references=_json(evidence_references, []),
-		policy_version=policy_version or "student-360-assessment-v1",
+		policy_version=policy_version or "student-360-assessment",
 		model_version=model_version,
 	)
 

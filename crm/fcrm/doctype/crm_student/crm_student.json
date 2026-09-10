@@ -46,9 +46,11 @@
   "section_academic",
   "high_school",
   "province",
-  "col_break_profile",
   "major",
   "aspiration",
+  "academic_results",
+  "language_certificates",
+  "col_break_profile",
   "section_enrollment",
   "source",
   "platform",
@@ -84,6 +86,7 @@
   "score_input_revision",
   "applied_score_input_revision",
   "applied_policy_revision",
+  "applied_score_template",
   "nba_dirty_since",
   "cohort_start_year",
   "cohort_end_year",
@@ -371,6 +374,18 @@
    "options": "CRM Aspiration"
   },
   {
+   "fieldname": "academic_results",
+   "fieldtype": "Table",
+   "label": "Academic Results",
+   "options": "CRM Student Academic Result"
+  },
+  {
+   "fieldname": "language_certificates",
+   "fieldtype": "Table",
+   "label": "Language Certificates",
+   "options": "CRM Student Language Certificate"
+  },
+  {
    "fieldname": "col_break_profile",
    "fieldtype": "Column Break"
   },
@@ -602,6 +617,13 @@
    "fieldname": "applied_policy_revision",
    "fieldtype": "Int",
    "label": "Applied Policy Revision",
+   "read_only": 1
+  },
+  {
+   "fieldname": "applied_score_template",
+   "fieldtype": "Link",
+   "label": "Applied Score Template",
+   "options": "CRM Score Template",
    "read_only": 1
   },
   {

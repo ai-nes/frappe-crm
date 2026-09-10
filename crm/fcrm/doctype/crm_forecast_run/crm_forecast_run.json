@@ -12,7 +12,7 @@
   {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
   {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Draft\nRunning\nCompleted\nFailed", "reqd": 1},
   {"fieldname": "correlation_id", "fieldtype": "Data", "in_list_view": 1, "label": "Correlation ID", "reqd": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [{"fields": ["model_version", "as_of", "planning_scope"], "name": "crm_forecast_run_lookup_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Run", "naming_rule": "Naming Series", "naming_series_options": "FCST-.YYYY.-", "owner": "Administrator",

@@ -24,7 +24,7 @@ DECISION_SIGNALS_CONTENT_SPEC = (
 	'"status":["open","resolved","denied","uncertain"]}'
 )
 DECISION_SIGNALS_CONTENT_HASH = "14930199a827a8df3a9eb11f8f82823c40267cf5ff50f4d575f27fe65374e0a0"
-NBA_ENGINE_R3 = "nba-engine-r3"
+NBA_ENGINE_NAME = "nba-engine"
 NEED_CODES = frozenset(
 	{
 		"RESOLVE_MAJOR_UNCERTAINTY",

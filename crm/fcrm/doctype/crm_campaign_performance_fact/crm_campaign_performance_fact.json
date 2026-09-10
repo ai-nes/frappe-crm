@@ -31,7 +31,7 @@
   {"fieldname": "verification_status", "fieldtype": "Select", "in_list_view": 1, "label": "Verification Status", "options": "Pending\nVerified\nRejected", "default": "Pending", "reqd": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [
   {"fields": ["campaign", "channel_assignment", "period_start", "period_end", "timezone", "normalized_dimension", "revision"], "name": "crm_campaign_performance_fact_grain_uniq", "unique": 1},

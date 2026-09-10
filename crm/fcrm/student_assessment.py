@@ -17,7 +17,7 @@ from crm.fcrm.doctype.crm_student_assessment.crm_student_assessment import (
 )
 from crm.services.student_context import mark_student_context_changed
 
-ASSESSMENT_POLICY_VERSION = "student-360-assessment-v1"
+ASSESSMENT_POLICY_VERSION = "student-360-assessment"
 
 
 def _student_for_write(student: str):

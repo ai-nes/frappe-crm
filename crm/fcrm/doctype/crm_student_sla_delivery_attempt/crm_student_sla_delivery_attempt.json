@@ -11,7 +11,7 @@
     {"fieldname": "error_code", "fieldtype": "Data", "label": "Error Code", "read_only": 1},
     {"fieldname": "submitted_at", "fieldtype": "Datetime", "label": "Submitted At", "read_only": 1, "reqd": 1},
     {"fieldname": "completed_at", "fieldtype": "Datetime", "label": "Completed At", "read_only": 1},
-    {"default": "phase4-v1", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
+    {"default": "student-sla", "fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "read_only": 1, "reqd": 1}
   ],
   "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student SLA Delivery Attempt", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1, "istable": 1
 }

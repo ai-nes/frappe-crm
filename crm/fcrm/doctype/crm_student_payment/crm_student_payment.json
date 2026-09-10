@@ -20,7 +20,7 @@
   {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "1", "read_only": 1, "reqd": 1},
   {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
   {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
-  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd"}
  ],
  "indexes": [{"fields": ["application", "status"], "name": "crm_student_payment_application_status_idx", "unique": 0}, {"fields": ["transaction_key", "currency", "revision"], "name": "crm_student_payment_transaction_idx", "unique": 0}],
  "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Payment", "naming_rule": "Naming Series", "naming_series_options": "PAY-.YYYY.-", "owner": "Administrator",

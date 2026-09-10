@@ -71,8 +71,8 @@ def _transition_receipt(student, old_status, new_status, occurred_at, actor, sou
 			"target_student": student,
 			"actor": actor,
 			"scope_snapshot": {"source": source or "enrollment_status"},
-			"policy_version": "enrollment-transition-v1",
-			"schema_version": "enrollment-transition-v1",
+			"policy_version": "enrollment-transition",
+			"schema_version": "enrollment-transition",
 			"correlation_token": key,
 			"request_received_at": now,
 			"completed_at": now,
@@ -111,8 +111,8 @@ def _insert_lifecycle_event(student, old_status, new_status, occurred_at, actor,
 			"command_receipt": receipt,
 			"idempotency_key": key,
 			"correlation_id": key,
-			"policy_version": "enrollment-transition-v1",
-			"schema_version": "enrollment-transition-v1",
+			"policy_version": "enrollment-transition",
+			"schema_version": "enrollment-transition",
 		}
 	).insert(ignore_permissions=True)
 	from crm.services.student_context import bump_student_context_revision
