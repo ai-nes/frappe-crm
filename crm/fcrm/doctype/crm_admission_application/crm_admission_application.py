@@ -12,6 +12,18 @@ APPLICATION_STATUSES = frozenset(
 
 
 class CRMAdmissionApplication(Document):
+	def after_insert(self):
+		# Keep standard Frappe document creation consistent with the command API.
+		# Patch/backfill jobs can create historical applications before templates
+		# are configured; the command/API will materialize them on replay.
+		if getattr(frappe.flags, "in_patch", False) or getattr(
+			frappe.flags, "admission_application_service", False
+		):
+			return
+		from crm.fcrm.admission_application import materialize_admission_profile
+
+		materialize_admission_profile(self)
+
 	def before_validate(self):
 		self._normalize_canonical_student()
 		if not self.schema_version:

@@ -32,8 +32,7 @@ STUDENT_FIELDS = [
 	"name",
 	"admission_year",
 	"province",
-	"processing_status",
-	"resolution",
+	"student_stage",
 	"creation",
 	"enrollment_date",
 ]
@@ -108,13 +107,23 @@ def _load_students(admission_year: str, scope: dict[str, Any], warnings: list[st
 	rows = [
 		dict(row)
 		for row in frappe.get_all(
-			"CRM Lead",
+			"CRM Student",
 			filters={"admission_year": admission_year},
 			fields=STUDENT_FIELDS,
 			order_by="creation asc, name asc",
 			limit_page_length=0,
 		)
 	]
+	for row in rows:
+		stage = str(row.get("student_stage") or "New").strip()
+		row["processing_status"] = {
+			"New": "new",
+			"Attempting": "processing",
+			"Qualified": "processed",
+			"Connected": "created",
+			"Disqualified": "invalid",
+		}.get(stage, "new")
+		row["resolution"] = "CREATED" if stage == "Connected" else None
 	if not scope.get("territory"):
 		return rows
 	if not frappe.db.table_exists("CRM Territory Geography Assignment"):
@@ -241,7 +250,7 @@ def _load_previous_students(
 	previous_year = str(int(admission_year) - 1)
 	try:
 		rows = frappe.get_all(
-			"CRM Lead",
+			"CRM Student",
 			filters={"admission_year": previous_year, "province": ["in", province_ids]},
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,
@@ -338,15 +347,19 @@ def _count_month(rows: list[dict[str, Any]], month: datetime, field: str, predic
 
 
 def _is_enrolled(row: dict[str, Any]) -> bool:
-	return _fold(row.get("resolution")) == "created"
+	return _fold(row.get("student_stage")) == "connected" or _fold(row.get("resolution")) == "created"
 
 
 def _is_qualified(row: dict[str, Any]) -> bool:
-	return _fold(row.get("processing_status")) in {"processing", "processed", "assigned"} or _is_enrolled(row)
+	return _fold(row.get("student_stage")) in {"attempting", "qualified", "connected"} or _fold(
+		row.get("processing_status")
+	) in {"processing", "processed", "assigned"} or _is_enrolled(row)
 
 
 def _is_counselling(row: dict[str, Any]) -> bool:
-	return _fold(row.get("processing_status")) in {"processing", "assigned"} or _is_enrolled(row)
+	return _fold(row.get("student_stage")) in {"attempting", "qualified", "connected"} or _fold(
+		row.get("processing_status")
+	) in {"processing", "assigned"} or _is_enrolled(row)
 
 
 def _capabilities(

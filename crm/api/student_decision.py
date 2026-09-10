@@ -31,6 +31,7 @@ from crm.fcrm.student_decision import (
 from crm.fcrm.student_decision import (
 	transition_action as _transition_action,
 )
+from crm.fcrm.student_reference import canonical_student
 
 
 def _require_action_writer():
@@ -111,6 +112,7 @@ def write_canonical_action(
 	expected_source_digest: str | None = None,
 ) -> dict:
 	"""Canonical CRM Action storage writer; compare-and-swap plus idempotency."""
+	student = canonical_student(student) or str(student or "").strip()
 	_require_action_writer()
 	_require_legacy_generation_epoch()
 	if origin != "ai":
@@ -151,7 +153,7 @@ def write_canonical_action(
 		frappe.throw(_("Unsupported v2 action type."), frappe.ValidationError)
 	require_parent_contact_authority(action_type, student)
 	row = frappe.db.sql(
-		"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
@@ -266,7 +268,7 @@ def _default_action_owner(student: str) -> str | None:
 	by an idempotent regeneration. Absent ``owner_staff`` leaves the Action
 	unassigned rather than guessing.
 	"""
-	return frappe.db.get_value("CRM Lead", student, "owner_staff") or None
+	return frappe.db.get_value("CRM Student", student, "owner_staff") or None
 
 
 def _plan_rank_defaults(rank: int) -> dict:
@@ -461,6 +463,7 @@ def write_canonical_action_bundle(
 	rank with a per-rank idempotency key. The whole bundle lands in the caller's
 	request transaction.
 	"""
+	student = canonical_student(student) or str(student or "").strip()
 	_require_action_writer()
 	_require_legacy_generation_epoch()
 	if not isinstance(candidates, list) or not 1 <= len(candidates) <= 3:
@@ -490,7 +493,7 @@ def write_canonical_action_bundle(
 		frappe.throw(_("Stale rollout epoch."), frappe.ValidationError)
 
 	row = frappe.db.sql(
-		"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
+		"SELECT name, student_context_revision FROM `tabCRM Student` WHERE name = %s FOR UPDATE",
 		(student,),
 		as_dict=True,
 	)
@@ -625,7 +628,7 @@ def _call(fn, **kwargs):
 
 
 def _decide_by_name(name: str, **kwargs):
-	"""Dispatch to the V2 task-native command when `name` names a CRM Lead
+	"""Dispatch to the V2 task-native command when `name` names a CRM Student
 	Task; CRM Recommendation only ever holds pre-cutover historical rows."""
 	if frappe.db.exists("CRM Action Item", name):
 		fn = _decide_student_task

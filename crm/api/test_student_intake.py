@@ -75,6 +75,20 @@ class TestStudentIntakeHelpers(FrappeTestCase):
 
 		self.assertEqual(payload["study_stage"], "grade_12_h1")
 
+	def test_prd_contact_payload_preserves_optional_admission_method(self):
+		payload = _normalize_contact_payload(
+			{
+				"source_system": "chatwoot",
+				"external_id": "conversation-method-42",
+				"idempotency_key": "idem-method-42",
+				"full_name": "Nguyen Test",
+				"admission_method": "TRANSCRIPT_REVIEW",
+				"consent": {"granted": True},
+			}
+		)
+
+		self.assertEqual(payload["admission_method"], "TRANSCRIPT_REVIEW")
+
 	def test_prd_contact_response_is_stable_and_contact_stays_nullable(self):
 		with patch("crm.api.student_intake._contact_for_student", return_value=None):
 			response = _intake_response({"outcome": "created", "student": "STU-1", "receipt": "REC-1"})

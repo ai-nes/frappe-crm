@@ -43,19 +43,20 @@ ASSIGNMENT_ORDERS = {"asc", "desc"}
 ASSIGNMENT_PIPELINE_REQUEST_STATUSES = {"pending", "deferred"}
 ASSIGNMENT_OWNER_FUNCTIONS = {"Sale", "CTV Sale"}
 ASSIGNMENT_REASON_LABELS = {
-	"TEAM_NOT_FOUND_FOR_PROVINCE": "Chưa có Team đang phụ trách tỉnh của Lead.",
+	"TEAM_NOT_FOUND_FOR_PROVINCE": "Chưa có Team đang phụ trách tỉnh của Student.",
 	"TEAM_NOT_FOUND": "Không tìm thấy Team nhận hồ sơ hoặc Team đã ngừng hoạt động.",
-	"NO_ELIGIBLE_RECIPIENT": "Team đã xác định nhưng chưa có Sale/CTV đủ điều kiện nhận Lead.",
-	"TEAM_NOT_READY": "Team chưa sẵn sàng nhận Lead.",
-	"MISSING_PROVINCE": "Chưa có tỉnh của Lead nên chưa thể xác định Team.",
-	"MISSING_CAMPUS": "Chưa có trường/cơ sở của Lead để kiểm tra dữ liệu.",
+	"NO_ELIGIBLE_RECIPIENT": "Team đã xác định nhưng chưa có Sale/CTV đủ điều kiện nhận Student.",
+	"TEAM_NOT_READY": "Team chưa sẵn sàng nhận Student.",
+	"MISSING_PROVINCE": "Chưa có tỉnh của Student nên chưa thể xác định Team.",
+	"MISSING_CAMPUS": "Chưa có trường/cơ sở của Student để kiểm tra dữ liệu.",
 	"STALE_ZONE_MAPPING": "Cấu hình khu vực đã thay đổi, cần thực hiện phân công lại.",
 	"STALE_OWNERSHIP_REVISION": "Thông tin người phụ trách đã thay đổi, cần thực hiện lại.",
 }
 UNKNOWN_ASSIGNMENT_REASON = "Không thể hoàn tất phân công tự động. Vui lòng kiểm tra cấu hình Team."
 ASSIGNMENT_STUDENT_FIELDS = [
 	"name",
-	"student_name",
+	"full_name",
+	"student_stage",
 	"high_school",
 	"province",
 	"major",
@@ -69,8 +70,6 @@ ASSIGNMENT_STUDENT_FIELDS = [
 	"latest_score",
 	"ownership_revision",
 	"admission_year",
-	"processing_status",
-	"resolution",
 ]
 ASSIGNMENT_WORKFLOW_CONNECTIONS = (
 	{"source": "input", "target": "validation", "label": None},
@@ -84,16 +83,16 @@ ASSIGNMENT_WORKFLOW_CONNECTIONS = (
 ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 	(
 		"input",
-		"Lead vào hệ thống",
-		"Tạo Lead · hàng chờ theo cơ sở",
-		"Tiếp nhận Lead, chống trùng và đưa vào hàng chờ theo cơ sở.",
-		("Kiểm tra Lead trùng trước khi đưa vào đợt.", "Chỉ chạy khi người vận hành bấm Sắp xếp tự động."),
+		"Học sinh vào hệ thống",
+		"Tạo học sinh · hàng chờ theo cơ sở",
+		"Tiếp nhận học sinh, chống trùng và đưa vào hàng chờ theo cơ sở.",
+		("Kiểm tra học sinh trùng trước khi đưa vào đợt.", "Chỉ chạy khi người vận hành bấm Sắp xếp tự động."),
 	),
 	(
 		"validation",
 		"Xác định hàng chờ",
 		"Cơ sở · Nhóm · Hàng chờ",
-		"Xác định đúng hàng chờ đang hoạt động và khớp cơ sở của Lead.",
+		"Xác định đúng hàng chờ đang hoạt động và khớp cơ sở của học sinh.",
 		("Hàng chờ phải đang hoạt động và thuộc đúng cơ sở.", "Sai cấu hình: dừng để kiểm tra lại."),
 	),
 	(
@@ -114,7 +113,7 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 		"review",
 		"Trường hợp cần kiểm tra",
 		"Thiếu dữ liệu · Hết chỗ · Chờ xử lý",
-		"Lead chưa thể gán sẽ được giữ lại để bổ sung dữ liệu hoặc xử lý sau.",
+		"Học sinh chưa thể gán sẽ được giữ lại để bổ sung dữ liệu hoặc xử lý sau.",
 		("Bổ sung trường, khu vực hoặc tỉnh còn thiếu.", "Chỉ chạy lại khi dữ liệu hoặc cấu hình đã được sửa."),
 	),
 	(
@@ -128,9 +127,8 @@ ASSIGNMENT_WORKFLOW_DEFINITIONS = (
 
 STUDENT_FIELDS = [
 	"name",
-	"student_name",
-	"processing_status",
-	"resolution",
+	"full_name",
+	"student_stage",
 	"admission_year",
 	"owner_staff",
 	"assigned_to",
@@ -349,10 +347,13 @@ def _resolve_teams(user: str, warnings: list[str]) -> list[dict[str, Any]]:
 
 def _load_students(admission_year: str, warnings: list[str]) -> list[dict[str, Any]]:
 	return [
-		dict(row)
+		_normalize_assignment_student(row)
 		for row in _get_list(
-			"CRM Lead",
-			filters={"admission_year": admission_year, "processing_status": ["!=", "CLOSED"]},
+			"CRM Student",
+			filters={
+				"admission_year": admission_year,
+				"student_stage": ["not in", ["Connected", "Disqualified"]],
+			},
 			fields=STUDENT_FIELDS,
 			limit_page_length=0,
 			warnings=warnings,
@@ -360,6 +361,16 @@ def _load_students(admission_year: str, warnings: list[str]) -> list[dict[str, A
 			order_by="name asc",
 		)
 	]
+
+
+def _normalize_assignment_student(row) -> dict[str, Any]:
+	"""Expose legacy workspace aliases from the canonical Student row."""
+	row = dict(row)
+	stage = row.get("student_stage")
+	row["student_name"] = row.get("full_name")
+	row["processing_status"] = "CLOSED" if stage in {"Connected", "Disqualified"} else "PROCESSED"
+	row["resolution"] = "CREATED" if stage == "Connected" else "PENDING"
+	return row
 
 
 def _get_list(
@@ -777,16 +788,16 @@ def _assignment_load_students(
 	if not team_ids and not staff_ids:
 		return []
 	try:
-		if not frappe.db.table_exists("CRM Lead"):
+		if not frappe.db.table_exists("CRM Student"):
 			warnings.append("students.source_unavailable")
 			return []
-		filters = {"processing_status": ["!=", "CLOSED"]}
+		filters = {"student_stage": ["not in", ["Connected", "Disqualified"]]}
 		if admission_year:
 			filters["admission_year"] = admission_year
 		return [
-			dict(row)
+			_normalize_assignment_student(row)
 			for row in frappe.get_list(
-				"CRM Lead",
+				"CRM Student",
 				filters=filters,
 				or_filters=[
 					["owner_staff", "in", staff_ids or ["__no_staff__"]],
@@ -796,6 +807,7 @@ def _assignment_load_students(
 				order_by="name asc",
 				limit_page_length=0,
 			)
+			if row.get("name")
 		]
 	except Exception:
 		warnings.append("students.source_unavailable")
@@ -1758,14 +1770,14 @@ def resolve_student_assignment(
 	if current_revision != expected_revision:
 		raise_api_error("STALE_REVISION", "Hồ sơ đã được cập nhật bởi người dùng khác. Vui lòng tải lại.", frappe.ValidationError, 409)
 	if not region_value and not student.get("province"):
-		raise_api_error("INVALID_ASSIGNMENT", "Khu vực là bắt buộc với Lead đang thiếu khu vực.", frappe.ValidationError, 422)
+		raise_api_error("INVALID_ASSIGNMENT", "Khu vực là bắt buộc với học sinh đang thiếu khu vực.", frappe.ValidationError, 422)
 	if region_value:
 		province = _assignment_region_name(region_value)
 	if region_value and not student.get("province"):
 		# Keep the region update in the same transaction as the ownership command.
-		# CRM Lead's save hook records the material context revision while the
+		# CRM Student's save hook records the material context revision while the
 		# ownership command remains the only writer of owner fields.
-		locked = frappe.get_doc("CRM Lead", student_id)
+		locked = frappe.get_doc("CRM Student", student_id)
 		locked.province = province
 		locked.save(ignore_permissions=True)
 	from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership

@@ -66,29 +66,13 @@ class CRMStudentContactConversion(Document):
 		student = frappe.db.get_value(
 			"CRM Lead",
 			self.student,
-			["identity", "case_key"],
+			["identity"],
 			as_dict=True,
 		)
 		if not student:
 			frappe.throw("The conversion Student does not exist.", frappe.ValidationError)
 		if _value(student, "identity") != self.student_identity:
 			frappe.throw("Conversion Student Identity does not match the Student.", frappe.ValidationError)
-		if _value(student, "case_key") != self.case_key:
-			frappe.throw("Conversion Case Key does not match the Student.", frappe.ValidationError)
-
-		case_key = frappe.db.get_value(
-			"CRM Student Case Key",
-			self.case_key,
-			["identity", "canonical_student"],
-			as_dict=True,
-		)
-		if not case_key:
-			frappe.throw("The conversion Case Key does not exist.", frappe.ValidationError)
-		if _value(case_key, "identity") != self.student_identity:
-			frappe.throw("Conversion Case Key Identity does not match the Student Identity.", frappe.ValidationError)
-		if _value(case_key, "canonical_student") != self.student:
-			frappe.throw("Conversion Student is not canonical for the Case Key.", frappe.ValidationError)
-
 		contact_identity = frappe.db.get_value("CRM Student", self.contact, "student_identity")
 		if not contact_identity:
 			frappe.throw("The conversion Contact must have a resolved Student Identity.", frappe.ValidationError)

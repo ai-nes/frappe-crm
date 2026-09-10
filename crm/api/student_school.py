@@ -7,35 +7,44 @@ from frappe import _
 
 from crm.api.lead_mapping import _normalize_lead_payload
 from crm.fcrm.role_policy import resolve_crm_profile
+from crm.fcrm.student_reference import canonical_student
 
 _STUDENT_BASIC_FIELDS = frozenset(
 	{
 		"student_name",
+		"full_name",
 		"phone",
 		"email",
 		"other_email",
+		"other_phone",
 		"gender",
 		"date_of_birth",
+		"birth_place",
+		"ethnicity",
+		"religion",
+		"nationality",
 		"province",
 		"ward",
+		"contact_address",
 		"high_school",
 		"current_grade",
 		"study_stage",
 		"branch",
-		"campaign",
 		"major",
 		"aspiration",
-		"advertising_channel",
-		"conversion_potential",
-		"segments",
+		"education_program",
+		"admission_method",
+		"platform",
 		"admission_year",
 		"alt_name",
 		"alt_phone",
 		"alt_address",
-		"notes",
 		"id_number",
 		"id_issued_date",
 		"id_issued_place",
+		"decision_maker",
+		"preferred_contact_channel",
+		"notes",
 	}
 )
 _STUDENT_WITH_LEAD_FIELDS = _STUDENT_BASIC_FIELDS | {
@@ -63,11 +72,44 @@ _SCHOOL_BASIC_FIELDS = frozenset(
 	}
 )
 _SCHOOL_CREATE_FIELDS = _SCHOOL_BASIC_FIELDS | {"school_code"}
-_OPTION_DOCTYPES = frozenset({"CRM Lead", "CRM High School"})
+_OPTION_DOCTYPES = frozenset({"CRM Lead", "CRM Student", "CRM High School"})
 _OPTION_FIELD_TYPES = frozenset({"Link", "Select"})
 _DEFAULT_OPTION_LIMIT = 20
 _MAX_OPTION_LIMIT = 100
 _CTV_STUDENT_UPDATE_FIELDS = frozenset({"notes"})
+_STUDENT_FIELD_ALIASES = {
+	"student_name": "full_name",
+	"alt_name": "parent_name",
+	"alt_phone": "parent_phone",
+	"alt_address": "contact_address",
+}
+_STUDENT_CANONICAL_FIELDS = frozenset(
+	_STUDENT_FIELD_ALIASES.get(fieldname, fieldname) for fieldname in _STUDENT_BASIC_FIELDS
+)
+
+
+def _canonical_student_fields(fields: dict | str | None) -> dict:
+	"""Translate the legacy form keys into the canonical Student schema."""
+	values = _parse_fields(fields, _STUDENT_BASIC_FIELDS)
+	canonical = {}
+	for fieldname, value in values.items():
+		canonical_name = _STUDENT_FIELD_ALIASES.get(fieldname, fieldname)
+		if canonical_name in canonical and canonical[canonical_name] != value:
+			frappe.throw(
+				_("Only one value may be supplied for {0}.").format(canonical_name),
+				frappe.ValidationError,
+			)
+		canonical[canonical_name] = value
+	return canonical
+
+
+def _student_response_fields(values: dict) -> dict:
+	"""Expose compatibility aliases without making Lead the response source."""
+	result = dict(values)
+	for legacy_name, canonical_name in _STUDENT_FIELD_ALIASES.items():
+		if canonical_name in result:
+			result[legacy_name] = result[canonical_name]
+	return result
 
 
 def _parse_fields(fields: dict | str | None, allowed_fields: frozenset[str]) -> dict:
@@ -115,7 +157,7 @@ def _update_document(doctype: str, name: str, fields: dict, allowed_fields: froz
 		if actor not in {None, "Guest", "None", "Administrator"}
 		else None
 	)
-	if doctype == "CRM Lead" and profile == "ctv_sale":
+	if doctype == "CRM Student" and profile == "ctv_sale":
 		unauthorized_fields = set(values) - _CTV_STUDENT_UPDATE_FIELDS
 		if unauthorized_fields:
 			frappe.throw(
@@ -158,6 +200,23 @@ def _create_document(
 	}
 
 
+def _create_student_document(fields: dict | str | None) -> dict:
+	result = _create_document(
+		"CRM Student",
+		_canonical_student_fields(fields),
+		_STUDENT_CANONICAL_FIELDS,
+		{"full_name"},
+	)
+	result["created_fields"] = _student_response_fields(result["created_fields"])
+	return result
+
+
+def _resolve_student_name(name: str) -> str:
+	if not isinstance(name, str) or not name.strip():
+		frappe.throw(_("Document name is required."), frappe.ValidationError)
+	return canonical_student(name.strip()) or name.strip()
+
+
 def _delete_document(doctype: str, name: str) -> dict:
 	if not isinstance(name, str) or not name.strip():
 		frappe.throw(_("Document name is required."), frappe.ValidationError)
@@ -171,10 +230,16 @@ def _delete_document(doctype: str, name: str) -> dict:
 def _student_values_from_lead(values: dict, source_lead: str, lead_code: str | None) -> dict:
 	student_fields = {field.fieldname for field in frappe.get_meta("CRM Student").fields}
 	student_values = {"doctype": "CRM Student", "source_lead": source_lead}
+	field_aliases = {
+		"student_name": "full_name",
+		"alt_name": "parent_name",
+		"alt_phone": "parent_phone",
+		"alt_address": "contact_address",
+	}
 	if lead_code and "lead_code" in student_fields:
 		student_values["lead_code"] = lead_code
 	for fieldname, value in values.items():
-		student_field = "full_name" if fieldname == "student_name" else fieldname
+		student_field = field_aliases.get(fieldname, fieldname)
 		if student_field in student_fields and value not in (None, ""):
 			student_values[student_field] = value
 	return student_values
@@ -378,13 +443,12 @@ def _get_link_options(
 
 @frappe.whitelist(methods=["POST"])
 def create_student(fields: dict | str | None = None) -> dict:
-	"""Legacy route that creates a CRM Lead; use create_student_with_lead for a real Student."""
-	return _create_document(
-		"CRM Lead",
-		fields,
-		_STUDENT_BASIC_FIELDS,
-		{"student_name"},
-	)
+	"""Create the canonical CRM Student record.
+
+	Lead intake remains available through ``create_student_with_lead``; this
+	route must not create a second, Lead-shaped Student record.
+	"""
+	return _create_student_document(fields)
 
 
 @frappe.whitelist(methods=["POST"])
@@ -407,7 +471,9 @@ def create_school(fields: dict | str | None = None) -> dict:
 @frappe.whitelist(methods=["GET"])
 def get_student(name: str) -> dict:
 	"""Get one Student with the fields marked ``in_list_view`` in its DocType."""
-	return _get_document("CRM Lead", name)
+	result = _get_document("CRM Student", _resolve_student_name(name))
+	result["fields"] = _student_response_fields(result["fields"])
+	return result
 
 
 @frappe.whitelist(methods=["GET"])
@@ -534,12 +600,19 @@ def get_field_options(
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_student(name: str, fields: dict | str | None = None) -> dict:
-	"""Partially update basic profile fields on one CRM Lead.
+	"""Partially update basic profile fields on one CRM Student.
 
 	Request fields: ``name`` and a non-empty ``fields`` object. The response
 	contains the document name and the normalized values that were updated.
 	"""
-	return _update_document("CRM Lead", name, fields, _STUDENT_BASIC_FIELDS)
+	result = _update_document(
+		"CRM Student",
+		_resolve_student_name(name),
+		_canonical_student_fields(fields),
+		_STUDENT_CANONICAL_FIELDS,
+	)
+	result["updated_fields"] = _student_response_fields(result["updated_fields"])
+	return result
 
 
 @frappe.whitelist(methods=["POST", "PUT"])
@@ -555,7 +628,7 @@ def update_school(name: str, fields: dict | str | None = None) -> dict:
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_student(name: str) -> dict:
 	"""Delete one CRM Student after checking delete permission and links."""
-	return _delete_document("CRM Lead", name)
+	return _delete_document("CRM Student", _resolve_student_name(name))
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])

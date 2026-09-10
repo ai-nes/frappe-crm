@@ -14,6 +14,7 @@ from crm.api.note import (
 	update_lead_note,
 	update_note,
 )
+from crm.fcrm.student_reference import canonical_student
 
 
 class TestNoteApi(FrappeTestCase):
@@ -114,6 +115,33 @@ class TestNoteApi(FrappeTestCase):
 
 		updated = update_lead_note(created["name"], content="Ghi chú Lead đã cập nhật")
 		self.assertEqual(updated["content"], "Ghi chú Lead đã cập nhật")
+		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})
+
+	def test_lead_alias_writes_to_canonical_student(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Canonical Note Student Lead",
+				"phone": "0912345682",
+				"email": "canonical-note-lead@example.com",
+			}
+		).insert(ignore_permissions=True)
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "Canonical Note Student",
+				"email": "canonical-note-student@example.com",
+				"source_lead": lead.name,
+			}
+		).insert(ignore_permissions=True)
+
+		created = create_lead_note(lead.name, content="Ghi chú Student")
+
+		self.assertEqual(created["reference_doctype"], "CRM Student")
+		self.assertEqual(created["reference_docname"], student.name)
+		self.assertEqual(canonical_student(lead.name), student.name)
+		self.assertEqual(list_lead_notes(lead.name)["total"], 1)
+		self.assertEqual(update_lead_note(created["name"], content="Đã cập nhật")["content"], "Đã cập nhật")
 		self.assertEqual(delete_lead_note(created["name"]), {"deleted": created["name"]})
 
 	def test_display_student_reference_is_resolved_at_note_boundary(self):

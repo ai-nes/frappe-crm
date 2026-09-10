@@ -33,8 +33,8 @@ from crm.fcrm.student_intake import StudentIntakeError
 class TestInteractionLogDispatch(FrappeTestCase):
 	def test_direct_student_reference_requires_the_same_student(self):
 		with patch("crm.fcrm.interaction_log.frappe.db.exists", return_value=True):
-			self.assertTrue(_source_matches_student("CRM Lead", "STU-1", "STU-1"))
-			self.assertFalse(_source_matches_student("CRM Lead", "STU-1", "STU-2"))
+			self.assertTrue(_source_matches_student("CRM Student", "STU-1", "STU-1"))
+			self.assertFalse(_source_matches_student("CRM Student", "STU-1", "STU-2"))
 
 	def test_external_interaction_replay_does_not_create_a_second_row(self):
 		payload = {

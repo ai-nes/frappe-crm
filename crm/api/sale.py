@@ -58,9 +58,8 @@ OPERATION_ORDER = ("overdue-tasks", "missing-documents")
 
 STUDENT_FIELDS = [
 	"name",
-	"student_name",
-	"processing_status",
-	"resolution",
+	"full_name",
+	"student_stage",
 	"admission_year",
 	"interest_level",
 	"fit_level",
@@ -314,13 +313,20 @@ def _load_students(
 	if not staff or not staff.get("name"):
 		return []
 	return [
-		dict(row)
+		{
+			**dict(row),
+			"student_name": row.get("full_name"),
+			"processing_status": "CLOSED"
+			if row.get("student_stage") in {"Connected", "Disqualified"}
+			else "PROCESSED",
+			"resolution": "CREATED" if row.get("student_stage") == "Connected" else "PENDING",
+		}
 		for row in _get_list(
-			"CRM Lead",
+			"CRM Student",
 			filters={
 				"owner_staff": staff["name"],
 				"admission_year": admission_year,
-				"processing_status": ["!=", "CLOSED"],
+				"student_stage": ["not in", ["Connected", "Disqualified"]],
 			},
 			fields=STUDENT_FIELDS,
 			order_by="name asc",
@@ -762,6 +768,8 @@ def _is_consulted(
 ) -> bool:
 	if any(_is_consulted_interaction(row) for row in interactions):
 		return True
+	if str(student.get("student_stage") or "") in {"Connected", "Qualified"}:
+		return True
 	if any(str(row.get("student_stage") or "") in {"Connected", "Qualified"} for row in contacts):
 		return True
 	return str(student.get("resolution") or "") == "CREATED" or any(
@@ -800,13 +808,13 @@ def _has_documents_stage(student: dict[str, Any], applications: list[dict[str, A
 
 
 def _is_confirmed(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("resolution") or "") == "CREATED":
+	if str(student.get("student_stage") or "") == "Connected":
 		return True
 	return any(_fold(row.get("status")) == "accepted" for row in applications)
 
 
 def _is_admitted(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("resolution") or "") == "CREATED":
+	if str(student.get("student_stage") or "") == "Connected":
 		return True
 	return any(_fold(row.get("status")) == "enrolled" for row in applications)
 

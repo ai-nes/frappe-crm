@@ -80,9 +80,9 @@ def materialize_sla_evidence():
 			continue
 		seen.add(row.student)
 		state = "known" if row.sla_status else "unknown"
-		previous = frappe.db.get_value("CRM Lead", row.student, "sla_evidence_state")
+		previous = frappe.db.get_value("CRM Student", row.student, "sla_evidence_state")
 		frappe.db.set_value(
-			"CRM Lead",
+			"CRM Student",
 			row.student,
 			{"sla_evidence_state": state, "sla_evidence_observed_at": observed_at},
 			update_modified=False,

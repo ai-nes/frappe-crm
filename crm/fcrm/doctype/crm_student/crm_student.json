@@ -34,12 +34,15 @@
   "chatwoot_contact_id",
   "col_break_1",
   "student_stage",
+  "enrollment_date",
   "readiness_level",
   "quality_bucket",
   "is_verified_lead",
   "assigned_to",
+  "assignment_priority",
   "owner_staff",
   "owning_team",
+  "owning_pool",
   "student",
   "student_identity",
   "admission_year",
@@ -54,9 +57,11 @@
   "major",
   "aspiration",
   "education_program",
+  "admission_method",
   "section_enrollment",
   "campaign",
   "source",
+  "advertising_channel",
   "platform",
   "col_break_enrollment",
   "branch",
@@ -87,6 +92,9 @@
   "sla_evidence_observed_at",
   "privacy_status",
   "student_context_revision",
+  "ownership_revision",
+  "engagement_revision",
+  "lifecycle_revision",
   "score_input_revision",
   "applied_score_input_revision",
   "applied_policy_revision",
@@ -265,6 +273,12 @@
    "description": "Server-managed recruitment contact stage. Use the Student stage command."
   },
   {
+   "fieldname": "enrollment_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Enrollment Date"
+  },
+  {
    "fieldname": "readiness_level",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -298,6 +312,13 @@
    "options": "CRM Staff"
   },
   {
+   "default": "normal",
+   "fieldname": "assignment_priority",
+   "fieldtype": "Select",
+   "label": "Assignment Priority",
+   "options": "low\nnormal\nhigh\nurgent"
+  },
+  {
    "fieldname": "owner_staff",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -314,6 +335,15 @@
    "options": "CRM Team",
    "read_only": 1,
    "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
+  },
+  {
+   "fieldname": "owning_pool",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Student Pool",
+   "options": "CRM Student Pool",
+   "read_only": 1,
+   "description": "Ownership projection for the Student Pool. Ownership commands are the authority."
   },
   {
    "fieldname": "student",
@@ -401,6 +431,12 @@
    "in_standard_filter": 1,
    "label": "Education Program",
    "options": "CRM Education Program"
+  },
+  {
+   "fieldname": "admission_method",
+   "fieldtype": "Select",
+   "label": "Admission Method",
+   "options": "\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
   },
   {
    "fieldname": "col_break_profile",
@@ -625,6 +661,35 @@
    "fieldtype": "Int",
    "label": "Student Context Revision",
    "read_only": 1
+  },
+  {
+   "fieldname": "advertising_channel",
+   "fieldtype": "Data",
+   "label": "Advertising Channel"
+  },
+  {
+   "default": "0",
+   "fieldname": "ownership_revision",
+   "fieldtype": "Int",
+   "label": "Ownership Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by ownership commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "engagement_revision",
+   "fieldtype": "Int",
+   "label": "Engagement Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by Student outcome commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "lifecycle_revision",
+   "fieldtype": "Int",
+   "label": "Lifecycle Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by lifecycle commands."
   },
   {
    "default": "0",

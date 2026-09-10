@@ -105,8 +105,7 @@ LIFECYCLE_EVENT_TO_STAGE = {
 STUDENT_FIELDS = [
 	"name",
 	"admission_year",
-	"processing_status",
-	"resolution",
+	"student_stage",
 	"branch",
 	"province",
 	"ward",
@@ -358,13 +357,24 @@ def _load_students(admission_year: str, scope: dict[str, Any]) -> list[dict[str,
 	filters: dict[str, Any] = {"admission_year": admission_year}
 	if scope.get("branch"):
 		filters["branch"] = scope["branch"]
-	return _fetch_rows(
-		"CRM Lead",
+	rows = _fetch_rows(
+		"CRM Student",
 		filters=filters,
 		fields=STUDENT_FIELDS,
 		order_by="creation asc, name asc",
 		allow_missing=False,
 	)
+	for row in rows:
+		stage = str(row.get("student_stage") or "New").strip()
+		row["processing_status"] = {
+			"New": "new",
+			"Attempting": "processing",
+			"Qualified": "processed",
+			"Connected": "created",
+			"Disqualified": "invalid",
+		}.get(stage, "new")
+		row["resolution"] = "CREATED" if stage == "Connected" else None
+	return rows
 
 
 def _load_applications(

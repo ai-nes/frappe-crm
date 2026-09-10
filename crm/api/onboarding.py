@@ -4,8 +4,7 @@ import frappe
 @frappe.whitelist()
 def get_first_crm_student():
 	student = frappe.get_list(
-		"CRM Lead",
-		filters={"converted": 0},
+		"CRM Student",
 		fields=["name"],
 		order_by="creation",
 		limit_page_length=1,

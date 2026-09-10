@@ -57,9 +57,9 @@ class TestDirectorAnalytics(FrappeTestCase):
 			response = role_workspaces.get_workspace_summary("director-overview", "overview")
 		self.assertEqual(response["contractStatus"], "unavailable")
 		self.assertEqual(response["kpis"], [])
-		self.assertEqual(response["definition"]["sources"], ["CRM Lead"])
+		self.assertEqual(response["definition"]["sources"], ["CRM Student"])
 		self.assertEqual(response["scopeLabel"], director_analytics.DIRECTOR_SCOPE_LABEL)
-		self.assertEqual(response["snapshotContext"]["watermarks"], {"CRM Lead": "unreleased"})
+		self.assertEqual(response["snapshotContext"]["watermarks"], {"CRM Student": "unreleased"})
 
 	def test_director_facade_is_unavailable_when_director_canary_is_disabled(self):
 		with (

@@ -153,7 +153,7 @@
    "permlevel": 1
   },
   {"fieldname": "section_items", "fieldtype": "Section Break", "label": "Insight Items"},
-  {"fieldname": "items", "fieldtype": "Table", "label": "Insight Items", "options": "CRM AI Lead Insight Item", "permlevel": 1},
+  {"fieldname": "items", "fieldtype": "Table", "label": "Insight Items", "options": "CRM AI Student Insight Item", "permlevel": 1},
   {
    "fieldname": "section_review",
    "fieldtype": "Section Break",
@@ -194,7 +194,7 @@
  "modified": "2026-08-06 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
- "name": "CRM AI Lead Insight",
+ "name": "CRM AI Student Insight",
  "naming_rule": "Naming Series",
  "naming_series_options": "CRMAI-.YYYY.-",
  "owner": "Administrator",

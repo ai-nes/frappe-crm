@@ -17,15 +17,33 @@ def _require_authenticated():
 
 def _students(filters: dict) -> list:
 	allowed = {"branch", "current_grade", "study_stage", "source"}
-	query = {key: value for key, value in (filters or {}).items() if key in allowed and value not in (None, "")}
+	query = {
+		key: value for key, value in (filters or {}).items() if key in allowed and value not in (None, "")
+	}
 	fields = [
-			"name", "student_name", "phone", "high_school", "current_grade", "study_stage",
-			"source", "processing_status", "resolution", "interest_level",
-			"fit_level", "assessment_status", "assessment_revision",
+		"name",
+		"full_name",
+		"phone",
+		"high_school",
+		"current_grade",
+		"study_stage",
+		"source",
+		"student_stage",
+		"interest_level",
+		"fit_level",
+		"assessment_status",
+		"assessment_revision",
 	]
 	rows, offset, page_size = [], 0, 1000
 	while True:
-		page = frappe.get_list("CRM Lead", filters=query, fields=fields, limit_start=offset, limit_page_length=page_size, order_by="name asc")
+		page = frappe.get_list(
+			"CRM Student",
+			filters=query,
+			fields=fields,
+			limit_start=offset,
+			limit_page_length=page_size,
+			order_by="name asc",
+		)
 		rows.extend(page)
 		if len(page) < page_size:
 			return rows
@@ -37,7 +55,7 @@ def _pct(numerator: int, denominator: int) -> float:
 
 
 def _is_enrolled(row) -> bool:
-	return str(row.get("resolution") or "").casefold() == "created"
+	return str(row.get("student_stage") or "").casefold() == "connected"
 
 
 def _interactions(student_ids: list[str]) -> list:
@@ -66,7 +84,9 @@ def _first_response_minutes(rows: list) -> list[float]:
 			by_student[row.student].append(row)
 	values = []
 	for student_rows in by_student.values():
-		inbound = next((row for row in student_rows if str(row.get("direction") or "").casefold() == "inbound"), None)
+		inbound = next(
+			(row for row in student_rows if str(row.get("direction") or "").casefold() == "inbound"), None
+		)
 		if not inbound:
 			continue
 		start = inbound.get("interaction_datetime") or inbound.get("creation")
@@ -79,7 +99,14 @@ def _first_response_minutes(rows: list) -> list[float]:
 			if not end:
 				continue
 			try:
-				seconds = (end - start).total_seconds() if isinstance(end, datetime) and isinstance(start, datetime) else (datetime.fromisoformat(str(end)).replace(tzinfo=None) - datetime.fromisoformat(str(start)).replace(tzinfo=None)).total_seconds()
+				seconds = (
+					(end - start).total_seconds()
+					if isinstance(end, datetime) and isinstance(start, datetime)
+					else (
+						datetime.fromisoformat(str(end)).replace(tzinfo=None)
+						- datetime.fromisoformat(str(start)).replace(tzinfo=None)
+					).total_seconds()
+				)
 			except (TypeError, ValueError):
 				continue
 			if seconds >= 0:
@@ -116,22 +143,42 @@ def _assessment_metrics(student_ids: list[str]) -> dict:
 
 def _campaign_costs(student_ids: list[str]) -> dict:
 	"""Return spend/enrollment by campaign without exposing Student identifiers."""
-	if not student_ids or not frappe.db.table_exists("CRM Marketing Engagement") or not frappe.db.table_exists("CRM Campaign Spend"):
+	if (
+		not student_ids
+		or not frappe.db.table_exists("CRM Marketing Engagement")
+		or not frappe.db.table_exists("CRM Campaign Spend")
+	):
 		return {}
 	from crm.fcrm.attribution import get_last_touch_campaign_by_student
 
 	last_touch = get_last_touch_campaign_by_student(student_ids)
 	enrolled = Counter()
-	for row in frappe.get_list("CRM Lead", filters={"name": ["in", student_ids]}, fields=["name", "processing_status", "resolution"], limit_page_length=0):
+	for row in frappe.get_list(
+		"CRM Student",
+		filters={"name": ["in", student_ids]},
+		fields=["name", "student_stage"],
+		limit_page_length=0,
+	):
 		if _is_enrolled(row) and last_touch.get(row.name):
 			enrolled[last_touch[row.name]] += 1
-	spend_rows = frappe.get_list("CRM Campaign Spend", fields=["crm_campaign", "amount"], filters={"crm_campaign": ["in", list(enrolled)]}, limit_page_length=0)
+	spend_rows = frappe.get_list(
+		"CRM Campaign Spend",
+		fields=["crm_campaign", "amount"],
+		filters={"crm_campaign": ["in", list(enrolled)]},
+		limit_page_length=0,
+	)
 	spend = Counter()
 	for row in spend_rows:
 		if row.get("crm_campaign"):
 			spend[row.crm_campaign] += float(row.get("amount") or 0)
 	return {
-		campaign: {"spend": round(spend[campaign], 2), "enrolled": enrolled[campaign], "cost_per_enrolled": round(spend[campaign] / enrolled[campaign], 2) if enrolled[campaign] else None}
+		campaign: {
+			"spend": round(spend[campaign], 2),
+			"enrolled": enrolled[campaign],
+			"cost_per_enrolled": round(spend[campaign] / enrolled[campaign], 2)
+			if enrolled[campaign]
+			else None,
+		}
 		for campaign in sorted(set(spend) | set(enrolled))
 	}
 
@@ -150,13 +197,24 @@ def get_student_360_metrics(filters=None) -> dict:
 	response_minutes = _first_response_minutes(interactions)
 	interaction_by_student = Counter(row.student for row in interactions if row.get("summary"))
 	profiled = sum(
-		bool(row.get("student_name") and row.get("phone") and row.get("high_school") and (row.get("current_grade") or row.get("study_stage")) and row.get("source") and interaction_by_student[row.name])
+		bool(
+			row.get("full_name")
+			and row.get("phone")
+			and row.get("high_school")
+			and (row.get("current_grade") or row.get("study_stage"))
+			and row.get("source")
+			and interaction_by_student[row.name]
+		)
 		for row in rows
 	)
 	source_counts = Counter(row.get("source") or "Unknown" for row in rows)
 	stage_counts = Counter(row.get("study_stage") or row.get("current_grade") or "Unknown" for row in rows)
 	grade_10_11 = sum(str(row.get("current_grade") or "") in {"10", "11"} for row in rows)
-	high_interest = [row for row in rows if row.get("assessment_status") == "confirmed" and row.get("interest_level") == "High"]
+	high_interest = [
+		row
+		for row in rows
+		if row.get("assessment_status") == "confirmed" and row.get("interest_level") == "High"
+	]
 	return {
 		"generated_at": str(frappe.utils.now_datetime()),
 		"cohort": {"visible_students": len(rows), "filters": filters},
@@ -164,13 +222,17 @@ def get_student_360_metrics(filters=None) -> dict:
 			"minimum_profile_count": profiled,
 			"minimum_profile_rate": _pct(profiled, len(rows)),
 			"source_rate": _pct(sum(bool(row.get("source")) for row in rows), len(rows)),
-			"grade_rate": _pct(sum(bool(row.get("current_grade") or row.get("study_stage")) for row in rows), len(rows)),
+			"grade_rate": _pct(
+				sum(bool(row.get("current_grade") or row.get("study_stage")) for row in rows), len(rows)
+			),
 			"grade_10_11_rate": _pct(grade_10_11, len(rows)),
 		},
 		"classification": {
 			**_assessment_metrics(student_ids),
 			"high_interest_count": len(high_interest),
-			"high_interest_enrollment_rate": _pct(sum(_is_enrolled(row) for row in high_interest), len(high_interest)),
+			"high_interest_enrollment_rate": _pct(
+				sum(_is_enrolled(row) for row in high_interest), len(high_interest)
+			),
 		},
 		"care": {
 			"first_response_minutes_avg": round(mean(response_minutes), 1) if response_minutes else None,

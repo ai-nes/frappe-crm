@@ -341,22 +341,20 @@ class TestAdmissionsDashboard(FrappeTestCase):
 	def _make_dash_student(self):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Lead",
-				"student_name": "_Test Dash Student Anchor",
+				"doctype": "CRM Student",
+				"full_name": "_Test Dash Student Anchor",
 				"phone": "0981112230",
-				"processing_status": "NEW",
+				"student_stage": "New",
 			}
 		)
-		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous_intake_flag
-		self.addCleanup(lambda: frappe.delete_doc("CRM Lead", student.name, force=True))
+		student.insert(ignore_permissions=True)
+		self.addCleanup(lambda: frappe.delete_doc("CRM Student", student.name, force=True))
 		return student.name
 
 	def _make_dash_contact(self, name, phone, crm_campaign=None, crm_event=None, student=None):
+		if student:
+			return student
+
 		payload = {
 			"doctype": "CRM Student",
 			"full_name": name,
@@ -367,8 +365,6 @@ class TestAdmissionsDashboard(FrappeTestCase):
 			payload["crm_campaign"] = crm_campaign
 		if crm_event:
 			payload["crm_event"] = crm_event
-		if student:
-			payload["student"] = student
 		contact = frappe.get_doc(payload)
 		previous_migration_flag = getattr(frappe.flags, "contact_migration_service", False)
 		frappe.flags.contact_migration_service = True

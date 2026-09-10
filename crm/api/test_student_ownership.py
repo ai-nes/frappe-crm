@@ -19,32 +19,28 @@ from crm.fcrm.student_ownership import (
 
 
 class TestStudentOwnershipContract(FrappeTestCase):
-	def test_linked_student_scope_follows_current_lead_assignment(self):
-		updates = {
-			"owner_staff": "STAFF-CTV",
-			"owning_team": None,
-			"owning_pool": None,
-			"assigned_to": "STAFF-CTV",
-		}
-		with (
-			patch.object(student_ownership_domain.frappe.db, "get_value", return_value="CRMC-1") as get_value,
-			patch.object(student_ownership_domain.frappe.db, "exists", return_value=True),
-			patch.object(
-				student_ownership_domain,
-				"_doctype_fields",
-				return_value={*updates, "ownership_revision"},
-			),
-			patch.object(student_ownership_domain.frappe.db, "set_value") as set_value,
-		):
-			student_ownership_domain._sync_linked_student_ownership("ENR-1", updates, 7)
-
-		get_value.assert_called_once_with("CRM Lead", "ENR-1", "student")
-		set_value.assert_called_once_with(
-			"CRM Student",
-			"CRMC-1",
-			{**updates, "ownership_revision": 7},
-			update_modified=True,
+	def test_ownership_events_target_student_aggregate(self):
+		event = student_ownership_domain._event_values(
+			student_name="STU-1",
+			actor="sale@example.com",
+			actor_scope="{}",
+			previous_owner=None,
+			previous_team=None,
+			previous_pool=None,
+			target={"owner_staff": "STAFF-CTV", "team": {}, "owning_pool": None},
+			previous_revision=6,
+			next_revision=7,
+			command_key="ownership:sale@example.com:key-1",
+			idempotency_key="key-1",
+			reason="Manual assignment",
+			correlation_id="student-assignment:key-1",
+			receipt_name="RECEIPT-1",
 		)
+
+		self.assertEqual(event["student"], "STU-1")
+		self.assertEqual(event["aggregate_name"], "STU-1")
+		self.assertEqual(event["aggregate_doctype"], "CRM Student")
+		self.assertEqual(event["revision"], 7)
 
 	def test_only_sale_and_managers_receive_ownership_capability(self):
 		for roles in ({"Sale"}, {"Lead Sale"}, {"Admissions Director"}):
@@ -332,6 +328,13 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 			frappe._dict(name="STAFF-SALE", full_name="Sale", user="sale@example.com", campus="CAMPUS-1"),
 			frappe._dict(name="STAFF-CTV", full_name="CTV Sale", user="ctv@example.com", campus="CAMPUS-1"),
 		]
+		original_get_value = frappe.db.get_value
+
+		def get_value(doctype, name, fieldname, *args, **kwargs):
+			if doctype == "User" and fieldname == "enabled":
+				return 1
+			return original_get_value(doctype, name, fieldname, *args, **kwargs)
+
 		with (
 			patch.object(
 				student_ownership_domain,
@@ -356,7 +359,7 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 					user
 				],
 			),
-			patch.object(frappe.db, "get_value", return_value=1),
+			patch.object(frappe.db, "get_value", side_effect=get_value),
 			patch.object(
 				frappe,
 				"get_all",
@@ -399,6 +402,13 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 				return memberships[filters["parent"]]
 			return []
 
+		original_get_value = student_ownership_domain.frappe.db.get_value
+
+		def get_value(doctype, name, fieldname, *args, **kwargs):
+			if doctype == "User" and fieldname == "enabled":
+				return 1
+			return original_get_value(doctype, name, fieldname, *args, **kwargs)
+
 		with (
 			patch.object(
 				student_ownership_domain,
@@ -413,7 +423,7 @@ class TestStudentOwnershipAPI(FrappeTestCase):
 				"get_roles",
 				side_effect=lambda user: {"sale-1@example.com": {"Sale"}, "sale-2@example.com": {"Sale"}}[user],
 			),
-			patch.object(student_ownership_domain.frappe.db, "get_value", return_value=1),
+			patch.object(student_ownership_domain.frappe.db, "get_value", side_effect=get_value),
 		):
 			response = student_ownership_domain.get_eligible_ownership_targets("STUDENT-1")
 

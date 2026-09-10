@@ -20,65 +20,41 @@ class TestAIInsightAPI(FrappeTestCase):
 		else:
 			frappe.conf.crm_agents_service_user = self._previous_service_user
 		students = frappe.db.get_all(
-			"CRM Lead", filters={"student_name": ["like", "_Test AI Insight%"]}, pluck="name"
+			"CRM Student", filters={"full_name": ["like", "_Test AI Insight%"]}, pluck="name"
 		)
 		for insight in frappe.db.get_all(
-			"CRM AI Lead Insight", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
+			"CRM AI Student Insight", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
 		):
-			frappe.delete_doc("CRM AI Lead Insight", insight, force=True)
+			frappe.delete_doc("CRM AI Student Insight", insight, force=True)
 		for receipt in frappe.db.get_all(
 			"CRM Student Command Receipt",
 			filters={"target_student": ["in", students or ["__none__"]]},
 			pluck="name",
 		):
 			frappe.db.delete("CRM Student Command Receipt", {"name": receipt})
-		for contact in frappe.db.get_all(
-			"CRM Student", filters={"student": ["in", students or ["__none__"]]}, pluck="name"
-		):
-			frappe.delete_doc("CRM Student", contact, force=True)
 		for student in students:
-			frappe.delete_doc("CRM Lead", student, force=True)
+			frappe.delete_doc("CRM Student", student, force=True)
 
 	def _make_pair(self, suffix="Base"):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Lead",
-				"student_name": f"_Test AI Insight {suffix}",
+				"doctype": "CRM Student",
+				"full_name": f"_Test AI Insight {suffix}",
 				"phone": "0981123456",
 				"email": f"ai-insight-{suffix.lower()}@example.com",
-				"processing_status": "NEW",
-			}
-		)
-		previous_flag = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous_flag
-
-		contact = frappe.get_doc(
-			{
-				"doctype": "CRM Student",
-				"full_name": f"_Test AI Insight Contact {suffix}",
-				"phone": "0981123457",
-				"student": student.name,
 				"student_stage": "New",
 			}
 		)
-		previous_flag = getattr(frappe.flags, "contact_migration_service", False)
-		frappe.flags.contact_migration_service = True
-		try:
-			contact.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.contact_migration_service = previous_flag
-		student.reload()
+		student.insert(ignore_permissions=True)
+		contact = student
 		return student, contact
 
 	def _payload(self, student, key="generation-1", **values):
+		key = f"{student.name}:{key}"
 		payload = {
 			"student": student.name,
 			"expected_context_revision": int(
-				frappe.db.get_value("CRM Lead", student.name, "student_context_revision") or 0
+				frappe.db.get_value("CRM Student", student.name, "student_context_revision") or 0
 			),
 			"generation_idempotency_key": key,
 			"idempotency_key": key,
@@ -107,9 +83,9 @@ class TestAIInsightAPI(FrappeTestCase):
 		self.assertEqual(second["applied"], False)
 		self.assertTrue(second["duplicate"])
 		self.assertEqual(second["current_revision"], payload["expected_context_revision"])
-		self.assertEqual(frappe.db.count("CRM AI Lead Insight", {"student": student.name}), 1)
+		self.assertEqual(frappe.db.count("CRM AI Student Insight", {"student": student.name}), 1)
 
-		insight = frappe.get_doc("CRM AI Lead Insight", first["insight"])
+		insight = frappe.get_doc("CRM AI Student Insight", first["insight"])
 		self.assertEqual(insight.student, student.name)
 		self.assertEqual(insight.contact, contact.name)
 		self.assertEqual(insight.ai_score, 72.5)
@@ -139,7 +115,7 @@ class TestAIInsightAPI(FrappeTestCase):
 		student, _contact = self._make_pair("Stale")
 		baseline = int(student.get("student_context_revision") or 0)
 		frappe.db.set_value(
-			"CRM Lead", student.name, "student_context_revision", baseline + 1, update_modified=False
+			"CRM Student", student.name, "student_context_revision", baseline + 1, update_modified=False
 		)
 
 		result = upsert_ai_insight(**self._payload(student, key="stale-generation", expected_context_revision=baseline))
@@ -149,7 +125,7 @@ class TestAIInsightAPI(FrappeTestCase):
 		self.assertTrue(result["stale"])
 		self.assertEqual(result["current_revision"], baseline + 1)
 		self.assertIsNone(result["insight"])
-		self.assertEqual(frappe.db.count("CRM AI Lead Insight", {"student": student.name}), 0)
+		self.assertEqual(frappe.db.count("CRM AI Student Insight", {"student": student.name}), 0)
 
 	def test_fields_outside_contract_are_rejected(self):
 		with self.assertRaises(AIInsightError) as context:
@@ -175,7 +151,7 @@ class TestAIInsightAPI(FrappeTestCase):
 		self.assertFalse(result["duplicate"])
 		self.assertFalse(result["stale"])
 		self.assertEqual(result["error_code"], "READ_BACK_VERIFICATION_FAILED")
-		self.assertEqual(frappe.db.count("CRM AI Lead Insight", {"student": student.name}), 0)
+		self.assertEqual(frappe.db.count("CRM AI Student Insight", {"student": student.name}), 0)
 
 	def test_unexpected_failure_settles_receipt_before_propagating(self):
 		student, _contact = self._make_pair("Unexpected")
@@ -189,7 +165,7 @@ class TestAIInsightAPI(FrappeTestCase):
 
 		receipt = frappe.db.get_value(
 			"CRM Student Command Receipt",
-			{"correlation_token": key},
+			{"correlation_token": f"{student.name}:{key}"},
 			["outcome", "error_code"],
 			as_dict=True,
 		)

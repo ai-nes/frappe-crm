@@ -87,7 +87,7 @@ def _safe_insight_summary(ai_insight: str | None) -> str | None:
 	if not ai_insight:
 		return None
 	try:
-		summary = frappe.db.get_value("CRM AI Lead Insight", ai_insight, "summary")
+		summary = frappe.db.get_value("CRM AI Student Insight", ai_insight, "summary")
 	except Exception:
 		return None
 	if not summary or not isinstance(summary, str):

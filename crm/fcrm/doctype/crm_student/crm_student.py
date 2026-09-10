@@ -93,8 +93,8 @@ class CRMStudent(Document):
 		self.student_stage = self.get("student_stage") or "New"
 		self._normalize_shared_fields()
 		self._resolve_geo()
-		# Student is a post-conversion/care aggregate. Assignment is performed on
-		# CRM Lead through an explicit batch and is never inferred on Student insert.
+		# Student is the operational aggregate. Assignment is applied by the
+		# ownership/routing commands and is never inferred from a Lead link.
 
 	def _set_defaults(self):
 		if not self.admission_year:

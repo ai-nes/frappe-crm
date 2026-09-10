@@ -51,9 +51,17 @@ def _fail(code: str, message: str):
 def lifecycle_targets(current_stage: str, capabilities: set[str] | frozenset[str]) -> list[dict[str, Any]]:
 	"""Return server-authoritative targets for the transition dialog."""
 	if current_stage == LOST_STAGE:
-		return [{"stage": "Reopen", "label": "Reopen", "requires_reason": True}] if "lifecycle.reopen" in capabilities else []
+		return (
+			[{"stage": "Reopen", "label": "Reopen", "requires_reason": True}]
+			if "lifecycle.reopen" in capabilities
+			else []
+		)
 	targets = []
-	if current_stage in ACTIVE_STAGES and "lifecycle.transition" in capabilities and enabled("lifecycle_write"):
+	if (
+		current_stage in ACTIVE_STAGES
+		and "lifecycle.transition" in capabilities
+		and enabled("lifecycle_write")
+	):
 		current_index = ACTIVE_STAGES.index(current_stage)
 		for stage in ACTIVE_STAGES[current_index + 1 :]:
 			targets.append({"stage": stage, "label": stage, "requires_evidence": True})
@@ -85,7 +93,15 @@ def get_lifecycle_stages() -> dict[str, Any]:
 	return {"stages": stages, "policy_version": POLICY_VERSION}
 
 
-def validate_transition(current_stage: str, target_stage: str, *, reason: str | None = None, evidence: Any = None, outcome_code: str | None = None, capabilities: set[str] | frozenset[str] = frozenset()) -> dict[str, Any]:
+def validate_transition(
+	current_stage: str,
+	target_stage: str,
+	*,
+	reason: str | None = None,
+	evidence: Any = None,
+	outcome_code: str | None = None,
+	capabilities: set[str] | frozenset[str] = frozenset(),
+) -> dict[str, Any]:
 	current = STAGE_ALIASES.get((current_stage or "New").strip(), (current_stage or "New").strip())
 	target = STAGE_ALIASES.get((target_stage or "").strip(), (target_stage or "").strip())
 	if target == "Reopen":
@@ -95,7 +111,13 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 			_fail("FORBIDDEN", "You are not permitted to reopen this Student.")
 		if not str(reason or "").strip():
 			_fail("REASON_REQUIRED", "Reopen requires a reason.")
-		return {"from_stage": current, "to_stage": None, "transition_kind": "reopen", "reason": str(reason).strip(), "evidence": []}
+		return {
+			"from_stage": current,
+			"to_stage": None,
+			"transition_kind": "reopen",
+			"reason": str(reason).strip(),
+			"evidence": [],
+		}
 	if target == LOST_STAGE:
 		if current not in ACTIVE_STAGES:
 			_fail("INVALID_EDGE", "Disqualified can only be entered from an active Student stage.")
@@ -103,7 +125,13 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 			_fail("FORBIDDEN", "You are not permitted to mark a Student Lost.")
 		if not str(reason or "").strip():
 			_fail("REASON_REQUIRED", "Lost requires a reason.")
-		return {"from_stage": current, "to_stage": target, "transition_kind": "lost", "reason": str(reason).strip(), "evidence": []}
+		return {
+			"from_stage": current,
+			"to_stage": target,
+			"transition_kind": "lost",
+			"reason": str(reason).strip(),
+			"evidence": [],
+		}
 	if (
 		current not in ACTIVE_STAGES
 		or target not in ACTIVE_STAGES
@@ -113,7 +141,9 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 	if "lifecycle.transition" not in capabilities:
 		_fail("FORBIDDEN", "You are not permitted to transition this Student.")
 	try:
-		validated = validate_qualification_evidence(target, outcome_code, evidence, policy_version=QUALIFICATION_POLICY_VERSION)
+		validated = validate_qualification_evidence(
+			target, outcome_code, evidence, policy_version=QUALIFICATION_POLICY_VERSION
+		)
 	except QualificationValidationError as exc:
 		_fail("INVALID_EVIDENCE", str(exc))
 	if target in {"Attempting", "Connected", "Qualified"} and outcome_code in MEANINGFUL_OUTCOMES:
@@ -122,7 +152,13 @@ def validate_transition(current_stage: str, target_stage: str, *, reason: str | 
 			for item in normalize_evidence(evidence)
 		):
 			_fail("INVALID_EVIDENCE", "A qualifying CRM Student Outcome record is required.")
-	return {"from_stage": current, "to_stage": target, "transition_kind": "forward", "reason": str(reason or "").strip() or None, "evidence": validated["evidence"]}
+	return {
+		"from_stage": current,
+		"to_stage": target,
+		"transition_kind": "forward",
+		"reason": str(reason or "").strip() or None,
+		"evidence": validated["evidence"],
+	}
 
 
 def _actor() -> str:
@@ -157,12 +193,15 @@ def _verify_evidence(student: str, references: list[dict[str, str]], *, outcome_
 			doc = frappe.get_doc(doctype, name)
 		except Exception:
 			_fail("INVALID_EVIDENCE", "A referenced qualification record does not exist.")
-		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
+		if not doc.has_permission("read") and doctype not in {
+			"CRM Student Outcome",
+			"CRM Student Lifecycle Event",
+		}:
 			_fail("OUT_OF_SCOPE", "A referenced qualification record is outside your scope.")
 		linked_student = doc.get("student")
-		if not linked_student and doc.get("reference_doctype") == "CRM Lead":
+		if not linked_student and doc.get("reference_doctype") in {"CRM Lead", "CRM Student"}:
 			linked_student = doc.get("reference_docname")
-		if not linked_student and doc.get("attached_to_doctype") == "CRM Lead":
+		if not linked_student and doc.get("attached_to_doctype") in {"CRM Lead", "CRM Student"}:
 			linked_student = doc.get("attached_to_name")
 		if not linked_student and doc.get("interaction"):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
@@ -192,7 +231,9 @@ def _command_key(actor: str, idempotency_key: str) -> str:
 
 
 def _fingerprint(payload: dict[str, Any]) -> str:
-	return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+	return hashlib.sha256(
+		json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
+	).hexdigest()
 
 
 def _replay(command_key: str, fingerprint: str):
@@ -256,7 +297,13 @@ def _lock(name: str):
 
 
 def _prior_active_stage(student: str) -> str | None:
-	rows = frappe.get_all(LIFECYCLE_EVENT_DOCTYPE, filters={"student": student}, fields=["from_stage", "to_stage", "prior_active_stage", "transition_kind"], order_by="occurred_at desc, name desc", limit_page_length=20)
+	rows = frappe.get_all(
+		LIFECYCLE_EVENT_DOCTYPE,
+		filters={"student": student},
+		fields=["from_stage", "to_stage", "prior_active_stage", "transition_kind"],
+		order_by="occurred_at desc, name desc",
+		limit_page_length=20,
+	)
 	for row in rows:
 		if row.get("to_stage") == LOST_STAGE or row.get("transition_kind") == "lost":
 			return row.get("from_stage") or row.get("prior_active_stage")
@@ -282,7 +329,14 @@ def request_transition(
 		_fail("INVALID_INPUT", "idempotency_key is required.")
 	if expected_revision in (None, ""):
 		_fail("INVALID_INPUT", "expected_revision is required.")
-	payload = {"student": student, "target_stage": target_stage, "reason": reason, "evidence_refs": evidence_refs, "outcome_code": outcome_code, "expected_revision": expected_revision}
+	payload = {
+		"student": student,
+		"target_stage": target_stage,
+		"reason": reason,
+		"evidence_refs": evidence_refs,
+		"outcome_code": outcome_code,
+		"expected_revision": expected_revision,
+	}
 	fingerprint = _fingerprint(payload)
 	command_key = _command_key(actor, idempotency_key)
 	result = _replay(command_key, fingerprint)
@@ -295,7 +349,14 @@ def request_transition(
 	revision = _revision(student_doc)
 	if expected_revision not in (None, "") and str(expected_revision) != str(revision):
 		_fail("STALE_REVISION", "Student lifecycle changed; reload before retrying.")
-	transition = validate_transition(current_stage, target_stage, reason=reason, evidence=evidence_refs, outcome_code=outcome_code, capabilities=capabilities)
+	transition = validate_transition(
+		current_stage,
+		target_stage,
+		reason=reason,
+		evidence=evidence_refs,
+		outcome_code=outcome_code,
+		capabilities=capabilities,
+	)
 	_verify_evidence(student, transition["evidence"], outcome_code=outcome_code)
 	prior_active = _prior_active_stage(student) if transition["transition_kind"] == "reopen" else None
 	if transition["transition_kind"] == "reopen":
@@ -314,7 +375,8 @@ def request_transition(
 				"from_stage": transition["from_stage"],
 				"to_stage": transition["to_stage"],
 				"transition_kind": transition["transition_kind"],
-				"prior_active_stage": prior_active or (current_stage if transition["transition_kind"] == "lost" else None),
+				"prior_active_stage": prior_active
+				or (current_stage if transition["transition_kind"] == "lost" else None),
 				"reason": transition["reason"],
 				"evidence_references": json.dumps(transition["evidence"]),
 				"actor": actor,
@@ -332,8 +394,11 @@ def request_transition(
 		frappe.db.set_value("CRM Student", student, updates, update_modified=False)
 		from crm.services.admission_event_policy import admit_lifecycle_transition
 		from crm.services.student_context import bump_student_context_revision
+
 		context_change = bump_student_context_revision(
-			student, "lifecycle_transition", enqueue=False,
+			student,
+			"lifecycle_transition",
+			enqueue=False,
 			event_id=f"lifecycle:{event.name}",
 		)
 		admit_lifecycle_transition(
@@ -342,19 +407,52 @@ def request_transition(
 			source_event=context_change["change"],
 			source_reference=event.name,
 		)
-		result = {"status": "created", "event": event.name, "student": student, "from_stage": transition["from_stage"], "to_stage": transition["to_stage"], "transition_kind": transition["transition_kind"], "revision": new_revision, "receipt": receipt.name}
+		result = {
+			"status": "created",
+			"event": event.name,
+			"student": student,
+			"from_stage": transition["from_stage"],
+			"to_stage": transition["to_stage"],
+			"transition_kind": transition["transition_kind"],
+			"revision": new_revision,
+			"receipt": receipt.name,
+		}
 		_finish(receipt, result)
 		return result
 	finally:
 		setattr(frappe.flags, SERVICE_FLAG, previous_flag)
 
 
-def reopen(student: str, reason: str, *, expected_revision: Any = None, idempotency_key: str | None = None, correlation_id: str | None = None):
-	return request_transition(student, "Reopen", reason=reason, expected_revision=expected_revision, idempotency_key=idempotency_key, correlation_id=correlation_id)
+def reopen(
+	student: str,
+	reason: str,
+	*,
+	expected_revision: Any = None,
+	idempotency_key: str | None = None,
+	correlation_id: str | None = None,
+):
+	return request_transition(
+		student,
+		"Reopen",
+		reason=reason,
+		expected_revision=expected_revision,
+		idempotency_key=idempotency_key,
+		correlation_id=correlation_id,
+	)
 
 
 def get_lifecycle_context(student: str) -> dict[str, Any]:
 	actor = _actor()
 	student_doc = _student(student)
 	capabilities = _capabilities(actor)
-	return {"current_stage": _stage(student_doc), "revision": _revision(student_doc), "allowed_targets": lifecycle_targets(_stage(student_doc), capabilities), "policy_version": POLICY_VERSION, "capabilities": {"transition": "lifecycle.transition" in capabilities, "lost": "lifecycle.lost" in capabilities, "reopen": "lifecycle.reopen" in capabilities}}
+	return {
+		"current_stage": _stage(student_doc),
+		"revision": _revision(student_doc),
+		"allowed_targets": lifecycle_targets(_stage(student_doc), capabilities),
+		"policy_version": POLICY_VERSION,
+		"capabilities": {
+			"transition": "lifecycle.transition" in capabilities,
+			"lost": "lifecycle.lost" in capabilities,
+			"reopen": "lifecycle.reopen" in capabilities,
+		},
+	}

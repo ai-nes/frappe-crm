@@ -1,4 +1,4 @@
-"""CRUD API for FCRM Note, scoped to CRM Lead / CRM Student.
+"""CRUD API for FCRM Note, scoped to CRM Student with Lead compatibility.
 
 FCRM Note itself carries only global role permissions (no
 permission_query_conditions/has_permission hook), so a plain
@@ -34,10 +34,10 @@ def _validated_content(content):
 def _resolve_reference(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
 		frappe.throw(_("Notes are only supported for CRM Lead and CRM Student."), frappe.ValidationError)
-	resolved_name = reference_docname
-	if reference_doctype == "CRM Student":
-		resolved_name = canonical_student(reference_docname) or reference_docname
-	reference_doc = frappe.get_doc(reference_doctype, resolved_name)
+	canonical_name = canonical_student(reference_docname)
+	resolved_name = canonical_name or reference_docname
+	resolved_doctype = "CRM Student" if canonical_name else reference_doctype
+	reference_doc = frappe.get_doc(resolved_doctype, resolved_name)
 	reference_doc.check_permission(permission_type)
 	return resolved_name, reference_doc
 
@@ -61,16 +61,18 @@ def list_notes(reference_doctype, reference_docname, search=None, start=0, page_
 
 	Requires read access to that student/contact. Optional search matches content.
 	"""
-	resolved_name, _ = _resolve_reference(reference_doctype, reference_docname, "read")
+	resolved_name, reference_doc = _resolve_reference(reference_doctype, reference_docname, "read")
 
-	# Keep legacy notes addressable while writing all new notes against the
+	# Keep legacy Lead notes addressable while writing all new notes against the
 	# canonical Student.name. This is a compatibility boundary, not a second
 	# source of truth.
 	reference_names = list(dict.fromkeys([reference_docname, resolved_name]))
-	filters = {
-		"reference_doctype": reference_doctype,
-		"reference_docname": ["in", reference_names],
-	}
+	resolved_doctype = reference_doc.doctype
+	filters = {"reference_docname": ["in", reference_names]}
+	if resolved_doctype == "CRM Student" and reference_doctype == "CRM Lead":
+		filters["reference_doctype"] = ["in", ["CRM Lead", "CRM Student"]]
+	else:
+		filters["reference_doctype"] = resolved_doctype
 	if search:
 		filters["content"] = ["like", f"%{search}%"]
 
@@ -100,10 +102,10 @@ def create_note(reference_doctype, reference_docname, content=None):
 	"""Create an FCRM Note on a CRM Lead or CRM Student. Requires read
 	access to that student/contact and create access to FCRM Note.
 	"""
-	resolved_name, _ = _resolve_reference(reference_doctype, reference_docname, "read")
+	resolved_name, reference_doc = _resolve_reference(reference_doctype, reference_docname, "read")
 	doc = frappe.new_doc("FCRM Note")
 	doc.content = _validated_content(content or "")
-	doc.reference_doctype = reference_doctype
+	doc.reference_doctype = reference_doc.doctype
 	doc.reference_docname = resolved_name
 	doc.insert()
 	return _with_owner_full_name(doc)
@@ -145,10 +147,10 @@ def list_lead_notes(lead_id, search=None, start=0, page_length=20):
 
 @frappe.whitelist()
 def get_lead_note(name):
-	"""Get one note attached to a CRM Lead."""
+	"""Get one legacy Lead note or a Student note created via the Lead alias."""
 	doc = get_note(name)
-	if doc.get("reference_doctype") != "CRM Lead":
-		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	if doc.get("reference_doctype") not in {"CRM Lead", "CRM Student"}:
+		frappe.throw(_("Note is not attached to a CRM Lead or CRM Student."), frappe.ValidationError)
 	return doc
 
 
@@ -160,17 +162,17 @@ def create_lead_note(lead_id, content=None):
 
 @frappe.whitelist(methods=["POST", "PUT"])
 def update_lead_note(name, content=None):
-	"""Update a note attached to a CRM Lead."""
+	"""Update a legacy Lead note or a Student note created via the Lead alias."""
 	doc = get_note(name)
-	if doc.get("reference_doctype") != "CRM Lead":
-		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	if doc.get("reference_doctype") not in {"CRM Lead", "CRM Student"}:
+		frappe.throw(_("Note is not attached to a CRM Lead or CRM Student."), frappe.ValidationError)
 	return update_note(name, content=content)
 
 
 @frappe.whitelist(methods=["DELETE", "POST"])
 def delete_lead_note(name):
-	"""Delete a note attached to a CRM Lead."""
+	"""Delete a legacy Lead note or a Student note created via the Lead alias."""
 	doc = get_note(name)
-	if doc.get("reference_doctype") != "CRM Lead":
-		frappe.throw(_("Note is not attached to a CRM Lead."), frappe.ValidationError)
+	if doc.get("reference_doctype") not in {"CRM Lead", "CRM Student"}:
+		frappe.throw(_("Note is not attached to a CRM Lead or CRM Student."), frappe.ValidationError)
 	return delete_note(name)

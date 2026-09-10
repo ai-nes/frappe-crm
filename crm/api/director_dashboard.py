@@ -154,8 +154,7 @@ KPI_DEFINITIONS = (
 STUDENT_FIELDS = [
 	"name",
 	"admission_year",
-	"processing_status",
-	"resolution",
+	"student_stage",
 	"branch",
 	"province",
 	"ward",
@@ -313,12 +312,23 @@ def _load_students(admission_year: str, scope: dict[str, Any]) -> list[dict[str,
 	if scope.get("branch"):
 		filters["branch"] = scope["branch"]
 	try:
-		return _fetch_rows(
-			"CRM Lead",
+		rows = _fetch_rows(
+			"CRM Student",
 			filters=filters,
 			fields=STUDENT_FIELDS,
 			order_by="creation asc, name asc",
 		)
+		for row in rows:
+			stage = str(row.get("student_stage") or "New").strip()
+			row["processing_status"] = {
+				"New": "new",
+				"Attempting": "processing",
+				"Qualified": "processed",
+				"Connected": "created",
+				"Disqualified": "invalid",
+			}.get(stage, "new")
+			row["resolution"] = "CREATED" if stage == "Connected" else None
+		return rows
 	except Exception:
 		_raise_api_error(
 			"DIRECTOR_OVERVIEW_UNAVAILABLE",

@@ -19,6 +19,7 @@ from crm.fcrm.recommendation_rule_constraints import (
 	has_legacy_stage_condition,
 	validate_rule_settings,
 )
+from crm.fcrm.student_reference import canonical_student
 
 RULE_LIST_FIELDS = [
 	"name",
@@ -138,7 +139,8 @@ def _student_context(context: dict[str, Any]) -> dict[str, Any]:
 	context = dict(context)
 	student = context.get("student")
 	if isinstance(student, str):
-		student_doc = frappe.get_doc("CRM Lead", student)
+		student_name = canonical_student(student) or student
+		student_doc = frappe.get_doc("CRM Student", student_name)
 		student_doc.check_permission("read")
 		context["student"] = student_doc.as_dict()
 	return context

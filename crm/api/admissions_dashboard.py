@@ -15,12 +15,12 @@ from crm.fcrm.student_contact_conversion import students_for_contact
 
 def _insight_scope_sql():
 	"""Apply the current session's row scope to the AI insight aggregate."""
-	condition = DatabaseQuery("CRM AI Lead Insight", user=frappe.session.user).build_match_conditions(
+	condition = DatabaseQuery("CRM AI Student Insight", user=frappe.session.user).build_match_conditions(
 		as_condition=True
 	)
 	if not condition:
 		return "", ()
-	return f"AND ({condition.replace('`tabCRM AI Lead Insight`', 'insight')})", ()
+	return f"AND ({condition.replace('`tabCRM AI Student Insight`', 'insight')})", ()
 
 
 def _normalize_date_range(from_date=None, to_date=None):
@@ -260,7 +260,7 @@ def get_sales_dashboard(
 		total_contacts = frappe.db.count("CRM Student", filters=base_filters) or 1
 		interest_card_items = []
 		funnel_rows = []
-		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Student Insight").fields}
 		ai_threshold = ai_staleness_threshold_seconds()
 		if "ai_generated_at" not in insight_fields or ai_threshold is None:
 			interest_freshness_sql = "AND 1 = 0"
@@ -282,9 +282,9 @@ def get_sales_dashboard(
 			cnt = frappe.db.sql(
 				f"""
 				SELECT COUNT(DISTINCT insight.contact)
-				FROM `tabCRM AI Lead Insight Item` item
-				JOIN `tabCRM AI Lead Insight` insight ON insight.name = item.parent
-				WHERE item.parenttype = 'CRM AI Lead Insight'
+				FROM `tabCRM AI Student Insight Item` item
+				JOIN `tabCRM AI Student Insight` insight ON insight.name = item.parent
+				WHERE item.parenttype = 'CRM AI Student Insight'
 				AND item.parentfield = 'items'
 				AND item.dimension_code = %s
 				AND item.item_kind = 'interest'
@@ -299,9 +299,9 @@ def get_sales_dashboard(
 				f"""
 				SELECT COUNT(DISTINCT c.name)
 				FROM `tabCRM Student` c
-				JOIN `tabCRM AI Lead Insight` insight ON insight.contact = c.name
-				JOIN `tabCRM AI Lead Insight Item` i ON i.parent = insight.name
-				WHERE i.parenttype = 'CRM AI Lead Insight'
+				JOIN `tabCRM AI Student Insight` insight ON insight.contact = c.name
+				JOIN `tabCRM AI Student Insight Item` i ON i.parent = insight.name
+				WHERE i.parenttype = 'CRM AI Student Insight'
 				AND i.parentfield = 'items'
 				AND i.dimension_code = %s
 				AND i.item_kind = 'interest'
@@ -415,17 +415,17 @@ def get_sales_dashboard(
 	# 3. SECTION: ACTIONS
 	# -------------------------------------------------------------
 	if section == "actions":
-		# Signal feed: get latest insights from CRM AI Lead Insight
-		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Lead Insight").fields}
+		# Signal feed: get latest insights from CRM AI Student Insight
+		insight_fields = {field.fieldname for field in frappe.get_meta("CRM AI Student Insight").fields}
 		fields = ["name", "contact", "summary", "generated_at"]
 		if "ai_summary" in insight_fields:
 			fields.append("ai_summary")
 		if "ai_generated_at" in insight_fields:
 			fields.append("ai_generated_at")
 		# `get_list` is intentional here: it applies the Student-linked row-scope
-		# hook for CRM AI Lead Insight. `db.get_all` would bypass that boundary.
+		# hook for CRM AI Student Insight. `db.get_all` would bypass that boundary.
 		insights = frappe.get_list(
-			"CRM AI Lead Insight",
+			"CRM AI Student Insight",
 			fields=fields,
 			order_by=("ai_generated_at desc, generated_at desc" if "ai_generated_at" in insight_fields else "generated_at desc"),
 			limit=10,
@@ -615,10 +615,10 @@ def _campaign_cost_data(campaign_list, from_date, to_date, base_filters):
 		# Attribution is Student-first. Contact-only filters are intentionally
 		# not applied to this canonical projection.
 		count_rows = frappe.get_list(
-			"CRM Lead",
+			"CRM Student",
 			filters=[
 				["name", "in", list(attributed_students) or ["__none__"]],
-				["resolution", "=", "CREATED"],
+				["student_stage", "=", "Connected"],
 			],
 			fields=["count(name) as count"],
 			limit_page_length=1,
@@ -1060,10 +1060,10 @@ def get_admissions_director_dashboard(from_date=None, to_date=None, campus=None)
 		for student in students_for_contact(contact)
 	}
 	enrolled_students = frappe.get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters={
 			"name": ["in", list(scoped_student_names) or ["__none__"]],
-			"resolution": "CREATED",
+			"student_stage": "Connected",
 		},
 		pluck="name",
 		limit_page_length=200,

@@ -178,13 +178,13 @@ def list_campaigns(
 	_set_date_filter(filters, "start_date", start_date_from, start_date_to)
 	_set_date_filter(filters, "end_date", end_date_from, end_date_to)
 	if str(lead_only).strip().lower() in {"1", "true", "yes"} or lead_only is True:
-		lead_campaigns = frappe.get_list(
-			"CRM Lead",
+		student_campaigns = frappe.get_list(
+			"CRM Student",
 			filters={"campaign": ["is", "set"]},
 			fields=["campaign"],
 			limit_page_length=0,
 		)
-		campaign_names = sorted({row.get("campaign") for row in lead_campaigns if row.get("campaign")})
+		campaign_names = sorted({row.get("campaign") for row in student_campaigns if row.get("campaign")})
 		filters["name"] = ["in", campaign_names or ["__no_visible_campaign__"]]
 
 	or_filters = None

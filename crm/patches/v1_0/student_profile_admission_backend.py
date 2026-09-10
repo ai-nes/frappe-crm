@@ -16,7 +16,7 @@ from crm.fcrm.student_reference import canonical_student
 
 LINK_MIGRATIONS = (
 	("CRM Admission Application", "student", ("crm_student",), "source_lead"),
-	("CRM AI Lead Insight", "student", ("contact",), None),
+	("CRM AI Student Insight", "student", ("contact",), None),
 	("CRM Campaign Attribution", "student", (), None),
 	("CRM Contact Consent Event", "student", (), None),
 	("CRM Marketing Engagement", "student", ("crm_contact",), None),

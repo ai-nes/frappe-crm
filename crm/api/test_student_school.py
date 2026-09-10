@@ -178,16 +178,20 @@ class TestStudentSchoolApi(TestCase):
 		rollback.assert_called_once()
 
 	def test_create_student_returns_created_fields(self):
-		doc = _FakeDocument("CRM Lead", "STU-NEW-001")
+		doc = _FakeDocument("CRM Student", "STU-NEW-001")
 		with patch.object(frappe, "new_doc", return_value=doc):
 			result = create_student({"student_name": "Nguyen Van B", "phone": "0900000001"})
 
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Lead",
+				"doctype": "CRM Student",
 				"name": "STU-NEW-001",
-				"created_fields": {"student_name": "Nguyen Van B", "phone": "0900000001"},
+				"created_fields": {
+					"full_name": "Nguyen Van B",
+					"phone": "0900000001",
+					"student_name": "Nguyen Van B",
+				},
 			},
 		)
 		self.assertEqual(doc.check_permission_calls, ["create"])
@@ -221,11 +225,11 @@ class TestStudentSchoolApi(TestCase):
 		new_doc.assert_not_called()
 
 	def test_get_student_returns_only_doctype_list_view_fields(self):
-		doc = _FakeDocument("CRM Lead", "STU-GET-001")
-		doc.values = {"student_name": "Nguyen Van C", "phone": "0900000002", "email": "c@example.com"}
+		doc = _FakeDocument("CRM Student", "STU-GET-001")
+		doc.values = {"full_name": "Nguyen Van C", "phone": "0900000002", "email": "c@example.com"}
 		meta = Mock(
 			fields=[
-				Mock(fieldname="student_name", in_list_view=1),
+				Mock(fieldname="full_name", in_list_view=1),
 				Mock(fieldname="phone", in_list_view=1),
 				Mock(fieldname="email", in_list_view=0),
 			]
@@ -239,9 +243,13 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Lead",
+				"doctype": "CRM Student",
 				"name": "STU-GET-001",
-				"fields": {"student_name": "Nguyen Van C", "phone": "0900000002"},
+				"fields": {
+					"full_name": "Nguyen Van C",
+					"phone": "0900000002",
+					"student_name": "Nguyen Van C",
+				},
 			},
 		)
 		self.assertEqual(doc.check_permission_calls, ["read"])
@@ -354,7 +362,7 @@ class TestStudentSchoolApi(TestCase):
 				get_field_options("CRM High School", "school_name")
 
 	def test_update_student_accepts_json_and_returns_updated_fields(self):
-		doc = _FakeDocument("CRM Lead", "STU-001")
+		doc = _FakeDocument("CRM Student", "STU-001")
 		with patch.object(frappe, "get_doc", return_value=doc):
 			result = update_student(
 				"STU-001",
@@ -364,14 +372,26 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(
 			result,
 			{
-				"doctype": "CRM Lead",
+				"doctype": "CRM Student",
 				"name": "STU-001",
-				"updated_fields": {"student_name": "Nguyen Van A", "phone": "0900000000"},
+				"updated_fields": {
+					"full_name": "Nguyen Van A",
+					"phone": "0900000000",
+					"student_name": "Nguyen Van A",
+				},
 			},
 		)
-		self.assertEqual(doc.values, {"student_name": "Nguyen Van A", "phone": "0900000000"})
+		self.assertEqual(doc.values, {"full_name": "Nguyen Van A", "phone": "0900000000"})
 		self.assertEqual(doc.check_permission_calls, ["write"])
 		self.assertEqual(doc.save_calls, 1)
+
+	def test_update_student_accepts_admission_method_for_later_workflow(self):
+		doc = _FakeDocument("CRM Student", "STU-001")
+		with patch.object(frappe, "get_doc", return_value=doc):
+			result = update_student("STU-001", {"admission_method": "TRANSCRIPT_REVIEW"})
+
+		self.assertEqual(result["updated_fields"], {"admission_method": "TRANSCRIPT_REVIEW"})
+		self.assertEqual(doc.values, {"admission_method": "TRANSCRIPT_REVIEW"})
 
 	def test_ctv_sale_can_only_update_note_and_status_fields(self):
 		with (
@@ -428,7 +448,7 @@ class TestStudentSchoolApi(TestCase):
 		get_doc.assert_not_called()
 
 	def test_delete_checks_permission_and_returns_deleted_document(self):
-		doc = _FakeDocument("CRM Lead", "STU-DELETE-001")
+		doc = _FakeDocument("CRM Student", "STU-DELETE-001")
 		with (
 			patch.object(frappe, "get_doc", return_value=doc),
 			patch.object(frappe, "delete_doc") as delete_doc,
@@ -437,10 +457,10 @@ class TestStudentSchoolApi(TestCase):
 
 		self.assertEqual(
 			result,
-			{"doctype": "CRM Lead", "name": "STU-DELETE-001", "deleted": True},
+			{"doctype": "CRM Student", "name": "STU-DELETE-001", "deleted": True},
 		)
 		self.assertEqual(doc.check_permission_calls, ["delete"])
-		delete_doc.assert_called_once_with("CRM Lead", "STU-DELETE-001")
+		delete_doc.assert_called_once_with("CRM Student", "STU-DELETE-001")
 
 	def test_delete_rejects_empty_name_before_loading_document(self):
 		with patch.object(frappe, "get_doc") as get_doc:
@@ -540,10 +560,10 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 		frappe.set_user("Administrator")
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Lead",
-				"student_name": "_Update API Student",
+				"doctype": "CRM Student",
+				"full_name": "_Update API Student",
 				"phone": "0981000077",
-				"processing_status": "NEW",
+				"student_stage": "New",
 			}
 		).insert(ignore_permissions=True)
 
@@ -553,9 +573,9 @@ class TestStudentSchoolApiIntegration(FrappeTestCase):
 			)
 			self.assertEqual(result["name"], student.name)
 			self.assertEqual(
-				frappe.db.get_value("CRM Lead", student.name, ["student_name", "email"], as_dict=True),
-				{"student_name": "_Updated API Student", "email": "api@example.com"},
+				frappe.db.get_value("CRM Student", student.name, ["full_name", "email"], as_dict=True),
+				{"full_name": "_Updated API Student", "email": "api@example.com"},
 			)
 		finally:
-			frappe.delete_doc("CRM Lead", student.name, force=True, ignore_permissions=True)
+			frappe.delete_doc("CRM Student", student.name, force=True, ignore_permissions=True)
 			frappe.set_user(previous_user)

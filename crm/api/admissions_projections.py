@@ -32,10 +32,10 @@ def _has_table(doctype: str) -> bool:
 def _student_scope(staff_names):
 	if staff_names is None:
 		return None
-	if not _has_table("CRM Lead"):
+	if not _has_table("CRM Student"):
 		return []
 	return frappe.get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters={"owner_staff": ["in", staff_names or ["__none__"]]},
 		fields=["name"],
 		limit_page_length=0,

@@ -424,7 +424,7 @@ def _list_my_actions(cursor: str | None = None, page_size: int | str = 20) -> di
 	conditions.append(f"({due_expr} > %(after_due)s OR ({due_expr} = %(after_due)s AND a.creation > %(after_creation)s) OR ({due_expr} = %(after_due)s AND a.creation = %(after_creation)s AND a.name > %(after_name)s))") if last_action else None
 	values = {"staff": staff, "limit": page_size + 1, "after_due": last_action[0] if last_action else "0001-01-01 00:00:00", "after_creation": last_action[1] if last_action else "0001-01-01 00:00:00", "after_name": last_action[2] if last_action else ""}
 	rows = frappe.db.sql(
-		"""select a.name, a.student, s.student_name, a.action, a.action_type, a.execution_status,
+		"""select a.name, a.student, s.full_name as student_name, a.action, a.action_type, a.execution_status,
 		a.due_at, {due_expr} as due_sort, a.action_owner as assignee_staff, a.action_revision, a.linked_interaction, a.creation,
 		a.outcome_code from `tabCRM Action Item` a
 		left join `tabCRM Student` s on s.name = a.student where {where}

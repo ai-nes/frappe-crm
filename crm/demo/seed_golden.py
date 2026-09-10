@@ -1951,13 +1951,13 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 	idempotency_key = f"{_ns()}:ai-insight:v1:r{revision}"
 	# upsert_ai_insight() is internally inconsistent for this schema: it locks the
 	# aggregate via `tabCRM Student` (request["student"] must be a CRM Student) but
-	# also writes that same value into CRM AI Lead Insight.student, a field left
+	# also writes that same value into CRM AI Student Insight.student, a field left
 	# CRM-Lead-typed by the split, and resolves "contact" through
 	# contacts_for_student() helpers that all expect a CRM Lead. No single value
 	# satisfies both call sites, so this seed writes the insight directly instead
 	# of calling the shared command.
 	existing_name = frappe.db.get_value(
-		"CRM AI Lead Insight", {"generation_idempotency_key": idempotency_key}, "name"
+		"CRM AI Student Insight", {"generation_idempotency_key": idempotency_key}, "name"
 	)
 	receipt = _insert_command_receipt("ai_insight", f"ai-insight-{contact}-r{revision}", student, contact)
 	values = {
@@ -1980,13 +1980,13 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 		"ai_risk_flags": frappe.as_json(risks),
 	}
 	if existing_name:
-		frappe.db.set_value("CRM AI Lead Insight", existing_name, values, update_modified=False)
+		frappe.db.set_value("CRM AI Student Insight", existing_name, values, update_modified=False)
 		insight_name = existing_name
 	else:
-		insight_name = frappe.get_doc({"doctype": "CRM AI Lead Insight", **values}).insert(ignore_permissions=True).name
+		insight_name = frappe.get_doc({"doctype": "CRM AI Student Insight", **values}).insert(ignore_permissions=True).name
 	frappe.db.delete(
-		"CRM AI Lead Insight Item",
-		{"parent": insight_name, "parenttype": "CRM AI Lead Insight", "parentfield": "items"},
+		"CRM AI Student Insight Item",
+		{"parent": insight_name, "parenttype": "CRM AI Student Insight", "parentfield": "items"},
 	)
 	items = [{"item_kind": "interest", **item} for item in interests] + [
 		{"item_kind": "risk", **item} for item in risks
@@ -1994,9 +1994,9 @@ def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> d
 	for index, item in enumerate(items, start=1):
 		frappe.get_doc(
 			{
-				"doctype": "CRM AI Lead Insight Item",
+				"doctype": "CRM AI Student Insight Item",
 				"parent": insight_name,
-				"parenttype": "CRM AI Lead Insight",
+				"parenttype": "CRM AI Student Insight",
 				"parentfield": "items",
 				"idx": index,
 				**item,
@@ -2557,7 +2557,7 @@ def verify() -> dict[str, Any]:
 				"score_state": ctx["admissions_context"]["score"].get("state"),
 				"history_count": len(ctx["history"]),
 				"owner_staff": frappe.db.get_value("CRM Lead", name, "owner_staff"),
-				"ai_insight": frappe.db.exists("CRM AI Lead Insight", {"student": name}),
+			"ai_insight": frappe.db.exists("CRM AI Student Insight", {"student": name}),
 				"recommendations": frappe.db.count("CRM Recommendation", {"target_id": contact}),
 			}
 		)

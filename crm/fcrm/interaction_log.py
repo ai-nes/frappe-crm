@@ -23,6 +23,7 @@ import json
 import frappe
 
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
+from crm.fcrm.student_reference import canonical_student
 
 INTERACTION_CHANNEL_ALIASES = {
 	"web": "webchat",
@@ -538,6 +539,8 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 	student_id = _text(payload.get("student_id"))
 	contact_id = _text(payload.get("contact_id"))
 	external_target_id = _text(payload.get("target_external_id"))
+	student_id = canonical_student(student_id) if student_id else None
+	contact_id = canonical_student(contact_id) if contact_id else None
 	if student_id and not frappe.db.exists("CRM Student", student_id):
 		_interaction_fail("INVALID_TARGET", "The target Student does not exist.")
 	if contact_id and not frappe.db.exists("CRM Student", contact_id):
@@ -793,6 +796,8 @@ def create_interaction(
 	episode_key=None,
 	episode_state=None,
 ):
+	student = canonical_student(student) if student else None
+	crm_contact = canonical_student(crm_contact) if crm_contact else None
 	if not student and crm_contact:
 		student = crm_contact
 
@@ -899,7 +904,7 @@ def _create_interaction_for_reference(
 	reference_doctype, reference_name, interaction_type, source_doc, summary=None, actor=None, outcome=None
 ):
 	if reference_doctype == "CRM Student":
-		student, crm_contact = reference_name, None
+		student, crm_contact = reference_name, reference_name
 	else:
 		return None
 

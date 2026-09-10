@@ -69,7 +69,7 @@ def _definition(workspace, view):
 	return {
 		"id": metric_id, "version": DIRECTOR_DEFINITION_VERSION, "label": _LABELS[workspace],
 		"formula": None, "numerator": None, "denominator": None, "unit": "count", "format": "number",
-		"sources": ["CRM Lead"], "grain": "state asOf", "asOfRule": "request-time source watermark",
+		"sources": ["CRM Student"], "grain": "state asOf", "asOfRule": "request-time source watermark",
 		"businessTimezone": "Asia/Ho_Chi_Minh", "privacyRule": "suppress small aggregates", "scopeLabel": DIRECTOR_SCOPE_LABEL,
 	}
 
@@ -78,8 +78,8 @@ DIRECTOR_VIEW_DEFINITIONS = {
 	(workspace, view): {
 		"definition": _definition(workspace, view), "filterKeys": _FILTERS[workspace], "rowSchema": [],
 		"availability": "unavailable", "reason": "The source contract for this view is not released.",
-		"metricGrain": {"key": "CRM Lead.name", "classification": "state", "lateArrival": "request-watermark"},
-		"dependencyDag": {"sources": ["CRM Lead"], "metrics": [f"{workspace}.{view}"]},
+		"metricGrain": {"key": "CRM Student.name", "classification": "state", "lateArrival": "request-watermark"},
+		"dependencyDag": {"sources": ["CRM Student"], "metrics": [f"{workspace}.{view}"]},
 	}
 	for workspace, view in sorted(set(_ROUTES.values()))
 }
@@ -106,11 +106,11 @@ _STAGE_ALIASES = {
 # Multi-source readers remain partial until the storage layer supports an
 # immutable as-of query.  These fields are immutable opening attribution.
 _VIEW_SOURCES = {
-	("director-forecast", "funnel"): ("CRM Lead", "CRM Student Lifecycle Event"),
+	("director-forecast", "funnel"): ("CRM Student", "CRM Student Lifecycle Event"),
 	("director-sla", "team"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
 	("director-sla", "campus"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
 	("director-sla", "ranking"): ("CRM Student SLA Attempt", "CRM Student SLA Event"),
-	("admissions-reference", "quota-tuition"): ("CRM Admission Year", "CRM Academic Year Config", "CRM Academic Year Line", "CRM Lead"),
+	("admissions-reference", "quota-tuition"): ("CRM Admission Year", "CRM Academic Year Config", "CRM Academic Year Line", "CRM Student"),
 }
 for _route, _sources in _VIEW_SOURCES.items():
 	DIRECTOR_VIEW_DEFINITIONS[_route]["definition"].update({"sources": list(_sources), "grain": "event" if _route[0] in {"director-forecast", "director-sla"} else "configured reference"})
@@ -131,7 +131,7 @@ def route_is_ready(workspace, view):
 
 def snapshot_context(policy, workspace, view, filters):
 	"""Preflight every source before issuing a usable analytics snapshot."""
-	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))
+	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Student",))
 	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in sources):
 		return None
 	watermarks = {source: _watermark(source) for source in sources}
@@ -197,7 +197,7 @@ def _watermark(doctype):
 def _ready_response(kind, snapshot, workspace, view, filters, *, kpis=None, series=None, rows=None, row_schema=None, total=None, reason=None):
 	response = _response(kind, snapshot, workspace, view, filters)
 	definition = response["definition"]
-	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))
+	sources = _VIEW_SOURCES.get((workspace, view), ("CRM Student",))
 	watermarks = {source: _watermark(source) for source in sources}
 	watermark = max((value for value in watermarks.values() if value), default=None)
 	# The current Frappe reader has no immutable/as-of predicate.  Keep live
@@ -293,7 +293,7 @@ def _quota_rows(policy, filters):
 
 
 def get_summary(policy, workspace, view, filters, snapshot):
-	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))):
+	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Student",))):
 		return _response("summary", snapshot, workspace, view, filters)
 	if (workspace, view) == ("director-forecast", "funnel"):
 		return _ready_response("summary", snapshot, workspace, view, filters, kpis=[{"metricId": "forecast.status", "definitionId": "forecast.status", "definitionVersion": DIRECTOR_DEFINITION_VERSION, "label": "Dự báo tuyển sinh", "value": None, "unit": "count", "nullReason": "insufficient_forecast_data"}], reason="Chưa đủ dữ liệu cohort đã hoàn tất để hiển thị dự báo đáng tin cậy.")
@@ -318,7 +318,7 @@ def get_summary(policy, workspace, view, filters, snapshot):
 
 
 def get_series(policy, workspace, view, filters, snapshot):
-	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Lead",))):
+	if not route_is_ready(workspace, view) or not all(_source_available(source) for source in _VIEW_SOURCES.get((workspace, view), ("CRM Student",))):
 		return _response("series", snapshot, workspace, view, filters)
 	if (workspace, view) == ("director-forecast", "funnel"):
 		return _ready_response("series", snapshot, workspace, view, filters, series=_forecast_series(policy, filters), reason="Chưa đủ dữ liệu cohort đã hoàn tất để hiển thị dự báo đáng tin cậy.")

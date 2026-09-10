@@ -17,10 +17,11 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.student_contact_conversion import contacts_for_student
+from crm.fcrm.student_reference import canonical_student
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
-INSIGHT_DOCTYPE = "CRM AI Lead Insight"
-ITEM_DOCTYPE = "CRM AI Lead Insight Item"
+INSIGHT_DOCTYPE = "CRM AI Student Insight"
+ITEM_DOCTYPE = "CRM AI Student Insight Item"
 COMMAND_KIND = "ai_insight"
 POLICY_VERSION = "phase2-ai-insight-v1"
 SCHEMA_VERSION = "phase2-v1"
@@ -224,7 +225,9 @@ def _normalize_request(kwargs: dict[str, Any]) -> dict[str, Any]:
 	unsupported = sorted(set(kwargs) - ALLOWED_REQUEST_FIELDS)
 	if unsupported:
 		_fail("INVALID_FIELD", _("Unsupported AI insight fields: {0}.").format(", ".join(unsupported)))
-	student = _required_text(kwargs.get("student"), "student")
+	student = canonical_student(_required_text(kwargs.get("student"), "student"))
+	if not student:
+		_fail("INVALID_INPUT", "student must identify a canonical CRM Student.")
 	key = _required_text(kwargs.get("generation_idempotency_key"), "generation_idempotency_key")
 	if "idempotency_key" in kwargs and _required_text(kwargs["idempotency_key"], "idempotency_key") != key:
 		_fail("INVALID_INPUT", "idempotency_key must match generation_idempotency_key.")
@@ -283,7 +286,9 @@ def _read_receipt(command_key: str, fingerprint: str) -> dict[str, Any] | None:
 		return None
 	receipt = frappe.get_doc(RECEIPT_DOCTYPE, name)
 	if receipt.get("request_fingerprint") != fingerprint:
-		_fail("IDEMPOTENCY_KEY_REUSED", "The generation idempotency key was already used for another request.")
+		_fail(
+			"IDEMPOTENCY_KEY_REUSED", "The generation idempotency key was already used for another request."
+		)
 	try:
 		result = json.loads(receipt.get("result_json") or "{}")
 	except (TypeError, ValueError):
@@ -292,7 +297,9 @@ def _read_receipt(command_key: str, fingerprint: str) -> dict[str, Any] | None:
 		result = {}
 	student = receipt.get("target_student")
 	if student and frappe.db.exists("CRM Student", student):
-		result["current_revision"] = int(frappe.db.get_value("CRM Student", student, "student_context_revision") or 0)
+		result["current_revision"] = int(
+			frappe.db.get_value("CRM Student", student, "student_context_revision") or 0
+		)
 	outcome = receipt.get("outcome")
 	if outcome == "pending":
 		# A previous worker may have crashed after creating the receipt but
@@ -356,15 +363,6 @@ def _lock_student(student: str):
 		as_dict=True,
 	)
 	if not row:
-		# AI insight records still carry the immutable CRM Lead student link.
-		# Accept that identifier while the canonical Student projection is being
-		# migrated; the linked contact is locked separately below.
-		row = frappe.db.sql(
-			"SELECT name, student_context_revision FROM `tabCRM Lead` WHERE name = %s FOR UPDATE",
-			(student,),
-			as_dict=True,
-		)
-	if not row:
 		_fail("NOT_FOUND", "The Student does not exist.")
 	return row[0]
 
@@ -390,7 +388,7 @@ def _current_insight(student: str):
 	rows = frappe.db.sql(
 		"""
 		SELECT name
-		FROM `tabCRM AI Lead Insight`
+		FROM `tabCRM AI Student Insight`
 		WHERE student = %s AND insight_type = 'Conversation Summary'
 		ORDER BY ai_generated_at DESC, generated_at DESC, creation DESC, name DESC
 		LIMIT 1
@@ -409,7 +407,9 @@ def _item_rows(interests: list[dict[str, Any]], risks: list[dict[str, Any]]) -> 
 
 
 def _replace_items(insight_name: str, interests: list[dict[str, Any]], risks: list[dict[str, Any]]):
-	frappe.db.delete(ITEM_DOCTYPE, {"parent": insight_name, "parenttype": INSIGHT_DOCTYPE, "parentfield": "items"})
+	frappe.db.delete(
+		ITEM_DOCTYPE, {"parent": insight_name, "parenttype": INSIGHT_DOCTYPE, "parentfield": "items"}
+	)
 	for index, item in enumerate(_item_rows(interests, risks), start=1):
 		frappe.get_doc(
 			{
@@ -437,7 +437,9 @@ def _json_list(value: Any, fieldname: str) -> list[Any]:
 
 
 def _raise_readback(fieldname: str):
-	raise ReadBackVerificationError("READ_BACK_VERIFICATION_FAILED", f"Read-back verification failed for {fieldname}.")
+	raise ReadBackVerificationError(
+		"READ_BACK_VERIFICATION_FAILED", f"Read-back verification failed for {fieldname}."
+	)
 
 
 def _readback_items(insight) -> list[dict[str, Any]]:
@@ -491,12 +493,23 @@ def _verify_readback(insight_name: str, expected: dict[str, Any], expected_items
 		if expected_item.get("item_kind") != actual_item.get("item_kind"):
 			_raise_readback("items.item_kind")
 		for fieldname, expected_value in expected_item.items():
-			if fieldname != "item_kind" and _canonical(actual_item.get(fieldname)) != _canonical(expected_value):
+			if fieldname != "item_kind" and _canonical(actual_item.get(fieldname)) != _canonical(
+				expected_value
+			):
 				_raise_readback(f"items.{fieldname}")
 	return readback
 
 
-def _result(*, insight_name: str | None, receipt_name: str, applied: bool, duplicate: bool, stale: bool, current_revision: int, **extra):
+def _result(
+	*,
+	insight_name: str | None,
+	receipt_name: str,
+	applied: bool,
+	duplicate: bool,
+	stale: bool,
+	current_revision: int,
+	**extra,
+):
 	return {
 		"applied": applied,
 		"duplicate": duplicate,
@@ -531,7 +544,10 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 		if existing_name:
 			existing_receipt = frappe.get_doc(RECEIPT_DOCTYPE, existing_name)
 			if existing_receipt.get("request_fingerprint") != fingerprint:
-				_fail("IDEMPOTENCY_KEY_REUSED", "The generation idempotency key was already used for another request.")
+				_fail(
+					"IDEMPOTENCY_KEY_REUSED",
+					"The generation idempotency key was already used for another request.",
+				)
 			if existing_receipt.get("outcome") == "pending":
 				receipt = existing_receipt
 			else:
@@ -559,8 +575,12 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 			return result
 
 		contact = _lock_contact_for_student(request["student"])
-		if frappe.db.exists(INSIGHT_DOCTYPE, {"generation_idempotency_key": request["generation_idempotency_key"]}):
-			_fail("IDEMPOTENCY_KEY_REUSED", "The generation idempotency key already belongs to another insight.")
+		if frappe.db.exists(
+			INSIGHT_DOCTYPE, {"generation_idempotency_key": request["generation_idempotency_key"]}
+		):
+			_fail(
+				"IDEMPOTENCY_KEY_REUSED", "The generation idempotency key already belongs to another insight."
+			)
 
 		insight = _current_insight(request["student"])
 		ai_generated_at = now_datetime()
@@ -636,7 +656,9 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 			applied=False,
 			duplicate=False,
 			stale=False,
-			current_revision=int(frappe.db.get_value("CRM Student", request["student"], "student_context_revision") or 0),
+			current_revision=int(
+				frappe.db.get_value("CRM Student", request["student"], "student_context_revision") or 0
+			),
 			error_code=exc.code,
 			verification_failed=True,
 		)
@@ -647,10 +669,7 @@ def upsert_ai_insight(**kwargs) -> dict[str, Any]:
 		error_code = exc.code if isinstance(exc, AIInsightError) else "INTERNAL_ERROR"
 		try:
 			current_revision = int(
-				frappe.db.get_value(
-					"CRM Student", request["student"], "student_context_revision"
-				)
-				or 0
+				frappe.db.get_value("CRM Student", request["student"], "student_context_revision") or 0
 			)
 		except Exception:
 			current_revision = 0

@@ -53,8 +53,8 @@
   {
    "fieldname": "ai_insight",
    "fieldtype": "Link",
-   "label": "AI Lead Insight",
-   "options": "CRM AI Lead Insight",
+   "label": "AI Student Insight",
+   "options": "CRM AI Student Insight",
    "description": "Optional — the insight this draft was generated from"
   },
   {

@@ -14,6 +14,7 @@ from typing import Any
 import frappe
 from frappe.utils import now_datetime
 
+from crm.fcrm.student_reference import canonical_student
 from crm.fcrm.utils.effective import is_effective
 
 MANUAL_QUEUE = "MANUAL_MANAGER_QUEUE"
@@ -159,7 +160,7 @@ def _capacity(staff: str, at=None) -> dict[str, Any]:
 	limit = int((rows[0].get("max_active_students") if rows else 0) or 0)
 	active = (
 		frappe.db.count(
-			"CRM Lead", {"owner_staff": staff, "processing_status": ["not in", ["CLOSED"]]}
+			"CRM Student", {"owner_staff": staff, "student_stage": ["not in", ["Connected", "Disqualified"]]}
 		)
 		if limit
 		else 0
@@ -282,9 +283,10 @@ def fairness_report(
 		student_ids = []
 		for student_name in {r.get("student") for r in rows if r.get("student")}:
 			try:
-				student = frappe.get_doc("CRM Lead", student_name)
+				canonical_name = canonical_student(student_name) or student_name
+				student = frappe.get_doc("CRM Student", canonical_name)
 				if resolve_student_zone(student).get("zone") == zone:
-					student_ids.append(student_name)
+					student_ids.append(canonical_name)
 			except Exception:
 				continue
 		rows = [r for r in rows if r.get("student") in student_ids]
@@ -299,7 +301,8 @@ def fairness_report(
 		if str(row.get("reason") or "").lower().startswith(("manager", "transfer")):
 			transferred[staff] = transferred.get(staff, 0) + 1
 		try:
-			student = frappe.get_doc("CRM Lead", row.student)
+			student_name = canonical_student(row.student) or row.student
+			student = frappe.get_doc("CRM Student", student_name)
 			score = float(student.get("latest_score") or 0)
 			quality.setdefault(staff, []).append(score)
 		except Exception:

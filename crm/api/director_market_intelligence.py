@@ -91,9 +91,9 @@ def _load_sources(admission_year: str):
 	students = supporting(
 		"students",
 		lambda: _permission_rows(
-			"CRM Lead",
+			"CRM Student",
 			filters={"admission_year": admission_year},
-			fields=["name", "high_school", "province", "processing_status", "resolution"],
+			fields=["name", "high_school", "province", "student_stage"],
 			order_by="name asc",
 		),
 	)

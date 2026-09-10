@@ -16,7 +16,7 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 	def tearDown(self):
 		frappe.set_user("Administrator")
 		for doctype, filters in (
-			("CRM Lead", {"student_name": ["like", "_Test LSW%"]}),
+			("CRM Student", {"full_name": ["like", "_Test LSW%"]}),
 			("CRM Staff", {"full_name": ["like", "_Test LSW%"]}),
 			("User", {"first_name": ["like", "_Test LSW%"]}),
 			("CRM Team", {"team_name": ["like", "_Test LSW%"]}),
@@ -72,13 +72,10 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 		return email, staff.insert(ignore_permissions=True).name
 
 	def _make_student(self, label, owner, team):
-		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": label, "phone": "0900000000"})
-		previous = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous
+		student = frappe.get_doc(
+			{"doctype": "CRM Student", "full_name": label, "phone": "0900000000", "student_stage": "New"}
+		)
+		student.insert(ignore_permissions=True)
 		student.db_set("owner_staff", owner)
 		student.db_set("owning_team", team)
 		return student
@@ -164,8 +161,8 @@ class TestLeadSalesWorkspace(FrappeTestCase):
 		self.assertEqual(
 			count.call_args_list,
 			[
-				(("CRM Lead", {"processing_status": ["!=", "CLOSED"]}),),
-				(("CRM Lead", {"owner_staff": ["is", "not set"]}),),
+				(("CRM Student", {"student_stage": ["not in", ["Connected", "Disqualified"]]}),),
+				(("CRM Student", {"owner_staff": ["is", "not set"]}),),
 				(
 					("CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}),
 					{"ignore_permissions": True},

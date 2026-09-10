@@ -26,7 +26,6 @@ RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 CONTACT_DOCTYPE = "CRM Student"
 LEAD_DOCTYPE = "CRM Lead"
 IDENTITY_DOCTYPE = "CRM Student Identity"
-CASE_KEY_DOCTYPE = "CRM Student Case Key"
 SERVICE_FLAG = "student_conversion_service"
 CAPABILITY = "conversion.execute"
 POLICY_VERSION = "phase8-conversion-v1"
@@ -250,23 +249,15 @@ def _complete_receipt(receipt, result: dict[str, Any], outcome: str):
 
 def _identity_and_case(student):
 	identity_name = student.get("identity")
-	case_name = student.get("case_key")
-	if not identity_name or not case_name:
-		_fail("INTEGRITY_REQUIRED", "Student identity and case key are required for conversion.")
-	if not _doctype_exists(IDENTITY_DOCTYPE) or not _doctype_exists(CASE_KEY_DOCTYPE):
-		_fail("CONFIGURATION_ERROR", "Student identity and case-key contracts are not installed.")
+	if not identity_name:
+		_fail("INTEGRITY_REQUIRED", "Student identity is required for conversion.")
+	if not _doctype_exists(IDENTITY_DOCTYPE):
+		_fail("CONFIGURATION_ERROR", "Student identity contract is not installed.")
 	_lock(IDENTITY_DOCTYPE, identity_name)
 	identity = frappe.get_doc(IDENTITY_DOCTYPE, identity_name)
 	if identity.get("identity_status") not in (None, "", "active"):
 		_fail("INTEGRITY_UNRESOLVED", "Student identity is not active.")
-	case = frappe.get_doc(CASE_KEY_DOCTYPE, case_name)
-	if case.get("integrity_state") not in (None, "", "resolved"):
-		_fail("INTEGRITY_UNRESOLVED", "Student case key is not resolved.")
-	if case.get("identity") not in (None, "", identity_name):
-		_fail("INTEGRITY_MISMATCH", "Student case key does not prove its identity.")
-	if case.get("canonical_student") not in (None, "", student.name):
-		_fail("INTEGRITY_MISMATCH", "Student is not the canonical case Student.")
-	return identity, case
+	return identity, None
 
 
 def _conversion_for_student(student_name: str):
@@ -476,7 +467,7 @@ def _conversion_values(student, identity, case, contact, receipt, scope, idempot
 		"canonical_student": contact.name,
 		"student": student.name,
 		"student_identity": identity.name,
-		"case_key": case.name,
+		"case_key": case.name if case else None,
 		"contact": contact.name,
 		"lifecycle_event": _lifecycle_event(student.name),
 		"actor": scope["actor"],
@@ -508,7 +499,7 @@ def _result(student, identity, case, contact, conversion, receipt, *, status, re
 		"replayed": replayed,
 		"lifecycle_revision": lifecycle_revision,
 		"student_identity": identity.name,
-		"case_key": case.name,
+		"case_key": case.name if case else None,
 		"policy_version": POLICY_VERSION,
 		"schema_version": SCHEMA_VERSION,
 	}
@@ -605,7 +596,7 @@ def convert_student(
 		if existing_conversion:
 			if existing_conversion.get("student_identity") not in (None, "", identity.name):
 				_fail("INTEGRITY_MISMATCH", "Existing conversion identity does not match Student.")
-			if existing_conversion.get("case_key") not in (None, "", case.name):
+			if case and existing_conversion.get("case_key") not in (None, "", case.name):
 				_fail("INTEGRITY_MISMATCH", "Existing conversion case key does not match Student.")
 			if target_student_name and target_student_name != existing_conversion.get("contact"):
 				_fail("RELATIONSHIP_CONFLICT", "Lead is already converted to a different Student.")
@@ -622,7 +613,7 @@ def convert_student(
 				actor=scope["actor"],
 				correlation_id=correlation_id,
 				identity=identity.name,
-				case_key=case.name,
+				case_key=case.name if case else None,
 				scope=scope,
 				contact=contact.name,
 			)
@@ -647,7 +638,7 @@ def convert_student(
 			actor=scope["actor"],
 			correlation_id=correlation_id,
 			identity=identity.name,
-			case_key=case.name,
+			case_key=case.name if case else None,
 			scope=scope,
 		)
 		# The receipt can be returned by a concurrent same-key caller only after
