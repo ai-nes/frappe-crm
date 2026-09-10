@@ -321,9 +321,7 @@ class TestStudentSchoolApi(TestCase):
 		student = _FakeDocument("CRM Student", "STU-SCORE-001")
 		student.values = {
 			"admission_year": "2026",
-			"academic_results": [
-				{"school_year": "2025-2026", "grade": "12", "academic_rank": "Khá"}
-			],
+			"academic_results": [{"school_year": "2025-2026", "grade": "12", "academic_rank": "Khá"}],
 		}
 		profile = _FakeDocument("CRM Student Admission Profile", "SAP-SCORE-001")
 		profile.values = {"admission_year": "2026"}
@@ -369,6 +367,13 @@ class TestStudentSchoolApi(TestCase):
 		with patch.object(frappe, "get_doc") as get_doc:
 			with self.assertRaises(frappe.ValidationError):
 				update_student_high_school_score("STU-SCORE-001", {"total_score": -1})
+
+		get_doc.assert_not_called()
+
+	def test_update_student_high_school_score_rejects_graduation_score_above_30(self):
+		with patch.object(frappe, "get_doc") as get_doc:
+			with self.assertRaises(frappe.ValidationError):
+				update_student_high_school_score("STU-SCORE-001", {"graduation_score": 30.01})
 
 		get_doc.assert_not_called()
 

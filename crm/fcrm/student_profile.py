@@ -10,6 +10,7 @@ from frappe import _
 from crm.fcrm.student_reference import canonical_student
 
 TEMPLATE_PROFILE_TYPES = frozenset({"academic_admission", "enrollment"})
+TEMPLATE_KINDS = frozenset({"standard", "special"})
 TEMPLATE_STATUSES = frozenset({"Draft", "Active", "Archived"})
 PROFILE_STATUSES = frozenset({"Draft", "Active", "Completed", "Archived"})
 REQUIREMENT_MODES = frozenset({"ALL", "ANY"})
@@ -339,12 +340,49 @@ def _document_type_rows(profile):
 	rows = _value(profile, "document_types")
 	if rows:
 		return _sort_document_type_rows(rows)
+
+	template_names = []
 	template_name = _value(profile, "profile_template")
-	if not template_name:
-		return []
-	return _sort_document_type_rows(
-		frappe.get_doc("CRM Admission Profile Template", template_name).get("document_types") or []
-	)
+	if template_name:
+		template_names.append(template_name)
+
+	application_name = _value(profile, "application")
+	if application_name and frappe.db.exists("CRM Admission Application", application_name):
+		application = frappe.get_doc("CRM Admission Application", application_name)
+		for option in application.get("special_profile_options") or []:
+			reference = str(option.get("special_profile_template") or "").strip()
+			if not reference:
+				continue
+			resolved_name = (
+				frappe.db.get_value(
+					"CRM Admission Profile Template", {"template_code": reference}, "name"
+				)
+				or reference
+			)
+			if resolved_name not in template_names:
+				template_names.append(resolved_name)
+
+	merged_rows = []
+	seen_document_types = set()
+	for template_index, template_name in enumerate(template_names):
+		template = frappe.get_doc("CRM Admission Profile Template", template_name)
+		group_prefix = None if template_index == 0 else template.template_code
+		for source_row in template.get("document_types") or []:
+			document_type = str(_value(source_row, "document_type") or "").strip()
+			if not document_type or not _condition_applies(source_row, profile):
+				continue
+			if document_type in seen_document_types:
+				continue
+			seen_document_types.add(document_type)
+			row = frappe._dict(source_row.as_dict() if hasattr(source_row, "as_dict") else dict(source_row))
+			if group_prefix:
+				group_name = str(
+					_value(row, "requirement_group") or f"document:{document_type}"
+				).strip()
+				row.requirement_group = f"{group_prefix}:{group_name}"
+			merged_rows.append(row)
+
+	return _sort_document_type_rows(merged_rows)
 
 
 def _sort_document_type_rows(rows):

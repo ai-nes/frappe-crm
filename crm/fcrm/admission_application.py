@@ -29,6 +29,7 @@ def _active_profile_template(application):
 		filters={
 			"status": "Active",
 			"profile_type": "academic_admission",
+			"template_kind": "standard",
 			"admission_method": application.admission_method,
 		},
 		fields=["name", "template_code", "template_name", "version", "education_program"],
@@ -59,12 +60,90 @@ def _get_active_profile_template(reference: str):
 		or reference
 	)
 	template = frappe.get_doc("CRM Admission Profile Template", template_name)
-	if template.status != "Active" or template.profile_type != "academic_admission":
+	if (
+		template.status != "Active"
+		or template.profile_type != "academic_admission"
+		or (template.template_kind or "standard") != "standard"
+	):
 		frappe.throw(
-			_("The selected admission profile template must be active and academic."),
+			_("The selected admission profile template must be active and standard."),
 			frappe.ValidationError,
 		)
 	return template
+
+
+def _resolve_template_name(reference: str) -> str:
+	value = str(reference or "").strip()
+	if not value:
+		return ""
+	return (
+		frappe.db.get_value("CRM Admission Profile Template", {"template_code": value}, "name")
+		or value
+	)
+
+
+def _active_special_profile_templates(application) -> list[Any]:
+	templates = []
+	seen = set()
+	for option in application.get("special_profile_options") or []:
+		reference = str(option.get("special_profile_template") or "").strip()
+		template_name = _resolve_template_name(reference)
+		if not template_name or template_name in seen:
+			continue
+		seen.add(template_name)
+		template = frappe.get_doc("CRM Admission Profile Template", template_name)
+		if (
+			template.status != "Active"
+			or template.profile_type != "academic_admission"
+			or (template.template_kind or "standard") != "special"
+		):
+			frappe.throw(
+				_("Every selected special profile option must be active and special."),
+				frappe.ValidationError,
+			)
+		if template.admission_method and template.admission_method != application.admission_method:
+			frappe.throw(
+				_("The selected special profile option is not configured for this Admission Method."),
+				frappe.ValidationError,
+			)
+		templates.append(template)
+	return templates
+
+
+def _normalize_special_profile_options(value: Any) -> list[dict[str, Any]]:
+	if value in (None, ""):
+		return []
+	if isinstance(value, str):
+		try:
+			value = frappe.parse_json(value)
+		except (TypeError, ValueError):
+			value = None
+	if not isinstance(value, list):
+		frappe.throw(_("special_profile_options must be a list."), frappe.ValidationError)
+
+	rows = []
+	seen = set()
+	for item in value:
+		reference = item
+		if isinstance(item, dict):
+			reference = item.get("special_profile_template") or item.get("profile_template") or item.get("id")
+		template_name = _resolve_template_name(str(reference or ""))
+		if not template_name:
+			frappe.throw(_("A special profile option is required."), frappe.ValidationError)
+		if template_name in seen:
+			frappe.throw(
+				_("A special profile option cannot be selected more than once."),
+				frappe.DuplicateEntryError,
+			)
+		seen.add(template_name)
+		rows.append(
+			{
+				"doctype": "CRM Admission Application Special Profile",
+				"special_profile_template": template_name,
+				"selection_order": len(rows) + 1,
+			}
+		)
+	return rows
 
 
 def _get_admission_method_name(reference: str) -> str:
@@ -151,12 +230,14 @@ def _resolve_offering(student_doc, application_values: dict[str, Any]) -> None:
 	application_values.setdefault("admission_year", offerings[0].admission_year)
 
 
-def _document_checklist(profile, template) -> list[dict[str, Any]]:
+def _document_checklist(profile) -> list[dict[str, Any]]:
 	"""Project the template junction rows as the Student checklist."""
 	from crm.fcrm.student_profile import _condition_applies, _is_checked, _sort_document_type_rows
 
 	checklist = []
-	for row in _sort_document_type_rows(template.get("document_types") or []):
+	from crm.fcrm.student_profile import _document_type_rows
+
+	for row in _sort_document_type_rows(_document_type_rows(profile)):
 		if not row.get("document_type") or not _condition_applies(row, profile):
 			continue
 		checklist.append(
@@ -176,86 +257,11 @@ def _document_checklist(profile, template) -> list[dict[str, Any]]:
 	return checklist
 
 
-def _active_template_profile_conflicts(profile, template):
-	return frappe.get_all(
-		"CRM Student Admission Profile",
-		filters={
-			"student": profile.student,
-			"admission_year": profile.admission_year,
-			"profile_template": template.name,
-			"name": ["!=", profile.name],
-			"profile_status": ["in", ["Draft", "Active", "Completed"]],
-		},
-		fields=["name", "application", "profile_status", "modified"],
-		order_by="modified desc, name desc",
-		limit_page_length=0,
-		ignore_permissions=True,
-	)
-
-
-def _withdraw_duplicate_application(application_name: str) -> None:
-	application_status = frappe.db.get_value("CRM Admission Application", application_name, "status")
-	if application_status not in {"Draft", "Withdrawn", "Lost"}:
-		frappe.throw(
-			_("The selected Profile Template is already used by a non-draft application."),
-			frappe.ValidationError,
-		)
-	if application_status == "Draft":
-		frappe.db.set_value(
-			"CRM Admission Application", application_name, "status", "Withdrawn", update_modified=True
-		)
-
-
-def _archive_duplicate_profile(row) -> None:
-	if row.application:
-		_withdraw_duplicate_application(row.application)
-	frappe.db.set_value(
-		"CRM Student Admission Profile", row.name, "profile_status", "Archived", update_modified=True
-	)
-
-
 def _change_profile_template(profile, template, application):
-	"""Change a profile template, reusing a draft duplicate when one exists."""
-	conflicts = _active_template_profile_conflicts(profile, template)
-	if conflicts:
-		if profile.profile_status != "Draft":
-			frappe.throw(
-				_("Only a draft Student admission profile can be merged into the selected template."),
-				frappe.PermissionError,
-			)
-		if any(row.profile_status != "Draft" for row in conflicts):
-			frappe.throw(
-				_("The selected Profile Template is already used by an active or completed profile."),
-				frappe.ValidationError,
-			)
-		target = frappe.get_doc("CRM Student Admission Profile", conflicts[0].name)
-		for row in conflicts[1:]:
-			_archive_duplicate_profile(row)
-		frappe.db.set_value(
-			"CRM Student Admission Profile", profile.name, "profile_status", "Archived", update_modified=True
-		)
-		frappe.db.set_value(
-			"CRM Student Admission Profile", profile.name, "application", None, update_modified=False
-		)
-		if target.application and target.application != application.name:
-			_withdraw_duplicate_application(target.application)
-		target.db_set("application", application.name, update_modified=False)
-		target.db_set("source_reference", application.source_reference, update_modified=True)
-		target.reload()
-		return target
-
-	attempt_key = f"{profile.student}|{profile.admission_year}|{template.name}|{profile.attempt_number or 1}"
-	duplicate = frappe.db.exists(
-		"CRM Student Admission Profile",
-		{"attempt_key": attempt_key, "name": ["!=", profile.name]},
-	)
-	if duplicate:
-		frappe.throw(
-			_("Another Student admission profile already uses the selected Profile Template."),
-			frappe.DuplicateEntryError,
-		)
+	"""Change the template on the profile owned by this application."""
 	profile.db_set("profile_template", template.name, update_modified=False)
-	profile.db_set("attempt_key", attempt_key, update_modified=True)
+	profile.db_set("attempt_key", f"application:{application.name}", update_modified=False)
+	profile.db_set("source_reference", application.source_reference, update_modified=True)
 	profile.reload()
 	return profile
 
@@ -265,6 +271,7 @@ def materialize_admission_profile(application: str | Any) -> dict[str, Any]:
 	if isinstance(application, str):
 		application = frappe.get_doc("CRM Admission Application", application)
 	template = _active_profile_template(application)
+	special_templates = _active_special_profile_templates(application)
 	profile_name = frappe.db.get_value(
 		"CRM Student Admission Profile", {"application": application.name}, "name"
 	)
@@ -302,7 +309,8 @@ def materialize_admission_profile(application: str | Any) -> dict[str, Any]:
 		"admission_profile": profile.name,
 		"profile_created": created,
 		"profile_template": template.name,
-		"document_checklist": _document_checklist(profile, template),
+		"special_profile_options": [template.template_code for template in special_templates],
+		"document_checklist": _document_checklist(profile),
 		"document_completeness": completeness,
 	}
 
@@ -327,13 +335,10 @@ def create_application(*, student: str, values: dict[str, Any], expected_revisio
 		frappe.throw(_("Student is required."), frappe.ValidationError)
 	_resolve_offering(student_doc, application_values)
 	if application_values.get("profile_template"):
-		application_values["profile_template"] = (
-			frappe.db.get_value(
-				"CRM Admission Profile Template",
-				{"template_code": application_values["profile_template"]},
-				"name",
-			)
-			or application_values["profile_template"]
+		application_values["profile_template"] = _resolve_template_name(application_values["profile_template"])
+	if "special_profile_options" in application_values:
+		application_values["special_profile_options"] = _normalize_special_profile_options(
+			application_values["special_profile_options"]
 		)
 	application_values.setdefault(
 		"source_reference",
@@ -442,7 +447,12 @@ def update_application(*, application: str, values: dict[str, Any]) -> dict[str,
 	if not isinstance(values, dict):
 		frappe.throw(_("Application values must be an object."), frappe.ValidationError)
 
-	unknown = set(values) - {"admission_method", "profile_template", "preference"}
+	unknown = set(values) - {
+		"admission_method",
+		"profile_template",
+		"preference",
+		"special_profile_options",
+	}
 	if unknown:
 		frappe.throw(
 			_("Unsupported admission application fields: {0}.").format(", ".join(sorted(unknown))),
@@ -465,6 +475,12 @@ def update_application(*, application: str, values: dict[str, Any]) -> dict[str,
 	if not template_reference:
 		frappe.throw(_("Profile Template is required."), frappe.ValidationError)
 	template = _get_active_profile_template(template_reference)
+	special_options_provided = "special_profile_options" in values
+	special_profile_options = (
+		_normalize_special_profile_options(values.get("special_profile_options"))
+		if special_options_provided
+		else None
+	)
 	if template.admission_method and template.admission_method != method_name:
 		frappe.throw(
 			_("The selected Profile Template is not configured for this Admission Method."),
@@ -527,6 +543,10 @@ def update_application(*, application: str, values: dict[str, Any]) -> dict[str,
 	application_doc.db_set("preference", preference, update_modified=False)
 	application_doc.db_set("preference_order", preference_order, update_modified=True)
 	application_doc.reload()
+	if special_options_provided:
+		application_doc.set("special_profile_options", special_profile_options)
+		application_doc.save(ignore_permissions=True)
+		application_doc.reload()
 	if preference == "Primary":
 		student_doc.db_set("admission_method", method_name, update_modified=False)
 

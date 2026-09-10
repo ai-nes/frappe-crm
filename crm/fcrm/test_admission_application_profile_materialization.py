@@ -155,6 +155,75 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 			0,
 		)
 
+		special_document_type = frappe.db.get_value(
+			"CRM Document Type",
+			{"status": "Active", "is_active": 1, "name": ["!=", document_type]},
+			"name",
+		)
+		if not special_document_type:
+			self.skipTest("A second active document type is required for the special-profile assertion")
+		special_template = frappe.get_doc(
+			{
+				"doctype": "CRM Admission Profile Template",
+				"template_code": f"TEST-SPECIAL-{uuid.uuid4().hex[:8].upper()}",
+				"template_name": "_Test special profile option",
+				"template_kind": "special",
+				"profile_type": "academic_admission",
+				"status": "Active",
+				"version": 1,
+				"document_types": [
+					{
+						"doctype": "CRM Profile Template Document Type",
+						"section_code": "special_program",
+						"document_type": special_document_type,
+						"requirement_group": "special_documents",
+						"requirement_mode": "ALL",
+						"is_required": 1,
+						"min_required": 1,
+						"quantity": 1,
+						"order_display": 1,
+					}
+				],
+			}
+		).insert(ignore_permissions=True)
+		self._cleanup.insert(0, ("CRM Admission Profile Template", special_template.name))
+		second_special_document_type = frappe.db.get_value(
+			"CRM Document Type",
+			{
+				"status": "Active",
+				"is_active": 1,
+				"name": ["not in", [document_type, special_document_type]],
+			},
+			"name",
+		)
+		if not second_special_document_type:
+			self.skipTest("A third active document type is required for the multi-selection assertion")
+		second_special_template = frappe.get_doc(
+			{
+				"doctype": "CRM Admission Profile Template",
+				"template_code": f"TEST-SPECIAL-2-{uuid.uuid4().hex[:8].upper()}",
+				"template_name": "_Test second special profile option",
+				"template_kind": "special",
+				"profile_type": "academic_admission",
+				"status": "Active",
+				"version": 1,
+				"document_types": [
+					{
+						"doctype": "CRM Profile Template Document Type",
+						"section_code": "special_program",
+						"document_type": second_special_document_type,
+						"requirement_group": "second_special_documents",
+						"requirement_mode": "ALL",
+						"is_required": 1,
+						"min_required": 1,
+						"quantity": 1,
+						"order_display": 1,
+					}
+				],
+			}
+		).insert(ignore_permissions=True)
+		self._cleanup.insert(0, ("CRM Admission Profile Template", second_special_template.name))
+
 		updated_template = frappe.get_doc(
 			{
 				"doctype": "CRM Admission Profile Template",
@@ -205,6 +274,10 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 			values={
 				"admission_method": method.name,
 				"profile_template": updated_template.template_code,
+				"special_profile_options": [
+					special_template.template_code,
+					second_special_template.template_code,
+				],
 				"preference": "Alternative",
 			},
 		)
@@ -212,15 +285,27 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 		self.assertEqual(updated["application"], result["application"])
 		self.assertEqual(updated["profile_created"], False)
 		self.assertEqual(updated["profile_template"], updated_template.name)
-		self.assertEqual(updated["admission_profile"], duplicate_profile_name)
-		self.assertEqual(profile.profile_status, "Archived")
+		self.assertEqual(updated["admission_profile"], profile_name)
+		self.assertEqual(
+			updated["special_profile_options"],
+			[special_template.template_code, second_special_template.template_code],
+		)
+		self.assertIn(
+			special_document_type,
+			{row["document_type"] for row in updated["document_checklist"]},
+		)
+		self.assertIn(
+			second_special_document_type,
+			{row["document_type"] for row in updated["document_checklist"]},
+		)
+		self.assertEqual(profile.profile_status, "Draft")
 		self.assertEqual(
 			frappe.db.get_value("CRM Student Admission Profile", duplicate_profile_name, "application"),
-			result["application"],
+			duplicate_application.name,
 		)
 		self.assertEqual(
 			frappe.db.get_value("CRM Admission Application", duplicate_application.name, "status"),
-			"Withdrawn",
+			"Draft",
 		)
 		self.assertEqual(
 			frappe.db.get_value("CRM Admission Application", result["application"], "profile_template"),
@@ -230,7 +315,10 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 			frappe.db.get_value("CRM Admission Application", result["application"], "preference"),
 			"Alternative",
 		)
-		self.assertEqual(updated["document_checklist"][0]["section_code"], "updated")
+		self.assertIn(
+			"updated",
+			{row["section_code"] for row in updated["document_checklist"]},
+		)
 
 		replay = create_application(
 			student=student.name,
@@ -238,7 +326,7 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 			expected_revision=0,
 			idempotency_key=f"test-application-{uuid.uuid4().hex}",
 		)
-		self.assertEqual(replay["admission_profile"], duplicate_profile_name)
+		self.assertEqual(replay["admission_profile"], profile_name)
 		self.assertEqual(replay["profile_created"], False)
 		self.assertEqual(
 			frappe.db.count("CRM Student Admission Profile", {"application": result["application"]}),

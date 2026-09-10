@@ -182,6 +182,8 @@ crm.patches.v1_0.seed_crm_action_need_mapping
 crm.patches.v1_0.activate_classification_catalog
 crm.patches.v1_0.student_profile_admission_backend
 crm.patches.v1_0.seed_admission_profile_template_catalog
+crm.patches.v1_0.admission_profile_options_v2
+crm.patches.v1_0.update_admission_profile_document_labels
 crm.patches.v1_0.ensure_admission_profile_offerings
 crm.patches.v1_0.allow_ctv_sale_aspiration_read
 crm.patches.v1_0.allow_ctv_sale_school_area_read

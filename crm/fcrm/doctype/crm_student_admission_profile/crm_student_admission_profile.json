@@ -50,6 +50,7 @@
  ],
  "indexes": [
   {"fields": ["student", "admission_year", "profile_template", "profile_status"], "name": "crm_student_admission_profile_student_status_idx", "unique": 0},
+  {"fields": ["application"], "name": "crm_student_admission_profile_application_idx", "unique": 0},
   {"fields": ["attempt_key"], "name": "crm_student_admission_profile_attempt_uniq", "unique": 1}
  ],
  "links": [],

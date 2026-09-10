@@ -1349,13 +1349,9 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 		)
 
 		try:
-			from crm.fcrm.student_profile import _condition_applies, _sort_document_type_rows
+			from crm.fcrm.student_profile import _document_type_rows
 
-			requirement_rows = [
-				row
-				for row in _sort_document_type_rows(template_doc.get("document_types") or [])
-				if _condition_applies(row, profile_doc)
-			]
+			requirement_rows = _document_type_rows(profile_doc)
 		except (frappe.ValidationError, frappe.DoesNotExistError):
 			requirement_rows = template_doc.get("document_types") or []
 
@@ -1452,6 +1448,30 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 			)
 
 		completeness = _json_object(profile.get("document_completeness"))
+		special_profile_options = []
+		if profile.application and _table_exists("CRM Admission Application Special Profile"):
+			try:
+				option_rows = frappe.get_all(
+					"CRM Admission Application Special Profile",
+					filters={"parent": profile.application, "parenttype": "CRM Admission Application"},
+					fields=["special_profile_template", "selection_order"],
+					order_by="selection_order asc, name asc",
+					limit_page_length=0,
+					ignore_permissions=True,
+				)
+				for option in option_rows:
+					option_template = frappe.get_doc(
+						"CRM Admission Profile Template", option.special_profile_template
+					)
+					special_profile_options.append(
+						{
+							"id": option_template.name,
+							"code": option_template.template_code,
+							"name": option_template.template_name,
+						}
+					)
+			except (frappe.DoesNotExistError, frappe.PermissionError):
+				special_profile_options = []
 		result.append(
 			{
 				"id": profile.name,
@@ -1463,6 +1483,7 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 					"id": template_doc.name,
 					"code": template_doc.template_code,
 					"name": template_doc.template_name,
+					"templateKind": template_doc.template_kind or "standard",
 					"profileType": template_doc.profile_type,
 					"status": template_doc.status,
 					"version": int(template_doc.version or 1),
@@ -1479,6 +1500,7 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 				"admissionYear": application_context.get("admission_year") or profile.admission_year,
 				"attemptNumber": int(profile.attempt_number or 1),
 				"application": profile.application,
+				"specialProfileOptions": special_profile_options,
 				"profileStatus": profile.profile_status,
 				"enrollmentStatus": profile.enrollment_status,
 				"revision": int(profile.revision or 0),

@@ -5,7 +5,7 @@
  "creation": "2026-08-30 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["naming_series", "application_attempt_key", "student", "crm_student", "source_lead", "offering", "admission_year", "preference_order", "preference", "major", "campus", "admission_method", "profile_template", "registration_code", "registration_location", "direct_admission_type", "registration_step", "admission_category", "status", "document_total", "document_completed", "agreed_tuition_fee", "scholarship_type", "scholarship_percentage", "discount_type", "discount_percentage", "discount_amount", "priority_admission_condition", "deadline", "submitted_at", "enrolled_at", "lost_reason", "source_doctype", "source_name", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "field_order": ["naming_series", "application_attempt_key", "student", "crm_student", "source_lead", "offering", "admission_year", "preference_order", "preference", "major", "campus", "admission_method", "profile_template", "special_profile_options", "registration_code", "registration_location", "direct_admission_type", "registration_step", "admission_category", "status", "document_total", "document_completed", "agreed_tuition_fee", "scholarship_type", "scholarship_percentage", "discount_type", "discount_percentage", "discount_amount", "priority_admission_condition", "deadline", "submitted_at", "enrolled_at", "lost_reason", "source_doctype", "source_name", "source_reference", "idempotency_fingerprint", "schema_version"],
  "fields": [
   {"default": "APP-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "APP-.YYYY.-"},
   {"fieldname": "application_attempt_key", "fieldtype": "Data", "hidden": 1, "label": "Application Attempt Key", "read_only": 1, "reqd": 1, "unique": 1},
@@ -20,6 +20,7 @@
   {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus", "read_only": 1},
   {"fieldname": "admission_method", "fieldtype": "Link", "in_list_view": 1, "label": "Admission Method", "options": "CRM Admission Method", "read_only": 1},
   {"fieldname": "profile_template", "fieldtype": "Link", "in_list_view": 1, "label": "Profile Template", "options": "CRM Admission Profile Template"},
+  {"fieldname": "special_profile_options", "fieldtype": "Table", "label": "Special Profile Options", "options": "CRM Admission Application Special Profile"},
   {"fieldname": "registration_code", "fieldtype": "Data", "label": "Registration Code"},
   {"fieldname": "registration_location", "fieldtype": "Data", "label": "Registration Location"},
   {"fieldname": "direct_admission_type", "fieldtype": "Data", "label": "Direct Admission Type"},

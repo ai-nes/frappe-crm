@@ -14,7 +14,9 @@ class CRMStudentAdmissionProfile(Document):
 	def before_validate(self):
 		self.profile_status = self.profile_status or "Draft"
 		self.enrollment_status = self.enrollment_status or "Not Started"
-		if not self.attempt_key and self.student and self.admission_year and self.profile_template:
+		if self.application and self.student and self.admission_year:
+			self.attempt_key = f"application:{self.application}"
+		elif not self.attempt_key and self.student and self.admission_year and self.profile_template:
 			self.attempt_key = (
 				f"{self.student}|{self.admission_year}|{self.profile_template}|{self.attempt_number or 1}"
 			)
@@ -40,6 +42,7 @@ class CRMStudentAdmissionProfile(Document):
 				)
 			validate_profile_completeness(self, strict=True)
 		self._validate_application_student()
+		self._validate_unique_application_profile()
 		self._validate_unique_active_profile()
 		self._validate_lifecycle_transition()
 
@@ -53,8 +56,22 @@ class CRMStudentAdmissionProfile(Document):
 				frappe.ValidationError,
 			)
 
+	def _validate_unique_application_profile(self):
+		if not self.application:
+			return
+		filters = {"application": self.application}
+		if not self.is_new():
+			filters["name"] = ["!=", self.name]
+		if frappe.db.exists("CRM Student Admission Profile", filters):
+			frappe.throw(
+				_("An Admission Application can have only one Student admission profile."),
+				frappe.DuplicateEntryError,
+			)
+
 	def _validate_unique_active_profile(self):
 		if self.profile_status != "Active":
+			return
+		if self.application:
 			return
 		filters = {
 			"student": self.student,

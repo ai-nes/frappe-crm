@@ -9,6 +9,7 @@ import frappe
 from frappe import _
 
 from crm.api.lead_mapping import _normalize_lead_payload
+from crm.fcrm.doctype.crm_student.crm_student import MAX_GRADUATION_SCORE
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_reference import canonical_student
 
@@ -101,9 +102,7 @@ _STUDENT_CANONICAL_FIELDS = frozenset(
 	_STUDENT_FIELD_ALIASES.get(fieldname, fieldname) for fieldname in _STUDENT_BASIC_FIELDS
 )
 _PAYMENT_ACCOUNT_FIELD_ALIASES = {"account_holder": "account_holder_name"}
-_STUDENT_HIGH_SCHOOL_SCORE_STUDENT_FIELDS = frozenset(
-	{"graduation_score", "transcript_score", "total_score"}
-)
+_STUDENT_HIGH_SCHOOL_SCORE_STUDENT_FIELDS = frozenset({"graduation_score", "transcript_score", "total_score"})
 _STUDENT_HIGH_SCHOOL_SCORE_PROFILE_FIELDS = frozenset(
 	{
 		"is_high_school_graduate",
@@ -136,6 +135,7 @@ _STUDENT_HIGH_SCHOOL_SCORE_NUMERIC_FIELDS = frozenset(
 		"priority_score",
 	}
 )
+_STUDENT_HIGH_SCHOOL_SCORE_MAX_VALUES = {"graduation_score": MAX_GRADUATION_SCORE}
 _STUDENT_HIGH_SCHOOL_SCORE_INTEGER_FIELDS = frozenset({"graduation_year"})
 _STUDENT_HIGH_SCHOOL_SCORE_BOOLEAN_FIELDS = frozenset({"is_high_school_graduate"})
 _STUDENT_HIGH_SCHOOL_SCORE_TEXT_FIELDS = frozenset(
@@ -309,6 +309,12 @@ def _normalize_score_value(fieldname: str, value):
 			)
 		if value < 0:
 			frappe.throw(_("{0} cannot be negative.").format(fieldname), frappe.ValidationError)
+		maximum = _STUDENT_HIGH_SCHOOL_SCORE_MAX_VALUES.get(fieldname)
+		if maximum is not None and value > maximum:
+			frappe.throw(
+				_("{0} must be between 0 and {1}.").format(fieldname, maximum),
+				frappe.ValidationError,
+			)
 		return value
 
 	if fieldname == "score_details":
@@ -404,11 +410,7 @@ def _student_high_school_score_payload(student, profile, admission_year: str | N
 		"graduation_score": student.get("graduation_score"),
 		"transcript_score": student.get("transcript_score"),
 		"total_score": student.get("total_score"),
-		"is_high_school_graduate": (
-			bool(profile_values.get("is_high_school_graduate"))
-			if profile
-			else None
-		),
+		"is_high_school_graduate": (bool(profile_values.get("is_high_school_graduate")) if profile else None),
 		"graduation_year": profile_values.get("graduation_year"),
 		"academic_rank": _academic_rank(student),
 		"priority_group": profile_values.get("priority_group"),
@@ -694,9 +696,7 @@ def _get_link_options(
 	]
 
 
-def _get_school_area_options(
-	high_school: str, search: str | None, limit: int
-) -> list[dict]:
+def _get_school_area_options(high_school: str, search: str | None, limit: int) -> list[dict]:
 	"""Return the area configured on one selected high school."""
 	rows = frappe.get_list(
 		"CRM High School",
@@ -911,9 +911,13 @@ def update_student(name: str, fields: dict | str | None = None) -> dict:
 	values = _parse_fields(fields, _STUDENT_BASIC_FIELDS | _STUDENT_PAYMENT_ACCOUNT_FIELDS)
 	_check_student_update_permission("CRM Student", values)
 	student_name = _resolve_student_name(name)
-	student_values = {fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_BASIC_FIELDS}
+	student_values = {
+		fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_BASIC_FIELDS
+	}
 	payment_values = {
-		fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_PAYMENT_ACCOUNT_FIELDS
+		fieldname: value
+		for fieldname, value in values.items()
+		if fieldname in _STUDENT_PAYMENT_ACCOUNT_FIELDS
 	}
 	result = {
 		"doctype": "CRM Student",
@@ -962,9 +966,7 @@ def update_student_high_school_score(
 		if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_ACADEMIC_FIELDS
 	}
 	profile = (
-		_score_profile(student.name, admission_year, permission_type="write")
-		if profile_values
-		else None
+		_score_profile(student.name, admission_year, permission_type="write") if profile_values else None
 	)
 	if profile_values and not profile:
 		frappe.throw(

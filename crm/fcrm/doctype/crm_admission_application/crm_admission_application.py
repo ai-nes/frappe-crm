@@ -47,6 +47,16 @@ class CRMAdmissionApplication(Document):
 				)
 				or self.profile_template
 			)
+		for index, row in enumerate(self.special_profile_options or [], start=1):
+			reference = str(row.special_profile_template or "").strip()
+			if reference:
+				row.special_profile_template = (
+					frappe.db.get_value(
+						"CRM Admission Profile Template", {"template_code": reference}, "name"
+					)
+					or reference
+				)
+			row.selection_order = index
 		if not self.application_attempt_key and self.student and self.offering:
 			self.application_attempt_key = canonical_application_attempt_key(
 				self.student,
@@ -70,6 +80,7 @@ class CRMAdmissionApplication(Document):
 	def validate(self):
 		self._validate_student_and_offering()
 		self._validate_profile_template()
+		self._validate_special_profile_options()
 		if self.status not in APPLICATION_STATUSES:
 			frappe.throw(_("Application status is invalid."), frappe.ValidationError)
 		if int(self.preference_order or 0) < 1:
@@ -148,14 +159,56 @@ class CRMAdmissionApplication(Document):
 		template = frappe.db.get_value(
 			"CRM Admission Profile Template",
 			self.profile_template,
-			["status", "profile_type"],
+			["status", "profile_type", "template_kind"],
 			as_dict=True,
 		)
-		if not template or template.status != "Active" or template.profile_type != "academic_admission":
+		if (
+			not template
+			or template.status != "Active"
+			or template.profile_type != "academic_admission"
+			or (template.template_kind or "standard") != "standard"
+		):
 			frappe.throw(
-				_("Application must use an active academic admission profile template."),
+				_("Application must use an active standard admission profile template."),
 				frappe.ValidationError,
 			)
+
+	def _validate_special_profile_options(self):
+		seen = set()
+		for row in self.special_profile_options or []:
+			template_name = str(row.special_profile_template or "").strip()
+			if not template_name:
+				frappe.throw(
+					_("Every special profile option requires a profile template."),
+					frappe.ValidationError,
+				)
+			if template_name in seen:
+				frappe.throw(
+					_("A special profile option cannot be selected more than once."),
+					frappe.DuplicateEntryError,
+				)
+			seen.add(template_name)
+			template = frappe.db.get_value(
+				"CRM Admission Profile Template",
+				template_name,
+				["status", "profile_type", "template_kind", "admission_method"],
+				as_dict=True,
+			)
+			if (
+				not template
+				or template.status != "Active"
+				or template.profile_type != "academic_admission"
+				or (template.template_kind or "standard") != "special"
+			):
+				frappe.throw(
+					_("Every selected special profile option must be an active special template."),
+					frappe.ValidationError,
+				)
+			if template.admission_method and template.admission_method != self.admission_method:
+				frappe.throw(
+					_("The selected special profile option is not configured for this Admission Method."),
+					frappe.ValidationError,
+				)
 
 	def _validate_immutable_identity(self):
 		if self.is_new():
