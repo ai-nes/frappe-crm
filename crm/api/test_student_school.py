@@ -393,6 +393,52 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(result["updated_fields"], {"admission_method": "TRANSCRIPT_REVIEW"})
 		self.assertEqual(doc.values, {"admission_method": "TRANSCRIPT_REVIEW"})
 
+	def test_update_student_accepts_contact_person_fields(self):
+		doc = _FakeDocument("CRM Student", "STU-001")
+		fields = {
+			"parent_other_phone": "0900000001",
+			"parent_email": "parent@example.com",
+			"father_name": "Nguyen Van An",
+			"father_phone": "0900000002",
+			"father_email": "father@example.com",
+			"father_occupation": "Business",
+			"mother_name": "Nguyen Thi An",
+			"mother_phone": "0900000003",
+			"mother_email": "mother@example.com",
+			"mother_occupation": "Teacher",
+		}
+		with patch.object(frappe, "get_doc", return_value=doc):
+			result = update_student("STU-001", fields)
+
+		self.assertEqual(result["updated_fields"], fields)
+		self.assertEqual(doc.values, fields)
+
+	def test_update_student_updates_the_separate_contact_payment_account(self):
+		student = _FakeDocument("CRM Student", "STU-001")
+		account = _FakeDocument("CRM Student Payment Account", "PBA-001")
+		fields = {
+			"bank_name": "Vietcombank",
+			"account_number": "123456789",
+			"account_holder": "Nguyen Thi An",
+		}
+		with (
+			patch.object(frappe, "get_doc", side_effect=[student, account]),
+			patch.object(frappe, "get_all", return_value=[{"name": "PBA-001"}]),
+		):
+			result = update_student("STU-001", fields)
+
+		self.assertEqual(result["updated_fields"], fields)
+		self.assertEqual(
+			account.values,
+			{
+				"bank_name": "Vietcombank",
+				"account_number": "123456789",
+				"account_holder_name": "Nguyen Thi An",
+			},
+		)
+		self.assertEqual(account.check_permission_calls, ["write"])
+		self.assertEqual(account.save_calls, 1)
+
 	def test_ctv_sale_can_only_update_note_and_status_fields(self):
 		with (
 			patch.object(frappe, "session", Mock(user="ctv@example.com")),

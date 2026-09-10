@@ -85,8 +85,12 @@ class TestStudentProfileAdmissionSchema(FrappeTestCase):
 		self.assertEqual(violations, [])
 
 	def test_sensitive_bank_account_is_a_separate_doctype(self):
+		student = _fields(_doctype("crm_student"))
 		account = _fields(_doctype("crm_student_payment_account"))
 
+		self.assertNotIn("bank_name", student)
+		self.assertNotIn("account_number", student)
+		self.assertNotIn("account_holder", student)
 		self.assertEqual(account["student"]["options"], "CRM Student")
 		self.assertEqual(account["account_number"]["permlevel"], 1)
 		self.assertEqual(account["account_holder_name"]["permlevel"], 1)

@@ -294,9 +294,37 @@ class TestDirectorStudents(FrappeTestCase):
 			current_grade="12",
 			study_stage="grade_12_h2",
 			aspiration="ASP-1",
+			major="MAJOR-1",
 			date_of_birth="2007-07-20",
 			gender="Nữ",
+			id_number="079207000001",
+			birth_place="Cần Thơ",
+			ethnicity="Kinh",
+			religion="Không",
+			nationality="Việt Nam",
+			id_issued_date="2022-01-10",
+			id_issued_place="Cục Cảnh sát",
+			other_phone="0911111111",
+			other_email="other@example.com",
+			parent_name="Nguyễn Thị An",
+			parent_phone="0922222222",
+			parent_other_phone="0933333333",
+			parent_email="parent@example.com",
+			father_email="father@example.com",
+			father_name="Nguyễn Văn An",
+			father_phone="0944444444",
+			father_occupation="Kinh doanh",
+			mother_phone="0955555555",
+			mother_name="Nguyễn Thị An",
+			mother_email="mother@example.com",
+			mother_occupation="Giáo viên",
+			contact_address="12 Đường A, Phường An Bình, Cần Thơ",
+			branch="CAMPUS-1",
+			platform="PLATFORM-1",
+			source_lead="LEAD-1",
 			admission_year="2026",
+			creation="2026-08-12 15:48:00",
+			modified="2026-09-09 08:10:00",
 			student_stage="Attempting",
 			assessment_status="confirmed",
 			campaign="Campaign 1",
@@ -320,6 +348,9 @@ class TestDirectorStudents(FrappeTestCase):
 			"owner": "Trần Quốc Bảo",
 			"revision": 4,
 			"source": "Career Talk 28/05",
+			"sourceLeadLabel": "Nguyễn Minh An",
+			"platform": "Website",
+			"branch": "Cần Thơ",
 			"priority": "Cao",
 		}
 		with (
@@ -341,6 +372,15 @@ class TestDirectorStudents(FrappeTestCase):
 					"lastInteraction": None,
 				},
 			),
+			patch.object(
+				director_students,
+				"_student_payment_account",
+				return_value={
+					"bankName": "Vietcombank",
+					"accountNumber": "123456789",
+					"accountHolder": "Nguyễn Thị An",
+				},
+			),
 			patch.object(director_students, "_student_applications", return_value=[]),
 			patch.object(director_students, "_student_admission_profiles", return_value=[]),
 		):
@@ -355,6 +395,39 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["student"]["currentGrade"], "12")
 		self.assertEqual(response["student"]["studyStage"], "grade_12_h2")
 		self.assertEqual(response["student"]["aspiration"], "ASP-1")
+		personal = response["student"]["profileDetails"]["personal"]
+		self.assertEqual(personal["fullName"], "Nguyễn Minh An")
+		self.assertEqual(personal["idNumber"], "079207000001")
+		self.assertEqual(personal["birthPlace"], "Cần Thơ")
+		self.assertEqual(personal["otherPhone"], "0911111111")
+		self.assertEqual(personal["otherEmail"], "other@example.com")
+		self.assertEqual(personal["convertedFromLead"], "Có")
+		self.assertEqual(personal["sourceLead"], "Nguyễn Minh An")
+		self.assertEqual(personal["campaign"], "Campaign 1")
+		self.assertEqual(personal["majorId"], "MAJOR-1")
+		self.assertEqual(personal["branch"], "Cần Thơ")
+		self.assertEqual(personal["branchId"], "CAMPUS-1")
+		self.assertEqual(personal["admissionYearId"], "2026")
+		contact = response["student"]["profileDetails"]["contact"]
+		self.assertEqual(contact["name"], "Nguyễn Thị An")
+		self.assertEqual(contact["phone"], "0922222222")
+		self.assertEqual(contact["otherPhone"], "0933333333")
+		self.assertEqual(contact["email"], "parent@example.com")
+		self.assertEqual(contact["bankName"], "Vietcombank")
+		self.assertEqual(contact["accountNumber"], "123456789")
+		self.assertEqual(contact["accountHolder"], "Nguyễn Thị An")
+		self.assertEqual(contact["fatherEmail"], "father@example.com")
+		self.assertEqual(contact["fatherName"], "Nguyễn Văn An")
+		self.assertEqual(contact["fatherPhone"], "0944444444")
+		self.assertEqual(contact["fatherOccupation"], "Kinh doanh")
+		self.assertEqual(contact["motherPhone"], "0955555555")
+		self.assertEqual(contact["motherName"], "Nguyễn Thị An")
+		self.assertEqual(contact["motherEmail"], "mother@example.com")
+		self.assertEqual(contact["motherOccupation"], "Giáo viên")
+		address = response["student"]["profileDetails"]["address"]
+		self.assertEqual(address["province"], "Cần Thơ")
+		self.assertEqual(address["ward"], "Phường An Bình")
+		self.assertEqual(address["fullAddress"], "12 Đường A, Phường An Bình, Cần Thơ")
 		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
