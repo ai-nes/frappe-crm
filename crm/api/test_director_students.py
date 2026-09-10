@@ -323,6 +323,7 @@ class TestDirectorStudents(FrappeTestCase):
 			platform="PLATFORM-1",
 			source_lead="LEAD-1",
 			admission_year="2026",
+			engagement_revision=8,
 			creation="2026-08-12 15:48:00",
 			modified="2026-09-09 08:10:00",
 			student_stage="Attempting",
@@ -395,6 +396,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(response["student"]["currentGrade"], "12")
 		self.assertEqual(response["student"]["studyStage"], "grade_12_h2")
 		self.assertEqual(response["student"]["aspiration"], "ASP-1")
+		self.assertEqual(response["student"]["engagementRevision"], 8)
 		personal = response["student"]["profileDetails"]["personal"]
 		self.assertEqual(personal["fullName"], "Nguyễn Minh An")
 		self.assertEqual(personal["idNumber"], "079207000001")
@@ -402,6 +404,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(personal["otherPhone"], "0911111111")
 		self.assertEqual(personal["otherEmail"], "other@example.com")
 		self.assertEqual(personal["convertedFromLead"], "Có")
+		self.assertEqual(personal["sourceLeadId"], "LEAD-1")
 		self.assertEqual(personal["sourceLead"], "Nguyễn Minh An")
 		self.assertEqual(personal["campaign"], "Campaign 1")
 		self.assertEqual(personal["majorId"], "MAJOR-1")

@@ -7,7 +7,7 @@ import uuid
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.fcrm.admission_application import create_application
+from crm.fcrm.admission_application import create_application, update_application
 from crm.fcrm.admission_offering import approve_offering
 
 
@@ -36,7 +36,7 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 		return year, campus, major, school, document_type
 
 	def _create_method(self):
-		method_code = "TRANSCRIPT_REVIEW"
+		method_code = "TRANSCRIPT_REVIEW_TEST"
 		if frappe.db.exists("CRM Admission Method", method_code):
 			return frappe.get_doc("CRM Admission Method", method_code)
 		method = frappe.get_doc(
@@ -118,7 +118,8 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 		result = create_application(
 			student=student.name,
 			values={
-				"offering": offering.name,
+				"admission_method": method.name,
+				"profile_template": template.template_code,
 				"preference_order": 1,
 				"preference": "Primary",
 				"status": "Draft",
@@ -135,6 +136,14 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 		self.assertEqual(profile.student, student.name)
 		self.assertEqual(profile.profile_template, template.name)
 		self.assertEqual(profile.application, result["application"])
+		self.assertEqual(
+			frappe.db.get_value("CRM Admission Application", result["application"], "offering"),
+			offering.name,
+		)
+		self.assertEqual(
+			frappe.db.get_value("CRM Admission Application", result["application"], "profile_template"),
+			template.name,
+		)
 		self.assertEqual(result["profile_created"], True)
 		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "admission_method"), method.name)
 		self.assertEqual(result["document_checklist"][0]["document_type"], document_type)
@@ -146,13 +155,90 @@ class TestAdmissionApplicationProfileMaterialization(FrappeTestCase):
 			0,
 		)
 
+		updated_template = frappe.get_doc(
+			{
+				"doctype": "CRM Admission Profile Template",
+				"template_code": f"TEST-APP-UPDATED-{uuid.uuid4().hex[:8].upper()}",
+				"template_name": "_Test updated application profile template",
+				"profile_type": "academic_admission",
+				"status": "Active",
+				"version": 1,
+				"admission_method": method.name,
+				"document_types": [
+					{
+						"doctype": "CRM Profile Template Document Type",
+						"section_code": "updated",
+						"document_type": document_type,
+						"requirement_group": "updated_documents",
+						"requirement_mode": "ALL",
+						"is_required": 1,
+						"min_required": 1,
+						"quantity": 1,
+						"order_display": 1,
+					}
+				],
+			}
+		).insert(ignore_permissions=True)
+		self._cleanup.insert(0, ("CRM Admission Profile Template", updated_template.name))
+
+		duplicate_application = frappe.get_doc(
+			{
+				"doctype": "CRM Admission Application",
+				"student": student.name,
+				"offering": offering.name,
+				"profile_template": updated_template.name,
+				"preference_order": 2,
+				"preference": "Alternative",
+				"status": "Draft",
+				"source_reference": f"test:duplicate-application:{uuid.uuid4().hex}",
+			}
+		).insert(ignore_permissions=True)
+		duplicate_profile_name = frappe.db.get_value(
+			"CRM Student Admission Profile", {"application": duplicate_application.name}, "name"
+		)
+		self.assertTrue(duplicate_profile_name)
+		self._cleanup.append(("CRM Student Admission Profile", duplicate_profile_name))
+		self._cleanup.append(("CRM Admission Application", duplicate_application.name))
+
+		updated = update_application(
+			application=result["application"],
+			values={
+				"admission_method": method.name,
+				"profile_template": updated_template.template_code,
+				"preference": "Alternative",
+			},
+		)
+		profile.reload()
+		self.assertEqual(updated["application"], result["application"])
+		self.assertEqual(updated["profile_created"], False)
+		self.assertEqual(updated["profile_template"], updated_template.name)
+		self.assertEqual(updated["admission_profile"], duplicate_profile_name)
+		self.assertEqual(profile.profile_status, "Archived")
+		self.assertEqual(
+			frappe.db.get_value("CRM Student Admission Profile", duplicate_profile_name, "application"),
+			result["application"],
+		)
+		self.assertEqual(
+			frappe.db.get_value("CRM Admission Application", duplicate_application.name, "status"),
+			"Withdrawn",
+		)
+		self.assertEqual(
+			frappe.db.get_value("CRM Admission Application", result["application"], "profile_template"),
+			updated_template.name,
+		)
+		self.assertEqual(
+			frappe.db.get_value("CRM Admission Application", result["application"], "preference"),
+			"Alternative",
+		)
+		self.assertEqual(updated["document_checklist"][0]["section_code"], "updated")
+
 		replay = create_application(
 			student=student.name,
 			values={"offering": offering.name, "source_reference": profile.source_reference},
 			expected_revision=0,
 			idempotency_key=f"test-application-{uuid.uuid4().hex}",
 		)
-		self.assertEqual(replay["admission_profile"], profile.name)
+		self.assertEqual(replay["admission_profile"], duplicate_profile_name)
 		self.assertEqual(replay["profile_created"], False)
 		self.assertEqual(
 			frappe.db.count("CRM Student Admission Profile", {"application": result["application"]}),

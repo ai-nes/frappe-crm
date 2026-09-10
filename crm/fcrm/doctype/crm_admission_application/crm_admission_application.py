@@ -38,6 +38,15 @@ class CRMAdmissionApplication(Document):
 			if offering:
 				for fieldname in ("admission_year", "major", "campus", "admission_method"):
 					self.set(fieldname, offering.get(fieldname))
+		if self.profile_template:
+			self.profile_template = (
+				frappe.db.get_value(
+					"CRM Admission Profile Template",
+					{"template_code": self.profile_template},
+					"name",
+				)
+				or self.profile_template
+			)
 		if not self.application_attempt_key and self.student and self.offering:
 			self.application_attempt_key = canonical_application_attempt_key(
 				self.student,
@@ -60,6 +69,7 @@ class CRMAdmissionApplication(Document):
 
 	def validate(self):
 		self._validate_student_and_offering()
+		self._validate_profile_template()
 		if self.status not in APPLICATION_STATUSES:
 			frappe.throw(_("Application status is invalid."), frappe.ValidationError)
 		if int(self.preference_order or 0) < 1:
@@ -132,13 +142,34 @@ class CRMAdmissionApplication(Document):
 				)
 			self.set(fieldname, offering.get(fieldname))
 
+	def _validate_profile_template(self):
+		if not self.profile_template:
+			return
+		template = frappe.db.get_value(
+			"CRM Admission Profile Template",
+			self.profile_template,
+			["status", "profile_type"],
+			as_dict=True,
+		)
+		if not template or template.status != "Active" or template.profile_type != "academic_admission":
+			frappe.throw(
+				_("Application must use an active academic admission profile template."),
+				frappe.ValidationError,
+			)
+
 	def _validate_immutable_identity(self):
 		if self.is_new():
 			return
 		previous = self.get_doc_before_save()
 		if not previous:
 			return
-		for fieldname in ("application_attempt_key", "student", "offering", "admission_year"):
+		for fieldname in (
+			"application_attempt_key",
+			"student",
+			"offering",
+			"admission_year",
+			"profile_template",
+		):
 			if self.get(fieldname) != previous.get(fieldname):
 				frappe.throw(
 					_("{0} is immutable on an Admission Application.").format(fieldname),

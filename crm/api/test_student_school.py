@@ -15,8 +15,10 @@ from crm.api.student_school import (
 	get_school,
 	get_schools,
 	get_student,
+	get_student_high_school_score,
 	update_school,
 	update_student,
+	update_student_high_school_score,
 )
 
 
@@ -265,6 +267,126 @@ class TestStudentSchoolApi(TestCase):
 		self.assertEqual(result["fields"], {"school_name": None})
 		self.assertEqual(doc.check_permission_calls, ["read"])
 
+	def test_get_student_high_school_score_combines_student_and_admission_profile(self):
+		student = _FakeDocument("CRM Student", "STU-SCORE-001")
+		student.values = {
+			"admission_year": "2026",
+			"transcript_score": 8.25,
+			"total_score": 27.5,
+		}
+		profile = _FakeDocument("CRM Student Admission Profile", "SAP-SCORE-001")
+		profile.values = {
+			"admission_year": "2026",
+			"grade_12_gpa": 8.8,
+			"exam_candidate_number": "012345",
+			"score_details": '{"toan": 9}',
+			"encouragement_type": "HSG",
+			"encouragement_score": 1.0,
+			"priority_type": "KV1",
+			"priority_score": 0.25,
+		}
+		with (
+			patch.object(frappe, "get_doc", side_effect=[student, profile]),
+			patch.object(frappe, "get_list", return_value=[{"name": profile.name}]),
+		):
+			result = get_student_high_school_score(student.name)
+
+		self.assertEqual(result["admission_profile"], profile.name)
+		self.assertEqual(result["admission_year"], "2026")
+		self.assertEqual(
+			result["fields"],
+			{
+				"graduation_score": None,
+				"transcript_score": 8.25,
+				"total_score": 27.5,
+				"is_high_school_graduate": False,
+				"graduation_year": None,
+				"academic_rank": None,
+				"priority_group": None,
+				"graduation_classification": None,
+				"conduct_rank": None,
+				"grade_12_gpa": 8.8,
+				"exam_candidate_number": "012345",
+				"score_details": {"toan": 9},
+				"encouragement_type": "HSG",
+				"encouragement_score": 1.0,
+				"priority_type": "KV1",
+				"priority_score": 0.25,
+			},
+		)
+		self.assertEqual(student.check_permission_calls, ["read"])
+		self.assertEqual(profile.check_permission_calls, ["read"])
+
+	def test_update_student_high_school_score_saves_owned_fields(self):
+		student = _FakeDocument("CRM Student", "STU-SCORE-001")
+		student.values = {
+			"admission_year": "2026",
+			"academic_results": [
+				{"school_year": "2025-2026", "grade": "12", "academic_rank": "Khá"}
+			],
+		}
+		profile = _FakeDocument("CRM Student Admission Profile", "SAP-SCORE-001")
+		profile.values = {"admission_year": "2026"}
+		with (
+			patch.object(frappe, "get_doc", side_effect=[student, profile]),
+			patch.object(frappe, "get_list", return_value=[{"name": profile.name}]),
+		):
+			result = update_student_high_school_score(
+				student.name,
+				{
+					"graduation_score": 8.6,
+					"is_high_school_graduate": True,
+					"graduation_year": 2026,
+					"academic_rank": "Giỏi",
+					"priority_group": "KV1",
+					"graduation_classification": "Khá",
+					"conduct_rank": "Tốt",
+					"transcript_score": 8.4,
+					"total_score": 28,
+					"grade_12_gpa": 8.9,
+					"score_details": {"toan": 9.5},
+				},
+			)
+
+		self.assertEqual(result["updated_fields"]["grade_12_gpa"], 8.9)
+		self.assertEqual(result["fields"]["score_details"], {"toan": 9.5})
+		self.assertEqual(student.values["graduation_score"], 8.6)
+		self.assertEqual(student.values["transcript_score"], 8.4)
+		self.assertEqual(student.values["total_score"], 28)
+		self.assertEqual(student.values["academic_results"][0]["academic_rank"], "Giỏi")
+		self.assertEqual(json.loads(profile.values["score_details"]), {"toan": 9.5})
+		self.assertTrue(profile.values["is_high_school_graduate"])
+		self.assertEqual(profile.values["graduation_year"], 2026)
+		self.assertEqual(profile.values["priority_group"], "KV1")
+		self.assertEqual(profile.values["graduation_classification"], "Khá")
+		self.assertEqual(profile.values["conduct_rank"], "Tốt")
+		self.assertEqual(student.check_permission_calls, ["write"])
+		self.assertEqual(profile.check_permission_calls, ["write"])
+		self.assertEqual(student.save_calls, 1)
+		self.assertEqual(profile.save_calls, 1)
+
+	def test_update_student_high_school_score_rejects_negative_values_before_loading(self):
+		with patch.object(frappe, "get_doc") as get_doc:
+			with self.assertRaises(frappe.ValidationError):
+				update_student_high_school_score("STU-SCORE-001", {"total_score": -1})
+
+		get_doc.assert_not_called()
+
+	def test_update_student_high_school_score_requires_profile_for_profile_fields(self):
+		student = _FakeDocument("CRM Student", "STU-SCORE-001")
+		with (
+			patch.object(frappe, "get_doc", return_value=student),
+			patch.object(frappe, "get_list", return_value=[]),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				update_student_high_school_score(
+					student.name,
+					{"grade_12_gpa": 8.5},
+				)
+
+		self.assertEqual(student.check_permission_calls, ["write"])
+		self.assertEqual(student.save_calls, 0)
+
 	def test_get_schools_filters_by_province_and_ward(self):
 		meta = Mock(
 			fields=[
@@ -348,6 +470,43 @@ class TestStudentSchoolApi(TestCase):
 			order_by="ward_name asc, name asc",
 			limit_page_length=10,
 		)
+
+	def test_get_field_options_filters_school_area_by_selected_high_school(self):
+		field = Mock(fieldname="school_area", fieldtype="Link", options="CRM School Area")
+		source_meta = Mock(fields=[field])
+		target_meta = Mock(
+			fields=[Mock(fieldname="code"), Mock(fieldname="display_name")],
+			title_field="display_name",
+		)
+		with (
+			patch.object(frappe, "get_meta", side_effect=[source_meta, target_meta]),
+			patch.object(
+				frappe,
+				"get_list",
+				side_effect=[
+					[{"school_area": "KV3"}],
+					[{"name": "KV3", "display_name": "Khu vực 3"}],
+				],
+			) as get_list,
+		):
+			result = get_field_options(
+				"CRM High School",
+				"school_area",
+				high_school="SCHOOL-001",
+				limit=1,
+			)
+
+		self.assertEqual(result["target_doctype"], "CRM School Area")
+		self.assertEqual(result["options"], [{"value": "KV3", "label": "Khu vực 3"}])
+		self.assertEqual(
+			get_list.call_args_list[0].kwargs,
+			{
+				"filters": {"name": "SCHOOL-001"},
+				"fields": ["school_area"],
+				"limit_page_length": 1,
+			},
+		)
+		self.assertEqual(get_list.call_args_list[1].kwargs["filters"], {"code": "KV3"})
 
 	def test_get_field_options_rejects_unknown_doctype_and_non_option_field(self):
 		with self.assertRaises(frappe.ValidationError):

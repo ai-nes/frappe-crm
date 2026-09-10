@@ -978,15 +978,9 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
 		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
 		"campaigns": _lookup_map("CRM Campaign", {row.get("campaign") for row in rows}, "title"),
-		"platforms": _lookup_map(
-			"CRM Platform", {row.get("platform") for row in rows}, "platform_name"
-		),
-		"branches": _lookup_map(
-			"CRM Campus", {row.get("branch") for row in rows}, "campus_name"
-		),
-		"sourceLeads": _lookup_map(
-			"CRM Lead", {row.get("source_lead") for row in rows}, "student_name"
-		),
+		"platforms": _lookup_map("CRM Platform", {row.get("platform") for row in rows}, "platform_name"),
+		"branches": _lookup_map("CRM Campus", {row.get("branch") for row in rows}, "campus_name"),
+		"sourceLeads": _lookup_map("CRM Lead", {row.get("source_lead") for row in rows}, "student_name"),
 	}
 
 
@@ -1283,7 +1277,10 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 	"""Project the template-driven admission checklist for Student Detail."""
 	if not student_id or not _table_exists("CRM Student Admission Profile"):
 		return []
-	filters: dict[str, Any] = {"student": student_id}
+	filters: dict[str, Any] = {
+		"student": student_id,
+		"profile_status": ["in", ["Draft", "Active", "Completed"]],
+	}
 	if admission_year:
 		filters["admission_year"] = admission_year
 	try:
@@ -1303,7 +1300,7 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 				"revision",
 				"modified",
 			],
-			order_by="attempt_number asc, creation asc, name asc",
+			order_by="modified desc, creation desc, name desc",
 			limit_page_length=50,
 		)
 	except frappe.PermissionError:
@@ -1316,6 +1313,40 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 			template_doc = frappe.get_doc("CRM Admission Profile Template", profile_doc.profile_template)
 		except (frappe.DoesNotExistError, frappe.PermissionError):
 			continue
+		application_context = frappe._dict()
+		if profile.application and _table_exists("CRM Admission Application"):
+			application_context = (
+				frappe.db.get_value(
+					"CRM Admission Application",
+					profile.application,
+					[
+						"admission_method",
+						"offering",
+						"admission_year",
+						"preference",
+						"preference_order",
+					],
+					as_dict=True,
+				)
+				or frappe._dict()
+			)
+		method_code = application_context.get("admission_method") or template_doc.admission_method
+		method_name = (
+			frappe.db.get_value("CRM Admission Method", method_code, "display_name")
+			if method_code and frappe.db.exists("CRM Admission Method", method_code)
+			else method_code
+		)
+		offering_name = application_context.get("offering")
+		offering_context = (
+			frappe.db.get_value(
+				"CRM Admission Offering",
+				offering_name,
+				["offering_key", "campus", "major"],
+				as_dict=True,
+			)
+			if offering_name and _table_exists("CRM Admission Offering")
+			else frappe._dict()
+		)
 
 		try:
 			from crm.fcrm.student_profile import _condition_applies, _sort_document_type_rows
@@ -1416,6 +1447,7 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 					"conditionKey": row.get("condition_key"),
 					"instruction": row.get("instruction"),
 					"documents": documents_by_type.get(document_type, []),
+					"hasDocument": bool(documents_by_type.get(document_type)),
 				}
 			)
 
@@ -1425,6 +1457,8 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 				"id": profile.name,
 				"student": profile.student,
 				"profileTemplate": profile.profile_template,
+				"profileTemplateCode": template_doc.template_code,
+				"profileTemplateName": template_doc.template_name,
 				"template": {
 					"id": template_doc.name,
 					"code": template_doc.template_code,
@@ -1433,10 +1467,16 @@ def _student_admission_profiles(student_id: str | None, admission_year: str | No
 					"status": template_doc.status,
 					"version": int(template_doc.version or 1),
 					"educationProgram": template_doc.education_program,
-					"admissionMethod": template_doc.admission_method,
+					"admissionMethod": method_code,
 					"description": template_doc.description,
 				},
-				"admissionYear": profile.admission_year,
+				"admissionMethodCode": method_code,
+				"admissionMethodName": method_name,
+				"preference": application_context.get("preference") or "Alternative",
+				"preferenceOrder": int(application_context.get("preference_order") or 1),
+				"offering": offering_name,
+				"offeringKey": offering_context.get("offering_key"),
+				"admissionYear": application_context.get("admission_year") or profile.admission_year,
 				"attemptNumber": int(profile.attempt_number or 1),
 				"application": profile.application,
 				"profileStatus": profile.profile_status,
@@ -1475,7 +1515,10 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"name": item.get("name"),
 			"code": item.get("code"),
 			"school": item.get("school"),
+			"schoolId": row.get("high_school"),
 			"grade": _grade_label(row),
+			"admissionYear": row.get("admission_year"),
+			"admissionMethod": row.get("admission_method"),
 			"major": item.get("major"),
 			"phone": row.get("phone"),
 			"email": row.get("email"),
@@ -1489,6 +1532,7 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"aspirationId": row.get("aspiration"),
 			"counselor": item.get("owner"),
 			"revision": item.get("revision"),
+			"engagementRevision": row.get("engagement_revision"),
 			"studentStage": item.get("studentStage") or _student_stage_value(row),
 			"priority": item.get("priority"),
 			"verificationStatus": _verification_status(row, assessment),
@@ -1597,6 +1641,7 @@ def _student_profile_details(row, item, payment_account=None) -> dict[str, Any]:
 			"campaign": item.get("campaign") or row.get("campaign"),
 			"owner": item.get("owner"),
 			"convertedFromLead": "Có" if row.get("source_lead") else "Không",
+			"sourceLeadId": row.get("source_lead"),
 			"sourceLead": item.get("sourceLeadLabel"),
 			"majorId": row.get("major"),
 			"major": item.get("major"),

@@ -27,7 +27,8 @@
  "name": "CRM Student Document",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
-  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+ {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "CTV Sale"},
   {"create": 1, "read": 1, "write": 1, "role": "Lead Sale"}
  ],
  "row_format": "Dynamic",
