@@ -71,7 +71,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"province": "can-tho",
 				"owner_id": None,
 				"assignment_status": "assigned",
-			"lifecycle_status": "Attempting",
+				"lifecycle_status": "Attempting",
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -239,6 +239,20 @@ class TestDirectorStudents(FrappeTestCase):
 		all_statuses = director_students._parse_query(assignmentStatus="all", lifecycleStatus="all")
 		self.assertIsNone(all_statuses["assignment_status"])
 		self.assertIsNone(all_statuses["lifecycle_status"])
+
+	def test_student_list_keeps_standalone_students_discoverable(self):
+		self.assertEqual(
+			director_students._canonical_student_filters("2026"),
+			{"admission_year": "2026"},
+		)
+
+	def test_student_search_includes_phone_and_email(self):
+		query = director_students._parse_query(q="0775767488")
+
+		_, or_filters = director_students._student_filters(query, None)
+
+		self.assertIn(["phone", "like", "%0775767488%"], or_filters)
+		self.assertIn(["email", "like", "%0775767488%"], or_filters)
 
 	def test_student_filters_match_dashboard_display_code(self):
 		query = director_students._parse_query(
@@ -518,7 +532,9 @@ class TestDirectorStudents(FrappeTestCase):
 		condition = "`tabCRM Lead`.owner_staff = 'STAFF-1'"
 		with (
 			patch.object(director_students, "can_read_full_lead_board", return_value=False),
-			patch.object(director_students, "get_student_list_read_condition", return_value=condition) as get_condition,
+			patch.object(
+				director_students, "get_student_list_read_condition", return_value=condition
+			) as get_condition,
 			patch.object(director_students.frappe.db, "sql", return_value=[{"name": "ENR-1"}]) as sql,
 		):
 			result = director_students._list_scope_student_ids()

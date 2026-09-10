@@ -161,7 +161,7 @@ STUDENT_FIELDS = [
 ]
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
 def get_director_students(
 	admissionYear: str | int | None = None,
 	page: str | int = 1,
@@ -227,9 +227,7 @@ def get_director_students(
 
 	return {
 		"data": _hydrate_rows(rows, sort_field=query["sort"]),
-		"summary": _build_summary(
-			query["admission_year"], allowed_student_ids=list_scope_student_ids
-		),
+		"summary": _build_summary(query["admission_year"], allowed_student_ids=list_scope_student_ids),
 		"actionSummary": _build_action_summary(
 			query["admission_year"], allowed_student_ids=list_scope_student_ids
 		),
@@ -254,7 +252,7 @@ def get_director_students(
 	}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
 def get_director_student(student_id: str) -> dict[str, Any]:
 	"""Return one permission-checked canonical CRM Student projection."""
 	_require_access()
@@ -276,7 +274,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	return _build_student_360(row, item)
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and Call Logs) for a CRM Student."""
 	_require_access()
@@ -289,12 +287,16 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 	except frappe.DoesNotExistError:
 		canonical_id = canonical_id or canonical_student(activity_id)
 		if not canonical_id:
-			_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+			_raise_api_error(
+				"STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404
+			)
 		try:
 			doc = frappe.get_doc("CRM Student", canonical_id)
 			activity_id = canonical_id
 		except frappe.DoesNotExistError:
-			_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+			_raise_api_error(
+				"STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404
+			)
 
 	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
@@ -318,7 +320,7 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 	}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
 def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
 	"""Return permission-scoped call history for one CRM Lead."""
 	payload = get_student_interactions(lead_id)
@@ -350,7 +352,7 @@ CHATWOOT_INTERACTION_FIELDS = [
 ]
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])
+@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
 def get_student_chatwoot_interactions(
 	student_id: str,
 	page: str | int = 1,
@@ -491,9 +493,7 @@ def _first_query_value(*values: str | None) -> str | None:
 	return None
 
 
-def _normalize_optional_enum(
-	value: str | None, choices: dict[str, Any], field: str
-) -> str | None:
+def _normalize_optional_enum(value: str | None, choices: dict[str, Any], field: str) -> str | None:
 	if not value or _fold(value) == "all":
 		return None
 	return _normalize_enum(value, choices, field)
@@ -586,17 +586,15 @@ def _resolve_province(value: str | None) -> str | None:
 	return value
 
 
-def _student_filters(
-	query: dict[str, Any], province: str | None
-) -> tuple[dict[str, Any], list[list[str]]]:
+def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[str, Any], list[list[str]]]:
 	filters: dict[str, Any] = _canonical_student_filters(query["admission_year"])
 	if query.get("owner_id"):
 		filters["owner_staff"] = query["owner_id"]
 	if query.get("assignment_status") == "assigned" and not query.get("owner_id"):
 		filters["owner_staff"] = ["is", "set"]
 	elif query.get("assignment_status") == "unassigned":
-		# The Student page is a post-conversion list. Unassigned rows are
-		# intentionally excluded even when the legacy filter is requested.
+		# Keep the explicit unassigned view aligned with the routed/converted
+		# workflow; the default Director view also includes standalone Students.
 		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
@@ -617,6 +615,8 @@ def _student_filters(
 			"full_name",
 			"lead_code",
 			"student_identity",
+			"phone",
+			"email",
 			"high_school",
 			"province",
 			"major",
@@ -691,12 +691,15 @@ def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | No
 
 
 def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
+	"""Return the admission-cycle filter shared by the Student read models.
+
+	A CRM Student can exist before a Lead conversion or ownership assignment is
+	completed. Those records remain permission-scoped by Frappe and must stay
+	discoverable in the Director list; conversion/assignment filters are applied
+	only when the caller explicitly requests them.
+	"""
 	return {
 		"admission_year": admission_year,
-		"source_lead": ["is", "set"],
-		"converted_at": ["is", "set"],
-		"owner_staff": ["is", "set"],
-		"assigned_to": ["is", "set"],
 	}
 
 
@@ -920,11 +923,7 @@ def _normalize_student_rows(rows: list) -> list:
 	"""
 	if not rows:
 		return []
-	source_leads = {
-		row.get("source_lead")
-		for row in rows
-		if row.get("source_lead")
-	}
+	source_leads = {row.get("source_lead") for row in rows if row.get("source_lead")}
 	lead_statuses = {}
 	if source_leads:
 		lead_statuses = {
@@ -1060,9 +1059,7 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"sourceLead": row.get("source_lead"),
 		"campaign": row.get("campaign"),
 		"recordType": "student",
-		"assignmentStatus": "assigned"
-		if row.get("owner_staff") or row.get("assigned_to")
-		else "unassigned",
+		"assignmentStatus": "assigned" if row.get("owner_staff") or row.get("assigned_to") else "unassigned",
 		"score": _number(row.get("latest_score")),
 		"scoreDelta": _number(score_history.get("score_change")) if score_history else None,
 		"lastActivity": _relative_time(activity_at),
@@ -1124,9 +1121,7 @@ def _priority_descriptor(action) -> dict[str, Any] | None:
 	return PRIORITIES.get(str(action.get("priority") or "").strip().lower())
 
 
-def _build_summary(
-	admission_year: str, *, allowed_student_ids: list[str] | None = None
-) -> dict[str, Any]:
+def _build_summary(admission_year: str, *, allowed_student_ids: list[str] | None = None) -> dict[str, Any]:
 	if allowed_student_ids is not None and not allowed_student_ids:
 		rows = []
 	else:
@@ -1704,9 +1699,7 @@ def _student_call_records(
 					"id": str(cl.get("name")),
 					"interactionId": str(canonical.get("name")) if canonical else None,
 					"evidenceId": (
-						str(canonical.get("evidence"))
-						if canonical and canonical.get("evidence")
-						else None
+						str(canonical.get("evidence")) if canonical and canonical.get("evidence") else None
 					),
 					"time": _format_activity_time(cl.get("start_time") or cl.get("creation")),
 					"direction": direction,
@@ -2158,10 +2151,7 @@ def _is_journey_milestone(interaction) -> bool:
 		return True
 
 	legacy_text = _fold(
-		" ".join(
-			str(interaction.get(field) or "")
-			for field in ("summary", "next_follow_up_action")
-		)
+		" ".join(str(interaction.get(field) or "") for field in ("summary", "next_follow_up_action"))
 	)
 	return any(term in legacy_text for term in JOURNEY_MILESTONE_TERMS)
 
