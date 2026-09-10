@@ -1,0 +1,211 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-06-11 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "interaction",
+  "student",
+  "crm_student",
+  "column_break_1",
+  "intent_type",
+  "intent_role",
+  "polarity",
+  "importance",
+  "confidence",
+  "analysis_result",
+  "notes"
+ ],
+ "fields": [
+  {
+   "default": "INTENT-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "INTENT-.YYYY.-"
+  },
+  {
+   "fieldname": "interaction",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Interaction",
+   "options": "CRM Interaction",
+   "reqd": 1
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "intent_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intent Type",
+   "options": "CRM Intent Type",
+   "reqd": 1
+  },
+  {
+   "default": "Support",
+   "fieldname": "intent_role",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Intent Role",
+   "options": "Dominant\nSupport",
+   "reqd": 1
+  },
+  {
+   "default": "Positive",
+   "fieldname": "polarity",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Polarity",
+   "options": "Positive\nNegative",
+   "reqd": 1
+  },
+  {
+   "fieldname": "importance",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Importance",
+   "options": "Medium\nHigh\nVery High",
+   "read_only": 1
+  },
+  {
+   "fieldname": "confidence",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Confidence"
+  },
+  {
+   "fieldname": "analysis_result",
+   "fieldtype": "Link",
+   "label": "Analysis Result",
+   "options": "CRM Interaction Analysis Result",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-18 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Intent",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "INTENT-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sale",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Sale",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "if_owner": 1,
+   "print": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "interaction,student,intent_type",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "intent_type",
+ "translated_doctype": 1
+}

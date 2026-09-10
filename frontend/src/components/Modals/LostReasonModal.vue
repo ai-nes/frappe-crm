@@ -54,8 +54,7 @@
 </template>
 <script setup>
 import Link from '@/components/Controls/Link.vue'
-import { createDocument } from '@/composables/document'
-import { Dialog } from 'frappe-ui'
+import { Dialog, call, toast } from 'frappe-ui'
 import { ref } from 'vue'
 
 const props = defineProps({
@@ -84,7 +83,7 @@ function save() {
     error.value = __('Lost Reason is required')
     return
   }
-  if (lostReason.value === 'Other' && !lostNotes.value) {
+  if (lostReason.value === 'OTHER' && !lostNotes.value) {
     error.value = __('Lost Notes are required when Lost Reason is "Other"')
     return
   }
@@ -97,11 +96,17 @@ function save() {
   props.document.save.submit()
 }
 
-function onCreate(value, close) {
-  let doc = { lost_reason: value }
-  createDocument('CRM Lost Reason', doc, close, (doc) => {
-    lostReason.value = doc.name
-    linkRef.value?.reload('', true)
-  })
+async function onCreate(value, close) {
+  error.value = ''
+  try {
+    const code = value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').toUpperCase()
+    await call('frappe.client.insert', {
+      doc: { doctype: 'CRM Lost Reason', code, display_name: value },
+    })
+    close()
+    toast.success(__('Lost Reason created.'))
+  } catch (requestError) {
+    error.value = requestError?.messages?.[0] || requestError?.message || __('Unable to create Lost Reason')
+  }
 }
 </script>

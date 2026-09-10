@@ -1,0 +1,26 @@
+{
+ "doctype": "DocType",
+ "name": "CRM Interaction Analysis Result",
+ "module": "FCRM",
+ "autoname": "naming_series:",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "IRES-.YYYY.-",
+ "field_order": ["naming_series", "analysis_run", "stage", "state", "source_revision", "source_digest", "result_digest", "policy_revision", "model_revision", "intent", "evidence_refs", "terminal_reason"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "options": "IRES-.YYYY.-", "hidden": 1},
+  {"fieldname": "analysis_run", "fieldtype": "Link", "options": "CRM Interaction Analysis Run", "read_only": 1, "reqd": 1},
+  {"fieldname": "stage", "fieldtype": "Link", "options": "CRM Analysis Run Stage", "read_only": 1, "reqd": 1},
+  {"fieldname": "state", "fieldtype": "Select", "options": "no_intent\nintent_bearing\nunknown\nfailed", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_revision", "fieldtype": "Int", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_digest", "fieldtype": "Data", "length": 64, "read_only": 1, "reqd": 1},
+  {"fieldname": "result_digest", "fieldtype": "Data", "length": 64, "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "policy_revision", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "model_revision", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "intent", "fieldtype": "Link", "options": "CRM Intent", "read_only": 1},
+  {"fieldname": "evidence_refs", "fieldtype": "JSON", "read_only": 1},
+  {"fieldname": "terminal_reason", "fieldtype": "Small Text", "read_only": 1}
+ ],
+ "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Administrator"}],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

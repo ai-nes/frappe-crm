@@ -2,8 +2,8 @@ import frappe
 
 
 def execute():
-	if not frappe.db.exists("DocType", "CRM Telephony Agent"):
-		frappe.reload_doctype("CRM Telephony Agent", force=True)
+	if not frappe.db.exists("DocType", "Telephony Agent"):
+		frappe.reload_doctype("Telephony Agent", force=True)
 
 	if frappe.db.exists("DocType", "Twilio Agents") and frappe.db.count("Twilio Agents") == 0:
 		return
@@ -13,7 +13,7 @@ def execute():
 		for agent in agents:
 			doc = frappe.get_doc(
 				{
-					"doctype": "CRM Telephony Agent",
+					"doctype": "Telephony Agent",
 					"creation": agent.get("creation"),
 					"modified": agent.get("modified"),
 					"modified_by": agent.get("modified_by"),

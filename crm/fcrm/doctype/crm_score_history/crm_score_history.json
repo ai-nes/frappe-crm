@@ -1,0 +1,258 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-06-11 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "student",
+  "crm_student",
+  "score_template",
+  "source_score_input_revision",
+  "policy_revision",
+  "policy_hash",
+  "idempotency_key",
+  "scoring_time",
+  "scoring_date",
+  "column_break_1",
+  "fit_score",
+  "engagement_score",
+  "intent_score",
+  "time_decay_score",
+  "negative_score",
+  "final_score",
+  "score_change",
+  "triggered_by_doctype",
+  "triggered_by",
+  "section_details",
+  "details"
+ ],
+ "fields": [
+  {
+   "default": "SCH-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "SCH-.YYYY.-"
+  },
+  {
+   "fieldname": "student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Student",
+   "options": "CRM Student",
+   "reqd": 1
+  },
+  {
+   "fieldname": "crm_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
+   "options": "CRM Student",
+   "read_only": 1
+  },
+  {
+   "fieldname": "score_template",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Score Template",
+   "options": "CRM Score Template",
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_score_input_revision",
+   "fieldtype": "Int",
+   "label": "Source Score Input Revision",
+   "read_only": 1,
+   "description": "CRM Student.score_input_revision at calculation time -- nullable/0 for historical rows written before this field existed."
+  },
+  {
+   "fieldname": "policy_revision",
+   "fieldtype": "Int",
+   "label": "Policy Revision",
+   "read_only": 1,
+   "description": "CRM Score Template.policy_revision used for this calculation; participates in ordering/CAS alongside source_score_input_revision."
+  },
+  {
+   "fieldname": "policy_hash",
+   "fieldtype": "Data",
+   "label": "Policy Hash",
+   "read_only": 1,
+   "description": "Immutable content hash of the policy used -- provenance/audit only, never part of ordering/CAS."
+  },
+  {
+   "fieldname": "idempotency_key",
+   "fieldtype": "Data",
+   "label": "Idempotency Key",
+   "read_only": 1,
+   "unique": 1,
+   "description": "student:source_score_input_revision:policy_revision -- a duplicate append_score_if_current call for the same tuple returns this existing row instead of writing a second one."
+  },
+  {
+   "fieldname": "scoring_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Scoring Time",
+   "reqd": 1
+  },
+  {
+   "fieldname": "scoring_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Scoring Date",
+   "read_only": 1,
+   "description": "Derived from scoring_time at save — used for chart grouping by day"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "fit_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Fit Score"
+  },
+  {
+   "fieldname": "engagement_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Engagement Score"
+  },
+  {
+   "fieldname": "intent_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Intent Score"
+  },
+  {
+   "fieldname": "time_decay_score",
+   "fieldtype": "Float",
+   "label": "Time Decay Score"
+  },
+  {
+   "fieldname": "negative_score",
+   "fieldtype": "Float",
+   "label": "Negative Score"
+  },
+  {
+   "fieldname": "final_score",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Final Score",
+   "reqd": 1
+  },
+  {
+   "fieldname": "score_change",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Score Change"
+  },
+  {
+   "fieldname": "triggered_by_doctype",
+   "fieldtype": "Select",
+   "label": "Triggered By (Doctype)",
+   "options": "\nCRM Interaction\nCRM Student",
+   "description": "Source doctype that triggered this score calculation"
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Dynamic Link",
+   "label": "Triggered By",
+   "options": "triggered_by_doctype",
+   "description": "Source record that triggered this score calculation"
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "label": "Score Details",
+   "options": "CRM Score History Detail"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score History",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "SCH-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sale",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "student,score_template",
+ "sort_field": "scoring_time",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "student",
+ "translated_doctype": 1
+}

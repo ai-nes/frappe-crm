@@ -23,11 +23,11 @@ class TestWhatsAppHooks(FrappeTestCase):
 
 		with patch(
 			"crm.api.whatsapp.get_contact_reference_from_number",
-			return_value=("CRM-CONTACT-0001", "CRM Contact"),
+			return_value=("CRM-CONTACT-0001", "CRM Student"),
 		):
 			validate(doc, None)
 
-		self.assertEqual(doc.reference_doctype, "CRM Contact")
+		self.assertEqual(doc.reference_doctype, "CRM Student")
 		self.assertEqual(doc.reference_name, "CRM-CONTACT-0001")
 
 	def test_validate_skips_reference_when_no_contact_found(self):

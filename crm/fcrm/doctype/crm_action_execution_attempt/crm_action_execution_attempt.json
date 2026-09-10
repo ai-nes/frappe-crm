@@ -1,0 +1,24 @@
+{
+ "actions": [], "autoname": "hash", "doctype": "DocType", "engine": "InnoDB", "name": "CRM Action Execution Attempt",
+ "field_order": ["action", "nba_execution", "actor", "operation", "idempotency_key", "request_fingerprint", "status", "action_revision", "package_revision", "ownership_revision", "consent_revision", "policy_revision", "attempt_generation", "lease_count", "provider_idempotency_key", "provider_event_id", "created_at"],
+ "fields": [
+  {"fieldname":"action","fieldtype":"Link","options":"CRM Action Item","reqd":1,"read_only":1},
+  {"fieldname":"nba_execution","fieldtype":"Link","options":"CRM Action Execution","label":"Action Execution","read_only":1},
+  {"fieldname":"actor","fieldtype":"Link","options":"User","reqd":1,"read_only":1},
+  {"fieldname":"operation","fieldtype":"Data","reqd":1,"read_only":1},
+  {"fieldname":"idempotency_key","fieldtype":"Data","reqd":1,"read_only":1},
+  {"fieldname":"request_fingerprint","fieldtype":"Data","reqd":1,"read_only":1},
+  {"fieldname":"status","fieldtype":"Select","options":"pending\nqueued\nconfirmed\nfailed\ncancelled","default":"pending","reqd":1},
+  {"fieldname":"action_revision","fieldtype":"Int","reqd":1,"read_only":1},
+  {"fieldname":"package_revision","fieldtype":"Int","reqd":1,"read_only":1},
+  {"fieldname":"ownership_revision","fieldtype":"Int","default":0,"reqd":1,"read_only":1},
+  {"fieldname":"consent_revision","fieldtype":"Int","default":0,"reqd":1,"read_only":1},
+  {"fieldname":"policy_revision","fieldtype":"Data","read_only":1},
+  {"fieldname":"attempt_generation","fieldtype":"Int","default":1,"reqd":1},
+  {"fieldname":"lease_count","fieldtype":"Int","default":0,"reqd":1},
+  {"fieldname":"provider_idempotency_key","fieldtype":"Data","read_only":1},
+  {"fieldname":"provider_event_id","fieldtype":"Data","read_only":1},
+  {"fieldname":"created_at","fieldtype":"Datetime","reqd":1,"read_only":1}
+ ],
+ "module": "FCRM", "permissions": [{"read": 1, "role": "System Manager"}]
+}

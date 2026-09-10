@@ -1,8 +1,7 @@
-# Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and contributors
-# For license information, please see license.txt
-
-from frappe.model.document import Document
+from crm.fcrm.lookup_doctype import LookupDocument
 
 
-class CRMSchoolType(Document):
+class CRMSchoolType(LookupDocument):
+	"""CRM School Type — flat controlled-vocabulary lookup (Loại trường)."""
+
 	pass

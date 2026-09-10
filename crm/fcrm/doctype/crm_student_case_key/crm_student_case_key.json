@@ -1,0 +1,142 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:case_key",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "case_key",
+  "identity",
+  "admission_year",
+  "canonical_student",
+  "source_student",
+  "source_reference_history",
+  "integrity_state",
+  "quarantine_reason",
+  "resolution_receipt",
+  "correlation_token",
+  "schema_version",
+  "legal_hold"
+ ],
+ "fields": [
+  {
+   "fieldname": "case_key",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Case Key",
+   "read_only": 1,
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "identity",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Identity",
+   "options": "CRM Student Identity",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "admission_year",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Admission Cycle",
+   "options": "CRM Admission Year",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "canonical_student",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Canonical Student",
+   "options": "CRM Lead",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_student",
+   "fieldtype": "Link",
+   "label": "Source Student",
+   "options": "CRM Lead",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "source_reference_history",
+   "fieldtype": "JSON",
+   "label": "Source Reference History",
+   "read_only": 1,
+   "description": "Append-only source Student references retained as migration evidence."
+  },
+  {
+   "default": "resolved",
+   "fieldname": "integrity_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Integrity State",
+   "options": "resolved\nquarantined\nretracted",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "quarantine_reason",
+   "fieldtype": "Small Text",
+   "label": "Quarantine Reason",
+   "read_only": 1
+  },
+  {
+   "fieldname": "resolution_receipt",
+   "fieldtype": "Link",
+   "label": "Resolution Receipt",
+   "options": "CRM Student Command Receipt",
+   "read_only": 1
+  },
+  {
+   "fieldname": "correlation_token",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Correlation Token",
+   "read_only": 1
+  },
+  {
+   "default": "admissions-erd-v2",
+   "fieldname": "schema_version",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Schema Version",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "legal_hold",
+   "fieldtype": "Check",
+   "label": "Legal Hold",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "indexes": [
+  {"fields": ["identity", "admission_year"], "name": "crm_student_case_key_identity_year_uniq", "unique": 1},
+  {"fields": ["canonical_student"], "name": "crm_student_case_key_canonical_student_uniq", "unique": 1}
+ ],
+ "modified": "2026-08-30 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Case Key",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "System Manager"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

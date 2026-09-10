@@ -1,0 +1,24 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "policy_name", "admission_year", "campus", "major", "award_type", "amount", "percentage", "criteria", "status", "version", "effective_from", "effective_until", "source_reference"],
+ "fields": [
+  {"default": "SCH-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "SCH-.YYYY.-"},
+  {"fieldname": "policy_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Policy Name", "reqd": 1},
+  {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year", "reqd": 1},
+  {"fieldname": "campus", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Campus", "options": "CRM Campus"},
+  {"fieldname": "major", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Major", "options": "CRM Major"},
+  {"default": "Percentage", "fieldname": "award_type", "fieldtype": "Select", "in_list_view": 1, "label": "Award Type", "options": "Percentage\nFixed Amount", "reqd": 1},
+  {"fieldname": "amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Fixed Amount"},
+  {"fieldname": "percentage", "fieldtype": "Percent", "in_list_view": 1, "label": "Percentage"},
+  {"fieldname": "criteria", "fieldtype": "Small Text", "label": "Criteria"},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Draft\nApproved\nRetired", "reqd": 1},
+  {"default": "1", "fieldname": "version", "fieldtype": "Int", "in_list_view": 1, "label": "Version", "reqd": 1},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "label": "Effective Until"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["policy_name", "admission_year", "version"], "name": "crm_scholarship_policy_lookup_idx", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Scholarship Policy", "naming_rule": "Naming Series", "naming_series_options": "SCH-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
+ "row_format": "Dynamic", "search_fields": "policy_name,admission_year,campus,major", "sort_field": "effective_from", "sort_order": "DESC"
+}

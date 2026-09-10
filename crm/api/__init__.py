@@ -1,3 +1,8 @@
+# Keep the workspace module available as a package attribute for callers that
+# patch or import it through ``crm.api.lead_sales_workspace``. Frappe's lazy
+# module loading can otherwise leave that dotted target unresolved in tests.
+from importlib import import_module
+
 import frappe
 from bs4 import BeautifulSoup
 from frappe import _
@@ -5,16 +10,19 @@ from frappe.core.api.file import get_max_file_size
 from frappe.translate import get_all_translations
 from frappe.utils import cstr, split_emails, validate_email_address
 
+lead_sales_workspace = import_module("crm.api.lead_sales_workspace")
+from crm.api.session import get_session_role_flags
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES
 from crm.utils import is_frappe_version
 
 
 @frappe.whitelist(allow_guest=True)
 def get_translations():
+	language = None
 	if frappe.session.user != "Guest":
 		language = frappe.db.get_value("User", frappe.session.user, "language")
-	else:
-		language = frappe.db.get_single_value("System Settings", "language")
 
+	language = language or frappe.db.get_single_value("System Settings", "language") or "vi"
 	return get_all_translations(language)
 
 
@@ -68,11 +76,10 @@ def check_app_permission():
 	if "FCRM" not in allowed_modules:
 		return False
 
-	roles = frappe.get_roles()
-	if any(role in ["System Manager", "Sales User", "Sales Manager"] for role in roles):
-		return True
-
-	return False
+	try:
+		return bool(get_session_role_flags()["is_crm_user"])
+	except frappe.PermissionError:
+		return False
 
 
 @frappe.whitelist(allow_guest=True)
@@ -80,10 +87,10 @@ def accept_invitation(key: str | None = None):
 	if not key:
 		frappe.throw(_("Invalid or expired key"))
 
-	result = frappe.db.get_all("CRM Invitation", filters={"key": key}, pluck="name")
+	result = frappe.db.get_all("Invitation", filters={"key": key}, pluck="name")
 	if not result:
 		frappe.throw(_("Invalid or expired key"))
-	invitation = frappe.get_doc("CRM Invitation", result[0])
+	invitation = frappe.get_doc("Invitation", result[0])
 	invitation.accept()
 	invitation.reload()
 
@@ -95,18 +102,12 @@ def accept_invitation(key: str | None = None):
 
 @frappe.whitelist()
 def invite_by_email(emails: str, role: str):
-	frappe.only_for(["Sales Manager", "System Manager"], True)
+	session_roles = get_session_role_flags()
 
-	user_roles = frappe.get_roles(frappe.session.user)
-
-	if role == "System Manager" and "System Manager" not in user_roles:
-		frappe.throw(_("You are not allowed to invite System Managers"), frappe.PermissionError)
-
-	if role == "Sales Manager" and "System Manager" not in user_roles:
-		frappe.throw(_("You are not allowed to invite Sales Managers"), frappe.PermissionError)
-
-	if role not in ["System Manager", "Sales Manager", "Sales User"]:
+	if role not in CANONICAL_SELECTABLE_ROLES:
 		frappe.throw(_("Cannot invite for this role"), frappe.PermissionError)
+	if not session_roles["is_system_manager"]:
+		frappe.throw(_("You are not allowed to invite this CRM profile"), frappe.PermissionError)
 
 	if not emails:
 		return
@@ -116,10 +117,10 @@ def invite_by_email(emails: str, role: str):
 		return
 	existing_members = frappe.db.get_all("User", filters={"email": ["in", email_list]}, pluck="email")
 	existing_invites = frappe.db.get_all(
-		"CRM Invitation",
+		"Invitation",
 		filters={
 			"email": ["in", email_list],
-			"role": ["in", ["System Manager", "Sales Manager", "Sales User"]],
+			"status": "Pending",
 		},
 		pluck="email",
 	)
@@ -127,7 +128,7 @@ def invite_by_email(emails: str, role: str):
 	to_invite = list(set(email_list) - set(existing_members) - set(existing_invites))
 
 	for email in to_invite:
-		frappe.get_doc(doctype="CRM Invitation", email=email, role=role).insert(ignore_permissions=True)
+		frappe.get_doc(doctype="Invitation", email=email, role=role).insert(ignore_permissions=True)
 
 	return {
 		"existing_members": existing_members,

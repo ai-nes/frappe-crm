@@ -4,6 +4,7 @@
     :class="
       isActive ? 'bg-surface-selected shadow-sm' : 'hover:bg-surface-gray-2'
     "
+    :title="isCollapsed ? label : undefined"
     @click="handleClick"
   >
     <div

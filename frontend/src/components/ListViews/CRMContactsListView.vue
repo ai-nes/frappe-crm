@@ -44,11 +44,11 @@
               <div>{{ item.timeAgo }}</div>
             </Tooltip>
           </div>
-          <div v-else-if="column.key === 'stage'">
+          <div v-else-if="column.key === 'enrollment_status'">
             <Badge
               v-if="item"
               :label="item"
-              :theme="stageColor(item)"
+              :theme="enrollmentStatusColor(item)"
               variant="subtle"
               size="md"
             />
@@ -87,6 +87,7 @@
     ref="listBulkActionsRef"
     v-model="list"
     doctype="CRM Contact"
+    :options="{ hideAssign: true }"
   />
 </template>
 
@@ -136,15 +137,8 @@ const pageLengthCount = defineModel({ type: Number })
 const list = defineModel('list', { type: Object })
 const listBulkActionsRef = ref(null)
 
-const STAGE_COLORS = {
-  Interested: 'blue',
-  Qualified: 'orange',
-  Enrolled: 'green',
-  Lost: 'gray',
-}
-
-function stageColor(stage) {
-  return STAGE_COLORS[stage] || 'gray'
+function enrollmentStatusColor() {
+  return 'gray'
 }
 
 watch(pageLengthCount, (val, old_value) => {

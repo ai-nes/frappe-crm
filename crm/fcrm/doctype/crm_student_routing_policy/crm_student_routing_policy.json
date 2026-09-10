@@ -1,0 +1,24 @@
+{
+ "actions": [], "allow_import": 0, "allow_rename": 0, "autoname": "field:policy_key", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["policy_key", "policy_version", "status", "campus", "student_pool", "strategy", "scoring_weights", "effective_from", "effective_until", "recipient_scope", "cursor_staff", "cursor_revision", "authored_by", "approved_by", "approved_at", "break_glass_reason", "schema_version"],
+ "fields": [
+  {"fieldname":"policy_key","fieldtype":"Data","label":"Policy Key","read_only":1,"reqd":1,"unique":1},
+  {"fieldname":"policy_version","fieldtype":"Int","label":"Policy Version","read_only":1,"reqd":1},
+  {"default":"draft","fieldname":"status","fieldtype":"Select","label":"Status","options":"draft\nactive\nretired","read_only":1,"reqd":1},
+  {"fieldname":"campus","fieldtype":"Link","label":"Campus","options":"CRM Campus","read_only":1,"reqd":1},
+  {"fieldname":"student_pool","fieldtype":"Link","label":"Student Pool","options":"CRM Student Pool","read_only":1,"reqd":1},
+  {"default":"round_robin","fieldname":"strategy","fieldtype":"Select","label":"Strategy","options":"round_robin\nweighted_score","read_only":1,"reqd":1},
+  {"fieldname":"scoring_weights","fieldtype":"JSON","label":"Scoring Weights","read_only":1},
+  {"fieldname":"effective_from","fieldtype":"Datetime","label":"Effective From","read_only":1,"reqd":1},
+  {"fieldname":"effective_until","fieldtype":"Datetime","label":"Effective Until","read_only":1},
+  {"fieldname":"recipient_scope","fieldtype":"JSON","label":"Recipient Scope","read_only":1},
+  {"fieldname":"cursor_staff","fieldtype":"Link","label":"Cursor Staff","options":"CRM Staff","read_only":1},
+  {"default":"0","fieldname":"cursor_revision","fieldtype":"Int","label":"Cursor Revision","read_only":1,"reqd":1},
+  {"fieldname":"authored_by","fieldtype":"Link","label":"Authored By","options":"User","read_only":1,"reqd":1},
+  {"fieldname":"approved_by","fieldtype":"Link","label":"Approved By","options":"User","read_only":1},
+  {"fieldname":"approved_at","fieldtype":"Datetime","label":"Approved At","read_only":1},
+  {"fieldname":"break_glass_reason","fieldtype":"Small Text","label":"Break-glass Reason","read_only":1},
+  {"default":"phase4-v1","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","read_only":1,"reqd":1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Routing Policy", "naming_rule": "By fieldname", "permissions": [], "quick_entry": 0, "track_changes": 1
+}

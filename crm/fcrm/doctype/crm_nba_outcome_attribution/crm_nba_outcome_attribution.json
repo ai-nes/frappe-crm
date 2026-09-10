@@ -1,0 +1,36 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "evaluation", "recommendation", "action_execution", "terminal_result_revision", "label", "cohort_key", "season", "observation_start", "observation_end", "attribution_rule", "source_digest", "exclusion_reason", "section_audit", "created_by_service"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "NBAOA-.YYYY.-", "options": "NBAOA-.YYYY.-"},
+  {"fieldname": "evaluation", "fieldtype": "Link", "options": "CRM NBA Evaluation", "reqd": 1, "read_only": 1},
+  {"fieldname": "recommendation", "fieldtype": "Link", "options": "CRM Recommendation", "reqd": 1, "read_only": 1},
+  {"fieldname": "action_execution", "fieldtype": "Link", "options": "CRM Action Execution", "reqd": 1, "read_only": 1},
+  {"fieldname": "terminal_result_revision", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "label", "fieldtype": "Select", "options": "enrolled\nlost\nwithdrawn\nunknown\nexcluded", "read_only": 1},
+  {"fieldname": "cohort_key", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "season", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "observation_start", "fieldtype": "Datetime", "reqd": 1, "read_only": 1},
+  {"fieldname": "observation_end", "fieldtype": "Datetime", "reqd": 1, "read_only": 1},
+  {"fieldname": "attribution_rule", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "source_digest", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "exclusion_reason", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "section_audit", "fieldtype": "Section Break", "label": "Audit"},
+  {"fieldname": "created_by_service", "fieldtype": "Data", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM NBA Outcome Attribution",
+ "permissions": [
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

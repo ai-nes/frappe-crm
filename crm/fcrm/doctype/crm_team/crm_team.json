@@ -1,0 +1,118 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:team_name",
+ "creation": "2026-08-22 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "team_name",
+  "group",
+  "team_type",
+  "area_code",
+  "column_break_1",
+  "campus",
+  "territory",
+  "team_lead_staff",
+  "is_active"
+ ],
+ "fields": [
+  {
+   "fieldname": "team_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Team Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "group",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Team Group",
+   "options": "CRM Team Group"
+  },
+  {
+   "fieldname": "team_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Team Type",
+   "options": "Sales\nMarketing\nAdmissions Operations",
+   "reqd": 1
+  },
+  {
+   "description": "Mã khu vực phụ trách, viết liền không dấu (BIENHOA, QUAN1). Dùng làm đoạn địa bàn trong team_code.",
+   "fieldname": "area_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Area Code",
+   "length": 32
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "campus",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campus",
+   "options": "CRM Campus",
+   "reqd": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Territory",
+   "options": "CRM Territory"
+  },
+  {
+   "fieldname": "team_lead_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Team Lead",
+   "options": "CRM Staff"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Active"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Team",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+   {"role":"Admissions Director","read":1,"export":1},
+   {"role":"Lead Sale","read":1},
+   {"role":"Marketing","read":1},
+   {"role":"Sale","read":1},
+   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "team_name,campus",
+ "sort_field": "team_name",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "team_name",
+ "translated_doctype": 1
+}

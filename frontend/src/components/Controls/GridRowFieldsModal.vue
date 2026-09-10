@@ -74,7 +74,7 @@ function getParams() {
 }
 
 const tabs = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_fields_layout',
   cache: ['GridRowFieldsModal', _doctype.value, props.parentDoctype],
   params: getParams(),
   onSuccess(data) {
@@ -113,7 +113,7 @@ function saveChanges() {
   })
   loading.value = true
   call(
-    'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.save_fields_layout',
+    'crm.fcrm.doctype.fields_layout.fields_layout.save_fields_layout',
     {
       doctype: _doctype.value,
       type: 'Grid Row',

@@ -11,12 +11,23 @@ from frappe.utils.telemetry import capture
 no_cache = 1
 
 
+def set_crm_session_language():
+	user_lang = None
+	if frappe.session.user and frappe.session.user != "Guest":
+		user_lang = frappe.db.get_value("User", frappe.session.user, "language")
+	system_lang = frappe.db.get_single_value("System Settings", "language")
+	target_lang = user_lang or system_lang or "vi"
+	frappe.local.lang = target_lang
+	return target_lang
+
+
 def get_context():
 	from crm.api import check_app_permission
 
 	if not check_app_permission():
 		frappe.throw(_("You do not have permission to access Frappe CRM"), frappe.PermissionError)
 
+	set_crm_session_language()
 	frappe.db.commit()
 	context = frappe._dict()
 	context.boot = get_boot()
@@ -29,10 +40,12 @@ def get_context():
 def get_context_for_dev():
 	if not frappe.conf.developer_mode:
 		frappe.throw(_("This method is only meant for developer mode"))
+	set_crm_session_language()
 	return get_boot()
 
 
 def get_boot():
+	target_lang = set_crm_session_language()
 	return frappe._dict(
 		{
 			"frappe_version": frappe.__version__,
@@ -43,11 +56,11 @@ def get_boot():
 			"setup_complete": cint(frappe.get_system_settings("setup_complete")),
 			"sysdefaults": frappe.defaults.get_defaults(),
 			"is_demo_site": frappe.conf.get("is_demo_site"),
-			"demo_data_created": frappe.db.get_default("crm_demo_data_created") == "1",
 			"is_fc_site": is_fc_site(),
 			"show_sales_hierarchy_banner": False,
 			"translated_doctypes": get_translated_doctypes(),
 			"translated_messages": get_messages_for_boot(),
+			"user_language": target_lang,
 			"timezone": {
 				"system": get_system_timezone(),
 				"user": frappe.db.get_value("User", frappe.session.user, "time_zone")
@@ -55,6 +68,7 @@ def get_boot():
 			},
 		}
 	)
+
 
 
 def get_default_route():

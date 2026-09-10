@@ -136,7 +136,7 @@ def _raise_exchange_rate_error(from_currency: str, to_currency: str, date: str, 
 		user = frappe.session.user
 		is_manager = (
 			"System Manager" in frappe.get_roles(user)
-			or "Sales Manager" in frappe.get_roles(user)
+			or "Lead Sale" in frappe.get_roles(user)
 			or user == "Administrator"
 		)
 		if not is_manager:

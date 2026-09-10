@@ -1,0 +1,194 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "naming_series:",
+ "creation": "2026-06-11 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "template_name",
+  "status",
+  "column_break_1",
+  "start_time",
+  "end_time",
+  "section_policy_version",
+  "policy_revision",
+  "policy_hash",
+  "section_weights",
+  "fit_weight",
+  "engagement_weight",
+  "intent_weight",
+  "section_rules",
+  "rules"
+ ],
+ "fields": [
+  {
+   "default": "SCT-.YYYY.-",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "SCT-.YYYY.-"
+  },
+  {
+   "fieldname": "template_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nActive\nInactive\nExpired",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "start_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Start Time"
+  },
+  {
+   "fieldname": "end_time",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "End Time"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_policy_version",
+   "fieldtype": "Section Break",
+   "label": "Policy Versioning"
+  },
+  {
+   "default": "0",
+   "description": "Monotonic per-template counter. Bumped automatically when this template's resolved rules/signals/weights content changes — never edited directly.",
+   "fieldname": "policy_revision",
+   "fieldtype": "Int",
+   "label": "Policy Revision",
+   "read_only": 1
+  },
+  {
+   "description": "Immutable content hash of the resolved policy (rules + negative rules + weights + time decay, joined with current signal content). Provenance/audit only — never used for ordering.",
+   "fieldname": "policy_hash",
+   "fieldtype": "Data",
+   "label": "Policy Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_weights",
+   "fieldtype": "Section Break",
+   "label": "Dimension Weights"
+  },
+  {
+   "default": "0.4",
+   "fieldname": "fit_weight",
+   "fieldtype": "Float",
+   "label": "Fit Weight"
+  },
+  {
+   "default": "0.3",
+   "fieldname": "engagement_weight",
+   "fieldtype": "Float",
+   "label": "Engagement Weight"
+  },
+  {
+   "default": "0.3",
+   "fieldname": "intent_weight",
+   "fieldtype": "Float",
+   "label": "Intent Weight"
+  },
+  {
+   "fieldname": "section_rules",
+   "fieldtype": "Section Break",
+   "label": "Scoring Rules"
+  },
+  {
+   "fieldname": "rules",
+   "fieldtype": "Table",
+   "label": "Rules",
+   "options": "CRM Score Rule"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score Template",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "SCT-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sale"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "AI Service"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "template_name,status",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "template_name",
+ "translated_doctype": 1
+}

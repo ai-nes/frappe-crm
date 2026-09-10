@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="CRM Staff" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Staff"
+        :label="__('Staff')"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -41,7 +45,7 @@
   />
   <EmptyState
     v-else-if="crm_staff.data && !rows.length"
-    name="CRM Staff"
+    name="Staff"
     :icon="CRMStaffIcon"
   />
 </template>

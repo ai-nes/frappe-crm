@@ -1,0 +1,10 @@
+{
+  "contract_version": "interaction-intelligence-v1",
+  "analysis_run_id": "RUN-0002",
+  "episode_id": "EP-0001",
+  "source_revision": 1,
+  "source_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "state": "no_intent",
+  "model_revision": "intent-model-v1",
+  "policy_revision": "intent-policy-v1"
+}

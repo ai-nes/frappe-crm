@@ -1,0 +1,67 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:event_id",
+ "creation": "2026-08-25 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["event_id", "event_type", "decision_operation", "student", "recommendation", "action", "action_definition_revision", "action_definition_digest", "manual_override", "command_receipt", "aggregate_revision", "from_state", "to_state", "delta", "actor", "actor_scope", "occurred_at", "reason", "correlation_id", "idempotency_key", "policy_version", "schema_version", "supersedes"],
+ "fields": [
+  {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "label": "Event Type", "options": "recommendation_decided\ntask_decided\naction_started\naction_completed\naction_failed\naction_cancelled\naction_reassigned\naction_superseded", "read_only": 1, "reqd": 1},
+  {"fieldname": "decision_operation", "fieldtype": "Select", "in_list_view": 1, "label": "Decision Operation", "options": "\nACCEPT\nACCEPT_WITH_CHANGES\nREJECT\nDEFER\nDISMISS", "read_only": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "recommendation", "fieldtype": "Link", "in_list_view": 1, "label": "Recommendation", "options": "CRM Recommendation", "read_only": 1},
+  {"fieldname": "action", "fieldtype": "Link", "in_list_view": 1, "label": "Action", "options": "CRM Action Item", "read_only": 1},
+  {"fieldname": "action_definition_revision", "fieldtype": "Link", "label": "Action Definition Revision", "options": "CRM Action Definition Revision", "read_only": 1},
+  {"fieldname": "action_definition_digest", "fieldtype": "Data", "label": "Action Definition Digest", "read_only": 1},
+  {"default": "0", "fieldname": "manual_override", "fieldtype": "Check", "label": "Manual Override", "read_only": 1},
+  {"fieldname": "command_receipt", "fieldtype": "Link", "label": "Command Receipt", "options": "CRM Student Command Receipt", "read_only": 1, "reqd": 1},
+  {"fieldname": "aggregate_revision", "fieldtype": "Int", "label": "Aggregate Revision", "read_only": 1, "reqd": 1},
+  {"fieldname": "from_state", "fieldtype": "Data", "label": "From State", "read_only": 1},
+  {"fieldname": "to_state", "fieldtype": "Data", "label": "To State", "read_only": 1, "reqd": 1},
+  {"fieldname": "delta", "fieldtype": "JSON", "label": "Allowlisted Delta", "read_only": 1},
+  {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "read_only": 1, "reqd": 1},
+  {"fieldname": "actor_scope", "fieldtype": "JSON", "label": "Actor Scope", "read_only": 1, "reqd": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Occurred At", "read_only": 1, "reqd": 1},
+  {"fieldname": "reason", "fieldtype": "Small Text", "label": "Reason", "read_only": 1},
+  {"fieldname": "correlation_id", "fieldtype": "Data", "hidden": 1, "label": "Correlation ID", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Key", "read_only": 1, "reqd": 1},
+  {"default": "phase6-recommendation-action-v1", "fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
+  {"default": "phase6-v1", "fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Student Decision Event", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Student Decision Event",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "Lead Sale"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "quick_entry": 0,
+ "sort_field": "occurred_at",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

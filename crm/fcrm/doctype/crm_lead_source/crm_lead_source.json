@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "field:source_name",
  "creation": "2023-07-24 19:47:01.063203",
  "default_view": "List",
@@ -10,7 +10,15 @@
  "engine": "InnoDB",
  "field_order": [
   "source_name",
-  "details"
+  "is_digital",
+  "channel_family",
+  "details",
+  "section_governance",
+  "owner_role",
+  "approval_state",
+  "column_break_governance",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
@@ -22,9 +30,62 @@
    "unique": 1
   },
   {
+   "default": "0",
+   "fieldname": "is_digital",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Is Digital"
+  },
+  {
+   "fieldname": "channel_family",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Channel Family",
+   "options": "\nSocial\nSearch\nDirect/Website\nReferral\nEvent/Offline"
+  },
+  {
    "fieldname": "details",
    "fieldtype": "Text Editor",
    "label": "Details"
+  },
+  {
+   "fieldname": "section_governance",
+   "fieldtype": "Section Break",
+   "label": "Governance"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Link",
+   "label": "Owner Role",
+   "options": "Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Approval State",
+   "options": "Proposed\nApproved\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_governance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
@@ -38,37 +99,24 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
+   "role": "Lead Sale"
   },
   {
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Sales User",
-   "share": 1
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "System Manager"
   }
  ],
  "quick_entry": 1,

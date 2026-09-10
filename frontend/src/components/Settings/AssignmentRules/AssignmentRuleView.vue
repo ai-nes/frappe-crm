@@ -127,11 +127,11 @@
             v-model="assignmentRuleData.documentType"
             :options="[
               {
-                label: 'CRM Contact',
+                label: __('Contact'),
                 value: 'CRM Contact',
               },
               {
-                label: 'CRM Student',
+                label: __('Student'),
                 value: 'CRM Student',
               },
             ]"
@@ -377,7 +377,7 @@ const isOldSla = ref(false)
 const documentType = computed(() =>
   assignmentRuleData.value.documentType == 'CRM Student'
     ? __('students')
-    : __('CRM contacts'),
+    : __('contacts'),
 )
 const deskUrl = `${window.location.origin}/app/assignment-rule/${step.value.data?.name}`
 

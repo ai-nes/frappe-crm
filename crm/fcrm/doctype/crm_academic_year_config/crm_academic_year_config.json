@@ -11,9 +11,7 @@
  "field_order": [
   "admission_year",
   "config_name",
-  "tuition_policy",
-  "scholarship_fund",
-  "quota",
+  "lines",
   "notes"
  ],
  "fields": [
@@ -32,24 +30,7 @@
    "fieldtype": "Data",
    "label": "Config Name"
   },
-  {
-   "fieldname": "tuition_policy",
-   "fieldtype": "Table",
-   "label": "Tuition Policy",
-   "options": "CRM Tuition Policy Item"
-  },
-  {
-   "fieldname": "scholarship_fund",
-   "fieldtype": "Table",
-   "label": "Scholarship Fund",
-   "options": "CRM Scholarship Item"
-  },
-  {
-   "fieldname": "quota",
-   "fieldtype": "Table",
-   "label": "Quota",
-   "options": "CRM Quota Item"
-  },
+  {"fieldname": "lines", "fieldtype": "Table", "label": "Lines", "options": "CRM Academic Year Line"},
   {
    "fieldname": "notes",
    "fieldtype": "Text Editor",
@@ -68,31 +49,10 @@
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
    "role": "System Manager",
-   "share": 1,
    "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "read": 1,
-   "report": 1,
-   "role": "Sales User"
   }
  ],
  "quick_entry": 0,

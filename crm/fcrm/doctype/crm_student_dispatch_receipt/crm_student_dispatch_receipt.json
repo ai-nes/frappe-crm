@@ -1,0 +1,16 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "action", "package_revision", "channel", "provider_key", "fence", "status", "provider_receipt", "created_at"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "default": "DSP-.YYYY.-", "options": "DSP-.YYYY.-"},
+  {"fieldname": "action", "fieldtype": "Link", "options": "CRM Action Item", "reqd": 1, "read_only": 1},
+  {"fieldname": "package_revision", "fieldtype": "Int", "reqd": 1, "read_only": 1},
+  {"fieldname": "channel", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "provider_key", "fieldtype": "Data", "reqd": 1, "unique": 1, "read_only": 1},
+  {"fieldname": "fence", "fieldtype": "Data", "reqd": 1, "read_only": 1},
+  {"fieldname": "status", "fieldtype": "Select", "options": "queued\nsent\nfailed\ncancelled", "default": "queued", "read_only": 1},
+  {"fieldname": "provider_receipt", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "created_at", "fieldtype": "Datetime", "reqd": 1, "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Dispatch Receipt", "permissions": [{"read": 1, "role": "System Manager"}], "sort_field": "creation", "sort_order": "DESC"
+}

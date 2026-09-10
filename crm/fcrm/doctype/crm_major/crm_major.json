@@ -11,6 +11,7 @@
  "field_order": [
   "major_name",
   "major_code",
+  "degree_name",
   "major_group",
   "is_active",
   "import_source_id"
@@ -20,6 +21,7 @@
    "fieldname": "major_name",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Major Name",
    "reqd": 1,
    "unique": 1
@@ -29,6 +31,13 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Major Code"
+  },
+  {
+   "fieldname": "degree_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Degree Name"
   },
   {
    "fieldname": "major_group",
@@ -54,7 +63,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-03 02:00:00.000000",
+ "modified": "2026-06-06 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Major",
@@ -62,38 +71,28 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "export": 1,
+   "read": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "Lead Sale"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
    "create": 1,
    "delete": 1,
-   "email": 1,
    "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales User",
-   "share": 1,
    "write": 1
   }
  ],
@@ -103,5 +102,6 @@
  "sort_order": "ASC",
  "states": [],
  "title_field": "major_name",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "search_fields": "major_name,major_code"
 }

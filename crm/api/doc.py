@@ -11,7 +11,7 @@ from frappe.utils import make_filter_tuple
 from pypika import Criterion
 
 from crm.api.views import get_views
-from crm.fcrm.doctype.crm_form_script.crm_form_script import get_form_script
+from crm.fcrm.doctype.form_script.form_script import get_form_script
 from crm.utils import is_frappe_version
 
 COUNT_NAME = (
@@ -165,8 +165,8 @@ def get_quick_filters(doctype: str, cached: bool = True):
 	meta = frappe.get_meta(doctype, cached)
 	quick_filters = []
 
-	if global_settings := frappe.db.exists("CRM Global Settings", {"dt": doctype, "type": "Quick Filters"}):
-		_quick_filters = frappe.db.get_value("CRM Global Settings", global_settings, "json")
+	if global_settings := frappe.db.exists("Global Settings", {"dt": doctype, "type": "Quick Filters"}):
+		_quick_filters = frappe.db.get_value("Global Settings", global_settings, "json")
 		_quick_filters = json.loads(_quick_filters) or []
 
 		fields = []
@@ -222,11 +222,11 @@ def update_quick_filters(quick_filters: str, old_filters: str, doctype: str):
 
 
 def create_update_global_settings(doctype, quick_filters):
-	if global_settings := frappe.db.exists("CRM Global Settings", {"dt": doctype, "type": "Quick Filters"}):
-		frappe.db.set_value("CRM Global Settings", global_settings, "json", json.dumps(quick_filters))
+	if global_settings := frappe.db.exists("Global Settings", {"dt": doctype, "type": "Quick Filters"}):
+		frappe.db.set_value("Global Settings", global_settings, "json", json.dumps(quick_filters))
 	else:
-		# create CRM Global Settings doc
-		doc = frappe.new_doc("CRM Global Settings")
+		# create Global Settings doc
+		doc = frappe.new_doc("Global Settings")
 		doc.dt = doctype
 		doc.type = "Quick Filters"
 		doc.json = json.dumps(quick_filters)
@@ -293,6 +293,8 @@ def get_data(
 		default_filters = frappe.parse_json(default_filters)
 		filters.update(default_filters)
 
+	query_filters = get_query_filters(doctype, filters)
+
 	is_default = True
 	data = []
 	_list = get_controller(doctype)
@@ -325,8 +327,8 @@ def get_data(
 			"user": frappe.session.user,
 		}
 
-		if not custom_view and frappe.db.exists("CRM View Settings", default_view_filters):
-			list_view_settings = frappe.get_doc("CRM View Settings", default_view_filters)
+		if not custom_view and frappe.db.exists("View Settings", default_view_filters):
+			list_view_settings = frappe.get_doc("View Settings", default_view_filters)
 			columns = frappe.parse_json(list_view_settings.columns)
 			rows = frappe.parse_json(list_view_settings.rows)
 			is_default = False
@@ -356,7 +358,7 @@ def get_data(
 			frappe.get_list(
 				doctype,
 				fields=rows,
-				filters=filters,
+				filters=query_filters,
 				order_by=order_by,
 				page_length=page_length,
 			)
@@ -480,7 +482,7 @@ def get_data(
 			fields.append(field)
 
 	if not is_default and custom_view_name:
-		is_default = frappe.db.get_value("CRM View Settings", custom_view_name, "load_default_columns")
+		is_default = frappe.db.get_value("View Settings", custom_view_name, "load_default_columns")
 
 	if group_by_field and view_type == "group_by":
 
@@ -530,12 +532,38 @@ def get_data(
 		"page_length_count": page_length_count,
 		"is_default": is_default,
 		"views": get_views(doctype),
-		"total_count": frappe.get_list(doctype, filters=filters, fields=[COUNT_NAME])[0].total_count,
+		"total_count": frappe.get_list(doctype, filters=query_filters, fields=[COUNT_NAME])[
+			0
+		].total_count,
 		"row_count": len(data),
 		"form_script": get_form_script(doctype),
 		"list_script": get_form_script(doctype, "List"),
 		"view_type": view_type,
 	}
+
+
+def get_query_filters(doctype, filters):
+	if doctype != "CRM Lead":
+		return filters
+
+	potential_score_tier = filters.get("_potential_score_tier")
+	if not potential_score_tier:
+		return filters
+
+	query_filters = convert_filter_to_tuple(
+		doctype,
+		{key: value for key, value in filters.items() if key != "_potential_score_tier"},
+	)
+
+	if potential_score_tier == "high":
+		query_filters.append([doctype, "latest_score", ">=", 80])
+	elif potential_score_tier == "medium":
+		query_filters.append([doctype, "latest_score", ">=", 50])
+		query_filters.append([doctype, "latest_score", "<", 80])
+	elif potential_score_tier == "low":
+		query_filters.append([doctype, "latest_score", "<", 50])
+
+	return query_filters
 
 
 def parse_list_data(data, doctype):
@@ -663,7 +691,7 @@ def getCounts(d, doctype):
 		filters={"reference_doctype": doctype, "reference_name": d.get("name"), "comment_type": "Comment"},
 	)
 	d["_task_count"] = frappe.db.count(
-		"CRM Task", filters={"reference_doctype": doctype, "reference_docname": d.get("name")}
+		"Task", filters={"reference_doctype": doctype, "reference_docname": d.get("name")}
 	)
 	d["_note_count"] = frappe.db.count(
 		"FCRM Note", filters={"reference_doctype": doctype, "reference_docname": d.get("name")}
@@ -695,10 +723,10 @@ def get_linked_docs_of_document(doctype: str, docname: str):
 			continue
 
 		title = data.get("title")
-		if data.doctype == "CRM Call Log":
+		if data.doctype == "Call Log":
 			title = f"Call from {data.get('from')} to {data.get('to')}"
 
-		if data.doctype == "CRM Notification":
+		if data.doctype == "Notification":
 			title = data.get("message")
 
 		docs_data.append(
@@ -718,7 +746,7 @@ def remove_doc_link(doctype, docname):
 
 	try:
 		linked_doc_data = frappe.get_doc(doctype, docname)
-		if doctype == "CRM Notification":
+		if doctype == "Notification":
 			delete_notification_type = {
 				"notification_type_doctype": "",
 				"notification_type_doc": "",

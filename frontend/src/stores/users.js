@@ -3,6 +3,7 @@ import { createResource } from 'frappe-ui'
 import { sessionStore } from './session'
 import { computed, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import { canConfigureSystem, hasCapability } from '@/utils/rolePolicy'
 
 export const usersStore = defineStore('crm-users', () => {
   const session = sessionStore()
@@ -44,17 +45,20 @@ export const usersStore = defineStore('crm-users', () => {
         last_name: '',
         user_image: null,
         role: null,
+        language: 'vi',
       }
     }
     return usersByName[email]
   }
 
   function isAdmin(email) {
-    return getUser(email).role === 'System Manager'
+    return canConfigureSystem(getUser(email))
   }
 
   function isManager(email) {
-    return getUser(email).role === 'Sales Manager' || isAdmin(email)
+    // Deprecated compatibility adapter for legacy callers. New UI names the
+    // capability it requires instead of treating supervisors as administrators.
+    return isAdmin(email)
   }
 
   function isWebsiteUser(email) {
@@ -62,7 +66,23 @@ export const usersStore = defineStore('crm-users', () => {
   }
 
   function isSalesUser(email) {
-    return getUser(email).role === 'Sales User'
+    return getUser(email).crm_profile === 'sales'
+  }
+
+  function getCurrentUser() {
+    return getUser()
+  }
+
+  function getCrmProfile(email) {
+    return getUser(email).crm_profile || null
+  }
+
+  function getCrmRoleState(email) {
+    return getUser(email).crm_role_state || null
+  }
+
+  function hasCrmCapability(capability, email) {
+    return hasCapability(getUser(email), capability)
   }
 
   function isTelephonyAgent(email) {
@@ -87,6 +107,10 @@ export const usersStore = defineStore('crm-users', () => {
     allUsers: computed(() => users.data.allUsers),
     crmUsers: computed(() => users.data.crmUsers),
     getUser,
+    getCurrentUser,
+    getCrmProfile,
+    getCrmRoleState,
+    hasCrmCapability,
     isAdmin,
     isManager,
     isSalesUser,

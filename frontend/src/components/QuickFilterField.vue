@@ -6,15 +6,23 @@
     type="checkbox"
     @change.stop="updateFilter(filter, $event.target.checked)"
   />
-  <FormControl
+  <Autocomplete
     v-else-if="filter.fieldtype === 'Select'"
-    v-model="filter.value"
-    class="form-control cursor-pointer [&_select]:cursor-pointer"
-    type="select"
+    :value="filter.value"
     :options="filter.options"
     :placeholder="filter.label"
-    @update:modelValue="updateFilter(filter, $event)"
-  />
+    @change="(data) => updateFilter(filter, data?.value || data)"
+  >
+    <template #footer="{ close }">
+      <Button
+        variant="ghost"
+        class="w-full !justify-start"
+        :label="__('Clear')"
+        iconLeft="x"
+        @click="() => updateFilter(filter, '', close)"
+      />
+    </template>
+  </Autocomplete>
   <Link
     v-else-if="filter.fieldtype === 'Link'"
     :value="filter.value"
@@ -40,6 +48,7 @@
 </template>
 <script setup>
 import Link from '@/components/Controls/Link.vue'
+import Autocomplete from '@/components/frappe-ui/Autocomplete.vue'
 import { FormControl, DatePicker, DateTimePicker } from 'frappe-ui'
 import { useDebounceFn } from '@vueuse/core'
 import { reactive, watch } from 'vue'
@@ -62,7 +71,8 @@ const debouncedFn = useDebounceFn((f, value) => {
   emit('applyQuickFilter', f, value)
 }, 500)
 
-function updateFilter(f, value) {
+function updateFilter(f, value, close) {
   emit('applyQuickFilter', f, value)
+  close?.()
 }
 </script>

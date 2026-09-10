@@ -1,0 +1,43 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "geography_type", "geography", "period_type", "period_start", "period_end", "source", "coverage", "confidence", "market_size", "eligible_population", "measured_on", "source_reference", "idempotency_fingerprint"],
+ "fields": [
+  {"default": "MKT-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "MKT-.YYYY.-"},
+  {"fieldname": "geography_type", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Geography Type", "options": "National\nRegion\nProvince\nWard\nTerritory", "reqd": 1},
+  {"fieldname": "geography", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Geography", "reqd": 1},
+  {"default": "Annual", "fieldname": "period_type", "fieldtype": "Select", "in_list_view": 1, "label": "Period Type", "options": "Month\nQuarter\nTerm\nAnnual", "reqd": 1},
+  {"fieldname": "period_start", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period Start", "reqd": 1},
+  {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period End", "reqd": 1},
+  {"fieldname": "source", "fieldtype": "Data", "in_list_view": 1, "label": "Source", "reqd": 1},
+  {"fieldname": "coverage", "fieldtype": "Percent", "in_list_view": 1, "label": "Coverage (%)"},
+  {"fieldname": "confidence", "fieldtype": "Percent", "in_list_view": 1, "label": "Confidence (%)"},
+  {"fieldname": "market_size", "fieldtype": "Int", "in_list_view": 1, "label": "Market Size", "reqd": 1},
+  {"fieldname": "eligible_population", "fieldtype": "Int", "in_list_view": 1, "label": "Eligible Population"},
+  {"fieldname": "measured_on", "fieldtype": "Date", "in_list_view": 1, "label": "Measured On", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1}
+ ],
+ "indexes": [{"fields": ["geography_type", "geography", "period_start", "period_end", "source"], "name": "crm_geography_market_snapshot_idx", "unique": 1}],
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Geography Market Snapshot",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "MKT-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"export": 1, "read": 1, "role": "Marketing"},
+  {"read": 1, "role": "Lead Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "geography,source,period_start,period_end",
+ "sort_field": "period_start",
+ "sort_order": "DESC"
+}

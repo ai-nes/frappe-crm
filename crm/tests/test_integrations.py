@@ -2,6 +2,7 @@
 # See license.txt
 
 import uuid
+from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -11,8 +12,11 @@ from crm.integrations.api import (
 	add_task_to_call_log,
 	get_contact_by_phone_number,
 	get_contact_reference_from_number,
+	get_integrations,
+	get_recording_url,
 	get_user_default_calling_medium,
 	is_call_integration_enabled,
+	_recording_url_allowed,
 	set_default_calling_medium,
 )
 
@@ -22,8 +26,8 @@ class TestIntegrations(FrappeTestCase):
 		frappe.db.rollback()
 
 	def test_is_call_integration_enabled_both_disabled(self):
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 0)
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 0)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 0)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
@@ -31,8 +35,8 @@ class TestIntegrations(FrappeTestCase):
 		self.assertFalse(result["integrations"]["exotel"])
 
 	def test_is_call_integration_enabled_twilio_only(self):
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 1)
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 0)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 1)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
@@ -40,17 +44,62 @@ class TestIntegrations(FrappeTestCase):
 		self.assertFalse(result["integrations"]["exotel"])
 
 	def test_is_call_integration_enabled_exotel_only(self):
-		frappe.db.set_single_value("CRM Exotel Settings", "enabled", 1)
-		frappe.db.set_single_value("CRM Twilio Settings", "enabled", 0)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 1)
+		frappe.db.set_single_value("Twilio Settings", "enabled", 0)
 
 		result = is_call_integration_enabled()
 
 		self.assertFalse(result["integrations"]["twilio"])
 		self.assertTrue(result["integrations"]["exotel"])
 
+	def test_get_integrations_returns_call_and_zalo_types(self):
+		frappe.db.set_single_value("Twilio Settings", "enabled", 1)
+		frappe.db.set_single_value("Exotel Settings", "enabled", 0)
+
+		result = get_integrations()
+
+		self.assertEqual(result["meta"]["requested_type"], None)
+		self.assertEqual(result["meta"]["returned_types"], ["call", "zalo"])
+		self.assertEqual(result["meta"]["total"], 3)
+		self.assertEqual(
+			[(item["type"], item["provider"], item["enabled"]) for item in result["data"]],
+			[("call", "twilio", True), ("call", "exotel", False), ("zalo", "zalo_oa", False)],
+		)
+		self.assertEqual(result["data"][2]["status"], "not_configured")
+
+	def test_get_integrations_filters_by_type(self):
+		call_result = get_integrations("call")
+		zalo_result = get_integrations("zalo")
+
+		self.assertEqual(call_result["meta"]["requested_type"], "call")
+		self.assertEqual({item["provider"] for item in call_result["data"]}, {"twilio", "exotel"})
+		self.assertEqual(zalo_result["meta"]["requested_type"], "zalo")
+		self.assertEqual([item["provider"] for item in zalo_result["data"]], ["zalo_oa"])
+
+	def test_get_integrations_rejects_unsupported_type(self):
+		with self.assertRaises(frappe.ValidationError):
+			get_integrations("email")
+
+	def test_recording_url_allowlist(self):
+		self.assertTrue(_recording_url_allowed("https://api.twilio.com/recording.mp3", "Twilio", False))
+		self.assertFalse(_recording_url_allowed("https://example.com/recording.mp3", "Twilio", False))
+		self.assertFalse(_recording_url_allowed("http://api.twilio.com/recording.mp3", "Twilio", False))
+
+	def test_recording_proxy_requires_call_log_read_permission(self):
+		call_log = frappe._dict(
+			name="CALL-PRIVATE-1",
+			has_permission=lambda permission: False,
+		)
+		with (
+			patch.object(frappe.db, "exists", return_value=True),
+			patch.object(frappe, "get_doc", return_value=call_log),
+		):
+			with self.assertRaises(frappe.DoesNotExistError):
+				get_recording_url("CALL-PRIVATE-1")
+
 	def test_get_user_default_calling_medium_no_agent(self):
-		if frappe.db.exists("CRM Telephony Agent", frappe.session.user):
-			frappe.delete_doc("CRM Telephony Agent", frappe.session.user)
+		if frappe.db.exists("Telephony Agent", frappe.session.user):
+			frappe.delete_doc("Telephony Agent", frappe.session.user)
 
 		self.assertIsNone(get_user_default_calling_medium())
 
@@ -58,7 +107,7 @@ class TestIntegrations(FrappeTestCase):
 		_delete_current_agent()
 		frappe.get_doc(
 			{
-				"doctype": "CRM Telephony Agent",
+				"doctype": "Telephony Agent",
 				"user": frappe.session.user,
 				"default_medium": "Twilio",
 			}
@@ -72,15 +121,15 @@ class TestIntegrations(FrappeTestCase):
 		result = set_default_calling_medium("Exotel")
 
 		self.assertEqual(result, "Exotel")
-		self.assertTrue(frappe.db.exists("CRM Telephony Agent", frappe.session.user))
-		agent = frappe.get_doc("CRM Telephony Agent", frappe.session.user)
+		self.assertTrue(frappe.db.exists("Telephony Agent", frappe.session.user))
+		agent = frappe.get_doc("Telephony Agent", frappe.session.user)
 		self.assertEqual(agent.default_medium, "Exotel")
 
 	def test_set_default_calling_medium_updates_existing_record(self):
 		_delete_current_agent()
 		frappe.get_doc(
 			{
-				"doctype": "CRM Telephony Agent",
+				"doctype": "Telephony Agent",
 				"user": frappe.session.user,
 				"default_medium": "Twilio",
 			}
@@ -89,7 +138,7 @@ class TestIntegrations(FrappeTestCase):
 		result = set_default_calling_medium("Exotel")
 
 		self.assertEqual(result, "Exotel")
-		agent = frappe.get_doc("CRM Telephony Agent", frappe.session.user)
+		agent = frappe.get_doc("Telephony Agent", frappe.session.user)
 		self.assertEqual(agent.default_medium, "Exotel")
 
 	def test_add_note_to_call_log_creates_new_note(self):
@@ -97,11 +146,10 @@ class TestIntegrations(FrappeTestCase):
 
 		result = add_note_to_call_log(
 			call_log.name,
-			{"title": "Call Summary", "content": "Discussed application next steps"},
+			{"content": "Discussed application next steps"},
 		)
 
 		self.assertTrue(frappe.db.exists("FCRM Note", result.name))
-		self.assertEqual(result.title, "Call Summary")
 		self.assertEqual(result.content, "Discussed application next steps")
 
 		call_log.reload()
@@ -113,14 +161,13 @@ class TestIntegrations(FrappeTestCase):
 		note = frappe.get_doc(
 			{
 				"doctype": "FCRM Note",
-				"title": "Initial Note",
 				"content": "Initial content",
 			}
 		).insert()
 
 		add_note_to_call_log(
 			call_log.name,
-			{"name": note.name, "title": note.title, "content": "Updated content"},
+			{"name": note.name, "content": "Updated content"},
 		)
 
 		note.reload()
@@ -141,20 +188,20 @@ class TestIntegrations(FrappeTestCase):
 			},
 		)
 
-		self.assertTrue(frappe.db.exists("CRM Task", result.name))
+		self.assertTrue(frappe.db.exists("Task", result.name))
 		self.assertEqual(result.title, "Follow up call")
 		self.assertEqual(result.assigned_to, "Administrator")
 		self.assertEqual(result.status, "Todo")
 
 		call_log.reload()
-		linked_tasks = [link.link_name for link in call_log.links if link.link_doctype == "CRM Task"]
+		linked_tasks = [link.link_name for link in call_log.links if link.link_doctype == "Task"]
 		self.assertIn(str(result.name), linked_tasks)
 
 	def test_add_task_to_call_log_updates_existing_task(self):
 		call_log = create_test_call_log()
 		task = frappe.get_doc(
 			{
-				"doctype": "CRM Task",
+				"doctype": "Task",
 				"title": "Initial Task",
 				"status": "Todo",
 				"priority": "Medium",
@@ -181,13 +228,13 @@ class TestIntegrations(FrappeTestCase):
 		self.assertEqual(task.priority, "High")
 
 	def test_get_contact_by_phone_number_finds_crm_contact(self):
-		contact = create_test_crm_contact(phone="+1 415 555 0600")
+		contact = create_test_crm_contact(phone="0912345600")
 
-		result = get_contact_by_phone_number("+1 415 555 0600")
+		result = get_contact_by_phone_number("0912345600")
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["crm_contact"], contact.name)
-		self.assertEqual(result["doctype"], "CRM Contact")
+		self.assertEqual(result["doctype"], "CRM Student")
 
 	def test_get_contact_by_phone_number_finds_contact(self):
 		contact = frappe.get_doc(
@@ -195,11 +242,11 @@ class TestIntegrations(FrappeTestCase):
 				"doctype": "Contact",
 				"first_name": "John",
 				"last_name": "Doe",
-				"mobile_no": "4155550100",
+				"phone_nos": [{"phone": "+91 9845552671", "is_primary_mobile_no": 1}],
 			}
 		).insert()
 
-		result = get_contact_by_phone_number("4155550100")
+		result = get_contact_by_phone_number("+91 9845552671")
 
 		self.assertEqual(result["name"], contact.name)
 		self.assertEqual(result["full_name"], "John Doe")
@@ -212,12 +259,12 @@ class TestIntegrations(FrappeTestCase):
 		self.assertNotIn("full_name", result)
 
 	def test_get_contact_reference_from_number_returns_crm_contact(self):
-		contact = create_test_crm_contact(phone="+1 415 555 0700")
+		contact = create_test_crm_contact(phone="0912345700")
 
-		docname, doctype = get_contact_reference_from_number("+1 415 555 0700")
+		docname, doctype = get_contact_reference_from_number("0912345700")
 
 		self.assertEqual(docname, contact.name)
-		self.assertEqual(doctype, "CRM Contact")
+		self.assertEqual(doctype, "CRM Student")
 
 	def test_get_contact_reference_from_number_returns_contact(self):
 		contact = frappe.get_doc(
@@ -225,11 +272,11 @@ class TestIntegrations(FrappeTestCase):
 				"doctype": "Contact",
 				"first_name": "Standalone",
 				"last_name": "Contact",
-				"mobile_no": "4155550400",
+				"phone_nos": [{"phone": "+91 9845552672", "is_primary_mobile_no": 1}],
 			}
 		).insert()
 
-		docname, doctype = get_contact_reference_from_number("4155550400")
+		docname, doctype = get_contact_reference_from_number("+91 9845552672")
 
 		self.assertEqual(docname, contact.name)
 		self.assertEqual(doctype, "Contact")
@@ -244,7 +291,7 @@ class TestIntegrations(FrappeTestCase):
 		call_log = create_test_call_log()
 		note = add_note_to_call_log(
 			call_log.name,
-			{"title": "Call Notes", "content": "Student interested in admission counseling"},
+			{"content": "Student interested in admission counseling"},
 		)
 		task = add_task_to_call_log(
 			call_log.name,
@@ -260,10 +307,10 @@ class TestIntegrations(FrappeTestCase):
 		call_log.reload()
 		link_types = {link.link_doctype for link in call_log.links}
 		self.assertIn("FCRM Note", link_types)
-		self.assertIn("CRM Task", link_types)
+		self.assertIn("Task", link_types)
 
 		note_links = [link for link in call_log.links if link.link_doctype == "FCRM Note"]
-		task_links = [link for link in call_log.links if link.link_doctype == "CRM Task"]
+		task_links = [link for link in call_log.links if link.link_doctype == "Task"]
 		self.assertEqual(note_links[0].link_name, note.name)
 		self.assertEqual(task_links[0].link_name, str(task.name))
 
@@ -271,7 +318,7 @@ class TestIntegrations(FrappeTestCase):
 def create_test_call_log(**kwargs):
 	unique_id = kwargs.pop("id", str(uuid.uuid4())[:10])
 	data = {
-		"doctype": "CRM Call Log",
+		"doctype": "Call Log",
 		"id": unique_id,
 		"type": "Incoming",
 		"status": "Completed",
@@ -285,9 +332,9 @@ def create_test_call_log(**kwargs):
 
 def create_test_crm_contact(**kwargs):
 	data = {
-		"doctype": "CRM Contact",
+		"doctype": "CRM Student",
 		"full_name": "Phone Lookup Contact",
-		"phone": "+1 415 555 0000",
+		"phone": "0912345000",
 		"email": f"lookup-{uuid.uuid4().hex[:8]}@example.com",
 		"stage": "Interested",
 	}
@@ -296,5 +343,5 @@ def create_test_crm_contact(**kwargs):
 
 
 def _delete_current_agent():
-	if frappe.db.exists("CRM Telephony Agent", frappe.session.user):
-		frappe.delete_doc("CRM Telephony Agent", frappe.session.user)
+	if frappe.db.exists("Telephony Agent", frappe.session.user):
+		frappe.delete_doc("Telephony Agent", frappe.session.user)

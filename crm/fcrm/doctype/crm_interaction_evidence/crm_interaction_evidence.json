@@ -1,0 +1,31 @@
+{
+ "doctype": "DocType",
+ "name": "CRM Interaction Evidence",
+ "module": "FCRM",
+ "autoname": "naming_series:",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "EVID-.YYYY.-",
+ "field_order": ["naming_series", "student", "crm_contact", "crm_student", "interaction", "external_event_key", "source_namespace", "source_record_id", "source_revision", "evidence_digest", "evidence_kind", "evidence_state", "channel", "direction", "actor_role", "occurred_at", "content"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "options": "EVID-.YYYY.-", "hidden": 1},
+  {"fieldname": "student", "fieldtype": "Link", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "crm_contact", "fieldtype": "Link", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "crm_student", "fieldtype": "Link", "label": "Canonical Student", "options": "CRM Student", "read_only": 1},
+  {"fieldname": "interaction", "fieldtype": "Link", "options": "CRM Interaction", "read_only": 1},
+  {"fieldname": "external_event_key", "fieldtype": "Data", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "source_namespace", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_record_id", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_revision", "fieldtype": "Int", "read_only": 1, "reqd": 1},
+  {"fieldname": "evidence_digest", "fieldtype": "Data", "read_only": 1, "reqd": 1, "length": 64},
+  {"fieldname": "evidence_kind", "fieldtype": "Select", "options": "message\ncall", "read_only": 1, "reqd": 1},
+  {"fieldname": "evidence_state", "fieldtype": "Select", "options": "draft\nfinal\ncorrection", "read_only": 1, "reqd": 1},
+  {"fieldname": "channel", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "direction", "fieldtype": "Select", "options": "inbound\noutbound", "read_only": 1},
+  {"fieldname": "actor_role", "fieldtype": "Select", "options": "student\nadvisor\nsystem", "read_only": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "read_only": 1},
+  {"fieldname": "content", "fieldtype": "Long Text", "read_only": 1, "reqd": 1}
+ ],
+ "permissions": [],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

@@ -1,4 +1,5 @@
 import functools
+import re
 
 import frappe
 import phonenumbers
@@ -9,6 +10,65 @@ from frappe.core.doctype.communication.communication import Communication
 from frappe.utils import floor, now
 from phonenumbers import NumberParseException
 from phonenumbers import PhoneNumberFormat as PNF
+
+
+def normalize_phone_for_lookup(phone_number: str | None) -> str:
+	if not phone_number:
+		return ""
+
+	digits = re.sub(r"\D", "", str(phone_number))
+	if digits.startswith("84") and len(digits) == 11:
+		return "0" + digits[2:]
+	if digits.startswith("0") and len(digits) == 10:
+		return digits
+	if len(digits) == 9:
+		return "0" + digits
+	return digits
+
+
+def get_phone_lookup_terms(phone_number: str | None) -> list[str]:
+	normalized = normalize_phone_for_lookup(phone_number)
+	if not normalized:
+		return []
+
+	terms = {normalized}
+	if normalized.startswith("0") and len(normalized) == 10:
+		national = normalized[1:]
+		terms.update({national, f"84{national}"})
+	elif normalized.startswith("84") and len(normalized) == 11:
+		national = normalized[2:]
+		terms.update({national, f"0{national}"})
+
+	return sorted(terms)
+
+
+def _validate_sql_identifier(value: str) -> str:
+	if not re.fullmatch(r"[A-Za-z0-9_ ]+", value or ""):
+		frappe.throw(_("Invalid SQL identifier: {0}").format(value))
+	return value
+
+
+def get_docs_by_phone(doctype: str, phone_number: str | None, phone_field: str = "phone") -> list[frappe._dict]:
+	terms = get_phone_lookup_terms(phone_number)
+	if not terms:
+		return []
+
+	doctype = _validate_sql_identifier(doctype)
+	phone_field = _validate_sql_identifier(phone_field)
+	normalized_phone = (
+		f"REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(`{phone_field}`, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')"
+	)
+	placeholders = ", ".join(["%s"] * len(terms))
+	return frappe.db.sql(
+		f"""
+		SELECT name
+		FROM `tab{doctype}`
+		WHERE {normalized_phone} IN ({placeholders})
+		ORDER BY modified DESC
+		""",
+		tuple(terms),
+		as_dict=True,
+	)
 
 
 def parse_phone_number(phone_number: str, default_country: str = "IN"):
@@ -121,7 +181,8 @@ def is_sales_user(user: str | None = None) -> bool:
 	:return: Whether `user` is an agent
 	"""
 	user = user or frappe.session.user
-	return is_admin() or "Sales Manager" in frappe.get_roles(user) or "Sales User" in frappe.get_roles(user)
+	roles = set(frappe.get_roles(user))
+	return is_admin() or bool(roles.intersection({"Sale", "CTV Sale", "Lead Sale"}))
 
 
 def sales_user_only(fn: callable) -> callable:
@@ -162,7 +223,7 @@ def _should_update_modified(doc: Communication | Comment) -> bool:
 	if not (doc.reference_doctype and doc.reference_name):
 		return False
 
-	if doc.reference_doctype != "CRM Contact":
+	if doc.reference_doctype != "CRM Student":
 		return False
 
 	if doc.doctype not in ["Comment", "Communication"]:
@@ -211,10 +272,10 @@ def create_crm_contact_from_incoming_email(doc: Communication, method: str | Non
 	if not create_contact_enabled:
 		return
 
-	if frappe.db.exists("CRM Contact", {"email": doc.sender}):
+	if frappe.db.exists("CRM Student", {"email": doc.sender}):
 		return
 
-	contact = frappe.new_doc("CRM Contact")
+	contact = frappe.new_doc("CRM Student")
 	contact.email = doc.sender
 	contact.full_name = doc.sender_full_name or doc.sender.split("@")[0]
 	contact.stage = "Interested"
@@ -224,7 +285,7 @@ def create_crm_contact_from_incoming_email(doc: Communication, method: str | Non
 
 	contact.insert(ignore_permissions=True)
 
-	doc.reference_doctype = "CRM Contact"
+	doc.reference_doctype = "CRM Student"
 	doc.reference_name = contact.name
 	doc.save(ignore_permissions=True)
 
@@ -233,7 +294,7 @@ def on_comment_insert(doc: Comment, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype != "CRM Contact" or doc.comment_type != "Comment":
+	if doc.reference_doctype != "CRM Student" or doc.comment_type != "Comment":
 		return
 
 	if not _should_update_modified(doc):
@@ -255,24 +316,15 @@ def on_communication_update(doc: Communication, method: str | None = None):
 	if not (doc.reference_doctype and doc.reference_name):
 		return
 
-	if doc.reference_doctype != "CRM Contact":
+	if doc.reference_doctype != "CRM Student":
 		return
 
 	should_update_modified = _should_update_modified(doc)
-	status = _get_communication_status(doc)
 
 	values = {}
 
 	if should_update_modified:
 		values["modified"] = now()
-
-	if status:
-		last_communication = frappe.get_last_doc(
-			"Communication",
-			{"reference_doctype": doc.reference_doctype, "reference_name": doc.reference_name},
-		)
-		if last_communication and last_communication.name == doc.name:
-			values["communication_status"] = status
 
 	if not values:
 		return

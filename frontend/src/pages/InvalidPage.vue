@@ -6,7 +6,7 @@
       <div>{{ __('Invalid page or not permitted to access') }}</div>
       <Button
         :route="{ name: 'CRM Contacts' }"
-        :label="__('CRM Contacts')"
+        :label="__('Contacts')"
         :iconLeft="ContactsIcon"
       />
     </div>

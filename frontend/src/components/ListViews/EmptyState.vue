@@ -33,14 +33,26 @@ const props = defineProps({
   width: { type: String, default: 'md' },
 })
 
+function translateWithFallback(template, values) {
+  const translated = __(template, values)
+  if (!values?.length || typeof translated !== 'string') return translated
+
+  return values.reduce(
+    (text, value, index) => text.replaceAll(`{${index}}`, String(value ?? '')),
+    translated,
+  )
+}
+
 const computedTitle = computed(() => {
-  return props.title ? props.title : __('No {0} Found', [__(props.name)])
+  return props.title
+    ? props.title
+    : translateWithFallback('No {0} Found', [__(props.name)])
 })
 
 const computedDescription = computed(() => {
   return props.description
     ? props.description
-    : __(
+    : translateWithFallback(
         'It appears that there are currently no {0} available. You can create more {0} by using the Create button.',
         [__(props.name)],
       )

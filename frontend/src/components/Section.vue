@@ -6,10 +6,13 @@
         class="section-header flex items-center justify-between"
         :class="headerClass"
       >
-        <div
+        <button
+          type="button"
           class="flex text-ink-gray-9 max-w-fit cursor-pointer items-center gap-2 text-base"
           :class="labelClass"
-          @click="collapsible && toggle()"
+          :aria-expanded="collapsible ? opened : undefined"
+          :disabled="!collapsible"
+          @click="toggle()"
         >
           <FeatherIcon
             v-if="collapsible && collapseIconPosition === 'left'"
@@ -26,7 +29,7 @@
             class="h-4 transition-all duration-300 ease-in-out"
             :class="{ 'rotate-90': opened }"
           />
-        </div>
+        </button>
         <slot name="actions"></slot>
       </div>
     </slot>

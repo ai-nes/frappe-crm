@@ -1,0 +1,20 @@
+{
+  "contract_version": "interaction-intelligence-v1",
+  "event_ledger_id": "CRM-EVENT-0001",
+  "source": {
+    "provider": "chatwoot",
+    "channel": "chat",
+    "event_id": "message-123",
+    "revision": 1,
+    "kind": "message",
+    "state": "final"
+  },
+  "evidence_ref": {"doctype": "CRM Message Evidence", "name": "EVID-0001"},
+  "evidence_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "sequence": 1,
+  "target": {"doctype": "CRM Student", "name": "STU-0001"},
+  "actor": {"id": "CONTACT-0001", "role": "student"},
+  "correlation_id": "conversation-0001",
+  "idempotency_key": "chatwoot:message-123:1",
+  "occurred_at": "2026-09-05T15:00:00Z"
+}

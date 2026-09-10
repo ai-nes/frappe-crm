@@ -11,16 +11,22 @@
  "field_order": [
   "full_name",
   "user",
+  "is_active",
   "column_break_1",
   "department",
   "campus",
-  "target"
+  "territory",
+  "target",
+  "last_routed_at",
+  "section_team_memberships",
+  "team_memberships"
  ],
  "fields": [
   {
    "fieldname": "full_name",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Full Name",
    "reqd": 1
   },
@@ -34,10 +40,19 @@
    "unique": 1
   },
   {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Active",
+   "description": "Only active staff are eligible for automatic lead routing (see crm.api.routing)."
+  },
+  {
    "fieldname": "column_break_1",
    "fieldtype": "Column Break"
   },
   {
+   "description": "Primary organizational department. Its campus must match the staff primary campus.",
    "fieldname": "department",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -47,18 +62,45 @@
    "reqd": 1
   },
   {
+   "description": "Primary campus for staff tenancy and User Permission scope. Kept aligned with the selected department.",
    "fieldname": "campus",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campus",
+   "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
+  },
+  {
+   "fieldname": "territory",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Territory",
+   "options": "CRM Territory"
   },
   {
    "fieldname": "target",
    "fieldtype": "Int",
    "label": "Monthly Target"
+  },
+  {
+   "fieldname": "last_routed_at",
+   "fieldtype": "Datetime",
+   "read_only": 1,
+   "label": "Last Routed At",
+   "description": "Set by the automatic lead-routing round robin (see crm.api.routing) each time a new lead is routed to this staff member. Do not edit directly."
+  },
+  {
+   "fieldname": "section_team_memberships",
+   "fieldtype": "Section Break",
+   "label": "Team Memberships"
+  },
+  {
+   "fieldname": "team_memberships",
+   "fieldtype": "Table",
+   "label": "Team Memberships",
+   "options": "CRM Team Membership"
   }
  ],
  "index_web_pages_for_search": 1,
@@ -71,15 +113,61 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
   },
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "Sales Manager", "share": 1, "write": 1
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
   },
   {
-   "read": 1, "report": 1, "role": "Sales User"
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Lead Sale",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Promoter"
+  },
+  {
+   "read": 1,
+"role": "Promoter"
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director"
   }
  ],
  "quick_entry": 0,

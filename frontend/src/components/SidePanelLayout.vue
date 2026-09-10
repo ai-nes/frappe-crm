@@ -429,7 +429,7 @@ import {
   interpolateTemplate,
 } from '@/utils'
 import { flt } from '@/utils/numberFormat.js'
-import { Tooltip, DateTimePicker, DatePicker, TimePicker } from 'frappe-ui'
+import { Tooltip, DateTimePicker, DatePicker, TimePicker, toast } from 'frappe-ui'
 import { useDocument } from '@/data/document'
 import { ref, computed, getCurrentInstance } from 'vue'
 
@@ -543,6 +543,15 @@ const attrs = instance?.vnode?.props ?? {}
 
 async function fieldChange(value, df) {
   if (props.preview) return
+
+  // Validate phone fields before saving
+  if (df.options === 'Phone' && value) {
+    const digits = value.replace(/\D/g, '')
+    if (digits.length !== 10) {
+      toast.error(__('{0} must be exactly 10 digits', [df.label || df.fieldname]))
+      return
+    }
+  }
 
   await triggerOnChange(df.fieldname, value)
 

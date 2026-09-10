@@ -110,11 +110,14 @@ function validateRequiredFields() {
     return __('Invalid Email Address')
   }
 
-  if (
-    _contact.doc.mobile_no &&
-    isNaN(_contact.doc.mobile_no.replace(/[-+() ]/g, ''))
-  ) {
-    return __('Mobile No. should be a number')
+  if (_contact.doc.mobile_no) {
+    if (isNaN(_contact.doc.mobile_no.replace(/[-+() ]/g, ''))) {
+      return __('Mobile No. should be a number')
+    }
+    const digits = _contact.doc.mobile_no.replace(/\D/g, '')
+    if (digits.length !== 10) {
+      return __('Mobile number must be exactly 10 digits')
+    }
   }
 
   return null
@@ -178,7 +181,7 @@ function handleContactUpdate(doc) {
 }
 
 const tabs = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_fields_layout',
   cache: ['QuickEntry', 'Contact'],
   params: { doctype: 'Contact', type: 'Quick Entry' },
   auto: true,

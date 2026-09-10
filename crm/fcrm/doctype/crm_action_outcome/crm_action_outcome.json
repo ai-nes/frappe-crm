@@ -1,0 +1,31 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "hash",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["execution", "outcome_type", "outcome_value", "success", "impact_score", "captured_by", "captured_at", "notes"],
+ "fields": [
+  {"fieldname": "execution", "fieldtype": "Link", "label": "Execution", "options": "CRM Action Execution", "reqd": 1, "read_only": 1},
+  {"fieldname": "outcome_type", "fieldtype": "Data", "label": "Outcome Type", "reqd": 1, "read_only": 1},
+  {"fieldname": "outcome_value", "fieldtype": "Small Text", "label": "Outcome Value", "reqd": 1, "read_only": 1},
+  {"fieldname": "success", "fieldtype": "Check", "label": "Success", "read_only": 1},
+  {"fieldname": "impact_score", "fieldtype": "Float", "label": "Impact Score", "read_only": 1},
+  {"fieldname": "captured_by", "fieldtype": "Link", "label": "Captured By", "options": "User", "reqd": 1, "read_only": 1},
+  {"fieldname": "captured_at", "fieldtype": "Datetime", "label": "Captured At", "reqd": 1, "read_only": 1},
+  {"fieldname": "notes", "fieldtype": "Small Text", "label": "Notes", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Action Outcome",
+ "permissions": [
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "System Manager"}
+ ],
+ "sort_field": "captured_at",
+ "sort_order": "DESC"
+}

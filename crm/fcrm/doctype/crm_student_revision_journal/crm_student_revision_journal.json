@@ -1,0 +1,24 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "field:event_id", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["event_id", "student", "event_type", "stream", "revision", "stream_sequence", "reason", "actor", "actor_scope", "occurred_at", "idempotency_key", "correlation_id", "policy_version", "schema_version", "payload"],
+ "fields": [
+  {"fieldname": "event_id", "fieldtype": "Data", "hidden": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "event_type", "fieldtype": "Select", "in_list_view": 1, "label": "Event Type", "options": "context_changed\nscore_input_changed", "read_only": 1, "reqd": 1},
+  {"fieldname": "stream", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Stream", "options": "context\nscoring", "read_only": 1, "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "in_list_view": 1, "label": "Revision", "read_only": 1, "reqd": 1},
+  {"fieldname": "stream_sequence", "fieldtype": "Int", "in_list_view": 1, "label": "Stream Sequence", "read_only": 1, "reqd": 1},
+  {"fieldname": "reason", "fieldtype": "Data", "label": "Reason", "read_only": 1, "reqd": 1},
+  {"fieldname": "actor", "fieldtype": "Link", "label": "Actor", "options": "User", "read_only": 1, "reqd": 1},
+  {"fieldname": "actor_scope", "fieldtype": "JSON", "label": "Actor Scope", "read_only": 1},
+  {"fieldname": "occurred_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Occurred At", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Key", "read_only": 1, "unique": 1},
+  {"fieldname": "correlation_id", "fieldtype": "Data", "hidden": 1, "label": "Correlation ID", "read_only": 1},
+  {"fieldname": "policy_version", "fieldtype": "Data", "hidden": 1, "label": "Policy Version", "read_only": 1, "reqd": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "reqd": 1},
+  {"fieldname": "payload", "fieldtype": "JSON", "label": "Payload", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0, "links": [], "module": "FCRM", "name": "CRM Student Revision Journal", "naming_rule": "By fieldname",
+ "owner": "Administrator", "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Sale"}, {"read": 1, "role": "Lead Sale"}, {"read": 1, "role": "Admissions Director"}],
+ "sort_field": "stream_sequence", "sort_order": "DESC", "track_changes": 1
+}

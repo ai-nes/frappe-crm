@@ -41,7 +41,7 @@ REQUIRED_COLUMNS = {
 
 @frappe.whitelist()
 def import_geography_high_schools(file_url: str):
-	frappe.only_for(["System Manager", "Sales Manager"], True)
+	frappe.only_for("System Manager", True)
 
 	if not file_url:
 		frappe.throw(_("File URL is required"))
@@ -163,20 +163,18 @@ def _import_row(data):
 	_required(data, "school_name", "Tên Trường")
 	_required(data, "region_code", "Khu Vực")
 
-	region = _upsert_by_field(
+	region = _upsert_doc(
 		"CRM Region",
-		"region_code",
-		data["region_code"],
+		{"code": data["region_code"]},
 		{
-			"region_name": data["region_code"],
-			"region_code": data["region_code"],
+			"code": data["region_code"],
+			"display_name": data["region_code"],
 		},
-		fallback_filters={"region_name": data["region_code"]},
+		fallback_filters={"code": data["region_code"]},
 	)
-	province = _upsert_by_field(
+	province = _upsert_doc(
 		"CRM Province",
-		"province_code",
-		data["province_code"],
+		{"province_code": data["province_code"]},
 		{
 			"province_name": data["province_name"],
 			"province_code": data["province_code"],
@@ -185,29 +183,41 @@ def _import_row(data):
 		},
 		fallback_filters={"province_name": data["province_name"]},
 	)
-	ward = _upsert_by_field(
+	ward = _upsert_doc(
 		"CRM Ward",
-		"ward_code",
-		data["ward_code"],
+		{"ward_code": data["ward_code"], "province": province.name},
 		{
 			"ward_name": data["ward_name"],
 			"ward_code": data["ward_code"],
 			"province": province.name,
+			"province_name": data["province_name"],
 			"ward_type": "Ward",
 		},
 		fallback_filters={"ward_name": data["ward_name"], "province": province.name},
 	)
-	_upsert_by_field(
+	school_area = frappe.db.get_value(
+		"CRM School Area", {"name": data.get("region_code"), "enabled": 1}, "name"
+	) if data.get("region_code") else None
+	_upsert_doc(
 		"CRM High School",
-		"school_code",
-		data["school_code"],
+		{
+			"school_code": data["school_code"],
+			"province": province.name,
+			"ward": ward.name,
+		},
 		{
 			"school_name": data["school_name"],
 			"school_code": data["school_code"],
+			"province": province.name,
 			"ward": ward.name,
+			"school_area": school_area,
 			"address": data.get("address"),
 		},
-		fallback_filters={"school_name": data["school_name"]},
+		fallback_filters={
+			"school_name": data["school_name"],
+			"ward": ward.name,
+			"province": province.name,
+		},
 	)
 
 
@@ -216,8 +226,8 @@ def _required(data, fieldname, label):
 		frappe.throw(_("{0} is required").format(label))
 
 
-def _upsert_by_field(doctype, fieldname, value, values, fallback_filters=None):
-	name = frappe.db.get_value(doctype, {fieldname: value}, "name")
+def _upsert_doc(doctype, filters, values, fallback_filters=None):
+	name = frappe.db.get_value(doctype, filters, "name")
 	if not name and fallback_filters:
 		name = frappe.db.get_value(doctype, fallback_filters, "name")
 

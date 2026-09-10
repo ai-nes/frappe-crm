@@ -71,8 +71,12 @@ fi
 
 echo "Installing and building CRM frontend assets..."
 cd /workspace
-yarn install --check-files
-yarn build
+if [ "${CRM_SKIP_FRONTEND_BUILD:-0}" = "1" ]; then
+    echo "Skipping frontend build (CRM_SKIP_FRONTEND_BUILD=1)"
+else
+    yarn install --check-files
+    yarn build
+fi
 cd "${BENCH_DIR}"
 sync_public_assets
 
@@ -89,8 +93,57 @@ if [ ! -d "sites/crm.localhost" ]; then
     bench --site crm.localhost set-config server_script_enabled 1
 fi
 
+# Keep the Frappe producer aligned with the only engine revision currently
+# supported by the NBA kernel.  The value can be overridden by the container
+# environment during a deliberate revision rollout.
+bench --site crm.localhost set-config crm_nba_engine_revision "${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}"
+
+# Keep the BFF and fixture reset contract in the server-side site config. The
+# browser only sees same-origin CRM methods; these values never enter Vite.
+if [ -n "${CRM_AGENTS_URL:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_url "${CRM_AGENTS_URL}"
+fi
+if [ -n "${CRM_AGENTS_API_KEY:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_api_key "${CRM_AGENTS_API_KEY}"
+fi
+if [ -n "${CRM_AGENTS_RESET_API_KEY:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_e2e_reset_api_key "${CRM_AGENTS_RESET_API_KEY}"
+fi
+if [ -n "${CRM_AGENTS_DELEGATION_KEYS_JSON:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_delegation_keys "${CRM_AGENTS_DELEGATION_KEYS_JSON}" --parse
+    bench --site crm.localhost set-config crm_agents_delegation_active_kid "${CRM_AGENTS_DELEGATION_ACTIVE_KID:-v1}"
+    bench --site crm.localhost set-config crm_agents_delegation_issuer "${CRM_AGENTS_DELEGATION_ISSUER:-http://crm.localhost:8001}"
+fi
+if [ -n "${CRM_E2E_FIXTURE_RUN_ID:-}" ]; then
+    bench --site crm.localhost set-config crm_e2e_fixture_run_id "${CRM_E2E_FIXTURE_RUN_ID}"
+fi
+if [ -n "${CRM_AGENTS_DEMO_FULL_ACCESS:-}" ]; then
+    bench --site crm.localhost set-config crm_agents_demo_full_access "${CRM_AGENTS_DEMO_FULL_ACCESS}"
+fi
+
 bench --site crm.localhost clear-cache
 bench --site crm.localhost migrate
+
+# Keep the disposable local site on the canonical CRM role catalog. This is an
+# operational seed step, not a migration patch.
+bench --site crm.localhost execute crm.operations_cutover_canonical_roles.execute || true
 bench use crm.localhost
+
+# Seed the curated demo dataset once, on first site creation. Set
+# CRM_SEED_DEMO=0 (e.g. for e2e runs) to keep the site empty. Failure here must
+# not stop the container from starting, so it is explicitly non-fatal.
+if [ "${CRM_SEED_DEMO:-1}" = "1" ] && [ ! -f "sites/crm.localhost/.demo-seeded" ]; then
+    echo "Seeding curated demo dataset (first run; set CRM_SEED_DEMO=0 to skip)..."
+    bench --site crm.localhost execute crm.demo.seed_showcase.ensure_demo_config || true
+    bench --site crm.localhost execute crm.demo.seed_showcase.ensure_local_integrity_keys || true
+    if bench --site crm.localhost execute crm.demo.seed_task.seed; then
+        bench --site crm.localhost execute crm.operations_cutover_canonical_roles.execute || true
+        bench --site crm.localhost execute crm.operations_reconcile_account_roles.apply || true
+        touch "sites/crm.localhost/.demo-seeded"
+        echo "Demo seed complete."
+    else
+        echo "WARNING: demo seed failed. Run 'task seed' after the container is up." >&2
+    fi
+fi
 
 bench start

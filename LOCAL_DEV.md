@@ -45,7 +45,9 @@ task fe
 
 Mở `http://crm.localhost:5000/crm`
 
-`task setup` = bật Docker + cài frontend deps. Container tự tạo bench, site `crm.localhost`, cài app CRM và migrate.
+`task setup` = bật Docker + cài frontend deps. Container tự tạo bench, site `crm.localhost`, cài app CRM, migrate **và seed bộ dữ liệu local liên kết** (lần đầu): 7 tỉnh, 35 trường, 6 ngành, 4 campaign, tài khoản cho các role, 20 Lead và 20 Student cùng hồ sơ tuyển sinh liên quan. Đặt `CRM_SEED_DEMO=0` trong `docker/.env` nếu muốn site rỗng.
+
+Seed lại thủ công: `task seed`. Seed idempotent, mỗi Lead chỉ có một owner trực tiếp và owner được phân bổ vòng giữa `ctvsale@gmail.com` và `sale@gmail.com`; `leadsale@gmail.com` là trưởng nhóm giám sát, không nhận Lead trực tiếp. Lệnh không prune dữ liệu đang có liên kết.
 
 ---
 
@@ -70,9 +72,9 @@ git pull
 task pull
 ```
 
-`task pull` = cài deps + migrate + clear cache + restart backend.
+`task pull` = deps + migrate + clear cache + restart backend + **seed lại demo data** (idempotent, không reinstall).
 
-Nếu biết chính xác đổi gì, có thể chạy riêng (xem bảng dưới).
+Không muốn seed lại: `task pull-fast`. Biết chính xác đổi gì thì chạy riêng (xem bảng dưới).
 
 ---
 

@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" :routeName="funnelTitle" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Students"
+        :label="funnelTitle"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -9,21 +13,25 @@
         :actions="listView.customListActions"
       />
       <Button
+        v-if="canSubmitIntake"
         variant="solid"
-        :label="__('Create')"
+        :label="__('New student')"
         iconLeft="plus"
-        @click="createStudent"
+        @click="showIntakeModal = true"
       />
     </template>
   </LayoutHeader>
   <ViewControls
+    :key="JSON.stringify([funnelStage, leadSalesContext])"
     ref="viewControls"
     v-model="students"
     v-model:loadMore="loadMore"
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
     doctype="CRM Student"
-    :filters="funnelFilters"
+    :filters="studentFilters"
+    :defaultGroupByField="leadSalesContext.defaultGroupByField"
+    :quickFilterPresets="potentialScoreFilters"
   />
   <CRMStudentsListView
     v-if="students.data && rows.length"
@@ -48,8 +56,20 @@
   />
   <EmptyState
     v-else-if="students.data && !rows.length"
-    name="CRM Students"
+    name="Students"
     :icon="EnrollmentIcon"
+  />
+  <StudentIntakeModal
+    v-if="showIntakeModal"
+    v-model="showIntakeModal"
+    @completed="handleIntakeCompleted"
+    @review-required="handleReviewRequired"
+  />
+  <DecideStudentIntakeReviewModal
+    v-if="showReviewModal && intakeReview"
+    v-model="showReviewModal"
+    :review="intakeReview"
+    @resolved="handleIntakeCompleted"
   />
 </template>
 
@@ -60,42 +80,70 @@ import LayoutHeader from '@/components/LayoutHeader.vue'
 import CRMStudentsListView from '@/components/ListViews/CRMStudentsListView.vue'
 import EmptyState from '@/components/ListViews/EmptyState.vue'
 import ViewControls from '@/components/ViewControls.vue'
+import StudentIntakeModal from '@/components/Modals/StudentIntakeModal.vue'
+import DecideStudentIntakeReviewModal from '@/components/Modals/DecideStudentIntakeReviewModal.vue'
 import EnrollmentIcon from '~icons/lucide/graduation-cap'
-import { useDoctypeModal } from '@/composables/doctypeModal'
 import { getMeta } from '@/stores/meta'
+import { usersStore } from '@/stores/users'
+import { hasAnyCapability } from '@/utils/rolePolicy'
+import { getStudentFunnelFilters } from '@/utils/studentFunnel'
+import { getLeadSalesStudentContext } from '@/utils/leadSalesStudentFilters'
+import { getSalesStudentFilters } from '@/utils/salesStudentFilters'
 import { formatDate, timeAgo } from '@/utils'
 import { useRoute, useRouter } from 'vue-router'
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
   getMeta('CRM Student')
-const { showModal } = useDoctypeModal()
 const route = useRoute()
 const router = useRouter()
+const { getCurrentUser } = usersStore()
 
+const leadSalesContext = computed(() => getLeadSalesStudentContext(route.query))
 const funnelStage = computed(() => route.query.stage || 'intake')
+const salesView = computed(() => route.query.sales_view || '')
 
 const funnelTitle = computed(() => {
-  if (funnelStage.value === 'enrolled') {
-    return __('Enrolled Students')
+  if (leadSalesContext.value.bypassFunnel) {
+    return 'Team Students'
   }
-  return __('Prospective Students')
+  if (funnelStage.value === 'enrolled') {
+    return 'Enrolled Students'
+  }
+  return 'Prospective Students'
 })
 
 const funnelFilters = computed(() => {
-  if (funnelStage.value === 'enrolled') {
-    return { enrollment_status: 'Enrolled' }
+  return getStudentFunnelFilters(funnelStage.value)
+})
+const studentFilters = computed(() => {
+  const context = leadSalesContext.value
+  return {
+    ...(context.bypassFunnel ? {} : funnelFilters.value),
+    ...getSalesStudentFilters(salesView.value),
+    ...(context.filters || {}),
   }
-  return { enrollment_status: ['!=', 'Enrolled'] }
 })
 
-watch(
-  () => route.query.stage,
-  () => {
-    students.value = {}
-    loadMore.value++
+const potentialScoreFilters = computed(() => [
+  {
+    key: 'potential-score',
+    label: __('Potential Score'),
+    fieldname: '_potential_score_tier',
+    fieldtype: 'Select',
+    options: [
+      { label: __('High Potential'), value: 'high' },
+      { label: __('Medium Potential'), value: 'medium' },
+      { label: __('Low Potential'), value: 'low' },
+    ],
+    presetValues: {
+      high: 'high',
+      medium: 'medium',
+      low: 'low',
+    },
+    after: 'enrollment_status',
   },
-)
+])
 
 const listView = ref(null)
 
@@ -104,17 +152,34 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
+const showIntakeModal = ref(false)
+const showReviewModal = ref(false)
+const intakeReview = ref(null)
+const canSubmitIntake = computed(() =>
+  hasAnyCapability(getCurrentUser(), [
+    'student.execute',
+    'team.oversee',
+    'admissions.oversee',
+    'system.configure',
+  ]),
+)
 
-function createStudent() {
-  showModal({
-    doctype: 'CRM Student',
-    title: __('New CRM Student'),
-    callbacks: {
-      afterInsert: (doc) => {
-        router.push({ name: 'CRM Student', params: { crmStudentId: doc.name } })
-      },
-    },
-  })
+function handleReviewRequired(review) {
+  intakeReview.value = review
+  showReviewModal.value = true
+}
+
+function handleIntakeCompleted(result) {
+  students.value?.reload?.()
+  const student =
+    result?.student ||
+    result?.student_id ||
+    result?.student_name ||
+    result?.case_name
+  if (student) {
+    showIntakeModal.value = false
+    router.push({ name: 'CRM Student', params: { crmStudentId: student } })
+  }
 }
 
 const rows = computed(() => {

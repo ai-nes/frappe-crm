@@ -8,26 +8,6 @@
       </Breadcrumbs>
     </template>
     <template v-if="!errorTitle" #right-header>
-      <CustomActions
-        v-if="document._actions?.length"
-        :actions="document._actions"
-      />
-      <Dropdown
-        v-if="doc.stage"
-        :options="stageOptions"
-        placement="right"
-      >
-        <template #default="{ open }">
-          <Button
-            :label="doc.stage"
-            :iconRight="open ? 'chevron-up' : 'chevron-down'"
-          >
-            <template #prefix>
-              <IndicatorIcon :class="stageColor(doc.stage)" />
-            </template>
-          </Button>
-        </template>
-      </Dropdown>
     </template>
   </LayoutHeader>
   <div v-if="doc.name" class="flex h-full overflow-hidden">
@@ -38,6 +18,7 @@
     >
       <template #tab-panel>
         <Activities
+          v-if="!['Interactions', 'Scoring', 'Actions'].includes(tabs[tabIndex]?.name)"
           ref="activities"
           v-model:reload="reload"
           v-model:tabIndex="tabIndex"
@@ -45,6 +26,22 @@
           :docname="crmContactId"
           :tabs="tabs"
           @afterSave="() => sections.reload()"
+        />
+        <ActionsPanel
+          v-else-if="tabs[tabIndex]?.name === 'Actions'"
+          doctype="CRM Contact"
+          :name="crmContactId"
+          :student="doc.student"
+        />
+        <InteractionScoreArea
+          v-else-if="tabs[tabIndex]?.name === 'Interactions'"
+          :contact="doc"
+          type="interactions"
+        />
+        <InteractionScoreArea
+          v-else
+          :contact="doc"
+          type="scores"
         />
       </template>
     </Tabs>
@@ -59,6 +56,7 @@
         v-if="sections.data"
         class="flex flex-1 flex-col justify-between overflow-hidden"
       >
+        <ContactConversionHistory :contact="crmContactId" />
         <SidePanelLayout
           :sections="sections.data"
           doctype="CRM Contact"
@@ -80,27 +78,25 @@
 import ErrorPage from '@/components/ErrorPage.vue'
 import Icon from '@/components/Icon.vue'
 import Resizer from '@/components/Resizer.vue'
-import IndicatorIcon from '@/components/Icons/IndicatorIcon.vue'
 import LayoutHeader from '@/components/LayoutHeader.vue'
 import Activities from '@/components/Activities/Activities.vue'
 import ActivityIcon from '@/components/Icons/ActivityIcon.vue'
 import DetailsIcon from '@/components/Icons/DetailsIcon.vue'
-import TaskIcon from '@/components/Icons/TaskIcon.vue'
+import ActionsPanel from '@/components/StudentDecision/ActionsPanel.vue'
 import NoteIcon from '@/components/Icons/NoteIcon.vue'
 import AttachmentIcon from '@/components/Icons/AttachmentIcon.vue'
 import SidePanelLayout from '@/components/SidePanelLayout.vue'
-import CustomActions from '@/components/CustomActions.vue'
+import InteractionScoreArea from '@/components/Activities/InteractionScoreArea.vue'
+import ContactConversionHistory from '@/components/StudentConversion/ContactConversionHistory.vue'
 import { copyToClipboard } from '@/utils'
 import { getSettings } from '@/stores/settings'
 import { getMeta } from '@/stores/meta'
 import { useDocument } from '@/data/document'
 import {
   createResource,
-  Dropdown,
   Tabs,
   Breadcrumbs,
   usePageMeta,
-  toast,
 } from 'frappe-ui'
 import { ref, computed, watch } from 'vue'
 import { useActiveTabManager } from '@/composables/useActiveTabManager'
@@ -136,7 +132,7 @@ watch(error, (err) => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: __('CRM Contacts'), route: { name: 'CRM Contacts' } }]
+  let items = [{ label: __('Contacts'), route: { name: 'CRM Contacts' } }]
   items.push({
     label: doc.value?.full_name || props.crmContactId,
     route: { name: 'CRM Contact', params: { crmContactId: props.crmContactId } },
@@ -151,35 +147,12 @@ const title = computed(() => {
 
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
-const STAGE_COLORS = {
-  Interested: 'text-blue-500',
-  Qualified: 'text-orange-500',
-  Enrolled: 'text-green-500',
-  Lost: 'text-gray-500',
-}
-
-function stageColor(stage) {
-  return STAGE_COLORS[stage] || 'text-gray-500'
-}
-
-const stageOptions = computed(() =>
-  ['Interested', 'Qualified', 'Enrolled', 'Lost'].map((s) => ({
-    label: s,
-    onClick: () => updateStage(s),
-  })),
-)
-
-function updateStage(stage) {
-  doc.value.stage = stage
-  document.save.submit(null, {
-    onError: (err) => toast.error(err.messages?.[0] || __('Error updating stage')),
-  })
-}
-
 const tabs = computed(() => [
-  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
-  { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
+  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
+  { name: 'Interactions', label: __('Interactions'), icon: ActivityIcon },
+  { name: 'Scoring', label: __('Potential Score'), icon: ActivityIcon },
+  { name: 'Actions', label: __('Actions'), icon: ActivityIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
 ])
@@ -187,9 +160,37 @@ const tabs = computed(() => [
 const { tabIndex } = useActiveTabManager(tabs, 'lastCRMContactTab')
 
 const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_sidepanel_sections',
   cache: ['sidePanelSections', 'CRM Contact'],
   params: { doctype: 'CRM Contact' },
   auto: true,
+  transform: (data) => {
+    const protectedFields = new Set([
+      'student',
+      'student_identity',
+      'enrollment_status',
+      'lifecycle_stage',
+      'assigned_to',
+      'owner_staff',
+      'owning_team',
+      'admission_year',
+      'branch',
+      'first_contact_time',
+      'sla_status',
+      'sla_started_at',
+      'next_follow_up',
+      'source',
+      'platform',
+      'crm_campaign',
+      'crm_event',
+    ])
+    return data.map((section) => ({
+      ...section,
+      columns: section.columns?.map((column) => ({
+        ...column,
+        fields: column.fields?.filter((field) => !protectedFields.has(field.fieldname)) || [],
+      })) || [],
+    }))
+  },
 })
 </script>

@@ -2,7 +2,7 @@
  "actions": [],
  "allow_import": 1,
  "allow_rename": 1,
- "autoname": "field:province_code",
+ "autoname": "field:province_name",
  "creation": "2026-05-30 00:00:00.000000",
  "default_view": "List",
  "doctype": "DocType",
@@ -13,7 +13,8 @@
   "province_name",
   "region",
   "city_type",
-  "import_source_id"
+  "import_source_id",
+  "previous_names"
  ],
  "fields": [
   {
@@ -43,6 +44,7 @@
    "fieldname": "city_type",
    "fieldtype": "Select",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Type",
    "options": "Centrally Controlled City\nProvince"
   },
@@ -51,6 +53,13 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Import Source ID"
+  },
+  {
+   "fieldname": "previous_names",
+   "fieldtype": "Table",
+   "label": "Previous Names",
+   "options": "CRM Province Former Name",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
@@ -62,48 +71,19 @@
  "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
-  },
-  {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
-   "read": 1,
-   "report": 1,
-   "role": "Sales User",
-   "share": 1,
-   "write": 1
-  }
+   {"role":"Admissions Director","read":1,"export":1},
+   {"role":"CTV Sale","read":1},
+   {"role":"Lead Sale","read":1},
+   {"role":"Marketing","read":1},
+   {"role":"Sale","read":1},
+   {"role":"System Manager","read":1,"write":1,"create":1,"delete":1,"export":1}
  ],
  "quick_entry": 1,
  "row_format": "Dynamic",
  "sort_field": "province_name",
  "sort_order": "ASC",
  "states": [],
+ "search_fields": "province_name,province_code",
  "title_field": "province_name",
  "translated_doctype": 1
 }

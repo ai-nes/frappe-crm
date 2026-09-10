@@ -1,5 +1,5 @@
 <template>
-  <div class="flex-1 overflow-y-auto p-3">
+  <div class="min-h-0 flex-1 overflow-auto p-3">
     <GridLayout
       v-if="items.length > 0"
       class="h-fit w-full"
@@ -30,6 +30,7 @@
               :index="index"
               :item="items[index]"
               :editing="editing"
+              @refresh="$emit('refresh')"
             />
           </div>
           <div
@@ -50,6 +51,8 @@
 </template>
 <script setup>
 import { GridLayout } from 'frappe-ui'
+
+defineEmits(['refresh'])
 
 defineProps({
   editing: { type: Boolean, default: false },

@@ -6,7 +6,6 @@ from frappe import _
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.model.document import Document
 
-from crm.demo.api import create_demo_data
 from crm.install import after_install
 
 
@@ -20,7 +19,7 @@ class FCRMSettings(Document):
 		from frappe.desk.doctype.event_notifications.event_notifications import EventNotifications
 		from frappe.types import DF
 
-		from crm.fcrm.doctype.crm_dropdown_item.crm_dropdown_item import CRMDropdownItem
+		from crm.fcrm.doctype.dropdown_item.dropdown_item import DropdownItem
 
 		access_key: DF.Data | None
 		all_day_event_notifications: DF.Table[EventNotifications]
@@ -30,7 +29,7 @@ class FCRMSettings(Document):
 		brand_name: DF.Data | None
 		currency: DF.Link | None
 		default_calendar_view: DF.Literal["Daily", "Weekly", "Monthly"]
-		dropdown_items: DF.Table[CRMDropdownItem]
+		dropdown_items: DF.Table[DropdownItem]
 		event_notifications: DF.Table[EventNotifications]
 		favicon: DF.Attach | None
 		service_provider: DF.Literal[
@@ -42,10 +41,6 @@ class FCRMSettings(Document):
 	@frappe.whitelist()
 	def restore_defaults(self, force: bool = False):
 		after_install(force)
-
-	@frappe.whitelist()
-	def restore_demo_data(self):
-		create_demo_data()
 
 	def validate(self):
 		self.do_not_allow_to_delete_if_standard()
@@ -81,6 +76,9 @@ def get_standard_dropdown_items():
 
 def after_migrate():
 	sync_table("dropdown_items", "standard_dropdown_items")
+	if not frappe.db.get_single_value("System Settings", "language"):
+		frappe.db.set_single_value("System Settings", "language", "vi")
+
 
 
 def sync_table(key, hook):

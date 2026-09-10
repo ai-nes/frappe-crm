@@ -270,7 +270,7 @@
 
     async function loadSocialProviders() {
       try {
-        const res = await fetch('/api/method/crm.api.auth.oauth_providers');
+        const res = await fetch('/api/method/crm.api.google_auth.providers?redirect_to=' + encodeURIComponent(redirectTo));
         const data = await res.json();
         const providers = data.message || [];
         if (!providers.length) return;

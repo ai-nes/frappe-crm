@@ -28,7 +28,7 @@ def validate_twilio_request(args, require_application_sid: bool = False):
 
 @frappe.whitelist()
 def is_enabled():
-	return frappe.db.get_single_value("CRM Twilio Settings", "enabled")
+	return frappe.db.get_single_value("Twilio Settings", "enabled")
 
 
 @frappe.whitelist()
@@ -38,7 +38,7 @@ def generate_access_token():
 	if not twilio:
 		return {}
 
-	from_number = frappe.db.get_value("CRM Telephony Agent", frappe.session.user, "twilio_number")
+	from_number = frappe.db.get_value("Telephony Agent", frappe.session.user, "twilio_number")
 	if not from_number:
 		return {
 			"ok": False,
@@ -57,7 +57,7 @@ def voice(**kwargs):
 	def _get_caller_number(caller):
 		identity = caller.replace("client:", "").strip()
 		user = Twilio.emailid_from_identity(identity)
-		return frappe.db.get_value("CRM Telephony Agent", user, "twilio_number")
+		return frappe.db.get_value("Telephony Agent", user, "twilio_number")
 
 	args = frappe._dict(kwargs)
 	twilio = validate_twilio_request(args, require_application_sid=True)
@@ -86,7 +86,7 @@ def twilio_incoming_call_handler(**kwargs):
 def create_call_log(call_details: TwilioCallDetails):
 	details = call_details.to_dict()
 
-	call_log = frappe.get_doc({**details, "doctype": "CRM Call Log", "telephony_medium": "Twilio"})
+	call_log = frappe.get_doc({**details, "doctype": "Call Log", "telephony_medium": "Twilio"})
 
 	# link call log with the resolved CRM/contact record
 	contact_number = details.get("from") if details.get("type") == "Incoming" else details.get("to")
@@ -103,7 +103,7 @@ def link(contact_number, call_log):
 		doctype = "Contact"
 		docname = contact.get("name")
 		if contact.get("crm_contact"):
-			doctype = "CRM Contact"
+			doctype = "CRM Student"
 			docname = contact.get("crm_contact")
 		call_log.link_with_reference_doc(doctype, docname)
 
@@ -111,12 +111,12 @@ def link(contact_number, call_log):
 def update_call_log(call_sid, status=None):
 	"""Update call log status."""
 	twilio = Twilio.connect()
-	if not (twilio and frappe.db.exists("CRM Call Log", call_sid)):
+	if not (twilio and frappe.db.exists("Call Log", call_sid)):
 		return
 
 	try:
 		call_details = twilio.get_call_info(call_sid)
-		call_log = frappe.get_doc("CRM Call Log", call_sid)
+		call_log = frappe.get_doc("Call Log", call_sid)
 		call_log.status = TwilioCallDetails.get_call_status(status or call_details.status)
 		call_log.duration = call_details.duration
 		call_log.start_time = get_datetime_from_timestamp(call_details.start_time)
@@ -130,7 +130,7 @@ def update_call_log(call_sid, status=None):
 
 
 def get_twilio_settings():
-	return frappe.get_single("CRM Twilio Settings")
+	return frappe.get_single("Twilio Settings")
 
 
 @frappe.whitelist(allow_guest=True)
@@ -145,7 +145,7 @@ def update_recording_info(**kwargs):
 		frappe.throw(_("Call log not found"), frappe.DoesNotExistError)
 
 	try:
-		frappe.db.set_value("CRM Call Log", call_sid, "recording_url", recording_url)
+		frappe.db.set_value("Call Log", call_sid, "recording_url", recording_url)
 		frappe.db.commit()
 	except Exception as exc:
 		frappe.log_error(title=_("Failed to capture Twilio recording"))

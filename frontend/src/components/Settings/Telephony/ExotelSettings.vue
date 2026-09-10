@@ -137,8 +137,8 @@ import { computed } from 'vue'
 const emit = defineEmits(['updateStep'])
 
 const { document: exotel } = useDocument(
-  'CRM Exotel Settings',
-  'CRM Exotel Settings',
+  'Exotel Settings',
+  'Exotel Settings',
 )
 
 function enable() {

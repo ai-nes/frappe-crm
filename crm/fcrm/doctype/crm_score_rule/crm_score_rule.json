@@ -1,0 +1,71 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "creation": "2026-06-12 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["rule_kind", "signal", "is_active", "column_break_1", "base_points", "max_points", "penalty_amount", "cooldown_days", "max_penalties", "max_days", "multiplier", "tier_label"],
+ "fields": [
+  {"fieldname": "rule_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Rule Kind", "options": "positive\nnegative\ntime_decay", "default": "positive", "reqd": 1},
+  {
+   "fieldname": "signal",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Signal",
+   "options": "CRM Score Signal"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "base_points",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Points"
+  },
+  {
+   "default": "0",
+   "fieldname": "max_points",
+   "fieldtype": "Float",
+   "label": "Max Points"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Active"
+  },
+  {"default": "0", "fieldname": "penalty_amount", "fieldtype": "Float", "label": "Penalty Points"},
+  {"default": "0", "fieldname": "cooldown_days", "fieldtype": "Int", "label": "Cooldown Days"},
+  {"default": "0", "fieldname": "max_penalties", "fieldtype": "Int", "label": "Max Penalties"},
+  {"default": "0", "fieldname": "max_days", "fieldtype": "Int", "label": "Max Days"},
+  {"default": "1.0", "fieldname": "multiplier", "fieldtype": "Float", "label": "Multiplier"},
+  {"fieldname": "tier_label", "fieldtype": "Data", "label": "Tier Label"}
+ ],
+ "index_web_pages_for_search": 0,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-13 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Score Rule",
+ "owner": "Administrator",
+ "permissions": [
+  {"read": 1, "role": "Administrator"},
+  {"read": 1, "role": "System Manager"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Sale"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "translated_doctype": 1
+}

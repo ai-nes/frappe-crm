@@ -1,0 +1,21 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["requester", "idempotency_key", "request_fingerprint", "parent_run_type", "parent_run", "expires_at"],
+ "fields": [
+  {"fieldname": "requester", "fieldtype": "Link", "label": "Requester", "options": "User", "read_only": 1, "reqd": 1},
+  {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "request_fingerprint", "fieldtype": "Data", "label": "Request Fingerprint", "read_only": 1, "reqd": 1},
+  {"fieldname": "parent_run_type", "fieldtype": "Select", "label": "Parent Run Type", "options": "CRM Student Analysis Run\nCRM School Analysis Run", "read_only": 1, "reqd": 1},
+  {"fieldname": "parent_run", "fieldtype": "Dynamic Link", "label": "Parent Run", "options": "parent_run_type", "read_only": 1, "reqd": 1},
+  {"fieldname": "expires_at", "fieldtype": "Datetime", "label": "Expires At", "read_only": 1}
+ ],
+ "module": "FCRM",
+ "name": "CRM Analysis Request Receipt",
+ "naming_rule": "Autoincrement",
+ "permissions": [{"read": 1, "role": "System Manager"}],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

@@ -80,8 +80,11 @@
           :options="[
             { label: __('All'), value: 'All' },
             { label: __('Admin'), value: 'System Manager' },
-            { label: __('Sales Manager'), value: 'Sales Manager' },
-            { label: __('Sales User'), value: 'Sales User' },
+            { label: __('Sale'), value: 'Sale' },
+            { label: __('Marketing'), value: 'Marketing' },
+            { label: __('Promoter'), value: 'Promoter' },
+            { label: __('Lead Sale'), value: 'Lead Sale' },
+            { label: __('Admissions Director'), value: 'Admissions Director' },
           ]"
         />
       </div>
@@ -101,6 +104,12 @@
                 <div class="text-p-sm text-ink-gray-5">
                   {{ user.name }}
                 </div>
+                <div
+                  v-if="roleStateLabel(user.crm_role_state)"
+                  class="text-p-xs text-ink-amber-6"
+                >
+                  {{ __(roleStateLabel(user.crm_role_state)) }}
+                </div>
               </div>
             </div>
             <div class="flex gap-2 items-center flex-row-reverse">
@@ -116,21 +125,21 @@
                 placement="right"
               />
               <Tooltip
-                v-if="isManager() && user.role == 'System Manager'"
+                v-if="canManageUsers() && user.role == 'System Manager'"
                 :text="__('Cannot change role of user with Admin access')"
               >
                 <Button :label="__('Admin')" icon-left="shield" />
               </Tooltip>
               <Dropdown
-                v-else
+                v-else-if="canManageUsers()"
                 :options="getDropdownOptions(user)"
                 :button="{
-                  label: roleMap[user.role],
+                  label: roleMap[user.role] || user.role,
                   iconRight: 'chevron-down',
                   iconLeft:
                     user.role === 'System Manager'
                       ? 'shield'
-                      : user.role === 'Sales Manager'
+                      : user.role === 'Lead Sale'
                         ? 'briefcase'
                         : 'user-check',
                 }"
@@ -178,8 +187,13 @@ import {
 } from 'frappe-ui'
 import { ref, computed, onMounted } from 'vue'
 import { ConfirmDelete } from '../../utils'
+import {
+  canonicalRoleOptions,
+  canManageRoles,
+  roleStateLabel,
+} from '@/utils/rolePolicy'
 
-const { users, isAdmin, isManager } = usersStore()
+const { users, getCurrentUser } = usersStore()
 
 const showAddExistingModal = ref(false)
 const searchRef = ref(null)
@@ -188,9 +202,15 @@ const currentRole = ref('All')
 
 const roleMap = {
   'System Manager': __('Admin'),
-  'Sales Manager': __('Sales Manager'),
-  'Sales User': __('Sales User'),
+  Sale: __('Sale'),
+  Sales: __('Sales (legacy)'),
+  'CTV-Sale': __('Sales (legacy)'),
+  Marketing: __('Marketing'),
+  'Lead Sale': __('Lead Sale'),
+  'Admissions Director': __('Admissions Director'),
 }
+
+const canManageUsers = () => canManageRoles(getCurrentUser())
 
 const usersList = computed(() => {
   let filteredUsers =
@@ -221,42 +241,21 @@ function getMoreOptions(user) {
 }
 
 function getDropdownOptions(user) {
-  let options = [
-    {
-      label: __('Admin'),
-      component: () =>
-        DropdownOption({
-          option: __('Admin'),
-          icon: 'shield',
-          selected: user.role === 'System Manager',
-        }),
-      onClick: () => updateRole(user, 'System Manager'),
-      condition: () => isAdmin(),
-    },
-    {
-      label: __('Sales Manager'),
-      component: () =>
-        DropdownOption({
-          option: __('Sales Manager'),
-          icon: 'briefcase',
-          selected: user.role === 'Sales Manager',
-        }),
-      onClick: () => updateRole(user, 'Sales Manager'),
-      condition: () => isAdmin(),
-    },
-    {
-      label: __('Sales User'),
-      component: () =>
-        DropdownOption({
-          option: __('Sales User'),
-          icon: 'user-check',
-          selected: user.role === 'Sales User',
-        }),
-      onClick: () => updateRole(user, 'Sales User'),
-    },
-  ]
-
-  return options.filter((option) => option.condition?.() || true)
+  return canonicalRoleOptions.map((role) => ({
+    label: __(role.value === 'System Manager' ? 'Admin' : role.label),
+    component: () =>
+      DropdownOption({
+        option: __(role.value === 'System Manager' ? 'Admin' : role.label),
+        icon:
+          role.value === 'System Manager'
+            ? 'shield'
+            : role.value === 'Marketing'
+              ? 'user-check'
+              : 'briefcase',
+        selected: user.role === role.value,
+      }),
+    onClick: () => updateRole(user, role.value),
+  }))
 }
 
 function updateRole(user, newRole) {
@@ -270,7 +269,7 @@ function updateRole(user, newRole) {
       toast.success(
         __('{0} has been granted {1} access', [
           user.full_name,
-          roleMap[newRole],
+          roleMap[newRole] || newRole,
         ]),
       )
       users.reload()

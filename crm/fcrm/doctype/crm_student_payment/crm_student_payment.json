@@ -1,0 +1,32 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "transaction_key", "application", "student", "payment_reference", "payment_type", "amount", "currency", "status", "received_at", "invoice_date", "payment_method", "recipient_account", "business_period", "timezone", "source_system", "source_run", "recorded_at", "revision", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"default": "PAY-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "PAY-.YYYY.-"},
+  {"fieldname": "transaction_key", "fieldtype": "Data", "hidden": 1, "label": "Transaction Key", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "application", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Application", "options": "CRM Admission Application", "reqd": 1},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "payment_reference", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Payment Reference", "reqd": 1},
+  {"default": "enrollment_fee", "fieldname": "payment_type", "fieldtype": "Select", "in_list_view": 1, "label": "Payment Type", "options": "booking_fee\nenrollment_fee\nsupplemental_enrollment_fee\ntuition_fee\nrefund\nother", "reqd": 1},
+  {"fieldname": "amount", "fieldtype": "Currency", "in_list_view": 1, "label": "Amount", "reqd": 1},
+  {"default": "VND", "fieldname": "currency", "fieldtype": "Data", "in_list_view": 1, "label": "Currency", "reqd": 1},
+  {"default": "Pending", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Pending\nReceived\nFailed\nRefunded", "read_only": 1, "reqd": 1},
+  {"fieldname": "received_at", "fieldtype": "Datetime", "in_list_view": 1, "label": "Received At"},
+  {"fieldname": "invoice_date", "fieldtype": "Date", "in_list_view": 1, "label": "Invoice Date"},
+  {"fieldname": "payment_method", "fieldtype": "Data", "in_list_view": 1, "label": "Payment Method"},
+  {"fieldname": "recipient_account", "fieldtype": "Data", "label": "Recipient Account", "permlevel": 1},
+  {"fieldname": "business_period", "fieldtype": "Date", "in_list_view": 1, "label": "Business Period", "reqd": 1},
+  {"fieldname": "timezone", "fieldtype": "Data", "label": "Timezone", "default": "Asia/Ho_Chi_Minh", "reqd": 1},
+  {"fieldname": "source_system", "fieldtype": "Data", "label": "Source System", "reqd": 1},
+  {"fieldname": "source_run", "fieldtype": "Data", "label": "Source Run", "reqd": 1},
+  {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "1", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [{"fields": ["application", "status"], "name": "crm_student_payment_application_status_idx", "unique": 0}, {"fields": ["transaction_key", "currency", "revision"], "name": "crm_student_payment_transaction_idx", "unique": 0}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Student Payment", "naming_rule": "Naming Series", "naming_series_options": "PAY-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
+ "row_format": "Dynamic", "search_fields": "application,student,payment_reference,status", "sort_field": "received_at", "sort_order": "DESC"
+}

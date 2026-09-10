@@ -1,0 +1,87 @@
+{
+  "context": {
+    "academic": {"gpa": null, "quality": "unknown", "source_revision": "none"},
+    "application_state": {
+      "completeness": "partial",
+      "missing": ["required_documents"],
+      "missing_count": 1,
+      "source_revision": "2026-09-04 01:00:00"
+    },
+    "blockers": ["missing_document"],
+    "contactability": {"channels": ["CALL", "EMAIL", "MESSAGE"], "consent": true, "recipient_bound": true},
+    "deadlines": [{"at": "2026-09-04T02:00:00", "kind": "application"}],
+    "engagement": {"last_contact_days": 0, "state": "cooling"},
+    "evidence_refs": [
+      "student-context:revision:42:intent",
+      "student-context:revision:42:stage",
+      "score-input:revision:42:score"
+    ],
+    "intent": {"polarity": "positive", "type": "tuition"},
+    "lifecycle": {"stage": "Qualified"},
+    "owner_capacity": {"open_tasks": null, "owner": null},
+    "parent_authority": {"valid": false},
+    "recent_outcomes": {},
+    "signal_quality": {"conflicts": [], "freshness": "current", "missingness": []},
+    "work_in_flight": ["CALL"]
+  },
+  "contract_version": "nba-evaluation-v1",
+  "eligible_action_set": {
+    "actions": [{
+      "action_code": "CALL",
+      "action_digest": "172d9af92a6a7afbbac8ce235c366286a38d49ff53bcd7e6e43c9cb40483e65c",
+      "action_id": "ACT-CALL",
+      "action_revision": 3,
+      "addresses_opportunities": ["ENGAGE_OR_REENGAGE"],
+      "allowed_actors": ["Sale"],
+      "allowed_channels": ["CALL"],
+      "conflict_keys": ["action:CALL"],
+      "cost_band": "unknown",
+      "default_parameters": {},
+      "effort_band": "unknown",
+      "execution_parameter_schema": {},
+      "group": "contact",
+      "hard_constraints": {"academic": {}, "requires_parent_authority": false},
+      "metadata_state": "provisional",
+      "normalized_timing_domain": {},
+      "purpose": "Re-engage the student about tuition.",
+      "risk_band": "unknown"
+    }],
+    "exclusions": [],
+    "set_digest": "22cd04e50e1258deaa44f04d7391908cea8034cc41c46b2012aca189f0c6bcaa",
+    "set_revision": 3
+  },
+  "evaluation_clock": "2026-09-04T02:00:00",
+  "evaluation_id": "NBAEVAL-f25b26cf3578c4fd",
+  "evaluation_key": "f25b26cf3578c4fdf1e7675e248918963a7ba669b96993705bc5b1aa0d494578",
+  "policies": {
+    "decision_digest": "5f583345a805d72e4bd19ff7fb898bc27d04f512fc6e673dbd51ac6105ac57be",
+    "decision_policy": {
+      "component_weights": {"effectiveness_index": 0.3, "opportunity_fit": 0.45, "urgency": 0.25},
+      "confidence_floor": 0.45,
+      "contact_pressure_penalty": 0.15,
+      "cooling_contact_days": 5,
+      "deadline_horizon_days": 30,
+      "diversity_group_penalty": 0.05,
+      "recent_contact_days": 2,
+      "recommendation_ttl_seconds": 604800,
+      "redundancy_penalty": 0.1,
+      "revision": "nba-decision-policy-r1",
+      "score_threshold": 0.35,
+      "top_n_cap": 3
+    },
+    "decision_revision": "nba-decision-policy-r1",
+    "eligibility_digest": "acb4c8b644214f034da0756305160330c104727d1ac02287842a1001c0396bfc",
+    "eligibility_revision": "eligibility-reason-codes-v1",
+    "library_digest": "22cd04e50e1258deaa44f04d7391908cea8034cc41c46b2012aca189f0c6bcaa",
+    "library_revision": "action-library-r3",
+    "timing_digest": "015b5bc03e0ac445d7f7f95f5622b0ab35053fed3e646437adaf35b1cce97cf9",
+    "timing_revisions": []
+  },
+  "student": {
+    "context_digest": "78c8bc1e6737fbb44bdb17b7d2bae9e307d20d9cc4174f053f0bb100a1d4df54",
+    "context_revision": 42,
+    "observed_at": "2026-09-04T02:00:00",
+    "student_id": "ENR-2026-00001",
+    "timezone": "Asia/Ho_Chi_Minh"
+  }
+}

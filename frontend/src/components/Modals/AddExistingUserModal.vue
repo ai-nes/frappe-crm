@@ -66,31 +66,26 @@ import { validateEmail } from '@/utils'
 import { usersStore } from '@/stores/users'
 import { createResource, toast } from 'frappe-ui'
 import { ref, computed } from 'vue'
+import {
+  canonicalRoleOptions,
+  canManageRoles,
+  roleOptionFor,
+} from '@/utils/rolePolicy'
 
-const { users, isAdmin } = usersStore()
+const { users, getCurrentUser } = usersStore()
 
 const show = defineModel({ type: Boolean })
 
 const newUsers = ref([])
-const role = ref('Sales User')
+const role = ref('Sale')
 
-const description = computed(() => {
-  return {
-    'System Manager':
-      'Can manage all aspects of the CRM, including user management, customizations and settings.',
-    'Sales Manager':
-      'Can manage and invite new users, and create public & private views (reports).',
-    'Sales User':
-      'Can work with leads and deals and create private views (reports).',
-  }[role.value]
-})
+const description = computed(() => roleOptionFor(role.value)?.description)
 
 const roleOptions = computed(() => {
-  return [
-    { value: 'Sales User', label: __('Sales User') },
-    ...(isAdmin() ? [{ value: 'Sales Manager', label: __('Manager') }] : []),
-    ...(isAdmin() ? [{ value: 'System Manager', label: __('Admin') }] : []),
-  ]
+  return canonicalRoleOptions.filter(
+    (option) =>
+      option.value !== 'System Manager' || canManageRoles(getCurrentUser()),
+  )
 })
 
 const addNewUser = createResource({

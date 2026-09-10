@@ -117,7 +117,7 @@
       >
         <div class="flex flex-col">
           <div class="text-p-base font-medium text-ink-gray-7 truncate">
-            {{ __('CRM Personal Mobile No.') }}
+            {{ __('Personal Mobile No.') }}
           </div>
           <div class="text-p-sm text-ink-gray-5">
             {{
@@ -220,7 +220,7 @@ const { getUser, isManager } = usersStore()
 const isNewDoc = ref(false)
 
 const { document: telephonyAgent } = useDocument(
-  'CRM Telephony Agent',
+  'Telephony Agent',
   getUser().name,
   {
     onError: (err) => {
@@ -252,7 +252,7 @@ function update() {
   if (isNewDoc.value) {
     insertResource.submit({
       doc: {
-        doctype: 'CRM Telephony Agent',
+        doctype: 'Telephony Agent',
         user: getUser().name,
         ...telephonyAgent.doc,
       },

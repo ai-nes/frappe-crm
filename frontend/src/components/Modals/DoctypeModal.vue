@@ -7,8 +7,8 @@
             <h3 class="text-2xl font-semibold leading-6 text-ink-gray-9">
               {{
                 editMode
-                  ? __('Edit ' + (doctypeTitle || doctype))
-                  : __('Create ' + (doctypeTitle || doctype))
+                  ? __('Edit {0}', [doctypeTitle || doctype])
+                  : __('Create {0}', [doctypeTitle || doctype])
               }}
             </h3>
           </div>
@@ -94,7 +94,7 @@ const { document, scripts, triggerOnRender, triggerOnBeforeCreate } =
 const doc = computed(() => document.doc || {})
 
 const layout = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_fields_layout',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_fields_layout',
   cache: ['Quick Entry', props.doctype],
   params: { doctype: props.doctype, type: 'Quick Entry' },
   auto: true,
@@ -127,6 +127,22 @@ const _create = createResource({
 
 async function create() {
   await triggerOnBeforeCreate?.()
+
+  // Validate phone fields (options: 'Phone') — must be exactly 10 digits
+  const allFields = layout.data?.flatMap((tab) =>
+    tab.sections?.flatMap((section) =>
+      section.columns?.flatMap((col) => col.fields || []) || [],
+    ) || [],
+  ) || []
+  for (const field of allFields) {
+    if (field.options === 'Phone' && document.doc?.[field.fieldname]) {
+      const digits = document.doc[field.fieldname].replace(/\D/g, '')
+      if (digits.length !== 10) {
+        error.value = __('{0} phải có đúng 10 số', [field.label || field.fieldname])
+        return
+      }
+    }
+  }
 
   _create.submit({
     doc: {

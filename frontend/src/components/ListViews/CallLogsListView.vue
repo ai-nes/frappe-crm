@@ -37,7 +37,7 @@
       v-slot="{ idx, column, item }"
       class="mx-3 sm:mx-5"
       :rows="rows"
-      doctype="CRM Call Log"
+      doctype="Call Log"
     >
       <ListRowItem :item="item" :align="column.align" class="overflow-hidden">
         <template #prefix>
@@ -169,7 +169,7 @@
   <ListBulkActions
     ref="listBulkActionsRef"
     v-model="list"
-    doctype="CRM Call Log"
+    doctype="Call Log"
     :options="{
       hideEdit: true,
       hideAssign: true,

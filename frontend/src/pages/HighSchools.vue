@@ -8,49 +8,54 @@
         v-if="listView?.customListActions"
         :actions="listView.customListActions"
       />
-      <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
-      <Button
-        variant="solid"
-        :label="__('Create')"
-        iconLeft="plus"
-        @click="createHighSchool"
-      />
+      <template v-if="canConfigure">
+        <GeographyImportButton variant="subtle" @imported="reloadHighSchools" />
+        <Button
+          variant="solid"
+          :label="__('Create')"
+          iconLeft="plus"
+          @click="createHighSchool"
+        />
+      </template>
     </template>
   </LayoutHeader>
-  <ViewControls
-    ref="viewControls"
-    v-model="highSchools"
-    v-model:loadMore="loadMore"
-    v-model:resizeColumn="triggerResize"
-    v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM High School"
-  />
-  <HighSchoolsListView
-    v-if="highSchools.data && rows.length"
-    ref="listView"
-    v-model="highSchools.data.page_length_count"
-    v-model:list="highSchools"
-    :rows="rows"
-    :columns="columns"
-    :options="{
-      showTooltip: false,
-      resizeColumn: true,
-      rowCount: highSchools.data.row_count,
-      totalCount: highSchools.data.total_count,
-    }"
-    @loadMore="() => loadMore++"
-    @columnWidthUpdated="() => triggerResize++"
-    @updatePageCount="(count) => (updatedPageCount = count)"
-    @applyFilter="(data) => viewControls.applyFilter(data)"
-    @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
-    @likeDoc="(data) => viewControls.likeDoc(data)"
-    @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
-  />
-  <EmptyState
-    v-else-if="highSchools.data && !rows.length"
-    name="High Schools"
-    :icon="SchoolIcon"
-  />
+  <main class="high-schools-content">
+    <ViewControls
+      ref="viewControls"
+      v-model="highSchools"
+      v-model:loadMore="loadMore"
+      v-model:resizeColumn="triggerResize"
+      v-model:updatedPageCount="updatedPageCount"
+      doctype="CRM High School"
+    />
+    <HighSchoolsListView
+      v-if="highSchools.data && rows.length"
+      ref="listView"
+      class="high-schools-table"
+      v-model="highSchools.data.page_length_count"
+      v-model:list="highSchools"
+      :rows="rows"
+      :columns="columns"
+      :options="{
+        showTooltip: false,
+        resizeColumn: true,
+        rowCount: highSchools.data.row_count,
+        totalCount: highSchools.data.total_count,
+      }"
+      @loadMore="() => loadMore++"
+      @columnWidthUpdated="() => triggerResize++"
+      @updatePageCount="(count) => (updatedPageCount = count)"
+      @applyFilter="(data) => viewControls.applyFilter(data)"
+      @applyLikeFilter="(data) => viewControls.applyLikeFilter(data)"
+      @likeDoc="(data) => viewControls.likeDoc(data)"
+      @selectionsChanged="(selections) => viewControls.updateSelections(selections)"
+    />
+    <EmptyState
+      v-else-if="highSchools.data && !rows.length"
+      name="High Schools"
+      :icon="SchoolIcon"
+    />
+  </main>
 </template>
 
 <script setup>
@@ -63,15 +68,18 @@ import ViewControls from '@/components/ViewControls.vue'
 import GeographyImportButton from '@/components/GeographyImportButton.vue'
 import SchoolIcon from '~icons/lucide/school'
 import { useDoctypeModal } from '@/composables/doctypeModal'
-import { getMeta } from '@/stores/meta'
+import { usersStore } from '@/stores/users'
+import { canConfigureSystem } from '@/utils/rolePolicy'
 import { formatDate, timeAgo } from '@/utils'
 import { useRouter } from 'vue-router'
 import { ref, computed } from 'vue'
 
-const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
-  getMeta('CRM High School')
 const { showModal } = useDoctypeModal()
+const { getUser } = usersStore()
 const router = useRouter()
+
+const user = computed(() => getUser() || {})
+const canConfigure = computed(() => canConfigureSystem(user.value))
 
 const listView = ref(null)
 const highSchools = ref({})
@@ -79,11 +87,10 @@ const loadMore = ref(1)
 const triggerResize = ref(1)
 const updatedPageCount = ref(20)
 const viewControls = ref(null)
-
 function createHighSchool() {
   showModal({
     doctype: 'CRM High School',
-    title: __('New High School'),
+    title: __('High School'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'High School', params: { highSchoolId: doc.name } })
@@ -131,15 +138,20 @@ const rows = computed(() => {
 })
 
 const columns = computed(() => {
-  let _columns = highSchools.value?.data?.columns || []
-  if (_columns.length) {
-    _columns = _columns.map((col, index) => {
-      if (index === _columns.length - 1) {
-        return { ...col, align: 'right' }
-      }
-      return col
-    })
-  }
-  return _columns
+  return highSchools.value?.data?.columns || []
 })
 </script>
+
+<style scoped>
+.high-schools-content {
+  min-height: calc(100vh - 7rem);
+  padding: 0 1rem 1rem;
+  background: #fafafa;
+}
+
+@media (min-width: 640px) {
+  .high-schools-content {
+    padding-inline: 1.25rem;
+  }
+}
+</style>

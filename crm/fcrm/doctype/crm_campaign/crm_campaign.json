@@ -10,12 +10,29 @@
  "engine": "InnoDB",
  "field_order": [
   "title",
+  "stable_code",
   "campus",
   "campaign_type",
+  "event_type",
+  "status",
   "column_break_1",
   "start_date",
   "end_date",
   "budget",
+  "section_ownership",
+  "owner_staff",
+  "owning_team",
+  "column_break_2",
+  "platform",
+  "channel_boundary",
+  "channel_type",
+  "channel_url",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "section_kpi",
+  "kpi_target_leads",
+  "kpi_target_enrollments",
   "section_notes",
   "notes"
  ],
@@ -24,8 +41,19 @@
    "fieldname": "title",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Title",
    "reqd": 1,
+   "unique": 1
+  },
+  {
+   "description": "Server-managed immutable identifier in CMP-{CAMPUS_CODE}-{YYMMDD}-{TOKEN4} format.",
+   "fieldname": "stable_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Campaign Code",
+   "read_only": 1,
    "unique": 1
   },
   {
@@ -33,7 +61,7 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campus",
+   "label": "Campus",
    "options": "CRM Campus",
    "reqd": 1
   },
@@ -42,8 +70,26 @@
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "CRM Campaign Type",
+   "label": "Campaign Type",
    "options": "CRM Campaign Type"
+  },
+  {
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Event Type",
+   "options": "\nOn-Campus\nOff-Campus"
+  },
+  {
+   "default": "DRAFT",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "DRAFT\nUPCOMING\nACTIVE\nCLOSED",
+   "reqd": 1
   },
   {
    "fieldname": "column_break_1",
@@ -66,6 +112,88 @@
    "label": "Budget"
   },
   {
+   "fieldname": "section_ownership",
+   "fieldtype": "Section Break",
+   "label": "Ownership & Attribution"
+  },
+  {
+   "description": "Defaulted from the creating user's CRM Staff record when left blank; not hard-required at the schema level so it doesn't break bulk imports or demo seeding.",
+   "fieldname": "owner_staff",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Owner",
+   "options": "CRM Staff"
+  },
+  {
+   "fieldname": "owning_team",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Marketing Team",
+   "options": "CRM Team"
+  },
+  {
+   "fieldname": "column_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "platform",
+   "fieldtype": "Link",
+   "label": "Platform",
+   "options": "CRM Platform"
+  },
+ {
+  "fieldname": "channel_boundary",
+  "fieldtype": "Select",
+  "in_list_view": 1,
+  "in_standard_filter": 1,
+  "label": "Channel Boundary",
+  "options": "\nDigital\nField\nPartner\nMixed"
+ },
+ {
+  "fieldname": "channel_type",
+  "fieldtype": "Link",
+  "in_standard_filter": 1,
+  "label": "Channel Type",
+  "options": "CRM Campaign Channel Type"
+ },
+ {
+  "fieldname": "channel_url",
+  "fieldtype": "Data",
+  "label": "Channel URL",
+  "options": "URL"
+ },
+  {
+   "fieldname": "utm_source",
+   "fieldtype": "Data",
+   "label": "UTM Source"
+  },
+  {
+   "fieldname": "utm_medium",
+   "fieldtype": "Data",
+   "label": "UTM Medium"
+  },
+  {
+   "fieldname": "utm_campaign",
+   "fieldtype": "Data",
+   "label": "UTM Campaign"
+  },
+  {
+   "fieldname": "section_kpi",
+   "fieldtype": "Section Break",
+   "label": "KPI Targets"
+  },
+  {
+   "fieldname": "kpi_target_leads",
+   "fieldtype": "Int",
+   "label": "Target Leads"
+  },
+  {
+   "fieldname": "kpi_target_enrollments",
+   "fieldtype": "Int",
+   "label": "Target Enrollments"
+  },
+  {
    "fieldname": "section_notes",
    "fieldtype": "Section Break",
    "label": "Notes"
@@ -77,7 +205,13 @@
   }
  ],
  "index_web_pages_for_search": 1,
- "links": [],
+ "links": [
+  {
+   "group": "Leads",
+   "link_doctype": "CRM Lead",
+   "link_fieldname": "campaign"
+  }
+ ],
  "modified": "2026-06-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
@@ -86,15 +220,35 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "System Manager", "share": 1, "write": 1
+   "export": 1,
+   "read": 1,
+   "role": "Admissions Director"
   },
   {
-   "create": 1, "delete": 1, "email": 1, "export": 1, "print": 1,
-   "read": 1, "report": 1, "role": "Sales Manager", "share": 1, "write": 1
+   "create": 1,
+   "read": 1,
+   "role": "Lead Sale",
+   "write": 1
   },
   {
-   "read": 1, "report": 1, "role": "Sales User"
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "Marketing",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
   }
  ],
  "quick_entry": 0,
@@ -104,5 +258,6 @@
  "sort_order": "DESC",
  "states": [],
  "title_field": "title",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "track_changes": 1
 }

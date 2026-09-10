@@ -1,0 +1,134 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 1,
+ "autoname": "field:zone_name",
+ "creation": "2026-09-04 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "zone_name",
+  "zone_code",
+  "cluster",
+  "column_break_1",
+  "is_placeholder",
+  "current_team",
+  "assignment_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "zone_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Zone Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "zone_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Zone Code"
+  },
+  {
+   "fieldname": "cluster",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Cluster",
+   "options": "CRM Cluster",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Set by the geography backfill patch for auto-generated placeholder zones. Use to find rows that still need manual re-clustering.",
+   "fieldname": "is_placeholder",
+   "fieldtype": "Check",
+   "in_standard_filter": 1,
+   "label": "Is Placeholder"
+  },
+  {
+   "description": "Synced automatically from the currently Active CRM Team Zone Assignment. Do not edit directly.",
+   "fieldname": "current_team",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Current Team",
+   "options": "CRM Team",
+   "read_only": 1
+  },
+  {
+   "default": "Unassigned",
+   "fieldname": "assignment_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Assignment Status",
+   "options": "Unassigned\nAssigned",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-09-04 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Zone",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Admissions Director"
+  },
+  {
+   "read": 1,
+   "role": "Lead Sale"
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Promoter"
+  },
+  {
+   "read": 1,
+"role": "Promoter"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "create": 1,
+   "read": 1,
+"role": "Admissions Director",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  }
+ ],
+ "quick_entry": 1,
+ "row_format": "Dynamic",
+ "search_fields": "zone_name,zone_code",
+ "sort_field": "zone_name",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "zone_name",
+ "translated_doctype": 1
+}

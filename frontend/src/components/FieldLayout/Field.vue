@@ -1,5 +1,10 @@
 <template>
-  <div v-if="field.visible" class="field">
+  <div
+    v-if="field.visible"
+    class="field"
+    :class="{ 'validation-error': field.description_is_error }"
+    :data-fieldname="field.fieldname"
+  >
     <div
       v-if="
         field.fieldtype != 'Check' &&
@@ -321,7 +326,11 @@ import {
 } from '@/utils'
 import { flt, formatNumber, formatCurrency } from '@/utils/numberFormat.js'
 import { getMeta } from '@/stores/meta'
-import { parseLinkFilters } from '@/utils/fieldTransforms'
+import {
+  getContextualLinkFilters,
+  getDependentFieldsToClear,
+  parseLinkFilters,
+} from '@/utils/fieldTransforms'
 import { usersStore } from '@/stores/users'
 import { useDocument } from '@/data/document'
 import {
@@ -372,6 +381,14 @@ if (standaloneContext) {
       row[fieldname] = value
     } else {
       data.value[fieldname] = value
+      for (const dependentField of getDependentFieldsToClear(
+        fieldname,
+        data.value,
+      )) {
+        if (data.value[dependentField]) {
+          data.value[dependentField] = ''
+        }
+      }
     }
   }
   triggerButton = async () => {}
@@ -472,7 +489,7 @@ const field = computed(() => {
     })
   }
 
-  if (field.fieldtype === 'Link' && field.options !== 'User') {
+  if (field.fieldtype === 'Link' && field.options !== 'User' && !field.no_create) {
     if (!field.create) {
       field.create = (value, close) => {
         const callback = (d) => {
@@ -503,9 +520,15 @@ const field = computed(() => {
     data.value,
   )
 
+  const filters = getContextualLinkFilters(
+    field,
+    data.value,
+    parseLinkFilters(field.link_filters),
+  )
+
   let _field = {
     ...field,
-    filters: parseLinkFilters(field.link_filters),
+    filters,
     placeholder: field.placeholder || field.label,
     display_via_depends_on: displayViaDependsOn,
     mandatory_via_depends_on: evaluateDependsOnValue(
@@ -593,6 +616,16 @@ async function fieldChange(value, df) {
   }
 }
 </script>
+
+<style scoped>
+.validation-error :deep(.text-ink-gray-5) {
+  color: rgb(var(--ink-red-3)) !important;
+}
+
+.validation-error :deep(p) {
+  color: rgb(var(--ink-red-3)) !important;
+}
+</style>
 <style scoped>
 :deep(.form-control.prefix select) {
   padding-left: 2rem;

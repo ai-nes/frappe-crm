@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:territory_name",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["territory_name", "territory_code", "parent_territory", "is_group", "region", "effective_from", "effective_until", "is_active", "source_reference"],
+ "fields": [
+  {"fieldname": "territory_name", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Territory Name", "reqd": 1, "unique": 1},
+  {"fieldname": "territory_code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Territory Code"},
+  {"fieldname": "parent_territory", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Parent Territory", "options": "CRM Territory"},
+  {"default": "0", "fieldname": "is_group", "fieldtype": "Check", "in_list_view": 1, "label": "Is Group"},
+  {"fieldname": "region", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Region", "options": "CRM Region"},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From"},
+  {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "label": "Effective Until"},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Is Active"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1}
+ ],
+ "is_tree": 1,
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Territory",
+ "nsm_parent_field": "parent_territory",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"export": 1, "read": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Marketing"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "territory_name,territory_code",
+ "sort_field": "territory_name",
+ "sort_order": "ASC",
+ "title_field": "territory_name"
+}

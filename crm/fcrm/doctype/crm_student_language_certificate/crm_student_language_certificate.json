@@ -1,0 +1,60 @@
+{
+ "actions": [],
+ "creation": "2026-06-11 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "language",
+  "certificate_name",
+  "score_level",
+  "issue_date",
+  "expiry_date"
+ ],
+ "fields": [
+  {
+   "fieldname": "language",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Ngôn ngữ",
+   "options": "Tiếng Anh\nTiếng Nhật\nTiếng Hàn\nTiếng Pháp\nKhác",
+   "reqd": 1
+  },
+  {
+   "fieldname": "certificate_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Tên chứng chỉ",
+   "reqd": 1
+  },
+  {
+   "fieldname": "score_level",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Điểm / Cấp độ"
+  },
+  {
+   "fieldname": "issue_date",
+   "fieldtype": "Date",
+   "label": "Ngày cấp"
+  },
+  {
+   "fieldname": "expiry_date",
+   "fieldtype": "Date",
+   "label": "Ngày hết hạn"
+  }
+ ],
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Student Language Certificate",
+ "parenttype": "CRM Student",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

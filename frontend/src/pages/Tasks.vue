@@ -22,7 +22,7 @@
     v-model:loadMore="loadMore"
     v-model:resizeColumn="triggerResize"
     v-model:updatedPageCount="updatedPageCount"
-    doctype="CRM Task"
+    doctype="Task"
     :options="{
       allowedViews: ['list', 'kanban'],
     }"
@@ -201,7 +201,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 
 const { getFormattedPercent, getFormattedFloat, getFormattedCurrency } =
-  getMeta('CRM Task')
+  getMeta('Task')
 const { getUser } = usersStore()
 const { updateOnboardingStep } = useOnboarding('frappecrm')
 const { capture } = useTelemetry()
@@ -331,7 +331,7 @@ const taskCallbacks = {
 function showTask(name) {
   showModal({
     name,
-    doctype: 'CRM Task',
+    doctype: 'Task',
     title: 'Task',
     callbacks: taskCallbacks,
   })
@@ -348,7 +348,7 @@ function createTask(column) {
   }
 
   showModal({
-    doctype: 'CRM Task',
+    doctype: 'Task',
     title: 'Task',
     defaults: defaults,
     callbacks: taskCallbacks,
@@ -370,7 +370,7 @@ function actions(name) {
 
 async function deleteTask(name) {
   await call('frappe.client.delete', {
-    doctype: 'CRM Task',
+    doctype: 'Task',
     name,
   })
 }

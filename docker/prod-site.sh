@@ -11,25 +11,16 @@ REDIS_QUEUE="${REDIS_QUEUE:-redis://redis-queue:6379}"
 REDIS_SOCKETIO="${REDIS_SOCKETIO:-redis://redis-queue:6379}"
 SOCKETIO_PORT="${SOCKETIO_PORT:-9000}"
 
-sync_public_assets() {
-    mkdir -p sites/assets
-
-    for app in frappe crm; do
-        public_dir="apps/${app}/${app}/public"
-        target_dir="sites/assets/${app}"
-
-        if [ -d "${public_dir}" ]; then
-            rm -rf "${target_dir}"
-            mkdir -p "${target_dir}"
-            cp -a "${public_dir}/." "${target_dir}/"
-        fi
-    done
-}
-
 cd "${BENCH_DIR}"
 
 mkdir -p sites
 cp -an /opt/frappe/sites-template/. sites/
+# apps.txt lists which apps this bench image has built in - not site data -
+# so unlike the rest of sites-template it must always be re-synced from the
+# image, otherwise a stale copy on the persistent `sites` volume shadows any
+# app added in a newer image and `bench install-app` fails with
+# "App <name> not in apps.txt".
+cp -f /opt/frappe/sites-template/apps.txt sites/apps.txt
 
 bench set-mariadb-host "${DB_HOST}"
 bench set-redis-cache-host "${REDIS_CACHE}"
@@ -38,6 +29,13 @@ bench set-redis-socketio-host "${REDIS_SOCKETIO}"
 bench set-config -g socketio_port "${SOCKETIO_PORT}"
 bench set-config -g developer_mode 0
 bench set-config -g maintenance_mode 0
+# Without restart_supervisor_on_update/restart_systemd_on_update, Frappe's
+# get_url() (frappe/utils/data.py) treats this as a bare bench-dev setup and
+# appends ":${webserver_port}" to every absolute URL it builds - including
+# the OAuth redirect_uri - even when host_name is explicitly set. This
+# container is never managed by supervisor/systemd, but setting this flag is
+# the documented way to tell Frappe "production mode, don't touch host_name".
+bench set-config -g restart_systemd_on_update 1
 
 if [ ! -d "sites/${SITE_NAME}" ]; then
     bench new-site "${SITE_NAME}" \
@@ -49,6 +47,23 @@ if [ ! -d "sites/${SITE_NAME}" ]; then
 fi
 
 bench use "${SITE_NAME}"
+# Keep the Frappe producer aligned with the only engine revision currently
+# supported by the NBA kernel.  The value can be overridden by the container
+# environment during a deliberate revision rollout.
+bench --site "${SITE_NAME}" set-config crm_nba_engine_revision "${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}"
+# install-app is idempotent (no-op if already installed), so this stays safe
+# to run on every deploy rather than only when the site is first created.
+bench --site "${SITE_NAME}" install-app dfp_external_storage
+if [ -n "${CRM_AGENTS_DEMO_FULL_ACCESS:-}" ]; then
+    bench --site "${SITE_NAME}" set-config crm_agents_demo_full_access "${CRM_AGENTS_DEMO_FULL_ACCESS}"
+fi
 bench --site "${SITE_NAME}" migrate
+# Force https:// regardless of what X-Forwarded-Proto the reverse proxy in
+# front of nginx sends - nginx itself only listens on plain HTTP, so
+# without this any absolute URL Frappe builds (OAuth redirect_uri, emails,
+# webhooks) can end up http:// even when the site is only ever reachable
+# over https.
+bench --site "${SITE_NAME}" set-config host_name "https://${SITE_NAME}"
+bench --site "${SITE_NAME}" clear-website-cache
 bench --site "${SITE_NAME}" clear-cache
-sync_public_assets
+bash /opt/frappe/scripts/prod-assets.sh

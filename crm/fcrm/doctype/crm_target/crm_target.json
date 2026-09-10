@@ -1,0 +1,46 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "creation": "2026-08-30 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "admission_year", "period_type", "period_start", "period_end", "metric_key", "planning_scope", "target_value", "status", "version", "effective_from", "effective_until", "source_reference", "idempotency_fingerprint"],
+ "fields": [
+  {"default": "TGT-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "TGT-.YYYY.-"},
+  {"fieldname": "admission_year", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Admission Year", "options": "CRM Admission Year", "reqd": 1},
+  {"default": "Annual", "fieldname": "period_type", "fieldtype": "Select", "in_list_view": 1, "label": "Period Type", "options": "Month\nQuarter\nTerm\nAnnual", "reqd": 1},
+  {"fieldname": "period_start", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period Start", "reqd": 1},
+  {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period End", "reqd": 1},
+  {"fieldname": "metric_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Metric Key", "reqd": 1},
+  {"fieldname": "planning_scope", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Planning Scope", "options": "CRM Planning Scope", "reqd": 1},
+  {"fieldname": "target_value", "fieldtype": "Float", "in_list_view": 1, "label": "Target Value", "reqd": 1},
+  {"default": "Draft", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Draft\nApproved\nRetired", "reqd": 1},
+  {"default": "1", "fieldname": "version", "fieldtype": "Int", "in_list_view": 1, "label": "Version", "reqd": 1},
+  {"fieldname": "effective_from", "fieldtype": "Date", "in_list_view": 1, "label": "Effective From", "reqd": 1},
+  {"fieldname": "effective_until", "fieldtype": "Date", "in_list_view": 1, "label": "Effective Until"},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1}
+ ],
+ "indexes": [
+  {"fields": ["admission_year", "period_start", "period_end", "metric_key", "planning_scope", "version"], "name": "crm_target_lookup_idx", "unique": 0},
+  {"fields": ["status", "effective_from", "effective_until"], "name": "crm_target_effective_idx", "unique": 0}
+ ],
+ "links": [],
+ "modified": "2026-08-30 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Target",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "TGT-.YYYY.-",
+ "owner": "Administrator",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"export": 1, "read": 1, "role": "Lead Sale"},
+  {"export": 1, "read": 1, "role": "Marketing"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "admission_year,metric_key,planning_scope",
+ "sort_field": "period_start",
+ "sort_order": "DESC"
+}

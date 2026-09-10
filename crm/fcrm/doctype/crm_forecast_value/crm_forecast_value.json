@@ -1,0 +1,27 @@
+{
+ "actions": [], "allow_rename": 0, "autoname": "naming_series:", "creation": "2026-08-30 00:00:00.000000", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["naming_series", "scenario", "planning_scope", "metric_key", "period_start", "period_end", "value_kind", "prediction", "lower_bound", "upper_bound", "confidence", "recorded_at", "revision", "supersedes", "source_reference", "idempotency_fingerprint", "schema_version"],
+ "fields": [
+  {"default": "FCV-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "label": "Series", "options": "FCV-.YYYY.-"},
+  {"fieldname": "scenario", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Scenario", "options": "CRM Forecast Scenario", "reqd": 1},
+  {"fieldname": "planning_scope", "fieldtype": "Link", "in_list_view": 1, "label": "Planning Scope", "options": "CRM Planning Scope", "reqd": 1},
+  {"fieldname": "metric_key", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Metric Key", "reqd": 1},
+  {"fieldname": "period_start", "fieldtype": "Date", "in_list_view": 1, "in_standard_filter": 1, "label": "Period Start", "reqd": 1},
+  {"fieldname": "period_end", "fieldtype": "Date", "in_list_view": 1, "label": "Period End", "reqd": 1},
+  {"default": "forecast", "fieldname": "value_kind", "fieldtype": "Select", "in_list_view": 1, "label": "Value Kind", "options": "forecast\nsimulation", "reqd": 1},
+  {"fieldname": "prediction", "fieldtype": "Float", "in_list_view": 1, "label": "Prediction", "reqd": 1},
+  {"fieldname": "lower_bound", "fieldtype": "Float", "in_list_view": 1, "label": "Lower Bound"},
+  {"fieldname": "upper_bound", "fieldtype": "Float", "in_list_view": 1, "label": "Upper Bound"},
+  {"fieldname": "confidence", "fieldtype": "Percent", "in_list_view": 1, "label": "Confidence"},
+  {"fieldname": "recorded_at", "fieldtype": "Datetime", "label": "Recorded At", "read_only": 1, "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "1", "read_only": 1, "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "label": "Supersedes", "options": "CRM Forecast Value", "read_only": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "hidden": 1, "label": "Source Reference", "read_only": 1},
+  {"fieldname": "idempotency_fingerprint", "fieldtype": "Data", "hidden": 1, "label": "Idempotency Fingerprint", "read_only": 1, "unique": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "hidden": 1, "label": "Schema Version", "read_only": 1, "default": "admissions-erd-v2"}
+ ],
+ "indexes": [{"fields": ["scenario", "planning_scope", "metric_key", "period_start", "period_end", "revision"], "name": "crm_forecast_value_lookup_idx", "unique": 1}],
+ "links": [], "modified": "2026-08-30 00:00:00.000000", "module": "FCRM", "name": "CRM Forecast Value", "naming_rule": "Naming Series", "naming_series_options": "FCV-.YYYY.-", "owner": "Administrator",
+ "permissions": [{"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "System Manager"}, {"create": 1, "export": 1, "read": 1, "write": 1, "role": "Admissions Director"}, {"read": 1, "role": "Lead Sale"}],
+ "row_format": "Dynamic", "search_fields": "scenario,planning_scope,metric_key,period_start,period_end", "sort_field": "period_start", "sort_order": "DESC"
+}

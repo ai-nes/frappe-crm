@@ -2,10 +2,9 @@ import json
 
 import frappe
 from frappe import _
-from frappe.query_builder import DocType
-from frappe.query_builder.functions import Count, Date, IfNull
 
-from crm.fcrm.doctype.crm_dashboard.crm_dashboard import create_default_manager_dashboard
+from crm.fcrm.doctype.dashboard.dashboard import create_default_manager_dashboard
+from crm.fcrm.student_feature_flags import role_workspace_read_enabled
 from crm.utils import sales_user_only
 
 
@@ -20,12 +19,12 @@ def reset_to_default():
 def get_dashboard(from_date: str | None = None, to_date: str | None = None, user: str | None = None):
 	from_date, to_date, user = normalize_dashboard_filters(from_date, to_date, user)
 
-	dashboard = frappe.db.exists("CRM Dashboard", "Manager Dashboard")
+	dashboard = frappe.db.exists("Dashboard", "Manager Dashboard")
 	if not dashboard:
 		layout = json.loads(create_default_manager_dashboard())
 		frappe.db.commit()
 	else:
-		layout = json.loads(frappe.db.get_value("CRM Dashboard", "Manager Dashboard", "layout") or "[]")
+		layout = json.loads(frappe.db.get_value("Dashboard", "Manager Dashboard", "layout") or "[]")
 
 	for item in layout:
 		method = getattr(frappe.get_attr("crm.api.dashboard"), f"get_{item['name']}", None)
@@ -53,8 +52,8 @@ def normalize_dashboard_filters(from_date=None, to_date=None, user=None):
 		to_date = frappe.utils.get_last_day(to_date or frappe.utils.nowdate())
 
 	roles = frappe.get_roles(frappe.session.user)
-	is_manager = "Sales Manager" in roles or "System Manager" in roles
-	is_user = "Sales User" in roles and not is_manager
+	is_manager = bool({"Lead Sale", "System Manager"}.intersection(roles))
+	is_user = bool({"Sale", "CTV Sale"}.intersection(roles)) and not is_manager
 
 	if is_user:
 		user = frappe.session.user
@@ -80,13 +79,13 @@ def get_count(doctype, from_date, to_date, user=None, extra_filters=None):
 		["creation", "<", frappe.utils.add_days(to_date, 1)],
 	]
 
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
 	if extra_filters:
 		filters.extend(extra_filters)
 
-	return frappe.db.count(doctype, filters=filters)
+	return _permission_aware_count(doctype, filters)
 
 
 def get_count_delta(doctype, from_date, to_date, user=None, extra_filters=None):
@@ -100,7 +99,7 @@ def get_count_delta(doctype, from_date, to_date, user=None, extra_filters=None):
 		["creation", "<", from_date],
 	]
 
-	if doctype == "CRM Contact" and user:
+	if doctype == "CRM Student" and user:
 		crm_staff = get_assigned_crm_staff(user)
 		current_filters.append(["assigned_to", "=", crm_staff])
 		previous_filters.append(["assigned_to", "=", crm_staff])
@@ -109,8 +108,8 @@ def get_count_delta(doctype, from_date, to_date, user=None, extra_filters=None):
 		current_filters.extend(extra_filters)
 		previous_filters.extend(extra_filters)
 
-	current = frappe.db.count(doctype, filters=current_filters)
-	previous = frappe.db.count(doctype, filters=previous_filters)
+	current = _permission_aware_count(doctype, current_filters)
+	previous = _permission_aware_count(doctype, previous_filters)
 	delta = ((current - previous) / previous * 100) if previous else 0
 	return current, delta
 
@@ -126,32 +125,32 @@ def number_chart(title, tooltip, value, delta):
 
 
 def get_total_students(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("CRM Student", from_date, to_date)
+	value, delta = get_count_delta("CRM Student", from_date, to_date, user)
 	return number_chart("Total students", "Total number of imported enrollment students", value, delta)
 
 
 def get_total_contacts(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("CRM Contact", from_date, to_date, user)
+	value, delta = get_count_delta("CRM Student", from_date, to_date, user)
 	return number_chart("Total CRM contacts", "Total number of admission contacts", value, delta)
 
 
 def get_qualified_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["stage", "=", "Qualified"]]
+		"CRM Student", from_date, to_date, user, [["student_stage", "in", ["Attempting", "Qualified"]]]
 	)
 	return number_chart("Qualified contacts", "Contacts currently in the qualified stage", value, delta)
 
 
 def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 	value, delta = get_count_delta(
-		"CRM Contact", from_date, to_date, user, [["stage", "=", "Enrolled"]]
+		"CRM Student", from_date, to_date, user, [["student_stage", "=", "Connected"]]
 	)
 	return number_chart("Enrolled contacts", "Contacts currently in the enrolled stage", value, delta)
 
 
 def get_admission_trend(from_date=None, to_date=None, user=None):
-	students = daily_counts("CRM Student", from_date, to_date)
-	contacts = daily_counts("CRM Contact", from_date, to_date, user)
+	students = daily_counts("CRM Student", from_date, to_date, user)
+	contacts = daily_counts("CRM Student", from_date, to_date, user)
 	dates = sorted(set(students) | set(contacts))
 	data = [
 		{
@@ -176,28 +175,25 @@ def get_admission_trend(from_date=None, to_date=None, user=None):
 
 
 def daily_counts(doctype, from_date, to_date, user=None):
-	table = DocType(doctype)
-	query = (
-		frappe.qb.from_(table)
-		.select(Date(table.creation).as_("date"), Count(table.name).as_("count"))
-		.where(Date(table.creation).between(from_date, to_date))
-		.groupby(Date(table.creation))
-		.orderby(Date(table.creation))
-	)
-	if doctype == "CRM Contact" and user:
-		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
+	filters = [
+		["creation", ">=", from_date],
+		["creation", "<", frappe.utils.add_days(to_date, 1)],
+	]
+	if doctype == "CRM Student" and user:
+		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
-	return {
-		frappe.utils.get_datetime(row.date).strftime("%Y-%m-%d"): row.count or 0
-		for row in query.run(as_dict=True)
-	}
+	counts = {}
+	for row in frappe.get_list(doctype, filters=filters, fields=["creation"], limit_page_length=0):
+		date_key = frappe.utils.get_datetime(row.creation).strftime("%Y-%m-%d")
+		counts[date_key] = counts.get(date_key, 0) + 1
+	return counts
 
 
 def get_contacts_by_stage(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Contact",
-		"stage",
-		"stage",
+		"CRM Student",
+		"student_stage",
+		"student_stage",
 		"Contacts by stage",
 		"Current admission pipeline distribution",
 		from_date,
@@ -208,7 +204,7 @@ def get_contacts_by_stage(from_date=None, to_date=None, user=None):
 
 def get_contacts_by_source(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Contact",
+		"CRM Student",
 		"source",
 		"source",
 		"Contacts by source",
@@ -233,7 +229,7 @@ def get_students_by_source(from_date=None, to_date=None, user=None):
 
 def get_contacts_by_high_school(from_date=None, to_date=None, user=None):
 	return axis_chart(
-		"CRM Contact",
+		"CRM Student",
 		"high_school",
 		"high_school",
 		"Contacts by high school",
@@ -245,20 +241,34 @@ def get_contacts_by_high_school(from_date=None, to_date=None, user=None):
 
 
 def get_contacts_by_assignee(from_date=None, to_date=None, user=None):
-	Contact = DocType("CRM Contact")
-	CRMStaff = DocType("CRM Staff")
-	query = (
-		frappe.qb.from_(Contact)
-		.left_join(CRMStaff)
-		.on(Contact.assigned_to == CRMStaff.name)
-		.select(IfNull(CRMStaff.full_name, "Unassigned").as_("assignee"), Count(Contact.name).as_("count"))
-		.where(Date(Contact.creation).between(from_date, to_date))
-		.groupby(Contact.assigned_to)
-	)
+	filters = [
+		["creation", ">=", from_date],
+		["creation", "<", frappe.utils.add_days(to_date, 1)],
+	]
 	if user:
-		query = query.where(Contact.assigned_to == get_assigned_crm_staff(user))
+		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
-	result = query.run(as_dict=True)
+	rows = frappe.get_list(
+		"CRM Student",
+		filters=filters,
+		fields=["assigned_to", "count(name) as count"],
+		group_by="assigned_to",
+		limit_page_length=0,
+	)
+	staff_names = [row.get("assigned_to") for row in rows if row.get("assigned_to")]
+	staff = {
+		row.get("name"): row.get("full_name") or row.get("name")
+		for row in frappe.get_list(
+			"CRM Staff",
+			filters={"name": ["in", staff_names or ["__none__"]]},
+			fields=["name", "full_name"],
+			limit_page_length=0,
+		)
+	}
+	result = [
+		{"assignee": staff.get(row.get("assigned_to"), "Unassigned"), "count": row.get("count") or 0}
+		for row in rows
+	]
 	return {
 		"data": result or [],
 		"title": _("Contacts by assignee"),
@@ -293,14 +303,107 @@ def axis_chart(doctype, fieldname, category_key, title, subtitle, from_date, to_
 
 
 def grouped_counts(doctype, fieldname, category_key, from_date, to_date, user=None):
-	table = DocType(doctype)
-	query = (
-		frappe.qb.from_(table)
-		.select(IfNull(table[fieldname], "Empty").as_(category_key), Count(table.name).as_("count"))
-		.where(Date(table.creation).between(from_date, to_date))
-		.groupby(table[fieldname])
-	)
-	if doctype == "CRM Contact" and user:
-		query = query.where(table.assigned_to == get_assigned_crm_staff(user))
+	filters = [
+		["creation", ">=", from_date],
+		["creation", "<", frappe.utils.add_days(to_date, 1)],
+	]
+	if doctype == "CRM Student" and user:
+		filters.append(["assigned_to", "=", get_assigned_crm_staff(user)])
 
-	return query.run(as_dict=True) or []
+	rows = frappe.get_list(
+		doctype,
+		filters=filters,
+		fields=[fieldname, "count(name) as count"],
+		group_by=fieldname,
+		limit_page_length=0,
+	)
+	return [{category_key: row.get(fieldname) or "Empty", "count": row.get("count") or 0} for row in rows]
+
+
+@frappe.whitelist()
+def get_sidebar_badge_counts():
+	"""Return legacy counters only during the workspace reader dark launch.
+
+	The frontend stops calling this endpoint once the server-issued
+	``role_workspace_read`` flag is true. It remains as a compatibility path so
+	default-off users do not lose existing sidebar indicators while the scoped
+	reader contracts are being released.
+	"""
+	if frappe.session.user in {"Guest", "None"}:
+		frappe.throw(_("Authentication is required."), frappe.PermissionError)
+	if role_workspace_read_enabled():
+		from crm.api.role_workspaces import get_workspace_badges
+
+		return get_workspace_badges()
+
+	user = frappe.session.user
+	roles = frappe.get_roles(user)
+	is_admin = "System Manager" in roles or user == "Administrator"
+
+	urgent_sla_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		urgent_sla_count = get_readable_count("CRM Student SLA Attempt", {"status": "open"})
+
+	pool_count = 0
+	if frappe.db.table_exists("CRM Student"):
+		pool_count = get_readable_count(
+			"CRM Student",
+			filters={"owner_staff": ["is", "not set"]},
+		)
+
+	team_sla_breached_count = 0
+	if frappe.db.table_exists("CRM Student SLA Attempt"):
+		team_sla_breached_count = get_readable_count(
+			"CRM Student SLA Attempt", {"status": ["in", ["breached", "escalated"]]}
+		)
+
+	duplicate_count = 0
+	if frappe.db.table_exists("CRM Student"):
+		duplicate_count = get_readable_count("CRM Student", {"full_name": ["like", "%(Trùng%"]})
+
+	pending_spend_approval_count = 0
+	if frappe.db.table_exists("CRM Campaign Spend"):
+		pending_spend_approval_count = frappe.db.count("CRM Campaign Spend")
+
+	manager_approvals_count = pending_spend_approval_count
+	if frappe.db.table_exists("CRM Master Data Change"):
+		manager_approvals_count += frappe.db.count("CRM Master Data Change", filters={"status": "Pending"})
+
+	my_task_count = 0
+	if frappe.db.table_exists("Task"):
+		task_filters = {"status": ["in", ["Todo", "In Progress"]]}
+		if not is_admin:
+			task_filters["assigned_to"] = user
+		my_task_count = frappe.db.count("Task", filters=task_filters)
+
+	return {
+		"urgentSlaCount": urgent_sla_count,
+		"poolCount": pool_count,
+		"teamSlaBreachedCount": team_sla_breached_count,
+		"unassignedCount": pool_count,
+		"duplicateCount": duplicate_count,
+		"pendingSpendApprovalCount": pending_spend_approval_count,
+		"managerApprovalsCount": manager_approvals_count,
+		"myTaskCount": my_task_count,
+	}
+
+
+def get_readable_count(doctype, filters):
+	"""Count records using Frappe's permission-aware list API.
+
+	Sidebar indicators are visible to non-admin users, so they must observe the
+	same row-level permissions as the list view they link to.
+	"""
+	result = frappe.get_list(
+		doctype,
+		filters=filters,
+		fields=["count(name) as count"],
+		limit_page_length=1,
+	)
+	return int(result[0].get("count", 0)) if result else 0
+
+
+def _permission_aware_count(doctype, filters):
+	"""Count only rows the current session can read."""
+	return get_readable_count(doctype, filters)
+

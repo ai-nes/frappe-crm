@@ -1,39 +1,51 @@
 [
 	{
 		"doctype": "User",
-		"email": "crm.manager@example.com",
+		"email": "leadsale@gmail.com",
 		"enabled": 1,
-		"first_name": "Sales",
-		"last_name": "Manager",
-		"full_name": "Sales Manager",
-		"new_password": "CRM_Manager_2026",
+		"first_name": "Lead",
+		"last_name": "Sales",
+		"full_name": "Lead Sale",
+		"new_password": "123456",
 		"roles": [
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Lead Sale"
 			}
 		],
 		"user_type": "System User"
 	},
 	{
 		"doctype": "User",
-		"email": "crm.user1@example.com",
+		"email": "sale@gmail.com",
 		"enabled": 1,
-		"first_name": "John",
-		"last_name": "Sales",
-		"full_name": "John Sales",
-		"new_password": "CRM_User1_2026",
+		"first_name": "Sale",
+		"last_name": "",
+		"full_name": "Sale",
+		"new_password": "123456",
 		"roles": [
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
+			}
+		],
+		"user_type": "System User"
+	},
+	{
+		"doctype": "User",
+		"email": "marketing@gmail.com",
+		"enabled": 1,
+		"first_name": "Marketing",
+		"last_name": "",
+		"full_name": "Marketing",
+		"new_password": "123456",
+		"roles": [
+			{
+				"doctype": "Has Role",
+				"parentfield": "roles",
+				"role": "Marketing"
 			}
 		],
 		"user_type": "System User"
@@ -50,7 +62,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -67,7 +79,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -84,7 +96,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -101,29 +113,24 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
 	},
 	{
 		"doctype": "User",
-		"email": "crm.supervisor@example.com",
+		"email": "director@gmail.com",
 		"enabled": 1,
-		"first_name": "Lisa",
-		"last_name": "Supervisor",
-		"full_name": "Lisa Supervisor",
-		"new_password": "CRM_Supervisor_2026",
+		"first_name": "Admissions",
+		"last_name": "Director",
+		"full_name": "Admissions Director",
+		"new_password": "123456",
 		"roles": [
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Admissions Director"
 			}
 		],
 		"user_type": "System User"
@@ -140,7 +147,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -157,7 +164,7 @@
 			{
 				"doctype": "Has Role",
 				"parentfield": "roles",
-				"role": "Sales User"
+				"role": "Sale"
 			}
 		],
 		"user_type": "System User"
@@ -175,16 +182,6 @@
 				"doctype": "Has Role",
 				"parentfield": "roles",
 				"role": "System Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales Manager"
-			},
-			{
-				"doctype": "Has Role",
-				"parentfield": "roles",
-				"role": "Sales User"
 			}
 		],
 		"user_type": "System User"

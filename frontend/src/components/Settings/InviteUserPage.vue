@@ -107,13 +107,18 @@ import {
   FormControl,
 } from 'frappe-ui'
 import { ref, computed } from 'vue'
+import {
+  canonicalRoleOptions,
+  canManageRoles,
+  roleOptionFor,
+} from '@/utils/rolePolicy'
 
 const { updateOnboardingStep } = useOnboarding('frappecrm')
-const { users, isAdmin } = usersStore()
+const { users, getCurrentUser } = usersStore()
 const { capture } = useTelemetry()
 
 const invitees = ref([])
-const role = ref('Sales User')
+const role = ref('Sale')
 const error = ref(null)
 
 const userExistMessage = computed(() => {
@@ -148,28 +153,20 @@ const inviteeExistMessage = computed(() => {
   ])
 })
 
-const description = computed(() => {
-  return {
-    'System Manager':
-      'Manage the entire CRM, including users, customization, and settings.',
-    'Sales Manager':
-      'Manage admissions: invite users and create public and private reports.',
-    'Sales User':
-      'Admissions user: work with leads, records, and private reports.',
-  }[role.value]
-})
+const description = computed(() => roleOptionFor(role.value)?.description)
 
 const roleOptions = computed(() => {
-  return [
-    { value: 'Sales User', label: __('Sales User') },
-    ...(isAdmin() ? [{ value: 'Sales Manager', label: __('Sales Manager') }] : []),
-    ...(isAdmin() ? [{ value: 'System Manager', label: __('Admin') }] : []),
-  ]
+  return canonicalRoleOptions.filter(
+    (option) =>
+      option.value !== 'System Manager' || canManageRoles(getCurrentUser()),
+  )
 })
 
 const roleMap = {
-  'Sales User': __('Sales User'),
-  'Sales Manager': __('Sales Manager'),
+  Sale: __('Sale'),
+  Marketing: __('Marketing'),
+  'Lead Sale': __('Lead Sale'),
+  'Admissions Director': __('Admissions Director'),
   'System Manager': __('Admin'),
 }
 
@@ -182,7 +179,7 @@ const inviteByEmail = createResource({
     }
   },
   onSuccess() {
-    role.value = 'Sales User'
+    role.value = 'Sale'
     error.value = null
     invitees.value = []
     pendingInvitations.reload()
@@ -198,7 +195,7 @@ const inviteByEmail = createResource({
 
 const pendingInvitations = createListResource({
   type: 'list',
-  doctype: 'CRM Invitation',
+  doctype: 'Invitation',
   filters: { status: 'Pending' },
   fields: ['name', 'email', 'role'],
   pageLength: 999,

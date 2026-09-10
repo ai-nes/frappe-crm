@@ -101,11 +101,11 @@ const viewLinkedDoc = (doc) => {
       page = 'enrollment-students'
       id = doc.reference_docname
       break
-    case 'CRM Call Log':
+    case 'Call Log':
       page = 'call-logs'
       id = `view?open=${doc.reference_docname}`
       break
-    case 'CRM Task':
+    case 'Task':
       page = 'tasks'
       id = `view?open=${doc.reference_docname}`
       break
@@ -117,7 +117,7 @@ const viewLinkedDoc = (doc) => {
       page = 'high-schools'
       id = doc.reference_docname
       break
-    case 'CRM Notification':
+    case 'Notification':
       page = 'crm-notification'
       id = doc.reference_docname
       openDesk = true

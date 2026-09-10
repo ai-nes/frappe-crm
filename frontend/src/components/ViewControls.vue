@@ -13,7 +13,7 @@
             @update="updateFilter"
           />
           <GroupBy
-            v-if="route.params.viewType === 'group_by'"
+            v-if="route.params.viewType === 'group_by' && !defaultGroupByField"
             v-model="list"
             :doctype="doctype"
             :hideLabel="isMobileView"
@@ -135,8 +135,8 @@
       orientation="horizontal"
     >
       <div
-        v-for="filter in quickFilterList"
-        :key="filter.fieldname"
+        v-for="filter in quickFilterListWithPresets"
+        :key="filter.key || filter.fieldname"
         class="m-1 min-w-36"
       >
         <QuickFilterField
@@ -162,7 +162,7 @@
           @click="reload()"
         />
         <GroupBy
-          v-if="route.params.viewType === 'group_by'"
+          v-if="route.params.viewType === 'group_by' && !defaultGroupByField"
           v-model="list"
           :doctype="doctype"
           @update="updateGroupBy"
@@ -345,6 +345,10 @@ import ImportIcon from '~icons/lucide/import'
 const props = defineProps({
   doctype: { type: String, required: true },
   filters: { type: Object, default: () => ({}) },
+  // A released route may require one exact grouping. It deliberately takes
+  // precedence over saved views so URLs cannot select arbitrary database fields.
+  defaultGroupByField: { type: String, default: '' },
+  cacheResource: { type: Boolean, default: true },
   options: {
     type: Object,
     default: () => ({
@@ -353,6 +357,7 @@ const props = defineProps({
       allowedViews: ['list'],
     }),
   },
+  quickFilterPresets: { type: Array, default: () => [] },
 })
 
 const { brand } = getSettings()
@@ -462,7 +467,7 @@ function getParams() {
   const view_type = _view?.type || route.params.viewType || 'list'
   const filters = (_view?.filters && JSON.parse(_view.filters)) || {}
   const order_by = _view?.order_by || 'modified desc'
-  const group_by_field = _view?.group_by_field || 'owner'
+  const group_by_field = props.defaultGroupByField || _view?.group_by_field || 'owner'
   const columns = _view?.columns || ''
   const rows = _view?.rows || ''
   const column_field = _view?.column_field || 'status'
@@ -514,7 +519,14 @@ function getParams() {
 list.value = createResource({
   url: 'crm.api.doc.get_data',
   params: getParams(),
-  cache: [props.doctype, route.query.view, route.params.viewType],
+  cache: props.cacheResource
+    ? [
+        props.doctype,
+        route.query.view,
+        route.params.viewType,
+        JSON.stringify(props.filters || {}),
+      ]
+    : false,
   onSuccess(data) {
     let cv = getView(route.query.view, route.params.viewType, props.doctype)
     let params = list.value.params ? list.value.params : getParams()
@@ -810,6 +822,29 @@ const quickFilterList = computed(() => {
   return filters
 })
 
+const quickFilterPresets = computed(() => props.quickFilterPresets || [])
+
+const quickFilterListWithPresets = computed(() => {
+  let filters = [...quickFilterList.value]
+  quickFilterPresets.value.forEach((preset) => {
+    let value = list.value.params?.filters?.[preset.fieldname]
+    let activeOption = Object.entries(preset.presetValues || {}).find(
+      ([, presetValue]) => JSON.stringify(presetValue) === JSON.stringify(value),
+    )
+    preset.value = activeOption?.[0] || ''
+
+    let index = preset.after
+      ? filters.findIndex((filter) => filter.fieldname === preset.after)
+      : -1
+    if (index === -1) {
+      filters.push(preset)
+    } else {
+      filters.splice(index + 1, 0, preset)
+    }
+  })
+  return filters
+})
+
 const quickFilters = createResource({
   url: 'crm.api.doc.get_quick_filters',
   params: { doctype: props.doctype },
@@ -833,7 +868,9 @@ function applyQuickFilter(filter, value) {
   let filters = { ...list.value.params.filters }
   let field = filter.fieldname
   if (value) {
-    if (
+    if (filter.presetValues) {
+      filters[field] = filter.presetValues[value]
+    } else if (
       ['Check', 'Select', 'Link', 'Date', 'Datetime'].includes(filter.fieldtype)
     ) {
       filters[field] = value
@@ -879,6 +916,7 @@ function updateSort(order_by) {
 }
 
 function updateGroupBy(group_by_field) {
+  if (props.defaultGroupByField) return
   viewUpdated.value = true
   if (!defaultParams.value) {
     defaultParams.value = getParams()
@@ -998,7 +1036,7 @@ function createOrUpdateStandardView() {
   if (route.query.view) return
   view.value.doctype = props.doctype
   call(
-    'crm.fcrm.doctype.crm_view_settings.crm_view_settings.create_or_update_standard_view',
+    'crm.fcrm.doctype.view_settings.view_settings.create_or_update_standard_view',
     {
       view: view.value,
     },
@@ -1161,7 +1199,7 @@ function createView() {
 }
 
 function setAsDefault(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.set_as_default', {
+  call('crm.fcrm.doctype.view_settings.view_settings.set_as_default', {
     name: v.name,
     type: v.type,
     doctype: v.dt,
@@ -1187,7 +1225,7 @@ function editView(v, close) {
 }
 
 function publicView(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.public', {
+  call('crm.fcrm.doctype.view_settings.view_settings.public', {
     name: v.name,
     value: !v.public,
   }).then(() => {
@@ -1198,7 +1236,7 @@ function publicView(v) {
 }
 
 function pinView(v) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.pin', {
+  call('crm.fcrm.doctype.view_settings.view_settings.pin', {
     name: v.name,
     value: !v.pinned,
   }).then(() => {
@@ -1209,7 +1247,7 @@ function pinView(v) {
 }
 
 function deleteView(v, close) {
-  call('crm.fcrm.doctype.crm_view_settings.crm_view_settings.delete', {
+  call('crm.fcrm.doctype.view_settings.view_settings.delete', {
     name: v.name,
   }).then(() => {
     router.push({ name: route.name, params: { viewType: 'list' } })
@@ -1221,7 +1259,7 @@ function deleteView(v, close) {
 
 function fetchAndUpdateKanbanColumns(v) {
   call(
-    'crm.fcrm.doctype.crm_view_settings.crm_view_settings.fetch_and_update_kanban_columns',
+    'crm.fcrm.doctype.view_settings.view_settings.fetch_and_update_kanban_columns',
     {
       name: v.name,
     },

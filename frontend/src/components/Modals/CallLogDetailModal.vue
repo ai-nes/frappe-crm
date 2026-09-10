@@ -152,7 +152,7 @@
         <Button
           class="w-full"
           variant="solid"
-          :label="__('Create CRM Contact')"
+          :label="__('Create Contact')"
           @click="createCRMContact"
         />
       </div>
@@ -207,7 +207,7 @@ function showNote(name) {
 function showTask(name) {
   showModal({
     name,
-    doctype: 'CRM Task',
+    doctype: 'Task',
     title: 'Task',
     defaults: { status: 'Backlog', priority: 'Low' },
     callbacks: {
@@ -334,7 +334,7 @@ const detailFields = computed(() => {
 const contactDetails = ref({})
 
 async function createCRMContact() {
-  call('crm.fcrm.doctype.crm_call_log.crm_call_log.create_contact_from_call_log', {
+  call('crm.fcrm.doctype.call_log.call_log.create_contact_from_call_log', {
     call_log: callLog.value?.data,
     contact_details: contactDetails.value,
   })
@@ -355,7 +355,7 @@ async function createCRMContact() {
 function openCallLogModal() {
   showModal({
     name: callLog.value?.data?.name,
-    doctype: 'CRM Call Log',
+    doctype: 'Call Log',
     title: 'Call Log',
     callbacks: {
       afterUpdate: () => {

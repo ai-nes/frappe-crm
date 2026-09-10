@@ -9,6 +9,12 @@ x-crm-service: &crm-service
     REDIS_QUEUE: redis://redis-queue:6379
     REDIS_SOCKETIO: redis://redis-queue:6379
     SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
+    CRM_GOOGLE_OAUTH_CLIENT_ID: ${CRM_GOOGLE_OAUTH_CLIENT_ID:-}
+    CRM_GOOGLE_OAUTH_CLIENT_SECRET: ${CRM_GOOGLE_OAUTH_CLIENT_SECRET:-}
+    CRM_GOOGLE_OAUTH_REDIRECT_URI: ${CRM_GOOGLE_OAUTH_REDIRECT_URI:-}
+    CRM_GOOGLE_OAUTH_DEFAULT_ROLE: ${CRM_GOOGLE_OAUTH_DEFAULT_ROLE:-Sale}
+    CRM_GOOGLE_OAUTH_ALLOWED_DOMAINS: ${CRM_GOOGLE_OAUTH_ALLOWED_DOMAINS:-}
+    CRM_GOOGLE_OAUTH_DASHBOARD_URL: ${CRM_GOOGLE_OAUTH_DASHBOARD_URL:-}
   volumes:
     - sites:/home/frappe/frappe-bench/sites
     - logs:/home/frappe/frappe-bench/logs
@@ -59,9 +65,16 @@ services:
       timeout: 5s
       retries: 12
 
+  # Runs on every `docker compose up`, not just first-time setup - creates
+  # the site if missing, then always runs `bench migrate` so the DB schema
+  # never drifts behind the deployed app code (this used to be gated behind
+  # the `setup` profile, which meant ordinary deploys silently skipped
+  # migrate and left new DocType columns like User.form_navigation_buttons
+  # missing until someone remembered to run this by hand).
   site:
     <<: *crm-service
     command: bash /opt/frappe/scripts/prod-site.sh
+    restart: "no"
     environment:
       SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in docker/.env}
@@ -71,9 +84,9 @@ services:
       REDIS_QUEUE: redis://redis-queue:6379
       REDIS_SOCKETIO: redis://redis-queue:6379
       SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
+      CRM_AGENTS_DEMO_FULL_ACCESS: ${CRM_AGENTS_DEMO_FULL_ACCESS:-0}
+      CRM_NBA_ENGINE_REVISION: ${CRM_NBA_ENGINE_REVISION:-nba-engine-r2}
     depends_on: *crm-depends-on
-    profiles:
-      - setup
 
   nginx:
     image: nginx:1.27-alpine
@@ -83,11 +96,29 @@ services:
       - -lc
       - |
         cat > /etc/nginx/conf.d/default.conf <<'EOF'
+        # Preserve the scheme an upstream TLS-terminating proxy (Traefik,
+        # Dokploy, Cloudflare Tunnel, etc) already set. Without this,
+        # $$scheme below always resolves to "http" - this container only
+        # listens on plain HTTP - which breaks any absolute URL Frappe
+        # builds (OAuth redirect_uri, emails, webhooks) by giving them the
+        # wrong protocol.
+        map $$http_x_forwarded_proto $$proxy_x_forwarded_proto {
+          default $$http_x_forwarded_proto;
+          ''      $$scheme;
+        }
+
         server {
           listen 8080;
           server_name _;
 
           client_max_body_size 50m;
+
+          location = /assets/assets.json {
+            alias /home/frappe/frappe-bench/sites/assets/assets.json;
+            access_log off;
+            expires -1;
+            add_header Cache-Control "no-cache, no-store, must-revalidate";
+          }
 
           location /assets/ {
             alias /home/frappe/frappe-bench/sites/assets/;
@@ -103,14 +134,14 @@ services:
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $$host;
             proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header X-Forwarded-Proto $$proxy_x_forwarded_proto;
             proxy_pass http://websocket:9000;
           }
 
           location / {
             proxy_set_header Host $$host;
             proxy_set_header X-Forwarded-For $$proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $$scheme;
+            proxy_set_header X-Forwarded-Proto $$proxy_x_forwarded_proto;
             proxy_read_timeout 120s;
             proxy_pass http://backend:8000;
           }
@@ -124,17 +155,49 @@ services:
     ports:
       - "${HTTP_PORT:-8000}:8080"
     depends_on:
+      assets:
+        condition: service_completed_successfully
       backend:
-        condition: service_started
+        condition: service_healthy
       websocket:
         condition: service_started
+
+  assets:
+    <<: *crm-service
+    pull_policy: always
+    user: root
+    restart: "no"
+    # SITE_NAME is only needed here (on top of the crm-service anchor's
+    # vars) so prod-assets.sh can clear this site's cached pages - explicit
+    # environment: replaces the anchor's block wholesale in YAML, so every
+    # var the anchor set has to be repeated (same pattern as the `site`
+    # service above).
+    environment:
+      SITE_NAME: ${SITE_NAME:?set SITE_NAME in docker/.env}
+      DB_HOST: mariadb
+      REDIS_CACHE: redis://redis-cache:6379
+      REDIS_QUEUE: redis://redis-queue:6379
+      REDIS_SOCKETIO: redis://redis-queue:6379
+      SOCKETIO_PORT: ${SOCKETIO_PORT:-9000}
+    command: bash /opt/frappe/scripts/prod-assets.sh
+    # Must run after `site` so the schema (and thus the cache it clears) is
+    # already migrated - everything else waits on `assets` completing, so
+    # this one edge is enough to put `site` ahead of the whole stack.
+    depends_on:
+      site:
+        condition: service_completed_successfully
 
   backend:
     <<: *crm-service
     restart: unless-stopped
+    networks:
+      default:
+      ai-crm_backend:
+        aliases:
+          # Keep service-to-service Frappe traffic inside Docker while
+          # preserving the canonical Host header used for site resolution.
+          - crm.faip.pro
     command:
-      - env
-      - SYNC_PUBLIC_ASSETS=1
       - bash
       - /opt/frappe/scripts/prod-runtime.sh
       - ./env/bin/gunicorn
@@ -146,7 +209,21 @@ services:
       - --worker-tmp-dir=/dev/shm
       - --timeout=120
       - frappe.app:application
-    depends_on: *crm-depends-on
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -H \"Host: ${SITE_NAME:?set SITE_NAME in docker/.env}\" http://localhost:8000/api/method/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   websocket:
     <<: *crm-service
@@ -157,6 +234,8 @@ services:
       - node
       - apps/frappe/socketio.js
     depends_on:
+      assets:
+        condition: service_completed_successfully
       redis-queue:
         condition: service_healthy
 
@@ -170,7 +249,15 @@ services:
       - worker
       - --queue
       - short
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   queue-default:
     <<: *crm-service
@@ -182,7 +269,15 @@ services:
       - worker
       - --queue
       - default
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   queue-long:
     <<: *crm-service
@@ -194,7 +289,15 @@ services:
       - worker
       - --queue
       - long
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
   scheduler:
     <<: *crm-service
@@ -204,9 +307,24 @@ services:
       - /opt/frappe/scripts/prod-runtime.sh
       - bench
       - schedule
-    depends_on: *crm-depends-on
+    depends_on:
+      assets:
+        condition: service_completed_successfully
+      mariadb:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
 
 volumes:
   mariadb-data:
   sites:
   logs:
+
+networks:
+  default:
+    name: crm-prod_default
+  ai-crm_backend:
+    external: true
+    name: ai-crm_backend

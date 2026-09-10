@@ -1,0 +1,369 @@
+"""Contract tests for the Lead processing and Student contact-stage commands."""
+
+import json
+import unittest
+from pathlib import Path
+
+try:
+	import frappe
+except ImportError:  # pragma: no cover - exercised by the no-bench CI lane
+	frappe = None
+
+if frappe is not None:
+	from frappe.tests.utils import FrappeTestCase
+
+
+@unittest.skipIf(frappe is None, "Lead/Student workflow tests require a Frappe bench")
+class TestLeadStudentProcessingContract(unittest.TestCase):
+	def test_processing_resolutions_are_exactly_the_six_business_outcomes(self):
+		from crm.fcrm.lead_processing import RESOLUTIONS
+
+		self.assertEqual(
+			set(RESOLUTIONS) - {"PENDING"},
+			{"MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED"},
+		)
+
+	def test_operator_reason_does_not_expose_pre_conversion_lead_identifier(self):
+		from crm.fcrm.lead_processing import _operator_lead_reason
+
+		reason = _operator_lead_reason(
+			"Đã đóng hồ sơ vì trùng CCCD với Lead HS-2026-HCM-000019."
+		)
+
+		self.assertEqual(reason, "Đã đóng hồ sơ vì trùng CCCD với một Lead khác.")
+
+	def test_identifier_gate_requires_name_phone_and_province(self):
+		from crm.fcrm.lead_processing import (
+			LeadProcessingError,
+			_normalise_identifiers,
+		)
+
+		valid = {
+			"student_name": " Nguyễn Văn A ",
+			"high_school": " THPT A ",
+			"major": " Công nghệ thông tin ",
+			"email": " Student@Example.com ",
+			"phone": "+84981000001",
+			"province": " Ho Chi Minh ",
+		}
+		self.assertEqual(
+			_normalise_identifiers(valid),
+			{
+				"student_name": "nguyễn văn a",
+				"high_school": "thpt a",
+				"major": "công nghệ thông tin",
+				"email": "student@example.com",
+				"phone": "0981000001",
+				"province": "ho chi minh",
+			},
+		)
+
+		invalid = {"phone": "", "province": "", "high_school": None, "major": None}
+		with self.assertRaises(LeadProcessingError) as ctx:
+			_normalise_identifiers(invalid)
+		self.assertEqual(ctx.exception.code, "IDENTIFIER_GATE_FAILED")
+
+		valid_without_school = {**valid, "student_name": "Nguyễn Văn A", "high_school": None}
+		self.assertEqual(_normalise_identifiers(valid_without_school)["student_name"], "nguyễn văn a")
+
+	def test_cccd_never_matches_two_leads_before_student_conversion(self):
+		from crm.fcrm.lead_processing import _duplicate_match_type, _normalise_identifiers
+
+		identifiers = _normalise_identifiers(
+			{
+				"student_name": "Nguyễn Văn A",
+				"id_number": "079300000001",
+				"phone": "0901000001",
+				"province": "Hà Nội",
+				"high_school": "THPT A",
+				"major": "Data Science",
+			}
+		)
+		self.assertNotIn("id_number", identifiers)
+		self.assertIsNone(
+			_duplicate_match_type(
+				identifiers,
+				{
+					"id_number": "079300000001",
+					"phone": "0901000002",
+					"province": "Hà Nội",
+					"high_school": "THPT A",
+					"major": "Data Science",
+				},
+			)
+		)
+
+	def test_bulk_scan_buckets_every_processing_outcome(self):
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		rows = [{"name": "LEAD-1"}, {"name": "LEAD-2"}, {"name": "LEAD-3"}]
+		outcomes = {
+			"LEAD-1": {"status": "PROCESSED", "resolution": "CREATED"},
+			"LEAD-2": {"status": "CLOSED", "resolution": "INVALID"},
+			"LEAD-3": lead_processing.LeadProcessingError("FORBIDDEN", "Not yours."),
+		}
+
+		def _process(name):
+			outcome = outcomes[name]
+			if isinstance(outcome, Exception):
+				raise outcome
+			return outcome
+
+		with (
+			patch.object(lead_processing.frappe, "get_all", return_value=rows) as scan,
+			patch.object(lead_processing.frappe.db, "savepoint"),
+			patch.object(lead_processing.frappe.db, "rollback"),
+			patch.object(lead_processing.frappe.db, "commit"),
+			patch.object(lead_processing, "process_lead", side_effect=_process),
+		):
+			result = lead_processing.process_new_leads(admission_year="2026")
+
+		self.assertEqual(
+			scan.call_args.kwargs["filters"], {"processing_status": "NEW", "admission_year": "2026"}
+		)
+		self.assertEqual(
+			result["summary"],
+			{"scanned": 3, "processed": 1, "closed": 1, "skipped": 1, "failed": 0},
+		)
+
+	def test_bulk_scan_rejects_a_malformed_admission_year(self):
+		from crm.fcrm.lead_processing import LeadProcessingError, process_new_leads
+
+		with self.assertRaises(LeadProcessingError) as ctx:
+			process_new_leads(admission_year="20x6")
+		self.assertEqual(ctx.exception.code, "INVALID_INPUT")
+
+	def test_student_contact_stage_edges_are_forward_only(self):
+		from crm.fcrm.student_stage import StudentStageError, validate_transition
+
+		for current, target in (
+			("New", "Attempting"),
+			("Attempting", "Connected"),
+			("Connected", "Qualified"),
+			("Connected", "Disqualified"),
+		):
+			self.assertEqual(validate_transition(current, target), (current, target))
+
+		for current, target in (("Qualified", "Connected"), ("Disqualified", "New"), ("New", "Connected")):
+			with self.assertRaises(StudentStageError) as ctx:
+				validate_transition(current, target)
+			self.assertEqual(ctx.exception.code, "INVALID_TRANSITION")
+
+	def test_legacy_enrollment_status_maps_to_the_student_stage_pipeline(self):
+		from crm.fcrm.student_stage import stage_from_enrollment_status
+
+		self.assertEqual(
+			{
+				status: stage_from_enrollment_status(status)
+				for status in ("NEW", "PROSPECT", "CONFIRMED", "ENROLLED", "REFUSED")
+			},
+			{
+				"NEW": "New",
+				"PROSPECT": "Attempting",
+				"CONFIRMED": "Qualified",
+				"ENROLLED": "Connected",
+				"REFUSED": "Disqualified",
+			},
+		)
+
+	def test_schema_contains_server_managed_workflow_fields(self):
+		root = Path(__file__).resolve().parents[1]
+		lead_schema = json.loads((root / "fcrm/doctype/crm_lead/crm_lead.json").read_text(encoding="utf-8"))
+		student_schema = json.loads(
+			(root / "fcrm/doctype/crm_student/crm_student.json").read_text(encoding="utf-8")
+		)
+		lead_fields = {field["fieldname"]: field for field in lead_schema["fields"]}
+		student_fields = {field["fieldname"]: field for field in student_schema["fields"]}
+
+		self.assertEqual(lead_fields["processing_status"]["default"], "NEW")
+		self.assertTrue(lead_fields["processing_status"]["read_only"])
+		self.assertIn("PROCESSING", lead_fields["processing_status"]["options"])
+		self.assertEqual(lead_fields["matched_student"]["options"], "CRM Student")
+		self.assertIn("MATCHED", lead_fields["resolution"]["options"])
+		self.assertEqual(student_fields["student_stage"]["default"], "New")
+		self.assertTrue(student_fields["student_stage"]["read_only"])
+		self.assertNotIn("enrollment_status", student_fields)
+		self.assertNotIn("lifecycle_stage", student_fields)
+
+
+@unittest.skipIf(frappe is None, "Lead/Student workflow tests require a Frappe bench")
+class TestLeadStudentProcessingRuntime(FrappeTestCase):
+	def setUp(self):
+		frappe.set_user("Administrator")
+
+	def tearDown(self):
+		for name in frappe.db.get_all(
+			"CRM Lead", filters={"student_name": ["like", "_Test Processing %"]}, pluck="name"
+		):
+			frappe.delete_doc("CRM Lead", name, force=True)
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"full_name": ["like", "_Test Processing %"]}, pluck="name"
+		):
+			frappe.delete_doc("CRM Student", name, force=True)
+
+	def _new_lead(self, suffix: str, **values):
+		payload = {
+			"doctype": "CRM Lead",
+			"student_name": f"_Test Processing {suffix}",
+			"phone": f"0981000{len(suffix):03d}",
+			"email": f"processing-{suffix.lower()}@example.com",
+			"processing_status": "NEW",
+			**values,
+		}
+		return frappe.get_doc(payload).insert(ignore_permissions=True)
+
+	def test_identifier_gate_closes_invalid_lead(self):
+		from crm.fcrm.lead_processing import process_lead
+
+		lead = self._new_lead("Invalid")
+		result = process_lead(lead.name)
+
+		self.assertEqual(result["status"], "CLOSED")
+		self.assertEqual(result["resolution"], "INVALID")
+		self.assertEqual(result["processing_outcome"], "INVALID")
+		self.assertTrue(result["validation"]["phone"])
+		self.assertFalse(result["validation"]["province"])
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "CLOSED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "INVALID")
+
+	def test_status_command_persists_every_supported_status(self):
+		from crm.fcrm.lead_processing import update_processing_status
+
+		expected_resolutions = {
+			"NEW": "PENDING",
+			"PROCESSING": "PENDING",
+			"PROCESSED": "PENDING",
+			"ASSIGNED": "PENDING",
+			"CLOSED": "PENDING",
+		}
+
+		for status, resolution in expected_resolutions.items():
+			with self.subTest(status=status):
+				lead = self._new_lead(f"StatusUpdate{status}")
+				result = update_processing_status(lead.name, status)
+
+				self.assertEqual(result["status"], status)
+				self.assertEqual(result["resolution"], resolution)
+				self.assertEqual(
+					frappe.db.get_value("CRM Lead", lead.name, "processing_status"),
+					status,
+				)
+				self.assertEqual(
+					frappe.db.get_value("CRM Lead", lead.name, "resolution"),
+					resolution,
+				)
+
+	def test_valid_gate_processes_without_creating_a_student_result(self):
+		from crm.fcrm.lead_processing import process_lead
+
+		province = frappe.db.get_value("CRM Province", {}, "name")
+		high_school = frappe.db.get_value("CRM High School", {}, "name")
+		major = frappe.db.get_value("CRM Major", {}, "name")
+		self.assertTrue(province)
+		self.assertTrue(high_school)
+		self.assertTrue(major)
+		lead = self._new_lead("Created", province=province, high_school=high_school, major=major)
+		result = process_lead(lead.name)
+
+		self.assertEqual(result["status"], "PROCESSED")
+		self.assertEqual(result["resolution"], "PENDING")
+		self.assertEqual(result["processing_outcome"], "CREATED")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "resolution"), "PENDING")
+		self.assertEqual(frappe.db.get_value("CRM Lead", lead.name, "processing_status"), "PROCESSED")
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": lead.phone}))
+		self.assertNotIn("id_number", result["validation"])
+
+	def test_duplicate_leads_without_cccd_keep_one_canonical_record(self):
+		from crm.fcrm.lead_processing import (
+			_candidate_rows,
+			_classify_resolution_details,
+			_duplicate_match_type,
+			_eligible_lead_duplicate,
+			_normalise_identifiers,
+			process_lead,
+		)
+
+		province = frappe.db.get_value("CRM Province", {}, "name")
+		high_school = frappe.db.get_value("CRM High School", {}, "name")
+		major = frappe.db.get_value("CRM Major", {}, "name")
+		values = {"province": province, "high_school": high_school, "major": major}
+		primary = self._new_lead("DuplicatePrimary", phone="0981000101", **values)
+		copy = self._new_lead("DuplicateCopy", phone="0981000101", **values)
+		third = self._new_lead("DuplicateThird", phone="0981000101", **values)
+		identifiers = _normalise_identifiers(copy)
+		candidates = _candidate_rows("CRM Lead", identifiers, exclude=copy.name)
+		self.assertEqual(len(candidates), 2)
+		for candidate in candidates:
+			self.assertTrue(_eligible_lead_duplicate(candidate))
+			self.assertEqual(
+				_duplicate_match_type(identifiers, candidate),
+				"PHONE_PROVINCE",
+			)
+		classification = _classify_resolution_details(copy, identifiers)
+		self.assertEqual(classification["resolution"], "DUPLICATE", classification)
+
+		# The newer copies are processed first to prove canonical selection does
+		# not depend on scan order. None of these Leads has a CCCD.
+		copy_result = process_lead(copy.name)
+		third_result = process_lead(third.name)
+		primary_result = process_lead(primary.name)
+
+		for duplicate_result in (copy_result, third_result):
+			self.assertEqual(duplicate_result["status"], "CLOSED")
+			self.assertEqual(duplicate_result["resolution"], "DUPLICATE")
+			self.assertEqual(duplicate_result["processing_outcome"], "DUPLICATE")
+			self.assertIn("trùng", duplicate_result["reason"])
+			self.assertNotIn(primary.name, duplicate_result["reason"])
+		self.assertEqual(primary_result["status"], "PROCESSED")
+		self.assertEqual(primary_result["resolution"], "PENDING")
+		self.assertEqual(primary_result["processing_outcome"], "CREATED")
+		self.assertEqual(
+			frappe.db.get_value("CRM Lead", primary.name, "processing_status"),
+			"PROCESSED",
+		)
+		for duplicate in (copy, third):
+			self.assertEqual(
+				frappe.db.get_value("CRM Lead", duplicate.name, "processing_status"),
+				"CLOSED",
+			)
+
+	def test_student_stage_command_advances_one_edge(self):
+		from crm.fcrm.student_stage import set_student_stage
+
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "_Test Processing Stage",
+				"phone": "0902222333",
+			}
+		).insert(ignore_permissions=True)
+		result = set_student_stage(student.name, "Attempting")
+
+		self.assertEqual(result["student_stage"], "Attempting")
+		self.assertEqual(frappe.db.get_value("CRM Student", student.name, "student_stage"), "Attempting")
+
+	def test_workflow_fields_reject_direct_document_edits(self):
+		lead = self._new_lead("Guard")
+		lead.processing_status = "CLOSED"
+		lead.resolution = "MATCHED"
+		with self.assertRaises(frappe.PermissionError):
+			lead.save(ignore_permissions=True)
+
+		student = frappe.get_doc(
+			{
+				"doctype": "CRM Student",
+				"full_name": "_Test Processing Guard Student",
+				"phone": "0902222444",
+			}
+		).insert(ignore_permissions=True)
+		student.student_stage = "Attempting"
+		with self.assertRaises(frappe.PermissionError):
+			student.save(ignore_permissions=True)
+
+	def test_new_lead_cannot_inject_processing_status(self):
+		lead = self._new_lead("ServerDefaults", processing_status="ASSIGNED", resolution="CREATED")
+
+		self.assertEqual(lead.processing_status, "NEW")
+		self.assertEqual(lead.resolution, "PENDING")

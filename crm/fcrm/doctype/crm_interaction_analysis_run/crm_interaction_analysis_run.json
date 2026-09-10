@@ -1,0 +1,26 @@
+{
+ "doctype": "DocType",
+ "name": "CRM Interaction Analysis Run",
+ "module": "FCRM",
+ "autoname": "naming_series:",
+ "naming_rule": "Naming Series",
+ "naming_series_options": "IAR-.YYYY.-",
+ "field_order": ["naming_series", "interaction", "episode_key", "run_key", "source_revision", "source_digest", "status", "supersedes", "policy_revision", "model_revision", "result_digest", "terminal_reason"],
+ "fields": [
+  {"fieldname": "naming_series", "fieldtype": "Select", "options": "IAR-.YYYY.-", "hidden": 1},
+  {"fieldname": "interaction", "fieldtype": "Link", "options": "CRM Interaction", "read_only": 1, "reqd": 1},
+  {"fieldname": "episode_key", "fieldtype": "Data", "read_only": 1, "reqd": 1},
+  {"fieldname": "run_key", "fieldtype": "Data", "read_only": 1, "reqd": 1, "unique": 1},
+  {"fieldname": "source_revision", "fieldtype": "Int", "read_only": 1, "reqd": 1},
+  {"fieldname": "source_digest", "fieldtype": "Data", "read_only": 1, "reqd": 1, "length": 64},
+  {"fieldname": "status", "fieldtype": "Select", "options": "queued\nrunning\ncompleted\nabstained\nfailed\ndead_lettered", "default": "queued", "read_only": 1, "reqd": 1},
+  {"fieldname": "supersedes", "fieldtype": "Link", "options": "CRM Interaction Analysis Run", "read_only": 1},
+  {"fieldname": "policy_revision", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "model_revision", "fieldtype": "Data", "read_only": 1},
+  {"fieldname": "result_digest", "fieldtype": "Data", "read_only": 1, "length": 64},
+  {"fieldname": "terminal_reason", "fieldtype": "Small Text", "read_only": 1}
+ ],
+ "permissions": [{"read": 1, "role": "System Manager"}, {"read": 1, "role": "Administrator"}],
+ "sort_field": "creation",
+ "sort_order": "DESC"
+}

@@ -37,8 +37,8 @@ export default defineConfig(async ({ mode }) => {
         },
         manifest: {
           display: 'standalone',
-          name: 'Frappe CRM',
-          short_name: 'Frappe CRM',
+          name: 'FAIP',
+          short_name: 'FAIP',
           start_url: '/crm',
           description:
             'Modern & 100% Open-source CRM tool to supercharge your sales operations',
@@ -105,7 +105,9 @@ export default defineConfig(async ({ mode }) => {
       buildConfig: {
         indexHtmlPath: '../crm/www/crm.html',
         emptyOutDir: true,
-        sourcemap: true,
+        // Source maps substantially increase the memory needed by the
+        // production bundle. Enable them explicitly for a diagnostic build.
+        sourcemap: process.env.CRM_SOURCEMAP === 'true',
       },
     }),
   )

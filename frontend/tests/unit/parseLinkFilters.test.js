@@ -1,4 +1,9 @@
-import { parseLinkFilters } from '@/utils/fieldTransforms'
+import {
+  getContextualLinkFilters,
+  getDependentFieldsToClear,
+  getProvinceScopedLinkFilters,
+  parseLinkFilters,
+} from '@/utils/fieldTransforms'
 
 describe('parseLinkFilters', () => {
   it('returns null for falsy input', () => {
@@ -23,5 +28,154 @@ describe('parseLinkFilters', () => {
 
   it('handles array JSON', () => {
     expect(parseLinkFilters('[1,2]')).toEqual([1, 2])
+  })
+})
+
+describe('getProvinceScopedLinkFilters', () => {
+  it('filters CRM Ward by selected province', () => {
+    expect(
+      getProvinceScopedLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Ward' },
+        { province: 'Ha Noi' },
+      ),
+    ).toEqual({ province: 'Ha Noi' })
+  })
+
+  it('filters CRM High School by selected province link', () => {
+    expect(
+      getProvinceScopedLinkFilters(
+        { fieldtype: 'Link', options: 'CRM High School' },
+        { province: 'Ha Noi' },
+      ),
+    ).toEqual({ province: 'Ha Noi' })
+  })
+
+  it('preserves existing filters when adding province scope', () => {
+    expect(
+      getProvinceScopedLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Ward' },
+        { province: 'Ha Noi' },
+        { enabled: 1 },
+      ),
+    ).toEqual({ enabled: 1, province: 'Ha Noi' })
+  })
+
+  it('returns base filters when no province scope applies', () => {
+    const baseFilters = { enabled: 1 }
+    expect(
+      getProvinceScopedLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Province' },
+        { province: 'Ha Noi' },
+        baseFilters,
+      ),
+    ).toBe(baseFilters)
+  })
+})
+
+describe('getContextualLinkFilters', () => {
+  it('does not filter CRM Campus by selected province', () => {
+    const baseFilters = { is_active: 1 }
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Campus' },
+        { province: 'Ha Noi' },
+        baseFilters,
+      ),
+    ).toBe(baseFilters)
+  })
+
+  it('filters CRM Campaign by selected branch', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Campaign' },
+        { branch: 'Main Campus' },
+      ),
+    ).toEqual({ campus: 'Main Campus' })
+  })
+
+  it('filters CRM Department by selected campus', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Department' },
+        { campus: 'Main Campus' },
+      ),
+    ).toEqual({ campus: 'Main Campus' })
+  })
+
+  it('filters CRM Staff by campus and department context', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Staff' },
+        { branch: 'Main Campus', department: 'Admissions' },
+      ),
+    ).toEqual({ campus: 'Main Campus', department: 'Admissions' })
+  })
+
+  it('filters CRM Event by selected campaign and province', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM Event' },
+        { crm_campaign: 'Open Day', province: 'Ha Noi' },
+      ),
+    ).toEqual({ crm_campaign: 'Open Day', province: 'Ha Noi' })
+  })
+
+  it('filters CRM High School by selected province and ward code', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM High School' },
+        { province: 'Ha Noi', ward: '001 - Ha Noi' },
+      ),
+    ).toEqual({ province: 'Ha Noi', ward_code: '001' })
+  })
+
+  it('filters CRM High School by selected province and ward name', () => {
+    expect(
+      getContextualLinkFilters(
+        { fieldtype: 'Link', options: 'CRM High School' },
+        { province: 'Lam Dong', ward: 'Phuong Phu Thuy' },
+      ),
+    ).toEqual({ province: 'Lam Dong', ward_name: 'Phuong Phu Thuy' })
+  })
+})
+
+describe('getDependentFieldsToClear', () => {
+  it('clears only dependent fields that exist on the current doc', () => {
+    expect(
+      getDependentFieldsToClear('province', {
+        province: 'Ha Noi',
+        ward: 'Old Ward',
+        high_school: 'Old School',
+        crm_campaign: 'Campaign',
+      }),
+    ).toEqual(['ward', 'high_school'])
+  })
+
+  it('keeps the selected campus when province changes', () => {
+    expect(
+      getDependentFieldsToClear('province', {
+        province: 'Ha Noi',
+        branch: 'Ho Chi Minh City',
+        campus: 'Ho Chi Minh City',
+      }),
+    ).toEqual([])
+  })
+
+  it('clears campaign when branch changes', () => {
+    expect(
+      getDependentFieldsToClear('branch', {
+        branch: 'Main Campus',
+        crm_campaign: 'Old Campaign',
+      }),
+    ).toEqual(['crm_campaign'])
+  })
+
+  it('clears high school when ward changes', () => {
+    expect(
+      getDependentFieldsToClear('ward', {
+        ward: '001 - Ha Noi',
+        high_school: 'Old School',
+      }),
+    ).toEqual(['high_school'])
   })
 })

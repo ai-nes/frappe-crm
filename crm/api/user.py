@@ -4,6 +4,70 @@ from frappe.auth import LoginAttemptTracker
 from frappe.rate_limiter import rate_limit
 from frappe.utils.password import check_password, update_password
 
+from crm.fcrm.role_policy import CANONICAL_SELECTABLE_ROLES, CRM_BUSINESS_ROLES, DESK_MANAGEMENT_ROLE_NAMES
+
+CRM_MANAGED_ROLES = CANONICAL_SELECTABLE_ROLES
+
+
+@frappe.whitelist()
+def get_all_roles():
+	"""Expose the CRM Administrator profile in the User role selector.
+
+	Frappe normally hides ``Administrator`` as an automatic role and exposes
+	``System Manager``.  CRM uses Administrator as the visible control profile,
+	so keep the technical role out of this business-facing selector.
+	"""
+	from frappe.core.doctype.user.user import get_all_roles as frappe_get_all_roles
+
+	roles = set(frappe_get_all_roles())
+	roles.discard("System Manager")
+	roles.add("Administrator")
+	return sorted(roles)
+
+
+def _require_crm_role_manager():
+	"""Allow role mutations only through the canonical session authority."""
+	from crm.api.session import get_session_role_flags
+
+	if get_session_role_flags()["is_system_manager"]:
+		return True
+	frappe.throw(_("Only System Managers may change CRM users."), frappe.PermissionError)
+
+
+def set_canonical_crm_profile(user_doc, new_role: str):
+	"""Replace CRM business aliases atomically while preserving unrelated roles."""
+	if new_role not in CRM_MANAGED_ROLES:
+		frappe.throw(_("Cannot assign this role"), frappe.ValidationError)
+	if new_role == "System Manager":
+		remove_roles(user_doc, *CRM_BUSINESS_ROLES)
+		user_doc.append_roles("System Manager", *DESK_MANAGEMENT_ROLE_NAMES)
+		user_doc.set("block_modules", [])
+		return
+	remove_roles(user_doc, "System Manager", *DESK_MANAGEMENT_ROLE_NAMES, *CRM_BUSINESS_ROLES)
+	user_doc.append_roles(new_role)
+	update_module_in_user(user_doc, "FCRM")
+
+
+def _can_assign_role(is_system_manager: bool, new_role: str) -> bool:
+	"""Only System Managers may create a new canonical profile assignment."""
+	return is_system_manager and new_role in CRM_MANAGED_ROLES
+
+
+def _can_manage_target(is_system_manager: bool, target_roles) -> bool:
+	"""Prevent a non-administrator from demoting another business profile."""
+	if is_system_manager:
+		return True
+	business_roles = set(target_roles) & CRM_BUSINESS_ROLES
+	return not business_roles
+
+
+def _can_remove_target(is_system_manager: bool, target_roles) -> bool:
+	"""A non-administrator may never remove an administrator's CRM access."""
+	roles = set(target_roles)
+	return _can_manage_target(is_system_manager, roles) and (
+		is_system_manager or "System Manager" not in roles
+	)
+
 
 @frappe.whitelist()
 @rate_limit(limit=5, seconds=300)  # 5 attempts per 5 minutes per user/IP
@@ -47,19 +111,14 @@ def change_password(old_password: str, new_password: str):
 
 
 @frappe.whitelist()
-def add_existing_users(users: str | list, role: str = "Sales User"):
+def add_existing_users(users: str | list, role: str = "Sale"):
 	"""
-	Add existing users to the CRM by assigning them a role (Sales User or Sales Manager).
+	Add existing users to the CRM by assigning a canonical role.
 	:param users: List of user names to be added
 	"""
-	frappe.only_for(["System Manager", "Sales Manager"], True)
-	is_system_manager = "System Manager" in frappe.get_roles()
-
-	if role == "System Manager" and not is_system_manager:
-		frappe.throw(_("Only System Managers can assign the System Manager role"), frappe.PermissionError)
-
-	if role == "Sales Manager" and not is_system_manager:
-		frappe.throw(_("Only System Managers can assign the Sales Manager role"), frappe.PermissionError)
+	is_system_manager = _require_crm_role_manager()
+	if not _can_assign_role(is_system_manager, role):
+		frappe.throw(_("Only System Managers may assign this CRM profile."), frappe.PermissionError)
 
 	users = frappe.parse_json(users)
 
@@ -70,40 +129,27 @@ def add_existing_users(users: str | list, role: str = "Sales User"):
 @frappe.whitelist()
 def update_user_role(user: str, new_role: str):
 	"""
-	Update the role of the user to Sales Manager, Sales User, or System Manager.
-	:param user: The name of the user
-	:param new_role: The new role to assign (Sales Manager or Sales User)
+	Replace a user's CRM business profile without granting extra permissions.
 	"""
 
-	frappe.only_for(["System Manager", "Sales Manager"], True)
-	is_system_manager = "System Manager" in frappe.get_roles()
-
-	if new_role not in ["System Manager", "Sales Manager", "Sales User"]:
-		frappe.throw(_("Cannot assign this role"))
+	is_system_manager = _require_crm_role_manager()
+	if not _can_assign_role(is_system_manager, new_role):
+		frappe.throw(_("Only System Managers may assign this CRM profile."), frappe.PermissionError)
 
 	user_doc = frappe.get_doc("User", user)
 	target_roles = [d.role for d in user_doc.roles]
 	target_is_system_manager = "System Manager" in target_roles
+	if not _can_manage_target(is_system_manager, target_roles):
+		frappe.throw(_("Only System Managers may modify this CRM user."), frappe.PermissionError)
 
-	if new_role == "System Manager" and not is_system_manager:
-		frappe.throw(_("Only System Managers can assign the System Manager role"), frappe.PermissionError)
+	if target_is_system_manager and new_role != "System Manager":
+		frappe.throw(
+			_("Remove System Manager access separately before changing this user"), frappe.PermissionError
+		)
+	if user == frappe.session.user and new_role != "System Manager":
+		frappe.throw(_("You cannot remove your own System Manager access."), frappe.PermissionError)
 
-	if target_is_system_manager and not is_system_manager:
-		frappe.throw(_("Only System Managers can modify other System Managers"), frappe.PermissionError)
-
-	if new_role == "Sales Manager" and not is_system_manager:
-		frappe.throw(_("Only System Managers can assign the Sales Manager role"), frappe.PermissionError)
-
-	if new_role == "System Manager":
-		user_doc.append_roles("System Manager", "Sales Manager", "Sales User")
-		user_doc.set("block_modules", [])
-	if new_role == "Sales Manager":
-		user_doc.append_roles("Sales Manager", "Sales User")
-		remove_roles(user_doc, "System Manager")
-	if new_role == "Sales User":
-		user_doc.append_roles("Sales User")
-		remove_roles(user_doc, "Sales Manager", "System Manager")
-		update_module_in_user(user_doc, "FCRM")
+	set_canonical_crm_profile(user_doc, new_role)
 
 	user_doc.save(ignore_permissions=True)
 
@@ -111,33 +157,27 @@ def update_user_role(user: str, new_role: str):
 @frappe.whitelist()
 def remove_crm_roles_from_user(user: str):
 	"""
-	Remove a user means removing Sales User & Sales Manager roles from the user.
+	Remove a user by clearing their CRM business roles.
 	:param user: The name of the user to be removed
 	"""
-	frappe.only_for(["System Manager", "Sales Manager"], True)
+	is_system_manager = _require_crm_role_manager()
 
 	if user == frappe.session.user:
 		frappe.throw(_("You cannot remove yourself."), frappe.PermissionError)
 
 	user_doc = frappe.get_doc("User", user)
 	roles = [d.role for d in user_doc.roles]
-
-	current_user_is_system_manager = "System Manager" in frappe.get_roles()
-
-	if "System Manager" in roles and not current_user_is_system_manager:
-		frappe.throw(_("Only System Managers can modify other System Managers"), frappe.PermissionError)
+	if not _can_remove_target(is_system_manager, roles):
+		frappe.throw(_("Only System Managers may remove this CRM user."), frappe.PermissionError)
 
 	if user_doc.get("role_profiles") or user_doc.get("role_profile_name"):
 		return frappe.throw(
 			_("User {0} cannot be removed as it has a Role Profile assigned to it.").format(user)
 		)
 
-	if "Sales User" in roles:
-		remove_roles(user_doc, "Sales User")
-	if "Sales Manager" in roles:
-		remove_roles(user_doc, "Sales Manager")
-	if "System Manager" in roles and current_user_is_system_manager:
-		remove_roles(user_doc, "System Manager")
+	remove_roles(user_doc, *CRM_BUSINESS_ROLES)
+	if "System Manager" in roles:
+		remove_roles(user_doc, "System Manager", *DESK_MANAGEMENT_ROLE_NAMES)
 		update_module_in_user(user_doc, "FCRM")
 
 	user_doc.save(ignore_permissions=True)

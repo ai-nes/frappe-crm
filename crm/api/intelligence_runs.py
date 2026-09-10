@@ -1,0 +1,125 @@
+"""Named, scoped Intelligence Run commands exposed to the CRM gateway."""
+from __future__ import annotations
+
+import frappe
+
+from crm.api.director_school_common import resolve_school_id
+from crm.fcrm import intelligence_runs
+from crm.fcrm.permissions import has_permission as has_student_permission
+from crm.fcrm.student_reference import canonical_student
+
+
+@frappe.whitelist(methods=["POST"])
+def request_student_analysis_run(student: str, idempotency_key: str | None = None, force_reason: str | None = None):
+	# Student 360 stores runs against the canonical CRM Student id. The CRM
+	# dashboard may still submit its legacy Lead id for the same record.
+	student = canonical_student(student) or student
+	return intelligence_runs.request_run(
+		domain="student", target=student, idempotency_key=idempotency_key or frappe.get_request_header("Idempotency-Key"), force_reason=force_reason
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def request_school_analysis_run(high_school: str, idempotency_key: str | None = None, force_reason: str | None = None, admission_year: int | None = None):
+	# The Director dashboard sends the canonical external school id (for
+	# example, ``01-001-062``), while Intelligence Runs store the Frappe
+	# ``CRM High School`` document name. Accept both forms at this boundary so
+	# the analysis request uses the same identity contract as school detail.
+	if high_school and not frappe.db.exists("CRM High School", high_school):
+		high_school = resolve_school_id(high_school)["name"]
+	return intelligence_runs.request_run(
+		domain="school", target=high_school, idempotency_key=idempotency_key or frappe.get_request_header("Idempotency-Key"), force_reason=force_reason, admission_year=admission_year
+	)
+
+
+@frappe.whitelist()
+def get_analysis_run(run_type: str, run_id: str):
+	if run_type not in intelligence_runs.RUN_TYPES.values():
+		frappe.throw("Invalid Intelligence Run type.", frappe.ValidationError)
+	run = frappe.get_doc(run_type, run_id)
+	target_type, target = (
+		("CRM Student", run.student)
+		if run_type == "CRM Student Analysis Run"
+		else ("CRM High School", run.high_school)
+	)
+	if target_type == "CRM Student":
+		permitted = has_student_permission(
+			frappe.get_doc(target_type, target),
+			user=frappe.session.user,
+			permission_type="read",
+		)
+	else:
+		permitted = frappe.has_permission(target_type, "read", target)
+	if not permitted:
+		frappe.throw("Intelligence Run target is outside current scope.", frappe.PermissionError)
+	return intelligence_runs.public_run_payload(run)
+
+
+@frappe.whitelist()
+def get_analysis_request_receipt(request_id: str):
+	return intelligence_runs.read_receipt(request_id)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_analysis_evidence(run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str):
+	return intelligence_runs.service_evidence(
+		run_type, run_id, stage_kind, int(stage_generation), lease_token
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def get_analysis_run_execution(run_type: str, run_id: str):
+	"""Service-only generic-signal materialization; never exposes CRM evidence."""
+	return intelligence_runs.execution(run_type, run_id)
+
+
+@frappe.whitelist(methods=["POST"])
+def claim_analysis_stage(run_type: str, run_id: str, stage_kind: str, stage_generation: int):
+	"""Acquire a fenced service-only stage lease before AI execution."""
+	return intelligence_runs.claim_stage(
+		run_type=run_type, run_id=run_id, stage_kind=stage_kind, stage_generation=int(stage_generation)
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def settle_analysis_stage(
+	run_type: str,
+	run_id: str,
+	stage_kind: str,
+	stage_generation: int,
+	lease_token: str,
+	expected_source_revision: str,
+	expected_source_digest: str,
+	status: str,
+	claims=None,
+	terminal_reason: str | None = None,
+	policy_revision: str | None = None,
+	model_revision: str | None = None,
+	result_digest: str | None = None,
+	report=None,
+):
+	"""Terminal-only, fenced worker settlement.
+
+	``claimed: false, deferred: true`` from ``claim_analysis_stage`` means the
+	worker must defer until ``retry_after``; it must not settle another worker's
+	lease.  ``dead_lettered`` is a normal terminal settlement for exhausted
+	retries and must include a bounded terminal reason.
+	"""
+	return intelligence_runs.settle_stage(
+		run_type=run_type,
+		run_id=run_id,
+		stage_kind=stage_kind,
+		stage_generation=int(stage_generation),
+		lease_token=lease_token,
+		expected_source_revision=expected_source_revision,
+		expected_source_digest=expected_source_digest,
+		status=status,
+		claims=claims,
+		terminal_reason=terminal_reason,
+		policy_revision=policy_revision,
+		model_revision=model_revision,
+		result_digest=result_digest,
+		report=report,
+	)
+
+

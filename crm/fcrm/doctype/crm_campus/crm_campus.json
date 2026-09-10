@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_import": 1,
- "allow_rename": 1,
+ "allow_rename": 0,
  "autoname": "field:campus_name",
  "creation": "2026-05-30 00:00:00.000000",
  "default_view": "List",
@@ -11,16 +11,30 @@
  "field_order": [
   "campus_name",
   "campus_code",
+  "is_default",
   "province",
+  "city",
+  "latitude",
+  "longitude",
+  "current_enrolled",
+  "target_enrolled",
+  "highlight_major",
   "address",
   "phone",
-  "import_source_id"
+  "import_source_id",
+  "section_governance",
+  "owner_role",
+  "approval_state",
+  "column_break_governance",
+  "version",
+  "effective_date"
  ],
  "fields": [
   {
    "fieldname": "campus_name",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "in_standard_filter": 1,
    "label": "Campus Name",
    "reqd": 1,
    "unique": 1
@@ -32,12 +46,54 @@
    "label": "Campus Code"
   },
   {
+   "fieldname": "is_default",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Default Branch"
+  },
+  {
    "fieldname": "province",
    "fieldtype": "Link",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Province",
    "options": "CRM Province"
+  },
+  {
+   "fieldname": "city",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "City"
+  },
+  {
+   "fieldname": "latitude",
+   "fieldtype": "Float",
+   "label": "Latitude"
+  },
+  {
+   "fieldname": "longitude",
+   "fieldtype": "Float",
+   "label": "Longitude"
+  },
+  {
+   "fieldname": "current_enrolled",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Current Enrolled"
+  },
+  {
+   "fieldname": "target_enrolled",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Target Enrolled"
+  },
+  {
+   "fieldname": "highlight_major",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Highlight Major",
+   "options": "CRM Major"
   },
   {
    "fieldname": "address",
@@ -54,11 +110,48 @@
    "fieldtype": "Int",
    "hidden": 1,
    "label": "Import Source ID"
+  },
+  {
+   "fieldname": "section_governance",
+   "fieldtype": "Section Break",
+   "label": "Governance"
+  },
+  {
+   "fieldname": "owner_role",
+   "fieldtype": "Link",
+   "label": "Owner Role",
+   "options": "Role",
+   "read_only": 1
+  },
+  {
+   "fieldname": "approval_state",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Approval State",
+   "options": "Proposed\nApproved\nRetired",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_governance",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "label": "Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_date",
+   "fieldtype": "Date",
+   "label": "Effective Date",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-06-04 00:00:00.000000",
+ "modified": "2026-06-06 03:00:00.000000",
  "modified_by": "Administrator",
  "module": "FCRM",
  "name": "CRM Campus",
@@ -66,39 +159,24 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "role": "Admissions Director"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Sales Manager",
-   "share": 1,
-   "write": 1
+   "role": "Lead Sale"
   },
   {
-   "create": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Sales User",
-   "share": 1,
-   "write": 1
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "System Manager"
   }
  ],
  "quick_entry": 1,
@@ -107,5 +185,6 @@
  "sort_order": "ASC",
  "states": [],
  "title_field": "campus_name",
- "translated_doctype": 1
+ "translated_doctype": 1,
+ "search_fields": "campus_name,campus_code"
 }

@@ -1,0 +1,81 @@
+{
+ "actions": [],
+ "creation": "2026-09-06 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "routing_enabled",
+  "assignment_mode",
+  "capacity_required",
+  "last_changed_by",
+  "last_change_reason",
+  "revision"
+ ],
+ "fields": [
+  {
+   "default": "0",
+   "description": "When enabled, new Students may be routed by the active Student Routing Policy.",
+   "fieldname": "routing_enabled",
+   "fieldtype": "Check",
+   "label": "Automatic Lead Assignment Enabled"
+  },
+  {
+   "default": "manual_batch",
+   "description": "Manual batch is the safe default after the Lead core refactor. Automatic on create is a compatibility mode only.",
+   "fieldname": "assignment_mode",
+   "fieldtype": "Select",
+   "label": "Assignment Execution Mode",
+   "options": "manual_batch\nautomatic_on_create",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "description": "Do not route to a recipient without an approved active capacity period.",
+   "fieldname": "capacity_required",
+   "fieldtype": "Check",
+   "label": "Require Capacity Before Assignment"
+  },
+  {
+   "fieldname": "last_changed_by",
+   "fieldtype": "Link",
+   "label": "Last Changed By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_change_reason",
+   "fieldtype": "Small Text",
+   "label": "Last Change Reason",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "revision",
+   "fieldtype": "Int",
+   "label": "Revision",
+   "read_only": 1
+  }
+ ],
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-09-06 00:00:00.000000",
+ "module": "FCRM",
+ "name": "CRM Assignment Control",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "export": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "export": 1,
+   "read": 1,
+   "role": "Admissions Director"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

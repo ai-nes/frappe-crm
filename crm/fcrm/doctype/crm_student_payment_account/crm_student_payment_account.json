@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "guardian", "bank_name", "account_number", "account_holder_name", "account_purpose", "is_primary", "verification_status", "verified_by", "verified_at", "rejection_reason", "source_reference"],
+ "fields": [
+  {"default": "PBA-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "options": "PBA-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "reqd": 1},
+  {"fieldname": "guardian", "fieldtype": "Link", "label": "Parent / Contact", "options": "CRM Student Guardian"},
+  {"fieldname": "bank_name", "fieldtype": "Data", "label": "Bank Name", "permlevel": 1, "reqd": 1},
+  {"fieldname": "account_number", "fieldtype": "Data", "label": "Account Number", "permlevel": 1, "reqd": 1},
+  {"fieldname": "account_holder_name", "fieldtype": "Data", "label": "Account Holder Name", "permlevel": 1, "reqd": 1},
+  {"default": "Other", "fieldname": "account_purpose", "fieldtype": "Select", "label": "Account Purpose", "options": "Tuition\nRefund\nOther", "permlevel": 1},
+  {"default": "0", "fieldname": "is_primary", "fieldtype": "Check", "label": "Primary Account", "permlevel": 1},
+  {"default": "Pending", "fieldname": "verification_status", "fieldtype": "Select", "in_list_view": 1, "label": "Verification Status", "options": "Pending\nVerified\nRejected", "permlevel": 1, "reqd": 1},
+  {"fieldname": "verified_by", "fieldtype": "Link", "label": "Verified By", "options": "User", "permlevel": 1, "read_only": 1},
+  {"fieldname": "verified_at", "fieldtype": "Datetime", "label": "Verified At", "permlevel": 1, "read_only": 1},
+  {"fieldname": "rejection_reason", "fieldtype": "Small Text", "label": "Rejection Reason", "permlevel": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source Reference", "read_only": 1}
+ ],
+ "indexes": [{"fields": ["student", "account_purpose", "is_primary"], "name": "crm_student_payment_account_primary_idx", "unique": 0}],
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Student Payment Account",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"permlevel": 1, "read": 1, "write": 1, "role": "System Manager"},
+  {"permlevel": 1, "read": 1, "write": 1, "role": "Admissions Director"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "student,bank_name,account_holder_name,verification_status",
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

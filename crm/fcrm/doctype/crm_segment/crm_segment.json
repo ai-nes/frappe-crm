@@ -1,0 +1,170 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "hash",
+ "creation": "2026-08-23 00:00:00.000000",
+ "default_view": "List",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "segment_code",
+  "title",
+  "is_public",
+  "column_break_1",
+  "filters",
+  "purpose",
+  "responsible_user",
+  "segment_type",
+  "status",
+  "revision",
+  "snapshot_at",
+  "snapshot_by",
+  "category"
+ ],
+ "fields": [
+  {
+   "description": "Server-managed immutable identifier in SEG-{YYMMDD}-{SHORT_ID} format. Legacy codes remain supported.",
+   "fieldname": "segment_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Segment Code",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Title",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_public",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Public"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "filters",
+   "fieldtype": "JSON",
+   "label": "Filter Rules",
+   "reqd": 0
+  },
+  {
+   "fieldname": "purpose",
+   "fieldtype": "Small Text",
+   "label": "Purpose"
+  },
+  {
+   "fieldname": "responsible_user",
+   "fieldtype": "Link",
+   "label": "Responsible User",
+   "options": "User"
+  },
+  {
+   "fieldname": "segment_type",
+   "fieldtype": "Select",
+   "label": "Segment Type",
+   "options": "dynamic\nstatic",
+   "default": "dynamic",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "draft\nactive\ninactive\narchive",
+   "default": "draft",
+   "reqd": 1,
+   "in_list_view": 1
+  },
+  {
+   "fieldname": "revision",
+   "fieldtype": "Int",
+   "label": "Revision",
+   "default": "0",
+   "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_at",
+   "fieldtype": "Datetime",
+   "label": "Snapshot At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_by",
+   "fieldtype": "Link",
+   "label": "Snapshot By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "category",
+   "fieldtype": "Select",
+   "label": "Business Category",
+   "options": "\nadmission_stage\npotential\nintent\nneed"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-08-23 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "FCRM",
+ "name": "CRM Segment",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Administrator",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Lead Sale"
+  },
+  {
+   "read": 1,
+   "role": "Sale"
+  }
+ ],
+ "quick_entry": 0,
+ "row_format": "Dynamic",
+ "search_fields": "title,segment_code",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "title",
+ "translated_doctype": 1,
+ "track_changes": 1
+}

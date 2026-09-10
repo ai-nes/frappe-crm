@@ -7,8 +7,8 @@ from frappe.desk.form.load import get_docinfo
 from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
-from crm.fcrm.doctype.crm_call_log.crm_call_log import parse_call_log
-
+from crm.fcrm.doctype.call_log.call_log import parse_call_log
+from crm.fcrm.student_reference import canonical_student
 
 IGNORED_VERSION_FIELDS = {
 	"docstatus",
@@ -30,6 +30,10 @@ IGNORED_VERSION_FIELDS = {
 
 @frappe.whitelist()
 def get_activities(doctype: str, name: str):
+	if doctype == "CRM Lead":
+		canonical_name = canonical_student(name)
+		if canonical_name:
+			doctype, name = "CRM Student", canonical_name
 	if not doctype or not name or not frappe.db.exists(doctype, name):
 		frappe.throw(_("Document not found"), frappe.DoesNotExistError)
 
@@ -163,7 +167,10 @@ def get_document_activities(doctype: str, name: str):
 	linked_calls = get_linked_calls(doctype, name)
 	calls = linked_calls.get("calls", [])
 	notes = get_linked_notes(doctype, name) + linked_calls.get("notes", [])
-	tasks = get_linked_tasks(doctype, name) + linked_calls.get("tasks", [])
+	# Admissions work items are canonical CRM Actions. Generic Task remains
+	# available to ordinary CRM records, but must not leak into Student/Contact
+	# admissions detail activity payloads.
+	tasks = [] if doctype in {"CRM Lead", "CRM Student"} else get_linked_tasks(doctype, name) + linked_calls.get("tasks", [])
 	attachments = get_attachments(doctype, name)
 
 	activities.sort(key=lambda x: x["creation"], reverse=True)
@@ -232,7 +239,7 @@ def parse_grouped_versions(versions: list):
 
 def get_linked_calls(doctype: str, name: str):
 	calls = frappe.db.get_all(
-		"CRM Call Log",
+		"Call Log",
 		filters={"reference_doctype": doctype, "reference_docname": name},
 		fields=[
 			"name",
@@ -256,7 +263,7 @@ def get_linked_calls(doctype: str, name: str):
 		filters={
 			"link_doctype": doctype,
 			"link_name": name,
-			"parenttype": "CRM Call Log",
+			"parenttype": "Call Log",
 		},
 		pluck="parent",
 	)
@@ -265,7 +272,7 @@ def get_linked_calls(doctype: str, name: str):
 	tasks = []
 
 	if linked_calls:
-		CallLog = frappe.qb.DocType("CRM Call Log")
+		CallLog = frappe.qb.DocType("Call Log")
 		Link = frappe.qb.DocType("Dynamic Link")
 		query = (
 			frappe.qb.from_(CallLog)
@@ -295,10 +302,10 @@ def get_linked_calls(doctype: str, name: str):
 		for call in _calls:
 			if call.get("link_doctype") == "FCRM Note":
 				notes.append(call.link_name)
-			elif call.get("link_doctype") == "CRM Task":
+			elif call.get("link_doctype") == "Task" and doctype not in {"CRM Lead", "CRM Student"}:
 				tasks.append(call.link_name)
 
-		_calls = [call for call in _calls if call.get("link_doctype") not in ["FCRM Note", "CRM Task"]]
+		_calls = [call for call in _calls if call.get("link_doctype") not in ["FCRM Note", "Task"]]
 		if _calls:
 			calls = calls + _calls
 
@@ -306,12 +313,14 @@ def get_linked_calls(doctype: str, name: str):
 		notes = frappe.db.get_all(
 			"FCRM Note",
 			filters={"name": ("in", notes)},
-			fields=["name", "title", "content", "owner", "modified"],
+			fields=["name", "content", "owner", "modified"],
 		)
+		for note in notes:
+			note["owner_full_name"] = frappe.get_cached_value("User", note.owner, "full_name")
 
 	if tasks:
 		tasks = frappe.db.get_all(
-			"CRM Task",
+			"Task",
 			filters={"name": ("in", tasks)},
 			fields=[
 				"name",
@@ -331,20 +340,20 @@ def get_linked_calls(doctype: str, name: str):
 
 
 def get_linked_notes(doctype: str, name: str):
-	return (
-		frappe.db.get_all(
-			"FCRM Note",
-			filters={"reference_doctype": doctype, "reference_docname": name},
-			fields=["name", "title", "content", "owner", "modified", "creation"],
-		)
-		or []
+	notes = frappe.db.get_all(
+		"FCRM Note",
+		filters={"reference_doctype": doctype, "reference_docname": name},
+		fields=["name", "content", "owner", "modified", "creation"],
 	)
+	for note in notes:
+		note["owner_full_name"] = frappe.get_cached_value("User", note.owner, "full_name")
+	return notes or []
 
 
 def get_linked_tasks(doctype: str, name: str):
 	return (
 		frappe.db.get_all(
-			"CRM Task",
+			"Task",
 			filters={"reference_doctype": doctype, "reference_docname": name},
 			fields=[
 				"name",

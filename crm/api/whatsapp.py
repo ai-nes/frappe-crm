@@ -5,10 +5,10 @@ from frappe import _
 from frappe.permissions import add_permission, update_permission_property
 
 from crm.api.doc import get_assigned_users
-from crm.fcrm.doctype.crm_notification.crm_notification import notify_user
+from crm.fcrm.doctype.notification.notification import notify_user
 from crm.integrations.api import get_contact_reference_from_number
 
-ALLOWED_WHATSAPP_ROLES = ["System Manager", "Sales Manager", "Sales User"]
+ALLOWED_WHATSAPP_ROLES = ["System Manager", "Lead Sale", "Sale", "CTV Sale"]
 
 
 def validate_access(reference_doctype=None, reference_name=None, permtype="read"):
@@ -332,7 +332,7 @@ def add_roles():
 	if "frappe_whatsapp" not in frappe.get_installed_apps():
 		return
 
-	role_list = ["Sales Manager", "Sales User"]
+	role_list = ["Lead Sale", "Sale"]
 	doctypes = ["WhatsApp Message", "WhatsApp Templates", "WhatsApp Settings"]
 	for doctype in doctypes:
 		for role in role_list:

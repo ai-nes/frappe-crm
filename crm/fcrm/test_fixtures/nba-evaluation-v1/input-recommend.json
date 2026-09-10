@@ -1,0 +1,184 @@
+{
+  "contract_version": "nba-evaluation-v1",
+  "evaluation_id": "NBAEVAL-0001",
+  "evaluation_key": "3d6dd720a9b29997690599d7063a4d4b9f97c6fb93f3a30cc2149275c30761a5",
+  "evaluation_clock": "2026-09-04T02:00:00+00:00",
+  "student": {
+    "student_id": "ENR-2026-00001",
+    "context_revision": 42,
+    "context_digest": "1111111111111111111111111111111111111111111111111111111111111111",
+    "observed_at": "2026-09-04T01:55:00+00:00",
+    "timezone": "Asia/Ho_Chi_Minh"
+  },
+  "context": {
+    "lifecycle": {
+      "stage": "Qualified"
+    },
+    "intent": {
+      "type": "tuition",
+      "polarity": "positive"
+    },
+    "engagement": {
+      "state": "cooling",
+      "last_contact_days": 6
+    },
+    "application_state": {
+      "completeness": "partial",
+      "missing": [
+        "transcript"
+      ]
+    },
+    "blockers": [
+      "missing_document"
+    ],
+    "deadlines": [
+      {
+        "kind": "application",
+        "at": "2026-09-20T00:00:00+00:00"
+      }
+    ],
+    "contactability": {
+      "consent": true,
+      "channels": [
+        "CALL",
+        "ZALO"
+      ]
+    },
+    "work_in_flight": [],
+    "owner_capacity": {
+      "owner": "sale-7",
+      "open_tasks": 3
+    },
+    "evidence_refs": [
+      "interaction:CRMI-1001",
+      "student:ENR-2026-00001"
+    ],
+    "signal_quality": {
+      "freshness": "current",
+      "missingness": [
+        "recent_assessment"
+      ],
+      "conflicts": []
+    }
+  },
+  "eligible_action_set": {
+    "set_revision": 5,
+    "set_digest": "2222222222222222222222222222222222222222222222222222222222222222",
+    "actions": [
+      {
+        "action_id": "ACT-CALL",
+        "action_revision": 3,
+        "action_digest": "3333333333333333333333333333333333333333333333333333333333333333",
+        "action_code": "CALL",
+        "group": "engagement",
+        "purpose": "Direct voice contact to progress the application.",
+        "addresses_opportunities": [
+          "ENGAGE_OR_REENGAGE",
+          "PROGRESS_APPLICATION"
+        ],
+        "allowed_channels": [
+          "CALL"
+        ],
+        "allowed_actors": [
+          "Sale",
+          "Lead Sale"
+        ],
+        "execution_parameter_schema": {
+          "call_window": "string",
+          "script_ref": "string"
+        },
+        "default_parameters": {
+          "call_window": "business_hours"
+        },
+        "hard_constraints": {
+          "consent_required": true
+        },
+        "normalized_timing_domain": {
+          "earliest_at": "2026-09-04T02:00:00+00:00",
+          "latest_at": "2026-09-19T10:00:00+00:00",
+          "allowed_windows": [
+            {
+              "from": "02:00",
+              "to": "10:00"
+            }
+          ],
+          "cooldown_until": null,
+          "deadline_at": "2026-09-20T00:00:00+00:00",
+          "minimum_delay": "PT0S",
+          "maximum_delay": "P7D",
+          "duration": "PT20M",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "cost_band": "low",
+        "risk_band": "low",
+        "effort_band": "medium",
+        "conflict_keys": [
+          "contact:voice"
+        ]
+      },
+      {
+        "action_id": "ACT-REQUEST-DOCUMENT",
+        "action_revision": 2,
+        "action_digest": "4444444444444444444444444444444444444444444444444444444444444444",
+        "action_code": "REQUEST_DOCUMENT",
+        "group": "requirements",
+        "purpose": "Ask the family for an outstanding required document.",
+        "addresses_opportunities": [
+          "COMPLETE_REQUIREMENT"
+        ],
+        "allowed_channels": [
+          "ZALO",
+          "EMAIL"
+        ],
+        "allowed_actors": [
+          "Sale"
+        ],
+        "execution_parameter_schema": {
+          "document": "string",
+          "deadline": "string"
+        },
+        "default_parameters": {
+          "document": "transcript"
+        },
+        "hard_constraints": {
+          "consent_required": true
+        },
+        "normalized_timing_domain": {
+          "earliest_at": "2026-09-04T02:00:00+00:00",
+          "latest_at": "2026-09-18T10:00:00+00:00",
+          "allowed_windows": [
+            {
+              "from": "01:00",
+              "to": "12:00"
+            }
+          ],
+          "cooldown_until": null,
+          "deadline_at": "2026-09-20T00:00:00+00:00",
+          "minimum_delay": "PT0S",
+          "maximum_delay": "P5D",
+          "duration": "PT10M",
+          "timezone": "Asia/Ho_Chi_Minh"
+        },
+        "cost_band": "low",
+        "risk_band": "low",
+        "effort_band": "low",
+        "conflict_keys": [
+          "contact:async"
+        ]
+      }
+    ]
+  },
+  "policies": {
+    "library_revision": "action-library-r7",
+    "library_digest": "5555555555555555555555555555555555555555555555555555555555555555",
+    "eligibility_revision": "eligibility-r4",
+    "eligibility_digest": "6666666666666666666666666666666666666666666666666666666666666666",
+    "decision_revision": "nba-decision-policy-r2",
+    "decision_digest": "7777777777777777777777777777777777777777777777777777777777777777",
+    "timing_revisions": [
+      "timing-call-r1",
+      "timing-document-r1"
+    ],
+    "timing_digest": "8888888888888888888888888888888888888888888888888888888888888888"
+  }
+}

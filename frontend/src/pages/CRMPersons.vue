@@ -1,7 +1,11 @@
 <template>
   <LayoutHeader>
     <template #left-header>
-      <ViewBreadcrumbs v-model="viewControls" routeName="CRM Persons" />
+      <ViewBreadcrumbs
+        v-model="viewControls"
+        routeName="CRM Persons"
+        :label="__('Persons')"
+      />
     </template>
     <template #right-header>
       <CustomActions
@@ -47,7 +51,7 @@
   />
   <EmptyState
     v-else-if="crmPersons.data && !rows.length"
-    name="CRM Persons"
+    name="Persons"
     :icon="CRMPersonIcon"
   />
 </template>
@@ -81,7 +85,7 @@ const viewControls = ref(null)
 function createCRMPerson() {
   showModal({
     doctype: 'CRM Person',
-    title: __('New CRM Person'),
+    title: __('Person'),
     callbacks: {
       afterInsert: (doc) => {
         router.push({ name: 'CRM Person', params: { crmPersonId: doc.name } })

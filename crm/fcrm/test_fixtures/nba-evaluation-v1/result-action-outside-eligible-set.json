@@ -1,0 +1,56 @@
+{
+  "contract_version": "nba-evaluation-v1",
+  "evaluation_id": "NBAEVAL-0001",
+  "evaluation_key": "3d6dd720a9b29997690599d7063a4d4b9f97c6fb93f3a30cc2149275c30761a5",
+  "input_digest": "c4561f1b6ccbf2a7b1383e19cceaf14f1d3b97c8799438ba63b148c27c281d9b",
+  "engine_revision": "nba-engine-r1",
+  "run_status": "completed",
+  "disposition": "RECOMMEND",
+  "reason_codes": [
+    "feasible_actions_present"
+  ],
+  "revisit_at": null,
+  "reevaluation_trigger": null,
+  "trace_ref": "nba-trace:NBAEVAL-0001",
+  "result_digest": "4d7a14b05c6111e067d21014b613d5a1611d130ca19a37725624b9ef710e331b",
+  "recommendations": [
+    {
+      "recommendation_key": "NBAEVAL-0001:ACT-UNLISTED:1",
+      "rank": 1,
+      "action_ref": {
+        "action_id": "ACT-UNLISTED",
+        "action_revision": 1,
+        "action_digest": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "opportunity_refs": [
+        "PROGRESS_APPLICATION"
+      ],
+      "recommended_execution_params": {},
+      "recommended_timing": {
+        "earliest_at": "2026-09-04T02:00:00+00:00",
+        "latest_at": "2026-09-19T10:00:00+00:00",
+        "scheduled_at": "2026-09-04T03:00:00+00:00",
+        "timezone": "Asia/Ho_Chi_Minh"
+      },
+      "score": {
+        "total": 0.9,
+        "components": {
+          "opportunity_fit": 0.9
+        },
+        "penalties": {}
+      },
+      "confidence": 0.8,
+      "reason_codes": [
+        "fabricated"
+      ],
+      "evidence_refs": [
+        "interaction:CRMI-1001"
+      ],
+      "explanation_facts": [
+        "This action is not in the eligible set."
+      ],
+      "conflict_keys": [],
+      "expires_at": "2026-09-11T02:00:00+00:00"
+    }
+  ]
+}

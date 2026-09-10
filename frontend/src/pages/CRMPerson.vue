@@ -109,7 +109,7 @@ watch(error, (err) => {
 })
 
 const breadcrumbs = computed(() => {
-  let items = [{ label: __('CRM Persons'), route: { name: 'CRM Persons' } }]
+  let items = [{ label: __('Persons'), route: { name: 'CRM Persons' } }]
   items.push({
     label: doc.value?.full_name || props.crmPersonId,
     route: { name: 'CRM Person', params: { crmPersonId: props.crmPersonId } },
@@ -125,8 +125,8 @@ const title = computed(() => {
 usePageMeta(() => ({ title: title.value, icon: brand.favicon }))
 
 const tabs = computed(() => [
-  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Data', label: __('Data'), icon: DetailsIcon },
+  { name: 'Activity', label: __('Activity'), icon: ActivityIcon },
   { name: 'Tasks', label: __('Tasks'), icon: TaskIcon },
   { name: 'Notes', label: __('Notes'), icon: NoteIcon },
   { name: 'Attachments', label: __('Attachments'), icon: AttachmentIcon },
@@ -135,7 +135,7 @@ const tabs = computed(() => [
 const { tabIndex } = useActiveTabManager(tabs, 'lastCRMPersonTab')
 
 const sections = createResource({
-  url: 'crm.fcrm.doctype.crm_fields_layout.crm_fields_layout.get_sidepanel_sections',
+  url: 'crm.fcrm.doctype.fields_layout.fields_layout.get_sidepanel_sections',
   cache: ['sidePanelSections', 'CRM Person'],
   params: { doctype: 'CRM Person' },
   auto: true,

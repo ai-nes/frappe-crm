@@ -25,7 +25,7 @@
     <div class="flex flex-1 flex-col overflow-y-auto">
       <Grid
         v-model="document.doc.dropdown_items"
-        doctype="CRM Dropdown Item"
+        doctype="Dropdown Item"
         parentDoctype="FCRM Settings"
         parentFieldname="dropdown_items"
       />

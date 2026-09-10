@@ -10,22 +10,26 @@ def get_sales_data(site_info):
 	activation_level = site_info.get("activation", {}).get("activation_level", 0)
 	sales_data = site_info.get("activation", {}).get("sales_data", [])
 	doctypes = [
+		"CRM Lead",
 		"CRM Student",
-		"CRM Contact",
 		"CRM High School",
+		"CRM High School Annual Snapshot",
+		"CRM School Activity",
+		"CRM School Stakeholder",
 		"CRM Person",
 		"CRM Campaign",
 		"CRM Event",
+		"CRM Interaction",
+		"CRM Intent",
 		"CRM Staff",
 		"Contact",
-		"CRM Task",
+		"Task",
 		"FCRM Note",
-		"CRM Call Log",
+		"Call Log",
 		"CRM Lead Source",
-		"CRM Lost Reason",
-		"CRM Form Script",
-		"CRM Fields Layout",
-		"CRM View Settings",
+		"Form Script",
+		"Fields Layout",
+		"View Settings",
 	]
 
 	for doctype in doctypes:

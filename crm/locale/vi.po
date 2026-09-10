@@ -70,6 +70,127 @@ msgstr "1 tuần trước"
 msgid "1 year ago"
 msgstr "1 năm trước"
 
+#: frontend/src/components/Modals/AssignStaffModal.vue
+#: frontend/src/components/ListBulkActions.vue
+msgid "Assign Staff"
+msgstr "Gán nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Assigned staff for {0} record(s)"
+msgstr "Đã gán nhân sự cho {0} bản ghi"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Select staff"
+msgstr "Chọn nhân sự"
+
+#: frontend/src/components/Modals/AssignStaffModal.vue
+msgid "Staff"
+msgstr "Nhân sự"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Cold"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Engage W."
+msgstr "TL tương tác"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Fit W."
+msgstr "TL phù hợp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Hot"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent Summary"
+msgstr "Tổng quan ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Intent W."
+msgstr "TL ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Lead Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "High Potential"
+msgstr "Tiềm năng cao"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Low Potential"
+msgstr "Tiềm năng thấp"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+#: frontend/src/components/ListViews/CRMStudentsListView.vue
+#: frontend/src/pages/CRMStudents.vue
+msgid "Medium Potential"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Linked interactions will appear here."
+msgstr "Các tương tác liên kết sẽ hiển thị ở đây."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "No score detail rows were recorded for this snapshot."
+msgstr "Ảnh chụp điểm này chưa có dòng chi tiết."
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Nổi bật"
+msgstr "Nổi bật"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Potential Score"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Breakdown"
+msgstr "Phân tích điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score History"
+msgstr "Lịch sử điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score Overview"
+msgstr "Tổng quan điểm"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Score rule"
+msgstr "Quy tắc điểm"
+
+#: frontend/src/pages/CRMContact.vue
+#: frontend/src/pages/CRMStudent.vue
+msgid "Scoring"
+msgstr "Điểm tiềm năng"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Top Signals"
+msgstr "Tín hiệu chính"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Triggered by"
+msgstr "Kích hoạt bởi"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "Warm"
+msgstr "Tiềm năng vừa"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "intents"
+msgstr "ý định"
+
+#: frontend/src/components/Activities/InteractionScoreArea.vue
+msgid "snapshots"
+msgstr "lần ghi nhận"
+
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Deal'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM Lead'
 #. Option for the 'No. of Employees' (Select) field in DocType 'CRM
@@ -169,15 +290,15 @@ msgstr "Một nguồn đồng bộ thí sinh tiềm năng đã được bật ch
 msgid "A new account has been created for you at {0}"
 msgstr "Một tài khoản mới đã được tạo cho bạn tại {0}"
 
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.py:251
+#: crm/fcrm/doctype/call_log/call_log.py:251
 msgid "A valid call log is required."
 msgstr "Yêu cầu một nhật ký cuộc gọi hợp lệ."
 
-#. Label of the api_key (Data) field in DocType 'CRM Exotel Settings'
-#. Label of the api_key (Data) field in DocType 'CRM Twilio Settings'
+#. Label of the api_key (Data) field in DocType 'Exotel Settings'
+#. Label of the api_key (Data) field in DocType 'Twilio Settings'
 #. Label of the api_key (Data) field in DocType 'ERPNext CRM Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: frontend/src/components/Settings/ERPNextSettings.vue:80
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:45
@@ -185,17 +306,17 @@ msgstr "Yêu cầu một nhật ký cuộc gọi hợp lệ."
 msgid "API Key"
 msgstr "Khóa API"
 
-#. Label of the api_secret (Password) field in DocType 'CRM Twilio Settings'
+#. Label of the api_secret (Password) field in DocType 'Twilio Settings'
 #. Label of the api_secret (Password) field in DocType 'ERPNext CRM Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: frontend/src/components/Settings/ERPNextSettings.vue:88
 #: frontend/src/components/Settings/emailConfig.js:93
 msgid "API Secret"
 msgstr "Mã mật API"
 
-#. Label of the api_token (Password) field in DocType 'CRM Exotel Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
+#. Label of the api_token (Password) field in DocType 'Exotel Settings'
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:53
 msgid "API Token"
 msgstr "Mã thông báo API"
@@ -217,17 +338,17 @@ msgstr "Chấp Nhận"
 msgid "Accept Call"
 msgstr "Chấp Nhận Cuộc Gọi"
 
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.js:7
+#: crm/fcrm/doctype/invitation/invitation.js:7
 msgid "Accept Invitation"
 msgstr "Chấp Nhận Lời Mời"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Option for the 'Status' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Accepted"
 msgstr "Đã Chấp Nhận"
 
-#. Label of the accepted_at (Datetime) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Label of the accepted_at (Datetime) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Accepted At"
 msgstr "Chấp Nhận Lúc"
 
@@ -271,10 +392,10 @@ msgstr "Thông Tin & Bảo Mật Tài Khoản"
 msgid "Account Name"
 msgstr "Tên Tài khoản"
 
-#. Label of the account_sid (Data) field in DocType 'CRM Exotel Settings'
-#. Label of the account_sid (Data) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the account_sid (Data) field in DocType 'Exotel Settings'
+#. Label of the account_sid (Data) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:59
 #: frontend/src/components/Settings/Telephony/TwilioSettings.vue:45
 msgid "Account SID"
@@ -297,7 +418,7 @@ msgstr "Chức năng"
 #: frontend/src/pages/Deal.vue:560 frontend/src/pages/Lead.vue:412
 #: frontend/src/pages/MobileDeal.vue:438 frontend/src/pages/MobileLead.vue:284
 msgid "Activity"
-msgstr "Hoạt Động"
+msgstr "Nhật ký"
 
 #: frontend/src/components/Dashboard/AddChartModal.vue:41
 #: frontend/src/components/Modals/AddExistingUserModal.vue:55
@@ -424,11 +545,11 @@ msgstr "Thêm Tab"
 
 #: frontend/src/components/Modals/CallLogDetailModal.vue:25
 msgid "Add Task"
-msgstr "Thêm Công Việc"
+msgstr "Thêm Task"
 
 #. Label of the add_weekly_holidays_section (Section Break) field in DocType
-#. 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Add Weekly Holidays"
 msgstr "Thêm ngày nghỉ hằng tuần"
 
@@ -447,7 +568,7 @@ msgstr "Thêm ghi chú"
 
 #: frontend/src/components/Telephony/ExotelCallUI.vue:191
 msgid "Add a Task"
-msgstr "Thêm Một Công Việc"
+msgstr "Thêm Task"
 
 #: frontend/src/components/Settings/LeadSyncing/leadSyncSourceConfig.js:25
 msgid "Add a name for your source"
@@ -467,8 +588,8 @@ msgstr "Thêm người dùng hiện có trong hệ thống vào CRM này. Gán v
 msgid "Add one to get started."
 msgstr "Thêm một mục để bắt đầu."
 
-#. Description of the 'Icon' (Code) field in DocType 'CRM Dropdown Item'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#. Description of the 'Icon' (Code) field in DocType 'Dropdown Item'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 msgid "Add svg code or use feather icons e.g 'settings'"
 msgstr "Thêm mã svg hoặc sử dụng biểu tượng feather ví dụ 'settings'"
 
@@ -476,8 +597,8 @@ msgstr "Thêm mã svg hoặc sử dụng biểu tượng feather ví dụ 'setti
 msgid "Add time targets around support milestones like first response"
 msgstr "Thêm mục tiêu thời gian cho các mốc hỗ trợ, ví dụ như thời gian phản hồi đầu tiên"
 
-#. Label of the add_to_holidays (Button) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the add_to_holidays (Button) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Add to Holidays"
 msgstr "Thêm vào ngày lễ"
 
@@ -496,7 +617,7 @@ msgstr "Thêm, chỉnh sửa và quản lý nguồn đồng bộ thí sinh tiề
 #. Label of the address (Link) field in DocType 'CRM Organization'
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 msgid "Address"
-msgstr "Địa Chỉ"
+msgstr "Địa chỉ"
 
 #: frontend/src/components/Modals/AddExistingUserModal.vue:94
 #: frontend/src/components/Settings/InviteUserPage.vue:166
@@ -555,7 +676,7 @@ msgstr "Số tiền sau chiết khấu"
 #: frontend/src/components/Modals/FieldLayoutDialog.vue:277
 #: frontend/src/data/script.js:53 frontend/src/data/script.js:54
 msgid "An error occurred"
-msgstr "Đã xảy ra lỗi"
+msgstr "Có lỗi xảy ra"
 
 #: frontend/src/data/document.js:73
 msgid "An error occurred while updating the document"
@@ -593,8 +714,8 @@ msgstr "Doanh thu hằng năm phải là dạng số"
 msgid "Any failed lead syncs will show up here"
 msgstr "Các lần đồng bộ thí sinh tiềm năng thất bại sẽ hiển thị tại đây"
 
-#. Label of the app_name (Data) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the app_name (Data) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 msgid "App Name"
 msgstr "Tên Ứng Dụng"
 
@@ -615,16 +736,16 @@ msgstr "Hiển thị cạnh tiêu đề trên tab trình duyệt. Khuyến ngh�
 msgid "Apply"
 msgstr "Áp dụng"
 
-#. Label of the apply_on (Link) field in DocType 'CRM Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#. Label of the apply_on (Link) field in DocType 'Service Level Agreement'
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:125
 #: frontend/src/components/Settings/Sla/SlaPolicyList.vue:64
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:71
 msgid "Apply On"
 msgstr "Áp dụng trên"
 
-#. Label of the view (Select) field in DocType 'CRM Form Script'
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
+#. Label of the view (Select) field in DocType 'Form Script'
+#: crm/fcrm/doctype/form_script/form_script.json
 msgid "Apply To"
 msgstr "Áp dụng cho"
 
@@ -713,8 +834,8 @@ msgstr "Giao cho"
 msgid "Assign To Me"
 msgstr "Giao Cho Tôi"
 
-#. Label of the assigned_to (Link) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Label of the assigned_to (Link) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Assigned To"
 msgstr "Người phụ trách"
 
@@ -726,8 +847,8 @@ msgstr "Quy tắc phân công"
 msgid "Assignees"
 msgstr "Người phụ trách"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Option for the 'Type' (Select) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Assignment"
 msgstr "Phân công"
 
@@ -823,7 +944,7 @@ msgstr "Đính kèm tệp…"
 #: frontend/src/pages/Deal.vue:600 frontend/src/pages/Lead.vue:452
 #: frontend/src/pages/MobileDeal.vue:474 frontend/src/pages/MobileLead.vue:319
 msgid "Attachments"
-msgstr "Tập tin đính kèm"
+msgstr "Tài liệu"
 
 #: frontend/src/components/Modals/EventModal.vue:120
 msgid "Attendees"
@@ -833,8 +954,8 @@ msgstr "Người tham dự"
 msgid "Attending status updated"
 msgstr "Trạng thái tham dự đã được cập nhật"
 
-#. Label of the auth_token (Password) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the auth_token (Password) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: frontend/src/components/Settings/Telephony/TwilioSettings.vue:53
 msgid "Auth Token"
 msgstr "Mã xác thực"
@@ -859,7 +980,7 @@ msgstr "Tự động phân công thí sinh tiềm năng/hồ sơ cho đúng cán
 
 #. Description of the 'Condition' (Code) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Auto-generated from the portal view — do not edit directly unless you know what you're doing! "
 msgstr "Được tạo tự động từ giao diện cổng thông tin — không nên chỉnh sửa trực tiếp trừ khi bạn hiểu rõ tác động của việc này!"
 
@@ -985,8 +1106,8 @@ msgstr "Quay lại tải lên tệp"
 msgid "Background Sync Frequency"
 msgstr "Tần suất đồng bộ nền"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Option for the 'Status' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Backlog"
 msgstr "Tồn đọng"
 
@@ -1019,8 +1140,8 @@ msgstr "Thương hiệu"
 msgid "Bulk Edit"
 msgstr "Chỉnh sửa hàng loạt"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Busy"
 msgstr "Bận"
 
@@ -1031,8 +1152,8 @@ msgid "CC"
 msgstr "CC"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-msgid "CRM Call Log"
+#: crm/fcrm/doctype/call_log/call_log.json
+msgid "Call Log"
 msgstr "Nhật ký cuộc gọi CRM"
 
 #. Name of a DocType
@@ -1042,14 +1163,14 @@ msgstr "Trạng thái giao tiếp CRM"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-msgid "CRM Contacts"
-msgstr "Hồ sơ sinh viên"
+msgid "CRM Students"
+msgstr "Hồ sơ"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
+#: crm/fcrm/doctype/dashboard/dashboard.json
 #: frontend/src/pages/Dashboard.vue:307
-msgid "CRM Dashboard"
-msgstr "Bảng Điều Khiển CRM"
+msgid "Dashboard"
+msgstr "Trang tổng quan"
 
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -1059,41 +1180,41 @@ msgstr "Hồ sơ CRM"
 #. Name of a DocType
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
 msgid "CRM Deal Status"
-msgstr "Trạng thái hồ sơ CRM"
+msgstr "Trạng thái giao dịch"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
-msgid "CRM Dropdown Item"
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
+msgid "Dropdown Item"
 msgstr "Mục dropdown CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-msgid "CRM Exotel Settings"
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+msgid "Exotel Settings"
 msgstr "Cài đặt CRM Exotel"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
-msgid "CRM Fields Layout"
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
+msgid "Fields Layout"
 msgstr "Bố cục trường CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-msgid "CRM Form Script"
+#: crm/fcrm/doctype/form_script/form_script.json
+msgid "Form Script"
 msgstr "Kịch bản biểu mẫu CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
-msgid "CRM Global Settings"
+#: crm/fcrm/doctype/global_settings/global_settings.json
+msgid "Global Settings"
 msgstr "Cài đặt toàn cục CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_holiday/crm_holiday.json
-msgid "CRM Holiday"
+#: crm/fcrm/doctype/holiday/holiday.json
+msgid "Holiday"
 msgstr "Ngày lễ CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-msgid "CRM Holiday List"
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+msgid "Holiday List"
 msgstr "Danh sách ngày lễ CRM"
 
 #. Name of a DocType
@@ -1102,8 +1223,8 @@ msgid "CRM Industry"
 msgstr "Ngành CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
-msgid "CRM Invitation"
+#: crm/fcrm/doctype/invitation/invitation.json
+msgid "Invitation"
 msgstr "Lời mời CRM"    
 
 #. Name of a DocType
@@ -1127,8 +1248,8 @@ msgid "CRM Lost Reason"
 msgstr "Lý do không nhập học CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
-msgid "CRM Notification"
+#: crm/fcrm/doctype/notification/notification.json
+msgid "Notification"
 msgstr "Thông Báo CRM"
 
 #. Name of a DocType
@@ -1152,43 +1273,43 @@ msgid "CRM Products"
 msgstr "Các Sản Phẩm CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
-msgid "CRM Rolling Response Time"
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
+msgid "Rolling Response Time"
 msgstr "Thời gian phản hồi trung bình cập nhật liên tục"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
-msgid "CRM Service Day"
+#: crm/fcrm/doctype/service_day/service_day.json
+msgid "Service Day"
 msgstr "Ngày làm việc CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-msgid "CRM Service Level Agreement"
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
+msgid "Service Level Agreement"
 msgstr "Thỏa thuận mức dịch vụ CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_service_level_priority/crm_service_level_priority.json
-msgid "CRM Service Level Priority"
+#: crm/fcrm/doctype/service_level_priority/service_level_priority.json
+msgid "Service Level Priority"
 msgstr "Mức ưu tiên dịch vụ CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
-msgid "CRM Status Change Log"
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
+msgid "Status Change Log"
 msgstr "Nhật ký thay đổi trạng thái CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_task/crm_task.json
-msgid "CRM Task"
-msgstr "Công việc CRM"
+#: crm/fcrm/doctype/task/task.json
+msgid "Task"
+msgstr "Task"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
-msgid "CRM Telephony Agent"
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
+msgid "Telephony Agent"
 msgstr "Nhân viên tổng đài CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_telephony_phone/crm_telephony_phone.json
-msgid "CRM Telephony Phone"
+#: crm/fcrm/doctype/telephony_phone/telephony_phone.json
+msgid "Telephony Phone"
 msgstr "Số điện thoại tổng đài CRM"
 
 #. Name of a DocType
@@ -1197,13 +1318,13 @@ msgid "CRM Territory"
 msgstr "Khu vực tuyển sinh CRM"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
-msgid "CRM Twilio Settings"
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
+msgid "Twilio Settings"
 msgstr "Cài đặt CRM Twilio"
 
 #. Name of a DocType
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
-msgid "CRM View Settings"
+#: crm/fcrm/doctype/view_settings/view_settings.json
+msgid "View Settings"
 msgstr "Cài đặt CRM"
 
 #: frontend/src/components/ViewControls.vue:285
@@ -1228,8 +1349,8 @@ msgstr "Chi tiết cuộc gọi"
 msgid "Call Log"
 msgstr "Nhật ký cuộc gọi"
 
-#. Label of the receiver (Link) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the receiver (Link) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Call Received By"
 msgstr "Cuộc gọi nhận bởi"
 
@@ -1246,8 +1367,8 @@ msgstr "Gọi bằng {0}"
 msgid "Call with John Doe"
 msgstr "Gọi với Nguyễn Văn A"
 
-#. Label of the caller (Link) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the caller (Link) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Caller"
 msgstr "Người Gọi"
 
@@ -1291,10 +1412,10 @@ msgstr "Không thể thử đồng bộ lại khi chưa có nguồn dữ liệu!
 msgid "Cancel"
 msgstr "Hủy"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#. Option for the 'Status' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_task/crm_task.json frontend/src/utils/callLog.js:69
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#. Option for the 'Status' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/task/task.json frontend/src/utils/callLog.js:69
 msgid "Canceled"
 msgstr "Đã hủy"
 
@@ -1448,8 +1569,8 @@ msgstr "Xóa dữ liệu demo"
 msgid "Clear Sort"
 msgstr "Xóa Sắp Xếp"
 
-#. Label of the clear_table (Button) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the clear_table (Button) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Clear Table"
 msgstr "Xóa Bảng"
 
@@ -1491,20 +1612,20 @@ msgstr "Màu sắc"
 msgid "Column"
 msgstr "Cột"
 
-#. Label of the column_field (Data) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the column_field (Data) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/Kanban/KanbanSettings.vue:12
 msgid "Column Field"
 msgstr "Cột trường"
 
-#. Label of the columns (Code) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the columns (Code) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/ColumnSettings.vue:4
 msgid "Columns"
 msgstr "Cột"
 
-#. Label of the comment (Link) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the comment (Link) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 #: frontend/src/components/Activities/ActivityHeader.vue:125
 #: frontend/src/components/CommentBox.vue:78
 #: frontend/src/components/CommunicationArea.vue:15
@@ -1554,21 +1675,21 @@ msgstr "Yêu cầu nhập tên công ty"
 msgid "Complete Registration"
 msgstr "Hoàn thành đăng ký"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: frontend/src/utils/callLog.js:64
 msgid "Completed"
 msgstr "Đã hoàn thành"
 
-#. Option for the 'Device' (Select) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Option for the 'Device' (Select) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 msgid "Computer"
 msgstr "Máy tính"
 
-#. Label of the condition (Code) field in DocType 'CRM Service Level Agreement'
+#. Label of the condition (Code) field in DocType 'Service Level Agreement'
 #. Label of the condition_json (Code) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/ConditionsFilter/CFCondition.vue:65
 #: frontend/src/components/ConditionsFilter/CFCondition.vue:72
 msgid "Condition"
@@ -1656,7 +1777,7 @@ msgstr "Kết nối ERPNext với Frappe CRM"
 msgid "Connect your Email"
 msgstr "Kết nối Email của bạn"
 
-#. Label of the contact (Link) field in DocType 'CRM Contacts'
+#. Label of the contact (Link) field in DocType 'CRM Students'
 #. Label of the contact (Link) field in DocType 'CRM Deal'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
@@ -1718,7 +1839,7 @@ msgstr "Đã cập nhật hình liên hệ"
 #: frontend/src/pages/Contact.vue:246 frontend/src/pages/MobileContact.vue:223
 #: frontend/src/pages/MobileOrganization.vue:348
 msgid "Contacts"
-msgstr "Liên hệ"
+msgstr "Hồ sơ"
 
 #. Label of the content (Text Editor) field in DocType 'FCRM Note'
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
@@ -1804,6 +1925,10 @@ msgstr "Đếm"
 msgid "Create"
 msgstr "Tạo"
 
+#: frontend/src/components/Modals/DoctypeModal.vue:11
+msgid "Create {0}"
+msgstr "Tạo {0}"
+
 #: frontend/src/components/Modals/DealModal.vue:8
 msgid "Create Deal"
 msgstr "Tạo hồ sơ"
@@ -1839,7 +1964,7 @@ msgstr "Tạo Ghi chú"
 
 #: frontend/src/components/Modals/TaskModal.vue:8
 msgid "Create Task"
-msgstr "Tạo Công việc"
+msgstr "Tạo Task"
 
 #: frontend/src/components/Modals/ViewModal.vue:9
 #: frontend/src/components/ViewControls.vue:696
@@ -1982,8 +2107,8 @@ msgstr "Cập nhật cài đặt dashboard thành công"
 msgid "Data"
 msgstr "Dữ liệu"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Option for the 'Type' (Select) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Data Fields"
 msgstr "Trường dữ liệu"
 
@@ -1991,8 +2116,8 @@ msgstr "Trường dữ liệu"
 msgid "Data Import"
 msgstr "Nhập dữ liệu"
 
-#. Label of the date (Date) field in DocType 'CRM Holiday'
-#: crm/api/dashboard.py:641 crm/fcrm/doctype/crm_holiday/crm_holiday.json
+#. Label of the date (Date) field in DocType 'Holiday'
+#: crm/api/dashboard.py:641 crm/fcrm/doctype/holiday/holiday.json
 msgid "Date"
 msgstr "Ngày"
 
@@ -2115,8 +2240,8 @@ msgstr "Kính gửi {{ lead_name }}, \\n\\nĐây là lời nhắc thanh toán ch
 msgid "Declined"
 msgstr "Đã từ chối"
 
-#. Label of the default (Check) field in DocType 'CRM Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#. Label of the default (Check) field in DocType 'Service Level Agreement'
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Default"
 msgstr "Mặc định"
 
@@ -2143,8 +2268,8 @@ msgstr "Hộp thư đến mặc định"
 msgid "Default Incoming"
 msgstr "Đến mặc định"
 
-#. Label of the default_medium (Select) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Label of the default_medium (Select) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:38
 msgid "Default Medium"
 msgstr "Phương tiện mặc định"
@@ -2155,7 +2280,7 @@ msgstr "Đi mặc định"
 
 #. Label of the default_priority (Check) field in DocType 'CRM Service Level
 #. Priority'
-#: crm/fcrm/doctype/crm_service_level_priority/crm_service_level_priority.json
+#: crm/fcrm/doctype/service_level_priority/service_level_priority.json
 #: frontend/src/components/Settings/Sla/SlaPriorityList.vue:181
 msgid "Default Priority"
 msgstr "Mức ưu tiên mặc định"
@@ -2168,7 +2293,7 @@ msgstr "Gửi mặc định"
 msgid "Default Sending & Inbox"
 msgstr "Gửi & Hộp thư đến mặc định"
 
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.py:62
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.py:62
 msgid "Default Service Level Agreement already exists for {0}"
 msgstr "Thỏa thuận Mức Dịch vụ Mặc định đã tồn tại cho {0}"
 
@@ -2260,7 +2385,7 @@ msgstr "Xóa Trường THPT"
 
 #: frontend/src/components/Activities/TaskArea.vue:59
 msgid "Delete Task"
-msgstr "Xóa Công việc"
+msgstr "Xóa Task"
 
 #: frontend/src/components/ViewControls.vue:1115
 #: frontend/src/components/ViewControls.vue:1123
@@ -2291,14 +2416,14 @@ msgstr "Đang xóa ghi chú..."
 msgid "Demo data restored successfully."
 msgstr "Dữ liệu demo đã được khôi phục thành công."
 
-#. Label of the description (Text Editor) field in DocType 'CRM Holiday'
+#. Label of the description (Text Editor) field in DocType 'Holiday'
 #. Label of the description (Text Editor) field in DocType 'CRM Lost Reason'
 #. Label of the description (Text Editor) field in DocType 'CRM Product'
-#. Label of the description (Text Editor) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_holiday/crm_holiday.json
+#. Label of the description (Text Editor) field in DocType 'Task'
+#: crm/fcrm/doctype/holiday/holiday.json
 #: crm/fcrm/doctype/crm_lost_reason/crm_lost_reason.json
 #: crm/fcrm/doctype/crm_product/crm_product.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#: crm/fcrm/doctype/task/task.json
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:254
 #: frontend/src/components/Modals/EventModal.vue:172
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:113
@@ -2328,12 +2453,12 @@ msgstr "Chi tiết"
 
 #. Label of the call_receiving_device (Select) field in DocType 'CRM Telephony
 #. Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/FilesUploader/FilesUploaderArea.vue:39
 msgid "Device"
 msgstr "Thiết bị"
 
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.js:30
+#: crm/fcrm/doctype/form_script/form_script.js:30
 #: frontend/src/components/Settings/ERPNextSettings.vue:32
 #: frontend/src/components/Settings/ERPNextSettings.vue:403
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:29
@@ -2379,12 +2504,12 @@ msgstr "Số tiền Giảm giá"
 msgid "Display format for dates across the system"
 msgstr "Định dạng hiển thị ngày trên toàn hệ thống"
 
-#. Label of the dt (Link) field in DocType 'CRM Form Script'
-#. Label of the dt (Link) field in DocType 'CRM Global Settings'
-#. Label of the dt (Link) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the dt (Link) field in DocType 'Form Script'
+#. Label of the dt (Link) field in DocType 'Global Settings'
+#. Label of the dt (Link) field in DocType 'View Settings'
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/global_settings/global_settings.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "DocType"
 msgstr "Loại tài liệu"
 
@@ -2396,8 +2521,8 @@ msgstr "Loại tài liệu là bắt buộc"
 msgid "Document Not Found"
 msgstr "Không tìm thấy tài liệu"
 
-#. Label of the dt (Link) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Label of the dt (Link) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Document Type"
 msgstr "Loại tài liệu"
 
@@ -2421,8 +2546,8 @@ msgstr "Tài liệu được cập nhật thành công"
 msgid "Documentation"
 msgstr "Tài liệu"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Option for the 'Status' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Done"
 msgstr "Xong"
 
@@ -2453,8 +2578,8 @@ msgstr "Thả tập tin vào đây"
 msgid "Dropdown items"
 msgstr "Mục danh sách thả xuống"
 
-#. Label of the due_date (Datetime) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Label of the due_date (Datetime) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Due Date"
 msgstr "Ngày đến hạn"
 
@@ -2503,10 +2628,10 @@ msgstr "Ngày làm việc trùng lặp: {0}. Mỗi ngày làm việc phải là 
 msgid "Duplicate an Event"
 msgstr "Sao chép một Sự kiện"
 
-#. Label of the duration (Duration) field in DocType 'CRM Call Log'
-#. Label of the duration (Duration) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the duration (Duration) field in DocType 'Call Log'
+#. Label of the duration (Duration) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "Duration"
 msgstr "Thời gian"
 
@@ -2561,6 +2686,10 @@ msgstr "ERPNext không được tích hợp với CRM"
 #: frontend/src/pages/Dashboard.vue:16
 msgid "Edit"
 msgstr "Chỉnh sửa"
+
+#: frontend/src/components/Modals/DoctypeModal.vue:10
+msgid "Edit {0}"
+msgstr "Chỉnh sửa {0}"
 
 #: frontend/src/components/Modals/CallLogDetailModal.vue:40
 #: frontend/src/components/Modals/CallLogModal.vue:87
@@ -2629,7 +2758,7 @@ msgstr "Chỉnh sửa Hàng"
 #: frontend/src/components/Modals/CallLogDetailModal.vue:25
 #: frontend/src/components/Modals/TaskModal.vue:8
 msgid "Edit Task"
-msgstr "Chỉnh sửa Công việc"
+msgstr "Chỉnh sửa Task"
 
 #: frontend/src/components/Modals/ViewModal.vue:6
 msgid "Edit View"
@@ -2651,11 +2780,11 @@ msgstr "Đang chỉnh sửa Sự kiện"
 msgid "Editing Row {0}"
 msgstr "Đang chỉnh sửa Hàng {0}"
 
-#. Label of the email (Data) field in DocType 'CRM Contacts'
-#. Label of the email (Data) field in DocType 'CRM Invitation'
+#. Label of the email (Data) field in DocType 'CRM Students'
+#. Label of the email (Data) field in DocType 'Invitation'
 #. Label of the email (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: frontend/src/components/Activities/ActivityHeader.vue:120
 #: frontend/src/components/Calendar/EventNotifications.vue:26
@@ -2708,8 +2837,8 @@ msgstr "ID email"
 msgid "Email ID is required"
 msgstr "ID Email là bắt buộc"
 
-#. Label of the email_sent_at (Datetime) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Label of the email_sent_at (Datetime) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Email Sent At"
 msgstr "Email gửi lúc"
 
@@ -2760,7 +2889,7 @@ msgstr "Trống - Chọn một trường để lọc theo"
 msgid "Empty - Choose a field to sort by"
 msgstr "Trống - Chọn một trường để sắp xếp theo"
 
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.js:30
+#: crm/fcrm/doctype/form_script/form_script.js:30
 #: frontend/src/components/Settings/ERPNextSettings.vue:259
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:117
 #: frontend/src/components/Settings/Telephony/TwilioSettings.vue:124
@@ -2798,15 +2927,15 @@ msgstr "Bật ghi âm cuộc gọi cho các cuộc gọi đến và đi"
 msgid "Enable the integration to create quotations and auto create customers in ERPNext."
 msgstr "Bật tích hợp để tạo báo giá và tự động tạo thí sinh trong ERPNext."
 
-#. Label of the enabled (Check) field in DocType 'CRM Exotel Settings'
-#. Label of the enabled (Check) field in DocType 'CRM Form Script'
-#. Label of the enabled (Check) field in DocType 'CRM Service Level Agreement'
-#. Label of the enabled (Check) field in DocType 'CRM Twilio Settings'
+#. Label of the enabled (Check) field in DocType 'Exotel Settings'
+#. Label of the enabled (Check) field in DocType 'Form Script'
+#. Label of the enabled (Check) field in DocType 'Service Level Agreement'
+#. Label of the enabled (Check) field in DocType 'Twilio Settings'
 #. Label of the enabled (Check) field in DocType 'ERPNext CRM Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:32
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRulesList.vue:18
@@ -2825,8 +2954,8 @@ msgstr "Đã bật"
 msgid "Enabled?"
 msgstr "Đã bật?"
 
-#. Label of the end_date (Date) field in DocType 'CRM Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#. Label of the end_date (Date) field in DocType 'Service Level Agreement'
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:193
 msgid "End Date"
 msgstr "Ngày kết thúc"
@@ -2835,10 +2964,10 @@ msgstr "Ngày kết thúc"
 msgid "End Date cannot be before start date"
 msgstr "Ngày kết thúc không thể trước ngày bắt đầu"
 
-#. Label of the end_time (Datetime) field in DocType 'CRM Call Log'
-#. Label of the end_time (Time) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Label of the end_time (Datetime) field in DocType 'Call Log'
+#. Label of the end_time (Time) field in DocType 'Service Day'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/service_day/service_day.json
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:346
 #: frontend/src/components/Modals/EventModal.vue:112
 #: frontend/src/components/Settings/Sla/SlaHolidays.vue:224
@@ -3025,11 +3154,11 @@ msgstr "Tỷ giá hối đoái"
 msgid "Exchange Rate Provider"
 msgstr "Nhà cung cấp Tỷ giá"
 
-#. Option for the 'Telephony Medium' (Select) field in DocType 'CRM Call Log'
+#. Option for the 'Telephony Medium' (Select) field in DocType 'Call Log'
 #. Option for the 'Default Medium' (Select) field in DocType 'CRM Telephony
 #. Agent'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/Layouts/AppSidebar.vue:626
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:52
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:178
@@ -3044,8 +3173,8 @@ msgstr "Ngoại lệ Exotel"
 msgid "Exotel Integration Disabled"
 msgstr "Tích hợp Exotel đã bị tắt"
 
-#. Label of the exotel_number (Data) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Label of the exotel_number (Data) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:99
 msgid "Exotel Number"
 msgstr "Số Exotel"
@@ -3084,8 +3213,8 @@ msgstr "Ngày đóng dự kiến là bắt buộc."
 msgid "Expected deal value is required."
 msgstr "Giá trị hồ sơ dự kiến là bắt buộc."
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Option for the 'Status' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Expired"
 msgstr "Đã hết hạn"
 
@@ -3152,15 +3281,15 @@ msgstr "ID Lead Facebook"
 msgid "Facebook Page"
 msgstr "Trang Facebook"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
 #. Option for the 'SLA Status' (Select) field in DocType 'CRM Deal'
 #. Option for the 'SLA Status' (Select) field in DocType 'CRM Lead'
 #. Option for the 'Status' (Select) field in DocType 'CRM Rolling Response
 #. Time'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
 #: frontend/src/utils/callLog.js:67
 msgid "Failed"
 msgstr "Thất bại"
@@ -3309,9 +3438,9 @@ msgstr "Tệp \"{0}\" bị bỏ qua vì chỉ cho phép {1} tải lên cho DocTy
 msgid "Filter"
 msgstr "Lọc"
 
-#. Label of the filters (Code) field in DocType 'CRM View Settings'
-#. Label of the filters_tab (Tab Break) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the filters (Code) field in DocType 'View Settings'
+#. Label of the filters_tab (Tab Break) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Filters"
 msgstr "Bộ lọc"
 
@@ -3345,7 +3474,7 @@ msgstr "Hạn phản hồi đầu tiên"
 
 #. Label of the first_response_time (Duration) field in DocType 'CRM Service
 #. Level Priority'
-#: crm/fcrm/doctype/crm_service_level_priority/crm_service_level_priority.json
+#: crm/fcrm/doctype/service_level_priority/service_level_priority.json
 msgid "First Response TIme"
 msgstr "Thời gian phản hồi đầu tiên"
 
@@ -3385,8 +3514,8 @@ msgstr "Doanh thu dự báo"
 msgid "Forecasted revenue"
 msgstr "Doanh thu dự báo"
 
-#. Option for the 'Apply To' (Select) field in DocType 'CRM Form Script'
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
+#. Option for the 'Apply To' (Select) field in DocType 'Form Script'
+#: crm/fcrm/doctype/form_script/form_script.json
 msgid "Form"
 msgstr "Mẫu"
 
@@ -3412,37 +3541,37 @@ msgstr "Frappe CRM di động"
 msgid "Frappe Mail Site"
 msgstr "Trang Frappe Mail"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Friday"
 msgstr "Thứ Sáu"
 
-#. Label of the from (Data) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the from (Data) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "From"
 msgstr "Từ"
 
-#. Label of the from_date (Date) field in DocType 'CRM Holiday List'
-#. Label of the from_date (Datetime) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the from_date (Date) field in DocType 'Holiday List'
+#. Label of the from_date (Datetime) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "From Date"
 msgstr "Từ Ngày"
 
-#. Label of the from (Data) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the from (Data) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "From Number"
 msgstr "Từ Số"
 
-#. Label of the from_type (Data) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the from_type (Data) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "From Type"
 msgstr "Từ Loại"
 
-#. Label of the from_user (Link) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the from_user (Link) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "From User"
 msgstr "Từ người dùng"
 
@@ -3452,11 +3581,11 @@ msgstr "Từ người dùng"
 #. Time'
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
 msgid "Fulfilled"
 msgstr "Đã thực hiện"
 
-#. Label of the full_name (Data) field in DocType 'CRM Contacts'
+#. Label of the full_name (Data) field in DocType 'CRM Students'
 #. Label of the lead_name (Data) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
@@ -3475,7 +3604,7 @@ msgstr "Chuyển đổi phễu"
 msgid "GMT+5:30"
 msgstr "GMT+5:30"
 
-#. Label of the gender (Link) field in DocType 'CRM Contacts'
+#. Label of the gender (Link) field in DocType 'CRM Students'
 #. Label of the gender (Link) field in DocType 'CRM Deal'
 #. Label of the gender (Link) field in DocType 'CRM Lead'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
@@ -3524,20 +3653,20 @@ msgstr "Lớn hơn"
 msgid "Greater than or equal to"
 msgstr "Lớn hơn hoặc bằng"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Option for the 'Type' (Select) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Grid Row"
 msgstr "Hàng lưới"
 
-#. Label of the group_by_tab (Tab Break) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the group_by_tab (Tab Break) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/ViewControls.vue:386
 #: frontend/src/components/ViewControls.vue:618 frontend/src/utils/view.js:16
 msgid "Group By"
 msgstr "Nhóm theo"
 
-#. Label of the group_by_field (Data) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the group_by_field (Data) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Group By Field"
 msgstr "Trường nhóm theo"
 
@@ -3561,8 +3690,8 @@ msgstr "Trợ giúp"
 msgid "Hi John, \\n\\nCan you please provide more details on this..."
 msgstr "Xin chào John, \\n\\nBạn có thể cung cấp thêm chi tiết về việc này..."
 
-#. Label of the hidden (Check) field in DocType 'CRM Dropdown Item'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#. Label of the hidden (Check) field in DocType 'Dropdown Item'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 msgid "Hidden"
 msgstr "Ẩn"
 
@@ -3593,26 +3722,26 @@ msgstr "Ẩn bản xem trước"
 msgid "Hide Recording"
 msgstr "Ẩn ghi âm"
 
-#. Option for the 'Priority' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Option for the 'Priority' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "High"
 msgstr "Cao"
 
 #. Label of the holiday_list (Link) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Holiday List"
 msgstr "Danh sách ngày nghỉ"
 
-#. Label of the holiday_list_name (Data) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the holiday_list_name (Data) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Holiday List Name"
 msgstr "Tên Danh sách ngày nghỉ"
 
-#. Label of the holidays_section (Section Break) field in DocType 'CRM Holiday
+#. Label of the holidays_section (Section Break) field in DocType 'Holiday
 #. List'
-#. Label of the holidays (Table) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the holidays (Table) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Holidays"
 msgstr "Ngày lễ"
 
@@ -3634,11 +3763,11 @@ msgstr "Hàng Giờ"
 msgid "I understand, Add Conditions"
 msgstr "Tôi hiểu, thêm Điều kiện"
 
-#. Label of the id (Data) field in DocType 'CRM Call Log'
+#. Label of the id (Data) field in DocType 'Call Log'
 #. Label of the id (Data) field in DocType 'Facebook Lead Form'
 #. Label of the id (Data) field in DocType 'Facebook Lead Form Question'
 #. Label of the id (Data) field in DocType 'Facebook Page'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/lead_syncing/doctype/facebook_lead_form/facebook_lead_form.json
 #: crm/lead_syncing/doctype/facebook_lead_form_question/facebook_lead_form_question.json
 #: crm/lead_syncing/doctype/facebook_page/facebook_page.json
@@ -3646,10 +3775,10 @@ msgstr "Tôi hiểu, thêm Điều kiện"
 msgid "ID"
 msgstr "Mã số"
 
-#. Label of the icon (Code) field in DocType 'CRM Dropdown Item'
-#. Label of the icon (Data) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the icon (Code) field in DocType 'Dropdown Item'
+#. Label of the icon (Data) field in DocType 'View Settings'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Icon"
 msgstr "Biểu tượng"
 
@@ -3692,10 +3821,10 @@ msgstr "Nhập dữ liệu"
 msgid "In"
 msgstr "Trong"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#. Option for the 'Status' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_task/crm_task.json frontend/src/utils/callLog.js:72
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#. Option for the 'Status' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/task/task.json frontend/src/utils/callLog.js:72
 msgid "In Progress"
 msgstr "Đang tiến hành"
 
@@ -3711,8 +3840,8 @@ msgstr "Cuộc gọi đến"
 msgid "Inbox"
 msgstr "Hộp thư đến"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Type' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Incoming"
 msgstr "Đang đến"
 
@@ -3740,8 +3869,8 @@ msgstr "Ngành"
 msgid "Industry"
 msgstr "Ngành"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: frontend/src/utils/callLog.js:65
 msgid "Initiated"
 msgstr "Đã khởi tạo"
@@ -3781,7 +3910,7 @@ msgstr "Tích hợp"
 msgid "Introduction"
 msgstr "Giới thiệu"
 
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.py:57
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.py:57
 msgid "Invalid Account SID or Auth Token."
 msgstr "Account SID hoặc Auth Token không hợp lệ."
 
@@ -3829,7 +3958,7 @@ msgstr "Access token được cung cấp cho Facebook không hợp lệ."
 msgid "Invalid chart name"
 msgstr "Tên biểu đồ không hợp lệ"
 
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.py:42
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.py:42
 msgid "Invalid credentials"
 msgstr "Thông tin xác thực không hợp lệ"
 
@@ -3862,12 +3991,12 @@ msgstr "Định dạng không hợp lệ. Thử: 1 giờ 30 phút, 2 giờ, 45 g
 msgid "Invalid format. Try: 1h 30m 45s, 1:30:45, 90s"
 msgstr "Định dạng không hợp lệ. Thử: 1h 30m 45s, 1:30:45, 90s"
 
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.py:263
+#: crm/fcrm/doctype/call_log/call_log.py:263
 msgid "Invalid lead details supplied."
 msgstr "Thông tin thí sinh tiềm năng được cung cấp không hợp lệ."
 
 #: crm/api/__init__.py:81 crm/api/__init__.py:85
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.py:61
+#: crm/fcrm/doctype/invitation/invitation.py:61
 msgid "Invalid or expired key"
 msgstr "Khóa không hợp lệ hoặc đã hết hạn"
 
@@ -3912,8 +4041,8 @@ msgstr "Mời người dùng truy cập CRM. Chỉ định vai trò của họ �
 msgid "Invite your team"
 msgstr "Mời nhóm của bạn"
 
-#. Label of the invited_by (Link) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Label of the invited_by (Link) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Invited By"
 msgstr "Được mời bởi"
 
@@ -3928,8 +4057,8 @@ msgstr "Được mời bởi"
 msgid "Is"
 msgstr "Là"
 
-#. Label of the is_default (Check) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the is_default (Check) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Is Default"
 msgstr "Là mặc định"
 
@@ -3944,19 +4073,19 @@ msgstr "ERPNext có được cài đặt trên một site khác không?"
 msgid "Is Group"
 msgstr "Là nhóm"
 
-#. Label of the is_primary (Check) field in DocType 'CRM Contacts'
-#. Label of the is_primary (Check) field in DocType 'CRM Telephony Phone'
+#. Label of the is_primary (Check) field in DocType 'CRM Students'
+#. Label of the is_primary (Check) field in DocType 'Telephony Phone'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
-#: crm/fcrm/doctype/crm_telephony_phone/crm_telephony_phone.json
+#: crm/fcrm/doctype/telephony_phone/telephony_phone.json
 msgid "Is Primary"
 msgstr "Là chính"
 
-#. Label of the is_standard (Check) field in DocType 'CRM Dropdown Item'
-#. Label of the is_standard (Check) field in DocType 'CRM Form Script'
-#. Label of the is_standard (Check) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the is_standard (Check) field in DocType 'Dropdown Item'
+#. Label of the is_standard (Check) field in DocType 'Form Script'
+#. Label of the is_standard (Check) field in DocType 'View Settings'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Is Standard"
 msgstr "Là Tiêu chuẩn"
 
@@ -3978,8 +4107,8 @@ msgstr "Các mục là bắt buộc"
 msgid "Items must be a list"
 msgstr "Các mục phải là một danh sách"
 
-#. Label of the json (JSON) field in DocType 'CRM Global Settings'
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
+#. Label of the json (JSON) field in DocType 'Global Settings'
+#: crm/fcrm/doctype/global_settings/global_settings.json
 msgid "JSON"
 msgstr "JSON"
 
@@ -4002,20 +4131,20 @@ msgstr "John Doe"
 msgid "John, Jane, Doe"
 msgstr "John, Jane, Doe"
 
-#. Label of the kanban_tab (Tab Break) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the kanban_tab (Tab Break) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/ViewControls.vue:391
 #: frontend/src/components/ViewControls.vue:607 frontend/src/utils/view.js:20
 msgid "Kanban"
 msgstr "Kanban"
 
-#. Label of the kanban_columns (Code) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the kanban_columns (Code) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Kanban Columns"
 msgstr "Cột Kanban"
 
-#. Label of the kanban_fields (Code) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the kanban_fields (Code) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Kanban Fields"
 msgstr "Trường Kanban"
 
@@ -4027,18 +4156,18 @@ msgstr "Cài đặt Kanban"
 msgid "Kanban settings"
 msgstr "Cài đặt kanban"
 
-#. Label of the key (Data) field in DocType 'CRM Invitation'
+#. Label of the key (Data) field in DocType 'Invitation'
 #. Label of the key (Data) field in DocType 'Facebook Lead Form Question'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/lead_syncing/doctype/facebook_lead_form_question/facebook_lead_form_question.json
 msgid "Key"
 msgstr "Khóa"
 
-#. Label of the label (Data) field in DocType 'CRM Dropdown Item'
-#. Label of the label (Data) field in DocType 'CRM View Settings'
+#. Label of the label (Data) field in DocType 'Dropdown Item'
+#. Label of the label (Data) field in DocType 'View Settings'
 #. Label of the label (Data) field in DocType 'Facebook Lead Form Question'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: crm/lead_syncing/doctype/facebook_lead_form_question/facebook_lead_form_question.json
 #: frontend/src/components/ColumnSettings.vue:101
 msgid "Label"
@@ -4113,7 +4242,7 @@ msgstr "Thời gian phản hồi cuối"
 
 #. Label of the last_status_change_log (Link) field in DocType 'CRM Status
 #. Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "Last Status Change Log"
 msgstr "Nhật ký thay đổi trạng thái cuối"
 
@@ -4141,10 +4270,10 @@ msgstr "Họ"
 msgid "Last user assigned by this rule"
 msgstr "Người dùng cuối cùng được phân công bởi quy tắc này"
 
-#. Label of the layout (Code) field in DocType 'CRM Dashboard'
-#. Label of the layout (Code) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Label of the layout (Code) field in DocType 'Dashboard'
+#. Label of the layout (Code) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/dashboard/dashboard.json
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Layout"
 msgstr "Bố cục"
 
@@ -4159,7 +4288,7 @@ msgstr "Bố cục"
 #: frontend/src/components/Telephony/ExotelCallUI.vue:200
 #: frontend/src/pages/Tasks.vue:133
 msgid "Lead"
-msgstr "Thí sinh tiềm năng"
+msgstr "Lead"
 
 #. Label of the lead_data (Code) field in DocType 'Failed Lead Sync Log'
 #: crm/lead_syncing/doctype/failed_lead_sync_log/failed_lead_sync_log.json
@@ -4210,7 +4339,7 @@ msgstr "Đã tạo Nguồn đồng bộ thí sinh tiềm năng thành công"
 msgid "Lead Syncing"
 msgstr "Đồng bộ thí sinh tiềm năng"
 
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.py:281
+#: crm/fcrm/doctype/call_log/call_log.py:281
 msgid "Lead from call {0}"
 msgstr "Thí sinh tiềm năng từ cuộc gọi {0}"
 
@@ -4287,15 +4416,15 @@ msgstr "Liên kết"
 msgid "Linked With"
 msgstr "Được liên kết với"
 
-#. Label of the links (Table) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the links (Table) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Links"
 msgstr "Liên kết"
 
-#. Option for the 'Apply To' (Select) field in DocType 'CRM Form Script'
-#. Label of the list_tab (Tab Break) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Option for the 'Apply To' (Select) field in DocType 'Form Script'
+#. Label of the list_tab (Tab Break) field in DocType 'View Settings'
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/ViewControls.vue:381
 #: frontend/src/components/ViewControls.vue:596 frontend/src/utils/view.js:12
 msgid "List"
@@ -4307,7 +4436,7 @@ msgstr "Nghe"
 
 #. Label of the load_default_columns (Check) field in DocType 'CRM View
 #. Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Load Default Columns"
 msgstr "Tải cột mặc định"
 
@@ -4408,8 +4537,8 @@ msgstr "Lý do không nhập học là bắt buộc"
 msgid "Lost deal reasons"
 msgstr "Lý do hồ sơ không nhập học"
 
-#. Option for the 'Priority' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Option for the 'Priority' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Low"
 msgstr "Thấp"
 
@@ -4505,8 +4634,8 @@ msgstr "Trường bắt buộc {0} phải được ánh xạ"
 msgid "Mandatory fields required: {0}"
 msgstr "Các trường bắt buộc: {0}"
 
-#. Option for the 'Telephony Medium' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Telephony Medium' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Manual"
 msgstr "Thủ công"
 
@@ -4542,15 +4671,15 @@ msgstr "1 tháng 5, 2025"
 msgid "Maybe"
 msgstr "Có lẽ"
 
-#. Label of the medium (Data) field in DocType 'CRM Call Log'
-#. Option for the 'Priority' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Label of the medium (Data) field in DocType 'Call Log'
+#. Option for the 'Priority' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/task/task.json
 msgid "Medium"
 msgstr "Trung bình"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Option for the 'Type' (Select) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Mention"
 msgstr "Đề cập đến"
 
@@ -4558,8 +4687,8 @@ msgstr "Đề cập đến"
 msgid "Mentions"
 msgstr "Đề cập"
 
-#. Label of the message (HTML Editor) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the message (HTML Editor) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Message"
 msgstr "Tin nhắn"
 
@@ -4584,12 +4713,12 @@ msgstr "Thiếu các trường bắt buộc: {0}"
 msgid "Mobile App Installation"
 msgstr "Cài đặt Ứng dụng di động"
 
-#. Label of the mobile_no (Data) field in DocType 'CRM Contacts'
+#. Label of the mobile_no (Data) field in DocType 'CRM Students'
 #. Label of the mobile_no (Data) field in DocType 'CRM Lead'
-#. Label of the mobile_no (Data) field in DocType 'CRM Telephony Agent'
+#. Label of the mobile_no (Data) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/pages/Contact.vue:541 frontend/src/pages/MobileContact.vue:534
 #: frontend/src/pages/MobileOrganization.vue:483
 #: frontend/src/pages/Organization.vue:513
@@ -4611,10 +4740,10 @@ msgstr "Số điện thoại di động"
 msgid "Mobile Number Missing"
 msgstr "Số di động bị thiếu"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Monday"
 msgstr "Thứ hai"
 
@@ -4665,11 +4794,11 @@ msgstr "Chuyển đến Tab trước"
 msgid "My Open Deals"
 msgstr "Hồ sơ đang mở của tôi"
 
-#. Label of the title (Data) field in DocType 'CRM Dashboard'
-#. Label of the name1 (Data) field in DocType 'CRM Dropdown Item'
+#. Label of the title (Data) field in DocType 'Dashboard'
+#. Label of the name1 (Data) field in DocType 'Dropdown Item'
 #. Label of the brand_name (Data) field in DocType 'FCRM Settings'
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#: crm/fcrm/doctype/dashboard/dashboard.json
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
 #: frontend/src/components/Modals/CreateDocumentModal.vue:121
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:52
@@ -4794,7 +4923,7 @@ msgstr "Tab mới"
 #: frontend/src/components/Activities/ActivityHeader.vue:48
 #: frontend/src/pages/Deals.vue:527 frontend/src/pages/Leads.vue:561
 msgid "New Task"
-msgstr "Công việc mới"
+msgstr "Thêm Task"
 
 #: frontend/src/components/Settings/EmailTemplate/NewEmailTemplate.vue:10
 msgid "New Template"
@@ -4849,8 +4978,8 @@ msgstr "Năm tới"
 msgid "No"
 msgstr "Không"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "No Answer"
 msgstr "Không trả lời"
 
@@ -5047,8 +5176,8 @@ msgstr "Không giống"
 
 #: crm/api/activities.py:25 crm/api/activities.py:179 crm/api/contact.py:34
 #: crm/api/contact.py:70 crm/api/contact.py:91
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.py:133
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.py:162
+#: crm/fcrm/doctype/view_settings/view_settings.py:133
+#: crm/fcrm/doctype/view_settings/view_settings.py:162
 msgid "Not permitted"
 msgstr "Không được phép"
 
@@ -5060,12 +5189,12 @@ msgstr "Không được phép truy cập tài liệu tham chiếu {0} {1}."
 msgid "Not permitted to access the referenced WhatsApp message."
 msgstr "Không được phép truy cập tin nhắn WhatsApp được tham chiếu."
 
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.py:197
+#: crm/fcrm/doctype/fields_layout/fields_layout.py:197
 msgid "Not permitted to modify fields layout"
 msgstr "Không được phép chỉnh sửa bố cục các trường"
 
-#. Label of the note (Link) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the note (Link) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: frontend/src/components/Activities/ActivityHeader.vue:146
 #: frontend/src/components/Layouts/AppSidebar.vue:578
 msgid "Note"
@@ -5095,20 +5224,20 @@ msgstr "Chế độ xem Ghi chú"
 msgid "Notification"
 msgstr "Thông báo"
 
-#. Label of the notification_text (Text) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the notification_text (Text) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Notification Text"
 msgstr "Văn bản Thông báo"
 
 #. Label of the notification_type_doc (Dynamic Link) field in DocType 'CRM
 #. Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Notification Type Doc"
 msgstr "Loại Tài liệu Thông báo"
 
 #. Label of the notification_type_doctype (Link) field in DocType 'CRM
 #. Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Notification Type Doctype"
 msgstr "Loại Doctype Thông báo"
 
@@ -5120,8 +5249,8 @@ msgstr "Loại Doctype Thông báo"
 msgid "Notifications"
 msgstr "Thông báo"
 
-#. Label of the number (Data) field in DocType 'CRM Telephony Phone'
-#: crm/fcrm/doctype/crm_telephony_phone/crm_telephony_phone.json
+#. Label of the number (Data) field in DocType 'Telephony Phone'
+#: crm/fcrm/doctype/telephony_phone/telephony_phone.json
 msgid "Number"
 msgstr "Số"
 
@@ -5203,7 +5332,7 @@ msgid "Only image files are allowed"
 msgstr "Chỉ cho phép tệp hình ảnh"
 
 #: crm/fcrm/doctype/crm_deal/crm_deal.py:135
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.py:68
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.py:68
 msgid "Only one {0} can be set as primary."
 msgstr "Chỉ có thể đặt một {0} làm chính."
 
@@ -5241,8 +5370,8 @@ msgstr "Mở Website"
 msgid "Open in Portal"
 msgstr "Mở trong Cổng thông tin"
 
-#. Label of the open_in_new_window (Check) field in DocType 'CRM Dropdown Item'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#. Label of the open_in_new_window (Check) field in DocType 'Dropdown Item'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 msgid "Open in new window"
 msgstr "Mở trong cửa sổ mới"
 
@@ -5261,9 +5390,9 @@ msgstr "Tùy chọn"
 msgid "Or create leads manually"
 msgstr "Hoặc tạo thí sinh tiềm năng thủ công"
 
-#. Label of the order_by_tab (Tab Break) field in DocType 'CRM View Settings'
-#. Label of the order_by (Code) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the order_by_tab (Tab Break) field in DocType 'View Settings'
+#. Label of the order_by (Code) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Order By"
 msgstr "Sắp xếp theo"
 
@@ -5331,19 +5460,19 @@ msgstr "Khác"
 msgid "Outbound Call"
 msgstr "Cuộc gọi đi"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Type' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Outgoing"
 msgstr "Đi"
 
-#. Label of the log_owner (Link) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the log_owner (Link) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "Owner"
-msgstr "Chủ sở hữu"
+msgstr "Người phụ trách"
 
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:146
 msgid "Owner: {0}"
-msgstr "Chủ sở hữu: {0}"
+msgstr "Người phụ trách: {0}"
 
 #. Label of the page (Link) field in DocType 'Facebook Lead Form'
 #: crm/lead_syncing/doctype/facebook_lead_form/facebook_lead_form.json
@@ -5416,8 +5545,8 @@ msgstr "Lời nhắc Thanh toán từ Frappé - (#{{ name }})"
 msgid "Payment reminder from Frappé - (#{{ name }})"
 msgstr "Lời nhắc thanh toán từ Frappé - (#{{ name }})"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Option for the 'Status' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 msgid "Pending"
 msgstr "Đang chờ xử lý"
 
@@ -5440,19 +5569,19 @@ msgstr "Người"
 msgid "Personal Mobile No."
 msgstr "Số Di động Cá nhân"
 
-#. Label of the phone (Data) field in DocType 'CRM Contacts'
+#. Label of the phone (Data) field in DocType 'CRM Students'
 #. Label of the phone (Data) field in DocType 'CRM Lead'
-#. Option for the 'Device' (Select) field in DocType 'CRM Telephony Agent'
+#. Option for the 'Device' (Select) field in DocType 'Telephony Agent'
 #: crm/fcrm/doctype/crm_contacts/crm_contacts.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/pages/MobileOrganization.vue:511
 #: frontend/src/pages/Organization.vue:541
 msgid "Phone"
 msgstr "Điện thoại"
 
-#. Label of the phone_nos (Table) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Label of the phone_nos (Table) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 msgid "Phone Numbers"
 msgstr "Số Điện thoại"
 
@@ -5460,8 +5589,8 @@ msgstr "Số Điện thoại"
 msgid "Pin View"
 msgstr "Ghim Chế độ xem"
 
-#. Label of the pinned (Check) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the pinned (Check) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Pinned"
 msgstr "Đã ghim"
 
@@ -5471,7 +5600,7 @@ msgstr "Chế độ xem Đã ghim"
 
 #: frontend/src/components/ViewControls.vue:685
 msgid "Pinned Views"
-msgstr "Các Chế độ xem Đã ghim"
+msgstr "Chế độ xem đã ghim"
 
 #: frontend/src/components/Activities/AudioPlayer.vue:176
 msgid "Playback Speed"
@@ -5513,7 +5642,7 @@ msgstr "Vui lòng chọn một liên hệ hiện có"
 msgid "Please select an existing organization"
 msgstr "Vui lòng chọn một trường THPT hiện có"
 
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.py:55
+#: crm/fcrm/doctype/holiday_list/holiday_list.py:55
 msgid "Please select weekly off day"
 msgstr "Vui lòng chọn ngày nghỉ hàng tuần"
 
@@ -5594,7 +5723,7 @@ msgstr "Điện thoại chính"
 
 #. Label of the priorities (Table) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Priorities"
 msgstr "Mức ưu tiên"
 
@@ -5602,10 +5731,10 @@ msgstr "Mức ưu tiên"
 msgid "Priorities must be unique"
 msgstr "Các mức ưu tiên phải là duy nhất"
 
-#. Label of the priority (Link) field in DocType 'CRM Service Level Priority'
-#. Label of the priority (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_service_level_priority/crm_service_level_priority.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Label of the priority (Link) field in DocType 'Service Level Priority'
+#. Label of the priority (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/service_level_priority/service_level_priority.json
+#: crm/fcrm/doctype/task/task.json
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRuleView.vue:64
 #: frontend/src/components/Settings/AssignmentRules/AssignmentRulesList.vue:17
 #: frontend/src/components/Settings/Sla/EditResponseResolutionModal.vue:16
@@ -5621,8 +5750,8 @@ msgstr "Mức ưu tiên {0}: Tên ưu tiên là bắt buộc"
 msgid "Priority {0}: Response Time is required"
 msgstr "Mức ưu tiên {0}: Thời gian phản hồi là bắt buộc"
 
-#. Label of the private (Check) field in DocType 'CRM Dashboard'
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
+#. Label of the private (Check) field in DocType 'Dashboard'
+#: crm/fcrm/doctype/dashboard/dashboard.json
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:479
 #: frontend/src/components/FilesUploader/FilesUploaderArea.vue:89
 #: frontend/src/components/Modals/EventModal.vue:143
@@ -5681,8 +5810,8 @@ msgstr "Hồ sơ đã được Cập nhật Thành công"
 msgid "Projected vs actual revenue based on deal probability"
 msgstr "Doanh thu dự kiến so với thực tế dựa trên xác suất hồ sơ"
 
-#. Label of the public (Check) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the public (Check) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:483
 #: frontend/src/components/Modals/EventModal.vue:147
 msgid "Public"
@@ -5694,7 +5823,7 @@ msgstr "Chế độ xem Công khai"
 
 #: frontend/src/components/ViewControls.vue:679
 msgid "Public Views"
-msgstr "Các Chế độ xem Công khai"
+msgstr "Chế độ xem công khai"
 
 #. Label of the qty (Float) field in DocType 'CRM Products'
 #: crm/fcrm/doctype/crm_products/crm_products.json
@@ -5706,14 +5835,14 @@ msgstr "Số lượng"
 msgid "Questions"
 msgstr "Câu hỏi"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: frontend/src/utils/callLog.js:68
 msgid "Queued"
 msgstr "Đang xếp hàng"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Option for the 'Type' (Select) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Quick Entry"
 msgstr "Vào nhanh"
 
@@ -5721,8 +5850,8 @@ msgstr "Vào nhanh"
 msgid "Quick Entry Layout"
 msgstr "Bố cục Nhập nhanh"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Global Settings'
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
+#. Option for the 'Type' (Select) field in DocType 'Global Settings'
+#: crm/fcrm/doctype/global_settings/global_settings.json
 msgid "Quick Filters"
 msgstr "Bộ lọc nhanh"
 
@@ -5735,8 +5864,8 @@ msgstr "Bộ lọc nhanh đã được cập nhật thành công"
 msgid "Rate"
 msgstr "Đơn giá"
 
-#. Label of the read (Check) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the read (Check) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Read"
 msgstr "Đọc"
 
@@ -5745,20 +5874,20 @@ msgstr "Đọc"
 msgid "Reason"
 msgstr "Lý do"
 
-#. Label of the record_calls (Check) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the record_calls (Check) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:86
 #: frontend/src/components/Settings/Telephony/TwilioSettings.vue:93
 msgid "Record Calls"
 msgstr "Ghi cuộc gọi"
 
-#. Label of the record_call (Check) field in DocType 'CRM Exotel Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
+#. Label of the record_call (Check) field in DocType 'Exotel Settings'
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
 msgid "Record Outgoing Calls"
 msgstr "Ghi Cuộc gọi Đi"
 
-#. Label of the recording_url (Small Text) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the recording_url (Small Text) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Recording URL"
 msgstr "URL ghi âm"
 
@@ -5768,31 +5897,31 @@ msgstr "Không tìm thấy URL Ghi âm"
 
 #. Label of the reference_name (Dynamic Link) field in DocType 'CRM
 #. Notification'
-#. Label of the reference_docname (Dynamic Link) field in DocType 'CRM Task'
+#. Label of the reference_docname (Dynamic Link) field in DocType 'Task'
 #. Label of the reference_docname (Dynamic Link) field in DocType 'FCRM Note'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#: crm/fcrm/doctype/notification/notification.json
+#: crm/fcrm/doctype/task/task.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 msgid "Reference Doc"
 msgstr "Tài liệu tham khảo"
 
-#. Label of the reference_doctype (Link) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the reference_doctype (Link) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "Reference Doctype"
 msgstr "Loại tài liệu tham khảo"
 
-#. Label of the reference_doctype (Link) field in DocType 'CRM Call Log'
-#. Label of the reference_doctype (Link) field in DocType 'CRM Task'
+#. Label of the reference_doctype (Link) field in DocType 'Call Log'
+#. Label of the reference_doctype (Link) field in DocType 'Task'
 #. Label of the reference_doctype (Link) field in DocType 'FCRM Note'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/task/task.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 msgid "Reference Document Type"
 msgstr "Loại tài liệu tham khảo"
 
 #. Label of the reference_docname (Dynamic Link) field in DocType 'CRM Call
 #. Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Reference Name"
 msgstr "Tên tham chiếu"
 
@@ -5903,8 +6032,8 @@ msgstr "Trả lời tất cả"
 msgid "Report an Issue"
 msgstr "Báo cáo sự cố"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Option for the 'Type' (Select) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Required Fields"
 msgstr "Trường Bắt buộc"
 
@@ -5931,13 +6060,13 @@ msgstr "Đặt lại về Mặc định"
 
 #. Label of the responded_on (Datetime) field in DocType 'CRM Rolling Response
 #. Time'
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
 msgid "Responded On"
 msgstr "Đã phản hồi vào"
 
 #. Label of the section_break_ufaf (Section Break) field in DocType 'CRM
 #. Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:215
 msgid "Response & Follow Up"
 msgstr "Phản hồi & Theo dõi"
@@ -5960,7 +6089,7 @@ msgstr "Chi tiết phản hồi"
 
 #. Label of the response_time (Duration) field in DocType 'CRM Rolling Response
 #. Time'
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
 msgid "Response Time"
 msgstr "Thời gian Phản hồi"
 
@@ -5970,7 +6099,7 @@ msgstr "Thời gian phản hồi là bắt buộc"
 
 #. Description of the 'Rolling Responses' (Check) field in DocType 'CRM Service
 #. Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:93
 msgid "Restart the SLA each time the customer replies (status changes to Open) and fulfill it when marked as Replied"
 msgstr "Khởi động lại SLA mỗi khi thí sinh phản hồi (trạng thái chuyển thành Mở) và hoàn thành khi được đánh dấu là Đã phản hồi"
@@ -6015,8 +6144,8 @@ msgstr "Văn bản phong phú"
 msgid "Right"
 msgstr "Phải"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Status' (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: frontend/src/utils/callLog.js:70
 msgid "Ringing"
 msgstr "Đang đổ chuông"
@@ -6026,8 +6155,8 @@ msgstr "Đang đổ chuông"
 msgid "Ringing..."
 msgstr "Đang đổ chuông..."
 
-#. Label of the role (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#. Label of the role (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/invitation/invitation.json
 #: frontend/src/components/Modals/AddExistingUserModal.vue:46
 msgid "Role"
 msgstr "Vai trò"
@@ -6045,24 +6174,24 @@ msgstr "Hạn Phản hồi Cuộn"
 #. Agreement'
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:89
 msgid "Rolling Responses"
 msgstr "Phản hồi Cuộn"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Dropdown Item'
-#. Label of the route (Data) field in DocType 'CRM Dropdown Item'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#. Option for the 'Type' (Select) field in DocType 'Dropdown Item'
+#. Label of the route (Data) field in DocType 'Dropdown Item'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 msgid "Route"
 msgstr "Tuyến đường"
 
-#. Label of the route_name (Data) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the route_name (Data) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Route Name"
 msgstr "Tên Tuyến đường"
 
-#. Label of the rows (Code) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the rows (Code) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "Rows"
 msgstr "Hàng"
 
@@ -6075,7 +6204,7 @@ msgstr "Hàng"
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/workspace/frappe_crm/frappe_crm.json
 msgid "SLA"
-msgstr "SLA"
+msgstr "Thời hạn xử lý (SLA)"
 
 #. Label of the sla_creation (Datetime) field in DocType 'CRM Deal'
 #. Label of the sla_creation (Datetime) field in DocType 'CRM Lead'
@@ -6084,8 +6213,8 @@ msgstr "SLA"
 msgid "SLA Creation"
 msgstr "Tạo SLA"
 
-#. Label of the sla_name (Data) field in DocType 'CRM Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#. Label of the sla_name (Data) field in DocType 'Service Level Agreement'
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "SLA Name"
 msgstr "Tên SLA"
 
@@ -6135,32 +6264,32 @@ msgid "SUBJECT"
 msgstr "CHỦ ĐỀ"
 
 #. Name of a role
-#. Option for the 'Role' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Role' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_communication_status/crm_communication_status.json
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
+#: crm/fcrm/doctype/dashboard/dashboard.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/global_settings/global_settings.json
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 #: crm/fcrm/doctype/crm_industry/crm_industry.json
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/doctype/crm_lead_source/crm_lead_source.json
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
 #: crm/fcrm/doctype/crm_lost_reason/crm_lost_reason.json
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#: crm/fcrm/doctype/notification/notification.json
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 #: crm/fcrm/doctype/crm_product/crm_product.json
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
+#: crm/fcrm/doctype/task/task.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: crm/fcrm/doctype/crm_territory/crm_territory.json
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
@@ -6176,29 +6305,29 @@ msgid "Sales Trend"
 msgstr "Xu hướng tuyển sinh"
 
 #. Name of a role
-#. Option for the 'Role' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Role' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_communication_status/crm_communication_status.json
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
+#: crm/fcrm/doctype/dashboard/dashboard.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/global_settings/global_settings.json
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 #: crm/fcrm/doctype/crm_industry/crm_industry.json
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/doctype/crm_lead_source/crm_lead_source.json
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
 #: crm/fcrm/doctype/crm_lost_reason/crm_lost_reason.json
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#: crm/fcrm/doctype/notification/notification.json
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 #: crm/fcrm/doctype/crm_product/crm_product.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/task/task.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: crm/fcrm/doctype/crm_territory/crm_territory.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
@@ -6228,10 +6357,10 @@ msgstr "Cán bộ tuyển sinh"
 msgid "Salutation"
 msgstr "Lời chào"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Saturday"
 msgstr "Thứ Bảy"
 
@@ -6281,8 +6410,8 @@ msgstr "Lên lịch một công việc..."
 msgid "Schedule an Event"
 msgstr "Lên lịch một Sự kiện"
 
-#. Label of the script (Code) field in DocType 'CRM Form Script'
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
+#. Label of the script (Code) field in DocType 'Form Script'
+#: crm/fcrm/doctype/form_script/form_script.json
 msgid "Script"
 msgstr "Kịch bản"
 
@@ -6425,8 +6554,8 @@ msgstr "Đang gửi bình luận..."
 msgid "Sending email..."
 msgstr "Đang gửi email..."
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Dropdown Item'
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
+#. Option for the 'Type' (Select) field in DocType 'Dropdown Item'
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
 msgid "Separator"
 msgstr "Dấu phân cách"
 
@@ -6605,13 +6734,13 @@ msgstr "Hiển thị Mật khẩu"
 msgid "Show Preview"
 msgstr "Hiển thị bản xem trước"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Fields Layout'
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
+#. Option for the 'Type' (Select) field in DocType 'Fields Layout'
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
 msgid "Side Panel"
 msgstr "Bảng bên"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Global Settings'
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
+#. Option for the 'Type' (Select) field in DocType 'Global Settings'
+#: crm/fcrm/doctype/global_settings/global_settings.json
 msgid "Sidebar Items"
 msgstr "Các mục thanh bên"
 
@@ -6621,7 +6750,7 @@ msgstr "Chữ ký"
 
 #. Description of the 'Condition' (Code) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Simple Python Expression, Example: doc.status == 'Open' and doc.lead_source == 'Ads'"
 msgstr "Biểu thức Python đơn giản, Ví dụ: doc.status == 'Open' and doc.lead_source == 'Ads'"
 
@@ -6717,7 +6846,7 @@ msgstr "Dấu cách"
 msgid "Stage"
 msgstr "Giai đoạn"
 
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.js:15
+#: crm/fcrm/doctype/form_script/form_script.js:15
 msgid "Standard Form Scripts can not be modified, duplicate the Form Script instead."
 msgstr "Các Form Script Tiêu chuẩn không thể được sửa đổi, hãy sao chép Form Script thay thế."
 
@@ -6736,9 +6865,9 @@ msgstr "Thời gian Bắt đầu & Kết thúc là Bắt buộc"
 
 #. Label of the start_date (Date) field in DocType 'CRM Service Level
 #. Agreement'
-#. Label of the start_date (Date) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Label of the start_date (Date) field in DocType 'Task'
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
+#: crm/fcrm/doctype/task/task.json
 #: frontend/src/components/Settings/Sla/SlaPolicyView.vue:176
 msgid "Start Date"
 msgstr "Ngày bắt đầu"
@@ -6747,10 +6876,10 @@ msgstr "Ngày bắt đầu"
 msgid "Start Date cannot be after end date"
 msgstr "Ngày bắt đầu không thể sau ngày kết thúc"
 
-#. Label of the start_time (Datetime) field in DocType 'CRM Call Log'
-#. Label of the start_time (Time) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Label of the start_time (Datetime) field in DocType 'Call Log'
+#. Label of the start_time (Time) field in DocType 'Service Day'
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/service_day/service_day.json
 #: frontend/src/components/Calendar/CalendarEventPanel.vue:338
 #: frontend/src/components/Modals/EventModal.vue:103
 #: frontend/src/components/Settings/Sla/SlaHolidays.vue:219
@@ -6767,24 +6896,24 @@ msgstr "Thời gian bắt đầu là bắt buộc"
 msgid "Start with sample 10 leads"
 msgstr "Bắt đầu với 10 thí sinh tiềm năng mẫu"
 
-#. Label of the status (Select) field in DocType 'CRM Call Log'
+#. Label of the status (Select) field in DocType 'Call Log'
 #. Label of the status (Data) field in DocType 'CRM Communication Status'
 #. Label of the status (Link) field in DocType 'CRM Deal'
 #. Label of the deal_status (Data) field in DocType 'CRM Deal Status'
-#. Label of the status (Select) field in DocType 'CRM Invitation'
+#. Label of the status (Select) field in DocType 'Invitation'
 #. Label of the status (Link) field in DocType 'CRM Lead'
 #. Label of the lead_status (Data) field in DocType 'CRM Lead Status'
-#. Label of the status (Select) field in DocType 'CRM Rolling Response Time'
-#. Label of the status (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the status (Select) field in DocType 'Rolling Response Time'
+#. Label of the status (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_communication_status/crm_communication_status.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
-#: crm/fcrm/doctype/crm_rolling_response_time/crm_rolling_response_time.json
-#: crm/fcrm/doctype/crm_task/crm_task.json frontend/src/pages/Contact.vue:531
+#: crm/fcrm/doctype/rolling_response_time/rolling_response_time.json
+#: crm/fcrm/doctype/task/task.json frontend/src/pages/Contact.vue:531
 #: frontend/src/pages/MobileContact.vue:524
 #: frontend/src/pages/MobileOrganization.vue:473
 #: frontend/src/pages/Organization.vue:503
@@ -6803,8 +6932,8 @@ msgstr "Nhật ký Thay đổi Trạng thái"
 msgid "Status is required"
 msgstr "Trạng thái là bắt buộc"
 
-#. Label of the subdomain (Data) field in DocType 'CRM Exotel Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
+#. Label of the subdomain (Data) field in DocType 'Exotel Settings'
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:75
 msgid "Subdomain"
 msgstr "Tên miền phụ"
@@ -6823,10 +6952,10 @@ msgstr "Yêu cầu nhập tiêu đề"
 msgid "Subject: {0}"
 msgstr "Chủ đề: {0}"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Sunday"
 msgstr "Chủ Nhật"
 
@@ -6890,32 +7019,32 @@ msgid "System Defaults"
 msgstr "Mặc định hệ thống"
 
 #. Name of a role
-#. Option for the 'Role' (Select) field in DocType 'CRM Invitation'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Option for the 'Role' (Select) field in DocType 'Invitation'
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_communication_status/crm_communication_status.json
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
+#: crm/fcrm/doctype/dashboard/dashboard.json
 #: crm/fcrm/doctype/crm_deal/crm_deal.json
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.json
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
+#: crm/fcrm/doctype/form_script/form_script.json
+#: crm/fcrm/doctype/global_settings/global_settings.json
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 #: crm/fcrm/doctype/crm_industry/crm_industry.json
-#: crm/fcrm/doctype/crm_invitation/crm_invitation.json
+#: crm/fcrm/doctype/invitation/invitation.json
 #: crm/fcrm/doctype/crm_lead/crm_lead.json
 #: crm/fcrm/doctype/crm_lead_source/crm_lead_source.json
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
 #: crm/fcrm/doctype/crm_lost_reason/crm_lost_reason.json
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#: crm/fcrm/doctype/notification/notification.json
 #: crm/fcrm/doctype/crm_organization/crm_organization.json
 #: crm/fcrm/doctype/crm_product/crm_product.json
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
-#: crm/fcrm/doctype/crm_task/crm_task.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
+#: crm/fcrm/doctype/task/task.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: crm/fcrm/doctype/crm_territory/crm_territory.json
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: crm/fcrm/doctype/erpnext_crm_settings/erpnext_crm_settings.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 #: crm/fcrm/doctype/fcrm_settings/fcrm_settings.json
@@ -6934,24 +7063,24 @@ msgstr "ĐẾN"
 msgid "Take a note..."
 msgstr "Ghi chú..."
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Option for the 'Type' (Select) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 #: frontend/src/components/Activities/ActivityHeader.vue:151
 #: frontend/src/components/Layouts/AppSidebar.vue:579
 msgid "Task"
-msgstr "Công việc"
+msgstr "Task"
 
 #: frontend/src/pages/Deal.vue:590 frontend/src/pages/Lead.vue:442
 #: frontend/src/pages/MobileDeal.vue:464 frontend/src/pages/MobileLead.vue:309
 msgid "Tasks"
-msgstr "Nhiệm vụ"
+msgstr "Tasks"
 
 #: frontend/src/components/Settings/Settings.vue:210
 msgid "Telephony"
 msgstr "Tổng đài"
 
-#. Label of the telephony_medium (Select) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the telephony_medium (Select) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "Telephony Medium"
 msgstr "Phương tiện tổng đài"
 
@@ -7019,11 +7148,11 @@ msgstr "Tên khu vực tuyển sinh"
 msgid "Thanks"
 msgstr "Cảm ơn"
 
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.py:72
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.py:72
 msgid "The Condition '{0}' is invalid: {1}"
 msgstr "Điều kiện '{0}' không hợp lệ: {1}"
 
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.py:64
+#: crm/fcrm/doctype/holiday_list/holiday_list.py:64
 msgid "The holiday on {0} is not between From Date and To Date"
 msgstr "Ngày nghỉ vào {0} không nằm giữa Từ ngày và Đến ngày"
 
@@ -7042,7 +7171,7 @@ msgstr "Tỷ giá được sử dụng để chuyển đổi tiền tệ của t
 msgid "Theme"
 msgstr "Chủ đề"
 
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.js:29
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.js:29
 msgid "There can only be one default priority in Priorities table"
 msgstr "Chỉ có thể có một mức ưu tiên mặc định trong bảng Mức ưu tiên"
 
@@ -7103,10 +7232,10 @@ msgstr "Điều này sẽ khôi phục (nếu không tồn tại) tất cả cá
 msgid "This will restore the demo data. Are you sure you want to continue?"
 msgstr "Điều này sẽ khôi phục dữ liệu demo. Bạn có chắc chắn muốn tiếp tục không?"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Thursday"
 msgstr "Thứ năm"
 
@@ -7128,16 +7257,16 @@ msgstr "Khoảng thời gian"
 msgid "Timezone"
 msgstr "Múi giờ"
 
-#. Label of the title (Data) field in DocType 'CRM Task'
+#. Label of the title (Data) field in DocType 'Task'
 #. Label of the title (Data) field in DocType 'FCRM Note'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#: crm/fcrm/doctype/task/task.json
 #: crm/fcrm/doctype/fcrm_note/fcrm_note.json
 #: frontend/src/components/Modals/EventModal.vue:43
 msgid "Title"
 msgstr "Tiêu đề"
 
-#. Label of the title_field (Data) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the title_field (Data) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: frontend/src/components/Kanban/KanbanSettings.vue:29
 msgid "Title Field"
 msgstr "Trường tiêu đề"
@@ -7147,35 +7276,35 @@ msgstr "Trường tiêu đề"
 msgid "Title is required"
 msgstr "Yêu cầu nhập tiêu đề"
 
-#. Label of the to (Data) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the to (Data) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 #: frontend/src/components/Activities/EmailArea.vue:53
 msgid "To"
 msgstr "Đến"
 
-#. Label of the to_date (Date) field in DocType 'CRM Holiday List'
-#. Label of the to_date (Datetime) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the to_date (Date) field in DocType 'Holiday List'
+#. Label of the to_date (Datetime) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "To Date"
 msgstr "Đến Ngày"
 
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.py:59
+#: crm/fcrm/doctype/holiday_list/holiday_list.py:59
 msgid "To Date cannot be before From Date"
 msgstr "Ngày kết thúc không thể trước Ngày bắt đầu"
 
-#. Label of the to (Data) field in DocType 'CRM Call Log'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#. Label of the to (Data) field in DocType 'Call Log'
+#: crm/fcrm/doctype/call_log/call_log.json
 msgid "To Number"
 msgstr "Số Đến"
 
-#. Label of the to_type (Data) field in DocType 'CRM Status Change Log'
-#: crm/fcrm/doctype/crm_status_change_log/crm_status_change_log.json
+#. Label of the to_type (Data) field in DocType 'Status Change Log'
+#: crm/fcrm/doctype/status_change_log/status_change_log.json
 msgid "To Type"
 msgstr "Loại Đến"
 
-#. Label of the to_user (Link) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Label of the to_user (Link) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 msgid "To User"
 msgstr "Gửi đến người dùng"
 
@@ -7187,8 +7316,8 @@ msgstr "Để biết thêm về thiết lập tài khoản email, nhấp vào"
 msgid "Today"
 msgstr "Hôm nay"
 
-#. Option for the 'Status' (Select) field in DocType 'CRM Task'
-#: crm/fcrm/doctype/crm_task/crm_task.json
+#. Option for the 'Status' (Select) field in DocType 'Task'
+#: crm/fcrm/doctype/task/task.json
 msgid "Todo"
 msgstr "Việc cần làm"
 
@@ -7211,8 +7340,8 @@ msgstr "Quá nhiều lần thử thất bại. Vui lòng thử lại sau."
 msgid "Total"
 msgstr "Tổng cộng"
 
-#. Label of the total_holidays (Int) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the total_holidays (Int) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Total Holidays"
 msgstr "Tổng ngày lễ"
 
@@ -7249,10 +7378,10 @@ msgstr "Tổng số hồ sơ đã nhập học dựa trên ngày đóng"
 msgid "Traceback"
 msgstr "Truy nguyên"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Tuesday"
 msgstr "Thứ ba"
 
@@ -7260,24 +7389,24 @@ msgstr "Thứ ba"
 msgid "Turn into a Group"
 msgstr "Chuyển thành Nhóm"
 
-#. Label of the twiml_sid (Data) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the twiml_sid (Data) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 msgid "TwiML SID"
 msgstr "TwiML SID"
 
-#. Option for the 'Telephony Medium' (Select) field in DocType 'CRM Call Log'
+#. Option for the 'Telephony Medium' (Select) field in DocType 'Call Log'
 #. Option for the 'Default Medium' (Select) field in DocType 'CRM Telephony
 #. Agent'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#: crm/fcrm/doctype/call_log/call_log.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/Layouts/AppSidebar.vue:625
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:51
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:153
 msgid "Twilio"
 msgstr "Twilio"
 
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.py:85
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.py:86
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.py:85
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.py:86
 msgid "Twilio API credential creation error."
 msgstr "Lỗi tạo thông tin xác thực API Twilio."
 
@@ -7285,8 +7414,8 @@ msgstr "Lỗi tạo thông tin xác thực API Twilio."
 msgid "Twilio App Name"
 msgstr "Tên Ứng dụng Twilio"
 
-#. Label of the twilio_apps (Data) field in DocType 'CRM Twilio Settings'
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.json
+#. Label of the twilio_apps (Data) field in DocType 'Twilio Settings'
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.json
 msgid "Twilio Apps"
 msgstr "Ứng dụng Twilio"
 
@@ -7294,8 +7423,8 @@ msgstr "Ứng dụng Twilio"
 msgid "Twilio Integration Disabled"
 msgstr "Tích hợp Twilio đã Bị vô hiệu hóa"
 
-#. Label of the twilio_number (Data) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Label of the twilio_number (Data) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 #: frontend/src/components/Settings/Telephony/TelephonySettings.vue:74
 msgid "Twilio Number"
 msgstr "Số Twilio"
@@ -7308,25 +7437,25 @@ msgstr "Cài đặt Twilio"
 msgid "Twilio configuration is missing"
 msgstr "Cấu hình Twilio bị thiếu"
 
-#. Label of the type (Select) field in DocType 'CRM Call Log'
+#. Label of the type (Select) field in DocType 'Call Log'
 #. Label of the type (Select) field in DocType 'CRM Deal Status'
-#. Label of the type (Select) field in DocType 'CRM Dropdown Item'
-#. Label of the type (Select) field in DocType 'CRM Fields Layout'
-#. Label of the type (Select) field in DocType 'CRM Global Settings'
+#. Label of the type (Select) field in DocType 'Dropdown Item'
+#. Label of the type (Select) field in DocType 'Fields Layout'
+#. Label of the type (Select) field in DocType 'Global Settings'
 #. Label of the type (Select) field in DocType 'CRM Lead Status'
-#. Label of the type (Select) field in DocType 'CRM Notification'
-#. Label of the type (Select) field in DocType 'CRM View Settings'
+#. Label of the type (Select) field in DocType 'Notification'
+#. Label of the type (Select) field in DocType 'View Settings'
 #. Label of the type (Data) field in DocType 'Facebook Lead Form Question'
 #. Label of the type (Select) field in DocType 'Failed Lead Sync Log'
 #. Label of the type (Select) field in DocType 'Lead Sync Source'
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.json
+#: crm/fcrm/doctype/call_log/call_log.json
 #: crm/fcrm/doctype/crm_deal_status/crm_deal_status.json
-#: crm/fcrm/doctype/crm_dropdown_item/crm_dropdown_item.json
-#: crm/fcrm/doctype/crm_fields_layout/crm_fields_layout.json
-#: crm/fcrm/doctype/crm_global_settings/crm_global_settings.json
+#: crm/fcrm/doctype/dropdown_item/dropdown_item.json
+#: crm/fcrm/doctype/fields_layout/fields_layout.json
+#: crm/fcrm/doctype/global_settings/global_settings.json
 #: crm/fcrm/doctype/crm_lead_status/crm_lead_status.json
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#: crm/fcrm/doctype/notification/notification.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 #: crm/lead_syncing/doctype/facebook_lead_form_question/facebook_lead_form_question.json
 #: crm/lead_syncing/doctype/failed_lead_sync_log/failed_lead_sync_log.json
 #: crm/lead_syncing/doctype/lead_sync_source/lead_sync_source.json
@@ -7342,7 +7471,7 @@ msgstr "Nhập địa chỉ email để thêm người tham dự"
 msgid "Type your message here..."
 msgstr "Nhập tin nhắn của bạn ở đây..."
 
-#: crm/fcrm/doctype/crm_twilio_settings/crm_twilio_settings.py:117
+#: crm/fcrm/doctype/twilio_settings/twilio_settings.py:117
 msgid "Unable to connect to Twilio account to fetch applications."
 msgstr "Không thể kết nối với tài khoản Twilio để lấy ứng dụng."
 
@@ -7505,12 +7634,12 @@ msgstr "Tải lên Video"
 msgid "Uploading {0}%"
 msgstr "Đang tải lên {0}%"
 
-#. Label of the user (Link) field in DocType 'CRM Dashboard'
-#. Label of the user (Link) field in DocType 'CRM Telephony Agent'
-#. Label of the user (Link) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_dashboard/crm_dashboard.json
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Label of the user (Link) field in DocType 'Dashboard'
+#. Label of the user (Link) field in DocType 'Telephony Agent'
+#. Label of the user (Link) field in DocType 'View Settings'
+#: crm/fcrm/doctype/dashboard/dashboard.json
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "User"
 msgstr "Người dùng"
 
@@ -7522,8 +7651,8 @@ msgstr "Cấu hình người dùng"
 msgid "User Management"
 msgstr "Quản lý Người dùng"
 
-#. Label of the user_name (Data) field in DocType 'CRM Telephony Agent'
-#: crm/fcrm/doctype/crm_telephony_agent/crm_telephony_agent.json
+#. Label of the user_name (Data) field in DocType 'Telephony Agent'
+#: crm/fcrm/doctype/telephony_agent/telephony_agent.json
 msgid "User Name"
 msgstr "Tên người dùng"
 
@@ -7564,7 +7693,7 @@ msgstr "Các điều kiện hợp lệ là bắt buộc"
 
 #. Label of the section_break_nevd (Section Break) field in DocType 'CRM
 #. Service Level Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Validity"
 msgstr "Hiệu lực"
 
@@ -7602,7 +7731,7 @@ msgstr "Web Form"
 
 #. Label of the webhook_verify_token (Data) field in DocType 'CRM Exotel
 #. Settings'
-#: crm/fcrm/doctype/crm_exotel_settings/crm_exotel_settings.json
+#: crm/fcrm/doctype/exotel_settings/exotel_settings.json
 #: frontend/src/components/Settings/Telephony/ExotelSettings.vue:67
 msgid "Webhook Verify Token"
 msgstr "Webhook Verify Token"
@@ -7617,10 +7746,10 @@ msgstr "Webhook Verify Token"
 msgid "Website"
 msgstr "Website"
 
-#. Option for the 'Weekly Off' (Select) field in DocType 'CRM Holiday List'
-#. Option for the 'Workday' (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Option for the 'Weekly Off' (Select) field in DocType 'Holiday List'
+#. Option for the 'Workday' (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
+#: crm/fcrm/doctype/service_day/service_day.json
 msgid "Wednesday"
 msgstr "Thứ Tư"
 
@@ -7635,10 +7764,10 @@ msgstr "Tuần"
 msgid "Weekly"
 msgstr "Hàng tuần"
 
-#. Label of the weekly_off (Check) field in DocType 'CRM Holiday'
-#. Label of the weekly_off (Select) field in DocType 'CRM Holiday List'
-#: crm/fcrm/doctype/crm_holiday/crm_holiday.json
-#: crm/fcrm/doctype/crm_holiday_list/crm_holiday_list.json
+#. Label of the weekly_off (Check) field in DocType 'Holiday'
+#. Label of the weekly_off (Select) field in DocType 'Holiday List'
+#: crm/fcrm/doctype/holiday/holiday.json
+#: crm/fcrm/doctype/holiday_list/holiday_list.json
 msgid "Weekly Off"
 msgstr "Nghỉ hàng tuần"
 
@@ -7650,8 +7779,8 @@ msgstr "Tin nhắn Chào mừng"
 msgid "Welcome {0}, lets add your first lead"
 msgstr "Chào {0}, hãy thêm thí sinh tiềm năng đầu tiên"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM Notification'
-#: crm/fcrm/doctype/crm_notification/crm_notification.json
+#. Option for the 'Type' (Select) field in DocType 'Notification'
+#: crm/fcrm/doctype/notification/notification.json
 #: frontend/src/components/Layouts/AppSidebar.vue:627
 #: frontend/src/components/Settings/Settings.vue:215
 #: frontend/src/pages/Deal.vue:605 frontend/src/pages/Lead.vue:457
@@ -7700,8 +7829,8 @@ msgstr "Hồ sơ đã nhập học"
 msgid "Work Schedule & Holidays"
 msgstr "Lịch làm việc & Ngày lễ"
 
-#. Label of the workday (Select) field in DocType 'CRM Service Day'
-#: crm/fcrm/doctype/crm_service_day/crm_service_day.json
+#. Label of the workday (Select) field in DocType 'Service Day'
+#: crm/fcrm/doctype/service_day/service_day.json
 #: frontend/src/components/Settings/Sla/WorkDayModal.vue:16
 msgid "Workday"
 msgstr "Ngày làm việc"
@@ -7710,7 +7839,7 @@ msgstr "Ngày làm việc"
 #. Service Level Agreement'
 #. Label of the working_hours (Table) field in DocType 'CRM Service Level
 #. Agreement'
-#: crm/fcrm/doctype/crm_service_level_agreement/crm_service_level_agreement.json
+#: crm/fcrm/doctype/service_level_agreement/service_level_agreement.json
 msgid "Working Hours"
 msgstr "Giờ làm việc"
 
@@ -7745,11 +7874,11 @@ msgstr "Bạn không được phép truy cập tài nguyên CRM."
 msgid "You are not permitted to access this resource."
 msgstr "Bạn không được phép truy cập tài nguyên này."
 
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.py:259
+#: crm/fcrm/doctype/call_log/call_log.py:259
 msgid "You are not permitted to create leads."
 msgstr "Bạn không được phép tạo thí sinh tiềm năng."
 
-#: crm/fcrm/doctype/crm_call_log/crm_call_log.py:256
+#: crm/fcrm/doctype/call_log/call_log.py:256
 msgid "You are not permitted to update this call log."
 msgstr "Bạn không được phép cập nhật nhật ký cuộc gọi này."
 
@@ -7801,7 +7930,7 @@ msgstr "Bạn không có quyền xóa tệp đính kèm này"
 msgid "You must be logged in to change your password"
 msgstr "Bạn phải đăng nhập để thay đổi mật khẩu"
 
-#: crm/fcrm/doctype/crm_form_script/crm_form_script.py:39
+#: crm/fcrm/doctype/form_script/form_script.py:39
 msgid "You need to be in developer mode to edit a Standard Form Script"
 msgstr "Bạn cần ở chế độ nhà phát triển để chỉnh sửa Form Script Tiêu chuẩn"
 
@@ -7975,8 +8104,8 @@ msgstr "màu xám"
 msgid "green"
 msgstr "màu xanh lá cây"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Option for the 'Type' (Select) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "group_by"
 msgstr "nhóm_theo"
 
@@ -8079,8 +8208,8 @@ msgstr "john@doe.com"
 msgid "just now"
 msgstr "vừa rồi"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Option for the 'Type' (Select) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "kanban"
 msgstr "kanban"
 
@@ -8093,8 +8222,8 @@ msgstr "nhãn"
 msgid "leads"
 msgstr "thí sinh tiềm năng"
 
-#. Option for the 'Type' (Select) field in DocType 'CRM View Settings'
-#: crm/fcrm/doctype/crm_view_settings/crm_view_settings.json
+#. Option for the 'Type' (Select) field in DocType 'View Settings'
+#: crm/fcrm/doctype/view_settings/view_settings.json
 msgid "list"
 msgstr "danh sách"
 
@@ -8446,8 +8575,8 @@ msgstr "Thêm trường THPT"
 msgid "CRM High School"
 msgstr "Trường THPT"
 
-msgid "CRM Contact"
-msgstr "Hồ sơ CRM"
+msgid "CRM Student"
+msgstr "Hồ sơ"
 
 msgid "Portal Page"
 msgstr "Trang cổng"
@@ -8465,7 +8594,10 @@ msgid "CRM School Type"
 msgstr "Loại trường"
 
 msgid "CRM Event"
-msgstr "Sự kiện CRM"
+msgstr "Sự kiện"
+
+msgid "Event"
+msgstr "Sự kiện"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
@@ -8502,6 +8634,9 @@ msgstr "Cá nhân"
 msgid "Person"
 msgstr "Cá nhân"
 
+msgid "CRM Person"
+msgstr "Cá nhân"
+
 msgid "Staff"
 msgstr "Nhân sự"
 
@@ -8521,7 +8656,7 @@ msgid "Admission Year"
 msgstr "Năm tuyển sinh"
 
 msgid "Campus"
-msgstr "Chi nhánh"
+msgstr "Campus"
 
 msgid "Reference Data"
 msgstr "Dữ liệu tham chiếu"
@@ -8608,19 +8743,19 @@ msgid "Mobile No"
 msgstr "Di động"
 
 msgid "Enrollment Status"
-msgstr "Trạng thái"
+msgstr "Trạng thái tuyển sinh"
 
 msgid "Enrollment Date"
 msgstr "Ngày nhập học"
 
-msgid "Converted to CRM Contact"
-msgstr "Đã chuyển thành hồ sơ CRM"
+msgid "Converted to CRM Student"
+msgstr "Đã chuyển thành Liên hệ"
 
 msgid "Links"
 msgstr "Liên kết"
 
 msgid "Major"
-msgstr "Ngành"
+msgstr "Ngành quan tâm"
 
 msgid "Source"
 msgstr "Nguồn"
@@ -8666,9 +8801,6 @@ msgstr "Tiêu chí"
 
 msgid "Note"
 msgstr "Ghi chú"
-
-msgid "Address"
-msgstr "Địa chỉ"
 
 msgid "Phone"
 msgstr "Điện thoại"
@@ -8731,7 +8863,7 @@ msgid "Active for Admission"
 msgstr "Còn tuyển"
 
 msgid "Convert to Contact"
-msgstr "Chuyển thành hồ sơ CRM"
+msgstr "Chuyển sang hổ sơ tiềm năng"
 
 #: frontend/src/components/Layouts/AppSidebar.vue
 #: frontend/src/components/Mobile/MobileSidebar.vue
@@ -8748,8 +8880,1685 @@ msgstr "Các bên liên quan"
 msgid "Campaigns"
 msgstr "Chiến dịch"
 
-#: frontend/src/components/Layouts/AppSidebar.vue
-#: frontend/src/components/Mobile/MobileSidebar.vue
-msgid "Contacts"
-msgstr "Hồ sơ CRM"
+#. Lead Status options - CRM Student
+msgid "New"
+msgstr "Mới"
 
+msgid "No Answer 1"
+msgstr "Không nghe máy lần 1"
+
+msgid "No Answer 2"
+msgstr "Không nghe máy lần 2"
+
+msgid "No Answer 3"
+msgstr "Không nghe máy lần 3"
+
+msgid "Unreachable"
+msgstr "Không liên lạc được"
+
+msgid "Callback Scheduled"
+msgstr "Hẹn liên hệ sau"
+
+msgid "Promising"
+msgstr "Có triển vọng"
+
+msgid "Considering"
+msgstr "Đang suy nghĩ"
+
+msgid "Not Interested"
+msgstr "Không quan tâm"
+
+msgid "Not Promising"
+msgstr "Không triển vọng"
+
+msgid "Wrong Number"
+msgstr "Sai số"
+
+msgid "Wrong Target"
+msgstr "Sai đối tượng"
+
+msgid "Financially Unqualified"
+msgstr "Không đủ tài chính"
+
+msgid "Follow-up Lead"
+msgstr "Lead nhắc lại"
+
+msgid "Duplicate Lead"
+msgstr "Lead trùng"
+
+#. Aspiration options - CRM Student / CRM Lead
+msgid "Undecided"
+msgstr "Đang suy nghĩ"
+
+msgid "Not Applying to FPT"
+msgstr "Không đăng ký FPT"
+
+#. Field labels - CRM Student / CRM Lead
+msgid "Lead Status"
+msgstr "Tình trạng thí sinh"
+
+msgid "Aspiration"
+msgstr "Nguyện vọng"
+
+msgid "Branch"
+msgstr "Chi nhánh"
+
+msgid "Admission Year"
+msgstr "Năm tuyển sinh"
+
+#. Workspace — card group labels
+msgid "Admissions"
+msgstr "Tuyển sinh"
+
+msgid "Geography"
+msgstr "Địa lý"
+
+msgid "Academic"
+msgstr "Học thuật"
+
+msgid "Operations"
+msgstr "Vận hành"
+
+msgid "Configuration"
+msgstr "Cấu hình"
+
+#. Workspace — link labels
+msgid "Students"
+msgstr "Học sinh"
+
+msgid "Regions"
+msgstr "Vùng miền"
+
+msgid "Provinces"
+msgstr "Tỉnh/Thành phố"
+
+msgid "Wards"
+msgstr "Phường/Xã"
+
+msgid "High Schools"
+msgstr "Trường THPT"
+
+msgid "Majors"
+msgstr "Ngành học"
+
+msgid "Major Groups"
+msgstr "Nhóm ngành"
+
+msgid "Campuses"
+msgstr "Chi nhánh"
+
+msgid "Admission Years"
+msgstr "Năm tuyển sinh"
+
+msgid "Staff"
+msgstr "Nhân viên"
+
+msgid "Campaigns"
+msgstr "Chiến dịch"
+
+msgid "Events"
+msgstr "Sự kiện"
+
+msgid "Lead Sources"
+msgstr "Nguồn thí sinh"
+
+msgid "School Types"
+msgstr "Loại trường"
+
+msgid "Campaign Types"
+msgstr "Loại chiến dịch"
+
+msgid "Departments"
+msgstr "Phòng ban"
+
+msgid "Lost Reasons"
+msgstr "Lý do không nhập học"
+
+msgid "Holiday Lists"
+msgstr "Lịch nghỉ lễ"
+
+msgid "Student"
+msgstr "Học sinh"
+
+#. Toast and error messages — CRM Lead
+msgid "Conversion failed"
+msgstr "Chuyển đổi thất bại"
+
+msgid "Error saving student"
+msgstr "Lỗi khi lưu học sinh"
+
+msgid "Error updating status"
+msgstr "Lỗi khi cập nhật trạng thái"
+
+#. Modal titles and button labels
+msgid "New CRM Event"
+msgstr "Thêm sự kiện"
+
+msgid "New CRM Campaign"
+msgstr "Thêm chiến dịch"
+
+msgid "Create Student"
+msgstr "Tạo học sinh"
+
+msgid "Geography Import"
+msgstr "Nhập dữ liệu địa lý"
+
+msgid "Import Geography Excel"
+msgstr "Nhập Excel địa lý"
+
+msgid "Error updating stage"
+msgstr "Lỗi khi cập nhật giai đoạn"
+
+msgid "Mobile"
+msgstr "Di động"
+
+msgid "Create Contact"
+msgstr "Tạo hồ sơ"
+
+msgid "New CRM Lead"
+msgstr "Thêm học sinh"
+
+msgid "New CRM Student"
+msgstr "Thêm hồ sơ"
+
+#. Dashboard chart labels
+msgid "Admission Trend"
+msgstr "Xu hướng tuyển sinh"
+
+msgid "Contacts by Assignee"
+msgstr "Hồ sơ theo người phụ trách"
+
+msgid "Contacts by High School"
+msgstr "Hồ sơ theo trường THPT"
+
+msgid "Contacts by Source"
+msgstr "Hồ sơ theo nguồn"
+
+msgid "Contacts by Stage"
+msgstr "Hồ sơ theo giai đoạn"
+
+msgid "Enrolled Contacts"
+msgstr "Hồ sơ đã nhập học"
+
+msgid "Qualified Contacts"
+msgstr "Hồ sơ đủ điều kiện"
+
+msgid "Students by Source"
+msgstr "Học sinh theo nguồn"
+
+msgid "Total Contacts"
+msgstr "Tổng Liên hệ"
+
+msgid "Total Students"
+msgstr "Tổng học sinh"
+
+#. Breadcrumb and page title labels
+msgid "CRM Campaigns"
+msgstr "Chiến dịch"
+
+msgid "CRM Events"
+msgstr "Sự kiện"
+
+msgid "CRM Persons"
+msgstr "Cá nhân"
+
+msgid "New CRM Person"
+msgstr "Thêm cá nhân"
+
+#. Welcome page
+msgid "Start with sample students"
+msgstr "Bắt đầu với học sinh mẫu"
+
+msgid "Or create students manually"
+msgstr "Hoặc tạo học sinh thủ công"
+
+#. Contact page
+msgid "Failed to create enrollment student"
+msgstr "Không thể tạo học sinh"
+
+msgid "Add Company..."
+msgstr "Thêm công ty..."
+
+msgid "Company"
+msgstr "Công ty"
+
+#. Common UI feedback
+msgid "No records found"
+msgstr "Không tìm thấy bản ghi"
+
+msgid "Record deleted"
+msgstr "Đã xóa bản ghi"
+
+msgid "Failed to delete"
+msgstr "Xóa thất bại"
+
+msgid "Dismiss"
+msgstr "Bỏ qua"
+
+msgid "students"
+msgstr "học sinh"
+
+msgid "My Open Contacts"
+msgstr "Hồ sơ của tôi đang mở"
+
+#. Geography import
+msgid "Please upload an Excel file"
+msgstr "Vui lòng tải lên tệp Excel"
+
+msgid "Some rows were skipped. Check console for details."
+msgstr "Một số hàng đã bị bỏ qua. Xem console để biết chi tiết."
+
+#. Onboarding steps
+msgid "Create your first student"
+msgstr "Tạo học sinh đầu tiên"
+
+msgid "Convert student to contact"
+msgstr "Chuyển học sinh thành Liên hệ"
+
+#. Help center article names
+msgid "CRM Lead"
+msgstr "Học sinh"
+
+msgid "CRM Campaign"
+msgstr "Chiến dịch"
+
+msgid "CRM contacts"
+msgstr "hồ sơ"
+
+msgid "CRM Personal Mobile No."
+msgstr "Số di động cá nhân"
+
+#. List/group UI
+msgid "Group By: "
+msgstr "Nhóm theo: "
+
+#. SLA priority
+msgid "Replied"
+msgstr "Đã trả lời"
+
+#. Validation messages
+msgid "Mobile number must be exactly 10 digits"
+msgstr "Số điện thoại phải có đúng 10 số"
+
+msgid "Invalid Phone Number"
+msgstr "Số điện thoại không hợp lệ"
+
+msgid "{0} must be exactly 10 digits"
+msgstr "{0} phải có đúng 10 số"
+
+msgid "Error saving data"
+msgstr "Lỗi khi lưu dữ liệu"
+
+#. CRM Education Program DocType
+msgid "CRM Education Program"
+msgstr "Chương trình đào tạo"
+
+msgid "Education Programs"
+msgstr "Chương trình đào tạo"
+
+msgid "New CRM Education Program"
+msgstr "Thêm chương trình đào tạo"
+
+msgid "Program Name"
+msgstr "Tên chương trình"
+
+msgid "Program Type"
+msgstr "Loại chương trình"
+
+#. CRM Student Academic Result DocType (child table)
+msgid "CRM Student Academic Result"
+msgstr "Kết quả học tập"
+
+#. CRM Student Language Certificate DocType (child table)
+msgid "CRM Student Language Certificate"
+msgstr "Chứng chỉ ngoại ngữ"
+
+#. CRM Student — custom fields (English msgid → Vietnamese msgstr)
+
+msgid "Parent Information"
+msgstr "Thông tin phụ huynh"
+
+msgid "Parent Name"
+msgstr "Tên phụ huynh"
+
+msgid "Parent Phone"
+msgstr "SĐT phụ huynh"
+
+msgid "Student Profile"
+msgstr "Hồ sơ học sinh"
+
+msgid "Applied Major"
+msgstr "Ngành đăng ký"
+
+msgid "Enrollment Information"
+msgstr "Thông tin tuyển sinh"
+
+msgid "Academic & Scores"
+msgstr "Học vấn & Điểm số"
+
+msgid "Results"
+msgstr "Bảng kết quả"
+
+msgid "Cohort Start Year"
+msgstr "Năm vào lớp 10"
+
+msgid "Cohort End Year"
+msgstr "Năm tốt nghiệp THPT"
+
+msgid "Education Program"
+msgstr "Chương trình đào tạo"
+
+msgid "Graduation Score"
+msgstr "Điểm tốt nghiệp THPT"
+
+msgid "English Score"
+msgstr "Điểm tiếng Anh quy đổi"
+
+msgid "Transcript Score"
+msgstr "Điểm học bạ"
+
+msgid "Total Score"
+msgstr "Điểm tổng cộng"
+
+msgid "Admission Method"
+msgstr "Hình thức xét tuyển"
+
+msgid "Academic Results"
+msgstr "Kết quả học tập"
+
+msgid "Language Certificates"
+msgstr "Chứng chỉ ngoại ngữ"
+
+msgid "Transcript Review"
+msgstr "Xét học bạ"
+
+msgid "National High School Exam"
+msgstr "Thi THPT Quốc gia"
+
+msgid "Language Certificate Review"
+msgstr "Xét bằng chứng chỉ ngoại ngữ"
+
+msgid "Direct Admission"
+msgstr "Xét tuyển thẳng"
+
+msgid "Combined"
+msgstr "Kết hợp"
+
+#. CRM Enrollment Status options
+
+msgid "Prospect"
+msgstr "Có triển vọng"
+
+msgid "Refused"
+msgstr "Từ chối"
+
+#. CRM Lead Status / Enrollment Status — DocType labels
+
+msgid "CRM Enrollment Status"
+msgstr "Trạng thái tuyển sinh"
+
+#. Workspace labels — missing translations
+
+msgid "Enrollment Statuses"
+msgstr "Trạng thái tuyển sinh"
+
+msgid "Interactions"
+msgstr "Tương tác"
+
+msgid "Intents"
+msgstr "Ý định"
+
+msgid "Interaction Types"
+msgstr "Loại tương tác"
+
+msgid "Intent Types"
+msgstr "Loại ý định"
+
+# Interaction / Intent / Scoring DocTypes
+
+msgid "CRM Interaction"
+msgstr "Tương tác"
+
+msgid "CRM Interaction Type"
+msgstr "Loại tương tác"
+
+msgid "CRM Intent"
+msgstr "Ý định"
+
+msgid "CRM Intent Type"
+msgstr "Loại ý định"
+
+msgid "CRM Score Template"
+msgstr "Mẫu chấm điểm"
+
+msgid "CRM Score History"
+msgstr "Lịch sử chấm điểm"
+
+msgid "CRM Score History Detail"
+msgstr "Chi tiết lịch sử chấm điểm"
+
+msgid "Score Templates"
+msgstr "Mẫu chấm điểm"
+
+msgid "Score Histories"
+msgstr "Lịch sử chấm điểm"
+
+msgid "Scores"
+msgstr "Điểm số"
+
+msgid "No Interactions Found"
+msgstr "Không tìm thấy tương tác"
+
+msgid "Interactions linked to this contact will appear here."
+msgstr "Các tương tác liên kết với hồ sơ này sẽ hiển thị tại đây."
+
+msgid "No Score History Found"
+msgstr "Không tìm thấy lịch sử chấm điểm"
+
+msgid "Score snapshots for the linked student will appear here."
+msgstr "Các lần chấm điểm của học sinh liên kết sẽ hiển thị tại đây."
+
+# Student Worklist & Admissions Decision Queue
+msgid "My Recommendations"
+msgstr "Cần liên hệ ngay"
+
+msgid "Immediate Follow-up"
+msgstr "Cần liên hệ ngay"
+
+msgid "Cần liên hệ ngay"
+msgstr "Cần liên hệ ngay"
+
+msgid "Recommendation inbox"
+msgstr "Đề xuất liên hệ"
+
+msgid "My actions"
+msgstr "Nhiệm vụ của tôi"
+
+msgid "Đề xuất liên hệ"
+msgstr "Đề xuất liên hệ"
+
+msgid "Nhiệm vụ của tôi"
+msgstr "Nhiệm vụ của tôi"
+
+msgid "DECISION QUEUE"
+msgstr "DANH SÁCH CẦN LIÊN HỆ"
+
+msgid "EXECUTION QUEUE"
+msgstr "DANH SÁCH NHIỆM VỤ"
+
+msgid "Recommendations to review"
+msgstr "Đề xuất liên hệ & tư vấn thí sinh"
+
+msgid "Actions assigned to you"
+msgstr "Nhiệm vụ tư vấn được giao"
+
+msgid "Turn accepted recommendations into one clear Action."
+msgstr "Tiếp nhận và lên lịch tư vấn để theo dõi tiến độ chăm sóc thí sinh."
+
+msgid "Work from due date first, then record the outcome."
+msgstr "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+
+msgid "Đề xuất liên hệ & tư vấn thí sinh"
+msgstr "Đề xuất liên hệ & tư vấn thí sinh"
+
+msgid "Nhiệm vụ tư vấn được giao"
+msgstr "Nhiệm vụ tư vấn được giao"
+
+msgid "Ưu tiên liên hệ theo thời hạn SLA và nhu cầu đăng ký xét tuyển của thí sinh."
+msgstr "Ưu tiên liên hệ theo thời hạn SLA và nhu cầu đăng ký xét tuyển của thí sinh."
+
+msgid "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+msgstr "Theo dõi và thực hiện các cuộc gọi, lịch hẹn tư vấn và chăm sóc hồ sơ theo hạn chót."
+
+msgid "đề xuất"
+msgstr "đề xuất"
+
+msgid "nhiệm vụ"
+msgstr "nhiệm vụ"
+
+msgid "quá hạn SLA"
+msgstr "quá hạn SLA"
+
+msgid "{0} quá hạn"
+msgstr "{0} quá hạn"
+
+msgid "No recommendations to decide"
+msgstr "Không có thí sinh cần liên hệ khẩn"
+
+msgid "New or returning recommendations will appear here."
+msgstr "Các thí sinh mới đăng ký hoặc đến lịch nhắc lại sẽ hiển thị tại đây."
+
+msgid "No actions assigned to you"
+msgstr "Không có nhiệm vụ cần thực hiện"
+
+msgid "Your active Actions will appear here."
+msgstr "Các lịch hẹn gọi điện, tư vấn và theo dõi hồ sơ của bạn sẽ xuất hiện tại đây."
+
+msgid "Không có thí sinh cần liên hệ khẩn"
+msgstr "Không có thí sinh cần liên hệ khẩn"
+
+msgid "Tất cả đề xuất tư vấn và chăm sóc thí sinh đã được xử lý hoặc lên lịch."
+msgstr "Tất cả đề xuất tư vấn và chăm sóc thí sinh đã được xử lý hoặc lên lịch."
+
+msgid "Không có nhiệm vụ cần thực hiện"
+msgstr "Không có nhiệm vụ cần thực hiện"
+
+msgid "Bạn đã hoàn thành tất cả nhiệm vụ tư vấn và chăm sóc hồ sơ được giao."
+msgstr "Bạn đã hoàn thành tất cả nhiệm vụ tư vấn và chăm sóc hồ sơ được giao."
+
+msgid "Loading work"
+msgstr "Đang tải danh sách..."
+
+msgid "Đang tải danh sách..."
+msgstr "Đang tải danh sách..."
+
+msgid "Work could not be loaded"
+msgstr "Không thể tải danh sách"
+
+msgid "Không thể tải danh sách"
+msgstr "Không thể tải danh sách"
+
+msgid "Try again"
+msgstr "Thử lại"
+
+msgid "Thử lại"
+msgstr "Thử lại"
+
+msgid "Student"
+msgstr "Thí sinh"
+
+msgid "Thí sinh"
+msgstr "Thí sinh"
+
+msgid "Scheduled"
+msgstr "Lịch hẹn đề xuất"
+
+msgid "Not scheduled"
+msgstr "Chưa lên lịch"
+
+msgid "Chưa lên lịch"
+msgstr "Chưa lên lịch"
+
+msgid "Chưa đặt hạn"
+msgstr "Chưa đặt hạn"
+
+msgid "Due"
+msgstr "Hạn xử lý (SLA)"
+
+msgid "Hạn xử lý (SLA)"
+msgstr "Hạn xử lý (SLA)"
+
+msgid "Assignee"
+msgstr "Tư vấn viên"
+
+msgid "Tư vấn viên"
+msgstr "Tư vấn viên"
+
+msgid "Outcome"
+msgstr "Kết quả tư vấn"
+
+msgid "Kết quả tư vấn"
+msgstr "Kết quả tư vấn"
+
+msgid "Linked interaction"
+msgstr "Cuộc gọi / Tương tác liên quan"
+
+msgid "Cuộc gọi / Tương tác liên quan"
+msgstr "Cuộc gọi / Tương tác liên quan"
+
+msgid "Open student"
+msgstr "Xem hồ sơ"
+
+msgid "Xem hồ sơ"
+msgstr "Xem hồ sơ"
+
+msgid "Update action"
+msgstr "Ghi nhận kết quả"
+
+msgid "Ghi nhận kết quả"
+msgstr "Ghi nhận kết quả"
+
+msgid "Ghi nhận kết quả tư vấn"
+msgstr "Ghi nhận kết quả tư vấn"
+
+msgid "Accept"
+msgstr "Tiếp nhận & Lên lịch"
+
+msgid "Tiếp nhận & Lên lịch"
+msgstr "Tiếp nhận & Lên lịch"
+
+msgid "Defer"
+msgstr "Hẹn lại"
+
+msgid "Hẹn lại"
+msgstr "Hẹn lại"
+
+msgid "Reject"
+msgstr "Bỏ qua"
+
+msgid "Bỏ qua"
+msgstr "Bỏ qua"
+
+msgid "Load more"
+msgstr "Tải thêm"
+
+msgid "Tải thêm"
+msgstr "Tải thêm"
+
+msgid "High priority"
+msgstr "Ưu tiên cao"
+
+msgid "Medium priority"
+msgstr "Ưu tiên trung bình"
+
+msgid "Low priority"
+msgstr "Ưu tiên thấp"
+
+msgid "Ưu tiên cao"
+msgstr "Ưu tiên cao"
+
+msgid "Ưu tiên trung bình"
+msgstr "Ưu tiên trung bình"
+
+msgid "Ưu tiên thấp"
+msgstr "Ưu tiên thấp"
+
+msgid "Không có độ ưu tiên"
+msgstr "Không có độ ưu tiên"
+
+msgid "Độ ưu tiên {0}"
+msgstr "Độ ưu tiên {0}"
+
+msgid "Overdue"
+msgstr "Quá hạn SLA"
+
+msgid "Quá hạn SLA"
+msgstr "Quá hạn SLA"
+
+msgid "Accept recommendation"
+msgstr "Tiếp nhận & Lên lịch tư vấn"
+
+msgid "Defer recommendation"
+msgstr "Hẹn liên hệ lại"
+
+msgid "Reject recommendation"
+msgstr "Bỏ qua đề xuất liên hệ"
+
+msgid "Decide recommendation"
+msgstr "Xử lý đề xuất liên hệ"
+
+msgid "Tiếp nhận & Lên lịch tư vấn"
+msgstr "Tiếp nhận & Lên lịch tư vấn"
+
+msgid "Hẹn liên hệ lại"
+msgstr "Hẹn liên hệ lại"
+
+msgid "Bỏ qua đề xuất liên hệ"
+msgstr "Bỏ qua đề xuất liên hệ"
+
+msgid "Bỏ qua đề xuất"
+msgstr "Bỏ qua đề xuất"
+
+msgid "Xử lý đề xuất liên hệ"
+msgstr "Xử lý đề xuất liên hệ"
+
+msgid "Xác nhận lên lịch"
+msgstr "Xác nhận lên lịch"
+
+msgid "Xác nhận hẹn lại"
+msgstr "Xác nhận hẹn lại"
+
+msgid "Xác nhận bỏ qua"
+msgstr "Xác nhận bỏ qua"
+
+msgid "Deciding recommendation for {0}."
+msgstr "Lên lịch tư vấn cho thí sinh {0}."
+
+msgid "Lên lịch tư vấn cho thí sinh {0}."
+msgstr "Lên lịch tư vấn cho thí sinh {0}."
+
+msgid "Due time"
+msgstr "Thời hạn thực hiện / Lịch hẹn"
+
+msgid "Thời hạn thực hiện / Lịch hẹn"
+msgstr "Thời hạn thực hiện / Lịch hẹn"
+
+msgid "Executor"
+msgstr "Tư vấn viên phụ trách"
+
+msgid "Tư vấn viên phụ trách"
+msgstr "Tư vấn viên phụ trách"
+
+msgid "Only executors permitted by the server are shown."
+msgstr "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+
+msgid "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+msgstr "Chỉ hiển thị các tư vấn viên hợp lệ trong nhóm."
+
+msgid "Deferral"
+msgstr "Hình thức hẹn lại"
+
+msgid "Hình thức hẹn lại"
+msgstr "Hình thức hẹn lại"
+
+msgid "Return to inbox later"
+msgstr "Nhắc lại sau vào danh sách"
+
+msgid "Nhắc lại sau vào danh sách"
+msgstr "Nhắc lại sau vào danh sách"
+
+msgid "Archive with reason"
+msgstr "Đóng đề xuất kèm lý do"
+
+msgid "Đóng đề xuất kèm lý do"
+msgstr "Đóng đề xuất kèm lý do"
+
+msgid "Return to inbox at"
+msgstr "Thời điểm nhắc lại"
+
+msgid "Thời điểm nhắc lại"
+msgstr "Thời điểm nhắc lại"
+
+msgid "Rejection reason"
+msgstr "Lý do bỏ qua"
+
+msgid "Lý do bỏ qua"
+msgstr "Lý do bỏ qua"
+
+msgid "Archival reason"
+msgstr "Lý do đóng đề xuất"
+
+msgid "Lý do đóng đề xuất"
+msgstr "Lý do đóng đề xuất"
+
+msgid "Next status"
+msgstr "Trạng thái xử lý"
+
+msgid "Trạng thái xử lý"
+msgstr "Trạng thái xử lý"
+
+msgid "Execution outcome"
+msgstr "Kết quả tư vấn"
+
+msgid "Evidence"
+msgstr "Nội dung / Ghi chú tư vấn"
+
+msgid "Nội dung / Ghi chú tư vấn"
+msgstr "Nội dung / Ghi chú tư vấn"
+
+msgid "Record execution evidence. A linked interaction must belong to this Student and already have its engagement outcome."
+msgstr "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+
+msgid "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+msgstr "Ghi nhận chi tiết kết quả trao đổi với thí sinh hoặc phụ huynh."
+
+msgid "Linked interaction (optional)"
+msgstr "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+
+msgid "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+msgstr "Cuộc gọi / Tương tác liên quan (tùy chọn)"
+
+msgid "Lý do không thành công"
+msgstr "Lý do không thành công"
+
+msgid "Save action"
+msgstr "Lưu kết quả tư vấn"
+
+msgid "Lưu kết quả tư vấn"
+msgstr "Lưu kết quả tư vấn"
+
+msgid "Không thể lưu quyết định này."
+msgstr "Không thể lưu quyết định này."
+
+msgid "Không thể cập nhật công việc này."
+msgstr "Không thể cập nhật công việc này."
+
+msgid "Không nghe máy / Chưa kết nối"
+msgstr "Không nghe máy / Chưa kết nối"
+
+msgid "Quan tâm cao / Muốn đăng ký xét tuyển"
+msgstr "Quan tâm cao / Muốn đăng ký xét tuyển"
+
+msgid "Cần gửi thêm thông tin ngành & học phí"
+msgstr "Cần gửi thêm thông tin ngành & học phí"
+
+msgid "Hẹn gọi lại sau"
+msgstr "Hẹn gọi lại sau"
+
+msgid "Bắt đầu nộp hồ sơ xét tuyển"
+msgstr "Bắt đầu nộp hồ sơ xét tuyển"
+
+msgid "Đã hoàn tất hồ sơ xét tuyển"
+msgstr "Đã hoàn tất hồ sơ xét tuyển"
+
+msgid "Không có nhu cầu xét tuyển"
+msgstr "Không có nhu cầu xét tuyển"
+
+msgid "Đang tư vấn"
+msgstr "Đang tư vấn"
+
+msgid "Đã hủy"
+msgstr "Đã hủy"
+
+msgid "Interaction"
+msgstr "Tương tác"
+
+msgid "Interaction Type"
+msgstr "Loại tương tác"
+
+msgid "Interaction Type Name"
+msgstr "Tên loại tương tác"
+
+msgid "Interaction Time"
+msgstr "Thời gian tương tác"
+
+msgid "Intent"
+msgstr "Ý định"
+
+msgid "Intent Type"
+msgstr "Loại ý định"
+
+msgid "Intent Type Name"
+msgstr "Tên loại ý định"
+
+msgid "Importance"
+msgstr "Mức độ quan trọng"
+
+msgid "Confidence"
+msgstr "Độ tin cậy"
+
+msgid "Outcome"
+msgstr "Kết quả"
+
+msgid "Summary"
+msgstr "Tóm tắt"
+
+msgid "Captured"
+msgstr "Đã ghi nhận"
+
+msgid "Follow Up Needed"
+msgstr "Cần theo dõi"
+
+msgid "Resolved"
+msgstr "Đã xử lý"
+
+msgid "No Response"
+msgstr "Không phản hồi"
+
+msgid "Medium"
+msgstr "Trung bình"
+
+msgid "High"
+msgstr "Cao"
+
+msgid "Very High"
+msgstr "Rất cao"
+
+msgid "Vietnamese Description"
+msgstr "Mô tả tiếng Việt"
+
+msgid "Latest Score"
+msgstr "Điểm mới nhất"
+
+msgid "Score Template"
+msgstr "Mẫu chấm điểm"
+
+msgid "Scoring Time"
+msgstr "Thời điểm chấm điểm"
+
+msgid "Scoring Formula"
+msgstr "Công thức chấm điểm"
+
+msgid "Fit"
+msgstr "Độ phù hợp"
+
+msgid "Engagement"
+msgstr "Mức độ tương tác"
+
+msgid "Time Decay"
+msgstr "Suy giảm theo thời gian"
+
+msgid "Negative"
+msgstr "Điểm trừ"
+
+msgid "Fit Scoring"
+msgstr "Chấm điểm độ phù hợp"
+
+msgid "Engagement Scoring"
+msgstr "Chấm điểm mức độ tương tác"
+
+msgid "Intent Scoring"
+msgstr "Chấm điểm ý định"
+
+msgid "Time Decay Scoring"
+msgstr "Chấm điểm suy giảm theo thời gian"
+
+msgid "Negative Scoring"
+msgstr "Chấm điểm trừ"
+
+msgid "Fit Score"
+msgstr "Điểm độ phù hợp"
+
+msgid "Engagement Score"
+msgstr "Điểm tương tác"
+
+msgid "Intent Score"
+msgstr "Điểm ý định"
+
+msgid "Time Decay Score"
+msgstr "Điểm suy giảm theo thời gian"
+
+msgid "Negative Score"
+msgstr "Điểm trừ"
+
+msgid "Final Score"
+msgstr "Điểm cuối cùng"
+
+msgid "Score Change"
+msgstr "Mức thay đổi điểm"
+
+msgid "Score Details"
+msgstr "Chi tiết điểm"
+
+msgid "Category"
+msgstr "Nhóm"
+
+msgid "Rule ID"
+msgstr "Mã quy tắc"
+
+msgid "Signal"
+msgstr "Tín hiệu"
+
+msgid "Score"
+msgstr "Điểm"
+
+msgid "Reason"
+msgstr "Lý do"
+
+msgid "Draft"
+msgstr "Nháp"
+
+msgid "Active"
+msgstr "Đang hoạt động"
+
+msgid "Inactive"
+msgstr "Không hoạt động"
+
+msgid "Expired"
+msgstr "Hết hiệu lực"
+
+#. CRM Lead — new fields (v2 field redesign)
+
+msgid "Date of Birth"
+msgstr "Ngày sinh"
+
+msgid "ID Number"
+msgstr "Số CCCD/CMND"
+
+msgid "ID Issued Date"
+msgstr "Ngày cấp CCCD"
+
+msgid "ID Issued Place"
+msgstr "Nơi cấp CCCD"
+
+msgid "Registration Step"
+msgstr "Bước đăng ký"
+
+msgid "Parent/Contact Name"
+msgstr "Họ tên phụ huynh/liên hệ"
+
+msgid "Parent Address"
+msgstr "Địa chỉ phụ huynh"
+
+msgid "Source ID"
+msgstr "Mã nguồn ngoài"
+
+msgid "Parent Info"
+msgstr "Thông tin phụ huynh"
+
+msgid "Identity"
+msgstr "Giấy tờ tùy thân"
+
+# Student ownership UI
+msgid "Current assignment"
+msgstr "Phân công hiện tại"
+
+msgid "Change ownership"
+msgstr "Cập nhật phân công"
+
+msgid "Loading…"
+msgstr "Đang tải…"
+
+msgid "Change student ownership"
+msgstr "Cập nhật phân công học sinh"
+
+msgid "Owner: {0} · Revision {1}"
+msgstr "Cá nhân phụ trách: {0} · Phiên bản {1}"
+
+msgid "Pool: {0} · Revision {1}"
+msgstr "Nhóm phụ trách: {0} · Phiên bản {1}"
+
+msgid "No active owner or pool."
+msgstr "Chưa có phân công đang hoạt động."
+
+msgid "Ownership changed"
+msgstr "Đã cập nhật phân công"
+
+msgid "Choose either an individual owner or a campus pool. The server verifies eligibility and scope."
+msgstr "Chọn cá nhân hoặc nhóm phụ trách theo chi nhánh. Hệ thống sẽ kiểm tra điều kiện và phạm vi."
+
+msgid "Assign to"
+msgstr "Phân công cho"
+
+msgid "Eligible owner"
+msgstr "Cá nhân đủ điều kiện"
+
+msgid "Eligible pool"
+msgstr "Nhóm đủ điều kiện"
+
+msgid "Campus pool"
+msgstr "Nhóm theo chi nhánh"
+
+msgid "Individual owner"
+msgstr "Cá nhân phụ trách"
+
+msgid "This reason is recorded in the ownership history."
+msgstr "Lý do này được lưu trong lịch sử phân công."
+
+msgid "Loading eligible ownership targets…"
+msgstr "Đang tải danh sách cá nhân/nhóm đủ điều kiện…"
+
+msgid "Save ownership"
+msgstr "Lưu phân công"
+
+msgid "Student ownership updated."
+msgstr "Đã cập nhật phân công học sinh."
+
+msgid "This ownership changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to change ownership."
+msgstr "Không thể cập nhật phân công."
+
+# Sales-facing lifecycle and SLA labels
+msgid "At a glance"
+msgstr "Tổng quan nhanh"
+
+msgid "Current state"
+msgstr "Trạng thái hiện tại"
+
+msgid "The information most useful for the next admissions action."
+msgstr "Thông tin quan trọng nhất cho bước tuyển sinh tiếp theo."
+
+msgid "Lifecycle"
+msgstr "Giai đoạn tuyển sinh"
+
+msgid "MQL"
+msgstr "MQL (Đủ điều kiện tư vấn)"
+
+msgid "Initial-response SLA"
+msgstr "Thời hạn phản hồi ban đầu (SLA)"
+
+msgid "Next deadline"
+msgstr "Hạn xử lý tiếp theo"
+
+msgid "Breach deadline"
+msgstr "Thời điểm quá hạn"
+
+msgid "Policy version"
+msgstr "Phiên bản chính sách"
+
+msgid "Escalated"
+msgstr "Cần xử lý gấp"
+
+msgid "Breached"
+msgstr "Đã quá hạn"
+
+msgid "Warning sent"
+msgstr "Đã gửi cảnh báo"
+
+msgid "Response recorded"
+msgstr "Đã ghi nhận phản hồi"
+
+msgid "Student routing"
+msgstr "Phân công tự động"
+
+msgid "Routing is operating normally."
+msgstr "Hệ thống đang phân công tự động bình thường."
+
+msgid "applied"
+msgstr "Đã phân công"
+
+msgid "deferred"
+msgstr "Chờ phân công"
+
+msgid "failed"
+msgstr "Phân công thất bại"
+
+msgid "Lifecycle unavailable"
+msgstr "Chưa có thông tin giai đoạn tuyển sinh"
+
+msgid "SLA Status"
+msgstr "Trạng thái thời hạn xử lý (SLA)"
+
+msgid "Change student lifecycle"
+msgstr "Chuyển giai đoạn tuyển sinh"
+
+msgid "Current stage: {0}. The server checks your permission, evidence and the latest revision before recording this transition."
+msgstr "Giai đoạn hiện tại: {0}. Hệ thống sẽ kiểm tra quyền, minh chứng và phiên bản mới nhất trước khi ghi nhận thay đổi."
+
+msgid "New stage"
+msgstr "Giai đoạn mới"
+
+msgid "Qualifying outcome"
+msgstr "Kết quả đủ điều kiện"
+
+msgid "Evidence category"
+msgstr "Loại minh chứng"
+
+msgid "Evidence DocType"
+msgstr "Loại dữ liệu minh chứng"
+
+msgid "Use the DocType that owns the approved Student-linked record."
+msgstr "Dùng loại dữ liệu chứa bản ghi đã được duyệt và liên kết với học sinh."
+
+msgid "Evidence reference"
+msgstr "Mã minh chứng"
+
+msgid "Enter the exact record name; it is checked against this Student and your read permission."
+msgstr "Nhập đúng tên bản ghi; hệ thống sẽ kiểm tra bản ghi với học sinh này và quyền xem của bạn."
+
+msgid "A reason is required for this transition and will be recorded in the lifecycle history."
+msgstr "Bắt buộc nhập lý do chuyển giai đoạn; lý do sẽ được lưu trong lịch sử tuyển sinh."
+
+msgid "Optional context recorded with this transition."
+msgstr "Thông tin bổ sung không bắt buộc, được lưu cùng lần chuyển giai đoạn này."
+
+msgid "No lifecycle transitions are currently available to you."
+msgstr "Hiện không có thao tác chuyển giai đoạn nào khả dụng với bạn."
+
+msgid "Record transition"
+msgstr "Ghi nhận chuyển giai đoạn"
+
+msgid "Lifecycle changed to {0}"
+msgstr "Đã chuyển sang giai đoạn {0}"
+
+msgid "Student lifecycle updated."
+msgstr "Đã cập nhật giai đoạn tuyển sinh."
+
+msgid "Unable to change the student lifecycle."
+msgstr "Không thể thay đổi giai đoạn tuyển sinh."
+
+msgid "Resume SLA"
+msgstr "Tiếp tục thời hạn xử lý"
+
+msgid "Pause SLA"
+msgstr "Tạm dừng thời hạn xử lý"
+
+msgid "No active Student SLA attempt."
+msgstr "Chưa có thời hạn xử lý đang hoạt động."
+
+msgid "Resume the SLA clock. The elapsed pause will be recorded."
+msgstr "Tiếp tục bộ đếm thời hạn xử lý. Thời gian đã tạm dừng sẽ được ghi nhận."
+
+msgid "Pause the SLA clock with an approved waiting reason."
+msgstr "Tạm dừng bộ đếm thời hạn xử lý với lý do chờ đã được phê duyệt."
+
+msgid "Pause reason"
+msgstr "Lý do tạm dừng"
+
+msgid "Resume Student SLA"
+msgstr "Tiếp tục thời hạn xử lý học sinh"
+
+msgid "Pause Student SLA"
+msgstr "Tạm dừng thời hạn xử lý học sinh"
+
+msgid "Student SLA resumed."
+msgstr "Đã tiếp tục thời hạn xử lý học sinh."
+
+msgid "Student SLA paused."
+msgstr "Đã tạm dừng thời hạn xử lý học sinh."
+
+msgid "This SLA changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Thời hạn xử lý đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to update the Student SLA."
+msgstr "Không thể cập nhật thời hạn xử lý học sinh."
+
+msgid "Retry student routing"
+msgstr "Thử lại phân công học sinh"
+
+msgid "Retry this deferred routing request. The server rechecks the current Student ownership, pool policy and eligible members."
+msgstr "Thử lại yêu cầu phân công đang chờ. Hệ thống sẽ kiểm tra lại phân công hiện tại, chính sách nhóm và nhân sự đủ điều kiện."
+
+msgid "Current reason: {0}"
+msgstr "Lý do hiện tại: {0}"
+
+msgid "Retry routing"
+msgstr "Thử lại phân công"
+
+msgid "Student routing retry submitted."
+msgstr "Đã gửi yêu cầu thử lại phân công học sinh."
+
+msgid "This routing request changed while you were editing. Reload it and review the current state before trying again."
+msgstr "Yêu cầu phân công đã thay đổi trong lúc bạn chỉnh sửa. Hãy tải lại và kiểm tra trạng thái hiện tại trước khi thử lại."
+
+msgid "Unable to retry student routing."
+msgstr "Không thể thử lại phân công học sinh."
+
+msgid "Review conversations and record their outcomes."
+msgstr "Xem lại các cuộc trao đổi và ghi nhận kết quả."
+
+msgid "Record outcome"
+msgstr "Ghi nhận kết quả"
+
+msgid "Record student outcome"
+msgstr "Ghi nhận kết quả trao đổi"
+
+msgid "Continuity"
+msgstr "Bước tiếp theo"
+
+msgid "Next action"
+msgstr "Bước tiếp theo"
+
+msgid "Waiting until"
+msgstr "Chờ đến"
+
+msgid "Reason / waiting context"
+msgstr "Lý do / bối cảnh chờ"
+
+msgid "Evidence references"
+msgstr "Mã minh chứng"
+
+msgid "Use outcome IDs or category:doctype:name references, separated by commas."
+msgstr "Nhập mã kết quả hoặc mã minh chứng theo dạng category:doctype:name, ngăn cách bằng dấu phẩy."
+
+msgid "Follow up with student"
+msgstr "Theo dõi lại học sinh"
+
+msgid "Student outcome recorded."
+msgstr "Đã ghi nhận kết quả trao đổi."
+
+msgid "Unable to record the Student outcome."
+msgstr "Không thể ghi nhận kết quả trao đổi."
+
+msgid "Outcome recorded: {0}"
+msgstr "Đã ghi nhận kết quả: {0}"
+
+msgid "connected"
+msgstr "Đã liên hệ"
+
+msgid "qualified"
+msgstr "Đủ điều kiện"
+
+msgid "follow_up_required"
+msgstr "Cần theo dõi"
+
+msgid "no_response"
+msgstr "Chưa phản hồi"
+
+msgid "not_interested"
+msgstr "Không quan tâm"
+
+msgid "invalid"
+msgstr "Không hợp lệ"
+
+msgid "completed"
+msgstr "Hoàn tất"
+
+msgid "task"
+msgstr "Tạo Task tiếp theo"
+
+msgid "waiting"
+msgstr "Chờ phản hồi"
+
+msgid "terminal"
+msgstr "Kết thúc"
+
+# Student intake modal
+msgid "Fill in the student information. Provide at least one valid phone number or email address."
+msgstr "Điền thông tin học sinh. Cần có ít nhất một số điện thoại hợp lệ hoặc địa chỉ email."
+
+msgid "Identity and assignment"
+msgstr "Giấy tờ tùy thân và phân công"
+
+msgid "National ID (optional)"
+msgstr "Số CCCD (không bắt buộc)"
+
+msgid "Initial pool (optional)"
+msgstr "Nhóm phụ trách ban đầu (không bắt buộc)"
+
+msgid "Intake attached to the existing admission case."
+msgstr "Thông tin đã được gắn vào hồ sơ tuyển sinh hiện có."
+
+msgid "Student intake created."
+msgstr "Đã tạo học sinh."
+
+msgid "A review is required before this intake can continue."
+msgstr "Cần xem xét trước khi tiếp tục tiếp nhận học sinh."
+
+msgid "Intake completed."
+msgstr "Đã hoàn tất tiếp nhận."
+
+msgid "The intake service returned an invalid result."
+msgstr "Dịch vụ tiếp nhận trả về kết quả không hợp lệ."
+
+msgid "Unable to submit intake."
+msgstr "Không thể tạo học sinh."
+
+# Student Detail admissions workspace
+msgid "Admissions action"
+msgstr "Thao tác tuyển sinh"
+
+msgid "Admissions action saved."
+msgstr "Đã lưu hoạt động tuyển sinh."
+
+msgid "Admissions context"
+msgstr "Bối cảnh tuyển sinh"
+
+msgid "Campaign, event and scholarship signals for the next conversation."
+msgstr "Tín hiệu từ chiến dịch, sự kiện và học bổng cho lần tư vấn tiếp theo."
+
+msgid "Loading admissions context…"
+msgstr "Đang tải bối cảnh tuyển sinh…"
+
+msgid "No campaign, event, scholarship, or next-action context is available yet."
+msgstr "Chưa có thông tin chiến dịch, sự kiện, học bổng hoặc hành động tiếp theo."
+
+msgid "Potential score recalculation pending"
+msgstr "Điểm tiềm năng đang được tính lại"
+
+msgid "Sensitive document · private"
+msgstr "Tài liệu nhạy cảm · riêng tư"
+
+msgid "Open Day / event"
+msgstr "Open Day / sự kiện"
+
+msgid "Scholarship interest"
+msgstr "Quan tâm học bổng"
+
+msgid "Next best action"
+msgstr "Hành động tiếp theo phù hợp nhất"
+
+msgid "Up to date"
+msgstr "Đã cập nhật"
+
+msgid "Recalculation pending"
+msgstr "Đang chờ tính lại"
+
+msgid "Not calculated yet"
+msgstr "Chưa tính điểm"
+
+msgid "confidence"
+msgstr "độ tin cậy"
+
+msgid "Potential score freshness"
+msgstr "Trạng thái cập nhật điểm tiềm năng"
+
+msgid "Latest score: {0}"
+msgstr "Điểm mới nhất: {0}"
+
+msgid "Sales decisions and actions"
+msgstr "Quyết định và công việc bán hàng"
+
+msgid "Pending decision: {0}"
+msgstr "Quyết định đang chờ: {0}"
+
+msgid "Status: {0} · Due: {1}"
+msgstr "Trạng thái: {0} · Hạn: {1}"
+
+msgid "Update action"
+msgstr "Cập nhật công việc"
+
+msgid "Latest action: {0}"
+msgstr "Công việc gần nhất: {0}"
+
+msgid "Linked interaction: {0}"
+msgstr "Tương tác liên kết: {0}"
+
+msgid "Not scheduled"
+msgstr "Chưa lên lịch"
+
+msgid "Unable to load more lifecycle history."
+msgstr "Không thể tải thêm lịch sử giai đoạn tuyển sinh."
+
+msgid "Other"
+msgstr "Khác"
+
+msgid "Competing schools"
+msgstr "Trường đang cân nhắc"
+
+msgid "Reason for choosing the major"
+msgstr "Lý do chọn ngành"
+
+msgid "Finance and scholarship"
+msgstr "Tài chính và học bổng"
+
+msgid "Parent influence"
+msgstr "Ảnh hưởng của phụ huynh"
+
+msgid "Lead hotness"
+msgstr "Mức độ tiềm năng"
+
+msgid "Action"
+msgstr "Hoạt động"
+
+msgid "Save action"
+msgstr "Lưu hoạt động"
+
+msgid "Unable to save this admissions action."
+msgstr "Không thể lưu hoạt động tuyển sinh này."
+
+msgid "Digital signal"
+msgstr "Tín hiệu số"
+
+msgid "Record an acquisition or digital behaviour."
+msgstr "Ghi nhận nguồn tiếp cận hoặc hành vi số."
+
+msgid "Call attempt"
+msgstr "Cuộc gọi chưa kết nối"
+
+msgid "Record an unanswered or attempted call."
+msgstr "Ghi nhận cuộc gọi không bắt máy hoặc chưa kết nối."
+
+msgid "Successful call"
+msgstr "Cuộc gọi kết nối thành công"
+
+msgid "Record a connected counselling call."
+msgstr "Ghi nhận cuộc gọi tư vấn đã kết nối."
+
+msgid "Brochure sent"
+msgstr "Đã gửi brochure"
+
+msgid "Record admissions information sent to the student."
+msgstr "Ghi nhận thông tin tuyển sinh đã gửi cho học sinh."
+
+msgid "Update major interest"
+msgstr "Cập nhật ngành quan tâm"
+
+msgid "Capture a change in programme interest."
+msgstr "Ghi nhận thay đổi ngành học quan tâm."
+
+msgid "Change lead status"
+msgstr "Chuyển trạng thái lead"
+
+msgid "Request a governed lifecycle transition."
+msgstr "Yêu cầu chuyển trạng thái theo quy trình."
+
+msgid "Invite to Open Day"
+msgstr "Mời tham dự Open Day"
+
+msgid "Record an event invitation."
+msgstr "Ghi nhận lời mời tham dự sự kiện."
+
+msgid "Register for event"
+msgstr "Đăng ký sự kiện"
+
+msgid "Record event registration."
+msgstr "Ghi nhận đăng ký sự kiện."
+
+msgid "Check in to event"
+msgstr "Check-in sự kiện"
+
+msgid "Record event check-in."
+msgstr "Ghi nhận check-in sự kiện."
+
+msgid "Capture scholarship target and confidence."
+msgstr "Ghi nhận mức học bổng quan tâm và độ tin cậy."
+
+msgid "Admissions task"
+msgstr "Công việc tuyển sinh"
+
+msgid "Create a follow-up task linked to this Student."
+msgstr "Tạo công việc theo dõi liên kết với học sinh này."
+
+msgid "Admissions insight"
+msgstr "Insight học sinh"
+
+msgid "Create a structured counselling note."
+msgstr "Tạo ghi chú tư vấn theo cấu trúc."
+
+msgid "Assign counselor"
+msgstr "Phân công tư vấn viên"
+
+msgid "Assign the Student to a counselor through the ownership command."
+msgstr "Phân công học sinh cho tư vấn viên qua thao tác phân công sở hữu."
+
+msgid "Facebook Ads click"
+msgstr "Nhấp quảng cáo Facebook"
+
+msgid "Landing Page visit"
+msgstr "Truy cập Landing Page"
+
+msgid "Messenger chat"
+msgstr "Chat Messenger"
+
+msgid "Zalo chat"
+msgstr "Chat Zalo"
+
+msgid "Website visit"
+msgstr "Truy cập website"
+
+msgid "Admissions prediction tool"
+msgstr "Dùng công cụ dự đoán tuyển sinh"
+
+msgid "Form submit"
+msgstr "Gửi biểu mẫu"
+
+msgid "New lead status"
+msgstr "Trạng thái lead mới"
+
+msgid "Scholarship target"
+msgstr "Mức học bổng quan tâm"
+
+msgid "Confidence (%)"
+msgstr "Mức độ tin cậy (%)"
+
+msgid "Task title"
+msgstr "Tiêu đề công việc"
+
+msgid "Due date"
+msgstr "Hạn hoàn thành"
+
+msgid "Counselor"
+msgstr "Tư vấn viên"
+
+msgid "Team (optional when unambiguous)"
+msgstr "Nhóm phụ trách (không bắt buộc nếu đã xác định rõ)"
+
+msgid "Please provide at least one admissions insight."
+msgstr "Hãy nhập ít nhất một insight học sinh."
+
+msgid "Please provide: {0}."
+msgstr "Hãy nhập: {0}."
+
+msgid "Invited"
+msgstr "Đã mời"
+
+msgid "Registered"
+msgstr "Đã đăng ký"
+
+msgid "Checked-in"
+msgstr "Đã check-in"
+
+# Student Detail admissions service messages
+msgid "Authentication is required."
+msgstr "Bạn cần đăng nhập để tiếp tục."
+
+msgid "Student is outside your current scope."
+msgstr "Học sinh nằm ngoài phạm vi hiện tại của bạn."
+
+msgid "You are not permitted to perform this admissions action."
+msgstr "Bạn không có quyền thực hiện hoạt động tuyển sinh này."
+
+msgid "You are not permitted to edit this Student profile."
+msgstr "Bạn không có quyền chỉnh sửa hồ sơ học sinh này."
+
+msgid "{0} is required."
+msgstr "Bắt buộc nhập {0}."
+
+msgid "Payload must be an object."
+msgstr "Dữ liệu gửi lên phải là một đối tượng."
+
+msgid "The idempotency key was already used for another request."
+msgstr "Khóa idempotency đã được dùng cho một yêu cầu khác."
+
+msgid "Student phone is required for a call action."
+msgstr "Cần có số điện thoại học sinh để thực hiện cuộc gọi."
+
+msgid "The event does not exist."
+msgstr "Sự kiện không tồn tại."
+
+msgid "Invited to {0}"
+msgstr "Đã mời tham dự {0}"
+
+msgid "Checked-in at {0}"
+msgstr "Đã check-in tại {0}"
+
+msgid "Registered for {0}"
+msgstr "Đã đăng ký {0}"
+
+msgid "Open Day invitation"
+msgstr "Mời tham dự Open Day"
+
+msgid "The selected major does not exist."
+msgstr "Ngành đã chọn không tồn tại."
+
+msgid "Scholarship intent type is not configured."
+msgstr "Chưa cấu hình loại mối quan tâm học bổng."
+
+msgid "Team is required when the counselor belongs to multiple teams."
+msgstr "Cần chọn nhóm khi tư vấn viên thuộc nhiều nhóm."
+
+msgid "Admissions assignment"
+msgstr "Phân công tuyển sinh"
+
+msgid "Unsupported admissions action."
+msgstr "Hoạt động tuyển sinh không được hỗ trợ."
+
+msgid "Expected revision is required."
+msgstr "Bắt buộc có phiên bản dự kiến."
+
+msgid "Occurred at is required."
+msgstr "Bắt buộc có thời điểm xảy ra."
+
+msgid "Student activity changed; reload before retrying."
+msgstr "Hoạt động của học sinh đã thay đổi; hãy tải lại trước khi thử lại."
+
+msgid "Only an admissions supervisor may change document visibility."
+msgstr "Chỉ quản lý tuyển sinh mới được thay đổi chế độ hiển thị tài liệu."
+
+msgid "File is not attached to this Student."
+msgstr "Tệp không được đính kèm với học sinh này."
+
+msgid "Making a Student document public requires confirmation."
+msgstr "Cần xác nhận trước khi công khai tài liệu của học sinh."
+
+msgid "Counseling"
+msgstr "Tư vấn"
+
+msgid "Outreach"
+msgstr "Tiếp cận"
+
+msgid "Connected"
+msgstr "Đã kết nối"

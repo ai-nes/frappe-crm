@@ -11,7 +11,7 @@
             :class="{ border: !isImage(attachment.file_type) }"
           >
             <img
-              v-if="isImage(attachment.file_type)"
+              v-if="isImage(attachment.file_type) && !isSensitive(attachment)"
               class="size-full object-cover"
               :src="attachment.file_url"
               :alt="attachment.file_name"
@@ -29,6 +29,9 @@
             <div class="mb-1 text-sm text-ink-gray-5">
               {{ convertSize(attachment.file_size) }}
             </div>
+            <div v-if="isSensitive(attachment)" class="text-xs text-ink-orange-3">
+              {{ __('Sensitive document · private') }}
+            </div>
           </div>
         </div>
         <div class="flex flex-col items-end gap-2 flex-shrink-0">
@@ -39,6 +42,7 @@
           </Tooltip>
           <div class="flex gap-1">
             <Button
+              v-if="allowVisibilityChange"
               :tooltip="
                 attachment.is_private ? __('Make Public') : __('Make Private')
               "
@@ -55,6 +59,7 @@
               </template>
             </Button>
             <Button
+              v-if="allowDelete"
               :tooltip="__('Delete Attachment')"
               class="!size-5"
               @click.stop="() => deleteAttachment(attachment.name)"
@@ -83,6 +88,8 @@ import { formatDate, timeAgo, convertSize, isImage } from '@/utils'
 
 defineProps({
   attachments: { type: Array, default: () => [] },
+  allowVisibilityChange: { type: Boolean, default: false },
+  allowDelete: { type: Boolean, default: false },
 })
 
 const emit = defineEmits(['reload'])
@@ -154,5 +161,11 @@ function fileIcon(type) {
     return FileVideoIcon
   }
   return FileTextIcon
+}
+
+function isSensitive(attachment) {
+  return /(cccd|căn cước|hoc ba|học bạ|transcript|bảng điểm|scholarship|học bổng)/i.test(
+    String(attachment?.file_name || ''),
+  )
 }
 </script>

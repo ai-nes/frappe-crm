@@ -8,20 +8,11 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "title",
   "content",
   "reference_doctype",
   "reference_docname"
  ],
  "fields": [
-  {
-   "fieldname": "title",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "in_standard_filter": 1,
-   "label": "Title",
-   "reqd": 1
-  },
   {
    "fieldname": "content",
    "fieldtype": "Text Editor",
@@ -30,7 +21,7 @@
    "label": "Content"
   },
   {
-   "default": "CRM Contact",
+   "default": "CRM Student",
    "fieldname": "reference_doctype",
    "fieldtype": "Link",
    "label": "Reference Document Type",
@@ -46,7 +37,7 @@
  "index_web_pages_for_search": 1,
  "links": [
   {
-   "link_doctype": "CRM Call Log",
+   "link_doctype": "Call Log",
    "link_fieldname": "note"
   }
  ],
@@ -76,7 +67,7 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Sales Manager",
+   "role": "Administrator",
    "share": 1,
    "write": 1
   },
@@ -88,8 +79,31 @@
    "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Sales User",
+   "role": "Lead Sale",
    "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Sale",
+   "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Marketing"
+  },
+  {
+   "read": 1,
+   "role": "CTV Sale"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Admissions Director",
    "write": 1
   }
  ],
@@ -97,6 +111,5 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "title",
  "track_changes": 1
 }

@@ -1,0 +1,16 @@
+{
+ "actions": [], "autoname": "BATCH-.YYYY.-.#####", "doctype": "DocType", "engine": "InnoDB",
+ "field_order": ["staff", "team", "status", "opened_at", "expires_at", "batch_size", "completed_count", "items", "recall_reason", "schema_version"],
+ "fields": [
+  {"fieldname":"staff","fieldtype":"Link","label":"CTV Staff","options":"CRM Staff","reqd":1},
+  {"fieldname":"team","fieldtype":"Link","label":"Team","options":"CRM Team","reqd":1},
+  {"default":"open","fieldname":"status","fieldtype":"Select","label":"Status","options":"open\ncompleted\nrecalled","reqd":1},
+  {"fieldname":"opened_at","fieldtype":"Datetime","label":"Opened At","reqd":1},
+  {"fieldname":"expires_at","fieldtype":"Datetime","label":"Expires At","reqd":1},
+  {"fieldname":"batch_size","fieldtype":"Int","label":"Batch Size","reqd":1},
+  {"default":"0","fieldname":"completed_count","fieldtype":"Int","label":"Completed Count"},
+  {"fieldname":"items","fieldtype":"Table","label":"Batch Leads","options":"CRM Student Assignment Batch Item"},
+  {"fieldname":"recall_reason","fieldtype":"Data","label":"Recall Reason"},
+  {"default":"phase7-v1","fieldname":"schema_version","fieldtype":"Data","label":"Schema Version","reqd":1}
+ ], "module":"FCRM", "name":"CRM Student Assignment Batch", "naming_rule":"Expression", "permissions": []
+}

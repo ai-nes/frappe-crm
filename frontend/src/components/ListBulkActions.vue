@@ -14,6 +14,13 @@
     :doctype="doctype"
     @reload="reload"
   />
+  <AssignStaffModal
+    v-if="showAssignStaffModal && isContact"
+    v-model="showAssignStaffModal"
+    :doctype="doctype"
+    :selectedValues="selectedValues"
+    @reload="reload"
+  />
   <DeleteLinkedDocModal
     v-if="showDeleteDocModal.showLinkedDocsModal"
     v-model="showDeleteDocModal.showLinkedDocsModal"
@@ -33,11 +40,12 @@
 <script setup>
 import EditValueModal from '@/components/Modals/EditValueModal.vue'
 import AssignmentModal from '@/components/Modals/AssignmentModal.vue'
+import AssignStaffModal from '@/components/Modals/AssignStaffModal.vue'
 import { setupListCustomizations } from '@/utils'
 import { globalStore } from '@/stores/global'
 import { useTelemetry } from 'frappe-ui/frappe'
 import { call, toast } from 'frappe-ui'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const props = defineProps({
@@ -93,9 +101,20 @@ function deleteValues(selections, unselectAll) {
 
 const showAssignmentModal = ref(false)
 const bulkAssignees = ref([])
+const showAssignStaffModal = ref(false)
+const canAssignStaff = ref(false)
+
+const isStudent = computed(() => props.doctype === 'CRM Student')
+const isContact = computed(() => props.doctype === 'CRM Contact')
 
 function assignValues(selections, unselectAll) {
   showAssignmentModal.value = true
+  selectedValues.value = selections
+  unselectAllAction.value = unselectAll
+}
+
+function assignStaffValues(selections, unselectAll) {
+  showAssignStaffModal.value = true
   selectedValues.value = selections
   unselectAllAction.value = unselectAll
 }
@@ -136,7 +155,8 @@ const customListActions = ref([])
 function bulkActions(selections, unselectAll) {
   let actions = []
 
-  if (!props.options.hideEdit) {
+  // Student ownership is an event command, never a generic bulk field edit.
+  if (!props.options.hideEdit && !isStudent.value) {
     actions.push({
       label: __('Edit'),
       onClick: () => editValues(selections, unselectAll),
@@ -150,7 +170,7 @@ function bulkActions(selections, unselectAll) {
     })
   }
 
-  if (!props.options.hideAssign) {
+  if (!props.options.hideAssign && !isStudent.value) {
     actions.push({
       label: __('Assign To'),
       onClick: () => assignValues(selections, unselectAll),
@@ -158,6 +178,16 @@ function bulkActions(selections, unselectAll) {
     actions.push({
       label: __('Clear Assignment'),
       onClick: () => clearAssignments(selections, unselectAll),
+    })
+  }
+
+  if (
+    isContact.value &&
+    canAssignStaff.value
+  ) {
+    actions.push({
+      label: __('Assign Staff'),
+      onClick: () => assignStaffValues(selections, unselectAll),
     })
   }
 
@@ -195,6 +225,9 @@ function reload(unselectAll) {
 }
 
 onMounted(async () => {
+  if (isContact.value) {
+    canAssignStaff.value = await call('crm.api.staff_assignment.can_assign_staff')
+  }
   if (!list.value?.data) return
   let customization = await setupListCustomizations(list.value.data, {
     list: list.value,

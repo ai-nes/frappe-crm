@@ -59,12 +59,12 @@ const isDataImportList = computed(
 
 const doctypeMap = {
   'CRM Student': {
-    title: 'CRM Students',
+    title: 'Students',
     listRoute: '/crm/crm-students',
     pageRoute: `/crm/crm-students/docname`,
   },
   'CRM Contact': {
-    title: 'CRM Contacts',
+    title: 'Contacts',
     listRoute: '/crm/crm-contacts',
     pageRoute: `/crm/crm-contacts/docname`,
   },
@@ -74,17 +74,17 @@ const doctypeMap = {
     pageRoute: `/crm/high-schools/docname`,
   },
   'CRM Person': {
-    title: 'CRM Persons',
+    title: 'Persons',
     listRoute: '/crm/crm-persons',
     pageRoute: `/crm/crm-persons/docname`,
   },
   'CRM Campaign': {
-    title: 'CRM Campaigns',
+    title: 'Campaigns',
     listRoute: '/crm/crm-campaigns',
     pageRoute: `/crm/crm-campaigns/docname`,
   },
   'CRM Event': {
-    title: 'CRM Events',
+    title: 'Events',
     listRoute: '/crm/crm-events',
     pageRoute: `/crm/crm-events/docname`,
   },
@@ -93,11 +93,11 @@ const doctypeMap = {
     listRoute: '/crm/contacts',
     pageRoute: `/crm/contacts/docname`,
   },
-  'CRM Task': {
+  'Task': {
     title: 'Tasks',
     listRoute: '/crm/tasks',
   },
-  'CRM Call Log': {
+  'Call Log': {
     title: 'Call Log',
     listRoute: '/crm/call-logs',
   },

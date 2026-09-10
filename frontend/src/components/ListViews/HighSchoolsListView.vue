@@ -17,7 +17,7 @@
     @update:selections="(selections) => emit('selectionsChanged', selections)"
   >
     <ListHeader
-      class="mx-3 sm:mx-5"
+      class="high-schools-list-header mx-3 sm:mx-5"
       @columnWidthUpdated="emit('columnWidthUpdated')"
     >
       <ListHeaderItem
@@ -29,7 +29,7 @@
     </ListHeader>
     <ListRows
       v-slot="{ idx, column, item }"
-      class="mx-3 sm:mx-5"
+      class="high-schools-list-rows mx-3 sm:mx-5"
       :rows="rows"
       doctype="CRM High School"
     >
@@ -37,7 +37,7 @@
         <template #default="{ label }">
           <div
             v-if="['modified', 'creation'].includes(column.key)"
-            class="truncate text-base"
+            class="truncate text-sm text-ink-gray-6"
             @click="(event) => emit('applyFilter', { event, idx, column, item, firstColumn: columns[0] })"
           >
             <Tooltip :text="item.label">
@@ -46,7 +46,11 @@
           </div>
           <div
             v-else-if="label"
-            class="truncate text-base"
+            class="truncate text-sm"
+            :class="{
+              'font-medium text-ink-gray-9': column.key === columns[0]?.key,
+              'text-ink-gray-6': column.key === 'address',
+            }"
             @click="(event) => emit('applyFilter', { event, idx, column, item, firstColumn: columns[0] })"
           >
             {{ label }}
@@ -129,3 +133,26 @@ watch(pageLengthCount, (val, old_value) => {
 
 defineExpose({ customListActions: null })
 </script>
+
+<style scoped>
+:deep(.high-schools-table) {
+  overflow: hidden;
+  border: 1px solid rgb(var(--ink-gray-2));
+  border-radius: 8px;
+  background: rgb(var(--surface-white));
+}
+
+:deep(.high-schools-list-header) {
+  border-bottom: 1px solid rgb(var(--ink-gray-2));
+  background: rgb(var(--ink-gray-1) / 0.55);
+}
+
+:deep(.high-schools-list-rows > *) {
+  border-bottom: 1px solid rgb(var(--ink-gray-1));
+  transition: background-color 120ms ease;
+}
+
+:deep(.high-schools-list-rows > *:hover) {
+  background: rgb(var(--ink-gray-1) / 0.45);
+}
+</style>
