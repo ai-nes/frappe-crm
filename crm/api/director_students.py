@@ -589,8 +589,8 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 	if query.get("assignment_status") == "assigned" and not query.get("owner_id"):
 		filters["owner_staff"] = ["is", "set"]
 	elif query.get("assignment_status") == "unassigned":
-		# The Student page is a post-conversion list. Unassigned rows are
-		# intentionally excluded even when the legacy filter is requested.
+		# Keep the explicit unassigned view aligned with the routed/converted
+		# workflow; the default Director view also includes standalone Students.
 		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
@@ -611,6 +611,8 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 			"full_name",
 			"lead_code",
 			"student_identity",
+			"phone",
+			"email",
 			"high_school",
 			"province",
 			"major",
@@ -699,12 +701,15 @@ def _resolve_canonical_activity_target(student_id: str | None) -> tuple[str, str
 
 
 def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
+	"""Return the admission-cycle filter shared by the Student read models.
+
+	A CRM Student can exist before a Lead conversion or ownership assignment is
+	completed. Those records remain permission-scoped by Frappe and must stay
+	discoverable in the Director list; conversion/assignment filters are applied
+	only when the caller explicitly requests them.
+	"""
 	return {
 		"admission_year": admission_year,
-		"source_lead": ["is", "set"],
-		"converted_at": ["is", "set"],
-		"owner_staff": ["is", "set"],
-		"assigned_to": ["is", "set"],
 	}
 
 

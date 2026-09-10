@@ -150,26 +150,12 @@
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Lead Sale",
-   "share": 1,
-   "write": 1
+   "role": "Lead Sale"
   },
   {
-   "create": 1,
-   "delete": 1,
-   "email": 1,
-   "print": 1,
    "read": 1,
-   "report": 1,
-   "role": "Sale",
-   "write": 1
+   "role": "Sale"
   }
  ],
  "quick_entry": 0,
