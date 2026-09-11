@@ -12,6 +12,7 @@ import frappe
 from frappe import _
 
 from crm.api._pagination import paged_list
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.student_reference import canonical_student
 
 ALLOWED_REFERENCE_DOCTYPES = {"CRM Lead", "CRM Student"}
@@ -34,8 +35,9 @@ def _validated_content(content):
 def _resolve_reference(reference_doctype, reference_docname, permission_type):
 	if reference_doctype not in ALLOWED_REFERENCE_DOCTYPES:
 		frappe.throw(_("Notes are only supported for CRM Lead and CRM Student."), frappe.ValidationError)
-	canonical_name = canonical_student(reference_docname)
-	resolved_name = canonical_name or reference_docname
+	lead_name = resolve_lead_name(reference_docname) if reference_doctype == "CRM Lead" else reference_docname
+	canonical_name = canonical_student(lead_name)
+	resolved_name = canonical_name or lead_name
 	resolved_doctype = "CRM Student" if canonical_name else reference_doctype
 	reference_doc = frappe.get_doc(resolved_doctype, resolved_name)
 	reference_doc.check_permission(permission_type)
@@ -66,7 +68,8 @@ def list_notes(reference_doctype, reference_docname, search=None, start=0, page_
 	# Keep legacy Lead notes addressable while writing all new notes against the
 	# canonical Student.name. This is a compatibility boundary, not a second
 	# source of truth.
-	reference_names = list(dict.fromkeys([reference_docname, resolved_name]))
+	lead_name = resolve_lead_name(reference_docname) if reference_doctype == "CRM Lead" else reference_docname
+	reference_names = list(dict.fromkeys([reference_docname, lead_name, resolved_name]))
 	resolved_doctype = reference_doc.doctype
 	filters = {"reference_docname": ["in", reference_names]}
 	if resolved_doctype == "CRM Student" and reference_doctype == "CRM Lead":

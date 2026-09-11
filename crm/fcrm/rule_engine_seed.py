@@ -39,6 +39,9 @@ from __future__ import annotations
 
 import frappe
 
+from crm.fcrm.action_type_catalog import canonicalize_action_type
+from crm.fcrm.rule_engine import normalize_rule_data
+
 RULE_VERSION_ID = "FAIP-V1"
 RULE_VERSION_NAME = "FAIP Rule Engine Seed v1"
 RULE_VERSION_DESCRIPTION = (
@@ -100,9 +103,9 @@ RULES: list[dict] = [
 		"action": "REQUEST_DATA",
 		"target_actions": [],
 		"condition": {
-			"fact": "application.document_completed",
-			"op": "lt",
-			"fact_ref": "application.document_total",
+			"fact": "application.missing_count",
+			"op": "gt",
+			"value": 0,
 		},
 	},
 	# --- 2. Communication Rules ---
@@ -130,7 +133,7 @@ RULES: list[dict] = [
 		"priority": 700,
 		"action": "BLOCK_CONTACT",
 		"target_actions": [],
-		"condition": {"fact": "student.email_bounced", "op": "is_true"},
+		"condition": {"fact": "contact.email_bounced", "op": "is_true"},
 	},
 	# --- 3. Funnel / Admission Rules ---
 	{
@@ -158,10 +161,9 @@ RULES: list[dict] = [
 		"action": "ALLOW_FOLLOWUP",
 		"target_actions": [],
 		"condition": {
-			"any": [
-				{"fact": "student.stage", "op": "eq", "value": "Attempting"},
-				{"fact": "student.stage", "op": "eq", "value": "Connected"},
-			]
+			"fact": "student.stage",
+			"op": "in",
+			"value": ["Attempting", "Connected"],
 		},
 	},
 	{
@@ -202,9 +204,9 @@ RULES: list[dict] = [
 		"action": "RECOMMEND_DOCUMENT_FOLLOWUP",
 		"target_actions": [],
 		"condition": {
-			"fact": "application.document_completed",
-			"op": "lt",
-			"fact_ref": "application.document_total",
+			"fact": "application.missing_count",
+			"op": "gt",
+			"value": 0,
 		},
 	},
 	{
@@ -232,9 +234,9 @@ RULES: list[dict] = [
 		"action": "BLOCK_DEADLINE_ACTION",
 		"target_actions": [],
 		"condition": {
-			"fact": "application.deadline",
-			"op": "before",
-			"fact_ref": "system.now",
+			"fact": "application.days_to_deadline",
+			"op": "lt",
+			"value": 0,
 		},
 	},
 	# --- 5. Action Rules ---
@@ -319,46 +321,137 @@ MULTI_VERSION_SPECS = (
 	},
 )
 
+RULE_GROUP_CODES = {
+	"Student Eligibility": "student_eligibility",
+	"Communication": "communication",
+	"Funnel": "funnel",
+	"Action": "action",
+}
+
+
+def _group_catalog_for(rows: list[dict]) -> list[dict]:
+	"""Build the canonical version-scoped groups used by the seed rules."""
+	seen = set()
+	groups = []
+	for row in rows:
+		label = str(row["rule_group"]).strip()
+		if label in seen:
+			continue
+		seen.add(label)
+		code = RULE_GROUP_CODES.get(label)
+		if not code:
+			raise ValueError(f"Unsupported seed rule group: {label}")
+		groups.append(
+			{
+				"code": code,
+				"label": label,
+				"enabled": True,
+				"description": f"{label} rules from the FAIP CRM seed catalog.",
+				"sort_order": len(groups) * 10 + 10,
+			}
+		)
+	return groups
+
+
+def _canonical_seed_rule(row: dict, version_id: str) -> dict:
+	"""Translate the historical seed literals into the current rule contract."""
+	group_code = RULE_GROUP_CODES.get(str(row["rule_group"]).strip())
+	if not group_code:
+		raise ValueError(f"Unsupported seed rule group: {row['rule_group']}")
+	return normalize_rule_data(
+		{
+			"rule_version": version_id,
+			"rule_id": row["rule_id"],
+			"group_code": group_code,
+			"rule_name": row["rule_name"],
+			"description": row.get("description"),
+			"feature": row.get("feature_scope"),
+			"rule_type": row.get("rule_type"),
+			"outcome": row.get("gate_outcome"),
+			"precedence": row.get("priority"),
+			"unknown_policy": row.get("unknown_policy", "WAIT"),
+			"reason_code": row.get("reason_code") or f"RULE_{str(row['rule_id']).replace('-', '_')}",
+			"target_actions": [
+				canonicalize_action_type(str(action).strip().upper())
+				for action in row.get("target_actions") or []
+			],
+			"condition": row.get("condition"),
+			"business_reason_template": row.get(
+				"business_reason_template", "{action} is governed by {rule_name}."
+			),
+			"sales_next_step_template": row.get(
+				"sales_next_step_template", "Chưa có bước tiếp theo được xác định."
+			),
+			"enabled": row.get("enabled", True),
+			"status": "draft",
+			"revision": 0,
+		}
+	)
+
+
+def _api_rule_values(data: dict) -> dict:
+	"""Return only fields accepted by the rule admin command."""
+	return {
+		fieldname: data[fieldname]
+		for fieldname in (
+			"rule_id",
+			"group_code",
+			"rule_name",
+			"description",
+			"feature",
+			"rule_type",
+			"outcome",
+			"precedence",
+			"unknown_policy",
+			"reason_code",
+			"business_reason_template",
+			"sales_next_step_template",
+			"target_actions",
+			"conditions",
+			"enabled",
+		)
+	}
+
 
 def _ensure_version(
 	version_id: str = RULE_VERSION_ID,
 	version_name: str = RULE_VERSION_NAME,
 	description: str = RULE_VERSION_DESCRIPTION,
+	group_catalog: list[dict] | None = None,
 ) -> str:
 	if frappe.db.exists("CRM Rule Version", version_id):
 		return version_id
-	doc = frappe.new_doc("CRM Rule Version")
-	doc.version_id = version_id
-	doc.version_name = version_name
-	doc.description = description
-	doc.insert(ignore_permissions=True)
-	return doc.name
+	from crm.api.rule_engine import create_rule_version
+
+	result = create_rule_version(
+		version_id=version_id,
+		version_name=version_name,
+		description=description,
+		group_catalog=group_catalog or _group_catalog_for(RULES),
+	)
+	return result["name"]
 
 
 def _upsert_rule(version_name: str, row: dict) -> bool:
-	"""Create or update one CRM Rule. Returns True when a new row was created."""
-	existing_name = frappe.db.exists("CRM Rule", {"rule_version": version_name, "rule_id": row["rule_id"]})
-	doc = frappe.get_doc("CRM Rule", existing_name) if existing_name else frappe.new_doc("CRM Rule")
-	if not existing_name:
-		doc.rule_version = version_name
-		doc.rule_id = row["rule_id"]
-	for fieldname in (
-		"rule_group",
-		"rule_name",
-		"description",
-		"feature_scope",
-		"rule_type",
-		"gate_outcome",
-		"priority",
-		"action",
-		"target_actions",
-		"condition",
-	):
-		doc.set(fieldname, row[fieldname])
+	"""Create or update one rule through the current admin command seam."""
+	from crm.api.rule_engine import create_rule, update_rule
+
+	version = frappe.get_doc("CRM Rule Version", version_name)
+	data = _canonical_seed_rule(row, version.version_id)
+	existing_name = frappe.db.exists("CRM Rule", {"rule_version": version.name, "rule_id": data["rule_id"]})
+	values = _api_rule_values(data)
 	if existing_name:
-		doc.save(ignore_permissions=True)
+		update_rule(
+			name=existing_name,
+			expected_version_revision=int(version.revision or 0),
+			**values,
+		)
 		return False
-	doc.insert(ignore_permissions=True)
+	create_rule(
+		version_name=version.version_id,
+		expected_version_revision=int(version.revision or 0),
+		**values,
+	)
 	return True
 
 
@@ -366,7 +459,15 @@ def seed_catalog() -> dict:
 	if not frappe.db.exists("DocType", "CRM Rule Version") or not frappe.db.exists("DocType", "CRM Rule"):
 		return {"status": "skipped", "reason": "rule_engine_doctypes_unavailable"}
 
-	version_name = _ensure_version()
+	version_name = _ensure_version(group_catalog=_group_catalog_for(RULES))
+	version = frappe.get_doc("CRM Rule Version", version_name)
+	if str(version.status or "draft").lower() != "draft":
+		return {
+			"status": "skipped",
+			"reason": "version_not_draft",
+			"version": version_name,
+			"version_status": version.status,
+		}
 	created = 0
 	updated = 0
 	for row in RULES:
@@ -381,6 +482,56 @@ def seed_catalog() -> dict:
 		"rules_created": created,
 		"rules_updated": updated,
 		"rules_total": len(RULES),
+	}
+
+
+def ensure_active_catalog() -> dict:
+	"""Create and activate the default catalog once on an existing site."""
+	if any(
+		not frappe.db.exists("DocType", doctype)
+		for doctype in ("CRM Rule Version", "CRM Rule", "CRM Rule Settings")
+	):
+		return {"status": "skipped", "reason": "rule_engine_doctypes_unavailable"}
+
+	settings = frappe.db.get_singles_dict("CRM Rule Settings", cast=True)
+	if settings and settings.get("active_rule_version") and settings.get("active_ruleset_digest"):
+		return {
+			"status": "already_active",
+			"version": settings.get("active_rule_version"),
+			"pointer_revision": int(settings.get("pointer_revision") or 0),
+		}
+	if frappe.db.count("CRM Rule Version", {"status": "active"}):
+		frappe.throw("An active CRM Rule Version exists but CRM Rule Settings has no complete pointer.")
+
+	seed_result = seed_catalog()
+	version_name = seed_result.get("version")
+	version = frappe.get_doc("CRM Rule Version", version_name)
+	from crm.api.rule_engine import update_rule_version
+
+	version_status = str(version.status or "draft").lower()
+	if version_status not in {"draft", "testing"}:
+		frappe.throw(f"Cannot bootstrap a CRM Rule Version in {version_status} status.")
+	if version_status == "draft":
+		update_rule_version(
+			name=version.name,
+			expected_revision=int(version.revision or 0),
+			status="testing",
+			change_note="Bootstrap the default FAIP rule catalog for the CRM runtime.",
+		)
+		version.reload()
+
+	settings = frappe.db.get_singles_dict("CRM Rule Settings", cast=True)
+	update_rule_version(
+		name=version.name,
+		expected_revision=int(version.revision or 0),
+		expected_settings_revision=int((settings or {}).get("pointer_revision") or 0),
+		status="active",
+		change_note="Activate the default FAIP rule catalog for the CRM runtime.",
+	)
+	return {
+		"status": "activated",
+		"version": version.name,
+		"rules": frappe.db.count("CRM Rule", {"rule_version": version.name}),
 	}
 
 
@@ -405,7 +556,12 @@ def seed_many_versions() -> dict:
 	deleted = _reset_rule_engine_data()
 	version_results = []
 	for spec in MULTI_VERSION_SPECS:
-		version_name = _ensure_version(spec["version_id"], spec["version_name"], spec["description"])
+		version_name = _ensure_version(
+			spec["version_id"],
+			spec["version_name"],
+			spec["description"],
+			_group_catalog_for(spec["rules"]),
+		)
 		created = 0
 		for row in spec["rules"]:
 			if _upsert_rule(version_name, row):
