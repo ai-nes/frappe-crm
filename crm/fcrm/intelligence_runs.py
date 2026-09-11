@@ -330,14 +330,22 @@ def _public_history_coverage(value: Any) -> dict[str, Any] | None:
 		if not isinstance(section, dict):
 			return None
 		required = {"included_count", "omitted_count", "state", "coverage_reason", "oldest_included", "newest_included"}
-		if set(section) != required:
+		# The producer-side layer (rows before the evidence cap, and that cap)
+		# is additive: older snapshots carry only the model-side counters.
+		producer_layer = {"source_total", "producer_limit"}
+		if set(section) != required and set(section) != required | producer_layer:
 			return None
 		included = section.get("included_count")
 		omitted = section.get("omitted_count")
 		state = section.get("state")
 		if (isinstance(included, bool) or not isinstance(included, int) or not 0 <= included <= 20
-				or isinstance(omitted, bool) or not isinstance(omitted, int) or not 0 <= omitted <= 20
+				or isinstance(omitted, bool) or not isinstance(omitted, int) or not 0 <= omitted <= 1000
 				or state not in {"available", "missing", "unavailable", "truncated"}):
+			return None
+		source_total = section.get("source_total")
+		producer_limit = section.get("producer_limit")
+		if any(value is not None and (isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100000)
+				for value in (source_total, producer_limit)):
 			return None
 		reason = section.get("coverage_reason")
 		if reason is not None and (not isinstance(reason, str) or not reason.strip() or len(reason) > 80):
@@ -360,6 +368,9 @@ def _public_history_coverage(value: Any) -> dict[str, Any] | None:
 			"oldest_included": section.get("oldest_included"),
 			"newest_included": section.get("newest_included"),
 		}
+		if producer_layer <= set(section):
+			result[name]["source_total"] = source_total
+			result[name]["producer_limit"] = producer_limit
 	return result
 
 
@@ -454,7 +465,9 @@ def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, A
 	v2_keys = base_keys | {"history_coverage", "intelligence_refs"}
 	full_v2_keys = v2_keys | {"finding_refs", "coverage"}
 	allowed_keys = (base_keys, base_keys | {"history_coverage"}, v2_keys, full_v2_keys)
-	if not report or not any(set(report) == keys for keys in allowed_keys) or not claims_visible:
+	# ``finding_coverage`` is an additive count of findings the handler dropped
+	# for lacking mapped evidence; it never changes which shape the report uses.
+	if not report or not any(set(report) - {"finding_coverage"} == keys for keys in allowed_keys) or not claims_visible:
 		return None
 	try:
 		_validate_student_awareness_report(report)
@@ -539,7 +552,24 @@ def _public_student_snapshot(value: Any, *, claims_visible: bool) -> dict[str, A
 		result["coverage"] = _public_coverage(report.get("coverage"))
 		if result["coverage"] is None:
 			return None
+	if report.get("finding_coverage") is not None:
+		result["finding_coverage"] = _public_finding_coverage(report.get("finding_coverage"))
+		if result["finding_coverage"] is None:
+			return None
 	return result
+
+
+def _public_finding_coverage(value: Any) -> dict[str, int] | None:
+	"""Validate the bounded emitted/unmapped finding count block."""
+	if not isinstance(value, dict) or set(value) != {"emitted", "unmapped"}:
+		return None
+	counts = {}
+	for key in ("emitted", "unmapped"):
+		count = value.get(key)
+		if isinstance(count, bool) or not isinstance(count, int) or not 0 <= count <= 64:
+			return None
+		counts[key] = count
+	return counts
 
 
 def _public_stage(stage: dict[str, Any], *, student: bool) -> dict[str, Any]:
@@ -876,6 +906,16 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 		return frappe.get_all(doctype, filters=filters, fields=["name", *fields],
 			limit_page_length=limit, order_by=order_by, ignore_permissions=True)
 
+	def _total(doctype, extra_filters=None):
+		# The query cap above is a producer truncation layer; the count lets the
+		# coverage disclose it instead of presenting the newest rows as complete.
+		if not frappe.db.table_exists(doctype):
+			return 0
+		try:
+			return int(frappe.db.count(doctype, {"student": student, **(extra_filters or {})}) or 0)
+		except Exception:
+			return 0
+
 	def _ref(prefix, item):
 		name = item.get("name")
 		return [f"{prefix}:{name}"] if name else []
@@ -910,13 +950,25 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 			contributors = []
 		item["contributors"] = contributors[:6]
 	interactions = _rows("CRM Interaction", [
-		"interaction_datetime", "interaction_type", "channel", "direction", "outcome", "source_verified",
+		"interaction_datetime", "interaction_type", "channel", "direction", "outcome", "source_verified", "actor",
 	], 20, "interaction_datetime desc, creation desc, name desc", {"source_verified": 1})
-	intents = _rows("CRM Intent", ["interaction", "intent_type", "polarity"], 20, "creation desc, name desc")
-	intents_by_interaction = {
-		item.get("interaction"): item
-		for item in intents
-		if item.get("interaction")
+	# Intents belong to the interactions in the window, not to the student's
+	# newest intents overall; the newest analysis row per interaction wins so a
+	# superseded intent cannot override its amendment by dictionary order.
+	interaction_names = [item["name"] for item in interactions if item.get("name")]
+	intents = _rows(
+		"CRM Intent", ["interaction", "intent_type", "intent_role", "polarity", "confidence"],
+		len(interaction_names) * 4, "creation desc, name desc", {"interaction": ["in", interaction_names]},
+	) if interaction_names else []
+	intents_by_interaction = {}
+	for item in intents:
+		if item.get("interaction"):
+			intents_by_interaction.setdefault(item["interaction"], item)
+	source_totals = {
+		"score_history": _total("CRM Score History"),
+		"interaction_history": _total("CRM Interaction", {"source_verified": 1}),
+		"applications": _total("CRM Admission Application"),
+		"guardian_signals": _total("CRM Student Guardian"),
 	}
 	latest_interaction = interactions[0] if interactions else {}
 	latest_intent = intents_by_interaction.get(latest_interaction.get("name")) or {}
@@ -981,8 +1033,15 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 					"channel": item.get("channel"),
 					"topics": [item.get("interaction_type")] if item.get("interaction_type") else [],
 					"intent_type": (intents_by_interaction.get(item.get("name")) or {}).get("intent_type"),
+					"intent_role": (intents_by_interaction.get(item.get("name")) or {}).get("intent_role"),
 					"intent_polarity": (intents_by_interaction.get(item.get("name")) or {}).get("polarity"),
-					"barriers": [row.get("primary_barrier")] if row.get("primary_barrier") else [],
+					"intent_confidence": (intents_by_interaction.get(item.get("name")) or {}).get("confidence"),
+					# No source records a barrier per interaction; the current
+					# ``primary_barrier`` is a Student fact and stays in the current-state
+					# block instead of being replayed as history.
+					"barriers": [],
+					# Only the actor kind crosses the boundary, never the User identity.
+					"actor_kind": "staff" if item.get("actor") else "system",
 					"direction": item.get("direction"),
 					"outcome": item.get("outcome"),
 					"source_verified": item.get("source_verified"),
@@ -1048,18 +1107,33 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 			for item in rows
 			if any(ref in selected_refs for ref in item.get("provenance_ids", []))
 		]
-	student_360["coverage"] = [
-		build_coverage(
+	student_360["coverage"] = []
+	for name, rows in history_sections:
+		included = len(student_360["signals"][name])
+		# Two producer layers can drop rows: the bounded query cap and the shared
+		# authority-ref limit. Disclose both against the real source total so a
+		# newest-only window is never reported as the complete history.
+		queried = len(rows)
+		total = max(source_totals.get(name, 0), queried)
+		reasons = []
+		if included < queried:
+			reasons.append("student_evidence_ref_limit")
+		if queried < total:
+			reasons.append("student_evidence_source_limit")
+		omitted = min(max(total - included, 0), 1000)
+		student_360["coverage"].append(build_coverage(
 			f"student:{student}:{name}",
-			"truncated" if len(student_360["signals"][name]) < len(rows) else "available",
-			len(student_360["signals"][name]),
-			len(rows) - len(student_360["signals"][name]),
-			reason="student_evidence_ref_limit"
-			if len(student_360["signals"][name]) < len(rows)
-			else None,
-		)
-		for name, rows in history_sections
-	]
+			"truncated" if omitted else "available",
+			included,
+			omitted,
+			reason="+".join(reasons) if omitted else None,
+		))
+	# Explicit per-section producer layer (count before the query cap) so the
+	# consumer can render "model n / producer m / source total" truthfully.
+	student_360["source_coverage"] = {
+		name: {"source_total": min(source_totals.get(name, 0), 100000), "producer_limit": limit}
+		for name, limit in (("score_history", 12), ("interaction_history", 20), ("applications", 8), ("guardian_signals", 8))
+	}
 	authority_refs = []
 	for raw in raw_refs:
 		prefix, separator, source_id = str(raw).partition(":")
@@ -1377,8 +1451,10 @@ def _validate_student_awareness_report(report: Any, *, expected_subject: str | N
 	v2_sections = coverage_sections | {"intelligence_refs"}
 	full_v2_sections = v2_sections | {"finding_refs", "coverage"}
 	allowed_sections = (base_sections, coverage_sections, v2_sections, full_v2_sections)
-	if not any(set(report) == sections for sections in allowed_sections):
+	if not any(set(report) - {"finding_coverage"} == sections for sections in allowed_sections):
 		frappe.throw("Student 360 report must use the v1 or v2 snapshot shape.", frappe.ValidationError)
+	if report.get("finding_coverage") is not None and _public_finding_coverage(report.get("finding_coverage")) is None:
+		frappe.throw("Student 360 finding coverage is invalid.", frappe.ValidationError)
 	if "history_coverage" in report and _public_history_coverage(report.get("history_coverage")) is None:
 		frappe.throw("Student 360 history coverage is invalid.", frappe.ValidationError)
 	if "intelligence_refs" in report and _public_intelligence_refs(report.get("intelligence_refs")) is None:

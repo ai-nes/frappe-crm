@@ -84,6 +84,20 @@ class TestStudentWorklist(FrappeTestCase):
 		)
 		self.assertEqual(dto["expected_revision"], "2026-01-01 10:05:00")
 		self.assertIn("dismissed", dto["permitted_decisions"])
+		# Key set consumed by the crm-agents Copilot worklist reader
+		# (tests/fixtures/frappe/student_worklist_page.json). Renaming any of
+		# these must fail here before it silently breaks the Copilot tool.
+		self.assertEqual(dto["recommendation"], "REC-1")
+		self.assertEqual(dto["student"], "STU-1")
+		self.assertEqual(dto["studentName"], "Nguyen Van A")
+		self.assertEqual(dto["priority"], "high")
+		self.assertEqual(dto["action"]["code"], "ACT-CALL")
+		self.assertIsInstance(dto["action"]["title"], str)
+		self.assertIn("scheduled_at", dto["timing"])
+		self.assertEqual(dto["objective"], "Follow up on interest")
+		self.assertEqual(
+			dto["status"], {"lifecycle": None, "decision": None, "execution": None}
+		)
 
 	def test_cursor_is_bound_to_principal_and_roles(self):
 		cursor = _encode_cursor((0, "2026-01-01", "2026-01-01", "REC-1"), "user@example.com", ["Sale"])

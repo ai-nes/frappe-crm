@@ -21,9 +21,11 @@ class TestStudent360Dashboard(FrappeTestCase):
 		self.assertEqual(payload["snapshot_schema_version"], "student-360-snapshot-v1")
 		self.assertEqual(payload["snapshot_status"], "NONE")
 		self.assertEqual(payload["analysis_status"], "IDLE")
-		self.assertEqual(set(payload), {"student_id", "snapshot_schema_version", "snapshot_status", "analysis_status", "analyzed_at", "advisory_signals", "interaction_journal", "score_overview", "risks", "opportunity_signals", "recent_changes"})
-		self.assertEqual(set(payload["score_overview"]), {"fit", "interaction", "intent", "total", "band", "trend", "summary", "contributors"})
+		self.assertEqual(set(payload), {"student_id", "snapshot_schema_version", "snapshot_status", "analysis_status", "analyzed_at", "advisory_signals", "interaction_journal", "score_overview", "source_revision", "risks", "opportunity_signals", "recent_changes"})
+		self.assertEqual(set(payload["score_overview"]), {"fit", "interaction", "intent", "total", "as_of", "band", "trend", "summary", "contributors"})
 		self.assertEqual(payload["score_overview"]["trend"]["direction"], "UNKNOWN")
+		self.assertIsNone(payload["score_overview"]["as_of"])
+		self.assertEqual(payload["source_revision"], "4")
 		request.assert_called_once()
 
 	@patch("crm.api.analysis_run_read._score", return_value={"items": [{"key": key, "value": None, "trend": {"direction": "unknown", "delta": None}, "contributors": []} for key in ("fit", "interaction", "intent", "total")], "explanation": {"text": "", "evidence_refs": []}})
@@ -76,3 +78,35 @@ class TestStudent360Dashboard(FrappeTestCase):
 		self.assertEqual(payload["snapshot_schema_version"], "student-360-snapshot-v2")
 		self.assertIn("history_coverage", payload)
 		self.assertEqual(payload["history_coverage"]["interaction_history"]["state"], "available")
+
+
+class TestStudent360PerSourcePermissions(FrappeTestCase):
+	"""The CRM Student read check must not stand in for the caller's own
+	CRM Interaction / CRM Score History permission when rows are materialized."""
+
+	def test_journal_and_score_read_through_the_callers_permission(self):
+		with patch("crm.api.analysis_run_read.frappe.get_list", return_value=[]) as get_list, patch(
+			"crm.api.analysis_run_read.frappe.get_all"
+		) as get_all:
+			journal = analysis_run_read._journal("STU-1")
+			score = analysis_run_read._score("STU-1")
+		get_all.assert_not_called()
+		self.assertEqual([call.args[0] for call in get_list.call_args_list], ["CRM Interaction", "CRM Score History"])
+		self.assertEqual(journal["inbound"], [])
+		self.assertIsNone(score["as_of"])
+
+	def test_user_without_interaction_read_gets_an_empty_journal(self):
+		import frappe
+
+		user = "_test_student360_noperm@example.com"
+		if not frappe.db.exists("User", user):
+			frappe.get_doc({"doctype": "User", "email": user, "first_name": "No Perm", "send_welcome_email": 0}).insert(ignore_permissions=True)
+		frappe.set_user(user)
+		try:
+			self.assertFalse(frappe.has_permission("CRM Interaction", "read", user=user))
+			journal = analysis_run_read._journal("STU-1")
+			self.assertEqual((journal["inbound"], journal["outbound"]), ([], []))
+			self.assertEqual(journal["omitted_reason"], "permission_denied")
+		finally:
+			frappe.set_user("Administrator")
+

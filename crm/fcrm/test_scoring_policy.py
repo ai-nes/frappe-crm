@@ -118,33 +118,39 @@ class TestScoringPolicyVersioning(FrappeTestCase):
 		second_revision = frappe.db.get_value("CRM Score Template", template, "policy_revision")
 		self.assertEqual(second_revision, first_revision + 1)
 
-	def test_editing_active_template_records_policy_changed_event(self):
-		from unittest.mock import patch
-
-		signal = self._make_signal("_Test SP Signal F")
-		template = self._make_template("_Test SP Template F", signal, penalty_amount=5)
-
-		doc = frappe.get_doc("CRM Score Template", template)
-		doc.rules[0].penalty_amount = 9
-		with patch("crm.api.agent_events.record_agent_event") as mock_record:
-			doc.save(ignore_permissions=True)
-
-		mock_record.assert_called_once()
-		args, _ = mock_record.call_args
-		self.assertEqual(args[0], "scoring.policy_changed.v1")
-		self.assertEqual(args[1].name, template)
-
-	def test_noop_save_on_active_template_does_not_record_event(self):
+	def test_active_template_saves_never_record_an_agent_event(self):
+		"""Scoring is Frappe-owned; crm-agents serves no policy-changed route, so
+		neither a no-op save nor a revision bump may enqueue an outbox row."""
 		from unittest.mock import patch
 
 		signal = self._make_signal("_Test SP Signal G")
-		template = self._make_template("_Test SP Template G", signal)
+		template = self._make_template("_Test SP Template G", signal, penalty_amount=5)
 
 		doc = frappe.get_doc("CRM Score Template", template)
 		with patch("crm.api.agent_events.record_agent_event") as mock_record:
 			doc.save(ignore_permissions=True)
+			doc.reload()
+			doc.rules[0].penalty_amount = 9
+			doc.save(ignore_permissions=True)
 
 		mock_record.assert_not_called()
+		doc.reload()
+		self.assertEqual(
+			frappe.db.count(
+				"CRM Agent Event",
+				{"aggregate_doctype": "CRM Score Template", "aggregate_name": template},
+			),
+			0,
+		)
+
+	def test_scoring_policy_changed_event_type_is_unsupported(self):
+		from crm.api.agent_events import record_agent_event
+
+		signal = self._make_signal("_Test SP Signal I")
+		template = self._make_template("_Test SP Template I", signal)
+		doc = frappe.get_doc("CRM Score Template", template)
+		with self.assertRaisesRegex(frappe.ValidationError, "Unsupported crm-agents event type"):
+			record_agent_event("scoring.policy_changed.v1", doc)
 
 	def test_editing_inactive_template_does_not_record_event(self):
 		from unittest.mock import patch
