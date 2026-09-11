@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -246,3 +248,16 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 			rule_engine.list_rule_versions()
 		with self.assertRaises(frappe.PermissionError):
 			rule_engine.get_active_rule_catalog()
+
+	def test_crm_rule_admin_roles_can_manage_the_control_plane(self):
+		previous_user = frappe.session.user
+		try:
+			frappe.session.user = "rules-manager@example.com"
+			for role in ("System Manager", "Admissions Director", "Business Admin"):
+				with patch.object(frappe, "get_roles", return_value=[role]):
+					rule_engine._require_admin()
+			with patch.object(frappe, "get_roles", return_value=["Sale"]):
+				with self.assertRaises(frappe.PermissionError):
+					rule_engine._require_admin()
+		finally:
+			frappe.session.user = previous_user

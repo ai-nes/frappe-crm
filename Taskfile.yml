@@ -58,9 +58,9 @@ tasks:
       - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.classification_catalog.seed_catalog"
 
   seed-rule-engine:
-    desc: Seed draft CRM Rule Version FAIP-V1 from docs/FAIP Rule Engine Rules.pdf for UI testing
+    desc: Seed and activate the complete FAIP MVP v3 CRM Rule catalog
     cmds:
-      - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.rule_engine_seed.seed_catalog"
+      - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.rule_engine_seed.seed_and_activate_catalog"
 
   seed-rule-engine-many-versions:
     desc: Local only — xóa Rule/Version và seed 5 Version FAIP

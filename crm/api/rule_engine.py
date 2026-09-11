@@ -27,6 +27,7 @@ from crm.fcrm.rule_engine import (
 SETTINGS_NAME = "CRM Rule Settings"
 MAX_PAGE_LENGTH = 200
 HEX_DIGEST = re.compile(r"^[a-f0-9]{64}$")
+CRM_RULE_ADMIN_ROLES = frozenset({"System Manager", "Admissions Director", "Business Admin"})
 VERSION_FIELDS = [
 	"name",
 	"owner",
@@ -74,9 +75,10 @@ RULE_FIELDS = [
 
 
 def _require_admin() -> None:
-	if frappe.session.user == "Administrator":
+	user = frappe.session.user
+	if user == "Administrator" or CRM_RULE_ADMIN_ROLES.intersection(frappe.get_roles(user)):
 		return
-	frappe.throw(_("Only Administrator may manage CRM Rules."), frappe.PermissionError)
+	frappe.throw(_("Only an authorized CRM Rule administrator may manage CRM Rules."), frappe.PermissionError)
 
 
 def _require_service_identity() -> None:

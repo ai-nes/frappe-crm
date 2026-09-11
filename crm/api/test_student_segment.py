@@ -111,6 +111,21 @@ class TestStudentSegment(FrappeTestCase):
 		self.assertEqual(rows[incomplete.name]["member_count"], 0)
 		self.assertEqual(rows[complete.name]["segment_code"], complete.segment_code)
 
+	def test_list_survives_a_legacy_segment_with_invalid_filters(self):
+		legacy = self.group(title="Legacy source segment")
+		frappe.db.set_value(
+			"CRM Segment",
+			legacy.name,
+			"filters",
+			'{"groups":[{"conditions":[{"field":"source","operator":"=","value":"Legacy"}]}]}',
+			update_modified=False,
+		)
+
+		rows = {row["name"]: row for row in segments.list_segments()}
+
+		self.assertIn(legacy.name, rows)
+		self.assertEqual(rows[legacy.name]["member_count"], 0)
+
 	def test_get_segment_by_code_returns_the_authorized_segment(self):
 		segment = self.group()
 

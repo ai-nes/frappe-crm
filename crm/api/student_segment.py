@@ -75,6 +75,21 @@ def get_segment_by_code(segment_code):
 	return get_segment(segments[0]["name"])
 
 
+def _safe_member_count(segment):
+	"""Keep one malformed legacy segment from taking down the whole list."""
+	if not segment.get("filters"):
+		return 0
+	try:
+		return service.preview(segment=segment["name"], start=0, page_length=1)["total"]
+	except frappe.ValidationError as exc:
+		frappe.logger("crm").warning(
+			"CRM Segment %s has invalid stored filters; returning a zero member count: %s",
+			segment["name"],
+			exc,
+		)
+		return 0
+
+
 @frappe.whitelist()
 def list_segments(status=None, category=None, start=0, page_length=20):
 	filters = {k: v for k, v in {"status": status, "category": category}.items() if v}
@@ -103,11 +118,7 @@ def list_segments(status=None, category=None, start=0, page_length=20):
 		limit_page_length=page_length,
 	)
 	for segment in segments:
-		segment["member_count"] = (
-			service.preview(segment=segment["name"], start=0, page_length=1)["total"]
-			if segment.get("filters")
-			else 0
-		)
+		segment["member_count"] = _safe_member_count(segment)
 	return segments
 
 
@@ -166,7 +177,15 @@ def _analysis_segments():
 	for row in rows:
 		doc = frappe.get_doc("CRM Segment", row["name"])
 		code = row.get("segment_code") or row["name"]
-		member_count = service.member_count(doc)
+		try:
+			member_count = service.member_count(doc)
+		except frappe.ValidationError as exc:
+			frappe.logger("crm").warning(
+				"CRM Segment %s has invalid stored filters; excluding it from analysis counts: %s",
+				doc.name,
+				exc,
+			)
+			member_count = 0
 		record = _analysis_segment_record(row, member_count)
 		records.append(record)
 		docs_by_code[code] = doc
