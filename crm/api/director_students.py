@@ -1819,6 +1819,9 @@ def _student_interactions(student_id: str | None) -> list:
 			"conversation_id",
 			"reference_doctype",
 			"reference_docname",
+			"source_namespace",
+			"source_record_id",
+			"external_id",
 		],
 		order_by="interaction_datetime desc, creation desc",
 		limit_page_length=50,
@@ -2004,11 +2007,21 @@ def _student_call_records(
 
 	calls: list[dict[str, Any]] = []
 	seen_call_ids: set[str] = set()
-	call_interactions = {
-		str(ix.get("reference_docname")): ix
-		for ix in interactions
-		if ix.get("reference_doctype") == "Call Log" and ix.get("reference_docname")
-	}
+	call_interactions: dict[str, Any] = {}
+	for ix in interactions:
+		if ix.get("reference_doctype") == "Call Log" and ix.get("reference_docname"):
+			call_interactions[str(ix.get("reference_docname"))] = ix
+
+		# Canonical provider interactions may refer to the operational Call Log by
+		# source_record_id instead of the legacy reference fields. Reuse that row
+		# so the dashboard keeps one call card with the recording and summary.
+		source_record_id = str(ix.get("source_record_id") or "").strip()
+		if source_record_id:
+			call_interactions.setdefault(source_record_id, ix)
+
+		external_id = str(ix.get("external_id") or "").strip()
+		if ":" in external_id:
+			call_interactions.setdefault(external_id.split(":", 1)[1], ix)
 
 	if _table_exists("Call Log"):
 		try:
@@ -2120,6 +2133,11 @@ def _student_call_records(
 
 		ref_doc = ix.get("reference_docname")
 		if ix.get("reference_doctype") == "Call Log" and ref_doc in seen_call_ids:
+			continue
+		if str(ix.get("source_record_id") or "").strip() in seen_call_ids:
+			continue
+		external_id = str(ix.get("external_id") or "").strip()
+		if ":" in external_id and external_id.split(":", 1)[1] in seen_call_ids:
 			continue
 		if ix.get("name") in seen_call_ids:
 			continue
