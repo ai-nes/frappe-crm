@@ -85,15 +85,29 @@ def _as_positive_int(value: Any, fieldname: str, *, default: int = 1) -> int:
 	return parsed
 
 
-def _document_type_rows(*, include_archived: bool = False) -> list[Any]:
+def _document_type_rows(
+	*,
+	include_archived: bool = False,
+	active_only: bool = False,
+	search: str | None = None,
+	ignore_permissions: bool = True,
+) -> list[Any]:
 	filters = {"status": ["in", ["Active", "Archived"]] if include_archived else "Active"}
+	if active_only:
+		filters["is_active"] = 1
+	search_value = str(search or "").strip()
+	or_filters = None
+	if search_value:
+		like = f"%{search_value}%"
+		or_filters = [[fieldname, "like", like] for fieldname in ("name", "code", "label", "category")]
 	return frappe.get_all(
 		"CRM Document Type",
 		filters=filters,
+		or_filters=or_filters,
 		fields=["name", "code", "label", "category", "description", "status", "is_active"],
 		order_by="label asc, name asc",
 		limit_page_length=0,
-		ignore_permissions=True,
+		ignore_permissions=ignore_permissions,
 	)
 
 
@@ -281,6 +295,16 @@ def _normalize_template_data(data: dict[str, Any], *, is_create: bool) -> dict[s
 	}
 
 
+def _assert_admission_method_enabled(method: str | None, status: str) -> None:
+	if not method or status != "Active":
+		return
+	if not frappe.db.get_value("CRM Admission Method", method, "enabled"):
+		frappe.throw(
+			_("An active template must use an enabled Admission Method."),
+			frappe.ValidationError,
+		)
+
+
 def _assert_expected_modified(doc, expected_modified: str | None) -> None:
 	if expected_modified and str(doc.modified) != str(expected_modified):
 		frappe.throw(
@@ -367,7 +391,9 @@ def _offering_label(row, method_labels: dict[str, str], year_labels: dict[str, s
 
 
 @frappe.whitelist()
-def get_admission_profile_catalog(admission_year: str | None = None) -> dict[str, Any]:
+def get_admission_profile_catalog(
+	admission_year: str | None = None, search: str | None = None
+) -> dict[str, Any]:
 	"""Return the active catalog needed to create a Student admission profile."""
 	method_rows = frappe.get_list(
 		"CRM Admission Method",
@@ -415,14 +441,13 @@ def get_admission_profile_catalog(admission_year: str | None = None) -> dict[str
 	]
 	year_labels = {item["id"]: item["name"] for item in years}
 
-	document_rows = frappe.get_list(
-		"CRM Document Type",
-		filters={"status": "Active", "is_active": 1},
-		fields=["name", "code", "label", "category", "description"],
-		order_by="label asc",
-		limit_page_length=0,
+	all_document_rows = _document_type_rows(active_only=True, ignore_permissions=False)
+	document_rows = (
+		_document_type_rows(active_only=True, search=search, ignore_permissions=False)
+		if str(search or "").strip()
+		else all_document_rows
 	)
-	document_types = {row.name: row for row in document_rows}
+	document_types = {row.name: row for row in all_document_rows}
 
 	template_rows = frappe.get_list(
 		"CRM Admission Profile Template",
@@ -514,7 +539,7 @@ def get_admission_profile_catalog(admission_year: str | None = None) -> dict[str
 
 
 @frappe.whitelist()
-def list_admission_profile_templates(status: str | None = None) -> dict[str, Any]:
+def list_admission_profile_templates(status: str | None = None, search: str | None = None) -> dict[str, Any]:
 	"""Return all academic templates and active document types for admin CRUD."""
 	_require_template_admin()
 	status_value = str(status or "").strip().title()
@@ -523,8 +548,9 @@ def list_admission_profile_templates(status: str | None = None) -> dict[str, Any
 		if status_value not in TEMPLATE_STATUSES:
 			frappe.throw(_("Template status is invalid."), frappe.ValidationError)
 		filters["status"] = status_value
-	document_rows = _document_type_rows()
-	document_types = {row.name: row for row in document_rows}
+	all_document_rows = _document_type_rows()
+	document_rows = _document_type_rows(search=search) if str(search or "").strip() else all_document_rows
+	document_types = {row.name: row for row in all_document_rows}
 	rows = frappe.get_all(
 		"CRM Admission Profile Template",
 		filters=filters,
@@ -557,6 +583,7 @@ def create_admission_profile_template(data: dict[str, Any] | str) -> dict[str, A
 	"""Create one academic profile template for the admin catalog."""
 	_require_template_admin()
 	values = _normalize_template_data(_parse_object(data, _("Template")), is_create=True)
+	_assert_admission_method_enabled(values["admission_method"], values["status"])
 	if frappe.db.exists("CRM Admission Profile Template", {"template_code": values["template_code"]}):
 		frappe.throw(
 			_("Template Code {0} already exists.").format(values["template_code"]),
@@ -580,6 +607,7 @@ def update_admission_profile_template(
 	data_object = _parse_object(data, _("Template"))
 	data_object.setdefault("template_kind", doc.template_kind or "standard")
 	values = _normalize_template_data(data_object, is_create=False)
+	_assert_admission_method_enabled(values["admission_method"], values["status"])
 	if values["template_code"] and values["template_code"] != doc.template_code:
 		frappe.throw(_("Template Code is immutable."), frappe.PermissionError)
 	_assert_template_kind_immutable(doc, values["template_kind"])
@@ -621,6 +649,7 @@ def transition_admission_profile_template(
 		frappe.throw(_("Template status is invalid."), frappe.ValidationError)
 	if status_value not in TEMPLATE_TRANSITIONS.get(doc.status, frozenset()):
 		frappe.throw(_("Invalid template status transition."), frappe.ValidationError)
+	_assert_admission_method_enabled(doc.get("admission_method"), status_value)
 	if status_value == "Active" and not doc.get("document_types"):
 		frappe.throw(_("An active template must contain at least one requirement."), frappe.ValidationError)
 	doc.status = status_value

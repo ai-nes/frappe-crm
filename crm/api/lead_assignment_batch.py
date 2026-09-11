@@ -24,6 +24,7 @@ from crm.fcrm.lead_processing import (
 	_processing_validation_reason,
 	_set_processing_values,
 	assign_lead,
+	change_lead_ownership,
 	preview_lead,
 )
 from crm.fcrm.student_assignment import (
@@ -32,7 +33,6 @@ from crm.fcrm.student_assignment import (
 	resolve_student_zone,
 	zone_team_pool,
 )
-from crm.fcrm.student_ownership import change_student_ownership
 from crm.fcrm.team_routing import (
 	active_lead_count,
 	province_for_zone,
@@ -1392,20 +1392,18 @@ def _assign_input_pool(batch, item, lead, actor_context: dict[str, Any]):
 	pool = _resolve_batch_pool(batch, lead, actor_context)
 	if lead.get("owning_team") and lead.get("owning_team") != pool.team:
 		raise frappe.ValidationError("INPUT_QUEUE_TEAM_MISMATCH")
-	result = change_student_ownership(
-		student=lead.name,
-		target_kind="pool",
-		target_id=pool.name,
+	result = change_lead_ownership(
+		lead=lead.name,
+		owner_staff=None,
 		target_team_id=pool.team,
 		reason="Gán Lead vào hàng chờ của đợt trước khi phân công.",
 		idempotency_key=f"lead-batch-pool:{batch.name}:{item.name}:{lead.get('ownership_revision') or 0}",
 		expected_revision=int(lead.get("ownership_revision") or 0),
 		correlation_id=batch.execution_id or str(uuid.uuid4()),
-		_internal_service=True,
-		_internal_actor=getattr(frappe.session, "user", None),
+		target_kind="pool",
+		target_id=pool.name,
 		_commit=False,
 		_route_trigger="pool_entry",
-		_enqueue_routing=False,
 	)
 	return int(result.get("revision") or 0)
 

@@ -82,6 +82,55 @@ class TestAdmissionProfileTemplates(FrappeTestCase):
 			],
 		)
 
+	def test_catalog_search_filters_document_type_options(self):
+		document_rows = [
+			frappe._dict(
+				name="DOC-ACHIEVEMENT",
+				code="ACHIEVEMENT",
+				label="Bản sao thành tích",
+				category="special",
+				description=None,
+				status="Active",
+				is_active=1,
+			),
+			frappe._dict(
+				name="DOC-CITIZEN-ID",
+				code="CITIZEN_ID",
+				label="Căn cước công dân",
+				category="identity",
+				description=None,
+				status="Active",
+				is_active=1,
+			),
+		]
+		document_queries = []
+
+		def fake_get_list(doctype, **kwargs):
+			return []
+
+		def fake_get_all(doctype, **kwargs):
+			if doctype != "CRM Document Type":
+				return []
+			document_queries.append(kwargs)
+			return document_rows if not kwargs.get("or_filters") else [document_rows[0]]
+
+		with (
+			patch.object(admission_profile_templates.frappe, "get_list", side_effect=fake_get_list),
+			patch.object(admission_profile_templates.frappe, "get_all", side_effect=fake_get_all),
+		):
+			result = admission_profile_templates.get_admission_profile_catalog(search="achievement")
+
+		self.assertEqual([document["code"] for document in result["documentTypes"]], ["ACHIEVEMENT"])
+		self.assertEqual(
+			document_queries[1]["or_filters"],
+			[
+				["name", "like", "%achievement%"],
+				["code", "like", "%achievement%"],
+				["label", "like", "%achievement%"],
+				["category", "like", "%achievement%"],
+			],
+		)
+
 	def test_admin_can_create_update_transition_and_delete_templates(self):
 		template_code = f"TEST_ADMIN_{frappe.generate_hash(length=8).upper()}"
 		data = {
