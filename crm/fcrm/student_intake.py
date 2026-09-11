@@ -234,6 +234,15 @@ def _doctype_exists(doctype: str) -> bool:
 		return False
 
 
+def _crm_student_or_none(name: str | None) -> str | None:
+	if not name:
+		return None
+	try:
+		return name if frappe.db.exists("CRM Student", name) else None
+	except Exception:
+		return None
+
+
 def _meta(doctype: str):
 	try:
 		return frappe.get_meta(doctype)
@@ -684,7 +693,10 @@ def _persist_receipt(
 		"command_kind": command_kind,
 		"outcome": receipt_outcome,
 		"error_code": result.get("error_code"),
-		"target_student": result.get("student"),
+		# result["student"] is a CRM Lead name at this stage (Student conversion
+		# happens later, in student_conversion.convert_student). target_student is
+		# typed to CRM Student, so only a genuine converted Student may be stored.
+		"target_student": _crm_student_or_none(result.get("student")),
 		"target_contact": result.get("contact"),
 		"student": result.get("student"),
 		"review": result.get("review_id"),
