@@ -16,6 +16,7 @@ from frappe import _
 
 from crm.fcrm.interaction_log import CHATWOOT_INTERACTION_TYPE
 from crm.fcrm.interaction_semantics import resolve_interaction_type
+from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.permissions import (
 	can_read_full_lead_board,
 	get_student_list_read_condition,
@@ -344,10 +345,11 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
 	"""Return permission-scoped call history for one CRM Lead."""
-	payload = get_student_interactions(lead_id)
+	requested_lead_id = str(lead_id or "").strip()
+	payload = get_student_interactions(resolve_lead_name(requested_lead_id))
 	calls = payload.get("calls") or []
 	return {
-		"lead_id": payload.get("student_id"),
+		"lead_id": requested_lead_id,
 		"calls": calls,
 		"total": len(calls),
 	}

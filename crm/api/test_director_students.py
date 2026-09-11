@@ -963,6 +963,24 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(result, {"lead_id": "LEAD-1", "calls": [{"id": "CALL-1"}], "total": 1})
 
+	def test_get_lead_call_logs_resolves_public_lead_id(self):
+		with (
+			patch.object(director_students, "resolve_lead_name", return_value="LEAD-1") as resolve,
+			patch.object(
+				director_students,
+				"get_student_interactions",
+				return_value={"student_id": "STU-1", "calls": [{"id": "CALL-1"}]},
+			) as get_interactions,
+		):
+			result = director_students.get_lead_call_logs("public-lead-uuid")
+
+		resolve.assert_called_once_with("public-lead-uuid")
+		get_interactions.assert_called_once_with("LEAD-1")
+		self.assertEqual(
+			result,
+			{"lead_id": "public-lead-uuid", "calls": [{"id": "CALL-1"}], "total": 1},
+		)
+
 	def test_student_zalo_messages_include_chatwoot_interactions(self):
 		messages = director_students._student_zalo_messages(
 			"ENR-1",
