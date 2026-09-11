@@ -12,17 +12,21 @@ Admin/System Manager
         ├── một Trưởng Group
         └── nhiều Team
               ├── một Trưởng nhóm tổ chức của từng Team
-              └── nhiều thành viên: Lead Sale, Sale, CTV Sale
+              └── nhiều thành viên: Sale, CTV Sale
 ```
 
 - Admin hoặc Lead Sale được chọn một Trưởng Group cho từng Group.
 - Admin hoặc Lead Sale được quyết định Trưởng nhóm tổ chức riêng cho từng Team.
-- Trưởng nhóm quản lý thành viên của Team mình.
+- Trưởng Group/Lead Sale là người quản lý qua các trường pointer và không trở
+  thành thành viên của Team. Trưởng nhóm Team là Sale/CTV được tự động thêm vào
+  membership khi chọn ngay trong dialog tạo Team.
 - Mỗi tỉnh có một Group hoạt động.
 - Một Group có thể có nhiều Team.
-- Một Team có nhiều Sale/CTV; không bắt buộc chỉ một Lead Sale.
-- `Lead Sale` là vai trò quản lý/nghiệp vụ, không phải người nhận Lead tự động.
+- Một Team có nhiều Sale/CTV; `Lead Sale` là vai trò quản lý, không phải member
+  nhận Lead trong Team Management.
 - Sale và CTV Sale mới là nhóm ứng viên nhận Lead.
+- Một staff chỉ có thể có một membership Team đang hiệu lực; muốn đổi Team phải
+  gỡ membership cũ trước.
 - Trường THPT thuộc tỉnh nào được lấy từ dữ liệu Frappe; không cần gắn từng
   trường vào Team trong luồng phân công mới.
 
@@ -32,9 +36,11 @@ Người vận hành chỉ cần làm bốn việc:
 
 1. Tạo hoặc chọn Group và gắn một tỉnh.
 2. Chọn Trưởng Group cho Group.
-3. Tạo Team bên trong Group và có thể chọn ngay Trưởng nhóm; backend tự thêm
-   người này vào Team.
-4. Chọn Trưởng nhóm cho từng Team và thêm các thành viên Sale/CTV.
+3. Tạo Team bên trong Group và có thể chọn ngay một Sale/CTV chưa thuộc Team;
+   backend tự thêm người này vào membership rồi gán làm Trưởng nhóm trong cùng
+   transaction.
+4. Thêm các thành viên Sale/CTV khác và chỉ chọn Trưởng nhóm từ member hiện tại
+   của Team.
 
 Team được coi là sẵn sàng khi:
 
@@ -92,6 +98,11 @@ CEO/Director không còn quyền vào module này. Scope Group/Team/member đư�
 Group Lead, Team Lead và membership hiện hành của `CRM Staff`; CTV Sale luôn bị
 ép thành member ở module này.
 
+Workspace và Team detail trả thêm `availableMembers`: staff đang hoạt động, chưa
+có Team membership hiệu lực và nằm trong campus thuộc phạm vi người quản lý.
+Danh sách này dùng cho thao tác thêm member; người đã thuộc Team khác không được
+đưa vào candidate.
+
 Lead Sale/System Manager có quyền toàn cục. Sale là Group Lead chỉ được tạo/cập nhật
 Team trong Group của mình; Sale là Team Lead chỉ được thêm, chuyển, sửa hoặc gỡ
 member trong Team mình quản lý. Tạo/cập nhật Group chỉ dành cho Lead Sale/System
@@ -105,7 +116,7 @@ Manager. Các kiểm tra nghiệp vụ và validation dữ liệu vẫn được
 | `crm.api.team_management.save_team_group` | Tạo/cập nhật Group và tỉnh |
 | `crm.api.team_management.save_team` | Tạo/cập nhật Team trong Group |
 | `crm.api.team_management.add_team_member` | Thêm/cập nhật thành viên và function |
-| `crm.api.team_management.move_team_member` | Chuyển thành viên giữa Team |
+| `crm.api.team_management.move_team_member` | API tương thích cũ; membership chéo Team bị từ chối |
 | `crm.api.team_management.remove_team_member` | Gỡ thành viên |
 | `crm.api.team_management.change_team_lead` | Đổi Trưởng nhóm tổ chức |
 | `crm.api.team_management.update_team_member` | Cập nhật tên nhân sự |
@@ -146,8 +157,11 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 
 - [ ] Admin tạo được Group có tỉnh từ danh mục Frappe.
 - [ ] Tạo được nhiều Team trong cùng Group.
-- [ ] Trưởng nhóm được chọn khi tạo Team sẽ tự động có membership trong Team đó.
-- [ ] Một Team có thể có nhiều Lead Sale, nhiều Sale và nhiều CTV.
+- [ ] Trưởng nhóm được chọn khi tạo Team được tự động thêm vào membership và
+      được gán làm Trưởng nhóm.
+- [ ] Lead Sale có thể làm Trưởng Group mà không cần membership.
+- [ ] Một staff đang ở Team khác không xuất hiện trong danh sách thêm member và
+      API từ chối membership chéo Team.
 - [ ] Mỗi card Group hiển thị và cho phép chỉnh một Trưởng Group.
 - [ ] Trưởng nhóm được quản lý độc lập với function của thành viên.
 - [ ] Team thiếu Sale/CTV hiển thị chưa sẵn sàng.
@@ -185,7 +199,7 @@ Nếu tài khoản đã đăng nhập được nhưng trả về `An active CRM 
 required.`, System Manager chạy command repair có tham số rõ ràng:
 
 ```bash
-bench --site <site> execute crm.demo.repair_operational_accounts.execute --kwargs '{"accounts":[{"email":"sale@example.com","role":"Sale","department":"<department>","campus":"<campus>","team":"<sales-team>"},{"email":"lead@example.com","role":"Lead Sale","department":"<department>","campus":"<campus>","team":"<sales-team>","is_team_lead":true}]}'
+bench --site <site> execute crm.demo.repair_operational_accounts.execute --kwargs '{"accounts":[{"email":"sale@example.com","role":"Sale","department":"<department>","campus":"<campus>","team":"<sales-team>"},{"email":"lead@example.com","role":"Lead Sale","department":"<department>","campus":"<campus>"}]}'
 ```
 
 `department`, `campus` và `team` phải là bản ghi đã tồn tại; command kiểm tra

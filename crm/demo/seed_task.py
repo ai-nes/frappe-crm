@@ -33,13 +33,13 @@ LEAD_COUNT = 20
 SCHOOLS_PER_PROVINCE = seed_lead_api_lookups.SCHOOLS_PER_PROVINCE
 EXPECTED_PROVINCE_COUNT = 7
 PROVINCE_SOURCE_CODES = {
-	"Khánh Hoà": "56",
-	"Đắk Lắk": "66",
-	"Lâm Đồng": "68",
-	"TP. Đồng Nai": "75",
-	"Tp. Hồ Chí Minh": "79",
-	"Tây Ninh": "80",
-	"Đồng Tháp": "82",
+	"Khánh Hoà": "VN_KHANH_HOA",
+	"Đắk Lắk": "VN_DAK_LAK",
+	"Lâm Đồng": "VN_LAM_DONG",
+	"TP. Đồng Nai": "VN_DONG_NAI",
+	"Tp. Hồ Chí Minh": "VN_HO_CHI_MINH",
+	"Tây Ninh": "VN_TAY_NINH",
+	"Đồng Tháp": "VN_DONG_THAP",
 }
 
 OWNER_ACCOUNTS = (

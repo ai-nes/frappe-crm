@@ -120,18 +120,15 @@ def team_routing_readiness(
 		row.name
 		for row in frappe.get_all("CRM Staff", filters={"is_active": 1}, fields=["name"], limit_page_length=0)
 	}
-	memberships = _active_memberships(team_id, at)
+	memberships = [row for row in _active_memberships(team_id, at) if row.staff != team.team_lead_staff]
 	lead_members = [row for row in memberships if row.function == "Lead Sale" and row.staff in staff_ids]
 	recipient_members = [
 		row for row in memberships if row.function in RECIPIENT_FUNCTIONS and row.staff in staff_ids
 	]
 	base["leadCount"] = len(lead_members)
 	base["recipientCount"] = len(recipient_members)
-	team_lead_membership = next(
-		(row for row in memberships if row.staff == team.team_lead_staff and row.staff in staff_ids),
-		None,
-	)
-	if not team_lead_membership:
+	team_lead_staff = team.team_lead_staff if team.team_lead_staff in staff_ids else None
+	if not team_lead_staff:
 		base["reason"] = "Team chưa có Trưởng nhóm đang hoạt động."
 		base["reasonCode"] = "team_lead_missing"
 		return base
@@ -241,9 +238,14 @@ def active_lead_count(staff: str) -> int:
 
 
 def _active_team_recipients(team_id: str, at=None) -> list[dict[str, Any]]:
-	"""Resolve Sale/CTV recipients; organizational leaders are not special here."""
+	"""Resolve Sale/CTV recipients without treating the Team manager as a member."""
 	at = at or now_datetime()
-	memberships = [row for row in _active_memberships(team_id, at) if row.function in RECIPIENT_FUNCTIONS]
+	team_lead_staff = frappe.db.get_value("CRM Team", team_id, "team_lead_staff")
+	memberships = [
+		row
+		for row in _active_memberships(team_id, at)
+		if row.function in RECIPIENT_FUNCTIONS and row.staff != team_lead_staff
+	]
 	staff_ids = sorted({row.staff for row in memberships if row.staff})
 	if not staff_ids:
 		return []
@@ -420,12 +422,6 @@ def select_province_fallback_recipient(
 		team_lead_staff = frappe.db.get_value("CRM Team", team["name"], "team_lead_staff")
 		if not team_lead_staff or team_lead_staff not in staff_ids:
 			continue
-		lead_membership = next(
-			(row for row in _active_memberships(team["name"], at) if row.staff == team_lead_staff),
-			None,
-		)
-		if not lead_membership:
-			continue
 		staff_row = frappe.db.get_value(
 			"CRM Staff", team_lead_staff, ["name", "full_name", "user"], as_dict=True
 		)
@@ -439,7 +435,7 @@ def select_province_fallback_recipient(
 				"staffName": staff_row.full_name or team_lead_staff,
 				"team": team["name"],
 				"teamName": team["team_name"],
-				"function": lead_membership.function,
+				"function": "Lead Sale",
 				"activeLoad": active_lead_count(team_lead_staff),
 			}
 		)

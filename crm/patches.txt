@@ -163,6 +163,7 @@ crm.patches.v1_0.unify_student_hs_identifiers
 crm.patches.v1_0.repair_lead_edit_permissions
 crm.patches.v1_0.repair_lead_ownership_projections
 crm.patches.v1_0.backfill_province_region
+crm.patches.v1_0.normalize_province_codes
 crm.patches.v1_0.backfill_team_area_code
 crm.patches.v1_0.upgrade_student_segments
 crm.patches.v1_0.migrate_classification_groups
