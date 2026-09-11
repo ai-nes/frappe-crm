@@ -110,16 +110,76 @@ def change_password(old_password: str, new_password: str):
 		tracker.add_success_attempt()
 
 	# Validate new password strength (server-side enforcement)
+	_assert_password_strength(new_password)
+
+	update_password(user=user, pwd=new_password, logout_all_sessions=False)
+	return _("Password Updated Successfully")
+
+
+def _assert_password_strength(password: str):
 	from frappe.core.doctype.user.user import test_password_strength
 
-	result = test_password_strength(new_password)
+	result = test_password_strength(password)
 	feedback = result.get("feedback", {})
 	if not feedback.get("password_policy_validation_passed", False):
 		suggestions = feedback.get("suggestions", [])
 		frappe.throw(_("Password is too weak. {0}").format(" ".join(suggestions) if suggestions else ""))
 
-	update_password(user=user, pwd=new_password, logout_all_sessions=False)
-	return _("Password Updated Successfully")
+
+@frappe.whitelist()
+def create_crm_user(email: str, full_name: str, password: str, role: str = "Sale"):
+	"""Create a new CRM user with an immediate login password (no email invite)."""
+	is_system_manager = _require_crm_role_manager()
+	if not _can_assign_role(is_system_manager, role):
+		frappe.throw(_("Only System Managers may assign this CRM profile."), frappe.PermissionError)
+
+	email = (email or "").strip()
+	full_name = (full_name or "").strip()
+	if not email or not full_name:
+		frappe.throw(_("Full name and email are required."), frappe.ValidationError)
+	if frappe.db.exists("User", email):
+		frappe.throw(_("A user with this email already exists."), frappe.ValidationError)
+
+	_assert_password_strength(password)
+
+	first_name, _sep, last_name = full_name.partition(" ")
+	user_doc = frappe.get_doc(
+		{
+			"doctype": "User",
+			"email": email,
+			"first_name": first_name,
+			"last_name": last_name or None,
+			"user_type": "System User",
+			"enabled": 1,
+			"send_welcome_email": 0,
+		}
+	).insert(ignore_permissions=True)
+
+	set_canonical_crm_profile(user_doc, role)
+	user_doc.save(ignore_permissions=True)
+	update_password(user=email, pwd=password, logout_all_sessions=True)
+	return user_doc.name
+
+
+@frappe.whitelist()
+def update_crm_user_profile(user: str, full_name: str = None, new_password: str = None):
+	"""Update a CRM user's display name and/or reset their password."""
+	is_system_manager = _require_crm_role_manager()
+	user_doc = frappe.get_doc("User", user)
+	target_roles = [d.role for d in user_doc.roles]
+	if not _can_manage_target(is_system_manager, target_roles):
+		frappe.throw(_("Only System Managers may modify this CRM user."), frappe.PermissionError)
+
+	full_name = (full_name or "").strip()
+	if full_name:
+		first_name, _sep, last_name = full_name.partition(" ")
+		user_doc.first_name = first_name
+		user_doc.last_name = last_name or None
+		user_doc.save(ignore_permissions=True)
+
+	if new_password:
+		_assert_password_strength(new_password)
+		update_password(user=user, pwd=new_password, logout_all_sessions=True)
 
 
 @frappe.whitelist()
