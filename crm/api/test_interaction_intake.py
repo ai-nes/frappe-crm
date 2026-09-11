@@ -1,35 +1,12 @@
 from unittest.mock import patch
 
-import frappe
 from frappe.tests.utils import FrappeTestCase
 
 from crm.api.interaction_intake import _interaction_response, _normalize_interaction_payload
-from crm.fcrm.student_intake import StudentIntakeError, _receipt_target_values
+from crm.fcrm.student_intake import StudentIntakeError
 
 
 class TestInteractionIntakeContract(FrappeTestCase):
-	def test_canonical_student_targets_the_receipt_student_link(self):
-		with patch.object(
-			frappe.db,
-			"exists",
-			side_effect=lambda doctype, name: doctype == "CRM Student" and name == "HS-2026-HCM-002284",
-		):
-			self.assertEqual(
-				_receipt_target_values({"student": "HS-2026-HCM-002284", "contact": None}),
-				{"target_student": None, "target_contact": "HS-2026-HCM-002284"},
-			)
-
-	def test_legacy_lead_targets_the_receipt_target_student_link(self):
-		with patch.object(
-			frappe.db,
-			"exists",
-			side_effect=lambda doctype, name: doctype == "CRM Lead" and name == "LEAD-1",
-		):
-			self.assertEqual(
-				_receipt_target_values({"student": "LEAD-1", "contact": None}),
-				{"target_student": "LEAD-1", "target_contact": None},
-			)
-
 	def test_interaction_payload_requires_canonical_identity_and_labelled_turns(self):
 		payload = _normalize_interaction_payload(
 			{
@@ -51,29 +28,6 @@ class TestInteractionIntakeContract(FrappeTestCase):
 		self.assertEqual(payload["student_id"], "STU-1")
 		self.assertEqual(payload["channel"], "facebook")
 		self.assertEqual(payload["direction"], "inbound")
-
-	def test_timezone_aware_datetimes_are_normalized_for_datetime_fields(self):
-		payload = _normalize_interaction_payload(
-			{
-				"source_namespace": "worldfone",
-				"source_record_id": "call-42",
-				"idempotency_key": "call-42",
-				"student_id": "STU-1",
-				"channel": "phone",
-				"direction": "inbound",
-				"turns": [
-					{
-						"speaker_role": "student",
-						"content": "Hello",
-						"occurred_at": "2026-08-29T09:00:00+07:00",
-					}
-				],
-				"occurred_at": "2026-08-29T09:00:00+07:00",
-			}
-		)
-
-		self.assertEqual(payload["occurred_at"], "2026-08-29 02:00:00")
-		self.assertEqual(payload["turns"][0]["occurred_at"], "2026-08-29 02:00:00")
 
 	def test_unknown_channel_and_caller_authority_are_rejected(self):
 		for payload in (

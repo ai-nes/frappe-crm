@@ -193,7 +193,6 @@ def record_student_assessment(
 		{
 			"doctype": "CRM Student Assessment",
 			"student": student_doc.name,
-			"crm_student": canonical_student(student_doc.name),
 			"assessment_revision": _next_revision(student_doc.name),
 			"status": "confirmed" if confirm or source == "manual" else "proposed",
 			"assessment_source": source,

@@ -191,7 +191,7 @@ STUDENT_FIELDS = [
 ]
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_students(
 	admissionYear: str | int | None = None,
 	page: str | int = 1,
@@ -284,7 +284,7 @@ def get_director_students(
 	}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_director_student(student_id: str) -> dict[str, Any]:
 	"""Return one permission-checked canonical CRM Student projection."""
 	_require_access()
@@ -306,7 +306,7 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 	return _build_student_360(row, item)
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and Call Logs) for a CRM Student."""
 	_require_access()
@@ -341,7 +341,7 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 	}
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
 	"""Return permission-scoped call history for one CRM Lead."""
 	payload = get_student_interactions(lead_id)
@@ -373,7 +373,7 @@ CHATWOOT_INTERACTION_FIELDS = [
 ]
 
 
-@frappe.whitelist(allow_guest=True, methods=["GET"])  # nosemgrep: security.guest-whitelisted-method
+@frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_student_chatwoot_interactions(
 	student_id: str,
 	page: str | int = 1,
@@ -971,19 +971,6 @@ def _normalize_student_rows(rows: list) -> list:
 	"""
 	if not rows:
 		return []
-	source_leads = {row.get("source_lead") for row in rows if row.get("source_lead")}
-	lead_statuses = {}
-	if source_leads:
-		lead_statuses = {
-			row.name: row
-			for row in frappe.get_all(
-				"CRM Lead",
-				filters={"name": ["in", list(source_leads)]},
-				fields=["name", "processing_status", "resolution", "ownership_revision"],
-				limit_page_length=0,
-				ignore_permissions=True,
-			)
-		}
 	normalized = []
 	for row in rows:
 		item = frappe._dict(row)
@@ -992,13 +979,8 @@ def _normalize_student_rows(rows: list) -> list:
 		item.student = item.get("student") or item.get("name")
 		item.processing_status = item.get("processing_status")
 		item.resolution = item.get("resolution")
-		lead_status = lead_statuses.get(item.get("source_lead"))
-		if lead_status:
-			item.processing_status = lead_status.get("processing_status")
-			item.resolution = lead_status.get("resolution")
-			item.ownership_revision = lead_status.get("ownership_revision")
-			if item.get("ownership_revision") is None:
-				item.ownership_revision = item.get("student_context_revision")
+		if item.get("ownership_revision") is None:
+			item.ownership_revision = item.get("student_context_revision")
 		normalized.append(item)
 	return normalized
 
@@ -1057,12 +1039,11 @@ def _latest_by_student(
 
 
 def _student_query_ids(student_ids: list[str]) -> list[str]:
-	"""Include both sides of a migrated Lead/Student identity boundary."""
+	"""Include Lead and canonical Student IDs for migrated child doctypes."""
 	values: list[str] = []
 	seen: set[str] = set()
 	for value in student_ids:
-		canonical = canonical_student(value)
-		for candidate in (value, canonical, lead_for_student(canonical)):
+		for candidate in (value, canonical_student(value)):
 			if candidate and candidate not in seen:
 				seen.add(candidate)
 				values.append(candidate)
@@ -1836,8 +1817,6 @@ def _student_interactions(student_id: str | None) -> list:
 			"actor",
 			"crm_contact",
 			"conversation_id",
-			"source_record_id",
-			"evidence",
 			"reference_doctype",
 			"reference_docname",
 		],
@@ -2025,18 +2004,6 @@ def _student_call_records(
 
 	calls: list[dict[str, Any]] = []
 	seen_call_ids: set[str] = set()
-	canonical_calls_by_source_id: dict[str, Any] = {}
-	for ix in interactions:
-		source_record_id = str(ix.get("source_record_id") or "").strip()
-		channel = _fold(ix.get("channel") or "")
-		interaction_type = _fold(ix.get("interaction_type") or "")
-		if source_record_id and (
-			"call" in channel
-			or "phone" in channel
-			or "call" in interaction_type
-			or "phone" in interaction_type
-		):
-			canonical_calls_by_source_id[source_record_id] = ix
 	call_interactions = {
 		str(ix.get("reference_docname")): ix
 		for ix in interactions
@@ -2045,10 +2012,9 @@ def _student_call_records(
 
 	if _table_exists("Call Log"):
 		try:
-			activity_ids = _student_query_ids([student_id])
 			call_logs = frappe.get_list(
 				"Call Log",
-				filters={"reference_docname": ["in", activity_ids]},
+				filters={"reference_docname": student_id},
 				or_filters=[
 					{"reference_doctype": "CRM Student"},
 					{"reference_doctype": "CRM Lead"},
@@ -2079,11 +2045,8 @@ def _student_call_records(
 			call_logs = []
 		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
-			call_log_id = str(cl.get("name") or "").strip()
-			seen_call_ids.add(call_log_id)
-			canonical_interaction = canonical_calls_by_source_id.get(call_log_id) or call_interactions.get(
-				call_log_id
-			)
+			seen_call_ids.add(cl.get("name"))
+			canonical_interaction = call_interactions.get(str(cl.get("name")))
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
 			duration_secs = int(cl.get("duration") or 0)
 			status_fold = _fold(cl.get("status") or "")
@@ -2112,29 +2075,13 @@ def _student_call_records(
 				phone_number = cl.get("to") or student_phone
 
 			note_projection = note_projections.get(str(cl.get("note") or ""), {})
-			topic = (
-				note_projection.get("summary")
-				or (canonical_interaction or {}).get("summary")
-				or "Cuộc gọi tư vấn"
-			)
-			summary = (
-				note_projection.get("summary")
-				or (canonical_interaction or {}).get("summary")
-				or f"Cuộc gọi {cl.get('status') or ''}"
-			)
+			topic = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or "Cuộc gọi tư vấn"
+			summary = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
 			summary_available = bool(note_projection.get("summary") or (canonical_interaction or {}).get("summary"))
 
 			calls.append(
 				{
 					"id": str(cl.get("name")),
-					"interactionId": (
-						str(canonical_interaction.get("name")) if canonical_interaction else None
-					),
-					"evidenceId": (
-						str(canonical_interaction.get("evidence"))
-						if canonical_interaction and canonical_interaction.get("evidence")
-						else None
-					),
 					"time": _format_activity_time(cl.get("start_time") or cl.get("creation")),
 					"direction": direction,
 					"outcome": outcome,
@@ -2149,6 +2096,7 @@ def _student_call_records(
 					"summaryAvailable": summary_available,
 					"summaryStatus": "COMPLETED" if summary_available else "NOT_AVAILABLE",
 					"transcript": note_projection.get("transcript"),
+					"interactionId": canonical_interaction.get("name") if canonical_interaction else None,
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),
 						cl.get("recording_url"),
@@ -2173,14 +2121,10 @@ def _student_call_records(
 		ref_doc = ix.get("reference_docname")
 		if ix.get("reference_doctype") == "Call Log" and ref_doc in seen_call_ids:
 			continue
-		source_record_id = str(ix.get("source_record_id") or "").strip()
-		if source_record_id and source_record_id in seen_call_ids:
-			continue
-		interaction_id = str(ix.get("name") or "").strip()
-		if interaction_id in seen_call_ids:
+		if ix.get("name") in seen_call_ids:
 			continue
 
-		seen_call_ids.add(interaction_id)
+		seen_call_ids.add(ix.get("name"))
 		direction = "inbound" if _fold(ix.get("direction") or "") in {"inbound", "incoming"} else "outbound"
 		actor_name = _user_name(ix.get("actor"), fallback=staff_name)
 
@@ -2211,9 +2155,7 @@ def _student_call_records(
 
 		calls.append(
 			{
-				"id": interaction_id,
-				"interactionId": interaction_id,
-				"evidenceId": str(ix.get("evidence")) if ix.get("evidence") else None,
+				"id": str(ix.get("name")),
 				"time": _format_activity_time(ix.get("interaction_datetime")),
 				"direction": direction,
 				"outcome": outcome,
@@ -2307,11 +2249,7 @@ def _contact_consent(student_id: str | None, privacy_status: str | None) -> dict
 	student_ids = _student_query_ids([student_id])
 	rows = frappe.get_all(
 		"CRM Contact Consent Event",
-		filters={},
-		or_filters=[
-			["student", "in", student_ids],
-			["contact", "in", student_ids],
-		],
+		filters={"student": ["in", student_ids]},
 		fields=["event_type", "occurred_at", "scope"],
 		order_by="occurred_at desc, creation desc",
 		limit_page_length=1,
@@ -2351,8 +2289,6 @@ def _consent_channels(scope: str | None) -> list[str]:
 		channels.append("Email")
 	if any(token in value for token in ("phone", "telephone", "dien thoai")):
 		channels.append("Điện thoại")
-	if "zalo" in value:
-		channels.append("Zalo")
 	return channels
 
 

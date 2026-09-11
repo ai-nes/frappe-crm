@@ -174,19 +174,7 @@ Student/legacy và giữ dữ liệu lịch sử. Lead batch mới dùng route
 - [ ] Batch có thể tạo nhiều đợt và có trạng thái Hoàn tất hoặc Còn lỗi.
 - [ ] Dữ liệu Frappe cũ về Zone/Pool/Policy không bị xóa.
 
-## 8. Audit và repair tài khoản vận hành trên production
-
-Audit read-only toàn bộ System User có role CRM hoặc có liên kết `CRM Staff`:
-
-```bash
-bench --site <site> execute crm.demo.repair_operational_accounts.audit_operational_accounts
-```
-
-Kết quả có `role_state`, `crm_profile`, capability, Staff, membership và issue
-codes. Các issue quan trọng gồm `ROLE_NOT_CANONICAL`,
-`MISSING_ACTIVE_CRM_STAFF`, `STAFF_ORGANIZATION_INCOMPLETE`,
-`DEPARTMENT_CAMPUS_MISMATCH`, `NO_ACTIVE_TEAM_MEMBERSHIP` và
-`TEAM_CAMPUS_MISMATCH`.
+## 8. Repair tài khoản vận hành trên production
 
 Hai endpoint workspace và lịch sử phân công yêu cầu tài khoản nghiệp vụ có:
 
@@ -203,10 +191,8 @@ bench --site <site> execute crm.demo.repair_operational_accounts.execute --kwarg
 ```
 
 `department`, `campus` và `team` phải là bản ghi đã tồn tại; command kiểm tra
-Team đang hoạt động, thuộc đúng campus và không tạo hai primary team. Role hỗ trợ
-các profile CRM canonical; `Admissions Director` có thể chỉ sửa role mà không
-cần Staff vì đây là profile global. Có thể bỏ `team` để chỉ sửa identity Staff,
-nhưng tài khoản Sales cần được gắn Team trước khi chạy routing. Command không
-đổi mật khẩu, không tự bật User bị disable, không sửa tài khoản
-`Administrator`/`System Manager`, và rollback toàn bộ nếu một tài khoản không
-hợp lệ.
+Team đang hoạt động, thuộc đúng campus và không tạo hai primary team. Có thể bỏ
+`team` để chỉ sửa identity Staff, nhưng tài khoản sẽ cần được gắn Team thủ công
+trước khi chạy routing. Command không đổi mật khẩu, không tự bật User bị disable,
+không sửa tài khoản `Administrator`/`System Manager`, và rollback toàn bộ nếu một
+tài khoản không hợp lệ.

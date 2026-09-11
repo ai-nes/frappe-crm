@@ -73,7 +73,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"campaign": "CAM-2026-00001",
 				"owner_id": None,
 				"assignment_status": "assigned",
-				"lifecycle_status": "Attempting",
+			"lifecycle_status": "Attempting",
 				"sort": "lastActivityAt",
 				"order": "asc",
 			},
@@ -584,38 +584,6 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(guardian["name"], "Nguyễn Văn Minh")
 		self.assertEqual(guardian["preferredChannel"], "Phone")
 
-	def test_student_query_ids_include_source_lead_for_canonical_student(self):
-		with (
-			patch.object(director_students, "canonical_student", side_effect=lambda value: value),
-			patch.object(
-				director_students,
-				"lead_for_student",
-				side_effect=lambda value: "LEAD-1" if value == "STU-1" else None,
-			),
-		):
-			ids = director_students._student_query_ids(["STU-1"])
-
-		self.assertEqual(ids, ["STU-1", "LEAD-1"])
-
-	def test_contact_consent_reads_canonical_contact_events(self):
-		with (
-			patch.object(director_students, "_table_exists", return_value=True),
-			patch.object(director_students, "_student_query_ids", return_value=["LEAD-1", "STU-1"]),
-			patch.object(
-				director_students.frappe,
-				"get_all",
-				return_value=[
-					frappe._dict(
-						event_type="Granted", occurred_at="2026-09-10 09:40:00", scope="phone,email,zalo"
-					)
-				],
-			),
-		):
-			consent = director_students._contact_consent("STU-1", None)
-
-		self.assertEqual(consent["status"], "Đã đồng ý")
-		self.assertEqual(consent["channels"], ["Email", "Điện thoại", "Zalo"])
-
 	def test_assessment_confidence_uses_existing_confidence_fields(self):
 		assessment = frappe._dict(interest_confidence=80, fit_confidence=70, barrier_confidence=60)
 
@@ -671,9 +639,7 @@ class TestDirectorStudents(FrappeTestCase):
 		condition = "`tabCRM Student`.owner_staff = 'STAFF-1'"
 		with (
 			patch.object(director_students, "can_read_full_lead_board", return_value=False),
-			patch.object(
-				director_students, "get_student_list_read_condition", return_value=condition
-			) as get_condition,
+			patch.object(director_students, "get_student_list_read_condition", return_value=condition) as get_condition,
 			patch.object(director_students.frappe.db, "sql", return_value=[{"name": "ENR-1"}]) as sql,
 		):
 			result = director_students._list_scope_student_ids()
@@ -758,53 +724,6 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["outcome"], "connected")
 		self.assertEqual(calls[0]["receiverName"], "Nguyễn Văn Minh")
 		self.assertEqual(calls[0]["phoneNumber"], "0901234412")
-
-	def test_student_call_records_deduplicate_call_log_and_canonical_interaction(self):
-		call_log = frappe._dict(
-			name="CALL-1",
-			type="Incoming",
-			status="Completed",
-			from_number="0901234412",
-			to="1200",
-			duration=45,
-			start_time="2026-08-30 16:20:58",
-			creation="2026-08-30 16:20:58",
-			recording_url=None,
-			telephony_medium="Manual",
-			medium="Worldfone",
-			caller=None,
-			receiver=None,
-			note=None,
-		)
-		interactions = [
-			frappe._dict(
-				name="INT-CALL-1",
-				channel="phone",
-				interaction_type="PHONE_CALL",
-				source_record_id="CALL-1",
-				evidence="EVIDENCE-1",
-				interaction_datetime="2026-08-30 16:20:58",
-				direction="inbound",
-				outcome="Connected",
-				summary="Tư vấn học phí",
-				notes="Đã phân tích cuộc gọi.",
-			)
-		]
-		with (
-			patch.object(director_students, "_table_exists", return_value=True),
-			patch.object(director_students.frappe, "get_list", return_value=[call_log]),
-		):
-			calls = director_students._student_call_records(
-				"ENR-1",
-				interactions,
-				frappe._dict(student_name="Student Demo", phone="0901234412"),
-				{},
-			)
-
-		self.assertEqual(len(calls), 1)
-		self.assertEqual(calls[0]["id"], "CALL-1")
-		self.assertEqual(calls[0]["interactionId"], "INT-CALL-1")
-		self.assertEqual(calls[0]["evidenceId"], "EVIDENCE-1")
 
 	def test_display_code_resolves_against_students_not_leads(self):
 		"""The display code is built from the Student name, so no Lead can match it."""
@@ -986,27 +905,6 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["student_id"], "CRMC-1")
 		self.assertEqual(result["zalo_messages"], [])
 		self.assertEqual(result["calls"], [])
-
-	def test_get_student_interactions_accepts_standalone_canonical_student(self):
-		doc = frappe._dict(name="CRMC-1", full_name="Nguyễn Minh An", phone="0901234412")
-		doc.has_permission = lambda permission_type: permission_type == "read"
-		with (
-			patch.object(director_students, "_require_access", return_value=None),
-			patch.object(
-				director_students,
-				"_resolve_activity_target",
-				return_value=("CRMC-1", "CRMC-1", "CRMC-1"),
-			),
-			patch.object(director_students.frappe, "get_doc", side_effect=[frappe.DoesNotExistError, doc]),
-			patch.object(director_students.frappe, "has_permission", return_value=True),
-			patch.object(director_students, "_student_interactions", return_value=[]),
-			patch.object(director_students, "_student_guardian", return_value={}),
-		):
-			result = director_students.get_student_interactions("CRMC-1")
-
-		self.assertEqual(result["student_id"], "CRMC-1")
-		self.assertEqual(result["calls"], [])
-		self.assertEqual(result["total_interactions"], 0)
 
 	def test_get_lead_call_logs_endpoint(self):
 		with patch.object(

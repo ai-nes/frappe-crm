@@ -645,22 +645,6 @@ def _receipt_response(receipt: dict[str, Any]) -> dict[str, Any]:
 	return response
 
 
-def _receipt_target_values(result: dict[str, Any]) -> dict[str, str | None]:
-	"""Map a result target to the compatible legacy receipt Link fields.
-
-	CRM Student is the canonical interaction target, while the historical
-	``target_student`` receipt field still links to CRM Lead. Never write a
-	canonical Student name into that Lead link: Frappe rejects it during insert.
-	"""
-	student = _text(result.get("student"))
-	contact = _text(result.get("contact"))
-	target_student = student if student and frappe.db.exists("CRM Lead", student) else None
-	target_contact = contact if contact and frappe.db.exists("CRM Student", contact) else None
-	if not target_contact and student and frappe.db.exists("CRM Student", student):
-		target_contact = student
-	return {"target_student": target_student, "target_contact": target_contact}
-
-
 def _persist_receipt(
 	keys: list[dict[str, Any]],
 	*,
@@ -688,7 +672,6 @@ def _persist_receipt(
 	encrypted_payload = None
 	if provenance_payload is not None:
 		encrypted_payload = encrypt_provenance(redact_provenance(provenance_payload))
-	target_values = _receipt_target_values(result)
 	values = {
 		"receipt_key": key_set.get("command_key"),
 		"command_key": key_set.get("command_key"),
@@ -701,7 +684,8 @@ def _persist_receipt(
 		"command_kind": command_kind,
 		"outcome": receipt_outcome,
 		"error_code": result.get("error_code"),
-		**target_values,
+		"target_student": result.get("student"),
+		"target_contact": result.get("contact"),
 		"student": result.get("student"),
 		"review": result.get("review_id"),
 		"review_id": result.get("review_id"),
@@ -770,10 +754,6 @@ def _assert_replay_scope(result: dict[str, Any], authority: dict[str, Any]) -> N
 		student = frappe.db.get_value(
 			"CRM Lead", student_name, ["branch", "owning_team", "owner_staff"], as_dict=True
 		)
-		if not student:
-			student = frappe.db.get_value(
-				"CRM Student", student_name, ["branch", "owning_team", "owner_staff"], as_dict=True
-			)
 		if not student:
 			_fail("UNAUTHORIZED", "The replay target is no longer available in the current scope.")
 		campuses = set(authority.get("campus_scope") or [])

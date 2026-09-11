@@ -936,21 +936,6 @@ def handoff_lead(
 			target_student = classified_target
 	if resolution not in ADVANCING_RESOLUTIONS:
 		_fail("INVALID_STATUS", "Lead này chưa đủ điều kiện để chuyển đổi Student.")
-	# Processing deliberately leaves an advancing Lead at PENDING while it is
-	# waiting for assignment.  Once the assigned Lead is handed off, persist the
-	# classification before entering the conversion command.  The conversion
-	# guard uses the persisted resolution to prevent a direct Lead -> Student
-	# bypass, and the same transaction rolls this projection back on failure.
-	if _get_resolution(lead_doc) == "PENDING":
-		_set_processing_values(
-			lead_doc.name,
-			{
-				"resolution": resolution,
-				"matched_student": target_student if resolution == "MATCHED" else None,
-				"resolution_reason": f"{resolution} handoff queued.",
-			},
-		)
-		lead_doc = _load_lead(lead_doc.name, internal_service=_internal_service)
 	idempotency_key = _required(idempotency_key, "idempotency_key")
 	correlation_id = _required(correlation_id or frappe.generate_hash(length=20), "correlation_id")
 	if expected_lifecycle_revision in (None, ""):
