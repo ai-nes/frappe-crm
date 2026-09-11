@@ -268,6 +268,30 @@ def test_eligible_action_publishes_explicit_rule_facts():
 	assert action["time_allowed"] is True
 
 
+def test_semantic_action_metadata_uses_the_ai_need_vocabulary():
+	result = filter_eligible_actions(
+		[_row("ADVISE_MAJOR", category="CONVERSION", need="DECISION_SUPPORT")],
+		now=NOW,
+	)["actions"]
+
+	assert result[0]["addresses_needs"] == ["RESOLVE_MAJOR_UNCERTAINTY"]
+	assert result[0]["desired_outcomes"] == ["major_clarity"]
+	assert result[0]["collects_information"] is False
+	assert result[0]["readiness_target"] == "advice"
+
+
+def test_decision_reason_action_publishes_clarification_semantics():
+	result = filter_eligible_actions(
+		[_row("ASK_DECISION_REASON", category="RECOVERY", need="NOT_READY")],
+		now=NOW,
+	)["actions"]
+
+	assert result[0]["addresses_needs"] == []
+	assert result[0]["desired_outcomes"] == ["decision_clarity"]
+	assert result[0]["collects_information"] is True
+	assert result[0]["readiness_target"] == "none"
+
+
 def test_academic_constraint_stays_unknown_without_current_gpa():
 	result = filter_eligible_actions(
 		[_row(academic_constraint={"min_gpa": 8.0})],

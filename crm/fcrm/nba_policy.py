@@ -99,6 +99,129 @@ _ACTIVE_ACTION_ITEM_STATES = frozenset({
 })
 _ACTIVE_RECOMMENDATION_STATES = frozenset({"proposed", "active"})
 
+# The CRM Need catalogue and the AI NBA semantic-need vocabulary are separate
+# contracts. Do not forward ``CRM Need.code`` directly: values such as
+# ``NOT_READY`` are valid Frappe master-data identifiers but are not valid NBA
+# semantic needs.
+_SEMANTIC_ACTION_METADATA: dict[str, dict[str, object]] = {
+	"ADVISE_MAJOR": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"COMPARE_MAJORS": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_MAJOR_INFO": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_MAJOR_VIDEO": {
+		"addresses_needs": ["RESOLVE_MAJOR_UNCERTAINTY"],
+		"desired_outcomes": ["major_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_TUITION": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_TUITION_INFO": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_FINANCIAL_PLAN": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_SCHOLARSHIP": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_SCHOLARSHIP_INFO": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ASSIST_APPLICATION_FEE": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_TUITION": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_SCHOLARSHIP": {
+		"addresses_needs": ["RESOLVE_FINANCIAL_UNCERTAINTY"],
+		"desired_outcomes": ["financial_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"ADVISE_CAREER": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_CAREER_INFO": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_TRAINING_ROADMAP": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+	"SEND_PARENT_CAREER_INFO": {
+		"addresses_needs": ["UNDERSTAND_CAREER_OUTLOOK"],
+		"desired_outcomes": ["career_clarity"],
+		"collects_information": False,
+		"readiness_target": "advice",
+	},
+}
+
+
+def semantic_action_metadata(code: str | None) -> dict[str, object]:
+	"""Return the bounded AI semantic contract for one canonical action."""
+	if str(code or "").strip().upper() == "ASK_DECISION_REASON":
+		return {
+			"addresses_needs": [],
+			"desired_outcomes": ["decision_clarity"],
+			"collects_information": True,
+			"readiness_target": "none",
+		}
+	metadata = _SEMANTIC_ACTION_METADATA.get(str(code or "").strip().upper())
+	if metadata is None:
+		return {
+			"addresses_needs": [],
+			"desired_outcomes": [],
+			"collects_information": False,
+			"readiness_target": "none",
+		}
+	return {key: list(value) if isinstance(value, list) else value for key, value in metadata.items()}
+
 
 def action_opportunities(code: str | None, category: str | None = None) -> tuple[str, ...]:
 	"""Return an explicitly governed opportunity mapping for one action code."""
@@ -397,6 +520,7 @@ def filter_eligible_actions(
 			if channel == "NONE" or channel not in parent_channels:
 				exclusions.append({"action": code, "reason": "PARENT_AUTHORITY_MISSING"})
 				continue
+		semantic = semantic_action_metadata(code)
 		actions.append(
 			{
 				"code": code,
@@ -429,7 +553,7 @@ def filter_eligible_actions(
 				),
 				"allowed_actors": allowed_actors,
 				"purpose": snapshot["purpose"],
-				"addresses_needs": [str(row["need"])] if row.get("need") else [],
+				**semantic,
 				"addresses_opportunities": list(opportunities),
 				"allowed_time_slots": _parse_time_slots(row.get("allowed_time_slots")),
 				"time_allowed": is_time_allowed(now, _parse_time_slots(row.get("allowed_time_slots"))),
