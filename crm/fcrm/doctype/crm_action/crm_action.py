@@ -146,7 +146,6 @@ def _has_references(code: str) -> bool:
 	for doctype, fieldname in (
 		("CRM Action Item", "action"),
 		("CRM Recommendation", "action"),
-		("CRM Recommendation Rule", "action"),
 	):
 		if frappe.db.exists("DocType", doctype) and frappe.db.exists(doctype, {fieldname: code}):
 			return True

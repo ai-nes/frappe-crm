@@ -189,20 +189,6 @@ describe('AI chat stream terminal handling', () => {
     })
   })
 
-  it('stores the structured student analysis envelope', () => {
-    const run = { finished: false }
-    const message = { text: '', streaming: true }
-    applyUIStreamEvent(
-      { type: 'data-student-analysis', data: { status: 'completed', anchor: { anchor_resource: 'CRM Student', anchor_id: 'STU-1' }, recommended_actions: ['Call'] } },
-      message,
-      run,
-      true,
-      () => {},
-    )
-    expect(message.analysisBrief.anchor.anchor_id).toBe('STU-1')
-    expect(message.analysisBrief.recommended_actions).toEqual(['Call'])
-  })
-
   it('stores a validated generic Student or School 360 envelope', () => {
     const run = { finished: false }
     const message = { text: '', streaming: true }
@@ -254,39 +240,4 @@ describe('AI chat stream terminal handling', () => {
     expect(message.overview360).toBeNull()
   })
 
-  it('forwards model-authored reasoning summaries separately from graph activity', () => {
-    const run = { finished: false }
-    const message = { text: '', streaming: true }
-    let reasoning = null
-
-    applyUIStreamEvent(
-      {
-        type: 'data-agent-reasoning',
-        data: {
-          node_id: 'run:analysis.reasoning:1',
-          evidence_count: 1,
-          reasoning: {
-            observed: '1 record / 13 fields',
-            analysis: 'The score is a signal.',
-            implication: 'Prioritize a focused follow-up.',
-            uncertainty: 'Intent is not proven.',
-            next_step: 'Ask an open question.',
-          },
-        },
-      },
-      message,
-      run,
-      true,
-      () => {},
-      () => {},
-      () => {},
-      () => {},
-      (value) => {
-        reasoning = value
-      },
-    )
-
-    expect(reasoning.reasoning.analysis).toBe('The score is a signal.')
-    expect(reasoning.evidence_count).toBe(1)
-  })
 })

@@ -18,9 +18,11 @@ import hashlib
 import json
 from collections.abc import Mapping
 
-CONTRACT_VERSION = 3
+CONTRACT_VERSION = 4
 
 INTERACTION_INTELLIGENCE_CONTRACT_VERSION = "interaction-intelligence-v1"
+INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION = "interaction-analysis-v2"
+DECISION_SIGNALS_SCHEMA_REVISION = "nba-decision-signals-v1"
 SILENCE_WINDOW_SECONDS = 15 * 60
 SUPPORTED_ANALYSIS_RESULT_STATES = frozenset({"no_intent", "intent_bearing", "unknown", "failed"})
 
@@ -55,6 +57,21 @@ INTERACTION_INTELLIGENCE_POLICY = {
 		"intent_bearing": "create_crm_intent",
 		"eligible_actor_roles": ("student",),
 	},
+	"intelligence": {
+		"placement": "settlement_payload_top_level_sibling_of_intent",
+		"digest_bound": False,
+		"states": ("intent_bearing", "no_intent"),
+		"fields": ("summary", "sentiment", "entities", "readiness", "concerns"),
+		"summary": "bounded_single_line_quote_free_model_prose",
+		"summary_max_chars": 600,
+		"sentiment_values": ("mixed", "negative", "neutral", "positive"),
+		"readiness_values": ("hesitant", "ready", "unknown"),
+		"max_concerns": 8,
+		"entities": "bounded_sanitized_string_map_reserved_keys_rejected",
+		"max_entity_types": 12,
+		"max_entity_values": 12,
+		"omitted_reproduces_legacy_digest": True,
+	},
 	"term": {
 		"semantic_key": "immutable",
 		"label": "mutable_display_only",
@@ -63,6 +80,11 @@ INTERACTION_INTELLIGENCE_POLICY = {
 	},
 	"compatibility": {
 		"supported_versions": (INTERACTION_INTELLIGENCE_CONTRACT_VERSION,),
+		"analysis_result_versions": (
+			INTERACTION_INTELLIGENCE_CONTRACT_VERSION,
+			INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
+		),
+		"decision_signals_schema_revision": DECISION_SIGNALS_SCHEMA_REVISION,
 		"unknown_version": "reject",
 		"same_version_additive_fields": "reject_at_boundary",
 	},
@@ -263,12 +285,14 @@ def _canonical_json(mapping):
 # Frozen expected value of CONTENT_HASH below -- both repos assert their own
 # computed hash equals this literal, so an unmirrored edit to either copy
 # fails that repo's own contract test without a cross-repo import.
-FROZEN_CONTENT_HASH = "873b67c10050aaab15dafd84cfc9bfd62a45febaf3a45d301bec684437699eb9"
+FROZEN_CONTENT_HASH = "ee6a9db7833f623c34e64db0ad657d657256eb2d76736dc3dab40e1cac9c9855"
 
 CONTENT_HASH = hashlib.sha256(
 	_canonical_json(
 		{
 			"contract_version": CONTRACT_VERSION,
+			"analysis_result_contract_version": INTERACTION_ANALYSIS_RESULT_CONTRACT_VERSION,
+			"decision_signals_schema_revision": DECISION_SIGNALS_SCHEMA_REVISION,
 			"interaction_intelligence_policy": INTERACTION_INTELLIGENCE_POLICY,
 			"interaction_type_mapping": INTERACTION_TYPE_MAPPING,
 			"outcome_field_mapping": OUTCOME_FIELD_MAPPING,

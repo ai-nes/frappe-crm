@@ -1,9 +1,9 @@
 {
-  "contract_version": "nba-evaluation-v1",
+  "contract_version": "nba-evaluation",
   "evaluation_id": "NBAEVAL-0002",
   "evaluation_key": "c4b2d1e3f506172839405162738495a6b7c8d9e0f1a2b3c4d5e6f7081920a3b4",
   "input_digest": "1010101010101010101010101010101010101010101010101010101010101010",
-  "engine_revision": "nba-engine-r1",
+  "engine_revision": "nba-engine",
   "run_status": "completed",
   "disposition": "WAIT",
   "reason_codes": [
@@ -12,6 +12,6 @@
   "revisit_at": "2026-09-06T02:00:00+00:00",
   "reevaluation_trigger": "cooldown_expired",
   "trace_ref": "nba-trace:NBAEVAL-0002",
-  "result_digest": "cb2c0d0bdb59272f9fb7dad917af2a02bb0ce3c57d86665615f7cc61e4aca523",
+  "result_digest": "cf1d0f5f430615b79c96b62a6ac52ee44b4a8090aac7b7aec577422529400e90",
   "recommendations": []
 }

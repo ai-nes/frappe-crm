@@ -17,6 +17,11 @@ from frappe.tests.utils import FrappeTestCase
 from crm.fcrm import intelligence_runs
 
 _RUN_TYPE = "CRM Student Analysis Run"
+_RULE_IDENTITY = {
+	"rule_version": "CURRENT",
+	"rule_version_digest": "a" * 64,
+	"ruleset_digest": "a" * 64,
+}
 
 
 class TestIntelligenceRunProvenance(FrappeTestCase):
@@ -32,7 +37,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 		for run in self._runs:
 			frappe.db.delete("CRM Analysis Run Stage", {"parent_run": run})
 			frappe.db.delete(_RUN_TYPE, {"name": run})
-		frappe.delete_doc("CRM Lead", self._student.name, force=True)
+		frappe.delete_doc("CRM Student", self._student.name, force=True)
 		if self._prev_service_user is None:
 			frappe.conf.pop(intelligence_runs.SERVICE_USER_KEY, None)
 		else:
@@ -40,13 +45,8 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 
 	def _make_student(self, name):
 		phone = "0" + "".join(str((int(c, 16) + 1) % 10) for c in frappe.generate_hash(length=9))
-		student = frappe.get_doc({"doctype": "CRM Lead", "student_name": name, "phone": phone})
-		previous = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous
+		student = frappe.get_doc({"doctype": "CRM Student", "full_name": name, "phone": phone})
+		student.insert(ignore_permissions=True)
 		return student
 
 	def _make_run(self, *, trigger, revision, **extra):
@@ -59,6 +59,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 			"trigger": trigger,
 			"status": "queued",
 			"request_fingerprint": frappe.generate_hash(length=32) + frappe.generate_hash(length=32),
+			**_RULE_IDENTITY,
 		}
 		if trigger == "automatic":
 			values["automatic_identity"] = frappe.generate_hash(length=48)
@@ -78,6 +79,7 @@ class TestIntelligenceRunProvenance(FrappeTestCase):
 				"status": "queued",
 				"expected_source_revision": str(revision),
 				"expected_source_digest": digest,
+				**_RULE_IDENTITY,
 			}
 		).insert(ignore_permissions=True)
 		return run

@@ -1,4 +1,4 @@
-"""Service-only boundary that assembles the NBA Evaluation v1 input envelope.
+"""Service-only boundary that assembles the current NBA Evaluation input envelope.
 
 The pure shaping and digest binding live in ``crm.fcrm.nba_evaluation_input``
 so they stay testable without a bench. This module gathers the live projection,
@@ -10,7 +10,8 @@ persists a row or triggers an evaluation.
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from typing import Any
 
 import frappe
 
@@ -20,7 +21,6 @@ from crm.fcrm.action_type_catalog import action_category
 from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import CONTRACT_VERSION, assemble_evaluation_input, input_digest
 from crm.fcrm.nba_timing import feasible_timing_domain, slot_bounds
-from crm.fcrm.rule_engine import active_rule_catalog
 from crm.services.action_outcome import (
 	ACTION_EFFECT_OVERRIDES,
 	CATEGORY_OUTCOME_EFFECTS,
@@ -449,10 +449,10 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	score = projection.get("score") or {}
 	academic = projection.get("academic") or {}
 	interaction_at = interaction.get("at")
-	if isinstance(interaction_at, datetime):
+	if isinstance(interaction_at, (date, datetime)):
 		interaction_at = interaction_at.isoformat()
 	application_deadline = application.get("deadline")
-	if isinstance(application_deadline, datetime):
+	if isinstance(application_deadline, (date, datetime)):
 		application_deadline = application_deadline.isoformat()
 	academic_signal = {
 		"gpa": academic.get("gpa"),
@@ -461,11 +461,13 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 	}
 	if academic.get("quality") == "current" and academic.get("evidence_ref"):
 		academic_signal["evidence_ref"] = str(academic["evidence_ref"])
+	consent = projection.get("is_opted_out")
+	consent_value = None if consent is None else bool(consent)
 	return {
 		"student_stage": projection.get("student_stage"),
 		"student": {
 			"stage": projection.get("student_stage"),
-			"is_opted_out": bool(projection.get("is_opted_out")),
+			"is_opted_out": consent_value,
 			"email_bounced": bool(projection.get("email_bounced")),
 		},
 		"intent": {"type": intent.get("type"), "polarity": intent.get("polarity")},
@@ -502,7 +504,7 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 			"consent": bool((projection.get("contactability") or {}).get("consent")),
 			"channels": list((projection.get("contactability") or {}).get("channels") or []),
 			"recipient_bound": (projection.get("contactability") or {}).get("recipient_bound") is not False,
-			"is_opted_out": bool(projection.get("is_opted_out")),
+			"is_opted_out": consent_value,
 			"email_bounced": bool(projection.get("email_bounced")),
 		},
 		"parent_authority": {
@@ -513,7 +515,7 @@ def _shape_context(projection: Mapping, *, student: str, now: datetime) -> dict:
 		# see `_decision_effect_signals`. Structured input for the kernel's
 		# opportunity suppression, not a raw outcome_code passthrough.
 		"decision_effects": _decision_effect_signals(student),
-		# Owner capacity has no approved scenario in v1. Preserve the member for
+		# Owner capacity has no approved scenario. Preserve the member for
 		# historical replay while emitting explicit unknown rather than inferring
 		# workload from action rows or assignments.
 		"owner_capacity": {"owner": None, "open_tasks": None},
@@ -577,7 +579,16 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 		action_id = nba_policy.wire_action_id(code)
 		revision = int(action.get("revision") or 1)
 		digest = _require_hex64(action.get("digest"), f"action_digest for {action_id}")
-		wire_actions.append({"action_id": action_id, "revision": revision, "digest": digest})
+		timing_domain = _timing_domain_for_action(action.get("allowed_time_slots"), timezone)
+		runtime_digest = canonical_digest({"normalized_timing_domain": timing_domain})
+		wire_actions.append(
+			{
+				"action_id": action_id,
+				"revision": revision,
+				"digest": digest,
+				"action_runtime_digest": runtime_digest,
+			}
+		)
 		actions.append(
 			{
 				"action_id": action_id,
@@ -589,6 +600,10 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"addresses_opportunities": list(action.get("addresses_opportunities") or []),
 				"allowed_channels": [channel] if channel not in (None, "NONE") else [],
 				"allowed_actors": list(action.get("allowed_actors") or []),
+				"addresses_needs": list(action.get("addresses_needs") or []),
+				"desired_outcomes": list(action.get("desired_outcomes") or []),
+				"collects_information": bool(action.get("collects_information")),
+				"readiness_target": action.get("readiness_target") or "none",
 				"execution_parameter_schema": {},
 				"default_parameters": {},
 				"hard_constraints": {
@@ -597,9 +612,8 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 					),
 					"academic": dict(action.get("academic_constraint") or {}),
 				},
-				"normalized_timing_domain": _timing_domain_for_action(
-					action.get("allowed_time_slots"), timezone
-				),
+				"normalized_timing_domain": timing_domain,
+				"action_runtime_digest": runtime_digest,
 				"metadata_state": "provisional",
 				"cost_band": _UNKNOWN_BAND,
 				"risk_band": _UNKNOWN_BAND,
@@ -607,9 +621,26 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"conflict_keys": [f"action:{code}"],
 			}
 		)
+	semantic_projection = {
+		action["action_id"]: {
+			field: action[field]
+			for field in (
+				"addresses_needs",
+				"desired_outcomes",
+				"collects_information",
+				"readiness_target",
+			)
+		}
+		for action in actions
+	}
+	semantic_digest = canonical_digest(
+		{key: semantic_projection[key] for key in sorted(semantic_projection)}
+	)
+	set_digest = nba_policy.eligible_set_digest(wire_actions)
 	return {
 		"set_revision": int(eligible.get("revision") or 0),
-		"set_digest": nba_policy.eligible_set_digest(wire_actions),
+		"set_digest": set_digest,
+		"semantic_digest": semantic_digest,
 		"actions": actions,
 		"exclusions": sorted(
 			list(eligible.get("exclusions") or []),
@@ -619,13 +650,34 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 
 
 def _shape_policies(
-	decision: Mapping, eligible: Mapping, eligible_set: Mapping, timing_digest: str, engine_revision: str
+	decision: Mapping,
+	eligible: Mapping,
+	eligible_set: Mapping,
+	timing_digest: str,
+	engine_revision: str,
+	*,
+	rule_catalog: Mapping[str, Any] | None = None,
 ) -> dict:
 	revision = eligible.get("revision") or 0
+	ruleset_identity = {}
+	if isinstance(rule_catalog, Mapping):
+		version = rule_catalog.get("rule_version")
+		digest = rule_catalog.get("ruleset_digest")
+		if version and digest:
+			ruleset_identity = {
+				"rule_version": str(version),
+				"rule_version_digest": str(digest),
+				"ruleset_digest": str(digest),
+			}
+	if not ruleset_identity:
+		frappe.throw("CRM Rule Settings has no complete active snapshot.", frappe.ValidationError)
 	return {
 		"library_revision": f"action-library-r{revision}",
-		"library_digest": eligible_set["set_digest"],
-		"eligibility_revision": "eligibility-reason-codes-v1",
+		"library_digest": canonical_digest({
+			"action_set_digest": eligible_set["set_digest"],
+			"semantic_digest": eligible_set["semantic_digest"],
+		}),
+		"eligibility_revision": "eligibility-reason-codes",
 		# The eligibility contract the engine binds is the reason-code vocabulary,
 		# not one student's exclusion list; that list is per-evaluation data.
 		"eligibility_digest": canonical_digest({"reason_codes": sorted(nba_policy.EXCLUSION_REASONS)}),
@@ -637,89 +689,42 @@ def _shape_policies(
 		"decision_policy": dict(decision.get("decision_policy") or {}),
 		"timing_revisions": [],
 		"timing_digest": _require_hex64(timing_digest, "timing_digest"),
-		# Kernel behaviour selector (see crm-agents' `evaluate`'s
-		# `_resolve_engine_revision`): folded into `policies_digest` ->
-		# `evaluation_key`, so a revision change earns a fresh identity instead
-		# of silently changing behaviour under an unchanged key. The caller
-		# resolves the value once per request and must reuse the exact same
-		# string for a replay identity check -- see `_stored_identity`.
+		"semantic_digest": eligible_set["semantic_digest"],
+		# Technical observability label only. It is not a behaviour selector.
 		"engine_revision": engine_revision,
-		"rule_engine": _active_rule_catalog("nba"),
+		# Durable NBA inputs carry only the immutable ruleset identity. The
+		# complete catalog is loaded by crm-agents through its service provider,
+		# so an embedded catalog cannot become a second runtime source.
+		"ruleset_identity": ruleset_identity,
 	}
 
 
-def _active_rule_catalog(feature_scope: str) -> dict:
-	"""Read the published rules from the single active CRM Rule Version."""
-	if not frappe.db.get_value("DocType", "CRM Rule", "name"):
-		return active_rule_catalog([], feature_scope=feature_scope)
-	if not frappe.db.get_value("DocType", "CRM Rule Version", "name"):
-		rows = frappe.get_all(
-			"CRM Rule",
-			filters={"status": "published", "enabled": 1},
-			fields=[
-				"rule_id",
-				"rule_group",
-				"rule_name",
-				"description",
-				"feature_scope",
-				"rule_type",
-				"gate_outcome",
-				"priority",
-				"action",
-				"target_actions",
-				"condition",
-				"revision",
-				"schema_version",
-			],
-			limit_page_length=1000,
-			order_by="priority desc, rule_id asc",
-		)
-		return active_rule_catalog(rows, feature_scope=feature_scope)
-	active_versions = frappe.get_all(
-		"CRM Rule Version",
-		filters={"is_active": 1, "status": "published"},
-		fields=["name", "version_id", "version_name", "ruleset_revision", "ruleset_digest"],
-		limit_page_length=2,
-		order_by="modified desc, name asc",
-	)
-	if len(active_versions) != 1:
-		return active_rule_catalog([], feature_scope=feature_scope)
-	version = active_versions[0]
-	rows = frappe.get_all(
-		"CRM Rule",
-		filters={"rule_version": version.name, "status": "published", "enabled": 1},
-		fields=[
-			"rule_version",
-			"rule_id",
-			"rule_group",
-			"rule_name",
-			"description",
-			"feature_scope",
-			"rule_type",
-			"gate_outcome",
-			"priority",
-			"action",
-			"target_actions",
-			"condition",
-			"revision",
-			"schema_version",
-		],
-		limit_page_length=1000,
-		order_by="priority desc, rule_id asc",
-	)
-	return active_rule_catalog(
-		rows,
-		feature_scope=feature_scope,
-		metadata={
-			"version_id": version.version_id,
-			"version_name": version.version_name,
-			"ruleset_revision": version.ruleset_revision,
-			"ruleset_digest": version.ruleset_digest,
-		},
+def _active_rule_catalog(
+	feature_scope: str,
+	*,
+	version: str | None = None,
+	expected_digest: str | None = None,
+	service_authorized: bool = False,
+) -> dict:
+	"""Read the complete snapshot selected by CRM Rule Settings."""
+	from crm.api.rule_engine import (
+		active_rule_catalog_internal,
+		get_active_rule_catalog,
+		get_rule_catalog,
 	)
 
+	if expected_digest:
+		if not version:
+			frappe.throw("Immutable CRM Rule lookup requires a rule version.", frappe.ValidationError)
+		return get_rule_catalog(version=version, expected_digest=expected_digest)
+	# Delegated request creation is already authorized against the Student, but
+	# must not expose the complete catalog through a service-only endpoint. Use
+	# the same authoritative pointer internally; service workers continue to
+	# use the permission-checked catalog API.
+	return get_active_rule_catalog(feature_scope=feature_scope) if service_authorized else active_rule_catalog_internal(feature_scope)
 
-_DEFAULT_ENGINE_REVISION = "nba-engine-r2"
+
+_DEFAULT_ENGINE_REVISION = "nba-engine"
 
 
 def build_nba_evaluation_input(
@@ -730,25 +735,28 @@ def build_nba_evaluation_input(
 	now: datetime | None = None,
 	service_authorized: bool = False,
 	engine_revision: str | None = None,
+	rule_version: str | None = None,
+	ruleset_digest: str | None = None,
 ) -> dict:
-	"""Assemble the NBA Evaluation v1 input for one student from live data.
+	"""Assemble the current NBA Evaluation input for one student from live data.
 
 	``service_authorized`` must only be set by a caller that has already run
 	``_require_agent_identity()``/``_service_only()`` on the current request --
 	see ``_projection``'s own docstring for why this bypasses the per-user
 	Student read check.
 
-	``engine_revision`` is the kernel behaviour selector a caller resolves once
-	up front (``crm.fcrm.nba_evaluations._engine_revision()`` for a fresh
-	request, or the run's own recorded ``engine_revision`` for a replay
-	identity check) and threads through unchanged; a caller with no revision
-	context of its own (e.g. the read-only evaluation-input inspector) falls
-	back to the live config default.
+	``engine_revision`` is retained as a technical observability field for the
+	public wire contract. It never selects behaviour; every request uses the
+	current unversioned engine label.
 	"""
 	moment = now or frappe.utils.now_datetime()
 	timezone = frappe.db.get_single_value("System Settings", "time_zone") or _DEFAULT_TIMEZONE
-	resolved_engine_revision = engine_revision or str(
-		frappe.conf.get("crm_nba_engine_revision") or _DEFAULT_ENGINE_REVISION
+	resolved_engine_revision = _DEFAULT_ENGINE_REVISION
+	rule_catalog = _active_rule_catalog(
+		"nba",
+		version=rule_version,
+		expected_digest=ruleset_digest,
+		service_authorized=service_authorized,
 	)
 
 	projection = _projection(student, int(minimum_revision), service_authorized=service_authorized, at=moment)
@@ -767,7 +775,14 @@ def build_nba_evaluation_input(
 		_shape_student(projection, now=moment, timezone=timezone),
 		_shape_context(projection, student=student, now=moment),
 		eligible_set,
-		_shape_policies(decision, eligible, eligible_set, canonical_digest(timing), resolved_engine_revision),
+		_shape_policies(
+			decision,
+			eligible,
+			eligible_set,
+			canonical_digest(timing),
+			resolved_engine_revision,
+			rule_catalog=rule_catalog,
+		),
 		now=moment,
 	)
 
@@ -849,6 +864,10 @@ def commit_nba_evaluation_result(
 	recommendations: object = None,
 	trace_entries: object = None,
 	terminal_reason: str | None = None,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
+	rule_decision: object = None,
 ):
 	"""Fenced terminal settlement that also writes the immutable Recommendation rows."""
 	from crm.fcrm import nba_evaluations
@@ -868,6 +887,10 @@ def commit_nba_evaluation_result(
 		recommendations=recommendations,
 		trace_entries=trace_entries,
 		terminal_reason=terminal_reason,
+		rule_version=rule_version,
+		rule_version_digest=rule_version_digest,
+		ruleset_digest=ruleset_digest,
+		rule_decision=rule_decision,
 	)
 
 
@@ -904,6 +927,10 @@ def settle_nba_evaluation(
 	terminal_reason: str | None = None,
 	engine_revision_settled: str | None = None,
 	recommendation_count: int = 0,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
+	rule_decision: object = None,
 ):
 	"""Terminal-only, fenced worker settlement with idempotent terminal replay."""
 	from crm.fcrm import nba_evaluations
@@ -919,4 +946,8 @@ def settle_nba_evaluation(
 		terminal_reason=terminal_reason,
 		engine_revision_settled=engine_revision_settled,
 		recommendation_count=int(recommendation_count or 0),
+		rule_version=rule_version,
+		rule_version_digest=rule_version_digest,
+		ruleset_digest=ruleset_digest,
+		rule_decision=rule_decision,
 	)

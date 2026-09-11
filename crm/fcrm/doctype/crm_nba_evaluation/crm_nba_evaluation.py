@@ -12,6 +12,8 @@ direct write.
 
 from frappe.model.document import Document
 
+from crm.fcrm.decision_trace import validate_rule_decision, validate_trace_entries
+
 
 class CRMNBAEvaluation(Document):
 	def validate(self):
@@ -23,3 +25,19 @@ class CRMNBAEvaluation(Document):
 			from frappe import ValidationError, throw
 
 			throw("NBA Evaluation recommendation count cannot be negative.", ValidationError)
+		try:
+			if self.evaluation_trace:
+				validate_trace_entries(self.evaluation_trace)
+			if self.rule_decision:
+				decision = validate_rule_decision(self.rule_decision)
+				identity = {
+					"rule_version": self.get("rule_version"),
+					"rule_version_digest": self.get("rule_version_digest"),
+					"ruleset_digest": self.get("ruleset_digest"),
+				}
+				if any(decision[field] != identity[field] for field in identity):
+					raise ValueError("NBA Evaluation rule decision identity is inconsistent.")
+		except ValueError as exc:
+			from frappe import ValidationError, throw
+
+			throw(str(exc), ValidationError)

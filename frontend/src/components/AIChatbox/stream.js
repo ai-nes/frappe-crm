@@ -15,7 +15,6 @@ export function applyUIStreamEvent(
   onApprovalRequired,
   onFinished,
   onActivity,
-  onReasoning,
 ) {
   if (!event) return
 
@@ -63,24 +62,6 @@ export function applyUIStreamEvent(
         ? JSON.parse(event.data || '{}')
         : event.data || {}
     if (activity && typeof activity === 'object') onActivity?.(activity)
-    return
-  }
-
-  if (event.type === 'data-agent-reasoning') {
-    const reasoning =
-      typeof event.data === 'string'
-        ? JSON.parse(event.data || '{}')
-        : event.data || {}
-    if (reasoning && typeof reasoning === 'object') onReasoning?.(reasoning)
-    return
-  }
-
-  if (event.type === 'data-student-analysis') {
-    const brief =
-      typeof event.data === 'string'
-        ? JSON.parse(event.data || '{}')
-        : event.data || {}
-    message.analysisBrief = brief
     return
   }
 

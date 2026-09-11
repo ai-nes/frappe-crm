@@ -18,6 +18,11 @@ from frappe.utils import now_datetime as frappe_now_datetime
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
+from crm.services.score_revision import (
+	RULESET_IDENTITY_FIELDS,
+	normalize_score_ruleset_identity,
+	score_input_ruleset_identity,
+)
 
 _EVENT_PATHS = {
 	"nba.evaluation.requested": "/api/v1/insight/nba-evaluation",
@@ -252,30 +257,86 @@ def dispatch_intent_domain_reevaluation(doc, method=None) -> None:
 		frappe.log_error(title="NBA domain re-evaluation dispatch failed", message=f"intent={doc.name}")
 
 
-def record_score_input_event(student: str, revision: int, *, event_id: str | None = None) -> str:
+def record_score_input_event(
+	student: str,
+	revision: int,
+	*,
+	event_id: str | None = None,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
+) -> str:
 	"""Coalesce only an undispatched scoring event; never rewrite a claim.
 
 	Uses the shared `CRM Agent Event` outbox with its own
 	`event_type`/`source_revision_bigint` lineage, so a burst of
 	Interaction/Intent/Student writes for one student collapses into a single
-	pending scoring event. The `event_type` filter partitions it into an
-	independent scoring namespace.
+	pending scoring event. The event carries only the creation-time ruleset
+	identity; the `event_type` filter partitions it into an independent scoring
+	namespace.
 	"""
 	if frappe.conf.get("crm_agents_scoring_events_enabled", 0) in (0, "0", False):
 		return ""
+	try:
+		revision = int(revision)
+		if revision < 0:
+			raise ValueError
+		identity = score_input_ruleset_identity(
+			student,
+			revision,
+			supplied={
+				"rule_version": rule_version,
+				"rule_version_digest": rule_version_digest,
+				"ruleset_digest": ruleset_digest,
+			},
+		)
+		identity = normalize_score_ruleset_identity(identity)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	fields = _event_fields()
+	event_identity_fields = set(RULESET_IDENTITY_FIELDS)
+	if not event_identity_fields.issubset(fields):
+		frappe.throw("CRM Agent Event ruleset identity fields are not migrated.", frappe.ValidationError)
+	event_payload = json.dumps(identity, sort_keys=True, separators=(",", ":"))
 	pending = frappe.db.sql(
-		"SELECT name FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
+		"SELECT name, source_revision_bigint, rule_version, rule_version_digest, ruleset_digest "
+		"FROM `tabCRM Agent Event` WHERE aggregate_doctype = %s AND aggregate_name = %s "
 		"AND event_type = %s AND status = 'pending' ORDER BY creation DESC LIMIT 1 FOR UPDATE",
 		("CRM Student", student, "student.score_input_changed.v1"),
 		as_dict=True,
 	)
 	if pending:
 		event_name = pending[0].name
-		frappe.db.sql(
-			"UPDATE `tabCRM Agent Event` SET source_revision = %s, source_revision_bigint = %s, "
-			"occurred_at = %s WHERE name = %s AND status = 'pending'",
-			(str(revision), revision, now_datetime(), event_name),
-		)
+		current_revision = int(pending[0].get("source_revision_bigint") or 0)
+		if current_revision == revision:
+			current_identity = normalize_score_ruleset_identity(
+				{field: pending[0].get(field) for field in RULESET_IDENTITY_FIELDS}
+			)
+			if current_identity != identity:
+				frappe.throw(
+					"CRM Agent Event ruleset identity does not match its creation-time identity.",
+					frappe.ValidationError,
+				)
+		elif current_revision < revision:
+			frappe.db.sql(
+				"UPDATE `tabCRM Agent Event` SET source_revision = %s, source_revision_bigint = %s, "
+				"rule_version = %s, rule_version_digest = %s, ruleset_digest = %s, payload = %s, "
+				"occurred_at = %s WHERE name = %s AND status = 'pending'",
+				(
+					str(revision),
+					revision,
+					identity["rule_version"],
+					identity["rule_version_digest"],
+					identity["ruleset_digest"],
+					event_payload,
+					now_datetime(),
+					event_name,
+				),
+			)
+		else:
+			normalize_score_ruleset_identity(
+				{field: pending[0].get(field) for field in RULESET_IDENTITY_FIELDS}
+			)
 	else:
 		event = frappe.get_doc(
 			{
@@ -287,6 +348,10 @@ def record_score_input_event(student: str, revision: int, *, event_id: str | Non
 				"source_revision": str(revision),
 				"source_revision_bigint": revision,
 				"contract_version": 1,
+				"rule_version": identity["rule_version"],
+				"rule_version_digest": identity["rule_version_digest"],
+				"ruleset_digest": identity["ruleset_digest"],
+				"payload": event_payload,
 				"occurred_at": now_datetime(),
 				"status": "pending",
 				"next_attempt_at": now_datetime(),
@@ -416,19 +481,50 @@ def send_daily_sla_director_digests() -> dict[str, int]:
 
 def _event_body(event) -> bytes:
 	payload = {
-			"event_id": event.event_id,
-			"event_type": event.event_type,
-			"aggregate_doctype": event.aggregate_doctype,
-			"aggregate_name": event.aggregate_name,
-			"source_revision": event.source_revision,
-			"contract_version": event.contract_version,
-			"occurred_at": str(event.occurred_at),
-		}
+		"event_id": event.event_id,
+		"event_type": event.event_type,
+		"aggregate_doctype": event.aggregate_doctype,
+		"aggregate_name": event.aggregate_name,
+		"source_revision": event.source_revision,
+		"contract_version": event.contract_version,
+		"occurred_at": str(event.occurred_at),
+	}
 	if event.event_type == "student.score_input_changed.v1":
+		if event.aggregate_doctype != "CRM Student" or not event.aggregate_name:
+			raise ValueError("Score input event aggregate is invalid.")
+		try:
+			revision = int(event.source_revision_bigint or event.source_revision)
+		except (TypeError, ValueError) as exc:
+			raise ValueError("Score input event revision is invalid.") from exc
+		if revision < 0:
+			raise ValueError("Score input event revision is invalid.")
+		try:
+			identity = normalize_score_ruleset_identity(
+				{field: getattr(event, field, None) for field in RULESET_IDENTITY_FIELDS}
+			)
+		except ValueError as exc:
+			raise ValueError("Score input event ruleset identity is invalid.") from exc
+		stored_payload = getattr(event, "payload", None)
+		if stored_payload:
+			try:
+				stored_payload = json.loads(stored_payload) if isinstance(stored_payload, str) else stored_payload
+			except (TypeError, ValueError) as exc:
+				raise ValueError("Score input event payload is invalid.") from exc
+			if not isinstance(stored_payload, dict) or set(stored_payload) != set(RULESET_IDENTITY_FIELDS):
+				raise ValueError("Score input event payload is not identity-only.")
+			try:
+				payload_identity = normalize_score_ruleset_identity(stored_payload)
+			except ValueError as exc:
+				raise ValueError("Score input event payload is invalid.") from exc
+			if payload_identity != identity:
+				raise ValueError("Score input event payload identity does not match its fields.")
 		payload.update(
 			{
-				"source_revision": int(event.source_revision_bigint or event.source_revision),
+				"student_id": event.aggregate_name,
+				"score_input_revision": revision,
+				"source_revision": revision,
 				"contract_version": 1,
+				**identity,
 			}
 		)
 	return json.dumps(

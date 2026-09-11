@@ -88,3 +88,8 @@ class TestGoogleAuth(FrappeTestCase):
 		finally:
 			if frappe.db.exists("User", email):
 				frappe.delete_doc("User", email, force=True)
+
+	@patch.object(google_auth, "_config", return_value={"default_role": "Business Admin"})
+	def test_business_admin_cannot_be_google_oauth_default_role(self, _config):
+		with self.assertRaises(frappe.ValidationError):
+			google_auth._default_role()

@@ -407,6 +407,15 @@ def _ensure_interaction_analysis_run(
 		f"{interaction}:{episode_key}:{source_revision}:{source_digest}".encode()
 	).hexdigest()
 	existing = frappe.db.get_value("CRM Interaction Analysis Run", {"run_key": run_key}, "name")
+	if existing:
+		# Idempotent redelivery of an already-materialized run must not require
+		# the *current* pointer. Its worker is fenced to the identity captured on
+		# the original creation, so an active-catalog outage cannot turn a replay
+		# into a new unpinned decision job.
+		return existing
+	from crm.fcrm.intelligence_runs import _captured_ruleset_identity
+
+	ruleset_identity = _captured_ruleset_identity()
 	if not existing:
 		existing = (
 			frappe.get_doc(
@@ -418,6 +427,7 @@ def _ensure_interaction_analysis_run(
 					"source_revision": source_revision,
 					"source_digest": source_digest,
 					"status": "queued",
+					**ruleset_identity,
 				}
 			)
 			.insert(ignore_permissions=True)
@@ -436,6 +446,7 @@ def _ensure_interaction_analysis_run(
 				"stage_generation": 0,
 				"expected_source_revision": str(source_revision),
 				"expected_source_digest": source_digest,
+				**ruleset_identity,
 			}
 		).insert(ignore_permissions=True)
 		if frappe.conf.get("crm_agents_interaction_analysis_events_enabled", 0) not in (0, "0", False):
@@ -452,7 +463,7 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 	if not service_user or frappe.session.user != service_user:
 		_interaction_fail("UNAUTHORIZED", "Evidence is restricted to the CRM-Agents capability.")
 	parent = frappe.db.get_value(
-		"CRM Interaction", interaction, ["source_revision", "evidence_digest"], as_dict=True
+		"CRM Interaction", interaction, ["source_revision", "evidence_digest", "student"], as_dict=True
 	)
 	if (
 		not parent
@@ -470,7 +481,7 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 	)
 	if not evidence_rows:
 		_interaction_fail("STALE_SOURCE_REVISION", "Evidence for the requested revision is unavailable.")
-	return {
+	result = {
 		"evidence_digest": expected_digest,
 		"source_revision": expected_revision,
 		"turns": [
@@ -482,6 +493,18 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 			for row in evidence_rows
 		],
 	}
+	# Consent is a bounded, authoritative fact needed by global ``all``
+	# guardrails.  It is safe to expose to the service worker without returning
+	# the student's identity or any other CRM fields.
+	if parent and parent.student:
+		consent = frappe.db.get_value("CRM Student", parent.student, "is_opted_out")
+		result["student"] = {
+			# Preserve an unavailable value as ``None`` so the agent fact builder
+			# applies the catalog's explicit unknown policy instead of turning a
+			# missing source field into a false consent assertion.
+			"is_opted_out": None if consent is None else bool(consent),
+		}
+	return result
 
 
 def _normalize_external_turns(value) -> list[dict]:

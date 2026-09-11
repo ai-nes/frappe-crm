@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["student", "crm_student", "source_revision", "source_digest", "analysis_input_digest", "candidate_revision", "admission_decision", "admission_event", "automatic_identity", "trigger", "status", "request_fingerprint", "requested_by", "policy_revision", "model_revision", "terminal_reason"],
+ "field_order": ["student", "crm_student", "source_revision", "source_digest", "analysis_input_digest", "candidate_revision", "admission_decision", "admission_event", "automatic_identity", "trigger", "status", "request_fingerprint", "requested_by", "policy_revision", "model_revision", "rule_version", "rule_version_digest", "ruleset_digest", "terminal_reason"],
  "fields": [
   {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
   {"fieldname": "crm_student", "fieldtype": "Link", "label": "Canonical Student", "options": "CRM Student", "read_only": 1},
@@ -20,6 +20,9 @@
   {"fieldname": "requested_by", "fieldtype": "Link", "label": "Requested By", "options": "User", "read_only": 1},
   {"fieldname": "policy_revision", "fieldtype": "Data", "label": "Policy Revision", "read_only": 1},
   {"fieldname": "model_revision", "fieldtype": "Data", "label": "Model Revision", "read_only": 1},
+  {"fieldname": "rule_version", "fieldtype": "Data", "label": "Rule Version", "read_only": 1},
+  {"fieldname": "rule_version_digest", "fieldtype": "Data", "label": "Rule Version Digest", "length": 64, "read_only": 1},
+  {"fieldname": "ruleset_digest", "fieldtype": "Data", "label": "Ruleset Digest", "length": 64, "read_only": 1},
   {"fieldname": "terminal_reason", "fieldtype": "Small Text", "label": "Terminal Reason", "read_only": 1}
  ],
  "module": "FCRM",

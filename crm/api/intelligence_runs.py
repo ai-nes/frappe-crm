@@ -97,6 +97,10 @@ def settle_analysis_stage(
 	model_revision: str | None = None,
 	result_digest: str | None = None,
 	report=None,
+	rule_decision=None,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
 ):
 	"""Terminal-only, fenced worker settlement.
 
@@ -105,6 +109,8 @@ def settle_analysis_stage(
 	lease.  ``dead_lettered`` is a normal terminal settlement for exhausted
 	retries and must include a bounded terminal reason.
 	"""
+	if isinstance(rule_decision, str):
+		rule_decision = frappe.parse_json(rule_decision)
 	return intelligence_runs.settle_stage(
 		run_type=run_type,
 		run_id=run_id,
@@ -120,6 +126,10 @@ def settle_analysis_stage(
 		model_revision=model_revision,
 		result_digest=result_digest,
 		report=report,
+		rule_decision=rule_decision,
+		rule_version=rule_version,
+		rule_version_digest=rule_version_digest,
+		ruleset_digest=ruleset_digest,
 	)
 
 

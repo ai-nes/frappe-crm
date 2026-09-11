@@ -1,5 +1,5 @@
 {
-  "contract_version": "nba-evaluation-v1",
+  "contract_version": "nba-evaluation",
   "evaluation_id": "NBAEVAL-0001",
   "evaluation_key": "3d6dd720a9b29997690599d7063a4d4b9f97c6fb93f3a30cc2149275c30761a5",
   "evaluation_clock": "2026-09-04T02:00:00+00:00",
@@ -169,15 +169,15 @@
     ]
   },
   "policies": {
-    "library_revision": "action-library-r7",
+    "library_revision": "action-library",
     "library_digest": "5555555555555555555555555555555555555555555555555555555555555555",
-    "eligibility_revision": "eligibility-r4",
+    "eligibility_revision": "eligibility-reason-codes",
     "eligibility_digest": "6666666666666666666666666666666666666666666666666666666666666666",
-    "decision_revision": "nba-decision-policy-r2",
+    "decision_revision": "nba-decision-policy",
     "decision_digest": "7777777777777777777777777777777777777777777777777777777777777777",
     "timing_revisions": [
-      "timing-call-r1",
-      "timing-document-r1"
+      "timing-call",
+      "timing-document"
     ],
     "timing_digest": "8888888888888888888888888888888888888888888888888888888888888888"
   }

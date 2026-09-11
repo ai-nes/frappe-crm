@@ -1,17 +1,11 @@
-"""Create the dedicated role used to manage the Frappe CRM Rule registry."""
+"""Retired historical Business Admin patch.
 
-import frappe
-
-from crm.fcrm.role_policy import BUSINESS_ADMIN_ROLE
+The module and its registration stay in place so an already-applied patch
+chain remains stable. The current control plane uses Administrator for rule
+management and AI Service for read-only catalog access; this historical step
+must not create a new Business Admin role on a later migrate.
+"""
 
 
 def execute():
-	if frappe.db.exists("Role", BUSINESS_ADMIN_ROLE):
-		return
-	frappe.get_doc(
-		{
-			"doctype": "Role",
-			"role_name": BUSINESS_ADMIN_ROLE,
-			"desk_access": 1,
-		}
-	).insert(ignore_permissions=True)
+	return

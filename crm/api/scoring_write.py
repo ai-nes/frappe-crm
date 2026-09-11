@@ -4,8 +4,9 @@ score calculation result.
 Replaces the old REST create-CRM-Score-History + PATCH-CRM-Student two-step
 (non-atomic, no ordering guarantee) with a single locked, idempotent,
 compare-and-swap write. Ordering/CAS uses only the total-order tuple
-`(source_score_input_revision, policy_revision)`; `policy_hash` is recorded
-for provenance/audit and never participates in the comparison.
+`(source_score_input_revision, policy_revision)`; `policy_hash` and the
+creation-time ruleset identity are recorded for provenance/audit and never
+participate in the comparison.
 """
 
 from __future__ import annotations
@@ -13,6 +14,12 @@ from __future__ import annotations
 import frappe
 from frappe import _
 from frappe.utils import now_datetime
+
+from crm.services.score_revision import (
+	RULESET_IDENTITY_FIELDS,
+	normalize_score_ruleset_identity,
+	score_input_ruleset_identity,
+)
 
 
 def _fixture_score_site_allowed() -> bool:
@@ -61,6 +68,9 @@ def append_score_if_current(
 	details: list | str | None = None,
 	triggered_by_doctype: str = "",
 	triggered_by: str = "",
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
 ) -> dict:
 	"""Append one CRM Score History row and update the current score
 	projection, only if the incoming (revision, policy_revision) tuple is
@@ -91,11 +101,47 @@ def append_score_if_current(
 	)
 	if not row:
 		frappe.throw(_("Student not found."), frappe.DoesNotExistError)
+	try:
+		ruleset_identity = score_input_ruleset_identity(
+			student,
+			source_score_input_revision,
+			supplied={
+				"rule_version": rule_version,
+				"rule_version_digest": rule_version_digest,
+				"ruleset_digest": ruleset_digest,
+			},
+			require_supplied=True,
+		)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 
 	idempotency_key = f"{student}:{source_score_input_revision}:{policy_revision}"
-	existing = frappe.db.get_value("CRM Score History", {"idempotency_key": idempotency_key}, "name")
+	existing = frappe.db.get_value(
+		"CRM Score History",
+		{"idempotency_key": idempotency_key},
+		["name", *RULESET_IDENTITY_FIELDS],
+		as_dict=True,
+	)
 	if existing:
-		return {"history": existing, "applied": False, "duplicate": True, "stale": False}
+		try:
+			existing_identity = normalize_score_ruleset_identity(
+				{field: existing.get(field) for field in RULESET_IDENTITY_FIELDS},
+				allow_empty=True,
+			)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
+		if existing_identity != ruleset_identity:
+			frappe.throw(
+				_("Score History ruleset identity does not match the CAS request."),
+				frappe.ValidationError,
+			)
+		return {
+			"history": existing.name,
+			"applied": False,
+			"duplicate": True,
+			"stale": False,
+			**ruleset_identity,
+		}
 
 	current_tuple = (
 		int(row[0].applied_score_input_revision or 0),
@@ -110,6 +156,7 @@ def append_score_if_current(
 			"stale": True,
 			"current_revision": current_tuple[0],
 			"current_policy_revision": current_tuple[1],
+			**ruleset_identity,
 		}
 
 	payload = {
@@ -119,6 +166,7 @@ def append_score_if_current(
 		"source_score_input_revision": source_score_input_revision,
 		"policy_revision": policy_revision,
 		"policy_hash": policy_hash,
+		**ruleset_identity,
 		"idempotency_key": idempotency_key,
 		"scoring_time": scoring_time or now_datetime().strftime("%Y-%m-%d %H:%M:%S"),
 		"fit_score": fit_score,
@@ -147,7 +195,13 @@ def append_score_if_current(
 		},
 		update_modified=False,
 	)
-	return {"history": history.name, "applied": True, "duplicate": False, "stale": False}
+	return {
+		"history": history.name,
+		"applied": True,
+		"duplicate": False,
+		"stale": False,
+		**ruleset_identity,
+	}
 
 
 def append_local_fixture_score(**values) -> dict:

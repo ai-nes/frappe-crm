@@ -4,6 +4,9 @@
 """Tests for the compare-and-swap score write command and
 score_input_revision tracking."""
 
+from typing import ClassVar
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -12,6 +15,12 @@ from crm.services.score_revision import bump_score_input_revision
 
 
 class TestScoringWrite(FrappeTestCase):
+	_RULESET_IDENTITY: ClassVar[dict[str, str]] = {
+		"rule_version": "RULES-2026-09",
+		"rule_version_digest": "a" * 64,
+		"ruleset_digest": "a" * 64,
+	}
+
 	def setUp(self):
 		frappe.set_user("Administrator")
 		self._previous_conf = frappe.conf.get("crm_agents_service_user")
@@ -144,6 +153,40 @@ class TestScoringWrite(FrappeTestCase):
 		student.reload()
 		self.assertEqual(student.latest_score, 45.0)
 		self.assertEqual(student.applied_policy_revision, 2)
+
+	def test_cas_persists_creation_time_ruleset_identity(self):
+		student = self._make_student("_Test SW Student Identity")
+		template = self._make_template("_Test SW Template Identity")
+		payload = self._payload(student.name, template, **self._RULESET_IDENTITY)
+
+		with patch("crm.api.scoring_write.score_input_ruleset_identity", return_value=self._RULESET_IDENTITY):
+			result = append_score_if_current(**payload)
+
+		self.assertTrue(result["applied"])
+		stored = frappe.db.get_value(
+			"CRM Score History",
+			result["history"],
+			["rule_version", "rule_version_digest", "ruleset_digest"],
+			as_dict=True,
+		)
+		self.assertEqual(dict(stored), self._RULESET_IDENTITY)
+
+	def test_cas_duplicate_rejects_a_different_ruleset_identity(self):
+		student = self._make_student("_Test SW Student Identity Fence")
+		template = self._make_template("_Test SW Template Identity Fence")
+		first_payload = self._payload(student.name, template, **self._RULESET_IDENTITY)
+		second_identity = {
+			"rule_version": "RULES-2026-10",
+			"rule_version_digest": "b" * 64,
+			"ruleset_digest": "b" * 64,
+		}
+		second_payload = self._payload(student.name, template, **second_identity)
+
+		with patch("crm.api.scoring_write.score_input_ruleset_identity", return_value=self._RULESET_IDENTITY):
+			append_score_if_current(**first_payload)
+		with patch("crm.api.scoring_write.score_input_ruleset_identity", return_value=second_identity):
+			with self.assertRaises(frappe.ValidationError):
+				append_score_if_current(**second_payload)
 
 	def test_bump_score_input_revision_is_monotonic_per_student(self):
 		student = self._make_student("_Test SW Student Bump")

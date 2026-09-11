@@ -1,0 +1,25 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-09-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["active_rule_version", "pointer_revision", "active_ruleset_digest", "changed_at", "changed_by"],
+ "fields": [
+  {"fieldname": "active_rule_version", "fieldtype": "Link", "label": "Active Rule Version", "options": "CRM Rule Version", "read_only": 1},
+  {"fieldname": "pointer_revision", "fieldtype": "Int", "label": "Pointer Revision", "default": "0", "read_only": 1, "non_negative": 1},
+  {"fieldname": "active_ruleset_digest", "fieldtype": "Data", "label": "Active Ruleset Digest", "length": 64, "read_only": 1},
+  {"fieldname": "changed_at", "fieldtype": "Datetime", "label": "Changed At", "read_only": 1},
+  {"fieldname": "changed_by", "fieldtype": "Link", "label": "Changed By", "options": "User", "read_only": 1}
+ ],
+ "issingle": 1,
+ "module": "FCRM",
+ "name": "CRM Rule Settings",
+ "permissions": [
+  {"read": 1, "role": "Administrator"},
+  {"read": 1, "role": "AI Service"}
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

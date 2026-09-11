@@ -76,6 +76,15 @@ class TestSessionRoleContract(FrappeTestCase):
 		self.assertEqual(resolve_crm_profile({"Admissions Director"}), "admissions_director")
 		self.assertIsNone(resolve_crm_profile({"Giám đốc Tuyển sinh"}))
 
+	def test_business_admin_is_not_an_active_crm_profile(self):
+		self.assertNotIn("Business Admin", CRM_ALLOWED_ROLES)
+		self.assertIsNone(resolve_crm_profile({"Business Admin"}))
+		self.assertEqual(classify_role_set({"Business Admin"}), "unmapped")
+		self.assertEqual(capabilities_for_roles({"Business Admin"}), frozenset())
+		self.assertEqual(get_crm_user_role({"Business Admin"}), ("", None))
+		with self.assertRaises(frappe.PermissionError):
+			_session_role_flags({"Business Admin"})
+
 	def test_retired_aliases_fail_closed(self):
 		for roles in (
 			{"Counseller"},
@@ -129,7 +138,6 @@ class TestSessionRoleContract(FrappeTestCase):
 			({"Marketing"}, "marketing", "Marketing"),
 			({"Lead Sale"}, "lead_sales", "Lead Sale"),
 			({"Admissions Director"}, "admissions_director", "Admissions Director"),
-			({"Business Admin"}, "business_admin", "Business Admin"),
 		):
 			with self.subTest(roles=roles):
 				flags = _session_role_flags(roles)
@@ -158,7 +166,7 @@ class TestSessionRoleContract(FrappeTestCase):
 			frozenset({"student.execute", "recommendation.decide", "action.execute"}),
 		)
 		self.assertIn("system.configure", capabilities_for_roles({"System Manager"}))
-		self.assertEqual(capabilities_for_roles({"Business Admin"}), frozenset({"rule.manage"}))
+		self.assertEqual(capabilities_for_roles({"Business Admin"}), frozenset())
 		self.assertEqual(capabilities_for_roles({"CRM Data Steward"}), frozenset())
 		with self.assertRaises(frappe.PermissionError):
 			_session_role_flags({"Marketing", "CRM Data Steward"})

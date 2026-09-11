@@ -16,6 +16,9 @@
   "source_score_input_revision",
   "policy_revision",
   "policy_hash",
+  "rule_version",
+  "rule_version_digest",
+  "ruleset_digest",
   "idempotency_key",
   "scoring_time",
   "scoring_date",
@@ -87,6 +90,29 @@
    "label": "Policy Hash",
    "read_only": 1,
    "description": "Immutable content hash of the policy used -- provenance/audit only, never part of ordering/CAS."
+  },
+  {
+   "fieldname": "rule_version",
+   "fieldtype": "Data",
+   "label": "Rule Version",
+   "read_only": 1,
+   "description": "Immutable business ruleset snapshot selected when the score input revision was created."
+  },
+  {
+   "fieldname": "rule_version_digest",
+   "fieldtype": "Data",
+   "label": "Rule Version Digest",
+   "length": 64,
+   "read_only": 1,
+   "description": "SHA-256 identity of the immutable ruleset snapshot used for this score."
+  },
+  {
+   "fieldname": "ruleset_digest",
+   "fieldtype": "Data",
+   "label": "Ruleset Digest",
+   "length": 64,
+   "read_only": 1,
+   "description": "Ruleset digest fenced from score-input creation through CAS write."
   },
   {
    "fieldname": "idempotency_key",

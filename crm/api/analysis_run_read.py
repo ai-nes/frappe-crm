@@ -87,7 +87,12 @@ def _score(student: str) -> dict:
 
 
 @frappe.whitelist()
-def get_student_360(student: str, request: bool = False, refresh: bool = False) -> dict:
+def get_student_360(
+	student: str,
+	request: bool = False,
+	refresh: bool = False,
+	include_consent: bool = False,
+) -> dict:
 	"""Return live Sales blocks and optionally request the current snapshot."""
 	student = _student_scope(student)
 	_revision, digest = _source("student", student)
@@ -119,6 +124,12 @@ def get_student_360(student: str, request: bool = False, refresh: bool = False) 
 	items = {item["key"]: item for item in score["items"]}
 	is_v2 = bool(displayed.get("history_coverage") or displayed.get("intelligence_refs"))
 	payload = {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 if is_v2 else STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}
+	if include_consent is True or str(include_consent).strip().lower() in {"1", "true", "yes", "on"}:
+		# The Copilot fact builder needs this one bounded, source-owned boolean
+		# to evaluate the global ``all`` guardrail.  Keep it opt-in so the normal
+		# dashboard contract does not expose consent metadata unnecessarily.
+		consent = frappe.db.get_value("CRM Student", student, "is_opted_out")
+		payload["is_opted_out"] = None if consent is None else bool(consent)
 	if displayed.get("history_coverage"):
 		payload["history_coverage"] = displayed["history_coverage"]
 	if displayed.get("intelligence_refs"):

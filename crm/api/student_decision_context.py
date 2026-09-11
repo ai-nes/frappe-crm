@@ -425,8 +425,8 @@ def _score_projection(row: dict) -> dict:
 	`append_score_if_current` already uses for its CAS write, so a consumer
 	never needs to duplicate that comparison logic to know whether the
 	last-written score reflects the student's current facts and policy.
-	`required_revision` is always None today -- no Recommendation/RCM rule yet
-	declares "fresh score mandatory"; it is reserved so a future rule can
+	`required_revision` is always None today -- no active CRM Rule yet declares
+	"fresh score mandatory"; it is reserved so a future rule can
 	populate it without another contract change.
 	"""
 	policy = get_active_policy() or {}

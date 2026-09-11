@@ -136,11 +136,15 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		), patch("crm.api.nba_evaluation.frappe.db.get_single_value", return_value="Asia/Ho_Chi_Minh"), patch(
 			"crm.api.nba_evaluation.nba_policy.get_active_decision_policy", return_value=decision
 		), patch("crm.fcrm.nba_policy._parent_authority_wire_channels", return_value=set()):
-			first = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
-			second = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
+			with patch(
+				"crm.api.nba_evaluation._active_rule_catalog",
+				return_value={"rule_version": "CURRENT", "ruleset_digest": "a" * 64},
+			):
+				first = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
+				second = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
 
 		print(json.dumps(first, sort_keys=True))
-		self.assertEqual(first["contract_version"], "nba-evaluation-v2")
+		self.assertEqual(first["contract_version"], "nba-evaluation")
 		self.assertEqual(first["context"]["student_stage"], "Connected")
 		self.assertNotIn("lifecycle", first["context"])
 		self.assertTrue(first["student"]["context_digest"])
@@ -158,6 +162,10 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		self.assertEqual(first["context"]["work_in_flight"], ["CALL"])
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["action_code"], "CALL")
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["addresses_opportunities"], ["ENGAGE_OR_REENGAGE"])
+		self.assertIn("semantic_digest", first["eligible_action_set"])
+		self.assertEqual(first["policies"]["semantic_digest"], first["eligible_action_set"]["semantic_digest"])
+		self.assertIn("ruleset_identity", first["policies"])
+		self.assertNotIn("rule_engine", first["policies"])
 		self.assertTrue(all(action["addresses_opportunities"] for action in first["eligible_action_set"]["actions"]))
 
 
