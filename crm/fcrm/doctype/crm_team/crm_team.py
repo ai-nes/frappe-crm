@@ -35,22 +35,15 @@ class CRMTeam(Document):
 		if not self.team_lead_staff:
 			return
 		staff = frappe.db.get_value(
-			"CRM Staff", self.team_lead_staff, ["name", "full_name", "is_active"], as_dict=True
+			"CRM Staff", self.team_lead_staff, ["name", "full_name", "is_active", "campus"], as_dict=True
 		)
 		if not staff:
 			frappe.throw(_("Trưởng nhóm không tồn tại."), frappe.ValidationError)
 		if not staff.is_active:
 			frappe.throw(_("Trưởng nhóm phải là nhân sự đang hoạt động."), frappe.ValidationError)
-		if self.name and not frappe.db.exists(
-			"CRM Team Membership",
-			{
-				"team": self.name,
-				"parent": self.team_lead_staff,
-				"parenttype": "CRM Staff",
-			},
-		):
+		if staff.campus != self.campus:
 			frappe.throw(
-				_("Trưởng nhóm phải là thành viên đang hoạt động của Team."),
+				_("Trưởng nhóm và Team phải cùng Cơ sở."),
 				frappe.ValidationError,
 			)
 

@@ -20,6 +20,8 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 			province_call.kwargs["filters"],
 			{"province_code": ["in", list(market.PRIORITY_PROVINCE_CODES)]},
 		)
+		self.assertIn("VN_KHANH_HOA", market.PRIORITY_PROVINCE_CODES)
+		self.assertNotIn("56", market.PRIORITY_PROVINCE_CODES)
 
 	def test_school_limit_defaults_to_five(self):
 		with (
@@ -82,6 +84,31 @@ class TestDirectorMarketIntelligence(FrappeTestCase):
 		)
 
 		self.assertEqual(response["data"]["provinces"][0]["highSchools"][0]["id"], "01-00123-015")
+
+	def test_new_province_code_is_projected_to_geometry_code(self):
+		sources = {
+			"provinces": [{
+				"name": "province-1", "province_code": "VN_KHANH_HOA", "province_name": "Khánh Hòa",
+				"region": "MT",
+			}],
+			"schools": [{
+				"name": "school-1", "school_name": "THPT Test", "school_code": "15",
+				"province": "province-1", "ward": "ward-1",
+			}],
+			"wards": [{"name": "ward-1", "ward_code": "00123", "ward_name": "Phường Test"}],
+			"students": [], "snapshots": [],
+		}
+
+		response = market._build_overview(
+			sources, set(), admission_year="2026", region="all", metric="opportunity",
+			include_schools=True, school_limit=6,
+		)
+
+		province = response["data"]["provinces"][0]
+		self.assertEqual(province["code"], "56")
+		self.assertEqual(province["regionKey"], "central")
+		self.assertEqual(province["highSchools"][0]["id"], "56-00123-015")
+		self.assertEqual(market._region_key("MT", "VN_DAK_LAK"), "highlands")
 
 	def test_student_source_failure_keeps_student_aggregates_unavailable(self):
 		sources = {

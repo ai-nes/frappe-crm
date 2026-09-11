@@ -264,9 +264,7 @@ def _canonical_lead_rank(row: Any) -> tuple[int, str, str, str]:
 def _classify_resolution_details(lead, identifiers: dict[str, str]) -> dict[str, Any]:
 	"""Classify Student matches and Lead duplicates without closing every copy."""
 	student_matches = _candidate_rows("CRM Student", identifiers)
-	student_matches = [
-		row for row in student_matches if _duplicate_match_type(identifiers, row)
-	]
+	student_matches = [row for row in student_matches if _duplicate_match_type(identifiers, row)]
 	if len(student_matches) > 1:
 		return {
 			"resolution": "DUPLICATE",
@@ -360,9 +358,7 @@ def preview_lead(lead: str) -> dict[str, Any]:
 		}
 	classification = _classify_resolution_details(lead_doc, identifiers)
 	return {
-		"status": "PROCESSED"
-		if classification["resolution"] in ADVANCING_RESOLUTIONS
-		else "CLOSED",
+		"status": "PROCESSED" if classification["resolution"] in ADVANCING_RESOLUTIONS else "CLOSED",
 		"resolution": "PENDING",
 		"lead": lead_doc.name,
 		"target_student": classification.get("target_student"),
@@ -461,12 +457,14 @@ def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: 
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not active at the Lead campus.")
 	if not staff.user or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale user is not enabled.")
-	if resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"} and not is_team_lead_target:
+	if (
+		resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"}
+		and not is_team_lead_target
+	):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target staff is not a Sale or CTV Sale recipient.")
 
-	if not any(
-		membership.staff == owner_staff
-		and (membership.function in RECIPIENT_FUNCTIONS or (is_team_lead_target and membership.function == "Lead Sale"))
+	if not is_team_lead_target and not any(
+		membership.staff == owner_staff and membership.function in RECIPIENT_FUNCTIONS
 		for membership in _active_memberships(target_team_id)
 	):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not an active member of the target Team.")

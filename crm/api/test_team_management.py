@@ -8,9 +8,10 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.api.team_management import (
 	RECIPIENT_FUNCTIONS,
+	_assert_staff_can_be_team_member,
+	_assert_staff_not_in_other_team,
 	_can_manage_leads,
 	_can_manage_team,
-	_ensure_created_team_lead_membership,
 	_initials,
 	_is_global,
 	_member_role,
@@ -76,19 +77,26 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 				with patch("crm.api.team_management._actor_context", return_value=context):
 					self.assertEqual(_require_access(write=True)["profile"], profile)
 
-	def test_created_team_lead_is_added_with_new_team_scope(self):
-		context = {"teams": ["T-1"], "campuses": ["C-1"]}
-		team = SimpleNamespace(name="T-2", campus="C-2")
+	def test_staff_already_in_another_team_is_rejected(self):
+		staff = SimpleNamespace(name="S-1")
+		with patch(
+			"crm.api.team_management._active_memberships",
+			return_value=[SimpleNamespace(staff="S-1", team="T-1")],
+		):
+			with self.assertRaises(frappe.ValidationError) as error:
+				_assert_staff_not_in_other_team(staff, "T-2")
 
-		with patch("crm.api.team_management._save_membership") as save_membership:
-			_ensure_created_team_lead_membership(team, "S-1", context)
+		self.assertEqual(error.exception.code, "STAFF_ALREADY_ASSIGNED")
 
-		args = save_membership.call_args.args
-		self.assertEqual(args[:6], ("S-1", "T-2", "Sale", False, None, True))
-		self.assertEqual(args[6]["teams"], ["T-1", "T-2"])
-		self.assertEqual(args[6]["campuses"], ["C-1", "C-2"])
+	def test_lead_sale_is_manager_only(self):
+		staff = SimpleNamespace(name="S-1", user="lead@example.com")
+		with patch("crm.api.team_management.frappe.get_roles", return_value=["Lead Sale"]):
+			with self.assertRaises(frappe.ValidationError) as error:
+				_assert_staff_can_be_team_member(staff)
 
-	def test_new_team_is_inserted_before_selected_lead_pointer_is_validated(self):
+		self.assertEqual(error.exception.code, "LEAD_SALE_MANAGER_ONLY")
+
+	def test_new_team_adds_selected_lead_then_keeps_team_lead_pointer(self):
 		class FakeTeam:
 			name = "T-2"
 			team_lead_staff = None
@@ -97,6 +105,8 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 				self.lead_at_insert = self.team_lead_staff
 
 		team = FakeTeam()
+		staff = SimpleNamespace(name="S-1", campus="C-1", user=None)
+		context = {"profile": "lead_sales"}
 
 		def exists(doctype, *args, **kwargs):
 			return doctype == "CRM Campus"
@@ -104,7 +114,10 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 		with (
 			patch("crm.api.team_management.frappe.db.exists", side_effect=exists),
 			patch("crm.api.team_management.frappe.get_doc", return_value=team),
-			patch("crm.api.team_management._ensure_created_team_lead_membership") as ensure_lead,
+			patch("crm.api.team_management._staff_doc", return_value=staff),
+			patch("crm.api.team_management._assert_staff_can_be_team_member"),
+			patch("crm.api.team_management._assert_staff_not_in_other_team"),
+			patch("crm.api.team_management._save_membership") as save_membership,
 			patch("crm.api.team_management._team_revision", return_value="revision"),
 		):
 			result = _save_team(
@@ -117,12 +130,20 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 				None,
 				"S-1",
 				False,
-				{"profile": "lead_sales"},
+				context,
 			)
 
-		self.assertEqual(team.lead_at_insert, None)
-		ensure_lead.assert_called_once_with(team, "S-1", {"profile": "lead_sales"})
+		self.assertEqual(team.lead_at_insert, "S-1")
 		self.assertEqual(result["teamId"], "T-2")
+		save_membership.assert_called_once_with(
+			"S-1",
+			"T-2",
+			"Sale",
+			False,
+			None,
+			True,
+			context,
+		)
 
 	def test_workspace_has_stable_dashboard_contract(self):
 		workspace = get_team_management_workspace()
@@ -133,6 +154,7 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 		self.assertIn("teams", workspace)
 		self.assertIn("members", workspace)
 		self.assertIn("options", workspace)
+		self.assertIn("availableMembers", workspace)
 		self.assertIn("permissions", workspace)
 		self.assertIn("provinces", workspace["options"])
 		for group in workspace["groups"]:
@@ -141,6 +163,10 @@ class TestTeamManagementWorkspace(FrappeTestCase):
 			self.assertIn("provinceName", group)
 		self.assertGreaterEqual(workspace["summary"]["teamCount"], len(workspace["teams"]))
 		self.assertTrue(workspace["permissions"]["canManageAll"])
+		for member in workspace["availableMembers"]:
+			self.assertTrue(member["isActive"])
+			self.assertNotEqual(member["role"], "LEAD_SALE")
+			self.assertEqual(member["teamIds"], [])
 
 		for team in workspace["teams"]:
 			self.assertIn(team["readiness"], {"ready", "not_ready", "inactive"})

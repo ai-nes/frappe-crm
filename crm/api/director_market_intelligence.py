@@ -27,7 +27,33 @@ _SOURCE_ERRORS = (frappe.PermissionError, frappe.DoesNotExistError, QueryDeadloc
 # The Director market map is intentionally scoped to the seven active provinces
 # configured by the dashboard. Keep this scope in the backend so every metric
 # in the response uses the same source-of-truth boundary.
-PRIORITY_PROVINCE_CODES = ("56", "66", "68", "75", "79", "80", "82")
+PRIORITY_PROVINCE_CODES = (
+	"VN_KHANH_HOA",
+	"VN_DAK_LAK",
+	"VN_LAM_DONG",
+	"VN_DONG_NAI",
+	"VN_HO_CHI_MINH",
+	"VN_TAY_NINH",
+	"VN_DONG_THAP",
+)
+PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE = {
+	"VN_KHANH_HOA": "56",
+	"VN_DAK_LAK": "66",
+	"VN_LAM_DONG": "68",
+	"VN_DONG_NAI": "75",
+	"VN_HO_CHI_MINH": "79",
+	"VN_TAY_NINH": "80",
+	"VN_DONG_THAP": "82",
+}
+PROVINCE_REGION_BY_SOURCE_CODE = {
+	"VN_KHANH_HOA": "central",
+	"VN_DAK_LAK": "highlands",
+	"VN_LAM_DONG": "highlands",
+	"VN_DONG_NAI": "south",
+	"VN_HO_CHI_MINH": "south",
+	"VN_TAY_NINH": "south",
+	"VN_DONG_THAP": "mekong",
+}
 
 
 class MarketPrimarySourceUnavailable(RuntimeError):
@@ -150,7 +176,21 @@ def _fold(value: Any) -> str:
 	return "".join(char for char in text if not unicodedata.combining(char)).replace("đ", "d")
 
 
-def _region_key(value: Any) -> str | None:
+def _geometry_province_code(value: Any) -> str | None:
+	code = str(value or "").strip()
+	return PROVINCE_GEOMETRY_CODE_BY_SOURCE_CODE.get(code, code or None)
+
+
+def _region_key(value: Any, province_code: Any = None) -> str | None:
+	source_region = str(value or "").strip().upper()
+	province_region = PROVINCE_REGION_BY_SOURCE_CODE.get(str(province_code or "").strip())
+	if source_region == "MB":
+		return "north"
+	if source_region == "MT":
+		return province_region or "central"
+	if source_region == "MN":
+		return province_region or "south"
+
 	text = _fold(value)
 	if "bac" in text:
 		return "north"
@@ -162,7 +202,7 @@ def _region_key(value: Any) -> str | None:
 		return "central"
 	if "nam" in text:
 		return "south"
-	return None
+	return province_region
 
 
 def _ratio(numerator: int, denominator: int) -> float | None:
@@ -204,7 +244,8 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 
 	provinces = []
 	for province_name, province in sorted(province_by_name.items(), key=lambda item: (str(item[1].get("province_code") or ""), item[0])):
-		region_key = _region_key(province.get("region"))
+		province_code = _geometry_province_code(province.get("province_code"))
+		region_key = _region_key(province.get("region"), province.get("province_code"))
 		if region != "all" and region_key != region:
 			continue
 		schools = schools_by_province.get(province_name, [])
@@ -218,8 +259,8 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			ward = ward_by_name.get(school.get("ward"), {})
 			external_id = None
 			school_code = str(school.get("school_code") or "").strip()
-			if province.get("province_code") and ward.get("ward_code") and school_code.isdigit():
-				external_id = f"{province['province_code']}-{ward['ward_code']}-{school_code.zfill(3)}"
+			if province_code and ward.get("ward_code") and school_code.isdigit():
+				external_id = f"{province_code}-{ward['ward_code']}-{school_code.zfill(3)}"
 			highlights.append({
 				"id": external_id,
 				"directoryId": external_id,
@@ -247,7 +288,7 @@ def _build_overview(sources, failed, *, admission_year, region, metric, include_
 			)
 		)
 		provinces.append({
-			"code": province.get("province_code"),
+			"code": province_code,
 			"name": province.get("province_name") or province_name,
 			"fullName": province.get("province_name") or province_name,
 			"regionKey": region_key,
