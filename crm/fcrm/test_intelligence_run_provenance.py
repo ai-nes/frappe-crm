@@ -189,6 +189,9 @@ class TestStudentEvidenceHistoryProvenance(FrappeTestCase):
 		self.assertEqual(payload["signals"]["intent_type"], "Amended")
 		intent_query = next(kwargs for doctype, kwargs in calls if doctype == "CRM Intent")
 		self.assertEqual(intent_query["filters"]["interaction"], ["in", ["I-NEW", "I-OLD"]])
+		# The interaction set is the only bound: a row cap would let a heavily
+		# re-analysed interaction crowd an older one out of the window again.
+		self.assertEqual(intent_query["limit_page_length"], 0)
 
 	def test_history_rows_carry_no_barrier_but_actor_kind_while_current_block_keeps_barrier(self):
 		payload, _ = self._evidence([])

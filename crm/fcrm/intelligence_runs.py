@@ -909,12 +909,11 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	def _total(doctype, extra_filters=None):
 		# The query cap above is a producer truncation layer; the count lets the
 		# coverage disclose it instead of presenting the newest rows as complete.
+		# A failed count must fail the evidence read like a failed row query
+		# would; a silent 0 would publish a self-contradicting source total.
 		if not frappe.db.table_exists(doctype):
 			return 0
-		try:
-			return int(frappe.db.count(doctype, {"student": student, **(extra_filters or {})}) or 0)
-		except Exception:
-			return 0
+		return int(frappe.db.count(doctype, {"student": student, **(extra_filters or {})}) or 0)
 
 	def _ref(prefix, item):
 		name = item.get("name")
@@ -956,9 +955,12 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	# newest intents overall; the newest analysis row per interaction wins so a
 	# superseded intent cannot override its amendment by dictionary order.
 	interaction_names = [item["name"] for item in interactions if item.get("name")]
+	# No row cap here: the ``interaction in`` filter is the bound. A cap would
+	# let interactions re-analysed many times crowd older ones out of the
+	# window and leave them with no intent again.
 	intents = _rows(
 		"CRM Intent", ["interaction", "intent_type", "intent_role", "polarity", "confidence"],
-		len(interaction_names) * 4, "creation desc, name desc", {"interaction": ["in", interaction_names]},
+		0, "creation desc, name desc", {"interaction": ["in", interaction_names]},
 	) if interaction_names else []
 	intents_by_interaction = {}
 	for item in intents:

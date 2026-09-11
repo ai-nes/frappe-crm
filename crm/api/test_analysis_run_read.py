@@ -65,6 +65,7 @@ class TestStudent360Dashboard(FrappeTestCase):
 		"generated_at": "2026-09-05T01:00:00+00:00",
 		"advisory_signals": [], "risks": [], "opportunity_signals": [], "recent_changes": [],
 		"history_coverage": {"interaction_history": {"included_count": 1, "omitted_count": 0, "state": "available", "coverage_reason": None, "oldest_included": "2026-09-05", "newest_included": "2026-09-05"}},
+		"finding_coverage": {"emitted": 3, "unmapped": 1},
 	})
 	@patch("crm.api.analysis_run_read._stages")
 	@patch("crm.api.analysis_run_read._source", return_value=("4", "current-digest"))
@@ -78,6 +79,7 @@ class TestStudent360Dashboard(FrappeTestCase):
 		self.assertEqual(payload["snapshot_schema_version"], "student-360-snapshot-v2")
 		self.assertIn("history_coverage", payload)
 		self.assertEqual(payload["history_coverage"]["interaction_history"]["state"], "available")
+		self.assertEqual(payload["finding_coverage"], {"emitted": 3, "unmapped": 1})
 
 
 class TestStudent360PerSourcePermissions(FrappeTestCase):

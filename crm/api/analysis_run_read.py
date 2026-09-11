@@ -144,4 +144,8 @@ def get_student_360(
 		payload["history_coverage"] = displayed["history_coverage"]
 	if displayed.get("intelligence_refs"):
 		payload["intelligence_refs"] = displayed["intelligence_refs"]
+	if displayed.get("finding_coverage"):
+		# Lets the reader say how many model findings were dropped for lacking
+		# mapped evidence instead of presenting a shorter card as complete.
+		payload["finding_coverage"] = displayed["finding_coverage"]
 	return payload
