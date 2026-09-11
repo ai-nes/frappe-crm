@@ -79,10 +79,12 @@ def _journal(student: str) -> dict:
 
 
 def _score(student: str) -> dict:
+	omitted_reason = None
 	try:
 		rows = frappe.get_list("CRM Score History", filters={"student": student}, fields=["name", "scoring_time", "fit_score", "engagement_score", "intent_score", "final_score", "score_change"], order_by="scoring_time desc, creation desc", limit_page_length=6)
 	except frappe.PermissionError:
 		rows = []
+		omitted_reason = "permission_denied"
 	latest = rows[0] if rows else None
 	values = {"fit": latest.get("fit_score") if latest else None, "interaction": latest.get("engagement_score") if latest else None, "intent": latest.get("intent_score") if latest else None, "total": latest.get("final_score") if latest else None}
 	score_change = latest.get("score_change") if latest else None
@@ -93,7 +95,10 @@ def _score(student: str) -> dict:
 	contributors = contributors[:4]
 	# `as_of` is the latest scoring time, or None: a missing score must read as
 	# unknown, never as "scored just now".
-	return {"as_of": _iso(latest.get("scoring_time")) if latest else None, "items": [{"key": key, "label": label, "value": values[key], "score_change": score_change, "contributors": contributors} for key, label in (("fit", "Fit"), ("interaction", "Interaction"), ("intent", "Intent"), ("total", "Total"))], "band": score_band(values["total"]), "trend": score_trend(score_change), "explanation": {"text": "Điểm do CRM tính; bản tóm tắt chỉ trình bày.", "evidence_refs": [f"score:{latest['name']}"] if latest else []}}
+	result = {"as_of": _iso(latest.get("scoring_time")) if latest else None, "items": [{"key": key, "label": label, "value": values[key], "score_change": score_change, "contributors": contributors} for key, label in (("fit", "Fit"), ("interaction", "Interaction"), ("intent", "Intent"), ("total", "Total"))], "band": score_band(values["total"]), "trend": score_trend(score_change), "explanation": {"text": "Điểm do CRM tính; bản tóm tắt chỉ trình bày.", "evidence_refs": [f"score:{latest['name']}"] if latest else []}}
+	if omitted_reason:
+		result["omitted_reason"] = omitted_reason
+	return result
 
 
 @frappe.whitelist()
@@ -133,7 +138,11 @@ def get_student_360(
 	score = _score(student)
 	items = {item["key"]: item for item in score["items"]}
 	is_v2 = bool(displayed.get("history_coverage") or displayed.get("intelligence_refs"))
-	payload = {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 if is_v2 else STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "as_of": score.get("as_of"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}, "source_revision": str(_revision) if _revision is not None else None, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}
+	student_stage, student_modified = frappe.db.get_value("CRM Student", student, ["student_stage", "modified"]) or (None, None)
+	score_overview = {"fit": items["fit"].get("value"), "interaction": items["interaction"].get("value"), "intent": items["intent"].get("value"), "total": items["total"].get("value"), "as_of": score.get("as_of"), "band": score.get("band"), "trend": score.get("trend", {"direction": "UNKNOWN", "delta": None}), "summary": score["explanation"]["text"], "contributors": items["total"].get("contributors", [])}
+	if score.get("omitted_reason"):
+		score_overview["omitted_reason"] = score["omitted_reason"]
+	payload = {"student_id": student, "snapshot_schema_version": STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 if is_v2 else STUDENT_360_SNAPSHOT_SCHEMA_VERSION, "snapshot_status": snapshot_status, "analysis_status": analysis_status, "analyzed_at": displayed.get("generated_at"), "student_stage": student_stage, "source_modified": _iso(student_modified) if student_modified else None, "advisory_signals": displayed.get("advisory_signals", []), "interaction_journal": _journal(student), "score_overview": score_overview, "source_revision": str(_revision) if _revision is not None else None, "risks": displayed.get("risks", []), "opportunity_signals": displayed.get("opportunity_signals", []), "recent_changes": displayed.get("recent_changes", [])}
 	if include_consent is True or str(include_consent).strip().lower() in {"1", "true", "yes", "on"}:
 		# The Copilot fact builder needs this one bounded, source-owned boolean
 		# to evaluate the global ``all`` guardrail.  Keep it opt-in so the normal

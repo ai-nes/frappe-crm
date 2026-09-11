@@ -210,3 +210,31 @@ class TestStudentEvidenceHistoryProvenance(FrappeTestCase):
 		self.assertEqual(interaction_coverage["included_count"], 2)
 		self.assertEqual(interaction_coverage["omitted_count"], 35)
 		self.assertEqual(interaction_coverage["reason"], "student_evidence_source_limit")
+
+	def test_failed_source_count_fails_the_evidence_read_instead_of_publishing_zero(self):
+		# A count query that raises must not be swallowed into a source_total
+		# of 0 -- that would publish a card claiming "2 of 0" (complete) when
+		# the true total is simply unknown.
+		from unittest.mock import patch
+
+		row = {
+			"student_stage": "Connected",
+			"primary_barrier": "Học phí",
+			"score_input_revision": 9,
+			"applied_score_input_revision": 9,
+		}
+		rows_by_doctype = {
+			"CRM Score History": [],
+			"CRM Interaction": [],
+			"CRM Intent": [],
+			"CRM Admission Application": [],
+			"CRM Student Guardian": [],
+		}
+		with (
+			patch("crm.fcrm.intelligence_runs.frappe.db.get_value", return_value=row),
+			patch("crm.fcrm.intelligence_runs.frappe.get_all", side_effect=lambda doctype, **kwargs: rows_by_doctype[doctype]),
+			patch("crm.fcrm.intelligence_runs.frappe.db.count", side_effect=Exception("count backend unavailable")),
+			patch("crm.fcrm.intelligence_runs.frappe.db.table_exists", return_value=True),
+		):
+			with self.assertRaises(Exception):
+				intelligence_runs._student_stage_evidence("STU-1", "9")

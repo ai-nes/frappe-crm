@@ -87,6 +87,24 @@ class TestKnowledgeGraphCapabilitySeed(unittest.TestCase):
 				)
 			)
 
+		for role_name in ("Sale", "Lead Sale"):
+			self.assertEqual(
+				[
+					row.value
+					for row in fake_frappe.roles[role_name].custom_ai_capability_grants
+					if row.grant_type == "semantic_capability" and row.value == "sales_intelligence.actions.read"
+				],
+				["sales_intelligence.actions.read"],
+			)
+
+		for role_name in ("Marketing", "Admissions Director", "Administrator", "System Manager"):
+			self.assertFalse(
+				any(
+					row.value == "sales_intelligence.actions.read"
+					for row in fake_frappe.roles[role_name].custom_ai_capability_grants
+				)
+			)
+
 		self.assertEqual(fake_frappe.db.commits, 1)
 		self.assertEqual(fake_frappe.cache_cleared, 1)
 
