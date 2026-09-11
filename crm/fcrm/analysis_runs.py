@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any
 
 import frappe
@@ -22,6 +23,8 @@ MAX_IDEMPOTENCY_KEY_LENGTH = 140
 MAX_SOURCE_REVISION_LENGTH = 64
 MAX_PROVENANCE_IDS = 32
 MAX_REVISION_LABEL_LENGTH = 160
+RULE_IDENTITY_FIELDS = ("rule_version", "rule_version_digest", "ruleset_digest")
+_HEX64 = re.compile(r"^[a-f0-9]{64}$")
 
 
 def canonical_request_fingerprint(payload: dict[str, Any]) -> str:
@@ -48,6 +51,7 @@ def validate_run_fields(doc) -> None:
 		frappe.throw("Analysis Run request fingerprint must be a SHA-256 digest.", frappe.ValidationError)
 	if doc.trigger == "manual" and not str(doc.requested_by or "").strip():
 		frappe.throw("Manual Analysis Runs require an actor.", frappe.ValidationError)
+	_validate_ruleset_identity(doc)
 
 
 def validate_stage_fields(doc) -> None:
@@ -70,6 +74,27 @@ def validate_stage_fields(doc) -> None:
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
 	if (doc.parent_run_type == "CRM Interaction Analysis Run") != (doc.stage_kind == "interaction_analysis"):
 		frappe.throw("Analysis Run stage kind does not match its parent domain.", frappe.ValidationError)
+	_validate_ruleset_identity(doc)
+
+
+def _validate_ruleset_identity(doc) -> None:
+	values = [getattr(doc, field, None) for field in RULE_IDENTITY_FIELDS]
+	if not any(value not in (None, "") for value in values):
+		# Historical rows may predate the ruleset control plane and remain
+		# readable, but no new decision-grade run/stage may enter the queue
+		# without the complete creation-time identity.
+		if getattr(doc, "is_new", lambda: False)():
+			frappe.throw(
+				"Decision-grade Analysis Runs require a complete ruleset identity.",
+				frappe.ValidationError,
+			)
+		return
+	if not all(isinstance(value, str) and value.strip() for value in values):
+		frappe.throw("Analysis Run ruleset identity must be complete.", frappe.ValidationError)
+	if not _HEX64.fullmatch(values[1].strip().lower()) or not _HEX64.fullmatch(values[2].strip().lower()):
+		frappe.throw("Analysis Run ruleset identity digests are invalid.", frappe.ValidationError)
+	if values[1].strip().lower() != values[2].strip().lower():
+		frappe.throw("Analysis Run ruleset identity digests must agree.", frappe.ValidationError)
 
 
 def validate_claim_set(value: str | list[dict[str, Any]] | None) -> None:

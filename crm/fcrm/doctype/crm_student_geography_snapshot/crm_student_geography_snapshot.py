@@ -29,7 +29,9 @@ class CRMStudentGeographySnapshot(Document):
 		if not self.captured_at:
 			frappe.throw("A geography snapshot requires captured_at.", frappe.ValidationError)
 		if not any(self.get(field) for field in _GEO_FIELDS):
-			frappe.throw("A geography snapshot requires at least one geography value.", frappe.ValidationError)
+			frappe.throw(
+				"A geography snapshot requires at least one geography value.", frappe.ValidationError
+			)
 		if not self.is_new():
 			frappe.throw("Student geography snapshots are append-only.", frappe.PermissionError)
 
@@ -40,21 +42,21 @@ class CRMStudentGeographySnapshot(Document):
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as student_conditions
 
-	condition = student_conditions("CRM Lead", user=user)
+	condition = student_conditions("CRM Student", user=user)
 	if condition is None:
 		return None
 	if condition == "1=0":
 		return "1=0"
 	return (
 		"`tabCRM Student Geography Snapshot`.`student` in "
-		"(select `tabCRM Lead`.`name` from `tabCRM Lead` where (" + condition + "))"
+		"(select `tabCRM Student`.`name` from `tabCRM Student` where (" + condition + "))"
 	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
 	if (permission_type or ptype) == "create":
 		return bool(getattr(frappe.flags, _SERVICE_FLAG, False))
-	return bool(doc.get("student") and frappe.has_permission("CRM Lead", "read", doc.student, user=user))
+	return bool(doc.get("student") and frappe.has_permission("CRM Student", "read", doc.student, user=user))
 
 
 def snapshot_student_geography(doc, method=None):

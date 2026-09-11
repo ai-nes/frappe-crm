@@ -156,6 +156,9 @@ permission_query_conditions = {
 	"CRM Admission Application": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Student Payment": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
 	"CRM Revenue Recognition": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Admission Profile": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Payment Account": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
+	"CRM Student Document": "crm.fcrm.doctype.crm_student_document.crm_student_document.get_permission_query_conditions",
 	"CRM Interaction": "crm.fcrm.permissions.get_interaction_permission_query_conditions",
 	"CRM Intent": "crm.fcrm.permissions.get_intent_permission_query_conditions",
 	"CRM Score History": "crm.fcrm.permissions.get_operational_record_permission_query_conditions",
@@ -164,7 +167,6 @@ permission_query_conditions = {
 	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.get_permission_query_conditions",
 	"CRM High School": "crm.fcrm.doctype.crm_high_school.crm_high_school.get_permission_query_conditions",
 	"CRM High School Annual Snapshot": "crm.fcrm.doctype.crm_high_school_annual_snapshot.crm_high_school_annual_snapshot.get_permission_query_conditions",
-	"CRM AI Lead Insight": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Agent Event": "crm.fcrm.permissions.get_student_projection_permission_query_conditions",
 	"CRM Admission Event Decision": "crm.fcrm.permissions.get_admission_decision_permission_query_conditions",
 	"CRM Permission Profile": "crm.fcrm.doctype.crm_permission_profile.crm_permission_profile.get_permission_query_conditions",
@@ -199,6 +201,9 @@ has_permission = {
 	"CRM Admission Application": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Student Payment": "crm.fcrm.permissions.has_operational_record_permission",
 	"CRM Revenue Recognition": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Admission Profile": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Payment Account": "crm.fcrm.permissions.has_operational_record_permission",
+	"CRM Student Document": "crm.fcrm.doctype.crm_student_document.crm_student_document.has_permission",
 	"CRM Interaction": "crm.fcrm.permissions.has_interaction_permission",
 	"CRM Intent": "crm.fcrm.permissions.has_intent_permission",
 	"CRM Score History": "crm.fcrm.permissions.has_operational_record_permission",
@@ -207,7 +212,6 @@ has_permission = {
 	"CRM School Activity": "crm.fcrm.doctype.crm_school_activity.crm_school_activity.has_permission",
 	"CRM High School": "crm.fcrm.doctype.crm_high_school.crm_high_school.has_permission",
 	"CRM High School Annual Snapshot": "crm.fcrm.doctype.crm_high_school_annual_snapshot.crm_high_school_annual_snapshot.has_permission",
-	"CRM AI Lead Insight": "crm.fcrm.permissions.has_student_projection_permission",
 	"CRM Agent Event": "crm.fcrm.permissions.has_student_projection_permission",
 	"CRM Admission Event Decision": "crm.fcrm.permissions.has_admission_decision_permission",
 }
@@ -244,11 +248,13 @@ doc_events = {
 	},
 	"CRM Student": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
-		"on_update": ["crm.fcrm.interaction_log.create_interaction_from_contact_update"],
+		"on_update": [
+			"crm.fcrm.interaction_log.create_interaction_from_contact_update",
+			"crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography",
+		],
 	},
 	"CRM Lead": {
 		"validate": ["crm.fcrm.doctype.status_change_log.status_change_log.on_change_log_hook"],
-		"on_update": ["crm.fcrm.doctype.crm_student_geography_snapshot.crm_student_geography_snapshot.snapshot_student_geography"],
 	},
 	"CRM Interaction": {
 		"before_validate": ["crm.fcrm.student_reference.sync_canonical_student"],
@@ -397,10 +403,20 @@ doc_events = {
 # Consumer-side enforcement is required because retiring a Link target does
 # not cause Frappe to revalidate existing consumer writes automatically.
 for _governed_consumer_doctype in (
-	"CRM Student", "CRM Platform", "CRM Lead", "CRM Campaign Spend",
-	"CRM Campaign", "CRM Intent", "CRM Score Signal", "CRM Department",
-	"CRM Staff", "CRM Academic Year Line", "CRM Student Pool", "CRM Student Routing Request",
-	"CRM Student SLA Attempt", "CRM Team",
+	"CRM Student",
+	"CRM Platform",
+	"CRM Lead",
+	"CRM Campaign Spend",
+	"CRM Campaign",
+	"CRM Intent",
+	"CRM Score Signal",
+	"CRM Department",
+	"CRM Staff",
+	"CRM Academic Year Line",
+	"CRM Student Pool",
+	"CRM Student Routing Request",
+	"CRM Student SLA Attempt",
+	"CRM Team",
 ):
 	_governed_events = doc_events.setdefault(_governed_consumer_doctype, {})
 	_governed_events.setdefault("validate", []).append(

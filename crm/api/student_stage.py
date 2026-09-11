@@ -5,14 +5,13 @@ from __future__ import annotations
 import frappe
 
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
+from crm.fcrm.student_reference import canonical_student
 
 
 def _resolve_student_name(student: str) -> str:
-	"""Normalize canonical Student IDs and Lead-backed dashboard IDs."""
+	"""Normalize canonical Student IDs and legacy public references."""
 	value = str(student or "").strip()
-	if not value or frappe.db.exists("CRM Student", value):
-		return value
-	return frappe.db.get_value("CRM Lead", value, "student") or value
+	return canonical_student(value) or value
 
 
 @frappe.whitelist(methods=["POST"])

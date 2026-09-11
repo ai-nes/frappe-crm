@@ -55,6 +55,8 @@ OPERATIONAL_RECORD_STUDENT_FIELDS = {
 	"CRM Admission Application": "student",
 	"CRM Student Payment": "student",
 	"CRM Revenue Recognition": "student",
+	"CRM Student Admission Profile": "student",
+	"CRM Student Payment Account": "student",
 }
 
 
@@ -220,12 +222,22 @@ def can_read_full_lead_board(user=None) -> bool:
 	Group/Team scope separately, so this compatibility flag no longer widens
 	list visibility.
 
-	The flag still aligns the Lead Sale write check with detail access; Student,
-	delete, and every assignment, conversion, ownership, or lifecycle command keep
-	their existing checks.
+	The flag still aligns the Lead Sale write check with detail access. Conversion
+	uses its dedicated ``can_convert_all_leads`` rule; Student, delete, assignment,
+	ownership, and lifecycle commands keep their existing checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
+
+
+def can_convert_all_leads(user=None) -> bool:
+	"""Whether the actor may convert any assigned Lead.
+
+	Lead Sale works the full intake board, so conversion must not re-apply the
+	team-limited CRUD scope after the Lead has passed the ASSIGNED gate. Sale and
+	CTV Sale continue through the normal owner scope in ``has_permission``.
+	"""
+	return can_read_full_lead_board(user)
 
 
 def can_write_full_lead_board(user=None) -> bool:
@@ -477,14 +489,14 @@ def has_intent_permission(doc, user=None, permission_type=None, ptype=None):
 def get_student_projection_permission_query_conditions(user=None, doctype=None):
 	"""Scope Student-linked projections through the canonical Student policy.
 
-	AI Insight and Agent Event are projections, not independent authorization
-	roots.  Their DocType role grants only describe who may use the projection;
+	Agent Event is a projection, not an independent authorization root.  Its
+	DocType role grants only describe who may use the projection;
 	the linked Student scope remains the source of truth. Events whose aggregate
 	is a Student-bearing operational record are joined back to that Student.
 	Global events (for example scoring-policy changes) remain unavailable through
 	the row-scoped event stream instead of becoming an unscoped side channel.
 	"""
-	if doctype not in {"CRM AI Lead Insight", "CRM Agent Event"}:
+	if doctype != "CRM Agent Event":
 		return "1=0"
 	user = user or frappe.session.user
 	student_condition = get_permission_query_conditions("CRM Student", user=user)
@@ -493,8 +505,6 @@ def get_student_projection_permission_query_conditions(user=None, doctype=None):
 	if student_condition == "1=0":
 		return "1=0"
 	student_names = f"select `tabCRM Student`.name from `tabCRM Student` where ({student_condition})"
-	if doctype == "CRM AI Lead Insight":
-		return f"`tabCRM AI Lead Insight`.student in ({student_names})"
 	return (
 		"(`tabCRM Agent Event`.aggregate_doctype = 'CRM Student' and "
 		f"`tabCRM Agent Event`.aggregate_name in ({student_names})) OR "
@@ -513,7 +523,7 @@ def has_student_projection_permission(doc, user=None, permission_type=None, ptyp
 	"""Apply the Student row scope to single projection records as well."""
 	permission_type = permission_type or ptype
 	if permission_type == "create" and not getattr(doc, "name", None):
-		student_name = doc.get("student") if doc.doctype == "CRM AI Lead Insight" else None
+		student_name = None
 		if doc.doctype == "CRM Agent Event" and doc.get("aggregate_doctype") == "CRM Student":
 			student_name = doc.get("aggregate_name")
 		if not student_name:
@@ -783,9 +793,7 @@ def _lead_sales_student_read_condition(table, crm_staff_name, *, doctype="CRM St
 			if staff_clause:
 				team_parts.append(staff_clause)
 			if team_parts:
-				assigned_clause = (
-					f"{table}.owner_staff is not null and {table}.assigned_to is not null"
-				)
+				assigned_clause = f"{table}.owner_staff is not null and {table}.assigned_to is not null"
 				parts.append(f"({assigned_clause} and ({' or '.join(team_parts)}))")
 			if team_clause:
 				parts.append(
@@ -804,8 +812,7 @@ def _lead_sales_student_read_condition(table, crm_staff_name, *, doctype="CRM St
 				province_clause = _in_clause(f"{table}.province", group_provinces)
 				if province_clause:
 					parts.append(
-						f"({table}.owner_staff is null and {table}.assigned_to is null and "
-						f"{province_clause})"
+						f"({table}.owner_staff is null and {table}.assigned_to is null and {province_clause})"
 					)
 
 	if not parts:

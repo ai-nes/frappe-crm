@@ -3,7 +3,7 @@
  "allow_rename": 0,
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["event_id", "event_type", "aggregate_doctype", "aggregate_name", "source_revision", "source_revision_bigint", "contract_version", "rollout_epoch", "source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "occurred_at", "status", "attempts", "next_attempt_at", "lease_id", "lease_expires_at", "delivered_at", "retention_until", "legal_hold", "last_error"],
+ "field_order": ["event_id", "event_type", "aggregate_doctype", "aggregate_name", "source_revision", "source_revision_bigint", "contract_version", "rollout_epoch", "rule_version", "rule_version_digest", "ruleset_digest", "source_doctype", "source_event", "delivery_key", "channel", "recipient_user", "recipient_role", "payload", "correlation_token", "occurred_at", "status", "attempts", "next_attempt_at", "lease_id", "lease_expires_at", "delivered_at", "retention_until", "legal_hold", "last_error"],
  "fields": [
   {"fieldname": "event_id", "fieldtype": "Data", "in_list_view": 1, "label": "Event ID", "read_only": 1, "reqd": 1, "unique": 1},
   {"fieldname": "event_type", "fieldtype": "Data", "in_list_view": 1, "label": "Event Type", "read_only": 1, "reqd": 1},
@@ -13,6 +13,9 @@
   {"fieldname": "source_revision_bigint", "fieldtype": "Int", "label": "Numeric Source Revision", "read_only": 1},
   {"default": "1", "fieldname": "contract_version", "fieldtype": "Int", "label": "Contract Version", "read_only": 1, "reqd": 1},
   {"default": "0", "fieldname": "rollout_epoch", "fieldtype": "Int", "label": "Rollout Epoch", "read_only": 1},
+  {"fieldname": "rule_version", "fieldtype": "Data", "label": "Rule Version", "read_only": 1},
+  {"fieldname": "rule_version_digest", "fieldtype": "Data", "label": "Rule Version Digest", "length": 64, "read_only": 1},
+  {"fieldname": "ruleset_digest", "fieldtype": "Data", "label": "Ruleset Digest", "length": 64, "read_only": 1},
   {"fieldname": "source_doctype", "fieldtype": "Data", "hidden": 1, "label": "Source DocType", "read_only": 1},
   {"fieldname": "source_event", "fieldtype": "Data", "hidden": 1, "label": "Source Event", "read_only": 1},
   {"fieldname": "delivery_key", "fieldtype": "Data", "hidden": 1, "label": "Delivery Key", "read_only": 1, "unique": 1},

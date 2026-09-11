@@ -125,7 +125,7 @@ def number_chart(title, tooltip, value, delta):
 
 
 def get_total_students(from_date=None, to_date=None, user=None):
-	value, delta = get_count_delta("CRM Lead", from_date, to_date)
+	value, delta = get_count_delta("CRM Student", from_date, to_date, user)
 	return number_chart("Total students", "Total number of imported enrollment students", value, delta)
 
 
@@ -149,7 +149,7 @@ def get_enrolled_contacts(from_date=None, to_date=None, user=None):
 
 
 def get_admission_trend(from_date=None, to_date=None, user=None):
-	students = daily_counts("CRM Lead", from_date, to_date)
+	students = daily_counts("CRM Student", from_date, to_date, user)
 	contacts = daily_counts("CRM Student", from_date, to_date, user)
 	dates = sorted(set(students) | set(contacts))
 	data = [
@@ -217,7 +217,7 @@ def get_contacts_by_source(from_date=None, to_date=None, user=None):
 
 def get_students_by_source(from_date=None, to_date=None, user=None):
 	return donut_chart(
-		"CRM Lead",
+		"CRM Student",
 		"source",
 		"source",
 		"Students by source",
@@ -350,8 +350,6 @@ def get_sidebar_badge_counts():
 			"CRM Student",
 			filters={"owner_staff": ["is", "not set"]},
 		)
-	elif frappe.db.table_exists("CRM Lead"):
-		pool_count = get_readable_count("CRM Lead", {"owner_staff": ["is", "not set"]})
 
 	team_sla_breached_count = 0
 	if frappe.db.table_exists("CRM Student SLA Attempt"):

@@ -20,6 +20,7 @@ from frappe.utils import get_datetime
 
 from crm.fcrm.interaction_semantics import INTERACTION_TYPE_MAPPING
 from crm.fcrm.permissions import get_interaction_permission_query_conditions
+from crm.fcrm.student_reference import canonical_student
 
 CONTRACT_VERSION = "interaction.read:v1"
 DEFAULT_PAGE_SIZE = 20
@@ -158,6 +159,8 @@ def _require_target(*, student: str | None, contact: str | None) -> tuple[str, s
 	student, contact = str(student or "").strip(), str(contact or "").strip()
 	if bool(student) == bool(contact):
 		frappe.throw(_("Provide exactly one Student or Contact."), frappe.ValidationError)
+	student = canonical_student(student) if student else None
+	contact = canonical_student(contact) if contact else None
 	target_type, target = ("CRM Student", student) if student else ("CRM Student", contact)
 	if frappe.session.user == "Guest" or not frappe.has_permission(target_type, "read", target):
 		frappe.throw(_("You are not allowed to view these interactions."), frappe.PermissionError)
@@ -193,6 +196,13 @@ def _safe_analysis(interaction: str) -> dict[str, Any] | None:
 			"result_digest",
 			"policy_revision",
 			"model_revision",
+			"contract_version",
+			"decision_signals",
+			"intelligence",
+			"rule_version",
+			"rule_version_digest",
+			"ruleset_digest",
+			"rule_decision",
 			"intent",
 			"terminal_reason",
 		],
@@ -295,7 +305,7 @@ def list_interactions(
 	limit: int | str | None = None,
 ) -> dict[str, Any]:
 	"""Return a stable, target-scoped Interaction feed without evidence."""
-	target_type, target = _require_target(student=student, contact=contact)
+	_, target = _require_target(student=student, contact=contact)
 	target_field = "student" if student else "crm_contact"
 	conditions = [f"`{target_field}` = %(target)s"]
 	values: dict[str, Any] = {"target": target}

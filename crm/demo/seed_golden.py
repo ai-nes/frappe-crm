@@ -1920,91 +1920,6 @@ def _digest(value: Any) -> str:
 	).hexdigest()
 
 
-def _ensure_ai_insight(student: str, contact: str, interactions: list[str]) -> dict[str, Any]:
-	revision = int(frappe.db.get_value("CRM Student", contact, "student_context_revision") or 0)
-	insight = _ACTIVE["insight"]
-	interests = [
-		{
-			"dimension_code": code,
-			"label": label,
-			"trend": trend,
-			"stance": stance,
-			"interest_level": 5 if confidence >= 85 else 3,
-			"score": round(confidence / 100, 2),
-			"confidence": round(confidence / 100, 2),
-			"evidence": f"{_ACTIVE['student_name']} — dữ liệu tư vấn tuyển sinh",
-		}
-		for code, label, trend, stance, confidence in insight["interests"]
-	]
-	risks = [
-		{
-			"label": label,
-			"severity": severity,
-			"evidence": f"{_ACTIVE['student_name']} — assessment và trao đổi phụ huynh",
-		}
-		for label, severity in insight["risks"]
-	]
-	summary = (
-		f"{_ACTIVE['student_name']} đã để lại nhu cầu rõ về {_ACTIVE['major']}. Hồ sơ còn một "
-		"số điểm cần được xác nhận trước khi chuyển bước tiếp theo."
-	)
-	idempotency_key = f"{_ns()}:ai-insight:v1:r{revision}"
-	# upsert_ai_insight() is internally inconsistent for this schema: it locks the
-	# aggregate via `tabCRM Student` (request["student"] must be a CRM Student) but
-	# also writes that same value into CRM AI Lead Insight.student, a field left
-	# CRM-Lead-typed by the split, and resolves "contact" through
-	# contacts_for_student() helpers that all expect a CRM Lead. No single value
-	# satisfies both call sites, so this seed writes the insight directly instead
-	# of calling the shared command.
-	existing_name = frappe.db.get_value(
-		"CRM AI Lead Insight", {"generation_idempotency_key": idempotency_key}, "name"
-	)
-	receipt = _insert_command_receipt("ai_insight", f"ai-insight-{contact}-r{revision}", student, contact)
-	values = {
-		"contact": contact,
-		"student": student,
-		"insight_type": "Conversation Summary",
-		"generated_at": SEED_NOW,
-		"ai_generated_at": SEED_NOW,
-		"ai_source_context_revision": revision,
-		"ai_policy_version": "phase2-ai-insight-v1",
-		"generation_idempotency_key": idempotency_key,
-		"producer_identity": "golden-seed",
-		"payload_digest": _digest({"contact": contact, "revision": revision}),
-		"command_receipt": receipt,
-		"ai_score": insight["score"],
-		"ai_score_reason": _ACTIVE["assessment_reason"],
-		"ai_next_action": insight["next_action"],
-		"ai_summary": summary,
-		"ai_detected_interests": frappe.as_json(interests),
-		"ai_risk_flags": frappe.as_json(risks),
-	}
-	if existing_name:
-		frappe.db.set_value("CRM AI Lead Insight", existing_name, values, update_modified=False)
-		insight_name = existing_name
-	else:
-		insight_name = frappe.get_doc({"doctype": "CRM AI Lead Insight", **values}).insert(ignore_permissions=True).name
-	frappe.db.delete(
-		"CRM AI Lead Insight Item",
-		{"parent": insight_name, "parenttype": "CRM AI Lead Insight", "parentfield": "items"},
-	)
-	items = [{"item_kind": "interest", **item} for item in interests] + [
-		{"item_kind": "risk", **item} for item in risks
-	]
-	for index, item in enumerate(items, start=1):
-		frappe.get_doc(
-			{
-				"doctype": "CRM AI Lead Insight Item",
-				"parent": insight_name,
-				"parenttype": "CRM AI Lead Insight",
-				"parentfield": "items",
-				"idx": index,
-				**item,
-			}
-		).insert(ignore_permissions=True)
-	return {"insight": insight_name, "receipt": receipt}
-
-
 def _ensure_student_analysis(contact: str, interactions: list[str], score: str | None) -> dict[str, Any]:
 	from crm.api.intelligence_runs import request_student_analysis_run
 	from crm.fcrm import intelligence_runs
@@ -2241,7 +2156,6 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 	frappe.db.commit()
 
 	interactions = [interaction_website, interaction_counseling, interaction_latest]
-	ai_insight = _ensure_ai_insight(student, student_record, interactions)
 	analysis = _ensure_student_analysis(student_record, interactions, score)
 	nba = _ensure_nba(student_record)
 	frappe.db.commit()
@@ -2265,7 +2179,6 @@ def _run_student(context: dict[str, Any], pool: str, high_school: str, staff: st
 		"dominant_intent": intent_dominant,
 		"first_intent": intent_first,
 		"outcome": outcome,
-		"ai_insight": ai_insight,
 		"analysis": analysis,
 		"nba": nba,
 		"counts": {
@@ -2557,7 +2470,6 @@ def verify() -> dict[str, Any]:
 				"score_state": ctx["admissions_context"]["score"].get("state"),
 				"history_count": len(ctx["history"]),
 				"owner_staff": frappe.db.get_value("CRM Lead", name, "owner_staff"),
-				"ai_insight": frappe.db.exists("CRM AI Lead Insight", {"student": name}),
 				"recommendations": frappe.db.count("CRM Recommendation", {"target_id": contact}),
 			}
 		)

@@ -1,0 +1,41 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "field:version_id",
+ "creation": "2026-09-10 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["version_id", "version_name", "description", "status", "group_catalog", "revision", "schema_version", "ruleset_revision", "ruleset_digest", "activated_at", "activated_by", "archived_at", "archived_by", "superseded_at", "superseded_by", "change_note"],
+ "fields": [
+  {"fieldname": "version_id", "fieldtype": "Data", "label": "Version ID", "reqd": 1, "unique": 1, "in_list_view": 1},
+  {"fieldname": "version_name", "fieldtype": "Data", "label": "Version Name", "reqd": 1, "in_list_view": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "draft\ntesting\nactive\narchived", "default": "draft", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "group_catalog", "fieldtype": "JSON", "label": "Managed Rule Group Catalog", "description": "Version-scoped canonical entries: code, label and enabled.", "default": "[]", "reqd": 1},
+  {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "0", "read_only": 1, "non_negative": 1, "in_list_view": 1},
+  {"fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "default": "rule-catalog", "read_only": 1},
+  {"fieldname": "ruleset_revision", "fieldtype": "Data", "label": "Technical Snapshot Revision", "read_only": 1},
+  {"fieldname": "ruleset_digest", "fieldtype": "Data", "label": "Ruleset Digest", "length": 64, "read_only": 1},
+  {"fieldname": "activated_at", "fieldtype": "Datetime", "label": "Activated At", "read_only": 1},
+  {"fieldname": "activated_by", "fieldtype": "Link", "label": "Activated By", "options": "User", "read_only": 1},
+  {"fieldname": "archived_at", "fieldtype": "Datetime", "label": "Archived At", "read_only": 1},
+  {"fieldname": "archived_by", "fieldtype": "Link", "label": "Archived By", "options": "User", "read_only": 1},
+  {"fieldname": "superseded_at", "fieldtype": "Datetime", "label": "Superseded At", "read_only": 1},
+  {"fieldname": "superseded_by", "fieldtype": "Link", "label": "Superseded By", "options": "User", "read_only": 1},
+  {"fieldname": "change_note", "fieldtype": "Small Text", "label": "Lifecycle Change Note", "read_only": 1}
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Rule Version",
+ "permissions": [
+  {"create": 1, "delete": 1, "export": 1, "read": 1, "write": 1, "role": "Administrator"},
+  {"read": 1, "role": "AI Service"}
+ ],
+ "quick_entry": 0,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

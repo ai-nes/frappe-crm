@@ -1,9 +1,9 @@
 """Authoritative Student intake command.
 
 The intake boundary is deliberately small. It resolves a phone/email identity
-and an admission cycle, then creates one Student case and its Case Key in the
-same transaction. National ID remains an optional strong observation and
-conflict signal; it never establishes an identity by itself.
+and an admission cycle, then creates one raw Lead intake record. National ID
+remains an optional strong observation and conflict signal; it never
+establishes an identity by itself.
 
 The module does not create Contacts.  The small amount of metadata probing in
 this file is intentional: the data-contract migration and this command can be
@@ -39,7 +39,6 @@ INTERACTION_CAPABILITY = "student.interaction.ingest"
 REVIEW_CAPABILITY = "student.intake.review.decide"
 
 IDENTITY_DOCTYPE = "CRM Student Identity"
-CASE_KEY_DOCTYPE = "CRM Student Case Key"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 REVIEW_DOCTYPE = "CRM Student Intake Review"
 IDENTIFIER_DOCTYPES = (
@@ -894,20 +893,26 @@ def _resolve_phone_email_identity(
 	return None, None
 
 
-def _case_key(identity: str, admission_year: str) -> dict[str, Any] | None:
-	if not _doctype_exists(CASE_KEY_DOCTYPE):
-		return None
-	identity_field = _first_field(CASE_KEY_DOCTYPE, ("identity", "identity_root"))
-	year_field = _first_field(CASE_KEY_DOCTYPE, ("admission_year", "admission_cycle"))
-	if not identity_field or not year_field:
-		return None
-	try:
-		rows = frappe.get_all(
-			CASE_KEY_DOCTYPE, filters={identity_field: identity, year_field: admission_year}, fields=["*"]
-		)
-	except Exception:
-		rows = []
-	return dict(rows[0]) if rows else None
+def _existing_identity_case(identity: str, admission_year: str) -> str | None:
+	"""Reuse an existing identity record without creating a Case Key."""
+	for doctype, identity_field in (
+		("CRM Student", "student_identity"),
+		("CRM Lead", "identity"),
+	):
+		if not _doctype_exists(doctype):
+			continue
+		try:
+			name = frappe.db.get_value(
+				doctype,
+				{identity_field: identity, "admission_year": admission_year},
+				"name",
+				order_by="creation asc, name asc",
+			)
+		except Exception:
+			name = None
+		if name:
+			return name
+	return None
 
 
 def _create_identity(candidate: dict[str, Any]):
@@ -1078,6 +1083,7 @@ def _create_case(
 		"province": payload.get("province"),
 		"high_school": payload.get("high_school"),
 		"major": payload.get("major"),
+		"admission_method": payload.get("admission_method"),
 	}
 	values.update(
 		{
@@ -1091,6 +1097,7 @@ def _create_case(
 				"province",
 				"ward",
 				"major",
+				"admission_method",
 				"aspiration",
 				"current_grade",
 				"study_stage",
@@ -1138,17 +1145,6 @@ def _create_case(
 			route_pool_owned_student(student.name, trigger="pool_entry")
 		elif _doctype_exists("CRM Student Routing Request"):
 			enqueue_student_routing(student.name, trigger="pool_entry")
-	if not _doctype_exists(CASE_KEY_DOCTYPE):
-		_fail("CONFIGURATION_ERROR", "Student Case Key data contract is not installed.")
-	from crm.fcrm.admission_case_key import ensure_case_key
-
-	ensure_case_key(
-		identity=identity,
-		admission_year=admission_year,
-		canonical_student=student.name,
-		source_reference=correlation_id,
-		correlation_token=correlation_id,
-	)
 	return student.name
 
 
@@ -1195,8 +1191,7 @@ def _create_review(
 	review_type = {
 		"weak_only": "identity_conflict",
 		"retracted_identifier": "identity_conflict",
-		"quarantined_case_key": "duplicate_case",
-		"identity_conflict": "identity_conflict",
+	"identity_conflict": "identity_conflict",
 		"missing_admission_cycle": "missing_admission_cycle",
 	}.get(reason, "malformed_identifier")
 	pool_name = pool
@@ -1482,26 +1477,23 @@ def submit_intake(
 	if not identity and not reason:
 		identity = _create_identity(candidate)
 	if identity and not reason:
-		key = _case_key(identity, admission_year)
-		if key:
+		existing_case = _existing_identity_case(identity, admission_year)
+		if existing_case:
 			_add_weak_observations(identity, candidate)
-			student_name = key.get("canonical_student") or key.get("student")
-			if student_name:
-				result = {"outcome": "attached", "student": student_name}
-				return _persist_intake_result(
-					result,
-					keys=keys,
-					fingerprint=fingerprint,
-					principal=principal,
-					source_namespace=source_namespace,
-					source_record_id=source_record_id,
-					idempotency_key=idempotency_key,
-					correlation_id=correlation_id,
-					nonce=nonce,
-					provenance_payload=provenance_payload,
-					consent=consent,
-				)
-			reason = "quarantined_case_key"
+			result = {"outcome": "attached", "student": existing_case}
+			return _persist_intake_result(
+				result,
+				keys=keys,
+				fingerprint=fingerprint,
+				principal=principal,
+				source_namespace=source_namespace,
+				source_record_id=source_record_id,
+				idempotency_key=idempotency_key,
+				correlation_id=correlation_id,
+				nonce=nonce,
+				provenance_payload=provenance_payload,
+				consent=consent,
+			)
 	if reason:
 		result = {"outcome": "review_required", "error_code": "REVIEW_REQUIRED"}
 		candidate_identity = None
@@ -1717,9 +1709,10 @@ def decide_intake_review(
 		pool = _text(_safe_get(doc, "proposed_owning_team", "proposed_pool", "owning_team", "pool"))
 		if not admission_year or not campus or not pool:
 			_fail("INVALID_INPUT", "The review is missing its cycle, Campus, or pool.")
-		if _case_key(identity, admission_year):
+		existing_case = _existing_identity_case(identity, admission_year)
+		if existing_case:
 			result["outcome"] = "attached"
-			result["student"] = _case_key(identity, admission_year).get("canonical_student")
+			result["student"] = existing_case
 		else:
 			student_name = _text(_safe_get(doc, "proposed_student_name", "proposed_name", "student_name"))
 			if not student_name:

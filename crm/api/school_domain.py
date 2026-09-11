@@ -174,7 +174,7 @@ def get_school360_overview(high_school: str, admission_year: str | None = None) 
 		# Presence is checked independently, but canonical child identifiers are
 		# never projected into this DTO.
 		"Contact": _school360_scope("CRM Student", [], probe_filters={"high_school": high_school}),
-		"Student": _school360_scope("CRM Lead", [], probe_filters={"high_school": high_school}),
+		"Student": _school360_scope("CRM Student", [], probe_filters={"high_school": high_school}),
 	}
 	relationship_scope = _school360_scope(
 		"CRM School Stakeholder",

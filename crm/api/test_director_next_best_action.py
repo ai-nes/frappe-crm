@@ -57,7 +57,7 @@ class TestDirectorNextBestActionMappers(FrappeTestCase):
 	def test_item_mapping_does_not_fabricate_probability_or_confidence_source(self):
 		lookups = {
 			"students": {
-				"STU-1": {"student_name": "Nguyễn Văn An", "high_school": "HS-1", "interest_level": "Cao"}
+				"STU-1": {"full_name": "Nguyễn Văn An", "high_school": "HS-1", "interest_level": "Cao"}
 			},
 			"schools": {"HS-1": "THPT Trưng Vương"},
 			"majors": {},
@@ -171,13 +171,13 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return [
 					{
 						"name": "STU-1",
-						"student_name": "Nguyễn Văn An",
+						"full_name": "Nguyễn Văn An",
 						"high_school": "HS-1",
 						"major": None,
 						"interest_level": "Cao",
@@ -226,13 +226,13 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return [
 					{
 						"name": "STU-1",
-						"student_name": "An",
+						"full_name": "An",
 						"high_school": None,
 						"major": None,
 						"interest_level": None,
@@ -258,13 +258,13 @@ class TestDirectorNextBestActionEnvelope(FrappeTestCase):
 		rows = [_row(name=f"A{index:02d}", plan_rank=2) for index in range(14)]
 
 		def fake_get_list(doctype, **kwargs):
-			if doctype == "CRM Lead" and kwargs.get("filters", {}).get("admission_year"):
+			if doctype == "CRM Student" and kwargs.get("filters", {}).get("admission_year"):
 				return [{"name": "STU-1"}]
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return [
 					{
 						"name": "STU-1",
-						"student_name": "An",
+						"full_name": "An",
 						"high_school": None,
 						"major": None,
 						"interest_level": None,
@@ -310,7 +310,7 @@ class TestDirectorNextBestActionScope(FrappeTestCase):
 
 				self.assertEqual(student_ids, ["STU-1"])
 				self.assertEqual(
-					seen["CRM Lead"]["filters"],
+					seen["CRM Student"]["filters"],
 					{"admission_year": "2026", "owner_staff": "STAFF-1"},
 				)
 
@@ -327,7 +327,7 @@ class TestDirectorNextBestActionScope(FrappeTestCase):
 			)
 
 		self.assertEqual(student_ids, ["STU-1"])
-		self.assertEqual(seen["CRM Lead"]["filters"], {"admission_year": "2026"})
+		self.assertEqual(seen["CRM Student"]["filters"], {"admission_year": "2026"})
 
 
 class _FakeAction:
@@ -453,7 +453,7 @@ def _recommendation_row(**overrides):
 	rank = overrides.get("rank", 1)
 	base = {
 		"name": f"NBA-EVAL-1-{rank}",
-		"target_type": "CRM Lead",
+		"target_type": "CRM Student",
 		"target_id": "STU-1",
 		"action": f"ACT-2026-000{rank}",
 		"evaluation": "NBA-EVAL-1",
@@ -501,10 +501,11 @@ class TestDirectorRecommendationsMapper(FrappeTestCase):
 				"explanationSource",
 				"evaluation",
 				"generatedAt",
+				"decision_ref",
 			},
 		)
 		self.assertEqual(item["rank"], 2)
-		self.assertEqual(item["target"], {"type": "CRM Lead", "id": "STU-1"})
+		self.assertEqual(item["target"], {"type": "CRM Student", "id": "STU-1"})
 		self.assertEqual(item["recommendationKey"], "key-2")
 		self.assertEqual(item["studentId"], "STU-1")
 		self.assertEqual(item["actionId"], "ACT-2026-0002")
@@ -552,7 +553,7 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 
 		def fake_get_list(doctype, **call):
 			seen[doctype] = call
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return [{"name": "STU-1"}]
 			if doctype == "CRM Recommendation":
 				return list(queue_rows)
@@ -583,7 +584,7 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 	def test_only_epoch_rows_are_requested_legacy_rows_are_excluded(self):
 		result, seen = self._run([_recommendation_row()])
 		self.assertEqual(seen["CRM Recommendation"]["filters"]["evaluation"], ["is", "set"])
-		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_type"], "CRM Lead")
+		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_type"], "CRM Student")
 		self.assertEqual(seen["CRM Recommendation"]["filters"]["target_id"], ["in", ["STU-1"]])
 		self.assertEqual(len(result["recommendations"]), 1)
 
@@ -654,7 +655,7 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 
 		def fake_get_list(doctype, **call):
 			seen[doctype] = call
-			if doctype == "CRM Lead":
+			if doctype == "CRM Student":
 				return [{"name": "STU-1"}]
 			if doctype == "CRM Recommendation":
 				return [_recommendation_row()]
@@ -675,6 +676,6 @@ class TestDirectorRecommendationsReadModel(FrappeTestCase):
 		access.assert_called_once_with(allow_sales=True)
 		self.assertEqual(result["meta"]["count"], 1)
 		self.assertEqual(
-			seen["CRM Lead"]["filters"],
+			seen["CRM Student"]["filters"],
 			{"admission_year": "2026", "owner_staff": "STAFF-1"},
 		)

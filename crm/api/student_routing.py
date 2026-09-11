@@ -7,11 +7,18 @@ from frappe import _
 
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.student_reference import canonical_student
 from crm.fcrm.student_routing import (
 	StudentRoutingError,
+)
+from crm.fcrm.student_routing import (
 	get_student_routing_status as _get_status,
-	route_pool_owned_student as _route_now,
+)
+from crm.fcrm.student_routing import (
 	retry_student_routing as _retry,
+)
+from crm.fcrm.student_routing import (
+	route_pool_owned_student as _route_now,
 )
 
 
@@ -19,7 +26,9 @@ def _require(capability: str):
 	actor = frappe.session.user
 	roles = frappe.get_roles(actor)
 	if capability not in capabilities_for_roles(roles, administrator=actor == "Administrator"):
-		frappe.throw(_("You are not permitted to perform this Student routing action."), frappe.PermissionError)
+		frappe.throw(
+			_("You are not permitted to perform this Student routing action."), frappe.PermissionError
+		)
 
 
 def _read(callable_, **kwargs):
@@ -44,9 +53,10 @@ def retry_student_routing(request: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def route_now(student: str, expected_revision: int | None = None) -> dict:
-	"""Explicit lead retry after a policy/member issue; no routing request is created."""
+	"""Explicit Student retry after a policy/member issue; no request is created."""
 	_require("student.routing.retry")
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student = canonical_student(student) or str(student or "").strip()
+	student_doc = frappe.get_doc("CRM Student", student)
 	if not has_student_permission(student_doc, user=frappe.session.user, permission_type="read"):
 		frappe.throw(_("Student is outside the current scope."), frappe.PermissionError)
 	return _read(_route_now, student=student, trigger="manual_retry", expected_revision=expected_revision)

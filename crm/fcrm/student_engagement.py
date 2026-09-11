@@ -13,8 +13,6 @@ import json
 from typing import Any
 
 import frappe
-
-from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
 from frappe import _
 
 from crm.fcrm.qualification import (
@@ -24,9 +22,11 @@ from crm.fcrm.qualification import (
 	validate_continuity,
 	validate_qualification_evidence,
 )
-from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.record_retention import technical_retention_until
+from crm.fcrm.role_policy import capabilities_for_roles
+from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
 from crm.fcrm.student_feature_flags import enabled
+from crm.fcrm.student_reference import canonical_student
 
 OUTCOME_DOCTYPE = "CRM Student Outcome"
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
@@ -67,7 +67,9 @@ def _required(value: Any, label: str) -> str:
 
 
 def _fingerprint(payload: dict[str, Any]) -> str:
-	return hashlib.sha256(json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
+	return hashlib.sha256(
+		json.dumps(payload, sort_keys=True, default=str, separators=(",", ":")).encode()
+	).hexdigest()
 
 
 def _command_key(actor: str, idempotency_key: str) -> str:
@@ -94,7 +96,15 @@ def _receipt(command_key: str, fingerprint: str):
 	return {"status": receipt.get("outcome") or "applied", "receipt": receipt.name, "replayed": True}
 
 
-def _new_receipt(*, command_key: str, idempotency_key: str, fingerprint: str, actor: str, student: str, correlation_id: str | None):
+def _new_receipt(
+	*,
+	command_key: str,
+	idempotency_key: str,
+	fingerprint: str,
+	actor: str,
+	student: str,
+	correlation_id: str | None,
+):
 	doc = frappe.get_doc(
 		{
 			"doctype": RECEIPT_DOCTYPE,
@@ -116,8 +126,15 @@ def _new_receipt(*, command_key: str, idempotency_key: str, fingerprint: str, ac
 	return doc
 
 
-def _update_receipt(receipt, result: dict[str, Any], *, outcome: str = "created", error_code: str | None = None):
-	values = {"outcome": outcome, "result_json": json.dumps(result, default=str), "completed_at": frappe.utils.now_datetime(), "retention_until": technical_retention_until("receipt")}
+def _update_receipt(
+	receipt, result: dict[str, Any], *, outcome: str = "created", error_code: str | None = None
+):
+	values = {
+		"outcome": outcome,
+		"result_json": json.dumps(result, default=str),
+		"completed_at": frappe.utils.now_datetime(),
+		"retention_until": technical_retention_until("receipt"),
+	}
 	if error_code:
 		values["error_code"] = error_code
 	for field, value in values.items():
@@ -126,13 +143,18 @@ def _update_receipt(receipt, result: dict[str, Any], *, outcome: str = "created"
 
 
 def _student(name: str):
-	student = frappe.get_doc("CRM Lead", _required(name, "student"))
+	student_name = canonical_student(_required(name, "student"))
+	if not student_name:
+		_fail("NOT_FOUND", "The Student does not exist.")
+	student = frappe.get_doc("CRM Student", student_name)
 	if not student.has_permission("read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside your current scope.")
 	return student
 
 
-def _verify_linked_records(student: str, interaction: str | None, source_doctype: str | None, source_name: str | None):
+def _verify_linked_records(
+	student: str, interaction: str | None, source_doctype: str | None, source_name: str | None
+):
 	if interaction:
 		try:
 			interaction_doc = frappe.get_doc("CRM Interaction", interaction)
@@ -150,7 +172,7 @@ def _verify_linked_records(student: str, interaction: str | None, source_doctype
 		if not source_doc.has_permission("read"):
 			_fail("OUT_OF_SCOPE", "The source evidence is outside the Student scope.")
 		linked_student = source_doc.get("student")
-		if not linked_student and source_doc.get("reference_doctype") == "CRM Lead":
+		if not linked_student and source_doc.get("reference_doctype") in {"CRM Lead", "CRM Student"}:
 			linked_student = source_doc.get("reference_docname")
 		if not linked_student and source_doc.get("crm_contact"):
 			students = students_for_contact(source_doc.get("crm_contact"))
@@ -160,7 +182,16 @@ def _verify_linked_records(student: str, interaction: str | None, source_doctype
 
 
 def _verify_evidence(student: str, references: list[dict[str, str]]):
-	allowed = {"CRM Student Outcome", "CRM Interaction", "Task", "CRM Student Lifecycle Event", "CRM Intent", "CRM Appointment", "CRM Student Document", "File"}
+	allowed = {
+		"CRM Student Outcome",
+		"CRM Interaction",
+		"Task",
+		"CRM Student Lifecycle Event",
+		"CRM Intent",
+		"CRM Appointment",
+		"CRM Student Document",
+		"File",
+	}
 	for reference in references:
 		doctype, name = reference.get("doctype"), reference.get("name")
 		if doctype not in allowed:
@@ -169,12 +200,15 @@ def _verify_evidence(student: str, references: list[dict[str, str]]):
 			doc = frappe.get_doc(doctype, name)
 		except Exception:
 			_fail("INVALID_EVIDENCE", "A referenced evidence record does not exist.")
-		if not doc.has_permission("read") and doctype not in {"CRM Student Outcome", "CRM Student Lifecycle Event"}:
+		if not doc.has_permission("read") and doctype not in {
+			"CRM Student Outcome",
+			"CRM Student Lifecycle Event",
+		}:
 			_fail("OUT_OF_SCOPE", "A referenced evidence record is outside your scope.")
 		linked_student = doc.get("student")
-		if not linked_student and doc.get("reference_doctype") == "CRM Lead":
+		if not linked_student and doc.get("reference_doctype") in {"CRM Lead", "CRM Student"}:
 			linked_student = doc.get("reference_docname")
-		if not linked_student and doc.get("attached_to_doctype") == "CRM Lead":
+		if not linked_student and doc.get("attached_to_doctype") in {"CRM Lead", "CRM Student"}:
 			linked_student = doc.get("attached_to_name")
 		if not linked_student and doc.get("interaction"):
 			linked_student = frappe.db.get_value("CRM Interaction", doc.get("interaction"), "student")
@@ -184,7 +218,7 @@ def _verify_evidence(student: str, references: list[dict[str, str]]):
 
 def _lock_student(name: str):
 	try:
-		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (name,))
+		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (name,))
 	except Exception:
 		pass
 
@@ -206,7 +240,11 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 		doc = frappe.get_doc(payload)
 	if doc.get("student") not in (None, "", student):
 		_fail("INVALID_CONTINUITY", "Next action belongs to a different Student.")
-	if doc.get("reference_doctype") == "CRM Lead" and doc.get("reference_docname") not in (None, "", student):
+	if doc.get("reference_doctype") in {"CRM Lead", "CRM Student"} and doc.get("reference_docname") not in (
+		None,
+		"",
+		student,
+	):
 		_fail("INVALID_CONTINUITY", "Next action references a different Student.")
 	if is_existing:
 		if not doc.has_permission("write"):
@@ -216,7 +254,7 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 	doc.student = student
 	if interaction:
 		doc.linked_interaction = interaction
-	doc.reference_doctype = "CRM Lead"
+	doc.reference_doctype = "CRM Student"
 	doc.reference_docname = student
 	if assignee:
 		doc.assigned_to = assignee
@@ -228,16 +266,16 @@ def _task(next_action: Any, student: str, interaction: str | None, assignee: str
 		doc.insert(ignore_permissions=True)
 	else:
 		doc.db_set(
-		{
-			"student": doc.student,
-			"linked_interaction": doc.get("linked_interaction"),
-			"reference_doctype": doc.get("reference_doctype"),
-			"reference_docname": doc.get("reference_docname"),
-			"assigned_to": doc.get("assigned_to"),
-			"due_date": doc.get("due_date"),
-		},
-		update_modified=False,
-	)
+			{
+				"student": doc.student,
+				"linked_interaction": doc.get("linked_interaction"),
+				"reference_doctype": doc.get("reference_doctype"),
+				"reference_docname": doc.get("reference_docname"),
+				"assigned_to": doc.get("assigned_to"),
+				"due_date": doc.get("due_date"),
+			},
+			update_modified=False,
+		)
 	return doc
 
 
@@ -259,13 +297,14 @@ def record_outcome(
 	idempotency_key: str | None = None,
 	correlation_id: str | None = None,
 	supersedes: str | None = None,
-	):
+):
 	"""Record one immutable Student outcome and project compatibility fields."""
 	if not enabled("engagement_write"):
 		_fail("DISABLED", "Student engagement writes are disabled by rollout policy.")
 	actor = _actor()
 	scope = _authorize(actor)
 	student_doc = _student(student)
+	student = student_doc.name
 	_verify_linked_records(student, interaction, source_doctype, source_name)
 	idempotency_key = _required(idempotency_key, "idempotency_key")
 	outcome_code = _required(outcome_code, "outcome_code")
@@ -298,7 +337,14 @@ def record_outcome(
 	if source_key and frappe.db.exists(OUTCOME_DOCTYPE, {"source_key": source_key}):
 		existing = frappe.db.get_value(OUTCOME_DOCTYPE, {"source_key": source_key}, "name")
 		return {"status": "attached", "event": existing, "student": student, "deduplicated": True}
-	receipt = _new_receipt(command_key=command_key, idempotency_key=idempotency_key, fingerprint=fingerprint, actor=actor, student=student, correlation_id=correlation_id)
+	receipt = _new_receipt(
+		command_key=command_key,
+		idempotency_key=idempotency_key,
+		fingerprint=fingerprint,
+		actor=actor,
+		student=student,
+		correlation_id=correlation_id,
+	)
 	_lock_student(student)
 	student_doc = _student(student)
 	current_revision = _revision(student_doc)
@@ -310,7 +356,9 @@ def record_outcome(
 	continuity = validate_continuity(
 		outcome_code,
 		continuity_kind,
-		next_action={"student": student, "assigned_to": next_task.assigned_to, "due_date": next_task.due_date} if next_task else next_action,
+		next_action={"student": student, "assigned_to": next_task.assigned_to, "due_date": next_task.due_date}
+		if next_task
+		else next_action,
 		reason=continuity_reason,
 		expires_at=continuity_expires_at,
 	)
@@ -357,10 +405,20 @@ def record_outcome(
 		if interaction and frappe.db.exists("CRM Interaction", interaction):
 			updates = {"outcome": outcome_code}
 			if next_task:
-				updates.update({"next_follow_up_date": next_task.due_date, "next_follow_up_action": next_task.title})
+				updates.update(
+					{"next_follow_up_date": next_task.due_date, "next_follow_up_action": next_task.title}
+				)
 			frappe.db.set_value("CRM Interaction", interaction, updates, update_modified=False)
-		frappe.db.set_value("CRM Lead", student, "engagement_revision", current_revision + 1, update_modified=False)
-		result = {"status": "created", "event": event.name, "student": student, "revision": current_revision + 1, "receipt": receipt.name}
+		frappe.db.set_value(
+			"CRM Student", student, "engagement_revision", current_revision + 1, update_modified=False
+		)
+		result = {
+			"status": "created",
+			"event": event.name,
+			"student": student,
+			"revision": current_revision + 1,
+			"receipt": receipt.name,
+		}
 		_update_receipt(receipt, result)
 		return result
 	finally:
@@ -377,7 +435,9 @@ def get_outcome_vocabulary() -> dict[str, Any]:
 	return {"policy_version": ENGAGEMENT_POLICY_VERSION, "outcomes": sorted(OUTCOME_CODES)}
 
 
-def get_student_context(student: str, history_limit: int = 20, history_cursor: str | None = None) -> dict[str, Any]:
+def get_student_context(
+	student: str, history_limit: int = 20, history_cursor: str | None = None
+) -> dict[str, Any]:
 	"""Compatibility import for the scoped context read service."""
 	from crm.fcrm.student_context import get_student_context as _get_context
 

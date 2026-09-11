@@ -1,0 +1,18 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": ["special_profile_template", "selection_order"],
+ "fields": [
+  {"fieldname": "special_profile_template", "fieldtype": "Link", "in_list_view": 1, "label": "Special Profile Template", "options": "CRM Admission Profile Template", "reqd": 1},
+  {"default": "1", "fieldname": "selection_order", "fieldtype": "Int", "in_list_view": 1, "label": "Selection Order", "reqd": 1}
+ ],
+ "istable": 1,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Admission Application Special Profile",
+ "permissions": [{"read": 1, "role": "System Manager"}],
+ "row_format": "Dynamic"
+}

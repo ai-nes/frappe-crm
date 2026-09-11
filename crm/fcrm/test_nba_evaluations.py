@@ -16,7 +16,7 @@ from crm.fcrm.nba_evaluations import _bounded_hex64, _identity_from_envelope
 
 _HEX64 = "a" * 64
 _SAMPLE_ENVELOPE = {
-	"contract_version": "nba-evaluation-v1",
+	"contract_version": "nba-evaluation",
 	"evaluation_id": "NBAEVAL-0000000000000000",
 	"evaluation_key": "b" * 64,
 	"evaluation_clock": "2026-09-04T03:00:00+07:00",
@@ -25,7 +25,7 @@ _SAMPLE_ENVELOPE = {
 	"policies": {
 		"library_revision": "action-library-r3",
 		"library_digest": "e" * 64,
-		"eligibility_revision": "eligibility-reason-codes-v1",
+		"eligibility_revision": "eligibility-reason-codes",
 		"eligibility_digest": "f" * 64,
 		"decision_revision": "nba-decision-policy-r1",
 		"decision_digest": "0" * 64,
@@ -68,7 +68,7 @@ except Exception:  # pragma: no cover - pure environment without a bench
 
 
 if FrappeTestCase is not None:
-	from crm.api import agent_events
+	from crm.api import agent_events, rule_engine
 	from crm.fcrm import nba_evaluations
 
 	class TestNbaEvaluationLifecycle(FrappeTestCase):
@@ -88,10 +88,48 @@ if FrappeTestCase is not None:
 					"crm_agents_outbox_enabled",
 				)
 			}
+			cls._previous_rule_settings = frappe.db.get_singles_dict(
+				rule_engine.SETTINGS_NAME, cast=True
+			)
+			cls._previous_active_versions = frappe.get_all(
+				"CRM Rule Version", filters={"status": "active"}, fields=["name"]
+			)
 			frappe.conf["crm_nba_evaluation_runtime_enabled"] = 1
 			frappe.conf["crm_agents_service_user"] = "Administrator"
 			frappe.conf["crm_nba_manual_requests_per_actor_target"] = 500
 			frappe.conf["crm_agents_outbox_enabled"] = 1
+			# The rule engine is deliberately DocType-backed.  Provision one
+			# disposable active snapshot for this lifecycle suite instead of
+			# falling back to an embedded or hard-coded production catalog.
+			cls._test_rule_version_id = f"TEST-NBA-{frappe.generate_hash(length=10).upper()}"
+			rule_engine.create_rule_version(cls._test_rule_version_id, "NBA lifecycle test rules")
+			rule_engine.create_rule(
+				cls._test_rule_version_id,
+				0,
+				rule_id="TEST-NBA-GATE-001",
+				group_code="test_nba",
+				rule_name="NBA lifecycle test gate",
+				feature="nba",
+				rule_type="GUARDRAIL",
+				outcome="PASS",
+				precedence=1,
+				unknown_policy="WAIT",
+				reason_code="TEST_NBA_GATE",
+				business_reason_template="{action} uses the NBA lifecycle test gate.",
+				target_actions=["CALL"],
+				conditions=[{"fact": "student.is_opted_out", "operator": "is_true"}],
+				enabled=True,
+			)
+			testing = rule_engine.update_rule_version(
+				cls._test_rule_version_id,
+				expected_revision=1,
+				status="testing",
+			)
+			rule_engine.activate_rule_version(
+				cls._test_rule_version_id,
+				frappe.db.get_single_value(rule_engine.SETTINGS_NAME, "pointer_revision", cache=False) or 0,
+				testing["revision"],
+			)
 			cls.student = frappe.get_all("CRM Student", pluck="name", limit_page_length=1)
 			if not cls.student:
 				raise unittest.SkipTest("no seeded CRM Student on this site")
@@ -99,6 +137,33 @@ if FrappeTestCase is not None:
 
 		@classmethod
 		def tearDownClass(cls):
+			frappe.set_user("Administrator")
+			for version in frappe.get_all(
+				"CRM Rule Version",
+				filters={"version_id": ["like", "TEST-NBA-%"]},
+				pluck="name",
+			):
+				frappe.db.delete("CRM Rule", {"rule_version": version})
+				frappe.db.delete("CRM Rule Version", version)
+			for version in cls._previous_active_versions:
+				if frappe.db.exists("CRM Rule Version", version.name):
+					frappe.db.set_value("CRM Rule Version", version.name, "status", "active", update_modified=False)
+					frappe.db.set_value(
+						"CRM Rule",
+						{"rule_version": version.name, "status": "superseded"},
+						"status",
+						"active",
+						update_modified=False,
+					)
+			if cls._previous_rule_settings:
+				frappe.db.set_single_value(
+					rule_engine.SETTINGS_NAME,
+					dict(cls._previous_rule_settings),
+					update_modified=False,
+				)
+			else:
+				frappe.db.delete("Singles", {"doctype": rule_engine.SETTINGS_NAME})
+			frappe.db.commit()
 			for key, value in cls._conf_backup.items():
 				if value is None:
 					frappe.conf.pop(key, None)
@@ -133,6 +198,20 @@ if FrappeTestCase is not None:
 
 		def _claim(self, evaluation, generation=0):
 			return nba_evaluations.claim_nba_evaluation(evaluation=evaluation, run_generation=generation)
+
+		def _rule_decision(self, evaluation, outcome="PASS"):
+			doc = frappe.get_doc(nba_evaluations.DOCTYPE, evaluation)
+			digest = doc.ruleset_digest
+			return {
+				"outcome": outcome,
+				"matched_rule_ids": [],
+				"reason_codes": ["NO_BLOCKING_RULE_MATCHED"],
+				"business_reason": "No blocking rule matched.",
+				"affected_actions": [],
+				"rule_version": doc.rule_version,
+				"rule_version_digest": digest,
+				"ruleset_digest": digest,
+			}
 
 		def test_duplicate_requested_event_yields_one_evaluation(self):
 			name = self._fresh_run("dup-event")
@@ -226,6 +305,7 @@ if FrappeTestCase is not None:
 				status="completed",
 				disposition="WAIT",
 				recommendation_count=0,
+				rule_decision=self._rule_decision(name),
 			)
 			self.assertEqual(settled["status"], "completed")
 			self.assertEqual(settled["disposition"], "WAIT")
@@ -243,6 +323,7 @@ if FrappeTestCase is not None:
 				status="completed",
 				disposition="WAIT",
 				recommendation_count=0,
+				rule_decision=self._rule_decision(wait_run),
 			)
 			self.assertEqual(
 				(out["status"], out["disposition"], out["recommendation_count"]), ("completed", "WAIT", 0)
@@ -258,6 +339,7 @@ if FrappeTestCase is not None:
 				disposition="RECOMMEND",
 				result_digest="a" * 64,
 				recommendation_count=2,
+				rule_decision=self._rule_decision(rec_run),
 			)
 			self.assertEqual(
 				(out["status"], out["disposition"], out["recommendation_count"]),
@@ -275,6 +357,7 @@ if FrappeTestCase is not None:
 				disposition="WAIT",
 				trace_digest="c" * 64,
 				recommendation_count=0,
+				rule_decision=self._rule_decision(name),
 			)
 			first = nba_evaluations.settle_nba_evaluation(**payload)
 			self.assertNotIn("replayed", first)
@@ -304,21 +387,15 @@ if FrappeTestCase is not None:
 			self.assertEqual(frappe.db.get_value(nba_evaluations.DOCTYPE, name, "status"), "queued")
 
 		def test_out_of_scope_student_is_denied(self):
-			original = frappe.has_permission
-
-			def deny(doctype, ptype=None, doc=None, *args, **kwargs):
-				if doctype == "CRM Student":
-					return False
-				return original(doctype, ptype, doc, *args, **kwargs)
-
-			frappe.has_permission = deny
+			original = nba_evaluations.has_student_permission
+			nba_evaluations.has_student_permission = lambda *args, **kwargs: False
 			try:
 				with self.assertRaises(frappe.PermissionError):
 					nba_evaluations.request_nba_evaluation(
 						student=self.student, idempotency_key=f"scope-{frappe.generate_hash(length=8)}"
 					)
 			finally:
-				frappe.has_permission = original
+				nba_evaluations.has_student_permission = original
 
 
 if __name__ == "__main__":

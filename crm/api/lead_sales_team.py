@@ -24,9 +24,8 @@ ORDER_VALUES = frozenset({"asc", "desc"})
 TEAM_MEMBER_FIELDS = ["name", "full_name", "user", "is_active"]
 STUDENT_FIELDS = [
 	"name",
-	"student_name",
-	"processing_status",
-	"resolution",
+	"full_name",
+	"student_stage",
 	"admission_year",
 	"owner_staff",
 	"assigned_to",
@@ -364,7 +363,7 @@ def _team_scope(user: str, report_date: date, warnings: list[str]) -> dict[str, 
 
 
 def _load_students(scope: dict[str, Any], year: str, warnings: list[str]) -> list[dict[str, Any]]:
-	if not _table_exists("CRM Lead"):
+	if not _table_exists("CRM Student"):
 		raise_api_error(
 			"SALES_TEAM_UNAVAILABLE",
 			"Không thể đọc dữ liệu học sinh của đội Sale.",
@@ -377,8 +376,8 @@ def _load_students(scope: dict[str, Any], year: str, warnings: list[str]) -> lis
 		return [
 			dict(row)
 			for row in frappe.get_list(
-				"CRM Lead",
-				filters={"admission_year": year, "processing_status": ["!=", "CLOSED"]},
+				"CRM Student",
+				filters={"admission_year": year, "student_stage": ["not in", ["Connected", "Disqualified"]]},
 				or_filters=[
 					["owner_staff", "in", staff_ids],
 					["owning_team", "in", team_ids],

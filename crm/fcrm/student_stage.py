@@ -9,6 +9,7 @@ import frappe
 STUDENT_STAGES = ("New", "Attempting", "Connected", "Qualified", "Disqualified")
 TERMINAL_STAGES = frozenset({"Qualified", "Disqualified"})
 SERVICE_FLAG = "student_stage_service"
+CONTEXT_SERVICE_FLAG = "student_stage_context_service"
 
 # Presentation/reporting helpers.  These keep old dashboard labels available
 # without persisting a second lifecycle/status field on CRM Student.
@@ -146,14 +147,10 @@ def set_student_stage(
 	if raw_current_stage != target_stage:
 		previous = getattr(frappe.flags, SERVICE_FLAG, False)
 		setattr(frappe.flags, SERVICE_FLAG, True)
+		setattr(doc.flags, CONTEXT_SERVICE_FLAG, True)
 		try:
-			frappe.db.set_value(
-				"CRM Student",
-				doc.name,
-				"student_stage",
-				target_stage,
-				update_modified=True,
-			)
+			doc.student_stage = target_stage
+			doc.save(ignore_permissions=True, ignore_version=False)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
 		from crm.fcrm.nba_evaluations import mark_student_nba_dirty

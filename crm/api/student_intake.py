@@ -38,6 +38,7 @@ _CONTACT_FIELD_MAP = {
 	"province_code": "province",
 	"high_school_code": "high_school",
 	"major_code": "major",
+	"admission_method": "admission_method",
 	"study_stage": "study_stage",
 	"lead_source": "source",
 	"campaign": "campaign",
@@ -92,6 +93,7 @@ def _normalize_contact_payload(payload: dict[str, Any]) -> dict[str, Any]:
 	for fieldname in (
 		"student_name",
 		"admission_year",
+		"admission_method",
 		"admission_cycle",
 		"year",
 		"national_id",

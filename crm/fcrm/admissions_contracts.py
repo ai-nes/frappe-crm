@@ -18,7 +18,6 @@ PROJECTION_NAMES = (
 	"DigitalMarketingOverview",
 	"FieldMarketingOverview",
 	"Student360",
-	"AICommandCenter",
 )
 
 ALLOWED_FILTERS = frozenset(

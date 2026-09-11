@@ -56,7 +56,7 @@
   {"fieldname": "evidence_reference", "fieldtype": "Data", "label": "Evidence Reference", "read_only": 1},
   {"fieldname": "correlation_token", "fieldtype": "Data", "hidden": 1, "label": "Correlation Token", "read_only": 1},
   {"fieldname": "decision_at", "fieldtype": "Datetime", "label": "Decision At", "read_only": 1},
-  {"fieldname": "resulting_student", "fieldtype": "Link", "label": "Resulting Student", "options": "CRM Lead", "read_only": 1},
+  {"fieldname": "resulting_student", "fieldtype": "Link", "label": "Resulting Student", "options": "CRM Student", "read_only": 1},
   {"default": "operational", "fieldname": "reason_sensitivity", "fieldtype": "Select", "label": "Reason Sensitivity", "options": "operational\nrestricted", "read_only": 1},
   {"default": "0", "fieldname": "legal_hold", "fieldtype": "Check", "label": "Legal Hold", "read_only": 1}
  ],

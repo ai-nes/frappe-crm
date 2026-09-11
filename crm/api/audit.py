@@ -6,9 +6,11 @@ from typing import Any
 import frappe
 from frappe import _
 
-from crm.fcrm.student_reference import canonical_student, lead_for_student
+from crm.fcrm.lead_identity import resolve_lead_name
+from crm.fcrm.permissions import can_read_full_lead_board
+from crm.fcrm.student_reference import canonical_student
 
-STUDENT_DOCTYPE = "CRM Lead"
+STUDENT_DOCTYPE = "CRM Student"
 DEFAULT_PAGE_LENGTH = 50
 MAX_PAGE_LENGTH = 100
 
@@ -55,11 +57,15 @@ def _unique_references(references: list[tuple[str, str]]) -> list[tuple[str, str
 	return list(dict.fromkeys((doctype, name) for doctype, name in references if doctype and name))
 
 
-def _readable_references(references: list[tuple[str, str]]) -> list[tuple[str, str]]:
+def _readable_references(
+	references: list[tuple[str, str]], *, allow_full_board: bool = False
+) -> list[tuple[str, str]]:
 	readable = []
 	for doctype, name in _unique_references(references):
 		try:
-			if frappe.has_permission(doctype, "read", name):
+			if allow_full_board and doctype in {"CRM Lead", STUDENT_DOCTYPE}:
+				readable.append((doctype, name))
+			elif frappe.has_permission(doctype, "read", name):
 				readable.append((doctype, name))
 		except (frappe.DoesNotExistError, frappe.PermissionError):
 			continue
@@ -1075,7 +1081,7 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 	for row in _rows_for_field_values(
 		"CRM Student Ownership Event",
 		"student",
-		lead_names,
+		student_names,
 		[
 			"name",
 			"event_id",
@@ -1097,7 +1103,7 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 		logs.append(
 			_business_log(
 				event_id=f"ownership:{source_name}",
-				doctype="CRM Lead",
+				doctype="CRM Student",
 				docname=row.get("student") or "",
 				fieldname="owner_staff",
 				field_label="Owner / Team / Pool",
@@ -1162,7 +1168,7 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 	for row in _rows_for_field_values(
 		"CRM Marketing Engagement",
 		"student",
-		lead_names,
+		student_names,
 		[
 			"name",
 			"student",
@@ -1181,7 +1187,7 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 		logs.append(
 			_business_log(
 				event_id=f"engagement:{row.get('name')}",
-				doctype="CRM Lead",
+				doctype="CRM Student",
 				docname=row.get("student") or "",
 				fieldname="engagement",
 				field_label="Marketing Engagement",
@@ -1205,14 +1211,14 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 	for row in _rows_for_field_values(
 		"CRM Student SLA Event",
 		"student",
-		lead_names,
+		student_names,
 		["name", "event_id", "student", "event_type", "actor", "event_at", "creation"],
 		order_by="event_at desc, name desc",
 	):
 		logs.append(
 			_business_log(
 				event_id=f"sla:{row.get('event_id') or row.get('name')}",
-				doctype="CRM Lead",
+				doctype="CRM Student",
 				docname=row.get("student") or "",
 				fieldname="sla_status",
 				field_label="SLA",
@@ -1267,14 +1273,14 @@ def _optional_event_logs(references: list[tuple[str, str]]) -> list[dict[str, An
 	for row in _rows_for_field_values(
 		"CRM Contact Consent Event",
 		"student",
-		lead_names,
+		student_names,
 		["name", "student", "event_type", "occurred_at", "source", "created_by", "purpose", "scope", "note"],
 		order_by="occurred_at desc, name desc",
 	):
 		logs.append(
 			_business_log(
 				event_id=f"consent:{row.get('name')}",
-				doctype="CRM Lead",
+				doctype="CRM Student",
 				docname=row.get("student") or "",
 				fieldname="privacy_status",
 				field_label="Consent & Privacy",
@@ -1340,9 +1346,13 @@ def get_audit_logs_for_document(
 	include_creation: bool = True,
 	include_deletion: bool = True,
 	related_references: list[tuple[str, str]] | None = None,
+	allow_full_board: bool = False,
 ) -> list[dict[str, Any]]:
 	"""Build the additive audit projection used by Student and Lead readers."""
-	references = _readable_references(related_references or _related_document_references(docname, doctype))
+	references = _readable_references(
+		related_references or _related_document_references(docname, doctype),
+		allow_full_board=allow_full_board,
+	)
 	logs: list[dict[str, Any]] = []
 	for reference_doctype, reference_name in references:
 		if include_creation:
@@ -1398,39 +1408,30 @@ def get_audit_logs_for_document(
 	return logs
 
 
-@frappe.whitelist()
-def get_student_audit_logs(
-	student: str,
-	start: int | str | None = 0,
-	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
+def _get_student_audit_logs(
+	requested_student: str,
+	canonical_id: str | None,
+	*,
+	start: int | str | None,
+	page_length: int | str | None,
+	allow_full_board: bool = False,
 ) -> dict[str, Any]:
-	"""Return immutable create/update/delete history for one CRM Student.
-
-	Audit rows are still recorded against the legacy CRM Lead projection, so a
-	canonical CRM Student ID is resolved to its source Lead before reading the
-	immutable history.
-	"""
-	requested_student = str(student or "").strip()
-	canonical_id = canonical_student(requested_student)
-	audit_docname = lead_for_student(canonical_id) if canonical_id else requested_student
-	if not audit_docname or not frappe.db.exists(STUDENT_DOCTYPE, audit_docname):
+	if not canonical_id or not frappe.db.exists(STUDENT_DOCTYPE, canonical_id):
 		frappe.throw(_("Student not found"), frappe.DoesNotExistError)
 
-	if canonical_id:
-		allowed = frappe.has_permission("CRM Student", "read", canonical_id)
-	else:
-		allowed = frappe.has_permission(STUDENT_DOCTYPE, "read", audit_docname)
-	if not allowed:
+	if not allow_full_board and not frappe.has_permission(STUDENT_DOCTYPE, "read", canonical_id):
 		frappe.throw(_("Not permitted"), frappe.PermissionError)
 
 	start = _parse_pagination(start, 0, "start")
 	page_length = _parse_pagination(page_length, DEFAULT_PAGE_LENGTH, "page_length", minimum=1)
 	page_length = min(page_length, MAX_PAGE_LENGTH)
 
-	references = _related_document_references(audit_docname, STUDENT_DOCTYPE)
-	if canonical_id and frappe.db.exists("CRM Student", canonical_id):
-		references = _unique_references([*references, ("CRM Student", canonical_id)])
-	logs = get_audit_logs_for_document(audit_docname, related_references=references)
+	references = _related_document_references(canonical_id, STUDENT_DOCTYPE)
+	logs = get_audit_logs_for_document(
+		canonical_id,
+		related_references=references,
+		allow_full_board=allow_full_board,
+	)
 
 	return {
 		"student": requested_student,
@@ -1443,14 +1444,67 @@ def get_student_audit_logs(
 
 
 @frappe.whitelist()
+def get_student_audit_logs(
+	student: str,
+	start: int | str | None = 0,
+	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
+) -> dict[str, Any]:
+	"""Return immutable create/update/delete history for one CRM Student.
+
+	The canonical Student is the primary audit aggregate. A source Lead and
+	legacy Lead-referenced activity remain compatibility references only.
+	"""
+	requested_student = str(student or "").strip()
+	return _get_student_audit_logs(
+		requested_student,
+		canonical_student(requested_student),
+		start=start,
+		page_length=page_length,
+	)
+
+
+@frappe.whitelist()
 def get_lead_audit_logs(
 	lead_id: str,
 	start: int | str | None = 0,
 	page_length: int | str | None = DEFAULT_PAGE_LENGTH,
 ) -> dict[str, Any]:
 	"""Return the read-only audit history for one CRM Lead."""
-	result = get_student_audit_logs(lead_id, start=start, page_length=page_length)
-	return {**result, "lead_id": result["student"]}
+	requested_lead = str(lead_id or "").strip()
+	lead_name = resolve_lead_name(requested_lead)
+	allow_full_board = can_read_full_lead_board()
+	canonical_id = canonical_student(lead_name)
+	if canonical_id:
+		result = _get_student_audit_logs(
+			canonical_id,
+			canonical_id,
+			start=start,
+			page_length=page_length,
+			allow_full_board=allow_full_board,
+		)
+		return {**result, "lead_id": requested_lead}
+
+	if not requested_lead or not frappe.db.exists("CRM Lead", lead_name):
+		frappe.throw(_("Lead not found"), frappe.DoesNotExistError)
+	if not allow_full_board and not frappe.has_permission("CRM Lead", "read", lead_name):
+		frappe.throw(_("Not permitted"), frappe.PermissionError)
+
+	start = _parse_pagination(start, 0, "start")
+	page_length = _parse_pagination(page_length, DEFAULT_PAGE_LENGTH, "page_length", minimum=1)
+	page_length = min(page_length, MAX_PAGE_LENGTH)
+	logs = get_audit_logs_for_document(
+		lead_name,
+		doctype="CRM Lead",
+		allow_full_board=allow_full_board,
+	)
+	return {
+		"lead_id": requested_lead,
+		"logs": logs[start : start + page_length],
+		"total": len(logs),
+		"start": start,
+		"page_length": page_length,
+		"read_only": True,
+	}
 
 
 @frappe.whitelist()

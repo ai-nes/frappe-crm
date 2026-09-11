@@ -527,14 +527,25 @@ def _apply_reported_leads(result: dict[str, dict[str, Any]], rows: list[dict[str
 
 
 def _load_attributed_students(student_ids: set[Any]) -> list[dict[str, Any]]:
-	if not student_ids or not _table_exists("CRM Lead"):
+	if not student_ids or not _table_exists("CRM Student"):
 		return []
-	return _fetch_rows(
-		"CRM Lead",
+	rows = _fetch_rows(
+		"CRM Student",
 		filters={"name": ["in", list(student_ids)]},
-		fields=["name", "processing_status", "resolution", "phone"],
+		fields=["name", "student_stage", "phone"],
 		allow_missing=True,
 	)
+	for row in rows:
+		stage = str(row.get("student_stage") or "New").strip()
+		row["processing_status"] = {
+			"New": "new",
+			"Attempting": "processing",
+			"Qualified": "processed",
+			"Connected": "created",
+			"Disqualified": "invalid",
+		}.get(stage, "new")
+		row["resolution"] = "CREATED" if stage == "Connected" else None
+	return rows
 
 
 def _load_attributed_applications(student_ids: set[Any]) -> list[dict[str, Any]]:
@@ -761,7 +772,7 @@ def _metric_status(value: float | None, target: float | None) -> str:
 
 
 def _load_total_prospects(year: str, scope: dict[str, Any]) -> int | None:
-	if not _table_exists("CRM Lead"):
+	if not _table_exists("CRM Student"):
 		return None
 	filters: dict[str, Any] = {"admission_year": year}
 	if scope.get("kind") == "campus":
@@ -777,12 +788,12 @@ def _load_total_prospects(year: str, scope: dict[str, Any]) -> int | None:
 			return 0
 		filters["high_school"] = ["in", [row["name"] for row in schools]]
 	rows = _fetch_rows(
-		"CRM Lead",
+		"CRM Student",
 		filters=filters,
-		fields=["name", "processing_status", "resolution"],
+		fields=["name", "student_stage"],
 		allow_missing=True,
 	)
-	return len([row for row in rows if str(row.get("processing_status") or "") != "CLOSED"])
+	return len([row for row in rows if row.get("student_stage") not in {"Connected", "Disqualified"}])
 
 
 def _load_device_sync(warnings: list[str]) -> tuple[dict[str, Any] | None, str]:
@@ -833,11 +844,15 @@ def _to_vnd(amount: float, unit: str | None) -> float:
 
 
 def _is_qualified(row: dict[str, Any]) -> bool:
-	return str(row.get("processing_status") or "").casefold() in {"processing", "processed", "assigned"} or row.get("resolution") == "CREATED"
+	return str(row.get("student_stage") or "").casefold() in {"attempting", "qualified", "connected"} or str(
+		row.get("processing_status") or ""
+	).casefold() in {"processing", "processed", "assigned"} or row.get("resolution") == "CREATED"
 
 
 def _is_enrolled(student: dict[str, Any], applications: list[dict[str, Any]]) -> bool:
-	if str(student.get("resolution") or "").casefold() == "created":
+	if str(student.get("student_stage") or "").casefold() == "connected" or str(
+		student.get("resolution") or ""
+	).casefold() == "created":
 		return True
 	return any(str(row.get("status") or "").casefold() == "enrolled" for row in applications)
 

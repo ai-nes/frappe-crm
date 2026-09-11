@@ -1,6 +1,8 @@
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
+from crm.fcrm.doctype.crm_student.crm_student import CRMStudent
+
 
 class TestCRMStudent(FrappeTestCase):
 	def setUp(self):
@@ -17,9 +19,7 @@ class TestCRMStudent(FrappeTestCase):
 				frappe.delete_doc("CRM Interaction", name, force=True)
 		for name in test_contact_names:
 			frappe.delete_doc("CRM Student", name, force=True)
-		for name in frappe.db.get_all(
-			"CRM Lead", filters={"student_name": ["like", "_Test%"]}, pluck="name"
-		):
+		for name in frappe.db.get_all("CRM Lead", filters={"student_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Lead", name, force=True)
 		for name in frappe.db.get_all("CRM Staff", filters={"full_name": ["like", "_Test%"]}, pluck="name"):
 			frappe.delete_doc("CRM Staff", name, force=True)
@@ -55,6 +55,12 @@ class TestCRMStudent(FrappeTestCase):
 		)
 		contact.insert(ignore_permissions=True)
 		return contact
+
+	def test_graduation_score_is_limited_to_30(self):
+		student = CRMStudent({"doctype": "CRM Student", "graduation_score": 30.01})
+
+		with self.assertRaises(frappe.ValidationError):
+			student._validate_score_ranges()
 
 	# ------------------------------------------------------- milestone-gated creation
 

@@ -32,10 +32,10 @@ def _has_table(doctype: str) -> bool:
 def _student_scope(staff_names):
 	if staff_names is None:
 		return None
-	if not _has_table("CRM Lead"):
+	if not _has_table("CRM Student"):
 		return []
 	return frappe.get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters={"owner_staff": ["in", staff_names or ["__none__"]]},
 		fields=["name"],
 		limit_page_length=0,
@@ -206,8 +206,6 @@ def get_admissions_overview(filters=None, **kwargs):
 		source_mode="canonical_application",
 		subject_grain="Application",
 	)
-
-
 @frappe.whitelist()
 def get_digital_marketing_overview(filters=None, **kwargs):
 	filters = _filters(filters, **kwargs)
@@ -234,23 +232,4 @@ def get_student_360(filters=None, **kwargs):
 		_student_360_data(filters, _student_scope(staff_names)),
 		source_mode="canonical_application",
 		subject_grain="Application",
-	)
-
-
-@frappe.whitelist()
-def get_ai_command_center(filters=None, **kwargs):
-	filters = _filters(filters, **kwargs)
-	staff_names = _staff_scope("admissions_director")
-	data = _overview_data(filters, _student_scope(staff_names))
-	data["raw_facts"] = {
-		"applications": data.get("application_count", 0),
-		"enrolled": data.get("enrolled_count", 0),
-	}
-	data["ai_status"] = "unavailable"
-	return build_projection(
-		"AICommandCenter",
-		filters,
-		data,
-		ai_unavailable=True,
-		warnings=["AI insights are unavailable; raw facts are returned."],
 	)

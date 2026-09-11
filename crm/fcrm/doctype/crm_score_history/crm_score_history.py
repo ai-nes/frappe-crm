@@ -1,6 +1,8 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.services.score_revision import normalize_score_ruleset_identity
+
 
 class CRMScoreHistory(Document):
 	def before_insert(self):
@@ -8,6 +10,17 @@ class CRMScoreHistory(Document):
 			self.scoring_time = frappe.utils.now_datetime()
 
 	def validate(self):
+		try:
+			normalize_score_ruleset_identity(
+				{
+					"rule_version": self.get("rule_version"),
+					"rule_version_digest": self.get("rule_version_digest"),
+					"ruleset_digest": self.get("ruleset_digest"),
+				},
+				allow_empty=True,
+			)
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 		self._set_score_change()
 
 	def on_update(self):

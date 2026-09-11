@@ -123,7 +123,7 @@ def get_campaign_leads(
 	toDate: str | None = None,
 	**query: Any,
 ) -> dict[str, Any]:
-	"""Return minimal CRM Lead rows from the same primary-attribution cohort as the chart."""
+	"""Return minimal CRM Student rows from the same primary-attribution cohort as the chart."""
 	access = require_campaign_intelligence_access()
 	year = resolve_admission_year(admissionYear)
 	date_from, date_to, warnings = _resolve_date_range(year, query.get("from", fromDate), query.get("to", toDate))
@@ -185,6 +185,15 @@ def _primary_attributions(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any
 
 
 def _lead_status_group(code: str, status: dict[str, Any]) -> str:
+	student_stage = str(status.get("student_stage") or "").strip()
+	if student_stage:
+		return {
+			"New": "new",
+			"Attempting": "in_progress",
+			"Qualified": "qualified",
+			"Connected": "converted",
+			"Disqualified": "disqualified",
+		}.get(student_stage, "unknown")
 	resolution = str(status.get("resolution") or code or "").upper()
 	processing = str(status.get("processing_status") or "").upper()
 	if resolution == "CREATED":
@@ -201,8 +210,8 @@ def _lead_status_group(code: str, status: dict[str, Any]) -> str:
 
 
 def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
-	"""Load one permission-scoped cohort; unavailable optional tables yield no lead metrics."""
-	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Lead")):
+	"""Load one permission-scoped cohort; unavailable optional tables yield no Student metrics."""
+	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Student")):
 		return None
 	attributions = frappe.get_all(
 		"CRM Campaign Attribution",
@@ -244,14 +253,14 @@ def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
 	if scope.get("territory"):
 		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
 		filters["owning_team"] = ["in", teams or [""]]
-	students = frappe.get_list("CRM Lead", filters=filters,
-		fields=["name", "lead_code", "student_name", "high_school", "processing_status", "resolution", "owner_staff", "source", "modified"],
+	students = frappe.get_list("CRM Student", filters=filters,
+		fields=["name", "lead_code", "full_name", "high_school", "student_stage", "owner_staff", "source", "modified"],
 		limit_page_length=0)
 	grouped = defaultdict(list)
 	for student in students:
 		row = dict(student)
-		code = str(row.get("processing_status") or "")
-		status = {"processing_status": code, "resolution": row.get("resolution")}
+		code = str(row.get("student_stage") or "")
+		status = {"student_stage": code}
 		row.update(statusCode=code, status=code or "Unknown",
 			statusGroup=_lead_status_group(code, status))
 		grouped[primary[row["name"]]["campaign"]].append(row)
@@ -259,8 +268,8 @@ def _load_campaign_lead_rows(year, date_from, date_to, campus, channel, scope):
 
 
 def _load_campaign_lead_page(year, date_from, date_to, campus, channel, scope, campaign_id, status_group, page, page_size):
-	"""Load one page from the campaign cohort instead of slicing a full student list in Python."""
-	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Lead")):
+	"""Load one page from the campaign cohort instead of slicing a full Student list in Python."""
+	if not all(frappe.db.table_exists(doctype) for doctype in ("CRM Campaign Attribution", "CRM Student")):
 		return None
 	attributions = frappe.get_all(
 		"CRM Campaign Attribution",
@@ -311,21 +320,21 @@ def _load_campaign_lead_page(year, date_from, date_to, campus, channel, scope, c
 		teams = frappe.get_all("CRM Team", filters={"territory": scope["territory"]}, pluck="name")
 		filters["owning_team"] = ["in", teams or [""]]
 	all_rows = frappe.get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters=filters,
-		fields=["name", "lead_code", "student_name", "high_school", "processing_status", "resolution", "owner_staff", "source", "modified"],
+		fields=["name", "lead_code", "full_name", "high_school", "student_stage", "owner_staff", "source", "modified"],
 		order_by="modified desc, name asc",
 		limit_page_length=0,
 	)
 	if status_group != "all":
 		all_rows = [
 			row for row in all_rows
-			if _lead_status_group(str(row.get("processing_status") or ""), dict(row)) == status_group
+			if _lead_status_group(str(row.get("student_stage") or ""), dict(row)) == status_group
 		]
 	total = len(all_rows)
 	rows = all_rows[(page - 1) * page_size : page * page_size]
 	for row in rows:
-		code = str(row.get("processing_status") or "")
+		code = str(row.get("student_stage") or "")
 		status = dict(row)
 		row.update(
 			statusCode=code,
@@ -374,7 +383,7 @@ def _build_lead_items(rows):
 	for interaction in interactions:
 		contacts[interaction["student"]].append(str(interaction["interaction_datetime"]))
 	return [{"id": row["name"], "leadCode": row.get("lead_code") or row["name"],
-		"name": row.get("student_name") or row["name"],
+		"name": row.get("full_name") or row["name"],
 		"school": schools.get(row.get("high_school"), ""), "status": row["status"], "statusCode": row["statusCode"],
 		"statusGroup": row["statusGroup"], "owner": owners.get(row.get("owner_staff"), ""),
 		"source": sources.get(row.get("source"), ""), "contactAttemptCount": len(contacts[row["name"]]),

@@ -155,8 +155,8 @@ class TestDirectorSchoolDetail(FrappeTestCase):
 		sources = {
 			"province": {}, "ward": {}, "snapshot": None, "intelligence": {},
 			"students": [
-				{"current_grade": "12", "study_stage": "grade_12_h1", "processing_status": "PROCESSED", "resolution": "PENDING"},
-				{"current_grade": "11", "study_stage": "grade_11", "processing_status": "CLOSED", "resolution": "CREATED"},
+				{"current_grade": "12", "study_stage": "grade_12_h1", "student_stage": "Attempting"},
+				{"current_grade": "11", "study_stage": "grade_11", "student_stage": "Connected"},
 			],
 			"contacts": [{"name": "contact-1"}], "stakeholders": [],
 			"people": {}, "roles": {}, "activities": [], "activity_types": {},

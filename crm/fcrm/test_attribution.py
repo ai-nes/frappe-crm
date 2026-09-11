@@ -26,24 +26,43 @@ class TestAttribution(FrappeTestCase):
 
 	def tearDown(self):
 		for name in frappe.db.get_all(
-			"CRM Marketing Engagement", filters={"engagement_kind": "campaign_touch", "crm_campaign": ["in", [self.campaign_a, self.campaign_b]]}, pluck="name"
+			"CRM Marketing Engagement",
+			filters={
+				"engagement_kind": "campaign_touch",
+				"crm_campaign": ["in", [self.campaign_a, self.campaign_b]],
+			},
+			pluck="name",
 		):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all(
 			"CRM Marketing Engagement",
-			filters={"engagement_kind": "event_participation", "crm_event": ["in", frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name")]},
+			filters={
+				"engagement_kind": "event_participation",
+				"crm_event": [
+					"in",
+					frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name"),
+				],
+			},
 			pluck="name",
 		):
 			frappe.delete_doc("CRM Marketing Engagement", name, force=True)
 		for name in frappe.db.get_all("CRM Event", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
 			frappe.delete_doc("CRM Event", name, force=True)
-		for name in frappe.db.get_all("CRM Student", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Student", filters={"full_name": ["like", "_Test Attr%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Student", name, force=True)
-		for name in frappe.db.get_all("CRM Lead", filters={"student_name": ["like", "_Test Attr%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Lead", filters={"student_name": ["like", "_Test Attr%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Lead", name, force=True)
-		for name in frappe.db.get_all("CRM Campaign", filters={"title": ["like", "_Test Attr%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campaign", filters={"title": ["like", "_Test Attr%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campaign", name, force=True)
-		for name in frappe.db.get_all("CRM Campus", filters={"campus_name": ["like", "_Test Attr%"]}, pluck="name"):
+		for name in frappe.db.get_all(
+			"CRM Campus", filters={"campus_name": ["like", "_Test Attr%"]}, pluck="name"
+		):
 			frappe.delete_doc("CRM Campus", name, force=True)
 
 	# --------------------------------------------------------------- helpers
@@ -51,9 +70,7 @@ class TestAttribution(FrappeTestCase):
 	def _make_campus(self, name):
 		if frappe.db.exists("CRM Campus", name):
 			frappe.delete_doc("CRM Campus", name, force=True)
-		doc = frappe.get_doc(
-			{"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-ATTR"}
-		)
+		doc = frappe.get_doc({"doctype": "CRM Campus", "campus_name": name, "campus_code": "TEST-ATTR"})
 		doc.insert(ignore_permissions=True)
 		return doc.name
 
@@ -103,7 +120,9 @@ class TestAttribution(FrappeTestCase):
 			}
 		)
 		contact.insert(ignore_permissions=True)
-		self.contact_students[contact.name] = student.name
+		# Marketing evidence is Student-owned.  Keep the Lead only as the raw
+		# intake/provenance record for the canonical Student.
+		self.contact_students[contact.name] = contact.name
 		return contact.name
 
 	def _make_touchpoint(self, contact, campaign, touched_at):

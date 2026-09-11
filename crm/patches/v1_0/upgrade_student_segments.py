@@ -17,8 +17,11 @@ def execute():
 	frappe.db.add_index("CRM Segment Member", ["student", "segment"])
 	frappe.db.add_index("CRM Student Need Assignment", ["need", "parent"])
 	frappe.db.add_index("CRM Student Tag Assignment", ["tag", "parent"])
-	frappe.db.add_index("CRM Need", ["status", "group"])
-	frappe.db.add_index("CRM Tag", ["status", "group"])
+	# ``group`` is a MariaDB keyword.  Frappe's generic helper interpolates
+	# field names verbatim, so quote the column and keep an explicit stable name
+	# for this already-registered patch.
+	frappe.db.add_index("CRM Need", ["status", "`group`"], "status_group_index")
+	frappe.db.add_index("CRM Tag", ["status", "`group`"], "status_group_index")
 	from crm.fcrm.classification_catalog import seed_catalog
 
 	seed_catalog()

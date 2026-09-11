@@ -8,7 +8,7 @@ from frappe.query_builder import JoinType
 from frappe.translate import get_translated_doctypes
 
 from crm.fcrm.doctype.call_log.call_log import parse_call_log
-
+from crm.fcrm.student_reference import canonical_student
 
 IGNORED_VERSION_FIELDS = {
 	"docstatus",
@@ -30,6 +30,10 @@ IGNORED_VERSION_FIELDS = {
 
 @frappe.whitelist()
 def get_activities(doctype: str, name: str):
+	if doctype == "CRM Lead":
+		canonical_name = canonical_student(name)
+		if canonical_name:
+			doctype, name = "CRM Student", canonical_name
 	if not doctype or not name or not frappe.db.exists(doctype, name):
 		frappe.throw(_("Document not found"), frappe.DoesNotExistError)
 

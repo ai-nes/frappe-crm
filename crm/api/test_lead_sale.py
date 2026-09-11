@@ -14,7 +14,7 @@ class TestLeadSaleOverview(FrappeTestCase):
 			{}, "error", None, {"last_error_code": "TEAM_NOT_FOUND_FOR_PROVINCE"}
 		)
 
-		self.assertEqual(reason, "Chưa có Team đang phụ trách tỉnh của Lead.")
+		self.assertEqual(reason, "Chưa có Team đang phụ trách tỉnh của Student.")
 		self.assertNotIn("TEAM_NOT_FOUND_FOR_PROVINCE", reason)
 
 	def test_assignment_reason_hides_unknown_routing_code(self):

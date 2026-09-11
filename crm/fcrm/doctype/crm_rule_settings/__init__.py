@@ -1,0 +1,1 @@
+"""CRM Rule Settings singleton."""

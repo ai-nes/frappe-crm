@@ -17,11 +17,13 @@ def _ensure_index(doctype: str, fields: tuple[str, ...], index_name: str):
 
 
 def execute():
-	frappe.reload_doc("fcrm", "doctype", "crm_ai_lead_insight")
-	frappe.reload_doc("fcrm", "doctype", "crm_ai_lead_insight_item")
+	if not frappe.db.exists("DocType", "CRM AI Student Insight"):
+		return
+	frappe.reload_doc("fcrm", "doctype", "crm_ai_student_insight")
+	frappe.reload_doc("fcrm", "doctype", "crm_ai_student_insight_item")
 	frappe.reload_doc("fcrm", "doctype", "crm_student_command_receipt")
 	_ensure_index(
-		"CRM AI Lead Insight",
+		"CRM AI Student Insight",
 		("student", "insight_type", "ai_generated_at"),
-		"crm_ai_lead_insight_student_type_idx",
+		"crm_ai_student_insight_student_type_idx",
 	)

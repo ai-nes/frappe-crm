@@ -8,18 +8,46 @@ class CRMStudentSLAAttempt(Document):
 	"""One first-response clock per opening ownership revision."""
 
 	_IDENTITY_FIELDS = (
-		"attempt_key", "reset_sequence", "student", "opening_ownership_revision", "opening_revision_key",
-		"opening_ownership_event", "owner_staff", "owning_team", "student_pool", "campus", "sla_policy",
-		"sla_policy_version", "warning_at", "breach_at", "escalation_at", "pause_reasons",
-		"maximum_pause_minutes", "recipient_strategy", "opened_at", "correlation_token",
+		"attempt_key",
+		"reset_sequence",
+		"student",
+		"opening_ownership_revision",
+		"opening_revision_key",
+		"opening_ownership_event",
+		"owner_staff",
+		"owning_team",
+		"student_pool",
+		"campus",
+		"sla_policy",
+		"sla_policy_version",
+		"warning_at",
+		"breach_at",
+		"escalation_at",
+		"pause_reasons",
+		"maximum_pause_minutes",
+		"recipient_strategy",
+		"opened_at",
+		"correlation_token",
 	)
 
 	@staticmethod
 	def default_list_data():
 		"""Provide the first-visit columns required by the shared list API."""
 		columns = [
-			{"label": "Student", "type": "Link", "key": "student", "options": "CRM Lead", "width": "16rem"},
-			{"label": "Owner", "type": "Link", "key": "owner_staff", "options": "CRM Staff", "width": "12rem"},
+			{
+				"label": "Student",
+				"type": "Link",
+				"key": "student",
+				"options": "CRM Student",
+				"width": "16rem",
+			},
+			{
+				"label": "Owner",
+				"type": "Link",
+				"key": "owner_staff",
+				"options": "CRM Staff",
+				"width": "12rem",
+			},
 			{"label": "Status", "type": "Select", "key": "status", "width": "10rem"},
 			{"label": "Warning At", "type": "Datetime", "key": "warning_at", "width": "11rem"},
 			{"label": "Breach At", "type": "Datetime", "key": "breach_at", "width": "11rem"},

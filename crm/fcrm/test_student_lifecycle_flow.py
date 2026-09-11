@@ -15,14 +15,31 @@ class TestStudentLifecycleFlow(FrappeTestCase):
 		]
 
 	def test_direct_progression_covers_every_admissions_target(self):
-		for target in ("MQL", "Applicant", "Enrolled"):
+		for target, canonical_target in (
+			("MQL", "Attempting"),
+			("Applicant", "Qualified"),
+			("Enrolled", "Connected"),
+		):
 			self.assertEqual(
-				validate_transition("Lead", target, outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities)["to_stage"], target
+				validate_transition(
+					"Lead",
+					target,
+					outcome_code="qualified",
+					evidence=self.evidence,
+					capabilities=self.capabilities,
+				)["to_stage"],
+				canonical_target,
 			)
 
 	def test_backward_direct_field_like_edge_is_rejected(self):
 		with self.assertRaises(StudentLifecycleError) as error:
-			validate_transition("Applicant", "MQL", outcome_code="qualified", evidence=self.evidence, capabilities=self.capabilities)
+			validate_transition(
+				"Applicant",
+				"MQL",
+				outcome_code="qualified",
+				evidence=self.evidence,
+				capabilities=self.capabilities,
+			)
 		self.assertEqual(error.exception.code, "INVALID_EDGE")
 
 	def test_reopen_is_only_available_after_lost_and_with_reason(self):

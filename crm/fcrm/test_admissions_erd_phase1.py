@@ -61,9 +61,9 @@ def test_phase1_facts_have_period_and_idempotency_keys():
 
 def test_canonical_admission_and_dashboard_facts_have_declared_grain():
 	application = _fields(_meta("crm_admission_application"))
-	assert {"case_key", "offering", "application_attempt_key"} <= set(application)
+	assert {"student", "offering", "application_attempt_key"} <= set(application)
 	assert application["application_attempt_key"]["unique"] == 1
-	assert application["case_key"]["reqd"] == 1
+	assert application["student"]["reqd"] == 1
 	assert application["offering"]["reqd"] == 1
 
 	for doctype, grain, unique_fields in (

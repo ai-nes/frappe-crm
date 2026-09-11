@@ -52,18 +52,13 @@ class TestStudentDashboardEvents(FrappeTestCase):
 	def _make_student(self, name, phone):
 		student = frappe.get_doc(
 			{
-				"doctype": "CRM Lead",
-				"student_name": name,
+				"doctype": "CRM Student",
+				"full_name": name,
 				"phone": phone,
-				"processing_status": "NEW",
+				"student_stage": "New",
 			}
 		)
-		previous_intake_flag = getattr(frappe.flags, "student_intake_service", False)
-		frappe.flags.student_intake_service = True
-		try:
-			student.insert(ignore_permissions=True)
-		finally:
-			frappe.flags.student_intake_service = previous_intake_flag
+		student.insert(ignore_permissions=True)
 		return student.name
 
 	def _make_event(self, title, start_datetime="2026-09-01 10:00:00", event_date=None):
@@ -81,6 +76,9 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		return doc.name
 
 	def _make_contact(self, full_name, phone, crm_event=None, student=None):
+		if student:
+			return student
+
 		fields = {
 			"doctype": "CRM Student",
 			"full_name": full_name,
@@ -88,8 +86,6 @@ class TestStudentDashboardEvents(FrappeTestCase):
 		}
 		if crm_event:
 			fields["crm_event"] = crm_event
-		if student:
-			fields["student"] = student
 		doc = frappe.get_doc(fields)
 		doc.insert(ignore_permissions=True)
 		return doc.name
@@ -134,17 +130,14 @@ class TestStudentDashboardEvents(FrappeTestCase):
 			frappe.delete_doc("CRM Student", contact_name, force=True)
 			frappe.delete_doc("CRM Event", event_name, force=True)
 
-	def test_student_can_have_multiple_leads(self):
-		contact_name = self._make_contact("_Test SD Multi Lead Student", "0987000095")
-		lead_one = self._make_student("_Test SD Multi Lead One", "0987000096")
-		lead_two = self._make_student("_Test SD Multi Lead Two", "0987000097")
-		frappe.db.set_value("CRM Lead", lead_one, "student", contact_name, update_modified=False)
-		frappe.db.set_value("CRM Lead", lead_two, "student", contact_name, update_modified=False)
+	def test_student_records_by_phone_returns_canonical_students(self):
+		student_one = self._make_student("_Test SD Student One", "0987000095")
+		student_two = self._make_student("_Test SD Student Two", "0987000095")
 
 		result = get_student_records_by_phone("0987000095")
-		lead_names = {row["name"] for row in result["students"]}
+		student_names = {row["name"] for row in result["students"]}
 
-		self.assertEqual(lead_names, {lead_one, lead_two})
+		self.assertEqual(student_names, {student_one, student_two})
 
 	def test_events_mapping_returns_only_canonical_participation(self):
 		participation_event = self._make_event("_Test SD Participation Event", start_datetime="2026-09-20 09:00:00")

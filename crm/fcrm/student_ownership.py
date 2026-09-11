@@ -1,4 +1,4 @@
-"""Authoritative ownership command for CRM Lead.
+"""Authoritative ownership command for CRM Student.
 
 Ownership is deliberately implemented as a command rather than as a writable
 field convention.  The command is the only supported application writer for
@@ -33,6 +33,7 @@ from crm.fcrm.role_policy import (
 	capabilities_for_roles,
 	resolve_crm_profile,
 )
+from crm.fcrm.student_reference import canonical_student
 from crm.fcrm.utils.effective import is_effective
 
 RECEIPT_DOCTYPE = "CRM Student Command Receipt"
@@ -480,7 +481,7 @@ def resolve_student_operational_target(
 
 
 def _revision_field() -> str | None:
-	fields = _doctype_fields("CRM Lead")
+	fields = _doctype_fields("CRM Student")
 	for fieldname in ("ownership_revision", "revision"):
 		if fieldname in fields:
 			return fieldname
@@ -504,31 +505,6 @@ def _next_revision(student, current):
 	# diagnosable on an un-migrated checkout but cannot pretend modified is a
 	# durable integer revision.
 	return current
-
-
-def _sync_linked_student_ownership(lead_name: str, updates: dict[str, Any], revision: Any) -> None:
-	"""Keep the canonical Student scope aligned with its Lead assignment.
-
-	The ownership command still uses CRM Lead as the operational aggregate for
-	backward-compatible assignment flows, while Student owns the post-conversion
-	status command.  A linked Student must therefore carry the same assignment
-	projection; otherwise a Sale/CTV Sale can open the Lead-backed detail but is
-	denied when changing the canonical Student stage.
-	"""
-	student_name = frappe.db.get_value("CRM Lead", lead_name, "student")
-	if not student_name or not frappe.db.exists("CRM Student", student_name):
-		return
-
-	student_fields = _doctype_fields("CRM Student")
-	student_updates = {
-		fieldname: updates.get(fieldname)
-		for fieldname in ("owner_staff", "owning_team", "owning_pool", "assigned_to")
-		if fieldname in student_fields
-	}
-	if "ownership_revision" in student_fields:
-		student_updates["ownership_revision"] = revision
-	if student_updates:
-		frappe.db.set_value("CRM Student", student_name, student_updates, update_modified=True)
 
 
 def _actor_scope_snapshot(actor: str, profile: str, teams: list[dict[str, Any]]) -> str:
@@ -582,11 +558,8 @@ def _receipt_values(
 		"result": result_json,
 		"result_revision": result.get("revision") if result else None,
 	}
-	# Ownership receipts are shared by the legacy CRM Student command and the
-	# Lead batch command.  The receipt's historical target_student link points to
-	# CRM Student, while ownership events support CRM Lead as the aggregate.  Do
-	# not write a Lead name into that Student link; the event remains the
-	# authoritative Lead audit record and replay path.
+	# The receipt target is always the canonical Student aggregate. Lead intake
+	# records may remain as source provenance, but never own this command state.
 	if frappe.db.exists("CRM Student", student_name):
 		values["target_student"] = student_name
 	return values
@@ -632,7 +605,7 @@ def _event_values(
 		"event_type": event_type,
 		"student": student_name,
 		"aggregate_name": student_name,
-		"aggregate_doctype": "CRM Lead",
+		"aggregate_doctype": "CRM Student",
 		"previous_revision": previous_revision,
 		"revision": next_revision,
 		"aggregate_revision": next_revision,
@@ -696,6 +669,7 @@ def change_student_ownership(
 	"""
 
 	student_name = _required_text(student, "INVALID_INPUT", "student")
+	student_name = canonical_student(student_name) or student_name
 	target_kind = _required_text(target_kind, "INVALID_INPUT", "target_kind")
 	target_id = _required_text(target_id, "INVALID_INPUT", "target_id")
 	reason = _required_text(reason, "INVALID_INPUT", "reason", max_length=2000)
@@ -738,7 +712,7 @@ def change_student_ownership(
 	try:
 		# Scope is checked from the current Student before any target Staff/Team
 		# lookup.  A historic event snapshot is never an authorization grant.
-		student_doc = frappe.get_doc("CRM Lead", student_name)
+		student_doc = frappe.get_doc("CRM Student", student_name)
 		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 
@@ -772,8 +746,8 @@ def change_student_ownership(
 			if receipt:
 				return _replay_receipt(receipt, fingerprint)
 			raise
-		_lock("CRM Lead", student_name)
-		student_doc = frappe.get_doc("CRM Lead", student_name)
+		_lock("CRM Student", student_name)
+		student_doc = frappe.get_doc("CRM Student", student_name)
 		if not _internal_service and not has_student_list_read_permission(student_doc, user=actor):
 			_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 		current_revision = _current_revision(student_doc)
@@ -813,8 +787,7 @@ def change_student_ownership(
 		}
 		if _revision_field():
 			updates[_revision_field()] = next_revision
-		frappe.db.set_value("CRM Lead", student_name, updates, update_modified=True)
-		_sync_linked_student_ownership(student_name, updates, next_revision)
+		frappe.db.set_value("CRM Student", student_name, updates, update_modified=True)
 		# Active Phase 6 work is reconciled in the same ownership transaction so a
 		# scope change cannot strand an action outside every executor queue.
 		from crm.fcrm.student_decision import reconcile_student_actions
@@ -950,7 +923,8 @@ def _read_actor() -> tuple[str, str, set[str]]:
 def _student_for_read(student_name: str):
 	student_name = _required_text(student_name, "INVALID_INPUT", "student")
 	actor, profile, capabilities = _read_actor()
-	student_doc = frappe.get_doc("CRM Lead", student_name)
+	student_name = canonical_student(student_name) or student_name
+	student_doc = frappe.get_doc("CRM Student", student_name)
 	if not has_student_list_read_permission(student_doc, user=actor):
 		_error("OUT_OF_SCOPE", "Student is outside the actor's current ownership scope.")
 	return student_doc, actor, profile, capabilities

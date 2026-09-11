@@ -1,0 +1,17 @@
+{
+  "contract_version": "nba-evaluation-unknown",
+  "evaluation_id": "NBAEVAL-0003",
+  "evaluation_key": "e12ce3bef4c446f5b67e58ba789ff48c7f1e70d873ff3eb3c97fc6121fd7fe20",
+  "input_digest": "2020202020202020202020202020202020202020202020202020202020202020",
+  "engine_revision": "nba-engine",
+  "run_status": "completed",
+  "disposition": "NO_ACTION",
+  "reason_codes": [
+    "empty_eligible_set"
+  ],
+  "revisit_at": null,
+  "reevaluation_trigger": null,
+  "trace_ref": "nba-trace:NBAEVAL-0003",
+  "result_digest": "505c93c7da993010f4fa790f6b1588266e820182436c19ede89ff74db7c43fef",
+  "recommendations": []
+}

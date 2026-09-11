@@ -34,7 +34,7 @@ MODULES = {
 		"CRM High School", "CRM Major", "CRM Province", "CRM Province Former Name", "CRM Ward", "CRM Master Data Change",
 		"CRM Master Data Change Approval",
 	),
-	"CRM AI": ("CRM AI Lead Insight", "CRM AI Lead Insight Item", "CRM AI Personal Email Draft", "CRM AI Capability Grant"),
+	"CRM AI": ("CRM AI Student Insight", "CRM AI Student Insight Item", "CRM AI Personal Email Draft", "CRM AI Capability Grant"),
 	"CRM Org": ("CRM Campus", "CRM Department", "CRM Staff", "CRM Team", "CRM Team Membership"),
 	"CRM Config": (
 		"FCRM Settings", "Global Settings", "Dropdown Item", "Fields Layout", "Form Script", "View Settings",

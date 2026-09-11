@@ -25,7 +25,7 @@ CONNECTED_OUTCOMES = {"captured", "resolved", "converted", "connected"}
 TERMINAL_TASK_STATES = {"done", "canceled", "completed", "cancelled", "rejected", "superseded"}
 MANAGER_PROFILES = {"lead_sales"}
 
-STUDENT_FIELDS = ["name", "student_name", "processing_status", "resolution", "modified"]
+STUDENT_FIELDS = ["name", "full_name", "student_stage", "modified"]
 CONTACT_FIELDS = ["name", "student", "readiness_level", "next_follow_up"]
 INTERACTION_FIELDS = [
 	"name",
@@ -75,7 +75,7 @@ def get_ctv_sale_overview(
 	students = _load_students(target_staff, warnings)
 	student_ids = [str(row.get("name")) for row in students if row.get("name")]
 	student_names = {
-		str(row.get("name")): str(row.get("student_name") or "Hồ sơ chưa đặt tên")
+		str(row.get("name")): str(row.get("full_name") or "Hồ sơ chưa đặt tên")
 		for row in students
 		if row.get("name")
 	}
@@ -222,11 +222,11 @@ def _viewer(staff: dict[str, Any] | None, fallback_user: str) -> dict[str, str]:
 
 
 def _load_students(target_staff: dict[str, Any] | None, warnings: list[str]) -> list[dict[str, Any]]:
-	filters: dict[str, Any] = {"processing_status": ["!=", "CLOSED"]}
+	filters: dict[str, Any] = {"student_stage": ["not in", ["Connected", "Disqualified"]]}
 	if target_staff:
 		filters["owner_staff"] = target_staff["name"]
 	rows = _get_list(
-		"CRM Lead",
+		"CRM Student",
 		filters=filters,
 		fields=STUDENT_FIELDS,
 		order_by="name asc",
@@ -513,7 +513,7 @@ def _transfer_ids(students: list[dict[str, Any]], contacts: list[dict[str, Any]]
 	ids = {
 		str(row.get("name"))
 		for row in students
-		if str(row.get("resolution") or "") == "CREATED"
+		if str(row.get("student_stage") or "") == "Connected"
 	}
 	for row in contacts:
 		readiness = str(row.get("readiness_level") or "")

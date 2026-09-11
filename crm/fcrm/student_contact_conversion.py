@@ -2,8 +2,9 @@
 
 The conversion junction is authoritative once present.  The legacy
 ``CRM Student.student`` link is used only as a temporary compatibility fallback
-for rows that have not been migrated yet; direct ``CRM Lead.student`` links are
-the canonical one-to-many relationship.
+for rows that have not been migrated yet. New operational relations use the
+canonical ``CRM Student`` record; ``CRM Lead.student`` remains provenance for
+the conversion boundary.
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ import json
 from typing import Any
 
 import frappe
+
+from crm.fcrm.student_reference import canonical_student, lead_for_student
 
 CONVERSION_DOCTYPE = "CRM Student Contact Conversion"
 
@@ -71,37 +74,53 @@ def conversion_rows_for_contact(contact: str, *, limit: int = 100, start: int = 
 
 def contacts_for_student(student: str) -> list[str]:
 	contacts = []
-	if _lead_student_link_available():
-		linked_contact = frappe.db.get_value("CRM Lead", student, "student")
+	canonical = canonical_student(student) or (student if frappe.db.exists("CRM Student", student) else None)
+	lead = (
+		lead_for_student(canonical)
+		if canonical
+		else (student if frappe.db.exists("CRM Lead", student) else None)
+	)
+	if _lead_student_link_available() and lead:
+		linked_contact = frappe.db.get_value("CRM Lead", lead, "student")
 		if linked_contact:
 			contacts.append(linked_contact)
 
-	rows = conversion_rows_for_student(student)
+	rows = conversion_rows_for_student(lead or student)
 	contacts.extend(row.get("contact") for row in rows if row.get("contact"))
-	legacy_contact = frappe.db.get_value("CRM Student", {"student": student}, "name")
+	legacy_contact = frappe.db.get_value("CRM Student", {"student": lead or student}, "name")
 	if legacy_contact:
 		contacts.append(legacy_contact)
+	if canonical:
+		contacts.append(canonical)
 	return list(dict.fromkeys(contacts))
 
 
 def leads_for_student(student: str) -> list[str]:
 	leads = []
-	if _lead_student_link_available():
+	canonical = canonical_student(student) or (student if frappe.db.exists("CRM Student", student) else None)
+	lead = (
+		lead_for_student(canonical)
+		if canonical
+		else (student if frappe.db.exists("CRM Lead", student) else None)
+	)
+	if _lead_student_link_available() and canonical:
 		leads.extend(
 			frappe.get_all(
 				"CRM Lead",
-				filters={"student": student},
+				filters={"student": canonical},
 				pluck="name",
 				order_by="creation asc, name asc",
 				ignore_permissions=True,
 			)
 		)
 
-	rows = conversion_rows_for_contact(student)
+	rows = conversion_rows_for_contact(canonical or student)
 	leads.extend(row.get("student") for row in rows if row.get("student"))
-	legacy = frappe.db.get_value("CRM Student", student, "student")
+	legacy = frappe.db.get_value("CRM Student", canonical or student, "student")
 	if legacy:
 		leads.append(legacy)
+	if lead:
+		leads.append(lead)
 	return list(dict.fromkeys(leads))
 
 
@@ -127,22 +146,48 @@ def contact_for_student(student: str, *, requested_contact: str | None = None) -
 def contact_is_linked_to_student(contact: str, student: str) -> bool:
 	if not contact or not student:
 		return False
-	if _lead_student_link_available() and frappe.db.get_value("CRM Lead", student, "student") == contact:
+	canonical = canonical_student(student)
+	contact_student = canonical_student(contact)
+	if canonical and contact_student and canonical == contact_student:
+		return True
+	lead = (
+		lead_for_student(canonical)
+		if canonical
+		else (student if frappe.db.exists("CRM Lead", student) else None)
+	)
+	if (
+		_lead_student_link_available()
+		and lead
+		and frappe.db.get_value("CRM Lead", lead, "student") == contact
+	):
 		return True
 	rows = conversion_rows_for_contact(contact)
-	return any(row.get("student") == student for row in rows) or frappe.db.get_value(
+	return any(row.get("student") == (lead or student) for row in rows) or frappe.db.get_value(
 		"CRM Student", contact, "student"
-	) == student
+	) in {student, lead}
 
 
 def relationship_source(contact: str, student: str | None = None) -> str:
 	rows = conversion_rows_for_contact(contact)
 	if rows and (student is None or any(row.get("student") == student for row in rows)):
 		return "junction"
-	if student and _lead_student_link_available() and frappe.db.get_value("CRM Lead", student, "student") == contact:
+	canonical = canonical_student(student)
+	if canonical and canonical_student(contact) == canonical:
+		return "canonical_student"
+	lead = (
+		lead_for_student(canonical)
+		if canonical
+		else (student if frappe.db.exists("CRM Lead", student) else None)
+	)
+	if (
+		student
+		and _lead_student_link_available()
+		and lead
+		and frappe.db.get_value("CRM Lead", lead, "student") == contact
+	):
 		return "lead_link"
 	if frappe.db.get_value("CRM Student", contact, "student") and (
-		student is None or frappe.db.get_value("CRM Student", contact, "student") == student
+		student is None or frappe.db.get_value("CRM Student", contact, "student") in {student, lead}
 	):
 		return "legacy"
 	return "none"
@@ -186,7 +231,10 @@ def visible_conversion_history_page(
 	for row in rows:
 		student = row.get("student")
 		try:
-			allowed = bool(frappe.has_permission("CRM Lead", "read", student))
+			canonical = canonical_student(student)
+			authority_doctype = "CRM Student" if canonical else "CRM Lead"
+			authority_name = canonical or student
+			allowed = bool(frappe.has_permission(authority_doctype, "read", authority_name))
 		except Exception:
 			allowed = False
 		if allowed:

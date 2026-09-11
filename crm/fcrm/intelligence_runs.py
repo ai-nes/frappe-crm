@@ -20,6 +20,7 @@ from crm.fcrm.analysis_runs import (
 	validate_claim_set,
 	validate_execution_revisions,
 )
+from crm.fcrm.decision_trace import validate_rule_decision
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.school_intelligence import get_school_intelligence
 from crm.fcrm.scoring_projection import score_band
@@ -34,6 +35,7 @@ STUDENT_360_POLICY_REVISION = "student-360-analysis-r3"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION = "student-360-snapshot-v1"
 STUDENT_360_SNAPSHOT_SCHEMA_VERSION_V2 = "student-360-snapshot-v2"
 MAX_STUDENT_INTELLIGENCE_REFS = 16
+RULE_IDENTITY_FIELDS = ("rule_version", "rule_version_digest", "ruleset_digest")
 _STUDENT_ACTION_ADVICE = re.compile(
 	r"(?:\b(?:nên|hãy|ưu tiên|đề xuất|khuyến nghị)\b[^.\n]{0,80}"
 	 r"\b(?:gọi|liên hệ|liên lạc|gửi|đặt lịch|tư vấn|theo dõi|thực hiện)\b"
@@ -67,6 +69,56 @@ PROVENANCE_DOCTYPES = {
 	# resolvable provenance alias, not a fictional outcome DocType.
 	"outcome": "CRM School Activity",
 }
+
+
+def _captured_ruleset_identity() -> dict[str, str]:
+	"""Capture a complete creation-time identity for durable decision work.
+
+	There is intentionally no bootstrap exception here.  A run without an
+	immutable ruleset identity cannot be replayed or settled safely, so the
+	control plane rejects it until an administrator activates the first snapshot.
+	"""
+	from crm.api.rule_engine import active_ruleset_identity
+
+	return active_ruleset_identity()
+
+
+def _run_ruleset_identity(run) -> dict[str, str]:
+	values = {field: str(run.get(field) or "").strip() for field in RULE_IDENTITY_FIELDS}
+	if not any(values.values()):
+		return {}
+	if not all(values.values()) or not re.fullmatch(r"[a-f0-9]{64}", values["rule_version_digest"]) or not re.fullmatch(r"[a-f0-9]{64}", values["ruleset_digest"]):
+		frappe.throw("Analysis Run ruleset identity is incomplete.", frappe.ValidationError)
+	if values["rule_version_digest"] != values["ruleset_digest"]:
+		frappe.throw("Analysis Run ruleset identity digests must agree.", frappe.ValidationError)
+	return values
+
+
+def _assert_run_ruleset_identity(run, supplied: dict[str, Any] | None = None) -> dict[str, str]:
+	stored = _run_ruleset_identity(run)
+	if not supplied or not any(value not in (None, "") for value in supplied.values()):
+		return stored
+	if not stored:
+		frappe.throw("Analysis Run has no creation-time ruleset identity.", frappe.ValidationError)
+	candidate = {field: str(supplied.get(field) or "").strip() for field in RULE_IDENTITY_FIELDS}
+	if not all(candidate.values()) or candidate != stored:
+		frappe.throw("Analysis Run ruleset digest fence mismatch.", frappe.ValidationError)
+	return stored
+
+
+def _assert_stage_ruleset_identity(stage, run_identity: dict[str, str]) -> dict[str, str]:
+	"""Ensure a stage carries the exact identity captured by its parent run.
+
+	Parent and stage rows are both durable decision boundaries. Checking only
+	the parent would let a partially-created or manually-mutated stage execute
+	under a different snapshot while still passing the parent fence.
+	"""
+	if not run_identity:
+		frappe.throw("Analysis Run has no creation-time ruleset identity.", frappe.ValidationError)
+	stage_identity = _run_ruleset_identity(stage)
+	if stage_identity != run_identity:
+		frappe.throw("Analysis Run stage ruleset identity does not match its parent.", frappe.ValidationError)
+	return stage_identity
 
 
 def _service_only():
@@ -128,11 +180,17 @@ def _student_360_analysis_input(evidence: dict[str, Any]) -> dict[str, Any]:
 	signals = evidence.get("signals") if isinstance(evidence.get("signals"), dict) else {}
 	return {
 		"policy_revision": STUDENT_360_POLICY_REVISION,
-		"student_state": {key: signals.get(key) for key in (
-			"student_stage", "study_stage", "assessment_status",
-			"interest", "fit",
-			"primary_barrier", "intent_type", "intent_polarity", "sla_state", "score",
-		)},
+		"student_state": {
+			"is_opted_out": evidence.get("is_opted_out"),
+			**{
+				key: signals.get(key)
+				for key in (
+					"student_stage", "study_stage", "assessment_status",
+					"interest", "fit",
+					"primary_barrier", "intent_type", "intent_polarity", "sla_state", "score",
+				)
+			},
+		},
 		"score_history": signals.get("score_history") or [],
 		"verified_interactions": signals.get("interaction_history") or [],
 		"applications": signals.get("applications") or [],
@@ -497,6 +555,7 @@ def _public_stage(stage: dict[str, Any], *, student: bool) -> dict[str, Any]:
 				"name": stage.get("name"), "stage_kind": stage.get("stage_kind"), "status": "abstained",
 				"claims": [], "report": None, "terminal_reason": "policy_superseded",
 				"policy_revision": stage.get("policy_revision") or None, "model_revision": stage.get("model_revision") or None,
+				**_run_ruleset_identity(stage),
 			}
 		claims = [claim for claim in claims if claim.get("kind") != "recommendation"]
 	return {
@@ -508,6 +567,8 @@ def _public_stage(stage: dict[str, Any], *, student: bool) -> dict[str, Any]:
 		"terminal_reason": stage.get("terminal_reason") or None,
 		"policy_revision": stage.get("policy_revision") or None,
 		"model_revision": stage.get("model_revision") or None,
+		**_run_ruleset_identity(stage),
+		"rule_decision": frappe.parse_json(stage.get("rule_decision")) if stage.get("rule_decision") else None,
 	}
 
 
@@ -516,7 +577,7 @@ def public_run_payload(run, *, receipt: Any | None = None, reused_existing_run: 
 	is_student = run.doctype == RUN_TYPES["student"]
 	stages = frappe.get_all(
 		"CRM Analysis Run Stage", filters={"parent_run_type": run.doctype, "parent_run": run.name},
-		fields=["name", "stage_kind", "status", "claims", "report_json", "policy_revision", "model_revision", "terminal_reason"],
+		fields=["name", "stage_kind", "status", "claims", "report_json", "policy_revision", "model_revision", "terminal_reason", *RULE_IDENTITY_FIELDS, "rule_decision"],
 		order_by="creation asc",
 	)
 	public_stages = [_public_stage(stage, student=is_student) for stage in stages if stage.get("stage_kind") in _stage_kinds_for(run.doctype)]
@@ -524,6 +585,7 @@ def public_run_payload(run, *, receipt: Any | None = None, reused_existing_run: 
 		public_stages = [stage for stage in public_stages if stage.get("stage_kind") == "student_360"]
 	return {
 		"run_id": run.name, "run_type": run.doctype, "status": run.status,
+		**_run_ruleset_identity(run),
 		"receipt": receipt.name if receipt else None,
 		"source_revision": int(run.source_revision) if str(run.source_revision).isdigit() else None,
 		"source_digest": run.get("source_digest") or None,
@@ -769,7 +831,8 @@ def request_automatic_run(domain: str, target: str, admission_year: int | None =
 
 def _insert_run(domain, target, revision, source_digest, fingerprint, admission_year, *, trigger="manual", admission_decision=None, admission_event=None, candidate_revision=None, policy_revision=None):
 	run_type = RUN_TYPES[domain]
-	values = {"doctype": run_type, "source_revision": revision, "source_digest": source_digest, "analysis_input_digest": source_digest, "trigger": trigger, "status": "queued", "request_fingerprint": fingerprint}
+	ruleset_identity = _captured_ruleset_identity()
+	values = {"doctype": run_type, "source_revision": revision, "source_digest": source_digest, "analysis_input_digest": source_digest, "trigger": trigger, "status": "queued", "request_fingerprint": fingerprint, **ruleset_identity}
 	if trigger == "manual":
 		values["requested_by"] = frappe.session.user
 	if policy_revision:
@@ -782,7 +845,7 @@ def _insert_run(domain, target, revision, source_digest, fingerprint, admission_
 		values["admission_year"] = admission_year
 	run = frappe.get_doc(values).insert(ignore_permissions=True)
 	for stage_kind in STAGES[domain]:
-		frappe.get_doc({"doctype": "CRM Analysis Run Stage", "parent_run_type": run_type, "parent_run": run.name, "stage_kind": stage_kind, "stage_key": f"{run_type}:{run.name}:{stage_kind}", "status": "queued", "stage_generation": 0, "expected_source_revision": revision, "expected_source_digest": source_digest}).insert(ignore_permissions=True)
+		frappe.get_doc({"doctype": "CRM Analysis Run Stage", "parent_run_type": run_type, "parent_run": run.name, "stage_kind": stage_kind, "stage_key": f"{run_type}:{run.name}:{stage_kind}", "status": "queued", "stage_generation": 0, "expected_source_revision": revision, "expected_source_digest": source_digest, **ruleset_identity}).insert(ignore_permissions=True)
 	return run
 
 
@@ -796,7 +859,7 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	row = frappe.db.get_value(
 		"CRM Student", student,
 		[
-			"student_stage", "current_grade", "study_stage",
+			"student_stage", "current_grade", "study_stage", "is_opted_out",
 			"assessment_status", "interest_level", "fit_level", "primary_barrier",
 			"latest_score", "sla_evidence_state", "score_input_revision", "applied_score_input_revision",
 		],
@@ -870,7 +933,14 @@ def _student_stage_evidence(student: str, revision: str) -> dict[str, Any]:
 	# any inference/uncertainty it publishes.  No name, phone, email, notes,
 	# free-form interaction text, or recipient data crosses this boundary.
 	student_stage = _canonical_student_stage(row.get("student_stage"))
+	opted_out = row.get("is_opted_out")
+	if opted_out is not None:
+		opted_out = bool(opted_out)
 	student_360 = {
+		# Consent is a bounded, source-owned fact consumed by the global ``all``
+		# rule. Keep it outside model prose while making it available to the
+		# shared Student-360 fact builder.
+		"is_opted_out": opted_out,
 		"signals": {
 			# This is the only CRM stage axis used by Student 360.  Never infer it
 			# from legacy lifecycle data or the academic study stage.
@@ -1011,6 +1081,8 @@ def service_evidence(run_type: str, run_id: str, stage_kind: str, stage_generati
 	stage = frappe.get_doc("CRM Analysis Run Stage", {"parent_run_type": run_type, "parent_run": run_id, "stage_kind": stage_kind})
 	if stage.status in TERMINAL:
 		return {"terminal": True, "status": stage.status}
+	run_identity = _assert_run_ruleset_identity(run)
+	_assert_stage_ruleset_identity(stage, run_identity)
 	if (
 		stage.status != "running"
 		or int(stage.stage_generation or 0) != int(stage_generation)
@@ -1052,7 +1124,15 @@ def service_evidence(run_type: str, run_id: str, stage_kind: str, stage_generati
 				))
 		school["intelligence_refs"] = authority_refs
 		evidence = {"school": school}
-	return {"run_id": run_id, "stage_kind": stage_kind, "source_revision": revision, "source_digest": digest, "target": target, "evidence": evidence}
+	return {
+		"run_id": run_id,
+		"stage_kind": stage_kind,
+		"source_revision": revision,
+		"source_digest": digest,
+		"target": target,
+		**run_identity,
+		"evidence": evidence,
+	}
 
 
 def execution(run_type: str, run_id: str) -> dict[str, Any]:
@@ -1069,15 +1149,21 @@ def execution(run_type: str, run_id: str) -> dict[str, Any]:
 	stages = frappe.get_all(
 		"CRM Analysis Run Stage",
 		filters={"parent_run_type": run_type, "parent_run": run_id, "status": ["in", ["queued", "running"]]},
-		fields=["stage_kind", "stage_key", "stage_generation", "expected_source_revision", "expected_source_digest"],
+		fields=["stage_kind", "stage_key", "stage_generation", "expected_source_revision", "expected_source_digest", *RULE_IDENTITY_FIELDS],
 		order_by="creation asc",
 	)
+	run_identity = _run_ruleset_identity(run)
+	if stages:
+		run_identity = _assert_run_ruleset_identity(run)
+		for stage in stages:
+			_assert_stage_ruleset_identity(stage, run_identity)
 	return {
 		"run_kind": "student" if run_type == RUN_TYPES["student"] else "school",
 		"run_id": run.name,
 		"source_revision": str(run.source_revision),
 		"source_digest": run.source_digest,
 		"trigger": run.trigger,
+		**run_identity,
 		"admission_decision": run.get("admission_decision"),
 		"admission_event": run.get("admission_event"),
 		"candidate_revision": str(run.get("candidate_revision") or run.source_revision),
@@ -1089,6 +1175,7 @@ def execution(run_type: str, run_id: str) -> dict[str, Any]:
 				"stage_generation": int(stage.stage_generation or 0),
 				"expected_source_revision": str(stage.expected_source_revision),
 				"expected_source_digest": stage.expected_source_digest,
+				**_run_ruleset_identity(stage),
 			}
 			for stage in stages
 		],
@@ -1127,6 +1214,9 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 	stage = frappe.get_doc("CRM Analysis Run Stage", stage.name)
 	if stage.status in TERMINAL:
 		return {"terminal": True, "status": stage.status, "stage_generation": int(stage.stage_generation or 0)}
+	run = frappe.get_doc(run_type, run_id)
+	run_identity = _assert_run_ruleset_identity(run)
+	_assert_stage_ruleset_identity(stage, run_identity)
 	# ``stage_generation`` in crm-agents' durable outbox is the generation
 	# observed when Frappe materialized the stage.  A retry may legitimately
 	# carry an older hint after a lease was claimed/reclaimed; the live Frappe
@@ -1151,13 +1241,13 @@ def claim_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation
 	)
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		frappe.throw("Stage claim lost its compare-and-swap fence.", frappe.ValidationError)
-	run = frappe.get_doc(run_type, run_id)
 	run.db_set("status", "running", update_modified=False)
 	return {
 		"claimed": True, "run_id": run_id, "run_kind": "student" if run_type == RUN_TYPES["student"] else "school",
 		"stage_kind": stage_kind, "stage_key": stage.stage_key, "stage_generation": generation,
 		"lease_token": token, "lease_expires_at": str(lease_until),
 		"expected_source_revision": str(stage.expected_source_revision), "expected_source_digest": stage.expected_source_digest,
+		**run_identity,
 	}
 
 
@@ -1165,11 +1255,15 @@ def _stage_kinds_for(run_type: str) -> set[str]:
 	return set(STAGES["student" if run_type == RUN_TYPES["student"] else "school"])
 
 
-def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str, status: str, claims=None, terminal_reason: str | None = None, policy_revision: str | None = None, model_revision: str | None = None, result_digest: str | None = None, completed_metadata: dict | None = None, report=None) -> dict[str, Any]:
+def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generation: int, lease_token: str, expected_source_revision: str, expected_source_digest: str, status: str, claims=None, terminal_reason: str | None = None, policy_revision: str | None = None, model_revision: str | None = None, result_digest: str | None = None, completed_metadata: dict | None = None, report=None, rule_decision=None, rule_version: str | None = None, rule_version_digest: str | None = None, ruleset_digest: str | None = None) -> dict[str, Any]:
 	_service_only()
 	if status not in TERMINAL:
 		frappe.throw("Only terminal stage settlement is allowed.", frappe.ValidationError)
 	result_digest = _validated_result_digest(result_digest)
+	try:
+		validated_rule_decision = validate_rule_decision(rule_decision) if rule_decision is not None else None
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 	if status == "completed" and not result_digest:
 		frappe.throw("Completed Analysis Run stages require a result digest.", frappe.ValidationError)
 	if status == "completed" and run_type == RUN_TYPES["student"]:
@@ -1195,16 +1289,37 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	if any(claim.get("visibility") != "shareable" for claim in (claims or [])):
 		frappe.throw("Only shareable claims may be persisted on an Analysis Run stage.", frappe.PermissionError)
 	stage = frappe.get_doc("CRM Analysis Run Stage", {"parent_run_type": run_type, "parent_run": run_id, "stage_kind": stage_kind})
+	run = frappe.get_doc(run_type, run_id)
+	identity = _assert_run_ruleset_identity(
+		run,
+		{
+			"rule_version": rule_version,
+			"rule_version_digest": rule_version_digest,
+			"ruleset_digest": ruleset_digest,
+		},
+	)
+	# Acquire the stage row lock before validating its identity and fence. This
+	# prevents a concurrent direct database write from changing the read-only
+	# identity between the initial lookup and the terminal CAS update.
+	frappe.db.sql("SELECT name FROM `tabCRM Analysis Run Stage` WHERE name=%s FOR UPDATE", (stage.name,))
+	stage = frappe.get_doc("CRM Analysis Run Stage", stage.name)
+	_assert_stage_ruleset_identity(stage, identity)
+	if validated_rule_decision is not None:
+		if identity and any(validated_rule_decision[field] != identity[field] for field in RULE_IDENTITY_FIELDS):
+			frappe.throw("Analysis Run rule decision identity does not match the pinned snapshot.", frappe.ValidationError)
+		if not identity:
+			frappe.throw("Analysis Run rule decision requires a pinned snapshot.", frappe.ValidationError)
+	rule_decision_json = json.dumps(validated_rule_decision, ensure_ascii=False, separators=(",", ":")) if validated_rule_decision else None
 	# Terminal replay is safe only when it repeats exactly the persisted result.
 	if stage.status in TERMINAL:
 		stored_claims = frappe.parse_json(stage.claims) if stage.claims else []
-		if stage.status == status and stored_claims == (claims or []) and (stage.terminal_reason or None) == (terminal_reason or None) and (stage.policy_revision or None) == (policy_revision or None) and (stage.model_revision or None) == (model_revision or None) and (stage.get("result_digest") or None) == (result_digest or None):
-			return {"run_id": run_id, "stage_kind": stage_kind, "status": stage.status, "parent_status": frappe.db.get_value(run_type, run_id, "status"), "policy_revision": stage.policy_revision, "model_revision": stage.model_revision, "result_digest": stage.get("result_digest"), "replayed": True}
+		stored_rule_decision = frappe.parse_json(stage.get("rule_decision")) if stage.get("rule_decision") else None
+		if stage.status == status and stored_claims == (claims or []) and (stage.terminal_reason or None) == (terminal_reason or None) and (stage.policy_revision or None) == (policy_revision or None) and (stage.model_revision or None) == (model_revision or None) and (stage.get("result_digest") or None) == (result_digest or None) and stored_rule_decision == validated_rule_decision:
+			return {"run_id": run_id, "stage_kind": stage_kind, "status": stage.status, "parent_status": frappe.db.get_value(run_type, run_id, "status"), "policy_revision": stage.policy_revision, "model_revision": stage.model_revision, "result_digest": stage.get("result_digest"), **identity, "rule_decision": stored_rule_decision, "replayed": True}
 		frappe.throw("Stage already has a different terminal settlement.", frappe.ValidationError)
 	if (int(stage.stage_generation or 0) != int(stage_generation) or stage.get("lease_token") != str(lease_token or "")
 		or stage.expected_source_revision != str(expected_source_revision) or stage.expected_source_digest != expected_source_digest):
 		frappe.throw("Stage fence mismatch.", frappe.ValidationError)
-	run = frappe.get_doc(run_type, run_id)
 	if status == "completed" and run_type == RUN_TYPES["student"] and (run.get("policy_revision") or None) != (policy_revision or None):
 		# A queued worker from the old recommendation-bearing policy must never
 		# publish into the new awareness-only surface.  Fence it terminal rather
@@ -1212,16 +1327,28 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 		status, terminal_reason, claims = "abstained", "policy_superseded", []
 		policy_revision = model_revision = result_digest = None
 		report_json = None
+		validated_rule_decision = None
+		rule_decision_json = None
 	domain = "student" if run_type == RUN_TYPES["student"] else "school"
 	target = run.student if domain == "student" else run.high_school
 	current_revision, current_digest = _source(domain, target, run.get("admission_year"))
 	if current_revision != str(expected_source_revision) or current_digest != expected_source_digest:
 		status, terminal_reason, claims, policy_revision, model_revision, result_digest = "abstained", "superseded", [], None, None, None
+		validated_rule_decision = None
+		rule_decision_json = None
 	frappe.db.sql(
-		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, report_json=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, result_digest=%s, analyzed_at=%s, lease_token=NULL, lease_expires_at=NULL "
+		"UPDATE `tabCRM Analysis Run Stage` SET status=%s, claims=%s, report_json=%s, terminal_reason=%s, policy_revision=%s, model_revision=%s, result_digest=%s, rule_decision=%s, analyzed_at=%s, lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND stage_generation=%s "
-		"AND lease_token=%s AND expected_source_revision=%s AND expected_source_digest=%s",
-		(status, json.dumps(claims or []), report_json, terminal_reason, policy_revision, model_revision, result_digest, now_datetime() if status == "completed" else None, stage.name, int(stage_generation), str(lease_token or ""), str(expected_source_revision), expected_source_digest),
+		"AND lease_token=%s AND expected_source_revision=%s AND expected_source_digest=%s "
+		"AND rule_version=%s AND rule_version_digest=%s AND ruleset_digest=%s",
+		(
+			status, json.dumps(claims or []), report_json, terminal_reason, policy_revision,
+			model_revision, result_digest, rule_decision_json,
+			now_datetime() if status == "completed" else None, stage.name,
+			int(stage_generation), str(lease_token or ""), str(expected_source_revision),
+			expected_source_digest, identity["rule_version"],
+			identity["rule_version_digest"], identity["ruleset_digest"],
+		),
 	)
 	if frappe.db.sql("SELECT ROW_COUNT() AS affected", as_dict=True)[0].affected != 1:
 		frappe.throw("Stage settlement lost its compare-and-swap fence.", frappe.ValidationError)
@@ -1229,7 +1356,7 @@ def settle_stage(*, run_type: str, run_id: str, stage_kind: str, stage_generatio
 	run.db_set("status", parent_status, update_modified=False)
 	if parent_status in TERMINAL:
 		run.db_set("terminal_reason", terminal_reason if parent_status != "completed" else None, update_modified=False)
-	return {"run_id": run_id, "stage_kind": stage_kind, "status": status, "parent_status": parent_status, "policy_revision": policy_revision, "model_revision": model_revision, "result_digest": result_digest}
+	return {"run_id": run_id, "stage_kind": stage_kind, "status": status, "parent_status": parent_status, "policy_revision": policy_revision, "model_revision": model_revision, "result_digest": result_digest, **identity, "rule_decision": validated_rule_decision}
 
 
 def _validated_result_digest(result_digest: str | None) -> str | None:

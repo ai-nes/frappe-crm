@@ -56,6 +56,8 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 			score_input_revision=42,
 			applied_score_input_revision=42,
 			applied_policy_revision=1,
+			is_opted_out=0,
+			email_bounced=0,
 			sla_evidence_state=None,
 			sla_evidence_observed_at=None,
 		)
@@ -134,11 +136,15 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		), patch("crm.api.nba_evaluation.frappe.db.get_single_value", return_value="Asia/Ho_Chi_Minh"), patch(
 			"crm.api.nba_evaluation.nba_policy.get_active_decision_policy", return_value=decision
 		), patch("crm.fcrm.nba_policy._parent_authority_wire_channels", return_value=set()):
-			first = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
-			second = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
+			with patch(
+				"crm.api.nba_evaluation._active_rule_catalog",
+				return_value={"rule_version": "CURRENT", "ruleset_digest": "a" * 64},
+			):
+				first = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
+				second = build_nba_evaluation_input("ENR-2026-00001", now=_NOW, service_authorized=True)
 
 		print(json.dumps(first, sort_keys=True))
-		self.assertEqual(first["contract_version"], "nba-evaluation-v2")
+		self.assertEqual(first["contract_version"], "nba-evaluation")
 		self.assertEqual(first["context"]["student_stage"], "Connected")
 		self.assertNotIn("lifecycle", first["context"])
 		self.assertTrue(first["student"]["context_digest"])
@@ -146,10 +152,20 @@ class TestNbaEvaluationProducer(FrappeTestCase):
 		self.assertEqual(input_digest(first), input_digest(second))
 		self.assertEqual(first["context"]["application_state"]["missing"], ["required_documents"])
 		self.assertEqual(first["context"]["application_state"]["source_revision"], "2026-09-04 01:00:00")
+		self.assertEqual(first["context"]["application_state"]["status"], "in progress")
+		self.assertEqual(first["context"]["application_state"]["document_total"], 2)
+		self.assertEqual(first["context"]["application_state"]["document_completed"], 1)
+		self.assertFalse(first["context"]["student"]["is_opted_out"])
+		self.assertFalse(first["context"]["student"]["email_bounced"])
+		self.assertEqual(first["context"]["score"]["source_revision"], 42)
 		self.assertEqual(first["context"]["engagement"]["state"], "cooling")
 		self.assertEqual(first["context"]["work_in_flight"], ["CALL"])
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["action_code"], "CALL")
 		self.assertEqual(first["eligible_action_set"]["actions"][0]["addresses_opportunities"], ["ENGAGE_OR_REENGAGE"])
+		self.assertIn("semantic_digest", first["eligible_action_set"])
+		self.assertEqual(first["policies"]["semantic_digest"], first["eligible_action_set"]["semantic_digest"])
+		self.assertIn("ruleset_identity", first["policies"])
+		self.assertNotIn("rule_engine", first["policies"])
 		self.assertTrue(all(action["addresses_opportunities"] for action in first["eligible_action_set"]["actions"]))
 
 

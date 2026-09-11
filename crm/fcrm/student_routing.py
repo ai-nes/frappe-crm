@@ -29,6 +29,7 @@ from crm.fcrm.student_assignment import (
 from crm.fcrm.student_feature_flags import enabled
 from crm.fcrm.student_lead_operations import deliver_ctv_student
 from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
+from crm.fcrm.student_reference import canonical_student
 from crm.fcrm.utils.effective import is_effective
 
 REQUEST_DOCTYPE = "CRM Student Routing Request"
@@ -127,7 +128,9 @@ def _eligible_team_members(
 	memberships = [row for row in memberships if is_effective(row)]
 	if staff_ids is not None:
 		memberships = [row for row in memberships if row.get("parent") in staff_ids]
-	sale_rows = [row for row in memberships if row.get("parent") and row.get("function") in (None, "", "Sale")]
+	sale_rows = [
+		row for row in memberships if row.get("parent") and row.get("function") in (None, "", "Sale")
+	]
 	ctv_rows = [row for row in memberships if row.get("parent") and row.get("function") == "CTV Sale"]
 	selected_rows = sale_rows or ctv_rows if prefer_sale else sale_rows + ctv_rows
 	staff_ids = sorted({row.parent for row in selected_rows})
@@ -221,8 +224,9 @@ def route_pool_owned_student(
 	"""
 	if not enabled("routing"):
 		return {"status": "deferred", "reason": "ROUTING_DISABLED", "student": student}
-	frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (student,))
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student = canonical_student(student) or student
+	frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (student,))
+	student_doc = frappe.get_doc("CRM Student", student)
 	# Keep the command compatible with lightweight dict doubles used by the
 	# offline contract tests as well as real Frappe documents.
 	student_name = student_doc.get("name") if isinstance(student_doc, dict) else student_doc.name
@@ -390,7 +394,8 @@ def _save_request(request, *, status: str, **values):
 
 def enqueue_student_routing(student: str, *, trigger: str = "pool_entry", correlation_id: str | None = None):
 	"""Create one idempotent request for the Student's current pool revision."""
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student = canonical_student(student) or student
+	student_doc = frappe.get_doc("CRM Student", student)
 	pool = _canonical_pool(student_doc)
 	context = _routing_context(student_doc, pool)
 	revision = int(student_doc.get("ownership_revision") or 0)
@@ -460,8 +465,8 @@ def process_routing_request(request_name: str, *, lease_token: str | None = None
 				attempt_count=int(request.attempt_count or 0) + 1,
 			)
 
-		student = frappe.get_doc("CRM Lead", request.student)
-		frappe.db.sql("select name from `tabCRM Lead` where name = %s for update", (student.name,))
+		student = frappe.get_doc("CRM Student", request.student)
+		frappe.db.sql("select name from `tabCRM Student` where name = %s for update", (student.name,))
 		student.reload()
 		current_revision = int(student.get("ownership_revision") or 0)
 		if current_revision != int(request.ownership_revision or 0):
@@ -506,7 +511,8 @@ def process_routing_request(request_name: str, *, lease_token: str | None = None
 
 def retry_student_routing(request_name: str) -> dict[str, Any]:
 	request = frappe.get_doc(REQUEST_DOCTYPE, request_name)
-	student = frappe.get_doc("CRM Lead", request.student)
+	student = canonical_student(request.student) or request.student
+	student = frappe.get_doc("CRM Student", student)
 	if not has_student_permission(student, user=frappe.session.user, permission_type="read"):
 		_error("OUT_OF_SCOPE", "Routing request is outside the current Student scope.")
 	if request.status in {"deferred", "failed"}:
@@ -581,7 +587,7 @@ def repair_orphan_routing_requests(limit: int = 1000) -> dict[str, int]:
 	repaired = 0
 	with service_context():
 		for row in rows:
-			if frappe.db.exists("CRM Lead", row.get("student")):
+			if frappe.db.exists("CRM Student", row.get("student")):
 				continue
 			# The Student link is intentionally orphaned. Updating through a Document
 			# would re-run Frappe link validation and prevent us from closing the
@@ -606,7 +612,8 @@ def repair_orphan_routing_requests(limit: int = 1000) -> dict[str, int]:
 
 def get_student_routing_status(request_name: str) -> dict[str, Any]:
 	request = frappe.get_doc(REQUEST_DOCTYPE, request_name)
-	student = frappe.get_doc("CRM Lead", request.student)
+	student = canonical_student(request.student) or request.student
+	student = frappe.get_doc("CRM Student", student)
 	if not has_student_permission(student, user=frappe.session.user, permission_type="read"):
 		_error("OUT_OF_SCOPE", "Routing request is outside the current Student scope.")
 	return {

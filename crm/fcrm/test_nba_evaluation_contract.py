@@ -1,9 +1,9 @@
 # Copyright (c) 2026, Frappe Technologies Pvt. Ltd. and Contributors
 # See license.txt
 
-"""Producer-side parity for the NBA Evaluation v1 wire contract.
+"""Producer-side parity for the current NBA Evaluation wire contract.
 
-The fixtures under ``crm/fcrm/test_fixtures/nba-evaluation-v1`` are shared
+The fixtures under ``crm/fcrm/test_fixtures/nba-evaluation`` are shared
 byte-for-byte with the consumer suite in the ``crm-agents`` repository
 (``tests/contract/test_nba_evaluation_shapes.py``). Each repository re-states
 the shape rules and pins the expected canonical digests and raw-byte hashes as
@@ -20,9 +20,9 @@ import json
 import pathlib
 import unittest
 
-_FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "nba-evaluation-v1"
+_FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "nba-evaluation"
 
-CONTRACT_VERSION = "nba-evaluation-v1"
+CONTRACT_VERSION = "nba-evaluation"
 _DISPOSITIONS = {"RECOMMEND", "WAIT", "NO_ACTION", "ABSTAIN"}
 _RUN_STATUSES = {"completed", "failed"}
 _MAX_EXPLANATION_FACT_CHARS = 800
@@ -104,21 +104,21 @@ _TIMING_REQUIRED = ("earliest_at", "latest_at", "scheduled_at", "timezone")
 
 # Canonical digest (SHA-256 of canonical JSON of the parsed envelope).
 _EXPECTED_DIGESTS = {
-	"input-recommend.json": "c4561f1b6ccbf2a7b1383e19cceaf14f1d3b97c8799438ba63b148c27c281d9b",
-	"result-recommend.json": "5b7f64146cc8c894d9efa9343d7b0c69e4302b758f520484d7df8704c61449e8",
-	"result-wait.json": "470e6935d164bb6f6f3ddd24d72f44bab1445d2295e3d030add4658ff2b343eb",
-	"result-unknown-major.json": "1d1b40dcb0da911dc8eea6d2baf1efb692c1899e83ee280ebcf8d3eb49023a9c",
-	"result-action-outside-eligible-set.json": "0eb513b83c6bf1b9d0b149394e797b9e58ff6a5ee8db871705c26c2697ac71f5",
-	"result-duplicate-recommendation-key.json": "12e638fd036dd653254dc3f309ef19eee6a9b93e90af1db7d82a7612e7804def",
+    "input-recommend.json": "747fa7e76f0193d461ca95ff8841ef4a31deaf32654a7e85f84a1cd5076d3b06",
+    "result-recommend.json": "19d6603179645fd4c4dfdc8d95fdb85e1389b6c5fca9c1f874a14801b08a47af",
+    "result-wait.json": "19199a52f7188c95670632f23ce537c769086578c167e63682bb9f3c6cfbbbbb",
+    "result-unknown-contract.json": "939f49f77318577dfc397a8e5d3638dddc9e0092949c18ee651cd974d40b148b",
+    "result-action-outside-eligible-set.json": "885b52b700efd34bb78a3bfb9e96f25e8c51f2584278088c3ff77ec395930f61",
+    "result-duplicate-recommendation-key.json": "5c32f0fe8f03eeb2b22066d48b124d743e3f4da085dbb238f98459aa594efd71",
 }
 # Raw file bytes.
 _EXPECTED_RAW_SHA256 = {
-	"input-recommend.json": "0fe69af1990c490e24afb4ebae1e2322bf0690383be237b4241295f32121d078",
-	"result-recommend.json": "9213d3d1a0d150090004645a2747204dd3b0d2b63cfdfd7085a79845daf4ac51",
-	"result-wait.json": "456c9d0b3cc809a41766b3680b045513be8eaffe10f2e1ee80b62c322c0ffa9c",
-	"result-unknown-major.json": "34b38fd98c8ceea64883c1f26ebda6b79cea733264ed2fa8d1fa714e7b388835",
-	"result-action-outside-eligible-set.json": "6216e0e8548d58e59022d3cab93461c8d9470c1a86567f56f1e0ae8b5ab0eeee",
-	"result-duplicate-recommendation-key.json": "9687586cab1727f651fdb1afee430a2cab8ce6069cf3e5e1ea1dec5fc391ad86",
+    "input-recommend.json": "ae79dd6d79ebc5f4f50e827b4d8b4f41aab3c4a8dafe71b74abe00966049500a",
+    "result-recommend.json": "1177b64ee968dd0050afd8f4d80cfddd6668a03b5a3815a15a46f0626ef98fc4",
+    "result-wait.json": "fe3853f98e58272975042bf9709388228551b3d9e8c3aec736526759838cf5d8",
+    "result-unknown-contract.json": "a856c691f3f34f614b1de7069485fdfa01fcec558fbc6c8ab041232db9277327",
+    "result-action-outside-eligible-set.json": "b723065787a4f1517dd4260488c9805f694a835add363920d5d67ee1cde3adc6",
+    "result-duplicate-recommendation-key.json": "ac936fce1f9ab1ac6e84cae667011e9ea250dde4fe58e8a84c7c5299387d0198",
 }
 
 
@@ -330,11 +330,11 @@ class TestNbaEvaluationContract(unittest.TestCase):
 
 	def test_unknown_contract_version_fails_closed(self):
 		with self.assertRaises(ContractShapeError):
-			assert_result_shape(_load("result-unknown-major.json"))
+			assert_result_shape(_load("result-unknown-contract.json"))
 
 	def test_additive_field_on_the_known_version_is_tolerated(self):
 		payload = _load("result-recommend.json")
-		payload["renderer_hint"] = "advisory-prose-v1"
+		payload["renderer_hint"] = "advisory-prose"
 		payload["result_digest"] = recompute_result_digest(payload)
 		assert_result_shape(payload)
 

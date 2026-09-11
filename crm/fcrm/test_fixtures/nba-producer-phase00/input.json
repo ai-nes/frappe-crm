@@ -24,7 +24,7 @@
     "signal_quality": {"conflicts": [], "freshness": "current", "missingness": []},
     "work_in_flight": ["CALL"]
   },
-  "contract_version": "nba-evaluation-v1",
+  "contract_version": "nba-evaluation",
   "eligible_action_set": {
     "actions": [{
       "action_code": "CALL",
@@ -65,15 +65,15 @@
       "recent_contact_days": 2,
       "recommendation_ttl_seconds": 604800,
       "redundancy_penalty": 0.1,
-      "revision": "nba-decision-policy-r1",
+      "revision": "nba-decision-policy",
       "score_threshold": 0.35,
       "top_n_cap": 3
     },
-    "decision_revision": "nba-decision-policy-r1",
+    "decision_revision": "nba-decision-policy",
     "eligibility_digest": "acb4c8b644214f034da0756305160330c104727d1ac02287842a1001c0396bfc",
-    "eligibility_revision": "eligibility-reason-codes-v1",
+    "eligibility_revision": "eligibility-reason-codes",
     "library_digest": "22cd04e50e1258deaa44f04d7391908cea8034cc41c46b2012aca189f0c6bcaa",
-    "library_revision": "action-library-r3",
+    "library_revision": "action-library",
     "timing_digest": "015b5bc03e0ac445d7f7f95f5622b0ab35053fed3e646437adaf35b1cce97cf9",
     "timing_revisions": []
   },

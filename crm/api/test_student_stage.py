@@ -24,8 +24,7 @@ class TestStudentStageAPI(FrappeTestCase):
 	def test_transition_endpoint_resolves_lead_name_to_linked_student(self):
 		expected = {"status": "applied", "student": "CRMC-2026-00001"}
 		with (
-			patch.object(student_stage.frappe.db, "exists", return_value=False) as exists,
-			patch.object(student_stage.frappe.db, "get_value", return_value="CRMC-2026-00001") as get_value,
+			patch.object(student_stage, "canonical_student", return_value="CRMC-2026-00001") as resolve,
 			patch.object(student_stage, "set_student_stage", return_value=expected) as command,
 		):
 			self.assertEqual(
@@ -33,6 +32,5 @@ class TestStudentStageAPI(FrappeTestCase):
 				expected,
 			)
 
-		exists.assert_called_once_with("CRM Student", "ENR-2026-00001")
-		get_value.assert_called_once_with("CRM Lead", "ENR-2026-00001", "student")
+		resolve.assert_called_once_with("ENR-2026-00001")
 		command.assert_called_once_with("CRMC-2026-00001", "Attempting")

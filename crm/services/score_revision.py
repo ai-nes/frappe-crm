@@ -12,7 +12,9 @@ unrelated Student-context traffic.
 
 from __future__ import annotations
 
+import re
 import time
+from collections.abc import Mapping
 
 import frappe
 from frappe.utils import now_datetime
@@ -28,6 +30,9 @@ _ACADEMIC_CHILD_TABLES = frozenset({"academic_results", "language_certificates"}
 
 _POLICY_FIELDS_CACHE_TTL_S = 60
 _policy_fields_cache: dict = {}
+RULESET_IDENTITY_FIELDS = ("rule_version", "rule_version_digest", "ruleset_digest")
+_HEX64 = re.compile(r"^[a-f0-9]{64}$")
+_RULE_VERSION = re.compile(r"^[A-Z][A-Z0-9._-]{1,63}$")
 
 
 def score_relevant_condition_fields(*, refresh: bool = False) -> frozenset:
@@ -86,6 +91,113 @@ def _child_rows_changed(table: str, before_rows: list, after_rows: list) -> bool
 	return before_key != after_key
 
 
+def normalize_score_ruleset_identity(value: Mapping | None, *, allow_empty: bool = False) -> dict[str, str]:
+	"""Normalize the immutable ruleset identity carried by scoring work."""
+	if value is None:
+		value = {}
+	if not isinstance(value, Mapping):
+		raise ValueError("Score input ruleset identity must be an object.")
+	identity = {
+		field: str(value.get(field) or "").strip()
+		for field in RULESET_IDENTITY_FIELDS
+	}
+	if not any(identity.values()):
+		if allow_empty:
+			return {}
+		raise ValueError("Score input ruleset identity is required.")
+	if not all(identity.values()):
+		raise ValueError("Score input ruleset identity must be complete.")
+	identity["rule_version"] = identity["rule_version"].upper()
+	if not _RULE_VERSION.fullmatch(identity["rule_version"]):
+		raise ValueError("Score input rule_version is invalid.")
+	for field in ("rule_version_digest", "ruleset_digest"):
+		if not _HEX64.fullmatch(identity[field]):
+			raise ValueError(f"Score input {field} must be a lowercase SHA-256 digest.")
+	if identity["rule_version_digest"] != identity["ruleset_digest"]:
+		raise ValueError("Score input ruleset identity digests must agree.")
+	return identity
+
+
+def _score_ruleset_control_plane_configured() -> bool:
+	return bool(frappe.db.get_single_value("CRM Rule Settings", "active_rule_version", cache=False))
+
+
+def _score_input_journal_identity(student: str, revision: int) -> dict[str, str]:
+	payload = frappe.db.get_value(
+		"CRM Student Revision Journal",
+		{
+			"student": student,
+			"revision": revision,
+			"stream": "scoring",
+			"event_type": "score_input_changed",
+		},
+		"payload",
+		order_by="creation desc",
+	)
+	if not payload:
+		return {}
+	if isinstance(payload, str):
+		try:
+			payload = frappe.parse_json(payload)
+		except Exception as exc:
+			raise ValueError("Score input revision journal payload is invalid.") from exc
+	if not isinstance(payload, Mapping):
+		raise ValueError("Score input revision journal payload is invalid.")
+	if payload.get("revision") not in (None, revision):
+		raise ValueError("Score input revision journal payload does not match its revision.")
+	return normalize_score_ruleset_identity(payload, allow_empty=True)
+
+
+def _validate_authoritative_score_ruleset(identity: dict[str, str]) -> dict[str, str]:
+	"""Verify identity against Frappe's immutable, digest-bound snapshot."""
+	if not identity:
+		return {}
+	from crm.api.rule_engine import _resolve_version_name, _version_wire_catalog
+
+	version_name = _resolve_version_name(identity["rule_version"])
+	version = frappe.get_doc("CRM Rule Version", version_name)
+	catalog = _version_wire_catalog(version)
+	authoritative = {
+		"rule_version": str(catalog["rule_version"]).strip().upper(),
+		"rule_version_digest": str(catalog["ruleset_digest"]).strip().lower(),
+		"ruleset_digest": str(catalog["ruleset_digest"]).strip().lower(),
+	}
+	if authoritative != identity:
+		raise ValueError("Score input ruleset identity does not match the Frappe snapshot.")
+	return authoritative
+
+
+def score_input_ruleset_identity(
+	student: str,
+	revision: int,
+	*,
+	supplied: Mapping | None = None,
+	require_supplied: bool = False,
+) -> dict[str, str]:
+	"""Resolve and fence scoring identity against the creation-time journal.
+
+	When the rule control plane exists, a missing creation-time identity is a
+	validation failure. A fresh installation without the Settings singleton may
+	still settle pre-control-plane historical score rows without inventing an
+	identity for them.
+	"""
+	stored = _score_input_journal_identity(student, revision)
+	candidate = normalize_score_ruleset_identity(supplied, allow_empty=True)
+	if stored:
+		if candidate and candidate != stored:
+			raise ValueError("Score input ruleset identity does not match its creation-time identity.")
+		if require_supplied and not candidate:
+			raise ValueError("Score input ruleset identity is required for CAS write.")
+		return _validate_authoritative_score_ruleset(stored)
+	if candidate:
+		if _score_ruleset_control_plane_configured():
+			raise ValueError("Score input has no creation-time ruleset identity.")
+		return _validate_authoritative_score_ruleset(candidate)
+	if _score_ruleset_control_plane_configured():
+		raise ValueError("Score input has no creation-time ruleset identity.")
+	return {}
+
+
 def _next_stream_sequence(stream: str) -> int:
 	frappe.db.sql(
 		"INSERT IGNORE INTO `tabCRM Event Stream Cursor` (name, stream, counter, creation, modified, owner, modified_by) VALUES (%s, %s, 0, NOW(), NOW(), %s, %s)",
@@ -110,6 +222,14 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 	if not row:
 		raise frappe.DoesNotExistError(f"CRM Student {student} does not exist")
 	revision = int(row[0].score_input_revision or 0) + 1
+	ruleset_identity: dict[str, str] = {}
+	if _score_ruleset_control_plane_configured():
+		from crm.api.rule_engine import active_ruleset_identity
+
+		try:
+			ruleset_identity = normalize_score_ruleset_identity(active_ruleset_identity())
+		except ValueError as exc:
+			frappe.throw(str(exc), frappe.ValidationError)
 	frappe.db.sql(
 		"UPDATE `tabCRM Student` SET score_input_revision = %s WHERE name = %s",
 		(revision, student),
@@ -132,7 +252,7 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 			"correlation_id": event_id,
 			"policy_version": "score-input-v2",
 			"schema_version": "revision-journal-v1",
-			"payload": {"revision": revision},
+			"payload": {"revision": revision, **ruleset_identity},
 			"reason": reason,
 			"event_id": event_id,
 			"occurred_at": now_datetime(),
@@ -141,5 +261,5 @@ def bump_score_input_revision(student: str, reason: str, *, enqueue: bool = True
 	if enqueue and frappe.conf.get("crm_agents_scoring_events_enabled", 0) not in (0, "0", False):
 		from crm.api.agent_events import record_score_input_event
 
-		record_score_input_event(student, revision, event_id=event_id)
+		record_score_input_event(student, revision, event_id=event_id, **ruleset_identity)
 	return {"student": student, "revision": revision, "stream_sequence": sequence, "change": change.name}

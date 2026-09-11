@@ -16,7 +16,9 @@ from crm.fcrm.permissions import has_permission as has_student_permission
 ASSESSMENT_SOURCES = frozenset({"system", "manual"})
 ASSESSMENT_STATUSES = frozenset({"proposed", "confirmed", "superseded", "rejected"})
 LEVELS = frozenset({"High", "Medium", "Low", "Unknown"})
-BARRIERS = frozenset({"Cost", "Capability", "Family", "Information", "Geography", "Competition", "None", "Unknown"})
+BARRIERS = frozenset(
+	{"Cost", "Capability", "Family", "Information", "Geography", "Competition", "None", "Unknown"}
+)
 
 
 def parse_evidence(value):
@@ -34,11 +36,28 @@ class CRMStudentAssessment(Document):
 	"""Immutable assessment snapshot; commands create a new revision."""
 
 	_IMMUTABLE_FIELDS = (
-		"student", "assessment_revision", "assessment_source", "assessed_at",
-		"policy_version", "model_version", "interest", "interest_confidence",
-		"signal_score", "enrollment_probability", "recommendation", "review_state",
-		"fit", "fit_confidence", "primary_barrier", "barrier_confidence",
-		"reason", "evidence_references", "supersedes", "confirmed_by", "confirmed_at", "override_reason",
+		"student",
+		"assessment_revision",
+		"assessment_source",
+		"assessed_at",
+		"policy_version",
+		"model_version",
+		"interest",
+		"interest_confidence",
+		"signal_score",
+		"enrollment_probability",
+		"recommendation",
+		"review_state",
+		"fit",
+		"fit_confidence",
+		"primary_barrier",
+		"barrier_confidence",
+		"reason",
+		"evidence_references",
+		"supersedes",
+		"confirmed_by",
+		"confirmed_at",
+		"override_reason",
 	)
 
 	def _from_command(self):
@@ -74,7 +93,10 @@ class CRMStudentAssessment(Document):
 		before = self.get_doc_before_save()
 		if not before:
 			return
-		if any(self.get(fieldname) != before.get(fieldname) for fieldname in self._IMMUTABLE_FIELDS) and not self._from_command():
+		if (
+			any(self.get(fieldname) != before.get(fieldname) for fieldname in self._IMMUTABLE_FIELDS)
+			and not self._from_command()
+		):
 			frappe.throw(_("Assessment evidence and dimensions are immutable; create a new revision."))
 		if self.status != before.status and not self._from_command():
 			frappe.throw(_("Assessment status changes must use the assessment command."))
@@ -84,14 +106,20 @@ def on_doctype_update():
 	"""Enforce one revision number per Student after a safe duplicate check."""
 	if not frappe.db.table_exists("CRM Student Assessment"):
 		return
-	if frappe.db.sql("SHOW INDEX FROM `tabCRM Student Assessment` WHERE Key_name = %s", "crm_student_assessment_revision_uniq"):
+	if frappe.db.sql(
+		"SHOW INDEX FROM `tabCRM Student Assessment` WHERE Key_name = %s",
+		"crm_student_assessment_revision_uniq",
+	):
 		return
 	duplicates = frappe.db.sql(
 		"SELECT student, assessment_revision, COUNT(*) AS row_count FROM `tabCRM Student Assessment` GROUP BY student, assessment_revision HAVING row_count > 1 LIMIT 1",
 		as_dict=True,
 	)
 	if duplicates:
-		frappe.log_error("Student assessment revision duplicates require quarantine before the unique index can be created.", "Student 360 assessment revision index")
+		frappe.log_error(
+			"Student assessment revision duplicates require quarantine before the unique index can be created.",
+			"Student 360 assessment revision index",
+		)
 		return
 	frappe.db.sql_ddl(
 		"ALTER TABLE `tabCRM Student Assessment` ADD UNIQUE INDEX `crm_student_assessment_revision_uniq` (`student`, `assessment_revision`)"
@@ -101,12 +129,14 @@ def on_doctype_update():
 def get_permission_query_conditions(user=None):
 	if not user:
 		user = frappe.session.user
-	student_condition = get_student_permission_query_conditions("CRM Lead", user=user)
+	student_condition = get_student_permission_query_conditions("CRM Student", user=user)
 	if student_condition is None:
 		return None
 	if student_condition == "1=0":
 		return "1=0"
-	return "`tabCRM Student Assessment`.student in (select `tabCRM Lead`.name from `tabCRM Lead` where ({0}))".format(student_condition)
+	return "`tabCRM Student Assessment`.student in (select `tabCRM Student`.name from `tabCRM Student` where ({0}))".format(
+		student_condition
+	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -122,8 +152,15 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 			return bool(
 				user == "Administrator"
 				or "System Manager" in roles
-				or ("Admissions Director" in roles and has_student_permission(frappe.get_doc("CRM Lead", student), user=user, permission_type="write"))
+				or (
+					"Admissions Director" in roles
+					and has_student_permission(
+						frappe.get_doc("CRM Student", student), user=user, permission_type="write"
+					)
+				)
 			)
-		return has_student_permission(frappe.get_doc("CRM Lead", student), user=user, permission_type="read")
+		return has_student_permission(
+			frappe.get_doc("CRM Student", student), user=user, permission_type="read"
+		)
 	except Exception:
 		return False

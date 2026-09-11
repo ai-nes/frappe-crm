@@ -8,7 +8,7 @@ from crm.fcrm.test_nba_evaluation_contract import (
 	canonical_digest,
 )
 
-_FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "nba-evaluation-v1"
+_FIXTURES = pathlib.Path(__file__).parent / "test_fixtures" / "nba-evaluation"
 
 
 def _load(name):
@@ -33,7 +33,7 @@ def _assemble_from_reference():
 def test_assembled_envelope_passes_the_shared_contract_shape():
 	envelope, _ = _assemble_from_reference()
 	assert_input_shape(envelope)
-	assert envelope["contract_version"] == "nba-evaluation-v1"
+	assert envelope["contract_version"] == "nba-evaluation"
 
 
 def test_evaluation_key_is_a_deterministic_hex_digest():

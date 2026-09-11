@@ -45,6 +45,7 @@ MATERIAL_STUDENT_FIELDS = frozenset(
 		"alt_phone",
 		"alt_address",
 		"privacy_status",
+		"is_opted_out",
 		"id_number",
 		"id_issued_date",
 		"id_issued_place",

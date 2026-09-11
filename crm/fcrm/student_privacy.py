@@ -10,30 +10,49 @@ from frappe.utils import now_datetime
 
 from crm.fcrm.doctype.crm_student_privacy_request.crm_student_privacy_request import REQUEST_TYPES
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student
+from crm.fcrm.student_reference import canonical_student
 
 
 def _student_for_write(student: str):
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
-	doc = frappe.get_doc("CRM Lead", student)
+	canonical = canonical_student(student)
+	if not canonical:
+		frappe.throw(_("A canonical CRM Student is required for privacy requests."), frappe.ValidationError)
+	doc = frappe.get_doc("CRM Student", canonical)
 	if not doc.has_permission("write"):
-		frappe.throw(_("You do not have permission to manage privacy requests for this Student."), frappe.PermissionError)
+		frappe.throw(
+			_("You do not have permission to manage privacy requests for this Student."),
+			frappe.PermissionError,
+		)
 	roles = set(frappe.get_roles(frappe.session.user))
-	if frappe.session.user != "Administrator" and "System Manager" not in roles and "Admissions Director" not in roles:
-		frappe.throw(_("Only an authorized privacy reviewer can manage privacy requests."), frappe.PermissionError)
+	if (
+		frappe.session.user != "Administrator"
+		and "System Manager" not in roles
+		and "Admissions Director" not in roles
+	):
+		frappe.throw(
+			_("Only an authorized privacy reviewer can manage privacy requests."), frappe.PermissionError
+		)
 	return doc
 
 
-def open_privacy_request(student: str, request_type: str, *, details: str | None = None, contact: str | None = None) -> dict[str, Any]:
-	_student_for_write(student)
+def open_privacy_request(
+	student: str, request_type: str, *, details: str | None = None, contact: str | None = None
+) -> dict[str, Any]:
+	student = _student_for_write(student).name
 	request_type = str(request_type or "").strip()
 	if request_type not in REQUEST_TYPES:
 		frappe.throw(_("Privacy request type is invalid."), frappe.ValidationError)
 	if contact:
 		if not frappe.db.exists("CRM Student", contact):
 			frappe.throw(_("The privacy-request Contact does not exist."), frappe.ValidationError)
-		if not contact_is_linked_to_student(contact, student) and not frappe.db.exists("CRM Parent Contact Authority", {"student": student, "contact": contact}):
-			frappe.throw(_("The privacy-request Contact is not related to this Student."), frappe.ValidationError)
+		if not contact_is_linked_to_student(contact, student) and not frappe.db.exists(
+			"CRM Parent Contact Authority", {"student": student, "contact": contact}
+		):
+			frappe.throw(
+				_("The privacy-request Contact is not related to this Student."), frappe.ValidationError
+			)
 	doc = frappe.get_doc(
 		{
 			"doctype": "CRM Student Privacy Request",
@@ -55,7 +74,9 @@ def open_privacy_request(student: str, request_type: str, *, details: str | None
 	return serialize_request(doc)
 
 
-def resolve_privacy_request(name: str, status: str, resolution: str, *, evidence_reference: str | None = None) -> dict[str, Any]:
+def resolve_privacy_request(
+	name: str, status: str, resolution: str, *, evidence_reference: str | None = None
+) -> dict[str, Any]:
 	if frappe.session.user == "Guest":
 		frappe.throw(_("Authentication is required."), frappe.PermissionError)
 	doc = frappe.get_doc("CRM Student Privacy Request", name)

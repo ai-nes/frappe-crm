@@ -54,6 +54,7 @@ class TestDirectorStudents(FrappeTestCase):
 			q="  Nguyen  ",
 			stage="counselling",
 			province="can-tho",
+			campaign="CAM-2026-00001",
 			assignmentStatus="assigned",
 			lifecycleStatus="MQL",
 			sort="lastActivityAt",
@@ -69,6 +70,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"query": "Nguyen",
 				"stage": "counselling",
 				"province": "can-tho",
+				"campaign": "CAM-2026-00001",
 				"owner_id": None,
 				"assignment_status": "assigned",
 				"lifecycle_status": "Attempting",
@@ -231,6 +233,21 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(filters["province"], "PROVINCE-01")
 		self.assertEqual(or_filters, [])
 
+	def test_student_filters_resolve_campaign_code(self):
+		with (
+			patch.object(director_students.frappe.db, "exists", return_value=False),
+			patch.object(
+				director_students.frappe.db,
+				"get_value",
+				return_value="CAMPAIGN-1",
+			),
+		):
+			query = director_students._parse_query(campaign="CAM-2026-00001")
+			filters, or_filters = director_students._student_filters(query, None)
+
+		self.assertEqual(filters["campaign"], "CAMPAIGN-1")
+		self.assertEqual(or_filters, [])
+
 		unassigned = director_students._parse_query(assignment_status="unassigned")
 		unassigned_filters, _ = director_students._student_filters(unassigned, None)
 		self.assertEqual(unassigned_filters["owner_staff"], ["is", "set"])
@@ -289,10 +306,43 @@ class TestDirectorStudents(FrappeTestCase):
 			student_name="Nguyễn Minh An",
 			phone="0900000000",
 			email="an@example.com",
+			province="P-1",
+			ward="W-1",
 			current_grade="12",
+			study_stage="grade_12_h2",
+			aspiration="ASP-1",
+			major="MAJOR-1",
 			date_of_birth="2007-07-20",
 			gender="Nữ",
+			id_number="079207000001",
+			birth_place="Cần Thơ",
+			ethnicity="Kinh",
+			religion="Không",
+			nationality="Việt Nam",
+			id_issued_date="2022-01-10",
+			id_issued_place="Cục Cảnh sát",
+			other_phone="0911111111",
+			other_email="other@example.com",
+			parent_name="Nguyễn Thị An",
+			parent_phone="0922222222",
+			parent_other_phone="0933333333",
+			parent_email="parent@example.com",
+			father_email="father@example.com",
+			father_name="Nguyễn Văn An",
+			father_phone="0944444444",
+			father_occupation="Kinh doanh",
+			mother_phone="0955555555",
+			mother_name="Nguyễn Thị An",
+			mother_email="mother@example.com",
+			mother_occupation="Giáo viên",
+			contact_address="12 Đường A, Phường An Bình, Cần Thơ",
+			branch="CAMPUS-1",
+			platform="PLATFORM-1",
+			source_lead="LEAD-1",
 			admission_year="2026",
+			engagement_revision=8,
+			creation="2026-08-12 15:48:00",
+			modified="2026-09-09 08:10:00",
 			student_stage="Attempting",
 			assessment_status="confirmed",
 			campaign="Campaign 1",
@@ -304,7 +354,9 @@ class TestDirectorStudents(FrappeTestCase):
 			"code": "ENR-1",
 			"school": "THPT Châu Văn Liêm",
 			"province": "Cần Thơ",
+			"ward": "Phường An Bình",
 			"major": "Trí tuệ nhân tạo",
+			"aspiration": "ASP-1",
 			"stage": "Tư vấn",
 			"score": 82,
 			"scoreDelta": 13,
@@ -314,6 +366,9 @@ class TestDirectorStudents(FrappeTestCase):
 			"owner": "Trần Quốc Bảo",
 			"revision": 4,
 			"source": "Career Talk 28/05",
+			"sourceLeadLabel": "Nguyễn Minh An",
+			"platform": "Website",
+			"branch": "Cần Thơ",
 			"priority": "Cao",
 		}
 		with (
@@ -335,13 +390,64 @@ class TestDirectorStudents(FrappeTestCase):
 					"lastInteraction": None,
 				},
 			),
+			patch.object(
+				director_students,
+				"_student_payment_account",
+				return_value={
+					"bankName": "Vietcombank",
+					"accountNumber": "123456789",
+					"accountHolder": "Nguyễn Thị An",
+				},
+			),
 			patch.object(director_students, "_student_applications", return_value=[]),
+			patch.object(director_students, "_student_admission_profiles", return_value=[]),
 		):
 			response = director_students._build_student_360(row, item)
 
 		self.assertEqual(response["student"]["phone"], "0900000000")
 		self.assertEqual(response["student"]["studentId"], "CRMC-1")
 		self.assertEqual(response["student"]["email"], "an@example.com")
+		self.assertEqual(response["student"]["provinceId"], "P-1")
+		self.assertEqual(response["student"]["ward"], "Phường An Bình")
+		self.assertEqual(response["student"]["wardId"], "W-1")
+		self.assertEqual(response["student"]["currentGrade"], "12")
+		self.assertEqual(response["student"]["studyStage"], "grade_12_h2")
+		self.assertEqual(response["student"]["aspiration"], "ASP-1")
+		self.assertEqual(response["student"]["engagementRevision"], 8)
+		personal = response["student"]["profileDetails"]["personal"]
+		self.assertEqual(personal["fullName"], "Nguyễn Minh An")
+		self.assertEqual(personal["idNumber"], "079207000001")
+		self.assertEqual(personal["birthPlace"], "Cần Thơ")
+		self.assertEqual(personal["otherPhone"], "0911111111")
+		self.assertEqual(personal["otherEmail"], "other@example.com")
+		self.assertEqual(personal["convertedFromLead"], "Có")
+		self.assertEqual(personal["sourceLeadId"], "LEAD-1")
+		self.assertEqual(personal["sourceLead"], "Nguyễn Minh An")
+		self.assertEqual(personal["campaign"], "Campaign 1")
+		self.assertEqual(personal["majorId"], "MAJOR-1")
+		self.assertEqual(personal["branch"], "Cần Thơ")
+		self.assertEqual(personal["branchId"], "CAMPUS-1")
+		self.assertEqual(personal["admissionYearId"], "2026")
+		contact = response["student"]["profileDetails"]["contact"]
+		self.assertEqual(contact["name"], "Nguyễn Thị An")
+		self.assertEqual(contact["phone"], "0922222222")
+		self.assertEqual(contact["otherPhone"], "0933333333")
+		self.assertEqual(contact["email"], "parent@example.com")
+		self.assertEqual(contact["bankName"], "Vietcombank")
+		self.assertEqual(contact["accountNumber"], "123456789")
+		self.assertEqual(contact["accountHolder"], "Nguyễn Thị An")
+		self.assertEqual(contact["fatherEmail"], "father@example.com")
+		self.assertEqual(contact["fatherName"], "Nguyễn Văn An")
+		self.assertEqual(contact["fatherPhone"], "0944444444")
+		self.assertEqual(contact["fatherOccupation"], "Kinh doanh")
+		self.assertEqual(contact["motherPhone"], "0955555555")
+		self.assertEqual(contact["motherName"], "Nguyễn Thị An")
+		self.assertEqual(contact["motherEmail"], "mother@example.com")
+		self.assertEqual(contact["motherOccupation"], "Giáo viên")
+		address = response["student"]["profileDetails"]["address"]
+		self.assertEqual(address["province"], "Cần Thơ")
+		self.assertEqual(address["ward"], "Phường An Bình")
+		self.assertEqual(address["fullAddress"], "12 Đường A, Phường An Bình, Cần Thơ")
 		self.assertEqual(response["student"]["revision"], 4)
 		self.assertEqual(response["student"]["grade"], "Lớp 12")
 		self.assertEqual(response["student"]["priority"], "Cao")
@@ -364,6 +470,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"journey",
 				"engagement",
 				"application",
+				"admissionProfiles",
 				"probabilityTrend",
 				"channelPerformance",
 				"zaloMessages",
@@ -560,8 +667,8 @@ class TestDirectorStudents(FrappeTestCase):
 			limit_page_length=1,
 		)
 
-	def test_sale_list_scope_uses_the_lead_projection_table(self):
-		condition = "`tabCRM Lead`.owner_staff = 'STAFF-1'"
+	def test_sale_list_scope_uses_the_student_projection_table(self):
+		condition = "`tabCRM Student`.owner_staff = 'STAFF-1'"
 		with (
 			patch.object(director_students, "can_read_full_lead_board", return_value=False),
 			patch.object(
@@ -572,9 +679,9 @@ class TestDirectorStudents(FrappeTestCase):
 			result = director_students._list_scope_student_ids()
 
 		self.assertEqual(result, ["ENR-1"])
-		get_condition.assert_called_once_with(doctype="CRM Lead")
+		get_condition.assert_called_once_with(doctype="CRM Student")
 		sql.assert_called_once_with(
-			"select name from `tabCRM Lead` where (`tabCRM Lead`.owner_staff = 'STAFF-1')",
+			"select name from `tabCRM Student` where (`tabCRM Student`.owner_staff = 'STAFF-1')",
 			as_dict=True,
 		)
 
@@ -839,30 +946,35 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(calls[0]["transcript"], "TƯ VẤN VIÊN: Em cần tư vấn.")
 
 	def test_get_student_interactions_endpoint(self):
-		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
-		doc.has_permission = lambda permission_type: permission_type == "read"
-		with (
-			patch.object(director_students, "_require_access", return_value=None),
-			patch.object(director_students.frappe, "get_doc", return_value=doc),
-			patch.object(director_students, "_student_interactions", return_value=[]),
-			patch.object(director_students, "_student_guardian", return_value={}),
-		):
-			result = director_students.get_student_interactions("ENR-1")
-
-		self.assertEqual(result["student_id"], "ENR-1")
-		self.assertEqual(result["zalo_messages"], [])
-		self.assertEqual(result["calls"], [])
-		self.assertEqual(result["total_interactions"], 0)
-
-	def test_get_student_interactions_resolves_canonical_student_id(self):
-		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc = frappe._dict(name="STU-1", full_name="Nguyễn Minh An", owner_staff="STAFF-1")
 		doc.has_permission = lambda permission_type: permission_type == "read"
 		with (
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(
 				director_students,
-				"_resolve_activity_target",
-				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+				"_resolve_canonical_activity_target",
+				return_value=("STU-1", "STU-1"),
+			),
+			patch.object(director_students.frappe, "get_doc", return_value=doc),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(director_students, "_student_guardian", return_value={}),
+		):
+			result = director_students.get_student_interactions("STU-1")
+
+		self.assertEqual(result["student_id"], "STU-1")
+		self.assertEqual(result["zalo_messages"], [])
+		self.assertEqual(result["calls"], [])
+		self.assertEqual(result["total_interactions"], 0)
+
+	def test_get_student_interactions_uses_canonical_student_id(self):
+		doc = frappe._dict(name="STU-1", full_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc.has_permission = lambda permission_type: permission_type == "read"
+		with (
+			patch.object(director_students, "_require_access", return_value=None),
+			patch.object(
+				director_students,
+				"_resolve_canonical_activity_target",
+				return_value=("CRMC-1", "STU-1"),
 			),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
 			patch.object(director_students.frappe, "has_permission", return_value=True),
@@ -928,7 +1040,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(messages[0]["content"], "Em muốn hỏi học phí.")
 
 	def test_get_student_chatwoot_interactions_filters_type_and_paginates(self):
-		doc = frappe._dict(name="ENR-1", student_name="Nguyễn Minh An", owner_staff="STAFF-1")
+		doc = frappe._dict(name="STU-1", full_name="Nguyễn Minh An", owner_staff="STAFF-1")
 		doc.has_permission = lambda permission_type: permission_type == "read"
 		rows = [
 			frappe._dict(
@@ -952,9 +1064,10 @@ class TestDirectorStudents(FrappeTestCase):
 			patch.object(director_students, "_require_access", return_value=None),
 			patch.object(
 				director_students,
-				"_resolve_activity_target",
-				return_value=("CRMC-1", "ENR-1", "CRMC-1"),
+				"_resolve_canonical_activity_target",
+				return_value=("CRMC-1", "STU-1"),
 			),
+			patch.object(director_students, "_student_query_ids", return_value=["STU-1"]),
 			patch.object(director_students.frappe, "get_doc", return_value=doc),
 			patch.object(director_students.frappe, "has_permission", return_value=True),
 			patch.object(director_students.frappe, "get_list", side_effect=get_list),
@@ -974,7 +1087,7 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(
 			calls[0][1]["filters"],
 			{
-				"student": "ENR-1",
+				"student": ["in", ["STU-1"]],
 				"interaction_type": ["in", ("MESSAGE", "TIN_NHAN_CHATWOOT")],
 			},
 		)

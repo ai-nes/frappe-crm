@@ -5,7 +5,9 @@ admissions lifecycle and conversion commands:
 
     NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
-Phone, province, high school, and major are the only required processing gates.
+Name, phone, and province are the only required processing gates. High school
+and major are optional Lead metadata: they are read and stored, but never
+block processing, routing, or assignment.
 Lead duplicate matching uses only Lead-owned identifiers and routing data;
 CCCD belongs to the later Student profile and is never read here.
 Processing and assignment only update the Lead status and ownership; neither
@@ -23,12 +25,20 @@ from typing import Any
 
 import frappe
 
+from crm.fcrm.conversion_readiness import conversion_readiness
+from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
 from crm.fcrm.student_intake import normalize_email, normalize_phone
-from crm.fcrm.student_ownership import StudentOwnershipError, change_student_ownership
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
+from crm.fcrm.team_routing import (
+	RECIPIENT_FUNCTIONS,
+	_active_memberships,
+	list_province_recipients,
+	team_routing_readiness,
+)
 
 PROCESSING_STATUSES = ("NEW", "PROCESSING", "PROCESSED", "ASSIGNED", "CLOSED")
+ASSIGNABLE_STATUSES = frozenset({"PROCESSING", "PROCESSED", "ASSIGNED"})
 RESOLUTIONS = ("PENDING", "MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED")
 ADVANCING_RESOLUTIONS = frozenset({"MATCHED", "CREATED"})
 TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
@@ -41,6 +51,7 @@ STATUS_DEFAULT_RESOLUTIONS = {
 }
 SERVICE_FLAG = "lead_processing_service"
 MAX_PROCESS_SCAN = 1000
+CONVERSION_OPERATOR_PROFILES = frozenset({"sales", "ctv_sale", "lead_sales"})
 
 
 class LeadProcessingError(frappe.ValidationError):
@@ -390,6 +401,117 @@ def _get_resolution(lead) -> str:
 	return str(lead.get("resolution") or "PENDING").strip().upper()
 
 
+def _assert_assignable_status(lead) -> None:
+	if _get_status(lead) not in ASSIGNABLE_STATUSES:
+		_fail("INVALID_STATUS", "Lead ở trạng thái Mới hoặc Đã đóng không thể phân công.")
+
+
+def list_lead_assignment_targets(lead: str) -> dict[str, Any]:
+	"""Return active Sale/CTV recipients eligible for manual Lead assignment."""
+	lead_doc = _load_lead(lead)
+	_assert_assignable_status(lead_doc)
+
+	province = str(lead_doc.get("province") or "").strip()
+	branch = str(lead_doc.get("branch") or "").strip()
+	if not province:
+		_fail("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
+	if not branch:
+		_fail("MISSING_CAMPUS", "Lead chưa có cơ sở để phân công.")
+
+	return {
+		"lead": lead_doc.name,
+		"province": province,
+		"ownership_revision": int(lead_doc.get("ownership_revision") or 0),
+		"targets": list_province_recipients(province, campus=branch),
+	}
+
+
+def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: str) -> None:
+	"""Ensure the requested Lead owner is an active recipient in the target Team.
+
+	A Team's own Trưởng nhóm is also accepted when the Team is otherwise ready
+	but currently has no active Sale/CTV: the province fallback path
+	(``select_province_fallback_recipient``) assigns the team lead in that
+	case so a routing failure never leaves a Lead without an accountable
+	owner, and this check must not reject that assignment.
+	"""
+	# Campus is optional Lead metadata, not a gate: a Lead without one still
+	# routes and gets an owner by province alone, so `branch` may be None here.
+	branch = lead_doc.get("branch")
+
+	team_lead_staff = frappe.db.get_value("CRM Team", target_team_id, "team_lead_staff")
+	is_team_lead_target = bool(team_lead_staff) and owner_staff == team_lead_staff
+
+	readiness = team_routing_readiness(
+		target_team_id,
+		campus=branch,
+		expected_province=lead_doc.get("province"),
+	)
+	fallback_allowed = is_team_lead_target and readiness.get("reasonCode") == "no_recipients"
+	if readiness.get("status") != "ready" and not fallback_allowed:
+		_fail("ROUTING_FAILED", readiness.get("reason") or "Target Team is not ready for routing.")
+
+	staff = frappe.db.get_value(
+		"CRM Staff",
+		owner_staff,
+		["name", "is_active", "user", "campus"],
+		as_dict=True,
+	)
+	if not staff or not staff.is_active or (branch and staff.campus and staff.campus != branch):
+		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not active at the Lead campus.")
+	if not staff.user or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
+		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale user is not enabled.")
+	if resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"} and not is_team_lead_target:
+		_fail("RECIPIENT_NOT_ELIGIBLE", "Target staff is not a Sale or CTV Sale recipient.")
+
+	if not any(
+		membership.staff == owner_staff
+		and (membership.function in RECIPIENT_FUNCTIONS or (is_team_lead_target and membership.function == "Lead Sale"))
+		for membership in _active_memberships(target_team_id)
+	):
+		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not an active member of the target Team.")
+
+
+def _validate_lead_pool_target(lead_doc, pool_name: str, target_team_id: str):
+	"""Ensure an optional Lead intake pool belongs to the target Team.
+
+	Campus is optional Lead metadata: the pool's campus is only cross-checked
+	when the Lead actually has one, so a Lead without a branch still routes.
+	"""
+	pool = frappe.db.get_value(
+		"CRM Student Pool",
+		pool_name,
+		["name", "team", "campus", "is_active"],
+		as_dict=True,
+	)
+	if not pool or not pool.is_active:
+		_fail("ROUTING_FAILED", "Input pool does not exist or is inactive.")
+	branch = lead_doc.get("branch")
+	if (branch and pool.campus != branch) or pool.team != target_team_id:
+		_fail("ROUTING_FAILED", "Input pool does not match the Lead campus and target Team.")
+	readiness = team_routing_readiness(
+		target_team_id,
+		campus=lead_doc.get("branch"),
+		expected_province=lead_doc.get("province"),
+	)
+	if readiness.get("status") != "ready":
+		_fail("ROUTING_FAILED", readiness.get("reason") or "Target Team is not ready for routing.")
+	return pool
+
+
+def _assert_lead_conversion_actor() -> None:
+	"""Allow only Sales operators to execute the Lead -> Student action."""
+	actor = getattr(getattr(frappe, "session", None), "user", None)
+	if not actor or actor in {"Guest", "None"}:
+		_fail("UNAUTHORIZED", "Authentication is required.")
+	profile = resolve_crm_profile(frappe.get_roles(actor))
+	if profile not in CONVERSION_OPERATOR_PROFILES:
+		_fail(
+			"FORBIDDEN",
+			"Chỉ Sale, CTV Sale hoặc Lead Sale mới được chuyển Lead thành học sinh.",
+		)
+
+
 def _resolution_for_status(status: str, current_resolution: str) -> str:
 	if status in {"NEW", "PROCESSING", "PROCESSED", "ASSIGNED"}:
 		return "PENDING"
@@ -399,10 +521,13 @@ def _resolution_for_status(status: str, current_resolution: str) -> str:
 
 
 def _set_processing_values(name: str, values: dict[str, Any]) -> None:
+	lead_doc = frappe.get_doc("CRM Lead", name)
 	previous = getattr(frappe.flags, SERVICE_FLAG, False)
 	setattr(frappe.flags, SERVICE_FLAG, True)
 	try:
-		frappe.db.set_value("CRM Lead", name, values, update_modified=True)
+		for fieldname, value in values.items():
+			lead_doc.set(fieldname, value)
+		lead_doc.save(ignore_permissions=True, ignore_version=False)
 	finally:
 		setattr(frappe.flags, SERVICE_FLAG, previous)
 
@@ -507,9 +632,8 @@ def reopen_lead(lead: str, reason: str | None = None) -> dict[str, Any]:
 
 	Assignment closes any Lead whose routing data cannot be resolved, and the
 	operator then fixes that data. The Lead goes back through intake instead of
-	jumping straight to PROCESSED: a record still missing phone, province, high
-	school, or major closes again here rather than reaching assignment
-	unvalidated.
+	jumping straight to PROCESSED: a record still missing name, phone, or
+	province closes again here rather than reaching assignment unvalidated.
 	"""
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) != "CLOSED":
@@ -618,8 +742,7 @@ def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) == "ASSIGNED":
 		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": "PENDING"}
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	if not lead_doc.get("owner_staff") and not lead_doc.get("assigned_to"):
 		_fail("OWNER_REQUIRED", "Lead ownership must be written before marking it assigned.")
 	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED", "resolution": "PENDING"})
@@ -628,6 +751,104 @@ def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
 		"lead": lead_doc.name,
 		"resolution": "PENDING",
 		"reason": reason,
+	}
+
+
+def change_lead_ownership(
+	lead: str,
+	owner_staff: str | None,
+	target_team_id: str,
+	reason: str,
+	idempotency_key: str,
+	expected_revision: Any,
+	correlation_id: str,
+	*,
+	target_kind: str = "owner",
+	target_id: str | None = None,
+	_commit: bool = True,
+	_route_trigger: str | None = None,
+) -> dict[str, Any]:
+	"""Atomically change a Lead's ownership projection without creating a Student."""
+	lead_name = _required(lead, "lead")
+	target_kind = _required(target_kind, "target_kind")
+	target_team_id = _required(target_team_id, "target_team_id")
+	reason = _required(reason, "reason", max_length=2000)
+	idempotency_key = _required(idempotency_key, "idempotency_key")
+	correlation_id = _required(correlation_id, "correlation_id")
+	if expected_revision in (None, ""):
+		_fail("INVALID_INPUT", "expected_revision is required.")
+	if target_kind not in {"owner", "pool"}:
+		_fail("INVALID_INPUT", "target_kind must be owner or pool.")
+
+	lead_doc = _load_lead(lead_name)
+	_lock_lead(lead_doc.name)
+	lead_doc = _load_lead(lead_doc.name)
+	_assert_assignable_status(lead_doc)
+
+	try:
+		current_revision = int(lead_doc.get("ownership_revision") or 0)
+		expected_revision = int(expected_revision)
+	except (TypeError, ValueError):
+		_fail("INVALID_INPUT", "expected_revision must be an integer.")
+	if current_revision != expected_revision:
+		_fail("STALE_OWNERSHIP_REVISION", "Lead ownership changed; refresh before retrying.")
+
+	previous_owner = lead_doc.get("owner_staff") or lead_doc.get("assigned_to")
+	previous_team = lead_doc.get("owning_team")
+	previous_pool = lead_doc.get("owning_pool")
+	if target_kind == "owner":
+		owner_staff = _required(owner_staff, "owner_staff")
+		_validate_lead_ownership_target(lead_doc, owner_staff, target_team_id)
+		ownership_values = {
+			"assigned_to": owner_staff,
+			"owner_staff": owner_staff,
+			"owning_team": target_team_id,
+			"owning_pool": None,
+		}
+		target_id = owner_staff
+	else:
+		target_id = _required(target_id, "target_id")
+		pool = _validate_lead_pool_target(lead_doc, target_id, target_team_id)
+		ownership_values = {
+			"assigned_to": None,
+			"owner_staff": None,
+			"owning_team": pool.team,
+			"owning_pool": pool.name,
+		}
+
+	next_revision = current_revision + 1
+	ownership_values["ownership_revision"] = next_revision
+	previous_service_flag = getattr(frappe.flags, "lead_ownership_service", False)
+	previous_reason = getattr(frappe.flags, "lead_ownership_reason", None)
+	previous_auto_routed = getattr(frappe.flags, "lead_ownership_auto_routed", False)
+	frappe.flags.lead_ownership_service = True
+	frappe.flags.lead_ownership_reason = reason
+	frappe.flags.lead_ownership_auto_routed = _route_trigger == "assignment_batch"
+	try:
+		for fieldname, value in ownership_values.items():
+			lead_doc.set(fieldname, value)
+		lead_doc.save(ignore_permissions=True, ignore_version=False)
+	finally:
+		frappe.flags.lead_ownership_service = previous_service_flag
+		frappe.flags.lead_ownership_reason = previous_reason
+		frappe.flags.lead_ownership_auto_routed = previous_auto_routed
+
+	if _commit:
+		frappe.db.commit()
+	return {
+		"status": "applied",
+		"lead": lead_doc.name,
+		"target_kind": target_kind,
+		"target_id": target_id,
+		"owner_staff": ownership_values["owner_staff"],
+		"owning_team": ownership_values["owning_team"],
+		"owning_pool": ownership_values["owning_pool"],
+		"previous_owner_staff": previous_owner,
+		"previous_owning_team": previous_team,
+		"previous_owning_pool": previous_pool,
+		"revision": next_revision,
+		"idempotency_key": idempotency_key,
+		"correlation_id": correlation_id,
 	}
 
 
@@ -640,10 +861,9 @@ def assign_lead(
 	expected_revision: Any,
 	correlation_id: str | None = None,
 ) -> dict[str, Any]:
-	"""Assign a processed Lead to a Sale and then move it to ASSIGNED."""
+	"""Assign or reassign a Lead to a Sale and move it to ASSIGNED."""
 	lead_doc = _load_lead(lead)
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	owner_staff = _required(owner_staff, "owner_staff")
 	target_team_id = _required(target_team_id, "target_team_id")
 	idempotency_key = _required(idempotency_key, "idempotency_key")
@@ -651,28 +871,23 @@ def assign_lead(
 	correlation_id = _required(correlation_id or frappe.generate_hash(length=20), "correlation_id")
 
 	try:
-		ownership = change_student_ownership(
-			student=lead_doc.name,
-			target_kind="owner",
-			target_id=owner_staff,
+		ownership = change_lead_ownership(
+			lead=lead_doc.name,
+			owner_staff=owner_staff,
 			target_team_id=target_team_id,
 			reason=reason,
 			idempotency_key=idempotency_key,
 			expected_revision=expected_revision,
 			correlation_id=correlation_id,
-			_internal_service=True,
-			_internal_actor=getattr(frappe.session, "user", None),
 			_commit=False,
 			_route_trigger="assignment_batch",
-			_enqueue_routing=False,
-			_skip_sla=True,
 		)
 		_set_processing_values(
 			lead_doc.name,
 			{"processing_status": "ASSIGNED", "resolution": "PENDING"},
 		)
 		frappe.db.commit()
-	except (StudentOwnershipError, LeadProcessingError):
+	except LeadProcessingError:
 		frappe.db.rollback()
 		raise
 	except Exception:
@@ -693,6 +908,7 @@ def handoff_lead(
 	idempotency_key: str = "",
 	correlation_id: str | None = None,
 	target_student: str | None = None,
+	_force_create: bool = False,
 	_internal_service: bool = False,
 ) -> dict[str, Any]:
 	"""Convert an assigned Lead, initialise Student stage, and close the Lead.
@@ -705,7 +921,17 @@ def handoff_lead(
 	resolution = _get_resolution(lead_doc)
 	if _get_status(lead_doc) != "ASSIGNED":
 		_fail("INVALID_STATUS", "Only assigned Leads can be handed off.")
-	if resolution == "PENDING":
+	if _force_create:
+		_assert_lead_conversion_actor()
+		readiness = conversion_readiness(lead_doc)
+		if not readiness["ready"]:
+			_fail(
+				"CONVERSION_CONDITION_FAILED",
+				"Lead is missing conversion requirements: " + ", ".join(readiness["blockers"]),
+			)
+		resolution = "CREATED"
+		target_student = None
+	elif resolution == "PENDING":
 		identifiers = _normalise_identifiers(lead_doc)
 		resolution, classified_target = _classify_resolution(lead_doc, identifiers)
 		if classified_target and not target_student:
@@ -743,6 +969,10 @@ def handoff_lead(
 			_fail("TARGET_STUDENT_REQUIRED", "MATCHED Lead must point to its target Student.")
 
 	try:
+		# The conversion command accepts only an ASSIGNED Lead with a resolved
+		# outcome. Persist the outcome inside this transaction so the command and
+		# the final CLOSED projection stay atomic.
+		_set_processing_values(lead_doc.name, {"resolution": resolution})
 		conversion = convert_student(
 			student=lead_doc.name,
 			expected_lifecycle_revision=expected_lifecycle_revision,
@@ -750,6 +980,7 @@ def handoff_lead(
 			correlation_id=correlation_id,
 			target_student=target_student,
 			_internal_service=_internal_service,
+			_lead_handoff=True,
 		)
 		student_id = conversion.get("target_student") or conversion.get("student_id")
 		if not student_id:

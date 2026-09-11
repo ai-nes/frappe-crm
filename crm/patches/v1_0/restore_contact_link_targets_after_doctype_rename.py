@@ -4,7 +4,7 @@ import frappe
 
 CONTACT_LINK_FIELDS = (
 	("CRM Action Item", "contact"),
-	("CRM AI Lead Insight", "contact"),
+	("CRM AI Student Insight", "contact"),
 	("CRM AI Personal Email Draft", "contact"),
 )
 

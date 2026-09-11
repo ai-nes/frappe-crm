@@ -32,18 +32,6 @@
 
     <div class="flex flex-wrap items-center gap-3 px-5 pb-2 pt-5">
       <div
-        v-if="isSalesDashboard"
-        class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
-      >
-        <Button
-          v-for="section in salesSections"
-          :key="section.value"
-          :variant="activeSalesSection === section.value ? 'solid' : 'ghost'"
-          :label="__(section.label)"
-          @click="openSalesSection(section.value)"
-        />
-      </div>
-      <div
         v-if="isOfflineMarketingDashboard"
         class="flex items-center rounded-md bg-surface-gray-2 p-0.5"
       >
@@ -126,7 +114,7 @@
 
     <div class="flex min-h-0 flex-1 flex-col overflow-hidden border-t">
       <DashboardGrid
-        :key="`${props.dashboardType}-${activeSalesSection}-${offlineTeamFilter}-${renderKey}`"
+        :key="`${props.dashboardType}-${offlineTeamFilter}-${renderKey}`"
         :model-value="dashboardItems"
         @refresh="refreshDashboard"
       />
@@ -170,7 +158,7 @@ import ViewBreadcrumbs from '@/components/ViewBreadcrumbs.vue'
 import {
   digitalMarketingDashboardItems,
   offlineMarketingDashboardItems,
-  salesDashboardSections,
+  salesDashboardItems,
   type OfflineTeam,
 } from '@/data/admissionsDashboardMock'
 import {
@@ -192,7 +180,6 @@ import {
   usePageMeta,
 } from 'frappe-ui'
 import { computed, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import LucideActivity from '~icons/lucide/activity'
 import LucideCalendar from '~icons/lucide/calendar'
 import LucideDatabase from '~icons/lucide/database'
@@ -204,8 +191,6 @@ const props = defineProps({
   dashboardType: { type: String, default: 'sales' },
   dashboardSection: { type: String, default: 'overview' },
 })
-const router = useRouter()
-
 const useMockData = useStorage('crm_dashboard_use_mock_data', false)
 const refreshing = ref(false)
 const renderKey = ref(0)
@@ -231,13 +216,7 @@ const advancedFilterFields = [
   { key: 'leadSource', label: 'Lead Source', options: ['Facebook', 'Google', 'Zalo', 'TikTok', 'Referral', 'Website'] },
   { key: 'campaign', label: 'Campaign', options: ['Open Day 2026', 'GenZ chọn ngành đúng', 'FPTU Scholarship', 'Campus Tour'] },
   { key: 'stage', label: 'Admission Stage', options: ['New Lead', 'Contacted', 'Qualified', 'Counseling', 'Application', 'Enrolled'] },
-  { key: 'dimension', label: 'Interest Dimension', options: ['Chi phí', 'Ngành & trường khác', 'Việc làm', 'Hoạt động sinh viên', 'Chỗ ở', 'Quan tâm', 'Khác'] },
-  { key: 'interestLevel', label: 'Interest Level', options: ['Level ≥1', 'Level ≥2', 'Level 3'] },
-  { key: 'stance', label: 'Stance', options: ['POSITIVE', 'NEUTRAL', 'NEGATIVE', 'UNRESOLVED'] },
   { key: 'readiness', label: 'Readiness', options: ['Level 0', 'Level 1', 'Level 2', 'Level 3', 'Level 4'] },
-  { key: 'confidence', label: 'Confidence Range', options: ['80–100', '60–79', 'Dưới 60'] },
-  { key: 'freshness', label: 'Data Freshness', options: ['Fresh · ≤15 phút', 'Recent · 16–60 phút', 'Stale · >60 phút', 'Never analyzed'] },
-  { key: 'newSignal', label: 'Has New Signal', options: ['Có', 'Không'] },
   { key: 'sla', label: 'SLA Status', options: ['Đúng SLA', 'Sắp quá hạn', 'Quá SLA'] },
 ]
 
@@ -251,24 +230,10 @@ const marketingFilterKeys = new Set([
   'leadChannel',
   'leadSource',
   'campaign',
-  'dimension',
-  'interestLevel',
-  'freshness',
 ])
 
 const isSalesDashboard = computed(() => props.dashboardType === 'sales')
 const isOfflineMarketingDashboard = computed(() => props.dashboardType === 'offline_marketing')
-const salesSections = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'interests', label: 'AI Interests' },
-  { value: 'actions', label: 'Action Queue' },
-] as const
-type SalesSection = (typeof salesSections)[number]['value']
-const activeSalesSection = computed<SalesSection>(() =>
-  salesSections.some((section) => section.value === props.dashboardSection)
-    ? (props.dashboardSection as SalesSection)
-    : 'overview',
-)
 const offlineTeams = [
   { value: 'all', label: 'Tổng quan tất cả' },
   { value: 'Team North', label: 'Team North' },
@@ -331,10 +296,8 @@ watch(
     useMockData,
     () => filters.period,
     () => filters.user,
-    () => activeSalesSection.value,
     () => offlineTeamFilter.value,
     () => props.dashboardType,
-    () => props.dashboardSection,
   ],
   () => {
     fetchLiveData()
@@ -344,7 +307,7 @@ watch(
 
 const dashboardItems = computed(() => {
   if (useMockData.value) {
-    if (isSalesDashboard.value) return salesDashboardSections[activeSalesSection.value]
+    if (isSalesDashboard.value) return salesDashboardItems
     if (isOfflineMarketingDashboard.value) return offlineMarketingDashboardItems(offlineTeamFilter.value)
     return digitalMarketingDashboardItems
   }
@@ -439,12 +402,6 @@ function refreshDashboard() {
 function toggleMockMode() {
   useMockData.value = !useMockData.value
   refreshDashboard()
-}
-
-function openSalesSection(section: SalesSection) {
-  if (section !== activeSalesSection.value) {
-    router.push({ name: 'Dashboard', params: { section } })
-  }
 }
 
 function clearAdvancedFilters() {

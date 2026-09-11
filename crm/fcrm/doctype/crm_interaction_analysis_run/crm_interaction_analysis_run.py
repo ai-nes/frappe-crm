@@ -1,6 +1,8 @@
 import frappe
 from frappe.model.document import Document
 
+from crm.fcrm.analysis_runs import _validate_ruleset_identity
+
 
 class CRMInteractionAnalysisRun(Document):
 	"""Dedicated analysis lifecycle for one Interaction episode revision."""
@@ -12,3 +14,4 @@ class CRMInteractionAnalysisRun(Document):
 			frappe.throw("Interaction analysis run source revision and digest are invalid.")
 		if self.status not in {"queued", "running", "completed", "abstained", "failed", "dead_lettered"}:
 			frappe.throw("Interaction analysis run status is invalid.")
+		_validate_ruleset_identity(self)

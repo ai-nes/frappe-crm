@@ -1,8 +1,8 @@
-"""Pure assembly of the NBA Evaluation v2 input envelope.
+"""Pure assembly of the current NBA Evaluation input envelope.
 
 No Frappe import: the shaping and digest binding are testable without a bench
 and stay byte-aligned with the shared golden fixtures under
-``crm/fcrm/test_fixtures/nba-evaluation-v1``. The Frappe-facing entry point in
+``crm/fcrm/test_fixtures/nba-evaluation``. The Frappe-facing entry point in
 ``crm/api/nba_evaluation.py`` gathers the live projection and calls in here.
 """
 
@@ -13,7 +13,7 @@ from datetime import datetime
 
 from crm.fcrm.nba_canonical import canonical_digest
 
-CONTRACT_VERSION = "nba-evaluation-v2"
+CONTRACT_VERSION = "nba-evaluation"
 
 
 def _clock(now: datetime | str) -> str:
@@ -30,7 +30,7 @@ def assemble_evaluation_input(
 	evaluation_id: str | None = None,
 	contract_version: str = CONTRACT_VERSION,
 ) -> dict:
-	"""Bind pre-shaped sub-documents into the NBA Evaluation v1 input envelope.
+	"""Bind pre-shaped sub-documents into the current NBA Evaluation envelope.
 
 	``evaluation_key`` is an idempotency key over the evaluation inputs -- the
 	student identity, its context revision, and the eligible-set and policy

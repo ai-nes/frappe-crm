@@ -9,9 +9,18 @@ class CRMParentContactAuthority(Document):
 	"""Append-only authorization evidence for Parent Contact actions."""
 
 	_IMMUTABLE_FIELDS = (
-		"student", "contact", "relationship_verified", "relationship_type",
-		"decision_role", "decision_influence", "concerns", "lawful_basis",
-		"allowed_channels", "effective_at", "expires_at", "proof_reference",
+		"student",
+		"contact",
+		"relationship_verified",
+		"relationship_type",
+		"decision_role",
+		"decision_influence",
+		"concerns",
+		"lawful_basis",
+		"allowed_channels",
+		"effective_at",
+		"expires_at",
+		"proof_reference",
 	)
 
 	def before_insert(self):
@@ -30,7 +39,10 @@ class CRMParentContactAuthority(Document):
 				frappe.throw("Parent Contact Authority is append-only.", frappe.PermissionError)
 			before = self.get_doc_before_save()
 			if before and any(self.get(field) != before.get(field) for field in self._IMMUTABLE_FIELDS):
-				frappe.throw("Parent relationship facts are immutable; use a new authority record.", frappe.PermissionError)
+				frappe.throw(
+					"Parent relationship facts are immutable; use a new authority record.",
+					frappe.PermissionError,
+				)
 		if self.decision_role not in {"Unknown", "Primary decision maker", "Influencer", "Information only"}:
 			frappe.throw("Decision role is invalid.", frappe.ValidationError)
 		if self.decision_influence not in {"Unknown", "High", "Medium", "Low"}:
@@ -47,12 +59,14 @@ class CRMParentContactAuthority(Document):
 def get_permission_query_conditions(user=None):
 	from crm.fcrm.permissions import get_permission_query_conditions as student_conditions
 
-	condition = student_conditions("CRM Lead", user=user)
+	condition = student_conditions("CRM Student", user=user)
 	if condition is None:
 		return None
 	if condition == "1=0":
 		return "1=0"
-	return "`tabCRM Parent Contact Authority`.student in (select `tabCRM Lead`.name from `tabCRM Lead` where ({0}))".format(condition)
+	return "`tabCRM Parent Contact Authority`.student in (select `tabCRM Student`.name from `tabCRM Student` where ({0}))".format(
+		condition
+	)
 
 
 def has_permission(doc, user=None, permission_type=None, ptype=None):
@@ -62,5 +76,9 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	permission_type = permission_type or ptype
 	if permission_type in {"create", "write", "delete"}:
 		roles = set(frappe.get_roles(user or frappe.session.user))
-		return bool((user or frappe.session.user) == "Administrator" or "System Manager" in roles or "Admissions Director" in roles)
-	return bool(frappe.has_permission("CRM Lead", "read", student, user=user))
+		return bool(
+			(user or frappe.session.user) == "Administrator"
+			or "System Manager" in roles
+			or "Admissions Director" in roles
+		)
+	return bool(frappe.has_permission("CRM Student", "read", student, user=user))

@@ -38,6 +38,25 @@ def _one(doctype, *, filters, fields):
 	return dict(rows[0]) if rows else None
 
 
+def _student_rows_for_school(high_school: str, admission_year: str | None) -> list[dict[str, Any]]:
+	"""Read school students from the canonical Student aggregate."""
+	rows = frappe.get_list(
+		"CRM Student",
+		filters={"high_school": high_school, "admission_year": admission_year},
+		fields=["name", "current_grade", "study_stage", "student_stage"],
+		order_by="name asc",
+		limit_page_length=0,
+	)
+	return [
+		{
+			**dict(row),
+			"processing_status": "CLOSED" if row.get("student_stage") == "Disqualified" else "PROCESSED",
+			"resolution": "CREATED" if row.get("student_stage") == "Connected" else "PENDING",
+		}
+		for row in rows
+	]
+
+
 def _load_supporting_sources(school, admission_year):
 	failed = set()
 	capped = set()
@@ -108,16 +127,7 @@ def _load_supporting_sources(school, admission_year):
 	)
 	load(
 		"students",
-		lambda: [
-			dict(row)
-			for row in frappe.get_list(
-				"CRM Lead",
-				filters={"high_school": school.get("name"), "admission_year": admission_year},
-				fields=["name", "current_grade", "study_stage", "processing_status", "resolution"],
-				order_by="name asc",
-				limit_page_length=0,
-			)
-		],
+		lambda: _student_rows_for_school(school.get("name"), admission_year),
 		[],
 	)
 	load(
@@ -286,10 +296,10 @@ def _build_detail(school, sources, failed, capped, admission_year):
 			str(row.get("current_grade") or "") == "12"
 			or str(row.get("study_stage") or "").startswith("grade_12")
 		)
-		and row.get("processing_status") != "CLOSED"
+		and row.get("student_stage") not in {"Connected", "Disqualified"}
 	)
-	student_applications = sum(1 for row in students if row.get("processing_status") in {"PROCESSED", "ASSIGNED"})
-	student_enrollment = sum(1 for row in students if row.get("resolution") == "CREATED")
+	student_applications = sum(1 for row in students if row.get("student_stage") in {"Qualified", "Connected"})
+	student_enrollment = sum(1 for row in students if row.get("student_stage") == "Connected")
 	grade12_from_snapshot = None
 	try:
 		enrollment_rate = float(snapshot.get("enrollment_rate"))

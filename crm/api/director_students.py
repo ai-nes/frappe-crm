@@ -135,7 +135,12 @@ STUDENT_FIELDS = [
 	"student_context_revision",
 	"high_school",
 	"province",
+	"ward",
 	"major",
+	"aspiration",
+	"branch",
+	"platform",
+	"source",
 	"student_stage",
 	"latest_score",
 	"assessment_status",
@@ -148,16 +153,41 @@ STUDENT_FIELDS = [
 	"transcript_score",
 	"english_converted_score",
 	"total_score",
-	"source",
-	"aspiration",
-	"branch",
-	"ward",
+	"other_phone",
+	"other_email",
+	"birth_place",
+	"ethnicity",
+	"religion",
+	"nationality",
+	"id_number",
+	"id_issued_date",
+	"id_issued_place",
+	"contact_address",
 	"notes",
 	"owner_staff",
 	"assigned_to",
 	"admission_year",
+	"creation",
 	"modified",
 	"privacy_status",
+	"parent_name",
+	"parent_phone",
+	"parent_other_phone",
+	"parent_email",
+	"father_name",
+	"father_phone",
+	"father_email",
+	"father_occupation",
+	"mother_name",
+	"mother_phone",
+	"mother_email",
+	"mother_occupation",
+	"education_program",
+	"decision_maker",
+	"preferred_contact_channel",
+	"ownership_revision",
+	"engagement_revision",
+	"lifecycle_revision",
 ]
 
 
@@ -169,6 +199,7 @@ def get_director_students(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -193,6 +224,7 @@ def get_director_students(
 		q=q,
 		stage=stage,
 		province=province,
+		campaign=campaign,
 		ownerId=ownerId,
 		sort=sort,
 		order=order,
@@ -207,8 +239,7 @@ def get_director_students(
 	resolved_province = _resolve_province(query["province"]) if query["province"] else None
 	student_filters, or_filters = _student_filters(query, resolved_province)
 
-	# CRM Lead remains the routing projection for this list. This keeps the
-	# Student view aligned with the same active Group/Team/pool scope as Lead.
+	# Apply the same active Group/Team/pool scope directly to canonical Students.
 	list_scope_student_ids = _list_scope_student_ids()
 	total = _count_students(
 		student_filters,
@@ -244,6 +275,7 @@ def get_director_students(
 				"stage": STAGES[query["stage"]]["label"] if query["stage"] else None,
 				"assignmentStatus": query["assignment_status"],
 				"lifecycleStatus": query["lifecycle_status"],
+				"campaign": query["campaign"],
 				"province": _province_label(resolved_province),
 			},
 			"sort": {"field": query["sort"], "order": query["order"]},
@@ -278,39 +310,28 @@ def get_director_student(student_id: str) -> dict[str, Any]:
 def get_student_interactions(student_id: str) -> dict[str, Any]:
 	"""Return interaction history (Zalo messages and Call Logs) for a CRM Student."""
 	_require_access()
-	requested_id, activity_id, canonical_id = _resolve_activity_target(student_id)
+	requested_id, canonical_id = _resolve_canonical_activity_target(student_id)
 	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", activity_id)
+		doc = frappe.get_doc("CRM Student", canonical_id)
 	except frappe.DoesNotExistError:
-		canonical_id = canonical_id or canonical_student(activity_id)
-		if not canonical_id:
-			_raise_api_error(
-				"STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404
-			)
-		try:
-			doc = frappe.get_doc("CRM Student", canonical_id)
-			activity_id = canonical_id
-		except frappe.DoesNotExistError:
-			_raise_api_error(
-				"STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404
-			)
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
+	if not frappe.has_permission("CRM Student", "read", canonical_id):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	row = _normalize_student_row(frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS}))
-	interactions = _student_interactions(activity_id)
-	guardian = _student_guardian(activity_id)
-	if not guardian.get("name") and row.get("alt_name"):
-		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
+	row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
+	interactions = _student_interactions(canonical_id)
+	guardian = _student_guardian(canonical_id)
+	if not guardian.get("name") and row.get("parent_name"):
+		guardian.update({"name": row.get("parent_name"), "preferredChannel": None, "consentStatus": None})
 
-	zalo_messages = _student_zalo_messages(activity_id, interactions, row, guardian)
-	calls = _student_call_records(activity_id, interactions, row, guardian)
+	zalo_messages = _student_zalo_messages(canonical_id, interactions, row, guardian)
+	calls = _student_call_records(canonical_id, interactions, row, guardian)
 
 	return {
 		"student_id": requested_id,
@@ -360,25 +381,24 @@ def get_student_chatwoot_interactions(
 ) -> dict[str, Any]:
 	"""Return permission-aware Chatwoot interactions for one Student."""
 	_require_access()
-	requested_id, lead_id, canonical_id = _resolve_activity_target(student_id)
+	requested_id, canonical_id = _resolve_canonical_activity_target(student_id)
 	if not requested_id:
 		_raise_api_error("INVALID_STUDENT_ID", "studentId không được để trống.", frappe.ValidationError, 400)
 
 	try:
-		doc = frappe.get_doc("CRM Lead", lead_id)
+		doc = frappe.get_doc("CRM Student", canonical_id)
 	except frappe.DoesNotExistError:
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
-	if canonical_id and not frappe.has_permission("CRM Student", "read", canonical_id):
+	if not frappe.has_permission("CRM Student", "read", canonical_id):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 	if not doc.has_permission("read"):
 		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
 
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_length = _parse_int(page_size, "page_size", 50, minimum=1, maximum=100)
-	canonical_id = canonical_id or canonical_student(lead_id) or lead_id
 	filters = {
-		"student": lead_id,
+		"student": ["in", _student_query_ids([canonical_id])],
 		"interaction_type": ["in", CHATWOOT_INTERACTION_TYPES],
 	}
 	rows = frappe.get_list(
@@ -396,17 +416,17 @@ def get_student_chatwoot_interactions(
 		limit_page_length=0,
 		pluck="name",
 	)
-	guardian = _student_guardian(lead_id)
+	guardian = _student_guardian(canonical_id)
 	student_row = frappe._dict({field: doc.get(field) for field in STUDENT_FIELDS})
-	if not guardian.get("name") and student_row.get("alt_name"):
+	if not guardian.get("name") and student_row.get("parent_name"):
 		guardian.update(
-			{"name": student_row.get("alt_name"), "preferredChannel": None, "consentStatus": None}
+			{"name": student_row.get("parent_name"), "preferredChannel": None, "consentStatus": None}
 		)
 
 	return {
 		"student_id": requested_id,
 		"data": rows,
-		"zalo_messages": _student_zalo_messages(lead_id, rows, student_row, guardian),
+		"zalo_messages": _student_zalo_messages(canonical_id, rows, student_row, guardian),
 		"meta": {
 			"page": page_number,
 			"page_size": page_length,
@@ -424,6 +444,7 @@ def _parse_query(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -439,6 +460,9 @@ def _parse_query(
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_size = _parse_int(pageSize, "pageSize", 20, minimum=1, maximum=100)
 	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
+	campaign_value = str(campaign or "").strip() or None
+	if campaign_value and _fold(campaign_value) == "all":
+		campaign_value = None
 	assignment_value = _first_query_value(assignmentStatus, assignment_status)
 	lifecycle_value = _first_query_value(lifecycleStatus, lifecycle_status)
 	if lifecycle_value:
@@ -478,6 +502,7 @@ def _parse_query(
 		"query": str(q or "").strip(),
 		"stage": normalized_stage,
 		"province": str(province_value or "").strip() or None,
+		"campaign": campaign_value,
 		"owner_id": owner_id,
 		"assignment_status": normalized_assignment_status,
 		"lifecycle_status": normalized_lifecycle_status,
@@ -598,6 +623,8 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
+	if query.get("campaign"):
+		filters["campaign"] = _resolve_campaign(query["campaign"])
 	if query.get("lifecycle_status"):
 		filters["student_stage"] = query["lifecycle_status"]
 	if query["stage"]:
@@ -628,6 +655,13 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		if display_code_ids:
 			or_filters.append(["name", "in", display_code_ids])
 	return filters, or_filters
+
+
+def _resolve_campaign(value: str) -> str:
+	"""Accept a campaign document name or its stable code as a filter value."""
+	if frappe.db.exists("CRM Campaign", value):
+		return value
+	return frappe.db.get_value("CRM Campaign", {"stable_code": value}, "name") or value
 
 
 def _display_code_student_ids(display_code: str, admission_year: str | None) -> list[str]:
@@ -690,6 +724,20 @@ def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | No
 	return requested_id, lead_id or resolved_id, canonical_id
 
 
+def _resolve_canonical_activity_target(student_id: str | None) -> tuple[str, str]:
+	"""Resolve activity requests to the canonical Student aggregate."""
+	requested_id = str(student_id or "").strip()
+	if not requested_id:
+		return requested_id, ""
+	resolved_id = _resolve_student_id(requested_id)
+	canonical_id = canonical_student(resolved_id)
+	if not canonical_id and _exists("CRM Student", resolved_id):
+		canonical_id = resolved_id
+	if not canonical_id:
+		_raise_api_error("STUDENT_NOT_FOUND", "Không tìm thấy hồ sơ học sinh.", frappe.DoesNotExistError, 404)
+	return requested_id, canonical_id
+
+
 def _canonical_student_filters(admission_year: str | None) -> dict[str, Any]:
 	"""Return the admission-cycle filter shared by the Student read models.
 
@@ -710,14 +758,14 @@ def _list_scope_student_ids() -> list[str] | None:
 	direct CRUD/detail access cannot be widened. This endpoint uses the explicit
 	list condition only to expose rows that the session may inspect before
 	assigning; all mutation commands perform their own ownership checks. The
-	condition targets CRM Lead because Lead is the canonical routing projection.
+	condition targets CRM Student, the canonical aggregate.
 	"""
 	if can_read_full_lead_board():
 		return None
-	condition = get_student_list_read_condition(doctype="CRM Lead")
+	condition = get_student_list_read_condition(doctype="CRM Student")
 	if condition is None:
 		return None
-	rows = frappe.db.sql(f"select name from `tabCRM Lead` where ({condition})", as_dict=True)
+	rows = frappe.db.sql(f"select name from `tabCRM Student` where ({condition})", as_dict=True)
 	return [row.get("name") for row in rows if row.get("name")]
 
 
@@ -949,8 +997,8 @@ def _normalize_student_rows(rows: list) -> list:
 			item.processing_status = lead_status.get("processing_status")
 			item.resolution = lead_status.get("resolution")
 			item.ownership_revision = lead_status.get("ownership_revision")
-		if item.get("ownership_revision") is None:
-			item.ownership_revision = item.get("student_context_revision")
+			if item.get("ownership_revision") is None:
+				item.ownership_revision = item.get("student_context_revision")
 		normalized.append(item)
 	return normalized
 
@@ -959,9 +1007,15 @@ def _load_lookups(rows: list) -> dict[str, dict[str, str]]:
 	return {
 		"schools": _lookup_map("CRM High School", {row.get("high_school") for row in rows}, "school_name"),
 		"provinces": _lookup_map("CRM Province", {row.get("province") for row in rows}, "province_name"),
+		"wards": _lookup_map("CRM Ward", {row.get("ward") for row in rows}, "ward_name"),
 		"majors": _lookup_map("CRM Major", {row.get("major") for row in rows}, "major_name"),
+		"aspirations": _lookup_map("CRM Aspiration", {row.get("aspiration") for row in rows}, "display_name"),
 		"owners": _lookup_map("CRM Staff", {row.get("owner_staff") for row in rows}, "full_name"),
 		"sources": _lookup_map("CRM Lead Source", {row.get("source") for row in rows}, "source_name"),
+		"campaigns": _lookup_map("CRM Campaign", {row.get("campaign") for row in rows}, "title"),
+		"platforms": _lookup_map("CRM Platform", {row.get("platform") for row in rows}, "platform_name"),
+		"branches": _lookup_map("CRM Campus", {row.get("branch") for row in rows}, "campus_name"),
+		"sourceLeads": _lookup_map("CRM Lead", {row.get("source_lead") for row in rows}, "student_name"),
 	}
 
 
@@ -1052,13 +1106,21 @@ def _map_student_row(row, *, lookups=None, activity=None, action=None, score_his
 		"school": lookups.get("schools", {}).get(row.get("high_school")) or row.get("high_school"),
 		"province": lookups.get("provinces", {}).get(row.get("province")) or row.get("province"),
 		"provinceId": row.get("province"),
+		"ward": lookups.get("wards", {}).get(row.get("ward")) or row.get("ward"),
+		"wardId": row.get("ward"),
 		"major": lookups.get("majors", {}).get(row.get("major")) or row.get("major"),
+		"aspiration": lookups.get("aspirations", {}).get(row.get("aspiration")) or row.get("aspiration"),
+		"aspirationId": row.get("aspiration"),
+		"platform": lookups.get("platforms", {}).get(row.get("platform")) or row.get("platform"),
+		"branch": lookups.get("branches", {}).get(row.get("branch")) or row.get("branch"),
+		"sourceLead": row.get("source_lead"),
+		"sourceLeadLabel": lookups.get("sourceLeads", {}).get(row.get("source_lead"))
+		or row.get("source_lead"),
+		"campaign": lookups.get("campaigns", {}).get(row.get("campaign")) or row.get("campaign"),
 		"stage": stage["label"] if stage else None,
 		"studentStage": _student_stage_value(row),
 		"processingStatus": row.get("processing_status"),
 		"resolution": row.get("resolution"),
-		"sourceLead": row.get("source_lead"),
-		"campaign": row.get("campaign"),
 		"recordType": "student",
 		"assignmentStatus": "assigned" if row.get("owner_staff") or row.get("assigned_to") else "unassigned",
 		"score": _number(row.get("latest_score")),
@@ -1230,6 +1292,261 @@ def _count_due_actions(student_ids: list[str]) -> int:
 	return len({row.get("student") for row in rows if row.get("student")})
 
 
+def _json_object(value: Any) -> dict[str, Any]:
+	if isinstance(value, dict):
+		return value
+	if isinstance(value, str):
+		try:
+			parsed = json.loads(value)
+			return parsed if isinstance(parsed, dict) else {}
+		except (TypeError, ValueError):
+			return {}
+	return {}
+
+
+def _as_bool(value: Any) -> bool:
+	"""Normalize Frappe checkbox values and serialized boolean values."""
+	return str(value or "").strip().casefold() in {"1", "true", "yes", "on"}
+
+
+def _student_admission_profiles(student_id: str | None, admission_year: str | None) -> list[dict[str, Any]]:
+	"""Project the template-driven admission checklist for Student Detail."""
+	if not student_id or not _table_exists("CRM Student Admission Profile"):
+		return []
+	filters: dict[str, Any] = {
+		"student": student_id,
+		"profile_status": ["in", ["Draft", "Active", "Completed"]],
+	}
+	if admission_year:
+		filters["admission_year"] = admission_year
+	try:
+		profiles = frappe.get_list(
+			"CRM Student Admission Profile",
+			filters=filters,
+			fields=[
+				"name",
+				"student",
+				"profile_template",
+				"admission_year",
+				"attempt_number",
+				"application",
+				"profile_status",
+				"enrollment_status",
+				"document_completeness",
+				"revision",
+				"modified",
+			],
+			order_by="modified desc, creation desc, name desc",
+			limit_page_length=50,
+		)
+	except frappe.PermissionError:
+		return []
+
+	result = []
+	for profile in profiles:
+		try:
+			profile_doc = frappe.get_doc("CRM Student Admission Profile", profile.name)
+			template_doc = frappe.get_doc("CRM Admission Profile Template", profile_doc.profile_template)
+		except (frappe.DoesNotExistError, frappe.PermissionError):
+			continue
+		application_context = frappe._dict()
+		if profile.application and _table_exists("CRM Admission Application"):
+			application_context = (
+				frappe.db.get_value(
+					"CRM Admission Application",
+					profile.application,
+					[
+						"admission_method",
+						"offering",
+						"admission_year",
+						"preference",
+						"preference_order",
+					],
+					as_dict=True,
+				)
+				or frappe._dict()
+			)
+		method_code = application_context.get("admission_method") or template_doc.admission_method
+		method_name = (
+			frappe.db.get_value("CRM Admission Method", method_code, "display_name")
+			if method_code and frappe.db.exists("CRM Admission Method", method_code)
+			else method_code
+		)
+		offering_name = application_context.get("offering")
+		offering_context = (
+			frappe.db.get_value(
+				"CRM Admission Offering",
+				offering_name,
+				["offering_key", "campus", "major"],
+				as_dict=True,
+			)
+			if offering_name and _table_exists("CRM Admission Offering")
+			else frappe._dict()
+		)
+
+		try:
+			from crm.fcrm.student_profile import _document_type_rows
+
+			requirement_rows = _document_type_rows(profile_doc)
+		except (frappe.ValidationError, frappe.DoesNotExistError):
+			requirement_rows = template_doc.get("document_types") or []
+
+		document_type_names = [
+			str(row.get("document_type") or "").strip()
+			for row in requirement_rows
+			if row.get("document_type")
+		]
+		type_map = {}
+		if document_type_names and _table_exists("CRM Document Type"):
+			try:
+				type_map = {
+					row.name: row
+					for row in frappe.get_list(
+						"CRM Document Type",
+						filters={"name": ["in", document_type_names]},
+						fields=["name", "code", "label", "category", "description", "status", "is_active"],
+						limit_page_length=0,
+					)
+				}
+			except frappe.PermissionError:
+				type_map = {}
+
+		documents_by_type: dict[str, list[dict[str, Any]]] = {}
+		if _table_exists("CRM Student Document"):
+			try:
+				document_rows = frappe.get_list(
+					"CRM Student Document",
+					filters={"student_admission_profile": profile.name},
+					fields=[
+						"name",
+						"student",
+						"student_admission_profile",
+						"document_type",
+						"application",
+						"file",
+						"is_private",
+						"status",
+						"version",
+						"source_reference",
+						"verified_by",
+						"verified_at",
+						"rejection_reason",
+						"modified",
+					],
+					order_by="version desc, modified desc, name desc",
+					limit_page_length=0,
+				)
+			except frappe.PermissionError:
+				document_rows = []
+			for document in document_rows:
+				documents_by_type.setdefault(document.document_type, []).append(
+					{
+						"id": document.name,
+						"student": document.student,
+						"profile": document.student_admission_profile,
+						"documentType": document.document_type,
+						"application": document.application,
+						"file": document.file,
+						"isPrivate": _as_bool(document.is_private),
+						"status": document.status,
+						"version": int(document.version or 1),
+						"sourceReference": document.source_reference,
+						"verifiedBy": document.verified_by,
+						"verifiedAt": _as_iso(document.verified_at),
+						"rejectionReason": document.rejection_reason,
+						"modifiedAt": _as_iso(document.modified),
+					}
+				)
+
+		requirements = []
+		for row in requirement_rows:
+			document_type = str(row.get("document_type") or "").strip()
+			descriptor = type_map.get(document_type, frappe._dict())
+			requirements.append(
+				{
+					"sectionCode": row.get("section_code") or "general",
+					"documentType": document_type,
+					"documentCode": descriptor.get("code") or document_type,
+					"documentLabel": descriptor.get("label") or document_type,
+					"category": descriptor.get("category"),
+					"description": descriptor.get("description"),
+					"requirementGroup": row.get("requirement_group") or f"document:{document_type}",
+					"requirementMode": str(row.get("requirement_mode") or "ALL").upper(),
+					"isRequired": _as_bool(row.get("is_required")),
+					"minimumRequired": int(row.get("min_required") or 1),
+					"quantity": int(row.get("quantity") or 1),
+					"orderDisplay": int(row.get("order_display") or 0),
+					"conditionKey": row.get("condition_key"),
+					"instruction": row.get("instruction"),
+					"documents": documents_by_type.get(document_type, []),
+					"hasDocument": bool(documents_by_type.get(document_type)),
+				}
+			)
+
+		completeness = _json_object(profile.get("document_completeness"))
+		special_profile_options = []
+		if profile.application and _table_exists("CRM Admission Application Special Profile"):
+			try:
+				option_rows = frappe.get_all(
+					"CRM Admission Application Special Profile",
+					filters={"parent": profile.application, "parenttype": "CRM Admission Application"},
+					fields=["special_profile_template", "selection_order"],
+					order_by="selection_order asc, name asc",
+					limit_page_length=0,
+					ignore_permissions=True,
+				)
+				for option in option_rows:
+					option_template = frappe.get_doc(
+						"CRM Admission Profile Template", option.special_profile_template
+					)
+					special_profile_options.append(
+						{
+							"id": option_template.name,
+							"code": option_template.template_code,
+							"name": option_template.template_name,
+						}
+					)
+			except (frappe.DoesNotExistError, frappe.PermissionError):
+				special_profile_options = []
+		result.append(
+			{
+				"id": profile.name,
+				"student": profile.student,
+				"profileTemplate": profile.profile_template,
+				"profileTemplateCode": template_doc.template_code,
+				"profileTemplateName": template_doc.template_name,
+				"template": {
+					"id": template_doc.name,
+					"code": template_doc.template_code,
+					"name": template_doc.template_name,
+					"templateKind": template_doc.template_kind or "standard",
+					"profileType": template_doc.profile_type,
+					"status": template_doc.status,
+					"version": int(template_doc.version or 1),
+					"educationProgram": template_doc.education_program,
+					"admissionMethod": method_code,
+					"description": template_doc.description,
+				},
+				"admissionMethodCode": method_code,
+				"admissionMethodName": method_name,
+				"preference": application_context.get("preference") or "Alternative",
+				"preferenceOrder": int(application_context.get("preference_order") or 1),
+				"offering": offering_name,
+				"offeringKey": offering_context.get("offering_key"),
+				"admissionYear": application_context.get("admission_year") or profile.admission_year,
+				"attemptNumber": int(profile.attempt_number or 1),
+				"application": profile.application,
+				"specialProfileOptions": special_profile_options,
+				"profileStatus": profile.profile_status,
+				"enrollmentStatus": profile.enrollment_status,
+				"revision": int(profile.revision or 0),
+				"documentCompleteness": completeness,
+				"requirements": requirements,
+			}
+		)
+	return result
+
+
 def _build_student_360(row, item) -> dict[str, Any]:
 	student_id = row.get("name")
 	assessment = _latest_assessment(student_id)
@@ -1237,11 +1554,12 @@ def _build_student_360(row, item) -> dict[str, Any]:
 	probability_trend = _student_probability_trend(student_id, interactions)
 	channel_performance = _channel_performance(interactions)
 	guardian = _student_guardian(student_id)
-	if not guardian.get("name") and row.get("alt_name"):
-		guardian.update({"name": row.get("alt_name"), "preferredChannel": None, "consentStatus": None})
+	if not guardian.get("name") and row.get("parent_name"):
+		guardian.update({"name": row.get("parent_name"), "preferredChannel": None, "consentStatus": None})
 	if interactions:
 		guardian["lastInteraction"] = _relative_time(interactions[0].get("interaction_datetime"))
 	applications = _student_applications(student_id, row.get("admission_year"))
+	admission_profiles = _student_admission_profiles(student_id, row.get("admission_year"))
 	stage = _stage_descriptor(row) or {"code": "", "label": ""}
 	score = item.get("score")
 	probability = _number(assessment.get("enrollment_probability")) if assessment else None
@@ -1255,18 +1573,30 @@ def _build_student_360(row, item) -> dict[str, Any]:
 			"name": item.get("name"),
 			"code": item.get("code"),
 			"school": item.get("school"),
+			"schoolId": row.get("high_school"),
 			"grade": _grade_label(row),
+			"admissionYear": row.get("admission_year"),
+			"admissionMethod": row.get("admission_method"),
 			"major": item.get("major"),
 			"phone": row.get("phone"),
 			"email": row.get("email"),
 			"province": item.get("province"),
+			"provinceId": row.get("province"),
+			"ward": item.get("ward"),
+			"wardId": row.get("ward"),
+			"currentGrade": row.get("current_grade"),
+			"studyStage": row.get("study_stage"),
+			"aspiration": item.get("aspiration"),
+			"aspirationId": row.get("aspiration"),
 			"counselor": item.get("owner"),
 			"revision": item.get("revision"),
+			"engagementRevision": row.get("engagement_revision"),
 			"studentStage": item.get("studentStage") or _student_stage_value(row),
 			"priority": item.get("priority"),
 			"verificationStatus": _verification_status(row, assessment),
 			"contactConsent": _contact_consent(student_id, row.get("privacy_status")),
 			"lastUpdatedAt": _as_iso(row.get("modified")),
+			"profileDetails": _student_profile_details(row, item, _student_payment_account(student_id)),
 		},
 		"readiness": _readiness(row, item, guardian, applications, interactions),
 		"profile": _key_values(
@@ -1316,10 +1646,94 @@ def _build_student_360(row, item) -> dict[str, Any]:
 		"journey": _journey(interactions, item),
 		"engagement": _engagement(interactions),
 		"application": _application_items(applications),
+		"admissionProfiles": admission_profiles,
 		"probabilityTrend": probability_trend,
 		"channelPerformance": channel_performance,
 		"zaloMessages": _student_zalo_messages(student_id, interactions, row, guardian),
 		"calls": _student_call_records(student_id, interactions, row, guardian),
+	}
+
+
+def _student_payment_account(student_id: str | None) -> dict[str, Any]:
+	result = {"bankName": None, "accountNumber": None, "accountHolder": None}
+	if not student_id or not _table_exists("CRM Student Payment Account"):
+		return result
+	if not frappe.has_permission("CRM Student Payment Account", "read"):
+		return result
+	accounts = frappe.get_all(
+		"CRM Student Payment Account",
+		filters={"student": student_id},
+		fields=["bank_name", "account_number", "account_holder_name"],
+		order_by="is_primary desc, modified desc",
+		limit_page_length=1,
+	)
+	if not accounts:
+		return result
+	account = accounts[0]
+	return {
+		"bankName": account.get("bank_name"),
+		"accountNumber": account.get("account_number"),
+		"accountHolder": account.get("account_holder_name"),
+	}
+
+
+def _student_profile_details(row, item, payment_account=None) -> dict[str, Any]:
+	"""Project every field rendered by the existing student profile cards."""
+	return {
+		"personal": {
+			"fullName": row.get("full_name") or row.get("student_name"),
+			"dateOfBirth": row.get("date_of_birth"),
+			"gender": row.get("gender"),
+			"idNumber": row.get("id_number"),
+			"birthPlace": row.get("birth_place"),
+			"ethnicity": row.get("ethnicity"),
+			"religion": row.get("religion"),
+			"nationality": row.get("nationality"),
+			"idIssuedDate": row.get("id_issued_date"),
+			"idIssuedPlace": row.get("id_issued_place"),
+			"phone": row.get("phone"),
+			"otherPhone": row.get("other_phone"),
+			"email": row.get("email"),
+			"otherEmail": row.get("other_email"),
+			"source": item.get("source"),
+			"campaign": item.get("campaign") or row.get("campaign"),
+			"owner": item.get("owner"),
+			"convertedFromLead": "Có" if row.get("source_lead") else "Không",
+			"sourceLeadId": row.get("source_lead"),
+			"sourceLead": item.get("sourceLeadLabel"),
+			"majorId": row.get("major"),
+			"major": item.get("major"),
+			"admissionYearId": row.get("admission_year"),
+			"admissionYear": row.get("admission_year"),
+			"branchId": row.get("branch"),
+			"branch": item.get("branch"),
+			"createdAt": _as_iso(row.get("creation")),
+			"modifiedAt": _as_iso(row.get("modified")),
+		},
+		"contact": {
+			"name": row.get("parent_name"),
+			"phone": row.get("parent_phone"),
+			"otherPhone": row.get("parent_other_phone"),
+			"email": row.get("parent_email"),
+			"bankName": (payment_account or {}).get("bankName"),
+			"accountNumber": (payment_account or {}).get("accountNumber"),
+			"accountHolder": (payment_account or {}).get("accountHolder"),
+			"fatherEmail": row.get("father_email"),
+			"fatherName": row.get("father_name"),
+			"fatherPhone": row.get("father_phone"),
+			"fatherOccupation": row.get("father_occupation"),
+			"motherPhone": row.get("mother_phone"),
+			"motherName": row.get("mother_name"),
+			"motherEmail": row.get("mother_email"),
+			"motherOccupation": row.get("mother_occupation"),
+		},
+		"address": {
+			"province": item.get("province"),
+			"provinceId": row.get("province"),
+			"ward": item.get("ward"),
+			"wardId": row.get("ward"),
+			"fullAddress": row.get("contact_address"),
+		},
 	}
 
 
@@ -1623,6 +2037,11 @@ def _student_call_records(
 			or "phone" in interaction_type
 		):
 			canonical_calls_by_source_id[source_record_id] = ix
+	call_interactions = {
+		str(ix.get("reference_docname")): ix
+		for ix in interactions
+		if ix.get("reference_doctype") == "Call Log" and ix.get("reference_docname")
+	}
 
 	if _table_exists("Call Log"):
 		try:
@@ -1662,7 +2081,9 @@ def _student_call_records(
 		for cl in call_logs:
 			call_log_id = str(cl.get("name") or "").strip()
 			seen_call_ids.add(call_log_id)
-			canonical = canonical_calls_by_source_id.get(call_log_id)
+			canonical_interaction = canonical_calls_by_source_id.get(call_log_id) or call_interactions.get(
+				call_log_id
+			)
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
 			duration_secs = int(cl.get("duration") or 0)
 			status_fold = _fold(cl.get("status") or "")
@@ -1691,16 +2112,28 @@ def _student_call_records(
 				phone_number = cl.get("to") or student_phone
 
 			note_projection = note_projections.get(str(cl.get("note") or ""), {})
-			topic = note_projection.get("summary") or "Cuộc gọi tư vấn"
-			summary = note_projection.get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
-			summary_available = bool(note_projection.get("summary"))
+			topic = (
+				note_projection.get("summary")
+				or (canonical_interaction or {}).get("summary")
+				or "Cuộc gọi tư vấn"
+			)
+			summary = (
+				note_projection.get("summary")
+				or (canonical_interaction or {}).get("summary")
+				or f"Cuộc gọi {cl.get('status') or ''}"
+			)
+			summary_available = bool(note_projection.get("summary") or (canonical_interaction or {}).get("summary"))
 
 			calls.append(
 				{
 					"id": str(cl.get("name")),
-					"interactionId": str(canonical.get("name")) if canonical else None,
+					"interactionId": (
+						str(canonical_interaction.get("name")) if canonical_interaction else None
+					),
 					"evidenceId": (
-						str(canonical.get("evidence")) if canonical and canonical.get("evidence") else None
+						str(canonical_interaction.get("evidence"))
+						if canonical_interaction and canonical_interaction.get("evidence")
+						else None
 					),
 					"time": _format_activity_time(cl.get("start_time") or cl.get("creation")),
 					"direction": direction,
@@ -1714,6 +2147,7 @@ def _student_call_records(
 					"topic": topic,
 					"summary": summary,
 					"summaryAvailable": summary_available,
+					"summaryStatus": "COMPLETED" if summary_available else "NOT_AVAILABLE",
 					"transcript": note_projection.get("transcript"),
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),
@@ -1791,6 +2225,9 @@ def _student_call_records(
 				"durationSeconds": 0,
 				"topic": topic,
 				"summary": summary,
+				"summaryAvailable": True,
+				"summaryStatus": "COMPLETED",
+				"interactionId": str(ix.get("name")),
 				"recordingUrl": None,
 			}
 		)

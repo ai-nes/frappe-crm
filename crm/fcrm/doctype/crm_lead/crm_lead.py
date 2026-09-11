@@ -74,11 +74,14 @@ class CRMLead(Document):
 				_("Lead Code is immutable after creation."),
 				frappe.ValidationError,
 			)
-		if before and not getattr(frappe.flags, "student_ownership_service", False):
+		if before and not (
+			getattr(frappe.flags, "student_ownership_service", False)
+			or getattr(frappe.flags, "lead_ownership_service", False)
+		):
 			ownership_fields = ("assigned_to", "owner_staff", "owning_team", "owning_pool")
 			if any(before.get(field) != self.get(field) for field in ownership_fields):
 				frappe.throw(
-					_("Student ownership changes must use the ownership command."),
+					_("Lead ownership changes must use the ownership command."),
 					title=_("Ownership command required"),
 				)
 		if before and not getattr(frappe.flags, SERVICE_FLAG, False):
@@ -118,7 +121,9 @@ class CRMLead(Document):
 			or not self.get_doc_before_save()
 		):
 			self._derive_owner_fields()
-		if getattr(frappe.flags, "student_ownership_service", False):
+		if getattr(frappe.flags, "student_ownership_service", False) or getattr(
+			frappe.flags, "lead_ownership_service", False
+		):
 			self._log_assignment_change()
 		self.flags.ignore_links = False
 		self._validate_links()
@@ -166,8 +171,9 @@ class CRMLead(Document):
 				"to_staff": self.assigned_to,
 				"changed_by": frappe.session.user,
 				"changed_at": now_datetime(),
-				"auto_routed": 0,
-				"reason": self.status_change_reason,
+				"auto_routed": int(bool(getattr(frappe.flags, "lead_ownership_auto_routed", False))),
+				"reason": getattr(frappe.flags, "lead_ownership_reason", None)
+				or self.status_change_reason,
 			},
 		)
 

@@ -7,6 +7,7 @@ import frappe
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_contact_conversion import visible_conversion_history_page
 from crm.fcrm.student_feature_flags import enabled
+from crm.fcrm.student_reference import canonical_student
 
 
 def _actor() -> str:
@@ -19,6 +20,7 @@ def _actor() -> str:
 @frappe.whitelist()
 def get_contact_conversion_history(contact: str, limit: int = 50, cursor: str | None = None):
 	_actor()
+	contact = canonical_student(contact) or contact
 	if not enabled("conversion_read"):
 		return {
 			"contact": contact,
@@ -43,16 +45,19 @@ def get_contact_conversion_history(contact: str, limit: int = 50, cursor: str | 
 @frappe.whitelist()
 def get_student_conversion_context(student: str):
 	actor = _actor()
-	doc = frappe.get_doc("CRM Lead", student)
+	student_id = canonical_student(student)
+	if not student_id:
+		frappe.throw("Student does not exist.", frappe.DoesNotExistError)
+	doc = frappe.get_doc("CRM Student", student_id)
 	if not doc.has_permission("read"):
 		frappe.throw("You do not have permission to view this Student.", frappe.PermissionError)
 	read_enabled = enabled("conversion_read")
 	write_enabled = enabled("conversion_write")
 	roles = frappe.get_roles(actor)
 	capabilities = capabilities_for_roles(roles, administrator=actor == "Administrator")
-	stage = "Enrolled" if doc.get("resolution") == "CREATED" else "Lead"
+	stage = "Enrolled" if doc.get("student_stage") == "Connected" else "Lead"
 	return {
-		"student": student,
+		"student": student_id,
 		"stage": stage,
 		"revision": int(doc.get("lifecycle_revision") or 0),
 		"can_convert": read_enabled and write_enabled and stage == "Enrolled" and ("conversion.execute" in capabilities or actor == "Administrator"),

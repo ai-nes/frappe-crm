@@ -1,4 +1,4 @@
-"""Authoritative first-response SLA lifecycle for CRM Lead."""
+"""Authoritative first-response SLA lifecycle for CRM Student."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.role_policy import capabilities_for_roles
 from crm.fcrm.student_assignment import next_working_start, priority_minutes, recall_due
 from crm.fcrm.student_feature_flags import enabled
+from crm.fcrm.student_reference import canonical_student
 
 ATTEMPT_DOCTYPE = "CRM Student SLA Attempt"
 EVENT_DOCTYPE = "CRM Student SLA Event"
@@ -63,6 +64,12 @@ class StudentSLAError(frappe.ValidationError):
 
 def _error(code: str, message: str | None = None):
 	raise StudentSLAError(code, message)
+
+
+def _student_name(value: str) -> str:
+	"""Resolve a legacy public reference to the canonical Student row."""
+	value = str(value or "").strip()
+	return canonical_student(value) or value
 
 
 @contextmanager
@@ -193,7 +200,7 @@ def _schedule_delivery(attempt, event, recipient_role: str, due_at=None):
 		return _insert_delivery(attempt, event, recipient_role, due_at=due_at)
 	from crm.api.agent_events import record_sla_notification
 
-	student = frappe.get_doc("CRM Lead", attempt.student)
+	student = frappe.get_doc("CRM Student", _student_name(attempt.student))
 	return [
 		record_sla_notification(
 			sla_event=event,
@@ -220,6 +227,7 @@ def open_sla_for_assignment(
 	"""Open or reconcile exactly one attempt after ownership commits."""
 	if not enabled("sla"):
 		return None
+	student = _student_name(student)
 	existing = frappe.get_all(
 		ATTEMPT_DOCTYPE,
 		filters={"student": student, "status": ["not in", list(TERMINAL)]},
@@ -228,7 +236,7 @@ def open_sla_for_assignment(
 	)
 	if existing:
 		return frappe.get_doc(ATTEMPT_DOCTYPE, existing[0].name)
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student_doc = frappe.get_doc("CRM Student", student)
 	policy = _policy(student_doc.branch, student_pool)
 	if not policy:
 		_error("NO_ACTIVE_POLICY", "An approved active SLA policy is required before assignment.")
@@ -294,7 +302,7 @@ def _lock_attempt(name: str):
 
 
 def _assert_scope(attempt):
-	student = frappe.get_doc("CRM Lead", attempt.student)
+	student = frappe.get_doc("CRM Student", _student_name(attempt.student))
 	if not has_student_permission(student, user=frappe.session.user, permission_type="read"):
 		_error("OUT_OF_SCOPE", "SLA attempt is outside the current Student scope.")
 	return student
@@ -528,7 +536,8 @@ def _attempt_projection(attempt) -> dict[str, Any]:
 
 
 def get_student_sla_status(student: str) -> dict[str, Any]:
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student = _student_name(student)
+	student_doc = frappe.get_doc("CRM Student", student)
 	if not has_student_permission(student_doc, user=frappe.session.user, permission_type="read"):
 		_error("OUT_OF_SCOPE", "SLA is outside the current Student scope.")
 	attempts = frappe.get_all(
@@ -606,7 +615,7 @@ def _auto_recall_if_due(name: str, now) -> bool:
 	attempt = _lock_attempt(name)
 	if not recall_due(attempt, now):
 		return False
-	student = frappe.get_doc("CRM Lead", attempt.student)
+	student = frappe.get_doc("CRM Student", _student_name(attempt.student))
 	pool = student.get("owning_pool")
 	if not pool and student.get("owner_staff"):
 		team = frappe.db.get_value(
@@ -710,7 +719,7 @@ def _process_due_attempt(name: str, now):
 
 
 def _delivery_recipients(delivery) -> list[str]:
-	student = frappe.get_doc("CRM Lead", delivery.student)
+	student = frappe.get_doc("CRM Student", _student_name(delivery.student))
 	return _authorized_recipients(student, delivery.recipient_role)
 
 

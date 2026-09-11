@@ -24,6 +24,7 @@ from crm.fcrm.lead_processing import (
 	_processing_validation_reason,
 	_set_processing_values,
 	assign_lead,
+	change_lead_ownership,
 	preview_lead,
 )
 from crm.fcrm.student_assignment import (
@@ -32,11 +33,11 @@ from crm.fcrm.student_assignment import (
 	resolve_student_zone,
 	zone_team_pool,
 )
-from crm.fcrm.student_ownership import change_student_ownership
 from crm.fcrm.team_routing import (
 	active_lead_count,
 	province_for_zone,
 	require_team_routing_ready,
+	select_province_fallback_recipient,
 	select_province_recipient,
 )
 
@@ -70,6 +71,21 @@ PERMANENT_ASSIGNMENT_ERROR_CODES = frozenset(
 		"TEAM_SCOPE_MISMATCH",
 	}
 )
+# Fallback labels for item.reason when a code is set without an accompanying
+# human-readable message (e.g. a bare-code exception, or a status transition
+# that never carried a routing message). ``_reset_item`` uses this so an
+# operator never sees a raw enum code as the whole explanation. Codes that
+# already carry a specific message from team_routing.py bypass this map.
+GENERIC_REASON_LABELS = {
+	"ALREADY_CONVERTED": "Lead đã được chuyển thành Student nên không cần phân công lại.",
+	"ALREADY_ASSIGNED": "Lead đã có người phụ trách.",
+	"NOT_PROCESSED": "Lead chưa qua bước Xử lý Lead nên chưa thể phân công.",
+	"INVALID_PROCESSING_STATUS": "Trạng thái xử lý của Lead không hợp lệ để phân công.",
+	"MISSING_PROVINCE": "Lead chưa có tỉnh/thành phố nên chưa thể xác định Team.",
+	"MISSING_CAMPUS": "Lead chưa xác định được cơ sở nên chưa thể kiểm tra Team.",
+	"PREVIEW_FAILED": "Không thể xem trước phân công do lỗi hệ thống ngoài dự kiến.",
+	"ROUTING_FAILED": "Không thể hoàn tất phân công tự động do lỗi cấu hình Team.",
+}
 BATCH_IMPORT_REQUIRED_HEADERS = frozenset(
 	{"student_name", "phone", "province", "high_school", "major"}
 )
@@ -318,6 +334,10 @@ def _pool(pool_name: str | None, branch: str | None, actor_context: dict[str, An
 
 
 def _reset_item(item, *, status: str = "pending", reason: str | None = None):
+	"""Reset an item's routing fields, expanding a bare error code into a
+	human-readable reason via ``GENERIC_REASON_LABELS`` so the operator always
+	sees a specific explanation instead of a raw code."""
+	reason = GENERIC_REASON_LABELS.get(reason, reason) if reason else reason
 	for fieldname in (
 		"error_code",
 		"routing_tier",
@@ -574,7 +594,7 @@ def _preview_item(
 	)
 	item.status = "pending"
 	item.reason = recipient["reason"]
-	item.routing_tier = "province"
+	item.routing_tier = "province_fallback_lead" if recipient.get("fallback") else "province"
 	item.queue = f"PROVINCE:{province}"
 	item.zone = None
 	item.team = recipient["team"]
@@ -588,17 +608,34 @@ def _preview_item(
 
 
 def _resolve_batch_recipient(batch, lead, actor_context: dict[str, Any], *, load_overrides=None):
-	"""Resolve a Team and Sale/CTV from the Lead's canonical Province."""
+	"""Resolve a Team and Sale/CTV from the Lead's canonical Province.
+
+	When the province and campus are valid but no Sale/CTV is currently
+	eligible, fall back to the covering Team's own Trưởng nhóm so the Lead
+	still gets an accountable owner instead of sitting unassigned. A missing
+	province/campus or a province with no Team at all cannot fall back to
+	anyone and is left as the specific routing failure.
+	"""
 	province = _canonical_province(lead.get("province"))
 	if not province:
 		_raise_batch_error("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
 	_validate_batch_scope(batch, lead, actor_context)
-	return select_province_recipient(
-		province,
-		campus=lead.get("branch"),
-		team_id=batch.target_team or None,
-		load_overrides=load_overrides,
-	)
+	try:
+		return select_province_recipient(
+			province,
+			campus=lead.get("branch"),
+			team_id=batch.target_team or None,
+			load_overrides=load_overrides,
+		)
+	except Exception as exc:
+		code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
+		if code != "NO_ELIGIBLE_RECIPIENT":
+			raise
+		return select_province_fallback_recipient(
+			province,
+			campus=lead.get("branch"),
+			team_id=batch.target_team or None,
+		)
 
 
 def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
@@ -614,7 +651,8 @@ def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
 				load_overrides[item.owner_staff] = load_overrides.get(item.owner_staff, 0) + 1
 		except Exception as exc:
 			code = getattr(exc, "code", None) or getattr(exc, "error_code", None)
-			if not code and str(exc).strip() in {
+			message = str(exc).strip()
+			if not code and message in {
 				"MISSING_PROVINCE",
 				"MISSING_CAMPUS",
 				"TEAM_NOT_FOUND_FOR_PROVINCE",
@@ -622,14 +660,18 @@ def _preview_batch_items(batch, actor_context: dict[str, Any]) -> None:
 				"TEAM_NOT_READY",
 				"PROVINCE_MISMATCH",
 			}:
-				code = str(exc).strip()
+				code = message
+				message = ""
 			code = code or "PREVIEW_FAILED"
 			if code in PERMANENT_ASSIGNMENT_ERROR_CODES:
 				_close_invalid_assignment_lead(item.lead, f"Lead bị đóng: {exc}")
+			# Preserve the specific message team_routing.py/lead_processing.py
+			# already raised (e.g. which Teams were checked and why each was
+			# blocked) instead of collapsing it down to the bare error code.
 			_reset_item(
 				item,
 				status="failed" if code in PERMANENT_ASSIGNMENT_ERROR_CODES else "manual_review",
-				reason=code,
+				reason=message or code,
 			)
 			item.error_code = code
 	batch.status = "ready"
@@ -1392,20 +1434,18 @@ def _assign_input_pool(batch, item, lead, actor_context: dict[str, Any]):
 	pool = _resolve_batch_pool(batch, lead, actor_context)
 	if lead.get("owning_team") and lead.get("owning_team") != pool.team:
 		raise frappe.ValidationError("INPUT_QUEUE_TEAM_MISMATCH")
-	result = change_student_ownership(
-		student=lead.name,
-		target_kind="pool",
-		target_id=pool.name,
+	result = change_lead_ownership(
+		lead=lead.name,
+		owner_staff=None,
 		target_team_id=pool.team,
 		reason="Gán Lead vào hàng chờ của đợt trước khi phân công.",
 		idempotency_key=f"lead-batch-pool:{batch.name}:{item.name}:{lead.get('ownership_revision') or 0}",
 		expected_revision=int(lead.get("ownership_revision") or 0),
 		correlation_id=batch.execution_id or str(uuid.uuid4()),
-		_internal_service=True,
-		_internal_actor=getattr(frappe.session, "user", None),
+		target_kind="pool",
+		target_id=pool.name,
 		_commit=False,
 		_route_trigger="pool_entry",
-		_enqueue_routing=False,
 	)
 	return int(result.get("revision") or 0)
 
@@ -1550,6 +1590,7 @@ def run_lead_assignment_batch(batch_name: str):
 					"owning_team": recipient["team"],
 					"reason": recipient["reason"],
 					"policy_version": recipient["policyVersion"],
+					"tier": "province_fallback_lead" if recipient.get("fallback") else "province",
 					"revision": assignment.get("ownership", {}).get("revision"),
 					"ownership": assignment.get("ownership") or {},
 				}

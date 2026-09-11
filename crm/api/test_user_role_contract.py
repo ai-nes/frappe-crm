@@ -1,7 +1,9 @@
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from crm.api.user import set_canonical_crm_profile
+from crm.api.user import get_all_roles, set_canonical_crm_profile
 
 
 class TestUserRoleContract(FrappeTestCase):
@@ -53,3 +55,26 @@ class TestUserRoleContract(FrappeTestCase):
 			set_canonical_crm_profile(self.user, "Sales User")
 		with self.assertRaises(frappe.ValidationError):
 			set_canonical_crm_profile(self.user, "CRM Data Steward")
+
+	def test_business_admin_is_not_exposed_or_assignable(self):
+		with patch(
+			"frappe.core.doctype.user.user.get_all_roles",
+			return_value=["Business Admin", "Sale", "System Manager"],
+		):
+			roles = get_all_roles()
+
+		self.assertIn("Administrator", roles)
+		self.assertIn("Sale", roles)
+		self.assertNotIn("Business Admin", roles)
+		with self.assertRaises(frappe.ValidationError):
+			set_canonical_crm_profile(self.user, "Business Admin")
+
+	def test_canonical_assignment_removes_historical_business_admin_role(self):
+		self.user.append("roles", {"role": "Business Admin"})
+		set_canonical_crm_profile(self.user, "Marketing")
+		self.user.save(ignore_permissions=True)
+		self.user.reload()
+
+		roles = {row.role for row in self.user.roles}
+		self.assertIn("Marketing", roles)
+		self.assertNotIn("Business Admin", roles)

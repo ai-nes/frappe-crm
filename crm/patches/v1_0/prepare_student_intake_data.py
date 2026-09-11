@@ -264,27 +264,6 @@ def _append_weak_observations(student: dict, identity: str) -> None:
 		doc.save(ignore_permissions=True)
 
 
-def _source_reference_history(student_name: str) -> str:
-	return json.dumps(
-		[
-			{"student": student_name, "kind": "legacy_source", "schema_version": SCHEMA_VERSION}
-		],
-		ensure_ascii=False,
-		separators=(",", ":"),
-	)
-
-
-def _ensure_case_key(student: dict, identity: str, cycle: str) -> str:
-	from crm.fcrm.admission_case_key import ensure_case_key
-
-	return ensure_case_key(
-		identity=identity,
-		admission_year=cycle,
-		canonical_student=student["name"],
-		source_reference=f"legacy-intake:{student['name']}",
-	)["case_key"]
-
-
 def _set_student(name: str, values: dict) -> None:
 	frappe.db.set_value("CRM Lead", name, values, update_modified=False)
 
@@ -382,10 +361,8 @@ def execute():
 		cycle, digest = resolvable[name]
 		identity = _ensure_identity(student, digest)
 		_append_weak_observations(student, identity)
-		case_key = _ensure_case_key(student, identity, cycle)
 		values = {
 			"identity": identity,
-			"case_key": case_key,
 			"intake_integrity_state": "resolved",
 			"intake_quarantine_reason": None,
 		}
@@ -396,16 +373,6 @@ def execute():
 		_set_student(name, values)
 		result["resolved"].append(name)
 
-	_add_unique_index(
-		"CRM Student Case Key",
-		("identity", "admission_year"),
-		"crm_student_case_key_identity_year_uniq",
-	)
-	_add_unique_index(
-		"CRM Student Case Key",
-		("canonical_student",),
-		"crm_student_case_key_canonical_student_uniq",
-	)
 	_add_unique_index(
 		"CRM Student Identity Identifier",
 		("identifier_type", "strong_keyed_digest"),

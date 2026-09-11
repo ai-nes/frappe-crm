@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import timedelta
 from typing import Any
 
@@ -20,13 +20,14 @@ import frappe
 from frappe.utils import add_to_date, now_datetime
 
 from crm.api.nba_evaluation import build_nba_evaluation_input
+from crm.fcrm.decision_trace import validate_rule_decision, validate_trace_entries
 from crm.fcrm.intelligence_runs import _lease_now, _require_force_rerun_permission, _service_only
 from crm.fcrm.permissions import has_permission as has_student_permission
 
 DOCTYPE = "CRM NBA Evaluation"
 TERMINAL = {"completed", "failed", "dead_lettered"}
 ACTIVE = {"queued", "running"}
-_ENGINE_REVISION_DEFAULT = "nba-engine-r2"
+_ENGINE_REVISION_DEFAULT = "nba-engine"
 _IDENTITY_DIGEST_FIELDS = (
 	"context_digest",
 	"eligible_set_digest",
@@ -34,6 +35,8 @@ _IDENTITY_DIGEST_FIELDS = (
 	"decision_digest",
 	"eligibility_digest",
 	"timing_digest",
+	"rule_version_digest",
+	"ruleset_digest",
 )
 
 
@@ -53,10 +56,11 @@ def require_nba_evaluation_runtime_enabled() -> None:
 # Pure helpers (no Frappe access -- exercised without a bench)
 # --------------------------------------------------------------------------- #
 def _identity_from_envelope(envelope: dict) -> dict[str, Any]:
-	"""Project the bound identity of an NBA Evaluation v1 input envelope."""
+	"""Project the bound identity of the current NBA Evaluation input envelope."""
 	student = envelope["student"]
 	policies = envelope["policies"]
 	eligible = envelope["eligible_action_set"]
+	ruleset_identity = policies.get("ruleset_identity") or {}
 	return {
 		"evaluation_key": envelope["evaluation_key"],
 		# Already folded into `evaluation_key` via `policies_digest` -- kept
@@ -72,6 +76,9 @@ def _identity_from_envelope(envelope: dict) -> dict[str, Any]:
 		"decision_digest": policies["decision_digest"],
 		"eligibility_digest": policies["eligibility_digest"],
 		"timing_digest": policies["timing_digest"],
+		"rule_version": ruleset_identity.get("rule_version"),
+		"rule_version_digest": ruleset_identity.get("rule_version_digest"),
+		"ruleset_digest": ruleset_identity.get("ruleset_digest"),
 		"evaluation_clock": envelope["evaluation_clock"],
 	}
 
@@ -89,7 +96,9 @@ def _bounded_hex64(value: object, label: str) -> str | None:
 # Frappe-facing helpers
 # --------------------------------------------------------------------------- #
 def _engine_revision() -> str:
-	return str(frappe.conf.get("crm_nba_engine_revision") or _ENGINE_REVISION_DEFAULT)
+	# This is an observability label only. The current unversioned NBA engine is
+	# the sole implementation; deployment config must not select behaviour.
+	return _ENGINE_REVISION_DEFAULT
 
 
 def _lease_minutes() -> int:
@@ -131,7 +140,13 @@ def _request_clock():
 
 
 def _identity_for(
-	student: str, clock, *, service_authorized: bool = False, engine_revision: str | None = None
+	student: str,
+	clock,
+	*,
+	service_authorized: bool = False,
+	engine_revision: str | None = None,
+	rule_version: str | None = None,
+	ruleset_digest: str | None = None,
 ) -> tuple[dict, dict[str, Any]]:
 	"""Build the evaluation input and its bound identity at a fixed clock.
 
@@ -139,13 +154,16 @@ def _identity_for(
 	ran ``_service_only()`` on the current request -- see ``_projection``'s
 	docstring in ``student_decision_context.py``.
 
-	``engine_revision`` is resolved once by the caller (``_engine_revision()``
-	for a fresh request, or the run's own recorded value for a replay identity
-	check via ``_stored_identity``) and passed through unchanged, never
-	re-derived here from the live config.
+	``engine_revision`` is retained as a technical observability field only. The
+	current unversioned engine is always used; it is never a behaviour selector.
 	"""
 	envelope = build_nba_evaluation_input(
-		student, now=clock, service_authorized=service_authorized, engine_revision=engine_revision
+		student,
+		now=clock,
+		service_authorized=service_authorized,
+		engine_revision=engine_revision,
+		rule_version=rule_version,
+		ruleset_digest=ruleset_digest,
 	)
 	return envelope, _identity_from_envelope(envelope)
 
@@ -164,6 +182,8 @@ def _stored_identity(doc, *, service_authorized: bool = False) -> tuple[dict, di
 		frappe.utils.get_datetime(doc.evaluation_clock),
 		service_authorized=service_authorized,
 		engine_revision=doc.engine_revision,
+		rule_version=doc.get("rule_version"),
+		ruleset_digest=doc.get("ruleset_digest"),
 	)
 
 
@@ -191,11 +211,61 @@ def _receipt(name: str) -> dict[str, Any]:
 		"disposition": doc.disposition,
 		"contract_version": doc.contract_version,
 		"engine_revision": doc.engine_revision,
+		"rule_version": doc.get("rule_version"),
+		"rule_version_digest": doc.get("rule_version_digest"),
+		"ruleset_digest": doc.get("ruleset_digest"),
 		"evaluation_key": doc.evaluation_key,
 		"run_generation": int(doc.run_generation or 0),
 		"recommendation_count": int(doc.recommendation_count or 0),
 		"terminal_reason": doc.terminal_reason,
 	}
+
+
+def _ruleset_identity(doc) -> dict[str, str]:
+	"""Return the immutable ruleset identity persisted at evaluation creation."""
+	identity = {
+		"rule_version": str(doc.get("rule_version") or "").strip(),
+		"rule_version_digest": str(doc.get("rule_version_digest") or "").strip().lower(),
+		"ruleset_digest": str(doc.get("ruleset_digest") or "").strip().lower(),
+	}
+	if (
+		not identity["rule_version"]
+		or not re.fullmatch(r"[a-f0-9]{64}", identity["rule_version_digest"])
+		or not re.fullmatch(r"[a-f0-9]{64}", identity["ruleset_digest"])
+	):
+		frappe.throw("NBA Evaluation ruleset identity is incomplete.", frappe.ValidationError)
+	return identity
+
+
+def _stored_rule_decision(doc) -> dict[str, Any] | None:
+	value = doc.get("rule_decision")
+	if value in (None, ""):
+		return None
+	try:
+		return validate_rule_decision(value)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+
+
+def _assert_ruleset_identity(doc, supplied: Mapping[str, Any] | None = None) -> dict[str, str]:
+	"""Fence an optional worker echo against the creation-time identity."""
+	stored = _ruleset_identity(doc)
+	if supplied is None:
+		return stored
+	values = {key: supplied.get(key) for key in stored}
+	if any(value not in (None, "") for value in values.values()) and any(
+		value in (None, "") for value in values.values()
+	):
+		frappe.throw("NBA Evaluation ruleset identity must be complete.", frappe.ValidationError)
+	if all(value not in (None, "") for value in values.values()):
+		candidate = {
+			"rule_version": str(values["rule_version"]).strip(),
+			"rule_version_digest": str(values["rule_version_digest"]).strip().lower(),
+			"ruleset_digest": str(values["ruleset_digest"]).strip().lower(),
+		}
+		if candidate != stored:
+			frappe.throw("NBA Evaluation ruleset digest fence mismatch.", frappe.ValidationError)
+	return stored
 
 
 def _enforce_manual_quota(student: str) -> None:
@@ -262,7 +332,7 @@ def _insert_evaluation(
 		"trigger": trigger,
 		"status": "queued",
 		"run_generation": 0,
-		"contract_version": "nba-evaluation-v2",
+		"contract_version": "nba-evaluation",
 		# The exact same value the caller resolved for `identity` above, so the
 		# queued row and the identity it was computed from never disagree.
 		"engine_revision": engine_revision or identity.get("engine_revision") or _engine_revision(),
@@ -276,6 +346,9 @@ def _insert_evaluation(
 		"decision_digest": identity["decision_digest"],
 		"eligibility_digest": identity["eligibility_digest"],
 		"timing_digest": identity["timing_digest"],
+		"rule_version": identity.get("rule_version"),
+		"rule_version_digest": identity.get("rule_version_digest"),
+		"ruleset_digest": identity.get("ruleset_digest"),
 		"evaluation_clock": clock,
 	}
 	if trigger == "manual":
@@ -354,12 +427,14 @@ def execution(evaluation: str) -> dict[str, Any]:
 	require_nba_evaluation_runtime_enabled()
 	_service_only()
 	doc = frappe.get_doc(DOCTYPE, evaluation)
+	identity = _ruleset_identity(doc)
 	return {
 		"evaluation": doc.name,
 		"student": doc.student,
 		"status": doc.status,
 		"contract_version": doc.contract_version,
 		"engine_revision": doc.engine_revision,
+		**identity,
 		"evaluation_key": doc.evaluation_key,
 		"run_generation": int(doc.run_generation or 0),
 		"context_revision": doc.context_revision,
@@ -390,6 +465,7 @@ def claim_nba_evaluation(*, evaluation: str, run_generation: int) -> dict[str, A
 	doc.reload()
 	if doc.status in TERMINAL:
 		return {"terminal": True, "status": doc.status, "run_generation": int(doc.run_generation or 0)}
+	_ruleset_identity(doc)
 	if int(run_generation) > int(doc.run_generation or 0):
 		frappe.throw("Evaluation claim references a future generation.", frappe.ValidationError)
 
@@ -426,6 +502,7 @@ def claim_nba_evaluation(*, evaluation: str, run_generation: int) -> dict[str, A
 		"lease_expires_at": str(lease_until),
 		"contract_version": doc.contract_version,
 		"engine_revision": doc.engine_revision,
+		**_ruleset_identity(doc),
 		"evaluation_key": doc.evaluation_key,
 	}
 
@@ -444,6 +521,7 @@ def snapshot(*, evaluation: str, lease_token: str) -> dict[str, Any]:
 		or doc.lease_expires_at <= _lease_now()
 	):
 		frappe.throw("Snapshot request does not own the current evaluation lease.", frappe.PermissionError)
+	_ruleset_identity(doc)
 	envelope, identity = _stored_identity(doc, service_authorized=True)
 	if _is_superseded(doc, identity):
 		frappe.db.sql(
@@ -463,6 +541,7 @@ def snapshot(*, evaluation: str, lease_token: str) -> dict[str, Any]:
 		"evaluation_key": doc.evaluation_key,
 		"input": envelope,
 		"input_digest": _canonical_input_digest(envelope),
+		**_ruleset_identity(doc),
 	}
 
 
@@ -484,6 +563,10 @@ def settle_nba_evaluation(
 	terminal_reason: str | None = None,
 	engine_revision_settled: str | None = None,
 	recommendation_count: int = 0,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
+	rule_decision: object = None,
 ) -> dict[str, Any]:
 	"""Terminal-only, fenced worker settlement with idempotent terminal replay."""
 	require_nba_evaluation_runtime_enabled()
@@ -506,8 +589,29 @@ def settle_nba_evaluation(
 	engine_revision_settled = (
 		str(engine_revision_settled).strip() if engine_revision_settled not in (None, "") else None
 	)
+	try:
+		validated_rule_decision = (
+			validate_rule_decision(rule_decision) if rule_decision is not None else None
+		)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 
 	doc = frappe.get_doc(DOCTYPE, evaluation)
+	identity = _assert_ruleset_identity(
+		doc,
+		{
+			"rule_version": rule_version,
+			"rule_version_digest": rule_version_digest,
+			"ruleset_digest": ruleset_digest,
+		},
+	)
+	if validated_rule_decision is not None and (
+		not identity
+		or any(validated_rule_decision[field] != identity[field] for field in identity)
+	):
+		frappe.throw("NBA Evaluation rule decision does not match its pinned snapshot.", frappe.ValidationError)
+	if identity and doc.status not in TERMINAL and validated_rule_decision is None and status == "completed":
+		frappe.throw("Completed NBA Evaluation settlement requires a rule decision.", frappe.ValidationError)
 	if doc.status in TERMINAL:
 		same = (
 			doc.status == status
@@ -517,6 +621,7 @@ def settle_nba_evaluation(
 			and (doc.get("trace_digest") or None) == (trace_digest or None)
 			and int(doc.recommendation_count or 0) == recommendation_count
 			and (doc.get("engine_revision_settled") or None) == (engine_revision_settled or None)
+			and _stored_rule_decision(doc) == validated_rule_decision
 		)
 		if same:
 			return {
@@ -528,6 +633,8 @@ def settle_nba_evaluation(
 				"trace_digest": doc.get("trace_digest"),
 				"recommendation_count": int(doc.recommendation_count or 0),
 				"engine_revision_settled": doc.get("engine_revision_settled"),
+				"rule_decision": _stored_rule_decision(doc),
+				**identity,
 				"replayed": True,
 			}
 		frappe.throw("Evaluation already has a different terminal settlement.", frappe.ValidationError)
@@ -542,10 +649,11 @@ def settle_nba_evaluation(
 		status, disposition, terminal_reason = "failed", None, "superseded"
 		result_digest = trace_digest = engine_revision_settled = None
 		recommendation_count = 0
+		validated_rule_decision = None
 
 	frappe.db.sql(
 		"UPDATE `tabCRM NBA Evaluation` SET status=%s, disposition=%s, terminal_reason=%s, result_digest=%s, "
-		"trace_digest=%s, recommendation_count=%s, engine_revision_settled=%s, lease_token=NULL, lease_expires_at=NULL "
+		"trace_digest=%s, recommendation_count=%s, engine_revision_settled=%s, rule_decision=%s, lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND run_generation=%s AND lease_token=%s",
 		(
 			status,
@@ -555,6 +663,7 @@ def settle_nba_evaluation(
 			trace_digest,
 			recommendation_count,
 			engine_revision_settled,
+			frappe.as_json(validated_rule_decision) if validated_rule_decision else None,
 			doc.name,
 			int(run_generation),
 			str(lease_token or ""),
@@ -571,6 +680,8 @@ def settle_nba_evaluation(
 		"trace_digest": trace_digest,
 		"recommendation_count": recommendation_count,
 		"engine_revision_settled": engine_revision_settled,
+		"rule_decision": validated_rule_decision,
+		**identity,
 	}
 
 
@@ -642,19 +753,22 @@ def _terminal_commit_receipt(doc) -> dict[str, Any]:
 			"recommendation_ids": _existing_recommendation_ids(doc.name),
 			"result_digest": doc.get("result_digest"),
 			"trace_digest": doc.get("trace_digest"),
+			"rule_decision": _stored_rule_decision(doc),
+			**_ruleset_identity(doc),
 		}
 	return {
 		"status": "superseded",
 		"evaluation": doc.name,
 		"recommendation_ids": [],
 		"terminal_reason": doc.terminal_reason or "superseded",
+		**_ruleset_identity(doc),
 	}
 
 
 def _superseded_commit(name: str, run_generation: int, lease_token: str) -> dict[str, Any]:
 	frappe.db.sql(
 		"UPDATE `tabCRM NBA Evaluation` SET status='failed', terminal_reason='superseded', disposition=NULL, "
-		"result_digest=NULL, trace_digest=NULL, evaluation_trace=NULL, engine_revision_settled=NULL, "
+		"result_digest=NULL, trace_digest=NULL, evaluation_trace=NULL, rule_decision=NULL, engine_revision_settled=NULL, "
 		"recommendation_count=0, revisit_at=NULL, reevaluation_trigger=NULL, "
 		"lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND run_generation=%s AND lease_token=%s",
@@ -686,6 +800,10 @@ def commit_nba_evaluation_result(
 	recommendations: object = None,
 	trace_entries: object = None,
 	terminal_reason: str | None = None,
+	rule_version: str | None = None,
+	rule_version_digest: str | None = None,
+	ruleset_digest: str | None = None,
+	rule_decision: object = None,
 ) -> dict[str, Any]:
 	"""One fenced transaction that writes the terminal NBA Evaluation state plus
 	its immutable ``CRM Recommendation`` rows.
@@ -705,6 +823,16 @@ def commit_nba_evaluation_result(
 		frappe.throw("NBA Evaluation commit accepts only a terminal run status.", frappe.ValidationError)
 	recommendations = _as_list(recommendations)
 	trace_entries = _as_list(trace_entries)
+	try:
+		validated_trace_entries = validate_trace_entries(trace_entries)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
+	try:
+		validated_rule_decision = (
+			validate_rule_decision(rule_decision) if rule_decision is not None else None
+		)
+	except ValueError as exc:
+		frappe.throw(str(exc), frappe.ValidationError)
 	terminal_reason = str(terminal_reason).strip() if terminal_reason not in (None, "") else None
 	if terminal_reason is not None and len(terminal_reason) > 500:
 		frappe.throw("NBA Evaluation terminal reason is bounded to 500 characters.", frappe.ValidationError)
@@ -716,6 +844,8 @@ def commit_nba_evaluation_result(
 		result_digest = trace_digest = None
 		recommendations = []
 		trace_entries = []
+		validated_trace_entries = []
+		validated_rule_decision = None
 		revisit_at = None
 		reevaluation_trigger = None
 	else:
@@ -752,6 +882,21 @@ def commit_nba_evaluation_result(
 			frappe.throw("Every recommendation needs a unique recommendation key.", frappe.ValidationError)
 
 	doc = frappe.get_doc(DOCTYPE, evaluation)
+	identity = _assert_ruleset_identity(
+		doc,
+		{
+			"rule_version": rule_version,
+			"rule_version_digest": rule_version_digest,
+			"ruleset_digest": ruleset_digest,
+		},
+	)
+	if validated_rule_decision is not None and (
+		not identity
+		or any(validated_rule_decision[field] != identity[field] for field in identity)
+	):
+		frappe.throw("NBA Evaluation rule decision does not match its pinned snapshot.", frappe.ValidationError)
+	if identity and run_status == "completed" and validated_rule_decision is None:
+		frappe.throw("A completed NBA Evaluation commit requires a rule decision.", frappe.ValidationError)
 	if doc.status in TERMINAL:
 		return _terminal_commit_receipt(doc)
 
@@ -772,7 +917,7 @@ def commit_nba_evaluation_result(
 	status = "completed" if run_status == "completed" else "failed"
 	frappe.db.sql(
 		"UPDATE `tabCRM NBA Evaluation` SET status=%s, disposition=%s, terminal_reason=%s, result_digest=%s, "
-		"trace_digest=%s, evaluation_trace=%s, engine_revision_settled=%s, recommendation_count=%s, "
+		"trace_digest=%s, evaluation_trace=%s, rule_decision=%s, engine_revision_settled=%s, recommendation_count=%s, "
 		"revisit_at=%s, reevaluation_trigger=%s, reevaluation_dispatched_at=NULL, "
 		"lease_token=NULL, lease_expires_at=NULL "
 		"WHERE name=%s AND status IN ('queued', 'running') AND run_generation=%s AND lease_token=%s",
@@ -782,7 +927,8 @@ def commit_nba_evaluation_result(
 			terminal_reason,
 			result_digest,
 			trace_digest,
-			frappe.as_json(trace_entries) if trace_entries else None,
+			frappe.as_json(validated_trace_entries) if validated_trace_entries else None,
+			frappe.as_json(validated_rule_decision) if validated_rule_decision else None,
 			(engine_revision or doc.engine_revision or "").strip() or None,
 			len(recommendations),
 			revisit_at,
@@ -840,6 +986,8 @@ def commit_nba_evaluation_result(
 		"recommendation_ids": recommendation_ids,
 		"result_digest": result_digest,
 		"trace_digest": trace_digest,
+		"rule_decision": validated_rule_decision,
+		**identity,
 	}
 
 

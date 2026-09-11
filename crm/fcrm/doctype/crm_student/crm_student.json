@@ -17,8 +17,14 @@
   "phone",
   "email",
   "other_email",
+  "other_phone",
   "gender",
   "date_of_birth",
+  "birth_place",
+  "ethnicity",
+  "religion",
+  "nationality",
+  "contact_address",
   "id_number",
   "id_issued_date",
   "id_issued_place",
@@ -28,12 +34,15 @@
   "chatwoot_contact_id",
   "col_break_1",
   "student_stage",
+  "enrollment_date",
   "readiness_level",
   "quality_bucket",
   "is_verified_lead",
   "assigned_to",
+  "assignment_priority",
   "owner_staff",
   "owning_team",
+  "owning_pool",
   "student",
   "student_identity",
   "admission_year",
@@ -41,15 +50,28 @@
   "parent_name",
   "col_break_parents",
   "parent_phone",
+  "parent_other_phone",
+  "parent_email",
+  "father_name",
+  "father_phone",
+  "father_email",
+  "father_occupation",
+  "mother_name",
+  "mother_phone",
+  "mother_email",
+  "mother_occupation",
   "section_academic",
   "high_school",
   "province",
   "col_break_profile",
   "major",
   "aspiration",
+  "education_program",
+  "admission_method",
   "section_enrollment",
   "campaign",
   "source",
+  "advertising_channel",
   "platform",
   "col_break_enrollment",
   "branch",
@@ -80,6 +102,9 @@
   "sla_evidence_observed_at",
   "privacy_status",
   "student_context_revision",
+  "ownership_revision",
+  "engagement_revision",
+  "lifecycle_revision",
   "score_input_revision",
   "applied_score_input_revision",
   "applied_policy_revision",
@@ -90,6 +115,8 @@
   "transcript_score",
   "english_converted_score",
   "total_score",
+  "academic_results",
+  "language_certificates",
   "section_notes",
   "notes",
   "potential",
@@ -156,6 +183,12 @@
    "options": "Email"
   },
   {
+   "fieldname": "other_phone",
+   "fieldtype": "Data",
+   "label": "Other Phone",
+   "options": "Phone"
+  },
+  {
    "fieldname": "gender",
    "fieldtype": "Select",
    "label": "Gender",
@@ -165,6 +198,32 @@
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
    "label": "Date of Birth"
+  },
+  {
+   "fieldname": "birth_place",
+   "fieldtype": "Data",
+   "label": "Birth Place"
+  },
+  {
+   "fieldname": "ethnicity",
+   "fieldtype": "Data",
+   "label": "Ethnicity"
+  },
+  {
+   "fieldname": "religion",
+   "fieldtype": "Data",
+   "label": "Religion",
+   "permlevel": 1
+  },
+  {
+   "fieldname": "nationality",
+   "fieldtype": "Data",
+   "label": "Nationality"
+  },
+  {
+   "fieldname": "contact_address",
+   "fieldtype": "Small Text",
+   "label": "Contact Address"
   },
   {
    "fieldname": "id_number",
@@ -224,6 +283,12 @@
    "description": "Server-managed recruitment contact stage. Use the Student stage command."
   },
   {
+   "fieldname": "enrollment_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Enrollment Date"
+  },
+  {
    "fieldname": "readiness_level",
    "fieldtype": "Select",
    "in_list_view": 1,
@@ -257,6 +322,13 @@
    "options": "CRM Staff"
   },
   {
+   "default": "normal",
+   "fieldname": "assignment_priority",
+   "fieldtype": "Select",
+   "label": "Assignment Priority",
+   "options": "low\nnormal\nhigh\nurgent"
+  },
+  {
    "fieldname": "owner_staff",
    "fieldtype": "Link",
    "in_standard_filter": 1,
@@ -273,6 +345,15 @@
    "options": "CRM Team",
    "read_only": 1,
    "description": "Derived from Owner Staff's primary team membership — used for row-level data scoping. Do not edit directly."
+  },
+  {
+   "fieldname": "owning_pool",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Owning Student Pool",
+   "options": "CRM Student Pool",
+   "read_only": 1,
+   "description": "Ownership projection for the Student Pool. Ownership commands are the authority."
   },
   {
    "fieldname": "student",
@@ -321,6 +402,62 @@
    "options": "Phone"
   },
   {
+   "fieldname": "parent_other_phone",
+   "fieldtype": "Data",
+   "label": "Other Parent Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "parent_email",
+   "fieldtype": "Data",
+   "label": "Parent Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "father_name",
+   "fieldtype": "Data",
+   "label": "Father Name"
+  },
+  {
+   "fieldname": "father_phone",
+   "fieldtype": "Data",
+   "label": "Father Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "father_email",
+   "fieldtype": "Data",
+   "label": "Father Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "father_occupation",
+   "fieldtype": "Data",
+   "label": "Father Occupation"
+  },
+  {
+   "fieldname": "mother_name",
+   "fieldtype": "Data",
+   "label": "Mother Name"
+  },
+  {
+   "fieldname": "mother_phone",
+   "fieldtype": "Data",
+   "label": "Mother Phone",
+   "options": "Phone"
+  },
+  {
+   "fieldname": "mother_email",
+   "fieldtype": "Data",
+   "label": "Mother Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "mother_occupation",
+   "fieldtype": "Data",
+   "label": "Mother Occupation"
+  },
+  {
    "fieldname": "section_academic",
    "fieldtype": "Section Break",
    "label": "Student Profile"
@@ -353,6 +490,19 @@
    "in_standard_filter": 1,
    "label": "Aspiration",
    "options": "CRM Aspiration"
+  },
+  {
+   "fieldname": "education_program",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Education Program",
+   "options": "CRM Education Program"
+  },
+  {
+   "fieldname": "admission_method",
+   "fieldtype": "Select",
+   "label": "Admission Method",
+   "options": "\nTHPT_SCORE\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
   },
   {
    "fieldname": "col_break_profile",
@@ -579,6 +729,35 @@
    "read_only": 1
   },
   {
+   "fieldname": "advertising_channel",
+   "fieldtype": "Data",
+   "label": "Advertising Channel"
+  },
+  {
+   "default": "0",
+   "fieldname": "ownership_revision",
+   "fieldtype": "Int",
+   "label": "Ownership Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by ownership commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "engagement_revision",
+   "fieldtype": "Int",
+   "label": "Engagement Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by Student outcome commands."
+  },
+  {
+   "default": "0",
+   "fieldname": "lifecycle_revision",
+   "fieldtype": "Int",
+   "label": "Lifecycle Revision",
+   "read_only": 1,
+   "description": "Optimistic-concurrency revision incremented by lifecycle commands."
+  },
+  {
    "default": "0",
    "fieldname": "score_input_revision",
    "fieldtype": "Int",
@@ -634,6 +813,18 @@
    "fieldname": "total_score",
    "fieldtype": "Float",
    "label": "Total Score"
+  },
+  {
+   "fieldname": "academic_results",
+   "fieldtype": "Table",
+   "label": "Academic Results",
+   "options": "CRM Student Academic Result"
+  },
+  {
+   "fieldname": "language_certificates",
+   "fieldtype": "Table",
+   "label": "Language Certificates",
+   "options": "CRM Student Language Certificate"
   },
   {
    "fieldname": "section_notes",

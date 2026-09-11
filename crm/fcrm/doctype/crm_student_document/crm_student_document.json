@@ -1,0 +1,38 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "student", "student_admission_profile", "document_type", "application", "file", "is_private", "status", "version", "source_reference", "verified_by", "verified_at", "rejection_reason"],
+ "fields": [
+  {"default": "SDOC-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "options": "SDOC-.YYYY.-"},
+  {"fieldname": "student", "fieldtype": "Link", "in_list_view": 1, "in_standard_filter": 1, "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
+  {"fieldname": "student_admission_profile", "fieldtype": "Link", "in_list_view": 1, "label": "Student Admission Profile", "options": "CRM Student Admission Profile", "reqd": 1},
+  {"fieldname": "document_type", "fieldtype": "Link", "in_list_view": 1, "label": "Document Type", "options": "CRM Document Type", "reqd": 1},
+  {"fieldname": "application", "fieldtype": "Link", "label": "Admission Application", "options": "CRM Admission Application"},
+  {"fieldname": "file", "fieldtype": "Attach", "label": "Private File"},
+  {"default": "1", "fieldname": "is_private", "fieldtype": "Check", "hidden": 1, "label": "Is Private", "read_only": 1},
+  {"default": "Uploaded", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "label": "Status", "options": "Uploaded\nVerified\nRejected\nNot Applicable", "reqd": 1},
+  {"default": "1", "fieldname": "version", "fieldtype": "Int", "in_list_view": 1, "label": "Version", "reqd": 1},
+  {"fieldname": "source_reference", "fieldtype": "Data", "label": "Source Reference", "read_only": 1},
+  {"fieldname": "verified_by", "fieldtype": "Link", "label": "Verified By", "options": "User", "read_only": 1},
+  {"fieldname": "verified_at", "fieldtype": "Datetime", "label": "Verified At", "read_only": 1},
+  {"fieldname": "rejection_reason", "fieldtype": "Small Text", "label": "Rejection Reason"}
+ ],
+ "indexes": [{"fields": ["student", "student_admission_profile", "document_type", "status"], "name": "crm_student_document_lookup_idx", "unique": 0}],
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Student Document",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+ {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "CTV Sale"},
+  {"create": 1, "read": 1, "write": 1, "role": "Lead Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "student,student_admission_profile,document_type,status",
+ "sort_field": "modified",
+ "sort_order": "DESC"
+}

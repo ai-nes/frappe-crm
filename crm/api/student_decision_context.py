@@ -39,6 +39,8 @@ _STUDENT_FIELDS = [
 	"applied_score_input_revision",
 	"applied_policy_revision",
 	"privacy_status",
+	"is_opted_out",
+	"email_bounced",
 ]
 
 _POLARITY_MAP = {
@@ -109,6 +111,9 @@ def _application_projection(student: str) -> dict:
 	)
 	if not rows:
 		return {
+			"status": None,
+			"document_total": None,
+			"document_completed": None,
 			"completeness": "not_started",
 			"missing": ["application"],
 			"missing_count": 1,
@@ -135,6 +140,9 @@ def _application_projection(student: str) -> dict:
 		# complete file; preserve the gap as an explicit unknown/partial signal.
 		completeness, missing_count = "unknown", 0
 	return {
+		"status": status,
+		"document_total": total,
+		"document_completed": completed,
 		"completeness": completeness,
 		"missing": ["required_documents"] if missing_count else [],
 		"missing_count": missing_count,
@@ -417,8 +425,8 @@ def _score_projection(row: dict) -> dict:
 	`append_score_if_current` already uses for its CAS write, so a consumer
 	never needs to duplicate that comparison logic to know whether the
 	last-written score reflects the student's current facts and policy.
-	`required_revision` is always None today -- no Recommendation/RCM rule yet
-	declares "fresh score mandatory"; it is reserved so a future rule can
+	`required_revision` is always None today -- no active CRM Rule yet declares
+	"fresh score mandatory"; it is reserved so a future rule can
 	populate it without another contract change.
 	"""
 	policy = get_active_policy() or {}

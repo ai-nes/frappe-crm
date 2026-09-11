@@ -1,0 +1,35 @@
+{
+ "actions": [],
+ "allow_import": 1,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "code", "label", "category", "description", "conditional_key", "status", "is_active"],
+ "fields": [
+  {"default": "DOC-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "options": "DOC-.YYYY.-"},
+  {"fieldname": "code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Code", "reqd": 1, "unique": 1},
+  {"fieldname": "label", "fieldtype": "Data", "in_list_view": 1, "label": "Label", "length": 1000, "reqd": 1},
+  {"fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "label": "Category", "options": "identity\neducation\nphoto\npayment\nscholarship\nlanguage\nspecial_program", "reqd": 1},
+  {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
+  {"fieldname": "conditional_key", "fieldtype": "Data", "label": "Conditional Key"},
+  {"default": "Active", "fieldname": "status", "fieldtype": "Select", "in_list_view": 1, "in_standard_filter": 1, "label": "Status", "options": "Active\nArchived", "reqd": 1},
+  {"default": "1", "fieldname": "is_active", "fieldtype": "Check", "in_list_view": 1, "label": "Active", "reqd": 1}
+ ],
+ "indexes": [{"fields": ["code", "status"], "name": "crm_document_type_code_status_idx", "unique": 0}],
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Document Type",
+ "permissions": [
+  {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
+ {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "CTV Sale"},
+  {"read": 1, "role": "Lead Sale"},
+  {"read": 1, "role": "Sale"}
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "code,label,category,status",
+ "sort_field": "label",
+ "sort_order": "ASC",
+ "title_field": "label"
+}

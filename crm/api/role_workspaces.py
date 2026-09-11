@@ -28,6 +28,7 @@ from crm.api.workspace_policy import (
 	route_for_menu_id,
 )
 from crm.fcrm.student_feature_flags import director_analytics_read_enabled, role_workspace_read_enabled
+from crm.fcrm.student_reference import canonical_student
 
 _SNAPSHOT_TTL_SECONDS = 300
 _DEFINITION_VERSION = "role-workspace-read-v1"
@@ -194,13 +195,14 @@ def resolve_workspace_row_detail(workspace: str, view: str, filters=None, snapsh
 		frappe.throw(_("Workspace row detail is not available."), frappe.PermissionError)
 	from crm.api.director_analytics import validate_row_detail_token
 	student = validate_row_detail_token(token, policy, validated_snapshot)
+	student = canonical_student(student) or student
 	# Tokens bind the scope revision, but ownership/campus can change after a
 	# token was issued. Recheck the current campus before disclosing a route.
-	if frappe.db.get_value("CRM Lead", student, "branch") not in policy.campuses:
+	if frappe.db.get_value("CRM Student", student, "branch") not in policy.campuses:
 		frappe.throw(_("Workspace row detail is not available."), frappe.PermissionError)
-	if not frappe.has_permission("CRM Lead", "read", student):
+	if not frappe.has_permission("CRM Student", "read", student):
 		frappe.throw(_("Workspace row detail is not available."), frappe.PermissionError)
-	return {"route": {"name": "Student", "params": {"doctype": "CRM Lead", "name": student}}}
+	return {"route": {"name": "Student", "params": {"doctype": "CRM Student", "name": student}}}
 
 
 @frappe.whitelist()

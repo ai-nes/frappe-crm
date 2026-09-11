@@ -69,7 +69,7 @@ def authorize_subject_refs(subjects=None) -> dict:
 @frappe.whitelist(methods=["POST"])
 def issue_context_handle(student: str, mode: str = "chat", origin: str | None = None) -> dict:
 	"""Mint a short-lived, one-time context handle without putting CRM state in a URL."""
-	if mode not in {"chat", "consultation"}:
+	if mode != "chat":
 		frappe.throw("Unsupported Copilot context mode.", frappe.ValidationError)
 	if not isinstance(student, str) or not student.strip() or len(student) > 180:
 		frappe.throw("student is required.", frappe.ValidationError)

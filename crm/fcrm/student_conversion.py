@@ -15,7 +15,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.conversion_readiness import conversion_readiness
-from crm.fcrm.permissions import derive_owner_fields
+from crm.fcrm.permissions import can_convert_all_leads, derive_owner_fields
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -26,7 +26,6 @@ RECEIPT_DOCTYPE = "CRM Student Command Receipt"
 CONTACT_DOCTYPE = "CRM Student"
 LEAD_DOCTYPE = "CRM Lead"
 IDENTITY_DOCTYPE = "CRM Student Identity"
-CASE_KEY_DOCTYPE = "CRM Student Case Key"
 SERVICE_FLAG = "student_conversion_service"
 CAPABILITY = "conversion.execute"
 POLICY_VERSION = "phase8-conversion-v1"
@@ -40,8 +39,14 @@ LEAD_TO_STUDENT_FIELDS = (
 	("phone", "phone"),
 	("email", "email"),
 	("other_email", "other_email"),
+	("other_phone", "other_phone"),
 	("gender", "gender"),
 	("date_of_birth", "date_of_birth"),
+	("birth_place", "birth_place"),
+	("ethnicity", "ethnicity"),
+	("religion", "religion"),
+	("nationality", "nationality"),
+	("alt_address", "contact_address"),
 	("id_number", "id_number"),
 	("id_issued_date", "id_issued_date"),
 	("id_issued_place", "id_issued_place"),
@@ -56,12 +61,18 @@ LEAD_TO_STUDENT_FIELDS = (
 	("study_stage", "study_stage"),
 	("major", "major"),
 	("aspiration", "aspiration"),
+	("education_program", "education_program"),
 	("branch", "branch"),
 	("campaign", "campaign"),
 	("source", "source"),
-	("parent_name", "parent_name"),
-	("parent_phone", "parent_phone"),
+	("alt_name", "parent_name"),
+	("alt_phone", "parent_phone"),
+	("graduation_score", "graduation_score"),
+	("transcript_score", "transcript_score"),
+	("english_converted_score", "english_converted_score"),
+	("total_score", "total_score"),
 	("notes", "notes"),
+	("identity", "student_identity"),
 )
 
 
@@ -122,9 +133,7 @@ def _actor_scope() -> dict[str, Any]:
 	roles = sorted(frappe.get_roles(actor))
 	administrator = actor == "Administrator"
 	system_manager = "System Manager" in roles
-	capabilities = set(
-		capabilities_for_roles(roles, administrator=administrator)
-	)
+	capabilities = set(capabilities_for_roles(roles, administrator=administrator))
 	if not (administrator or system_manager) and CAPABILITY not in capabilities:
 		_fail("FORBIDDEN", "You are not permitted to convert this Student.")
 	return {
@@ -152,6 +161,11 @@ def _load_student(student_name: str, actor: str, *, internal_service: bool = Fal
 	# and then commit ownership to another Team.  Re-checking the operator's row
 	# scope here would strand every cross-Team Lead as ASSIGNED-never-converted.
 	if internal_service:
+		return student
+	# Lead Sale operates the full intake board and is explicitly allowed to
+	# convert any assigned Lead. Sale/CTV Sale must still pass the owner scope
+	# below, preserving the assigned-only rule for those profiles.
+	if can_convert_all_leads(actor):
 		return student
 	if not has_student_permission(student, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside the actor's current scope.")
@@ -202,7 +216,7 @@ def _receipt_values(
 		"command_kind": "conversion",
 		"request_fingerprint": fingerprint,
 		"outcome": "pending",
-		"target_student": student,
+		"target_student": contact,
 		"target_case_key": case_key,
 		"target_contact": contact,
 		"actor": actor,
@@ -228,6 +242,7 @@ def _insert_receipt(**kwargs):
 def _complete_receipt(receipt, result: dict[str, Any], outcome: str):
 	updates = {
 		"outcome": outcome,
+		"target_student": result.get("target_student"),
 		"result_json": _canonical_json(result),
 		"completed_at": frappe.utils.now_datetime(),
 		"retention_until": technical_retention_until("receipt"),
@@ -239,23 +254,56 @@ def _complete_receipt(receipt, result: dict[str, Any], outcome: str):
 
 def _identity_and_case(student):
 	identity_name = student.get("identity")
-	case_name = student.get("case_key")
-	if not identity_name or not case_name:
-		_fail("INTEGRITY_REQUIRED", "Student identity and case key are required for conversion.")
-	if not _doctype_exists(IDENTITY_DOCTYPE) or not _doctype_exists(CASE_KEY_DOCTYPE):
-		_fail("CONFIGURATION_ERROR", "Student identity and case-key contracts are not installed.")
+	if not identity_name:
+		_fail("INTEGRITY_REQUIRED", "Student identity is required for conversion.")
+	if not _doctype_exists(IDENTITY_DOCTYPE):
+		_fail("CONFIGURATION_ERROR", "Student identity contract is not installed.")
 	_lock(IDENTITY_DOCTYPE, identity_name)
 	identity = frappe.get_doc(IDENTITY_DOCTYPE, identity_name)
 	if identity.get("identity_status") not in (None, "", "active"):
 		_fail("INTEGRITY_UNRESOLVED", "Student identity is not active.")
-	case = frappe.get_doc(CASE_KEY_DOCTYPE, case_name)
-	if case.get("integrity_state") not in (None, "", "resolved"):
-		_fail("INTEGRITY_UNRESOLVED", "Student case key is not resolved.")
-	if case.get("identity") not in (None, "", identity_name):
-		_fail("INTEGRITY_MISMATCH", "Student case key does not prove its identity.")
-	if case.get("canonical_student") not in (None, "", student.name):
-		_fail("INTEGRITY_MISMATCH", "Student is not the canonical case Student.")
-	return identity, case
+	return identity, None
+
+
+def _prepare_lead_integrity_for_handoff(lead):
+	"""Make legacy assigned Leads compatible with the conversion contract.
+
+	Older Leads can be assigned before the intake identity projection was
+	installed, while the Lead -> Student business action only requires an
+	assigned owner and the conversion fields.  Create the missing opaque
+	identity in this trusted handoff transaction and resolve the projection so
+	the Student snapshot and conversion junction remain internally consistent.
+	Quarantined records stay blocked because they require an explicit review.
+	"""
+	state = str(lead.get("intake_integrity_state") or "").strip().lower()
+	if state == "quarantined":
+		_fail("INTEGRITY_UNRESOLVED", "Lead intake is quarantined and requires review before conversion.")
+	if not _doctype_exists(IDENTITY_DOCTYPE):
+		_fail("CONFIGURATION_ERROR", "Student identity contract is not installed.")
+
+	identity_name = lead.get("identity")
+	if identity_name and not frappe.db.exists(IDENTITY_DOCTYPE, identity_name):
+		identity_name = None
+	if not identity_name:
+		# Reuse the intake identity factory so opaque keys and site HMAC policy
+		# remain identical for both intake-created and handoff-created identities.
+		from crm.fcrm.student_intake import _create_identity
+
+		identity_name = _create_identity({"strong": None})
+
+	updates = {}
+	if lead.get("identity") != identity_name:
+		updates["identity"] = identity_name
+	if state != "resolved":
+		updates["intake_integrity_state"] = "resolved"
+	if updates:
+		frappe.db.set_value(LEAD_DOCTYPE, lead.name, updates, update_modified=False)
+		for fieldname, value in updates.items():
+			if callable(getattr(lead, "set", None)):
+				lead.set(fieldname, value)
+			else:
+				lead[fieldname] = value
+	return lead
 
 
 def _conversion_for_student(student_name: str):
@@ -465,7 +513,7 @@ def _conversion_values(student, identity, case, contact, receipt, scope, idempot
 		"canonical_student": contact.name,
 		"student": student.name,
 		"student_identity": identity.name,
-		"case_key": case.name,
+		"case_key": case.name if case else None,
 		"contact": contact.name,
 		"lifecycle_event": _lifecycle_event(student.name),
 		"actor": scope["actor"],
@@ -497,7 +545,7 @@ def _result(student, identity, case, contact, conversion, receipt, *, status, re
 		"replayed": replayed,
 		"lifecycle_revision": lifecycle_revision,
 		"student_identity": identity.name,
-		"case_key": case.name,
+		"case_key": case.name if case else None,
 		"policy_version": POLICY_VERSION,
 		"schema_version": SCHEMA_VERSION,
 	}
@@ -510,6 +558,7 @@ def convert_student(
 	correlation_id: str | None = None,
 	target_student: str | None = None,
 	_internal_service: bool = False,
+	_lead_handoff: bool = False,
 ):
 	"""Convert one Lead into one independent Student snapshot.
 
@@ -523,6 +572,10 @@ def convert_student(
 	Lead out of that operator's row scope. It never crosses the HTTP boundary:
 	the whitelisted adapters pass explicit keyword arguments only.
 
+	``_lead_handoff`` is private to the Lead conversion workflow. It allows
+	assigned legacy Leads without an intake integrity projection to be completed
+	by creating the missing opaque identity in the same transaction.
+
 	A successful conversion closes the Lead and preserves its MATCHED/CREATED
 	resolution. Errors roll back the receipt, Student, direct link, and junction
 	together; callers should not catch-and-return partial state.
@@ -535,7 +588,9 @@ def convert_student(
 	if expected_lifecycle_revision in (None, ""):
 		_fail("INVALID_INPUT", "expected_lifecycle_revision is required.")
 	correlation_id = _required(correlation_id or frappe.generate_hash(length=20), "correlation_id")
-	target_student_name = str(target_student).strip() if target_student and str(target_student).strip() else None
+	target_student_name = (
+		str(target_student).strip() if target_student and str(target_student).strip() else None
+	)
 	payload = {
 		"student": student_name,
 		"expected_lifecycle_revision": str(expected_lifecycle_revision),
@@ -585,14 +640,16 @@ def convert_student(
 			_fail("INVALID_REVISION", "Student lifecycle revision is invalid.")
 		if str(expected_lifecycle_revision) != str(current_revision):
 			_fail("STALE_REVISION", "Student lifecycle changed; reload before converting.")
-		if student_doc.get("intake_integrity_state") != "resolved":
+		if _lead_handoff:
+			student_doc = _prepare_lead_integrity_for_handoff(student_doc)
+		elif student_doc.get("intake_integrity_state") != "resolved":
 			_fail("INTEGRITY_UNRESOLVED", "Student intake integrity is not resolved.")
 		identity, case = _identity_and_case(student_doc)
 		existing_conversion = _conversion_for_student(student_name)
 		if existing_conversion:
 			if existing_conversion.get("student_identity") not in (None, "", identity.name):
 				_fail("INTEGRITY_MISMATCH", "Existing conversion identity does not match Student.")
-			if existing_conversion.get("case_key") not in (None, "", case.name):
+			if case and existing_conversion.get("case_key") not in (None, "", case.name):
 				_fail("INTEGRITY_MISMATCH", "Existing conversion case key does not match Student.")
 			if target_student_name and target_student_name != existing_conversion.get("contact"):
 				_fail("RELATIONSHIP_CONFLICT", "Lead is already converted to a different Student.")
@@ -609,7 +666,7 @@ def convert_student(
 				actor=scope["actor"],
 				correlation_id=correlation_id,
 				identity=identity.name,
-				case_key=case.name,
+				case_key=case.name if case else None,
 				scope=scope,
 				contact=contact.name,
 			)
@@ -634,7 +691,7 @@ def convert_student(
 			actor=scope["actor"],
 			correlation_id=correlation_id,
 			identity=identity.name,
-			case_key=case.name,
+			case_key=case.name if case else None,
 			scope=scope,
 		)
 		# The receipt can be returned by a concurrent same-key caller only after
@@ -664,9 +721,7 @@ def convert_student(
 		try:
 			# ``contact`` was inserted or locked above in this transaction. Frappe's
 			# Link cache can still miss that just-created HS record at this boundary.
-			conversion = frappe.get_doc(conversion_values).insert(
-				ignore_permissions=True, ignore_links=True
-			)
+			conversion = frappe.get_doc(conversion_values).insert(ignore_permissions=True, ignore_links=True)
 		finally:
 			setattr(frappe.flags, SERVICE_FLAG, previous)
 		result = _result(

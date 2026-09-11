@@ -34,8 +34,7 @@ STUDENT_FIELDS = [
 	"aspiration",
 	"province",
 	"high_school",
-	"processing_status",
-	"resolution",
+	"student_stage",
 	"admission_year",
 	"creation",
 ]
@@ -252,13 +251,24 @@ def _empty_acquisition_map() -> dict[str, Any]:
 
 
 def _load_students(admission_year: str) -> list:
-	return frappe.get_all(
-		"CRM Lead",
+	rows = frappe.get_all(
+		"CRM Student",
 		filters={"admission_year": admission_year},
 		fields=STUDENT_FIELDS,
 		order_by="creation asc, name asc",
 		limit_page_length=0,
 	)
+	for row in rows:
+		stage = str(row.get("student_stage") or "New").strip()
+		row["processing_status"] = {
+			"New": "new",
+			"Attempting": "processing",
+			"Qualified": "processed",
+			"Connected": "created",
+			"Disqualified": "invalid",
+		}.get(stage, "new")
+		row["resolution"] = "CREATED" if stage == "Connected" else None
+	return rows
 
 
 def _load_lookups(rows: list) -> dict[str, dict]:

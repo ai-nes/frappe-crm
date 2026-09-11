@@ -79,7 +79,7 @@ REQUIRED_DOCTYPES = (
 	"CRM Student Pool",
 	"CRM Team Zone Assignment",
 	"CRM High School Assignment",
-	"CRM Lead",
+	"CRM Student",
 	"CRM Assignment Control",
 )
 
@@ -434,12 +434,12 @@ def get_setup_readiness():
 
 
 def _grouped_students():
-	if not _doctype_exists("CRM Lead"):
+	if not _doctype_exists("CRM Student"):
 		return []
 	try:
 		return frappe.get_list(
-			"CRM Lead",
-			filters={"processing_status": ["not in", ["CLOSED"]]},
+			"CRM Student",
+			filters={"student_stage": ["not in", ["Connected", "Disqualified"]]},
 			fields=[
 				"branch",
 				"high_school",
@@ -2338,13 +2338,16 @@ def _school_revision_from_database(high_school):
 
 
 def _student_count_for_schools(schools):
-	if not schools or not _doctype_exists("CRM Lead"):
+	if not schools or not _doctype_exists("CRM Student"):
 		return 0
 	return len(
 		_safe_get_all(
-			"CRM Lead",
+			"CRM Student",
 			["name"],
-			{"high_school": ["in", list(schools)], "processing_status": ["not in", ["CLOSED"]]},
+			{
+				"high_school": ["in", list(schools)],
+				"student_stage": ["not in", ["Connected", "Disqualified"]],
+			},
 		)
 	)
 

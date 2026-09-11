@@ -3,8 +3,7 @@
 import pytest
 
 from crm.fcrm.admissions_canonical_contracts import (
-	canonical_attempt_key,
-	canonical_case_key,
+	canonical_application_attempt_key,
 	normalize_planning_scope,
 	validate_fact_envelope,
 	validate_metric_definition,
@@ -13,13 +12,12 @@ from crm.fcrm.admissions_canonical_contracts import (
 from crm.fcrm.territory_geography import select_effective_assignment
 
 
-def test_case_and_attempt_keys_are_stable_and_not_preference_identity():
-	assert canonical_case_key(" ID-1 ", "2026") == "CK-ID-1-2026"
-	first = canonical_attempt_key("CK-ID-1-2026", "OFF-1", "source:1")
-	second = canonical_attempt_key("CK-ID-1-2026", "OFF-1", "source:1")
+def test_application_attempt_key_is_stable_and_not_preference_identity():
+	first = canonical_application_attempt_key("STU-1", "OFF-1", "source:1")
+	second = canonical_application_attempt_key("STU-1", "OFF-1", "source:1")
 
 	assert first == second
-	assert first != canonical_attempt_key("CK-ID-1-2026", "OFF-1", "source:2")
+	assert first != canonical_application_attempt_key("STU-1", "OFF-1", "source:2")
 
 
 def test_offering_contract_rejects_invalid_interval_and_quota():
@@ -96,8 +94,18 @@ def test_metric_definition_requires_subject_grain_and_stage_version():
 
 def test_territory_resolution_fails_closed_on_effective_overlap():
 	rows = [
-		{"territory": "T-1", "status": "Active", "effective_from": "2026-01-01", "effective_until": "2026-12-31"},
-		{"territory": "T-2", "status": "Active", "effective_from": "2026-06-01", "effective_until": "2026-09-30"},
+		{
+			"territory": "T-1",
+			"status": "Active",
+			"effective_from": "2026-01-01",
+			"effective_until": "2026-12-31",
+		},
+		{
+			"territory": "T-2",
+			"status": "Active",
+			"effective_from": "2026-06-01",
+			"effective_until": "2026-09-30",
+		},
 	]
 	with pytest.raises(ValueError, match="overlapping"):
 		select_effective_assignment(rows, "2026-07-01")

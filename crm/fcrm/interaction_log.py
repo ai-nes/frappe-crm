@@ -24,6 +24,7 @@ from datetime import timezone
 import frappe
 
 from crm.fcrm.student_contact_conversion import contact_is_linked_to_student, students_for_contact
+from crm.fcrm.student_reference import canonical_student
 
 INTERACTION_CHANNEL_ALIASES = {
 	"web": "webchat",
@@ -416,6 +417,15 @@ def _ensure_interaction_analysis_run(
 		f"{interaction}:{episode_key}:{source_revision}:{source_digest}".encode()
 	).hexdigest()
 	existing = frappe.db.get_value("CRM Interaction Analysis Run", {"run_key": run_key}, "name")
+	if existing:
+		# Idempotent redelivery of an already-materialized run must not require
+		# the *current* pointer. Its worker is fenced to the identity captured on
+		# the original creation, so an active-catalog outage cannot turn a replay
+		# into a new unpinned decision job.
+		return existing
+	from crm.fcrm.intelligence_runs import _captured_ruleset_identity
+
+	ruleset_identity = _captured_ruleset_identity()
 	if not existing:
 		existing = (
 			frappe.get_doc(
@@ -427,6 +437,7 @@ def _ensure_interaction_analysis_run(
 					"source_revision": source_revision,
 					"source_digest": source_digest,
 					"status": "queued",
+					**ruleset_identity,
 				}
 			)
 			.insert(ignore_permissions=True)
@@ -445,6 +456,7 @@ def _ensure_interaction_analysis_run(
 				"stage_generation": 0,
 				"expected_source_revision": str(source_revision),
 				"expected_source_digest": source_digest,
+				**ruleset_identity,
 			}
 		).insert(ignore_permissions=True)
 		if frappe.conf.get("crm_agents_interaction_analysis_events_enabled", 0) not in (0, "0", False):
@@ -461,7 +473,7 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 	if not service_user or frappe.session.user != service_user:
 		_interaction_fail("UNAUTHORIZED", "Evidence is restricted to the CRM-Agents capability.")
 	parent = frappe.db.get_value(
-		"CRM Interaction", interaction, ["source_revision", "evidence_digest"], as_dict=True
+		"CRM Interaction", interaction, ["source_revision", "evidence_digest", "student"], as_dict=True
 	)
 	if (
 		not parent
@@ -479,7 +491,7 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 	)
 	if not evidence_rows:
 		_interaction_fail("STALE_SOURCE_REVISION", "Evidence for the requested revision is unavailable.")
-	return {
+	result = {
 		"evidence_digest": expected_digest,
 		"source_revision": expected_revision,
 		"turns": [
@@ -491,6 +503,18 @@ def read_interaction_evidence(interaction: str, *, expected_revision: int, expec
 			for row in evidence_rows
 		],
 	}
+	# Consent is a bounded, authoritative fact needed by global ``all``
+	# guardrails.  It is safe to expose to the service worker without returning
+	# the student's identity or any other CRM fields.
+	if parent and parent.student:
+		consent = frappe.db.get_value("CRM Student", parent.student, "is_opted_out")
+		result["student"] = {
+			# Preserve an unavailable value as ``None`` so the agent fact builder
+			# applies the catalog's explicit unknown policy instead of turning a
+			# missing source field into a false consent assertion.
+			"is_opted_out": None if consent is None else bool(consent),
+		}
+	return result
 
 
 def _normalize_external_turns(value) -> list[dict]:
@@ -550,6 +574,8 @@ def _resolve_external_interaction_target(payload: dict) -> dict:
 	student_id = _text(payload.get("student_id"))
 	contact_id = _text(payload.get("contact_id"))
 	external_target_id = _text(payload.get("target_external_id"))
+	student_id = canonical_student(student_id) if student_id else None
+	contact_id = canonical_student(contact_id) if contact_id else None
 	if student_id and not frappe.db.exists("CRM Student", student_id):
 		_interaction_fail("INVALID_TARGET", "The target Student does not exist.")
 	if contact_id and not frappe.db.exists("CRM Student", contact_id):
@@ -805,6 +831,8 @@ def create_interaction(
 	episode_key=None,
 	episode_state=None,
 ):
+	student = canonical_student(student) if student else None
+	crm_contact = canonical_student(crm_contact) if crm_contact else None
 	if not student and crm_contact:
 		student = crm_contact
 
@@ -911,7 +939,7 @@ def _create_interaction_for_reference(
 	reference_doctype, reference_name, interaction_type, source_doc, summary=None, actor=None, outcome=None
 ):
 	if reference_doctype == "CRM Student":
-		student, crm_contact = reference_name, None
+		student, crm_contact = reference_name, reference_name
 	else:
 		return None
 

@@ -57,6 +57,16 @@ tasks:
     cmds:
       - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.classification_catalog.seed_catalog"
 
+  seed-rule-engine:
+    desc: Seed draft CRM Rule Version FAIP-V1 from docs/FAIP Rule Engine Rules.pdf for UI testing
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.rule_engine_seed.seed_catalog"
+
+  seed-rule-engine-many-versions:
+    desc: Local only — xóa Rule/Version và seed 5 Version FAIP
+    cmds:
+      - "{{.EXEC}} {{.BENCH}} execute crm.fcrm.rule_engine_seed.seed_many_versions"
+
   workspace:
     desc: Sync Desk workspace Frappe CRM
     aliases: [sync-workspace]

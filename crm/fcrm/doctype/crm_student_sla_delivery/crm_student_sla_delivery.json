@@ -11,7 +11,7 @@
     {"default": "pending", "fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "pending\nleased\ndelivering\ndelivered\nfailed\ncancelled", "read_only": 1, "reqd": 1},
     {"default": "0", "fieldname": "revision", "fieldtype": "Int", "label": "Revision", "read_only": 1, "reqd": 1},
     {"fieldname": "sla_event", "fieldtype": "Link", "label": "SLA Event", "options": "CRM Student SLA Event", "read_only": 1, "reqd": 1},
-    {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Lead", "read_only": 1, "reqd": 1},
+    {"fieldname": "student", "fieldtype": "Link", "label": "Student", "options": "CRM Student", "read_only": 1, "reqd": 1},
     {"fieldname": "channel", "fieldtype": "Select", "label": "Channel", "options": "notification", "read_only": 1, "reqd": 1},
     {"fieldname": "recipient_role", "fieldtype": "Data", "label": "Recipient Role", "read_only": 1, "reqd": 1},
     {"fieldname": "idempotency_key", "fieldtype": "Data", "label": "Idempotency Key", "read_only": 1, "reqd": 1, "unique": 1},

@@ -8,6 +8,7 @@ import frappe
 
 from crm.fcrm.student_assignment import capacity_eligible, fairness_report, resolve_student_zone
 from crm.fcrm.student_ownership import change_student_ownership
+from crm.fcrm.student_reference import canonical_student
 
 
 def is_ctv_eligible(student) -> bool:
@@ -84,7 +85,8 @@ def recall_expired_ctv_batches(limit: int = 50):
 		for item in batch.get("items") or []:
 			if item.status != "delivered":
 				continue
-			student = frappe.get_doc("CRM Lead", item.student)
+			student_name = canonical_student(item.student) or item.student
+			student = frappe.get_doc("CRM Student", student_name)
 			if student.get("owner_staff"):
 				pool = frappe.db.get_value(
 					"CRM Student Pool",
@@ -153,7 +155,8 @@ def manager_reassign_student(
 	*,
 	emergency_override: bool = False,
 ) -> dict:
-	student_doc = frappe.get_doc("CRM Lead", student)
+	student = canonical_student(student) or student
+	student_doc = frappe.get_doc("CRM Student", student)
 	geo = resolve_student_zone(student_doc)
 	if geo.get("zone") and not emergency_override:
 		from crm.fcrm.student_assignment import zone_team_pool

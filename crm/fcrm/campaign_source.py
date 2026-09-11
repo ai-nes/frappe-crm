@@ -72,11 +72,6 @@ def sync_campaign_source(doc, campaign: str | None = None) -> str | None:
 
 
 def sync_student_campaign_source(doc) -> str | None:
-	"""Inherit Campaign attribution from a Student's immutable source Lead."""
+	"""Keep a Student's governed source aligned with its own Campaign."""
 	campaign = doc.get("campaign")
-	if doc.get("source_lead"):
-		lead_campaign = frappe.db.get_value("CRM Lead", doc.get("source_lead"), "campaign")
-		if lead_campaign:
-			campaign = lead_campaign
-			doc.set("campaign", campaign)
 	return sync_campaign_source(doc, campaign)
