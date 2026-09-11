@@ -502,7 +502,7 @@
    "fieldname": "admission_method",
    "fieldtype": "Select",
    "label": "Admission Method",
-   "options": "\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
+   "options": "\nTHPT_SCORE\nTRANSCRIPT_REVIEW\nNATIONAL_HIGH_SCHOOL_EXAM\nLANGUAGE_CERTIFICATE_REVIEW\nDIRECT_ADMISSION\nCOMBINED"
   },
   {
    "fieldname": "col_break_profile",

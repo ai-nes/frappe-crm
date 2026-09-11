@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import json
+import math
+
 import frappe
 from frappe import _
 
 from crm.api.lead_mapping import _normalize_lead_payload
+from crm.fcrm.doctype.crm_student.crm_student import MAX_GRADUATION_SCORE
 from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_reference import canonical_student
 
@@ -98,6 +102,53 @@ _STUDENT_CANONICAL_FIELDS = frozenset(
 	_STUDENT_FIELD_ALIASES.get(fieldname, fieldname) for fieldname in _STUDENT_BASIC_FIELDS
 )
 _PAYMENT_ACCOUNT_FIELD_ALIASES = {"account_holder": "account_holder_name"}
+_STUDENT_HIGH_SCHOOL_SCORE_STUDENT_FIELDS = frozenset({"graduation_score", "transcript_score", "total_score"})
+_STUDENT_HIGH_SCHOOL_SCORE_PROFILE_FIELDS = frozenset(
+	{
+		"is_high_school_graduate",
+		"graduation_year",
+		"priority_group",
+		"graduation_classification",
+		"conduct_rank",
+		"grade_12_gpa",
+		"exam_candidate_number",
+		"score_details",
+		"encouragement_type",
+		"encouragement_score",
+		"priority_type",
+		"priority_score",
+	}
+)
+_STUDENT_HIGH_SCHOOL_SCORE_ACADEMIC_FIELDS = frozenset({"academic_rank"})
+_STUDENT_HIGH_SCHOOL_SCORE_FIELDS = (
+	_STUDENT_HIGH_SCHOOL_SCORE_STUDENT_FIELDS
+	| _STUDENT_HIGH_SCHOOL_SCORE_PROFILE_FIELDS
+	| _STUDENT_HIGH_SCHOOL_SCORE_ACADEMIC_FIELDS
+)
+_STUDENT_HIGH_SCHOOL_SCORE_NUMERIC_FIELDS = frozenset(
+	{
+		"graduation_score",
+		"transcript_score",
+		"total_score",
+		"grade_12_gpa",
+		"encouragement_score",
+		"priority_score",
+	}
+)
+_STUDENT_HIGH_SCHOOL_SCORE_MAX_VALUES = {"graduation_score": MAX_GRADUATION_SCORE}
+_STUDENT_HIGH_SCHOOL_SCORE_INTEGER_FIELDS = frozenset({"graduation_year"})
+_STUDENT_HIGH_SCHOOL_SCORE_BOOLEAN_FIELDS = frozenset({"is_high_school_graduate"})
+_STUDENT_HIGH_SCHOOL_SCORE_TEXT_FIELDS = frozenset(
+	{
+		"academic_rank",
+		"conduct_rank",
+		"exam_candidate_number",
+		"encouragement_type",
+		"graduation_classification",
+		"priority_group",
+		"priority_type",
+	}
+)
 
 
 def _canonical_student_fields(fields: dict | str | None) -> dict:
@@ -228,6 +279,157 @@ def _update_payment_account(name: str, fields: dict) -> dict:
 	return {
 		fieldname: account.get(_PAYMENT_ACCOUNT_FIELD_ALIASES.get(fieldname, fieldname))
 		for fieldname in fields
+	}
+
+
+def _normalize_score_value(fieldname: str, value):
+	if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_INTEGER_FIELDS:
+		if value in (None, ""):
+			return None
+		if isinstance(value, bool) or not isinstance(value, int):
+			frappe.throw(_("{0} must be an integer.").format(fieldname), frappe.ValidationError)
+		return value
+
+	if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_BOOLEAN_FIELDS:
+		if value in (None, ""):
+			return None
+		if isinstance(value, bool):
+			return value
+		if value in (0, 1):
+			return bool(value)
+		frappe.throw(_("{0} must be a boolean.").format(fieldname), frappe.ValidationError)
+
+	if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_NUMERIC_FIELDS:
+		if value in (None, ""):
+			return None
+		if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+			frappe.throw(
+				_("{0} must be a finite non-negative number.").format(fieldname),
+				frappe.ValidationError,
+			)
+		if value < 0:
+			frappe.throw(_("{0} cannot be negative.").format(fieldname), frappe.ValidationError)
+		maximum = _STUDENT_HIGH_SCHOOL_SCORE_MAX_VALUES.get(fieldname)
+		if maximum is not None and value > maximum:
+			frappe.throw(
+				_("{0} must be between 0 and {1}.").format(fieldname, maximum),
+				frappe.ValidationError,
+			)
+		return value
+
+	if fieldname == "score_details":
+		if value in (None, ""):
+			return None
+		if isinstance(value, str):
+			try:
+				value = json.loads(value)
+			except (TypeError, ValueError):
+				frappe.throw(_("score_details must be valid JSON."), frappe.ValidationError)
+		if not isinstance(value, (dict, list)):
+			frappe.throw(_("score_details must be a JSON object or array."), frappe.ValidationError)
+		return value
+
+	if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_TEXT_FIELDS:
+		if value in (None, ""):
+			return None
+		if not isinstance(value, str):
+			frappe.throw(_("{0} must be a string.").format(fieldname), frappe.ValidationError)
+		return value.strip() or None
+
+	return value
+
+
+def _read_score_details(value):
+	if value in (None, ""):
+		return None
+	if isinstance(value, str):
+		try:
+			value = json.loads(value)
+		except (TypeError, ValueError):
+			return None
+	return value if isinstance(value, (dict, list)) else None
+
+
+def _academic_rank(student) -> str | None:
+	rows = student.get("academic_results") or []
+	for row in reversed(rows):
+		if row.get("grade") == "12":
+			return row.get("academic_rank")
+	return None
+
+
+def _set_academic_rank(student, value: str | None, school_year: str | None) -> None:
+	rows = student.get("academic_results") or []
+	for row in reversed(rows):
+		if row.get("grade") != "12":
+			continue
+		row.set("academic_rank", value) if hasattr(row, "set") else row.update(academic_rank=value)
+		return
+
+	if value is None:
+		return
+	if not school_year:
+		frappe.throw(
+			_("A school year is required to create the Grade 12 academic result."),
+			frappe.ValidationError,
+		)
+	student.append(
+		"academic_results",
+		{"school_year": str(school_year), "grade": "12", "academic_rank": value},
+	)
+
+
+def _score_profile(student_name: str, admission_year: str | None = None, *, permission_type="read"):
+	filters = {"student": student_name}
+	if admission_year:
+		filters["admission_year"] = admission_year
+	rows = frappe.get_list(
+		"CRM Student Admission Profile",
+		filters=filters,
+		fields=["name", "admission_year", "attempt_number", "modified"],
+		order_by="modified desc, attempt_number desc, name desc",
+		limit_page_length=1,
+	)
+	if not rows:
+		return None
+
+	profile = frappe.get_doc("CRM Student Admission Profile", rows[0]["name"])
+	try:
+		profile.check_permission(permission_type)
+	except frappe.PermissionError:
+		if permission_type == "read":
+			return None
+		raise
+	return profile
+
+
+def _student_high_school_score_payload(student, profile, admission_year: str | None = None) -> dict:
+	profile_values = profile or {}
+	resolved_year = profile_values.get("admission_year") or admission_year or student.get("admission_year")
+	fields = {
+		"graduation_score": student.get("graduation_score"),
+		"transcript_score": student.get("transcript_score"),
+		"total_score": student.get("total_score"),
+		"is_high_school_graduate": (bool(profile_values.get("is_high_school_graduate")) if profile else None),
+		"graduation_year": profile_values.get("graduation_year"),
+		"academic_rank": _academic_rank(student),
+		"priority_group": profile_values.get("priority_group"),
+		"graduation_classification": profile_values.get("graduation_classification"),
+		"conduct_rank": profile_values.get("conduct_rank"),
+		"grade_12_gpa": profile_values.get("grade_12_gpa"),
+		"exam_candidate_number": profile_values.get("exam_candidate_number"),
+		"score_details": _read_score_details(profile_values.get("score_details")),
+		"encouragement_type": profile_values.get("encouragement_type"),
+		"encouragement_score": profile_values.get("encouragement_score"),
+		"priority_type": profile_values.get("priority_type"),
+		"priority_score": profile_values.get("priority_score"),
+	}
+	return {
+		"doctype": "CRM Student",
+		"name": student.name,
+		"admission_profile": profile.name if profile else None,
+		"admission_year": resolved_year,
+		"fields": fields,
 	}
 
 
@@ -494,6 +696,24 @@ def _get_link_options(
 	]
 
 
+def _get_school_area_options(high_school: str, search: str | None, limit: int) -> list[dict]:
+	"""Return the area configured on one selected high school."""
+	rows = frappe.get_list(
+		"CRM High School",
+		filters={"name": high_school},
+		fields=["school_area"],
+		limit_page_length=1,
+	)
+	if not rows or not rows[0].get("school_area"):
+		return []
+	return _get_link_options(
+		"CRM School Area",
+		{"code": rows[0].get("school_area")},
+		search,
+		limit,
+	)
+
+
 @frappe.whitelist(methods=["POST"])
 def create_student(fields: dict | str | None = None) -> dict:
 	"""Create the canonical CRM Student record.
@@ -527,6 +747,17 @@ def get_student(name: str) -> dict:
 	result = _get_document("CRM Student", _resolve_student_name(name))
 	result["fields"] = _student_response_fields(result["fields"])
 	return result
+
+
+@frappe.whitelist(methods=["GET"])
+def get_student_high_school_score(name: str, admission_year: str | None = None) -> dict:
+	"""Get the high-school score fields owned by Student and its admission profile."""
+	student_name = _resolve_student_name(name)
+	student = frappe.get_doc("CRM Student", student_name)
+	student.check_permission("read")
+	admission_year = _parse_text_filter(admission_year, "admission_year") or student.get("admission_year")
+	profile = _score_profile(student.name, admission_year)
+	return _student_high_school_score_payload(student, profile, admission_year)
 
 
 @frappe.whitelist(methods=["GET"])
@@ -597,8 +828,13 @@ def get_field_options(
 	filters: dict | str | None = None,
 	limit: int | str | None = None,
 	province: str | None = None,
+	high_school: str | None = None,
 ) -> dict:
-	"""Get options for any Link or Select field on Student or High School."""
+	"""Get options for any Link or Select field on Student or High School.
+
+	``high_school`` is supported for ``CRM High School.school_area`` and makes
+	the lookup return only the area configured on that selected school.
+	"""
 	if doctype not in _OPTION_DOCTYPES:
 		frappe.throw(_("Options are not available for this doctype."), frappe.ValidationError)
 	if not isinstance(fieldname, str) or not fieldname.strip():
@@ -618,10 +854,20 @@ def get_field_options(
 	parsed_limit = _parse_option_limit(limit)
 	search = search.strip() if search else None
 	province = _parse_text_filter(province, "province")
+	high_school = _parse_text_filter(high_school, "high_school")
+	if high_school and (doctype, fieldname) != ("CRM High School", "school_area"):
+		frappe.throw(
+			_("high_school can only be used to filter CRM High School.school_area."),
+			frappe.ValidationError,
+		)
+	if high_school and province:
+		frappe.throw(_("province and high_school cannot be used together."), frappe.ValidationError)
 
 	if field.fieldtype == "Select":
 		if province:
 			frappe.throw(_("province can only be used with a Link field."), frappe.ValidationError)
+		if high_school:
+			frappe.throw(_("high_school can only be used with a Link field."), frappe.ValidationError)
 		options = _get_select_options(field, search, parsed_limit)
 		target_doctype = None
 	else:
@@ -629,7 +875,9 @@ def get_field_options(
 		if not target_doctype:
 			frappe.throw(_("Link field {0} has no target doctype.").format(fieldname), frappe.ValidationError)
 		target_meta = frappe.get_meta(target_doctype) if province else None
-		if province:
+		if high_school:
+			options = _get_school_area_options(high_school, search, parsed_limit)
+		elif province:
 			if _find_meta_field(target_meta, "province") is None:
 				frappe.throw(
 					_("province cannot be used to filter {0}.").format(target_doctype),
@@ -638,9 +886,11 @@ def get_field_options(
 			if "province" in parsed_filters and parsed_filters["province"] != province:
 				frappe.throw(_("province filters do not match."), frappe.ValidationError)
 			parsed_filters["province"] = province
-		options = _get_link_options(
-			target_doctype, parsed_filters, search, parsed_limit, target_meta=target_meta
-		)
+			options = _get_link_options(
+				target_doctype, parsed_filters, search, parsed_limit, target_meta=target_meta
+			)
+		else:
+			options = _get_link_options(target_doctype, parsed_filters, search, parsed_limit)
 
 	return {
 		"doctype": doctype,
@@ -661,9 +911,13 @@ def update_student(name: str, fields: dict | str | None = None) -> dict:
 	values = _parse_fields(fields, _STUDENT_BASIC_FIELDS | _STUDENT_PAYMENT_ACCOUNT_FIELDS)
 	_check_student_update_permission("CRM Student", values)
 	student_name = _resolve_student_name(name)
-	student_values = {fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_BASIC_FIELDS}
+	student_values = {
+		fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_BASIC_FIELDS
+	}
 	payment_values = {
-		fieldname: value for fieldname, value in values.items() if fieldname in _STUDENT_PAYMENT_ACCOUNT_FIELDS
+		fieldname: value
+		for fieldname, value in values.items()
+		if fieldname in _STUDENT_PAYMENT_ACCOUNT_FIELDS
 	}
 	result = {
 		"doctype": "CRM Student",
@@ -680,6 +934,69 @@ def update_student(name: str, fields: dict | str | None = None) -> dict:
 		result["updated_fields"].update(_student_response_fields(student_result["updated_fields"]))
 	if payment_values:
 		result["updated_fields"].update(_update_payment_account(student_name, payment_values))
+	return result
+
+
+@frappe.whitelist(methods=["POST", "PUT"])
+def update_student_high_school_score(
+	name: str,
+	fields: dict | str | None = None,
+	admission_year: str | None = None,
+) -> dict:
+	"""Update the score fields shown by the Student Detail high-school card."""
+	values = _parse_fields(fields, _STUDENT_HIGH_SCHOOL_SCORE_FIELDS)
+	values = {fieldname: _normalize_score_value(fieldname, value) for fieldname, value in values.items()}
+	student_name = _resolve_student_name(name)
+	student = frappe.get_doc("CRM Student", student_name)
+	student.check_permission("write")
+	admission_year = _parse_text_filter(admission_year, "admission_year") or student.get("admission_year")
+	student_values = {
+		fieldname: value
+		for fieldname, value in values.items()
+		if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_STUDENT_FIELDS
+	}
+	profile_values = {
+		fieldname: value
+		for fieldname, value in values.items()
+		if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_PROFILE_FIELDS
+	}
+	academic_values = {
+		fieldname: value
+		for fieldname, value in values.items()
+		if fieldname in _STUDENT_HIGH_SCHOOL_SCORE_ACADEMIC_FIELDS
+	}
+	profile = (
+		_score_profile(student.name, admission_year, permission_type="write") if profile_values else None
+	)
+	if profile_values and not profile:
+		frappe.throw(
+			_("No admission profile exists for this Student and admission year."),
+			frappe.DoesNotExistError,
+		)
+
+	for fieldname, value in student_values.items():
+		student.set(fieldname, value)
+	if academic_values:
+		academic_year = (
+			profile_values.get("graduation_year")
+			or (profile.get("graduation_year") if profile else None)
+			or admission_year
+			or student.get("admission_year")
+		)
+		_set_academic_rank(student, academic_values["academic_rank"], academic_year)
+	if student_values or academic_values:
+		student.save()
+
+	for fieldname, value in profile_values.items():
+		profile.set(
+			fieldname,
+			frappe.as_json(value) if fieldname == "score_details" and value is not None else value,
+		)
+	if profile_values:
+		profile.save()
+
+	result = _student_high_school_score_payload(student, profile, admission_year)
+	result["updated_fields"] = values
 	return result
 
 

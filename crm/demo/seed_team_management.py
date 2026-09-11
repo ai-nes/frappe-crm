@@ -108,11 +108,11 @@ CATALOG_FIXTURES: tuple[dict[str, Any], ...] = (
 			},
 		),
 		"schools": (
-			{"name": "THPT Chuyên Lê Hồng Phong", "code": "HCM-LHP", "ward_code": "760"},
-			{"name": "THPT Nguyễn Thượng Hiền", "code": "HCM-NTH", "ward_code": "760"},
-			{"name": "THPT Gia Định", "code": "HCM-GD", "ward_code": "760"},
-			{"name": "THPT Nguyễn Hữu Huân", "code": "HCM-NHH", "ward_code": "760"},
-			{"name": "THPT Thủ Đức", "code": "HCM-TD", "ward_code": "760"},
+			{"name": "THPT Chuyên Lê Hồng Phong", "code": "HCM-LHP", "ward_code": "760", "school_area": "KV3"},
+			{"name": "THPT Nguyễn Thượng Hiền", "code": "HCM-NTH", "ward_code": "760", "school_area": "KV3"},
+			{"name": "THPT Gia Định", "code": "HCM-GD", "ward_code": "760", "school_area": "KV3"},
+			{"name": "THPT Nguyễn Hữu Huân", "code": "HCM-NHH", "ward_code": "760", "school_area": "KV3"},
+			{"name": "THPT Thủ Đức", "code": "HCM-TD", "ward_code": "760", "school_area": "KV3"},
 		),
 	},
 	{
@@ -341,6 +341,7 @@ def _ensure_catalog_schools(fixture: dict[str, Any], geography: dict[str, str]) 
 		if school_name:
 			school = frappe.get_doc("CRM High School", school_name)
 			school.school_name = school_spec["name"]
+			school.school_area = school_spec.get("school_area")
 			school.is_active = 1
 			school.save(ignore_permissions=True)
 		else:
@@ -351,6 +352,7 @@ def _ensure_catalog_schools(fixture: dict[str, Any], geography: dict[str, str]) 
 					"school_code": school_spec["code"],
 					"province": geography["province"],
 					"ward": ward,
+					"school_area": school_spec.get("school_area"),
 					"is_active": 1,
 				}
 			).insert(ignore_permissions=True)

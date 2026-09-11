@@ -29,6 +29,7 @@ MAX_PAGE_LENGTH = 200
 HEX_DIGEST = re.compile(r"^[a-f0-9]{64}$")
 VERSION_FIELDS = [
 	"name",
+	"owner",
 	"version_id",
 	"version_name",
 	"description",
@@ -258,6 +259,7 @@ def _version_payload(row, rules_count: int | None = None) -> dict:
 	data = as_dict() if callable(as_dict) else dict(row)
 	payload = {
 		"name": data.get("name"),
+		"owner": data.get("owner"),
 		"version_id": data.get("version_id"),
 		"version_name": data.get("version_name") or "",
 		"description": data.get("description") or "",

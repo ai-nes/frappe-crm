@@ -79,7 +79,7 @@ def assign_lead(
 ) -> dict:
 	return _run(
 		_assign_lead,
-		lead=lead,
+		lead=resolve_lead_name(lead),
 		owner_staff=owner_staff,
 		target_team_id=target_team_id,
 		reason=reason,
@@ -104,4 +104,25 @@ def handoff_lead(
 		idempotency_key=idempotency_key,
 		correlation_id=correlation_id,
 		target_student=target_student,
+	)
+
+
+@frappe.whitelist(methods=["POST"])
+def convert_to_student(
+	lead: str,
+	idempotency_key: str | None = None,
+	correlation_id: str | None = None,
+) -> dict:
+	"""Create a new CRM Student from one assigned Lead."""
+	lead_name = resolve_lead_name(lead)
+	request_key = (
+		str(idempotency_key or "").strip()
+		or f"lead-convert:{lead_name}:{frappe.generate_hash(length=20)}"
+	)
+	return _run(
+		_handoff_lead,
+		lead=lead_name,
+		idempotency_key=request_key,
+		correlation_id=correlation_id,
+		_force_create=True,
 	)

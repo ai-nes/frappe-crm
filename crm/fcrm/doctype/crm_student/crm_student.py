@@ -1,3 +1,4 @@
+import math
 import re
 
 import frappe
@@ -14,6 +15,7 @@ from crm.fcrm.utils.geo_resolver import resolve_high_school_strict, resolve_prov
 
 CONVERSION_SERVICE_FLAG = "student_conversion_service"
 MIGRATION_SERVICE_FLAG = "contact_migration_service"
+MAX_GRADUATION_SCORE = 30
 
 
 class CRMStudent(Document):
@@ -27,9 +29,9 @@ class CRMStudent(Document):
 
 	def autoname(self):
 		"""Use the source Lead's HS ID, or allocate the next HS ID."""
-		self.name = hs_code_for_reference(self.get("source_lead"), self.get("admission_year")) or next_hs_code(
-			self.get("admission_year")
-		)
+		self.name = hs_code_for_reference(
+			self.get("source_lead"), self.get("admission_year")
+		) or next_hs_code(self.get("admission_year"))
 
 	@staticmethod
 	def default_list_data():
@@ -136,6 +138,7 @@ class CRMStudent(Document):
 	def validate(self):
 		from crm.fcrm.student_classification import validate_classifications
 
+		self._validate_score_ranges()
 		sync_student_campaign_source(self)
 		validate_classifications(self)
 		self.student_stage = self.get("student_stage") or "New"
@@ -149,6 +152,22 @@ class CRMStudent(Document):
 		self._track_sla_start()
 		self.flags.ignore_links = False
 		self._validate_links()
+
+	def _validate_score_ranges(self):
+		score = self.get("graduation_score")
+		if score in (None, ""):
+			return
+		if (
+			isinstance(score, bool)
+			or not isinstance(score, (int, float))
+			or not math.isfinite(score)
+			or score < 0
+			or score > MAX_GRADUATION_SCORE
+		):
+			frappe.throw(
+				f"Graduation Score must be between 0 and {MAX_GRADUATION_SCORE}.",
+				frappe.ValidationError,
+			)
 
 	def _is_service_write(self):
 		return bool(

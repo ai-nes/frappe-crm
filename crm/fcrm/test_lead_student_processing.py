@@ -275,6 +275,45 @@ class TestLeadStudentProcessingRuntime(FrappeTestCase):
 		self.assertFalse(frappe.db.exists("CRM Student", {"phone": lead.phone}))
 		self.assertNotIn("id_number", result["validation"])
 
+	def test_assignment_uses_lead_ownership_without_creating_a_student(self):
+		from crm.fcrm.lead_processing import assign_lead, process_lead
+		from crm.fcrm.team_routing import select_province_recipient
+
+		province = "Ho Chi Minh City"
+		branch = "FPTU Ho Chi Minh Campus"
+		if not frappe.db.exists("CRM Province", province) or not frappe.db.exists("CRM Campus", branch):
+			self.skipTest("The seeded Ho Chi Minh routing topology is not available.")
+		high_school = frappe.db.get_value("CRM High School", {"province": province}, "name")
+		lead = self._new_lead(
+			"Assignment",
+			province=province,
+			branch=branch,
+			high_school=high_school,
+		)
+		self.assertEqual(process_lead(lead.name)["status"], "PROCESSED")
+
+		recipient = select_province_recipient(province, campus=branch)
+		result = assign_lead(
+			lead.name,
+			recipient["ownerStaff"],
+			recipient["team"],
+			recipient["reason"],
+			idempotency_key="test-lead-ownership-assignment",
+			expected_revision=0,
+			correlation_id="test-lead-ownership-assignment",
+		)
+
+		lead.reload()
+		self.assertEqual(result["ownership"]["revision"], 1)
+		self.assertEqual(lead.processing_status, "ASSIGNED")
+		self.assertEqual(lead.assigned_to, recipient["ownerStaff"])
+		self.assertEqual(lead.owner_staff, recipient["ownerStaff"])
+		self.assertEqual(lead.owning_team, recipient["team"])
+		self.assertEqual(lead.ownership_revision, 1)
+		self.assertEqual(len(lead.assignment_log), 1)
+		self.assertEqual(lead.assignment_log[0].to_staff, recipient["ownerStaff"])
+		self.assertFalse(frappe.db.exists("CRM Student", {"phone": lead.phone}))
+
 	def test_duplicate_leads_without_cccd_keep_one_canonical_record(self):
 		from crm.fcrm.lead_processing import (
 			_candidate_rows,

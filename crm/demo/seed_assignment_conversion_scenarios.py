@@ -26,6 +26,7 @@ from typing import Any
 import frappe
 
 from crm.demo import seed_assignment_scenarios, seed_team_management
+from crm.fcrm.lead_code import is_valid_lead_code
 
 LOCAL_SITE = "crm.localhost"
 NAMESPACE = "local-assignment-conversion-20260908"
@@ -41,6 +42,65 @@ UNMANAGED_PROVINCE = "Hà Nội"
 # both Leads. The resubmission is then stamped with the primary phone to
 # exercise the Lead duplicate resolver without inventing a CCCD on a Lead.
 DUPLICATE_PHONE = "0903000019"
+_SPLIT_RECEIPT_LINK_GAP_PATCHED = False
+
+
+def _intake_namespace(run_token: str) -> str:
+	"""Give each fresh local fixture run a distinct immutable intake source."""
+	return f"{NAMESPACE}:run:{run_token}"
+
+
+def _patch_split_receipt_link_gap() -> None:
+	"""Keep Lead intake receipts valid while the receipt schema still links Student."""
+	global _SPLIT_RECEIPT_LINK_GAP_PATCHED
+	if _SPLIT_RECEIPT_LINK_GAP_PATCHED:
+		return
+
+	import crm.fcrm.admission_case_key as admission_case_key
+	import crm.fcrm.student_intake as student_intake
+
+	original_write_receipt = admission_case_key._write_receipt
+
+	def _write_lead_safe_receipt(**kwargs):
+		kwargs.pop("student", None)
+		return original_write_receipt(student=None, **kwargs)
+
+	admission_case_key._write_receipt = _write_lead_safe_receipt
+
+	original_persist_receipt = student_intake._persist_receipt
+
+	def _persist_lead_safe_receipt(keys, *, result, **kwargs):
+		lead = result.get("student")
+		safe_result = dict(result)
+		safe_result.pop("student", None)
+		persisted = original_persist_receipt(keys, result=safe_result, **kwargs)
+		if lead:
+			persisted["student"] = lead
+		return persisted
+
+	student_intake._persist_receipt = _persist_lead_safe_receipt
+
+	original_persist_consent = student_intake._persist_consent_grant
+
+	def _persist_lead_safe_consent(student, consent, **kwargs):
+		if student and frappe.db.exists("CRM Lead", student) and not frappe.db.exists("CRM Student", student):
+			return None
+		return original_persist_consent(student, consent, **kwargs)
+
+	student_intake._persist_consent_grant = _persist_lead_safe_consent
+	_SPLIT_RECEIPT_LINK_GAP_PATCHED = True
+
+
+def _require_lead_code(lead: str) -> str:
+	"""Return the server-managed public Lead code or fail the fixture early."""
+	lead_code = frappe.db.get_value("CRM Lead", lead, "lead_code")
+	if not lead_code or not is_valid_lead_code(lead_code):
+		frappe.throw(
+			f"Lead {lead} không có leadCode hợp lệ (kỳ vọng LD-YYYY-REGION-NNNNNN).",
+			frappe.ValidationError,
+		)
+	return lead_code
+
 
 SCENARIOS: tuple[dict[str, Any], ...] = (
 	# --- Happy path: 12 intake-complete Leads, 6 per province ------------------
@@ -273,6 +333,31 @@ def _purge_identity_graph() -> dict[str, int]:
 	return deleted
 
 
+def _purge_orphan_command_receipts() -> int:
+	"""Remove local receipts pointing to records cleared by the fixture reset."""
+	if not frappe.db.table_exists("CRM Student Command Receipt"):
+		return 0
+
+	orphan_names: list[str] = []
+	for row in frappe.get_all(
+		"CRM Student Command Receipt",
+		fields=["name", "target_student", "target_case_key"],
+		limit_page_length=0,
+	):
+		student = row.get("target_student")
+		case_key = row.get("target_case_key")
+		student_missing = student and not (
+			frappe.db.exists("CRM Lead", student) or frappe.db.exists("CRM Student", student)
+		)
+		case_key_missing = case_key and not frappe.db.exists("CRM Student Case Key", case_key)
+		if student_missing or case_key_missing:
+			orphan_names.append(row.name)
+
+	for name in orphan_names:
+		frappe.db.sql("delete from `tabCRM Student Command Receipt` where name = %s", (name,))
+	return len(orphan_names)
+
+
 def _team_by_province() -> dict[str, str]:
 	"""Pick one active Sales Team per seeded province group.
 
@@ -335,6 +420,8 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 	"""Create one intake-complete Lead sitting unassigned in its province pool."""
 	from crm.fcrm.student_intake import submit_intake
 
+	_patch_split_receipt_link_gap()
+	intake_namespace = _intake_namespace(run_token)
 	payload = {
 		"student_name": spec["name"],
 		"phone": spec["phone"],
@@ -362,12 +449,13 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 	}
 	result = submit_intake(
 		payload,
-		source_namespace=NAMESPACE,
+		# Intake receipts are append-only and source-idempotent. The fixture purges
+		# the Lead/identity graph between runs, so each fresh run needs a new source
+		# namespace instead of colliding with a receipt whose target was deleted.
+		source_namespace=intake_namespace,
 		source_record_id=f"lead:{spec['phone']}",
-		# Each reseed is a new command: the previous run's Leads were purged, so
-		# replaying its receipt would return a Lead that no longer exists.
 		idempotency_key=f"{NAMESPACE}:{run_token}:{index:02d}",
-		correlation_id=f"{NAMESPACE}:{run_token}:{index:02d}",
+		correlation_id=f"{intake_namespace}:{index:02d}",
 	)
 	lead = result.get("student")
 	if result.get("outcome") != "created" or not lead:
@@ -386,6 +474,7 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 	)
 	if defect:
 		_apply_defect(lead, defect)
+	_require_lead_code(lead)
 	return lead
 
 
@@ -396,16 +485,19 @@ def execute() -> dict[str, Any]:
 	seed_team_management.execute()
 	deleted = seed_assignment_scenarios._purge_business_data()
 	purged_identities = _purge_identity_graph()
+	purged_receipts = _purge_orphan_command_receipts()
 	source = seed_assignment_scenarios._active_source()
 	pools = {province: _ensure_pool(team) for province, team in _team_by_province().items()}
 	run_token = frappe.generate_hash(length=10)
 	seeded: list[dict[str, Any]] = []
 	for index, spec in enumerate(SCENARIOS, start=1):
 		lead = _submit_lead(spec, source, index, pools[spec["province"]], run_token)
+		lead_code = _require_lead_code(lead)
 		defect = spec.get("defect")
 		seeded.append(
 			{
 				"lead": lead,
+				"leadCode": lead_code,
 				"name": spec["name"],
 				"expected": defect["expected"] if defect else "assigned",
 				"defect": defect["code"] if defect else None,
@@ -416,6 +508,7 @@ def execute() -> dict[str, Any]:
 	return {
 		"deleted": deleted,
 		"purged_identities": purged_identities,
+		"purged_orphan_receipts": purged_receipts,
 		"seeded_leads": len(seeded),
 		"happy_leads": len(happy),
 		"defect_leads": len(seeded) - len(happy),

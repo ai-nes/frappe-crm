@@ -9,7 +9,7 @@
  "fields": [
   {"default": "DOC-.YYYY.-", "fieldname": "naming_series", "fieldtype": "Select", "hidden": 1, "options": "DOC-.YYYY.-"},
   {"fieldname": "code", "fieldtype": "Data", "in_list_view": 1, "in_standard_filter": 1, "label": "Code", "reqd": 1, "unique": 1},
-  {"fieldname": "label", "fieldtype": "Data", "in_list_view": 1, "label": "Label", "reqd": 1},
+  {"fieldname": "label", "fieldtype": "Data", "in_list_view": 1, "label": "Label", "length": 1000, "reqd": 1},
   {"fieldname": "category", "fieldtype": "Select", "in_list_view": 1, "label": "Category", "options": "identity\neducation\nphoto\npayment\nscholarship\nlanguage\nspecial_program", "reqd": 1},
   {"fieldname": "description", "fieldtype": "Small Text", "label": "Description"},
   {"fieldname": "conditional_key", "fieldtype": "Data", "label": "Conditional Key"},
@@ -22,7 +22,8 @@
  "name": "CRM Document Type",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
-  {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+ {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "CTV Sale"},
   {"read": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Sale"}
  ],

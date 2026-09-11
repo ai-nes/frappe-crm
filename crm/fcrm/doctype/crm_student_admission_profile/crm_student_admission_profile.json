@@ -50,6 +50,7 @@
  ],
  "indexes": [
   {"fields": ["student", "admission_year", "profile_template", "profile_status"], "name": "crm_student_admission_profile_student_status_idx", "unique": 0},
+  {"fields": ["application"], "name": "crm_student_admission_profile_application_idx", "unique": 0},
   {"fields": ["attempt_key"], "name": "crm_student_admission_profile_attempt_uniq", "unique": 1}
  ],
  "links": [],
@@ -57,7 +58,8 @@
  "name": "CRM Student Admission Profile",
  "permissions": [
   {"create": 1, "delete": 1, "read": 1, "write": 1, "role": "System Manager"},
-  {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+ {"create": 1, "read": 1, "write": 1, "role": "Admissions Director"},
+  {"read": 1, "role": "CTV Sale"},
   {"create": 1, "read": 1, "write": 1, "role": "Lead Sale"},
   {"read": 1, "role": "Sale"}
  ],

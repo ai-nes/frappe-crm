@@ -30,7 +30,16 @@ _ADMISSIONS_CASE_DOCTYPES = CANONICAL_PERMISSION_MATRIX["admissions_case"]["doct
 # exposed to CTV Sale. Keep this list explicit: the CTV profile must not inherit
 # the broader reference-data permissions of the canonical Sale profile.
 CTV_SALE_DIRECTOR_READ_DOCTYPES = (
+	"CRM Admission Method",
 	"CRM Admission Year",
+	"CRM Admission Offering",
+	"CRM Admission Profile Template",
+	"CRM Aspiration",
+	"CRM Document Type",
+	"CRM School Area",
+	"CRM Admission Application",
+	"CRM Student Admission Profile",
+	"CRM Student Document",
 	"CRM High School",
 	"CRM Province",
 	"CRM Ward",

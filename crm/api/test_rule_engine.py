@@ -182,8 +182,8 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 	def test_group_reference_and_immutable_direct_writes_are_rejected(self):
 		with self.assertRaises(frappe.ValidationError):
 			rule_engine.create_rule(self.version_id, 0, **self._rule(
-			rule_id="BAD-GROUP-001", group_code="bad group"
-		))
+				rule_id="BAD-GROUP-001", group_code="bad group"
+			))
 
 	def test_management_and_catalog_reads_are_separated_by_identity(self):
 		frappe.set_user("Guest")
