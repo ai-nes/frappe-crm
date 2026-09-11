@@ -19,6 +19,7 @@ from frappe.tests.utils import FrappeTestCase
 
 from crm.api import student_decision_context
 from crm.api.nba_evaluation import (
+	_shape_context,
 	_shape_eligible_action_set,
 	build_nba_evaluation_input,
 	request_nba_evaluation,
@@ -28,6 +29,25 @@ from crm.fcrm.nba_canonical import canonical_digest
 from crm.fcrm.nba_evaluation_input import input_digest
 
 _NOW = datetime(2026, 9, 4, 2, 0)
+
+
+class TestShapeContext(unittest.TestCase):
+	def test_naive_interaction_datetime_gets_site_timezone(self):
+		projection = {"interaction": {"at": datetime(2026, 9, 11, 20, 35, 54)}}
+
+		with patch("crm.api.nba_evaluation._decision_effect_signals", return_value={}):
+			context = _shape_context(
+				projection,
+				student="HS-2026-HCM-002301",
+				now=_NOW,
+				timezone="Asia/Ho_Chi_Minh",
+			)
+
+		expected = "2026-09-11T20:35:54+07:00"
+		self.assertEqual(context["interaction"]["at"], expected)
+		self.assertEqual(context["activity"]["last_contact_at"], expected)
+
+
 class TestNbaEvaluationProducer(FrappeTestCase):
 	def test_request_resolves_legacy_lead_id_to_canonical_student(self):
 		with (
