@@ -5,7 +5,9 @@ admissions lifecycle and conversion commands:
 
     NEW -> PROCESSING -> PROCESSED -> ASSIGNED -> CLOSED
 
-Phone, province, high school, and major are the only required processing gates.
+Name, phone, and province are the only required processing gates. High school
+and major are optional Lead metadata: they are read and stored, but never
+block processing, routing, or assignment.
 Lead duplicate matching uses only Lead-owned identifiers and routing data;
 CCCD belongs to the later Student profile and is never read here.
 Processing and assignment only update the Lead status and ownership; neither
@@ -394,17 +396,28 @@ def _get_resolution(lead) -> str:
 
 
 def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: str) -> None:
-	"""Ensure the requested Lead owner is an active recipient in the target Team."""
+	"""Ensure the requested Lead owner is an active recipient in the target Team.
+
+	A Team's own Trưởng nhóm is also accepted when the Team is otherwise ready
+	but currently has no active Sale/CTV: the province fallback path
+	(``select_province_fallback_recipient``) assigns the team lead in that
+	case so a routing failure never leaves a Lead without an accountable
+	owner, and this check must not reject that assignment.
+	"""
+	# Campus is optional Lead metadata, not a gate: a Lead without one still
+	# routes and gets an owner by province alone, so `branch` may be None here.
 	branch = lead_doc.get("branch")
-	if not branch:
-		_fail("ROUTING_FAILED", "Lead must have a campus before ownership can be assigned.")
+
+	team_lead_staff = frappe.db.get_value("CRM Team", target_team_id, "team_lead_staff")
+	is_team_lead_target = bool(team_lead_staff) and owner_staff == team_lead_staff
 
 	readiness = team_routing_readiness(
 		target_team_id,
 		campus=branch,
 		expected_province=lead_doc.get("province"),
 	)
-	if readiness.get("status") != "ready":
+	fallback_allowed = is_team_lead_target and readiness.get("reasonCode") == "no_recipients"
+	if readiness.get("status") != "ready" and not fallback_allowed:
 		_fail("ROUTING_FAILED", readiness.get("reason") or "Target Team is not ready for routing.")
 
 	staff = frappe.db.get_value(
@@ -413,22 +426,27 @@ def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: 
 		["name", "is_active", "user", "campus"],
 		as_dict=True,
 	)
-	if not staff or not staff.is_active or (staff.campus and staff.campus != branch):
+	if not staff or not staff.is_active or (branch and staff.campus and staff.campus != branch):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not active at the Lead campus.")
 	if not staff.user or frappe.db.get_value("User", staff.user, "enabled") not in (1, True, "1"):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale user is not enabled.")
-	if resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"}:
+	if resolve_crm_profile(frappe.get_roles(staff.user)) not in {"sales", "ctv_sale"} and not is_team_lead_target:
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target staff is not a Sale or CTV Sale recipient.")
 
 	if not any(
-		membership.staff == owner_staff and membership.function in RECIPIENT_FUNCTIONS
+		membership.staff == owner_staff
+		and (membership.function in RECIPIENT_FUNCTIONS or (is_team_lead_target and membership.function == "Lead Sale"))
 		for membership in _active_memberships(target_team_id)
 	):
 		_fail("RECIPIENT_NOT_ELIGIBLE", "Target Sale is not an active member of the target Team.")
 
 
 def _validate_lead_pool_target(lead_doc, pool_name: str, target_team_id: str):
-	"""Ensure an optional Lead intake pool belongs to the Lead's campus and Team."""
+	"""Ensure an optional Lead intake pool belongs to the target Team.
+
+	Campus is optional Lead metadata: the pool's campus is only cross-checked
+	when the Lead actually has one, so a Lead without a branch still routes.
+	"""
 	pool = frappe.db.get_value(
 		"CRM Student Pool",
 		pool_name,
@@ -437,7 +455,8 @@ def _validate_lead_pool_target(lead_doc, pool_name: str, target_team_id: str):
 	)
 	if not pool or not pool.is_active:
 		_fail("ROUTING_FAILED", "Input pool does not exist or is inactive.")
-	if pool.campus != lead_doc.get("branch") or pool.team != target_team_id:
+	branch = lead_doc.get("branch")
+	if (branch and pool.campus != branch) or pool.team != target_team_id:
 		_fail("ROUTING_FAILED", "Input pool does not match the Lead campus and target Team.")
 	readiness = team_routing_readiness(
 		target_team_id,
@@ -582,9 +601,8 @@ def reopen_lead(lead: str, reason: str | None = None) -> dict[str, Any]:
 
 	Assignment closes any Lead whose routing data cannot be resolved, and the
 	operator then fixes that data. The Lead goes back through intake instead of
-	jumping straight to PROCESSED: a record still missing phone, province, high
-	school, or major closes again here rather than reaching assignment
-	unvalidated.
+	jumping straight to PROCESSED: a record still missing name, phone, or
+	province closes again here rather than reaching assignment unvalidated.
 	"""
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) != "CLOSED":

@@ -1,4 +1,9 @@
-"""Pure qualification rules for Lead -> Student conversion."""
+"""Pure qualification rules for Lead -> Student conversion.
+
+``major`` (Ngành quan tâm) is intake metadata, not a conversion gate: it is
+optional and must never block a Lead from being processed, routed, or
+converted into a Student.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +14,6 @@ REQUIRED_CONVERSION_FIELDS = (
 	("phone", "missing_phone"),
 	("province", "missing_province"),
 	("high_school", "missing_high_school"),
-	("major", "missing_major"),
 )
 
 

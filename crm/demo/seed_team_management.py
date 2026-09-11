@@ -94,6 +94,27 @@ GROUP_FIXTURES: tuple[dict[str, Any], ...] = (
 			},
 		),
 	},
+	{
+		# Deliberately the only Team for its province, and deliberately staffed
+		# with only a Trưởng nhóm (function "Lead Sale", outside
+		# team_routing.RECIPIENT_FUNCTIONS). Routing here always fails to find a
+		# Sale/CTV and must fall back to the team lead — this is the fixture for
+		# the NO_ELIGIBLE_RECIPIENT -> team-lead-fallback path, which none of the
+		# fully-staffed HCM/Đồng Nai teams above can ever exercise.
+		"name": "Phân nhóm Tuyển sinh Bình Dương",
+		"province": "Bình Dương",
+		"group_lead_email": "dinh.quoc.duy@fpt.edu.vn",
+		"legacy_names": (),
+		"teams": (
+			{
+				"name": "Đội Tư vấn Thủ Dầu Một - Bình Dương",
+				"lead_email": "pham.gia.huy@fpt.edu.vn",
+				"members": (
+					("pham.gia.huy@fpt.edu.vn", "Lead Sale"),
+				),
+			},
+		),
+	},
 )
 
 CATALOG_FIXTURES: tuple[dict[str, Any], ...] = (
@@ -142,6 +163,20 @@ CATALOG_FIXTURES: tuple[dict[str, Any], ...] = (
 			{"name": "THPT Bình Sơn", "code": "DNI-BINH-SON", "ward_code": "DNI-LT"},
 			{"name": "THPT Trảng Bom", "code": "DNI-TRANG-BOM", "ward_code": "DNI-TB"},
 			{"name": "THPT Thống Nhất", "code": "DNI-THONG-NHAT", "ward_code": "DNI-TB"},
+		),
+	},
+	{
+		"province": "Bình Dương",
+		"cluster": {"name": "Bình Dương - Tuyển sinh", "code": "BDG-TS"},
+		"zones": (
+			{
+				"name": "Bình Dương - Khu Thủ Dầu Một",
+				"code": "BDG-TDM",
+				"ward": {"code": "BDG-TDM", "name": "Thủ Dầu Một"},
+			},
+		),
+		"schools": (
+			{"name": "THPT Trịnh Hoài Đức", "code": "BDG-THD", "ward_code": "BDG-TDM"},
 		),
 	},
 )
@@ -229,11 +264,13 @@ def _ensure_catalog_province(province_name: str) -> str:
 		from crm.api.lead_mapping import _resolve_province
 
 		try:
-			province = _resolve_province(province_name)
+			resolved = _resolve_province(province_name)
 		except frappe.ValidationError:
-			province = None
-		if province and frappe.db.exists("CRM Province", province):
-			return province
+			resolved = None
+		# A resolver miss returns the input unchanged rather than raising, so a
+		# truthy `resolved` is not proof the row exists -- check before reusing it.
+		if resolved and frappe.db.exists("CRM Province", resolved):
+			return resolved
 	if not province:
 		province = (
 			frappe.get_doc(
@@ -647,5 +684,9 @@ def execute() -> dict[str, Any]:
 			{"email": spec["email"], "name": spec["full_name"], "role": spec["role"]}
 			for spec in STAFF_FIXTURES
 		],
-		"message": "Đã seed 2 Group tỉnh, mỗi Group 3 Team và catalog Lead trên local.",
+		"message": (
+			"Đã seed 2 Group tỉnh với 3 Team đầy đủ Sale/CTV (TP.HCM, Đồng Nai), "
+			"1 Group tỉnh Bình Dương với 1 Team chỉ có Trưởng nhóm để test fallback, "
+			"và catalog Lead trên local."
+		),
 	}

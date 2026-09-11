@@ -145,18 +145,34 @@ ownership_revision
 
 ### 3.1. Điều kiện để Lead được xử lý
 
-Bốn điều kiện bắt buộc để Lead được xử lý là:
+Đây là hai gate khác nhau, không dùng chung danh sách field:
+
+**Gate xử lý/phân công** (`_normalise_identifiers` trong `lead_processing.py`) — chỉ chặn khi
+thiếu một trong ba field sau:
+
+```text
+Họ và tên     → CRM Lead.student_name
+Số điện thoại → CRM Lead.phone
+Tỉnh/thành    → CRM Lead.province
+```
+
+Nếu thiếu, BE đóng Lead với `CLOSED / PENDING` và không phân công.
+
+`Trường THPT` và `Ngành quan tâm` là dữ liệu Lead/báo cáo, không phải điều kiện chặn ở bước
+này — Lead vẫn được xử lý và phân công dù hai field này còn trống.
+
+**Gate chuyển đổi Lead → Student** (`conversion_readiness` trong `conversion_readiness.py`,
+dùng trong `convert_student`) — chặn khi thiếu một trong ba field sau:
 
 ```text
 Số điện thoại → CRM Lead.phone
 Tỉnh/thành    → CRM Lead.province
 Trường THPT   → CRM Lead.high_school
-Ngành quan tâm → CRM Lead.major
 ```
 
-CCCD và email không phải gate của luồng xử lý/phân công hiện tại.
+`Ngành quan tâm` (`major`) là tùy chọn và không chặn việc chuyển đổi thành Student.
 
-Nếu thiếu một trong bốn điều kiện, BE đóng Lead với `CLOSED / PENDING` và không phân công.
+CCCD và email không phải gate của cả hai bước trên.
 
 ### 3.2. Field bắt buộc khi import vào batch
 

@@ -76,17 +76,20 @@ def team_routing_readiness(
 		"recipientCount": 0,
 		"status": "not_ready",
 		"reason": "Team không tồn tại.",
+		"reasonCode": "team_missing",
 	}
 	if not team:
 		return base
 	if not team.is_active:
-		base.update(status="inactive", reason="Team đang ngừng hoạt động.")
+		base.update(status="inactive", reason="Team đang ngừng hoạt động.", reasonCode="team_inactive")
 		return base
 	if team.team_type != "Sales":
 		base["reason"] = "Chỉ Team Sales mới được nhận Lead."
+		base["reasonCode"] = "team_type_mismatch"
 		return base
 	if campus and team.campus != campus:
 		base["reason"] = "Team và cơ sở của Lead không khớp."
+		base["reasonCode"] = "campus_mismatch"
 		return base
 
 	group = (
@@ -101,13 +104,16 @@ def team_routing_readiness(
 	)
 	if not group or not group.is_active:
 		base["reason"] = "Team chưa thuộc một Group đang hoạt động."
+		base["reasonCode"] = "group_inactive"
 		return base
 	base["province"] = group.province
 	if not group.province:
 		base["reason"] = "Group chưa được gắn tỉnh."
+		base["reasonCode"] = "group_missing_province"
 		return base
 	if expected_province and group.province != expected_province:
 		base["reason"] = "Tỉnh của Team không khớp với tỉnh của Lead/Zone."
+		base["reasonCode"] = "province_mismatch"
 		return base
 
 	staff_ids = {
@@ -127,9 +133,11 @@ def team_routing_readiness(
 	)
 	if not team_lead_membership:
 		base["reason"] = "Team chưa có Trưởng nhóm đang hoạt động."
+		base["reasonCode"] = "team_lead_missing"
 		return base
 	if not recipient_members:
 		base["reason"] = "Team chưa có Sale hoặc CTV Sale đang hoạt động."
+		base["reasonCode"] = "no_recipients"
 		return base
 
 	# Zone assignments are informational legacy data.  They are intentionally
@@ -146,7 +154,11 @@ def team_routing_readiness(
 	)
 	zone_rows = [row for row in zone_rows if is_effective(row, at)]
 	base["zoneCount"] = len(zone_rows)
-	base.update(status="ready", reason="Team có tỉnh, Trưởng nhóm và Sale/CTV đang hoạt động.")
+	base.update(
+		status="ready",
+		reason="Team có tỉnh, Trưởng nhóm và Sale/CTV đang hoạt động.",
+		reasonCode="ready",
+	)
 	return base
 
 
@@ -337,6 +349,87 @@ def select_province_recipient(
 			f"/{winner['capacity']['limit'] or 'không giới hạn'})."
 		),
 		"policyVersion": "province-capacity-v1",
+	}
+
+
+def select_province_fallback_recipient(
+	province: str,
+	*,
+	campus: str | None = None,
+	team_id: str | None = None,
+	at=None,
+) -> dict[str, Any]:
+	"""Fall back to a Team's active Trưởng nhóm when no Sale/CTV is eligible.
+
+	Call this only after ``select_province_recipient`` fails with a
+	recipient-side reason (a Team covers the province but has no live Sale/CTV
+	right now). A routing failure must still name someone accountable instead
+	of leaving the Lead ownerless, so the Team's own team lead stands in until
+	a Sale/CTV becomes available.
+	"""
+	province = str(province or "").strip()
+	if not province:
+		_raise_routing_error("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
+	teams = _active_teams_for_province(province, campus=campus, team_id=team_id)
+	if not teams:
+		_raise_routing_error(
+			"TEAM_NOT_FOUND_FOR_PROVINCE", "Chưa có Team đang hoạt động quản lý tỉnh của Lead."
+		)
+	staff_ids = {
+		row.name
+		for row in frappe.get_all("CRM Staff", filters={"is_active": 1}, fields=["name"], limit_page_length=0)
+	}
+	candidates = []
+	for team in teams:
+		team_lead_staff = frappe.db.get_value("CRM Team", team["name"], "team_lead_staff")
+		if not team_lead_staff or team_lead_staff not in staff_ids:
+			continue
+		lead_membership = next(
+			(row for row in _active_memberships(team["name"], at) if row.staff == team_lead_staff),
+			None,
+		)
+		if not lead_membership:
+			continue
+		staff_row = frappe.db.get_value(
+			"CRM Staff", team_lead_staff, ["name", "full_name", "user"], as_dict=True
+		)
+		if not staff_row or not staff_row.user:
+			continue
+		if frappe.db.get_value("User", staff_row.user, "enabled") not in (1, True, "1"):
+			continue
+		candidates.append(
+			{
+				"staff": team_lead_staff,
+				"staffName": staff_row.full_name or team_lead_staff,
+				"team": team["name"],
+				"teamName": team["team_name"],
+				"function": lead_membership.function,
+				"activeLoad": active_lead_count(team_lead_staff),
+			}
+		)
+	if not candidates:
+		_raise_routing_error(
+			"NO_ELIGIBLE_RECIPIENT",
+			"Không có Team nào tại tỉnh này có Trưởng nhóm đang hoạt động để nhận tạm Lead.",
+		)
+	winner = min(
+		candidates,
+		key=lambda row: (row["activeLoad"], row["teamName"], row["staffName"], row["staff"]),
+	)
+	return {
+		"province": province,
+		"team": winner["team"],
+		"teamName": winner["teamName"],
+		"ownerStaff": winner["staff"],
+		"ownerName": winner["staffName"],
+		"function": winner["function"],
+		"capacity": {"active": winner["activeLoad"], "limit": None, "remaining": None},
+		"reason": (
+			f"Chưa có Sale/CTV khả dụng tại tỉnh {province}; tạm gán cho Trưởng nhóm "
+			f"{winner['staffName']} ({winner['teamName']}) để đảm bảo có người xử lý."
+		),
+		"policyVersion": "province-capacity-v1",
+		"fallback": True,
 	}
 
 

@@ -1,4 +1,4 @@
-"""Seed a 20-Lead assignment fixture covering the happy and the defect paths.
+"""Seed a 25-Lead assignment fixture covering the happy and the defect paths.
 
 Run locally with::
 
@@ -188,7 +188,7 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"school": "THPT Thống Nhất",
 		"major": "Software Engineering",
 	},
-	# --- Defect path: 8 Leads, one failure mode each ---------------------------
+	# --- Defect path: 13 Leads, one failure mode each (fallback repeated twice) -
 	{
 		"name": "Lý Thu Trang",
 		"phone": "0903000013",
@@ -196,9 +196,9 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 		"school": "THPT Gia Định",
 		"major": "Data Science",
 		"defect": {
-			"code": "INVALID_MISSING_MAJOR",
-			"expected": "manual_review",
-			"note": "Thiếu ngành quan tâm → xử lý Lead đóng hồ sơ.",
+			"code": "MISSING_MAJOR_OPTIONAL",
+			"expected": "assigned",
+			"note": "Ngành quan tâm là dữ liệu tuỳ chọn → Lead vẫn được xử lý và phân công theo tỉnh bình thường.",
 			"fields": {"major": None},
 		},
 	},
@@ -293,6 +293,99 @@ SCENARIOS: tuple[dict[str, Any], ...] = (
 			"fields": {"phone": DUPLICATE_PHONE},
 		},
 	},
+	# --- Fallback path: Team hợp lệ nhưng chưa có Sale/CTV đang hoạt động -------
+	# "Bình Dương" only has the one Team seeded by seed_team_management, and that
+	# Team has nothing but a Trưởng nhóm. Routing can never find a Sale/CTV here,
+	# so the batch must fall back to the team lead instead of leaving the Lead
+	# ownerless. Two Leads exercise the fallback so a bulk run can be checked too.
+	{
+		"name": "Trương Bảo Long",
+		"phone": "0903000021",
+		"province": "Bình Dương",
+		"school": "THPT Trịnh Hoài Đức",
+		"major": "Business Administration",
+		"defect": {
+			"code": "NO_ELIGIBLE_RECIPIENT_FALLBACK",
+			"expected": "assigned",
+			"note": (
+				"Team tại Bình Dương chưa có Sale/CTV đang hoạt động → tạm phân công "
+				"cho Trưởng nhóm để đảm bảo có người xử lý."
+			),
+			"fields": {},
+		},
+	},
+	{
+		"name": "Đinh Thị Cẩm Tú",
+		"phone": "0903000022",
+		"province": "Bình Dương",
+		"school": "THPT Trịnh Hoài Đức",
+		"major": "Software Engineering",
+		"defect": {
+			"code": "NO_ELIGIBLE_RECIPIENT_FALLBACK",
+			"expected": "assigned",
+			"note": (
+				"Team tại Bình Dương chưa có Sale/CTV đang hoạt động → tạm phân công "
+				"cho Trưởng nhóm để đảm bảo có người xử lý."
+			),
+			"fields": {},
+		},
+	},
+	# --- Data-quality robustness: looks risky, must still assign -------------
+	# Each Lead below has some data quirk that a naive gate might reject, but
+	# the actual processing/routing gate (student_name + phone + province) does
+	# not care about any of them, so every one of these must still assign.
+	{
+		"name": "Ngô Thị Bảo Trâm",
+		"phone": "0903000023",
+		"province": "Ho Chi Minh City",
+		"school": "THPT Chuyên Lê Hồng Phong",
+		"major": "Data Science",
+		"defect": {
+			"code": "OPTIONAL_FIELDS_MISSING",
+			"expected": "assigned",
+			"note": (
+				"Thiếu đồng thời trường THPT và ngành quan tâm — cả hai đều là dữ liệu "
+				"tuỳ chọn → Lead vẫn được xử lý và phân công theo tỉnh bình thường."
+			),
+			"fields": {"high_school": None, "major": None},
+		},
+	},
+	{
+		"name": "Trần Nhật Huy",
+		# Deliberately messy formatting (dashes) instead of the plain digit string
+		# every other row uses, to prove intake normalizes it before routing.
+		"phone": "0903-000-024",
+		"province": "Ho Chi Minh City",
+		"school": "THPT Nguyễn Hữu Huân",
+		"major": "Digital Marketing",
+		"defect": {
+			"code": "PHONE_FORMAT_NORMALIZED",
+			"expected": "assigned",
+			"note": (
+				"Số điện thoại nhập có dấu gạch ngang → hệ thống chuẩn hoá về đúng số "
+				"và vẫn xử lý, phân công bình thường."
+			),
+			"fields": {},
+		},
+	},
+	{
+		"name": "Lâm Gia Bảo",
+		"phone": "0903000025",
+		# Everyday Vietnamese form with a "TP" prefix, not the label every other
+		# row uses -- proves the province alias resolver strips that prefix too.
+		"province": "TP Hồ Chí Minh",
+		"school": "THPT Thủ Đức",
+		"major": "Business Administration",
+		"defect": {
+			"code": "PROVINCE_ALIAS_RESOLVED",
+			"expected": "assigned",
+			"note": (
+				"Tỉnh nhập theo tên gọi thông thường (TP Hồ Chí Minh) thay vì tên trong "
+				"catalog → hệ thống vẫn nhận đúng tỉnh và phân công bình thường."
+			),
+			"fields": {},
+		},
+	},
 )
 
 
@@ -367,6 +460,19 @@ def _team_by_province() -> dict[str, str]:
 	return {
 		fixture["province"]: fixture["teams"][0]["name"] for fixture in seed_team_management.GROUP_FIXTURES
 	}
+
+
+def _canonical_province_name(province: str) -> str:
+	"""Resolve a raw or alias province label to its CRM Province docname.
+
+	A scenario may deliberately spell its province as an everyday alias (e.g.
+	"TP Hồ Chí Minh") to exercise the resolver, while the fixture's own pool
+	map is keyed by the plain label used in ``seed_team_management``. Both
+	must land on the same docname or the alias Lead would look unmanaged.
+	"""
+	from crm.api.lead_mapping import _resolve_province
+
+	return _resolve_province(province)
 
 
 def _ensure_pool(team: str) -> str:
@@ -479,7 +585,7 @@ def _submit_lead(spec: dict[str, Any], source: str, index: int, pool: str, run_t
 
 
 def execute() -> dict[str, Any]:
-	"""Reset local Lead/Student rows and seed the 20-Lead assignment fixture."""
+	"""Reset local Lead/Student rows and seed the 25-Lead assignment fixture."""
 	_assert_local_site()
 	frappe.set_user("Administrator")
 	seed_team_management.execute()
@@ -487,11 +593,15 @@ def execute() -> dict[str, Any]:
 	purged_identities = _purge_identity_graph()
 	purged_receipts = _purge_orphan_command_receipts()
 	source = seed_assignment_scenarios._active_source()
-	pools = {province: _ensure_pool(team) for province, team in _team_by_province().items()}
+	pools = {
+		_canonical_province_name(province): _ensure_pool(team)
+		for province, team in _team_by_province().items()
+	}
 	run_token = frappe.generate_hash(length=10)
 	seeded: list[dict[str, Any]] = []
 	for index, spec in enumerate(SCENARIOS, start=1):
-		lead = _submit_lead(spec, source, index, pools[spec["province"]], run_token)
+		pool = pools[_canonical_province_name(spec["province"])]
+		lead = _submit_lead(spec, source, index, pool, run_token)
 		lead_code = _require_lead_code(lead)
 		defect = spec.get("defect")
 		seeded.append(
