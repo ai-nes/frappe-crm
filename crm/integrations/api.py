@@ -16,6 +16,42 @@ _WORLDFONE_CALLUUID_RE = re.compile(r"^\d+\.\d+$")
 _WORLDFONE_BASE_URL = "https://apps.worldfone.cloud/externalcrm"
 
 
+def _recording_range_header() -> str | None:
+	request = getattr(frappe, "request", None)
+	headers = getattr(request, "headers", None)
+	if not headers:
+		return None
+	range_header = str(headers.get("Range") or "").strip()
+	return range_header or None
+
+
+def _parse_byte_range(range_header: str, total_length: int) -> tuple[int, int] | None:
+	"""Parse one HTTP byte range, returning inclusive start/end offsets."""
+	if total_length <= 0 or not range_header.lower().startswith("bytes="):
+		return None
+
+	specification = range_header[6:].strip()
+	if not specification or "," in specification or "-" not in specification:
+		return None
+	start_text, end_text = (part.strip() for part in specification.split("-", 1))
+	try:
+		if start_text:
+			start = int(start_text)
+			end = int(end_text) if end_text else total_length - 1
+		else:
+			suffix_length = int(end_text)
+			if suffix_length <= 0:
+				return None
+			start = max(total_length - suffix_length, 0)
+			end = total_length - 1
+	except ValueError:
+		return None
+
+	if start < 0 or start >= total_length or end < start:
+		return None
+	return start, min(end, total_length - 1)
+
+
 def _worldfone_config(name: str, default: str = "") -> str:
 	"""Read Worldfone settings without ever exposing them in API payloads."""
 	config_key = f"crm_worldfone_{name}"
@@ -415,19 +451,41 @@ def get_recording_url(call_log_name: str):
 	if not _recording_url_allowed(recording_url, telephony_medium, is_worldfone_call):
 		frappe.throw(_("Recording provider is not allowed"), frappe.DoesNotExistError)
 	auth = _get_recording_credentials(telephony_medium)
+	range_header = _recording_range_header()
 	with requests.get(
 		recording_url,
 		auth=auth,
+		headers={"Range": range_header} if range_header else None,
 		stream=True,
 		timeout=10,
 		allow_redirects=False,
 	) as r:
 		if 300 <= r.status_code < 400:
 			frappe.throw(_("Recording provider redirect is not allowed"), frappe.DoesNotExistError)
-		r.raise_for_status()
-		response = Response()
-		response.data = r.content
-		response.mimetype = "audio/mpeg"
+		if r.status_code not in {200, 206, 416}:
+			r.raise_for_status()
+
+		body = r.content
+		status = r.status_code
+		content_range = r.headers.get("Content-Range")
+		try:
+			content_length = int(r.headers.get("Content-Length") or len(body))
+		except (TypeError, ValueError):
+			content_length = len(body)
+		if range_header and status == 200:
+			byte_range = _parse_byte_range(range_header, content_length)
+			if byte_range:
+				start, end = byte_range
+				body = body[start : end + 1]
+				status = 206
+				content_range = f"bytes {start}-{end}/{content_length}"
+
+		content_type = (r.headers.get("Content-Type") or "audio/mpeg").split(";", 1)[0]
+		response = Response(body, status=status, mimetype=content_type)
+		response.headers["Accept-Ranges"] = r.headers.get("Accept-Ranges", "bytes")
+		response.headers["Content-Length"] = str(len(body))
+		if content_range:
+			response.headers["Content-Range"] = content_range
 	return response
 
 
