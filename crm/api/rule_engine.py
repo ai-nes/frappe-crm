@@ -13,12 +13,13 @@ from crm.fcrm.rule_engine import (
 	active_rule_catalog,
 	fact_metadata,
 	normalize_rule_data,
+	normalize_rule_version_data,
 )
-from crm.fcrm.rule_engine import normalize_rule_version_data
 
 ADMIN_ROLES = frozenset({"Business Admin", "Admissions Director", "System Manager"})
 VERSION_FIELDS = [
 	"name",
+	"owner",
 	"version_id",
 	"version_name",
 	"description",
@@ -31,6 +32,7 @@ VERSION_FIELDS = [
 	"published_at",
 	"published_by",
 	"archive_reason",
+	"creation",
 	"modified",
 ]
 RULE_FIELDS = [
@@ -170,6 +172,14 @@ def _assert_draft(version) -> None:
 		)
 
 
+def _assert_publishable(version) -> None:
+	if version.is_active or version.status not in {"draft", "archived"}:
+		frappe.throw(
+			_("Only an inactive draft or archived CRM Rule Version can be published."),
+			frappe.PermissionError,
+		)
+
+
 def _assert_expected_version(version, expected_revision) -> None:
 	expected = _expected_revision(expected_revision, "expected_version_revision")
 	if expected != int(version.revision or 0):
@@ -189,11 +199,37 @@ def _bump_version(version) -> None:
 	)
 
 
+def _archive_version_records(version, reason: str) -> None:
+	archive_reason = str(reason or "Archived by Business Admin").strip()[:2000]
+	new_revision = int(version.revision or 0) + 1
+	for rule_name in frappe.get_all(
+		"CRM Rule", filters={"rule_version": version.name}, pluck="name", limit_page_length=MAX_CATALOG_RULES
+	):
+		frappe.db.set_value(
+			"CRM Rule",
+			rule_name,
+			{"status": "archived", "enabled": 0, "archive_reason": archive_reason},
+			update_modified=False,
+		)
+	frappe.db.set_value(
+		"CRM Rule Version",
+		version.name,
+		{
+			"status": "archived",
+			"is_active": 0,
+			"revision": new_revision,
+			"archive_reason": archive_reason,
+		},
+		update_modified=True,
+	)
+
+
 def _version_payload(row, rules_count: int | None = None) -> dict:
 	as_dict = getattr(row, "as_dict", None)
 	data = as_dict() if callable(as_dict) else dict(row)
 	payload = {
 		"name": data.get("name"),
+		"owner": data.get("owner"),
 		"version_id": data.get("version_id"),
 		"version_name": data.get("version_name") or "",
 		"description": data.get("description") or "",
@@ -206,6 +242,7 @@ def _version_payload(row, rules_count: int | None = None) -> dict:
 		"published_at": data.get("published_at"),
 		"published_by": data.get("published_by"),
 		"archive_reason": data.get("archive_reason"),
+		"creation": data.get("creation"),
 		"modified": data.get("modified"),
 	}
 	if rules_count is not None:
@@ -556,7 +593,7 @@ def publish_rule_version(name: str, expected_revision: int | str) -> dict:
 	_lock_all_versions()
 	version = _get_version(name)
 	_assert_expected_version(version, expected_revision)
-	_assert_draft(version)
+	_assert_publishable(version)
 	rows = frappe.get_all(
 		"CRM Rule",
 		filters={"rule_version": version.name},
@@ -595,13 +632,14 @@ def publish_rule_version(name: str, expected_revision: int | str) -> dict:
 			},
 			update_modified=False,
 		)
-	for old in frappe.get_all(
+	for old_name in frappe.get_all(
 		"CRM Rule Version",
-		filters={"is_active": 1, "name": ["!=", version.name]},
+		filters={"status": "published", "name": ["!=", version.name]},
 		pluck="name",
 		limit_page_length=MAX_CATALOG_RULES,
 	):
-		frappe.db.set_value("CRM Rule Version", old, "is_active", 0, update_modified=False)
+		old_version = _get_version(old_name)
+		_archive_version_records(old_version, f"Superseded by {version.version_id}")
 	frappe.db.set_value(
 		"CRM Rule Version",
 		version.name,
@@ -635,29 +673,10 @@ def archive_rule_version(
 		return _version_payload(version, frappe.db.count("CRM Rule", {"rule_version": version.name}))
 	if version.status not in {"draft", "published"}:
 		frappe.throw(_("CRM Rule Version status is invalid."), frappe.ValidationError)
-	new_revision = int(version.revision or 0) + 1
-	archive_reason = str(reason or "Archived by Business Admin").strip()[:2000]
-	for rule_name in frappe.get_all(
-		"CRM Rule", filters={"rule_version": version.name}, pluck="name", limit_page_length=MAX_CATALOG_RULES
-	):
-		frappe.db.set_value(
-			"CRM Rule",
-			rule_name,
-			{"status": "archived", "enabled": 0, "archive_reason": archive_reason},
-			update_modified=False,
-		)
-	frappe.db.set_value(
-		"CRM Rule Version",
-		version.name,
-		{
-			"status": "archived",
-			"is_active": 0,
-			"revision": new_revision,
-			"archive_reason": archive_reason,
-		},
-		update_modified=True,
+	_archive_version_records(version, reason or "Archived by Business Admin")
+	return _version_payload(
+		_get_version(version.name), frappe.db.count("CRM Rule", {"rule_version": version.name})
 	)
-	return _version_payload(_get_version(version.name), frappe.db.count("CRM Rule", {"rule_version": version.name}))
 
 
 @frappe.whitelist()
