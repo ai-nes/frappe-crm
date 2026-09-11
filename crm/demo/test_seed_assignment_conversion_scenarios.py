@@ -5,6 +5,7 @@ from crm.demo.seed_assignment_conversion_scenarios import (
 	DUPLICATE_PHONE,
 	SCENARIOS,
 	UNMANAGED_PROVINCE,
+	_intake_namespace,
 	_team_by_province,
 )
 
@@ -22,11 +23,7 @@ class TestSeedAssignmentConversionScenarios(TestCase):
 			self.assertNotIn("id", row)
 
 	def test_thirteen_leads_are_assignable_and_eight_carry_one_defect(self):
-		happy = [
-			row
-			for row in SCENARIOS
-			if "defect" not in row or row["defect"]["expected"] == "assigned"
-		]
+		happy = [row for row in SCENARIOS if "defect" not in row or row["defect"]["expected"] == "assigned"]
 		defects = [row for row in SCENARIOS if "defect" in row]
 		self.assertEqual(len(happy), 15)
 		self.assertEqual(len(defects), 8)
@@ -66,6 +63,13 @@ class TestSeedAssignmentConversionScenarios(TestCase):
 		)
 		for row in SCENARIOS:
 			self.assertIn(row["province"], teams)
+
+	def test_each_fixture_run_uses_a_distinct_intake_namespace(self):
+		first = _intake_namespace("first-run")
+		second = _intake_namespace("second-run")
+
+		self.assertNotEqual(first, second)
+		self.assertTrue(first.startswith("local-assignment-conversion-20260908:run:"))
 
 	def test_the_unmanaged_province_defect_targets_a_province_without_a_team(self):
 		"""The routing defect only fires while no seeded Team covers that province."""
