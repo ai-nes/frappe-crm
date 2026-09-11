@@ -817,6 +817,53 @@ class TestDirectorStudents(FrappeTestCase):
 		)
 		self.assertFalse(calls[0]["summaryAvailable"])
 
+	def test_student_call_records_merges_canonical_source_record_id(self):
+		call_log = frappe._dict(
+			name="1787883563.580456",
+			type="Incoming",
+			status="Completed",
+			from_number="0775767488",
+			to="1200",
+			duration=354,
+			start_time="2026-09-09 20:30:00",
+			creation="2026-09-09 20:30:00",
+			recording_url="https://apps.worldfone.cloud/externalcrm/playback2.php?calluuid=1787883563.580456",
+			telephony_medium="Manual",
+			medium="Worldfone",
+			caller=None,
+			receiver=None,
+			note=None,
+		)
+		canonical = frappe._dict(
+			name="INTX-CALL-1",
+			interaction_datetime="2026-09-09 20:30:00",
+			interaction_type="PHONE_CALL",
+			channel="phone",
+			direction="inbound",
+			summary="phone inbound",
+			notes="AI đã phân tích cuộc gọi.",
+			source_namespace="worldfone",
+			source_record_id="1787883563.580456",
+			external_id="worldfone:1787883563.580456",
+		)
+
+		with (
+			patch.object(director_students, "_table_exists", return_value=True),
+			patch.object(director_students.frappe, "get_list", return_value=[call_log]),
+		):
+			calls = director_students._student_call_records(
+				"ENR-1",
+				[canonical],
+				frappe._dict(student_name="Student Demo", phone="0775767488"),
+				{},
+			)
+
+		self.assertEqual(len(calls), 1)
+		self.assertEqual(calls[0]["id"], "1787883563.580456")
+		self.assertEqual(calls[0]["interactionId"], "INTX-CALL-1")
+		self.assertEqual(calls[0]["summary"], "AI đã phân tích cuộc gọi.")
+		self.assertEqual(calls[0]["durationSeconds"], 354)
+
 	def test_student_call_records_include_transcript_from_linked_note(self):
 		call_log = frappe._dict(
 			name="CALL-TRANSCRIPT-1",
