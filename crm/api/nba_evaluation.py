@@ -608,6 +608,18 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"addresses_opportunities": list(action.get("addresses_opportunities") or []),
 				"allowed_channels": [channel] if channel not in (None, "NONE") else [],
 				"allowed_actors": list(action.get("allowed_actors") or []),
+				# Action eligibility facts are authoritative Frappe projections. Keep
+				# them explicit: the NBA catalog treats an omitted fact as UNKNOWN
+				# and therefore applies its fail-closed WAIT policy.
+				"in_candidate_set": action.get("in_candidate_set"),
+				"enabled": action.get("enabled"),
+				"effective": action.get("effective"),
+				"actor_allowed": action.get("actor_allowed"),
+				"requires_approval": action.get("requires_approval"),
+				"academic_eligible": action.get("academic_eligible"),
+				"duplicate_active": action.get("duplicate_active"),
+				"recently_completed": action.get("recently_completed"),
+				"time_allowed": action.get("time_allowed"),
 				"addresses_needs": list(action.get("addresses_needs") or []),
 				"desired_outcomes": list(action.get("desired_outcomes") or []),
 				"collects_information": bool(action.get("collects_information")),
@@ -615,6 +627,7 @@ def _shape_eligible_action_set(eligible: Mapping, *, timezone: str) -> dict:
 				"execution_parameter_schema": {},
 				"default_parameters": {},
 				"hard_constraints": {
+					"requires_approval": action.get("requires_approval"),
 					"requires_parent_authority": bool(
 						action.get("requires_parent_authority") or action.get("category") == "PARENT"
 					),
