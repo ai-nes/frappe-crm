@@ -68,9 +68,9 @@ class CRMRuleVersion(Document):
                 "ruleset_digest",
             )
             changed = any(before.get(fieldname) != self.get(fieldname) for fieldname in managed_fields)
-            if previous_status in {"active", "superseded"} and changed and not lifecycle:
+            if previous_status in {"testing", "active", "archived"} and changed and not lifecycle:
                 frappe.throw(
-                    "Active or superseded CRM Rule Versions are immutable. Clone the snapshot to edit.",
+                    "Testing, active and archived CRM Rule Versions are immutable. Clone the snapshot to edit.",
                     frappe.PermissionError,
                 )
             if previous_status == "draft" and changed and not authoring:

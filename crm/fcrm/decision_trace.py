@@ -31,6 +31,7 @@ RULE_DECISION_FIELDS = frozenset(
 		"matched_rule_ids",
 		"reason_codes",
 		"business_reason",
+		"sales_next_step",
 		"affected_actions",
 		"rule_version",
 		"rule_version_digest",
@@ -56,6 +57,7 @@ TRACE_VALUE_FIELDS = frozenset(
 		"matched_rule_ids",
 		"reason_codes",
 		"business_reason",
+		"sales_next_step",
 		"affected_actions",
 		"rule_version",
 		"rule_version_digest",
@@ -208,7 +210,13 @@ def _text(
 def validate_rule_decision(value: Any) -> dict[str, Any]:
 	"""Validate and normalize one mandatory rule decision projection."""
 	value = _parse_json(value, "rule_decision")
-	if not isinstance(value, Mapping) or set(value) != RULE_DECISION_FIELDS:
+	legacy_fields = RULE_DECISION_FIELDS - {"sales_next_step"}
+	if not isinstance(value, Mapping):
+		raise ValueError("rule_decision contains unsupported or missing fields")
+	if set(value) == legacy_fields:
+		value = dict(value)
+		value["sales_next_step"] = "Chưa có bước tiếp theo được xác định."
+	if set(value) != RULE_DECISION_FIELDS:
 		raise ValueError("rule_decision contains unsupported or missing fields")
 	outcome = value.get("outcome")
 	if outcome not in OUTCOMES:
@@ -228,7 +236,7 @@ def validate_rule_decision(value: Any) -> dict[str, Any]:
 		raise ValueError("rule_decision reason_codes is invalid")
 	if reasons != sorted(set(reasons)):
 		raise ValueError("rule_decision reason_codes must be sorted and unique")
-	if not isinstance(actions, list) or len(actions) > 20 or any(
+	if not isinstance(actions, list) or len(actions) > 30 or any(
 		not isinstance(item, str) or item not in ACTION_CODES for item in actions
 	):
 		raise ValueError("rule_decision affected_actions is invalid")
@@ -257,6 +265,7 @@ def validate_rule_decision(value: Any) -> dict[str, Any]:
 		"matched_rule_ids": list(matched),
 		"reason_codes": list(reasons),
 		"business_reason": _text(value.get("business_reason"), "rule_decision.business_reason"),
+		"sales_next_step": _text(value.get("sales_next_step"), "rule_decision.sales_next_step"),
 		"affected_actions": list(actions),
 		"rule_version": rule_version,
 		"rule_version_digest": value["rule_version_digest"],

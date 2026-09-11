@@ -34,7 +34,7 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 				frappe.db.set_value("CRM Rule Version", version.name, "status", version.status, update_modified=False)
 				frappe.db.set_value(
 					"CRM Rule",
-					{"rule_version": version.name, "status": "superseded"},
+					{"rule_version": version.name, "status": ["in", ["superseded", "archived"]]},
 					"status",
 					"active",
 					update_modified=False,
@@ -97,7 +97,8 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 
 	def test_activation_builds_complete_catalog_and_authoritative_pointer(self):
 		rule = rule_engine.create_rule(self.version_id, 0, **self._rule())
-		activated = rule_engine.activate_rule_version(self.version_id, self._settings_revision(), 1)
+		testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
+		activated = rule_engine.activate_rule_version(self.version_id, self._settings_revision(), testing["revision"])
 		self.assertEqual(activated["status"], "active")
 		self.assertRegex(activated["ruleset_digest"], r"^[a-f0-9]{64}$")
 		self.assertEqual(
@@ -125,6 +126,45 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 		self.assertNotIn("condition", catalog["rules"][0])
 		self.assertNotIn("action", catalog["rules"][0])
 
+	def test_status_put_follows_draft_testing_active_archived_lifecycle(self):
+		rule_engine.create_rule(self.version_id, 0, **self._rule())
+		testing = rule_engine.update_rule_version(
+			self.version_id,
+			expected_revision=1,
+			status="testing",
+		)
+		self.assertEqual(testing["status"], "testing")
+		self.assertEqual(testing["revision"], 2)
+		active = rule_engine.update_rule_version(
+			self.version_id,
+			expected_revision=testing["revision"],
+			status="active",
+			expected_settings_revision=testing["settings_revision"],
+		)
+		self.assertEqual(active["status"], "active")
+		self.assertTrue(active["is_active"])
+
+		with self.assertRaises(frappe.ValidationError):
+			rule_engine.update_rule_version(
+				self.version_id,
+				expected_revision=active["revision"],
+				status="draft",
+			)
+
+	def test_status_put_allows_testing_back_to_draft_and_rejects_direct_draft_active(self):
+		rule_engine.create_rule(self.version_id, 0, **self._rule())
+		with self.assertRaises(frappe.ValidationError):
+			rule_engine.activate_rule_version(self.version_id, self._settings_revision(), 1)
+		with self.assertRaises(frappe.ValidationError):
+			rule_engine.update_rule_version(self.version_id, expected_revision=1, status="active")
+		testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
+		draft = rule_engine.update_rule_version(
+			self.version_id,
+			expected_revision=testing["revision"],
+			status="draft",
+		)
+		self.assertEqual(draft["status"], "draft")
+
 	def test_activation_accepts_global_rule_scope_for_the_complete_catalog(self):
 		rule = rule_engine.create_rule(
 			self.version_id,
@@ -137,7 +177,8 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 				business_reason_template="AI work is blocked by {rule_name}.",
 			),
 		)
-		rule_engine.activate_rule_version(self.version_id, self._settings_revision(), 1)
+		testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
+		rule_engine.activate_rule_version(self.version_id, self._settings_revision(), testing["revision"])
 		catalog = rule_engine.get_active_rule_catalog()
 		self.assertEqual(catalog["rules"][0]["rule_id"], rule["rule_id"])
 		self.assertEqual(catalog["rules"][0]["feature"], "all")
@@ -155,9 +196,20 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 		self.assertEqual(updated["business_reason_template"], "{action} is waiting on {rule_name}.")
 		self.assertEqual(rule_engine.list_rules(self.version_id)["rules"][0]["outcome"], "WAIT")
 
+	def test_set_rule_enabled_toggles_only_the_draft_rule_and_bumps_parent_revision(self):
+		rule = rule_engine.create_rule(self.version_id, 0, **self._rule(enabled=True))
+		updated = rule_engine.set_rule_enabled(rule["name"], 1, False)
+		self.assertFalse(updated["enabled"])
+		self.assertEqual(updated["revision"], 1)
+		self.assertEqual(rule_engine.get_rule_version(self.version_id)["revision"], 2)
+		testing = rule_engine.update_rule_version(self.version_id, expected_revision=2, status="testing")
+		with self.assertRaises(frappe.PermissionError):
+			rule_engine.set_rule_enabled(rule["name"], testing["revision"], True)
+
 	def test_clone_copies_full_independent_draft_snapshot(self):
 		rule_engine.create_rule(self.version_id, 0, **self._rule(enabled=False))
-		rule_engine.activate_rule_version(self.version_id, self._settings_revision(), 1)
+		testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
+		rule_engine.activate_rule_version(self.version_id, self._settings_revision(), testing["revision"])
 		clone_id = f"{self.version_id}-NEXT"
 		clone = rule_engine.clone_rule_version(self.version_id, clone_id, "Next Test Version")
 		self.assertEqual(clone["status"], "draft")
@@ -166,17 +218,20 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 		self.assertFalse(cloned_rule["enabled"])
 		self.assertEqual(cloned_rule["status"], "draft")
 
-	def test_activation_cas_rejects_stale_pointer_and_immutable_lookup_accepts_superseded(self):
+	def test_activation_cas_rejects_stale_pointer_and_immutable_lookup_accepts_archived(self):
 		rule_engine.create_rule(self.version_id, 0, **self._rule())
-		first = rule_engine.activate_rule_version(self.version_id, self._settings_revision(), 1)
+		first_testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
+		first = rule_engine.activate_rule_version(self.version_id, self._settings_revision(), first_testing["revision"])
 		clone_id = f"{self.version_id}-NEXT"
 		rule_engine.clone_rule_version(self.version_id, clone_id)
-		second = rule_engine.activate_rule_version(clone_id, self._settings_revision(), 0)
+		second_testing = rule_engine.update_rule_version(clone_id, expected_revision=0, status="testing")
+		second = rule_engine.activate_rule_version(clone_id, self._settings_revision(), second_testing["revision"])
 		with self.assertRaises(frappe.ValidationError):
 			rule_engine.activate_rule_version(self.version_id, 1, first["revision"])
 		catalog = rule_engine.get_rule_catalog(self.version_id, first["ruleset_digest"])
 		self.assertEqual(catalog["rule_version"], self.version_id)
 		self.assertEqual(catalog["ruleset_digest"], first["ruleset_digest"])
+		self.assertEqual(frappe.db.get_value("CRM Rule Version", self.version_id, "status"), "archived")
 		self.assertEqual(second["status"], "active")
 
 	def test_group_reference_and_immutable_direct_writes_are_rejected(self):

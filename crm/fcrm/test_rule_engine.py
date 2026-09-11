@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from crm.fcrm.rule_engine import (
+	ACTION_CATALOG,
 	CATALOG_FEATURES,
 	FEATURE_SCOPES,
 	RUNTIME_FEATURES,
@@ -68,6 +69,13 @@ def test_feature_registry_has_five_capabilities_and_one_global_scope():
 	assert FEATURE_SCOPES == {"all", *RUNTIME_FEATURES}
 	assert CATALOG_FEATURES == set(RUNTIME_FEATURES)
 	assert "all" not in CATALOG_FEATURES
+
+
+def test_rule_action_catalog_covers_the_canonical_crm_action_taxonomy():
+	assert len(ACTION_CATALOG) == 79
+	assert len(set(ACTION_CATALOG)) == 79
+	assert "VIDEO_CALL" in ACTION_CATALOG
+	assert "REQUEST_SUPERVISOR_REVIEW" in ACTION_CATALOG
 
 
 @pytest.mark.parametrize("legacy", ("intent", "scoring_ai"))

@@ -6,7 +6,7 @@
  "creation": "2026-09-10 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["rule_version", "rule_id", "group_code", "rule_name", "description", "feature", "rule_type", "outcome", "precedence", "unknown_policy", "reason_code", "business_reason_template", "target_actions", "conditions", "status", "enabled", "revision", "schema_version"],
+ "field_order": ["rule_version", "rule_id", "group_code", "rule_name", "description", "feature", "rule_type", "outcome", "precedence", "unknown_policy", "reason_code", "business_reason_template", "sales_next_step_template", "target_actions", "conditions", "status", "enabled", "revision", "schema_version"],
  "fields": [
   {"fieldname": "rule_version", "fieldtype": "Link", "label": "Rule Version", "options": "CRM Rule Version", "reqd": 1, "in_list_view": 1},
   {"fieldname": "rule_id", "fieldtype": "Data", "label": "Rule ID", "reqd": 1, "in_list_view": 1},
@@ -20,9 +20,10 @@
   {"fieldname": "unknown_policy", "fieldtype": "Select", "label": "Unknown Fact Policy", "options": "WAIT\nSTOP\nPASS", "default": "WAIT", "reqd": 1},
   {"fieldname": "reason_code", "fieldtype": "Data", "label": "Reason Code", "default": "RULE_MATCHED", "reqd": 1},
   {"fieldname": "business_reason_template", "fieldtype": "Small Text", "label": "Business Reason Template", "default": "{action} is governed by {rule_name}.", "reqd": 1},
+  {"fieldname": "sales_next_step_template", "fieldtype": "Small Text", "label": "Sales Next Step Template", "default": "Chưa có bước tiếp theo được xác định.", "reqd": 1},
   {"fieldname": "target_actions", "fieldtype": "JSON", "label": "Target Actions", "description": "Optional JSON array of closed action codes affected by this rule."},
   {"fieldname": "conditions", "fieldtype": "JSON", "label": "Conditions", "description": "Canonical bounded array of fact/operator/value conditions.", "reqd": 1},
-  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "draft\nactive\nsuperseded", "default": "draft", "read_only": 1, "in_list_view": 1},
+  {"fieldname": "status", "fieldtype": "Select", "label": "Status", "options": "draft\ntesting\nactive\narchived", "default": "draft", "read_only": 1, "in_list_view": 1},
   {"fieldname": "enabled", "fieldtype": "Check", "label": "Enabled", "default": "1", "read_only": 1, "in_list_view": 1},
   {"fieldname": "revision", "fieldtype": "Int", "label": "Revision", "default": "0", "read_only": 1, "non_negative": 1, "in_list_view": 1},
   {"fieldname": "schema_version", "fieldtype": "Data", "label": "Schema Version", "default": "rule-catalog", "read_only": 1}

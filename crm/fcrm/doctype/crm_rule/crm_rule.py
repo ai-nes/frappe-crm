@@ -65,6 +65,7 @@ class CRMRule(Document):
                 "unknown_policy",
                 "reason_code",
                 "business_reason_template",
+                "sales_next_step_template",
                 "target_actions",
                 "conditions",
                 "enabled",
@@ -102,6 +103,7 @@ class CRMRule(Document):
         self.unknown_policy = data["unknown_policy"]
         self.reason_code = data["reason_code"]
         self.business_reason_template = data["business_reason_template"]
+        self.sales_next_step_template = data["sales_next_step_template"]
         self.conditions = json.dumps(data["conditions"], ensure_ascii=False)
         self.target_actions = json.dumps(data["target_actions"], ensure_ascii=False)
         self.status = str(self.status or data["status"]).lower()

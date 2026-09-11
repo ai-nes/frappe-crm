@@ -2004,6 +2004,11 @@ def _student_call_records(
 
 	calls: list[dict[str, Any]] = []
 	seen_call_ids: set[str] = set()
+	call_interactions = {
+		str(ix.get("reference_docname")): ix
+		for ix in interactions
+		if ix.get("reference_doctype") == "Call Log" and ix.get("reference_docname")
+	}
 
 	if _table_exists("Call Log"):
 		try:
@@ -2041,6 +2046,7 @@ def _student_call_records(
 		note_projections = _call_note_projections(call_logs)
 		for cl in call_logs:
 			seen_call_ids.add(cl.get("name"))
+			canonical_interaction = call_interactions.get(str(cl.get("name")))
 			is_inbound = _fold(cl.get("type") or "") in {"incoming", "inbound"}
 			duration_secs = int(cl.get("duration") or 0)
 			status_fold = _fold(cl.get("status") or "")
@@ -2069,9 +2075,9 @@ def _student_call_records(
 				phone_number = cl.get("to") or student_phone
 
 			note_projection = note_projections.get(str(cl.get("note") or ""), {})
-			topic = note_projection.get("summary") or "Cuộc gọi tư vấn"
-			summary = note_projection.get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
-			summary_available = bool(note_projection.get("summary"))
+			topic = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or "Cuộc gọi tư vấn"
+			summary = note_projection.get("summary") or (canonical_interaction or {}).get("summary") or f"Cuộc gọi {cl.get('status') or ''}"
+			summary_available = bool(note_projection.get("summary") or (canonical_interaction or {}).get("summary"))
 
 			calls.append(
 				{
@@ -2088,7 +2094,9 @@ def _student_call_records(
 					"topic": topic,
 					"summary": summary,
 					"summaryAvailable": summary_available,
+					"summaryStatus": "COMPLETED" if summary_available else "NOT_AVAILABLE",
 					"transcript": note_projection.get("transcript"),
+					"interactionId": canonical_interaction.get("name") if canonical_interaction else None,
 					"recordingUrl": get_recording_url_path(
 						cl.get("name"),
 						cl.get("recording_url"),
@@ -2159,6 +2167,9 @@ def _student_call_records(
 				"durationSeconds": 0,
 				"topic": topic,
 				"summary": summary,
+				"summaryAvailable": True,
+				"summaryStatus": "COMPLETED",
+				"interactionId": str(ix.get("name")),
 				"recordingUrl": None,
 			}
 		)
