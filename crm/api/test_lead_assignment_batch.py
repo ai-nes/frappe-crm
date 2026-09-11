@@ -440,6 +440,95 @@ class TestLeadAssignmentBatchHelpers(TestCase):
 		self.assertEqual(result["function"], "Sale")
 		self.assertEqual(result["policyVersion"], "province-capacity-v1")
 
+	def test_fallback_recipient_selects_team_lead_when_no_sale_or_ctv_active(self):
+		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
+		lead_membership = frappe._dict(staff="STAFF-LEAD", function="Lead Sale")
+
+		def get_value_side_effect(doctype, *args, **kwargs):
+			if doctype == "CRM Team":
+				return "STAFF-LEAD"
+			if doctype == "CRM Staff":
+				return frappe._dict(name="STAFF-LEAD", full_name="Trưởng nhóm Bắc", user="lead@x.com")
+			if doctype == "User":
+				return 1
+			return None
+
+		with (
+			patch.object(team_routing, "_active_teams_for_province", return_value=teams),
+			patch.object(team_routing.frappe, "get_all", return_value=[frappe._dict(name="STAFF-LEAD")]),
+			patch.object(team_routing.frappe.db, "get_value", side_effect=get_value_side_effect),
+			patch.object(team_routing, "_active_memberships", return_value=[lead_membership]),
+			patch.object(team_routing, "active_lead_count", return_value=0),
+		):
+			result = team_routing.select_province_fallback_recipient("Ho Chi Minh City")
+
+		self.assertEqual(result["ownerStaff"], "STAFF-LEAD")
+		self.assertEqual(result["team"], "TEAM-NORTH")
+		self.assertEqual(result["function"], "Lead Sale")
+		self.assertTrue(result["fallback"])
+
+	def test_fallback_recipient_fails_when_no_team_has_an_active_team_lead(self):
+		teams = [{"name": "TEAM-NORTH", "team_name": "Đội Tư vấn Khu Bắc", "campus": "CAMPUS-1"}]
+		with (
+			patch.object(team_routing, "_active_teams_for_province", return_value=teams),
+			patch.object(team_routing.frappe, "get_all", return_value=[]),
+			patch.object(team_routing.frappe.db, "get_value", return_value=None),
+			patch.object(team_routing, "_active_memberships", return_value=[]),
+		):
+			with self.assertRaises(frappe.ValidationError) as context:
+				team_routing.select_province_fallback_recipient("Ho Chi Minh City")
+		self.assertEqual(context.exception.code, "NO_ELIGIBLE_RECIPIENT")
+
+	def test_batch_recipient_falls_back_to_team_lead_when_no_eligible_recipient(self):
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province="Ho Chi Minh City", branch="CAMPUS-1")
+		no_eligible = frappe.ValidationError("Không có Team đủ điều kiện: TEAM-1: chưa có Sale/CTV.")
+		no_eligible.code = "NO_ELIGIBLE_RECIPIENT"
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value="Ho Chi Minh City"),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=no_eligible),
+			patch.object(
+				lead_assignment_batch,
+				"select_province_fallback_recipient",
+				return_value={"ownerStaff": "STAFF-LEAD", "fallback": True},
+			) as fallback,
+		):
+			result = lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
+
+		fallback.assert_called_once_with("Ho Chi Minh City", campus="CAMPUS-1", team_id=None)
+		self.assertTrue(result["fallback"])
+
+	def test_batch_recipient_does_not_fall_back_when_no_team_covers_province(self):
+		batch = self._BatchScope()
+		lead = frappe._dict(name="LEAD-1", province="Unknown Province", branch="CAMPUS-1")
+		not_found = frappe.ValidationError("Chưa có Team đang hoạt động quản lý tỉnh của Lead.")
+		not_found.code = "TEAM_NOT_FOUND_FOR_PROVINCE"
+		with (
+			patch.object(lead_assignment_batch, "_canonical_province", return_value="Unknown Province"),
+			patch.object(lead_assignment_batch, "_validate_batch_scope", return_value=None),
+			patch.object(lead_assignment_batch, "select_province_recipient", side_effect=not_found),
+			patch.object(
+				lead_assignment_batch,
+				"select_province_fallback_recipient",
+				side_effect=AssertionError("must not fall back when no Team covers the province"),
+			),
+		):
+			with self.assertRaises(frappe.ValidationError) as context:
+				lead_assignment_batch._resolve_batch_recipient(batch, lead, {})
+		self.assertEqual(context.exception.code, "TEAM_NOT_FOUND_FOR_PROVINCE")
+
+	def test_reset_item_expands_bare_error_code_into_a_specific_reason(self):
+		item = MagicMock()
+		lead_assignment_batch._reset_item(item, status="manual_review", reason="NOT_PROCESSED")
+		self.assertEqual(item.reason, "Lead chưa qua bước Xử lý Lead nên chưa thể phân công.")
+
+	def test_reset_item_keeps_a_specific_message_untouched(self):
+		item = MagicMock()
+		specific = "Không có Team đủ điều kiện: Đội Bắc: Team chưa có Sale hoặc CTV Sale đang hoạt động."
+		lead_assignment_batch._reset_item(item, status="manual_review", reason=specific)
+		self.assertEqual(item.reason, specific)
+
 	class _RetryItem:
 		"""Minimal stand-in for one batch child row."""
 

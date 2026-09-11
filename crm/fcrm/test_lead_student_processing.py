@@ -93,6 +93,101 @@ class TestLeadStudentProcessingContract(unittest.TestCase):
 			)
 		)
 
+	def test_ownership_target_accepts_team_lead_when_only_recipients_are_missing(self):
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		lead_doc = {"branch": "CAMPUS-1", "province": "Ho Chi Minh City"}
+		membership = type("Membership", (), {"staff": "STAFF-LEAD", "function": "Lead Sale"})()
+
+		def get_value_side_effect(doctype, *args, **kwargs):
+			if doctype == "CRM Team":
+				return "STAFF-LEAD"
+			if doctype == "CRM Staff":
+				return frappe._dict(name="STAFF-LEAD", is_active=1, user="lead@x.com", campus="CAMPUS-1")
+			if doctype == "User":
+				return 1
+			return None
+
+		with (
+			patch.object(lead_processing.frappe.db, "get_value", side_effect=get_value_side_effect),
+			patch.object(
+				lead_processing,
+				"team_routing_readiness",
+				return_value={
+					"status": "not_ready",
+					"reason": "Team chưa có Sale hoặc CTV Sale đang hoạt động.",
+					"reasonCode": "no_recipients",
+				},
+			),
+			patch.object(lead_processing, "_active_memberships", return_value=[membership]),
+			patch.object(lead_processing, "resolve_crm_profile", return_value="lead_sales"),
+			patch.object(lead_processing.frappe, "get_roles", return_value=["Lead Sale"]),
+		):
+			# Must not raise: the Team's own Trưởng nhóm is a valid fallback owner
+			# when the only readiness gap is a missing active Sale/CTV.
+			lead_processing._validate_lead_ownership_target(lead_doc, "STAFF-LEAD", "TEAM-1")
+
+	def test_ownership_target_still_rejects_team_lead_for_other_readiness_gaps(self):
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		lead_doc = {"branch": "CAMPUS-1", "province": "Ho Chi Minh City"}
+		with (
+			patch.object(
+				lead_processing.frappe.db,
+				"get_value",
+				side_effect=lambda doctype, *a, **k: "STAFF-LEAD" if doctype == "CRM Team" else None,
+			),
+			patch.object(
+				lead_processing,
+				"team_routing_readiness",
+				return_value={
+					"status": "not_ready",
+					"reason": "Team chưa có Trưởng nhóm đang hoạt động.",
+					"reasonCode": "team_lead_missing",
+				},
+			),
+		):
+			with self.assertRaises(lead_processing.LeadProcessingError) as ctx:
+				lead_processing._validate_lead_ownership_target(lead_doc, "STAFF-LEAD", "TEAM-1")
+		self.assertEqual(ctx.exception.code, "ROUTING_FAILED")
+
+	def test_ownership_target_accepts_a_lead_with_no_campus(self):
+		"""Campus is optional Lead metadata, never a gate on ownership assignment."""
+		from unittest.mock import patch
+
+		from crm.fcrm import lead_processing
+
+		lead_doc = {"branch": None, "province": "Ho Chi Minh City"}
+		membership = type("Membership", (), {"staff": "STAFF-SALE", "function": "Sale"})()
+
+		def get_value_side_effect(doctype, *args, **kwargs):
+			if doctype == "CRM Team":
+				return "STAFF-LEAD"
+			if doctype == "CRM Staff":
+				return frappe._dict(name="STAFF-SALE", is_active=1, user="sale@x.com", campus="CAMPUS-1")
+			if doctype == "User":
+				return 1
+			return None
+
+		with (
+			patch.object(lead_processing.frappe.db, "get_value", side_effect=get_value_side_effect),
+			patch.object(
+				lead_processing,
+				"team_routing_readiness",
+				return_value={"status": "ready", "reason": "ready", "reasonCode": "ready"},
+			),
+			patch.object(lead_processing, "_active_memberships", return_value=[membership]),
+			patch.object(lead_processing, "resolve_crm_profile", return_value="sales"),
+			patch.object(lead_processing.frappe, "get_roles", return_value=["Sale"]),
+		):
+			# Must not raise even though the Sale's own campus is set and the Lead's
+			# is not: a missing Lead campus is never grounds to block routing.
+			lead_processing._validate_lead_ownership_target(lead_doc, "STAFF-SALE", "TEAM-1")
+
 	def test_bulk_scan_buckets_every_processing_outcome(self):
 		from unittest.mock import patch
 
