@@ -4,7 +4,8 @@ import frappe
 
 METHODS = (
 	("THPT_SCORE", "Xét điểm thi tốt nghiệp THPT", 10),
-	("DIRECT_ADMISSION", "Tuyển thẳng", 20),
+	("COLLEGE_GRADUATION", "Xét tốt nghiệp Cao đẳng", 20),
+	("DIRECT_ADMISSION", "Tuyển thẳng", 30),
 )
 
 DOCUMENT_TYPES = (
@@ -43,7 +44,7 @@ DOCUMENT_TYPES = (
 	(
 		"FPT_POLYTECHNIC_DIPLOMA",
 		"01 Bản sao chứng thực Bằng tốt nghiệp Cao đẳng FPT Polytechnic",
-		"special_program",
+		"education",
 	),
 	(
 		"ACHIEVEMENT_PROOF",
@@ -102,6 +103,22 @@ DOCUMENT_TYPES = (
 	),
 )
 
+DOCUMENT_TYPE_CONDITION_KEYS = {
+	"ENGLISH_SCORE_CONVERSION_CERTIFICATE": "LANGUAGE_CERTIFICATE",
+	"ENGLISH_EXEMPTION_CERTIFICATE": "LANGUAGE_CERTIFICATE",
+	"FIRST_GENERATION_PRIORITY_FORM": "FIRST_GENERATION",
+	"INTERNATIONAL_PROGRAM_DIPLOMA": "INTERNATIONAL_PROGRAM",
+	"ACHIEVEMENT_PROOF": "ACHIEVEMENT",
+	"STUDY_NOW_PAY_LATER_APPLICATION": "STUDY_NOW_PAY_LATER",
+	"STUDY_NOW_PAY_LATER_AGREEMENT": "STUDY_NOW_PAY_LATER",
+	"FINANCIAL_HARDSHIP_PROOF": "STUDY_NOW_PAY_LATER",
+	"FAMILY_RELATIONSHIP_PROOF": "FAMILY_FE_FPT",
+	"SIBLING_BIRTH_CERTIFICATE": "FAMILY_FE_FPT",
+	"PARENT_IDENTITY_DOCUMENT": "FAMILY_FE_FPT",
+	"FAMILY_EMPLOYMENT_PROOF": "FAMILY_FE_FPT",
+	"SCHOLARSHIP_ACHIEVEMENT_PROOF": "SCHOLARSHIP",
+}
+
 BASE_ROWS = (
 	("ENROLLMENT_FORM", "BASIC_ADMISSION", "ALL", 1, "Phiếu nhập học theo biểu mẫu của nhà trường."),
 	(
@@ -154,6 +171,16 @@ THPT_RESULT_ROWS = (
 	("THPT_SCORE_CONFIRMATION", "THPT_RESULT", "ANY", 21, "Xác nhận điểm của Sở Giáo dục và Đào tạo."),
 )
 
+COLLEGE_GRADUATION_RESULT_ROWS = (
+	(
+		"FPT_POLYTECHNIC_DIPLOMA",
+		"COLLEGE_GRADUATION",
+		"ALL",
+		22,
+		"Bằng tốt nghiệp Cao đẳng FPT Polytechnic.",
+	),
+)
+
 SPECIAL_PROFILE_ROWS = {
 	"FIRST_GENERATION": (
 		(
@@ -187,15 +214,6 @@ SPECIAL_PROFILE_ROWS = {
 			"ALL",
 			33,
 			"Bằng tốt nghiệp chương trình quốc tế.",
-		),
-	),
-	"FPT_POLYTECHNIC": (
-		(
-			"FPT_POLYTECHNIC_DIPLOMA",
-			"FPT_POLYTECHNIC",
-			"ALL",
-			34,
-			"Bằng tốt nghiệp Cao đẳng FPT Polytechnic.",
 		),
 	),
 	"ACHIEVEMENT": (("ACHIEVEMENT_PROOF", "ACHIEVEMENT", "ALL", 35, "Giấy tờ chứng minh thành tích khác."),),
@@ -243,7 +261,6 @@ SPECIAL_PROFILE_DEFINITIONS = (
 	("FIRST_GENERATION", "Xét tuyển theo thế hệ 1"),
 	("LANGUAGE_CERTIFICATE", "Xét có chứng chỉ ngoại ngữ"),
 	("INTERNATIONAL_PROGRAM", "Xét có bằng tốt nghiệp chương trình quốc tế"),
-	("FPT_POLYTECHNIC", "Xét có bằng tốt nghiệp Cao đẳng FPT Polytechnic"),
 	("ACHIEVEMENT", "Xét giấy tờ các thành tích khác"),
 	("STUDY_NOW_PAY_LATER", "Xét diện Học trước – Trả sau"),
 	("FAMILY_FE_FPT", "Diện ưu đãi học phí người thân FE/FPT"),
@@ -278,22 +295,26 @@ def _rows(template_code: str) -> list[dict]:
 			for document_type, group, mode, order, instruction in BASE_ROWS
 		)
 	if template_code == "STANDARD":
-		for document_type, group, mode, order, instruction in THPT_RESULT_ROWS:
-			rows.append(
-				{
-					"doctype": "CRM Profile Template Document Type",
-					"section_code": "method",
-					"document_type": _document_type_reference(document_type),
-					"requirement_group": group,
-					"requirement_mode": mode,
-					"is_required": 1,
-					"min_required": 1,
-					"quantity": 1,
-					"order_display": order,
-					"condition_key": _condition("THPT_SCORE"),
-					"instruction": instruction,
-				}
-			)
+		for method, method_rows in (
+			("THPT_SCORE", THPT_RESULT_ROWS),
+			("COLLEGE_GRADUATION", COLLEGE_GRADUATION_RESULT_ROWS),
+		):
+			for document_type, group, mode, order, instruction in method_rows:
+				rows.append(
+					{
+						"doctype": "CRM Profile Template Document Type",
+						"section_code": "method",
+						"document_type": _document_type_reference(document_type),
+						"requirement_group": group,
+						"requirement_mode": mode,
+						"is_required": 1,
+						"min_required": 1,
+						"quantity": 1,
+						"order_display": order,
+						"condition_key": _condition(method),
+						"instruction": instruction,
+					}
+				)
 	for document_type, group, mode, order, instruction in SPECIAL_PROFILE_ROWS.get(template_code, ()):
 		rows.append(
 			{
@@ -314,16 +335,23 @@ def _rows(template_code: str) -> list[dict]:
 
 def execute() -> None:
 	for code, display_name, sort_order in METHODS:
-		if not frappe.db.exists("CRM Admission Method", code):
-			frappe.get_doc(
-				{
-					"doctype": "CRM Admission Method",
-					"code": code,
-					"display_name": display_name,
-					"enabled": 1,
-					"sort_order": sort_order,
-				}
-			).insert(ignore_permissions=True)
+		if frappe.db.exists("CRM Admission Method", code):
+			frappe.db.set_value(
+				"CRM Admission Method",
+				code,
+				{"display_name": display_name, "sort_order": sort_order},
+				update_modified=False,
+			)
+			continue
+		frappe.get_doc(
+			{
+				"doctype": "CRM Admission Method",
+				"code": code,
+				"display_name": display_name,
+				"enabled": 1,
+				"sort_order": sort_order,
+			}
+		).insert(ignore_permissions=True)
 
 	for code, label, category in DOCUMENT_TYPES:
 		document_type_name = frappe.db.get_value("CRM Document Type", {"code": code}, "name")
@@ -331,7 +359,11 @@ def execute() -> None:
 			frappe.db.set_value(
 				"CRM Document Type",
 				document_type_name,
-				{"label": label, "category": category},
+				{
+					"label": label,
+					"category": category,
+					"conditional_key": DOCUMENT_TYPE_CONDITION_KEYS.get(code),
+				},
 				update_modified=False,
 			)
 			continue
@@ -341,6 +373,7 @@ def execute() -> None:
 				"code": code,
 				"label": label,
 				"category": category,
+				"conditional_key": DOCUMENT_TYPE_CONDITION_KEYS.get(code),
 				"status": "Active",
 				"is_active": 1,
 			}

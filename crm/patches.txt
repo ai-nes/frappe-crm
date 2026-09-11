@@ -195,3 +195,7 @@ crm.patches.v1_0.cleanup_legacy_ai_insight_tables
 crm.patches.v1_0.create_business_admin_role
 crm.patches.v1_0.migrate_crm_rule_versions
 crm.patches.v1_0.bootstrap_rule_engine_catalog
+crm.patches.v1_0.migrate_college_graduation_admission_method
+crm.patches.v1_0.backfill_admission_document_type_conditions
+crm.patches.v1_0.seed_crm_message_templates
+crm.patches.v1_0.migrate_message_template_library

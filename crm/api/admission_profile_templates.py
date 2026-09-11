@@ -8,11 +8,11 @@ from typing import Any
 import frappe
 from frappe import _
 
-SUPPORTED_ADMISSION_METHOD_CODES = ("THPT_SCORE", "DIRECT_ADMISSION")
+SUPPORTED_ADMISSION_METHOD_CODES = ("THPT_SCORE", "COLLEGE_GRADUATION", "DIRECT_ADMISSION")
+LEGACY_TEMPLATE_CODES = frozenset({"SPECIAL_PROGRAM", "FPT_POLYTECHNIC"})
 TEMPLATE_ADMIN_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director"})
 TEMPLATE_STATUSES = frozenset({"Draft", "Active", "Archived"})
 TEMPLATE_KINDS = frozenset({"standard", "special"})
-LEGACY_TEMPLATE_CODES = frozenset({"SPECIAL_PROGRAM"})
 TEMPLATE_TRANSITIONS = {
 	"Draft": frozenset({"Draft", "Active", "Archived"}),
 	"Active": frozenset({"Active", "Archived"}),

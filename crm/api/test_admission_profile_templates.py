@@ -49,6 +49,14 @@ class TestAdmissionProfileTemplates(FrappeTestCase):
 				enabled=1,
 			),
 			frappe._dict(
+				name="COLLEGE_GRADUATION",
+				code="COLLEGE_GRADUATION",
+				display_name="Xét tốt nghiệp Cao đẳng",
+				description=None,
+				sort_order=20,
+				enabled=1,
+			),
+			frappe._dict(
 				name="NATIONAL_HIGH_SCHOOL_EXAM",
 				code="NATIONAL_HIGH_SCHOOL_EXAM",
 				display_name="Điểm thi tốt nghiệp THPT",
@@ -78,8 +86,29 @@ class TestAdmissionProfileTemplates(FrappeTestCase):
 			[(method["code"], method["name"]) for method in result["methods"]],
 			[
 				("THPT_SCORE", "Xét điểm thi tốt nghiệp THPT"),
+				("COLLEGE_GRADUATION", "Xét tốt nghiệp Cao đẳng"),
 				("DIRECT_ADMISSION", "Tuyển thẳng"),
 			],
+		)
+
+	def test_standard_template_rows_include_college_graduation_requirement(self):
+		from crm.patches.v1_0 import seed_admission_profile_template_catalog
+
+		with patch.object(
+			seed_admission_profile_template_catalog.frappe.db,
+			"get_value",
+			side_effect=lambda doctype, filters, fieldname: (
+				filters.get("code") if doctype == "CRM Document Type" else None
+			),
+		):
+			rows = seed_admission_profile_template_catalog._rows("STANDARD")
+
+		college_row = next(row for row in rows if row["document_type"] == "FPT_POLYTECHNIC_DIPLOMA")
+		self.assertEqual(college_row["section_code"], "method")
+		self.assertEqual(college_row["requirement_group"], "COLLEGE_GRADUATION")
+		self.assertEqual(
+			college_row["condition_key"],
+			"field:application.admission_method=COLLEGE_GRADUATION",
 		)
 
 	def test_catalog_search_filters_document_type_options(self):

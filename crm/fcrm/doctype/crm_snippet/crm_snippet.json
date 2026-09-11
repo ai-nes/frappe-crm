@@ -1,0 +1,87 @@
+{
+ "actions": [],
+ "allow_import": 0,
+ "allow_rename": 0,
+ "autoname": "naming_series:",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": ["naming_series", "snippet_name", "is_public", "content"],
+ "fields": [
+  {
+   "default": "SNP-.###",
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "options": "SNP-.###"
+  },
+  {
+   "fieldname": "snippet_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Snippet Name",
+   "reqd": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_public",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Public"
+  },
+  {
+   "fieldname": "content",
+   "fieldtype": "HTML Editor",
+   "label": "Content",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "module": "FCRM",
+ "name": "CRM Snippet",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "All",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "System Manager",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Administrator",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Admissions Director",
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "role": "Lead Sale",
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "name,snippet_name,content,owner",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "title_field": "snippet_name",
+ "track_changes": 1
+}
