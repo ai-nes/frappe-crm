@@ -300,6 +300,42 @@ class TestStudentAuditApi(FrappeTestCase):
 		self.assertTrue(result["read_only"])
 		self.assertIn("created", [log["action"] for log in result["logs"]])
 
+	def test_lead_audit_accepts_internal_lead_id(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Opaque Lead Audit API",
+				"phone": "0912345684",
+				"email": "opaque-lead-audit-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		result = get_lead_audit_logs(lead.lead_id)
+
+		self.assertEqual(result["lead_id"], lead.lead_id)
+		self.assertTrue(any(log["docname"] == lead.name for log in result["logs"]))
+		self.assertIn("created", [log["action"] for log in result["logs"]])
+
+	def test_lead_sale_can_read_audit_for_any_lead(self):
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Full Board Lead Audit API",
+				"phone": "0912345685",
+				"email": "full-board-lead-audit-api@example.com",
+			}
+		).insert(ignore_permissions=True)
+
+		with (
+			patch("crm.api.audit.can_read_full_lead_board", return_value=True),
+			patch("crm.api.audit.frappe.has_permission", return_value=False),
+		):
+			result = get_lead_audit_logs(lead.lead_id)
+
+		self.assertEqual(result["lead_id"], lead.lead_id)
+		self.assertTrue(any(log["docname"] == lead.name for log in result["logs"]))
+		self.assertIn("created", [log["action"] for log in result["logs"]])
+
 	def test_student_audit_uses_canonical_student_as_primary_aggregate(self):
 		lead = frappe.get_doc(
 			{

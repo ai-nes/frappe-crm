@@ -222,12 +222,22 @@ def can_read_full_lead_board(user=None) -> bool:
 	Group/Team scope separately, so this compatibility flag no longer widens
 	list visibility.
 
-	The flag still aligns the Lead Sale write check with detail access; Student,
-	delete, and every assignment, conversion, ownership, or lifecycle command keep
-	their existing checks.
+	The flag still aligns the Lead Sale write check with detail access. Conversion
+	uses its dedicated ``can_convert_all_leads`` rule; Student, delete, assignment,
+	ownership, and lifecycle commands keep their existing checks.
 	"""
 	user = user or frappe.session.user
 	return resolve_crm_profile(_get_policy_roles(user)) == "lead_sales"
+
+
+def can_convert_all_leads(user=None) -> bool:
+	"""Whether the actor may convert any assigned Lead.
+
+	Lead Sale works the full intake board, so conversion must not re-apply the
+	team-limited CRUD scope after the Lead has passed the ASSIGNED gate. Sale and
+	CTV Sale continue through the normal owner scope in ``has_permission``.
+	"""
+	return can_read_full_lead_board(user)
 
 
 def can_write_full_lead_board(user=None) -> bool:

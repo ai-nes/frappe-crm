@@ -15,7 +15,7 @@ from typing import Any
 import frappe
 
 from crm.fcrm.conversion_readiness import conversion_readiness
-from crm.fcrm.permissions import derive_owner_fields
+from crm.fcrm.permissions import can_convert_all_leads, derive_owner_fields
 from crm.fcrm.permissions import has_permission as has_student_permission
 from crm.fcrm.record_retention import technical_retention_until
 from crm.fcrm.role_policy import capabilities_for_roles
@@ -162,6 +162,11 @@ def _load_student(student_name: str, actor: str, *, internal_service: bool = Fal
 	# scope here would strand every cross-Team Lead as ASSIGNED-never-converted.
 	if internal_service:
 		return student
+	# Lead Sale operates the full intake board and is explicitly allowed to
+	# convert any assigned Lead. Sale/CTV Sale must still pass the owner scope
+	# below, preserving the assigned-only rule for those profiles.
+	if can_convert_all_leads(actor):
+		return student
 	if not has_student_permission(student, user=actor, permission_type="read"):
 		_fail("OUT_OF_SCOPE", "The Student is outside the actor's current scope.")
 	return student
@@ -258,6 +263,47 @@ def _identity_and_case(student):
 	if identity.get("identity_status") not in (None, "", "active"):
 		_fail("INTEGRITY_UNRESOLVED", "Student identity is not active.")
 	return identity, None
+
+
+def _prepare_lead_integrity_for_handoff(lead):
+	"""Make legacy assigned Leads compatible with the conversion contract.
+
+	Older Leads can be assigned before the intake identity projection was
+	installed, while the Lead -> Student business action only requires an
+	assigned owner and the conversion fields.  Create the missing opaque
+	identity in this trusted handoff transaction and resolve the projection so
+	the Student snapshot and conversion junction remain internally consistent.
+	Quarantined records stay blocked because they require an explicit review.
+	"""
+	state = str(lead.get("intake_integrity_state") or "").strip().lower()
+	if state == "quarantined":
+		_fail("INTEGRITY_UNRESOLVED", "Lead intake is quarantined and requires review before conversion.")
+	if not _doctype_exists(IDENTITY_DOCTYPE):
+		_fail("CONFIGURATION_ERROR", "Student identity contract is not installed.")
+
+	identity_name = lead.get("identity")
+	if identity_name and not frappe.db.exists(IDENTITY_DOCTYPE, identity_name):
+		identity_name = None
+	if not identity_name:
+		# Reuse the intake identity factory so opaque keys and site HMAC policy
+		# remain identical for both intake-created and handoff-created identities.
+		from crm.fcrm.student_intake import _create_identity
+
+		identity_name = _create_identity({"strong": None})
+
+	updates = {}
+	if lead.get("identity") != identity_name:
+		updates["identity"] = identity_name
+	if state != "resolved":
+		updates["intake_integrity_state"] = "resolved"
+	if updates:
+		frappe.db.set_value(LEAD_DOCTYPE, lead.name, updates, update_modified=False)
+		for fieldname, value in updates.items():
+			if callable(getattr(lead, "set", None)):
+				lead.set(fieldname, value)
+			else:
+				lead[fieldname] = value
+	return lead
 
 
 def _conversion_for_student(student_name: str):
@@ -512,6 +558,7 @@ def convert_student(
 	correlation_id: str | None = None,
 	target_student: str | None = None,
 	_internal_service: bool = False,
+	_lead_handoff: bool = False,
 ):
 	"""Convert one Lead into one independent Student snapshot.
 
@@ -524,6 +571,10 @@ def convert_student(
 	assignment batch) that already authorized the operator and then moved the
 	Lead out of that operator's row scope. It never crosses the HTTP boundary:
 	the whitelisted adapters pass explicit keyword arguments only.
+
+	``_lead_handoff`` is private to the Lead conversion workflow. It allows
+	assigned legacy Leads without an intake integrity projection to be completed
+	by creating the missing opaque identity in the same transaction.
 
 	A successful conversion closes the Lead and preserves its MATCHED/CREATED
 	resolution. Errors roll back the receipt, Student, direct link, and junction
@@ -589,7 +640,9 @@ def convert_student(
 			_fail("INVALID_REVISION", "Student lifecycle revision is invalid.")
 		if str(expected_lifecycle_revision) != str(current_revision):
 			_fail("STALE_REVISION", "Student lifecycle changed; reload before converting.")
-		if student_doc.get("intake_integrity_state") != "resolved":
+		if _lead_handoff:
+			student_doc = _prepare_lead_integrity_for_handoff(student_doc)
+		elif student_doc.get("intake_integrity_state") != "resolved":
 			_fail("INTEGRITY_UNRESOLVED", "Student intake integrity is not resolved.")
 		identity, case = _identity_and_case(student_doc)
 		existing_conversion = _conversion_for_student(student_name)

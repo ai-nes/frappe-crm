@@ -199,6 +199,7 @@ def get_director_students(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -223,6 +224,7 @@ def get_director_students(
 		q=q,
 		stage=stage,
 		province=province,
+		campaign=campaign,
 		ownerId=ownerId,
 		sort=sort,
 		order=order,
@@ -273,6 +275,7 @@ def get_director_students(
 				"stage": STAGES[query["stage"]]["label"] if query["stage"] else None,
 				"assignmentStatus": query["assignment_status"],
 				"lifecycleStatus": query["lifecycle_status"],
+				"campaign": query["campaign"],
 				"province": _province_label(resolved_province),
 			},
 			"sort": {"field": query["sort"], "order": query["order"]},
@@ -441,6 +444,7 @@ def _parse_query(
 	q: str | None = "",
 	stage: str | None = None,
 	province: str | None = None,
+	campaign: str | None = None,
 	ownerId: str | None = None,
 	sort: str = "score",
 	order: str = "desc",
@@ -456,6 +460,9 @@ def _parse_query(
 	page_number = _parse_int(page, "page", 1, minimum=1)
 	page_size = _parse_int(pageSize, "pageSize", 20, minimum=1, maximum=100)
 	normalized_stage = _normalize_enum(stage, STAGES, "stage") if stage else None
+	campaign_value = str(campaign or "").strip() or None
+	if campaign_value and _fold(campaign_value) == "all":
+		campaign_value = None
 	assignment_value = _first_query_value(assignmentStatus, assignment_status)
 	lifecycle_value = _first_query_value(lifecycleStatus, lifecycle_status)
 	if lifecycle_value:
@@ -495,6 +502,7 @@ def _parse_query(
 		"query": str(q or "").strip(),
 		"stage": normalized_stage,
 		"province": str(province_value or "").strip() or None,
+		"campaign": campaign_value,
 		"owner_id": owner_id,
 		"assignment_status": normalized_assignment_status,
 		"lifecycle_status": normalized_lifecycle_status,
@@ -615,6 +623,8 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		filters["name"] = "__student_without_owner__"
 	if province:
 		filters["province"] = province
+	if query.get("campaign"):
+		filters["campaign"] = _resolve_campaign(query["campaign"])
 	if query.get("lifecycle_status"):
 		filters["student_stage"] = query["lifecycle_status"]
 	if query["stage"]:
@@ -645,6 +655,13 @@ def _student_filters(query: dict[str, Any], province: str | None) -> tuple[dict[
 		if display_code_ids:
 			or_filters.append(["name", "in", display_code_ids])
 	return filters, or_filters
+
+
+def _resolve_campaign(value: str) -> str:
+	"""Accept a campaign document name or its stable code as a filter value."""
+	if frappe.db.exists("CRM Campaign", value):
+		return value
+	return frappe.db.get_value("CRM Campaign", {"stable_code": value}, "name") or value
 
 
 def _display_code_student_ids(display_code: str, admission_year: str | None) -> list[str]:

@@ -279,6 +279,42 @@ def _active_team_recipients(team_id: str, at=None) -> list[dict[str, Any]]:
 	return result
 
 
+def list_province_recipients(
+	province: str,
+	*,
+	campus: str | None = None,
+	at=None,
+) -> list[dict[str, Any]]:
+	"""List active Sale/CTV recipients eligible for a Lead's routing scope."""
+	province = str(province or "").strip()
+	if not province:
+		return []
+
+	targets = []
+	for team in _active_teams_for_province(province, campus=campus):
+		readiness = team_routing_readiness(
+			team["name"],
+			campus=team["campus"],
+			expected_province=province,
+			at=at,
+		)
+		if readiness["status"] != "ready":
+			continue
+		for recipient in _active_team_recipients(team["name"], at):
+			targets.append(
+				{
+					**recipient,
+					"teamName": team["team_name"],
+					"effectiveActive": recipient["capacity"]["active"],
+				}
+			)
+
+	return sorted(
+		targets,
+		key=lambda row: (row["teamName"], row["staffName"], row["staff"]),
+	)
+
+
 def select_province_recipient(
 	province: str,
 	*,

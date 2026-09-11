@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import frappe
 
+from crm.api.assignment_workspace import _actor_context
 from crm.fcrm.lead_identity import resolve_lead_name
 from crm.fcrm.lead_processing import (
 	LeadProcessingError,
@@ -13,6 +14,9 @@ from crm.fcrm.lead_processing import (
 )
 from crm.fcrm.lead_processing import (
 	handoff_lead as _handoff_lead,
+)
+from crm.fcrm.lead_processing import (
+	list_lead_assignment_targets as _list_lead_assignment_targets,
 )
 from crm.fcrm.lead_processing import (
 	preview_lead as _preview_lead,
@@ -40,6 +44,11 @@ def _run(command, **kwargs):
 	except (LeadProcessingError, StudentConversionError) as exc:
 		exception_type = frappe.PermissionError if exc.code in _PERMISSION_ERRORS else frappe.ValidationError
 		frappe.throw(str(exc), exception_type)
+
+
+def _require_assignment_access():
+	"""Require the server-side capability for manual Lead assignment."""
+	return _actor_context(required_capabilities={"student.routing.operate"})
 
 
 @frappe.whitelist(methods=["POST"])
@@ -77,6 +86,7 @@ def assign_lead(
 	expected_revision: str | int,
 	correlation_id: str | None = None,
 ) -> dict:
+	_require_assignment_access()
 	return _run(
 		_assign_lead,
 		lead=resolve_lead_name(lead),
@@ -104,6 +114,16 @@ def handoff_lead(
 		idempotency_key=idempotency_key,
 		correlation_id=correlation_id,
 		target_student=target_student,
+	)
+
+
+@frappe.whitelist(methods=["GET"])
+def list_lead_assignment_targets(lead: str) -> dict:
+	"""List Sale/CTV recipients eligible for manual assignment of a Lead."""
+	_require_assignment_access()
+	return _run(
+		_list_lead_assignment_targets,
+		lead=resolve_lead_name(lead),
 	)
 
 

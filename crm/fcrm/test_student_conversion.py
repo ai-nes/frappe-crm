@@ -125,6 +125,37 @@ class TestStudentConversionCommand(unittest.TestCase):
 				)
 		self.assertEqual(ctx.exception.code, "OWNER_REQUIRED")
 
+	def test_lead_sale_can_load_any_assigned_lead_for_conversion(self):
+		from crm.fcrm import student_conversion
+		from crm.fcrm.student_conversion import _load_student
+
+		lead = frappe._dict(doctype="CRM Lead", name="HS-2026-OTHER-000001", owner_staff="OTHER-STAFF")
+		with (
+			patch.object(student_conversion.frappe.db, "exists", return_value=True),
+			patch.object(student_conversion.frappe, "get_doc", return_value=lead),
+			patch.object(student_conversion, "can_convert_all_leads", return_value=True),
+			patch.object(student_conversion, "has_student_permission", return_value=False) as has_permission,
+		):
+			self.assertIs(_load_student(lead.name, "lead-sale@example.com"), lead)
+
+		has_permission.assert_not_called()
+
+	def test_sale_conversion_keeps_owner_scope(self):
+		from crm.fcrm import student_conversion
+		from crm.fcrm.student_conversion import StudentConversionError, _load_student
+
+		lead = frappe._dict(doctype="CRM Lead", name="HS-2026-OTHER-000002", owner_staff="OTHER-STAFF")
+		with (
+			patch.object(student_conversion.frappe.db, "exists", return_value=True),
+			patch.object(student_conversion.frappe, "get_doc", return_value=lead),
+			patch.object(student_conversion, "can_convert_all_leads", return_value=False),
+			patch.object(student_conversion, "has_student_permission", return_value=False),
+		):
+			with self.assertRaises(StudentConversionError) as ctx:
+				_load_student(lead.name, "sale@example.com")
+
+		self.assertEqual(ctx.exception.code, "OUT_OF_SCOPE")
+
 	def test_converted_student_requires_assignee(self):
 		from crm.fcrm.student_conversion import (
 			StudentConversionError,
@@ -136,3 +167,45 @@ class TestStudentConversionCommand(unittest.TestCase):
 				frappe._dict(assigned_to=None, owner_staff=None, owning_team=None)
 			)
 		self.assertEqual(ctx.exception.code, "OWNER_REQUIRED")
+
+	def test_legacy_assigned_lead_integrity_is_initialized_for_handoff(self):
+		from crm.fcrm import student_conversion
+
+		lead = frappe._dict(
+			name="HS-2026-LEGACY-000001",
+			identity=None,
+			intake_integrity_state="review_required",
+		)
+		with (
+			patch.object(student_conversion, "_doctype_exists", return_value=True),
+			patch(
+				"crm.fcrm.student_intake._create_identity",
+				return_value="ID-HANDOFF-000001",
+			) as create_identity,
+			patch.object(student_conversion.frappe.db, "exists", return_value=True),
+			patch.object(student_conversion.frappe.db, "set_value") as set_value,
+		):
+			result = student_conversion._prepare_lead_integrity_for_handoff(lead)
+
+		self.assertIs(result, lead)
+		self.assertEqual(lead.identity, "ID-HANDOFF-000001")
+		self.assertEqual(lead.intake_integrity_state, "resolved")
+		create_identity.assert_called_once_with({"strong": None})
+		set_value.assert_called_once_with(
+			"CRM Lead",
+			lead.name,
+			{"identity": "ID-HANDOFF-000001", "intake_integrity_state": "resolved"},
+			update_modified=False,
+		)
+
+	def test_quarantined_lead_integrity_stays_blocked(self):
+		from crm.fcrm.student_conversion import (
+			StudentConversionError,
+			_prepare_lead_integrity_for_handoff,
+		)
+
+		with self.assertRaises(StudentConversionError) as ctx:
+			_prepare_lead_integrity_for_handoff(
+				frappe._dict(name="HS-2026-QUARANTINED-000001", intake_integrity_state="quarantined")
+			)
+		self.assertEqual(ctx.exception.code, "INTEGRITY_UNRESOLVED")

@@ -30,9 +30,15 @@ from crm.fcrm.role_policy import resolve_crm_profile
 from crm.fcrm.student_conversion import StudentConversionError, convert_student
 from crm.fcrm.student_intake import normalize_email, normalize_phone
 from crm.fcrm.student_stage import StudentStageError, set_student_stage
-from crm.fcrm.team_routing import RECIPIENT_FUNCTIONS, _active_memberships, team_routing_readiness
+from crm.fcrm.team_routing import (
+	RECIPIENT_FUNCTIONS,
+	_active_memberships,
+	list_province_recipients,
+	team_routing_readiness,
+)
 
 PROCESSING_STATUSES = ("NEW", "PROCESSING", "PROCESSED", "ASSIGNED", "CLOSED")
+ASSIGNABLE_STATUSES = frozenset({"PROCESSING", "PROCESSED", "ASSIGNED"})
 RESOLUTIONS = ("PENDING", "MATCHED", "CREATED", "DUPLICATE", "INVALID", "SPAM", "FAILED")
 ADVANCING_RESOLUTIONS = frozenset({"MATCHED", "CREATED"})
 TERMINAL_RESOLUTIONS = frozenset({"DUPLICATE", "INVALID", "SPAM", "FAILED"})
@@ -395,6 +401,31 @@ def _get_resolution(lead) -> str:
 	return str(lead.get("resolution") or "PENDING").strip().upper()
 
 
+def _assert_assignable_status(lead) -> None:
+	if _get_status(lead) not in ASSIGNABLE_STATUSES:
+		_fail("INVALID_STATUS", "Lead ở trạng thái Mới hoặc Đã đóng không thể phân công.")
+
+
+def list_lead_assignment_targets(lead: str) -> dict[str, Any]:
+	"""Return active Sale/CTV recipients eligible for manual Lead assignment."""
+	lead_doc = _load_lead(lead)
+	_assert_assignable_status(lead_doc)
+
+	province = str(lead_doc.get("province") or "").strip()
+	branch = str(lead_doc.get("branch") or "").strip()
+	if not province:
+		_fail("MISSING_PROVINCE", "Lead chưa có tỉnh để phân công.")
+	if not branch:
+		_fail("MISSING_CAMPUS", "Lead chưa có cơ sở để phân công.")
+
+	return {
+		"lead": lead_doc.name,
+		"province": province,
+		"ownership_revision": int(lead_doc.get("ownership_revision") or 0),
+		"targets": list_province_recipients(province, campus=branch),
+	}
+
+
 def _validate_lead_ownership_target(lead_doc, owner_staff: str, target_team_id: str) -> None:
 	"""Ensure the requested Lead owner is an active recipient in the target Team.
 
@@ -711,8 +742,7 @@ def mark_lead_assigned(lead: str, reason: str | None = None) -> dict[str, Any]:
 	lead_doc = _load_lead(lead)
 	if _get_status(lead_doc) == "ASSIGNED":
 		return {"status": "ASSIGNED", "lead": lead_doc.name, "resolution": "PENDING"}
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	if not lead_doc.get("owner_staff") and not lead_doc.get("assigned_to"):
 		_fail("OWNER_REQUIRED", "Lead ownership must be written before marking it assigned.")
 	_set_processing_values(lead_doc.name, {"processing_status": "ASSIGNED", "resolution": "PENDING"})
@@ -753,8 +783,7 @@ def change_lead_ownership(
 	lead_doc = _load_lead(lead_name)
 	_lock_lead(lead_doc.name)
 	lead_doc = _load_lead(lead_doc.name)
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can change ownership.")
+	_assert_assignable_status(lead_doc)
 
 	try:
 		current_revision = int(lead_doc.get("ownership_revision") or 0)
@@ -832,10 +861,9 @@ def assign_lead(
 	expected_revision: Any,
 	correlation_id: str | None = None,
 ) -> dict[str, Any]:
-	"""Assign a processed Lead to a Sale and then move it to ASSIGNED."""
+	"""Assign or reassign a Lead to a Sale and move it to ASSIGNED."""
 	lead_doc = _load_lead(lead)
-	if _get_status(lead_doc) != "PROCESSED":
-		_fail("INVALID_STATUS", "Only processed valid Leads can be assigned.")
+	_assert_assignable_status(lead_doc)
 	owner_staff = _required(owner_staff, "owner_staff")
 	target_team_id = _required(target_team_id, "target_team_id")
 	idempotency_key = _required(idempotency_key, "idempotency_key")
@@ -937,6 +965,7 @@ def handoff_lead(
 			correlation_id=correlation_id,
 			target_student=target_student,
 			_internal_service=_internal_service,
+			_lead_handoff=True,
 		)
 		student_id = conversion.get("target_student") or conversion.get("student_id")
 		if not student_id:

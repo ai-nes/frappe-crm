@@ -54,6 +54,7 @@ class TestDirectorStudents(FrappeTestCase):
 			q="  Nguyen  ",
 			stage="counselling",
 			province="can-tho",
+			campaign="CAM-2026-00001",
 			assignmentStatus="assigned",
 			lifecycleStatus="MQL",
 			sort="lastActivityAt",
@@ -69,6 +70,7 @@ class TestDirectorStudents(FrappeTestCase):
 				"query": "Nguyen",
 				"stage": "counselling",
 				"province": "can-tho",
+				"campaign": "CAM-2026-00001",
 				"owner_id": None,
 				"assignment_status": "assigned",
 			"lifecycle_status": "Attempting",
@@ -229,6 +231,21 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(filters["owner_staff"], ["is", "set"])
 		self.assertEqual(filters["student_stage"], "Qualified")
 		self.assertEqual(filters["province"], "PROVINCE-01")
+		self.assertEqual(or_filters, [])
+
+	def test_student_filters_resolve_campaign_code(self):
+		with (
+			patch.object(director_students.frappe.db, "exists", return_value=False),
+			patch.object(
+				director_students.frappe.db,
+				"get_value",
+				return_value="CAMPAIGN-1",
+			),
+		):
+			query = director_students._parse_query(campaign="CAM-2026-00001")
+			filters, or_filters = director_students._student_filters(query, None)
+
+		self.assertEqual(filters["campaign"], "CAMPAIGN-1")
 		self.assertEqual(or_filters, [])
 
 		unassigned = director_students._parse_query(assignment_status="unassigned")
