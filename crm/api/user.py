@@ -31,6 +31,46 @@ def get_all_roles():
 	return sorted(roles)
 
 
+def _current_canonical_role(target_roles) -> str | None:
+	"""Return the single canonical CRM role a user currently holds, if any."""
+	if "System Manager" in target_roles:
+		return "System Manager"
+	matches = [role for role in target_roles if role in CRM_MANAGED_ROLES]
+	return matches[0] if len(matches) == 1 else None
+
+
+def _log_role_change(user: str, action: str, previous_role: str | None, new_role: str | None):
+	"""Record a role change/removal. Called only after the mutation already saved."""
+	frappe.get_doc(
+		{
+			"doctype": "CRM User Role Log",
+			"user": user,
+			"action": action,
+			"previous_role": previous_role,
+			"new_role": new_role,
+		}
+	).insert(ignore_permissions=True)
+
+
+@frappe.whitelist()
+def list_user_role_logs(user: str | None = None, start: int = 0, page_length: int = 50) -> dict:
+	"""List role-change audit log rows, optionally filtered by target user."""
+	_require_crm_role_manager()
+	start = int(start or 0)
+	page_length = min(int(page_length or 50), 200)
+	filters = {"user": user} if user else {}
+	logs = frappe.get_list(
+		"CRM User Role Log",
+		filters=filters,
+		fields=["name", "user", "action", "previous_role", "new_role", "owner", "creation"],
+		order_by="creation desc",
+		start=start,
+		page_length=page_length,
+	)
+	total = frappe.db.count("CRM User Role Log", filters=filters)
+	return {"logs": logs, "total": total, "start": start, "page_length": page_length}
+
+
 def _require_crm_role_manager():
 	"""Allow role mutations only through the canonical session authority."""
 	from crm.api.session import get_session_role_flags
@@ -221,9 +261,13 @@ def update_user_role(user: str, new_role: str):
 	if user == frappe.session.user and new_role != "System Manager":
 		frappe.throw(_("You cannot remove your own System Manager access."), frappe.PermissionError)
 
+	previous_role = _current_canonical_role(target_roles)
+
 	set_canonical_crm_profile(user_doc, new_role)
 
 	user_doc.save(ignore_permissions=True)
+
+	_log_role_change(user, "role_changed", previous_role, new_role)
 
 
 @frappe.whitelist()
@@ -247,12 +291,16 @@ def remove_crm_roles_from_user(user: str):
 			_("User {0} cannot be removed as it has a Role Profile assigned to it.").format(user)
 		)
 
+	previous_role = _current_canonical_role(roles)
+
 	remove_roles(user_doc, BUSINESS_ADMIN_ROLE, *CRM_BUSINESS_ROLES)
 	if "System Manager" in roles:
 		remove_roles(user_doc, "System Manager", *DESK_MANAGEMENT_ROLE_NAMES)
 		update_module_in_user(user_doc, "FCRM")
 
 	user_doc.save(ignore_permissions=True)
+
+	_log_role_change(user, "removed", previous_role, None)
 	frappe.msgprint(_("User {0} has been removed from CRM roles.").format(user))
 
 
