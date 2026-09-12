@@ -216,6 +216,38 @@ class TestCrmRuleVersionApi(FrappeTestCase):
 		with self.assertRaises(frappe.PermissionError):
 			rule_engine.set_rule_enabled(rule["name"], testing["revision"], True)
 
+	def test_rule_admin_roles_manage_rules_without_direct_version_write_permission(self):
+		rule = rule_engine.create_rule(self.version_id, 0, **self._rule(enabled=True))
+		expected_version_revision = 1
+		for role, enabled in (
+			("System Manager", False),
+			("Admissions Director", True),
+			("Business Admin", False),
+		):
+			email = f"rule-admin-{frappe.scrub(role)}-{frappe.generate_hash(length=8)}@example.com"
+			user = frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": email,
+					"first_name": "Rule Admin",
+					"user_type": "System User",
+					"send_welcome_email": 0,
+					"roles": [{"role": role}],
+				}
+			).insert(ignore_permissions=True)
+			try:
+				frappe.set_user(user.name)
+				self.assertIn(role, frappe.get_roles(user.name))
+				self.assertTrue(frappe.has_permission("CRM Rule Version", "read", user=user.name))
+				self.assertFalse(frappe.has_permission("CRM Rule Version", "write", user=user.name))
+
+				updated = rule_engine.set_rule_enabled(rule["name"], expected_version_revision, enabled)
+				self.assertEqual(updated["enabled"], enabled)
+				expected_version_revision += 1
+			finally:
+				frappe.set_user("Administrator")
+				frappe.delete_doc("User", user.name, force=True)
+
 	def test_clone_copies_full_independent_draft_snapshot(self):
 		rule_engine.create_rule(self.version_id, 0, **self._rule(enabled=False))
 		testing = rule_engine.update_rule_version(self.version_id, expected_revision=1, status="testing")
