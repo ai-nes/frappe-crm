@@ -11,15 +11,18 @@ from frappe import _
 SNIPPET = "CRM Snippet"
 SNIPPET_FIELDS = (
 	"name",
-	"snippet_name",
+	"internal_name",
+	"snippet_text",
+	"shortcut",
 	"is_public",
 	"owner",
 	"creation",
 	"modified",
-	"content",
 )
-SNIPPET_DATA_FIELDS = frozenset({"name", "content", "sharing"})
+SNIPPET_DATA_FIELDS = frozenset({"internalName", "snippetText", "shortcut", "sharing"})
 SNIPPET_REFERENCE_PATTERN = re.compile(r"#\(\s*([^()\r\n]+?)\s*\)|#([A-Za-z0-9][A-Za-z0-9_.-]*)")
+DEFAULT_PAGE_SIZE = 5
+MAX_PAGE_SIZE = 100
 
 
 def _require_authentication() -> None:
@@ -45,6 +48,24 @@ def _text(value: Any, fieldname: str) -> str:
 	return result
 
 
+def _positive_integer(
+	value: Any,
+	fieldname: str,
+	default: int,
+	maximum: int | None = None,
+) -> int:
+	text = "" if value is None else str(value).strip()
+	if not text:
+		return default
+	try:
+		parsed = int(text)
+	except (TypeError, ValueError):
+		frappe.throw(_("{0} must be an integer.").format(fieldname), frappe.ValidationError)
+	if parsed < 1 or (maximum is not None and parsed > maximum):
+		frappe.throw(_("{0} is out of range.").format(fieldname), frappe.ValidationError)
+	return parsed
+
+
 def _sharing_value(value: Any) -> str:
 	sharing = str(value or "public").strip().lower()
 	if sharing not in {"public", "private"}:
@@ -60,10 +81,29 @@ def _normalize_data(data: dict[str, Any]) -> dict[str, Any]:
 			frappe.ValidationError,
 		)
 	return {
-		"snippet_name": _text(data.get("name"), _("Snippet name")),
-		"content": _text(data.get("content"), _("Content")),
+		"internal_name": _text(data.get("internalName"), _("Internal name")),
+		"snippet_text": _text(data.get("snippetText"), _("Snippet text")),
+		"shortcut": _normalize_shortcut(data.get("shortcut")),
 		"is_public": 1 if _sharing_value(data.get("sharing")) == "public" else 0,
 	}
+
+
+def _normalize_shortcut(value: Any) -> str:
+	shortcut = str(value or "").strip().lstrip("#").strip()
+	if not shortcut:
+		frappe.throw(_("Shortcut is required."), frappe.ValidationError)
+	if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", shortcut):
+		frappe.throw(
+			_("Shortcut may contain only letters, numbers, dots, underscores, and hyphens."),
+			frappe.ValidationError,
+		)
+	return shortcut
+
+
+def _ensure_shortcut_is_available(shortcut: str, current_name: str | None = None) -> None:
+	existing_name = frappe.db.get_value(SNIPPET, {"shortcut": shortcut}, "name")
+	if existing_name and existing_name != current_name:
+		frappe.throw(_("Shortcut must be unique."), frappe.ValidationError)
 
 
 def _owner_name(owner: str, cache: dict[str, str]) -> str:
@@ -83,7 +123,9 @@ def _payload(row: Any, owner_cache: dict[str, str] | None = None) -> dict[str, A
 	return {
 		"id": row.get("name"),
 		"code": row.get("name"),
-		"name": row.get("snippet_name"),
+		"internalName": row.get("internal_name") or "",
+		"snippetText": row.get("snippet_text") or "",
+		"shortcut": row.get("shortcut") or "",
 		"ownerId": owner,
 		"owner": _owner_name(owner, owner_cache),
 		"sharing": "public" if frappe.utils.cint(row.get("is_public")) else "private",
@@ -115,34 +157,66 @@ def resolve_snippet_references(value: str) -> tuple[str, list[str]]:
 	missing: set[str] = set()
 	cache: dict[str, Any | None] = {}
 
-	def find_snippet(snippet_name: str) -> Any | None:
-		if snippet_name in cache:
-			return cache[snippet_name]
+	def find_snippet(snippet_name: str, *, allow_internal_name: bool) -> Any | None:
+		cache_key = f"{snippet_name}|{allow_internal_name}"
+		if cache_key in cache:
+			return cache[cache_key]
+
+		lookup_fields = [["shortcut", "=", snippet_name]]
+		if allow_internal_name:
+			lookup_fields.extend([["internal_name", "=", snippet_name], ["name", "=", snippet_name]])
 
 		rows = frappe.get_list(
 			SNIPPET,
-			or_filters=[
-				["snippet_name", "=", snippet_name],
-				["name", "=", snippet_name],
-			],
-			fields=["name", "snippet_name", "owner", "content"],
+			or_filters=lookup_fields,
+			fields=["name", "internal_name", "shortcut", "owner", "snippet_text"],
 			order_by="modified desc, creation desc, name desc",
 			limit_page_length=0,
 		)
 		actor = frappe.session.user
 		owned = [row for row in rows if str(row.get("owner") or "") == actor]
-		cache[snippet_name] = (owned or rows or [None])[0]
-		return cache[snippet_name]
+		cache[cache_key] = (owned or rows or [None])[0]
+		return cache[cache_key]
 
 	def replace(match: re.Match[str]) -> str:
 		snippet_name = (match.group(1) or match.group(2) or "").strip()
-		snippet = find_snippet(snippet_name)
+		snippet = find_snippet(snippet_name, allow_internal_name=bool(match.group(1)))
 		if not snippet:
 			missing.add(match.group(0))
 			return match.group(0)
-		return str(snippet.get("content") or "")
+		return str(snippet.get("snippet_text") or "")
 
 	return SNIPPET_REFERENCE_PATTERN.sub(replace, value), sorted(missing)
+
+
+def _count_snippets(filters: dict[str, Any], or_filters: list[list[str]] | None = None) -> int:
+	rows = frappe.get_list(
+		SNIPPET,
+		filters=filters,
+		or_filters=or_filters,
+		fields=["name"],
+		limit_page_length=0,
+	)
+	return len(rows)
+
+
+def _owner_options(filters: dict[str, Any], owner_cache: dict[str, str]) -> list[dict[str, str]]:
+	rows = frappe.get_list(
+		SNIPPET,
+		filters=filters,
+		fields=["owner"],
+		order_by="owner asc",
+		limit_page_length=0,
+	)
+	owner_ids = {str(row.get("owner") or "") for row in rows}
+	owner_ids.discard("")
+	return [
+		{"id": owner_id, "name": _owner_name(owner_id, owner_cache)}
+		for owner_id in sorted(
+			owner_ids,
+			key=lambda value: (_owner_name(value, owner_cache).casefold(), value),
+		)
+	]
 
 
 @frappe.whitelist()
@@ -150,41 +224,70 @@ def list_snippets(
 	search: str | None = None,
 	owner: str | None = None,
 	sharing: str | None = None,
+	scope: str | None = None,
+	page: str | int = 1,
+	pageSize: str | int = DEFAULT_PAGE_SIZE,
 ) -> dict[str, Any]:
-	"""Return snippets visible to the authenticated user."""
+	"""Return a permission-scoped, paginated snippet list."""
 	_require_authentication()
-	filters: dict[str, Any] = {}
+	page_number = _positive_integer(page, "page", 1)
+	page_size = _positive_integer(pageSize, "pageSize", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
+	actor = frappe.session.user
+	scope_value = str(scope or "all").strip().lower()
+	if scope_value not in {"all", "mine"}:
+		frappe.throw(_("scope must be all or mine."), frappe.ValidationError)
+
+	base_filters: dict[str, Any] = {}
 	owner_value = str(owner or "").strip()
-	if owner_value:
-		filters["owner"] = owner_value
+	if owner_value.lower() == "all":
+		owner_value = ""
 	sharing_value = str(sharing or "").strip().lower()
-	if sharing_value:
+	if sharing_value and sharing_value != "all":
 		if sharing_value not in {"public", "private"}:
 			frappe.throw(_("Sharing must be either public or private."), frappe.ValidationError)
-		filters["is_public"] = 1 if sharing_value == "public" else 0
+		base_filters["is_public"] = 1 if sharing_value == "public" else 0
+	query_filters = dict(base_filters)
+	if scope_value == "mine":
+		query_filters["owner"] = actor
+	elif owner_value:
+		query_filters["owner"] = owner_value
 	search_value = str(search or "").strip()
 	or_filters = None
 	if search_value:
 		like = f"%{search_value}%"
-		or_filters = [[fieldname, "like", like] for fieldname in ("name", "snippet_name", "content")]
+		or_filters = [
+			[fieldname, "like", like] for fieldname in ("name", "internal_name", "shortcut", "snippet_text")
+		]
+	total_all = _count_snippets(base_filters)
+	total_mine = _count_snippets({**base_filters, "owner": actor})
+	total = _count_snippets(query_filters, or_filters)
+	total_pages = max(1, (total + page_size - 1) // page_size)
+	owner_filters = dict(base_filters)
+	if scope_value == "mine":
+		owner_filters["owner"] = actor
+	owner_cache: dict[str, str] = {}
+	owners = _owner_options(owner_filters, owner_cache)
 	rows = frappe.get_list(
 		SNIPPET,
-		filters=filters,
+		filters=query_filters,
 		or_filters=or_filters,
 		fields=list(SNIPPET_FIELDS),
 		order_by="modified desc, creation desc, name desc",
-		limit_page_length=0,
+		limit_start=(page_number - 1) * page_size,
+		limit_page_length=page_size,
 	)
-	owner_cache: dict[str, str] = {}
 	snippets = [_payload(row, owner_cache) for row in rows]
-	owners_by_id = {
-		row["ownerId"]: {"id": row["ownerId"], "name": row["owner"]} for row in snippets if row["ownerId"]
+	return {
+		"snippets": snippets,
+		"owners": owners,
+		"total": total,
+		"totalAll": total_all,
+		"totalMine": total_mine,
+		"page": page_number,
+		"pageSize": page_size,
+		"totalPages": total_pages,
+		"hasNextPage": page_number < total_pages,
 	}
-	owners = sorted(
-		owners_by_id.values(),
-		key=lambda value: (value["name"].casefold(), value["id"]),
-	)
-	return {"snippets": snippets, "owners": owners, "total": len(snippets)}
 
 
 @frappe.whitelist()
@@ -199,6 +302,7 @@ def get_snippet(name: str) -> dict[str, Any]:
 def create_snippet(data: dict[str, Any] | str) -> dict[str, Any]:
 	_require_authentication()
 	values = _normalize_data(_parse_data(data))
+	_ensure_shortcut_is_available(values["shortcut"])
 	doc = frappe.get_doc({"doctype": SNIPPET, "naming_series": "SNP-.###", **values})
 	doc.insert()
 	return _payload(doc)
@@ -212,7 +316,9 @@ def update_snippet(
 	doc = frappe.get_doc(SNIPPET, _document_name(name))
 	doc.check_permission("write")
 	_expected_modified(doc, expected_modified)
-	for fieldname, value in _normalize_data(_parse_data(data)).items():
+	values = _normalize_data(_parse_data(data))
+	_ensure_shortcut_is_available(values["shortcut"], current_name=doc.name)
+	for fieldname, value in values.items():
 		doc.set(fieldname, value)
 	doc.save()
 	return _payload(doc)

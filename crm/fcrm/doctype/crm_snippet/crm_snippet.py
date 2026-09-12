@@ -9,14 +9,35 @@ class CRMSnippet(Document):
 	"""Reusable short content owned by the user who created it."""
 
 	def validate(self):
-		if not str(self.snippet_name or "").strip():
-			frappe.throw(_("Snippet name is required."), frappe.ValidationError)
-		if not _has_content(self.content):
-			frappe.throw(_("Snippet content is required."), frappe.ValidationError)
+		self.internal_name = str(self.internal_name or "").strip()
+		self.shortcut = _normalize_shortcut(self.shortcut)
+		if not self.internal_name:
+			frappe.throw(_("Internal name is required."), frappe.ValidationError)
+		if not _has_content(self.snippet_text):
+			frappe.throw(_("Snippet text is required."), frappe.ValidationError)
+		self._validate_shortcut_is_unique()
 
 	def before_insert(self):
-		self.snippet_name = str(self.snippet_name or "").strip()
+		self.internal_name = str(self.internal_name or "").strip()
+		self.shortcut = _normalize_shortcut(self.shortcut)
 		self.is_public = 1 if frappe.utils.cint(self.is_public) else 0
+
+	def _validate_shortcut_is_unique(self):
+		name = frappe.db.get_value("CRM Snippet", {"shortcut": self.shortcut}, "name")
+		if name and name != self.name:
+			frappe.throw(_("Shortcut must be unique."), frappe.ValidationError)
+
+
+def _normalize_shortcut(value):
+	shortcut = str(value or "").strip().lstrip("#").strip()
+	if not shortcut:
+		frappe.throw(_("Shortcut is required."), frappe.ValidationError)
+	if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", shortcut):
+		frappe.throw(
+			_("Shortcut may contain only letters, numbers, dots, underscores, and hyphens."),
+			frappe.ValidationError,
+		)
+	return shortcut
 
 
 def _has_content(value):

@@ -5,7 +5,7 @@
  "autoname": "naming_series:",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["naming_series", "snippet_name", "is_public", "content"],
+ "field_order": ["naming_series", "internal_name", "snippet_text", "shortcut", "is_public"],
  "fields": [
   {
    "default": "SNP-.###",
@@ -15,11 +15,11 @@
    "options": "SNP-.###"
   },
   {
-   "fieldname": "snippet_name",
+   "fieldname": "internal_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "in_standard_filter": 1,
-   "label": "Snippet Name",
+   "label": "Internal name",
    "reqd": 1
   },
   {
@@ -31,9 +31,17 @@
    "label": "Public"
   },
   {
-   "fieldname": "content",
+   "fieldname": "snippet_text",
    "fieldtype": "HTML Editor",
-   "label": "Content",
+   "label": "Snippet text",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shortcut",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Shortcut",
    "reqd": 1
   }
  ],
@@ -79,9 +87,9 @@
   }
  ],
  "row_format": "Dynamic",
- "search_fields": "name,snippet_name,content,owner",
+ "search_fields": "name,internal_name,shortcut,snippet_text,owner",
  "sort_field": "modified",
  "sort_order": "DESC",
- "title_field": "snippet_name",
+ "title_field": "internal_name",
  "track_changes": 1
 }

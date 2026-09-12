@@ -90,6 +90,59 @@ class TestMessageTemplates(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self._create(body="<p><br></p>")
 
+	def test_token_catalog_exposes_global_and_context_tokens(self):
+		result = message_templates.list_message_template_tokens()
+		tokens = {token["value"]: token for token in result["tokens"]}
+
+		self.assertEqual(tokens["school.name"]["sourceType"], "admin_value")
+		self.assertEqual(tokens["school.name"]["adminValue"], "Đại học FPT")
+		self.assertEqual(tokens["student.first_name"]["sourceDoctype"], "CRM Student")
+		self.assertEqual(tokens["lead.status"]["sourceDoctype"], "CRM Lead")
+		self.assertEqual(tokens["program.name"]["sourceType"], "context")
+		self.assertEqual(tokens["event.link"]["sourceType"], "context")
+		self.assertEqual(tokens["tuition.amount"]["inputLabel"], "Mức học phí")
+		self.assertEqual(tokens["program.link"]["inputType"], "url")
+		self.assertIn("student.interested_program", tokens)
+		self.assertIn("application.status", tokens)
+
+	def test_context_tokens_use_preview_fallbacks_and_school_global_value(self):
+		created = self._create(
+			customValues={
+				"program.name": "Kỹ thuật phần mềm",
+				"program.link": "https://fpt.edu.vn/programs/software",
+				"event.name": "Open Day 2026",
+			}
+		)
+		self.assertEqual(created["customValues"]["program.name"], "Kỹ thuật phần mềm")
+
+		lead = frappe.get_doc(
+			{
+				"doctype": "CRM Lead",
+				"student_name": "Nguyễn Minh Anh",
+				"processing_status": "NEW",
+				"resolution": "PENDING",
+			}
+		)
+		frappe.flags.student_intake_service = True
+		try:
+			lead.insert(ignore_permissions=True)
+		finally:
+			frappe.flags.student_intake_service = False
+		self.created_lead_names.append(lead.name)
+
+		preview = message_templates.preview_message_template(
+			lead.name,
+			{
+				"subject": "{{school.name}} - {{program.name}}",
+				"body": "<p>{{event.name}} {{event.link}} {{application.status}}</p>",
+				"customValues": created["customValues"],
+			},
+		)
+		self.assertEqual(preview["subject"], "Đại học FPT - [Tên chương trình]")
+		self.assertIn("[Tên sự kiện]", preview["body"])
+		self.assertIn("[Liên kết sự kiện]", preview["body"])
+		self.assertIn("Mới", preview["body"])
+
 	def test_row_permissions_keep_private_templates_owner_only(self):
 		private_doc = frappe._dict(owner="owner@example.com", is_public=0)
 		public_doc = frappe._dict(owner="owner@example.com", is_public=1)
@@ -200,8 +253,9 @@ class TestMessageTemplates(FrappeTestCase):
 	def test_preview_expands_visible_snippets_and_reports_missing_references(self):
 		snippet = snippets.create_snippet(
 			{
-				"name": "123",
-				"content": "<p>Xin chào {{student.first_name}}</p>",
+				"internalName": "Xin chào",
+				"snippetText": "<p>Xin chào {{student.first_name}}</p>",
+				"shortcut": "123",
 				"sharing": "private",
 			}
 		)

@@ -5,7 +5,7 @@
  "autoname": "naming_series:",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["naming_series", "template_name", "category", "description", "subject", "body", "is_active"],
+ "field_order": ["naming_series", "template_name", "category", "description", "subject", "body", "custom_values", "is_active"],
  "fields": [
   {
    "default": "MSG-LIB-.###",
@@ -46,6 +46,12 @@
    "fieldtype": "HTML Editor",
    "label": "Body",
    "reqd": 1
+  },
+  {
+   "fieldname": "custom_values",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Custom Template Values"
   },
   {
    "default": "1",

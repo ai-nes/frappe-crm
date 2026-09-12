@@ -199,3 +199,4 @@ crm.patches.v1_0.migrate_college_graduation_admission_method
 crm.patches.v1_0.backfill_admission_document_type_conditions
 crm.patches.v1_0.seed_crm_message_templates
 crm.patches.v1_0.migrate_message_template_library
+crm.patches.v1_0.migrate_crm_snippet_fields

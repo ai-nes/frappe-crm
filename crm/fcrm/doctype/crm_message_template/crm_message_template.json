@@ -5,7 +5,7 @@
  "autoname": "naming_series:",
  "doctype": "DocType",
  "engine": "InnoDB",
- "field_order": ["naming_series", "template_name", "is_public", "is_system_template", "library_category", "description", "subject", "body"],
+ "field_order": ["naming_series", "template_name", "is_public", "is_system_template", "library_category", "description", "subject", "body", "custom_values"],
  "fields": [
   {
    "default": "MSG-.###",
@@ -60,6 +60,12 @@
    "fieldtype": "HTML Editor",
    "label": "Body",
    "reqd": 1
+  },
+  {
+   "fieldname": "custom_values",
+   "fieldtype": "JSON",
+   "hidden": 1,
+   "label": "Custom Template Values"
   }
  ],
  "index_web_pages_for_search": 0,

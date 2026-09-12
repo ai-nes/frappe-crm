@@ -24,8 +24,9 @@ class TestSnippets(FrappeTestCase):
 
 	def _create(self, **overrides):
 		data = {
-			"name": "Test greeting snippet",
-			"content": "Chào {{student.full_name}}, mình có thể hỗ trợ gì cho bạn?",
+			"internalName": "Test greeting snippet",
+			"snippetText": "Chào {{student.full_name}}, mình có thể hỗ trợ gì cho bạn?",
+			"shortcut": "greeting",
 			"sharing": "public",
 			**overrides,
 		}
@@ -45,14 +46,15 @@ class TestSnippets(FrappeTestCase):
 		updated = snippets.update_snippet(
 			created["id"],
 			{
-				"name": "Private greeting snippet",
-				"content": "Nội dung riêng",
+				"internalName": "Private greeting snippet",
+				"snippetText": "Nội dung riêng",
+				"shortcut": "private-greeting",
 				"sharing": "private",
 			},
 			expected_modified=created["modifiedAt"],
 		)
 		self.assertEqual(updated["sharing"], "private")
-		self.assertEqual(updated["name"], "Private greeting snippet")
+		self.assertEqual(updated["internalName"], "Private greeting snippet")
 
 		deleted = snippets.delete_snippet(updated["id"], expected_modified=updated["modifiedAt"])
 		self.assertTrue(deleted["deleted"])
@@ -62,7 +64,32 @@ class TestSnippets(FrappeTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self._create(sharing="team")
 		with self.assertRaises(frappe.ValidationError):
-			self._create(content="<p><br></p>")
+			self._create(snippetText="<p><br></p>")
+
+	def test_list_is_paginated_and_returns_toolbar_metadata(self):
+		baseline = snippets.list_snippets(page=1, pageSize=5)
+		for index in range(1, 7):
+			self._create(
+				internalName=f"Paged snippet {index}",
+				snippetText=f"Page content {index}",
+				shortcut=f"paged-{index}",
+			)
+
+		listed = snippets.list_snippets(search="Paged snippet", page=2, pageSize=5)
+
+		self.assertEqual(listed["total"], 6)
+		self.assertEqual(listed["totalAll"], baseline["totalAll"] + 6)
+		self.assertEqual(listed["totalMine"], baseline["totalMine"] + 6)
+		self.assertEqual(listed["page"], 2)
+		self.assertEqual(listed["pageSize"], 5)
+		self.assertEqual(listed["totalPages"], 2)
+		self.assertFalse(listed["hasNextPage"])
+		self.assertEqual(len(listed["snippets"]), 1)
+		self.assertTrue(any(owner["id"] == "Administrator" for owner in listed["owners"]))
+
+		filtered = snippets.list_snippets(search="paged-6", page=1, pageSize=5)
+		self.assertEqual(filtered["total"], 1)
+		self.assertEqual(filtered["snippets"][0]["shortcut"], "paged-6")
 
 	def test_row_permissions_keep_private_snippets_owner_only(self):
 		private_doc = frappe._dict(owner="owner@example.com", is_public=0)
@@ -80,8 +107,9 @@ class TestSnippets(FrappeTestCase):
 			snippets.update_snippet(
 				created["id"],
 				{
-					"name": "Changed",
-					"content": "Changed",
+					"internalName": "Changed",
+					"snippetText": "Changed",
+					"shortcut": "changed",
 					"sharing": "public",
 				},
 				expected_modified="2000-01-01 00:00:00",
