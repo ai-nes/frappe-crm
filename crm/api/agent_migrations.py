@@ -1,9 +1,16 @@
 """Idempotent expand/backfill work for the local agent integration."""
+
 import frappe
 
 SALES_WORKLIST_ROLE_NAMES = ("Sale", "CTV Sale", "Lead Sale")
 SCHOOL360_READ_ROLE_NAMES = (
-	"Sale", "CTV Sale", "Lead Sale", "Marketing", "Promoter", "Lead Promoter", "Admissions Director",
+	"Sale",
+	"CTV Sale",
+	"Lead Sale",
+	"Marketing",
+	"Promoter",
+	"Lead Promoter",
+	"Admissions Director",
 )
 SCHOOL360_CAPABILITY_ID = "school360.overview.read:v1"
 SCHOOL360_ROLLOUT_CONFIG_KEY = "crm_agents_school360_contract"
@@ -53,7 +60,8 @@ def _grant_sales_worklist_capability() -> None:
 			continue
 		role = frappe.get_doc("Role", role_name)
 		if any(
-			row.grant_type == "semantic_capability" and row.value == "admissions_analytics.pipeline_summary.read"
+			row.grant_type == "semantic_capability"
+			and row.value == "admissions_analytics.pipeline_summary.read"
 			for row in role.custom_ai_capability_grants
 		):
 			continue
@@ -80,17 +88,6 @@ def _grant_sales_worklist_capability() -> None:
 		)
 		role.save(ignore_permissions=True)
 		changed = True
-	# The generic mutation is intentionally visible only as a named capability;
-	# the endpoint still requires the explicit demo site flag and Director role.
-	if getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)("crm_agents_demo_full_access") in (1, "1", True, "true", "True"):
-		for role_name in ("Sale", "Marketing", "Lead Sale", "Admissions Director"):
-			if not frappe.db.exists("Role", role_name):
-				continue
-			role = frappe.get_doc("Role", role_name)
-			if not any(row.grant_type == "semantic_capability" and row.value == "action.crm_mutation" for row in role.custom_ai_capability_grants):
-				role.append("custom_ai_capability_grants", {"grant_type": "semantic_capability", "value": "action.crm_mutation"})
-				role.save(ignore_permissions=True)
-				changed = True
 	# Quiescence gate: operators set this site-config marker only after the
 	# matching crm-agents registry/client has been deployed. This prevents a
 	# Frappe-only rollout from advertising a capability the consumer cannot use.
@@ -135,7 +132,9 @@ def _grant_sales_worklist_capability() -> None:
 	# Recommendation context is a separate, later rollout.  It is never implied
 	# by the School 360 facts grant; operators must deploy and opt in explicitly.
 	recommendation_ready = (
-		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(SCHOOL360_RECOMMENDATION_ROLLOUT_CONFIG_KEY)
+		getattr(getattr(frappe, "conf", None), "get", lambda *_args: None)(
+			SCHOOL360_RECOMMENDATION_ROLLOUT_CONFIG_KEY
+		)
 		== SCHOOL360_RECOMMENDATION_CAPABILITY_ID
 	)
 	for role_name in ("Admissions Director",) if recommendation_ready else ():

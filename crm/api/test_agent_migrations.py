@@ -1,5 +1,5 @@
-from types import SimpleNamespace
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from crm.api import agent_migrations
@@ -39,6 +39,7 @@ class _Frappe:
 	def __init__(self, role_names):
 		self.roles = {role_name: _Role() for role_name in role_names}
 		self.db = self._DB(self.roles)
+		self.conf = {"crm_agents_demo_full_access": True}
 		self.cache_cleared = 0
 
 	def get_meta(self, doctype):
@@ -83,6 +84,13 @@ class TestKnowledgeGraphCapabilitySeed(unittest.TestCase):
 			self.assertFalse(
 				any(
 					row.value == "knowledge_graph.query"
+					for row in fake_frappe.roles[role_name].custom_ai_capability_grants
+				)
+			)
+		for role_name in ("Sale", "Marketing", "Lead Sale", "Admissions Director"):
+			self.assertFalse(
+				any(
+					row.grant_type == "semantic_capability" and row.value == "action.crm_mutation"
 					for row in fake_frappe.roles[role_name].custom_ai_capability_grants
 				)
 			)
