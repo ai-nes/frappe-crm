@@ -156,6 +156,10 @@
   {
    "read": 1,
    "role": "Sale"
+  },
+  {
+   "read": 1,
+   "role": "CTV Sale"
   }
  ],
  "quick_entry": 0,

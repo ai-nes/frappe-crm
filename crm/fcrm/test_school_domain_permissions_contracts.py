@@ -135,6 +135,22 @@ def test_marketing_and_governance_roles_keep_explicit_full_row_contract(monkeypa
 		assert permissions.school_portfolio_condition("CRM High School", "other@example.com") is None
 
 
+def test_ctv_sale_can_read_school_directory_without_relationship_rows(monkeypatch):
+	fake_frappe = _Frappe()
+	fake_frappe.roles = ["CTV Sale"]
+	monkeypatch.setattr(permissions, "frappe", fake_frappe)
+
+	assert permissions.school_portfolio_condition("CRM High School", "ctv@example.com") is None
+	assert (
+		permissions.school_portfolio_condition(
+			"CRM High School Annual Snapshot", "ctv@example.com", school_field="high_school"
+		)
+		is None
+	)
+	assert permissions.portfolio_condition("CRM School Activity", "ctv@example.com") == "1=0"
+	assert permissions.person_portfolio_condition("ctv@example.com") == "1=0"
+
+
 def test_promoter_school_and_snapshot_scope_follow_stakeholder_portfolio(monkeypatch):
 	fake_frappe = _Frappe()
 	monkeypatch.setattr(permissions, "frappe", fake_frappe)

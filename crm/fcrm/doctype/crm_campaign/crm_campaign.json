@@ -225,6 +225,10 @@
    "role": "Admissions Director"
   },
   {
+   "read": 1,
+   "role": "CTV Sale"
+  },
+  {
    "create": 1,
    "read": 1,
    "role": "Lead Sale",

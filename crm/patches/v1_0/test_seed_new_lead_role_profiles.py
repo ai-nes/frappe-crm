@@ -56,6 +56,17 @@ class TestSeedNewLeadRoleProfiles(FrappeTestCase):
 				self.assertEqual(bool(row.create), bool(flags["create"]))
 				self.assertEqual(bool(row.delete), bool(flags["delete"]))
 
+	def test_ctv_sale_can_read_campaign_without_mutation_permissions(self):
+		profile = self._profile("CTV Sale")
+		permissions = {row.document_type: row for row in profile.applicable_doctypes}
+
+		campaign = permissions["CRM Campaign"]
+		self.assertTrue(campaign.read)
+		self.assertFalse(campaign.write)
+		self.assertFalse(campaign.create)
+		self.assertFalse(campaign.delete)
+		self.assertFalse(campaign.export)
+
 	def test_lead_sales_and_marketing_updated_by_the_same_deploy(self):
 		doctypes = CANONICAL_PERMISSION_MATRIX["admissions_case"]["doctypes"]
 

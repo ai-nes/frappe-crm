@@ -5,6 +5,8 @@ from frappe.model.document import Document
 from crm.fcrm.segment_code import generate_segment_code
 from crm.fcrm.segment_lifecycle import validate_segment
 
+SHARED_READ_ROLES = {"Lead Sale", "Sale", "CTV Sale"}
+
 
 class CRMSegment(Document):
 	def before_insert(self):
@@ -54,6 +56,8 @@ def get_permission_query_conditions(user=None):
 	user = user or frappe.session.user
 	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
 		return ""
+	if SHARED_READ_ROLES.intersection(frappe.get_roles(user)):
+		return ""
 	return f"""(`tabCRM Segment`.`is_public` = 1 OR `tabCRM Segment`.`owner` = {frappe.db.escape(user)})"""
 
 
@@ -62,10 +66,12 @@ def has_permission(doc, user=None, permission_type=None, ptype=None):
 	user = user or frappe.session.user
 	if user == "Administrator" or "System Manager" in frappe.get_roles(user):
 		return True
+	if permission_type == "read" and SHARED_READ_ROLES.intersection(frappe.get_roles(user)):
+		return True
 	if doc.owner == user:
 		return True
-	# is_public only grants visibility (read), never write/delete/share on
-	# someone else's segment.
+	# For roles outside the shared segment audience, is_public only grants
+	# visibility (read), never write/delete/share on someone else's segment.
 	if doc.is_public and permission_type in (None, "read"):
 		return True
 	return False

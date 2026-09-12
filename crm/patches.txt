@@ -189,6 +189,7 @@ crm.patches.v1_0.update_admission_profile_document_labels
 crm.patches.v1_0.ensure_admission_profile_offerings
 crm.patches.v1_0.allow_ctv_sale_aspiration_read
 crm.patches.v1_0.allow_ctv_sale_school_area_read
+crm.patches.v1_0.allow_ctv_sale_campaign_read
 crm.patches.v1_0.move_student_operational_state
 crm.patches.v1_0.rename_ai_lead_insight_to_student_insight
 crm.patches.v1_0.cleanup_legacy_ai_insight_tables

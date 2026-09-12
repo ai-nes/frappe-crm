@@ -111,6 +111,29 @@ class TestStudentSegment(FrappeTestCase):
 		self.assertEqual(rows[incomplete.name]["member_count"], 0)
 		self.assertEqual(rows[complete.name]["segment_code"], complete.segment_code)
 
+	def test_shared_segments_are_readable_by_sales_profiles(self):
+		segment = self.group()
+
+		for role in ("Lead Sale", "Sale", "CTV Sale"):
+			user = frappe.get_doc(
+				{
+					"doctype": "User",
+					"email": f"{frappe.generate_hash(length=10)}@example.com",
+					"first_name": f"Shared segment {role}",
+					"send_welcome_email": 0,
+					"roles": [{"role": role}],
+				}
+			).insert()
+			frappe.set_user(user.name)
+			try:
+				result = segments.get_segment_analysis()
+				self.assertIn(
+					segment.segment_code,
+					{row["segment_code"] for row in result["segments"]},
+				)
+			finally:
+				frappe.set_user("Administrator")
+
 	def test_list_survives_a_legacy_segment_with_invalid_filters(self):
 		legacy = self.group(title="Legacy source segment")
 		frappe.db.set_value(

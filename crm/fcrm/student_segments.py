@@ -3,21 +3,10 @@
 import frappe
 
 from crm.fcrm.segment_lifecycle import lifecycle_command
-from crm.fcrm.segment_rules import fail, integer, scoped_rule_query, student_scope_or_filters
+from crm.fcrm.segment_rules import fail, integer, scoped_rule_query, visible_student_query
 
 MAX_SNAPSHOT = 10000
 EDITABLE = {"title", "purpose", "responsible_user", "segment_type", "category", "is_public", "filters"}
-
-
-def visible_student_query():
-	return frappe.get_list(
-		"CRM Student",
-		fields=["name"],
-		or_filters=student_scope_or_filters(),
-		order_by="",
-		limit_page_length=0,
-		run=False,
-	)
 
 
 def visible_student_count():
@@ -108,7 +97,7 @@ def preview(segment=None, filters=None, start=0, page_length=20, search=None):
 		)
 	]
 	students = (
-		frappe.get_list(
+		frappe.get_all(
 			"CRM Student",
 			filters={"name": ["in", names]},
 			fields=[

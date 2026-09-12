@@ -25,6 +25,7 @@ from crm.fcrm.role_policy import (
 	delete_requires_ownership_for_roles,
 	resolve_crm_profile,
 )
+from crm.fcrm.utils.effective import is_effective
 
 # Compatibility export for lifecycle.py only. Row-level Student/Contact access
 # no longer reads this set; it resolves the canonical policy below.
@@ -255,9 +256,10 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	"""Return the list-only Student read scope for roles with assignment access.
 
 	Sale and CTV Sale keep the canonical assigned-only row scope for direct CRUD
-	and detail operations, but their list projection exposes their Team and team
-	pool. The assignment command still enforces its own authorization and
-	ownership revision checks.
+	and detail operations, but their list projection is derived from the active
+	Group/Team topology. Sale receives its own memberships plus Teams it leads or
+	Groups it leads; CTV Sale remains assigned-only. The assignment command still
+	enforces its own authorization and ownership revision checks.
 
 	Lead Sale additionally sees assigned Students in active Teams belonging to
 	active Groups led by the current CRM Staff. This is the existing Student
@@ -287,9 +289,12 @@ def get_student_list_read_condition(user=None, *, doctype="CRM Student"):
 	if not crm_staff_name:
 		return "1=0"
 
-	own_condition = f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"
-	team_condition = _team_leader_condition(table, crm_staff_name)
-	return f"({own_condition} or {team_condition})"
+	return _sales_list_read_condition(
+		table,
+		crm_staff_name,
+		profile=profile,
+		doctype=doctype,
+	)
 
 
 def has_student_dashboard_read_permission(doc, user=None):
@@ -734,6 +739,106 @@ def _in_clause(field, values):
 		return None
 	escaped = ", ".join(frappe.db.escape(v) for v in values)
 	return f"{field} in ({escaped})"
+
+
+def _sales_list_scope_teams(crm_staff_name, profile):
+	"""Resolve the active Team scope for a Sale/CTV list projection.
+
+	The organizational links are authoritative here:
+
+	- Sale members see their active memberships.
+	- Sale Team Leads also see active Teams where ``team_lead_staff`` matches.
+	- Sale Group Leads also see every active Team in their active Groups.
+	- CTV Sale is intentionally assigned-only, even if a stale or exceptional
+	  membership or Group/Team lead link points at the staff record.
+
+	This is deliberately uncached because Team/Group changes are authorization
+	changes and list visibility must reflect them on the next request.
+	"""
+	if profile == "ctv_sale":
+		return set(), set()
+
+	membership_rows = frappe.get_all(
+		"CRM Team Membership",
+		filters={"parent": crm_staff_name, "parenttype": "CRM Staff"},
+		fields=["team", "effective_from", "effective_until"],
+		limit_page_length=0,
+	)
+	member_teams = {row.get("team") for row in membership_rows if row.get("team") and is_effective(row)}
+
+	active_group_ids = set(
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"is_active": 1},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	team_rows = frappe.get_all(
+		"CRM Team",
+		fields=["name", "group", "team_lead_staff", "is_active"],
+		limit_page_length=0,
+	)
+	active_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name")
+		and row.get("is_active")
+		and (not row.get("group") or row.get("group") in active_group_ids)
+	}
+	member_teams &= active_teams
+
+	group_lead_groups = set(
+		frappe.get_all(
+			"CRM Team Group",
+			filters={"group_lead_staff": crm_staff_name, "is_active": 1},
+			pluck="name",
+			limit_page_length=0,
+		)
+	)
+	group_lead_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name") in active_teams and row.get("group") in group_lead_groups
+	}
+	team_lead_teams = {
+		row.get("name")
+		for row in team_rows
+		if row.get("name") in active_teams and row.get("team_lead_staff") == crm_staff_name
+	}
+
+	return member_teams | group_lead_teams | team_lead_teams, group_lead_groups
+
+
+def _sales_list_read_condition(table, crm_staff_name, *, profile, doctype):
+	"""Build the Group/Team read projection without widening CRUD scope."""
+	teams, group_ids = _sales_list_scope_teams(crm_staff_name, profile)
+	parts = [f"{table}.owner_staff = {frappe.db.escape(crm_staff_name)}"]
+
+	team_clause = _in_clause(f"{table}.owning_team", teams)
+	if team_clause:
+		assigned_clause = f"{table}.owner_staff is not null and {table}.assigned_to is not null"
+		parts.append(f"({assigned_clause} and {team_clause})")
+		parts.append(f"({table}.owner_staff is null and {table}.assigned_to is null and {team_clause})")
+
+	# A Lead can arrive before routing assigns a Team. A Sale Group Lead may
+	# still discover that intake record through the Group's Province; Student
+	# rows do not use this fallback because the Student API requires conversion
+	# and assignment first.
+	if doctype == "CRM Lead" and group_ids:
+		group_provinces = frappe.get_all(
+			"CRM Team Group",
+			filters={"name": ["in", sorted(group_ids)], "is_active": 1},
+			pluck="province",
+			limit_page_length=0,
+		)
+		province_clause = _in_clause(f"{table}.province", group_provinces)
+		if province_clause:
+			parts.append(
+				f"({table}.owner_staff is null and {table}.assigned_to is null and {province_clause})"
+			)
+
+	return "(" + " or ".join(parts) + ")"
 
 
 def _team_leader_condition(table, crm_staff_name):

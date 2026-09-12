@@ -480,9 +480,9 @@ class TestCRMSegment(FrappeTestCase):
 		finally:
 			frappe.set_user("Administrator")
 
-	def test_preview_private_segment_denied_to_non_owner(self):
+	def test_preview_private_segment_denied_to_role_without_segment_access(self):
 		owner_email = self._make_user("_Test Segment Owner2", roles=("Lead Sale", "System Manager"))
-		other_email = self._make_user("_Test Segment Other")
+		other_email = self._make_user("_Test Segment Other", roles=("Marketing",))
 
 		frappe.set_user(owner_email)
 		filters = {

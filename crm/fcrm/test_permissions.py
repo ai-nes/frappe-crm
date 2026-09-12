@@ -110,19 +110,95 @@ class TestSharedScopingPermissions(FrappeTestCase):
 		self.assertIn("`tabCRM Lead`.owner_staff", lead_list_condition)
 		self.assertNotIn("`tabCRM Student`", lead_list_condition)
 
-	def test_ctv_student_list_scope_includes_team_pool_without_widening_crud_scope(self):
+	def test_ctv_student_list_scope_is_assigned_only_without_widening_crud_scope(self):
 		user, staff = self._make_user_and_staff(
 			"_Test Scope CTV List", roles=["CTV Sale"], team=self._team, function="CTV Sale"
 		)
 
 		list_condition = get_student_list_read_condition(user=user)
 
-		self.assertIn("owning_team", list_condition)
-		self.assertIn(staff, list_condition)
+		self.assertNotIn("owning_team", list_condition)
+		self.assertEqual(
+			list_condition,
+			f"(`tabCRM Student`.owner_staff = {frappe.db.escape(staff)})",
+		)
 		self.assertEqual(
 			shared_conditions("CRM Student", user=user),
 			f"`tabCRM Student`.owner_staff = {frappe.db.escape(staff)}",
 		)
+
+	def test_sale_group_lead_list_scope_covers_all_active_teams_in_group(self):
+		user, staff = self._make_user_and_staff("_Test Scope Sale Group Lead", roles=["Sale"])
+		province = frappe.get_doc(
+			{
+				"doctype": "CRM Province",
+				"province_name": "_Test Scope Sale Group Province",
+				"province_code": "_TEST_SCOPE_SALE_GROUP",
+				"city_type": "Province",
+			}
+		)
+		province.insert(ignore_permissions=True)
+		group = frappe.get_doc(
+			{
+				"doctype": "CRM Team Group",
+				"group_name": "_Test Scope Sale Group",
+				"province": province.name,
+				"group_lead_staff": staff,
+				"is_active": 1,
+			}
+		)
+		group.insert(ignore_permissions=True)
+		second_team = self._make_team("_Test Scope Sale Group Team", self._campus)
+		team_docs = [frappe.get_doc("CRM Team", name) for name in (self._team, second_team)]
+		for team_doc in team_docs:
+			team_doc.group = group.name
+			team_doc.save(ignore_permissions=True)
+
+		try:
+			student_condition = get_student_list_read_condition(user=user)
+			lead_condition = get_student_list_read_condition(user=user, doctype="CRM Lead")
+			for team_name in (self._team, second_team):
+				self.assertIn(frappe.db.escape(team_name), student_condition)
+				self.assertIn(frappe.db.escape(team_name), lead_condition)
+			self.assertIn(frappe.db.escape(province.name), lead_condition)
+		finally:
+			for team_doc in team_docs:
+				team_doc.group = None
+				team_doc.save(ignore_permissions=True)
+			frappe.delete_doc("CRM Team", second_team, force=True)
+			frappe.delete_doc("CRM Team Group", group.name, force=True)
+			frappe.delete_doc("CRM Province", province.name, force=True)
+
+	def test_sale_team_lead_list_scope_uses_team_lead_link_without_membership(self):
+		user, staff = self._make_user_and_staff("_Test Scope Sale Team Lead", roles=["Sale"])
+		team = frappe.get_doc("CRM Team", self._team)
+		team.team_lead_staff = staff
+		team.save(ignore_permissions=True)
+
+		try:
+			condition = get_student_list_read_condition(user=user)
+			self.assertIn(frappe.db.escape(self._team), condition)
+			self.assertIn("owning_team", condition)
+		finally:
+			team.team_lead_staff = None
+			team.save(ignore_permissions=True)
+
+	def test_ctv_list_scope_remains_assigned_only_even_with_team_lead_link(self):
+		user, staff = self._make_user_and_staff("_Test Scope CTV Lead Link", roles=["CTV Sale"])
+		team = frappe.get_doc("CRM Team", self._team)
+		team.team_lead_staff = staff
+		team.save(ignore_permissions=True)
+
+		try:
+			condition = get_student_list_read_condition(user=user)
+			self.assertNotIn(frappe.db.escape(self._team), condition)
+			self.assertEqual(
+				condition,
+				f"(`tabCRM Student`.owner_staff = {frappe.db.escape(staff)})",
+			)
+		finally:
+			team.team_lead_staff = None
+			team.save(ignore_permissions=True)
 
 	def test_lead_sale_group_leader_reads_managed_group_students(self):
 		user, staff = self._make_user_and_staff(

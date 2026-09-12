@@ -9,9 +9,9 @@
 |---|---|---|---|
 | Lead Sale | Toàn bộ Lead | Toàn bộ Student | Theo quyền Lead Sale hiện hành |
 | Director/CEO/Admin/System Manager | Toàn bộ Lead | Toàn bộ Student | Theo quyền hệ thống |
-| Team Lead (Sale/CTV) | Lead thuộc Team mình dẫn và pool của Team | Student đã convert và assigned trong Team; Student chưa assign bị loại bởi invariant của API | Theo quyền ghi của bản thân/Team |
+| Team Lead (Sale) | Lead thuộc Team mình dẫn và pool của Team | Student đã convert và assigned trong Team; Student chưa assign bị loại bởi invariant của API | Theo quyền ghi của bản thân/Team |
 | Sale member | Lead được giao cho mình; được xem Lead trong Team/pool để phục vụ phân công | Student đã convert và assigned trong Team/pool scope | Chỉ bản ghi được phép ghi |
-| CTV Sale member | Lead được giao cho mình; được xem Lead trong Team/pool | Student đã convert và assigned trong Team/pool scope | Theo quyền CTV hiện hành |
+| CTV Sale member | Chỉ Lead được phân công cho mình | Chỉ Student đã convert và được phân công cho mình | Theo quyền CTV hiện hành |
 
 Nếu một nhân sự đồng thời có nhiều membership hoặc vai trò, scope là hợp của các
 phạm vi hợp lệ. Scope được tính từ session, không tin vào `ownerId` do client gửi.
@@ -26,7 +26,9 @@ Sale/Team Lead/CTV, sau đó áp dụng danh sách ID được phép vào `total
 KPI trạng thái, campaign stats và dữ liệu phân trang.
 
 Lead Sale được nhận diện là full-list profile và đọc trực tiếp toàn bộ Lead;
-Sale/Team Lead mới đi qua explicit ID scope Group/Team/pool. `frappe.get_all`
+Sale/Team Lead mới đi qua explicit ID scope Group/Team/pool. Với Sale,
+scope hợp từ Team Membership, `team_lead_staff` và `group_lead_staff`; CTV
+chỉ dùng điều kiện `owner_staff` của chính mình. `frappe.get_all`
 chỉ được dùng cho full-list profile hoặc sau khi backend đã tạo explicit ID scope;
 đường đọc detail tương thích cũ không thay đổi trong phạm vi này.
 

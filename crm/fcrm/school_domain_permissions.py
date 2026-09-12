@@ -12,6 +12,10 @@ import frappe
 PORTFOLIO_ROLES = frozenset({"Promoter"})
 FULL_ACCESS_ROLES = frozenset({"Administrator", "System Manager", "Admissions Director", "Lead Sale"})
 READ_ALL_ROLES = frozenset({"Marketing", "Sale"})
+# The school directory and its annual snapshots are shared read-only reference
+# data for CTV Sale. Keep this separate from READ_ALL_ROLES so CTV Sale does
+# not inherit access to every school relationship record.
+SCHOOL_DIRECTORY_READ_ALL_ROLES = frozenset({"CTV Sale"})
 
 
 def _user_roles(user: str | None = None) -> set[str]:
@@ -105,7 +109,7 @@ def school_portfolio_condition(doctype: str, user: str | None = None, *, school_
 	predicate so list, aggregate, and bounded-DTO queries can reuse it verbatim.
 	"""
 	roles = _user_roles(user)
-	if roles & FULL_ACCESS_ROLES or roles & READ_ALL_ROLES:
+	if roles & (FULL_ACCESS_ROLES | READ_ALL_ROLES | SCHOOL_DIRECTORY_READ_ALL_ROLES):
 		return None
 	if not roles & PORTFOLIO_ROLES:
 		return "1=0"
