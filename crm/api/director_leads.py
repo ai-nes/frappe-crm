@@ -143,6 +143,7 @@ def get_director_leads(
 		"statusOptions": _status_options(),
 		"resolution": query["resolution"],
 		"resolutionOptions": _resolution_options(),
+		"order": query["order"],
 		"asOf": _as_iso(frappe.utils.now_datetime()),
 	}
 	if query.get("campaign"):
@@ -385,8 +386,8 @@ def _fetch_lead_rows(
 
 
 def _lead_order_by(order: str) -> str:
-	"""Keep the list grouped by workflow status before applying recency."""
-	return f"{PROCESSING_STATUS_ORDER} asc, modified {order}, name {order}"
+	"""Prioritize recency, then keep the workflow status order deterministic."""
+	return f"modified {order}, {PROCESSING_STATUS_ORDER} asc, name {order}"
 
 
 def _load_lookups(rows: list) -> dict[str, Any]:

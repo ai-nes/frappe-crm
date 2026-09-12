@@ -14,21 +14,21 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(missing_fields, set())
 
-	def test_student_order_groups_stage_before_requested_sort(self):
+	def test_student_order_prioritizes_recency_before_stage(self):
 		self.assertEqual(
 			director_students._student_order_by("latest_score", "desc"),
-			"CASE student_stage WHEN 'New' THEN 1 WHEN 'Attempting' THEN 2 "
+			"modified desc, CASE student_stage WHEN 'New' THEN 1 WHEN 'Attempting' THEN 2 "
 			"WHEN 'Connected' THEN 3 WHEN 'Qualified' THEN 4 WHEN 'Disqualified' THEN 5 "
 			"ELSE 99 END asc, latest_score desc, name desc",
 		)
 
-	def test_computed_student_sort_keeps_workflow_stage_order(self):
+	def test_computed_student_sort_prioritizes_recency_before_stage(self):
 		rows = [
-			frappe._dict(name="QUALIFIED", student_stage="Qualified"),
-			frappe._dict(name="NEW", student_stage="New"),
-			frappe._dict(name="CONNECTED", student_stage="Connected"),
-			frappe._dict(name="ATTEMPTING", student_stage="Attempting"),
-			frappe._dict(name="DISQUALIFIED", student_stage="Disqualified"),
+			frappe._dict(name="QUALIFIED", student_stage="Qualified", modified="2026-09-10 10:00:00"),
+			frappe._dict(name="NEW", student_stage="New", modified="2026-09-09 10:00:00"),
+			frappe._dict(name="CONNECTED", student_stage="Connected", modified="2026-09-11 10:00:00"),
+			frappe._dict(name="ATTEMPTING", student_stage="Attempting", modified="2026-09-11 10:00:00"),
+			frappe._dict(name="DISQUALIFIED", student_stage="Disqualified", modified="2026-09-08 10:00:00"),
 		]
 		query = {"sort": "priority", "order": "asc", "page": 1, "page_size": 10}
 
@@ -43,7 +43,7 @@ class TestDirectorStudents(FrappeTestCase):
 
 		self.assertEqual(
 			[row["name"] for row in result],
-			["NEW", "ATTEMPTING", "CONNECTED", "QUALIFIED", "DISQUALIFIED"],
+			["DISQUALIFIED", "NEW", "QUALIFIED", "ATTEMPTING", "CONNECTED"],
 		)
 
 	def test_query_normalization_accepts_contract_values(self):
@@ -954,28 +954,44 @@ class TestDirectorStudents(FrappeTestCase):
 		self.assertEqual(result["calls"], [])
 
 	def test_get_lead_call_logs_endpoint(self):
-		with patch.object(
-			director_students,
-			"get_student_interactions",
-			return_value={"student_id": "LEAD-1", "calls": [{"id": "CALL-1"}]},
+		lead = frappe._dict(name="LEAD-1", student_name="Lead Demo", phone="0900000000")
+		with (
+			patch.object(
+				director_students,
+				"_resolve_lead_call_target",
+				return_value=("LEAD-1", "LEAD-1", lead),
+			),
+			patch.object(director_students, "_student_interactions", return_value=[]) as interactions,
+			patch.object(
+				director_students,
+				"_student_call_records",
+				return_value=[{"id": "CALL-1"}],
+			) as call_records,
 		):
 			result = director_students.get_lead_call_logs("LEAD-1")
 
+		interactions.assert_called_once_with("LEAD-1")
+		call_records.assert_called_once_with("LEAD-1", [], lead, {})
 		self.assertEqual(result, {"lead_id": "LEAD-1", "calls": [{"id": "CALL-1"}], "total": 1})
 
 	def test_get_lead_call_logs_resolves_public_lead_id(self):
+		lead = frappe._dict(name="LEAD-1", student_name="Lead Demo", phone="0900000000")
+		lead.has_permission = lambda permission_type: permission_type == "read"
 		with (
 			patch.object(director_students, "resolve_lead_name", return_value="LEAD-1") as resolve,
 			patch.object(
+				director_students.frappe, "get_doc", return_value=lead
+			),
+			patch.object(director_students, "_student_interactions", return_value=[]),
+			patch.object(
 				director_students,
-				"get_student_interactions",
-				return_value={"student_id": "STU-1", "calls": [{"id": "CALL-1"}]},
-			) as get_interactions,
+				"_student_call_records",
+				return_value=[{"id": "CALL-1"}],
+			),
 		):
 			result = director_students.get_lead_call_logs("public-lead-uuid")
 
 		resolve.assert_called_once_with("public-lead-uuid")
-		get_interactions.assert_called_once_with("LEAD-1")
 		self.assertEqual(
 			result,
 			{"lead_id": "public-lead-uuid", "calls": [{"id": "CALL-1"}], "total": 1},

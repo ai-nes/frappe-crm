@@ -59,12 +59,12 @@ class TestDirectorLeads(FrappeTestCase):
 				with self.assertRaises(frappe.ValidationError):
 					resolver(value)
 
-	def test_lead_order_groups_status_before_recency(self):
+	def test_lead_order_prioritizes_recency_before_status(self):
 		self.assertEqual(
 			director_leads._lead_order_by("desc"),
-			"CASE processing_status WHEN 'NEW' THEN 1 WHEN 'PROCESSING' THEN 2 "
+			"modified desc, CASE processing_status WHEN 'NEW' THEN 1 WHEN 'PROCESSING' THEN 2 "
 			"WHEN 'PROCESSED' THEN 3 WHEN 'ASSIGNED' THEN 4 WHEN 'CLOSED' THEN 5 "
-			"ELSE 99 END asc, modified desc, name desc",
+			"ELSE 99 END asc, name desc",
 		)
 
 	def test_lead_filters_search_expected_fields_and_status(self):
@@ -312,6 +312,7 @@ class TestDirectorLeads(FrappeTestCase):
 		self.assertFalse(response["meta"]["hasNextPage"])
 		self.assertEqual(response["meta"]["status"], "NEW")
 		self.assertEqual(response["meta"]["resolution"], "MATCHED")
+		self.assertEqual(response["meta"]["order"], "desc")
 		self.assertEqual(
 			response["meta"]["stats"],
 			{"total": 1, "inProgress": 1, "closed": 1, "conversionRate": 100},

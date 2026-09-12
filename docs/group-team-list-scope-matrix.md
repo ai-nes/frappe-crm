@@ -38,7 +38,8 @@ Director/CEO dùng unrestricted reader để xem toàn bộ Student. Bộ lọc 
 chỉ hiển thị bản ghi đã convert, đã có owner và đã được assign; đây là invariant
 của màn hình Student, không phải lỗ hổng scope. Kết quả được nhóm theo
 `student_stage` theo thứ tự `New` → `Attempting` → `Connected` → `Qualified` /
-`Disqualified`; tiêu chí sort được yêu cầu chỉ áp dụng bên trong từng nhóm.
+`Disqualified`. Trong mỗi chiều cũ nhất/mới nhất, kết quả được ưu tiên theo
+`modified` trước, sau đó mới dùng thứ tự `student_stage` và tiêu chí phụ.
 
 ## 3. Quy tắc dữ liệu
 

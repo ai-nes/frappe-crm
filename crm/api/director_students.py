@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 from datetime import timedelta
+from functools import cmp_to_key
 from statistics import mean
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -345,9 +346,9 @@ def get_student_interactions(student_id: str) -> dict[str, Any]:
 @frappe.whitelist(allow_guest=True, methods=["GET"])
 def get_lead_call_logs(lead_id: str) -> dict[str, Any]:
 	"""Return permission-scoped call history for one CRM Lead."""
-	requested_lead_id = str(lead_id or "").strip()
-	payload = get_student_interactions(resolve_lead_name(requested_lead_id))
-	calls = payload.get("calls") or []
+	requested_lead_id, lead_name, lead_doc = _resolve_lead_call_target(lead_id)
+	interactions = _student_interactions(lead_name)
+	calls = _student_call_records(lead_name, interactions, lead_doc, {})
 	return {
 		"lead_id": requested_lead_id,
 		"calls": calls,
@@ -726,6 +727,24 @@ def _resolve_activity_target(student_id: str | None) -> tuple[str, str, str | No
 	return requested_id, lead_id or resolved_id, canonical_id
 
 
+def _resolve_lead_call_target(lead_id: str | None) -> tuple[str, str, Any]:
+	"""Resolve a Lead reference without requiring a canonical Student."""
+	requested_id = str(lead_id or "").strip()
+	if not requested_id:
+		_raise_api_error("INVALID_LEAD_ID", "leadId không được để trống.", frappe.ValidationError, 400)
+
+	lead_name = resolve_lead_name(requested_id)
+	try:
+		lead_doc = frappe.get_doc("CRM Lead", lead_name)
+	except frappe.DoesNotExistError:
+		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
+
+	if not lead_doc.has_permission("read") and not can_read_full_lead_board():
+		_raise_api_error("LEAD_NOT_FOUND", "Không tìm thấy Lead.", frappe.DoesNotExistError, 404)
+
+	return requested_id, lead_name, lead_doc
+
+
 def _resolve_canonical_activity_target(student_id: str | None) -> tuple[str, str]:
 	"""Resolve activity requests to the canonical Student aggregate."""
 	requested_id = str(student_id or "").strip()
@@ -838,8 +857,8 @@ def _fetch_student_rows(
 
 
 def _student_order_by(sort_field: str, order: str) -> str:
-	"""Keep the list grouped by Student workflow stage before applying the requested sort."""
-	return f"{STUDENT_STAGE_ORDER} asc, {sort_field} {order}, name {order}"
+	"""Prioritize recency, then workflow stage, then the requested tie-breaker."""
+	return f"modified {order}, {STUDENT_STAGE_ORDER} asc, {sort_field} {order}, name {order}"
 
 
 def _fetch_computed_sort_rows(
@@ -888,16 +907,51 @@ def _fetch_computed_sort_rows(
 			filters={"state": ["in", list(ACTIVE_ACTION_STATES)], "current_slot": "CURRENT"},
 		)
 
-	present, missing = [], []
 	for row in rows:
-		value = _sort_related_value(query["sort"], related.get(row.get("name")))
-		(missing if value is None else present).append((value, row.get("name") or "", row))
-	present.sort(key=lambda entry: (entry[0], entry[1]), reverse=query["order"] == "desc")
-	missing.sort(key=lambda entry: entry[1])
-	sorted_rows = [entry[2] for entry in present + missing]
-	sorted_rows.sort(key=_student_stage_rank)
+		row["_sort_related_value"] = _sort_related_value(
+			query["sort"], related.get(row.get("name"))
+		)
+
+	sorted_rows = sorted(
+		rows,
+		key=cmp_to_key(lambda left, right: _compare_student_rows(left, right, query["order"])),
+	)
+	for row in sorted_rows:
+		row.pop("_sort_related_value", None)
 	start = (query["page"] - 1) * query["page_size"]
 	return sorted_rows[start : start + query["page_size"]]
+
+
+def _compare_student_rows(left, right, order: str) -> int:
+	"""Compare rows by modified time, stage, related sort value, then name."""
+	reverse = order == "desc"
+	for left_value, right_value, descending in (
+		(left.get("modified"), right.get("modified"), reverse),
+		(_student_stage_rank(left), _student_stage_rank(right), False),
+		(left.get("_sort_related_value"), right.get("_sort_related_value"), reverse),
+		(left.get("name") or "", right.get("name") or "", reverse),
+	):
+		comparison = _compare_optional_values(left_value, right_value, descending)
+		if comparison:
+			return comparison
+	return 0
+
+
+def _compare_optional_values(left, right, descending: bool) -> int:
+	"""Compare values while keeping missing values at the end of each tier."""
+	if left is None and right is None:
+		return 0
+	if left is None:
+		return 1
+	if right is None:
+		return -1
+	if left == right:
+		return 0
+	try:
+		comparison = -1 if left < right else 1
+	except TypeError:
+		comparison = -1 if str(left) < str(right) else 1
+	return -comparison if descending else comparison
 
 
 def _student_stage_rank(row) -> int:
@@ -1049,6 +1103,20 @@ def _student_query_ids(student_ids: list[str]) -> list[str]:
 			if candidate and candidate not in seen:
 				seen.add(candidate)
 				values.append(candidate)
+	return values
+
+
+def _activity_query_ids(reference_id: str | None) -> list[str]:
+	"""Include both sides of the Lead/Student activity compatibility boundary."""
+	if not reference_id:
+		return []
+
+	values = [reference_id]
+	canonical_id = canonical_student(reference_id)
+	lead_id = lead_for_student(canonical_id) if canonical_id else None
+	for candidate in (canonical_id, lead_id):
+		if candidate and candidate not in values:
+			values.append(candidate)
 	return values
 
 
@@ -1802,7 +1870,7 @@ def _build_probability_trend(assessments: list, interactions: list) -> list[dict
 def _student_interactions(student_id: str | None) -> list:
 	if not student_id or not _table_exists("CRM Interaction"):
 		return []
-	student_ids = _student_query_ids([student_id])
+	student_ids = _activity_query_ids(student_id)
 	return frappe.get_all(
 		"CRM Interaction",
 		filters={"student": ["in", student_ids]},
@@ -2029,7 +2097,7 @@ def _student_call_records(
 		try:
 			call_logs = frappe.get_list(
 				"Call Log",
-				filters={"reference_docname": student_id},
+				filters={"reference_docname": ["in", _activity_query_ids(student_id)]},
 				or_filters=[
 					{"reference_doctype": "CRM Student"},
 					{"reference_doctype": "CRM Lead"},
